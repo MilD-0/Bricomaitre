@@ -16,6 +16,7 @@ export const brands = pgTable(
     id: bigserial("id", { mode: "number" }).primaryKey(),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
+    mongoId: text("mongo_id"),
     image: text("image"),
     isActive: boolean("is_active").notNull().default(true),
     featured: boolean("featured").notNull().default(false),
@@ -39,6 +40,7 @@ export const brands = pgTable(
   },
   (t) => [
     uniqueIndex("brands_slug_unique").on(t.slug),
+    index("idx_brands_mongo_id").on(t.mongoId),
     index("idx_brands_popularity").on(t.popularityScore),
     index("idx_brands_last_viewed_at").on(t.lastViewedAt.desc()),
   ],

@@ -33,6 +33,7 @@ export const featuredProductGroups = pgTable('featured_product_groups', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
   name: text('name').notNull(),
   cta: text('cta'),
+  ctaAr: text('cta_ar'),
   link: text('link'),
   sortOrder: integer('sort_order').notNull().default(0),
   showAtTopOfProductsPage: boolean('show_at_top_of_products_page').notNull().default(false),

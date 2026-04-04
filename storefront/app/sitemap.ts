@@ -5,6 +5,7 @@ import { locales } from "@/i18n/config";
 import {
   fetchStorefrontBrands,
   fetchStorefrontCategories,
+  isNextProductionBuildPhase,
   listAllStorefrontProducts,
   normalizeBrand,
   normalizeCategory,
@@ -75,7 +76,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         }),
       ),
     ];
-  } catch {
+  } catch (error) {
+    if (isNextProductionBuildPhase()) {
+      throw error;
+    }
+
     return staticPages;
   }
 }

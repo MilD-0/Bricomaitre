@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, or } from 'drizzle-orm';
 
 import type { getDb } from '../../../db/src/client';
 import { brands, categories, products } from '../../../db/src/schema';
@@ -110,4 +110,22 @@ export async function readStorefrontCategories(db: Database) {
     .orderBy(asc(categories.name));
 
   return rows.map(toStorefrontCategoryDto);
+}
+
+export async function readStorefrontCatalogCounts(db: Database) {
+  const productWhereClause = eq(products.active, true);
+  const brandWhereClause = eq(brands.isActive, true);
+  const categoryWhereClause = eq(categories.isActive, true);
+
+  const [productRows, brandRows, categoryRows] = await Promise.all([
+    db.select({ count: count() }).from(products).where(productWhereClause),
+    db.select({ count: count() }).from(brands).where(brandWhereClause),
+    db.select({ count: count() }).from(categories).where(categoryWhereClause),
+  ]);
+
+  return {
+    productCount: Number(productRows[0]?.count ?? 0),
+    brandCount: Number(brandRows[0]?.count ?? 0),
+    categoryCount: Number(categoryRows[0]?.count ?? 0),
+  };
 }

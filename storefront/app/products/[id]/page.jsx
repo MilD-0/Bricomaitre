@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { getLocale } from "next-intl/server";
 
 import {
+  listAllStorefrontProducts,
   fetchLegacyProductByToken,
 } from "@/lib/storefront-api";
 import {
@@ -18,6 +19,13 @@ import Main from "./Main";
 
 export const revalidate = 120;
 export const dynamicParams = true;
+
+export async function generateStaticParams() {
+  const products = await listAllStorefrontProducts();
+  return products.map((product) => ({
+    id: product.slug ?? String(product.id),
+  }));
+}
 
 async function loadProduct(id) {
   return fetchLegacyProductByToken(id);

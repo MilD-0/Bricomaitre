@@ -47,6 +47,7 @@ const bannerDefaults: AssetBannerInput = {
 const groupDefaults: FeaturedProductGroupInput = {
   name: '',
   cta: '',
+  ctaAr: '',
   link: '',
   productIds: [],
   brandIds: [],
@@ -123,6 +124,7 @@ function toGroupFormValues(group: FeaturedProductGroupRecord): FeaturedProductGr
   return {
     ...group,
     cta: group.cta ?? '',
+    ctaAr: group.ctaAr ?? '',
     link: group.link ?? '',
   };
 }
@@ -654,6 +656,14 @@ function FeaturedGroupDialogForm({
               {form.formState.errors.cta ? <FieldError>{form.formState.errors.cta.message}</FieldError> : null}
             </Field>
 
+            <Field>
+              <FieldLabel htmlFor="asset-group-cta-ar">{t('groupCtaArLabel')}</FieldLabel>
+              <Input id="asset-group-cta-ar" placeholder={t('groupCtaArPlaceholder')} {...form.register('ctaAr')} />
+              {form.formState.errors.ctaAr ? <FieldError>{form.formState.errors.ctaAr.message}</FieldError> : null}
+            </Field>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="asset-group-link">{t('groupLinkLabel')}</FieldLabel>
               <Input id="asset-group-link" placeholder={t('groupLinkPlaceholder')} {...form.register('link')} />

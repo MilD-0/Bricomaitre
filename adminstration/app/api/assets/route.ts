@@ -110,6 +110,7 @@ export async function POST(req: NextRequest) {
           .values({
             name: parsed.data.name,
             cta: parsed.data.cta,
+            ctaAr: parsed.data.ctaAr,
             link: parsed.data.link,
             active: parsed.data.active,
             sortOrder,

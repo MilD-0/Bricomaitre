@@ -64,6 +64,7 @@ describe('AssetsManager', () => {
               id: 2,
               name: 'Summer carousel',
               cta: null,
+              ctaAr: null,
               link: null,
               productIds: [10],
               brandIds: [],
@@ -303,6 +304,7 @@ describe('AssetsManager', () => {
     const groupDialog = screen.getByRole('dialog');
     await userEvent.type(within(groupDialog).getByRole('textbox', { name: 'Group name' }), 'Homepage picks');
     await userEvent.type(within(groupDialog).getByRole('textbox', { name: 'CTA text' }), 'Voir Plus');
+    await userEvent.type(within(groupDialog).getByRole('textbox', { name: 'Arabic CTA text' }), 'اكتشف المزيد');
     await userEvent.type(within(groupDialog).getByRole('textbox', { name: 'CTA link' }), '/products?featured=1');
     await userEvent.click(within(groupDialog).getByRole('switch', { name: 'Show at top of products page' }));
     await userEvent.click(within(groupDialog).getByRole('button', { name: 'Add Roller' }));
@@ -314,6 +316,7 @@ describe('AssetsManager', () => {
         data: {
           name: 'Homepage picks',
           cta: 'Voir Plus',
+          ctaAr: 'اكتشف المزيد',
           link: '/products?featured=1',
           productIds: [10],
           brandIds: [],
@@ -404,6 +407,7 @@ describe('AssetsManager', () => {
               id: 2,
               name: 'Summer carousel',
               cta: null,
+              ctaAr: null,
               link: null,
               productIds: [10],
               brandIds: [],
@@ -418,6 +422,7 @@ describe('AssetsManager', () => {
               id: 5,
               name: 'Top sellers',
               cta: null,
+              ctaAr: null,
               link: null,
               productIds: [],
               brandIds: [100],

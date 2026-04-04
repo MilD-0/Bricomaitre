@@ -39,6 +39,7 @@ yarn-error.log*
 **/.codex
 skills-lock.json
 **/skills-lock.json
+ops/runtime/
 
 *.sw?
 *.save

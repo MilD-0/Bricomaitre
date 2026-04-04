@@ -16,6 +16,7 @@ export const orders = pgTable(
   "orders",
   {
     id: bigserial("id", { mode: "number" }).primaryKey(),
+    mongoId: text("mongo_id"),
     firstName: text("first_name"),
     lastName: text("last_name"),
     state: integer("state"),
@@ -57,6 +58,7 @@ export const orders = pgTable(
       .defaultNow(),
   },
   (t) => [
+    index("idx_orders_mongo_id").on(t.mongoId),
     index("idx_orders_confirmed").on(t.confirmed),
     index("idx_orders_created").on(t.createdAt),
     index("idx_orders_journey").on(t.journeyId),

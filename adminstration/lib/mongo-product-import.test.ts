@@ -3,11 +3,14 @@ import { describe, expect, it } from 'vitest';
 import {
   importMongoBrands,
   importMongoCategories,
+  mapMongoOrderToCurrentSchema,
   mapMongoProductToCurrentSchema,
   mapMongoBrandToCurrentSchema,
   mapMongoCategoryToCurrentSchema,
   parseMongoCollectionExport,
+  readMongoDate,
   readMongoId,
+  resolveWilayaCode,
 } from './mongo-product-import';
 
 describe('lib/mongo-product-import', () => {
@@ -92,6 +95,7 @@ describe('lib/mongo-product-import', () => {
   it('maps brand and category exports to the current schema', () => {
     expect(mapMongoBrandToCurrentSchema({ name: 'Acme', image: 'https://cdn.example.com/acme.jpg', featured: true })).toEqual(
       expect.objectContaining({
+        mongoId: null,
         name: 'Acme',
         slug: 'acme',
         image: 'https://cdn.example.com/acme.jpg',
@@ -102,6 +106,7 @@ describe('lib/mongo-product-import', () => {
 
     expect(mapMongoBrandToCurrentSchema({ name: 'Éclairage décoratif' })).toEqual(
       expect.objectContaining({
+        mongoId: null,
         name: 'Éclairage décoratif',
         slug: 'eclairage-decoratif',
       }),
@@ -116,6 +121,7 @@ describe('lib/mongo-product-import', () => {
       featured: true,
     }, 9)).toEqual(
       expect.objectContaining({
+        mongoId: null,
         name: 'Lighting',
         slug: 'lighting',
         nameEn: 'Lighting',
@@ -160,5 +166,126 @@ describe('lib/mongo-product-import', () => {
   it('reads mongo ids from extended json objects', () => {
     expect(readMongoId({ $oid: 'abc123' })).toBe('abc123');
     expect(readMongoId('xyz789')).toBe('xyz789');
+  });
+
+  it('reads mongo dates from extended json objects', () => {
+    expect(readMongoDate({ $date: '2024-01-01T00:00:00.000Z' })).toEqual(new Date('2024-01-01T00:00:00.000Z'));
+  });
+
+  it('marks zero-stock products as out of stock', () => {
+    expect(mapMongoProductToCurrentSchema({
+      _id: { $oid: 'mongo-2' } as never,
+      title: 'Empty shelf',
+      price: 200,
+      stock: 0,
+    })).toEqual(expect.objectContaining({
+      mongoId: 'mongo-2',
+      inStock: false,
+      availabilityStatus: 'out_of_stock',
+    }));
+  });
+
+  it('maps legacy orders into the current schema with product id remapping', () => {
+    const result = mapMongoOrderToCurrentSchema({
+      _id: { $oid: 'order-1' } as never,
+      firstName: 'Amine',
+      lastName: 'Test',
+      state: 'Tébessa',
+      city: 'Tebessa',
+      homeAddress: 'Rue 1',
+      email: 'TEST@Example.com',
+      phoneNumber1: 551234567,
+      phoneNumber2: 552345678,
+      cartProducts: ['mongo-product-1', 'mongo-product-1'],
+      delivery: 'office',
+      del_pr: 400,
+      price: 1900,
+      note: 'Note',
+      confirmed: 'no3',
+      createdAt: { $date: '2025-12-20T00:00:00.000Z' } as never,
+      updatedAt: { $date: '2025-12-21T00:00:00.000Z' } as never,
+      ecotrackStatus: 'En attente',
+      ecotrackCurrentStatus: 'Commande creee',
+      ecotrackLastSync: { $date: '2025-12-21T10:00:00.000Z' } as never,
+      ecotrackTrackingNumber: 'trk-1',
+    }, {
+      productIdByMongoId: new Map([['mongo-product-1', 42]]),
+      importNow: new Date('2026-04-04T00:00:00.000Z'),
+    });
+
+    expect(result).toEqual({
+      row: {
+        mongoId: 'order-1',
+        firstName: 'Amine',
+        lastName: 'Test',
+        state: 12,
+        city: 'Tebessa',
+        homeAddress: 'Rue 1',
+        email: 'test@example.com',
+        phoneNumber1: '551234567',
+        phoneNumber2: '552345678',
+        cartProducts: ['42', '42'],
+        delivery: 1,
+        delPr: '400.00',
+        price: '1900.00',
+        note: 'Note',
+        confirmed: 1,
+        noAnswerCount: 2,
+        confirmedBy: null,
+        confirmedByName: null,
+        confirmedAt: null,
+        archivedAt: new Date('2026-04-04T00:00:00.000Z'),
+        ecotrackStatus: 'En attente',
+        ecotrackStatusLastUpdate: new Date('2025-12-21T10:00:00.000Z'),
+        ecotrackStatusData: { currentStatus: 'Commande creee' },
+        ecotrackReference: null,
+        ecotrackTrackingNumber: 'trk-1',
+        createdAt: new Date('2025-12-20T00:00:00.000Z'),
+        updatedAt: new Date('2025-12-21T00:00:00.000Z'),
+      },
+      warnings: [],
+      errors: [],
+    });
+  });
+
+  it('blocks orders with unmatched cart refs and skips unresolved states', () => {
+    const missingProduct = mapMongoOrderToCurrentSchema({
+      _id: { $oid: 'order-2' } as never,
+      state: 'Alger',
+      phoneNumber1: 551234567,
+      cartProducts: ['missing'],
+      createdAt: { $date: '2026-01-02T00:00:00.000Z' } as never,
+    }, {
+      productIdByMongoId: new Map(),
+      importNow: new Date('2026-04-04T00:00:00.000Z'),
+    });
+
+    expect(missingProduct.row).toBeNull();
+    expect(missingProduct.errors).toEqual([
+      expect.objectContaining({ code: 'unmatched_cart_product', value: 'missing' }),
+    ]);
+
+    const unresolvedState = mapMongoOrderToCurrentSchema({
+      _id: { $oid: 'order-3' } as never,
+      state: 'Unknown State',
+      phoneNumber1: 551234567,
+      cartProducts: [],
+      createdAt: { $date: '2026-01-02T00:00:00.000Z' } as never,
+    }, {
+      productIdByMongoId: new Map(),
+      importNow: new Date('2026-04-04T00:00:00.000Z'),
+    });
+
+    expect(unresolvedState.row).toBeNull();
+    expect(unresolvedState.warnings).toEqual([
+      expect.objectContaining({ code: 'unresolved_state', value: 'Unknown State' }),
+    ]);
+  });
+
+  it('normalizes wilaya names and variants', () => {
+    expect(resolveWilayaCode('Tebessa')).toBe(12);
+    expect(resolveWilayaCode('Tébessa')).toBe(12);
+    expect(resolveWilayaCode('Tébessa')).toBe(12);
+    expect(resolveWilayaCode('Sidi Bel Abbes')).toBe(22);
   });
 });
