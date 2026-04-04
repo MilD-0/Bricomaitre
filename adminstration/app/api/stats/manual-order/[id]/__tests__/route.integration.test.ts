@@ -1,0 +1,72 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { DELETE } from '../route';
+
+const { hasDbMock, requireOpsAccessMock, deleteManualOrderMock, authMock } = vi.hoisted(() => ({
+  hasDbMock: vi.fn(),
+  requireOpsAccessMock: vi.fn(),
+  deleteManualOrderMock: vi.fn(),
+  authMock: vi.fn(),
+}));
+
+vi.mock('../../../../../../db/client', () => ({
+  hasDb: hasDbMock,
+}));
+
+vi.mock('../../../../../../lib/rbac', () => ({
+  requireOpsAccess: requireOpsAccessMock,
+}));
+
+vi.mock('../../../../../../lib/auth', () => ({
+  auth: authMock,
+}));
+
+vi.mock('../../../../../../lib/stats', () => ({
+  deleteManualOrder: deleteManualOrderMock,
+}));
+
+describe('app/api/stats/manual-order/[id]/route', () => {
+  beforeEach(() => {
+    hasDbMock.mockReset();
+    requireOpsAccessMock.mockReset();
+    deleteManualOrderMock.mockReset();
+    authMock.mockReset();
+
+    hasDbMock.mockReturnValue(true);
+    requireOpsAccessMock.mockResolvedValue(null);
+    authMock.mockResolvedValue({ user: { email: 'ops@example.com', name: 'Ops' } });
+  });
+
+  it('returns 404 when the order does not exist', async () => {
+    deleteManualOrderMock.mockResolvedValue(null);
+
+    const response = await DELETE(new NextRequest('http://localhost/api/stats/manual-order/1', { method: 'DELETE' }), {
+      params: Promise.resolve({ id: '1' }),
+    });
+
+    expect(response.status).toBe(404);
+  });
+
+  it('deletes the manual order', async () => {
+    deleteManualOrderMock.mockResolvedValue({ id: 1 });
+
+    const response = await DELETE(new NextRequest('http://localhost/api/stats/manual-order/1', { method: 'DELETE' }), {
+      params: Promise.resolve({ id: '1' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(deleteManualOrderMock).toHaveBeenCalledWith('1', { email: 'ops@example.com', name: 'Ops' });
+    await expect(response.json()).resolves.toEqual({ data: { id: 1 } });
+  });
+
+  it('returns the RBAC denial response', async () => {
+    requireOpsAccessMock.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }));
+
+    const response = await DELETE(new NextRequest('http://localhost/api/stats/manual-order/1', { method: 'DELETE' }), {
+      params: Promise.resolve({ id: '1' }),
+    });
+
+    expect(response.status).toBe(403);
+  });
+});

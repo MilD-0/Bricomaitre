@@ -1,0 +1,118 @@
+@import 'tailwindcss';
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+}
+
+:root {
+  color-scheme: light;
+  --background: 210 25% 98%;
+  --foreground: 200 9% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 200 9% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 200 9% 11%;
+  --primary: 175 100% 21%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 180 14% 92%;
+  --secondary-foreground: 175 100% 21%;
+  --muted: 200 10% 90%;
+  --muted-foreground: 170 10% 26%;
+  --accent: 180 14% 95%;
+  --accent-foreground: 200 9% 11%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 167 17% 76%;
+  --input: 200 16% 94%;
+  --ring: 175 100% 21%;
+  --chart-1: 175 100% 21%;
+  --chart-2: 184 43% 34%;
+  --chart-3: 206 32% 42%;
+  --chart-4: 38 87% 56%;
+  --chart-5: 17 58% 47%;
+  --shadow-vapor: 0 20px 40px rgba(0, 107, 95, 0.04);
+  --shadow-vapor-strong: 0 28px 64px rgba(0, 107, 95, 0.08);
+  --glass-surface: hsla(0, 0%, 100%, 0.8);
+  --motion-duration-fast: 180ms;
+  --motion-duration-medium: 240ms;
+  --motion-duration-slow: 320ms;
+  --motion-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dark {
+  color-scheme: dark;
+  --background: 195 18% 11%;
+  --foreground: 180 10% 94%;
+  --card: 190 16% 14%;
+  --card-foreground: 180 10% 94%;
+  --popover: 190 16% 14%;
+  --popover-foreground: 180 10% 94%;
+  --primary: 174 70% 37%;
+  --primary-foreground: 195 18% 11%;
+  --secondary: 190 14% 19%;
+  --secondary-foreground: 180 10% 94%;
+  --muted: 190 14% 18%;
+  --muted-foreground: 180 8% 72%;
+  --accent: 190 12% 23%;
+  --accent-foreground: 180 10% 94%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 173 10% 34%;
+  --input: 190 14% 18%;
+  --ring: 174 78% 40%;
+  --chart-1: 174 78% 40%;
+  --chart-2: 166 42% 50%;
+  --chart-3: 198 38% 57%;
+  --chart-4: 43 96% 62%;
+  --chart-5: 16 72% 62%;
+  --shadow-vapor: 0 20px 40px rgba(0, 0, 0, 0.18);
+  --shadow-vapor-strong: 0 28px 64px rgba(0, 0, 0, 0.28);
+  --glass-surface: hsla(190, 16%, 14%, 0.8);
+  --motion-duration-fast: 180ms;
+  --motion-duration-medium: 240ms;
+  --motion-duration-slow: 320ms;
+  --motion-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  letter-spacing: -0.01em;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--motion-duration-medium);
+  animation-timing-function: var(--motion-ease-standard);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}

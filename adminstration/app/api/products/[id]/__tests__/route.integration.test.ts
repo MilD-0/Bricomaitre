@@ -1,0 +1,246 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { DELETE, GET, PATCH, PUT } from '../route';
+import { productPatchSchema, productPayloadSchema } from '../../../../../lib/products';
+
+const { hasDbMock, getDbMock, requireMutationAccessMock, authMock, mutateEntityWithHistoryMock } = vi.hoisted(() => ({
+  hasDbMock: vi.fn(),
+  getDbMock: vi.fn(),
+  requireMutationAccessMock: vi.fn(),
+  authMock: vi.fn(),
+  mutateEntityWithHistoryMock: vi.fn(),
+}));
+const { revalidateServerTagsMock } = vi.hoisted(() => ({
+  revalidateServerTagsMock: vi.fn(),
+}));
+
+vi.mock('../../../../../db/client', () => ({
+  hasDb: hasDbMock,
+  getDb: getDbMock,
+}));
+
+vi.mock('../../../../../lib/rbac', () => ({
+  requireMutationAccess: requireMutationAccessMock,
+}));
+
+vi.mock('../../../../../lib/auth', () => ({
+  auth: authMock,
+}));
+
+vi.mock('../../../../../lib/action-history', () => ({
+  mutateEntityWithHistory: mutateEntityWithHistoryMock,
+}));
+
+vi.mock('../../../../../lib/server-cache', () => ({
+  CACHE_TAGS: {
+    products: 'products',
+    productsMeta: 'products-meta',
+  },
+  revalidateServerTags: revalidateServerTagsMock,
+}));
+
+describe('app/api/products/[id]/route', () => {
+  beforeEach(() => {
+    hasDbMock.mockReset();
+    getDbMock.mockReset();
+    requireMutationAccessMock.mockReset();
+    requireMutationAccessMock.mockResolvedValue(null);
+    authMock.mockReset();
+    authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
+    mutateEntityWithHistoryMock.mockReset();
+    mutateEntityWithHistoryMock.mockResolvedValue(undefined);
+    revalidateServerTagsMock.mockReset();
+  });
+
+  it('returns 503 when DB is unavailable for GET', async () => {
+    hasDbMock.mockReturnValue(false);
+
+    const res = await GET(new NextRequest('http://localhost/api/products/1'), { params: Promise.resolve({ id: '1' }) });
+
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toEqual({ error: 'DATABASE_URL is not configured' });
+  });
+
+  it('returns 404 for missing product in GET', async () => {
+    hasDbMock.mockReturnValue(true);
+    const findFirst = vi.fn().mockResolvedValue(undefined);
+    getDbMock.mockReturnValue({ query: { products: { findFirst } } });
+
+    const res = await GET(new NextRequest('http://localhost/api/products/999'), { params: Promise.resolve({ id: '999' }) });
+
+    expect(res.status).toBe(404);
+    await expect(res.json()).resolves.toEqual({ error: 'Not found' });
+  });
+
+  it('returns 403 for PUT when caller lacks RBAC access', async () => {
+    requireMutationAccessMock.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }));
+
+    const res = await PUT(
+      new NextRequest('http://localhost/api/products/4', {
+        method: 'PUT',
+        body: JSON.stringify({}),
+        headers: { 'content-type': 'application/json' },
+      }),
+      { params: Promise.resolve({ id: '4' }) },
+    );
+
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toEqual({ error: 'Forbidden' });
+  });
+
+  it('returns 400 when PUT payload is invalid', async () => {
+    hasDbMock.mockReturnValue(true);
+    vi.spyOn(productPayloadSchema, 'safeParse').mockReturnValue({
+      success: false,
+      error: { flatten: () => ({ fieldErrors: { title: ['required'] } }) },
+    } as never);
+
+    const res = await PUT(
+      new NextRequest('http://localhost/api/products/4', {
+        method: 'PUT',
+        body: JSON.stringify({ bad: true }),
+        headers: { 'content-type': 'application/json' },
+      }),
+      { params: Promise.resolve({ id: '4' }) },
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: { fieldErrors: { title: ['required'] } } });
+  });
+
+  it('updates product and applies numeric formatting rules in PUT', async () => {
+    hasDbMock.mockReturnValue(true);
+    vi.spyOn(productPayloadSchema, 'safeParse').mockReturnValue({
+      success: true,
+      data: {
+        title: 'Updated Product',
+        slug: 'updated-product',
+        titleAr: null,
+        description: null,
+        descriptionAr: null,
+        sku: null,
+        barcode: null,
+        price: 7,
+        oldPrice: 8.2,
+        purchasePrice: null,
+        active: false,
+        inStock: false,
+        availabilityStatus: 'in_stock',
+        inventoryQuantity: 3,
+        brandId: null,
+        categoryId: null,
+        images: [],
+      },
+    } as never);
+
+    const db = { marker: 'db' };
+    getDbMock.mockReturnValue(db);
+
+    const res = await PUT(
+      new NextRequest('http://localhost/api/products/4', {
+        method: 'PUT',
+        body: JSON.stringify({}),
+        headers: { 'content-type': 'application/json' },
+      }),
+      { params: Promise.resolve({ id: '4' }) },
+    );
+
+    expect(requireMutationAccessMock).toHaveBeenCalledWith('products');
+    expect(res.status).toBe(200);
+    expect(mutateEntityWithHistoryMock).toHaveBeenCalledWith(db, expect.objectContaining({
+      entityType: 'products',
+      entityId: 4,
+      operation: 'update',
+      actor: { email: 'admin@example.com', name: 'Admin' },
+      execute: expect.any(Function),
+    }));
+
+    const { execute } = mutateEntityWithHistoryMock.mock.calls[0][1];
+    const whereMock = vi.fn().mockResolvedValue(undefined);
+    const setMock = vi.fn().mockReturnValue({ where: whereMock });
+    const updateMock = vi.fn().mockReturnValue({ set: setMock });
+    await execute({ update: updateMock });
+
+    expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
+      price: '7.00',
+      slug: 'updated-product',
+      oldPrice: '8.20',
+      purchasePrice: null,
+      active: false,
+      inventoryQuantity: 3,
+      updatedAt: expect.any(Date),
+    }));
+    expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
+    await expect(res.json()).resolves.toEqual({ ok: true });
+  });
+
+  it('patches product toggles in PATCH', async () => {
+    hasDbMock.mockReturnValue(true);
+    vi.spyOn(productPatchSchema, 'safeParse').mockReturnValue({
+      success: true,
+      data: {
+        active: true,
+        inStock: false,
+      },
+    } as never);
+
+    const db = { marker: 'db' };
+    getDbMock.mockReturnValue(db);
+
+    const res = await PATCH(
+      new NextRequest('http://localhost/api/products/4', {
+        method: 'PATCH',
+        body: JSON.stringify({ active: true, inStock: false }),
+        headers: { 'content-type': 'application/json' },
+      }),
+      { params: Promise.resolve({ id: '4' }) },
+    );
+
+    expect(requireMutationAccessMock).toHaveBeenCalledWith('products');
+    expect(res.status).toBe(200);
+
+    const { execute } = mutateEntityWithHistoryMock.mock.calls[0][1];
+    const whereMock = vi.fn().mockResolvedValue(undefined);
+    const setMock = vi.fn().mockReturnValue({ where: whereMock });
+    const updateMock = vi.fn().mockReturnValue({ set: setMock });
+    await execute({ update: updateMock });
+
+    expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
+      active: true,
+      inStock: false,
+      updatedAt: expect.any(Date),
+    }));
+    expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
+    await expect(res.json()).resolves.toEqual({ ok: true });
+  });
+
+  it('deletes a product when RBAC allows it', async () => {
+    hasDbMock.mockReturnValue(true);
+    const db = { marker: 'db' };
+    getDbMock.mockReturnValue(db);
+
+    const res = await DELETE(new NextRequest('http://localhost/api/products/4', { method: 'DELETE' }), {
+      params: Promise.resolve({ id: '4' }),
+    });
+
+    expect(requireMutationAccessMock).toHaveBeenCalledWith('products');
+    expect(mutateEntityWithHistoryMock).toHaveBeenCalledWith(db, expect.objectContaining({
+      entityType: 'products',
+      entityId: 4,
+      operation: 'delete',
+      actor: { email: 'admin@example.com', name: 'Admin' },
+      execute: expect.any(Function),
+    }));
+
+    const { execute } = mutateEntityWithHistoryMock.mock.calls[0][1];
+    const whereMock = vi.fn().mockResolvedValue(undefined);
+    const deleteMock = vi.fn().mockReturnValue({ where: whereMock });
+    await execute({ delete: deleteMock });
+
+    expect(deleteMock).toHaveBeenCalledOnce();
+    expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ ok: true });
+  });
+});

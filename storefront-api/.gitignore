@@ -1,0 +1,6 @@
+node_modules
+.next
+*.key
+*.p12
+*.pfx
+*.sw?

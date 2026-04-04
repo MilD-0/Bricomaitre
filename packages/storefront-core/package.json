@@ -1,0 +1,26 @@
+{
+  "name": "@bric/storefront-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./analytics": "./src/storefront/analytics.ts",
+    "./assets": "./src/storefront/assets.ts",
+    "./catalog": "./src/storefront/catalog.ts",
+    "./contracts": "./src/storefront/contracts.ts",
+    "./dto": "./src/storefront/dto.ts",
+    "./ecotrack-catalog": "./src/storefront/ecotrack-catalog.ts",
+    "./order-access": "./src/storefront/order-access.ts",
+    "./order-records": "./src/order-records.ts",
+    "./orders": "./src/storefront/orders.ts",
+    "./server-cache": "./src/server-cache.ts"
+  },
+  "dependencies": {
+    "@bric/db": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "next": "16.2.1",
+    "zod": "^4.3.6"
+  },
+  "license": "AGPL-3.0-only"
+}

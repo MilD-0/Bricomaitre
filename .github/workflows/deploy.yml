@@ -1,0 +1,71 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PATH: ${{ secrets.VPS_PATH }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm test:ci
+
+      - name: Build apps
+        run: pnpm build:apps
+
+      - name: Analyze storefront bundle
+        if: github.event_name == 'workflow_dispatch'
+        run: pnpm analyze:storefront
+
+      - name: Upload Sentry sourcemaps
+        if: env.SENTRY_AUTH_TOKEN != ''
+        run: echo "Hook Sentry release upload here with project-specific secrets."
+
+      - name: Sync workspace to VPS
+        uses: easingthemes/ssh-deploy@v5.1.0
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.VPS_HOST }}
+          REMOTE_USER: ${{ secrets.VPS_USER }}
+          TARGET: ${{ secrets.VPS_PATH }}
+          EXCLUDE: |
+            .git/
+            node_modules/
+            **/node_modules/
+            **/.next/cache/
+
+      - name: Deploy on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd "${{ secrets.VPS_PATH }}"
+            bash ops/scripts/deploy.sh
+
+      - name: Invalidate CloudFront
+        if: secrets.AWS_ACCESS_KEY_ID != '' && secrets.CLOUDFRONT_DISTRIBUTION_ID != ''
+        run: echo "Invalidate CloudFront here when CDN-hosted assets change."
