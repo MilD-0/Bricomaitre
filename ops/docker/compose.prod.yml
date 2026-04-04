@@ -1,5 +1,114 @@
 name: bricadmin
 
+x-storefront-api-blue: &storefront-api-blue
+  build:
+    context: ../..
+    dockerfile: ops/docker/Dockerfile.storefront-api
+  restart: unless-stopped
+  env_file:
+    - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront-api.env
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3001/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+
+x-admin-blue: &admin-blue
+  build:
+    context: ../..
+    dockerfile: ops/docker/Dockerfile.admin
+    target: web
+    args:
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-}
+      STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
+  restart: unless-stopped
+  env_file:
+    - ${BRIC_ENV_DIR:-/srv/bric/env}/admin.env
+  environment:
+    STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
+  depends_on:
+    storefront-api-blue:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+
+x-admin-worker-blue: &admin-worker-blue
+  build:
+    context: ../..
+    dockerfile: ops/docker/Dockerfile.admin
+    target: worker
+    args:
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-}
+      STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
+  restart: unless-stopped
+  env_file:
+    - ${BRIC_ENV_DIR:-/srv/bric/env}/admin.env
+  environment:
+    STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
+  depends_on:
+    storefront-api-blue:
+      condition: service_healthy
+
+x-admin-migrations-blue: &admin-migrations-blue
+  build:
+    context: ../..
+    dockerfile: ops/docker/Dockerfile.admin
+    target: worker
+    args:
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-}
+      STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
+  restart: "no"
+  env_file:
+    - ${BRIC_ENV_DIR:-/srv/bric/env}/admin.env
+  environment:
+    STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
+    ADMIN_DB_TASK: ${ADMIN_DB_TASK:-verify}
+  depends_on:
+    postgres:
+      condition: service_healthy
+  command:
+    - bash
+    - -lc
+    - pnpm --filter adminstration db:$${ADMIN_DB_TASK:?ADMIN_DB_TASK is required}
+
+x-storefront-blue: &storefront-blue
+  build:
+    context: ../..
+    dockerfile: ops/docker/Dockerfile.storefront
+    network: host
+    args:
+      STOREFRONT_API_BASE_URL: http://127.0.0.1:3101
+  restart: unless-stopped
+  env_file:
+    - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront.env
+  environment:
+    STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
+  depends_on:
+    storefront-api-blue:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3002/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+
 services:
   postgres:
     image: postgres:16-bookworm
@@ -28,80 +137,104 @@ services:
       timeout: 5s
       retries: 10
 
-  storefront-api:
-    build:
-      context: ../..
-      dockerfile: ops/docker/Dockerfile.storefront-api
-    restart: unless-stopped
-    env_file:
-      - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront-api.env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3001/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
-      interval: 10s
-      timeout: 5s
-      retries: 12
+  storefront-api-blue:
+    <<: *storefront-api-blue
+    ports:
+      - "127.0.0.1:3101:3001"
 
-  adminstration:
+  storefront-api-green:
+    <<: *storefront-api-blue
+    ports:
+      - "127.0.0.1:3102:3001"
+
+  adminstration-blue:
+    <<: *admin-blue
+
+  adminstration-green:
+    <<: *admin-blue
     build:
       context: ../..
       dockerfile: ops/docker/Dockerfile.admin
       target: web
-    restart: unless-stopped
-    env_file:
-      - ${BRIC_ENV_DIR:-/srv/bric/env}/admin.env
+      args:
+        GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+        GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+        NEXTAUTH_URL: ${NEXTAUTH_URL:-}
+        NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-}
+        STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
+    environment:
+      STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
     depends_on:
-      storefront-api:
+      storefront-api-green:
         condition: service_healthy
 
-  admin-worker:
+  admin-worker-blue:
+    <<: *admin-worker-blue
+
+  admin-migrations-blue:
+    <<: *admin-migrations-blue
+
+  admin-worker-green:
+    <<: *admin-worker-blue
     build:
       context: ../..
       dockerfile: ops/docker/Dockerfile.admin
       target: worker
-    restart: unless-stopped
-    env_file:
-      - ${BRIC_ENV_DIR:-/srv/bric/env}/admin.env
+      args:
+        GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+        GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+        NEXTAUTH_URL: ${NEXTAUTH_URL:-}
+        NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-}
+        STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
+    environment:
+      STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
     depends_on:
-      storefront-api:
+      storefront-api-green:
         condition: service_healthy
 
-  storefront:
+  admin-migrations-green:
+    <<: *admin-migrations-blue
+    build:
+      context: ../..
+      dockerfile: ops/docker/Dockerfile.admin
+      target: worker
+      args:
+        GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+        GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+        NEXTAUTH_URL: ${NEXTAUTH_URL:-}
+        NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-}
+        STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
+    environment:
+      STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
+      ADMIN_DB_TASK: ${ADMIN_DB_TASK:-verify}
+
+  storefront-blue:
+    <<: *storefront-blue
+
+  storefront-green:
+    <<: *storefront-blue
     build:
       context: ../..
       dockerfile: ops/docker/Dockerfile.storefront
-    restart: unless-stopped
-    env_file:
-      - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront.env
+      network: host
+      args:
+        STOREFRONT_API_BASE_URL: http://127.0.0.1:3102
+    environment:
+      STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
     depends_on:
-      storefront-api:
+      storefront-api-green:
         condition: service_healthy
 
   nginx:
     image: nginx:1.27-bookworm
     restart: unless-stopped
-    depends_on:
-      storefront-api:
-        condition: service_started
-      adminstration:
-        condition: service_started
-      storefront:
-        condition: service_started
-    environment:
-      BRIC_ADMIN_DOMAIN: ${BRIC_ADMIN_DOMAIN:-admin.example.com}
-      BRIC_API_DOMAIN: ${BRIC_API_DOMAIN:-api.example.com}
-      BRIC_STOREFRONT_DOMAIN: ${BRIC_STOREFRONT_DOMAIN:-www.example.com}
-      BRIC_STOREFRONT_APEX_DOMAIN: ${BRIC_STOREFRONT_APEX_DOMAIN:-example.com}
     ports:
       - "80:80"
       - "443:443"
     volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
       - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ../nginx/templates:/etc/nginx/templates:ro
+      - ${BRIC_RUNTIME_DIR:-/srv/bric/runtime}/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
 
 volumes:
   postgres-data:

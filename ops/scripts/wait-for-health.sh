@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+repo_root="$(cd "$script_dir/../.." && pwd -P)"
+
+source "$script_dir/load-infra-env.sh"
+
 service_name="${1:?compose service name is required}"
-compose_file="${COMPOSE_FILE:-ops/docker/compose.prod.yml}"
+compose_file="${COMPOSE_FILE:-$repo_root/ops/docker/compose.prod.yml}"
 attempts="${ATTEMPTS:-30}"
 sleep_seconds="${SLEEP_SECONDS:-2}"
 

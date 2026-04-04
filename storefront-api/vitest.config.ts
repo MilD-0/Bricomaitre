@@ -1,13 +1,12 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
-import tsconfigPaths from 'vite-tsconfig-paths';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  plugins: [tsconfigPaths()],
   resolve: {
+    tsconfigPaths: true,
     alias: [
       { find: 'drizzle-orm', replacement: `${rootDir}/node_modules/drizzle-orm` },
       { find: 'drizzle-orm/', replacement: `${rootDir}/node_modules/drizzle-orm/` },

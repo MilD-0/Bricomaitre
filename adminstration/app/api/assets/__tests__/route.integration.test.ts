@@ -148,6 +148,7 @@ describe('app/api/assets/route', () => {
       data: {
         name: 'Top carousel',
         cta: 'Voir Plus',
+        ctaAr: 'اكتشف المزيد',
         link: '/products?featured=1',
         productIds: [9],
         brandIds: [],
@@ -177,6 +178,7 @@ describe('app/api/assets/route', () => {
     expect(valuesMock).toHaveBeenCalledWith({
       name: 'Top carousel',
       cta: 'Voir Plus',
+      ctaAr: 'اكتشف المزيد',
       link: '/products?featured=1',
       active: true,
       sortOrder: 2,

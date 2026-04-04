@@ -14,12 +14,14 @@ describe("storefront-api upstream fallback logging", () => {
     delete process.env.NEXT_PHASE;
   });
 
-  it("suppresses upstream fallback logs during next production builds", async () => {
+  it("fails fast during next production builds when storefront-api is unavailable", async () => {
     process.env.NEXT_PHASE = "phase-production-build";
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED")));
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await expect(fetchStorefrontBrands()).resolves.toEqual([]);
+    await expect(fetchStorefrontBrands()).rejects.toThrow(
+      "Storefront API is unavailable: /api/storefront/brands",
+    );
 
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
@@ -119,6 +121,7 @@ describe("storefront-api featured groups", () => {
         id: 8,
         name: "Homepage picks",
         cta: "Voir Plus",
+        ctaAr: "اكتشف المزيد",
         link: "/products?featured=1",
         sortOrder: 0,
         showAtTopOfProductsPage: false,
@@ -133,6 +136,7 @@ describe("storefront-api featured groups", () => {
     );
 
     expect(result.cta).toBe("Voir Plus");
+    expect(result.ctaAr).toBe("اكتشف المزيد");
     expect(result.link).toBe("/products?featured=1");
   });
 });

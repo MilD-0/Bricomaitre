@@ -1,5 +1,6 @@
 const DEFAULT_STOREFRONT_API_BASE_URL = "http://localhost:3001";
 const DEFAULT_TIMEOUT_MS = 5_000;
+const DEFAULT_READ_TIMEOUT_MS = 15_000;
 
 export class StorefrontUpstreamError extends Error {
   status: number | null;
@@ -29,6 +30,18 @@ export function isUsingDefaultStorefrontApiBaseUrl() {
 
 export function buildStorefrontApiUrl(pathname: string) {
   return `${getStorefrontApiBaseUrl()}${pathname}`;
+}
+
+function readConfiguredReadTimeoutMs() {
+  const rawValue = process.env.STOREFRONT_API_TIMEOUT_MS?.trim();
+
+  if (!rawValue) {
+    return DEFAULT_READ_TIMEOUT_MS;
+  }
+
+  const parsed = Number(rawValue);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_READ_TIMEOUT_MS;
 }
 
 export async function fetchStorefrontUpstream(
@@ -66,6 +79,7 @@ export async function fetchStorefrontJson<T>(
 ): Promise<T> {
   const response = await fetchStorefrontUpstream(pathname, {
     ...init,
+    timeoutMs: init?.timeoutMs ?? readConfiguredReadTimeoutMs(),
     headers: {
       accept: "application/json",
       "content-type": "application/json",

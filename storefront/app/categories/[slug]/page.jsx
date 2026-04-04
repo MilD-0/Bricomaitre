@@ -18,6 +18,13 @@ import {
 export const revalidate = 60;
 export const dynamicParams = true;
 
+export async function generateStaticParams() {
+  const categories = (await fetchStorefrontCategories()).map(normalizeCategory);
+  return categories
+    .filter((category) => Boolean(category.slug))
+    .map((category) => ({ slug: category.slug }));
+}
+
 async function loadCategory(slug) {
   const categories = (await fetchStorefrontCategories()).map(normalizeCategory);
   const category = categories.find((item) => item.slug === slug) ?? null;

@@ -194,7 +194,15 @@ export default function Home({
 
           {featuredGroups.length > 0 &&
             featuredGroups.map((group) => (
-              <FeaturedGroup key={group._id} groupId={group.id} title={group.title} cta={group.cta} link={group.link} />
+              <FeaturedGroup
+                key={group._id}
+                groupId={group.id}
+                title={group.title}
+                cta={group.cta}
+                ctaAr={group.ctaAr}
+                link={group.link}
+                locale={locale}
+              />
             ))}
 
           <section className="sf-container text-center">

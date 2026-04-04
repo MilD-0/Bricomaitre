@@ -3,14 +3,13 @@ import createNextIntlPlugin from 'next-intl/plugin';
 import { withSentryConfig } from '@sentry/nextjs';
 import createBundleAnalyzer from '@next/bundle-analyzer';
 
-import { getCloudfrontOrigin, getStorefrontAssetPrefix } from './lib/cdn';
+import { getStorefrontAssetPrefix, getStorefrontRemoteImagePatterns } from './lib/cdn';
 
 const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 const withBundleAnalyzer = createBundleAnalyzer({
   enabled: process.env.ANALYZE === 'true',
 });
 
-const cloudfrontOrigin = getCloudfrontOrigin();
 const assetPrefix = getStorefrontAssetPrefix();
 
 const securityHeaders = [
@@ -42,14 +41,7 @@ const nextConfig: NextConfig = {
   assetPrefix,
   images: {
     qualities: [60, 75],
-    remotePatterns: cloudfrontOrigin
-      ? [
-          {
-            protocol: cloudfrontOrigin.protocol.replace(':', '') as 'http' | 'https',
-            hostname: cloudfrontOrigin.hostname,
-          },
-        ]
-      : [],
+    remotePatterns: getStorefrontRemoteImagePatterns(),
   },
   async headers() {
     return [

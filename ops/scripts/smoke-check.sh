@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$(dirname "$0")/load-infra-env.sh"
+
 proxy_url="${BRIC_PROXY_URL:-http://127.0.0.1}"
 admin_domain="${BRIC_ADMIN_DOMAIN:-admin.example.com}"
 api_domain="${BRIC_API_DOMAIN:-api.example.com}"

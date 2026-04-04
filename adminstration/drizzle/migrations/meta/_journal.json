@@ -253,6 +253,27 @@
       "when": 1775489400000,
       "tag": "0035_featured_group_cta",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1775575800000,
+      "tag": "0036_legacy_mongo_ids",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1775583000000,
+      "tag": "0037_featured_group_cta_ar",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1775590000000,
+      "tag": "0038_ci_pipeline_noop",
+      "breakpoints": true
     }
   ]
 }

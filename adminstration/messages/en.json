@@ -1280,6 +1280,8 @@
     "groupNameColumn": "Group name",
     "groupCtaLabel": "CTA text",
     "groupCtaPlaceholder": "Voir Plus",
+    "groupCtaArLabel": "Arabic CTA text",
+    "groupCtaArPlaceholder": "اكتشف المزيد",
     "groupLinkLabel": "CTA link",
     "groupLinkPlaceholder": "/products",
     "groupShowAtTopLabel": "Show at top of products page",
