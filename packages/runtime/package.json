@@ -1,0 +1,19 @@
+{
+  "name": "@bric/runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./redis": "./src/redis.ts",
+    "./jobs": "./src/jobs.ts",
+    "./rate-limit": "./src/rate-limit.ts",
+    "./idempotency": "./src/idempotency.ts"
+  },
+  "dependencies": {
+    "@sentry/node": "10.47.0",
+    "bullmq": "^5.58.0",
+    "ioredis": "^5.7.0"
+  },
+  "license": "AGPL-3.0-only"
+}

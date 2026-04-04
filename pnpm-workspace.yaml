@@ -1,0 +1,16 @@
+packages:
+  - adminstration
+  - storefront-api
+  - storefront
+  - packages/*
+
+allowBuilds:
+  '@parcel/watcher': false
+  '@sentry/cli': true
+  '@swc/core': false
+  core-js: false
+  esbuild: false
+  msgpackr-extract: true
+  msw: false
+  sharp: false
+  unrs-resolver: false

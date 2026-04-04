@@ -1,0 +1,1 @@
+ALTER TABLE "featured_product_groups" ADD COLUMN "show_at_top_of_products_page" boolean DEFAULT false NOT NULL;

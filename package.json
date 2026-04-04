@@ -1,0 +1,29 @@
+{
+  "name": "bricadmin-workspace",
+  "private": true,
+  "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319",
+  "scripts": {
+    "dev:admin": "pnpm --filter adminstration dev",
+    "dev:storefront-api": "pnpm --filter storefront-api dev",
+    "dev:storefront": "pnpm --filter storefront dev",
+    "worker:admin": "pnpm --filter adminstration worker",
+    "build:admin": "pnpm --filter adminstration build",
+    "build:storefront-api": "pnpm --filter storefront-api build",
+    "build:storefront": "pnpm --filter storefront build",
+    "build:apps": "pnpm build:storefront-api && pnpm build:admin && pnpm build:storefront",
+    "test:admin": "pnpm --filter adminstration test",
+    "test:admin:integration": "pnpm --filter adminstration test:integration",
+    "test:storefront-api": "pnpm --filter storefront-api test",
+    "test:storefront": "pnpm --filter storefront test",
+    "test:ci": "pnpm test:admin && pnpm test:admin:integration && pnpm test:storefront-api && pnpm test:storefront",
+    "analyze:storefront": "pnpm --filter storefront analyze",
+    "ops:up": "docker compose -f ops/docker/compose.prod.yml up -d",
+    "ops:down": "docker compose -f ops/docker/compose.prod.yml down",
+    "ops:restart": "docker compose -f ops/docker/compose.prod.yml restart",
+    "ops:logs": "docker compose -f ops/docker/compose.prod.yml logs -f --tail=200",
+    "ops:wait:storefront-api": "bash ops/scripts/wait-for-health.sh storefront-api",
+    "ops:migrate": "bash ops/scripts/run-admin-migrations.sh",
+    "ops:smoke": "bash ops/scripts/smoke-check.sh"
+  },
+  "license": "AGPL-3.0-only"
+}

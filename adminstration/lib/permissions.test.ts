@@ -1,0 +1,87 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  canEdit,
+  canExportAllProducts,
+  canManageSettings,
+  canViewOps,
+  entityFormSchema,
+  getPermissionsForRole,
+  permissionKeySchema,
+  roleDefinitionFormSchema,
+} from './permissions';
+
+describe('entityFormSchema', () => {
+  it('enforces min/max length and status enum constraints', () => {
+    expect(
+      entityFormSchema.safeParse({ name: 'Ab', status: 'active', tags: 'tag1' }).success,
+    ).toBe(false);
+
+    expect(
+      entityFormSchema.safeParse({
+        name: 'A'.repeat(121),
+        status: 'active',
+      }).success,
+    ).toBe(false);
+
+    expect(
+      entityFormSchema.safeParse({ name: 'Valid Name', status: 'invalid' }).success,
+    ).toBe(false);
+
+    expect(
+      entityFormSchema.safeParse({ name: 'Valid Name', status: 'draft', tags: 'a,b' }).success,
+    ).toBe(true);
+  });
+});
+
+describe('roleDefinitionFormSchema', () => {
+  it('requires at least one permission and a valid name', () => {
+    expect(roleDefinitionFormSchema.safeParse({ name: 'Ab', permissions: [] }).success).toBe(false);
+    expect(roleDefinitionFormSchema.safeParse({ name: 'Support', permissions: ['orders_write'] }).success).toBe(true);
+  });
+
+  it('rejects unsupported permission keys', () => {
+    expect(permissionKeySchema.safeParse('ops_view').success).toBe(true);
+    expect(permissionKeySchema.safeParse('bulletin_moderate').success).toBe(true);
+    expect(permissionKeySchema.safeParse('unknown_permission').success).toBe(false);
+  });
+});
+
+describe('permissions role matrix', () => {
+  it('matches expected canEdit permissions', () => {
+    expect(canEdit('viewer')).toBe(false);
+    expect(canEdit('employee')).toBe(true);
+    expect(canEdit('admin')).toBe(true);
+    expect(canEdit('developer')).toBe(true);
+  });
+
+  it('matches expected canViewOps permissions', () => {
+    expect(canViewOps('viewer')).toBe(false);
+    expect(canViewOps('employee')).toBe(false);
+    expect(canViewOps('admin')).toBe(true);
+    expect(canViewOps('developer')).toBe(true);
+    expect(canViewOps(['settings_manage'])).toBe(true);
+  });
+
+  it('maps built-in roles to the expected permission sets', () => {
+    expect(getPermissionsForRole('employee')).toEqual([
+      'products_write',
+      'orders_write',
+      'assets_write',
+      'brands_categories_write',
+    ]);
+    expect(getPermissionsForRole('campaign-manager')).toEqual([]);
+  });
+
+  it('keeps settings-specific access separate from generic edit access', () => {
+    expect(canManageSettings(['settings_manage'])).toBe(true);
+    expect(canManageSettings(['ops_view'])).toBe(false);
+  });
+
+  it('limits full product exports to admin and developer roles', () => {
+    expect(canExportAllProducts('viewer')).toBe(false);
+    expect(canExportAllProducts('employee')).toBe(false);
+    expect(canExportAllProducts('admin')).toBe(true);
+    expect(canExportAllProducts('developer')).toBe(true);
+  });
+});
