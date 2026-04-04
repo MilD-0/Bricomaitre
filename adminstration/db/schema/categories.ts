@@ -17,6 +17,7 @@ export const categories = pgTable(
     id: bigserial("id", { mode: "number" }).primaryKey(),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
+    mongoId: text("mongo_id"),
     nameEn: text("name_en"),
     nameAr: text("name_ar"),
     image: text("image"),
@@ -48,6 +49,7 @@ export const categories = pgTable(
   },
   (t) => [
     index("idx_categories_parent").on(t.parentId),
+    index("idx_categories_mongo_id").on(t.mongoId),
     uniqueIndex("categories_slug_unique").on(t.slug),
     index("idx_categories_popularity").on(t.popularityScore),
     index("idx_categories_last_viewed_at").on(t.lastViewedAt.desc()),

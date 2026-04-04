@@ -21,9 +21,12 @@
     "ops:down": "docker compose -f ops/docker/compose.prod.yml down",
     "ops:restart": "docker compose -f ops/docker/compose.prod.yml restart",
     "ops:logs": "docker compose -f ops/docker/compose.prod.yml logs -f --tail=200",
-    "ops:wait:storefront-api": "bash ops/scripts/wait-for-health.sh storefront-api",
+    "ops:wait:storefront-api": "bash -lc 'source ops/scripts/blue-green.sh && bash ops/scripts/wait-for-health.sh \"$(service_name storefront-api \"$(get_active_slot)\")\"'",
     "ops:migrate": "bash ops/scripts/run-admin-migrations.sh",
-    "ops:smoke": "bash ops/scripts/smoke-check.sh"
+    "ops:smoke": "bash ops/scripts/smoke-check.sh",
+    "ops:deploy": "bash ops/scripts/deploy.sh",
+    "ops:rollback": "bash ops/scripts/rollback.sh",
+    "ops:render-nginx": "bash ops/scripts/render-nginx-config.sh"
   },
   "license": "AGPL-3.0-only"
 }

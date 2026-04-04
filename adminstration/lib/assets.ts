@@ -48,6 +48,7 @@ export const assetBannerSchema = z.object({
 export const featuredProductGroupSchema = z.object({
   name: z.string().trim().min(1).max(120),
   cta: optionalShortTextSchema,
+  ctaAr: optionalShortTextSchema,
   link: optionalLinkSchema,
   productIds: z.array(z.coerce.number().int().positive()).default([]),
   brandIds: z.array(z.coerce.number().int().positive()).default([]),

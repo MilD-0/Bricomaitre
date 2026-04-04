@@ -68,6 +68,7 @@ type StorefrontFeaturedGroup = {
   id: number;
   name: string;
   cta: string | null;
+  ctaAr: string | null;
   link: string | null;
   sortOrder: number;
   showAtTopOfProductsPage: boolean;
@@ -109,6 +110,7 @@ export type LegacyFeaturedGroup = {
   id: number;
   title: string;
   cta: string | null;
+  ctaAr: string | null;
   link: string | null;
   products: LegacyProduct[];
 };
@@ -118,6 +120,7 @@ export type LegacyHomepageFeaturedGroup = {
   id: number;
   title: string;
   cta: string | null;
+  ctaAr: string | null;
   link: string | null;
 };
 
@@ -310,9 +313,11 @@ async function withStorefrontFallback<T>(
     return await load();
   } catch (error) {
     if (error instanceof StorefrontUpstreamError) {
-      if (!isNextProductionBuildPhase()) {
-        console.error(`[storefront] upstream request failed for ${pathname}`, error.message);
+      if (isNextProductionBuildPhase()) {
+        throw error;
       }
+
+      console.error(`[storefront] upstream request failed for ${pathname}`, error.message);
       return fallback;
     }
 
@@ -649,6 +654,7 @@ function normalizeHomepageFeaturedGroup(
     id: group.id,
     title: group.name,
     cta: group.cta,
+    ctaAr: group.ctaAr,
     link: group.link,
   };
 }
@@ -986,6 +992,7 @@ export function normalizeFeaturedGroup(
     id: group.id,
     title: group.name,
     cta: group.cta,
+    ctaAr: group.ctaAr,
     link: group.link,
     products: buildFeaturedGroupProducts(group, products, limit),
   };

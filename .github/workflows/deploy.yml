@@ -7,65 +7,136 @@ on:
       - main
 
 jobs:
-  deploy:
+  verify:
     runs-on: ubuntu-latest
-    env:
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-      VPS_HOST: ${{ secrets.VPS_HOST }}
-      VPS_USER: ${{ secrets.VPS_USER }}
-      VPS_PATH: ${{ secrets.VPS_PATH }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
         with:
-          version: 10.33.0
+          node-version: 24
+          package-manager-cache: false
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack install
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Test
-        run: pnpm test:ci
+        run: |
+          set -euo pipefail
 
-      - name: Build apps
-        run: pnpm build:apps
+          run_step() {
+            local label="$1"
+            shift
+
+            echo "::group::$label"
+            if "$@"; then
+              echo "- ✅ $label" >> "$GITHUB_STEP_SUMMARY"
+              echo "::endgroup::"
+              return 0
+            fi
+
+            local status=$?
+            echo "- ❌ $label" >> "$GITHUB_STEP_SUMMARY"
+            echo "::endgroup::"
+            return "$status"
+          }
+
+          echo "## Verify phase" >> "$GITHUB_STEP_SUMMARY"
+          run_step "Admin unit and jsdom tests" pnpm test:admin
+          run_step "Admin integration tests" pnpm test:admin:integration
+          run_step "Storefront API tests" pnpm test:storefront-api
+          run_step "Storefront tests" pnpm test:storefront
+          echo >> "$GITHUB_STEP_SUMMARY"
 
       - name: Analyze storefront bundle
         if: github.event_name == 'workflow_dispatch'
-        run: pnpm analyze:storefront
+        run: |
+          ANALYZE=true pnpm build:storefront
+          echo "- ✅ Storefront bundle analysis build completed" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload Sentry sourcemaps
-        if: env.SENTRY_AUTH_TOKEN != ''
-        run: echo "Hook Sentry release upload here with project-specific secrets."
+  deploy:
+    needs: verify
+    runs-on:
+      - self-hosted
+      - linux
+      - bric-vps
+    env:
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      VPS_PATH: ${{ secrets.VPS_PATH != '' && secrets.VPS_PATH || '/srv/bric/current' }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+      CLOUDFRONT_INVALIDATION_PATHS: ${{ secrets.CLOUDFRONT_INVALIDATION_PATHS }}
+    steps:
+      - uses: actions/checkout@v5
 
-      - name: Sync workspace to VPS
-        uses: easingthemes/ssh-deploy@v5.1.0
+      - name: Prepare release metadata
+        run: |
+          set -euo pipefail
+
+          vps_path="${VPS_PATH%/}"
+          release_id="${GITHUB_SHA::12}-${GITHUB_RUN_ID}"
+          deploy_root="${vps_path%/current}"
+          if [ "$deploy_root" = "$vps_path" ]; then
+            deploy_root="$vps_path"
+          fi
+          release_path="$deploy_root/releases/$release_id"
+
+          {
+            echo "RELEASE_ID=$release_id"
+            echo "DEPLOY_ROOT=$deploy_root"
+            echo "RELEASE_PATH=$release_path"
+          } >> "$GITHUB_ENV"
+
+          cat > .bric-release.env <<EOF
+          BRIC_RELEASE_ID=$release_id
+          BRIC_RELEASE_COMMIT=$GITHUB_SHA
+          BRIC_RELEASE_CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          BRIC_WORKFLOW_RUN_ID=$GITHUB_RUN_ID
+          EOF
+
+      - name: Prepare release directory on VPS
+        run: |
+          set -euo pipefail
+          mkdir -p "${DEPLOY_ROOT}/releases"
+          rm -rf "${RELEASE_PATH}"
+          mkdir -p "${RELEASE_PATH}"
+
+      - name: Stage release contents
+        run: |
+          set -euo pipefail
+          rsync -a --delete \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            "${GITHUB_WORKSPACE}/" "${RELEASE_PATH}/"
+          cp .bric-release.env "${RELEASE_PATH}/.bric-release.env"
+
+      - name: Deploy on VPS runner
+        run: |
+          set -euo pipefail
+          cd "${RELEASE_PATH}"
+          bash ops/scripts/deploy.sh "${RELEASE_PATH}" "${GITHUB_SHA}"
+          echo "## Deploy phase" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ✅ Deployed release ${RELEASE_ID}" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Configure AWS credentials
+        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_REGION != '' && env.CLOUDFRONT_DISTRIBUTION_ID != '' && env.CLOUDFRONT_INVALIDATION_PATHS != ''
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
-          REMOTE_HOST: ${{ secrets.VPS_HOST }}
-          REMOTE_USER: ${{ secrets.VPS_USER }}
-          TARGET: ${{ secrets.VPS_PATH }}
-          EXCLUDE: |
-            .git/
-            node_modules/
-            **/node_modules/
-            **/.next/cache/
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Deploy on VPS
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            cd "${{ secrets.VPS_PATH }}"
-            bash ops/scripts/deploy.sh
-
-      - name: Invalidate CloudFront
-        if: secrets.AWS_ACCESS_KEY_ID != '' && secrets.CLOUDFRONT_DISTRIBUTION_ID != ''
-        run: echo "Invalidate CloudFront here when CDN-hosted assets change."
+      - name: Invalidate CloudFront media paths
+        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_REGION != '' && env.CLOUDFRONT_DISTRIBUTION_ID != '' && env.CLOUDFRONT_INVALIDATION_PATHS != ''
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ env.CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths ${{ env.CLOUDFRONT_INVALIDATION_PATHS }}

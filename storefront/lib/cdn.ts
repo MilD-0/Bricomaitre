@@ -14,6 +14,19 @@ export function getCloudfrontOrigin() {
   return parseOriginUrl(process.env.NEXT_PUBLIC_CLOUDFRONT_URL);
 }
 
+export function getStorefrontRemoteImagePatterns() {
+  return [
+    {
+      protocol: 'http' as const,
+      hostname: '**',
+    },
+    {
+      protocol: 'https' as const,
+      hostname: '**',
+    },
+  ];
+}
+
 export function getStorefrontAssetPrefix() {
   if (process.env.NODE_ENV !== 'production') {
     return undefined;

@@ -167,6 +167,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ kind
           .set({
             name: parsed.data.name,
             cta: parsed.data.cta,
+            ctaAr: parsed.data.ctaAr,
             link: parsed.data.link,
             active: parsed.data.active,
             showAtTopOfProductsPage: parsed.data.showAtTopOfProductsPage,

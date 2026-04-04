@@ -20,6 +20,8 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+RUN mkdir -p storefront-api/public
+
 RUN pnpm --filter storefront-api build
 
 FROM node:20-bookworm-slim AS runner

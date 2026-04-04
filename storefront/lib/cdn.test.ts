@@ -10,6 +10,23 @@ describe('storefront cdn helpers', () => {
     expect(getCloudfrontOrigin()).toBeNull();
   });
 
+  it('allows remote images from any http or https origin', async () => {
+    vi.resetModules();
+
+    const { getStorefrontRemoteImagePatterns } = await import('./cdn');
+
+    expect(getStorefrontRemoteImagePatterns()).toEqual([
+      {
+        protocol: 'http',
+        hostname: '**',
+      },
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ]);
+  });
+
   it('returns a normalized asset prefix in production only', async () => {
     vi.resetModules();
     process.env.NODE_ENV = 'production';

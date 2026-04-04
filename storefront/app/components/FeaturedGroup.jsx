@@ -22,7 +22,7 @@ function FeaturedGroupSkeleton() {
   );
 }
 
-export default function FeaturedGroup({ title, groupId, cta, link }) {
+export default function FeaturedGroup({ title, groupId, cta, ctaAr, link, locale }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -70,7 +70,8 @@ export default function FeaturedGroup({ title, groupId, cta, link }) {
     return null;
   }
 
-  const hasCta = Boolean(cta && link);
+  const localizedCta = locale === "ar" ? (ctaAr || cta) : cta;
+  const hasCta = Boolean(localizedCta && link);
 
   return (
     <section className="overflow-hidden">
@@ -92,7 +93,7 @@ export default function FeaturedGroup({ title, groupId, cta, link }) {
             href={link}
             className="sf-button min-w-[12rem] justify-center px-8 py-3 text-base md:min-w-[18rem]"
           >
-            {cta}
+            {localizedCta}
           </Link>
         </div>
       ) : null}

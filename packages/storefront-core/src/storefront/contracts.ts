@@ -94,6 +94,7 @@ export const storefrontAssetsResponseSchema = z.object({
   banners: z.array(z.object({}).passthrough()),
   featuredGroups: z.array(z.object({
     cta: z.string().nullable(),
+    ctaAr: z.string().nullable(),
     link: z.string().nullable(),
     productIds: z.array(z.number().int()),
     brandIds: z.array(z.number().int()),
