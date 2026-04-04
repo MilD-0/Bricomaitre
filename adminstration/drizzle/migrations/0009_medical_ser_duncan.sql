@@ -1,0 +1,21 @@
+ALTER TABLE "products" DROP COLUMN "short_description";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "summary";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "summary_ar";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "summary2";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "summary2_ar";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "vid_link";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "color";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "by";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "show_percentage";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "is_digital";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "weight";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "weight_unit";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "length";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "width";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "height";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "dimension_unit";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "tax_class";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "seo_title";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "seo_description";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "meta_keywords";--> statement-breakpoint
+ALTER TABLE "products" DROP COLUMN "published_at";

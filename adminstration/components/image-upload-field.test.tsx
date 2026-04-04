@@ -1,0 +1,143 @@
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { ImageUploadField } from './image-upload-field';
+
+class MockXHR {
+  responseType = '';
+  status = 0;
+  response: unknown = null;
+  upload = {
+    onprogress: null as ((event: { lengthComputable: boolean; loaded: number; total: number }) => void) | null,
+  };
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+
+  open = vi.fn();
+  send = vi.fn(() => {
+    this.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 100 });
+    setTimeout(() => {
+      this.status = 200;
+      this.response = { urls: ['https://cdn.example.com/uploaded.jpg'] };
+      this.onload?.();
+    }, 80);
+  });
+}
+
+describe('ImageUploadField', () => {
+  const originalXHR = globalThis.XMLHttpRequest;
+  const originalCreateObjectURL = URL.createObjectURL;
+  const originalRevokeObjectURL = URL.revokeObjectURL;
+
+  beforeEach(() => {
+    globalThis.XMLHttpRequest = MockXHR as unknown as typeof XMLHttpRequest;
+    URL.createObjectURL = vi.fn(() => 'blob:preview');
+    URL.revokeObjectURL = vi.fn();
+  });
+
+  afterEach(() => {
+    cleanup();
+    globalThis.XMLHttpRequest = originalXHR;
+    URL.createObjectURL = originalCreateObjectURL;
+    URL.revokeObjectURL = originalRevokeObjectURL;
+    vi.restoreAllMocks();
+  });
+
+  it('shows a thumbnail and upload progress before applying the returned URL', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ImageUploadField
+        uploadUrl="/api/uploads/test"
+        label="Images"
+        value={[]}
+        onChange={onChange}
+      />,
+    );
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(fileInput, new File(['img'], 'preview.png', { type: 'image/png' }));
+
+    expect(await screen.findByText('preview.png')).toBeInTheDocument();
+    expect(screen.getByText('50%')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith(['https://cdn.example.com/uploaded.jpg']);
+    });
+  });
+
+  it('opens a full-size preview when clicking an uploaded image card', async () => {
+    render(
+      <ImageUploadField
+        uploadUrl="/api/uploads/test"
+        label="Images"
+        value={['https://cdn.example.com/existing.jpg']}
+        onChange={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open image 1' }));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Image 1' })).toHaveAttribute('src', 'https://cdn.example.com/existing.jpg');
+    expect(screen.getByRole('img', { name: 'Image 1' }).parentElement).toHaveClass('bg-[hsl(var(--background)/0.86)]');
+  });
+
+  it('renders pointer cursors for image actions', () => {
+    render(
+      <ImageUploadField
+        uploadUrl="/api/uploads/test"
+        label="Images"
+        value={['https://cdn.example.com/existing.jpg']}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Open image 1' })).toHaveClass('cursor-pointer');
+    expect(screen.getByRole('button', { name: 'Change image 1' })).toHaveClass('cursor-pointer');
+    expect(screen.getByRole('button', { name: 'Delete image 1' })).toHaveClass('cursor-pointer');
+  });
+
+  it('asks for confirmation before deleting an image', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ImageUploadField
+        uploadUrl="/api/uploads/test"
+        label="Images"
+        value={['https://cdn.example.com/existing.jpg']}
+        onChange={onChange}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete image 1' }));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Delete image?')).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(onChange).toHaveBeenCalledWith([]);
+  });
+
+  it('locks body scrolling while a popup is open', async () => {
+    render(
+      <ImageUploadField
+        uploadUrl="/api/uploads/test"
+        label="Images"
+        value={['https://cdn.example.com/existing.jpg']}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(document.body.style.overflow).toBe('');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open image 1' }));
+    expect(document.body.style.overflow).toBe('hidden');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close dialog overlay' }));
+    expect(document.body.style.overflow).toBe('');
+  });
+});

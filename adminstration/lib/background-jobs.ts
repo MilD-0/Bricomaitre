@@ -1,0 +1,430 @@
+import { and, asc, count, eq, inArray, isNull } from 'drizzle-orm';
+import { getLatestOwnedJob, requestJobCancellation, startOwnedJob, type JobSnapshot } from '@bric/runtime/jobs';
+import { storefrontAnalyticsEventSchema, ingestStorefrontAnalyticsEvent } from '@bric/storefront-core/analytics';
+import { getOrderProductLookup, toOrderRecord } from '@bric/storefront-core/order-records';
+
+import { getDb } from '../db/client';
+import {
+  brands,
+  orderStatusHistory,
+  orders,
+  products,
+} from '../db/schema';
+import { syncEcotrackCatalog } from './ecotrack';
+import { uploadExportArtifact } from './export-artifacts';
+import {
+  buildMetaCatalogExportFileName,
+  buildMetaCatalogExportRows,
+  buildMetaCatalogImageKeySeed,
+  buildMetaCatalogWorkbook,
+  createSquareCatalogImage,
+  toXlsxBuffer,
+} from './meta-catalog';
+import {
+  buildOrderExportFileName,
+  buildOrderExportRows,
+  buildOrderExportWorkbook,
+  type EcotrackCatalogExportData,
+} from './order-export';
+import type { OrderStatusHistoryRecord } from './orders';
+import { importAdCostsSpreadsheet, importStatsSpreadsheet } from './stats';
+import { readEcotrackCatalog } from './ecotrack';
+
+export const ADMIN_PRODUCT_EXPORT_QUEUE = 'admin-product-export';
+export const ADMIN_ORDER_EXPORT_QUEUE = 'admin-order-export';
+export const ADMIN_STATS_IMPORT_QUEUE = 'admin-stats-import';
+export const ADMIN_AD_COST_IMPORT_QUEUE = 'admin-ad-cost-import';
+export const ADMIN_ECOTRACK_SYNC_QUEUE = 'admin-ecotrack-sync';
+export const STOREFRONT_ANALYTICS_QUEUE = 'storefront-analytics';
+
+type QueueJobMeta = {
+  __jobMeta: {
+    id: string;
+    ownerKey: string;
+    queueName: string;
+    activeScope: 'owner' | 'global';
+  };
+};
+
+export type ExportJobResponse = {
+  job: {
+    id: string;
+    status: JobSnapshot['status'];
+    fileName: string | null;
+    progress: JobSnapshot['progress'];
+    errorMessage: string | null;
+    downloadPath: string | null;
+  } | null;
+};
+
+type ProductExportPayload = QueueJobMeta;
+type OrderExportPayload = QueueJobMeta & {
+  mode: 'selected' | 'confirmed';
+  orderIds: number[];
+};
+type StatsImportPayload = QueueJobMeta & {
+  fileName: string;
+  fileBufferBase64: string;
+};
+type AdCostsImportPayload = QueueJobMeta & {
+  fileName: string;
+  fileBufferBase64: string;
+  rate: number;
+  actor: {
+    email?: string | null;
+    name?: string | null;
+  };
+};
+type EcotrackSyncPayload = QueueJobMeta & {
+  trigger: string;
+};
+type AnalyticsPayload = {
+  event: ReturnType<typeof storefrontAnalyticsEventSchema.parse>;
+};
+
+function toClientJob(snapshot: JobSnapshot | null, fileName: string | null = null): ExportJobResponse['job'] {
+  if (!snapshot) {
+    return null;
+  }
+
+  const summaryFileName = typeof snapshot.resultSummary?.fileName === 'string'
+    ? snapshot.resultSummary.fileName
+    : fileName;
+
+  return {
+    id: snapshot.id,
+    status: snapshot.status,
+    fileName: summaryFileName ?? null,
+    progress: snapshot.progress,
+    errorMessage: snapshot.errorMessage,
+    downloadPath: snapshot.downloadUrl,
+  };
+}
+
+export async function getLatestExportJob(queueName: string, ownerKey: string) {
+  return toClientJob(await getLatestOwnedJob(queueName, ownerKey));
+}
+
+export async function cancelExportJob(queueName: string, ownerKey: string) {
+  return toClientJob(await requestJobCancellation(queueName, ownerKey));
+}
+
+export async function startProductExportJob(ownerKey: string, requestId?: string) {
+  const result = await startOwnedJob<ProductExportPayload>({
+    queueName: ADMIN_PRODUCT_EXPORT_QUEUE,
+    kind: 'product-export',
+    ownerKey,
+    requestId,
+    data: {} as ProductExportPayload,
+    activeScope: 'global',
+  });
+
+  return {
+    kind: result.kind,
+    job: toClientJob(result.job),
+  };
+}
+
+export async function startOrderExportJob(ownerKey: string, payload: { mode: 'selected' | 'confirmed'; orderIds: number[] }, requestId?: string) {
+  const result = await startOwnedJob<OrderExportPayload>({
+    queueName: ADMIN_ORDER_EXPORT_QUEUE,
+    kind: `order-export:${payload.mode}`,
+    ownerKey,
+    requestId,
+    data: payload as OrderExportPayload,
+  });
+
+  return {
+    kind: result.kind,
+    job: toClientJob(result.job, buildOrderExportFileName(payload.mode)),
+  };
+}
+
+export async function startStatsImportJob(ownerKey: string, payload: { fileName: string; fileBuffer: Buffer }, requestId?: string) {
+  return startOwnedJob<StatsImportPayload>({
+    queueName: ADMIN_STATS_IMPORT_QUEUE,
+    kind: 'stats-import',
+    ownerKey,
+    requestId,
+    data: {
+      fileName: payload.fileName,
+      fileBufferBase64: payload.fileBuffer.toString('base64'),
+    } as StatsImportPayload,
+  });
+}
+
+export async function startAdCostsImportJob(ownerKey: string, payload: { fileName: string; fileBuffer: Buffer; rate: number; actor: { email?: string | null; name?: string | null } }, requestId?: string) {
+  return startOwnedJob<AdCostsImportPayload>({
+    queueName: ADMIN_AD_COST_IMPORT_QUEUE,
+    kind: 'ad-cost-import',
+    ownerKey,
+    requestId,
+    data: {
+      fileName: payload.fileName,
+      fileBufferBase64: payload.fileBuffer.toString('base64'),
+      rate: payload.rate,
+      actor: payload.actor,
+    } as AdCostsImportPayload,
+  });
+}
+
+export async function startEcotrackSyncJob(ownerKey: string, trigger: string, requestId?: string) {
+  return startOwnedJob<EcotrackSyncPayload>({
+    queueName: ADMIN_ECOTRACK_SYNC_QUEUE,
+    kind: 'ecotrack-sync',
+    ownerKey,
+    requestId,
+    data: { trigger } as EcotrackSyncPayload,
+    activeScope: 'global',
+  });
+}
+
+export async function enqueueAnalyticsEvent(event: ReturnType<typeof storefrontAnalyticsEventSchema.parse>, requestId?: string) {
+  return startOwnedJob<AnalyticsPayload>({
+    queueName: STOREFRONT_ANALYTICS_QUEUE,
+    kind: 'analytics-event',
+    ownerKey: event.eventId,
+    requestId,
+    data: { event },
+  });
+}
+
+export async function runProductExportJob(
+  payload: ProductExportPayload,
+  helpers: {
+    updateProgress: (progress: { phase: string; current: number; total: number }) => Promise<void>;
+    updateSummary: (summary: Record<string, unknown>) => Promise<void>;
+    setDownloadUrl: (url: string) => Promise<void>;
+    throwIfCancelled: () => Promise<void>;
+  },
+) {
+  const db = getDb();
+  const batchSize = Math.max(Number(process.env.PRODUCT_EXPORT_BATCH_SIZE ?? 250), 1);
+  const batchDelayMs = Math.max(Number(process.env.PRODUCT_EXPORT_BATCH_DELAY_MS ?? 100), 0);
+
+  await helpers.updateProgress({ phase: 'counting', current: 0, total: 0 });
+  const [brandRows, [{ value: totalProducts }]] = await Promise.all([
+    db.select({ id: brands.id, name: brands.name }).from(brands),
+    db.select({ value: count() }).from(products),
+  ]);
+
+  const brandNameById = new Map(brandRows.map((brand) => [brand.id, brand.name]));
+  const productRows: Array<typeof products.$inferSelect> = [];
+  await helpers.updateProgress({ phase: 'loading', current: 0, total: totalProducts });
+
+  for (let offset = 0; offset < totalProducts; offset += batchSize) {
+    await helpers.throwIfCancelled();
+    const batch = await db.select().from(products).orderBy(asc(products.id)).limit(batchSize).offset(offset);
+    productRows.push(...batch);
+    await helpers.updateProgress({
+      phase: 'loading',
+      current: Math.min(offset + batch.length, totalProducts),
+      total: totalProducts,
+    });
+
+    if (batchDelayMs > 0 && offset + batch.length < totalProducts) {
+      await new Promise((resolve) => setTimeout(resolve, batchDelayMs));
+    }
+  }
+
+  await helpers.updateProgress({ phase: 'processing-images', current: 0, total: totalProducts });
+  const imageLinkByProductId = new Map<number, string>();
+
+  for (let index = 0; index < productRows.length; index += 1) {
+    await helpers.throwIfCancelled();
+    const product = productRows[index];
+    if (product.images[0]) {
+      const imageLink = await createSquareCatalogImage(product.images[0], buildMetaCatalogImageKeySeed(product));
+      imageLinkByProductId.set(product.id, imageLink);
+    }
+    await helpers.updateProgress({ phase: 'processing-images', current: index + 1, total: totalProducts });
+  }
+
+  await helpers.throwIfCancelled();
+  await helpers.updateProgress({ phase: 'packaging', current: totalProducts, total: totalProducts });
+
+  const workbook = buildMetaCatalogWorkbook(
+    buildMetaCatalogExportRows(productRows, brandNameById, imageLinkByProductId),
+  );
+  const fileName = buildMetaCatalogExportFileName();
+  const downloadUrl = await uploadExportArtifact({
+    prefix: 'exports/products',
+    fileName,
+    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    body: toXlsxBuffer(workbook),
+  });
+
+  await helpers.setDownloadUrl(downloadUrl);
+  await helpers.updateSummary({ fileName, totalProducts });
+
+  return {
+    fileName,
+    totalProducts,
+  };
+}
+
+async function loadOrdersForExport(mode: 'selected' | 'confirmed', orderIds: number[]) {
+  const db = getDb();
+  const orderRows = await db.query.orders.findMany({
+    where: mode === 'confirmed'
+      ? and(eq(orders.confirmed, 2), isNull(orders.archivedAt), inArray(orders.id, orderIds))
+      : and(isNull(orders.archivedAt), inArray(orders.id, orderIds)),
+    orderBy: [asc(orders.id)],
+  });
+  const historyRows = await db.query.orderStatusHistory.findMany({
+    where: inArray(orderStatusHistory.orderId, orderRows.map((row) => row.id)),
+    orderBy: [asc(orderStatusHistory.changedAt)],
+  });
+  const historyByOrderId = new Map<number, OrderStatusHistoryRecord[]>();
+  for (const row of historyRows) {
+    const list = historyByOrderId.get(row.orderId) ?? [];
+    list.push({
+      id: row.id,
+      status: row.status as OrderStatusHistoryRecord['status'],
+      noAnswerCount: row.noAnswerCount,
+      changedAt: row.changedAt.toISOString(),
+      changedBy: row.changedBy,
+      changedByName: row.changedByName,
+    });
+    historyByOrderId.set(row.orderId, list);
+  }
+
+  const productLookup = await getOrderProductLookup(db, orderRows);
+  return orderRows.map((row) => toOrderRecord(row, historyByOrderId.get(row.id) ?? [], productLookup));
+}
+
+async function markOrdersAsDispatched(orderIds: number[]) {
+  const db = getDb();
+  const now = new Date();
+
+  for (const orderId of orderIds) {
+    const [updatedOrder] = await db
+      .update(orders)
+      .set({
+        confirmed: 3,
+        noAnswerCount: 0,
+        updatedAt: now,
+      })
+      .where(eq(orders.id, orderId))
+      .returning();
+
+    if (!updatedOrder) {
+      continue;
+    }
+
+    await db.insert(orderStatusHistory).values({
+      orderId,
+      status: 3,
+      noAnswerCount: 0,
+      changedAt: now,
+    });
+  }
+}
+
+export async function runOrderExportJob(
+  payload: OrderExportPayload,
+  helpers: {
+    updateProgress: (progress: { phase: string; current: number; total: number }) => Promise<void>;
+    updateSummary: (summary: Record<string, unknown>) => Promise<void>;
+    setDownloadUrl: (url: string) => Promise<void>;
+    throwIfCancelled: () => Promise<void>;
+  },
+) {
+  await helpers.updateProgress({ phase: 'loading', current: 0, total: payload.orderIds.length });
+  const exportOrders = await loadOrdersForExport(payload.mode, payload.orderIds);
+  await helpers.throwIfCancelled();
+
+  const catalog = await readEcotrackCatalog(getDb());
+  const exportRows = buildOrderExportRows(exportOrders, catalog satisfies EcotrackCatalogExportData);
+  await helpers.updateProgress({ phase: 'exporting', current: exportRows.length, total: exportRows.length });
+
+  const fileName = buildOrderExportFileName(payload.mode);
+  const workbook = buildOrderExportWorkbook(exportRows);
+  const downloadUrl = await uploadExportArtifact({
+    prefix: 'exports/orders',
+    fileName,
+    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    body: toXlsxBuffer(workbook),
+  });
+
+  await helpers.setDownloadUrl(downloadUrl);
+  await helpers.updateSummary({ fileName, mode: payload.mode, totalOrders: exportOrders.length });
+
+  if (payload.mode === 'confirmed') {
+    await helpers.updateProgress({ phase: 'updating-statuses', current: 0, total: exportOrders.length });
+    for (let index = 0; index < exportOrders.length; index += 1) {
+      await helpers.throwIfCancelled();
+      await markOrdersAsDispatched([exportOrders[index].id]);
+      await helpers.updateProgress({ phase: 'updating-statuses', current: index + 1, total: exportOrders.length });
+    }
+  }
+
+  return {
+    fileName,
+    mode: payload.mode,
+    totalOrders: exportOrders.length,
+  };
+}
+
+export async function runStatsImportJob(
+  payload: StatsImportPayload,
+  helpers: {
+    updateSummary: (summary: Record<string, unknown>) => Promise<void>;
+  },
+) {
+  const result = await importStatsSpreadsheet(Buffer.from(payload.fileBufferBase64, 'base64'), payload.fileName);
+  await helpers.updateSummary({
+    fileName: payload.fileName,
+    batchId: result.batchId,
+    newOrders: result.newOrders,
+    duplicateOrders: result.duplicateOrders,
+  });
+
+  return {
+    fileName: payload.fileName,
+    batchId: result.batchId,
+    newOrders: result.newOrders,
+    duplicateOrders: result.duplicateOrders,
+  };
+}
+
+export async function runAdCostsImportJob(
+  payload: AdCostsImportPayload,
+  helpers: {
+    updateSummary: (summary: Record<string, unknown>) => Promise<void>;
+  },
+) {
+  const result = await importAdCostsSpreadsheet(
+    Buffer.from(payload.fileBufferBase64, 'base64'),
+    payload.rate,
+    payload.actor,
+  );
+  await helpers.updateSummary({
+    fileName: payload.fileName,
+    total: result.total,
+    imported: result.imported,
+    updated: result.updated,
+  });
+
+  return {
+    fileName: payload.fileName,
+    total: result.total,
+    imported: result.imported,
+    updated: result.updated,
+  };
+}
+
+export async function runEcotrackSyncJob(
+  payload: EcotrackSyncPayload,
+  helpers: {
+    updateSummary: (summary: Record<string, unknown>) => Promise<void>;
+  },
+) {
+  const result = await syncEcotrackCatalog(getDb(), { trigger: payload.trigger });
+  await helpers.updateSummary(result as unknown as Record<string, unknown>);
+  return result as unknown as Record<string, unknown>;
+}
+
+export async function runAnalyticsJob(payload: AnalyticsPayload) {
+  return ingestStorefrontAnalyticsEvent(getDb(), payload.event);
+}

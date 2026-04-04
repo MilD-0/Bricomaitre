@@ -1,0 +1,38 @@
+FROM node:20-bookworm-slim AS base
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+
+RUN corepack enable
+
+WORKDIR /workspace
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY adminstration/package.json adminstration/package.json
+COPY storefront-api/package.json storefront-api/package.json
+COPY storefront/package.json storefront/package.json
+COPY packages/db/package.json packages/db/package.json
+COPY packages/runtime/package.json packages/runtime/package.json
+COPY packages/storefront-core/package.json packages/storefront-core/package.json
+COPY storefront/app/components/package.json storefront/app/components/package.json
+
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+
+RUN pnpm --filter storefront-api build
+
+FROM node:20-bookworm-slim AS runner
+
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3001
+ENV HOSTNAME=0.0.0.0
+
+COPY --from=base /workspace/storefront-api/.next/standalone ./
+COPY --from=base /workspace/storefront-api/.next/static ./storefront-api/.next/static
+COPY --from=base /workspace/storefront-api/public ./storefront-api/public
+
+EXPOSE 3001
+
+CMD ["node", "storefront-api/server.js"]
