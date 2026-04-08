@@ -411,12 +411,13 @@ export function StatsDashboard({ description: _description, initialData = null, 
   const [importStage, setImportStage] = useState<'idle' | 'uploading' | 'processing'>('idle');
   const importStatusInitializedRef = useRef(false);
   const lastImportStatusKeyRef = useRef<string | null>(null);
+  const [initialStatsUpdatedAt] = useState(() => (initialData ? Date.now() : 0));
 
   const statsQuery = useQuery({
     queryKey: ['stats-dashboard', range, startDate, endDate],
     queryFn: () => request<StatsQueryResponse>(buildStatsUrl(range, startDate, endDate)),
     initialData: initialData && range === '90d' && startDate === '' && endDate === '' ? { data: initialData } : undefined,
-    initialDataUpdatedAt: initialData ? Date.now() : 0,
+    initialDataUpdatedAt: initialStatsUpdatedAt,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     enabled: true,
@@ -534,17 +535,23 @@ export function StatsDashboard({ description: _description, initialData = null, 
         }),
         { id: 'stats-upload' },
       );
-      setUploadedFiles([]);
-      setImportStage('idle');
+      queueMicrotask(() => {
+        setUploadedFiles([]);
+        setImportStage('idle');
+      });
       void queryClient.invalidateQueries({ queryKey: ['stats-dashboard'] });
     } else if (job.status === 'failed') {
       toast.error(job.errorMessage || t('notifications.upload.error'), { id: 'stats-upload' });
-      setImportStage('idle');
-      setUploadedFiles([]);
+      queueMicrotask(() => {
+        setImportStage('idle');
+        setUploadedFiles([]);
+      });
     } else if (job.status === 'cancelled') {
       toast.error(t('notifications.upload.error'), { id: 'stats-upload' });
-      setImportStage('idle');
-      setUploadedFiles([]);
+      queueMicrotask(() => {
+        setImportStage('idle');
+        setUploadedFiles([]);
+      });
     }
   }, [importJobQuery.data.job, queryClient, t]);
 
@@ -821,10 +828,12 @@ export function StatsDashboard({ description: _description, initialData = null, 
   const activeQuery = statsQuery;
 
   useEffect(() => {
-    setProductsPage(1);
-    setWilayasPage(1);
-    setImportsTrendPage(1);
-    setHistoryPage(1);
+    queueMicrotask(() => {
+      setProductsPage(1);
+      setWilayasPage(1);
+      setImportsTrendPage(1);
+      setHistoryPage(1);
+    });
   }, [stats]);
 
   if (activeQuery.isLoading && !stats) {

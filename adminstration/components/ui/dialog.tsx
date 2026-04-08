@@ -37,15 +37,15 @@ export function Dialog({
   onOpenChange: (open: boolean) => void;
   children: React.ReactNode;
 }) {
-  const [mounted, setMounted] = React.useState(false);
+  const mounted = React.useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
   const contentRef = React.useRef<HTMLDivElement>(null);
   const onOpenChangeRef = React.useRef(onOpenChange);
   const titleId = React.useId();
   const descriptionId = React.useId();
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
 
   React.useEffect(() => {
     onOpenChangeRef.current = onOpenChange;

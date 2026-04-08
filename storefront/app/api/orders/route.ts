@@ -14,6 +14,7 @@ function mapDelivery(value: unknown) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
+  const idempotencyKey = request.headers.get("idempotency-key")?.trim();
   const payload = {
     firstName: body.firstName ?? null,
     lastName: body.lastName ?? null,
@@ -43,6 +44,7 @@ export async function POST(request: NextRequest) {
       headers: {
         accept: "application/json",
         "content-type": "application/json",
+        ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
       },
       body: JSON.stringify(payload),
       timeoutMs: ORDER_UPSTREAM_TIMEOUT_MS,

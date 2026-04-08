@@ -70,8 +70,14 @@ export async function loadAssetsData(): Promise<AssetsResponse> {
   ]);
 
   return {
-    banners: banners.map((banner) => serializeAssetRecord(banner)) satisfies AssetBannerRecord[],
-    featuredGroups: withSelections(groups, groupProducts, groupBrands, groupCategories).map((group) => serializeAssetRecord(group)) satisfies FeaturedProductGroupRecord[],
+    banners: banners.map((banner) => ({
+      ...serializeAssetRecord(banner),
+      titleAr: banner.titleAr ?? '',
+    })) satisfies AssetBannerRecord[],
+    featuredGroups: withSelections(groups, groupProducts, groupBrands, groupCategories).map((group) => ({
+      ...serializeAssetRecord(group),
+      nameAr: group.nameAr ?? '',
+    })) satisfies FeaturedProductGroupRecord[],
     productCards: cards.map((card) => serializeAssetRecord(card)) satisfies ProductCardRecord[],
   };
 }

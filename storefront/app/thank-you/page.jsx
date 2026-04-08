@@ -17,5 +17,11 @@ export async function generateMetadata() {
 export default async function Home({ searchParams }) {
   const resolvedSearchParams = (await searchParams) ?? {};
 
-  return <Thank modified={resolvedSearchParams.modified != null} />
+  return (
+    <Thank
+      modified={resolvedSearchParams.modified != null}
+      orderId={resolvedSearchParams.orderId ?? null}
+      token={resolvedSearchParams.token ?? null}
+    />
+  )
 }

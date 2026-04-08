@@ -1,30 +1,142 @@
 import { eq } from 'drizzle-orm';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '../../../../db/client';
 import { brands } from '../../../../db/schema';
+import { mutateEntityWithHistory } from '../../../../lib/action-history';
+import { auth } from '../../../../lib/auth';
+import { readBrand, resolveBrandSlug } from '../../../../lib/brands-categories-api';
+import { brandUpdateSchema } from '../../../../lib/brands-categories';
+import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
+
+function parseBrandId(id: string) {
+  const numericId = Number(id);
+  return Number.isInteger(numericId) && numericId > 0 ? numericId : null;
+}
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireAppAccess();
+  if (denied) {
+    return denied;
+  }
+
   if (!hasDb()) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
 
   const { id } = await params;
-  const numericId = Number(id);
+  const numericId = parseBrandId(id);
 
-  if (!Number.isInteger(numericId) || numericId <= 0) {
+  if (!numericId) {
     return NextResponse.json({ error: 'Invalid brand id' }, { status: 400 });
   }
 
-  const [brand] = await getDb()
-    .select({ id: brands.id, name: brands.name, slug: brands.slug })
-    .from(brands)
-    .where(eq(brands.id, numericId))
-    .limit(1);
+  const brand = await readBrand(numericId);
 
   if (!brand) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  return NextResponse.json(brand);
+  return NextResponse.json({ id: numericId, name: brand.name, slug: brand.slug });
+}
+
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireMutationAccess('brandsCategories');
+  if (denied) {
+    return denied;
+  }
+
+  if (!hasDb()) {
+    return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
+  }
+
+  const { id } = await params;
+  const numericId = parseBrandId(id);
+  if (!numericId) {
+    return NextResponse.json({ error: 'Invalid brand id' }, { status: 400 });
+  }
+
+  const parsed = brandUpdateSchema.safeParse(await req.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const existing = await readBrand(numericId);
+  if (!existing) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  const db = getDb();
+  const session = await auth();
+  const actor = { email: session?.user?.email, name: session?.user?.name };
+  const data = parsed.data;
+
+  await mutateEntityWithHistory(db, {
+    entityType: 'brands',
+    entityId: numericId,
+    operation: 'update',
+    actor,
+    execute: async (tx) => {
+      const update: {
+        name?: string;
+        slug?: string;
+        image?: string | null;
+        isActive?: boolean;
+        updatedAt: Date;
+        updatedBy: string | null;
+        updatedByName: string | null;
+      } = {
+        updatedAt: new Date(),
+        updatedBy: actor.email ?? null,
+        updatedByName: actor.name ?? null,
+      };
+
+      if (data.name !== undefined) {
+        update.name = data.name;
+        update.slug = await resolveBrandSlug(data.name, numericId);
+      }
+      if (data.imageUrl !== undefined) update.image = data.imageUrl;
+      if (data.status !== undefined) update.isActive = data.status === 'active';
+
+      await tx.update(brands).set(update).where(eq(brands.id, numericId));
+    },
+  });
+
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireMutationAccess('brandsCategories');
+  if (denied) {
+    return denied;
+  }
+
+  if (!hasDb()) {
+    return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
+  }
+
+  const { id } = await params;
+  const numericId = parseBrandId(id);
+  if (!numericId) {
+    return NextResponse.json({ error: 'Invalid brand id' }, { status: 400 });
+  }
+
+  const existing = await readBrand(numericId);
+  if (!existing) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  const db = getDb();
+  const session = await auth();
+  const actor = { email: session?.user?.email, name: session?.user?.name };
+
+  await mutateEntityWithHistory(db, {
+    entityType: 'brands',
+    entityId: numericId,
+    operation: 'delete',
+    actor,
+    execute: (tx) => tx.delete(brands).where(eq(brands.id, numericId)),
+  });
+
+  return NextResponse.json({ ok: true });
 }

@@ -115,6 +115,9 @@ describe('lib/orders', () => {
     expect(coerceOrderStatus('yes')).toBe(2);
     expect(coerceOrderStatus('no4')).toBe(1);
     expect(coerceOrderStatus(6)).toBe(6);
+    expect(coerceOrderStatus('in_delivery')).toBe(7);
+    expect(coerceOrderStatus('returned')).toBe(8);
+    expect(coerceOrderStatus('failed')).toBe(9);
     expect(coerceDeliveryType('home')).toBe(0);
     expect(coerceDeliveryType('office')).toBe(1);
     expect(coerceDeliveryType(1)).toBe(1);
@@ -122,8 +125,14 @@ describe('lib/orders', () => {
     expect(coerceNoAnswerCount(1, 4, 'no2')).toBe(4);
     expect(coerceNoAnswerCount(2, 4, 'no2')).toBe(0);
     expect(getOrderStatusLabelKey(3)).toBe('dispatched');
+    expect(getOrderStatusLabelKey(7)).toBe('inDelivery');
+    expect(getOrderStatusLabelKey(8)).toBe('returned');
+    expect(getOrderStatusLabelKey(9)).toBe('failed');
     expect(getDeliveryTypeLabelKey(1)).toBe('office');
     expect(isConfirmedLifecycleStatus(5)).toBe(true);
+    expect(isConfirmedLifecycleStatus(7)).toBe(true);
+    expect(isConfirmedLifecycleStatus(8)).toBe(true);
+    expect(isConfirmedLifecycleStatus(9)).toBe(true);
     expect(isConfirmedLifecycleStatus(6)).toBe(false);
   });
 

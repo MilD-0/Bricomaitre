@@ -120,7 +120,7 @@ describe('FileUploadField', () => {
     } satisfies BulletinAttachment;
     const onChange = vi.fn();
     const onUploaded = vi.fn();
-    const listeners = new Map<string, (...args: any[]) => void>();
+    const listeners = new Map<string, (...args: unknown[]) => void>();
 
     mockOn.mockImplementation((event, callback) => {
       listeners.set(event, callback);

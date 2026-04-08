@@ -65,6 +65,7 @@ describe('productPayloadSchema', () => {
       search: 'drill',
       brandId: '3',
       categoryId: '',
+      imageOrigin: 'external',
       sortKey: 'price',
       sortDirection: 'asc',
     })).toEqual({
@@ -73,6 +74,7 @@ describe('productPayloadSchema', () => {
       search: 'drill',
       brandId: 3,
       categoryId: null,
+      imageOrigin: 'external',
       sortKey: 'price',
       sortDirection: 'asc',
     });

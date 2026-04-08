@@ -3,6 +3,8 @@
     "administration": "Administration",
     "products": "Produits",
     "orders": "Commandes",
+    "ordersTable": "Saisie des commandes",
+    "ecotrackShipments": "Expeditions ECOTRACK",
     "inventory": "Inventaire",
     "assets": "Ressources",
     "brands": "Marques",
@@ -39,8 +41,11 @@
     "searchProducts": "Rechercher des produits",
     "filterByBrand": "Filtrer par marque",
     "filterByCategory": "Filtrer par catégorie",
+    "filterByImageOrigin": "Filtrer par liens d'image",
     "allBrands": "Toutes les marques",
     "allCategories": "Toutes les catégories",
+    "allImageLinks": "Tous les liens d'image",
+    "externalImageLinks": "Liens d'image externes",
     "deleteDialogTitle": "Confirmer la suppression",
     "deleteDialogDescription": "Cette action supprimera définitivement {target}.",
     "selectAll": "Sélectionner toutes les lignes",
@@ -898,9 +903,58 @@
       "success": "Commandes exportées.",
       "error": "Échec de l'export des commandes.",
       "empty": "Sélectionnez au moins une commande à exporter.",
+      "emptyConfirmed": "Aucune commande confirmée à exporter.",
       "progress": {
         "exporting": "Génération du fichier",
         "updating-statuses": "Mise à jour des statuts"
+      }
+    },
+    "ecotrack": {
+      "selectedAction": "Envoyer la sélection à Ecotrack",
+      "confirmedAction": "Envoyer les confirmées à Ecotrack",
+      "selectedTitle": "Envoyer {count} commandes sélectionnées à Ecotrack",
+      "confirmedTitle": "Envoyer {count} commandes confirmées à Ecotrack",
+      "previewTitle": "Aperçu de l'envoi Ecotrack",
+      "previewEligible": "Commandes éligibles",
+      "previewSkipped": "Commandes ignorées",
+      "previewInvalid": "Commandes invalides",
+      "emptyEligible": "Aucune commande éligible.",
+      "emptySkipped": "Aucune commande ignorée.",
+      "emptyInvalid": "Aucune commande invalide.",
+      "confirm": "Envoyer à Ecotrack",
+      "loading": "Préparation de l'aperçu Ecotrack...",
+      "ready": "L'aperçu Ecotrack est prêt.",
+      "success": "Envoi Ecotrack terminé.",
+      "cancelled": "Envoi Ecotrack annulé.",
+      "error": "Échec de l'envoi des commandes à Ecotrack.",
+      "empty": "Sélectionnez au moins une commande à envoyer.",
+      "emptyConfirmed": "Aucune commande confirmée à envoyer.",
+      "resultTitle": "Résultats de l'envoi",
+      "summary": {
+        "totalRequested": "Demandées",
+        "eligible": "Éligibles",
+        "created": "Créées",
+        "skipped": "Ignorées",
+        "invalid": "Invalides",
+        "failed": "Échouées"
+      },
+      "progress": {
+        "loading": "Chargement des commandes",
+        "validating-token": "Validation du jeton Ecotrack",
+        "classifying": "Classification des commandes",
+        "creating": "Création des commandes Ecotrack",
+        "persisting": "Enregistrement local des mises à jour",
+        "completed": "Terminé"
+      },
+      "reasons": {
+        "already_posted": "Déjà envoyée",
+        "status_not_confirmed": "Commande non confirmée",
+        "missing_phone": "Numéro manquant",
+        "missing_wilaya": "Wilaya manquante",
+        "missing_commune": "Commune manquante",
+        "invalid_commune": "Commune invalide",
+        "missing_address": "Adresse manquante",
+        "missing_name": "Nom client manquant"
       }
     },
     "delivery": {
@@ -915,6 +969,9 @@
       "dispatched": "Expédié",
       "completed": "Complétée",
       "delayed": "Reportée",
+      "inDelivery": "En livraison",
+      "returned": "Retournée",
+      "failed": "Échouée",
       "incrementNoAnswer": "Sans réponse {count}",
       "noAnswerCounter": "Compteur : {count}",
       "increaseNoAnswer": "Augmenter sans réponse à {count}",
@@ -937,17 +994,43 @@
       "title": "Liste de préparation",
       "description": "La vue consolidée indique quoi rassembler et le panneau de droite garde le détail par commande.",
       "selectedAction": "Liste sélectionnée",
+      "confirmedAction": "Liste des commandes confirmées",
       "dispatchedAction": "Liste expédiée",
       "selectedTitle": "Liste pour {count} commandes sélectionnées",
+      "confirmedTitle": "Liste pour les commandes confirmées",
       "dispatchedTitle": "Liste pour les commandes expédiées",
       "consolidatedTitle": "À préparer",
       "ordersTitle": "Détail par commande",
       "notes": "Notes",
       "print": "Version impression",
+      "reset": "Réinitialiser la liste",
+      "acceptAllInventoryChanges": "Accepter toutes les baisses de stock",
+      "applySelectedInventoryChanges": "Appliquer les baisses sélectionnées",
+      "addProductTitle": "Ajouter un produit",
+      "addProductPlaceholder": "Rechercher dans le catalogue",
+      "addProductAction": "Ajouter le produit",
+      "addProductError": "Impossible d’ajouter le produit à la liste.",
+      "toggleItem": "Basculer {title}",
+      "customItem": "Ajouté manuellement",
+      "increaseQuantity": "Augmenter la quantité de {title}",
+      "decreaseQuantity": "Réduire la quantité de {title}",
+      "increaseInventoryDelta": "Augmenter la baisse de stock pour {title}",
+      "decreaseInventoryDelta": "Réduire la baisse de stock pour {title}",
+      "inventoryAdjustLabel": "Baisse du stock",
+      "inventoryDecreasePreview": "Le stock sera réduit de {count}",
+      "inventoryShortage": "Manque {count}",
+      "inventoryApplied": "Baisse de stock appliquée : {count}",
+      "inventoryApplyLoading": "Application des baisses de stock pour {count} produits...",
+      "inventoryApplySuccess": "Baisses de stock appliquées pour {count} produits.",
+      "inventoryApplyError": "Impossible d’appliquer les baisses de stock pour {count} produits.",
+      "noInventoryChanges": "Aucune baisse de stock prête à être appliquée.",
+      "removeItem": "Retirer {title}",
       "loading": "Création de la liste...",
       "ready": "Liste prête.",
       "error": "Échec de création de la liste.",
       "emptySelection": "Sélectionnez au moins une commande.",
+      "emptyConfirmed": "Aucune commande confirmée disponible pour la liste.",
+      "emptyDispatched": "Aucune commande expédiée disponible pour la liste.",
       "printError": "Impossible d’ouvrir la version impression."
     },
     "products": {
@@ -985,6 +1068,187 @@
     "unconfirmed": "Non confirmée",
     "unconfirmedDate": "Aucun horodatage de confirmation"
   },
+  "ordersEcotrackManager": {
+    "searchPlaceholder": "Rechercher par tracking, client, telephone, adresse, commune, wilaya, produit ou statut",
+    "filters": {
+      "statusLabel": "Filtrer par statut ECOTRACK",
+      "allStatuses": "Tous les statuts",
+      "sortKeyLabel": "Trier par",
+      "sortDirectionLabel": "Sens",
+      "staleOnly": "Afficher seulement les donnees perimees"
+    },
+    "sort": {
+      "createdAt": "Date de creation",
+      "trackingNumber": "Numero de tracking",
+      "clientName": "Nom du client",
+      "currentStatus": "Statut actuel",
+      "lastStatusSyncedAt": "Derniere synchro statut",
+      "asc": "Croissant",
+      "desc": "Decroissant"
+    },
+    "columns": {
+      "trackingNumber": "Numero de tracking",
+      "client": "Client et telephone",
+      "address": "Adresse, commune, wilaya, livraison",
+      "products": "Produits",
+      "amount": "Montant",
+      "status": "Statut ECOTRACK"
+    },
+    "reference": "Reference",
+    "missingValue": "Valeur manquante",
+    "staleBadge": "Perime",
+    "driverPhone": "Telephone livreur",
+    "estimatedFee": "Frais estimes",
+    "deskPhone": "Telephone point relais",
+    "deskCommune": "Commune point relais",
+    "deskAddress": "Adresse point relais",
+    "lastSync": "Derniere synchro statut",
+    "lastTrackingSync": "Derniere synchro tracking",
+    "lastMajSync": "Derniere synchro mise a jour",
+    "neverSynced": "Jamais synchronise",
+    "summaryTitle": "Resume de l'expedition",
+    "amounts": {
+      "subtotal": "Produits",
+      "deliveryFee": "Livraison",
+      "total": "Total"
+    },
+    "history": {
+      "title": "Historique de la commande",
+      "majTitle": "Mises a jour",
+      "timelineTitle": "Historique tracking",
+      "empty": "Aucun historique disponible.",
+      "emptyMaj": "Aucune mise a jour en cache.",
+      "emptyTimeline": "Aucun evenement tracking en cache."
+    },
+    "actions": {
+      "printSelected": "Imprimer les etiquettes selectionnees",
+      "refreshSelected": "Rafraichir la selection",
+      "clearSelection": "Vider la selection",
+      "refreshVisible": "Rafraichir la page",
+      "dispatchReady": "Expedier prete a expedier",
+      "dispatchSelected": "Expedier la selection",
+      "showHistorySelected": "Afficher l'historique de la selection",
+      "showHistoryVisible": "Afficher l'historique de la page",
+      "label": "Etiquette",
+      "refresh": "Rafraichir",
+      "dispatch": "Expedier",
+      "maj": "Ajouter une mise a jour",
+      "return": "Demander un retour",
+      "showHistory": "Afficher l'historique",
+      "hideHistory": "Masquer l'historique"
+    },
+    "loading": {
+      "refreshing": "Rafraichissement des expeditions ECOTRACK",
+      "inProgress": "En cours"
+    },
+    "empty": {
+      "title": "Aucune expedition ECOTRACK",
+      "description": "Les commandes apparaissent ici apres leur creation sur ECOTRACK et l'attribution d'un tracking."
+    },
+    "dialogs": {
+      "editTitle": "Modifier l'expedition ECOTRACK",
+      "editDescription": "Mettez a jour la commande locale puis ECOTRACK tant que l'expedition est encore prete_a_expedier.",
+      "editHint": "Les produits et le split du montant restent derives de la commande locale.",
+      "deleteTitle": "Supprimer l'expedition ECOTRACK",
+      "deleteDescription": "Supprimer l'expedition ECOTRACK pour {name}. La commande locale restera disponible pour un repost plus tard.",
+      "dispatchTitle": "Expedier l'expedition ECOTRACK",
+      "dispatchDescription": "Expedier l'envoi pour {name} et verrouiller les modifications avant expedition.",
+      "majTitle": "Ajouter une mise a jour ECOTRACK",
+      "majDescription": "Envoyer une mise a jour pour {name}."
+    },
+    "fields": {
+      "firstName": "Prenom",
+      "lastName": "Nom",
+      "phoneNumber1": "Telephone principal",
+      "phoneNumber2": "Telephone secondaire",
+      "delivery": "Type de livraison",
+      "state": "Wilaya",
+      "statePlaceholder": "Selectionner une wilaya",
+      "city": "Commune",
+      "cityPlaceholder": "Selectionner une commune",
+      "homeAddress": "Adresse",
+      "note": "Remarque",
+      "askCollection": "Demander un ramassage",
+      "askCollectionDescription": "Envoie ask_collection=1 lors de l'expedition si un ramassage est necessaire.",
+      "majContent": "Contenu de la mise a jour",
+      "majHint": "255 caracteres maximum."
+    },
+    "confirmations": {
+      "return": "Demander un retour pour cette expedition ECOTRACK ?"
+    },
+    "notifications": {
+      "refresh": {
+        "loading": "Rafraichissement de l'expedition ECOTRACK...",
+        "success": "Expedition ECOTRACK rafraichie.",
+        "error": "Echec du rafraichissement ECOTRACK."
+      },
+      "update": {
+        "loading": "Enregistrement de l'expedition ECOTRACK...",
+        "success": "Expedition ECOTRACK enregistree.",
+        "error": "Echec de l'enregistrement ECOTRACK."
+      },
+      "delete": {
+        "loading": "Suppression de l'expedition ECOTRACK...",
+        "success": "Expedition ECOTRACK supprimee.",
+        "error": "Echec de la suppression ECOTRACK."
+      },
+      "dispatch": {
+        "loading": "Expedition ECOTRACK en cours...",
+        "success": "Expedition ECOTRACK envoyee.",
+        "partial": "{successCount} expeditions envoyees, {failedCount} en echec.",
+        "error": "Echec de l'expedition ECOTRACK."
+      },
+      "maj": {
+        "loading": "Envoi de la mise a jour ECOTRACK...",
+        "success": "Mise a jour ECOTRACK envoyee.",
+        "error": "Echec de l'envoi de la mise a jour ECOTRACK."
+      },
+      "return": {
+        "loading": "Demande de retour ECOTRACK...",
+        "success": "Retour ECOTRACK demande.",
+        "error": "Echec de la demande de retour ECOTRACK."
+      },
+      "labels": {
+        "loading": "Preparation des etiquettes ECOTRACK...",
+        "success": "Etiquettes ECOTRACK pretes.",
+        "error": "Echec de la preparation des etiquettes ECOTRACK."
+      }
+    },
+    "statuses": {
+      "prete_a_expedier": "Prete a expedier",
+      "en_ramassage": "En ramassage",
+      "en_preparation_stock": "En preparation stock",
+      "vers_hub": "Vers hub",
+      "en_hub": "En hub",
+      "vers_wilaya": "Vers wilaya",
+      "en_preparation": "En preparation",
+      "en_livraison": "En livraison",
+      "suspendu": "Suspendu",
+      "livre_non_encaisse": "Livre non encaisse",
+      "encaisse_non_paye": "Encaisse non paye",
+      "paiements_prets": "Paiements prets",
+      "paye_et_archive": "Paye et archive",
+      "retour_chez_livreur": "Retour chez livreur",
+      "retour_transit_entrepot": "Retour transit entrepot",
+      "retour_en_traitement": "Retour en traitement",
+      "retour_recu": "Retour recu",
+      "retour_archive": "Retour archive",
+      "annule": "Annule"
+    },
+    "historyStatuses": {
+      "order_information_received_by_carrier": "Commande enregistrée et validée par le vendeur",
+      "picked": "Commande récupérée par le prestataire de livraison",
+      "accepted_by_carrier": "Commande réceptionnée par le centre de tri",
+      "dispatched_to_driver": "Commande dispatchée au livreur",
+      "attempt_delivery": "Tentative de livraison",
+      "return_asked": "Retour initié par le centre de tri",
+      "return_in_transit": "Retour en transit",
+      "return_received": "Retour réceptionné par le vendeur",
+      "livred": "Commande livrée",
+      "encaissed": "Commande encaissée",
+      "payed": "Paiement effectué"
+    }
+  },
   "inventory": {
     "searchPlaceholder": "Rechercher par produit, SKU ou code-barres",
     "searchHint": "Seuls les produits avec une quantité supérieure à zéro sont affichés par défaut. Recherchez ou scannez pour faire réapparaître les articles masqués.",
@@ -1009,6 +1273,26 @@
       "editTitle": "Modifier le code-barres de {name}",
       "description": "Enregistrez un code-barres pour retrouver directement le produit depuis la table d’inventaire.",
       "placeholder": "Saisir un code-barres"
+    },
+    "scan": {
+      "title": "Scanner un code-barres ou une commande",
+      "description": "Saisissez un code-barres exact ou un ID de commande pour réajouter des produits au stock.",
+      "placeholder": "Code-barres ou ID de commande",
+      "action": "Scanner",
+      "barcodeTitle": "Ajouter une unité de {name}",
+      "barcodeDescription": "Confirmez pour ajouter une unité du code-barres scanné.",
+      "confirmAddOne": "Ajouter 1 unité",
+      "orderTitle": "Commande n°{id}",
+      "toggleOrderItem": "Basculer l’article {name}",
+      "orderQuantity": "Quantité commandée : {count}",
+      "currentInventory": "Stock actuel : {count}",
+      "confirmOrderAdd": "Ajouter les produits sélectionnés",
+      "orderApplyLoading": "Ajout de {count} produits de commande au stock...",
+      "orderApplySuccess": "{count} produits de commande ont été ajoutés au stock.",
+      "orderApplyError": "Impossible d’ajouter {count} produits de commande au stock.",
+      "notFound": "Aucun code-barres ou ID de commande correspondant n’a été trouvé.",
+      "error": "Échec du scan d’inventaire.",
+      "noSelection": "Sélectionnez au moins un produit de la commande scannée."
     },
     "notifications": {
       "barcode": {
@@ -1219,11 +1503,13 @@
       "brandsCategories": "Marques et catégories",
       "bulletin": "Bulletin",
       "stats": "Statistiques",
-      "settings": "Paramètres"
+      "settings": "Paramètres",
+      "ecotrack": "Ecotrack"
     },
     "state": {
       "applied": "Appliqué",
-      "undone": "Annulé"
+      "undone": "Annulé",
+      "nonReversible": "Non réversible"
     },
     "details": {
       "title": "Activité de {entity}",
@@ -1262,6 +1548,7 @@
     "editBannerTitle": "Modifier la bannière",
     "bannerDialogDescription": "Définissez le titre, le produit lié et l’image de la bannière.",
     "bannerTitlePlaceholder": "Titre de la bannière",
+    "bannerTitleArPlaceholder": "Titre arabe de la bannière",
     "titleLabel": "Titre",
     "titleColumn": "Titre",
     "bannerProductPlaceholder": "Sélectionner le produit lié",
@@ -1282,6 +1569,8 @@
     "groupDialogDescription": "Choisissez les produits, marques et catégories qui composent ce groupe.",
     "groupNamePlaceholder": "Nom du groupe",
     "groupNameLabel": "Nom du groupe",
+    "groupNameArLabel": "Nom arabe du groupe",
+    "groupNameArPlaceholder": "Nom arabe du groupe",
     "groupNameColumn": "Nom du groupe",
     "groupCtaLabel": "Texte du CTA",
     "groupCtaPlaceholder": "Voir Plus",

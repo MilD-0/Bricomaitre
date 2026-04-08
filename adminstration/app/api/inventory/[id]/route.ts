@@ -6,6 +6,7 @@ import { getDb, hasDb } from '../../../../db/client';
 import { products } from '../../../../db/schema';
 import { mutateEntityWithHistory } from '../../../../lib/action-history';
 import { auth } from '../../../../lib/auth';
+import { applyInventoryQuantityChange, buildInventoryRowSelection, readInventoryProductById } from '../../../../lib/inventory-actions';
 import { inventoryBarcodeSchema } from '../../../../lib/inventory';
 import { requireMutationAccess } from '../../../../lib/rbac';
 
@@ -37,7 +38,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const numericId = Number(id);
   const db = getDb();
-  const current = await db.query.products.findFirst({ where: eq(products.id, numericId) });
+  const current = await readInventoryProductById(db, numericId);
 
   if (!current) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -45,38 +46,37 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
-  const updateValues = 'delta' in parsed.data
-    ? {
-      inventoryQuantity: Math.max(0, current.inventoryQuantity + parsed.data.delta),
-      updatedAt: new Date(),
-    }
+
+  const updated = 'delta' in parsed.data
+    ? await applyInventoryQuantityChange(db, {
+      productId: numericId,
+      mode: parsed.data.delta > 0 ? 'increase' : 'decrease',
+      quantity: Math.abs(parsed.data.delta),
+      actor,
+    })
     : {
-      ...('inStock' in parsed.data
-        ? { inStock: parsed.data.inStock }
-        : { barcode: parsed.data.barcode }),
-      updatedAt: new Date(),
+      kind: 'updated' as const,
+      item: (await mutateEntityWithHistory(db, {
+        entityType: 'products',
+        entityId: numericId,
+        operation: 'update',
+        actor,
+        execute: (tx) => tx
+          .update(products)
+          .set({
+            ...('inStock' in parsed.data
+              ? { inStock: parsed.data.inStock }
+              : { barcode: 'barcode' in parsed.data ? parsed.data.barcode : null }),
+            updatedAt: new Date(),
+          })
+          .where(eq(products.id, numericId))
+          .returning(buildInventoryRowSelection()),
+      }))[0],
     };
 
-  const [updated] = await mutateEntityWithHistory(db, {
-    entityType: 'products',
-    entityId: numericId,
-    operation: 'update',
-    actor,
-    execute: (tx) => tx
-      .update(products)
-      .set(updateValues)
-      .where(eq(products.id, numericId))
-      .returning({
-        id: products.id,
-        title: products.title,
-        sku: products.sku,
-        barcode: products.barcode,
-        inStock: products.inStock,
-        availabilityStatus: products.availabilityStatus,
-        inventoryQuantity: products.inventoryQuantity,
-        updatedAt: products.updatedAt,
-      }),
-  });
+  if (updated.kind !== 'updated') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
 
-  return NextResponse.json({ ok: true, item: updated });
+  return NextResponse.json({ ok: true, item: updated.item });
 }

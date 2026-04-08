@@ -3,6 +3,8 @@
     "administration": "الإدارة",
     "products": "المنتجات",
     "orders": "الطلبات",
+    "ordersTable": "ادخال الطلبات",
+    "ecotrackShipments": "شحنات ECOTRACK",
     "inventory": "المخزون",
     "assets": "الأصول",
     "brands": "العلامات",
@@ -39,8 +41,11 @@
     "searchProducts": "ابحث في المنتجات",
     "filterByBrand": "تصفية حسب العلامة",
     "filterByCategory": "تصفية حسب التصنيف",
+    "filterByImageOrigin": "تصفية حسب روابط الصور",
     "allBrands": "كل العلامات",
     "allCategories": "كل التصنيفات",
+    "allImageLinks": "كل روابط الصور",
+    "externalImageLinks": "روابط الصور الخارجية",
     "deleteDialogTitle": "تأكيد الحذف",
     "deleteDialogDescription": "سيتم حذف {target} نهائيًا.",
     "selectAll": "تحديد كل الصفوف",
@@ -895,9 +900,58 @@
       "success": "تم تصدير الطلبات.",
       "error": "تعذر تصدير الطلبات.",
       "empty": "حدد طلبًا واحدًا على الأقل للتصدير.",
+      "emptyConfirmed": "لا توجد طلبات مؤكدة متاحة للتصدير.",
       "progress": {
         "exporting": "جار إنشاء الملف",
         "updating-statuses": "جار تحديث حالات الطلبات"
+      }
+    },
+    "ecotrack": {
+      "selectedAction": "إرسال المحدد إلى Ecotrack",
+      "confirmedAction": "إرسال المؤكد إلى Ecotrack",
+      "selectedTitle": "إرسال {count} من الطلبات المحددة إلى Ecotrack",
+      "confirmedTitle": "إرسال {count} من الطلبات المؤكدة إلى Ecotrack",
+      "previewTitle": "معاينة إرسال Ecotrack",
+      "previewEligible": "الطلبات المؤهلة",
+      "previewSkipped": "الطلبات المتخطاة",
+      "previewInvalid": "الطلبات غير الصالحة",
+      "emptyEligible": "لا توجد طلبات مؤهلة.",
+      "emptySkipped": "لا توجد طلبات متخطاة.",
+      "emptyInvalid": "لا توجد طلبات غير صالحة.",
+      "confirm": "إرسال إلى Ecotrack",
+      "loading": "جار تجهيز معاينة Ecotrack...",
+      "ready": "معاينة Ecotrack جاهزة.",
+      "success": "اكتمل إرسال Ecotrack.",
+      "cancelled": "تم إلغاء إرسال Ecotrack.",
+      "error": "تعذر إرسال الطلبات إلى Ecotrack.",
+      "empty": "حدد طلبًا واحدًا على الأقل للإرسال.",
+      "emptyConfirmed": "لا توجد طلبات مؤكدة متاحة للإرسال.",
+      "resultTitle": "نتائج الإرسال",
+      "summary": {
+        "totalRequested": "المطلوبة",
+        "eligible": "المؤهلة",
+        "created": "المنشأة",
+        "skipped": "المتخطاة",
+        "invalid": "غير الصالحة",
+        "failed": "الفاشلة"
+      },
+      "progress": {
+        "loading": "جار تحميل الطلبات",
+        "validating-token": "جار التحقق من رمز Ecotrack",
+        "classifying": "جار تصنيف الطلبات",
+        "creating": "جار إنشاء طلبات Ecotrack",
+        "persisting": "جار حفظ التحديثات محليًا",
+        "completed": "اكتمل"
+      },
+      "reasons": {
+        "already_posted": "تم إرسالها سابقًا",
+        "status_not_confirmed": "الطلب غير مؤكد",
+        "missing_phone": "رقم الهاتف مفقود",
+        "missing_wilaya": "الولاية مفقودة",
+        "missing_commune": "البلدية مفقودة",
+        "invalid_commune": "البلدية غير صالحة",
+        "missing_address": "العنوان مفقود",
+        "missing_name": "اسم العميل مفقود"
       }
     },
     "delivery": {
@@ -912,6 +966,9 @@
       "dispatched": "تم الشحن",
       "completed": "مكتملة",
       "delayed": "مؤجلة",
+      "inDelivery": "قيد التوصيل",
+      "returned": "مرتجعة",
+      "failed": "فشلت",
       "incrementNoAnswer": "بدون رد {count}",
       "noAnswerCounter": "العداد: {count}",
       "increaseNoAnswer": "زيادة بدون رد إلى {count}",
@@ -934,17 +991,43 @@
       "title": "قائمة التجهيز",
       "description": "تعرض الجهة اليسرى ما يجب جمعه، بينما تعرض الجهة اليمنى تفاصيل كل طلب وملاحظاته.",
       "selectedAction": "قائمة المحدد",
+      "confirmedAction": "قائمة الطلبات المؤكدة",
       "dispatchedAction": "قائمة الطلبات المرسلة",
       "selectedTitle": "قائمة لـ {count} طلبات محددة",
+      "confirmedTitle": "قائمة الطلبات المؤكدة",
       "dispatchedTitle": "قائمة الطلبات المرسلة",
       "consolidatedTitle": "ما يجب جمعه",
       "ordersTitle": "تفصيل حسب الطلب",
       "notes": "ملاحظات",
       "print": "نسخة للطباعة",
+      "reset": "إعادة تعيين القائمة",
+      "acceptAllInventoryChanges": "قبول كل تخفيضات المخزون",
+      "applySelectedInventoryChanges": "تطبيق التخفيضات المحددة",
+      "addProductTitle": "إضافة منتج",
+      "addProductPlaceholder": "ابحث في منتجات الكتالوج",
+      "addProductAction": "إضافة المنتج",
+      "addProductError": "تعذر إضافة المنتج إلى قائمة التجهيز.",
+      "toggleItem": "تبديل {title}",
+      "customItem": "أضيف يدويًا",
+      "increaseQuantity": "زيادة كمية {title}",
+      "decreaseQuantity": "تقليل كمية {title}",
+      "increaseInventoryDelta": "زيادة تخفيض المخزون لـ {title}",
+      "decreaseInventoryDelta": "تقليل تخفيض المخزون لـ {title}",
+      "inventoryAdjustLabel": "تخفيض المخزون",
+      "inventoryDecreasePreview": "سيتم تخفيض المخزون بمقدار {count}",
+      "inventoryShortage": "النقص {count}",
+      "inventoryApplied": "تم تطبيق تخفيض مخزون بمقدار {count}",
+      "inventoryApplyLoading": "جار تطبيق تغييرات المخزون على {count} منتجات...",
+      "inventoryApplySuccess": "تم تطبيق تغييرات المخزون على {count} منتجات.",
+      "inventoryApplyError": "تعذر تطبيق تغييرات المخزون على {count} منتجات.",
+      "noInventoryChanges": "لا توجد تغييرات مخزون جاهزة للتطبيق.",
+      "removeItem": "إزالة {title}",
       "loading": "جارٍ إنشاء القائمة...",
       "ready": "القائمة جاهزة.",
       "error": "تعذر إنشاء القائمة.",
       "emptySelection": "حدد طلبًا واحدًا على الأقل.",
+      "emptyConfirmed": "لا توجد طلبات مؤكدة متاحة لقائمة التجهيز.",
+      "emptyDispatched": "لا توجد طلبات مرسلة متاحة لقائمة التجهيز.",
       "printError": "تعذر فتح نسخة الطباعة."
     },
     "products": {
@@ -981,6 +1064,187 @@
     "system": "النظام",
     "unconfirmed": "غير مؤكد",
     "unconfirmedDate": "لا يوجد وقت تأكيد"
+  },
+  "ordersEcotrackManager": {
+    "searchPlaceholder": "ابحث برقم التتبع او العميل او الهاتف او العنوان او البلدية او الولاية او المنتج او الحالة",
+    "filters": {
+      "statusLabel": "تصفية حسب حالة ECOTRACK",
+      "allStatuses": "كل الحالات",
+      "sortKeyLabel": "الترتيب حسب",
+      "sortDirectionLabel": "الاتجاه",
+      "staleOnly": "عرض البيانات القديمة فقط"
+    },
+    "sort": {
+      "createdAt": "تاريخ الانشاء",
+      "trackingNumber": "رقم التتبع",
+      "clientName": "اسم العميل",
+      "currentStatus": "الحالة الحالية",
+      "lastStatusSyncedAt": "اخر مزامنة للحالة",
+      "asc": "تصاعدي",
+      "desc": "تنازلي"
+    },
+    "columns": {
+      "trackingNumber": "رقم التتبع",
+      "client": "العميل والهاتف",
+      "address": "العنوان والبلدية والولاية ونوع التوصيل",
+      "products": "المنتجات",
+      "amount": "المبلغ",
+      "status": "حالة ECOTRACK"
+    },
+    "reference": "المرجع",
+    "missingValue": "قيمة مفقودة",
+    "staleBadge": "قديمة",
+    "driverPhone": "هاتف السائق",
+    "estimatedFee": "الرسوم المقدرة",
+    "deskPhone": "هاتف نقطة الاستلام",
+    "deskCommune": "بلدية نقطة الاستلام",
+    "deskAddress": "عنوان نقطة الاستلام",
+    "lastSync": "اخر مزامنة للحالة",
+    "lastTrackingSync": "اخر مزامنة للتتبع",
+    "lastMajSync": "اخر مزامنة للتحديثات",
+    "neverSynced": "لم تتم المزامنة",
+    "summaryTitle": "ملخص الشحنة",
+    "amounts": {
+      "subtotal": "المنتجات",
+      "deliveryFee": "التوصيل",
+      "total": "الاجمالي"
+    },
+    "history": {
+      "title": "سجل الطلب",
+      "majTitle": "التحديثات",
+      "timelineTitle": "سجل التتبع",
+      "empty": "لا يوجد سجل حاليا.",
+      "emptyMaj": "لا توجد تحديثات محفوظة.",
+      "emptyTimeline": "لا توجد احداث تتبع محفوظة."
+    },
+    "actions": {
+      "printSelected": "طباعة الملصقات المحددة",
+      "refreshSelected": "تحديث المحدد",
+      "clearSelection": "مسح التحديد",
+      "refreshVisible": "تحديث الظاهر",
+      "dispatchReady": "ارسال prete a expedier",
+      "dispatchSelected": "ارسال المحدد",
+      "showHistorySelected": "اظهار سجل المحدد",
+      "showHistoryVisible": "اظهار سجل الظاهر",
+      "label": "الملصق",
+      "refresh": "تحديث",
+      "dispatch": "ارسال",
+      "maj": "اضافة تحديث",
+      "return": "طلب ارجاع",
+      "showHistory": "اظهار السجل",
+      "hideHistory": "اخفاء السجل"
+    },
+    "loading": {
+      "refreshing": "جار تحديث شحنات ECOTRACK",
+      "inProgress": "قيد التنفيذ"
+    },
+    "empty": {
+      "title": "لا توجد شحنات ECOTRACK",
+      "description": "تظهر الطلبات هنا بعد ارسالها الى ECOTRACK والحصول على رقم تتبع."
+    },
+    "dialogs": {
+      "editTitle": "تعديل شحنة ECOTRACK",
+      "editDescription": "قم بتحديث الطلب المحلي ثم ECOTRACK ما دامت الشحنة ما زالت prete_a_expedier.",
+      "editHint": "قيمة المنتجات وتقسيم المبلغ يبقيان مشتقين من الطلب المحلي.",
+      "deleteTitle": "حذف شحنة ECOTRACK",
+      "deleteDescription": "حذف شحنة ECOTRACK الخاصة بـ {name}. سيبقى الطلب المحلي متاحا لاعادة الارسال لاحقا.",
+      "dispatchTitle": "ارسال شحنة ECOTRACK",
+      "dispatchDescription": "قم بارسال شحنة {name} واقفل تعديلات ما قبل الارسال.",
+      "majTitle": "اضافة تحديث ECOTRACK",
+      "majDescription": "ارسل تحديثا خاصا بـ {name}."
+    },
+    "fields": {
+      "firstName": "الاسم",
+      "lastName": "اللقب",
+      "phoneNumber1": "الهاتف الرئيسي",
+      "phoneNumber2": "الهاتف الثانوي",
+      "delivery": "نوع التوصيل",
+      "state": "الولاية",
+      "statePlaceholder": "اختر ولاية",
+      "city": "البلدية",
+      "cityPlaceholder": "اختر بلدية",
+      "homeAddress": "العنوان",
+      "note": "ملاحظة",
+      "askCollection": "طلب جمع",
+      "askCollectionDescription": "يرسل ask_collection=1 عند الارسال اذا كان يلزم جمع الشحنة من جهتكم.",
+      "majContent": "محتوى التحديث",
+      "majHint": "الحد الاقصى 255 حرفا."
+    },
+    "confirmations": {
+      "return": "هل تريد طلب ارجاع لهذه الشحنة من ECOTRACK؟"
+    },
+    "notifications": {
+      "refresh": {
+        "loading": "جار تحديث شحنة ECOTRACK...",
+        "success": "تم تحديث شحنة ECOTRACK.",
+        "error": "فشل تحديث شحنة ECOTRACK."
+      },
+      "update": {
+        "loading": "جار حفظ شحنة ECOTRACK...",
+        "success": "تم حفظ شحنة ECOTRACK.",
+        "error": "فشل حفظ شحنة ECOTRACK."
+      },
+      "delete": {
+        "loading": "جار حذف شحنة ECOTRACK...",
+        "success": "تم حذف شحنة ECOTRACK.",
+        "error": "فشل حذف شحنة ECOTRACK."
+      },
+      "dispatch": {
+        "loading": "جار ارسال شحنة ECOTRACK...",
+        "success": "تم ارسال شحنة ECOTRACK.",
+        "partial": "تم ارسال {successCount} شحنات وفشل {failedCount}.",
+        "error": "فشل ارسال شحنة ECOTRACK."
+      },
+      "maj": {
+        "loading": "جار ارسال تحديث ECOTRACK...",
+        "success": "تم ارسال تحديث ECOTRACK.",
+        "error": "فشل ارسال تحديث ECOTRACK."
+      },
+      "return": {
+        "loading": "جار طلب ارجاع ECOTRACK...",
+        "success": "تم طلب ارجاع ECOTRACK.",
+        "error": "فشل طلب ارجاع ECOTRACK."
+      },
+      "labels": {
+        "loading": "جار تحضير ملصقات ECOTRACK...",
+        "success": "ملصقات ECOTRACK جاهزة.",
+        "error": "فشل تحضير ملصقات ECOTRACK."
+      }
+    },
+    "statuses": {
+      "prete_a_expedier": "جاهز للارسال",
+      "en_ramassage": "قيد الجمع",
+      "en_preparation_stock": "قيد تحضير المخزون",
+      "vers_hub": "نحو المركز",
+      "en_hub": "في المركز",
+      "vers_wilaya": "نحو الولاية",
+      "en_preparation": "قيد التحضير",
+      "en_livraison": "قيد التوصيل",
+      "suspendu": "معلق",
+      "livre_non_encaisse": "تم التسليم غير محصل",
+      "encaisse_non_paye": "محصل غير مدفوع",
+      "paiements_prets": "الدفعات جاهزة",
+      "paye_et_archive": "مدفوع ومؤرشف",
+      "retour_chez_livreur": "ارجاع عند السائق",
+      "retour_transit_entrepot": "ارجاع في طريقه للمخزن",
+      "retour_en_traitement": "ارجاع قيد المعالجة",
+      "retour_recu": "تم استلام الارجاع",
+      "retour_archive": "ارجاع مؤرشف",
+      "annule": "ملغى"
+    },
+    "historyStatuses": {
+      "order_information_received_by_carrier": "تم تسجيل الطلب واعتماده من البائع",
+      "picked": "تم استلام الطلب من طرف شركة التوصيل",
+      "accepted_by_carrier": "تم استلام الطلب في مركز الفرز",
+      "dispatched_to_driver": "تم توجيه الطلب إلى الموزع",
+      "attempt_delivery": "محاولة تسليم",
+      "return_asked": "تم بدء الإرجاع من مركز الفرز",
+      "return_in_transit": "المرتجع في الطريق",
+      "return_received": "تم استلام المرتجع من البائع",
+      "livred": "تم تسليم الطلب",
+      "encaissed": "تم تحصيل الطلب",
+      "payed": "تم الدفع"
+    }
   },
   "settings": {
     "general": {
@@ -1147,11 +1411,13 @@
       "brandsCategories": "العلامات والتصنيفات",
       "bulletin": "النشرات",
       "stats": "الإحصاءات",
-      "settings": "الإعدادات"
+      "settings": "الإعدادات",
+      "ecotrack": "إيكوتراك"
     },
     "state": {
       "applied": "مطبّق",
-      "undone": "تم التراجع"
+      "undone": "تم التراجع",
+      "nonReversible": "غير قابل للتراجع"
     },
     "details": {
       "title": "نشاط {entity}",
@@ -1207,6 +1473,26 @@
       "description": "احفظ الباركود حتى يمكن العثور على المنتج مباشرة من جدول المخزون.",
       "placeholder": "أدخل الباركود"
     },
+    "scan": {
+      "title": "مسح باركود أو طلب",
+      "description": "أدخل باركودًا مطابقًا أو رقم طلب لإضافة المنتجات مرة أخرى إلى المخزون.",
+      "placeholder": "باركود أو رقم طلب",
+      "action": "مسح",
+      "barcodeTitle": "إضافة وحدة واحدة من {name}",
+      "barcodeDescription": "أكد لإضافة وحدة واحدة للباركود الممسوح.",
+      "confirmAddOne": "إضافة وحدة واحدة",
+      "orderTitle": "الطلب #{id}",
+      "toggleOrderItem": "تبديل عنصر الطلب {name}",
+      "orderQuantity": "كمية الطلب: {count}",
+      "currentInventory": "المخزون الحالي: {count}",
+      "confirmOrderAdd": "إضافة المنتجات المحددة",
+      "orderApplyLoading": "جار إضافة {count} منتجات من الطلب إلى المخزون...",
+      "orderApplySuccess": "تمت إضافة {count} منتجات من الطلب إلى المخزون.",
+      "orderApplyError": "تعذر إضافة {count} منتجات من الطلب إلى المخزون.",
+      "notFound": "لم يتم العثور على باركود أو طلب مطابق.",
+      "error": "تعذر فحص الإدخال.",
+      "noSelection": "حدد منتجًا واحدًا على الأقل من الطلب الممسوح."
+    },
     "notifications": {
       "barcode": {
         "create": {
@@ -1259,6 +1545,7 @@
     "editBannerTitle": "تعديل البنر",
     "bannerDialogDescription": "حدّد عنوان البنر والمنتج المرتبط والصورة.",
     "bannerTitlePlaceholder": "عنوان البنر",
+    "bannerTitleArPlaceholder": "عنوان البنر بالعربية",
     "titleLabel": "العنوان",
     "titleColumn": "العنوان",
     "bannerProductPlaceholder": "اختر المنتج المرتبط",
@@ -1279,6 +1566,8 @@
     "groupDialogDescription": "اختر المنتجات والعلامات والتصنيفات التي تنتمي إلى هذه المجموعة.",
     "groupNamePlaceholder": "اسم المجموعة",
     "groupNameLabel": "اسم المجموعة",
+    "groupNameArLabel": "اسم المجموعة بالعربية",
+    "groupNameArPlaceholder": "اسم المجموعة بالعربية",
     "groupNameColumn": "اسم المجموعة",
     "groupCtaLabel": "نص زر الدعوة",
     "groupCtaPlaceholder": "Voir Plus",

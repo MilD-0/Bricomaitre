@@ -91,7 +91,12 @@
   "thx": {
     "mrc": "Commande reçu avec succès(تم استلام الطلب بنجاح)",
     "vp": "Voir plus des produits",
-    "va": "Voir Aussi"
+    "va": "Voir Aussi",
+    "verifying": "Verification de la commande en cours",
+    "verificationFailed": "Impossible de verifier la commande pour le moment.",
+    "confirmationUnavailable": "Confirmation indisponible",
+    "verifiedReceipt": "Votre commande a ete verifiee aupres de notre backend avant l'affichage de cette page.",
+    "modifiedReceipt": "Votre modification a ete verifiee aupres de notre backend avant l'affichage de cette page."
   },
   "checkout": {
         "mail": "Votre addresse E-mail (optionnel)",
@@ -118,6 +123,11 @@
     "off": "Livraison au poste",
     "officeFallbackNotice": "Livraison au poste indisponible pour cette commune. Bascule automatique vers livraison à domicile.",
     "modi": "Modifier",
+    "verifying": "Verification en cours...",
+    "verificationFailed": "Une commande precedente existe peut-etre deja. Verifiez-la avant d'en envoyer une nouvelle.",
+    "retryVerification": "Reessayer la verification",
+    "submissionInvalidResponse": "Le serveur a repondu avec une confirmation invalide. Aucune page de succes n'a ete affichee.",
+    "discardPendingVerification": "Ignorer cette verification",
     "livr": "Mode de livraison",
     "lv1": "à domicile",
     "lv2": "au poste",

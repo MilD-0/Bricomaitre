@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, asc, count, desc, eq, ilike, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, or, sql } from 'drizzle-orm';
 
 import { getDb, hasDb } from '../../../db/client';
 import { products } from '../../../db/schema';
@@ -61,6 +61,58 @@ async function toProductMutationValues(
 
 type ProductListQuery = ReturnType<typeof productListQuerySchema.parse>;
 
+function normalizeHostname(value: string | undefined) {
+  return String(value ?? '')
+    .trim()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/+$/, '')
+    .toLowerCase();
+}
+
+function buildOwnedImageUrlPrefixes() {
+  const bucket = String(process.env.AWS_S3_BUCKET ?? '').trim();
+  const region = String(process.env.AWS_REGION ?? '').trim();
+  const cloudfrontHost = normalizeHostname(process.env.AWS_CLOUDFRONT_DOMAIN);
+  const prefixes = new Set<string>();
+
+  if (cloudfrontHost) {
+    prefixes.add(`https://${cloudfrontHost}/%`);
+    prefixes.add(`http://${cloudfrontHost}/%`);
+  }
+
+  if (bucket) {
+    if (region) {
+      prefixes.add(`https://${bucket}.s3.${region}.amazonaws.com/%`);
+      prefixes.add(`http://${bucket}.s3.${region}.amazonaws.com/%`);
+      prefixes.add(`https://s3.${region}.amazonaws.com/${bucket}/%`);
+      prefixes.add(`http://s3.${region}.amazonaws.com/${bucket}/%`);
+    }
+
+    prefixes.add(`https://${bucket}.s3.amazonaws.com/%`);
+    prefixes.add(`http://${bucket}.s3.amazonaws.com/%`);
+    prefixes.add(`https://s3.amazonaws.com/${bucket}/%`);
+    prefixes.add(`http://s3.amazonaws.com/${bucket}/%`);
+  }
+
+  return [...prefixes];
+}
+
+function buildExternalImageWhereClause() {
+  const imageUrl = sql.raw('image_url');
+  const ownedPatterns = buildOwnedImageUrlPrefixes();
+  const ownedClauses = ownedPatterns.map((pattern) => sql`${imageUrl} ILIKE ${pattern}`);
+  const ownedImagePredicate = ownedClauses.length > 0
+    ? sql.join(ownedClauses, sql` OR `)
+    : sql`false`;
+
+  return sql`exists (
+    select 1
+    from unnest(coalesce(${products.images}, ARRAY[]::text[])) as image_rows(image_url)
+    where nullif(btrim(${imageUrl}), '') is not null
+      and not (${ownedImagePredicate})
+  )`;
+}
+
 async function getCachedAllProducts() {
   applyServerCache({ stale: 60, revalidate: 300, expire: 3600 }, CACHE_TAGS.products);
 
@@ -81,6 +133,7 @@ async function getCachedPaginatedProducts(query: ProductListQuery) {
       : undefined,
     query.brandId === null ? undefined : eq(products.brandId, query.brandId),
     query.categoryId === null ? undefined : eq(products.categoryId, query.categoryId),
+    query.imageOrigin === 'external' ? buildExternalImageWhereClause() : undefined,
   ].filter((value) => value !== undefined);
   const whereClause = filters.length > 0 ? and(...filters) : undefined;
 
@@ -130,7 +183,7 @@ export async function GET(req: NextRequest) {
   }
 
   const searchParams = req.nextUrl.searchParams;
-  const shouldPaginate = ['page', 'limit', 'search', 'brandId', 'categoryId', 'sortKey', 'sortDirection']
+  const shouldPaginate = ['page', 'limit', 'search', 'brandId', 'categoryId', 'imageOrigin', 'sortKey', 'sortDirection']
     .some((key) => searchParams.has(key));
 
   if (!shouldPaginate) {
@@ -144,6 +197,7 @@ export async function GET(req: NextRequest) {
     search: searchParams?.get('search') ?? undefined,
     brandId: searchParams?.get('brandId'),
     categoryId: searchParams?.get('categoryId'),
+    imageOrigin: searchParams?.get('imageOrigin') ?? undefined,
     sortKey: searchParams?.get('sortKey') ?? undefined,
     sortDirection: searchParams?.get('sortDirection') ?? undefined,
   });

@@ -12,7 +12,9 @@ import { GET as canonicalOrderGet, PATCH as canonicalOrderPatch } from '../../st
 import { GET as compatibilityOrderGet, PATCH as compatibilityOrderPatch } from './orders/[id]/route';
 import { POST as canonicalOrdersPost } from '../../storefront/orders/route';
 import { POST as compatibilityOrdersPost } from './orders/route';
+import { GET as canonicalProductBuildFeedGet } from '../../storefront/products/build-feed/route';
 import { GET as canonicalProductsGet } from '../../storefront/products/route';
+import { GET as compatibilityProductBuildFeedGet } from './products/build-feed/route';
 import { GET as compatibilityProductsGet } from './products/route';
 
 describe('app/api/storefront compatibility routes', () => {
@@ -25,5 +27,6 @@ describe('app/api/storefront compatibility routes', () => {
     expect(compatibilityOrdersPost).toBe(canonicalOrdersPost);
     expect(compatibilityOrderGet).toBe(canonicalOrderGet);
     expect(compatibilityOrderPatch).toBe(canonicalOrderPatch);
+    expect(compatibilityProductBuildFeedGet).toBe(canonicalProductBuildFeedGet);
   });
 });

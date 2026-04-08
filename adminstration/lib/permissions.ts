@@ -27,15 +27,6 @@ export const permissionCatalog: readonly PermissionKey[] = [
   'settings_manage',
 ] as const;
 
-export const entityFormSchema = z.object({
-  name: z.string().min(3).max(120),
-  status: z.enum(['active', 'draft', 'archived']),
-  tags: z.string().optional(),
-  imageUrl: z.string().optional(),
-});
-
-export const entityStatusSchema = entityFormSchema.pick({ status: true });
-
 export const roleDefinitionFormSchema = z.object({
   name: z.string().trim().min(3).max(60),
   description: z.string().trim().max(160).optional().nullable(),
@@ -64,7 +55,6 @@ export const userAccessGrantFormSchema = z.object({
   }
 });
 
-export type EntityFormValues = z.infer<typeof entityFormSchema>;
 export type RoleDefinitionFormValues = z.infer<typeof roleDefinitionFormSchema>;
 export type UserAccessGrantFormValues = z.infer<typeof userAccessGrantFormSchema>;
 

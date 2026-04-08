@@ -15,6 +15,7 @@ import { assetBannerSchema, featuredProductGroupSchema, productCardSchema } from
 import { mutateEntityWithHistory } from '../../../lib/action-history';
 import { auth } from '../../../lib/auth';
 import { requireMutationAccess } from '../../../lib/rbac';
+import { revalidateStorefrontAssets } from '../../../lib/storefront-revalidate';
 
 type Database = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -90,6 +91,7 @@ export async function POST(req: NextRequest) {
       execute: (tx) => tx.insert(assetBanners).values({ ...parsed.data, sortOrder }).returning({ id: assetBanners.id }),
       resolveEntityId: (rows) => rows[0]?.id,
     });
+    await revalidateStorefrontAssets();
     return NextResponse.json({ ok: true });
   }
 
@@ -109,6 +111,7 @@ export async function POST(req: NextRequest) {
           .insert(featuredProductGroups)
           .values({
             name: parsed.data.name,
+            nameAr: parsed.data.nameAr,
             cta: parsed.data.cta,
             ctaAr: parsed.data.ctaAr,
             link: parsed.data.link,
@@ -129,6 +132,7 @@ export async function POST(req: NextRequest) {
       resolveEntityId: (result) => result[0]?.id,
     });
 
+    await revalidateStorefrontAssets();
     return NextResponse.json({ ok: true });
   }
 
@@ -146,6 +150,7 @@ export async function POST(req: NextRequest) {
       execute: (tx) => tx.insert(productCards).values({ ...parsed.data, sortOrder }).returning({ id: productCards.id }),
       resolveEntityId: (rows) => rows[0]?.id,
     });
+    await revalidateStorefrontAssets();
     return NextResponse.json({ ok: true });
   }
 

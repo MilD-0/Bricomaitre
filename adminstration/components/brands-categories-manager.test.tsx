@@ -44,7 +44,7 @@ describe('BrandsCategoriesManager', () => {
     window.localStorage.clear();
 
     server.use(
-      http.get('/api/entities/brands', ({ request }) => {
+      http.get('/api/brands', ({ request }) => {
         const url = new URL(request.url);
         const page = url.searchParams.get('page');
         const search = url.searchParams.get('search') ?? '';
@@ -70,7 +70,7 @@ describe('BrandsCategoriesManager', () => {
           pagination: { page: Number(page ?? '1'), limit: 50, totalItems: 100, totalPages: 2, hasNextPage: page !== '2', hasPreviousPage: page === '2' },
         });
       }),
-      http.get('/api/entities/categories', ({ request }) => {
+      http.get('/api/categories', ({ request }) => {
         const url = new URL(request.url);
         const page = url.searchParams.get('page');
         const search = url.searchParams.get('search') ?? '';
@@ -107,17 +107,31 @@ describe('BrandsCategoriesManager', () => {
           pagination: { page: Number(page ?? '1'), limit: 50, totalItems: 100, totalPages: 2, hasNextPage: page !== '2', hasPreviousPage: page === '2' },
         });
       }),
-      http.post('/api/entities/:entityType', async ({ request }) => {
+      http.post('/api/brands', async ({ request }) => {
         await delay(50);
         postCalls.push({ url: request.url, body: await request.json() });
         return HttpResponse.json({ ok: true });
       }),
-      http.patch('/api/entities/:entityType/:id', async ({ request }) => {
+      http.post('/api/categories', async ({ request }) => {
+        await delay(50);
+        postCalls.push({ url: request.url, body: await request.json() });
+        return HttpResponse.json({ ok: true });
+      }),
+      http.patch('/api/brands/:id', async ({ request }) => {
         await delay(50);
         patchCalls.push({ url: request.url, body: await request.json() });
         return HttpResponse.json({ ok: true });
       }),
-      http.delete('/api/entities/:entityType/:id', ({ request }) => {
+      http.patch('/api/categories/:id', async ({ request }) => {
+        await delay(50);
+        patchCalls.push({ url: request.url, body: await request.json() });
+        return HttpResponse.json({ ok: true });
+      }),
+      http.delete('/api/brands/:id', ({ request }) => {
+        deleteCalls.push(request.url);
+        return HttpResponse.json({ ok: true });
+      }),
+      http.delete('/api/categories/:id', ({ request }) => {
         deleteCalls.push(request.url);
         return HttpResponse.json({ ok: true });
       }),
@@ -160,7 +174,7 @@ describe('BrandsCategoriesManager', () => {
 
     await waitFor(() => {
       expect(patchCalls).toContainEqual({
-        url: 'http://localhost:3000/api/entities/brands/1',
+        url: 'http://localhost:3000/api/brands/1',
         body: { status: 'draft' },
       });
     });
@@ -178,7 +192,7 @@ describe('BrandsCategoriesManager', () => {
 
     await waitFor(() => {
       expect(patchCalls).toContainEqual({
-        url: 'http://localhost:3000/api/entities/categories/10',
+        url: 'http://localhost:3000/api/categories/10',
         body: { status: 'draft' },
       });
     });
@@ -198,7 +212,7 @@ describe('BrandsCategoriesManager', () => {
 
     await waitFor(() => {
       expect(postCalls).toContainEqual({
-        url: 'http://localhost:3000/api/entities/brands',
+        url: 'http://localhost:3000/api/brands',
         body: { name: 'Nova', imageUrl: 'https://cdn.example.com/nova.jpg' },
       });
     });
@@ -225,7 +239,7 @@ describe('BrandsCategoriesManager', () => {
 
     await waitFor(() => {
       expect(patchCalls).toContainEqual({
-        url: 'http://localhost:3000/api/entities/categories/10',
+        url: 'http://localhost:3000/api/categories/10',
         body: {
           name: 'Exterior paint',
           nameAr: 'طلاء خارجي',
@@ -267,7 +281,7 @@ describe('BrandsCategoriesManager', () => {
 
     await waitFor(() => {
       expect(patchCalls).toContainEqual({
-        url: 'http://localhost:3000/api/entities/brands/1',
+        url: 'http://localhost:3000/api/brands/1',
         body: { status: 'active' },
       });
     });
@@ -278,7 +292,7 @@ describe('BrandsCategoriesManager', () => {
     await screen.findByText('Deleted 1 selected.');
 
     await waitFor(() => {
-      expect(deleteCalls).toContain('http://localhost:3000/api/entities/brands/1');
+      expect(deleteCalls).toContain('http://localhost:3000/api/brands/1');
     });
 
     await userEvent.click(screen.getAllByRole('button', { name: 'Go to page 2' })[0]);
@@ -300,7 +314,7 @@ describe('BrandsCategoriesManager', () => {
 
   it('restores optimistic updates and shows a failure toast when a mutation fails', async () => {
     server.use(
-      http.patch('/api/entities/brands/:id', async () => {
+      http.patch('/api/brands/:id', async () => {
         await delay(50);
         return new HttpResponse('broken', { status: 500 });
       }),

@@ -6,7 +6,7 @@ import { products } from '../../../../db/schema';
 import { mutateEntityWithHistory } from '../../../../lib/action-history';
 import { auth } from '../../../../lib/auth';
 import { productPatchSchema, productPayloadSchema } from '../../../../lib/products';
-import { requireMutationAccess } from '../../../../lib/rbac';
+import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
 import { CACHE_TAGS, revalidateServerTags } from '../../../../lib/server-cache';
 import { resolveUniqueSlug } from '../../../../lib/slug';
 
@@ -60,6 +60,11 @@ async function toProductMutationValues(
 }
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireAppAccess();
+  if (denied) {
+    return denied;
+  }
+
   if (!hasDb()) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }

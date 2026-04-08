@@ -6,6 +6,7 @@ import { assetBanners, featuredProductGroups, productCards } from '../../../../d
 import { assetReorderSchema } from '../../../../lib/assets';
 import { auth } from '../../../../lib/auth';
 import { requireMutationAccess } from '../../../../lib/rbac';
+import { revalidateStorefrontAssets } from '../../../../lib/storefront-revalidate';
 
 export async function POST(req: NextRequest) {
   const denied = await requireMutationAccess('assets');
@@ -54,5 +55,6 @@ export async function POST(req: NextRequest) {
     );
   });
 
+  await revalidateStorefrontAssets();
   return NextResponse.json({ ok: true });
 }

@@ -22,6 +22,7 @@ export const actionLogs = adminSchema.table(
     afterState: jsonb("after_state"),
     createdBy: text("created_by"),
     createdByName: text("created_by_name"),
+    isReversible: boolean("is_reversible").notNull().default(true),
     isUndone: boolean("is_undone").notNull().default(false),
     undoneAt: timestamp("undone_at", { withTimezone: true }),
     undoneBy: text("undone_by"),

@@ -24,6 +24,17 @@ import {
   findWilayaByName,
   getCommunesForWilaya,
 } from "@/lib/storefront-api";
+import {
+  clearPendingOrderVerification,
+  readPendingOrderVerification,
+  writePendingOrderVerification,
+} from "@/lib/pending-order-verification";
+import {
+  StorefrontOrderClientError,
+  createStorefrontOrder,
+  patchStorefrontOrder,
+  readVerifiedStorefrontOrder,
+} from "@/lib/storefront-order-client";
 import { usePathname, useRouter } from "@/i18n/navigation";
 
 const FREE_SHIPPING_PRODUCT_ID = "f00000000000000000000005";
@@ -42,6 +53,9 @@ export default function OrderForm({ prod, cart, order }) {
   const [singleProduct, setSingleProduct] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [deliveryCatalog, setDeliveryCatalog] = useState(null);
+  const [pendingVerification, setPendingVerification] = useState(null);
+  const [verificationError, setVerificationError] = useState("");
+  const [isRetryingVerification, setIsRetryingVerification] = useState(false);
 
   const [firstName, setFirstName] = useState(storage?.getItem("firstName") || "");
   const [lastName, setLastName] = useState(storage?.getItem("lastName") || "");
@@ -68,6 +82,10 @@ export default function OrderForm({ prod, cart, order }) {
       setCart();
     }
   }, [modify, setCart]);
+
+  useEffect(() => {
+    setPendingVerification(readPendingOrderVerification());
+  }, []);
 
   useEffect(() => {
     const loadCatalog = async () => {
@@ -233,10 +251,88 @@ export default function OrderForm({ prod, cart, order }) {
     setShowOfficeFallbackNotice(false);
   }
 
+  async function verifyAndComplete({ orderId, token, mode, duplicateSignature }) {
+    writePendingOrderVerification({
+      orderId,
+      token,
+      mode,
+      createdAt: new Date().toISOString(),
+    });
+    setPendingVerification(readPendingOrderVerification());
+
+    const verifiedOrder = await readVerifiedStorefrontOrder({ orderId, token });
+
+    clearPendingOrderVerification();
+    setPendingVerification(null);
+    setVerificationError("");
+
+    storage?.setItem("orderId", String(orderId));
+    storage?.setItem("orderToken", token);
+    if (duplicateSignature) {
+      storage?.setItem(
+        "lastOrder",
+        JSON.stringify({
+          ...duplicateSignature,
+          timestamp: Date.now(),
+        }),
+      );
+    }
+
+    clearCart();
+
+    const search = new URLSearchParams({
+      orderId: String(orderId),
+      token,
+      ...(mode === "patch" ? { modified: "true" } : {}),
+    });
+    router.push(`/thank-you?${search.toString()}`);
+
+    return verifiedOrder;
+  }
+
+  async function retryPendingVerification() {
+    const currentPendingVerification = readPendingOrderVerification();
+    if (!currentPendingVerification) {
+      setPendingVerification(null);
+      return;
+    }
+
+    setIsRetryingVerification(true);
+    setVerificationError("");
+
+    try {
+      await verifyAndComplete({
+        orderId: currentPendingVerification.orderId,
+        token: currentPendingVerification.token,
+        mode: currentPendingVerification.mode,
+        duplicateSignature: null,
+      });
+    } catch (error) {
+      console.error(error);
+      setPendingVerification(readPendingOrderVerification());
+      setVerificationError(t("verificationFailed"));
+    } finally {
+      setIsRetryingVerification(false);
+    }
+  }
+
+  function discardPendingVerification() {
+    clearPendingOrderVerification();
+    setPendingVerification(null);
+    setVerificationError("");
+  }
+
   async function saveOrder(event) {
     event.preventDefault();
 
     if (isSubmitting || selectedWilayaId == null || !city) {
+      return;
+    }
+
+    const currentPendingVerification = readPendingOrderVerification();
+    if (currentPendingVerification) {
+      setPendingVerification(currentPendingVerification);
+      setVerificationError(t("verificationFailed"));
       return;
     }
 
@@ -257,6 +353,7 @@ export default function OrderForm({ prod, cart, order }) {
     }
 
     setIsSubmitting(true);
+    setVerificationError("");
 
     storage?.setItem("firstName", firstName);
     storage?.setItem("lastName", lastName);
@@ -291,62 +388,49 @@ export default function OrderForm({ prod, cart, order }) {
     };
 
     try {
-      const orderId = storage?.getItem("orderId");
-      const orderToken = storage?.getItem("orderToken");
+      let successfulOrder;
+      let verifiedOrder;
 
-      const response = await fetch(
-        modify && orderId && orderToken
-          ? `/api/storefront/orders/${orderId}?token=${orderToken}`
-          : "/api/orders",
-        {
-          method: modify && orderId && orderToken ? "PATCH" : "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(
-            modify
-              ? storefrontPayload
-              : {
-                  ...storefrontPayload,
-                  time: eventTime,
-                  ev_id: eventId,
-                  url: pathname,
-                  fbp: getCookie("_fbp") || null,
-                  fbc: getCookie("_fbc") || null,
-                },
-          ),
-        },
-      );
+      if (modify) {
+        const orderId = storage?.getItem("orderId");
+        const orderToken = storage?.getItem("orderToken");
 
-      const responseData = await response.json();
-      if (!response.ok) {
-        void trackAnalyticsEvent({
-          eventName: "api_error",
-          gaEventName: "exception",
-          pageType: "checkout",
-          metadata: {
-            kind: "order_request_failed",
-            status: response.status,
-            error: responseData?.error ?? "Order request failed",
-          },
+        if (!orderId || !orderToken) {
+          throw new StorefrontOrderClientError(t("verificationFailed"), {
+            code: "missing_order_identity",
+          });
+        }
+
+        successfulOrder = await patchStorefrontOrder({
+          orderId,
+          token: orderToken,
+          payload: storefrontPayload,
         });
-        throw new Error(responseData?.error || "Order request failed");
+        verifiedOrder = await verifyAndComplete({
+          orderId: successfulOrder.id,
+          token: orderToken,
+          mode: "patch",
+          duplicateSignature,
+        });
+      } else {
+        successfulOrder = await createStorefrontOrder({
+          payload: {
+            ...storefrontPayload,
+            time: eventTime,
+            ev_id: eventId,
+            url: pathname,
+            fbp: getCookie("_fbp") || null,
+            fbc: getCookie("_fbc") || null,
+          },
+          submissionKey: uuidv4(),
+        });
+        verifiedOrder = await verifyAndComplete({
+          orderId: successfulOrder.id,
+          token: successfulOrder.publicToken,
+          mode: "create",
+          duplicateSignature,
+        });
       }
-
-      if (responseData?.item?.id) {
-        storage?.setItem("orderId", String(responseData.item.id));
-      }
-      if (responseData?.item?.publicToken) {
-        storage?.setItem("orderToken", responseData.item.publicToken);
-      }
-
-      storage?.setItem(
-        "lastOrder",
-        JSON.stringify({
-          ...duplicateSignature,
-          timestamp: Date.now(),
-        }),
-      );
 
       if (!modify) {
         const analyticsItems = buildItemArray(cart ? products : [singleProduct].filter(Boolean));
@@ -356,7 +440,7 @@ export default function OrderForm({ prod, cart, order }) {
           pageType: "checkout",
           quantity: effectiveCartProducts.length,
           value: totalAmount,
-          orderId: responseData?.item?.id ?? null,
+          orderId: verifiedOrder?.id ?? successfulOrder?.id ?? null,
           metadata: {
             items: analyticsItems,
             delivery,
@@ -370,7 +454,7 @@ export default function OrderForm({ prod, cart, order }) {
           totalValue: totalAmount,
           eventId,
           eventTime,
-          orderId: responseData?.item?.id ?? null,
+          orderId: verifiedOrder?.id ?? successfulOrder?.id ?? null,
           additionalUserData: {
             em: email,
             fn: firstName,
@@ -382,9 +466,6 @@ export default function OrderForm({ prod, cart, order }) {
           },
         }).catch((error) => console.error(error));
       }
-
-      clearCart();
-      router.push(modify ? "/thank-you?modified=true" : "/thank-you");
     } catch (error) {
       console.error(error);
       void trackAnalyticsEvent({
@@ -393,10 +474,22 @@ export default function OrderForm({ prod, cart, order }) {
         pageType: "checkout",
         metadata: {
           kind: "checkout_submit_exception",
+          status: error instanceof StorefrontOrderClientError ? error.status : null,
+          code: error instanceof StorefrontOrderClientError ? error.code : null,
           message: String(error),
         },
       });
-      alert(`Une erreur est survenue lors de la creation de la commande: ${error}`);
+      if (error instanceof StorefrontOrderClientError && error.code.startsWith("invalid_")) {
+        setVerificationError(t("submissionInvalidResponse"));
+      } else if (
+        error instanceof StorefrontOrderClientError
+        && (error.code === "verification_failed" || error.code === "invalid_read_response")
+      ) {
+        setPendingVerification(readPendingOrderVerification());
+        setVerificationError(t("verificationFailed"));
+      } else {
+        setVerificationError(error instanceof Error ? error.message : String(error));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -410,6 +503,35 @@ export default function OrderForm({ prod, cart, order }) {
       </div>
 
       <h1 className="mt-8 text-3xl font-semibold tracking-tight text-slate-900">{t("info")}:</h1>
+      {pendingVerification ? (
+        <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
+          <p className="font-semibold">{t("verificationFailed")}</p>
+          <p className="mt-2">{t("verifying")}</p>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={retryPendingVerification}
+              disabled={isRetryingVerification || isSubmitting}
+              className="sf-button w-full justify-center sm:w-auto"
+            >
+              {isRetryingVerification ? t("verifying") : t("retryVerification")}
+            </button>
+            <button
+              type="button"
+              onClick={discardPendingVerification}
+              disabled={isRetryingVerification || isSubmitting}
+              className="sf-button-secondary w-full justify-center sm:w-auto"
+            >
+              {t("discardPendingVerification")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {verificationError ? (
+        <p className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+          {verificationError}
+        </p>
+      ) : null}
       <form id="checkout-order-form" onSubmit={saveOrder} className="mt-6">
         <label className="block text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
           {t("nom")}
@@ -534,10 +656,10 @@ export default function OrderForm({ prod, cart, order }) {
             <button
               type="submit"
               form="checkout-order-form"
-              disabled={isSubmitting}
+              disabled={isSubmitting || pendingVerification != null}
               className={`${modify ? "sf-button" : "sf-button-accent"} mt-6 w-full justify-center disabled:opacity-60`}
             >
-              {modify ? t("modi") : t("conf")}
+              {isSubmitting ? t("verifying") : modify ? t("modi") : t("conf")}
             </button>
           ) : null}
 

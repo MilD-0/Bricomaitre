@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { auth } from './auth';
 import { canViewOps, hasPermission, normalizePermissions, type PermissionKey } from './permissions';
 
-export type MutationResource = 'products' | 'orders' | 'assets' | 'brandsCategories' | 'bulletin' | 'stats' | 'settings';
+export type MutationResource = 'products' | 'orders' | 'assets' | 'brandsCategories' | 'bulletin' | 'stats' | 'settings' | 'ecotrack';
 
 const resourcePermissions: Record<MutationResource, PermissionKey> = {
   products: 'products_write',
@@ -13,21 +13,11 @@ const resourcePermissions: Record<MutationResource, PermissionKey> = {
   bulletin: 'bulletin_moderate',
   stats: 'ops_view',
   settings: 'settings_manage',
+  ecotrack: 'orders_write',
 };
 
 export function canMutateResource(access: readonly PermissionKey[] | undefined, resource: MutationResource) {
   return hasPermission(access ?? [], resourcePermissions[resource]);
-}
-
-export function getEntityMutationResource(entityType: string): MutationResource | null {
-  if (entityType === 'products') return 'products';
-  if (entityType === 'orders') return 'orders';
-  if (entityType === 'assets') return 'assets';
-  if (entityType === 'statsAdCosts' || entityType === 'statsManualOrders') return 'stats';
-  if (entityType === 'roleDefinitions' || entityType === 'userAccessGrants') return 'settings';
-  if (entityType === 'bulletinPosts') return 'bulletin';
-  if (entityType === 'brands' || entityType === 'categories' || entityType === 'brandsCategories') return 'brandsCategories';
-  return null;
 }
 
 export async function requireOpsAccess() {

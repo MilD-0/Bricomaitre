@@ -5,6 +5,7 @@ import { GET } from "./route";
 describe("app/api/health/route", () => {
   beforeEach(() => {
     process.env.STOREFRONT_API_BASE_URL = "https://storefront-api.example.com";
+    process.env.STOREFRONT_REVALIDATE_SECRET = "secret";
   });
 
   it("returns ok when storefront-api is reachable", async () => {

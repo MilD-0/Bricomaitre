@@ -231,13 +231,13 @@ export function AdCostsManager({
 
     if (job.status === 'completed') {
       toast.success(t('notifications.importSuccess'));
-      setUploadedFiles([]);
+      queueMicrotask(() => setUploadedFiles([]));
       void queryClient.invalidateQueries({ queryKey: ['ad-costs'] });
       void queryClient.invalidateQueries({ queryKey: ['stats-dashboard'] });
       void queryClient.invalidateQueries({ queryKey: ['action-history'] });
     } else if (job.status === 'failed') {
       toast.error(job.errorMessage || 'Import failed.');
-      setUploadedFiles([]);
+      queueMicrotask(() => setUploadedFiles([]));
     }
   }, [importJobQuery.data.job, queryClient, t]);
 

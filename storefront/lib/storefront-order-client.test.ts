@@ -1,0 +1,219 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  StorefrontOrderClientError,
+  createStorefrontOrder,
+  patchStorefrontOrder,
+  readVerifiedStorefrontOrder,
+} from "./storefront-order-client";
+
+describe("storefront-order-client", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("creates an order and requires a public token in the success response", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      item: {
+        id: 11,
+        publicToken: "public-token",
+        variant: null,
+        isDegradedCapture: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        firstName: "Ada",
+        lastName: "Lovelace",
+        fullName: "Ada Lovelace",
+        email: "ada@example.com",
+        phoneNumber1: "0550111111",
+        phoneNumber2: null,
+        cartProducts: ["1"],
+        orderProducts: [],
+        delivery: 0,
+        state: 16,
+        city: "Algiers",
+        homeAddress: "Street 1",
+        productSubtotal: 1000,
+        deliveryFee: 400,
+        totalAmount: 1400,
+        note: null,
+        confirmed: 0,
+        noAnswerCount: 0,
+        confirmedAt: null,
+        hasStatusHistory: false,
+        statusHistory: [],
+      },
+    }), { status: 200 })));
+
+    const result = await createStorefrontOrder({
+      payload: { phoneNumber1: "0550111111" },
+      submissionKey: "submission-key",
+    });
+
+    expect(result.id).toBe(11);
+    expect(result.publicToken).toBe("public-token");
+    expect(fetch).toHaveBeenCalledWith("/api/orders", expect.objectContaining({
+      headers: expect.objectContaining({
+        "idempotency-key": "submission-key",
+      }),
+    }));
+  });
+
+  it("rejects a malformed create success response", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      item: { id: 11 },
+    }), { status: 200 })));
+
+    await expect(createStorefrontOrder({
+      payload: { phoneNumber1: "0550111111" },
+      submissionKey: "submission-key",
+    })).rejects.toMatchObject({
+      name: "StorefrontOrderClientError",
+    });
+  });
+
+  it("rejects a create response missing the order token", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      item: {
+        id: 11,
+        publicToken: null,
+        variant: null,
+        isDegradedCapture: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        firstName: null,
+        lastName: null,
+        fullName: "0550111111",
+        email: null,
+        phoneNumber1: "0550111111",
+        phoneNumber2: null,
+        cartProducts: [],
+        orderProducts: [],
+        delivery: 0,
+        state: null,
+        city: null,
+        homeAddress: null,
+        productSubtotal: 0,
+        deliveryFee: 0,
+        totalAmount: 0,
+        note: null,
+        confirmed: 0,
+        noAnswerCount: 0,
+        confirmedAt: null,
+        hasStatusHistory: false,
+        statusHistory: [],
+      },
+    }), { status: 200 })));
+
+    await expect(createStorefrontOrder({
+      payload: { phoneNumber1: "0550111111" },
+      submissionKey: "submission-key",
+    })).rejects.toMatchObject({
+      code: "missing_order_token",
+    } satisfies Partial<StorefrontOrderClientError>);
+  });
+
+  it("verifies an order read response", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      item: {
+        id: 11,
+        publicToken: "public-token",
+        variant: null,
+        isDegradedCapture: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        firstName: "Ada",
+        lastName: "Lovelace",
+        fullName: "Ada Lovelace",
+        email: "ada@example.com",
+        phoneNumber1: "0550111111",
+        phoneNumber2: null,
+        cartProducts: ["1"],
+        orderProducts: [],
+        delivery: 0,
+        state: 16,
+        city: "Algiers",
+        homeAddress: "Street 1",
+        productSubtotal: 1000,
+        deliveryFee: 400,
+        totalAmount: 1400,
+        note: null,
+        confirmed: 0,
+        noAnswerCount: 0,
+        confirmedAt: null,
+        hasStatusHistory: false,
+        statusHistory: [],
+      },
+    }), { status: 200 })));
+
+    const result = await readVerifiedStorefrontOrder({
+      orderId: 11,
+      token: "public-token",
+    });
+
+    expect(result.id).toBe(11);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/storefront/orders/11?token=public-token",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("rejects a malformed verification response", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      item: { id: "wrong" },
+    }), { status: 200 })));
+
+    await expect(readVerifiedStorefrontOrder({
+      orderId: 11,
+      token: "public-token",
+    })).rejects.toMatchObject({
+      code: "invalid_read_response",
+    } satisfies Partial<StorefrontOrderClientError>);
+  });
+
+  it("patches an order and validates the response shape", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      item: {
+        id: 11,
+        publicToken: "public-token",
+        variant: null,
+        isDegradedCapture: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        firstName: "Ada",
+        lastName: "Lovelace",
+        fullName: "Ada Lovelace",
+        email: "ada@example.com",
+        phoneNumber1: "0550111111",
+        phoneNumber2: null,
+        cartProducts: ["1"],
+        orderProducts: [],
+        delivery: 0,
+        state: 16,
+        city: "Algiers",
+        homeAddress: "Street 1",
+        productSubtotal: 1000,
+        deliveryFee: 400,
+        totalAmount: 1400,
+        note: null,
+        confirmed: 0,
+        noAnswerCount: 0,
+        confirmedAt: null,
+        hasStatusHistory: false,
+        statusHistory: [],
+      },
+    }), { status: 200 })));
+
+    const result = await patchStorefrontOrder({
+      orderId: 11,
+      token: "public-token",
+      payload: { city: "Oran" },
+    });
+
+    expect(result.id).toBe(11);
+  });
+});

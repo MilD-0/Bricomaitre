@@ -13,9 +13,13 @@ import { Toaster } from './ui/toaster';
 
 describe('InventoryManager', () => {
   const patchCalls: Array<{ id: number; body: unknown }> = [];
+  const scanCalls: string[] = [];
+  const applyCalls: Array<Record<string, unknown>> = [];
 
   beforeEach(() => {
     patchCalls.length = 0;
+    scanCalls.length = 0;
+    applyCalls.length = 0;
 
     let items = [
       {
@@ -66,6 +70,36 @@ describe('InventoryManager', () => {
             hasNextPage: start + perPage < filtered.length,
             hasPreviousPage: page > 1,
           },
+        });
+      }),
+      http.post('/api/inventory/scan', async ({ request }) => {
+        const body = await request.json() as { query: string };
+        scanCalls.push(body.query);
+
+        if (body.query === '123456') {
+          return HttpResponse.json({ kind: 'barcode', item: items[0] });
+        }
+
+        if (body.query === '50') {
+          return HttpResponse.json({
+            kind: 'order',
+            order: { id: 50, fullName: 'Ada Lovelace' },
+            items: [
+              { productId: 1, title: 'Hammer', quantity: 2, inventoryQuantity: 2, selectable: true },
+              { productId: null, title: 'Custom bundle', quantity: 1, inventoryQuantity: null, selectable: false, reason: 'Missing catalog match.' },
+            ],
+          });
+        }
+
+        return HttpResponse.json({ kind: 'none' });
+      }),
+      http.post('/api/inventory/apply', async ({ request }) => {
+        const body = await request.json() as Record<string, unknown>;
+        applyCalls.push(body);
+        return HttpResponse.json({
+          ok: true,
+          items: [{ productId: 1, previousQuantity: 2, nextQuantity: 3 }],
+          skipped: [],
         });
       }),
       http.patch('/api/inventory/:id', async ({ request, params }) => {
@@ -218,6 +252,40 @@ describe('InventoryManager', () => {
     await waitFor(() => {
       expect(patchCalls).toContainEqual({ id: 2, body: { barcode: '999999' } });
       expect(patchCalls).toContainEqual({ id: 2, body: { delta: 1 } });
+    });
+  });
+
+  it('scans barcodes and order IDs into inventory with preview dialogs', async () => {
+    renderInventoryManager();
+
+    await screen.findByText('Hammer');
+
+    const scanField = screen.getByPlaceholderText('Barcode or order ID');
+    await userEvent.type(scanField, '123456');
+    await userEvent.click(screen.getByRole('button', { name: 'Scan' }));
+
+    expect(await screen.findByText('Confirm to add one unit for the scanned barcode.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add 1 unit' }));
+    await screen.findByText('Scanned Hammer into inventory.');
+
+    await userEvent.clear(scanField);
+    await userEvent.type(scanField, '50');
+    await userEvent.click(screen.getByRole('button', { name: 'Scan' }));
+
+    expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
+    expect(screen.getByText('Order quantity: 2 • Current inventory: 2')).toBeInTheDocument();
+    expect(screen.getByText('Missing catalog match.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add selected products' }));
+    await screen.findByText('Added 1 scanned order products to inventory.');
+
+    expect(scanCalls).toEqual(['123456', '50']);
+    expect(applyCalls).toContainEqual({
+      mode: 'increase',
+      items: [{ productId: 1, quantity: 1, source: { type: 'order-scan' } }],
+    });
+    expect(applyCalls).toContainEqual({
+      mode: 'increase',
+      items: [{ productId: 1, quantity: 2, source: { type: 'order-scan', orderIds: [50] } }],
     });
   });
 });

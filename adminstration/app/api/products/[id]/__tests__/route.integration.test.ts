@@ -4,9 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DELETE, GET, PATCH, PUT } from '../route';
 import { productPatchSchema, productPayloadSchema } from '../../../../../lib/products';
 
-const { hasDbMock, getDbMock, requireMutationAccessMock, authMock, mutateEntityWithHistoryMock } = vi.hoisted(() => ({
+const { hasDbMock, getDbMock, requireAppAccessMock, requireMutationAccessMock, authMock, mutateEntityWithHistoryMock } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
+  requireAppAccessMock: vi.fn(),
   requireMutationAccessMock: vi.fn(),
   authMock: vi.fn(),
   mutateEntityWithHistoryMock: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock('../../../../../db/client', () => ({
 }));
 
 vi.mock('../../../../../lib/rbac', () => ({
+  requireAppAccess: requireAppAccessMock,
   requireMutationAccess: requireMutationAccessMock,
 }));
 
@@ -44,6 +46,8 @@ describe('app/api/products/[id]/route', () => {
   beforeEach(() => {
     hasDbMock.mockReset();
     getDbMock.mockReset();
+    requireAppAccessMock.mockReset();
+    requireAppAccessMock.mockResolvedValue(null);
     requireMutationAccessMock.mockReset();
     requireMutationAccessMock.mockResolvedValue(null);
     authMock.mockReset();
@@ -60,6 +64,15 @@ describe('app/api/products/[id]/route', () => {
 
     expect(res.status).toBe(503);
     await expect(res.json()).resolves.toEqual({ error: 'DATABASE_URL is not configured' });
+  });
+
+  it('returns 401 for GET when app access is denied', async () => {
+    requireAppAccessMock.mockResolvedValue(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
+
+    const res = await GET(new NextRequest('http://localhost/api/products/1'), { params: Promise.resolve({ id: '1' }) });
+
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toEqual({ error: 'Unauthorized' });
   });
 
   it('returns 404 for missing product in GET', async () => {

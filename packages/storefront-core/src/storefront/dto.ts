@@ -71,6 +71,7 @@ export function toStorefrontCategoryDto(
 export function toStorefrontBannerDto(row: typeof assetBanners.$inferSelect) {
   return {
     ...row,
+    titleAr: row.titleAr,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -85,6 +86,7 @@ export function toStorefrontFeaturedGroupDto(
 ) {
   return {
     ...row,
+    nameAr: row.nameAr,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

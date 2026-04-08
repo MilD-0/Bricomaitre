@@ -3,6 +3,7 @@ import { asc } from 'drizzle-orm';
 
 import { getDb, hasDb } from '../../../../db/client';
 import { brands, categories } from '../../../../db/schema';
+import { requireAppAccess } from '../../../../lib/rbac';
 import { applyServerCache, CACHE_TAGS } from '../../../../lib/server-cache';
 
 async function getCachedProductsMeta() {
@@ -15,6 +16,11 @@ async function getCachedProductsMeta() {
 }
 
 export async function GET() {
+  const denied = await requireAppAccess();
+  if (denied) {
+    return denied;
+  }
+
   if (!hasDb()) {
     return NextResponse.json({ brands: [], categories: [] });
   }

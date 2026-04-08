@@ -51,6 +51,7 @@ describe('AssetsManager', () => {
             {
               id: 1,
               title: 'Existing banner',
+              titleAr: 'البنر الحالي',
               imageUrl: 'https://cdn.example.com/banner-1.jpg',
               productId: 10,
               sortOrder: 0,
@@ -63,6 +64,7 @@ describe('AssetsManager', () => {
             {
               id: 2,
               name: 'Summer carousel',
+              nameAr: 'دوار الصيف',
               cta: null,
               ctaAr: null,
               link: null,
@@ -155,6 +157,7 @@ describe('AssetsManager', () => {
     await userEvent.click(screen.getByRole('button', { name: 'New banner' }));
     const bannerDialog = screen.getByRole('dialog');
     await userEvent.type(within(bannerDialog).getByRole('textbox', { name: 'Title' }), 'Hero banner');
+    await userEvent.type(within(bannerDialog).getByRole('textbox', { name: 'Arabic title' }), 'بانر رئيسي');
     await userEvent.click(within(bannerDialog).getByRole('button', { name: 'Choose Roller' }));
     await userEvent.type(within(bannerDialog).getByRole('textbox', { name: 'Banner image' }), 'https://cdn.example.com/new-banner.jpg');
     await userEvent.click(within(bannerDialog).getByRole('button', { name: 'Create banner' }));
@@ -168,6 +171,7 @@ describe('AssetsManager', () => {
         kind: 'banner',
           data: {
             title: 'Hero banner',
+            titleAr: 'بانر رئيسي',
             imageUrl: 'https://cdn.example.com/new-banner.jpg',
             productId: 10,
             active: true,
@@ -286,6 +290,7 @@ describe('AssetsManager', () => {
     await userEvent.click(screen.getByRole('button', { name: 'New group' }));
     const groupDialog = screen.getByRole('dialog');
     await userEvent.type(within(groupDialog).getByRole('textbox', { name: 'Group name' }), 'Empty group');
+    await userEvent.type(within(groupDialog).getByRole('textbox', { name: 'Arabic group name' }), 'مجموعة فارغة');
     expect(within(groupDialog).getByText('roller')).toBeInTheDocument();
     await userEvent.click(within(groupDialog).getByRole('button', { name: 'Add Roller' }));
     await userEvent.click(within(groupDialog).getAllByRole('button', { name: 'Remove Roller' })[0]);
@@ -303,6 +308,7 @@ describe('AssetsManager', () => {
     await userEvent.click(screen.getByRole('button', { name: 'New group' }));
     const groupDialog = screen.getByRole('dialog');
     await userEvent.type(within(groupDialog).getByRole('textbox', { name: 'Group name' }), 'Homepage picks');
+    await userEvent.type(within(groupDialog).getByRole('textbox', { name: 'Arabic group name' }), 'اختيارات الصفحة الرئيسية');
     await userEvent.type(within(groupDialog).getByRole('textbox', { name: 'CTA text' }), 'Voir Plus');
     await userEvent.type(within(groupDialog).getByRole('textbox', { name: 'Arabic CTA text' }), 'اكتشف المزيد');
     await userEvent.type(within(groupDialog).getByRole('textbox', { name: 'CTA link' }), '/products?featured=1');
@@ -315,6 +321,7 @@ describe('AssetsManager', () => {
         kind: 'featuredGroup',
         data: {
           name: 'Homepage picks',
+          nameAr: 'اختيارات الصفحة الرئيسية',
           cta: 'Voir Plus',
           ctaAr: 'اكتشف المزيد',
           link: '/products?featured=1',

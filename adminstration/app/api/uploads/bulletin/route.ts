@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { Readable } from 'stream';
+import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 import { NextRequest, NextResponse } from 'next/server';
 import { Upload } from '@aws-sdk/lib-storage';
 import { S3Client } from '@aws-sdk/client-s3';
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
 
       const extension = file.name.includes('.') ? file.name.split('.').pop() : 'bin';
       const key = `bulletin/${new Date().toISOString().slice(0, 10)}/${randomUUID()}.${extension}`;
-      const body = Readable.fromWeb(file.stream() as any);
+      const body = Readable.fromWeb(file.stream() as unknown as NodeReadableStream);
 
       const upload = new Upload({
         client,

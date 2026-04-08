@@ -20,7 +20,7 @@ vi.mock('../../../../lib/action-history', () => ({
     limit: z.coerce.number().int().min(1).max(100).default(10),
     search: z.string().trim().default(''),
     operation: z.enum(['all', 'create', 'update', 'delete']).default('all'),
-    resource: z.enum(['all', 'products', 'orders', 'assets', 'brandsCategories', 'bulletin', 'stats']).default('all'),
+    resource: z.enum(['all', 'products', 'orders', 'assets', 'brandsCategories', 'bulletin', 'stats', 'settings', 'ecotrack']).default('all'),
     state: z.enum(['all', 'applied', 'undone']).default('all'),
     sortKey: z.enum(['operation', 'resource', 'createdBy', 'createdAt', 'isUndone']).default('createdAt'),
     sortDirection: z.enum(['asc', 'desc']).default('desc'),

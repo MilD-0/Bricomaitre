@@ -23,12 +23,12 @@ import {
   roleDefinitions,
   userAccessGrants,
 } from '../db/schema';
-import type { MutationResource } from './rbac';
 
 export type ActionOperation = 'create' | 'update' | 'delete';
 export type ActionHistoryState = 'all' | 'applied' | 'undone';
 export type ActionHistorySortKey = 'operation' | 'resource' | 'createdBy' | 'createdAt' | 'isUndone';
 export type ActionHistorySortDirection = 'asc' | 'desc';
+export type ActionHistoryResource = 'products' | 'orders' | 'assets' | 'brandsCategories' | 'bulletin' | 'stats' | 'settings' | 'ecotrack';
 
 type Database = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -37,8 +37,8 @@ type SnapshotRecord = Record<string, unknown>;
 
 type MutableEntityConfig = {
   entityType: string;
-  resource: MutationResource;
-  table:
+  resource: ActionHistoryResource;
+  table?:
     | typeof adCosts
     | typeof products
     | typeof orders
@@ -57,6 +57,7 @@ type MutableEntityConfig = {
     | typeof userAccessGrants;
   label: (row: SnapshotRecord) => string;
   timestampKeys: string[];
+  reversible?: boolean;
   fetchState?: (tx: Database | Transaction, entityId: number) => Promise<SnapshotRecord | null>;
   insertState?: (tx: Transaction, snapshot: SnapshotRecord) => Promise<void>;
   updateState?: (tx: Transaction, entityId: number, snapshot: SnapshotRecord) => Promise<void>;
@@ -80,7 +81,7 @@ export const actionHistoryQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(10),
   search: z.string().trim().default(''),
   operation: z.enum(['all', 'create', 'update', 'delete']).default('all'),
-  resource: z.enum(['all', 'products', 'orders', 'assets', 'brandsCategories', 'bulletin', 'stats', 'settings']).default('all'),
+  resource: z.enum(['all', 'products', 'orders', 'assets', 'brandsCategories', 'bulletin', 'stats', 'settings', 'ecotrack']).default('all'),
   state: z.enum(['all', 'applied', 'undone']).default('all'),
   sortKey: z.enum(['operation', 'resource', 'createdBy', 'createdAt', 'isUndone']).default('createdAt'),
   sortDirection: z.enum(['asc', 'desc']).default('desc'),
@@ -324,6 +325,34 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
     label: (row) => String(row.email ?? `#${row.id ?? 'unknown'}`),
     timestampKeys: ['createdAt', 'updatedAt'],
   },
+  ecotrackShipments: {
+    entityType: 'ecotrackShipments',
+    resource: 'ecotrack',
+    reversible: false,
+    label: (row) => String(row.trackingNumber ?? row.reference ?? row.entityLabel ?? `Order #${row.orderId ?? row.id ?? 'unknown'}`),
+    timestampKeys: ['createdAt', 'updatedAt', 'lastStatusSyncedAt', 'lastTrackingSyncedAt', 'lastMajSyncedAt', 'lastActionAt', 'deletedAt'],
+  },
+  ecotrackShipmentMajSync: {
+    entityType: 'ecotrackShipmentMajSync',
+    resource: 'ecotrack',
+    reversible: false,
+    label: (row) => String(row.trackingNumber ?? row.entityLabel ?? `Order #${row.orderId ?? row.id ?? 'unknown'} MAJ sync`),
+    timestampKeys: ['latestRemoteCreatedAt'],
+  },
+  ecotrackShipmentTrackingSync: {
+    entityType: 'ecotrackShipmentTrackingSync',
+    resource: 'ecotrack',
+    reversible: false,
+    label: (row) => String(row.trackingNumber ?? row.entityLabel ?? `Order #${row.orderId ?? row.id ?? 'unknown'} tracking sync`),
+    timestampKeys: ['latestEventAt'],
+  },
+  ecotrackCatalogSyncRuns: {
+    entityType: 'ecotrackCatalogSyncRuns',
+    resource: 'ecotrack',
+    reversible: false,
+    label: (row) => String(row.trigger ?? row.entityLabel ?? `ECOTRACK sync #${row.id ?? 'unknown'}`),
+    timestampKeys: ['startedAt', 'finishedAt', 'previousSuccessfulFinishedAt'],
+  },
 };
 
 export function getActionEntityConfig(entityType: string) {
@@ -423,6 +452,10 @@ async function fetchEntity(tx: Database | Transaction, entityType: string, entit
     return config.fetchState(tx, entityId);
   }
 
+  if (!config.table) {
+    throw new Error(`Entity type ${entityType} does not support state fetches`);
+  }
+
   const [row] = await tx.select().from(config.table).where(eq(config.table.id, entityId)).limit(1);
   return row ? (row as SnapshotRecord) : null;
 }
@@ -439,6 +472,10 @@ async function insertEntity(tx: Transaction, entityType: string, snapshot: Snaps
     return;
   }
 
+  if (!config.table) {
+    throw new Error(`Entity type ${entityType} does not support inserts`);
+  }
+
   const allowedKeys = new Set(Object.keys(getTableColumns(config.table)));
   await tx.insert(config.table).values(cleanSnapshot(snapshot, allowedKeys) as never);
 }
@@ -453,6 +490,10 @@ async function updateEntity(tx: Transaction, entityType: string, entityId: numbe
   if (config.updateState) {
     await config.updateState(tx, entityId, snapshot);
     return;
+  }
+
+  if (!config.table) {
+    throw new Error(`Entity type ${entityType} does not support updates`);
   }
 
   const allowedKeys = new Set(Object.keys(getTableColumns(config.table)));
@@ -474,6 +515,10 @@ async function deleteEntity(tx: Transaction, entityType: string, entityId: numbe
     return;
   }
 
+  if (!config.table) {
+    throw new Error(`Entity type ${entityType} does not support deletes`);
+  }
+
   await tx.delete(config.table).where(eq(config.table.id, entityId));
 }
 
@@ -486,6 +531,7 @@ export async function recordActionLog(
     beforeState?: SnapshotRecord | null;
     afterState?: SnapshotRecord | null;
     actor?: ActionActor;
+    isReversible?: boolean;
   },
 ) {
   const config = getActionEntityConfig(params.entityType);
@@ -506,6 +552,42 @@ export async function recordActionLog(
     afterState: serializeSnapshot(params.afterState ?? null),
     createdBy: params.actor?.email ?? null,
     createdByName: params.actor?.name ?? null,
+    isReversible: params.isReversible ?? config.reversible ?? true,
+  });
+}
+
+export async function recordExplicitActionLog(
+  tx: Transaction,
+  params: {
+    entityType: string;
+    entityId: number;
+    operation: ActionOperation;
+    entityLabel?: string;
+    beforeState?: SnapshotRecord | null;
+    afterState?: SnapshotRecord | null;
+    actor?: ActionActor;
+    isReversible?: boolean;
+  },
+) {
+  const config = getActionEntityConfig(params.entityType);
+
+  if (!config) {
+    throw new Error(`Unsupported entity type: ${params.entityType}`);
+  }
+
+  const labelSource = params.afterState ?? params.beforeState ?? { id: params.entityId };
+
+  await tx.insert(actionLogs).values({
+    resource: config.resource,
+    entityType: params.entityType,
+    entityId: params.entityId,
+    entityLabel: params.entityLabel ?? config.label(labelSource),
+    operation: params.operation,
+    beforeState: serializeSnapshot(params.beforeState ?? null),
+    afterState: serializeSnapshot(params.afterState ?? null),
+    createdBy: params.actor?.email ?? null,
+    createdByName: params.actor?.name ?? null,
+    isReversible: params.isReversible ?? config.reversible ?? true,
   });
 }
 
@@ -518,6 +600,7 @@ export async function mutateEntityWithHistory<T>(
     entityId?: number;
     execute: (tx: Transaction) => Promise<T>;
     resolveEntityId?: (result: T) => number;
+    isReversible?: boolean;
   },
 ) {
   return db.transaction(async (tx) => {
@@ -538,6 +621,7 @@ export async function mutateEntityWithHistory<T>(
       beforeState,
       afterState,
       actor: params.actor,
+      isReversible: params.isReversible,
     });
 
     return result;
@@ -617,6 +701,10 @@ export async function applyHistoryAction(
 
     if (params.direction === 'redo' && !entry.isUndone) {
       throw new Error('Action has not been undone');
+    }
+
+    if (!entry.isReversible) {
+      throw new Error(params.direction === 'undo' ? 'This action cannot be undone.' : 'This action cannot be redone.');
     }
 
     const config = getActionEntityConfig(entry.entityType);
@@ -715,6 +803,7 @@ export function toActionHistoryItem(entry: ActionLogEntry) {
     operation: entry.operation,
     createdBy: entry.createdBy,
     createdByName: entry.createdByName,
+    isReversible: entry.isReversible,
     isUndone: entry.isUndone,
     changes: getActionHistoryChanges(entry),
     createdAt: entry.createdAt.toISOString(),
@@ -730,7 +819,7 @@ export function buildInsertResultResolver<T extends { id: number } | { id: numbe
 export function getEntityIdColumnKeys(entityType: string) {
   const config = getActionEntityConfig(entityType);
 
-  if (!config) {
+  if (!config || !config.table) {
     return [];
   }
 

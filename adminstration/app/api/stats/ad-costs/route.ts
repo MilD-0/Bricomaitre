@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  return NextResponse.json({ data: await listAdCosts(parsed.data as any) });
+  return NextResponse.json({ data: await listAdCosts(parsed.data) });
 }
 
 export async function POST(request: NextRequest) {
