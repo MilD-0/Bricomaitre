@@ -1,10 +1,23 @@
 import { z } from 'zod';
 
-export const orderStatusValues = [0, 1, 2, 3, 4, 5, 6] as const;
+export const orderStatusValues = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 export const deliveryTypeValues = [0, 1] as const;
 export const DEGRADED_CAPTURE_VARIANT = 'degraded_capture' as const;
 
-export const orderStatusSchema = z.union(orderStatusValues.map((value) => z.literal(value)) as [z.ZodLiteral<0>, z.ZodLiteral<1>, z.ZodLiteral<2>, z.ZodLiteral<3>, z.ZodLiteral<4>, z.ZodLiteral<5>, z.ZodLiteral<6>]);
+export const orderStatusSchema = z.union(
+  orderStatusValues.map((value) => z.literal(value)) as [
+    z.ZodLiteral<0>,
+    z.ZodLiteral<1>,
+    z.ZodLiteral<2>,
+    z.ZodLiteral<3>,
+    z.ZodLiteral<4>,
+    z.ZodLiteral<5>,
+    z.ZodLiteral<6>,
+    z.ZodLiteral<7>,
+    z.ZodLiteral<8>,
+    z.ZodLiteral<9>,
+  ],
+);
 export const deliveryTypeSchema = z.union(deliveryTypeValues.map((value) => z.literal(value)) as [z.ZodLiteral<0>, z.ZodLiteral<1>]);
 export const noAnswerCountSchema = z.number().int().min(0).max(99);
 
@@ -16,6 +29,9 @@ export const ORDER_STATUS_LABEL_KEYS = {
   4: 'completed',
   5: 'delayed',
   6: 'cancelled',
+  7: 'inDelivery',
+  8: 'returned',
+  9: 'failed',
 } as const satisfies Record<(typeof orderStatusValues)[number], string>;
 
 export const DELIVERY_TYPE_LABEL_KEYS = {
@@ -229,6 +245,10 @@ const legacyOrderStatusMap = {
   complete: 4,
   delayed: 5,
   cancelled: 6,
+  in_delivery: 7,
+  'in delivery': 7,
+  returned: 8,
+  failed: 9,
 } as const;
 
 const legacyNoAnswerCountMap = {
@@ -289,7 +309,7 @@ export function coerceNoAnswerCount(status: OrderStatus, count: unknown, legacyS
 }
 
 export function isConfirmedLifecycleStatus(status: OrderStatus) {
-  return status >= 2 && status <= 5;
+  return status === 2 || status === 3 || status === 4 || status === 5 || status === 7 || status === 8 || status === 9;
 }
 
 export function getOrderStatusLabelKey(status: OrderStatus) {

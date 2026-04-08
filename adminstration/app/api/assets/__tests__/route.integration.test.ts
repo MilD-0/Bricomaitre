@@ -10,12 +10,14 @@ const {
   requireMutationAccessMock,
   authMock,
   mutateEntityWithHistoryMock,
+  revalidateStorefrontAssetsMock,
 } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
   requireMutationAccessMock: vi.fn(),
   authMock: vi.fn(),
   mutateEntityWithHistoryMock: vi.fn(),
+  revalidateStorefrontAssetsMock: vi.fn(),
 }));
 
 vi.mock('../../../../db/client', () => ({
@@ -35,6 +37,10 @@ vi.mock('../../../../lib/action-history', () => ({
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
 }));
 
+vi.mock('../../../../lib/storefront-revalidate', () => ({
+  revalidateStorefrontAssets: revalidateStorefrontAssetsMock,
+}));
+
 describe('app/api/assets/route', () => {
   beforeEach(() => {
     hasDbMock.mockReset();
@@ -45,6 +51,8 @@ describe('app/api/assets/route', () => {
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mutateEntityWithHistoryMock.mockReset();
     mutateEntityWithHistoryMock.mockResolvedValue([{ id: 77 }]);
+    revalidateStorefrontAssetsMock.mockReset();
+    revalidateStorefrontAssetsMock.mockResolvedValue(undefined);
   });
 
   it('returns 401 when assets mutation access is denied', async () => {
@@ -90,6 +98,7 @@ describe('app/api/assets/route', () => {
       success: true,
       data: {
         title: 'Homepage hero',
+        titleAr: 'بانر الواجهة',
         imageUrl: 'https://cdn.example.com/banner.jpg',
         productId: 15,
         active: true,
@@ -125,6 +134,7 @@ describe('app/api/assets/route', () => {
     expect(insertMock).toHaveBeenCalledOnce();
     expect(valuesMock).toHaveBeenCalledWith({
       title: 'Homepage hero',
+      titleAr: 'بانر الواجهة',
       imageUrl: 'https://cdn.example.com/banner.jpg',
       productId: 15,
       sortOrder: 4,
@@ -132,6 +142,7 @@ describe('app/api/assets/route', () => {
     });
     expect(selectMock).toHaveBeenCalledOnce();
     expect(resolveEntityId([{ id: 77 }])).toBe(77);
+    expect(revalidateStorefrontAssetsMock).toHaveBeenCalledOnce();
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ ok: true });
   });
@@ -147,6 +158,7 @@ describe('app/api/assets/route', () => {
       success: true,
       data: {
         name: 'Top carousel',
+        nameAr: 'دوار علوي',
         cta: 'Voir Plus',
         ctaAr: 'اكتشف المزيد',
         link: '/products?featured=1',
@@ -177,6 +189,7 @@ describe('app/api/assets/route', () => {
 
     expect(valuesMock).toHaveBeenCalledWith({
       name: 'Top carousel',
+      nameAr: 'دوار علوي',
       cta: 'Voir Plus',
       ctaAr: 'اكتشف المزيد',
       link: '/products?featured=1',

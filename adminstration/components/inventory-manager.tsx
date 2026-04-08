@@ -8,10 +8,21 @@ import { useTranslations } from 'next-intl';
 import { useDeferredValue, useMemo, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 
-import { inventoryBarcodeSchema, inventoryListResponseSchema, type InventoryBarcodeInput, type InventoryListResponse, type InventoryRow } from '../lib/inventory';
-import { useLiveUpdates } from '../lib/live';
+import {
+  inventoryApplyResponseSchema,
+  inventoryBarcodeSchema,
+  inventoryListResponseSchema,
+  inventoryScanResponseSchema,
+  type InventoryApplyResponse,
+  type InventoryBarcodeInput,
+  type InventoryListResponse,
+  type InventoryOrderScanItem,
+  type InventoryRow,
+  type InventoryScanResponse,
+} from '../lib/inventory';
 import { toast } from '../lib/toast';
 import { Button } from './ui/button';
+import { Checkbox } from './ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './ui/empty';
 import { Field, FieldError, FieldGroup, FieldLabel } from './ui/field';
@@ -45,6 +56,22 @@ type InventoryMutationVariables = {
 type BarcodeDialogState = {
   open: boolean;
   item: InventoryRow | null;
+};
+
+type ScanBarcodeState = {
+  open: boolean;
+  item: InventoryRow | null;
+};
+
+type ScanOrderDraftItem = InventoryOrderScanItem & {
+  selected: boolean;
+  addQuantity: number;
+};
+
+type ScanOrderState = {
+  open: boolean;
+  order: { id: number; fullName: string } | null;
+  items: ScanOrderDraftItem[];
 };
 
 type InventorySortKey = 'title' | 'inventoryQuantity' | 'inStock';
@@ -225,18 +252,123 @@ function BarcodeDialog({
   );
 }
 
+function ScanBarcodeDialog({
+  state,
+  pending,
+  onOpenChange,
+  onConfirm,
+}: {
+  state: ScanBarcodeState;
+  pending: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  const t = useTranslations();
+
+  return (
+    <Dialog open={state.open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t('inventory.scan.barcodeTitle', { name: state.item?.title ?? '' })}</DialogTitle>
+          <DialogDescription>{t('inventory.scan.barcodeDescription')}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="mt-6">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            {t('actions.cancel')}
+          </Button>
+          <Button type="button" disabled={pending} onClick={onConfirm}>
+            {t('inventory.scan.confirmAddOne')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ScanOrderDialog({
+  state,
+  pending,
+  onOpenChange,
+  onToggleItem,
+  onIncreaseQuantity,
+  onDecreaseQuantity,
+  onConfirm,
+}: {
+  state: ScanOrderState;
+  pending: boolean;
+  onOpenChange: (open: boolean) => void;
+  onToggleItem: (productId: number) => void;
+  onIncreaseQuantity: (productId: number) => void;
+  onDecreaseQuantity: (productId: number) => void;
+  onConfirm: () => void;
+}) {
+  const t = useTranslations();
+
+  return (
+    <Dialog open={state.open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{t('inventory.scan.orderTitle', { id: state.order?.id ?? 0 })}</DialogTitle>
+          <DialogDescription>{state.order?.fullName ?? ''}</DialogDescription>
+        </DialogHeader>
+        <div className="mt-4 flex flex-col gap-3">
+          {state.items.map((item) => (
+            <div key={`${item.productId ?? item.title}`} className="rounded-xl border border-border/70 p-3">
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  checked={item.selected}
+                  disabled={!item.selectable || pending}
+                  onChange={() => item.productId != null && onToggleItem(item.productId)}
+                  aria-label={t('inventory.scan.toggleOrderItem', { name: item.title })}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{item.title}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {t('inventory.scan.orderQuantity', { count: item.quantity })} • {t('inventory.scan.currentInventory', { count: item.inventoryQuantity ?? 0 })}
+                  </p>
+                  {!item.selectable && item.reason ? <p className="text-xs text-muted-foreground">{item.reason}</p> : null}
+                </div>
+                {item.selectable && item.productId != null ? (
+                  <div className="flex items-center gap-2">
+                    <Button type="button" variant="outline" size="sm" disabled={pending || item.addQuantity <= 1} onClick={() => onDecreaseQuantity(item.productId!)}>
+                      -1
+                    </Button>
+                    <span className="min-w-10 text-center text-sm font-medium">{item.addQuantity}</span>
+                    <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => onIncreaseQuantity(item.productId!)}>
+                      +1
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+        <DialogFooter className="mt-6">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            {t('actions.cancel')}
+          </Button>
+          <Button type="button" disabled={pending} onClick={onConfirm}>
+            {t('inventory.scan.confirmOrderAdd')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function InventoryManager({ title }: { title: string }) {
   const t = useTranslations();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [scanQuery, setScanQuery] = useState('');
   const deferredSearch = useDeferredValue(search.trim());
   const [sortKey, setSortKey] = useState<InventorySortKey>('title');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [barcodeDialogState, setBarcodeDialogState] = useState<BarcodeDialogState>({ open: false, item: null });
+  const [scanBarcodeState, setScanBarcodeState] = useState<ScanBarcodeState>({ open: false, item: null });
+  const [scanOrderState, setScanOrderState] = useState<ScanOrderState>({ open: false, order: null, items: [] });
   const [isFilterPending, startFilterTransition] = useTransition();
-
-  useLiveUpdates('inventory');
 
   const barcodeForm = useForm<InventoryBarcodeInput>({
     resolver: zodResolver(inventoryBarcodeSchema),
@@ -322,6 +454,27 @@ export function InventoryManager({ title }: { title: string }) {
       await queryClient.invalidateQueries({ queryKey: ['action-history'] });
     },
   });
+  const scanMutation = useMutation<InventoryScanResponse, Error, string>({
+    mutationFn: async (value) => inventoryScanResponseSchema.parse(await request('/api/inventory/scan', {
+      method: 'POST',
+      body: JSON.stringify({ query: value }),
+    })),
+  });
+  const batchApplyMutation = useMutation<
+    InventoryApplyResponse,
+    Error,
+    { mode: 'increase'; items: Array<{ productId: number; quantity: number; source: { type: 'order-scan' | 'shopping-list'; orderIds?: number[] } }> }
+  >({
+    mutationFn: async (payload) => inventoryApplyResponseSchema.parse(await request('/api/inventory/apply', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['inventory-table'] });
+      await queryClient.invalidateQueries({ queryKey: ['products'] });
+      await queryClient.invalidateQueries({ queryKey: ['action-history'] });
+    },
+  });
 
   const items = useMemo(() => {
     const rows = [...(query.data?.items ?? [])];
@@ -370,6 +523,14 @@ export function InventoryManager({ title }: { title: string }) {
     barcodeForm.reset({ barcode: '' });
   };
 
+  const closeScanBarcodeDialog = () => {
+    setScanBarcodeState({ open: false, item: null });
+  };
+
+  const closeScanOrderDialog = () => {
+    setScanOrderState({ open: false, order: null, items: [] });
+  };
+
   const submitBarcode = barcodeForm.handleSubmit(async (rawValues) => {
     if (!barcodeDialogState.item) {
       return;
@@ -389,9 +550,113 @@ export function InventoryManager({ title }: { title: string }) {
     });
   });
 
+  async function submitScan() {
+    const normalized = scanQuery.trim();
+    if (!normalized) {
+      return;
+    }
+
+    try {
+      const response = await scanMutation.mutateAsync(normalized);
+
+      if (response.kind === 'barcode') {
+        setScanBarcodeState({ open: true, item: response.item });
+        return;
+      }
+
+      if (response.kind === 'order') {
+        setScanOrderState({
+          open: true,
+          order: response.order,
+          items: response.items.map((item) => ({
+            ...item,
+            selected: item.selectable,
+            addQuantity: item.quantity,
+          })),
+        });
+        return;
+      }
+
+      toast.error(t('inventory.scan.notFound'));
+    } catch {
+      toast.error(t('inventory.scan.error'));
+    }
+  }
+
+  async function confirmBarcodeScanAdd() {
+    if (!scanBarcodeState.item) {
+      return;
+    }
+
+    const toastId = toast.loading(t('inventory.notifications.quantity.scan.loading', { name: scanBarcodeState.item.title }));
+
+    try {
+      await batchApplyMutation.mutateAsync({
+        mode: 'increase',
+        items: [{
+          productId: scanBarcodeState.item.id,
+          quantity: 1,
+          source: { type: 'order-scan' },
+        }],
+      });
+      toast.success(t('inventory.notifications.quantity.scan.success', { name: scanBarcodeState.item.title }), { id: toastId });
+      closeScanBarcodeDialog();
+      setScanQuery('');
+    } catch {
+      toast.error(t('inventory.notifications.quantity.scan.error', { name: scanBarcodeState.item.title }), { id: toastId });
+    }
+  }
+
+  function toggleScanOrderItem(productId: number) {
+    setScanOrderState((current) => ({
+      ...current,
+      items: current.items.map((item) => item.productId === productId ? { ...item, selected: !item.selected } : item),
+    }));
+  }
+
+  function increaseScanOrderQuantity(productId: number) {
+    setScanOrderState((current) => ({
+      ...current,
+      items: current.items.map((item) => item.productId === productId ? { ...item, addQuantity: item.addQuantity + 1 } : item),
+    }));
+  }
+
+  function decreaseScanOrderQuantity(productId: number) {
+    setScanOrderState((current) => ({
+      ...current,
+      items: current.items.map((item) => item.productId === productId ? { ...item, addQuantity: Math.max(1, item.addQuantity - 1) } : item),
+    }));
+  }
+
+  async function confirmOrderScanAdd() {
+    const selectedItems = scanOrderState.items.filter((item) => item.productId != null && item.selectable && item.selected && item.addQuantity > 0);
+    if (selectedItems.length === 0) {
+      toast.error(t('inventory.scan.noSelection'));
+      return;
+    }
+
+    const toastId = toast.loading(t('inventory.scan.orderApplyLoading', { count: selectedItems.length }));
+
+    try {
+      await batchApplyMutation.mutateAsync({
+        mode: 'increase',
+        items: selectedItems.map((item) => ({
+          productId: item.productId!,
+          quantity: item.addQuantity,
+          source: { type: 'order-scan', orderIds: scanOrderState.order ? [scanOrderState.order.id] : undefined },
+        })),
+      });
+      toast.success(t('inventory.scan.orderApplySuccess', { count: selectedItems.length }), { id: toastId });
+      closeScanOrderDialog();
+      setScanQuery('');
+    } catch {
+      toast.error(t('inventory.scan.orderApplyError', { count: selectedItems.length }), { id: toastId });
+    }
+  }
+
   const writable = query.data?.writable ?? false;
   const isLoading = query.isPending;
-  const isMutating = mutation.isPending;
+  const isMutating = mutation.isPending || batchApplyMutation.isPending;
 
   return (
     <motion.section className="scroll-mt-24 overflow-hidden rounded-[1.75rem] border border-border/70 bg-background/95 shadow-sm" {...sectionTransitionProps}>
@@ -407,6 +672,26 @@ export function InventoryManager({ title }: { title: string }) {
         </div>
 
         <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2 rounded-2xl border border-border/70 bg-muted/20 p-3">
+            <p className="text-sm font-medium">{t('inventory.scan.title')}</p>
+            <p className="text-xs text-muted-foreground">{t('inventory.scan.description')}</p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                value={scanQuery}
+                onChange={(event) => setScanQuery(event.target.value)}
+                placeholder={t('inventory.scan.placeholder')}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void submitScan();
+                  }
+                }}
+              />
+              <Button type="button" disabled={scanMutation.isPending || batchApplyMutation.isPending || scanQuery.trim().length === 0} onClick={() => void submitScan()}>
+                {t('inventory.scan.action')}
+              </Button>
+            </div>
+          </div>
           <SearchField
             value={search}
             placeholder={t('inventory.searchPlaceholder')}
@@ -574,6 +859,29 @@ export function InventoryManager({ title }: { title: string }) {
           }
         }}
         onSubmit={submitBarcode}
+      />
+      <ScanBarcodeDialog
+        state={scanBarcodeState}
+        pending={batchApplyMutation.isPending}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeScanBarcodeDialog();
+          }
+        }}
+        onConfirm={() => void confirmBarcodeScanAdd()}
+      />
+      <ScanOrderDialog
+        state={scanOrderState}
+        pending={batchApplyMutation.isPending}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeScanOrderDialog();
+          }
+        }}
+        onToggleItem={toggleScanOrderItem}
+        onIncreaseQuantity={increaseScanOrderQuantity}
+        onDecreaseQuantity={decreaseScanOrderQuantity}
+        onConfirm={() => void confirmOrderScanAdd()}
       />
     </motion.section>
   );

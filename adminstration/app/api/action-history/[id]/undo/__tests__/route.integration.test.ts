@@ -61,7 +61,7 @@ describe('app/api/action-history/[id]/undo/route', () => {
 
   it('enforces resource write access before undoing', async () => {
     hasDbMock.mockReturnValue(true);
-    getDbMock.mockReturnValue({ select: () => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve([{ id: 9, entityType: 'orders' }]) }) }) }) });
+    getDbMock.mockReturnValue({ select: () => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve([{ id: 9, entityType: 'orders', isReversible: true }]) }) }) }) });
     requireMutationAccessMock.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }));
 
     const res = await POST(new Request('http://localhost/api/action-history/9/undo', { method: 'POST' }), {
@@ -74,7 +74,7 @@ describe('app/api/action-history/[id]/undo/route', () => {
 
   it('undoes a tracked action', async () => {
     hasDbMock.mockReturnValue(true);
-    const db = { select: () => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve([{ id: 9, entityType: 'orders' }]) }) }) }) };
+    const db = { select: () => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve([{ id: 9, entityType: 'orders', isReversible: true }]) }) }) }) };
     getDbMock.mockReturnValue(db);
 
     const res = await POST(new Request('http://localhost/api/action-history/9/undo', { method: 'POST' }), {
@@ -88,5 +88,25 @@ describe('app/api/action-history/[id]/undo/route', () => {
       actor: { email: 'admin@example.com', name: 'Admin' },
     });
     await expect(res.json()).resolves.toEqual({ ok: true, item: { id: 1, createdAt: '2026-03-21T00:00:00.000Z' } });
+  });
+
+  it('returns 409 for non-reversible entries', async () => {
+    hasDbMock.mockReturnValue(true);
+    getDbMock.mockReturnValue({
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: () => Promise.resolve([{ id: 9, entityType: 'ecotrackShipments', isReversible: false }]),
+          }),
+        }),
+      }),
+    });
+
+    const res = await POST(new Request('http://localhost/api/action-history/9/undo', { method: 'POST' }), {
+      params: Promise.resolve({ id: '9' }),
+    });
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toEqual({ error: 'This action cannot be undone.' });
   });
 });

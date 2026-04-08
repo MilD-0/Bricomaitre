@@ -28,5 +28,9 @@
     "ops:rollback": "bash ops/scripts/rollback.sh",
     "ops:render-nginx": "bash ops/scripts/render-nginx-config.sh"
   },
+  "devDependencies": {
+    "eslint": "^9.39.4",
+    "eslint-config-next": "16.2.2"
+  },
   "license": "AGPL-3.0-only"
 }

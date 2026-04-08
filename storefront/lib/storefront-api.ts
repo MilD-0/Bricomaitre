@@ -3,9 +3,9 @@ import {
   StorefrontUpstreamError,
   fetchStorefrontJson,
 } from "@/lib/storefront-upstream";
+import { STOREFRONT_CACHE_TAGS } from "@/lib/cache-tags";
 
 const DEFAULT_PAGE_SIZE = 100;
-const MAX_PRODUCT_PAGES = 50;
 
 type StorefrontProduct = {
   id: number;
@@ -26,6 +26,12 @@ type StorefrontProduct = {
   categoryId: number | null;
   images: string[];
   createdAt: string;
+  updatedAt: string;
+};
+
+type StorefrontProductBuildFeedItem = {
+  id: number;
+  slug: string | null;
   updatedAt: string;
 };
 
@@ -56,6 +62,7 @@ type StorefrontCategory = {
 type StorefrontBanner = {
   id: number;
   title: string;
+  titleAr: string | null;
   imageUrl: string;
   productId: number | null;
   sortOrder: number;
@@ -67,6 +74,7 @@ type StorefrontBanner = {
 type StorefrontFeaturedGroup = {
   id: number;
   name: string;
+  nameAr: string | null;
   cta: string | null;
   ctaAr: string | null;
   link: string | null;
@@ -99,6 +107,7 @@ export type LegacyStorefrontBanner = {
   _id: string;
   id: number;
   title: string;
+  titleAr: string | null;
   image: string;
   link: string;
   createdAt: string;
@@ -109,6 +118,7 @@ export type LegacyFeaturedGroup = {
   _id: string;
   id: number;
   title: string;
+  titleAr: string | null;
   cta: string | null;
   ctaAr: string | null;
   link: string | null;
@@ -119,6 +129,7 @@ export type LegacyHomepageFeaturedGroup = {
   _id: string;
   id: number;
   title: string;
+  titleAr: string | null;
   cta: string | null;
   ctaAr: string | null;
   link: string | null;
@@ -313,11 +324,8 @@ async function withStorefrontFallback<T>(
     return await load();
   } catch (error) {
     if (error instanceof StorefrontUpstreamError) {
-      if (isNextProductionBuildPhase()) {
-        throw error;
-      }
-
-      console.error(`[storefront] upstream request failed for ${pathname}`, error.message);
+      const phaseLabel = isNextProductionBuildPhase() ? "build" : "runtime";
+      console.error(`[storefront] upstream request failed for ${pathname} during ${phaseLabel}`, error.message);
       return fallback;
     }
 
@@ -352,9 +360,19 @@ export async function fetchStorefrontCategories() {
 export async function fetchStorefrontAssets() {
   return withStorefrontFallback("/api/storefront/assets", EMPTY_STOREFRONT_ASSETS, () =>
     storefrontFetchJson<StorefrontAssets>("/api/storefront/assets", {
-      next: { revalidate: 300 },
+      next: { revalidate: 300, tags: [STOREFRONT_CACHE_TAGS.assets] },
     }),
   );
+}
+
+export async function fetchStorefrontProductBuildFeed() {
+  return withStorefrontFallback("/api/storefront/products/build-feed", [] as StorefrontProductBuildFeedItem[], async () => {
+    const data = await storefrontFetchJson<{ items: StorefrontProductBuildFeedItem[] }>(
+      "/api/storefront/products/build-feed",
+      { next: { revalidate: 60, tags: [STOREFRONT_CACHE_TAGS.buildFeed] } },
+    );
+    return data.items;
+  });
 }
 
 export async function fetchStorefrontEcotrackCatalog() {
@@ -430,8 +448,9 @@ export async function listAllStorefrontProducts(filters?: {
   sortDirection?: string;
 }) {
   const items: StorefrontProduct[] = [];
+  let page = 1;
 
-  for (let page = 1; page <= MAX_PRODUCT_PAGES; page += 1) {
+  while (true) {
     const pageItems = await fetchStorefrontProductsPage({
       page,
       limit: DEFAULT_PAGE_SIZE,
@@ -443,6 +462,8 @@ export async function listAllStorefrontProducts(filters?: {
     if (pageItems.length < DEFAULT_PAGE_SIZE) {
       break;
     }
+
+    page += 1;
   }
 
   return items;
@@ -463,7 +484,7 @@ const getCachedCatalogContext = unstable_cache(
     return { brands, categories, assets };
   },
   ["storefront-catalog-context"],
-  { revalidate: 300 },
+  { revalidate: 300, tags: [STOREFRONT_CACHE_TAGS.catalogContext, STOREFRONT_CACHE_TAGS.assets] },
 );
 
 export function normalizeBrand(brand: StorefrontBrand): LegacyBrand {
@@ -636,6 +657,7 @@ export function normalizeBanner(
     _id: String(banner.id),
     id: banner.id,
     title: banner.title,
+    titleAr: banner.titleAr,
     image: banner.imageUrl,
     link: linkedProduct ? buildLandingProductHref({
       _id: String(linkedProduct.id),
@@ -646,6 +668,35 @@ export function normalizeBanner(
   };
 }
 
+export function normalizeFeaturedGroupLink(link: string | null) {
+  if (!link) {
+    return null;
+  }
+
+  if (link.startsWith("#")) {
+    return link;
+  }
+
+  try {
+    const url = new URL(link);
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      return link;
+    }
+  } catch {}
+
+  if (!link.startsWith("/")) {
+    return link;
+  }
+
+  const match = link.match(/^\/(fr|ar)(\/.*|$)/);
+  if (!match) {
+    return link;
+  }
+
+  const suffix = match[2] || "";
+  return suffix.length > 0 ? suffix : "/";
+}
+
 function normalizeHomepageFeaturedGroup(
   group: StorefrontFeaturedGroup,
 ): LegacyHomepageFeaturedGroup {
@@ -653,9 +704,10 @@ function normalizeHomepageFeaturedGroup(
     _id: String(group.id),
     id: group.id,
     title: group.name,
+    titleAr: group.nameAr,
     cta: group.cta,
     ctaAr: group.ctaAr,
-    link: group.link,
+    link: normalizeFeaturedGroupLink(group.link),
   };
 }
 
@@ -991,9 +1043,10 @@ export function normalizeFeaturedGroup(
     _id: String(group.id),
     id: group.id,
     title: group.name,
+    titleAr: group.nameAr,
     cta: group.cta,
     ctaAr: group.ctaAr,
-    link: group.link,
+    link: normalizeFeaturedGroupLink(group.link),
     products: buildFeaturedGroupProducts(group, products, limit),
   };
 }

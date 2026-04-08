@@ -8,35 +8,45 @@ export type EcotrackCatalogExportData = {
 };
 
 export type OrderExportRow = {
+  reference: string;
   fullName: string;
-  phoneNumber1: string;
+  phoneNumber: string;
   phoneNumber2: string;
-  product: string;
-  quantity: string;
-  address: string;
+  wilayaCode: string;
   wilaya: string;
   commune: string;
+  address: string;
+  product: string;
+  weightKg: string;
   totalToCollect: string;
   note: string;
-  id: string;
+  fragile: string;
   exchange: string;
+  pickup: string;
+  recouvrement: string;
   stopdesk: string;
+  mapLink: string;
 };
 
 export const ORDER_EXPORT_HEADERS = [
-  'Nom Complet',
-  'Telephone 1',
-  'Telephone 2',
-  'Produit',
-  'Quantite',
-  'Adresse',
-  'Wilaya',
-  'Commune',
-  'Total a ramasser',
-  'Note',
-  'ID',
-  'Echange ( OUI )',
-  'Stopdesk ( OUI )',
+  'reference commande',
+  'nom et prenom du destinataire*',
+  'telephone*',
+  'telephone 2',
+  'code wilaya*',
+  'wilaya de livraison',
+  'commune de livraison*',
+  'adresse de livraison*',
+  'produit*',
+  'poids (kg)',
+  'montant du colis*',
+  'remarque',
+  'FRAGILE\r\n( si oui mettez OUI sinon laissez vide )',
+  'ECHANGE\r\n( si oui mettez OUI sinon laissez vide )',
+  'PICK UP\r\n( si oui mettez OUI sinon laissez vide )',
+  'RECOUVREMENT\r\n( si oui mettez OUI sinon laissez vide )',
+  'STOP DESK\r\n( si oui mettez OUI sinon laissez vide )',
+  'Lien map',
 ] as const;
 
 export function formatPhoneForOrderExport(value: string | null | undefined) {
@@ -76,19 +86,24 @@ export function resolveCommuneLabel(
 
 export function buildOrderExportRows(orders: OrderRecord[], catalog: EcotrackCatalogExportData | undefined) {
   return orders.map((order) => ({
+    reference: String(order.id),
     fullName: order.fullName,
-    phoneNumber1: formatPhoneForOrderExport(order.phoneNumber1),
+    phoneNumber: formatPhoneForOrderExport(order.phoneNumber1),
     phoneNumber2: formatPhoneForOrderExport(order.phoneNumber2),
-    product: order.orderProducts.map((product) => `${product.title}:${product.unitPrice}DA`).join('\n'),
-    quantity: String(order.orderProducts.reduce((sum, product) => sum + product.quantity, 0)),
-    address: order.homeAddress ?? '',
+    wilayaCode: order.state === null ? '' : String(order.state),
     wilaya: resolveWilayaLabel(catalog, order.state),
     commune: resolveCommuneLabel(catalog, order.state, order.city),
+    address: order.homeAddress ?? '',
+    product: order.orderProducts.map((product) => `${product.title} x${product.quantity}`).join('\n'),
+    weightKg: '',
     totalToCollect: String(order.totalAmount),
     note: order.note ?? '',
-    id: String(order.id),
-    exchange: 'NON',
-    stopdesk: order.delivery === 1 ? 'OUI' : 'NON',
+    fragile: '',
+    exchange: '',
+    pickup: '',
+    recouvrement: order.totalAmount > 0 ? 'OUI' : '',
+    stopdesk: order.delivery === 1 ? 'OUI' : '',
+    mapLink: '',
   }));
 }
 
@@ -96,40 +111,50 @@ export function buildOrderExportWorkbook(rows: OrderExportRow[]) {
   const sheet = XLSX.utils.aoa_to_sheet([
     [...ORDER_EXPORT_HEADERS],
     ...rows.map((row) => ([
+      row.reference,
       row.fullName,
-      row.phoneNumber1,
+      row.phoneNumber,
       row.phoneNumber2,
-      row.product,
-      row.quantity,
-      row.address,
+      row.wilayaCode,
       row.wilaya,
       row.commune,
+      row.address,
+      row.product,
+      row.weightKg,
       row.totalToCollect,
       row.note,
-      row.id,
+      row.fragile,
       row.exchange,
+      row.pickup,
+      row.recouvrement,
       row.stopdesk,
+      row.mapLink,
     ])),
   ]);
 
   sheet['!cols'] = [
-    { wch: 24 },
-    { wch: 16 },
-    { wch: 16 },
-    { wch: 36 },
-    { wch: 10 },
+    { wch: 21 },
     { wch: 28 },
-    { wch: 18 },
-    { wch: 18 },
-    { wch: 18 },
-    { wch: 24 },
-    { wch: 12 },
-    { wch: 14 },
-    { wch: 16 },
+    { wch: 17 },
+    { wch: 17 },
+    { wch: 20 },
+    { wch: 22 },
+    { wch: 22 },
+    { wch: 26 },
+    { wch: 23 },
+    { wch: 20 },
+    { wch: 19 },
+    { wch: 23 },
+    { wch: 31 },
+    { wch: 40 },
+    { wch: 33 },
+    { wch: 40 },
+    { wch: 32 },
+    { wch: 10 },
   ];
 
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, 'Orders');
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Sheet1');
   return workbook;
 }
 

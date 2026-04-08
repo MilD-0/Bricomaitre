@@ -1,37 +1,41 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET } from './route';
 
-const { fetchMock } = vi.hoisted(() => ({
-  fetchMock: vi.fn(),
+const { getAdminHealthMock } = vi.hoisted(() => ({
+  getAdminHealthMock: vi.fn(),
+}));
+
+vi.mock('../../../lib/health', () => ({
+  getAdminHealth: getAdminHealthMock,
 }));
 
 describe('app/api/health/route', () => {
-  const originalEnv = process.env;
-
   beforeEach(() => {
-    process.env = {
-      ...originalEnv,
-      DATABASE_URL: 'postgres://example',
-      GOOGLE_CLIENT_ID: 'google-client-id',
-      GOOGLE_CLIENT_SECRET: 'google-client-secret',
-      NEXTAUTH_SECRET: 'secret',
-      AWS_REGION: 'eu-west-3',
-      AWS_S3_BUCKET: 'bucket',
-      AWS_CLOUDFRONT_DOMAIN: 'cdn.example.com',
-      STOREFRONT_API_BASE_URL: 'https://storefront-api.example.com',
-    };
-    fetchMock.mockReset();
-    vi.stubGlobal('fetch', fetchMock);
+    getAdminHealthMock.mockReset();
   });
 
-  afterEach(() => {
-    process.env = originalEnv;
-    vi.unstubAllGlobals();
-  });
-
-  it('returns ok when local config and storefront upstream are healthy', async () => {
-    fetchMock.mockResolvedValue(new Response(JSON.stringify({ status: 'ok' }), { status: 200 }));
+  it('returns ok when local config, database, and storefront upstream are healthy', async () => {
+    getAdminHealthMock.mockResolvedValue({
+      ok: true,
+      missingEnv: [],
+      checks: {
+        env: {
+          databaseConfigured: true,
+          authConfigured: true,
+          uploadsConfigured: true,
+          storefrontRevalidationConfigured: true,
+        },
+        database: { configured: true, ok: true, latencyMs: 4.1 },
+        storefrontApi: {
+          configured: true,
+          ok: true,
+          status: 200,
+          latencyMs: 12.3,
+          baseUrl: 'https://storefront-api.example.com',
+        },
+      },
+    });
 
     const response = await GET(new Request('http://localhost/api/health'));
 
@@ -41,6 +45,9 @@ describe('app/api/health/route', () => {
       service: 'admin',
       missingEnv: [],
       checks: expect.objectContaining({
+        database: expect.objectContaining({
+          ok: true,
+        }),
         storefrontApi: expect.objectContaining({
           ok: true,
           status: 200,
@@ -50,17 +57,38 @@ describe('app/api/health/route', () => {
     }));
   });
 
-  it('returns degraded when required env vars are missing or storefront is unavailable', async () => {
-    delete process.env.AWS_S3_BUCKET;
-    fetchMock.mockRejectedValue(new Error('connect ECONNREFUSED'));
+  it('returns degraded when local readiness or storefront health fails', async () => {
+    getAdminHealthMock.mockResolvedValue({
+      ok: false,
+      missingEnv: ['STOREFRONT_REVALIDATE_SECRET'],
+      checks: {
+        env: {
+          databaseConfigured: true,
+          authConfigured: true,
+          uploadsConfigured: true,
+          storefrontRevalidationConfigured: false,
+        },
+        database: { configured: true, ok: false, latencyMs: 1500, error: 'database timed out after 1500ms' },
+        storefrontApi: {
+          configured: true,
+          ok: false,
+          status: 503,
+          latencyMs: 18.6,
+          baseUrl: 'https://storefront-api.example.com',
+        },
+      },
+    });
 
     const response = await GET(new Request('http://localhost/api/health'));
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual(expect.objectContaining({
       status: 'degraded',
-      missingEnv: ['AWS_S3_BUCKET'],
+      missingEnv: ['STOREFRONT_REVALIDATE_SECRET'],
       checks: expect.objectContaining({
+        database: expect.objectContaining({
+          ok: false,
+        }),
         storefrontApi: expect.objectContaining({
           ok: false,
           baseUrl: 'https://storefront-api.example.com',

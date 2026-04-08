@@ -5,8 +5,8 @@ import { locales } from "@/i18n/config";
 import {
   fetchStorefrontBrands,
   fetchStorefrontCategories,
+  fetchStorefrontProductBuildFeed,
   isNextProductionBuildPhase,
-  listAllStorefrontProducts,
   normalizeBrand,
   normalizeCategory,
 } from "@/lib/storefront-api";
@@ -43,7 +43,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   try {
     const [products, brands, categories] = await Promise.all([
-      listAllStorefrontProducts(),
+      fetchStorefrontProductBuildFeed(),
       fetchStorefrontBrands().then((items) => items.map(normalizeBrand)),
       fetchStorefrontCategories().then((items) => items.map(normalizeCategory)),
     ]);

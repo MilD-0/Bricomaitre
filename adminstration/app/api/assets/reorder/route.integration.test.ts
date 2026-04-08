@@ -8,11 +8,13 @@ const {
   getDbMock,
   requireMutationAccessMock,
   authMock,
+  revalidateStorefrontAssetsMock,
 } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
   requireMutationAccessMock: vi.fn(),
   authMock: vi.fn(),
+  revalidateStorefrontAssetsMock: vi.fn(),
 }));
 
 vi.mock('../../../../db/client', () => ({
@@ -28,6 +30,10 @@ vi.mock('../../../../lib/auth', () => ({
   auth: authMock,
 }));
 
+vi.mock('../../../../lib/storefront-revalidate', () => ({
+  revalidateStorefrontAssets: revalidateStorefrontAssetsMock,
+}));
+
 describe('app/api/assets/reorder/route', () => {
   beforeEach(() => {
     hasDbMock.mockReset();
@@ -36,6 +42,8 @@ describe('app/api/assets/reorder/route', () => {
     requireMutationAccessMock.mockResolvedValue(null);
     authMock.mockReset();
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
+    revalidateStorefrontAssetsMock.mockReset();
+    revalidateStorefrontAssetsMock.mockResolvedValue(undefined);
   });
 
   it('returns 400 for invalid reorder payloads', async () => {
@@ -90,6 +98,7 @@ describe('app/api/assets/reorder/route', () => {
     expect(updateMock).toHaveBeenCalledTimes(2);
     expect(setMock).toHaveBeenNthCalledWith(1, expect.objectContaining({ sortOrder: 0, updatedAt: expect.any(Date) }));
     expect(setMock).toHaveBeenNthCalledWith(2, expect.objectContaining({ sortOrder: 1, updatedAt: expect.any(Date) }));
+    expect(revalidateStorefrontAssetsMock).toHaveBeenCalledOnce();
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ ok: true });
   });

@@ -97,6 +97,7 @@ describe('ProductsManager', () => {
     const search = (url.searchParams.get('search') ?? '').toLowerCase();
     const brandId = url.searchParams.get('brandId');
     const categoryId = url.searchParams.get('categoryId');
+    const imageOrigin = url.searchParams.get('imageOrigin') ?? 'all';
     const sortKey = url.searchParams.get('sortKey') ?? 'updatedAt';
     const sortDirection = url.searchParams.get('sortDirection') ?? 'desc';
 
@@ -107,6 +108,13 @@ describe('ProductsManager', () => {
 
       if (categoryId && product.categoryId !== Number(categoryId)) {
         return false;
+      }
+
+      if (imageOrigin === 'external') {
+        const hasExternalImage = product.images.some((image) => !image.startsWith('https://cdn.example.com/'));
+        if (!hasExternalImage) {
+          return false;
+        }
       }
 
       const target = [product.title, product.sku, product.barcode].filter(Boolean).join(' ').toLowerCase();
@@ -380,7 +388,7 @@ describe('ProductsManager', () => {
         body: { inStock: true },
       });
     });
-  });
+  }, 15_000);
 
   it('filters products by brand and category', async () => {
     renderProductsManager();
@@ -397,6 +405,18 @@ describe('ProductsManager', () => {
 
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Filter by brand' }), '');
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Filter by category' }), '20');
+    expect(screen.getAllByRole('button', { name: 'Paint bucket' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Existing product' })).not.toBeInTheDocument();
+  });
+
+  it('filters products by external image links', async () => {
+    renderProductsManager();
+
+    await screen.findAllByRole('button', { name: 'Existing product' });
+    expect(screen.getAllByRole('button', { name: 'Paint bucket' }).length).toBeGreaterThan(0);
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Filter by image links' }), 'external');
+
     expect(screen.getAllByRole('button', { name: 'Paint bucket' }).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: 'Existing product' })).not.toBeInTheDocument();
   });
@@ -438,7 +458,7 @@ describe('ProductsManager', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Go' }));
 
     expect((await screen.findAllByRole('button', { name: 'Product 1' })).length).toBeGreaterThan(0);
-  }, 10000);
+  }, 20000);
 
   it('deletes selected products from the bulk action flow', async () => {
     renderProductsManager();

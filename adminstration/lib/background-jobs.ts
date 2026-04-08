@@ -10,7 +10,8 @@ import {
   orders,
   products,
 } from '../db/schema';
-import { syncEcotrackCatalog } from './ecotrack';
+import { syncEcotrackShipmentStates } from './admin-ecotrack-orders-data';
+import { loadEcotrackOrderInputs, postOrdersToEcotrack, readEcotrackCatalog, syncEcotrackCatalog } from './ecotrack';
 import { uploadExportArtifact } from './export-artifacts';
 import {
   buildMetaCatalogExportFileName,
@@ -28,13 +29,14 @@ import {
 } from './order-export';
 import type { OrderStatusHistoryRecord } from './orders';
 import { importAdCostsSpreadsheet, importStatsSpreadsheet } from './stats';
-import { readEcotrackCatalog } from './ecotrack';
 
 export const ADMIN_PRODUCT_EXPORT_QUEUE = 'admin-product-export';
 export const ADMIN_ORDER_EXPORT_QUEUE = 'admin-order-export';
+export const ADMIN_ORDER_ECOTRACK_QUEUE = 'admin-order-ecotrack';
 export const ADMIN_STATS_IMPORT_QUEUE = 'admin-stats-import';
 export const ADMIN_AD_COST_IMPORT_QUEUE = 'admin-ad-cost-import';
 export const ADMIN_ECOTRACK_SYNC_QUEUE = 'admin-ecotrack-sync';
+export const ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE = 'admin-ecotrack-shipment-sync';
 export const STOREFRONT_ANALYTICS_QUEUE = 'storefront-analytics';
 
 type QueueJobMeta = {
@@ -54,6 +56,7 @@ export type ExportJobResponse = {
     progress: JobSnapshot['progress'];
     errorMessage: string | null;
     downloadPath: string | null;
+    resultSummary: Record<string, unknown> | null;
   } | null;
 };
 
@@ -61,6 +64,14 @@ type ProductExportPayload = QueueJobMeta;
 type OrderExportPayload = QueueJobMeta & {
   mode: 'selected' | 'confirmed';
   orderIds: number[];
+};
+type OrderEcotrackPayload = QueueJobMeta & {
+  mode: 'selected' | 'confirmed';
+  orderIds: number[];
+  actor: {
+    email?: string | null;
+    name?: string | null;
+  };
 };
 type StatsImportPayload = QueueJobMeta & {
   fileName: string;
@@ -77,6 +88,17 @@ type AdCostsImportPayload = QueueJobMeta & {
 };
 type EcotrackSyncPayload = QueueJobMeta & {
   trigger: string;
+  actor?: {
+    email?: string | null;
+    name?: string | null;
+  };
+};
+type EcotrackShipmentSyncPayload = QueueJobMeta & {
+  trigger: string;
+  actor?: {
+    email?: string | null;
+    name?: string | null;
+  };
 };
 type AnalyticsPayload = {
   event: ReturnType<typeof storefrontAnalyticsEventSchema.parse>;
@@ -98,6 +120,7 @@ function toClientJob(snapshot: JobSnapshot | null, fileName: string | null = nul
     progress: snapshot.progress,
     errorMessage: snapshot.errorMessage,
     downloadPath: snapshot.downloadUrl,
+    resultSummary: snapshot.resultSummary,
   };
 }
 
@@ -140,6 +163,26 @@ export async function startOrderExportJob(ownerKey: string, payload: { mode: 'se
   };
 }
 
+export async function startOrderEcotrackJob(
+  ownerKey: string,
+  payload: { mode: 'selected' | 'confirmed'; orderIds: number[]; actor: { email?: string | null; name?: string | null } },
+  requestId?: string,
+) {
+  const result = await startOwnedJob<OrderEcotrackPayload>({
+    queueName: ADMIN_ORDER_ECOTRACK_QUEUE,
+    kind: `order-ecotrack:${payload.mode}`,
+    ownerKey,
+    requestId,
+    data: payload as OrderEcotrackPayload,
+    activeScope: 'global',
+  });
+
+  return {
+    kind: result.kind,
+    job: toClientJob(result.job),
+  };
+}
+
 export async function startStatsImportJob(ownerKey: string, payload: { fileName: string; fileBuffer: Buffer }, requestId?: string) {
   return startOwnedJob<StatsImportPayload>({
     queueName: ADMIN_STATS_IMPORT_QUEUE,
@@ -168,13 +211,34 @@ export async function startAdCostsImportJob(ownerKey: string, payload: { fileNam
   });
 }
 
-export async function startEcotrackSyncJob(ownerKey: string, trigger: string, requestId?: string) {
+export async function startEcotrackSyncJob(
+  ownerKey: string,
+  trigger: string,
+  actor?: { email?: string | null; name?: string | null },
+  requestId?: string,
+) {
   return startOwnedJob<EcotrackSyncPayload>({
     queueName: ADMIN_ECOTRACK_SYNC_QUEUE,
     kind: 'ecotrack-sync',
     ownerKey,
     requestId,
-    data: { trigger } as EcotrackSyncPayload,
+    data: { trigger, actor } as EcotrackSyncPayload,
+    activeScope: 'global',
+  });
+}
+
+export async function startEcotrackShipmentSyncJob(
+  ownerKey: string,
+  trigger: string,
+  actor?: { email?: string | null; name?: string | null },
+  requestId?: string,
+) {
+  return startOwnedJob<EcotrackShipmentSyncPayload>({
+    queueName: ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE,
+    kind: 'ecotrack-shipment-sync',
+    ownerKey,
+    requestId,
+    data: { trigger, actor } as EcotrackShipmentSyncPayload,
     activeScope: 'global',
   });
 }
@@ -366,6 +430,33 @@ export async function runOrderExportJob(
   };
 }
 
+export async function runOrderEcotrackJob(
+  payload: OrderEcotrackPayload,
+  helpers: {
+    updateProgress: (progress: { phase: string; current: number; total: number }) => Promise<void>;
+    updateSummary: (summary: Record<string, unknown>) => Promise<void>;
+    throwIfCancelled: () => Promise<void>;
+  },
+) {
+  const db = getDb();
+
+  await helpers.updateProgress({ phase: 'loading', current: 0, total: payload.orderIds.length });
+  const [items, catalog] = await Promise.all([
+    loadEcotrackOrderInputs(db, payload.mode, payload.orderIds),
+    readEcotrackCatalog(db),
+  ]);
+  await helpers.updateProgress({ phase: 'loading', current: items.length, total: payload.orderIds.length });
+  await helpers.throwIfCancelled();
+
+  return postOrdersToEcotrack(db, items, catalog, payload.actor, {
+    throwIfCancelled: helpers.throwIfCancelled,
+    updateProgress: helpers.updateProgress,
+    updateSummary: async (summary) => {
+      await helpers.updateSummary(summary as unknown as Record<string, unknown>);
+    },
+  });
+}
+
 export async function runStatsImportJob(
   payload: StatsImportPayload,
   helpers: {
@@ -420,9 +511,24 @@ export async function runEcotrackSyncJob(
     updateSummary: (summary: Record<string, unknown>) => Promise<void>;
   },
 ) {
-  const result = await syncEcotrackCatalog(getDb(), { trigger: payload.trigger });
+  const result = await syncEcotrackCatalog(getDb(), { trigger: payload.trigger, actor: payload.actor });
   await helpers.updateSummary(result as unknown as Record<string, unknown>);
   return result as unknown as Record<string, unknown>;
+}
+
+export async function runEcotrackShipmentSyncJob(
+  payload: EcotrackShipmentSyncPayload,
+  helpers: {
+    updateSummary: (summary: Record<string, unknown>) => Promise<void>;
+  },
+) {
+  const result = await syncEcotrackShipmentStates({ actor: payload.actor });
+  const summary = {
+    trigger: payload.trigger,
+    ...result,
+  };
+  await helpers.updateSummary(summary);
+  return summary;
 }
 
 export async function runAnalyticsJob(payload: AnalyticsPayload) {

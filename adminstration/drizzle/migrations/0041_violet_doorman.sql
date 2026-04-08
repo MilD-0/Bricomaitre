@@ -1,0 +1,1 @@
+ALTER TABLE "admin"."action_logs" ADD COLUMN "is_reversible" boolean DEFAULT true NOT NULL;

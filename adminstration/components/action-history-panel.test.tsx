@@ -162,6 +162,7 @@ describe('ActionHistoryPanel', () => {
       operation: index === 9 ? 'update' : index === 10 ? 'delete' : 'create',
       createdBy: index === 9 ? 'nadia@example.com' : `user${index + 1}@example.com`,
       createdByName: index === 9 ? 'Nadia' : `User ${index + 1}`,
+      isReversible: true,
       isUndone: index === 9,
       changes: index === 9 ? [{ field: 'Spend', before: 200, after: 150 }] : [],
       createdAt: `2026-03-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
@@ -215,6 +216,7 @@ describe('ActionHistoryPanel', () => {
       operation: 'create' | 'update' | 'delete';
       createdBy: string | null;
       createdByName: string | null;
+      isReversible: boolean;
       isUndone: boolean;
       changes: Array<{ field: string; before: unknown; after: unknown }>;
       createdAt: string;
@@ -232,6 +234,7 @@ describe('ActionHistoryPanel', () => {
         operation: 'update',
         createdBy: 'admin@example.com',
         createdByName: 'Admin',
+        isReversible: true,
         isUndone: false,
         changes: [{ field: 'In Stock', before: false, after: true }],
         createdAt: '2026-03-21T00:00:00.000Z',
@@ -280,5 +283,37 @@ describe('ActionHistoryPanel', () => {
 
     expect(toastMock.loading).toHaveBeenCalledWith('redo:Widget:loading');
     expect(toastMock.success).toHaveBeenCalledWith('redo:Widget:success', { id: 'toast-id' });
+  });
+
+  it('disables undo and redo for non-reversible entries', async () => {
+    const items = [
+      {
+        id: 2,
+        resource: 'ecotrack',
+        entityType: 'ecotrackShipments',
+        entityId: 22,
+        entityLabel: 'TRK-22',
+        operation: 'update',
+        createdBy: null,
+        createdByName: 'ECOTRACK sync',
+        isReversible: false,
+        isUndone: false,
+        changes: [{ field: 'Current Status', before: 'prete_a_expedier', after: 'vers_hub' }],
+        createdAt: '2026-03-22T00:00:00.000Z',
+        undoneAt: null,
+        redoneAt: null,
+      },
+    ];
+
+    server.use(
+      http.get('/api/action-history', ({ request }) => HttpResponse.json(buildHistoryResponse(request.url, items))),
+    );
+
+    renderPanel();
+
+    expect(await screen.findByText('TRK-22')).toBeInTheDocument();
+    expect(screen.getByText('history.state.nonReversible')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'history.undo' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'history.redo' })).toBeDisabled();
   });
 });

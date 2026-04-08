@@ -11,36 +11,6 @@ vi.mock('../../../../lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../db/client', () => ({
-  hasDb: vi.fn(() => true),
-  getDb: vi.fn(() => ({ tag: 'db' })),
-}));
-
-vi.mock('../../../../lib/ecotrack', () => ({
-  readEcotrackCatalog: vi.fn(async () => ({
-    wilayas: [],
-    communes: [],
-    serviceFees: [],
-    weightFees: [],
-    lastSync: {
-      id: 1,
-      trigger: 'manual',
-      status: 'success',
-      requestCount: 3,
-      wilayaCount: 58,
-      communeCount: 1542,
-      serviceFeeCount: 280,
-      weightFeeCount: 4,
-      rateLimitSnapshot: null,
-      errorMessage: null,
-      startedAt: new Date('2026-03-30T21:08:20.000Z'),
-      finishedAt: new Date('2026-03-30T21:08:29.000Z'),
-      createdAt: new Date('2026-03-30T21:08:29.000Z'),
-      updatedAt: new Date('2026-03-30T21:08:29.000Z'),
-    },
-  })),
-}));
-
 vi.mock('../../../../components/settings/role-management-panel', () => ({
   RoleManagementPanel: () => <div>RoleManagementPanel</div>,
 }));
@@ -77,17 +47,6 @@ describe('AdministrationPage', () => {
         'roles.employee': 'Employee',
         'roles.admin': 'Admin',
         'roles.developer': 'Developer',
-        'settings.general.currentRoleLabel': 'Current role',
-        'settings.general.signedInEmailLabel': 'Signed-in email',
-        'settings.general.missingEmail': 'No email available',
-        'settings.ecotrack.title': 'ECOTRACK catalog sync',
-        'settings.ecotrack.lastFetchLabel': 'Last fetched',
-        'settings.ecotrack.statusLabel': 'Status',
-        'settings.ecotrack.statusSuccess': 'Succeeded',
-        'settings.ecotrack.statusFailed': 'Failed',
-        'settings.ecotrack.statusUnknown': 'Never run',
-        'settings.ecotrack.neverSynced': 'Never synced',
-        'settings.ecotrack.errorLabel': 'Last error',
       };
 
       return translations[key] ?? key;
@@ -107,13 +66,12 @@ describe('AdministrationPage', () => {
     render(ui);
 
     expect(screen.getByRole('heading', { name: 'Administration' })).toBeInTheDocument();
-    expect(screen.getByText('ECOTRACK catalog sync')).toBeInTheDocument();
-    expect(screen.getAllByText('Succeeded').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('private-contact-01@example.invalid').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText('Current role').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('UserAccessPanel')).toBeInTheDocument();
     expect(screen.getByText('RoleManagementPanel')).toBeInTheDocument();
     expect(screen.getByText('ActionHistoryPanel')).toBeInTheDocument();
+    expect(screen.queryByText('ECOTRACK catalog sync')).not.toBeInTheDocument();
+    expect(screen.queryByText('Current role')).not.toBeInTheDocument();
+    expect(screen.queryByText('private-contact-01@example.invalid')).not.toBeInTheDocument();
     expect(screen.queryByText('Permissions & roles config')).not.toBeInTheDocument();
     expect(screen.queryByText('Administration overview and action history.')).not.toBeInTheDocument();
     expect(screen.queryByText('Role assignment policy')).not.toBeInTheDocument();

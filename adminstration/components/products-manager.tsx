@@ -8,7 +8,6 @@ import { useTranslations, useLocale } from 'next-intl';
 import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 
-import { useLiveUpdates } from '../lib/live';
 import {
   buildMetaCatalogExportFileName,
   buildMetaCatalogExportRows,
@@ -17,6 +16,7 @@ import {
 import { canExportAllProducts } from '../lib/permissions';
 import { cn } from '../lib/utils';
 import {
+  imageOriginFilterValues,
   productListQuerySchema,
   productPayloadSchema,
   type ProductPatch,
@@ -89,6 +89,7 @@ type ProductExportAllJob = {
   downloadPath: string | null;
 };
 type ProductExportJobResponse = { job: ProductExportAllJob | null };
+type ImageOriginFilter = (typeof imageOriginFilterValues)[number];
 
 const PRODUCT_DIALOG_STORAGE_KEY = 'products-dialog-state-v2';
 const defaults: ProductPayloadInput = {
@@ -607,6 +608,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
   const [search, setSearch] = useState('');
   const [selectedBrandId, setSelectedBrandId] = useState<number | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+  const [selectedImageOrigin, setSelectedImageOrigin] = useState<ImageOriginFilter>('all');
   const deferredSearch = useDeferredValue(search.trim().toLowerCase());
   const [sortKey, setSortKey] = useState<ProductSortKey>('updatedAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -620,8 +622,6 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
   const initializedExportStatusRef = useRef(false);
   const lastExportStatusKeyRef = useRef<string | null>(null);
 
-  useLiveUpdates('products');
-
   const form = useForm<ProductPayloadInput>({
     resolver: zodResolver(productPayloadSchema),
     defaultValues: defaults,
@@ -629,7 +629,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
   const draftValues = useWatch({ control: form.control });
 
   const productsQuery = useQuery({
-    queryKey: ['products-table', page, deferredSearch, selectedBrandId, selectedCategoryId, sortKey, sortDirection],
+    queryKey: ['products-table', page, deferredSearch, selectedBrandId, selectedCategoryId, selectedImageOrigin, sortKey, sortDirection],
     queryFn: () => {
       const params = productListQuerySchema.parse({
         page,
@@ -637,6 +637,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
         search: deferredSearch,
         brandId: selectedBrandId,
         categoryId: selectedCategoryId,
+        imageOrigin: selectedImageOrigin,
         sortKey,
         sortDirection,
       });
@@ -652,6 +653,9 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
       }
       if (params.categoryId !== null) {
         searchParams.set('categoryId', String(params.categoryId));
+      }
+      if (params.imageOrigin !== 'all') {
+        searchParams.set('imageOrigin', params.imageOrigin);
       }
       return request<ProductsResponse>(`/api/products?${searchParams.toString()}`);
     },
@@ -686,7 +690,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
   useEffect(() => {
     const stored = readStorage<{ dialogState: ProductDialogState; values: ProductPayloadInput }>(PRODUCT_DIALOG_STORAGE_KEY);
     if (stored) {
-      setDialogState(stored.dialogState);
+      queueMicrotask(() => setDialogState(stored.dialogState));
       form.reset(stored.values);
     }
     hydratedRef.current = true;
@@ -910,7 +914,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
   useEffect(() => {
     const currentPage = productsQuery.data.pagination?.page ?? 1;
     if (!productsQuery.isFetching && !productsQuery.isPlaceholderData && page !== currentPage) {
-      setPage(currentPage);
+      queueMicrotask(() => setPage(currentPage));
     }
   }, [page, productsQuery.data.pagination?.page, productsQuery.isFetching, productsQuery.isPlaceholderData]);
 
@@ -1071,7 +1075,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
                 });
               }}
             />
-            <div className="grid gap-3 sm:grid-cols-2 lg:w-[28rem]">
+            <div className="grid gap-3 sm:grid-cols-3 lg:w-[42rem]">
               <NativeSelect
                 aria-label={t('labels.filterByBrand')}
                 value={selectedBrandId ?? ''}
@@ -1105,6 +1109,19 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
                     {category.name}
                   </NativeSelectOption>
                 ))}
+              </NativeSelect>
+              <NativeSelect
+                aria-label={t('labels.filterByImageOrigin')}
+                value={selectedImageOrigin}
+                onChange={(event) => {
+                  startFilterTransition(() => {
+                    setPage(1);
+                    setSelectedImageOrigin(event.target.value as ImageOriginFilter);
+                  });
+                }}
+              >
+                <NativeSelectOption value="all">{t('labels.allImageLinks')}</NativeSelectOption>
+                <NativeSelectOption value="external">{t('labels.externalImageLinks')}</NativeSelectOption>
               </NativeSelect>
             </div>
           </div>

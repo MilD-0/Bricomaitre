@@ -3,6 +3,8 @@
     "administration": "Administration",
     "products": "Products",
     "orders": "Orders",
+    "ordersTable": "Order capture",
+    "ecotrackShipments": "ECOTRACK shipments",
     "inventory": "Inventory",
     "assets": "Assets",
     "brands": "Brands",
@@ -39,8 +41,11 @@
     "searchProducts": "Search products",
     "filterByBrand": "Filter by brand",
     "filterByCategory": "Filter by category",
+    "filterByImageOrigin": "Filter by image links",
     "allBrands": "All brands",
     "allCategories": "All categories",
+    "allImageLinks": "All image links",
+    "externalImageLinks": "External image links",
     "deleteDialogTitle": "Confirm deletion",
     "deleteDialogDescription": "This will permanently delete {target}.",
     "selectAll": "Select all rows",
@@ -893,9 +898,58 @@
       "success": "Orders exported.",
       "error": "Failed to export orders.",
       "empty": "Select at least one order to export.",
+      "emptyConfirmed": "No confirmed orders are available to export.",
       "progress": {
         "exporting": "Generating spreadsheet",
         "updating-statuses": "Updating order statuses"
+      }
+    },
+    "ecotrack": {
+      "selectedAction": "Post selected to Ecotrack",
+      "confirmedAction": "Post confirmed to Ecotrack",
+      "selectedTitle": "Post {count} selected orders to Ecotrack",
+      "confirmedTitle": "Post {count} confirmed orders to Ecotrack",
+      "previewTitle": "Ecotrack posting preview",
+      "previewEligible": "Eligible orders",
+      "previewSkipped": "Skipped orders",
+      "previewInvalid": "Invalid orders",
+      "emptyEligible": "No eligible orders.",
+      "emptySkipped": "No skipped orders.",
+      "emptyInvalid": "No invalid orders.",
+      "confirm": "Post to Ecotrack",
+      "loading": "Preparing Ecotrack preview...",
+      "ready": "Ecotrack preview is ready.",
+      "success": "Ecotrack posting completed.",
+      "cancelled": "Ecotrack posting cancelled.",
+      "error": "Failed to post orders to Ecotrack.",
+      "empty": "Select at least one order to post.",
+      "emptyConfirmed": "No confirmed orders are available to post.",
+      "resultTitle": "Posting results",
+      "summary": {
+        "totalRequested": "Requested",
+        "eligible": "Eligible",
+        "created": "Created",
+        "skipped": "Skipped",
+        "invalid": "Invalid",
+        "failed": "Failed"
+      },
+      "progress": {
+        "loading": "Loading orders",
+        "validating-token": "Validating Ecotrack token",
+        "classifying": "Classifying orders",
+        "creating": "Creating Ecotrack orders",
+        "persisting": "Persisting local updates",
+        "completed": "Completed"
+      },
+      "reasons": {
+        "already_posted": "Already posted",
+        "status_not_confirmed": "Order is not confirmed",
+        "missing_phone": "Missing phone number",
+        "missing_wilaya": "Missing wilaya",
+        "missing_commune": "Missing commune",
+        "invalid_commune": "Invalid commune",
+        "missing_address": "Missing address",
+        "missing_name": "Missing customer name"
       }
     },
     "delivery": {
@@ -910,6 +964,9 @@
       "dispatched": "Dispatched",
       "completed": "Completed",
       "delayed": "Delayed",
+      "inDelivery": "In delivery",
+      "returned": "Returned",
+      "failed": "Failed",
       "incrementNoAnswer": "No answer {count}",
       "noAnswerCounter": "Counter: {count}",
       "increaseNoAnswer": "Increase no answer to {count}",
@@ -932,17 +989,43 @@
       "title": "Shopping list",
       "description": "Use the consolidated list to gather products and the order list to confirm per-order notes.",
       "selectedAction": "Shopping list",
+      "confirmedAction": "Shopping list for confirmed orders",
       "dispatchedAction": "Dispatched shopping list",
       "selectedTitle": "Shopping list for {count} selected orders",
+      "confirmedTitle": "Shopping list for confirmed orders",
       "dispatchedTitle": "Shopping list for dispatched orders",
       "consolidatedTitle": "What to gather",
       "ordersTitle": "Order breakdown",
       "notes": "Notes",
       "print": "Print view",
+      "reset": "Reset list",
+      "acceptAllInventoryChanges": "Accept all inventory changes",
+      "applySelectedInventoryChanges": "Apply selected inventory changes",
+      "addProductTitle": "Add a product",
+      "addProductPlaceholder": "Search catalog products",
+      "addProductAction": "Add product",
+      "addProductError": "Failed to add the product to the shopping list.",
+      "toggleItem": "Toggle {title}",
+      "customItem": "Added manually",
+      "increaseQuantity": "Increase quantity for {title}",
+      "decreaseQuantity": "Decrease quantity for {title}",
+      "increaseInventoryDelta": "Increase inventory decrease for {title}",
+      "decreaseInventoryDelta": "Decrease inventory decrease for {title}",
+      "inventoryAdjustLabel": "Inventory decrease",
+      "inventoryDecreasePreview": "Will decrease inventory by {count}",
+      "inventoryShortage": "Short by {count}",
+      "inventoryApplied": "Applied inventory decrease: {count}",
+      "inventoryApplyLoading": "Applying inventory changes for {count} products...",
+      "inventoryApplySuccess": "Applied inventory changes for {count} products.",
+      "inventoryApplyError": "Failed to apply inventory changes for {count} products.",
+      "noInventoryChanges": "No inventory changes are ready to apply.",
+      "removeItem": "Remove {title}",
       "loading": "Building shopping list...",
       "ready": "Shopping list ready.",
       "error": "Failed to build shopping list.",
       "emptySelection": "Select at least one order first.",
+      "emptyConfirmed": "No confirmed orders are available for a shopping list.",
+      "emptyDispatched": "No dispatched orders are available for a shopping list.",
       "printError": "Unable to open the print view."
     },
     "products": {
@@ -980,6 +1063,187 @@
     "unconfirmed": "Not confirmed",
     "unconfirmedDate": "No confirmation timestamp"
   },
+  "ordersEcotrackManager": {
+    "searchPlaceholder": "Search by tracking, client, phone, address, commune, wilaya, product, or status",
+    "filters": {
+      "statusLabel": "Filter by ECOTRACK status",
+      "allStatuses": "All statuses",
+      "sortKeyLabel": "Sort by",
+      "sortDirectionLabel": "Direction",
+      "staleOnly": "Show stale only"
+    },
+    "sort": {
+      "createdAt": "Created date",
+      "trackingNumber": "Tracking number",
+      "clientName": "Client name",
+      "currentStatus": "Current status",
+      "lastStatusSyncedAt": "Last status sync",
+      "asc": "Ascending",
+      "desc": "Descending"
+    },
+    "columns": {
+      "trackingNumber": "Tracking number",
+      "client": "Client name and phone",
+      "address": "Address, commune, wilaya, delivery type",
+      "products": "Products",
+      "amount": "Montant",
+      "status": "ECOTRACK status"
+    },
+    "reference": "Reference",
+    "missingValue": "Missing value",
+    "staleBadge": "Stale",
+    "driverPhone": "Driver phone",
+    "estimatedFee": "Estimated fee",
+    "deskPhone": "Desk phone",
+    "deskCommune": "Desk commune",
+    "deskAddress": "Desk address",
+    "lastSync": "Last status sync",
+    "lastTrackingSync": "Last tracking sync",
+    "lastMajSync": "Last mise a jour sync",
+    "neverSynced": "Never synced",
+    "summaryTitle": "Shipment summary",
+    "amounts": {
+      "subtotal": "Products",
+      "deliveryFee": "Delivery",
+      "total": "Total"
+    },
+    "history": {
+      "title": "Order history",
+      "majTitle": "Mises a jour",
+      "timelineTitle": "Tracking timeline",
+      "empty": "No history available yet.",
+      "emptyMaj": "No mises a jour cached yet.",
+      "emptyTimeline": "No tracking events cached yet."
+    },
+    "actions": {
+      "printSelected": "Print selected labels",
+      "refreshSelected": "Refresh selected",
+      "clearSelection": "Clear selection",
+      "refreshVisible": "Refresh visible",
+      "dispatchReady": "Dispatch prete a expedier",
+      "dispatchSelected": "Dispatch selected",
+      "showHistorySelected": "Show history for selected",
+      "showHistoryVisible": "Show history for visible",
+      "label": "Label",
+      "refresh": "Refresh",
+      "dispatch": "Dispatch",
+      "maj": "Add mise a jour",
+      "return": "Request return",
+      "showHistory": "Show history",
+      "hideHistory": "Hide history"
+    },
+    "loading": {
+      "refreshing": "Refreshing ECOTRACK shipments",
+      "inProgress": "In progress"
+    },
+    "empty": {
+      "title": "No ECOTRACK shipments found",
+      "description": "Orders appear here after they are posted to ECOTRACK and receive a tracking number."
+    },
+    "dialogs": {
+      "editTitle": "Edit ECOTRACK shipment",
+      "editDescription": "Update the local order and propagate the changes to ECOTRACK while the shipment is still prete_a_expedier.",
+      "editHint": "Product and montant splits stay derived from the local order items and delivery fee.",
+      "deleteTitle": "Delete ECOTRACK shipment",
+      "deleteDescription": "Delete the ECOTRACK shipment for {name}. The local order will stay available for reposting later.",
+      "dispatchTitle": "Dispatch ECOTRACK shipment",
+      "dispatchDescription": "Dispatch the shipment for {name} and lock further pre-dispatch edits.",
+      "majTitle": "Add ECOTRACK mise a jour",
+      "majDescription": "Send a follow-up update for {name}."
+    },
+    "fields": {
+      "firstName": "First name",
+      "lastName": "Last name",
+      "phoneNumber1": "Primary phone",
+      "phoneNumber2": "Secondary phone",
+      "delivery": "Delivery type",
+      "state": "Wilaya",
+      "statePlaceholder": "Select a wilaya",
+      "city": "Commune",
+      "cityPlaceholder": "Select a commune",
+      "homeAddress": "Address",
+      "note": "Remarque",
+      "askCollection": "Ask collection",
+      "askCollectionDescription": "Set ask_collection=1 when dispatching if pickup from your side is needed.",
+      "majContent": "Mise a jour content",
+      "majHint": "Maximum 255 characters."
+    },
+    "confirmations": {
+      "return": "Request a return for this ECOTRACK shipment?"
+    },
+    "notifications": {
+      "refresh": {
+        "loading": "Refreshing ECOTRACK shipment...",
+        "success": "ECOTRACK shipment refreshed.",
+        "error": "Failed to refresh the ECOTRACK shipment."
+      },
+      "update": {
+        "loading": "Saving ECOTRACK shipment...",
+        "success": "ECOTRACK shipment saved.",
+        "error": "Failed to save the ECOTRACK shipment."
+      },
+      "delete": {
+        "loading": "Deleting ECOTRACK shipment...",
+        "success": "ECOTRACK shipment deleted.",
+        "error": "Failed to delete the ECOTRACK shipment."
+      },
+      "dispatch": {
+        "loading": "Dispatching ECOTRACK shipment...",
+        "success": "ECOTRACK shipment dispatched.",
+        "partial": "{successCount} shipments dispatched, {failedCount} failed.",
+        "error": "Failed to dispatch the ECOTRACK shipment."
+      },
+      "maj": {
+        "loading": "Sending ECOTRACK mise a jour...",
+        "success": "ECOTRACK mise a jour sent.",
+        "error": "Failed to send the ECOTRACK mise a jour."
+      },
+      "return": {
+        "loading": "Requesting ECOTRACK return...",
+        "success": "ECOTRACK return requested.",
+        "error": "Failed to request the ECOTRACK return."
+      },
+      "labels": {
+        "loading": "Preparing ECOTRACK labels...",
+        "success": "ECOTRACK labels ready.",
+        "error": "Failed to prepare the ECOTRACK labels."
+      }
+    },
+    "statuses": {
+      "prete_a_expedier": "Prete a expedier",
+      "en_ramassage": "En ramassage",
+      "en_preparation_stock": "En preparation stock",
+      "vers_hub": "Vers hub",
+      "en_hub": "En hub",
+      "vers_wilaya": "Vers wilaya",
+      "en_preparation": "En preparation",
+      "en_livraison": "En livraison",
+      "suspendu": "Suspendu",
+      "livre_non_encaisse": "Livre non encaisse",
+      "encaisse_non_paye": "Encaisse non paye",
+      "paiements_prets": "Paiements prets",
+      "paye_et_archive": "Paye et archive",
+      "retour_chez_livreur": "Retour chez livreur",
+      "retour_transit_entrepot": "Retour transit entrepot",
+      "retour_en_traitement": "Retour en traitement",
+      "retour_recu": "Retour recu",
+      "retour_archive": "Retour archive",
+      "annule": "Annule"
+    },
+    "historyStatuses": {
+      "order_information_received_by_carrier": "Order recorded and validated by the seller",
+      "picked": "Order picked up by the delivery provider",
+      "accepted_by_carrier": "Order received by the sorting center",
+      "dispatched_to_driver": "Order dispatched to the driver",
+      "attempt_delivery": "Delivery attempt",
+      "return_asked": "Return initiated by the sorting center",
+      "return_in_transit": "Return in transit",
+      "return_received": "Return received by the seller",
+      "livred": "Order delivered",
+      "encaissed": "Order collected",
+      "payed": "Payment completed"
+    }
+  },
   "inventory": {
     "searchPlaceholder": "Search by product, SKU, or barcode",
     "searchHint": "Only products with quantity above zero are listed by default. Search or scan to bring back hidden items.",
@@ -1004,6 +1268,26 @@
       "editTitle": "Edit barcode for {name}",
       "description": "Save a barcode so the product can be found directly from the inventory table.",
       "placeholder": "Enter barcode"
+    },
+    "scan": {
+      "title": "Scan barcode or order",
+      "description": "Enter an exact barcode or order ID to add products back into inventory.",
+      "placeholder": "Barcode or order ID",
+      "action": "Scan",
+      "barcodeTitle": "Add one unit of {name}",
+      "barcodeDescription": "Confirm to add one unit for the scanned barcode.",
+      "confirmAddOne": "Add 1 unit",
+      "orderTitle": "Order #{id}",
+      "toggleOrderItem": "Toggle order item {name}",
+      "orderQuantity": "Order quantity: {count}",
+      "currentInventory": "Current inventory: {count}",
+      "confirmOrderAdd": "Add selected products",
+      "orderApplyLoading": "Adding {count} scanned order products...",
+      "orderApplySuccess": "Added {count} scanned order products to inventory.",
+      "orderApplyError": "Failed to add {count} scanned order products to inventory.",
+      "notFound": "No matching barcode or order was found.",
+      "error": "Failed to scan the inventory input.",
+      "noSelection": "Select at least one product from the scanned order."
     },
     "notifications": {
       "barcode": {
@@ -1214,11 +1498,13 @@
       "brandsCategories": "Brands & categories",
       "bulletin": "Bulletin",
       "stats": "Stats",
-      "settings": "Settings"
+      "settings": "Settings",
+      "ecotrack": "Ecotrack"
     },
     "state": {
       "applied": "Applied",
-      "undone": "Undone"
+      "undone": "Undone",
+      "nonReversible": "Non-reversible"
     },
     "details": {
       "title": "{entity} activity",
@@ -1257,6 +1543,7 @@
     "editBannerTitle": "Edit banner",
     "bannerDialogDescription": "Set the banner title, linked product, and image.",
     "bannerTitlePlaceholder": "Banner title",
+    "bannerTitleArPlaceholder": "Arabic banner title",
     "titleLabel": "Title",
     "titleColumn": "Title",
     "bannerProductPlaceholder": "Select linked product",
@@ -1277,6 +1564,8 @@
     "groupDialogDescription": "Choose the products, brands, and categories that belong to this featured group.",
     "groupNamePlaceholder": "Group name",
     "groupNameLabel": "Group name",
+    "groupNameArLabel": "Arabic group name",
+    "groupNameArPlaceholder": "Arabic group name",
     "groupNameColumn": "Group name",
     "groupCtaLabel": "CTA text",
     "groupCtaPlaceholder": "Voir Plus",

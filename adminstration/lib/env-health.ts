@@ -6,6 +6,7 @@ const ADMIN_REQUIRED_ENV_VARS = [
   'AWS_REGION',
   'AWS_S3_BUCKET',
   'AWS_CLOUDFRONT_DOMAIN',
+  'STOREFRONT_REVALIDATE_SECRET',
 ] as const;
 
 export function getMissingAdminEnvVars(env: NodeJS.ProcessEnv = process.env) {
@@ -22,6 +23,7 @@ export function getAdminEnvHealth(env: NodeJS.ProcessEnv = process.env) {
       databaseConfigured: Boolean(env.DATABASE_URL?.trim()),
       authConfigured: Boolean(env.GOOGLE_CLIENT_ID?.trim() && env.GOOGLE_CLIENT_SECRET?.trim() && env.NEXTAUTH_SECRET?.trim()),
       uploadsConfigured: Boolean(env.AWS_REGION?.trim() && env.AWS_S3_BUCKET?.trim() && env.AWS_CLOUDFRONT_DOMAIN?.trim()),
+      storefrontRevalidationConfigured: Boolean(env.STOREFRONT_REVALIDATE_SECRET?.trim()),
     },
   };
 }

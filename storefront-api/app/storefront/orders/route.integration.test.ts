@@ -9,6 +9,17 @@ const { hasDbMock, getDbMock, createStorefrontOrderMock } = vi.hoisted(() => ({
   getDbMock: vi.fn(),
   createStorefrontOrderMock: vi.fn(),
 }));
+const {
+  beginIdempotentRequestMock,
+  buildIdempotencyFingerprintMock,
+  clearIdempotentRequestMock,
+  completeIdempotentRequestMock,
+} = vi.hoisted(() => ({
+  beginIdempotentRequestMock: vi.fn(),
+  buildIdempotencyFingerprintMock: vi.fn(),
+  clearIdempotentRequestMock: vi.fn(),
+  completeIdempotentRequestMock: vi.fn(),
+}));
 const { buildRateLimitHeadersMock, enforceRequestRateLimitMock } = vi.hoisted(() => ({
   buildRateLimitHeadersMock: vi.fn(),
   enforceRequestRateLimitMock: vi.fn(),
@@ -23,6 +34,13 @@ vi.mock('@bric/storefront-core/orders', () => ({
   createStorefrontOrder: createStorefrontOrderMock,
 }));
 
+vi.mock('@bric/runtime/idempotency', () => ({
+  beginIdempotentRequest: beginIdempotentRequestMock,
+  buildIdempotencyFingerprint: buildIdempotencyFingerprintMock,
+  clearIdempotentRequest: clearIdempotentRequestMock,
+  completeIdempotentRequest: completeIdempotentRequestMock,
+}));
+
 vi.mock('../../../lib/request-security', () => ({
   buildRateLimitHeaders: buildRateLimitHeadersMock,
   enforceRequestRateLimit: enforceRequestRateLimitMock,
@@ -33,9 +51,17 @@ describe('app/storefront/orders/route', () => {
     hasDbMock.mockReset();
     getDbMock.mockReset();
     createStorefrontOrderMock.mockReset();
+    beginIdempotentRequestMock.mockReset();
+    buildIdempotencyFingerprintMock.mockReset();
+    clearIdempotentRequestMock.mockReset();
+    completeIdempotentRequestMock.mockReset();
     buildRateLimitHeadersMock.mockReset();
     enforceRequestRateLimitMock.mockReset();
     createStorefrontOrderMock.mockResolvedValue({ id: 11, publicToken: 'public-token' });
+    beginIdempotentRequestMock.mockResolvedValue({ kind: 'started' });
+    buildIdempotencyFingerprintMock.mockReturnValue('fingerprint');
+    clearIdempotentRequestMock.mockResolvedValue(undefined);
+    completeIdempotentRequestMock.mockResolvedValue(undefined);
     buildRateLimitHeadersMock.mockReturnValue({});
     enforceRequestRateLimitMock.mockResolvedValue({
       ok: true,
@@ -176,5 +202,61 @@ describe('app/storefront/orders/route', () => {
     );
     performanceNowSpy.mockRestore();
     warnSpy.mockRestore();
+  });
+
+  it('returns the stored response for a completed idempotent request', async () => {
+    hasDbMock.mockReturnValue(true);
+    beginIdempotentRequestMock.mockResolvedValue({
+      kind: 'existing',
+      record: {
+        status: 'completed',
+        fingerprint: 'fingerprint',
+        response: {
+          statusCode: 200,
+          body: { ok: true, item: { id: 11, publicToken: 'public-token' } },
+        },
+      },
+    });
+
+    const res = await POST(new NextRequest('http://localhost/storefront/orders', {
+      method: 'POST',
+      body: JSON.stringify({ phoneNumber1: '0550111111' }),
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'submission-key',
+      },
+    }));
+
+    expect(createStorefrontOrderMock).not.toHaveBeenCalled();
+    await expect(res.json()).resolves.toEqual({ ok: true, item: { id: 11, publicToken: 'public-token' } });
+  });
+
+  it('returns 409 when an idempotency key is reused with a different payload fingerprint', async () => {
+    hasDbMock.mockReturnValue(true);
+    beginIdempotentRequestMock.mockResolvedValue({
+      kind: 'existing',
+      record: {
+        status: 'completed',
+        fingerprint: 'different-fingerprint',
+        response: {
+          statusCode: 200,
+          body: { ok: true, item: { id: 11, publicToken: 'public-token' } },
+        },
+      },
+    });
+
+    const res = await POST(new NextRequest('http://localhost/storefront/orders', {
+      method: 'POST',
+      body: JSON.stringify({ phoneNumber1: '0550111111' }),
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'submission-key',
+      },
+    }));
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toEqual({
+      error: 'Idempotency key already used with a different payload.',
+    });
   });
 });

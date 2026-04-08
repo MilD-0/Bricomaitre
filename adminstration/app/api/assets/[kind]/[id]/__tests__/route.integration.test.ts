@@ -10,12 +10,14 @@ const {
   requireMutationAccessMock,
   authMock,
   mutateEntityWithHistoryMock,
+  revalidateStorefrontAssetsMock,
 } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
   requireMutationAccessMock: vi.fn(),
   authMock: vi.fn(),
   mutateEntityWithHistoryMock: vi.fn(),
+  revalidateStorefrontAssetsMock: vi.fn(),
 }));
 
 vi.mock('../../../../../../db/client', () => ({
@@ -35,6 +37,10 @@ vi.mock('../../../../../../lib/action-history', () => ({
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
 }));
 
+vi.mock('../../../../../../lib/storefront-revalidate', () => ({
+  revalidateStorefrontAssets: revalidateStorefrontAssetsMock,
+}));
+
 describe('app/api/assets/[kind]/[id]/route', () => {
   beforeEach(() => {
     hasDbMock.mockReset();
@@ -45,6 +51,8 @@ describe('app/api/assets/[kind]/[id]/route', () => {
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mutateEntityWithHistoryMock.mockReset();
     mutateEntityWithHistoryMock.mockResolvedValue(undefined);
+    revalidateStorefrontAssetsMock.mockReset();
+    revalidateStorefrontAssetsMock.mockResolvedValue(undefined);
   });
 
   it('returns 400 for invalid toggle payloads', async () => {
@@ -71,6 +79,7 @@ describe('app/api/assets/[kind]/[id]/route', () => {
       success: true,
       data: {
         title: 'Updated banner',
+        titleAr: 'بنر محدث',
         imageUrl: 'https://cdn.example.com/updated.jpg',
         productId: 4,
         active: false,
@@ -93,6 +102,7 @@ describe('app/api/assets/[kind]/[id]/route', () => {
         operation: 'update',
       }),
     );
+    expect(revalidateStorefrontAssetsMock).toHaveBeenCalledOnce();
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ ok: true });
   });
@@ -117,6 +127,7 @@ describe('app/api/assets/[kind]/[id]/route', () => {
         actor: { email: 'admin@example.com', name: 'Admin' },
       }),
     );
+    expect(revalidateStorefrontAssetsMock).toHaveBeenCalledOnce();
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ ok: true });
   });

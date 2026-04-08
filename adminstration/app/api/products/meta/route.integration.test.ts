@@ -1,10 +1,12 @@
+import { NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET } from './route';
 
-const { hasDbMock, getDbMock } = vi.hoisted(() => ({
+const { hasDbMock, getDbMock, requireAppAccessMock } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
+  requireAppAccessMock: vi.fn(),
 }));
 
 vi.mock('../../../../db/client', () => ({
@@ -12,9 +14,23 @@ vi.mock('../../../../db/client', () => ({
   getDb: getDbMock,
 }));
 
+vi.mock('../../../../lib/rbac', () => ({
+  requireAppAccess: requireAppAccessMock,
+}));
+
 describe('app/api/products/meta/route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    requireAppAccessMock.mockResolvedValue(null);
+  });
+
+  it('returns 401 when app access is denied', async () => {
+    requireAppAccessMock.mockResolvedValue(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
+
+    const response = await GET();
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: 'Unauthorized' });
   });
 
   it('returns empty meta payload when the database is unavailable', async () => {

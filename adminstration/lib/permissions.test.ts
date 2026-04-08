@@ -5,34 +5,10 @@ import {
   canExportAllProducts,
   canManageSettings,
   canViewOps,
-  entityFormSchema,
   getPermissionsForRole,
   permissionKeySchema,
   roleDefinitionFormSchema,
 } from './permissions';
-
-describe('entityFormSchema', () => {
-  it('enforces min/max length and status enum constraints', () => {
-    expect(
-      entityFormSchema.safeParse({ name: 'Ab', status: 'active', tags: 'tag1' }).success,
-    ).toBe(false);
-
-    expect(
-      entityFormSchema.safeParse({
-        name: 'A'.repeat(121),
-        status: 'active',
-      }).success,
-    ).toBe(false);
-
-    expect(
-      entityFormSchema.safeParse({ name: 'Valid Name', status: 'invalid' }).success,
-    ).toBe(false);
-
-    expect(
-      entityFormSchema.safeParse({ name: 'Valid Name', status: 'draft', tags: 'a,b' }).success,
-    ).toBe(true);
-  });
-});
 
 describe('roleDefinitionFormSchema', () => {
   it('requires at least one permission and a valid name', () => {

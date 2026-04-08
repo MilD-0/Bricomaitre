@@ -14,6 +14,7 @@ import { assetBannerSchema, featuredProductGroupSchema, productCardSchema } from
 import { mutateEntityWithHistory } from '../../../../../lib/action-history';
 import { auth } from '../../../../../lib/auth';
 import { requireMutationAccess } from '../../../../../lib/rbac';
+import { revalidateStorefrontAssets } from '../../../../../lib/storefront-revalidate';
 
 type Database = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -85,6 +86,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ki
       actor,
       execute: (tx) => tx.update(assetBanners).set(updateValues).where(eq(assetBanners.id, numericId)),
     });
+    await revalidateStorefrontAssets();
     return NextResponse.json({ ok: true });
   }
 
@@ -96,6 +98,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ki
       actor,
       execute: (tx) => tx.update(featuredProductGroups).set(updateValues).where(eq(featuredProductGroups.id, numericId)),
     });
+    await revalidateStorefrontAssets();
     return NextResponse.json({ ok: true });
   }
 
@@ -111,6 +114,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ki
       actor,
       execute: (tx) => tx.update(productCards).set(updateValues).where(eq(productCards.id, numericId)),
     });
+    await revalidateStorefrontAssets();
     return NextResponse.json({ ok: true });
   }
 
@@ -147,6 +151,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ kind
       actor,
       execute: (tx) => tx.update(assetBanners).set({ ...parsed.data, updatedAt: new Date() }).where(eq(assetBanners.id, numericId)),
     });
+    await revalidateStorefrontAssets();
     return NextResponse.json({ ok: true });
   }
 
@@ -166,6 +171,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ kind
           .update(featuredProductGroups)
           .set({
             name: parsed.data.name,
+            nameAr: parsed.data.nameAr,
             cta: parsed.data.cta,
             ctaAr: parsed.data.ctaAr,
             link: parsed.data.link,
@@ -179,6 +185,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ kind
       },
     });
 
+    await revalidateStorefrontAssets();
     return NextResponse.json({ ok: true });
   }
 
@@ -195,6 +202,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ kind
       actor,
       execute: (tx) => tx.update(productCards).set({ ...parsed.data, updatedAt: new Date() }).where(eq(productCards.id, numericId)),
     });
+    await revalidateStorefrontAssets();
     return NextResponse.json({ ok: true });
   }
 
@@ -225,6 +233,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ kin
       actor,
       execute: (tx) => tx.delete(assetBanners).where(eq(assetBanners.id, numericId)),
     });
+    await revalidateStorefrontAssets();
     return NextResponse.json({ ok: true });
   }
 
@@ -244,6 +253,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ kin
         await tx.delete(featuredProductGroups).where(eq(featuredProductGroups.id, numericId));
       },
     });
+    await revalidateStorefrontAssets();
     return NextResponse.json({ ok: true });
   }
 
@@ -255,6 +265,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ kin
       actor,
       execute: (tx) => tx.delete(productCards).where(eq(productCards.id, numericId)),
     });
+    await revalidateStorefrontAssets();
     return NextResponse.json({ ok: true });
   }
 

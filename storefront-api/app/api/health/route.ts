@@ -1,20 +1,20 @@
 import { NextResponse } from 'next/server';
 
-import { getStorefrontApiEnvHealth } from '../../../lib/env-health';
+import { getStorefrontApiHealth } from '../../../lib/health';
 import { getRequestId, withRequestIdHeaders } from '../../../lib/sentry';
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
-  const env = getStorefrontApiEnvHealth();
+  const health = await getStorefrontApiHealth();
 
   return NextResponse.json({
-    status: env.ok ? 'ok' : 'degraded',
+    status: health.ok ? 'ok' : 'degraded',
     service: 'storefront-api',
     timestamp: new Date().toISOString(),
-    checks: env.checks,
-    missingEnv: env.missing,
+    checks: health.checks,
+    missingEnv: health.missingEnv,
   }, {
-    status: env.ok ? 200 : 503,
+    status: health.ok ? 200 : 503,
     headers: withRequestIdHeaders(requestId),
   });
 }

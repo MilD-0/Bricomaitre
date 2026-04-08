@@ -26,7 +26,6 @@ import {
   type CategoryRow,
   type CategoryUpdateValues,
 } from '../lib/brands-categories';
-import { useLiveUpdates } from '../lib/live';
 import { slugify } from '../lib/slug';
 import { toast } from '../lib/toast';
 import { Button } from './ui/button';
@@ -403,8 +402,6 @@ export function BrandsManager() {
   const [isFilterPending, startFilterTransition] = useTransition();
   const hydratedRef = useRef(false);
 
-  useLiveUpdates('brands');
-
   const form = useForm<BrandFormInput>({
     resolver: zodResolver(brandFormSchema),
     defaultValues: brandFormDefaults,
@@ -415,7 +412,7 @@ export function BrandsManager() {
     queryKey: ['brands-table', page, deferredSearch],
     queryFn: async () =>
       brandsListResponseSchema.parse(
-        await request(`/api/entities/brands?page=${page}&limit=50&search=${encodeURIComponent(deferredSearch)}`),
+        await request(`/api/brands?page=${page}&limit=50&search=${encodeURIComponent(deferredSearch)}`),
       ),
     initialData: { writable: false, items: [], pagination: { page: 1, limit: 50, totalItems: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false } },
     initialDataUpdatedAt: 0,
@@ -426,7 +423,7 @@ export function BrandsManager() {
   useEffect(() => {
     const stored = readStorage<{ dialogState: BrandDialogState; values: BrandFormInput }>(BRAND_DIALOG_STORAGE_KEY);
     if (stored) {
-      setDialogState(stored.dialogState);
+      queueMicrotask(() => setDialogState(stored.dialogState));
       form.reset(stored.values);
     }
     hydratedRef.current = true;
@@ -466,7 +463,7 @@ export function BrandsManager() {
 
   const updateMutation = useMutation<unknown, Error, BrandUpdateMutationVariables, MutationContext<BrandsListResponse>>({
     mutationFn: ({ id, values }) =>
-      request(`/api/entities/brands/${id}`, { method: 'PATCH', body: JSON.stringify(values) }),
+      request(`/api/brands/${id}`, { method: 'PATCH', body: JSON.stringify(values) }),
     onMutate: async ({ id, values, messages }) => {
       await queryClient.cancelQueries({ queryKey: ['brands-table'] });
       const snapshot = captureQueries<BrandsListResponse>(queryClient, ['brands-table']);
@@ -507,7 +504,7 @@ export function BrandsManager() {
 
   const createMutation = useMutation<unknown, Error, BrandCreateMutationVariables, MutationContext<BrandsListResponse>>({
     mutationFn: ({ values }) =>
-      request('/api/entities/brands', { method: 'POST', body: JSON.stringify(values) }),
+      request('/api/brands', { method: 'POST', body: JSON.stringify(values) }),
     onMutate: async ({ values, messages }) => {
       await queryClient.cancelQueries({ queryKey: ['brands-table'] });
       const snapshot = captureQueries<BrandsListResponse>(queryClient, ['brands-table']);
@@ -563,7 +560,7 @@ export function BrandsManager() {
 
   const bulkStatusMutation = useMutation<unknown, Error, BrandBulkStatusMutationVariables, MutationContext<BrandsListResponse>>({
     mutationFn: async ({ ids, status }) =>
-      Promise.all(ids.map((id) => request(`/api/entities/brands/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }))),
+      Promise.all(ids.map((id) => request(`/api/brands/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }))),
     onMutate: async ({ ids, status, messages }) => {
       await queryClient.cancelQueries({ queryKey: ['brands-table'] });
       const snapshot = captureQueries<BrandsListResponse>(queryClient, ['brands-table']);
@@ -593,7 +590,7 @@ export function BrandsManager() {
   });
 
   const deleteMutation = useMutation<unknown, Error, BrandDeleteMutationVariables, MutationContext<BrandsListResponse>>({
-    mutationFn: async ({ ids }) => Promise.all(ids.map((id) => request(`/api/entities/brands/${id}`, { method: 'DELETE' }))),
+    mutationFn: async ({ ids }) => Promise.all(ids.map((id) => request(`/api/brands/${id}`, { method: 'DELETE' }))),
     onMutate: async ({ ids, messages }) => {
       await queryClient.cancelQueries({ queryKey: ['brands-table'] });
       const snapshot = captureQueries<BrandsListResponse>(queryClient, ['brands-table']);
@@ -877,8 +874,6 @@ export function CategoriesManager() {
   const [isFilterPending, startFilterTransition] = useTransition();
   const hydratedRef = useRef(false);
 
-  useLiveUpdates('categories');
-
   const form = useForm<CategoryFormInput>({
     resolver: zodResolver(categoryFormSchema),
     defaultValues: categoryFormDefaults,
@@ -890,7 +885,7 @@ export function CategoriesManager() {
     queryFn: async () =>
       categoriesListResponseSchema.parse(
         await request(
-          `/api/entities/categories?page=${page}&limit=50&search=${encodeURIComponent(deferredSearch)}${dialogState.open ? '&includeParentOptions=1' : ''}`,
+          `/api/categories?page=${page}&limit=50&search=${encodeURIComponent(deferredSearch)}${dialogState.open ? '&includeParentOptions=1' : ''}`,
         ),
       ),
     initialData: {
@@ -907,7 +902,7 @@ export function CategoriesManager() {
   useEffect(() => {
     const stored = readStorage<{ dialogState: CategoryDialogState; values: CategoryFormInput }>(CATEGORY_DIALOG_STORAGE_KEY);
     if (stored) {
-      setDialogState(stored.dialogState);
+      queueMicrotask(() => setDialogState(stored.dialogState));
       form.reset(stored.values);
     }
     hydratedRef.current = true;
@@ -949,7 +944,7 @@ export function CategoriesManager() {
 
   const updateMutation = useMutation<unknown, Error, CategoryUpdateMutationVariables, MutationContext<CategoriesListResponse>>({
     mutationFn: ({ id, values }) =>
-      request(`/api/entities/categories/${id}`, { method: 'PATCH', body: JSON.stringify(values) }),
+      request(`/api/categories/${id}`, { method: 'PATCH', body: JSON.stringify(values) }),
     onMutate: async ({ id, values, messages }) => {
       await queryClient.cancelQueries({ queryKey: ['categories-table'] });
       const snapshot = captureQueries<CategoriesListResponse>(queryClient, ['categories-table']);
@@ -997,7 +992,7 @@ export function CategoriesManager() {
 
   const createMutation = useMutation<unknown, Error, CategoryCreateMutationVariables, MutationContext<CategoriesListResponse>>({
     mutationFn: ({ values }) =>
-      request('/api/entities/categories', { method: 'POST', body: JSON.stringify(values) }),
+      request('/api/categories', { method: 'POST', body: JSON.stringify(values) }),
     onMutate: async ({ values, messages }) => {
       await queryClient.cancelQueries({ queryKey: ['categories-table'] });
       const snapshot = captureQueries<CategoriesListResponse>(queryClient, ['categories-table']);
@@ -1059,7 +1054,7 @@ export function CategoriesManager() {
 
   const bulkStatusMutation = useMutation<unknown, Error, CategoryBulkStatusMutationVariables, MutationContext<CategoriesListResponse>>({
     mutationFn: async ({ ids, status }) =>
-      Promise.all(ids.map((id) => request(`/api/entities/categories/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }))),
+      Promise.all(ids.map((id) => request(`/api/categories/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }))),
     onMutate: async ({ ids, status, messages }) => {
       await queryClient.cancelQueries({ queryKey: ['categories-table'] });
       const snapshot = captureQueries<CategoriesListResponse>(queryClient, ['categories-table']);
@@ -1089,7 +1084,7 @@ export function CategoriesManager() {
   });
 
   const deleteMutation = useMutation<unknown, Error, CategoryDeleteMutationVariables, MutationContext<CategoriesListResponse>>({
-    mutationFn: async ({ ids }) => Promise.all(ids.map((id) => request(`/api/entities/categories/${id}`, { method: 'DELETE' }))),
+    mutationFn: async ({ ids }) => Promise.all(ids.map((id) => request(`/api/categories/${id}`, { method: 'DELETE' }))),
     onMutate: async ({ ids, messages }) => {
       await queryClient.cancelQueries({ queryKey: ['categories-table'] });
       const snapshot = captureQueries<CategoriesListResponse>(queryClient, ['categories-table']);

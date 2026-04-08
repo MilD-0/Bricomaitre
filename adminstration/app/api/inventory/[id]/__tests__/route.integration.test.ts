@@ -117,13 +117,9 @@ describe('app/api/inventory/[id]/route', () => {
 
     expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
       inventoryQuantity: 2,
+      inStock: true,
+      availabilityStatus: 'in_stock',
       updatedAt: expect.any(Date),
-    }));
-    expect(setMock).not.toHaveBeenCalledWith(expect.objectContaining({
-      inStock: expect.anything(),
-    }));
-    expect(setMock).not.toHaveBeenCalledWith(expect.objectContaining({
-      availabilityStatus: expect.anything(),
     }));
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({

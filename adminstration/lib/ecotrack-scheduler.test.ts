@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { scheduleMock, validateMock, startEcotrackSyncJobMock } = vi.hoisted(() => ({
+const { scheduleMock, validateMock, startEcotrackSyncJobMock, startEcotrackShipmentSyncJobMock } = vi.hoisted(() => ({
   scheduleMock: vi.fn(),
   validateMock: vi.fn(),
   startEcotrackSyncJobMock: vi.fn(),
+  startEcotrackShipmentSyncJobMock: vi.fn(),
 }));
 
 vi.mock('node-cron', () => ({
@@ -15,6 +16,7 @@ vi.mock('node-cron', () => ({
 
 vi.mock('./background-jobs', () => ({
   startEcotrackSyncJob: startEcotrackSyncJobMock,
+  startEcotrackShipmentSyncJob: startEcotrackShipmentSyncJobMock,
 }));
 
 describe('lib/ecotrack-scheduler', () => {
@@ -23,10 +25,12 @@ describe('lib/ecotrack-scheduler', () => {
     scheduleMock.mockReset();
     validateMock.mockReset();
     startEcotrackSyncJobMock.mockReset();
+    startEcotrackShipmentSyncJobMock.mockReset();
 
     validateMock.mockReturnValue(true);
     scheduleMock.mockReturnValue({ stop: vi.fn() });
     startEcotrackSyncJobMock.mockResolvedValue({ kind: 'started', job: { id: 'job-1', status: 'queued' } });
+    startEcotrackShipmentSyncJobMock.mockResolvedValue({ kind: 'started', job: { id: 'job-2', status: 'queued' } });
 
     vi.stubEnv('NODE_ENV', 'development');
     delete process.env.ECOTRACK_SYNC_CRON;
@@ -34,14 +38,20 @@ describe('lib/ecotrack-scheduler', () => {
   });
 
   it('registers the scheduler only once', async () => {
-    const { resetEcotrackSchedulerForTests, startEcotrackScheduler, DEFAULT_ECOTRACK_SYNC_CRON } = await import('./ecotrack-scheduler');
+    const {
+      resetEcotrackSchedulerForTests,
+      startEcotrackScheduler,
+      DEFAULT_ECOTRACK_SYNC_CRON,
+      DEFAULT_ECOTRACK_SHIPMENT_SYNC_CRON,
+    } = await import('./ecotrack-scheduler');
 
     resetEcotrackSchedulerForTests();
     startEcotrackScheduler();
     startEcotrackScheduler();
 
     expect(validateMock).toHaveBeenCalledWith(DEFAULT_ECOTRACK_SYNC_CRON);
-    expect(scheduleMock).toHaveBeenCalledTimes(1);
+    expect(validateMock).toHaveBeenCalledWith(DEFAULT_ECOTRACK_SHIPMENT_SYNC_CRON);
+    expect(scheduleMock).toHaveBeenCalledTimes(2);
   });
 
   it('runs the sync job when the scheduler entrypoint is invoked', async () => {

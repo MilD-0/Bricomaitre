@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrdersManager } from './orders-manager';
 import { server } from '../test/mocks/server';
 
-const { toastMock, xlsxMock } = vi.hoisted(() => ({
+  const { toastMock, xlsxMock } = vi.hoisted(() => ({
   toastMock: {
     loading: vi.fn(() => 'toast-id'),
     success: vi.fn(),
@@ -45,14 +45,14 @@ vi.mock('xlsx', () => ({
   writeFile: xlsxMock.writeFile,
 }));
 
-function renderOrdersManager() {
+function renderOrdersManager(props?: Parameters<typeof OrdersManager>[0]) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <OrdersManager />
+      <OrdersManager {...props} />
     </QueryClientProvider>,
   );
 }
@@ -126,6 +126,7 @@ describe('OrdersManager', () => {
         lastSync: null,
       })),
       http.get('/api/orders/export', () => HttpResponse.json({ job: null })),
+      http.get('/api/orders/ecotrack', () => HttpResponse.json({ job: null })),
     );
     toastMock.loading.mockClear();
     toastMock.success.mockClear();
@@ -237,9 +238,11 @@ describe('OrdersManager', () => {
 
     await userEvent.type(screen.getByPlaceholderText('ordersManager.searchPlaceholder'), '0550000002');
 
-    expect(screen.queryAllByText('Ada Lovelace')).toHaveLength(0);
-    expect(screen.getAllByText('Grace Hopper').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Alger').length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(screen.queryAllByText('Ada Lovelace')).toHaveLength(0);
+      expect(screen.getAllByText('Grace Hopper').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Alger').length).toBeGreaterThan(0);
+    });
   });
 
   it('keeps previous rows visible while a filtered refetch is pending', async () => {
@@ -1162,16 +1165,28 @@ describe('OrdersManager', () => {
 
     renderOrdersManager();
 
-    expect(await screen.findByRole('combobox', { name: 'ordersManager.filters.statusLabel' })).toBeInTheDocument();
-    expect(await screen.findByRole('combobox', { name: 'ordersManager.bulk.statusLabel' })).toBeInTheDocument();
+    const statusFilter = await screen.findByRole('combobox', { name: 'ordersManager.filters.statusLabel' });
+    const bulkStatus = await screen.findByRole('combobox', { name: 'ordersManager.bulk.statusLabel' });
+    const applyButton = screen.getByRole('button', { name: 'ordersManager.bulk.applyStatus' });
+
+    expect(statusFilter).toBeInTheDocument();
+    expect(bulkStatus).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'ordersManager.bulk.applyStatus' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'ordersManager.export.selectedAction' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'ordersManager.export.confirmedAction' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'ordersManager.shoppingList.selectedAction' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'ordersManager.shoppingList.dispatchedAction' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ordersManager.ecotrack.confirmedAction' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ordersManager.shoppingList.confirmedAction' })).toBeInTheDocument();
+    expect(statusFilter.closest('div.flex')).toContainElement(applyButton);
+
+    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.ecotrack.confirmedAction menu' }))[0]);
+    expect(screen.getByRole('menuitem', { name: 'ordersManager.export.selectedAction' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'ordersManager.export.confirmedAction' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'ordersManager.ecotrack.selectedAction' })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'ordersManager.shoppingList.confirmedAction menu' }));
+    expect(screen.getByRole('menuitem', { name: 'ordersManager.shoppingList.selectedAction' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'ordersManager.shoppingList.dispatchedAction' })).toBeInTheDocument();
   });
 
-  it('exports confirmed orders and marks them as dispatched', async () => {
+  it('opens the confirmed ecotrack preview from the split button primary action', async () => {
     const confirmedItems = [
       {
         id: 21,
@@ -1203,16 +1218,12 @@ describe('OrdersManager', () => {
         statusHistory: [],
       },
     ];
-    const exportBodies: Array<Record<string, unknown>> = [];
+    const previewBodies: Array<Record<string, unknown>> = [];
 
     server.use(
-      http.get('/api/ecotrack/catalog', () => HttpResponse.json({
-        wilayas: [{ wilayaId: 16, name: 'Alger' }],
-        communes: [{ communeId: 42, wilayaId: 16, name: 'Bab Ezzouar', postalCode: '1621', hasStopDesk: true }],
-        serviceFees: [{ serviceType: 'livraison', wilayaId: 16, homeFee: '200', stopDeskFee: '150' }],
-        weightFees: [],
-        lastSync: null,
-      })),
+      http.get('/api/ecotrack/catalog', () => HttpResponse.json({ wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null })),
+      http.get('/api/orders/export', () => HttpResponse.json({ job: null })),
+      http.get('/api/orders/ecotrack', () => HttpResponse.json({ job: null })),
       http.get('/api/orders', ({ request }) => {
         const url = new URL(request.url);
         if (url.searchParams.get('confirmed') === '2') {
@@ -1225,36 +1236,46 @@ describe('OrdersManager', () => {
 
         return HttpResponse.json(paginatedOrdersResponse([], request.url));
       }),
-      http.get('/api/orders/export', () => HttpResponse.json({ job: null })),
-      http.post('/api/orders/export', async ({ request }) => {
-        exportBodies.push(await request.json() as Record<string, unknown>);
+      http.post('/api/orders/ecotrack/preview', async ({ request }) => {
+        previewBodies.push(await request.json() as Record<string, unknown>);
         return HttpResponse.json({
-          job: {
-            id: 'job-1',
-            status: 'queued',
-            fileName: 'confirmed-orders-export-20260331-120000.xlsx',
-            progress: { phase: 'queued', current: 0, total: 0, percentage: 0 },
-            errorMessage: null,
-            downloadPath: null,
-          },
+          totalRequested: 1,
+          eligible: [{
+            orderId: 21,
+            customerName: 'Grace Hopper',
+            destination: 'Alger',
+            amount: '1200',
+            payload: {
+              reference: '21',
+              nom_client: 'Grace Hopper',
+              telephone: '0550000021',
+              adresse: 'Street 21',
+              commune: 'Bab Ezzouar',
+              code_wilaya: '16',
+              montant: '1200',
+              type: '1',
+              stop_desk: 0,
+            },
+          }],
+          skipped: [],
+          invalid: [],
         });
       }),
     );
 
     renderOrdersManager();
 
-    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.export.confirmedAction' }))[0]);
-
-    expect(await screen.findByText('Grace Hopper')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'ordersManager.export.confirmAndDispatch' }));
+    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.ecotrack.confirmedAction' }))[0]);
 
     await waitFor(() => {
-      expect(exportBodies).toContainEqual({ mode: 'confirmed', orderIds: [21] });
+      expect(previewBodies).toContainEqual({ mode: 'confirmed', orderIds: [21] });
     });
+    expect((await screen.findAllByText(/Grace Hopper/)).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'ordersManager.ecotrack.confirm' })).toBeInTheDocument();
   });
 
-  it('builds a shopping list for dispatched orders and opens a print view', async () => {
-    const dispatchedItems = [
+  it('builds a confirmed shopping list draft, supports edits, and prints the edited draft', async () => {
+    const confirmedItems = [
       {
         id: 31,
         createdAt: '2026-03-01T10:00:00.000Z',
@@ -1313,13 +1334,13 @@ describe('OrdersManager', () => {
         statusHistory: [],
       },
     ];
-    const dispatchedOrdersResponse = {
+    const confirmedOrdersResponse = {
       writable: true,
-      items: dispatchedItems,
+      items: confirmedItems,
       pagination: {
         page: 1,
         limit: 100,
-        totalItems: dispatchedItems.length,
+        totalItems: confirmedItems.length,
         totalPages: 1,
         hasNextPage: false,
         hasPreviousPage: false,
@@ -1339,30 +1360,43 @@ describe('OrdersManager', () => {
     };
 
     server.use(
-      http.get('/api/ecotrack/catalog', () => HttpResponse.json({
-        wilayas: [{ wilayaId: 16, name: 'Alger' }],
-        communes: [{ communeId: 42, wilayaId: 16, name: 'Bab Ezzouar', postalCode: '1621', hasStopDesk: true }],
-        serviceFees: [{ serviceType: 'livraison', wilayaId: 16, homeFee: '200', stopDeskFee: '150' }],
-        weightFees: [],
-        lastSync: null,
-      })),
+      http.get('/api/ecotrack/catalog', () => HttpResponse.json({ wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null })),
+      http.get('/api/orders/export', () => HttpResponse.json({ job: null })),
+      http.get('/api/orders/ecotrack', () => HttpResponse.json({ job: null })),
       http.get('/api/orders', ({ request }) => {
         const url = new URL(request.url);
-        if (url.searchParams.get('confirmed') === '3') {
-          return HttpResponse.json(dispatchedOrdersResponse);
+        if (url.searchParams.get('confirmed') === '2') {
+          return HttpResponse.json(confirmedOrdersResponse);
         }
 
         return HttpResponse.json(emptyOrdersResponse);
       }),
+      http.get('/api/products', ({ request }) => {
+        const url = new URL(request.url);
+        if ((url.searchParams.get('search') ?? '').toLowerCase().includes('lamp')) {
+          return HttpResponse.json({
+            items: [{
+              id: 3,
+              title: 'Lamp',
+              price: 900,
+              images: ['https://cdn.example.com/lamp.jpg'],
+            }],
+          });
+        }
+
+        return HttpResponse.json({ items: [] });
+      }),
       http.get('/api/brands/9', () => HttpResponse.json({ id: 9, name: 'Acme' })),
       http.get('/api/brands/10', () => HttpResponse.json({ id: 10, name: 'Globex' })),
+      http.get('/api/brands/11', () => HttpResponse.json({ id: 11, name: 'Nova' })),
       http.get('/api/products/1', () => HttpResponse.json({ item: { id: 1, inventoryQuantity: 5 } })),
       http.get('/api/products/2', () => HttpResponse.json({ item: { id: 2, inventoryQuantity: 0 } })),
+      http.get('/api/products/3', () => HttpResponse.json({ item: { id: 3, title: 'Lamp', brandId: 11, inventoryQuantity: 7, images: ['https://cdn.example.com/lamp.jpg'] } })),
     );
 
     renderOrdersManager();
 
-    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.shoppingList.dispatchedAction' }))[0]);
+    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.shoppingList.confirmedAction' }))[0]);
 
     expect(await screen.findByText('Acme')).toBeInTheDocument();
     expect(screen.getByText('Chair x2')).toBeInTheDocument();
@@ -1370,6 +1404,17 @@ describe('OrdersManager', () => {
     expect(screen.getAllByText(/Handle gently/).length).toBeGreaterThan(0);
     expect(screen.getByText('Chair x2').closest('div.rounded-lg')).toHaveClass('bg-emerald-50');
     expect(screen.getAllByRole('img', { name: 'Chair' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Acme / Chair x1').length).toBeGreaterThan(0);
+
+    await userEvent.click(screen.getByRole('button', { name: 'ordersManager.shoppingList.increaseQuantity:Chair' }));
+    expect(screen.getByText('Chair x3')).toBeInTheDocument();
+    expect(screen.getAllByText('Acme / Chair x1').length).toBeGreaterThan(0);
+
+    const searchInput = screen.getByPlaceholderText('ordersManager.shoppingList.addProductPlaceholder');
+    await userEvent.type(searchInput, 'Lamp');
+    await userEvent.click(await screen.findByRole('button', { name: 'ordersManager.shoppingList.addProductAction' }));
+    expect(await screen.findByText('Lamp x1')).toBeInTheDocument();
+    expect(screen.getByText('ordersManager.shoppingList.customItem')).toBeInTheDocument();
 
     const openDocumentSpy = vi.fn();
     const writeDocumentSpy = vi.fn();
@@ -1385,5 +1430,39 @@ describe('OrdersManager', () => {
     expect(printWindowSpy).toHaveBeenCalled();
     expect(openDocumentSpy).toHaveBeenCalled();
     expect(writeDocumentSpy).toHaveBeenCalledWith(expect.stringContaining('https://cdn.example.com/chair.jpg'));
+    expect(writeDocumentSpy).toHaveBeenCalledWith(expect.stringContaining('Lamp'));
+    expect(writeDocumentSpy).toHaveBeenCalledWith(expect.stringContaining('Inventory decrease: 3'));
     expect(closeDocumentSpy).toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'ordersManager.shoppingList.reset' }));
+    await waitFor(() => {
+      expect(screen.getByText('Chair x2')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Lamp x1')).not.toBeInTheDocument();
+  });
+
+  it('shows confirmed and dispatched empty-state toasts for generated shopping lists and exports', async () => {
+    server.use(
+      http.get('/api/ecotrack/catalog', () => HttpResponse.json({ wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null })),
+      http.get('/api/orders/export', () => HttpResponse.json({ job: null })),
+      http.get('/api/orders/ecotrack', () => HttpResponse.json({ job: null })),
+      http.get('/api/orders', () => HttpResponse.json({
+        writable: true,
+        items: [],
+        pagination: { page: 1, limit: 100, totalItems: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+      })),
+    );
+
+    renderOrdersManager();
+
+    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.shoppingList.confirmedAction' }))[0]);
+    expect(toastMock.error).toHaveBeenCalledWith('ordersManager.shoppingList.emptyConfirmed', { id: 'toast-id' });
+
+    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.shoppingList.confirmedAction menu' }))[0]);
+    await userEvent.click(screen.getByRole('menuitem', { name: 'ordersManager.shoppingList.dispatchedAction' }));
+    expect(toastMock.error).toHaveBeenCalledWith('ordersManager.shoppingList.emptyDispatched', { id: 'toast-id' });
+
+    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.ecotrack.confirmedAction menu' }))[0]);
+    await userEvent.click(screen.getByRole('menuitem', { name: 'ordersManager.export.confirmedAction' }));
+    expect(toastMock.error).toHaveBeenCalledWith('ordersManager.export.emptyConfirmed', { id: 'toast-id' });
   });

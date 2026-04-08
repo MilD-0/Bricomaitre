@@ -16,9 +16,7 @@ import {
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
 import { useForm, useWatch } from 'react-hook-form';
-import remarkGfm from 'remark-gfm';
 
 import {
   type BulletinAttachment,
@@ -40,6 +38,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field, FieldContent, FieldLabel } from './ui/field';
 import { FileUploadField } from './file-upload-field';
 import { Input } from './ui/input';
+import { Markdown } from './ui/markdown';
 import { NativeSelect, NativeSelectOption } from './ui/native-select';
 import { Separator } from './ui/separator';
 import { Textarea } from './ui/textarea';
@@ -1227,16 +1226,7 @@ function BulletinPostCard({
         </div>
       </div>
 
-      <div className="prose prose-sm max-w-none text-foreground prose-p:leading-6 prose-pre:overflow-x-auto">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            a: ({ ...props }) => <a {...props} className="text-primary underline" target="_blank" rel="noreferrer" />,
-          }}
-        >
-          {post.body}
-        </ReactMarkdown>
-      </div>
+      <Markdown>{post.body}</Markdown>
 
       {post.attachments.length > 0 ? (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -1335,16 +1325,7 @@ function BulletinPostCard({
                     </Button>
                   ) : null}
                 </div>
-                <div className="prose prose-sm mt-3 max-w-none text-foreground prose-p:leading-6">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      a: ({ ...props }) => <a {...props} className="text-primary underline" target="_blank" rel="noreferrer" />,
-                    }}
-                  >
-                    {reply.body}
-                  </ReactMarkdown>
-                </div>
+                <Markdown className="mt-3">{reply.body}</Markdown>
                 <div className="mt-3">
                   <ReactionRow
                     currentUserId={currentUserId}

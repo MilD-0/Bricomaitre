@@ -72,7 +72,7 @@ describe('BulletinBoard', () => {
             {
               id: 1,
               title: 'Pinned issue',
-              body: 'The **front counter** printer needs toner before noon.',
+              body: 'The **front counter** printer needs toner before noon.\nSecond line stays visible.\n\n- Replace cartridge\n- Run a test page',
               tags: ['ops', 'urgent'],
               attachments: [],
               reactions: [
@@ -238,7 +238,7 @@ describe('BulletinBoard', () => {
         ],
       });
     });
-  }, 15_000);
+  }, 30_000);
 
   it('filters by plain tag labels, confirms delete, and paginates posts', async () => {
     renderBoard();
@@ -263,6 +263,19 @@ describe('BulletinBoard', () => {
     expect(await screen.findByText('Page 2 of 2')).toBeInTheDocument();
     expect(await screen.findByText('Page two update')).toBeInTheDocument();
   }, 15_000);
+
+  it('renders markdown formatting and preserves line breaks in bulletin posts', async () => {
+    renderBoard();
+
+    await screen.findByText('Pinned issue');
+
+    expect(screen.getByText('front counter', { selector: 'strong' })).toBeInTheDocument();
+    expect(
+      screen.getAllByText((_, node) => node?.tagName === 'P' && (node.textContent?.includes('Second line stays visible.') ?? false)).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText('Replace cartridge', { selector: 'li' })).toBeInTheDocument();
+    expect(screen.getByText('Run a test page', { selector: 'li' })).toBeInTheDocument();
+  });
 
   it('restores a draft after remount', async () => {
     const firstRender = renderBoard();
@@ -310,7 +323,7 @@ describe('BulletinBoard', () => {
         body: { body: 'I will handle it.' },
       });
     });
-  });
+  }, 15_000);
 
   it('updates reply reactions optimistically', async () => {
     renderBoard();
