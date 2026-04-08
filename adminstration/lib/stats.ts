@@ -426,7 +426,7 @@ type WebsiteSearchRow = {
 };
 
 type WebsiteTopProductRow = {
-  id: string;
+  id: number;
   title: string;
   sku: string | null;
   categoryName: string | null;
@@ -440,7 +440,7 @@ type WebsiteTopProductRow = {
 };
 
 type WebsiteMetricRow = {
-  id: string;
+  id: number;
   viewCount: number;
   addToCartCount: number;
   checkoutCount: number;
@@ -450,31 +450,6 @@ type WebsiteMetricRow = {
 };
 
 async function getWebsiteAnalyticsData(db: ReturnType<typeof getDb>, analyticsWhere: ReturnType<typeof buildAnalyticsWhere>) {
-  const emptyWebsiteAnalytics = {
-    websiteSummaryRows: [] as WebsiteSummaryRow[],
-    websiteLandingRows: [] as WebsiteLandingRow[],
-    websiteSearchRows: [] as WebsiteSearchRow[],
-    websiteTopProductRows: [] as WebsiteTopProductRow[],
-    websiteMetricRows: [] as WebsiteMetricRow[],
-  };
-
-  const analyticsTableCheck = await db.execute(sql`
-    select to_regclass('analytics_events') is not null as "analyticsEventsExists"
-  `);
-  const analyticsEventsExists = Boolean(analyticsTableCheck.rows[0]?.analyticsEventsExists);
-
-  if (!analyticsEventsExists) {
-    return emptyWebsiteAnalytics;
-  }
-
-  const productAnalyticsColumnsCheck = await db.execute(sql`
-    select count(*)::int as "columnCount"
-    from information_schema.columns
-    where table_name = 'products'
-      and column_name in ('view_count', 'add_to_cart_count', 'checkout_count', 'purchase_count', 'popularity_score', 'conversion_rate')
-  `);
-  const productAnalyticsColumnsExist = Number(productAnalyticsColumnsCheck.rows[0]?.columnCount ?? 0) === 6;
-
   const [
     websiteSummaryRows,
     websiteLandingRows,
@@ -524,41 +499,37 @@ async function getWebsiteAnalyticsData(db: ReturnType<typeof getDb>, analyticsWh
       .groupBy(sql`1`)
       .orderBy(sql`2 desc`)
       .limit(8),
-    productAnalyticsColumnsExist
-      ? db
-        .select({
-          id: products.id,
-          title: products.title,
-          sku: products.sku,
-          categoryName: categories.name,
-          brandName: brands.name,
-          viewCount: sql<number>`coalesce(${products.viewCount}, 0)::int`,
-          addToCartCount: sql<number>`coalesce(${products.addToCartCount}, 0)::int`,
-          checkoutCount: sql<number>`coalesce(${products.checkoutCount}, 0)::int`,
-          websitePurchaseCount: sql<number>`coalesce(${products.purchaseCount}, 0)::int`,
-          popularityScore: sql<number>`coalesce(${products.popularityScore}, 0)::double precision`,
-          websiteConversionRate: sql<number>`coalesce(${products.conversionRate}, 0)::double precision`,
-        })
-        .from(products)
-        .leftJoin(categories, eq(products.categoryId, categories.id))
-        .leftJoin(brands, eq(products.brandId, brands.id))
-        .where(sql`${products.viewCount} > 0 or ${products.addToCartCount} > 0 or ${products.purchaseCount} > 0`)
-        .orderBy(sql`${products.popularityScore} desc`)
-        .limit(8)
-      : Promise.resolve([] as WebsiteTopProductRow[]),
-    productAnalyticsColumnsExist
-      ? db
-        .select({
-          id: products.id,
-          viewCount: sql<number>`coalesce(${products.viewCount}, 0)::int`,
-          addToCartCount: sql<number>`coalesce(${products.addToCartCount}, 0)::int`,
-          checkoutCount: sql<number>`coalesce(${products.checkoutCount}, 0)::int`,
-          websitePurchaseCount: sql<number>`coalesce(${products.purchaseCount}, 0)::int`,
-          popularityScore: sql<number>`coalesce(${products.popularityScore}, 0)::double precision`,
-          websiteConversionRate: sql<number>`coalesce(${products.conversionRate}, 0)::double precision`,
-        })
-        .from(products)
-      : Promise.resolve([] as WebsiteMetricRow[]),
+    db
+      .select({
+        id: products.id,
+        title: products.title,
+        sku: products.sku,
+        categoryName: categories.name,
+        brandName: brands.name,
+        viewCount: sql<number>`coalesce(${products.viewCount}, 0)::int`,
+        addToCartCount: sql<number>`coalesce(${products.addToCartCount}, 0)::int`,
+        checkoutCount: sql<number>`coalesce(${products.checkoutCount}, 0)::int`,
+        websitePurchaseCount: sql<number>`coalesce(${products.purchaseCount}, 0)::int`,
+        popularityScore: sql<number>`coalesce(${products.popularityScore}, 0)::double precision`,
+        websiteConversionRate: sql<number>`coalesce(${products.conversionRate}, 0)::double precision`,
+      })
+      .from(products)
+      .leftJoin(categories, eq(products.categoryId, categories.id))
+      .leftJoin(brands, eq(products.brandId, brands.id))
+      .where(sql`${products.viewCount} > 0 or ${products.addToCartCount} > 0 or ${products.purchaseCount} > 0`)
+      .orderBy(sql`${products.popularityScore} desc`)
+      .limit(8),
+    db
+      .select({
+        id: products.id,
+        viewCount: sql<number>`coalesce(${products.viewCount}, 0)::int`,
+        addToCartCount: sql<number>`coalesce(${products.addToCartCount}, 0)::int`,
+        checkoutCount: sql<number>`coalesce(${products.checkoutCount}, 0)::int`,
+        websitePurchaseCount: sql<number>`coalesce(${products.purchaseCount}, 0)::int`,
+        popularityScore: sql<number>`coalesce(${products.popularityScore}, 0)::double precision`,
+        websiteConversionRate: sql<number>`coalesce(${products.conversionRate}, 0)::double precision`,
+      })
+      .from(products),
   ]);
 
   return {

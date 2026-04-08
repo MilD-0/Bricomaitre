@@ -3,6 +3,7 @@ const STOREFRONT_API_REQUIRED_ENV_VARS = [
   'REDIS_HOST',
   'ECOTRACK_BASE_URL',
   'ECOTRACK_TOKEN',
+  'STOREFRONT_REVALIDATE_SECRET',
 ] as const;
 
 export function getMissingStorefrontApiEnvVars(env: NodeJS.ProcessEnv = process.env) {
@@ -27,6 +28,7 @@ export function getStorefrontApiEnvHealth(env: NodeJS.ProcessEnv = process.env) 
       databaseConfigured: Boolean(env.DATABASE_URL?.trim()),
       redisConfigured: Boolean(env.REDIS_URL?.trim() || env.REDIS_HOST?.trim()),
       ecotrackConfigured: Boolean(env.ECOTRACK_BASE_URL?.trim() && env.ECOTRACK_TOKEN?.trim()),
+      revalidationConfigured: Boolean(env.STOREFRONT_REVALIDATE_SECRET?.trim()),
     },
   };
 }

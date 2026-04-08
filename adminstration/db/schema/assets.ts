@@ -19,6 +19,7 @@ export const assetBanners = pgTable(
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     title: text('title').notNull(),
+    titleAr: text('title_ar'),
     imageUrl: text('image_url').notNull(),
     productId: bigint('product_id', { mode: 'number' }).references(() => products.id, { onDelete: 'set null' }),
     sortOrder: integer('sort_order').notNull().default(0),
@@ -32,6 +33,7 @@ export const assetBanners = pgTable(
 export const featuredProductGroups = pgTable('featured_product_groups', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
   name: text('name').notNull(),
+  nameAr: text('name_ar'),
   cta: text('cta'),
   ctaAr: text('cta_ar'),
   link: text('link'),

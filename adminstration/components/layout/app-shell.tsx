@@ -104,12 +104,14 @@ export function AppShell({
   }, [initialPermissions, initialRole, initialRoleLabel, setAccess]);
 
   useEffect(() => {
-    setSidebarOpen(false);
+    queueMicrotask(() => setSidebarOpen(false));
   }, [pathname]);
 
   useEffect(() => {
-    setProfileOpen(false);
-    setPendingHref(null);
+    queueMicrotask(() => {
+      setProfileOpen(false);
+      setPendingHref(null);
+    });
   }, [currentHash, pathname]);
 
   useEffect(() => {
@@ -339,7 +341,7 @@ function SidebarNavItem({
 
   useEffect(() => {
     if (active) {
-      setOpen(true);
+      queueMicrotask(() => setOpen(true));
     }
   }, [active]);
 

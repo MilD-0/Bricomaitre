@@ -40,8 +40,51 @@ describe("app/api/orders/route", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "https://storefront-api.example.com/api/storefront/orders",
       expect.objectContaining({
+        headers: expect.objectContaining({
+          accept: "application/json",
+          "content-type": "application/json",
+        }),
         method: "POST",
         timeoutMs: 15_000,
+      }),
+    );
+  });
+
+  it("forwards the idempotency key to storefront-api", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      item: { id: 11, publicToken: "public-token" },
+    }), {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+      },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new Request("http://localhost/api/orders", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "submission-key",
+      },
+      body: JSON.stringify({
+        phoneNumber1: "0550123456",
+        cartProducts: ["1"],
+        delivery: "home",
+        state: 16,
+        city: "Algiers",
+      }),
+    });
+
+    await POST(request as never);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://storefront-api.example.com/api/storefront/orders",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "idempotency-key": "submission-key",
+        }),
       }),
     );
   });

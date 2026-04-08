@@ -4,6 +4,7 @@ import {
   fetchStorefrontBrands,
   findDeliveryFee,
   normalizeFeaturedGroup,
+  normalizeFeaturedGroupLink,
   type LegacyProduct,
 } from "./storefront-api";
 
@@ -14,16 +15,17 @@ describe("storefront-api upstream fallback logging", () => {
     delete process.env.NEXT_PHASE;
   });
 
-  it("fails fast during next production builds when storefront-api is unavailable", async () => {
+  it("keeps build-time read fallback logs when storefront-api is unavailable", async () => {
     process.env.NEXT_PHASE = "phase-production-build";
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED")));
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await expect(fetchStorefrontBrands()).rejects.toThrow(
+    await expect(fetchStorefrontBrands()).resolves.toEqual([]);
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[storefront] upstream request failed for /api/storefront/brands during build",
       "Storefront API is unavailable: /api/storefront/brands",
     );
-
-    expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 
   it("keeps runtime upstream fallback logs outside the build phase", async () => {
@@ -33,7 +35,7 @@ describe("storefront-api upstream fallback logging", () => {
     await expect(fetchStorefrontBrands()).resolves.toEqual([]);
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "[storefront] upstream request failed for /api/storefront/brands",
+      "[storefront] upstream request failed for /api/storefront/brands during runtime",
       "Storefront API is unavailable: /api/storefront/brands",
     );
   });
@@ -120,6 +122,7 @@ describe("storefront-api featured groups", () => {
       {
         id: 8,
         name: "Homepage picks",
+        nameAr: "اختيارات الصفحة الرئيسية",
         cta: "Voir Plus",
         ctaAr: "اكتشف المزيد",
         link: "/products?featured=1",
@@ -136,7 +139,16 @@ describe("storefront-api featured groups", () => {
     );
 
     expect(result.cta).toBe("Voir Plus");
+    expect(result.titleAr).toBe("اختيارات الصفحة الرئيسية");
     expect(result.ctaAr).toBe("اكتشف المزيد");
     expect(result.link).toBe("/products?featured=1");
+  });
+
+  it("normalizes locale-prefixed featured-group links for locale-aware routing", () => {
+    expect(normalizeFeaturedGroupLink("/products?brand=acme")).toBe("/products?brand=acme");
+    expect(normalizeFeaturedGroupLink("/fr/products?brand=acme")).toBe("/products?brand=acme");
+    expect(normalizeFeaturedGroupLink("/ar/products?brand=acme")).toBe("/products?brand=acme");
+    expect(normalizeFeaturedGroupLink("https://example.com/products?brand=acme")).toBe("https://example.com/products?brand=acme");
+    expect(normalizeFeaturedGroupLink("#top")).toBe("#top");
   });
 });

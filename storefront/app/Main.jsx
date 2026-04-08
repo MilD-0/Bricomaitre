@@ -29,7 +29,7 @@ function BannerCarousel({ banners, locale }) {
             <div key={banner._id} className="embla__slide !flex-[0_0_100%]">
               <Link className="block" href={banner.link}>
                 <Image
-                  alt={banner.title || "featured"}
+                  alt={(locale === "ar" ? (banner.titleAr || banner.title) : banner.title) || "featured"}
                   className="h-auto min-h-[220px] w-full rounded-[1.75rem] object-cover md:min-h-[420px]"
                   height={1600}
                   priority={index === 0}
@@ -197,7 +197,7 @@ export default function Home({
               <FeaturedGroup
                 key={group._id}
                 groupId={group.id}
-                title={group.title}
+                title={locale === "ar" ? (group.titleAr || group.title) : group.title}
                 cta={group.cta}
                 ctaAr={group.ctaAr}
                 link={group.link}

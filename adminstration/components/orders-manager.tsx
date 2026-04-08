@@ -5,6 +5,7 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  ChevronDown,
   Copy,
   Eye,
   History,
@@ -19,9 +20,8 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useLocale, useTranslations } from 'next-intl';
-import { type Dispatch, type SetStateAction, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { type Dispatch, type ReactNode, type SetStateAction, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
-import { useLiveUpdates } from '../lib/live';
 import { toast } from '../lib/toast';
 import { cn } from '../lib/utils';
 import {
@@ -66,6 +66,7 @@ type ProductSearchItem = { id: number; title: string; price: number | string; im
 type ProductSearchResponse = { items: ProductSearchItem[] };
 type MutationMessages = { loading: string; success: string; error: string };
 type QuerySnapshot<T> = Array<[readonly unknown[], T | undefined]>;
+type SplitActionOption = { key: string; label: string; onSelect: () => void | Promise<void>; disabled?: boolean };
 type EditableOrderProduct = {
   rawValue: string;
   productId: number | null;
@@ -79,19 +80,28 @@ type DeleteMutationVariables = { id: number; messages: MutationMessages };
 type DeleteState = { id: number; label: string } | null;
 type ProductsDialogState = { order: OrderRecord; items: EditableOrderProduct[]; search: string } | null;
 type AddressDraft = { delivery: 0 | 1; state: string; city: string; homeAddress: string };
-type ShoppingListProduct = {
+type ShoppingListSourceMode = 'selected' | 'confirmed' | 'dispatched';
+type ShoppingListDraftItem = {
+  draftId: string;
   productId: number | null;
   brandId: number | null;
+  brandName: string;
   title: string;
   quantity: number;
   thumbnailUrl: string | null;
   inventoryQuantity: number | null;
+  inventoryDecreaseQuantity: number;
+  inventoryShortageQuantity: number;
+  inventoryAppliedQuantity: number;
+  inventoryActionEligible: boolean;
   notes: string[];
+  checked: boolean;
+  isCustom: boolean;
 };
 type ShoppingListBrandGroup = {
   brandId: number | null;
   brandName: string;
-  products: ShoppingListProduct[];
+  products: ShoppingListDraftItem[];
 };
 type ShoppingListOrderGroup = {
   orderId: number;
@@ -100,24 +110,32 @@ type ShoppingListOrderGroup = {
   products: Array<{ title: string; quantity: number; brandId: number | null; brandName: string; thumbnailUrl: string | null }>;
 };
 type ShoppingListState = {
+  sourceMode: ShoppingListSourceMode;
   title: string;
-  brands: ShoppingListBrandGroup[];
+  generatedItems: ShoppingListDraftItem[];
+  draftItems: ShoppingListDraftItem[];
   orders: ShoppingListOrderGroup[];
+  search: string;
 } | null;
 type ExportRow = {
+  reference: string;
   fullName: string;
-  phoneNumber1: string;
+  phoneNumber: string;
   phoneNumber2: string;
-  product: string;
-  quantity: string;
-  address: string;
+  wilayaCode: string;
   wilaya: string;
   commune: string;
+  address: string;
+  product: string;
+  weightKg: string;
   totalToCollect: string;
   note: string;
-  id: string;
+  fragile: string;
   exchange: string;
+  pickup: string;
+  recouvrement: string;
   stopdesk: string;
+  mapLink: string;
 };
 type ExportPreviewState = {
   mode: 'selected' | 'confirmed';
@@ -143,8 +161,71 @@ type OrderExportJob = {
   };
   errorMessage: string | null;
   downloadPath: string | null;
+  resultSummary: Record<string, unknown> | null;
 };
 type OrderExportJobResponse = { job: OrderExportJob | null };
+type EcotrackOrderPayload = {
+  reference: string;
+  nom_client: string;
+  telephone: string;
+  telephone_2?: string;
+  adresse: string;
+  code_postal?: string;
+  commune: string;
+  code_wilaya: string;
+  montant: string;
+  remarque?: string;
+  produit?: string;
+  type: '1';
+  stop_desk: 0 | 1;
+};
+type EcotrackPreviewItem = {
+  orderId: number;
+  customerName: string;
+  destination: string;
+  amount: string;
+  payload: EcotrackOrderPayload;
+};
+type EcotrackPreviewSkipItem = {
+  orderId: number;
+  customerName: string;
+  reason: 'already_posted';
+};
+type EcotrackPreviewInvalidItem = {
+  orderId: number;
+  customerName: string;
+  reason: 'status_not_confirmed' | 'missing_phone' | 'missing_wilaya' | 'missing_commune' | 'invalid_commune' | 'missing_address' | 'missing_name';
+  message: string;
+};
+type EcotrackPreviewResponse = {
+  totalRequested: number;
+  eligible: EcotrackPreviewItem[];
+  skipped: EcotrackPreviewSkipItem[];
+  invalid: EcotrackPreviewInvalidItem[];
+};
+type EcotrackPostingResultItem = {
+  orderId: number;
+  reference: string;
+  tracking: string | null;
+  status: 'skipped' | 'invalid' | 'created' | 'failed';
+  message: string;
+};
+type EcotrackPostingSummary = {
+  totalRequested: number;
+  eligible: number;
+  created: number;
+  skippedAlreadyPosted: number;
+  invalid: number;
+  failed: number;
+  rateLimits: Array<Record<string, unknown>>;
+  results: EcotrackPostingResultItem[];
+};
+type EcotrackPostingPreviewState = {
+  mode: 'selected' | 'confirmed';
+  title: string;
+  orderIds: number[];
+  preview: EcotrackPreviewResponse;
+} | null;
 type EcotrackCatalogResponse = {
   wilayas: Array<{ wilayaId: number; name: string }>;
   communes: Array<{ communeId: number; wilayaId: number; name: string; postalCode: string | null; hasStopDesk: boolean }>;
@@ -153,8 +234,13 @@ type EcotrackCatalogResponse = {
   lastSync: Record<string, unknown> | null;
 };
 type BrandLookupResponse = { id: number; name: string };
-type ProductLookupResponse = { item: { id: number; inventoryQuantity: number } };
+type ProductLookupResponse = { item: { id: number; inventoryQuantity: number; brandId?: number | null; title?: string; images?: string[] } };
 type OrderDetailResponse = { ok: true; item: OrderRecord };
+type InventoryApplyResponse = {
+  ok: true;
+  items: Array<{ productId: number; previousQuantity: number; nextQuantity: number }>;
+  skipped: Array<{ productId: number; reason: string }>;
+};
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -177,6 +263,100 @@ function SearchField({ value, onChange, placeholder }: { value: string; onChange
     <div className="relative w-full max-w-sm">
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input className="pl-9" value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
+    </div>
+  );
+}
+
+function SplitActionButton({
+  label,
+  icon,
+  onPrimaryClick,
+  primaryDisabled = false,
+  options,
+}: {
+  label: string;
+  icon?: ReactNode;
+  onPrimaryClick: () => void | Promise<void>;
+  primaryDisabled?: boolean;
+  options: SplitActionOption[];
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="relative inline-flex">
+      <Button
+        type="button"
+        variant="outline"
+        disabled={primaryDisabled}
+        className="rounded-r-none border-r border-border/70"
+        onClick={() => void onPrimaryClick()}
+      >
+        {icon}
+        {label}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        aria-label={`${label} menu`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="rounded-l-none px-3"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <ChevronDown className="size-4" />
+      </Button>
+      {open ? (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-20 mt-2 min-w-56 rounded-2xl border border-border/70 bg-background p-1 shadow-[var(--shadow-vapor)]"
+        >
+          {options.map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              role="menuitem"
+              disabled={option.disabled}
+              className={cn(
+                'flex w-full rounded-xl px-3 py-2 text-left text-sm transition-colors',
+                option.disabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-muted/60',
+              )}
+              onClick={() => {
+                setOpen(false);
+                void option.onSelect();
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -517,13 +697,42 @@ async function fetchProductInventoryQuantity(productId: number | null, cache: Ma
   return product.item.inventoryQuantity;
 }
 
+function buildInventoryPreview(quantity: number, inventoryQuantity: number | null) {
+  const available = Math.max(inventoryQuantity ?? 0, 0);
+  const decreaseQuantity = Math.min(quantity, available);
+
+  return {
+    inventoryDecreaseQuantity: decreaseQuantity,
+    inventoryShortageQuantity: Math.max(quantity - decreaseQuantity, 0),
+    inventoryAppliedQuantity: 0,
+    inventoryActionEligible: inventoryQuantity != null && decreaseQuantity > 0,
+  };
+}
+
+function recalculateShoppingListInventory(item: ShoppingListDraftItem, overrides?: Partial<Pick<ShoppingListDraftItem, 'quantity' | 'inventoryQuantity' | 'inventoryAppliedQuantity'>>) {
+  const quantity = overrides?.quantity ?? item.quantity;
+  const inventoryQuantity = overrides?.inventoryQuantity ?? item.inventoryQuantity;
+  const nextPreview = buildInventoryPreview(quantity, inventoryQuantity);
+
+  return {
+    ...item,
+    quantity,
+    inventoryQuantity,
+    inventoryDecreaseQuantity: nextPreview.inventoryDecreaseQuantity,
+    inventoryShortageQuantity: nextPreview.inventoryShortageQuantity,
+    inventoryActionEligible: item.productId != null && nextPreview.inventoryActionEligible,
+    inventoryAppliedQuantity: overrides?.inventoryAppliedQuantity ?? item.inventoryAppliedQuantity,
+  };
+}
+
 async function buildShoppingListState(
   orders: OrderRecord[],
+  sourceMode: ShoppingListSourceMode,
   title: string,
 ) {
   const brandCache = new Map<number, string>();
   const inventoryCache = new Map<number, number>();
-  const productMap = new Map<string, ShoppingListProduct>();
+  const productMap = new Map<string, ShoppingListDraftItem>();
 
   for (const order of orders) {
     for (const product of order.orderProducts) {
@@ -539,33 +748,24 @@ async function buildShoppingListState(
         continue;
       }
 
+      const inventoryQuantity = await fetchProductInventoryQuantity(product.productId, inventoryCache);
+
       productMap.set(key, {
+        draftId: key,
         productId: product.productId ?? null,
         brandId: product.brandId ?? null,
+        brandName: await fetchBrandName(product.brandId ?? null, brandCache),
         title: product.title,
         quantity: product.quantity,
         thumbnailUrl: product.thumbnailUrl,
-        inventoryQuantity: await fetchProductInventoryQuantity(product.productId, inventoryCache),
+        inventoryQuantity,
+        ...buildInventoryPreview(product.quantity, inventoryQuantity),
         notes: note ? [note] : [],
+        checked: false,
+        isCustom: false,
       });
     }
   }
-
-  const brandGroupsMap = new Map<string, ShoppingListBrandGroup>();
-  for (const product of productMap.values()) {
-    const brandName = await fetchBrandName(product.brandId, brandCache);
-    const key = `${product.brandId ?? 'none'}:${brandName}`;
-    const group = brandGroupsMap.get(key) ?? { brandId: product.brandId, brandName, products: [] };
-    group.products.push(product);
-    brandGroupsMap.set(key, group);
-  }
-
-  const brands = [...brandGroupsMap.values()]
-    .map((group) => ({
-      ...group,
-      products: [...group.products].sort((left, right) => left.title.localeCompare(right.title)),
-    }))
-    .sort((left, right) => left.brandName.localeCompare(right.brandName));
 
   const ordersPanel: ShoppingListOrderGroup[] = await Promise.all(
     orders.map(async (order) => ({
@@ -584,7 +784,19 @@ async function buildShoppingListState(
     })),
   );
 
-  return { title, brands, orders: ordersPanel };
+  const generatedItems = [...productMap.values()].sort((left, right) => {
+    const brandCompare = left.brandName.localeCompare(right.brandName);
+    return brandCompare !== 0 ? brandCompare : left.title.localeCompare(right.title);
+  });
+
+  return {
+    sourceMode,
+    title,
+    generatedItems,
+    draftItems: generatedItems.map((item) => ({ ...item, notes: [...item.notes] })),
+    orders: ordersPanel,
+    search: '',
+  };
 }
 
 function buildShoppingListPrintHtml(state: NonNullable<ShoppingListState>) {
@@ -596,16 +808,35 @@ function buildShoppingListPrintHtml(state: NonNullable<ShoppingListState>) {
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#39;');
 
-  const brandsHtml = state.brands.map((group) => `
+  const groupedBrands = state.draftItems.reduce<Map<string, ShoppingListBrandGroup>>((groups, product) => {
+    const key = `${product.brandId ?? 'none'}:${product.brandName}`;
+    const group = groups.get(key) ?? { brandId: product.brandId, brandName: product.brandName, products: [] };
+    group.products.push(product);
+    groups.set(key, group);
+    return groups;
+  }, new Map());
+
+  const brandsHtml = [...groupedBrands.values()]
+    .sort((left, right) => left.brandName.localeCompare(right.brandName))
+    .map((group) => `
     <section>
       <h2>${escapeHtml(group.brandName)}</h2>
       <ul>
-        ${group.products.map((product) => `
-          <li style="${product.inventoryQuantity != null && product.inventoryQuantity > 0 ? 'color: #166534; background: #dcfce7; border: 1px solid #86efac; border-radius: 10px; padding: 8px 10px;' : ''}">
+        ${group.products
+          .sort((left, right) => left.title.localeCompare(right.title))
+          .map((product) => `
+          <li style="${
+            product.checked
+              ? 'opacity: 0.65; text-decoration: line-through;'
+              : product.inventoryQuantity != null && product.inventoryQuantity > 0
+                ? 'color: #166534; background: #dcfce7; border: 1px solid #86efac; border-radius: 10px; padding: 8px 10px;'
+                : ''
+          }">
             <div style="display: flex; align-items: flex-start; gap: 10px;">
               ${product.thumbnailUrl ? `<img src="${escapeHtml(product.thumbnailUrl)}" alt="${escapeHtml(product.title)}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 8px; border: 1px solid #d4d4d8; flex: none;" />` : ''}
               <div>
-                <strong>${escapeHtml(product.title)}</strong> x${product.quantity}
+                <strong>${product.checked ? '&#10003; ' : ''}${escapeHtml(product.title)}</strong> x${product.quantity}
+                ${product.inventoryActionEligible ? `<div>Inventory decrease: ${product.inventoryDecreaseQuantity}${product.inventoryShortageQuantity > 0 ? ` | Short: ${product.inventoryShortageQuantity}` : ''}</div>` : ''}
                 ${product.notes.length ? `<div>Notes: ${escapeHtml(product.notes.join(' | '))}</div>` : ''}
               </div>
             </div>
@@ -1111,18 +1342,79 @@ function HistoryDialog({ order, onOpenChange }: { order: OrderRecord | null; onO
 }
 
 function ShoppingListDialog({
+  open,
   state,
+  pending,
+  inventoryPending,
   onOpenChange,
   onPrint,
+  onSearchChange,
+  onAddProduct,
+  onReset,
+  onToggleItem,
+  onIncreaseQuantity,
+  onDecreaseQuantity,
+  onIncreaseInventoryDecrease,
+  onDecreaseInventoryDecrease,
+  onRemoveItem,
+  onApplyAllInventoryChanges,
+  onApplySelectedInventoryChanges,
 }: {
+  open: boolean;
   state: ShoppingListState;
+  pending: boolean;
+  inventoryPending: boolean;
   onOpenChange: (open: boolean) => void;
   onPrint: () => void;
+  onSearchChange: (value: string) => void;
+  onAddProduct: (product: ProductSearchItem) => void;
+  onReset: () => void;
+  onToggleItem: (draftId: string) => void;
+  onIncreaseQuantity: (draftId: string) => void;
+  onDecreaseQuantity: (draftId: string) => void;
+  onIncreaseInventoryDecrease: (draftId: string) => void;
+  onDecreaseInventoryDecrease: (draftId: string) => void;
+  onRemoveItem: (draftId: string) => void;
+  onApplyAllInventoryChanges: () => void;
+  onApplySelectedInventoryChanges: () => void;
 }) {
   const t = useTranslations();
+  const deferredSearch = useDeferredValue(state?.search ?? '');
+  const searchQuery = useQuery({
+    queryKey: ['shopping-list-products-search', deferredSearch],
+    enabled: open && deferredSearch.trim().length > 0,
+    queryFn: async () => {
+      const response = await request<ProductSearchResponse>(`/api/products?page=1&limit=8&search=${encodeURIComponent(deferredSearch)}`);
+
+      return response.items.map((item) => ({
+        ...item,
+        price: parseNumericAmount(item.price),
+      }));
+    },
+  });
+  const groupedBrands = useMemo(() => {
+    if (!state) {
+      return [];
+    }
+
+    const brandGroupsMap = new Map<string, ShoppingListBrandGroup>();
+    for (const product of state.draftItems) {
+      const key = `${product.brandId ?? 'none'}:${product.brandName}`;
+      const group = brandGroupsMap.get(key) ?? { brandId: product.brandId, brandName: product.brandName, products: [] };
+      group.products.push(product);
+      brandGroupsMap.set(key, group);
+    }
+
+    return [...brandGroupsMap.values()]
+      .map((group) => ({
+        ...group,
+        products: [...group.products].sort((left, right) => left.title.localeCompare(right.title)),
+      }))
+      .sort((left, right) => left.brandName.localeCompare(right.brandName));
+  }, [state]);
 
   return (
-    <Dialog open={Boolean(state)} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>{state?.title ?? t('ordersManager.shoppingList.title')}</DialogTitle>
@@ -1131,28 +1423,74 @@ function ShoppingListDialog({
         {state ? (
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-2xl border border-border/70 p-4">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <Button type="button" variant="outline" onClick={onPrint}>
-                  <Printer data-icon="inline-start" />
-                  {t('ordersManager.shoppingList.print')}
-                </Button>
+              <div className="mb-4 flex flex-col gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button type="button" variant="outline" onClick={onPrint}>
+                    <Printer data-icon="inline-start" />
+                    {t('ordersManager.shoppingList.print')}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={onReset}>
+                    {t('ordersManager.shoppingList.reset')}
+                  </Button>
+                  <Button type="button" variant="outline" disabled={inventoryPending} onClick={onApplyAllInventoryChanges}>
+                    {t('ordersManager.shoppingList.acceptAllInventoryChanges')}
+                  </Button>
+                  <Button type="button" variant="outline" disabled={inventoryPending} onClick={onApplySelectedInventoryChanges}>
+                    {t('ordersManager.shoppingList.applySelectedInventoryChanges')}
+                  </Button>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-medium">{t('ordersManager.shoppingList.addProductTitle')}</p>
+                  <SearchField
+                    value={state.search}
+                    onChange={onSearchChange}
+                    placeholder={t('ordersManager.shoppingList.addProductPlaceholder')}
+                  />
+                  {state.search.trim().length ? (
+                    <div className="flex flex-col gap-3">
+                      {searchQuery.isFetching ? <p className="text-sm text-muted-foreground">{t('ordersManager.products.searchLoading')}</p> : null}
+                      {!searchQuery.isFetching && searchQuery.data?.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">{t('ordersManager.products.searchEmpty')}</p>
+                      ) : null}
+                      {searchQuery.data?.map((product) => (
+                        <Card key={product.id} className="flex items-center gap-3 rounded-2xl border border-border/70 p-3">
+                          <ProductThumbnail src={product.images[0] ?? null} alt={product.title} />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-medium">{product.title}</p>
+                            <p className="text-sm text-muted-foreground">{t('ordersManager.products.unitPrice')}: {product.price}</p>
+                          </div>
+                          <Button type="button" size="sm" disabled={pending} onClick={() => onAddProduct(product)}>
+                            {t('ordersManager.shoppingList.addProductAction')}
+                          </Button>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </div>
               <div className="flex flex-col gap-4">
-                {state.brands.map((group) => (
+                {groupedBrands.map((group) => (
                   <div key={`${group.brandId ?? 'none'}-${group.brandName}`} className="rounded-xl border border-border/70 p-3">
                     <p className="font-medium">{group.brandName}</p>
                     <div className="mt-3 flex flex-col gap-2">
                       {group.products.map((product) => (
                         <div
-                          key={`${product.brandId ?? 'none'}-${product.productId ?? product.title}`}
+                          key={product.draftId}
                           className={cn(
-                            'rounded-lg p-2 text-sm',
-                            product.inventoryQuantity != null && product.inventoryQuantity > 0
+                            'rounded-lg border p-2 text-sm',
+                            product.checked
+                              ? 'border-border/70 bg-muted/30 text-muted-foreground line-through'
+                              : product.inventoryQuantity != null && product.inventoryQuantity > 0
                               ? 'border border-emerald-200 bg-emerald-50 text-emerald-900'
-                              : 'bg-muted/30',
+                              : 'border-border/70 bg-muted/30',
                           )}
                         >
                           <div className="flex items-start gap-3">
+                            <Checkbox
+                              checked={product.checked}
+                              onChange={() => onToggleItem(product.draftId)}
+                              aria-label={t('ordersManager.shoppingList.toggleItem', { title: product.title })}
+                            />
                             {product.thumbnailUrl ? (
                               <img
                                 src={product.thumbnailUrl}
@@ -1163,8 +1501,78 @@ function ShoppingListDialog({
                             <div className="min-w-0 flex-1">
                               <p className="font-medium">{product.title} x{product.quantity}</p>
                               {product.notes.length ? <p className="text-muted-foreground">{t('ordersManager.shoppingList.notes')}: {product.notes.join(' | ')}</p> : null}
+                              {product.isCustom ? <p className="text-xs text-muted-foreground">{t('ordersManager.shoppingList.customItem')}</p> : null}
+                              {product.inventoryActionEligible ? (
+                                <p className="text-xs font-medium text-emerald-700">
+                                  {t('ordersManager.shoppingList.inventoryDecreasePreview', { count: product.inventoryDecreaseQuantity })}
+                                  {product.inventoryShortageQuantity > 0 ? ` • ${t('ordersManager.shoppingList.inventoryShortage', { count: product.inventoryShortageQuantity })}` : ''}
+                                </p>
+                              ) : null}
+                              {product.inventoryAppliedQuantity > 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                  {t('ordersManager.shoppingList.inventoryApplied', { count: product.inventoryAppliedQuantity })}
+                                </p>
+                              ) : null}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={pending || product.quantity <= 1}
+                                onClick={() => onDecreaseQuantity(product.draftId)}
+                                aria-label={t('ordersManager.shoppingList.decreaseQuantity', { title: product.title })}
+                              >
+                                -
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={pending}
+                                onClick={() => onIncreaseQuantity(product.draftId)}
+                                aria-label={t('ordersManager.shoppingList.increaseQuantity', { title: product.title })}
+                              >
+                                +
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={pending}
+                                onClick={() => onRemoveItem(product.draftId)}
+                                aria-label={t('ordersManager.shoppingList.removeItem', { title: product.title })}
+                              >
+                                <X />
+                              </Button>
                             </div>
                           </div>
+                          {product.productId != null ? (
+                            <div className="mt-3 flex items-center gap-2 pl-7">
+                              <span className="text-xs text-muted-foreground">{t('ordersManager.shoppingList.inventoryAdjustLabel')}</span>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={inventoryPending || product.inventoryDecreaseQuantity <= 0}
+                                onClick={() => onDecreaseInventoryDecrease(product.draftId)}
+                                aria-label={t('ordersManager.shoppingList.decreaseInventoryDelta', { title: product.title })}
+                              >
+                                -1
+                              </Button>
+                              <span className="min-w-10 text-center text-sm font-medium">{product.inventoryDecreaseQuantity}</span>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={inventoryPending || product.inventoryDecreaseQuantity >= Math.min(product.quantity, product.inventoryQuantity ?? 0)}
+                                onClick={() => onIncreaseInventoryDecrease(product.draftId)}
+                                aria-label={t('ordersManager.shoppingList.increaseInventoryDelta', { title: product.title })}
+                              >
+                                +1
+                              </Button>
+                            </div>
+                          ) : null}
                         </div>
                       ))}
                     </div>
@@ -1265,20 +1673,25 @@ function ExportOrdersDialog({
                     </TableHeader>
                     <TableBody>
                       {state.rows.map((row) => (
-                        <TableRow key={`${state.mode}-${row.id}`}>
+                        <TableRow key={`${state.mode}-${row.reference}`}>
+                          <TableCell className="px-2 py-2 whitespace-nowrap">{row.reference}</TableCell>
                           <TableCell className="px-2 py-2 whitespace-nowrap">{row.fullName}</TableCell>
-                          <TableCell className="px-2 py-2 whitespace-nowrap">{row.phoneNumber1}</TableCell>
+                          <TableCell className="px-2 py-2 whitespace-nowrap">{row.phoneNumber}</TableCell>
                           <TableCell className="px-2 py-2 whitespace-nowrap">{row.phoneNumber2}</TableCell>
-                          <TableCell className="px-2 py-2 whitespace-pre-line">{row.product}</TableCell>
-                          <TableCell className="px-2 py-2 whitespace-nowrap">{row.quantity}</TableCell>
-                          <TableCell className="px-2 py-2">{row.address}</TableCell>
+                          <TableCell className="px-2 py-2 whitespace-nowrap">{row.wilayaCode}</TableCell>
                           <TableCell className="px-2 py-2 whitespace-nowrap">{row.wilaya}</TableCell>
                           <TableCell className="px-2 py-2 whitespace-nowrap">{row.commune}</TableCell>
+                          <TableCell className="px-2 py-2">{row.address}</TableCell>
+                          <TableCell className="px-2 py-2 whitespace-pre-line">{row.product}</TableCell>
+                          <TableCell className="px-2 py-2 whitespace-nowrap">{row.weightKg}</TableCell>
                           <TableCell className="px-2 py-2 whitespace-nowrap">{row.totalToCollect}</TableCell>
                           <TableCell className="px-2 py-2">{row.note}</TableCell>
-                          <TableCell className="px-2 py-2 whitespace-nowrap">{row.id}</TableCell>
+                          <TableCell className="px-2 py-2 whitespace-nowrap">{row.fragile}</TableCell>
                           <TableCell className="px-2 py-2 whitespace-nowrap">{row.exchange}</TableCell>
+                          <TableCell className="px-2 py-2 whitespace-nowrap">{row.pickup}</TableCell>
+                          <TableCell className="px-2 py-2 whitespace-nowrap">{row.recouvrement}</TableCell>
                           <TableCell className="px-2 py-2 whitespace-nowrap">{row.stopdesk}</TableCell>
+                          <TableCell className="px-2 py-2 whitespace-nowrap">{row.mapLink}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -1299,6 +1712,137 @@ function ExportOrdersDialog({
           ) : null}
           <Button type="button" disabled={pending || !state} onClick={onConfirm}>
             {t(state?.mode === 'confirmed' ? 'ordersManager.export.confirmAndDispatch' : 'ordersManager.export.confirm')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EcotrackPostingDialog({
+  state,
+  progress,
+  postingSummary,
+  onOpenChange,
+  onConfirm,
+  onCancelJob,
+}: {
+  state: EcotrackPostingPreviewState;
+  progress: ExportProgressState;
+  postingSummary: EcotrackPostingSummary | null;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+  onCancelJob: () => void;
+}) {
+  const t = useTranslations();
+  const pending = progress !== null;
+  const preview = state?.preview ?? null;
+  const summary = postingSummary;
+
+  return (
+    <Dialog open={Boolean(state)} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-5xl">
+        <DialogHeader className="shrink-0 border-b border-border/70 pb-4">
+          <DialogTitle>{state?.title ?? t('ordersManager.ecotrack.previewTitle')}</DialogTitle>
+        </DialogHeader>
+        {preview ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto py-4">
+            {progress ? (
+              <div className="rounded-2xl border border-border/70 p-4">
+                <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                  <span>{t(`ordersManager.ecotrack.progress.${progress.phase}`)}</span>
+                  <span>{progress.current}/{progress.total}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-foreground transition-all"
+                    style={{ width: `${progress.total === 0 ? 0 : (progress.current / progress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            <div className="grid gap-3 sm:grid-cols-4">
+              <Card className="p-4"><p className="text-xs text-muted-foreground">{t('ordersManager.ecotrack.summary.totalRequested')}</p><p className="mt-1 text-lg font-semibold">{preview.totalRequested}</p></Card>
+              <Card className="p-4"><p className="text-xs text-muted-foreground">{t('ordersManager.ecotrack.summary.eligible')}</p><p className="mt-1 text-lg font-semibold">{preview.eligible.length}</p></Card>
+              <Card className="p-4"><p className="text-xs text-muted-foreground">{t('ordersManager.ecotrack.summary.skipped')}</p><p className="mt-1 text-lg font-semibold">{preview.skipped.length}</p></Card>
+              <Card className="p-4"><p className="text-xs text-muted-foreground">{t('ordersManager.ecotrack.summary.invalid')}</p><p className="mt-1 text-lg font-semibold">{preview.invalid.length}</p></Card>
+            </div>
+
+            <div className="rounded-2xl border border-border/70 p-4">
+              <p className="mb-3 text-sm font-medium">{t('ordersManager.ecotrack.previewEligible')}</p>
+              <div className="flex flex-col gap-3">
+                {preview.eligible.length === 0 ? <p className="text-sm text-muted-foreground">{t('ordersManager.ecotrack.emptyEligible')}</p> : null}
+                {preview.eligible.map((item) => (
+                  <div key={item.orderId} className="rounded-xl border border-border/70 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium">#{item.orderId} {item.customerName}</p>
+                      <p className="text-sm text-muted-foreground">{item.destination} • {item.amount}</p>
+                    </div>
+                    <pre className="mt-3 overflow-x-auto rounded-lg bg-muted/50 p-3 text-xs">{JSON.stringify(item.payload, null, 2)}</pre>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-2xl border border-border/70 p-4">
+                <p className="mb-3 text-sm font-medium">{t('ordersManager.ecotrack.previewSkipped')}</p>
+                <div className="flex flex-col gap-2">
+                  {preview.skipped.length === 0 ? <p className="text-sm text-muted-foreground">{t('ordersManager.ecotrack.emptySkipped')}</p> : null}
+                  {preview.skipped.map((item) => (
+                    <div key={`skip-${item.orderId}`} className="rounded-lg border border-border/70 p-3 text-sm">
+                      #{item.orderId} {item.customerName} • {t(`ordersManager.ecotrack.reasons.${item.reason}`)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-border/70 p-4">
+                <p className="mb-3 text-sm font-medium">{t('ordersManager.ecotrack.previewInvalid')}</p>
+                <div className="flex flex-col gap-2">
+                  {preview.invalid.length === 0 ? <p className="text-sm text-muted-foreground">{t('ordersManager.ecotrack.emptyInvalid')}</p> : null}
+                  {preview.invalid.map((item) => (
+                    <div key={`invalid-${item.orderId}`} className="rounded-lg border border-border/70 p-3 text-sm">
+                      <p>#{item.orderId} {item.customerName}</p>
+                      <p className="text-muted-foreground">{t(`ordersManager.ecotrack.reasons.${item.reason}`)} • {item.message}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {summary ? (
+              <div className="rounded-2xl border border-border/70 p-4">
+                <p className="mb-3 text-sm font-medium">{t('ordersManager.ecotrack.resultTitle')}</p>
+                <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                  <Badge variant="outline">{t('ordersManager.ecotrack.summary.created')}: {summary.created}</Badge>
+                  <Badge variant="outline">{t('ordersManager.ecotrack.summary.failed')}: {summary.failed}</Badge>
+                  <Badge variant="outline">{t('ordersManager.ecotrack.summary.skipped')}: {summary.skippedAlreadyPosted}</Badge>
+                  <Badge variant="outline">{t('ordersManager.ecotrack.summary.invalid')}: {summary.invalid}</Badge>
+                  <Badge variant="outline">{t('ordersManager.ecotrack.summary.eligible')}: {summary.eligible}</Badge>
+                </div>
+                <div className="mt-4 flex flex-col gap-2">
+                  {summary.results.map((item) => (
+                    <div key={`${item.reference}-${item.status}-${item.tracking ?? 'none'}`} className="rounded-lg border border-border/70 p-3 text-sm">
+                      #{item.orderId} • {item.status} {item.tracking ? `• ${item.tracking}` : ''} {item.message ? `• ${item.message}` : ''}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        <DialogFooter className="sticky bottom-0 shrink-0 border-t border-border/70 bg-background pt-4">
+          <Button type="button" variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>
+            {t('actions.cancel')}
+          </Button>
+          {pending ? (
+            <Button type="button" variant="outline" onClick={onCancelJob}>
+              {t('actions.cancel')}
+            </Button>
+          ) : null}
+          <Button type="button" disabled={pending || !state || preview?.eligible.length === 0} onClick={onConfirm}>
+            {t('ordersManager.ecotrack.confirm')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1331,21 +1875,27 @@ export function OrdersManager({
   const [productsDialog, setProductsDialog] = useState<ProductsDialogState>(null);
   const [bulkStatus, setBulkStatus] = useState<string>('2');
   const [shoppingListState, setShoppingListState] = useState<ShoppingListState>(null);
+  const [shoppingListOpen, setShoppingListOpen] = useState(false);
   const [exportPreviewState, setExportPreviewState] = useState<ExportPreviewState>(null);
+  const [ecotrackPreviewState, setEcotrackPreviewState] = useState<EcotrackPostingPreviewState>(null);
+  const [activeEcotrackJobId, setActiveEcotrackJobId] = useState<string | null>(null);
   const [hoveredProductKey, setHoveredProductKey] = useState<string | null>(null);
   const [isFilterPending, startFilterTransition] = useTransition();
   const initializedExportStatusRef = useRef(false);
   const lastExportStatusKeyRef = useRef<string | null>(null);
+  const initializedEcotrackStatusRef = useRef(false);
+  const lastEcotrackStatusKeyRef = useRef<string | null>(null);
+  const sessionStartedEcotrackJobIdsRef = useRef<Set<string>>(new Set());
   const deferredSearch = useDeferredValue(search);
   const deferredStatusFilter = useDeferredValue(statusFilter);
-
-  useLiveUpdates('orders');
+  const [initialOrdersUpdatedAt] = useState(() => (initialOrders ? Date.now() : 0));
+  const [initialCatalogUpdatedAt] = useState(() => (initialCatalog ? Date.now() : 0));
 
   const ordersQuery = useQuery({
     queryKey: ['orders-table', page, deferredSearch, deferredStatusFilter, sortKey, sortDirection],
     queryFn: () => request<OrdersResponse>(`/api/orders?page=${page}&limit=25&search=${encodeURIComponent(deferredSearch)}&confirmed=${deferredStatusFilter === 'all' ? '' : deferredStatusFilter}&sortKey=${sortKey}&sortDirection=${sortDirection}`),
     initialData: initialOrders,
-    initialDataUpdatedAt: initialOrders ? Date.now() : 0,
+    initialDataUpdatedAt: initialOrdersUpdatedAt,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
   });
@@ -1353,12 +1903,25 @@ export function OrdersManager({
     queryKey: ['ecotrack-catalog-for-orders'],
     queryFn: () => request<EcotrackCatalogResponse>('/api/ecotrack/catalog'),
     initialData: initialCatalog,
-    initialDataUpdatedAt: initialCatalog ? Date.now() : 0,
+    initialDataUpdatedAt: initialCatalogUpdatedAt,
     staleTime: 300_000,
   });
   const orderExportJobQuery = useQuery({
     queryKey: ['orders-export-job'],
     queryFn: () => request<OrderExportJobResponse>('/api/orders/export'),
+    initialData: { job: null },
+    initialDataUpdatedAt: 0,
+    refetchInterval: (query) => {
+      const status = query.state.data?.job?.status;
+      return status === 'queued' || status === 'running' ? 1_000 : false;
+    },
+    refetchIntervalInBackground: true,
+    staleTime: 0,
+  });
+  const orderEcotrackJobQuery = useQuery({
+    queryKey: ['orders-ecotrack-job', activeEcotrackJobId],
+    queryFn: () => request<OrderExportJobResponse>(`/api/orders/ecotrack?jobId=${encodeURIComponent(activeEcotrackJobId ?? '')}`),
+    enabled: activeEcotrackJobId !== null,
     initialData: { job: null },
     initialDataUpdatedAt: 0,
     refetchInterval: (query) => {
@@ -1463,6 +2026,88 @@ export function OrdersManager({
       await queryClient.invalidateQueries({ queryKey: ['orders-export-job'] });
     },
   });
+  const previewOrderEcotrackMutation = useMutation<
+    EcotrackPreviewResponse,
+    Error,
+    { mode: 'selected' | 'confirmed'; orderIds: number[] },
+    { toastId: string }
+  >({
+    mutationFn: (payload) => request<EcotrackPreviewResponse>('/api/orders/ecotrack/preview', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+    onMutate: () => ({ toastId: toast.loading(t('ordersManager.ecotrack.loading')) }),
+    onError: (error, _variables, context) => {
+      toast.error(error.message || t('ordersManager.ecotrack.error'), { id: context?.toastId });
+    },
+    onSuccess: (_data, _variables, context) => {
+      toast.success(t('ordersManager.ecotrack.ready'), { id: context?.toastId });
+    },
+  });
+  const startOrderEcotrackMutation = useMutation<
+    OrderExportJobResponse,
+    Error,
+    { mode: 'selected' | 'confirmed'; orderIds: number[] },
+    { toastId: string }
+  >({
+    mutationFn: (payload) => request<OrderExportJobResponse>('/api/orders/ecotrack', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+    onMutate: () => ({ toastId: toast.loading(t('ordersManager.ecotrack.loading')) }),
+    onError: (error, _variables, context) => {
+      toast.error(error.message || t('ordersManager.ecotrack.error'), { id: context?.toastId });
+    },
+    onSuccess: async (data, _variables, context) => {
+      toast.success(t('ordersManager.ecotrack.ready'), { id: context?.toastId });
+      const jobId = data.job?.id ?? null;
+      setActiveEcotrackJobId(jobId);
+      if (jobId) {
+        sessionStartedEcotrackJobIdsRef.current.add(jobId);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['orders-ecotrack-job'] });
+    },
+  });
+  const cancelOrderEcotrackMutation = useMutation<OrderExportJobResponse, Error, void>({
+    mutationFn: () => request<OrderExportJobResponse>('/api/orders/ecotrack', {
+      method: 'DELETE',
+    }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['orders-ecotrack-job'] });
+    },
+  });
+  const addShoppingListProductMutation = useMutation<
+    { product: ProductLookupResponse['item']; brandName: string },
+    Error,
+    ProductSearchItem
+  >({
+    mutationFn: async (product) => {
+      const detail = await request<ProductLookupResponse>(`/api/products/${product.id}`);
+      const brandId = detail.item.brandId ?? null;
+      const brandName = brandId === null
+        ? 'Unbranded'
+        : (await request<BrandLookupResponse>(`/api/brands/${brandId}`)).name;
+
+      return { product: detail.item, brandName };
+    },
+  });
+  const applyShoppingListInventoryMutation = useMutation<
+    InventoryApplyResponse,
+    Error,
+    { items: Array<{ productId: number; quantity: number; source: { type: 'shopping-list'; orderIds: number[] } }> }
+  >({
+    mutationFn: ({ items }) => request<InventoryApplyResponse>('/api/inventory/apply', {
+      method: 'POST',
+      body: JSON.stringify({
+        mode: 'decrease',
+        items,
+      }),
+    }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['inventory-table'] });
+      await queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+  });
   const totalPages = ordersQuery.data?.pagination?.totalPages ?? 1;
   const currentPage = ordersQuery.data?.pagination?.page ?? page;
   const paginatedOrders = ordersQuery.data?.items ?? [];
@@ -1470,6 +2115,7 @@ export function OrdersManager({
   const allSelected = paginatedOrders.length > 0 && paginatedOrders.every((order) => selectedIds.includes(order.id));
   const writable = ordersQuery.data?.writable ?? false;
   const orderExportJob = orderExportJobQuery.data.job;
+  const orderEcotrackJob = orderEcotrackJobQuery.data.job;
   const exportProgressState: ExportProgressState = orderExportJob && (orderExportJob.status === 'queued' || orderExportJob.status === 'running')
     ? {
         phase: orderExportJob.progress.phase,
@@ -1477,12 +2123,24 @@ export function OrdersManager({
         total: orderExportJob.progress.total,
       }
     : null;
+  const ecotrackProgressState: ExportProgressState = orderEcotrackJob && (orderEcotrackJob.status === 'queued' || orderEcotrackJob.status === 'running')
+    ? {
+        phase: orderEcotrackJob.progress.phase,
+        current: orderEcotrackJob.progress.current,
+        total: orderEcotrackJob.progress.total,
+      }
+    : null;
+  const ecotrackPostingSummary = orderEcotrackJob?.resultSummary as EcotrackPostingSummary | null | undefined ?? null;
   const isInitialLoading = !ordersQuery.data && ordersQuery.isPending;
   const showRefreshingProgress = ordersQuery.isFetching && !isInitialLoading;
 
+  function shouldAnnounceEcotrackJob(job: OrderExportJob | null) {
+    return Boolean(job?.id && sessionStartedEcotrackJobIdsRef.current.has(job.id));
+  }
+
   useEffect(() => {
     if (!ordersQuery.isFetching && page !== currentPage) {
-      setPage(currentPage);
+      queueMicrotask(() => setPage(currentPage));
     }
   }, [currentPage, page, ordersQuery.isFetching]);
 
@@ -1509,7 +2167,7 @@ export function OrdersManager({
       if (orderExportJob.downloadPath) {
         window.open(orderExportJob.downloadPath, '_self');
       }
-      setExportPreviewState(null);
+      queueMicrotask(() => setExportPreviewState(null));
       void queryClient.invalidateQueries({ queryKey: ['orders-table'] });
     } else if (orderExportJob.status === 'cancelled') {
       toast.success(t('products.exportAll.notifications.status.cancelled'));
@@ -1517,6 +2175,41 @@ export function OrdersManager({
       toast.error(orderExportJob.errorMessage || t('ordersManager.export.error'));
     }
   }, [orderExportJob, queryClient, t]);
+
+  useEffect(() => {
+    const statusKey = orderEcotrackJob ? `${orderEcotrackJob.id}:${orderEcotrackJob.status}` : null;
+
+    if (!initializedEcotrackStatusRef.current) {
+      initializedEcotrackStatusRef.current = true;
+      lastEcotrackStatusKeyRef.current = statusKey;
+      return;
+    }
+
+    if (!statusKey || statusKey === lastEcotrackStatusKeyRef.current) {
+      return;
+    }
+
+    lastEcotrackStatusKeyRef.current = statusKey;
+    if (!orderEcotrackJob) {
+      return;
+    }
+
+    if (!shouldAnnounceEcotrackJob(orderEcotrackJob)) {
+      return;
+    }
+
+    if (orderEcotrackJob.status === 'completed') {
+      toast.success(t('ordersManager.ecotrack.success'));
+      void queryClient.invalidateQueries({ queryKey: ['orders-table'] });
+      sessionStartedEcotrackJobIdsRef.current.delete(orderEcotrackJob.id);
+    } else if (orderEcotrackJob.status === 'cancelled') {
+      toast.success(t('ordersManager.ecotrack.cancelled'));
+      sessionStartedEcotrackJobIdsRef.current.delete(orderEcotrackJob.id);
+    } else if (orderEcotrackJob.status === 'failed') {
+      toast.error(orderEcotrackJob.errorMessage || t('ordersManager.ecotrack.error'));
+      sessionStartedEcotrackJobIdsRef.current.delete(orderEcotrackJob.id);
+    }
+  }, [orderEcotrackJob, queryClient, t]);
 
   function toggleSort(nextKey: OrderSortKey) {
     startFilterTransition(() => {
@@ -1741,27 +2434,13 @@ export function OrdersManager({
     const toastId = toast.loading(t('ordersManager.shoppingList.loading'));
 
     try {
-      const nextState = await buildShoppingListState(orders, title);
+      const nextState = await buildShoppingListState(orders, 'selected', title);
       setShoppingListState(nextState);
+      setShoppingListOpen(true);
       toast.success(t('ordersManager.shoppingList.ready'), { id: toastId });
     } catch {
       toast.error(t('ordersManager.shoppingList.error'), { id: toastId });
     }
-  }
-
-  async function openDispatchedShoppingList() {
-    const allDispatched: OrderRecord[] = [];
-    let nextPage = 1;
-    let totalPagesForStatus = 1;
-
-    do {
-      const response = await request<OrdersResponse>(`/api/orders?page=${nextPage}&limit=100&confirmed=3&search=&sortKey=createdAt&sortDirection=desc`);
-      allDispatched.push(...response.items);
-      totalPagesForStatus = response.pagination.totalPages;
-      nextPage += 1;
-    } while (nextPage <= totalPagesForStatus);
-
-    await openShoppingListForOrders(allDispatched, t('ordersManager.shoppingList.dispatchedTitle'));
   }
 
   async function fetchOrdersByStatus(status: OrderRecord['confirmed']) {
@@ -1777,6 +2456,38 @@ export function OrdersManager({
     } while (nextPage <= totalPagesForStatus);
 
     return items;
+  }
+
+  async function openStatusBasedShoppingList(status: 2 | 3, sourceMode: Exclude<ShoppingListSourceMode, 'selected'>) {
+    const toastId = toast.loading(t('ordersManager.shoppingList.loading'));
+
+    try {
+      const items = await fetchOrdersByStatus(status);
+
+      if (items.length === 0) {
+        toast.error(t(status === 2 ? 'ordersManager.shoppingList.emptyConfirmed' : 'ordersManager.shoppingList.emptyDispatched'), { id: toastId });
+        return;
+      }
+
+      const nextState = await buildShoppingListState(
+        items,
+        sourceMode,
+        t(status === 2 ? 'ordersManager.shoppingList.confirmedTitle' : 'ordersManager.shoppingList.dispatchedTitle'),
+      );
+      setShoppingListState(nextState);
+      setShoppingListOpen(true);
+      toast.success(t('ordersManager.shoppingList.ready'), { id: toastId });
+    } catch {
+      toast.error(t('ordersManager.shoppingList.error'), { id: toastId });
+    }
+  }
+
+  async function openConfirmedShoppingList() {
+    await openStatusBasedShoppingList(2, 'confirmed');
+  }
+
+  async function openDispatchedShoppingList() {
+    await openStatusBasedShoppingList(3, 'dispatched');
   }
 
   function openExportPreview(orders: OrderRecord[], mode: 'selected' | 'confirmed', title: string) {
@@ -1803,6 +2514,11 @@ export function OrdersManager({
 
     try {
       const orders = await fetchOrdersByStatus(2);
+      if (orders.length === 0) {
+        toast.error(t('ordersManager.export.emptyConfirmed'), { id: toastId });
+        return;
+      }
+
       openExportPreview(orders, 'confirmed', t('ordersManager.export.confirmedTitle', { count: orders.length }));
       toast.success(t('ordersManager.export.ready'), { id: toastId });
     } catch {
@@ -1825,6 +2541,52 @@ export function OrdersManager({
     }
   }
 
+  async function openEcotrackPreview(mode: 'selected' | 'confirmed', orderIds: number[], title: string) {
+    if (orderIds.length === 0) {
+      toast.error(t('ordersManager.ecotrack.empty'));
+      return;
+    }
+
+    try {
+      const preview = await previewOrderEcotrackMutation.mutateAsync({ mode, orderIds });
+      setActiveEcotrackJobId(null);
+      setEcotrackPreviewState({ mode, title, orderIds, preview });
+    } catch {
+      toast.error(t('ordersManager.ecotrack.error'));
+    }
+  }
+
+  async function openSelectedOrdersEcotrackPreview() {
+    await openEcotrackPreview('selected', selectedOrders.map((order) => order.id), t('ordersManager.ecotrack.selectedTitle', { count: selectedOrders.length }));
+  }
+
+  async function openConfirmedOrdersEcotrackPreview() {
+    const orders = await fetchOrdersByStatus(2);
+    if (orders.length === 0) {
+      toast.error(t('ordersManager.ecotrack.emptyConfirmed'));
+      return;
+    }
+    await openEcotrackPreview('confirmed', orders.map((order) => order.id), t('ordersManager.ecotrack.confirmedTitle', { count: orders.length }));
+  }
+
+  async function confirmEcotrackPosting() {
+    if (!ecotrackPreviewState) {
+      return;
+    }
+
+    try {
+      const response = await startOrderEcotrackMutation.mutateAsync({
+        mode: ecotrackPreviewState.mode,
+        orderIds: ecotrackPreviewState.orderIds,
+      });
+      if (response.job?.id) {
+        setActiveEcotrackJobId(response.job.id);
+      }
+    } catch {
+      toast.error(t('ordersManager.ecotrack.error'));
+    }
+  }
+
   function openShoppingListPrintView() {
     if (!shoppingListState) {
       return;
@@ -1839,6 +2601,176 @@ export function OrdersManager({
     printWindow.document.open();
     printWindow.document.write(buildShoppingListPrintHtml(shoppingListState));
     printWindow.document.close();
+  }
+
+  function updateShoppingListState(updater: (state: NonNullable<ShoppingListState>) => NonNullable<ShoppingListState>) {
+    setShoppingListState((current) => (current ? updater(current) : current));
+  }
+
+  function updateShoppingListDraftItems(updater: (items: ShoppingListDraftItem[]) => ShoppingListDraftItem[]) {
+    updateShoppingListState((current) => ({ ...current, draftItems: updater(current.draftItems) }));
+  }
+
+  function resetShoppingListDraft() {
+    updateShoppingListState((current) => ({
+      ...current,
+      draftItems: current.generatedItems.map((item) => ({ ...item, notes: [...item.notes] })),
+      search: '',
+    }));
+  }
+
+  function toggleShoppingListItem(draftId: string) {
+    updateShoppingListDraftItems((items) => items.map((item) => (item.draftId === draftId ? { ...item, checked: !item.checked } : item)));
+  }
+
+  function increaseShoppingListItemQuantity(draftId: string) {
+    updateShoppingListDraftItems((items) => items.map((item) => (
+      item.draftId === draftId ? recalculateShoppingListInventory(item, { quantity: item.quantity + 1 }) : item
+    )));
+  }
+
+  function decreaseShoppingListItemQuantity(draftId: string) {
+    updateShoppingListDraftItems((items) => items.map((item) => (
+      item.draftId === draftId && item.quantity > 1 ? recalculateShoppingListInventory(item, { quantity: item.quantity - 1 }) : item
+    )));
+  }
+
+  function increaseShoppingListInventoryDecrease(draftId: string) {
+    updateShoppingListDraftItems((items) => items.map((item) => {
+      if (item.draftId !== draftId) {
+        return item;
+      }
+
+      const maxDecrease = Math.min(item.quantity, item.inventoryQuantity ?? 0);
+      return {
+        ...item,
+        inventoryDecreaseQuantity: Math.min(item.inventoryDecreaseQuantity + 1, maxDecrease),
+        inventoryShortageQuantity: Math.max(item.quantity - Math.min(item.inventoryDecreaseQuantity + 1, maxDecrease), 0),
+      };
+    }));
+  }
+
+  function decreaseShoppingListInventoryDecrease(draftId: string) {
+    updateShoppingListDraftItems((items) => items.map((item) => (
+      item.draftId === draftId
+        ? {
+            ...item,
+            inventoryDecreaseQuantity: Math.max(item.inventoryDecreaseQuantity - 1, 0),
+            inventoryShortageQuantity: Math.max(item.quantity - Math.max(item.inventoryDecreaseQuantity - 1, 0), 0),
+          }
+        : item
+    )));
+  }
+
+  function removeShoppingListItem(draftId: string) {
+    updateShoppingListDraftItems((items) => items.filter((item) => item.draftId !== draftId));
+  }
+
+  async function addProductToShoppingList(product: ProductSearchItem) {
+    try {
+      const { product: detail, brandName } = await addShoppingListProductMutation.mutateAsync(product);
+      updateShoppingListState((current) => {
+        const existing = current.draftItems.find((item) => item.productId === detail.id);
+        if (existing) {
+          return {
+            ...current,
+            search: '',
+            draftItems: current.draftItems.map((item) => (
+              item.productId === detail.id ? { ...item, quantity: item.quantity + 1 } : item
+            )),
+          };
+        }
+
+        const nextItem: ShoppingListDraftItem = {
+          draftId: `custom:${detail.id}`,
+          productId: detail.id,
+          brandId: detail.brandId ?? null,
+          brandName: detail.brandId == null ? t('labels.noBrand') : brandName,
+          title: detail.title ?? product.title,
+          quantity: 1,
+          thumbnailUrl: detail.images?.[0] ?? product.images[0] ?? null,
+          inventoryQuantity: detail.inventoryQuantity,
+          ...buildInventoryPreview(1, detail.inventoryQuantity),
+          notes: [],
+          checked: false,
+          isCustom: true,
+        };
+
+        return {
+          ...current,
+          search: '',
+          draftItems: [...current.draftItems, nextItem],
+        };
+      });
+    } catch {
+      toast.error(t('ordersManager.shoppingList.addProductError'));
+    }
+  }
+
+  async function applyShoppingListInventoryChanges(mode: 'all' | 'selected') {
+    if (!shoppingListState) {
+      return;
+    }
+
+    const selectedItems = shoppingListState.draftItems.filter((item) => {
+      if (item.productId == null || item.inventoryDecreaseQuantity <= 0 || !item.inventoryActionEligible) {
+        return false;
+      }
+
+      return mode === 'all' ? !item.checked : !item.checked;
+    });
+
+    if (selectedItems.length === 0) {
+      toast.error(t('ordersManager.shoppingList.noInventoryChanges'));
+      return;
+    }
+
+    const orderIds = shoppingListState.orders.map((order) => order.orderId);
+    const toastId = toast.loading(t('ordersManager.shoppingList.inventoryApplyLoading', { count: selectedItems.length }));
+
+    try {
+      const response = await applyShoppingListInventoryMutation.mutateAsync({
+        items: selectedItems.map((item) => ({
+          productId: item.productId!,
+          quantity: item.inventoryDecreaseQuantity,
+          source: {
+            type: 'shopping-list',
+            orderIds,
+          },
+        })),
+      });
+
+      updateShoppingListDraftItems((items) => items.map((item) => {
+        if (item.productId == null) {
+          return item;
+        }
+
+        const applied = response.items.find((entry) => entry.productId === item.productId);
+        if (!applied) {
+          return item;
+        }
+
+        return recalculateShoppingListInventory(item, {
+          inventoryQuantity: applied.nextQuantity,
+          inventoryAppliedQuantity: item.inventoryAppliedQuantity + (applied.previousQuantity - applied.nextQuantity),
+        });
+      }).map((item) => {
+        if (item.productId == null) {
+          return item;
+        }
+
+        const applied = response.items.find((entry) => entry.productId === item.productId);
+        return applied ? { ...item, checked: true } : item;
+      }));
+
+      toast.success(t('ordersManager.shoppingList.inventoryApplySuccess', { count: response.items.length }), { id: toastId });
+
+      if (response.skipped.length > 0) {
+        toast.error(response.skipped.map((item) => `${item.productId}: ${item.reason}`).join(' | '));
+      }
+    } catch {
+      toast.error(t('ordersManager.shoppingList.inventoryApplyError', { count: selectedItems.length }), { id: toastId });
+    }
   }
 
   async function updateAddressDelivery(order: OrderRecord, delivery: 0 | 1) {
@@ -1940,7 +2872,7 @@ export function OrdersManager({
 
           <div className="rounded-[1.5rem] border border-border/70 bg-background/90 p-3">
             <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+              <div className="flex flex-col gap-3">
                 <SearchField
                   value={search}
                   placeholder={t('ordersManager.searchPlaceholder')}
@@ -1951,9 +2883,11 @@ export function OrdersManager({
                     });
                   }}
                 />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
                 <NativeSelect
                   aria-label={t('ordersManager.filters.statusLabel')}
-                  className="w-full xl:w-56"
+                  className="w-full sm:w-56"
                   value={statusFilter}
                   onChange={(event) => {
                     startFilterTransition(() => {
@@ -1970,9 +2904,10 @@ export function OrdersManager({
                   <NativeSelectOption value="4">{t('ordersManager.status.completed')}</NativeSelectOption>
                   <NativeSelectOption value="5">{t('ordersManager.status.delayed')}</NativeSelectOption>
                   <NativeSelectOption value="6">{t('ordersManager.status.cancelled')}</NativeSelectOption>
+                  <NativeSelectOption value="7">{t('ordersManager.status.inDelivery')}</NativeSelectOption>
+                  <NativeSelectOption value="8">{t('ordersManager.status.returned')}</NativeSelectOption>
+                  <NativeSelectOption value="9">{t('ordersManager.status.failed')}</NativeSelectOption>
                 </NativeSelect>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">{t('labels.bulkSelectionCount', { count: selectedIds.length })}</Badge>
                 <NativeSelect aria-label={t('ordersManager.bulk.statusLabel')} value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value)} className="min-w-44">
                   <NativeSelectOption value="0">{t('ordersManager.status.notContacted')}</NativeSelectOption>
@@ -1982,6 +2917,9 @@ export function OrdersManager({
                   <NativeSelectOption value="4">{t('ordersManager.status.completed')}</NativeSelectOption>
                   <NativeSelectOption value="5">{t('ordersManager.status.delayed')}</NativeSelectOption>
                   <NativeSelectOption value="6">{t('ordersManager.status.cancelled')}</NativeSelectOption>
+                  <NativeSelectOption value="7">{t('ordersManager.status.inDelivery')}</NativeSelectOption>
+                  <NativeSelectOption value="8">{t('ordersManager.status.returned')}</NativeSelectOption>
+                  <NativeSelectOption value="9">{t('ordersManager.status.failed')}</NativeSelectOption>
                 </NativeSelect>
                 <Button type="button" variant="outline" disabled={!writable || selectedOrders.length === 0} onClick={() => void applyBulkStatus()}>
                   {t('ordersManager.bulk.applyStatus')}
@@ -1989,20 +2927,48 @@ export function OrdersManager({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" disabled={selectedOrders.length === 0} onClick={() => void openSelectedOrdersExportPreview()}>
-                  {t('ordersManager.export.selectedAction')}
-                </Button>
-                <Button type="button" variant="outline" onClick={() => void openConfirmedOrdersExportPreview()}>
-                  {t('ordersManager.export.confirmedAction')}
-                </Button>
-                <Button type="button" variant="outline" disabled={selectedOrders.length === 0} onClick={() => void openShoppingListForOrders(selectedOrders, t('ordersManager.shoppingList.selectedTitle', { count: selectedOrders.length }))}>
-                  <ShoppingBasket data-icon="inline-start" />
-                  {t('ordersManager.shoppingList.selectedAction')}
-                </Button>
-                <Button type="button" variant="outline" onClick={() => void openDispatchedShoppingList()}>
-                  <ShoppingBasket data-icon="inline-start" />
-                  {t('ordersManager.shoppingList.dispatchedAction')}
-                </Button>
+                <SplitActionButton
+                  label={t('ordersManager.ecotrack.confirmedAction')}
+                  icon={<Package data-icon="inline-start" />}
+                  onPrimaryClick={() => void openConfirmedOrdersEcotrackPreview()}
+                  options={[
+                    {
+                      key: 'export-selected',
+                      label: t('ordersManager.export.selectedAction'),
+                      onSelect: () => openSelectedOrdersExportPreview(),
+                      disabled: selectedOrders.length === 0,
+                    },
+                    {
+                      key: 'export-confirmed',
+                      label: t('ordersManager.export.confirmedAction'),
+                      onSelect: () => openConfirmedOrdersExportPreview(),
+                    },
+                    {
+                      key: 'post-selected',
+                      label: t('ordersManager.ecotrack.selectedAction'),
+                      onSelect: () => openSelectedOrdersEcotrackPreview(),
+                      disabled: selectedOrders.length === 0,
+                    },
+                  ]}
+                />
+                <SplitActionButton
+                  label={t('ordersManager.shoppingList.confirmedAction')}
+                  icon={<ShoppingBasket data-icon="inline-start" />}
+                  onPrimaryClick={() => void openConfirmedShoppingList()}
+                  options={[
+                    {
+                      key: 'shopping-selected',
+                      label: t('ordersManager.shoppingList.selectedAction'),
+                      onSelect: () => openShoppingListForOrders(selectedOrders, t('ordersManager.shoppingList.selectedTitle', { count: selectedOrders.length })),
+                      disabled: selectedOrders.length === 0,
+                    },
+                    {
+                      key: 'shopping-dispatched',
+                      label: t('ordersManager.shoppingList.dispatchedAction'),
+                      onSelect: () => openDispatchedShoppingList(),
+                    },
+                  ]}
+                />
               </div>
             </div>
           </div>
@@ -2283,6 +3249,9 @@ export function OrdersManager({
                         <NativeSelectOption value="4">{t('ordersManager.status.completed')}</NativeSelectOption>
                         <NativeSelectOption value="5">{t('ordersManager.status.delayed')}</NativeSelectOption>
                         <NativeSelectOption value="6">{t('ordersManager.status.cancelled')}</NativeSelectOption>
+                        <NativeSelectOption value="7">{t('ordersManager.status.inDelivery')}</NativeSelectOption>
+                        <NativeSelectOption value="8">{t('ordersManager.status.returned')}</NativeSelectOption>
+                        <NativeSelectOption value="9">{t('ordersManager.status.failed')}</NativeSelectOption>
                       </NativeSelect>
                       {order.confirmed === 1 ? (
                         <NoAnswerCounter
@@ -2510,6 +3479,9 @@ export function OrdersManager({
                       <NativeSelectOption value="4">{t('ordersManager.status.completed')}</NativeSelectOption>
                       <NativeSelectOption value="5">{t('ordersManager.status.delayed')}</NativeSelectOption>
                       <NativeSelectOption value="6">{t('ordersManager.status.cancelled')}</NativeSelectOption>
+                      <NativeSelectOption value="7">{t('ordersManager.status.inDelivery')}</NativeSelectOption>
+                      <NativeSelectOption value="8">{t('ordersManager.status.returned')}</NativeSelectOption>
+                      <NativeSelectOption value="9">{t('ordersManager.status.failed')}</NativeSelectOption>
                     </NativeSelect>
                     {order.confirmed === 1 ? (
                       <NoAnswerCounter
@@ -2688,7 +3660,25 @@ export function OrdersManager({
           });
         }}
       />
-      <ShoppingListDialog state={shoppingListState} onOpenChange={(open) => !open && setShoppingListState(null)} onPrint={openShoppingListPrintView} />
+      <ShoppingListDialog
+        open={shoppingListOpen}
+        state={shoppingListState}
+        pending={addShoppingListProductMutation.isPending}
+        inventoryPending={applyShoppingListInventoryMutation.isPending}
+        onOpenChange={setShoppingListOpen}
+        onPrint={openShoppingListPrintView}
+        onSearchChange={(value) => updateShoppingListState((current) => ({ ...current, search: value }))}
+        onAddProduct={(product) => void addProductToShoppingList(product)}
+        onReset={resetShoppingListDraft}
+        onToggleItem={toggleShoppingListItem}
+        onIncreaseQuantity={increaseShoppingListItemQuantity}
+        onDecreaseQuantity={decreaseShoppingListItemQuantity}
+        onIncreaseInventoryDecrease={increaseShoppingListInventoryDecrease}
+        onDecreaseInventoryDecrease={decreaseShoppingListInventoryDecrease}
+        onRemoveItem={removeShoppingListItem}
+        onApplyAllInventoryChanges={() => void applyShoppingListInventoryChanges('all')}
+        onApplySelectedInventoryChanges={() => void applyShoppingListInventoryChanges('selected')}
+      />
       <ExportOrdersDialog
         state={exportPreviewState}
         progress={exportProgressState}
@@ -2699,6 +3689,19 @@ export function OrdersManager({
         }}
         onConfirm={() => void confirmExport()}
         onCancelJob={() => void cancelOrderExportMutation.mutateAsync()}
+      />
+      <EcotrackPostingDialog
+        state={ecotrackPreviewState}
+        progress={ecotrackProgressState}
+        postingSummary={ecotrackPostingSummary}
+        onOpenChange={(open) => {
+          if (!open && !ecotrackProgressState) {
+            setEcotrackPreviewState(null);
+            setActiveEcotrackJobId(null);
+          }
+        }}
+        onConfirm={() => void confirmEcotrackPosting()}
+        onCancelJob={() => void cancelOrderEcotrackMutation.mutateAsync()}
       />
       </>) : null}
     </motion.section>

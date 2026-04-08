@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET } from './route';
 
-const { hasDbMock, getDbMock, readStorefrontAssetsMock } = vi.hoisted(() => ({
+const { hasDbMock, getDbMock, readStorefrontAssetsMock, applyServerCacheMock } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
   readStorefrontAssetsMock: vi.fn(),
+  applyServerCacheMock: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', () => ({
@@ -17,11 +18,19 @@ vi.mock('@bric/storefront-core/assets', () => ({
   readStorefrontAssets: readStorefrontAssetsMock,
 }));
 
+vi.mock('@bric/storefront-core/server-cache', () => ({
+  CACHE_TAGS: {
+    assets: 'assets',
+  },
+  applyServerCache: applyServerCacheMock,
+}));
+
 describe('app/storefront/assets/route', () => {
   beforeEach(() => {
     hasDbMock.mockReset();
     getDbMock.mockReset();
     readStorefrontAssetsMock.mockReset();
+    applyServerCacheMock.mockReset();
   });
 
   it('returns empty storefront assets when DB is unavailable', async () => {
@@ -40,6 +49,7 @@ describe('app/storefront/assets/route', () => {
         {
           id: 1,
           title: 'Hero',
+          titleAr: 'البطولة',
           imageUrl: 'https://cdn.example.com/banner.jpg',
           productId: 9,
           sortOrder: 0,
@@ -52,6 +62,7 @@ describe('app/storefront/assets/route', () => {
         {
           id: 2,
           name: 'Top picks',
+          nameAr: 'أفضل الاختيارات',
           cta: 'Voir Plus',
           ctaAr: 'اكتشف المزيد',
           link: '/products?featured=1',
@@ -85,12 +96,14 @@ describe('app/storefront/assets/route', () => {
 
     const res = await GET();
 
+    expect(applyServerCacheMock).toHaveBeenCalledWith({ stale: 30, revalidate: 120, expire: 600 }, 'assets');
     expect(readStorefrontAssetsMock).toHaveBeenCalledWith({ tag: 'db' });
     await expect(res.json()).resolves.toEqual({
       banners: [
         {
           id: 1,
           title: 'Hero',
+          titleAr: 'البطولة',
           imageUrl: 'https://cdn.example.com/banner.jpg',
           productId: 9,
           sortOrder: 0,
@@ -103,6 +116,7 @@ describe('app/storefront/assets/route', () => {
         {
           id: 2,
           name: 'Top picks',
+          nameAr: 'أفضل الاختيارات',
           cta: 'Voir Plus',
           ctaAr: 'اكتشف المزيد',
           link: '/products?featured=1',

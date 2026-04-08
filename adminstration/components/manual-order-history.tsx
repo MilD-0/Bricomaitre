@@ -112,7 +112,7 @@ export function ManualOrderHistory() {
   useEffect(() => {
     const currentPage = historyQuery.data?.pagination?.page;
     if (!historyQuery.isFetching && currentPage && currentPage !== page) {
-      setPage(currentPage);
+      queueMicrotask(() => setPage(currentPage));
     }
   }, [historyQuery.data?.pagination?.page, historyQuery.isFetching, page]);
 

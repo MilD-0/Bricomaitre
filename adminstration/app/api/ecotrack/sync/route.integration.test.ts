@@ -61,7 +61,12 @@ describe('app/api/ecotrack/sync/route', () => {
   it('queues a manual sync', async () => {
     const response = await POST(new Request('http://localhost/api/ecotrack/sync', { method: 'POST' }));
 
-    expect(startEcotrackSyncJobMock).toHaveBeenCalledWith('ops@example.com', 'manual', expect.any(String));
+    expect(startEcotrackSyncJobMock).toHaveBeenCalledWith(
+      'ops@example.com',
+      'manual',
+      { email: 'ops@example.com', name: null },
+      expect.any(String),
+    );
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual({
       job: { id: 'sync-1', status: 'queued' },

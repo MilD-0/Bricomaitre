@@ -1,21 +1,34 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET } from './route';
 
-describe('app/api/health/route', () => {
-  const originalEnv = process.env;
+const { getStorefrontApiHealthMock } = vi.hoisted(() => ({
+  getStorefrontApiHealthMock: vi.fn(),
+}));
 
+vi.mock('../../../lib/health', () => ({
+  getStorefrontApiHealth: getStorefrontApiHealthMock,
+}));
+
+describe('app/api/health/route', () => {
   beforeEach(() => {
-    process.env = {
-      ...originalEnv,
-      DATABASE_URL: 'postgres://example',
-      REDIS_URL: 'redis://default:password@example.com:6379/0',
-      ECOTRACK_BASE_URL: 'https://ecotrack.example.com/api',
-      ECOTRACK_TOKEN: 'token',
-    };
+    getStorefrontApiHealthMock.mockReset();
   });
 
-  it('returns ok when required storefront-api env vars are configured', async () => {
+  it('returns ok when storefront-api dependencies are reachable', async () => {
+    getStorefrontApiHealthMock.mockResolvedValue({
+      ok: true,
+      missingEnv: [],
+      checks: {
+        databaseConfigured: true,
+        redisConfigured: true,
+        ecotrackConfigured: true,
+        revalidationConfigured: true,
+        database: { configured: true, ok: true, latencyMs: 3.2 },
+        redis: { configured: true, ok: true, latencyMs: 2.1 },
+      },
+    });
+
     const response = await GET(new Request('http://localhost/api/health'));
 
     expect(response.status).toBe(200);
@@ -27,21 +40,33 @@ describe('app/api/health/route', () => {
         databaseConfigured: true,
         redisConfigured: true,
         ecotrackConfigured: true,
+        revalidationConfigured: true,
+        database: { configured: true, ok: true, latencyMs: 3.2 },
+        redis: { configured: true, ok: true, latencyMs: 2.1 },
       },
     }));
   });
 
-  it('returns degraded when required env vars are missing', async () => {
-    delete process.env.REDIS_URL;
-    delete process.env.REDIS_HOST;
-    delete process.env.ECOTRACK_TOKEN;
+  it('returns degraded when a dependency check fails', async () => {
+    getStorefrontApiHealthMock.mockResolvedValue({
+      ok: false,
+      missingEnv: ['STOREFRONT_REVALIDATE_SECRET'],
+      checks: {
+        databaseConfigured: true,
+        redisConfigured: true,
+        ecotrackConfigured: true,
+        revalidationConfigured: false,
+        database: { configured: true, ok: true, latencyMs: 2.4 },
+        redis: { configured: true, ok: false, latencyMs: 1500, error: 'redis timed out after 1500ms' },
+      },
+    });
 
     const response = await GET(new Request('http://localhost/api/health'));
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual(expect.objectContaining({
       status: 'degraded',
-      missingEnv: ['REDIS_HOST', 'ECOTRACK_TOKEN'],
+      missingEnv: ['STOREFRONT_REVALIDATE_SECRET'],
     }));
   });
 });

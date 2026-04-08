@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./internal-signing": "./src/internal-signing.ts",
     "./redis": "./src/redis.ts",
     "./jobs": "./src/jobs.ts",
     "./rate-limit": "./src/rate-limit.ts",

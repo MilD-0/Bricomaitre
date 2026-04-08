@@ -23,6 +23,7 @@ type ActionHistoryItem = {
   operation: 'create' | 'update' | 'delete';
   createdBy: string | null;
   createdByName: string | null;
+  isReversible: boolean;
   isUndone: boolean;
   changes: Array<{
     field: string;
@@ -52,7 +53,7 @@ type ActionHistorySortKey = 'operation' | 'resource' | 'createdBy' | 'createdAt'
 type ActionHistorySortDirection = 'asc' | 'desc';
 type ActionHistoryState = 'all' | 'applied' | 'undone';
 type ActionHistoryOperationFilter = 'all' | 'create' | 'update' | 'delete';
-type ActionHistoryResourceFilter = 'all' | 'products' | 'orders' | 'assets' | 'brandsCategories' | 'bulletin' | 'stats' | 'settings';
+type ActionHistoryResourceFilter = 'all' | 'products' | 'orders' | 'assets' | 'brandsCategories' | 'bulletin' | 'stats' | 'settings' | 'ecotrack';
 
 function formatChangeValue(t: ReturnType<typeof useTranslations>, value: unknown) {
   if (value == null || value === '') {
@@ -161,6 +162,11 @@ function HistoryDetailsDialog({
               <Badge variant={item.isUndone ? 'outline' : 'secondary'} className="rounded-full">
                 {t(item.isUndone ? 'history.state.undone' : 'history.state.applied')}
               </Badge>
+              {!item.isReversible ? (
+                <Badge variant="outline" className="rounded-full">
+                  {t('history.state.nonReversible')}
+                </Badge>
+              ) : null}
             </div>
           </div>
 
@@ -299,6 +305,7 @@ export function ActionHistoryPanel({ invalidateQueryKeys = [] }: { invalidateQue
       { value: 'bulletin', label: t('history.resources.bulletin') },
       { value: 'stats', label: t('history.resources.stats') },
       { value: 'settings', label: t('history.resources.settings') },
+      { value: 'ecotrack', label: t('history.resources.ecotrack') },
     ] satisfies Array<{ value: ActionHistoryResourceFilter; label: string }>,
     [t],
   );
@@ -526,6 +533,11 @@ export function ActionHistoryPanel({ invalidateQueryKeys = [] }: { invalidateQue
                       <Badge variant={item.isUndone ? 'outline' : 'secondary'} className="rounded-full">
                         {t(item.isUndone ? 'history.state.undone' : 'history.state.applied')}
                       </Badge>
+                      {!item.isReversible ? (
+                        <Badge variant="outline" className="rounded-full">
+                          {t('history.state.nonReversible')}
+                        </Badge>
+                      ) : null}
                       <Button type="button" variant="outline" size="sm" onClick={() => setDetailItem(item)}>
                         {t('history.viewDetails')}
                       </Button>
@@ -533,7 +545,7 @@ export function ActionHistoryPanel({ invalidateQueryKeys = [] }: { invalidateQue
                         type="button"
                         variant="outline"
                         size="sm"
-                        disabled={item.isUndone || undoMutation.isPending || redoMutation.isPending}
+                        disabled={!item.isReversible || item.isUndone || undoMutation.isPending || redoMutation.isPending}
                         onClick={() => undoMutation.mutate({ id: item.id, label: item.entityLabel })}
                       >
                         {isUndoPending ? t('history.undoPending') : t('history.undo')}
@@ -541,7 +553,7 @@ export function ActionHistoryPanel({ invalidateQueryKeys = [] }: { invalidateQue
                       <Button
                         type="button"
                         size="sm"
-                        disabled={!item.isUndone || undoMutation.isPending || redoMutation.isPending}
+                        disabled={!item.isReversible || !item.isUndone || undoMutation.isPending || redoMutation.isPending}
                         onClick={() => redoMutation.mutate({ id: item.id, label: item.entityLabel })}
                       >
                         {isRedoPending ? t('history.redoPending') : t('history.redo')}

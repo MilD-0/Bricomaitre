@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { applyHistoryAction, getActionEntityConfig, getActionHistoryChanges, mutateEntityWithHistory, toActionHistoryItem } from './action-history';
+import { applyHistoryAction, getActionEntityConfig, getActionHistoryChanges, mutateEntityWithHistory, recordExplicitActionLog, toActionHistoryItem } from './action-history';
 
 function createSelectBuilder(row: unknown) {
   return {
@@ -43,6 +43,14 @@ describe('action-history helpers', () => {
     });
   });
 
+  it('registers ecotrack shipments as a non-reversible tracked entity', () => {
+    expect(getActionEntityConfig('ecotrackShipments')).toMatchObject({
+      entityType: 'ecotrackShipments',
+      resource: 'ecotrack',
+      reversible: false,
+    });
+  });
+
   it('records before/after snapshots around a mutation', async () => {
     const beforeRow = { id: 3, phoneNumber1: '0550', confirmed: 0, createdAt: new Date('2026-03-20T00:00:00.000Z'), updatedAt: new Date('2026-03-20T00:00:00.000Z') };
     const afterRow = { ...beforeRow, confirmed: 2, updatedAt: new Date('2026-03-21T00:00:00.000Z') };
@@ -72,8 +80,33 @@ describe('action-history helpers', () => {
       operation: 'update',
       createdBy: 'admin@example.com',
       createdByName: 'Admin',
+      isReversible: true,
       beforeState: expect.objectContaining({ confirmed: 0 }),
       afterState: expect.objectContaining({ confirmed: 2 }),
+    }));
+  });
+
+  it('records explicit non-reversible action logs', async () => {
+    const actionLogValues = vi.fn().mockResolvedValue(undefined);
+    const tx = {
+      insert: vi.fn(() => ({ values: actionLogValues })),
+    };
+
+    await recordExplicitActionLog(tx as never, {
+      entityType: 'ecotrackShipments',
+      entityId: 11,
+      operation: 'update',
+      beforeState: { orderId: 11, trackingNumber: 'TRK-OLD' },
+      afterState: { orderId: 11, trackingNumber: 'TRK-NEW' },
+      actor: { name: 'ECOTRACK sync' },
+    });
+
+    expect(actionLogValues).toHaveBeenCalledWith(expect.objectContaining({
+      entityType: 'ecotrackShipments',
+      entityId: 11,
+      resource: 'ecotrack',
+      isReversible: false,
+      createdByName: 'ECOTRACK sync',
     }));
   });
 
@@ -89,6 +122,7 @@ describe('action-history helpers', () => {
       afterState: { id: 11, phoneNumber1: '0550', confirmed: 2, createdAt: '2026-03-20T00:00:00.000Z', updatedAt: '2026-03-21T00:00:00.000Z' },
       createdBy: 'admin@example.com',
       createdByName: 'Admin',
+      isReversible: true,
       isUndone: false,
       undoneAt: null,
       undoneBy: null,
@@ -153,6 +187,7 @@ describe('action-history helpers', () => {
       afterState: { id: 9, title: 'Widget', color: '#000000', inventoryQuantity: 4 },
       createdBy: 'admin@example.com',
       createdByName: 'Admin',
+      isReversible: true,
       isUndone: false,
       undoneAt: null,
       undoneBy: null,
@@ -205,6 +240,7 @@ describe('action-history helpers', () => {
       afterState: { id: 11, confirmed: 2 },
       createdBy: 'admin@example.com',
       createdByName: 'Admin',
+      isReversible: true,
       isUndone: false,
       undoneAt: null,
       undoneBy: null,
@@ -250,6 +286,7 @@ describe('action-history helpers', () => {
       afterState: { id: 11, confirmed: 3 },
       createdBy: 'admin@example.com',
       createdByName: 'Admin',
+      isReversible: true,
       isUndone: true,
       undoneAt: new Date('2026-03-21T01:00:00.000Z'),
       undoneBy: 'admin@example.com',
@@ -283,6 +320,45 @@ describe('action-history helpers', () => {
     expect(tx.insert).not.toHaveBeenCalled();
   });
 
+  it('rejects undo for non-reversible action logs', async () => {
+    const historyEntry = {
+      id: 21,
+      resource: 'ecotrack',
+      entityType: 'ecotrackShipments',
+      entityId: 11,
+      entityLabel: 'TRK-123',
+      operation: 'update',
+      beforeState: { trackingNumber: 'TRK-123', currentStatus: 'created' },
+      afterState: { trackingNumber: 'TRK-123', currentStatus: 'vers_hub' },
+      createdBy: null,
+      createdByName: 'ECOTRACK sync',
+      isReversible: false,
+      isUndone: false,
+      undoneAt: null,
+      undoneBy: null,
+      redoneAt: null,
+      redoneBy: null,
+      createdAt: new Date('2026-03-21T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-21T00:00:00.000Z'),
+    };
+
+    const tx = {
+      select: vi.fn()
+        .mockReturnValueOnce(createActionLogSelectBuilder(historyEntry)),
+      update: vi.fn(),
+      insert: vi.fn(),
+      delete: vi.fn(),
+    };
+    const db = {
+      transaction: vi.fn(async (callback: (innerTx: typeof tx) => Promise<unknown>) => callback(tx)),
+    };
+
+    await expect(applyHistoryAction(db as never, {
+      actionLogId: 21,
+      direction: 'undo',
+    })).rejects.toThrow('This action cannot be undone.');
+  });
+
   it('serializes action log entries for the API', () => {
     expect(toActionHistoryItem({
       id: 1,
@@ -295,6 +371,7 @@ describe('action-history helpers', () => {
       afterState: { id: 9 },
       createdBy: 'admin@example.com',
       createdByName: 'Admin',
+      isReversible: true,
       isUndone: false,
       undoneAt: null,
       undoneBy: null,
@@ -305,6 +382,7 @@ describe('action-history helpers', () => {
     } as never)).toEqual(expect.objectContaining({
       id: 1,
       entityLabel: 'Widget',
+      isReversible: true,
       changes: [],
       createdAt: '2026-03-21T00:00:00.000Z',
     }));

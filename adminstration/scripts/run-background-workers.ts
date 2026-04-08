@@ -5,13 +5,17 @@ import { readSampleRate } from '../lib/sentry';
 import {
   ADMIN_AD_COST_IMPORT_QUEUE,
   ADMIN_ECOTRACK_SYNC_QUEUE,
+  ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE,
+  ADMIN_ORDER_ECOTRACK_QUEUE,
   ADMIN_ORDER_EXPORT_QUEUE,
   ADMIN_PRODUCT_EXPORT_QUEUE,
   ADMIN_STATS_IMPORT_QUEUE,
   STOREFRONT_ANALYTICS_QUEUE,
   runAdCostsImportJob,
   runAnalyticsJob,
+  runEcotrackShipmentSyncJob,
   runEcotrackSyncJob,
+  runOrderEcotrackJob,
   runOrderExportJob,
   runProductExportJob,
   runStatsImportJob,
@@ -35,9 +39,11 @@ Sentry.init({
 const workers = [
   createQueueWorker(ADMIN_PRODUCT_EXPORT_QUEUE, runProductExportJob),
   createQueueWorker(ADMIN_ORDER_EXPORT_QUEUE, runOrderExportJob),
+  createQueueWorker(ADMIN_ORDER_ECOTRACK_QUEUE, runOrderEcotrackJob),
   createQueueWorker(ADMIN_STATS_IMPORT_QUEUE, runStatsImportJob),
   createQueueWorker(ADMIN_AD_COST_IMPORT_QUEUE, runAdCostsImportJob),
   createQueueWorker(ADMIN_ECOTRACK_SYNC_QUEUE, runEcotrackSyncJob),
+  createQueueWorker(ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE, runEcotrackShipmentSyncJob),
   createQueueWorker(STOREFRONT_ANALYTICS_QUEUE, runAnalyticsJob),
 ];
 

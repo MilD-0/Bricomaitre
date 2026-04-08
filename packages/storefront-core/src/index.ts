@@ -8,3 +8,5 @@ export * from './storefront/dto';
 export * from './storefront/ecotrack-catalog';
 export * from './storefront/order-access';
 export * from './storefront/orders';
+export * from './ecotrack-client';
+export * from './ecotrack-tracking';

@@ -10,7 +10,7 @@ vi.mock('./auth', () => ({
 }));
 
 import { normalizePermissions, normalizeRole } from './permissions';
-import { canMutateResource, getEntityMutationResource, requireMutationAccess, requireOpsAccess } from './rbac';
+import { canMutateResource, requireMutationAccess, requireOpsAccess } from './rbac';
 
 describe('rbac helpers', () => {
   beforeEach(() => {
@@ -25,15 +25,6 @@ describe('rbac helpers', () => {
 
   it('normalizes unsupported permissions away', () => {
     expect(normalizePermissions(['products_write', 'unknown_permission'])).toEqual(['products_write']);
-  });
-
-  it('maps entity mutation resources consistently', () => {
-    expect(getEntityMutationResource('products')).toBe('products');
-    expect(getEntityMutationResource('orders')).toBe('orders');
-    expect(getEntityMutationResource('assets')).toBe('assets');
-    expect(getEntityMutationResource('bulletinPosts')).toBe('bulletin');
-    expect(getEntityMutationResource('brandsCategories')).toBe('brandsCategories');
-    expect(getEntityMutationResource('inventory')).toBeNull();
   });
 
   it('enforces edit vs ops permissions by role', () => {

@@ -45,6 +45,7 @@ export type ProductPatch = z.output<typeof productPatchSchema>;
 
 export const productSortKeyValues = ['active', 'title', 'price', 'purchasePrice', 'inStock', 'updatedAt', 'createdAt'] as const;
 export const sortDirectionValues = ['asc', 'desc'] as const;
+export const imageOriginFilterValues = ['all', 'external'] as const;
 
 const optionalNumericFilter = z.union([z.coerce.number().int().positive(), z.literal(''), z.null(), z.undefined()]).transform((value) => {
   if (value === '' || value == null) {
@@ -60,6 +61,7 @@ export const productListQuerySchema = z.object({
   search: z.string().trim().default(''),
   brandId: optionalNumericFilter,
   categoryId: optionalNumericFilter,
+  imageOrigin: z.enum(imageOriginFilterValues).default('all'),
   sortKey: z.enum(productSortKeyValues).default('updatedAt'),
   sortDirection: z.enum(sortDirectionValues).default('desc'),
 });

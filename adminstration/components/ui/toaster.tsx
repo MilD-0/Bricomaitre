@@ -1,7 +1,8 @@
 'use client';
 
 import { AlertCircle, CheckCircle2, LoaderCircle, X } from 'lucide-react';
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 
 import { cn } from '../../lib/utils';
 import { dismissToast, getToastSnapshot, subscribeToToasts, type ToastTone } from '../../lib/toast';
@@ -32,8 +33,17 @@ const toneStyles: Record<ToastTone, { card: string; icon: string; progress: stri
 
 export function Toaster() {
   const toasts = useSyncExternalStore(subscribeToToasts, getToastSnapshot, getToastSnapshot);
+  const [mounted, setMounted] = useState(false);
 
-  return (
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
+
+  return createPortal(
     <div className="pointer-events-none fixed inset-x-0 bottom-4 z-100 flex w-full flex-col gap-3 px-4 sm:inset-x-auto sm:end-6 sm:bottom-6 sm:max-w-sm sm:px-0">
       {toasts.map((toast) => {
         const { Icon, card, icon, label, progress } = toneStyles[toast.tone];
@@ -44,7 +54,7 @@ export function Toaster() {
             role="status"
             aria-live={toast.tone === 'error' ? 'assertive' : 'polite'}
             className={cn(
-              'pointer-events-auto overflow-hidden rounded-[1.5rem] border shadow-[var(--shadow-vapor-strong)] backdrop-blur-md',
+              'pointer-events-auto overflow-hidden rounded-[1.5rem] border shadow-[var(--shadow-vapor-strong)]',
               card,
             )}
           >
@@ -79,6 +89,7 @@ export function Toaster() {
           </div>
         );
       })}
-    </div>
+    </div>,
+    document.body,
   );
 }

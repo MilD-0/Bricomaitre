@@ -22,6 +22,10 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     return NextResponse.json({ error: 'Action log not found' }, { status: 404 });
   }
 
+  if (!entry.isReversible) {
+    return NextResponse.json({ error: 'This action cannot be undone.' }, { status: 409 });
+  }
+
   const config = getActionEntityConfig(entry.entityType);
   if (!config) {
     return NextResponse.json({ error: 'Unsupported entity type' }, { status: 400 });

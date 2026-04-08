@@ -40,6 +40,7 @@ const optionalLinkSchema = z.string().trim().max(2048).optional().nullable().tra
 
 export const assetBannerSchema = z.object({
   title: z.string().trim().min(1).max(120),
+  titleAr: z.string().trim().min(1).max(120),
   imageUrl: z.string().trim().url(),
   productId: productLinkSchema,
   active: z.boolean().default(true),
@@ -47,6 +48,7 @@ export const assetBannerSchema = z.object({
 
 export const featuredProductGroupSchema = z.object({
   name: z.string().trim().min(1).max(120),
+  nameAr: z.string().trim().min(1).max(120),
   cta: optionalShortTextSchema,
   ctaAr: optionalShortTextSchema,
   link: optionalLinkSchema,

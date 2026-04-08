@@ -117,6 +117,54 @@ describe('app/api/products/route', () => {
     });
   });
 
+  it('treats imageOrigin as a paginated products filter', async () => {
+    hasDbMock.mockReturnValue(true);
+
+    const rows = [
+      {
+        id: 3,
+        title: 'External image product',
+        updatedAt: new Date('2026-03-06T00:00:00.000Z'),
+      },
+    ];
+
+    const offsetMock = vi.fn().mockResolvedValue(rows);
+    const limitMock = vi.fn(() => ({ offset: offsetMock }));
+    const orderByMock = vi.fn(() => ({ limit: limitMock }));
+    const whereRowsMock = vi.fn(() => ({ orderBy: orderByMock }));
+    const fromRowsMock = vi.fn(() => ({ where: whereRowsMock }));
+    const whereCountMock = vi.fn().mockResolvedValue([{ value: 1 }]);
+    const fromCountMock = vi.fn(() => ({ where: whereCountMock }));
+    const selectMock = vi
+      .fn()
+      .mockReturnValueOnce({ from: fromCountMock })
+      .mockReturnValueOnce({ from: fromRowsMock });
+
+    getDbMock.mockReturnValue({ select: selectMock });
+
+    const res = await GET(new NextRequest('http://localhost/api/products?page=1&limit=50&imageOrigin=external'));
+
+    expect(whereCountMock).toHaveBeenCalledOnce();
+    expect(whereRowsMock).toHaveBeenCalledOnce();
+    await expect(res.json()).resolves.toEqual({
+      items: [
+        {
+          id: 3,
+          title: 'External image product',
+          updatedAt: '2026-03-06T00:00:00.000Z',
+        },
+      ],
+      pagination: {
+        page: 1,
+        limit: 50,
+        totalItems: 1,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    });
+  });
+
   it('returns 503 when DB is unavailable', async () => {
     hasDbMock.mockReturnValue(false);
 

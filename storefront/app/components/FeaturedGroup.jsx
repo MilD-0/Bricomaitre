@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { Link } from "@/i18n/navigation";
 import Embla from "./Embla";
 import { Skeleton } from "./ui";
 

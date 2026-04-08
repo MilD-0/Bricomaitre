@@ -37,7 +37,15 @@ export async function POST(request: Request) {
 
   const session = await auth();
   try {
-    const result = await startEcotrackSyncJob(getRequesterKey(session?.user?.email), 'manual', requestId);
+    const result = await startEcotrackSyncJob(
+      getRequesterKey(session?.user?.email),
+      'manual',
+      {
+        email: session?.user?.email ?? null,
+        name: session?.user?.name ?? null,
+      },
+      requestId,
+    );
 
     if (result.kind === 'busy') {
       return NextResponse.json({ error: 'Ecotrack sync is already running.', job: result.job }, { status: 429, headers: withRequestIdHeaders(requestId) });

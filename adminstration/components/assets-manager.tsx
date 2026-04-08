@@ -39,6 +39,7 @@ import { Textarea } from './ui/textarea';
 
 const bannerDefaults: AssetBannerInput = {
   title: '',
+  titleAr: '',
   imageUrl: '',
   productId: null,
   active: true,
@@ -46,6 +47,7 @@ const bannerDefaults: AssetBannerInput = {
 
 const groupDefaults: FeaturedProductGroupInput = {
   name: '',
+  nameAr: '',
   cta: '',
   ctaAr: '',
   link: '',
@@ -123,6 +125,7 @@ function timestampLabel(value: string) {
 function toGroupFormValues(group: FeaturedProductGroupRecord): FeaturedProductGroupInput {
   return {
     ...group,
+    nameAr: group.nameAr ?? '',
     cta: group.cta ?? '',
     ctaAr: group.ctaAr ?? '',
     link: group.link ?? '',
@@ -564,6 +567,12 @@ function BannerDialogForm({
             {form.formState.errors.title ? <FieldError>{form.formState.errors.title.message}</FieldError> : null}
           </Field>
 
+          <Field>
+            <FieldLabel htmlFor="asset-banner-title-ar">{t('titleArLabel')}</FieldLabel>
+            <Input id="asset-banner-title-ar" placeholder={t('bannerTitleArPlaceholder')} {...form.register('titleAr')} />
+            {form.formState.errors.titleAr ? <FieldError>{form.formState.errors.titleAr.message}</FieldError> : null}
+          </Field>
+
           <ProductPickerField
             label={t('linkedProductLabel')}
             items={products.map((product) => ({
@@ -647,6 +656,12 @@ function FeaturedGroupDialogForm({
             <FieldLabel htmlFor="asset-group-name">{t('groupNameLabel')}</FieldLabel>
             <Input id="asset-group-name" placeholder={t('groupNamePlaceholder')} {...form.register('name')} />
             {form.formState.errors.name ? <FieldError>{form.formState.errors.name.message}</FieldError> : null}
+          </Field>
+
+          <Field>
+            <FieldLabel htmlFor="asset-group-name-ar">{t('groupNameArLabel')}</FieldLabel>
+            <Input id="asset-group-name-ar" placeholder={t('groupNameArPlaceholder')} {...form.register('nameAr')} />
+            {form.formState.errors.nameAr ? <FieldError>{form.formState.errors.nameAr.message}</FieldError> : null}
           </Field>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -765,8 +780,12 @@ function ProductCardDialogForm({
       return;
     }
 
-    setCharacteristicsArDraft(arrayToLines(form.getValues('characteristicsAr') ?? []));
-    setCharacteristicsFrDraft(arrayToLines(form.getValues('characteristicsFr') ?? []));
+    const nextCharacteristicsArDraft = arrayToLines(form.getValues('characteristicsAr') ?? []);
+    const nextCharacteristicsFrDraft = arrayToLines(form.getValues('characteristicsFr') ?? []);
+    queueMicrotask(() => {
+      setCharacteristicsArDraft(nextCharacteristicsArDraft);
+      setCharacteristicsFrDraft(nextCharacteristicsFrDraft);
+    });
   }, [form, open, mode]);
 
   const syncCharacteristicsToForm = () => {
@@ -918,12 +937,21 @@ export function AssetsManager({
   const [editingGroup, setEditingGroup] = useState<FeaturedProductGroupRecord | null>(null);
   const [editingCard, setEditingCard] = useState<ProductCardRecord | null>(null);
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
+  const [optimisticId, setOptimisticId] = useState(-1);
+  const [initialAssetsUpdatedAt] = useState(() => (initialAssets ? Date.now() : 0));
+  const [initialMetaUpdatedAt] = useState(() => (initialMeta ? Date.now() : 0));
+
+  const getNextOptimisticId = () => {
+    const nextId = optimisticId;
+    setOptimisticId((current) => current - 1);
+    return nextId;
+  };
 
   const assetsQuery = useQuery({
     queryKey: ['assets-manager'],
     queryFn: () => request<AssetsResponse>('/api/assets'),
     initialData: initialAssets,
-    initialDataUpdatedAt: initialAssets ? Date.now() : 0,
+    initialDataUpdatedAt: initialAssetsUpdatedAt,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
   });
@@ -932,7 +960,7 @@ export function AssetsManager({
     queryKey: ['assets-meta'],
     queryFn: () => request<AssetsMetaResponse>('/api/assets/meta'),
     initialData: initialMeta,
-    initialDataUpdatedAt: initialMeta ? Date.now() : 0,
+    initialDataUpdatedAt: initialMetaUpdatedAt,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
   });
@@ -1233,7 +1261,7 @@ export function AssetsManager({
       kind: 'banner',
       data: values,
       optimisticItem: {
-        id: -Date.now(),
+        id: getNextOptimisticId(),
         ...values,
         sortOrder: getNextSortOrder(assetData.banners),
         createdAt: now,
@@ -1273,7 +1301,7 @@ export function AssetsManager({
       kind: 'featuredGroup',
       data: values,
       optimisticItem: {
-        id: -Date.now(),
+        id: getNextOptimisticId(),
         ...values,
         sortOrder: getNextSortOrder(assetData.featuredGroups),
         createdAt: now,
@@ -1314,7 +1342,7 @@ export function AssetsManager({
       kind: 'productCard',
       data: values,
       optimisticItem: {
-        id: -Date.now(),
+        id: getNextOptimisticId(),
         ...values,
         sortOrder: getNextSortOrder(assetData.productCards),
         createdAt: now,
@@ -1517,7 +1545,10 @@ export function AssetsManager({
                       }}
                     />
                   </TableCell>
-                  <TableCell className="font-medium">{banner.title}</TableCell>
+                  <TableCell className="font-medium">
+                    <div>{banner.title}</div>
+                    <div className="text-sm font-normal text-muted-foreground">{banner.titleAr}</div>
+                  </TableCell>
                   <TableCell>{banner.productId ? productNameById.get(banner.productId) ?? t('unknownProduct') : t('noLinkedProduct')}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{timestampLabel(banner.updatedAt)}</TableCell>
                   <TableCell>
@@ -1635,7 +1666,10 @@ export function AssetsManager({
                       }}
                     />
                   </TableCell>
-                  <TableCell className="font-medium">{group.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <div>{group.name}</div>
+                    <div className="text-sm font-normal text-muted-foreground">{group.nameAr}</div>
+                  </TableCell>
                   <TableCell>
                     <Switch
                       aria-label={t('groupShowAtTopToggle', { name: group.name })}

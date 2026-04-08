@@ -2,7 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { getLocale } from "next-intl/server";
 
 import {
-  listAllStorefrontProducts,
+  fetchStorefrontProductBuildFeed,
   fetchLegacyProductByToken,
 } from "@/lib/storefront-api";
 import {
@@ -21,7 +21,7 @@ export const revalidate = 120;
 export const dynamicParams = true;
 
 export async function generateStaticParams() {
-  const products = await listAllStorefrontProducts();
+  const products = await fetchStorefrontProductBuildFeed();
   return products.map((product) => ({
     id: product.slug ?? String(product.id),
   }));

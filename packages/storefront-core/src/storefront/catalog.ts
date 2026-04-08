@@ -12,6 +12,12 @@ import {
 
 type Database = ReturnType<typeof getDb>;
 
+export type StorefrontProductBuildFeedItem = {
+  id: number;
+  slug: string | null;
+  updatedAt: string;
+};
+
 export async function readStorefrontProducts(
   db: Database,
   query: StorefrontProductListQuery,
@@ -70,6 +76,24 @@ export async function readStorefrontProducts(
     .offset((query.page - 1) * query.limit);
 
   return rows.map((row) => toStorefrontProductDto(row satisfies StorefrontProductDtoRow));
+}
+
+export async function readStorefrontProductBuildFeed(db: Database) {
+  const rows = await db
+    .select({
+      id: products.id,
+      slug: products.slug,
+      updatedAt: products.updatedAt,
+    })
+    .from(products)
+    .where(eq(products.active, true))
+    .orderBy(desc(products.updatedAt), desc(products.id));
+
+  return rows.map((row) => ({
+    id: row.id,
+    slug: row.slug,
+    updatedAt: row.updatedAt.toISOString(),
+  }) satisfies StorefrontProductBuildFeedItem);
 }
 
 export async function readStorefrontBrands(db: Database) {

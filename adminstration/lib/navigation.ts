@@ -35,6 +35,10 @@ export const navigationItems: NavigationItem[] = [
   {
     key: 'orders',
     href: '/orders',
+    subItems: [
+      { key: 'ordersTable', href: '/orders', translationKey: 'nav.ordersTable' },
+      { key: 'ecotrackShipments', href: '/orders/ecotrack', translationKey: 'nav.ecotrackShipments' },
+    ],
   },
   {
     key: 'inventory',

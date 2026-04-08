@@ -75,7 +75,7 @@ export function isStorefrontUpstreamTimeoutError(error: unknown) {
 
 export async function fetchStorefrontJson<T>(
   pathname: string,
-  init?: RequestInit & { next?: { revalidate?: number }; timeoutMs?: number },
+  init?: RequestInit & { next?: { revalidate?: number; tags?: string[] }; timeoutMs?: number },
 ): Promise<T> {
   const response = await fetchStorefrontUpstream(pathname, {
     ...init,
