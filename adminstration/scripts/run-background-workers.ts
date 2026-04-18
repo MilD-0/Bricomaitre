@@ -8,6 +8,7 @@ import {
   ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE,
   ADMIN_ORDER_ECOTRACK_QUEUE,
   ADMIN_ORDER_EXPORT_QUEUE,
+  ADMIN_PRODUCT_CATALOG_FEED_QUEUE,
   ADMIN_PRODUCT_EXPORT_QUEUE,
   ADMIN_STATS_IMPORT_QUEUE,
   STOREFRONT_ANALYTICS_QUEUE,
@@ -17,6 +18,7 @@ import {
   runEcotrackSyncJob,
   runOrderEcotrackJob,
   runOrderExportJob,
+  runProductCatalogFeedRefreshJob,
   runProductExportJob,
   runStatsImportJob,
 } from '../lib/background-jobs';
@@ -38,6 +40,7 @@ Sentry.init({
 
 const workers = [
   createQueueWorker(ADMIN_PRODUCT_EXPORT_QUEUE, runProductExportJob),
+  createQueueWorker(ADMIN_PRODUCT_CATALOG_FEED_QUEUE, runProductCatalogFeedRefreshJob),
   createQueueWorker(ADMIN_ORDER_EXPORT_QUEUE, runOrderExportJob),
   createQueueWorker(ADMIN_ORDER_ECOTRACK_QUEUE, runOrderEcotrackJob),
   createQueueWorker(ADMIN_STATS_IMPORT_QUEUE, runStatsImportJob),

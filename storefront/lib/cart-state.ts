@@ -1,5 +1,6 @@
 export type CartProductSnapshot = {
   _id: string;
+  id: number | null;
   slug: string;
   title: string;
   title_ar: string;
@@ -17,6 +18,7 @@ export type CartProductSnapshot = {
 
 export function toCartProductSnapshot(product: {
   _id: string | number;
+  id?: number | string | null;
   slug?: string | null;
   title?: string | null;
   title_ar?: string | null;
@@ -34,9 +36,16 @@ export function toCartProductSnapshot(product: {
   const price = typeof product.price === "number" ? product.price : Number(product.price ?? 0);
   const oldPriceRaw = product.oldPrice ?? product.OldPrice;
   const oldPrice = oldPriceRaw == null ? null : Number(oldPriceRaw);
+  const id =
+    typeof product.id === "number"
+      ? product.id
+      : typeof product.id === "string" && /^-?[0-9]+$/.test(product.id.trim())
+        ? Number(product.id)
+        : null;
 
   return {
     _id: String(product._id),
+    id,
     slug: product.slug ?? String(product._id),
     title: product.title ?? "",
     title_ar: product.title_ar ?? "",
@@ -62,13 +71,38 @@ export function mergeCartProductSnapshots(
   }
 
   const next = { ...current };
+  let changed = false;
 
   for (const product of products) {
     const snapshot = toCartProductSnapshot(product);
+    const previous = current[snapshot._id];
+
+    if (
+      previous
+      && previous.slug === snapshot.slug
+      && previous.id === snapshot.id
+      && previous.title === snapshot.title
+      && previous.title_ar === snapshot.title_ar
+      && previous.summary === snapshot.summary
+      && previous.summary_ar === snapshot.summary_ar
+      && previous.price === snapshot.price
+      && previous.OldPrice === snapshot.OldPrice
+      && previous.oldPrice === snapshot.oldPrice
+      && previous.stock === snapshot.stock
+      && previous.inStock === snapshot.inStock
+      && previous.availabilityStatus === snapshot.availabilityStatus
+      && previous.updatedAt === snapshot.updatedAt
+      && previous.images.length === snapshot.images.length
+      && previous.images.every((image, index) => image === snapshot.images[index])
+    ) {
+      continue;
+    }
+
     next[snapshot._id] = snapshot;
+    changed = true;
   }
 
-  return next;
+  return changed ? next : current;
 }
 
 export function buildCartProductSummary(

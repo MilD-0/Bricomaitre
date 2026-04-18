@@ -7,7 +7,7 @@ import {
   coerceOrderStatus,
   orderListQuerySchema,
   type OrderRecord,
-  type OrderSortKey,
+  type OrderSortRule,
   type OrderStatusHistoryRecord,
 } from './orders';
 import { getOrderProductLookup, toOrderRecord } from './order-records';
@@ -17,6 +17,7 @@ type OrdersQueryInput = {
   limit?: string | number | undefined;
   search?: string | undefined;
   confirmed?: number | undefined;
+  sort?: string[] | undefined;
   sortKey?: string | undefined;
   sortDirection?: string | undefined;
 };
@@ -36,18 +37,22 @@ export type OrdersResponse = {
   pagination: PaginationMeta;
 };
 
-function getOrderBy(sortKey: OrderSortKey, sortDirection: 'asc' | 'desc') {
-  const direction = sortDirection === 'asc' ? asc : desc;
+function getOrderBy(sortRules: OrderSortRule[]) {
+  const orderBy = sortRules.flatMap((rule) => {
+    const direction = rule.direction === 'asc' ? asc : desc;
 
-  if (sortKey === 'fullName') {
-    return [direction(orders.firstName), direction(orders.lastName), desc(orders.createdAt)] as const;
-  }
+    if (rule.key === 'fullName') {
+      return [direction(orders.firstName), direction(orders.lastName)] as const;
+    }
 
-  if (sortKey === 'confirmed') {
-    return [direction(orders.confirmed), desc(orders.createdAt)] as const;
-  }
+    if (rule.key === 'confirmed') {
+      return [direction(orders.confirmed)] as const;
+    }
 
-  return [direction(orders.createdAt)] as const;
+    return [direction(orders.createdAt)] as const;
+  });
+
+  return [...orderBy, desc(orders.id)] as const;
 }
 
 function buildOrderHistory(rows: typeof orderStatusHistory.$inferSelect[]): OrderStatusHistoryRecord[] {
@@ -102,7 +107,7 @@ export async function loadOrdersPageData(
     .select()
     .from(orders)
     .where(whereClause)
-    .orderBy(...getOrderBy(query.sortKey, query.sortDirection))
+    .orderBy(...getOrderBy(query.sortRules))
     .limit(query.limit)
     .offset((page - 1) * query.limit);
   const orderIds = rows.map((row) => row.id);

@@ -10,6 +10,8 @@ declare global {
 const JOURNEY_STORAGE_KEY = "analytics:journey-id";
 const SESSION_STORAGE_KEY = "analytics:session-id";
 const SESSION_STARTED_KEY = "analytics:session-started";
+const VISIT_COOKIE_NAME = "bric_visit_id";
+const VARIANT_COOKIE_NAME = "bric_sf_variant";
 
 type AnalyticsItem = {
   productId?: number | null;
@@ -27,8 +29,11 @@ type AnalyticsItem = {
 };
 
 type AnalyticsEventInput = {
+  eventId?: string | null;
   eventName: string;
   gaEventName?: string | null;
+  visitId?: string | null;
+  occurredAt?: string | null;
   pagePath?: string | null;
   pageType?: string | null;
   locale?: string | null;
@@ -71,6 +76,19 @@ function ensureGtag() {
   }
 }
 
+function readCookie(name: string) {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const cookie = document.cookie
+    .split(";")
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(`${name}=`));
+
+  return cookie ? decodeURIComponent(cookie.slice(name.length + 1)) : null;
+}
+
 export function getOrCreateJourneyId() {
   if (typeof window === "undefined") {
     return "";
@@ -99,6 +117,10 @@ export function getOrCreateSessionId() {
   const next = createId();
   window.sessionStorage.setItem(SESSION_STORAGE_KEY, next);
   return next;
+}
+
+export function getVisitIdFromCookie() {
+  return readCookie(VISIT_COOKIE_NAME);
 }
 
 export function markSessionStarted() {
@@ -133,6 +155,50 @@ function getUtmValues() {
     utmCampaign: params.get("utm_campaign"),
     utmTerm: params.get("utm_term"),
     utmContent: params.get("utm_content"),
+  };
+}
+
+function getClientMetadata() {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  return {
+    landingUrl: window.location.href,
+    landingHost: window.location.host,
+    userAgent: window.navigator.userAgent,
+    fbc: readCookie("_fbc"),
+    paidClickCookie: readCookie("bric_paid_click") === "1",
+    paidClickSeenAt: readCookie("bric_paid_click_seen_at"),
+  };
+}
+
+function getExperimentMetadata() {
+  if (typeof window === "undefined") {
+    return {
+      storefrontVariant: "new",
+    };
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const queryVariant = params.get("sf_variant");
+  const cookieVariant = readCookie(VARIANT_COOKIE_NAME);
+  const pinnedVariant =
+    queryVariant === "legacy" || queryVariant === "new"
+      ? queryVariant
+      : cookieVariant === "legacy" || cookieVariant === "new"
+        ? cookieVariant
+        : null;
+
+  return {
+    storefrontVariant: "new",
+    ...(pinnedVariant
+      ? {
+          experimentMode: "campaign_pinned",
+          experimentSource: "meta_campaign",
+          requestedVariant: pinnedVariant,
+        }
+      : {}),
   };
 }
 
@@ -182,14 +248,17 @@ export async function trackAnalyticsEvent(input: AnalyticsEventInput) {
 
   const journeyId = getOrCreateJourneyId();
   const sessionId = getOrCreateSessionId();
+  const visitId = input.visitId ?? getVisitIdFromCookie();
   const utmValues = getUtmValues();
-  const eventId = createId();
+  const eventId = input.eventId ?? createId();
   const payload = {
     eventId,
+    visitId,
     journeyId,
     sessionId,
     eventName: input.eventName,
     gaEventName: input.gaEventName ?? input.eventName,
+    occurredAt: input.occurredAt ?? new Date().toISOString(),
     pagePath: input.pagePath ?? window.location.pathname,
     pageType: input.pageType ?? getPageType(window.location.pathname),
     locale: input.locale ?? document.documentElement.lang ?? null,
@@ -210,7 +279,11 @@ export async function trackAnalyticsEvent(input: AnalyticsEventInput) {
     quantity: input.quantity ?? null,
     value: input.value ?? null,
     currency: input.currency ?? "DZD",
-    metadata: input.metadata ?? {},
+    metadata: {
+      ...getClientMetadata(),
+      ...getExperimentMetadata(),
+      ...(input.metadata ?? {}),
+    },
   };
 
   ensureGtag();
@@ -220,6 +293,7 @@ export async function trackAnalyticsEvent(input: AnalyticsEventInput) {
       send_to: process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
       page_path: payload.pagePath,
       page_location: window.location.href,
+      visit_id: visitId,
       journey_id: journeyId,
       session_id: sessionId,
       value: payload.value,

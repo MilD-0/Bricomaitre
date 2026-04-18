@@ -1,6 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
-import {getLocale} from 'next-intl/server';
+import {getLocale, getMessages} from 'next-intl/server';
 
 import "./globals.css";
 import {
@@ -12,12 +12,20 @@ import {
   SITE_TITLE,
 } from "@/lib/seo";
 import { getCloudfrontOrigin } from "@/lib/cdn";
+import StorefrontProviders from "./StorefrontProviders";
 
 
 const appFont = localFont({
   src: "./fonts/GeistVF.woff",
   variable: "--font-app",
 });
+
+const BRAND_THEME_COLOR = "#007f86";
+
+export const viewport: Viewport = {
+  themeColor: BRAND_THEME_COLOR,
+  colorScheme: "light",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),
@@ -27,6 +35,12 @@ export const metadata: Metadata = {
   },
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
+  manifest: "/manifest.webmanifest",
+  formatDetection: {
+    telephone: false,
+    email: false,
+    address: false,
+  },
   alternates: {
     canonical: buildCanonicalUrl("/"),
   },
@@ -58,8 +72,20 @@ export const metadata: Metadata = {
     images: [buildCanonicalUrl("/opengraph-image.png")],
   },
   icons: {
-    icon: "/favicon.ico",
-    apple: "/apple-icon.png",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-16x16.png", type: "image/png", sizes: "16x16" },
+      { url: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
+    ],
+    shortcut: ["/favicon.ico"],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+    other: [
+      {
+        rel: "mask-icon",
+        url: "/safari-pinned-tab.svg",
+        color: BRAND_THEME_COLOR,
+      },
+    ],
   },
 };
 import { FacebookPixel } from "./components";
@@ -69,6 +95,7 @@ import GoogleAnalytics from "./components/GoogleAnalytics";
 
 export default async function RootLayout({children}: {children: React.ReactNode}, ) {
   const locale = await getLocale();
+  const messages = await getMessages();
   const cloudfrontOrigin = getCloudfrontOrigin();
 
   return (
@@ -79,7 +106,9 @@ export default async function RootLayout({children}: {children: React.ReactNode}
         ) : null}
       </head>
       <body className={appFont.className}>
-        {children}
+        <StorefrontProviders locale={locale} messages={messages}>
+          {children}
+        </StorefrontProviders>
         <FacebookPixel />
         <GoogleAnalytics />
         <AnalyticsTracker />

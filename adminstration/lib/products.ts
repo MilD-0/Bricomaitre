@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { parseSortRuleStrings, type SortRule } from './multi-sort';
+
 const nullableText = z.string().trim().optional().nullable();
 const nullableNumber = z.coerce.number().min(0).optional().nullable();
 
@@ -46,6 +48,7 @@ export type ProductPatch = z.output<typeof productPatchSchema>;
 export const productSortKeyValues = ['active', 'title', 'price', 'purchasePrice', 'inStock', 'updatedAt', 'createdAt'] as const;
 export const sortDirectionValues = ['asc', 'desc'] as const;
 export const imageOriginFilterValues = ['all', 'external'] as const;
+const defaultProductSortRules = [{ key: 'updatedAt', direction: 'desc' }] as const satisfies readonly SortRule<(typeof productSortKeyValues)[number]>[];
 
 const optionalNumericFilter = z.union([z.coerce.number().int().positive(), z.literal(''), z.null(), z.undefined()]).transform((value) => {
   if (value === '' || value == null) {
@@ -62,8 +65,28 @@ export const productListQuerySchema = z.object({
   brandId: optionalNumericFilter,
   categoryId: optionalNumericFilter,
   imageOrigin: z.enum(imageOriginFilterValues).default('all'),
+  sort: z.array(z.string().trim()).optional().default([]),
   sortKey: z.enum(productSortKeyValues).default('updatedAt'),
   sortDirection: z.enum(sortDirectionValues).default('desc'),
+}).transform((value, ctx) => {
+  const parsedSortRules = parseSortRuleStrings(value.sort, productSortKeyValues);
+
+  if (!parsedSortRules.ok) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: parsedSortRules.issue,
+      path: ['sort'],
+    });
+
+    return z.NEVER;
+  }
+
+  return {
+    ...value,
+    sortRules: parsedSortRules.rules.length > 0
+      ? parsedSortRules.rules
+      : [{ key: value.sortKey, direction: value.sortDirection }],
+  };
 });
 
 export type ProductRecord = ProductPayload & {
@@ -74,3 +97,5 @@ export type ProductRecord = ProductPayload & {
 
 export type ProductSortKey = z.infer<typeof productListQuerySchema>['sortKey'];
 export type SortDirection = z.infer<typeof productListQuerySchema>['sortDirection'];
+export type ProductSortRule = SortRule<ProductSortKey>;
+export const defaultProductSort = [...defaultProductSortRules] as ProductSortRule[];

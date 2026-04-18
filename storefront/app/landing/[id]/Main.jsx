@@ -3,9 +3,8 @@
 import Layout from "@/app/components/layout";
 import Image from "next/image";
 import { handleViewProduct } from "@/app/components/Init";
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect } from "react";
 import Carousel from "@/app/components/Carousel";
-import { CartContext } from "@/app/components/cartContext";
 import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import OrderForm from "@/app/components/OrderForm";
@@ -20,7 +19,6 @@ export default function Landing({ id, initialProduct = null }) {
   const t = useTranslations("common");
   const [showMore, setShowMore] = useState(false);
   const [product, setProduct] = useState(initialProduct);
-  const { addProduct } = useContext(CartContext);
   const brand = product?.brandInfo ?? null;
   const category = product?.categoryInfo ?? null;
   const parent = product?.parentCategoryInfo ?? null;
@@ -58,12 +56,13 @@ export default function Landing({ id, initialProduct = null }) {
   return (
     <Layout>
       <div className="sf-container space-y-8 py-6">
-        <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="sf-panel overflow-hidden">
-            <Carousel data={locale === "ar" ? [...product.images].reverse() : product.images} />
-          </div>
+        <section className="sf-card overflow-hidden">
+          <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
+            <div className="border-b border-slate-200/80 p-5 md:p-6 lg:border-b-0 lg:border-r">
+              <Carousel data={locale === "ar" ? [...product.images].reverse() : product.images} />
+            </div>
 
-          <div className="sf-panel">
+            <div className="p-5 md:p-6">
             {brand ? (
               <Link href={buildBrandFilterHref(brand)}>
                 <Image
@@ -71,7 +70,7 @@ export default function Landing({ id, initialProduct = null }) {
                   alt={brand.name}
                   width={180}
                   height={120}
-                  className="rounded-[1rem] bg-white p-2 shadow-sm"
+                  className="rounded-[1rem] border border-slate-200 bg-white p-2"
                   sizes="180px"
                 />
               </Link>
@@ -135,17 +134,18 @@ export default function Landing({ id, initialProduct = null }) {
             <p className={`mt-3 text-sm font-medium ${product.stock > 0 ? "text-green-600" : "text-red-600"}`}>
               {product.inStock ? t("es") : t("ns")}
             </p>
-
             {product.stock > 0 ? (
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Link href="#order" className="sf-button-accent justify-center">{t("ach")}</Link>
-                <button onClick={() => addProduct(product._id, product)} className="sf-button justify-center">{t("ajt")}</button>
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <Link href="#order" className="sf-button-accent justify-center">
+                  {t("ach")}
+                </Link>
               </div>
             ) : null}
+            </div>
           </div>
         </section>
 
-        <section className="sf-panel">
+        <section className="sf-card p-5 md:p-6">
           <h2 className="sf-kicker">{t("desc")}</h2>
           <pre className={`mt-4 whitespace-pre-wrap font-sans text-base leading-7 text-slate-600 ${showMore ? "" : "max-h-32 overflow-hidden"}`}>
             {showMore ? description : truncatedDescription}
@@ -158,7 +158,7 @@ export default function Landing({ id, initialProduct = null }) {
         </section>
 
         {product.stock > 0 ? (
-          <section id="order" className="sf-panel">
+          <section id="order" className="scroll-mt-28">
             <OrderForm prod={id} cart={false} />
           </section>
         ) : (
@@ -166,7 +166,7 @@ export default function Landing({ id, initialProduct = null }) {
         )}
 
         {product.vidlink ? (
-          <section className="sf-panel">
+          <section className="sf-card p-5 md:p-6">
             <h2 className="text-2xl font-semibold text-slate-900">{t("vid")}</h2>
             <div className="mt-4 flex justify-center">
               <iframe
@@ -178,10 +178,15 @@ export default function Landing({ id, initialProduct = null }) {
                 allowFullScreen
               ></iframe>
             </div>
+            <div className="mt-6">
+              <Link href="#order" className="sf-button-accent justify-center">
+                {t("ach")}
+              </Link>
+            </div>
           </section>
         ) : null}
 
-        <section className="sf-panel">
+        <section className="sf-card p-5 md:p-6">
           <h2 className="text-2xl font-semibold text-slate-900">{t("imgs")}</h2>
           <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {product.images.map((image) => (
@@ -201,6 +206,13 @@ export default function Landing({ id, initialProduct = null }) {
 
         {category ? <Category key={category._id} categoryid={category._id} productId={product._id} /> : null}
       </div>
+      {product.stock > 0 ? (
+        <div className="fixed bottom-3 left-3 right-3 z-50 md:hidden">
+          <Link href="#order" className="sf-button-accent w-full justify-center shadow-2xl shadow-teal-900/20">
+            {t("ach")}
+          </Link>
+        </div>
+      ) : null}
     </Layout>
   );
 }

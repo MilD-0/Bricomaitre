@@ -80,6 +80,7 @@ describe("storefront-api featured groups", () => {
     const products: LegacyProduct[] = [
       {
         _id: "10",
+        mongo_id: null,
         id: 10,
         slug: "roller",
         title: "Roller",

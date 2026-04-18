@@ -160,10 +160,11 @@ describe('InventoryManager', () => {
     expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
   });
 
-  it('supports sorting by product, quantity, and in-stock columns', async () => {
+  it('supports hierarchical sorting with three-click header toggles', async () => {
     renderInventoryManager();
 
     await screen.findByText('Hammer');
+    expect(screen.getByRole('button', { name: /^Product/ })).toHaveClass('cursor-pointer');
 
     const searchField = screen.getByPlaceholderText('Search by product, SKU, or barcode');
     await userEvent.type(searchField, 'r');
@@ -175,20 +176,26 @@ describe('InventoryManager', () => {
 
     expect(getProductOrder()).toEqual(['Hammer', 'Wrench']);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Product' }));
-    expect(getProductOrder()).toEqual(['Wrench', 'Hammer']);
-
-    await userEvent.click(screen.getByRole('button', { name: 'Inventory quantity' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Product/ }));
     expect(getProductOrder()).toEqual(['Hammer', 'Wrench']);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Inventory quantity' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Product/ }));
     expect(getProductOrder()).toEqual(['Wrench', 'Hammer']);
 
-    await userEvent.click(screen.getByRole('button', { name: 'In stock' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Inventory quantity/ }));
+    expect(getProductOrder()).toEqual(['Wrench', 'Hammer']);
+
+    await userEvent.click(screen.getByRole('button', { name: /^Inventory quantity/ }));
+    expect(getProductOrder()).toEqual(['Wrench', 'Hammer']);
+
+    await userEvent.click(screen.getByRole('button', { name: /^Product/ }));
     expect(getProductOrder()).toEqual(['Hammer', 'Wrench']);
 
-    await userEvent.click(screen.getByRole('button', { name: 'In stock' }));
-    expect(getProductOrder()).toEqual(['Wrench', 'Hammer']);
+    await userEvent.click(screen.getByRole('button', { name: /^In stock/ }));
+    expect(getProductOrder()).toEqual(['Hammer', 'Wrench']);
+
+    await userEvent.click(screen.getByRole('button', { name: /^In stock/ }));
+    expect(getProductOrder()).toEqual(['Hammer', 'Wrench']);
   });
 
   it('supports barcode add and inventory controls from the table', async () => {

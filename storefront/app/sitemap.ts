@@ -1,7 +1,6 @@
 import type { MetadataRoute } from "next";
 
 import { buildCanonicalUrl } from "@/lib/seo";
-import { locales } from "@/i18n/config";
 import {
   fetchStorefrontBrands,
   fetchStorefrontCategories,
@@ -15,10 +14,12 @@ function buildLocalizedEntries(
   pathname: string,
   options: Omit<MetadataRoute.Sitemap[number], "url">,
 ): MetadataRoute.Sitemap {
-  return locales.map((locale) => ({
-    url: buildCanonicalUrl(pathname, locale),
-    ...options,
-  }));
+  return [
+    {
+      url: buildCanonicalUrl(pathname),
+      ...options,
+    },
+  ];
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

@@ -71,6 +71,7 @@ export const navigationItems: NavigationItem[] = [
       { key: 'geography', href: '/stats/geography', translationKey: 'statsDashboard.tabs.geography' },
       { key: 'time', href: '/stats/time', translationKey: 'statsDashboard.tabs.time' },
       { key: 'metaAds', href: '/stats/meta-ads', translationKey: 'statsDashboard.tabs.metaAds' },
+      { key: 'paidClicks', href: '/stats/paid-clicks', translationKey: 'statsDashboard.tabs.paidClicks' },
       { key: 'manualOrders', href: '/stats/manual-orders', translationKey: 'statsDashboard.manualOrders.sectionTitle' },
       { key: 'imports', href: '/stats/import-history', translationKey: 'statsDashboard.imports.title' },
     ],

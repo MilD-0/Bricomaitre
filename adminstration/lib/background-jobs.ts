@@ -12,25 +12,26 @@ import {
 } from '../db/schema';
 import { syncEcotrackShipmentStates } from './admin-ecotrack-orders-data';
 import { loadEcotrackOrderInputs, postOrdersToEcotrack, readEcotrackCatalog, syncEcotrackCatalog } from './ecotrack';
-import { uploadExportArtifact } from './export-artifacts';
+import { uploadExportArtifact, uploadStableArtifact } from './export-artifacts';
 import {
   buildMetaCatalogExportFileName,
   buildMetaCatalogExportRows,
-  buildMetaCatalogImageKeySeed,
   buildMetaCatalogWorkbook,
-  createSquareCatalogImage,
+  toCsvBuffer,
   toXlsxBuffer,
 } from './meta-catalog';
 import {
   buildOrderExportFileName,
   buildOrderExportRows,
   buildOrderExportWorkbook,
+  filterRecentConfirmedOrders,
   type EcotrackCatalogExportData,
 } from './order-export';
 import type { OrderStatusHistoryRecord } from './orders';
 import { importAdCostsSpreadsheet, importStatsSpreadsheet } from './stats';
 
 export const ADMIN_PRODUCT_EXPORT_QUEUE = 'admin-product-export';
+export const ADMIN_PRODUCT_CATALOG_FEED_QUEUE = 'admin-product-catalog-feed';
 export const ADMIN_ORDER_EXPORT_QUEUE = 'admin-order-export';
 export const ADMIN_ORDER_ECOTRACK_QUEUE = 'admin-order-ecotrack';
 export const ADMIN_STATS_IMPORT_QUEUE = 'admin-stats-import';
@@ -61,6 +62,9 @@ export type ExportJobResponse = {
 };
 
 type ProductExportPayload = QueueJobMeta;
+type ProductCatalogFeedPayload = QueueJobMeta & {
+  trigger: string;
+};
 type OrderExportPayload = QueueJobMeta & {
   mode: 'selected' | 'confirmed';
   orderIds: number[];
@@ -104,6 +108,10 @@ type AnalyticsPayload = {
   event: ReturnType<typeof storefrontAnalyticsEventSchema.parse>;
 };
 
+export function filterCatalogFeedProducts<T extends { active: boolean; inStock: boolean }>(productRows: T[]) {
+  return productRows.filter((product) => product.active && product.inStock);
+}
+
 function toClientJob(snapshot: JobSnapshot | null, fileName: string | null = null): ExportJobResponse['job'] {
   if (!snapshot) {
     return null;
@@ -145,6 +153,44 @@ export async function startProductExportJob(ownerKey: string, requestId?: string
   return {
     kind: result.kind,
     job: toClientJob(result.job),
+  };
+}
+
+const PRODUCT_CATALOG_FEED_OWNER_KEY = 'catalog-feed';
+const PRODUCT_CATALOG_FEED_FILE_NAME = 'meta-catalog-feed.csv';
+export const PRODUCT_CATALOG_FEED_OBJECT_KEY = 'exports/products/catalog-feed/latest.csv';
+
+function getProductCatalogFeedDebounceMs() {
+  const configured = Number(process.env.PRODUCT_CATALOG_FEED_DEBOUNCE_MS ?? 120_000);
+  return Number.isFinite(configured) && configured >= 0 ? configured : 120_000;
+}
+
+export async function startProductCatalogFeedRefreshJob(trigger: string, requestId?: string) {
+  const latest = await getLatestOwnedJob(ADMIN_PRODUCT_CATALOG_FEED_QUEUE, PRODUCT_CATALOG_FEED_OWNER_KEY);
+  if (latest) {
+    const isActive = latest.status === 'queued' || latest.status === 'running';
+    const withinDebounce = Date.now() - Date.parse(latest.updatedAt) < getProductCatalogFeedDebounceMs();
+
+    if (isActive || withinDebounce) {
+      return {
+        kind: 'existing' as const,
+        job: toClientJob(latest, PRODUCT_CATALOG_FEED_FILE_NAME),
+      };
+    }
+  }
+
+  const result = await startOwnedJob<ProductCatalogFeedPayload>({
+    queueName: ADMIN_PRODUCT_CATALOG_FEED_QUEUE,
+    kind: 'product-catalog-feed-refresh',
+    ownerKey: PRODUCT_CATALOG_FEED_OWNER_KEY,
+    requestId,
+    data: { trigger } as ProductCatalogFeedPayload,
+    activeScope: 'global',
+  });
+
+  return {
+    kind: result.kind,
+    job: toClientJob(result.job, PRODUCT_CATALOG_FEED_FILE_NAME),
   };
 }
 
@@ -297,9 +343,9 @@ export async function runProductExportJob(
   for (let index = 0; index < productRows.length; index += 1) {
     await helpers.throwIfCancelled();
     const product = productRows[index];
-    if (product.images[0]) {
-      const imageLink = await createSquareCatalogImage(product.images[0], buildMetaCatalogImageKeySeed(product));
-      imageLinkByProductId.set(product.id, imageLink);
+    const primaryImage = product.images[0];
+    if (primaryImage) {
+      imageLinkByProductId.set(product.id, primaryImage);
     }
     await helpers.updateProgress({ phase: 'processing-images', current: index + 1, total: totalProducts });
   }
@@ -324,6 +370,79 @@ export async function runProductExportJob(
   return {
     fileName,
     totalProducts,
+  };
+}
+
+export async function runProductCatalogFeedRefreshJob(
+  payload: ProductCatalogFeedPayload,
+  helpers: {
+    updateProgress: (progress: { phase: string; current: number; total: number }) => Promise<void>;
+    updateSummary: (summary: Record<string, unknown>) => Promise<void>;
+    setDownloadUrl: (url: string) => Promise<void>;
+    throwIfCancelled: () => Promise<void>;
+  },
+) {
+  const db = getDb();
+  const batchSize = Math.max(Number(process.env.PRODUCT_EXPORT_BATCH_SIZE ?? 250), 1);
+
+  await helpers.updateProgress({ phase: 'counting', current: 0, total: 0 });
+  const [brandRows, [{ value: totalProducts }]] = await Promise.all([
+    db.select({ id: brands.id, name: brands.name }).from(brands),
+    db.select({ value: count() }).from(products),
+  ]);
+
+  const brandNameById = new Map(brandRows.map((brand) => [brand.id, brand.name]));
+  const productRows: Array<typeof products.$inferSelect> = [];
+  await helpers.updateProgress({ phase: 'loading', current: 0, total: totalProducts });
+
+  for (let offset = 0; offset < totalProducts; offset += batchSize) {
+    await helpers.throwIfCancelled();
+    const batch = await db.select().from(products).orderBy(asc(products.id)).limit(batchSize).offset(offset);
+    productRows.push(...batch);
+    await helpers.updateProgress({
+      phase: 'loading',
+      current: Math.min(offset + batch.length, totalProducts),
+      total: totalProducts,
+    });
+  }
+
+  await helpers.updateProgress({ phase: 'processing-images', current: 0, total: totalProducts });
+  const imageLinkByProductId = new Map<number, string>();
+
+  for (let index = 0; index < productRows.length; index += 1) {
+    await helpers.throwIfCancelled();
+    const product = productRows[index];
+    if (product.images[0]) {
+      imageLinkByProductId.set(product.id, product.images[0]);
+    }
+    await helpers.updateProgress({ phase: 'processing-images', current: index + 1, total: totalProducts });
+  }
+
+  await helpers.throwIfCancelled();
+  const rows = buildMetaCatalogExportRows(
+    filterCatalogFeedProducts(productRows),
+    brandNameById,
+    imageLinkByProductId,
+  );
+  const downloadUrl = await uploadStableArtifact({
+    key: PRODUCT_CATALOG_FEED_OBJECT_KEY,
+    contentType: 'text/csv; charset=utf-8',
+    body: toCsvBuffer(rows),
+  });
+
+  await helpers.setDownloadUrl(downloadUrl);
+  await helpers.updateProgress({ phase: 'packaging', current: totalProducts, total: totalProducts });
+  await helpers.updateSummary({
+    fileName: PRODUCT_CATALOG_FEED_FILE_NAME,
+    totalProducts: rows.length,
+    sourceProductCount: totalProducts,
+    trigger: payload.trigger,
+    updatedAt: new Date().toISOString(),
+  });
+
+  return {
+    fileName: PRODUCT_CATALOG_FEED_FILE_NAME,
+    totalProducts: rows.length,
   };
 }
 
@@ -354,7 +473,9 @@ async function loadOrdersForExport(mode: 'selected' | 'confirmed', orderIds: num
   }
 
   const productLookup = await getOrderProductLookup(db, orderRows);
-  return orderRows.map((row) => toOrderRecord(row, historyByOrderId.get(row.id) ?? [], productLookup));
+  const exportOrders = orderRows.map((row) => toOrderRecord(row, historyByOrderId.get(row.id) ?? [], productLookup));
+
+  return mode === 'confirmed' ? filterRecentConfirmedOrders(exportOrders) : exportOrders;
 }
 
 async function markOrdersAsDispatched(orderIds: number[]) {

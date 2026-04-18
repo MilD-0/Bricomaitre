@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
       search: searchParams.get('search') ?? undefined,
       status: searchParams.get('status') ?? undefined,
       staleOnly: searchParams.get('staleOnly') ?? undefined,
+      sort: searchParams.getAll('sort'),
       sortKey: searchParams.get('sortKey') ?? undefined,
       sortDirection: searchParams.get('sortDirection') ?? undefined,
     }, writable), { headers: withRequestIdHeaders(requestId) });

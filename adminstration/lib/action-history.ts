@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq, getTableColumns, ilike, or } from 'drizzle-o
 import { z } from 'zod';
 
 import type { getDb } from '../db/client';
+import { parseSortRuleStrings, type SortRule } from './multi-sort';
 import {
   actionLogs,
   adCosts,
@@ -29,6 +30,8 @@ export type ActionHistoryState = 'all' | 'applied' | 'undone';
 export type ActionHistorySortKey = 'operation' | 'resource' | 'createdBy' | 'createdAt' | 'isUndone';
 export type ActionHistorySortDirection = 'asc' | 'desc';
 export type ActionHistoryResource = 'products' | 'orders' | 'assets' | 'brandsCategories' | 'bulletin' | 'stats' | 'settings' | 'ecotrack';
+const actionHistorySortKeyValues = ['operation', 'resource', 'createdBy', 'createdAt', 'isUndone'] as const;
+const defaultActionHistorySortRules = [{ key: 'createdAt', direction: 'desc' }] as const satisfies readonly SortRule<ActionHistorySortKey>[];
 
 type Database = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -83,11 +86,32 @@ export const actionHistoryQuerySchema = z.object({
   operation: z.enum(['all', 'create', 'update', 'delete']).default('all'),
   resource: z.enum(['all', 'products', 'orders', 'assets', 'brandsCategories', 'bulletin', 'stats', 'settings', 'ecotrack']).default('all'),
   state: z.enum(['all', 'applied', 'undone']).default('all'),
-  sortKey: z.enum(['operation', 'resource', 'createdBy', 'createdAt', 'isUndone']).default('createdAt'),
+  sort: z.array(z.string().trim()).optional().default([]),
+  sortKey: z.enum(actionHistorySortKeyValues).default('createdAt'),
   sortDirection: z.enum(['asc', 'desc']).default('desc'),
+}).transform((value, ctx) => {
+  const parsedSortRules = parseSortRuleStrings(value.sort, actionHistorySortKeyValues);
+
+  if (!parsedSortRules.ok) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: parsedSortRules.issue,
+      path: ['sort'],
+    });
+
+    return z.NEVER;
+  }
+
+  return {
+    ...value,
+    sortRules: parsedSortRules.rules.length > 0
+      ? parsedSortRules.rules
+      : [{ key: value.sortKey, direction: value.sortDirection }],
+  };
 });
 
 export type ActionHistoryQuery = z.infer<typeof actionHistoryQuerySchema>;
+export type ActionHistorySortRule = SortRule<ActionHistorySortKey>;
 export type ActionHistoryPagination = {
   page: number;
   limit: number;
@@ -100,6 +124,7 @@ export type ActionHistoryListResult = {
   items: ActionLogEntry[];
   pagination: ActionHistoryPagination;
 };
+export const defaultActionHistorySort = [...defaultActionHistorySortRules] as ActionHistorySortRule[];
 
 const entityConfigs: Record<string, MutableEntityConfig> = {
   products: {
@@ -650,20 +675,23 @@ export async function listActionHistory(db: Database, queryInput: Partial<Action
   const [{ value: totalItems }] = await db.select({ value: count() }).from(actionLogs).where(whereClause);
   const totalPages = Math.max(1, Math.ceil(totalItems / query.limit));
   const page = Math.min(query.page, totalPages);
-  const direction = query.sortDirection === 'asc' ? asc : desc;
-  const orderBy = {
-    operation: [direction(actionLogs.operation), desc(actionLogs.createdAt), desc(actionLogs.id)],
-    resource: [direction(actionLogs.resource), desc(actionLogs.createdAt), desc(actionLogs.id)],
-    createdBy: [direction(actionLogs.createdByName), direction(actionLogs.createdBy), desc(actionLogs.createdAt), desc(actionLogs.id)],
-    createdAt: [direction(actionLogs.createdAt), direction(actionLogs.id)],
-    isUndone: [direction(actionLogs.isUndone), desc(actionLogs.createdAt), desc(actionLogs.id)],
-  } satisfies Record<ActionHistorySortKey, unknown[]>;
+  const orderBy = query.sortRules.flatMap((rule) => {
+    const direction = rule.direction === 'asc' ? asc : desc;
+
+    return ({
+      operation: [direction(actionLogs.operation)],
+      resource: [direction(actionLogs.resource)],
+      createdBy: [direction(actionLogs.createdByName), direction(actionLogs.createdBy)],
+      createdAt: [direction(actionLogs.createdAt)],
+      isUndone: [direction(actionLogs.isUndone)],
+    } satisfies Record<ActionHistorySortKey, unknown[]>)[rule.key];
+  });
 
   const items = await db
     .select()
     .from(actionLogs)
     .where(whereClause)
-    .orderBy(...orderBy[query.sortKey])
+    .orderBy(...orderBy, desc(actionLogs.id))
     .limit(query.limit)
     .offset((page - 1) * query.limit);
 

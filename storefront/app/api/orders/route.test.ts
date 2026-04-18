@@ -150,4 +150,109 @@ describe("app/api/orders/route", () => {
     );
     errorSpy.mockRestore();
   });
+
+  it("normalizes numeric string state values before forwarding upstream", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      item: { id: 11, publicToken: "public-token" },
+    }), {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+      },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new Request("http://localhost/api/orders", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        phoneNumber1: "0550123456",
+        cartProducts: ["1"],
+        delivery: "home",
+        state: "16",
+        city: "Algiers",
+      }),
+    });
+
+    await POST(request as never);
+
+    const forwardedBody = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body);
+    expect(forwardedBody.state).toBe(16);
+  });
+
+  it("rejects orders without a wilaya and commune", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new Request("http://localhost/api/orders", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        phoneNumber1: "0550123456",
+        cartProducts: ["1"],
+        delivery: "home",
+        state: null,
+        city: "",
+      }),
+    });
+
+    const response = await POST(request as never);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Wilaya and commune are required",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("normalizes wilaya names through the Ecotrack catalog before forwarding upstream", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        wilayas: [{ wilayaId: 16, name: "Alger" }],
+        communes: [],
+        serviceFees: [],
+        weightFees: [],
+        lastSync: null,
+      }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+        },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ok: true,
+        item: { id: 11, publicToken: "public-token" },
+      }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+        },
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new Request("http://localhost/api/orders", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        phoneNumber1: "0550123456",
+        cartProducts: ["1"],
+        delivery: "home",
+        state: "Alger",
+        city: "Algiers",
+      }),
+    });
+
+    await POST(request as never);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const forwardedBody = JSON.parse(fetchMock.mock.calls[1]?.[1]?.body);
+    expect(forwardedBody.state).toBe(16);
+  });
 });

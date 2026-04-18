@@ -35,6 +35,7 @@ export async function readStorefrontProducts(
   const whereClause = and(
     eq(products.active, true),
     query.id === null ? undefined : eq(products.id, query.id),
+    query.mongoId ? eq(products.mongoId, query.mongoId) : undefined,
     query.slug ? eq(products.slug, query.slug) : undefined,
     query.search
       ? or(
@@ -51,6 +52,7 @@ export async function readStorefrontProducts(
     .select({
       id: products.id,
       slug: products.slug,
+      mongoId: products.mongoId,
       title: products.title,
       titleAr: products.titleAr,
       description: products.description,

@@ -8,6 +8,12 @@ import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { Link } from "@/i18n/navigation";
 import { readVerifiedStorefrontOrder } from "@/lib/storefront-order-client";
+import {
+  readCompletedOrderSnapshot,
+  writeCompletedOrderSnapshot,
+} from "@/lib/completed-order-state";
+import { clearPendingOrderVerification } from "@/lib/pending-order-verification";
+import { trackAnalyticsEvent } from "@/lib/analytics";
 
 function formatDeliveryType(value, c) {
   return value === 1 ? c("lv2") : c("lv1");
@@ -21,6 +27,7 @@ export default function ThankYou({ modified = false, orderId = null, token = nul
   const [featuredBrands, setFeaturedBrands] = useState(null);
   const [categories, setCategories] = useState(null);
   const [products, setProducts] = useState(null);
+  const [snapshot, setSnapshot] = useState(null);
   const [order, setOrder] = useState(null);
   const [status, setStatus] = useState(orderId && token ? "loading" : "failure");
 
@@ -45,13 +52,34 @@ export default function ThankYou({ modified = false, orderId = null, token = nul
   }, []);
 
   useEffect(() => {
+    const storedSnapshot = readCompletedOrderSnapshot();
+    const matchingSnapshot = storedSnapshot
+      && (orderId == null || Number(orderId) === storedSnapshot.orderId)
+        ? storedSnapshot
+        : null;
+
+    setSnapshot(matchingSnapshot);
+
     if (!orderId || !token) {
-      setStatus("failure");
+      if (matchingSnapshot) {
+        setOrder(matchingSnapshot);
+        setStatus("fallback");
+      } else {
+        setStatus("failure");
+      }
+    } else if (matchingSnapshot) {
+      setOrder(matchingSnapshot);
+      setStatus((currentStatus) => (currentStatus === "success" ? currentStatus : "fallback"));
+    }
+  }, [orderId, token]);
+
+  useEffect(() => {
+    if (!orderId || !token) {
       return;
     }
 
     let active = true;
-    setStatus("loading");
+    setStatus(snapshot ? "fallback" : "loading");
 
     readVerifiedStorefrontOrder({ orderId, token })
       .then((item) => {
@@ -59,8 +87,29 @@ export default function ThankYou({ modified = false, orderId = null, token = nul
           return;
         }
 
+        clearPendingOrderVerification();
         setOrder(item);
         setStatus("success");
+        writeCompletedOrderSnapshot({
+          orderId: item.id,
+          token: item.publicToken,
+          modified,
+          createdAt: new Date().toISOString(),
+          firstName: item.firstName,
+          lastName: item.lastName,
+          fullName: item.fullName,
+          email: item.email,
+          phoneNumber1: item.phoneNumber1,
+          phoneNumber2: item.phoneNumber2,
+          delivery: item.delivery,
+          deliveryFee: item.deliveryFee,
+          productSubtotal: item.productSubtotal,
+          totalAmount: item.totalAmount,
+          state: snapshot?.state ?? null,
+          city: item.city,
+          homeAddress: item.homeAddress,
+          orderProducts: item.orderProducts,
+        });
       })
       .catch((error) => {
         console.error(error);
@@ -68,14 +117,30 @@ export default function ThankYou({ modified = false, orderId = null, token = nul
           return;
         }
 
-        setOrder(null);
-        setStatus("failure");
+        if (snapshot) {
+          setOrder(snapshot);
+          setStatus("fallback");
+        } else {
+          setOrder(null);
+          setStatus("failure");
+        }
+        void trackAnalyticsEvent({
+          eventName: "order_verification_failed_after_create",
+          gaEventName: "order_verification_failed_after_create",
+          pageType: "thank_you",
+          orderId: Number(orderId),
+          metadata: {
+            storefrontVariant: "new",
+            verificationAttempted: true,
+            verificationSucceeded: false,
+          },
+        }).catch((analyticsError) => console.error(analyticsError));
       });
 
     return () => {
       active = false;
     };
-  }, [orderId, token]);
+  }, [modified, orderId, snapshot, token]);
 
   return (
     <Layout>
@@ -104,13 +169,24 @@ export default function ThankYou({ modified = false, orderId = null, token = nul
           </section>
         ) : null}
 
-        {status === "success" ? (
+        {status === "success" || status === "fallback" ? (
           <section className="sf-panel text-center">
             <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-900">{t("mrc")}</h1>
           </section>
         ) : null}
 
-        {status === "success" && order?.orderProducts?.length ? (
+        {status === "fallback" && orderId && token ? (
+          <div className="flex flex-col gap-3 md:flex-row">
+            <Link href={modified ? `/thank-you?orderId=${orderId}&token=${token}&modified=true` : `/thank-you?orderId=${orderId}&token=${token}`} className="sf-button w-full justify-center md:w-auto">
+              {c("retryVerification")}
+            </Link>
+            <Link href="/products" className="sf-button-secondary w-full justify-center md:w-auto">
+              {t("vp")}
+            </Link>
+          </div>
+        ) : null}
+
+        {(status === "success" || status === "fallback") && order?.orderProducts?.length ? (
           <section className="sf-panel">
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               {order.orderProducts.map((product) => (
@@ -145,7 +221,7 @@ export default function ThankYou({ modified = false, orderId = null, token = nul
           </section>
         ) : null}
 
-        {status === "success" && order ? (
+        {(status === "success" || status === "fallback") && order ? (
         <section className="sf-panel">
           <div className="mt-6 grid gap-3 md:grid-cols-2">
             <p><span className="font-semibold">{c("nom")}:</span> {order.fullName}</p>
@@ -162,7 +238,7 @@ export default function ThankYou({ modified = false, orderId = null, token = nul
         </section>
         ) : null}
 
-        {status === "success" ? (
+        {status === "success" || status === "fallback" ? (
         <div className="flex flex-col gap-3 md:flex-row">
           <Link href="/checkout?order=1" className="sf-button w-full justify-center md:w-auto">
             {c("modi")}

@@ -1,9 +1,6 @@
 import {notFound} from "next/navigation";
-import {NextIntlClientProvider} from "next-intl";
 import {setRequestLocale} from "next-intl/server";
-import {getMessages} from "next-intl/server";
 
-import {CartContextProvider} from "@/app/components/cartContext";
 import {locales} from "@/i18n/config";
 
 export function generateStaticParams() {
@@ -24,11 +21,5 @@ export default async function LocaleLayout({
   }
 
   setRequestLocale(locale);
-  const messages = await getMessages();
-
-  return (
-    <NextIntlClientProvider locale={locale} messages={messages}>
-      <CartContextProvider locale={locale}>{children}</CartContextProvider>
-    </NextIntlClientProvider>
-  );
+  return children;
 }

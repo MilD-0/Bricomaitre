@@ -5,7 +5,7 @@ import { motion } from 'motion/react';
 import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import {
@@ -26,15 +26,17 @@ import {
   type CategoryRow,
   type CategoryUpdateValues,
 } from '../lib/brands-categories';
+import { applyClientMultiSort, getEffectiveSortRules, getSortRuleState, toggleSortRule, type SortRule } from '../lib/multi-sort';
 import { slugify } from '../lib/slug';
 import { toast } from '../lib/toast';
+import { MultiSortHeader } from './multi-sort-header';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Field, FieldError, FieldLabel } from './ui/field';
 import { ImageUploadField } from './image-upload-field';
 import { Input } from './ui/input';
-import { PendingInline, sectionTransitionProps } from './ui/motion';
+import { PendingInline, sectionTransitionProps, SurfacePendingOverlay } from './ui/motion';
 import { NativeSelect, NativeSelectOption } from './ui/native-select';
 import { Switch } from './ui/switch';
 import { TablePaginationControls } from './table-pagination-controls';
@@ -57,6 +59,8 @@ const categoryFormDefaults: CategoryFormInput = {
 
 type BrandSortKey = 'status' | 'name' | 'createdAt' | 'updatedAt';
 type CategorySortKey = 'status' | 'name' | 'parentName' | 'createdAt' | 'updatedAt';
+type BrandSortRule = SortRule<BrandSortKey>;
+type CategorySortRule = SortRule<CategorySortKey>;
 type MutationMessages = { loading: string; success: string; error: string };
 type QuerySnapshot<T> = Array<[readonly unknown[], T | undefined]>;
 type BrandDialogState = { open: boolean; mode: 'create' | 'edit'; editingId: string | null };
@@ -90,27 +94,6 @@ function actorLabel(name?: string | null, email?: string | null, fallback?: stri
 
 function timestampLabel(value: string, actor: string) {
   return `${new Date(value).toLocaleString()} • ${actor}`;
-}
-
-function SortHeader({
-  label,
-  active,
-  direction,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  direction: 'asc' | 'desc';
-  onClick: () => void;
-}) {
-  const Icon = !active ? ArrowUpDown : direction === 'asc' ? ArrowUp : ArrowDown;
-
-  return (
-    <button type="button" className="inline-flex items-center gap-2 text-left font-medium" onClick={onClick}>
-      <span>{label}</span>
-      <Icon className="size-4" />
-    </button>
-  );
 }
 
 function DeleteDialog({
@@ -394,8 +377,7 @@ export function BrandsManager() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search.trim());
-  const [sortKey, setSortKey] = useState<BrandSortKey>('updatedAt');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [sortRules, setSortRules] = useState<BrandSortRule[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteState, setDeleteState] = useState<{ ids: string[]; label: string } | null>(null);
   const [dialogState, setDialogState] = useState<BrandDialogState>({ open: false, mode: 'create', editingId: null });
@@ -616,30 +598,22 @@ export function BrandsManager() {
     },
   });
 
-  const sortedItems = useMemo(() => {
-    const items = [...query.data.items];
-    items.sort((left, right) => {
-      const leftValue = left[sortKey];
-      const rightValue = right[sortKey];
-      const normalizedLeft = typeof leftValue === 'string' ? leftValue.toLowerCase() : leftValue ?? '';
-      const normalizedRight = typeof rightValue === 'string' ? rightValue.toLowerCase() : rightValue ?? '';
-      if (normalizedLeft < normalizedRight) return sortDirection === 'asc' ? -1 : 1;
-      if (normalizedLeft > normalizedRight) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-    return items;
-  }, [query.data.items, sortDirection, sortKey]);
+  const sortedItems = useMemo(() => applyClientMultiSort(
+    query.data.items,
+    getEffectiveSortRules(sortRules, [{ key: 'updatedAt', direction: 'desc' }]),
+    {
+      status: (brand) => brand.status,
+      name: (brand) => brand.name,
+      createdAt: (brand) => brand.createdAt,
+      updatedAt: (brand) => brand.updatedAt,
+    },
+  ), [query.data.items, sortRules]);
 
   const allSelected = sortedItems.length > 0 && sortedItems.every((item) => selectedIds.includes(item.id));
 
   const toggleSort = (key: BrandSortKey) => {
     startFilterTransition(() => {
-      if (sortKey === key) {
-        setSortDirection((value) => (value === 'asc' ? 'desc' : 'asc'));
-        return;
-      }
-      setSortKey(key);
-      setSortDirection(key === 'name' ? 'asc' : 'desc');
+      setSortRules((current) => toggleSortRule(current, key, 'asc'));
     });
   };
 
@@ -723,6 +697,8 @@ export function BrandsManager() {
         </div>
       </div>
 
+      <div className="relative" aria-busy={query.isFetching}>
+        <div className={query.isFetching ? 'transition-opacity duration-200 opacity-70' : 'transition-opacity duration-200'}>
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
@@ -735,16 +711,16 @@ export function BrandsManager() {
                 />
               </TableHead>
               <TableHead className="w-28">
-                <SortHeader label={t('labels.status')} active={sortKey === 'status'} direction={sortDirection} onClick={() => toggleSort('status')} />
+                <MultiSortHeader label={t('labels.status')} sortState={getSortRuleState(sortRules, 'status')} onClick={() => toggleSort('status')} />
               </TableHead>
               <TableHead>
-                <SortHeader label={t('labels.name')} active={sortKey === 'name'} direction={sortDirection} onClick={() => toggleSort('name')} />
+                <MultiSortHeader label={t('labels.name')} sortState={getSortRuleState(sortRules, 'name')} onClick={() => toggleSort('name')} />
               </TableHead>
               <TableHead>
-                <SortHeader label={t('labels.created')} active={sortKey === 'createdAt'} direction={sortDirection} onClick={() => toggleSort('createdAt')} />
+                <MultiSortHeader label={t('labels.created')} sortState={getSortRuleState(sortRules, 'createdAt')} onClick={() => toggleSort('createdAt')} />
               </TableHead>
               <TableHead>
-                <SortHeader label={t('labels.modified')} active={sortKey === 'updatedAt'} direction={sortDirection} onClick={() => toggleSort('updatedAt')} />
+                <MultiSortHeader label={t('labels.modified')} sortState={getSortRuleState(sortRules, 'updatedAt')} onClick={() => toggleSort('updatedAt')} />
               </TableHead>
               <TableHead className="w-48 text-right">{t('labels.actions')}</TableHead>
             </TableRow>
@@ -825,6 +801,9 @@ export function BrandsManager() {
       </div>
 
       <TablePaginationControls currentPage={query.data.pagination.page} totalPages={query.data.pagination.totalPages} onPageChange={(nextPage) => startFilterTransition(() => setPage(nextPage))} />
+        </div>
+        <SurfacePendingOverlay active={query.isFetching} label={t('labels.loading')} />
+      </div>
 
       <BrandDialogForm
         open={dialogState.open}
@@ -866,8 +845,7 @@ export function CategoriesManager() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search.trim());
-  const [sortKey, setSortKey] = useState<CategorySortKey>('updatedAt');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [sortRules, setSortRules] = useState<CategorySortRule[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteState, setDeleteState] = useState<{ ids: string[]; label: string } | null>(null);
   const [dialogState, setDialogState] = useState<CategoryDialogState>({ open: false, mode: 'create', editingId: null });
@@ -1110,30 +1088,23 @@ export function CategoriesManager() {
     },
   });
 
-  const sortedItems = useMemo(() => {
-    const items = [...query.data.items];
-    items.sort((left, right) => {
-      const leftValue = left[sortKey] ?? '';
-      const rightValue = right[sortKey] ?? '';
-      const normalizedLeft = typeof leftValue === 'string' ? leftValue.toLowerCase() : leftValue;
-      const normalizedRight = typeof rightValue === 'string' ? rightValue.toLowerCase() : rightValue;
-      if (normalizedLeft < normalizedRight) return sortDirection === 'asc' ? -1 : 1;
-      if (normalizedLeft > normalizedRight) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-    return items;
-  }, [query.data.items, sortDirection, sortKey]);
+  const sortedItems = useMemo(() => applyClientMultiSort(
+    query.data.items,
+    getEffectiveSortRules(sortRules, [{ key: 'updatedAt', direction: 'desc' }]),
+    {
+      status: (category) => category.status,
+      name: (category) => category.name,
+      parentName: (category) => category.parentName,
+      createdAt: (category) => category.createdAt,
+      updatedAt: (category) => category.updatedAt,
+    },
+  ), [query.data.items, sortRules]);
 
   const allSelected = sortedItems.length > 0 && sortedItems.every((item) => selectedIds.includes(item.id));
 
   const toggleSort = (key: CategorySortKey) => {
     startFilterTransition(() => {
-      if (sortKey === key) {
-        setSortDirection((value) => (value === 'asc' ? 'desc' : 'asc'));
-        return;
-      }
-      setSortKey(key);
-      setSortDirection(key === 'name' || key === 'parentName' ? 'asc' : 'desc');
+      setSortRules((current) => toggleSortRule(current, key, 'asc'));
     });
   };
 
@@ -1217,6 +1188,8 @@ export function CategoriesManager() {
         </div>
       </div>
 
+      <div className="relative" aria-busy={query.isFetching}>
+        <div className={query.isFetching ? 'transition-opacity duration-200 opacity-70' : 'transition-opacity duration-200'}>
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
@@ -1229,19 +1202,19 @@ export function CategoriesManager() {
                 />
               </TableHead>
               <TableHead className="w-28">
-                <SortHeader label={t('labels.status')} active={sortKey === 'status'} direction={sortDirection} onClick={() => toggleSort('status')} />
+                <MultiSortHeader label={t('labels.status')} sortState={getSortRuleState(sortRules, 'status')} onClick={() => toggleSort('status')} />
               </TableHead>
               <TableHead>
-                <SortHeader label={t('labels.name')} active={sortKey === 'name'} direction={sortDirection} onClick={() => toggleSort('name')} />
+                <MultiSortHeader label={t('labels.name')} sortState={getSortRuleState(sortRules, 'name')} onClick={() => toggleSort('name')} />
               </TableHead>
               <TableHead>
-                <SortHeader label={t('labels.parentCategory')} active={sortKey === 'parentName'} direction={sortDirection} onClick={() => toggleSort('parentName')} />
+                <MultiSortHeader label={t('labels.parentCategory')} sortState={getSortRuleState(sortRules, 'parentName')} onClick={() => toggleSort('parentName')} />
               </TableHead>
               <TableHead>
-                <SortHeader label={t('labels.created')} active={sortKey === 'createdAt'} direction={sortDirection} onClick={() => toggleSort('createdAt')} />
+                <MultiSortHeader label={t('labels.created')} sortState={getSortRuleState(sortRules, 'createdAt')} onClick={() => toggleSort('createdAt')} />
               </TableHead>
               <TableHead>
-                <SortHeader label={t('labels.modified')} active={sortKey === 'updatedAt'} direction={sortDirection} onClick={() => toggleSort('updatedAt')} />
+                <MultiSortHeader label={t('labels.modified')} sortState={getSortRuleState(sortRules, 'updatedAt')} onClick={() => toggleSort('updatedAt')} />
               </TableHead>
               <TableHead className="w-48 text-right">{t('labels.actions')}</TableHead>
             </TableRow>
@@ -1330,6 +1303,9 @@ export function CategoriesManager() {
       </div>
 
       <TablePaginationControls currentPage={query.data.pagination.page} totalPages={query.data.pagination.totalPages} onPageChange={(nextPage) => startFilterTransition(() => setPage(nextPage))} />
+        </div>
+        <SurfacePendingOverlay active={query.isFetching} label={t('labels.loading')} />
+      </div>
 
       <CategoryDialogForm
         open={dialogState.open}

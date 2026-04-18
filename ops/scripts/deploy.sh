@@ -30,9 +30,11 @@ api_service="$(service_name storefront-api "$target_slot")"
 admin_service="$(service_name adminstration "$target_slot")"
 worker_service="$(service_name admin-worker "$target_slot")"
 storefront_service="$(service_name storefront "$target_slot")"
+storefront_old_service="$(service_name storefront-old "$target_slot")"
 api_host_port="$(slot_api_host_port "$target_slot")"
 storefront_build_log="$runtime_dir/storefront-build-${RELEASE_ID:-$target_slot}.log"
 storefront_static_pages_baseline_file="$runtime_dir/storefront-static-pages.env"
+storefront_static_pages_tolerance=2000
 
 append_summary() {
   local line="${1:?summary line is required}"
@@ -103,6 +105,28 @@ print(generated)
 PY
 }
 
+compute_storefront_expected_static_pages() {
+  local product_count="${1:?product count is required}"
+  local brand_count="${2:?brand count is required}"
+  local category_count="${3:?category count is required}"
+
+  python3 - "$product_count" "$brand_count" "$category_count" <<'PY'
+import sys
+
+product_count = int(sys.argv[1])
+brand_count = int(sys.argv[2])
+category_count = int(sys.argv[3])
+
+locale_count = 2
+root_fixed_pages = 11
+localized_fixed_pages = 6 * locale_count
+catalog_pages_per_namespace = product_count + brand_count + category_count
+expected = root_fixed_pages + localized_fixed_pages + ((1 + locale_count) * catalog_pages_per_namespace)
+
+print(expected)
+PY
+}
+
 read_storefront_static_pages_baseline() {
   local baseline_file="${1:?baseline file path is required}"
 
@@ -168,31 +192,55 @@ append_summary "- Upstream counts: ${PRODUCT_COUNT} products, ${BRAND_COUNT} bra
 
 compose build --progress plain "$admin_service"
 compose build --progress plain "$storefront_service" 2>&1 | tee "$storefront_build_log"
+compose build --progress plain "$storefront_old_service"
 
 actual_static_pages="$(extract_static_page_count "$storefront_build_log")"
 printf 'storefront build generated %s static pages\n' "$actual_static_pages"
 append_summary "- Static pages generated: ${actual_static_pages}"
 
-baseline_static_pages=""
-if baseline_static_pages="$(read_storefront_static_pages_baseline "$storefront_static_pages_baseline_file")"; then
-  printf 'storefront static-page baseline is %s pages\n' "$baseline_static_pages"
-  append_summary "- Static-page baseline: ${baseline_static_pages}"
-
-  if (( actual_static_pages < baseline_static_pages )); then
-    echo "storefront static-page count regressed: got ${actual_static_pages}, expected at least ${baseline_static_pages}" >&2
-    append_summary "- ❌ Static page count regressed: ${actual_static_pages} < ${baseline_static_pages}"
-    exit 1
-  fi
-
-  append_summary "- ✅ Static page count passed baseline (${actual_static_pages} >= ${baseline_static_pages})"
-else
-  echo "storefront static-page baseline not found; bootstrapping with current successful build after deploy"
-  append_summary "- ℹ️ Static-page baseline not found; this deploy will bootstrap it after success"
+expected_static_pages="$(compute_storefront_expected_static_pages "$PRODUCT_COUNT" "$BRAND_COUNT" "$CATEGORY_COUNT")"
+minimum_static_pages="$(( expected_static_pages - storefront_static_pages_tolerance ))"
+if (( minimum_static_pages < 1 )); then
+  minimum_static_pages=1
 fi
 
-compose up -d "$admin_service" "$storefront_service"
+printf 'storefront expected approximately %s static pages; enforcing floor %s (tolerance %s)\n' \
+  "$expected_static_pages" \
+  "$minimum_static_pages" \
+  "$storefront_static_pages_tolerance"
+append_summary "- Expected static pages from live catalog: ${expected_static_pages}"
+append_summary "- Enforced minimum after tolerance: ${minimum_static_pages}"
+
+baseline_static_pages=""
+if baseline_static_pages="$(read_storefront_static_pages_baseline "$storefront_static_pages_baseline_file")"; then
+  printf 'previous storefront static-page baseline is %s pages\n' "$baseline_static_pages"
+  append_summary "- Previous successful static-page count: ${baseline_static_pages}"
+else
+  echo "storefront static-page baseline not found; continuing with live-catalog validation"
+  append_summary "- ℹ️ Previous static-page baseline not found; using live-catalog validation only"
+fi
+
+if (( actual_static_pages < minimum_static_pages )); then
+  echo "storefront static-page count regressed versus live catalog: got ${actual_static_pages}, expected at least ${minimum_static_pages} (from ${PRODUCT_COUNT} products, ${BRAND_COUNT} brands, ${CATEGORY_COUNT} categories)" >&2
+  append_summary "- ❌ Static page count regressed versus live catalog: ${actual_static_pages} < ${minimum_static_pages}"
+  exit 1
+fi
+
+append_summary "- ✅ Static page count passed live-catalog validation (${actual_static_pages} >= ${minimum_static_pages})"
+
+compose up -d "$admin_service" "$storefront_service" "$storefront_old_service"
 bash "$script_dir/wait-for-health.sh" "$admin_service"
 bash "$script_dir/wait-for-health.sh" "$storefront_service"
+bash "$script_dir/wait-for-health.sh" "$storefront_old_service"
+
+if meta_verify_output="$(bash "$script_dir/verify-storefront-meta.sh" "$target_slot" 2>&1)"; then
+  printf '%s\n' "$meta_verify_output"
+  append_summary "- ✅ Candidate slot ${target_slot} passed Meta CAPI verification"
+else
+  printf '%s\n' "$meta_verify_output" >&2
+  append_summary "- ❌ Candidate slot ${target_slot} failed Meta CAPI verification"
+  exit 1
+fi
 
 render_nginx_config "$target_slot"
 

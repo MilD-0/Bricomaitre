@@ -4,11 +4,9 @@ import { inArray } from 'drizzle-orm';
 import { getDb, hasDb } from '../../../../db/client';
 import { brands, products } from '../../../../db/schema';
 import {
-  buildMetaCatalogImageKeySeed,
   buildMetaCatalogExportFileName,
   buildMetaCatalogExportRows,
   buildMetaCatalogWorkbook,
-  createSquareCatalogImage,
   toXlsxBuffer,
 } from '../../../../lib/meta-catalog';
 import { requireMutationAccess } from '../../../../lib/rbac';
@@ -56,12 +54,10 @@ export async function GET(request: NextRequest) {
   const imageLinkByProductId = new Map<number, string>();
 
   for (const product of productsByRequestedOrder) {
-    if (!product.images[0]) {
-      continue;
+    const primaryImage = product.images[0];
+    if (primaryImage) {
+      imageLinkByProductId.set(product.id, primaryImage);
     }
-
-    const imageLink = await createSquareCatalogImage(product.images[0], buildMetaCatalogImageKeySeed(product));
-    imageLinkByProductId.set(product.id, imageLink);
   }
 
   const rows = buildMetaCatalogExportRows(productsByRequestedOrder, brandNameById, imageLinkByProductId);

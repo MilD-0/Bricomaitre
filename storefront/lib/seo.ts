@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import type { LegacyProduct } from "@/lib/storefront-api";
-import {defaultLocale, locales, type Locale} from "@/i18n/config";
+import {locales, type Locale} from "@/i18n/config";
 
 const FALLBACK_SITE_URL = "https://bricomaitre.com";
 const DEFAULT_OG_IMAGE = "/opengraph-image.png";
@@ -40,17 +40,7 @@ export function getSiteUrl() {
 }
 
 export function localizePathname(pathname = "/", locale?: string) {
-  const normalizedPathname = normalizePathname(pathname);
-
-  if (!locale) {
-    return normalizedPathname;
-  }
-
-  if (normalizedPathname === "/") {
-    return `/${locale}`;
-  }
-
-  return `/${locale}${normalizedPathname}`;
+  return normalizePathname(pathname);
 }
 
 function normalizeSearchParamValue(value: SearchParamPrimitive) {
@@ -111,15 +101,10 @@ export function buildLanguageAlternates(
   pathname = "/",
   searchParams?: SearchParamInput,
 ) {
+  const canonical = buildCanonicalUrl(pathname, undefined, searchParams);
+
   return Object.fromEntries(
-    [...locales, "x-default"].map((localeCode) => [
-      localeCode,
-      buildCanonicalUrl(
-        pathname,
-        localeCode === "x-default" ? defaultLocale : localeCode,
-        searchParams,
-      ),
-    ]),
+    [...locales, "x-default"].map((localeCode) => [localeCode, canonical]),
   ) as Record<Locale | "x-default", string>;
 }
 
@@ -435,7 +420,7 @@ export function buildProductSchema(
   return {
     "@context": "https://schema.org",
     "@type": "Product",
-    productID: product._id,
+    productID: String(product.id),
     sku: product.sku ?? undefined,
     gtin: product.barcode ?? undefined,
     name: buildProductTitle(product, locale),

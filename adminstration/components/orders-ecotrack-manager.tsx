@@ -35,7 +35,7 @@ import {
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from './ui/empty';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from './ui/field';
 import { Input } from './ui/input';
-import { PendingInline, sectionTransitionProps } from './ui/motion';
+import { PendingInline, sectionTransitionProps, SurfacePendingOverlay } from './ui/motion';
 import { NativeSelect, NativeSelectOption } from './ui/native-select';
 import { Skeleton } from './ui/skeleton';
 import { Switch } from './ui/switch';
@@ -842,9 +842,25 @@ export function OrdersEcotrackManager({
     limit: 25,
     totalItems: 0,
     totalPages: 1,
-    hasNextPage: false,
-    hasPreviousPage: false,
+      hasNextPage: false,
+      hasPreviousPage: false,
   };
+  const selectedShipments = useMemo(() => {
+    const selectedIdSet = new Set(selectedIds);
+    const selectedShipmentById = new Map<number, EcotrackShipmentListItem>();
+
+    queryClient.getQueriesData<EcotrackShipmentsResponse>({ queryKey: ['ecotrack-shipments'] }).forEach(([, data]) => {
+      data?.items.forEach((item) => {
+        if (selectedIdSet.has(item.orderId) && !selectedShipmentById.has(item.orderId)) {
+          selectedShipmentById.set(item.orderId, item);
+        }
+      });
+    });
+
+    return selectedIds
+      .map((orderId) => selectedShipmentById.get(orderId))
+      .filter((item): item is EcotrackShipmentListItem => item !== undefined);
+  }, [queryClient, selectedIds, shipmentsQuery.data]);
   const visibleSelectedIds = selectedIds.filter((orderId) => items.some((item) => item.orderId === orderId));
   const allVisibleSelected = items.length > 0 && items.every((item) => selectedIds.includes(item.orderId));
   const isInitialLoading = !shipmentsQuery.data && shipmentsQuery.isPending;
@@ -911,15 +927,15 @@ export function OrdersEcotrackManager({
   };
 
   const handleBulkRefresh = async () => {
-    if (visibleSelectedIds.length === 0) {
+    if (selectedIds.length === 0) {
       return;
     }
 
-    await refreshManyMutation.mutateAsync({ orderIds: visibleSelectedIds });
+    await refreshManyMutation.mutateAsync({ orderIds: selectedIds });
   };
 
   const dispatchableVisibleIds = items.filter((item) => item.canDispatch).map((item) => item.orderId);
-  const dispatchableSelectedIds = visibleSelectedIds.filter((orderId) => items.some((item) => item.orderId === orderId && item.canDispatch));
+  const dispatchableSelectedIds = selectedShipments.filter((item) => item.canDispatch).map((item) => item.orderId);
 
   const toggleHistoryForIds = (orderIds: number[]) => {
     if (orderIds.length === 0) {
@@ -948,11 +964,11 @@ export function OrdersEcotrackManager({
   };
 
   const handleBulkLabels = async () => {
-    if (visibleSelectedIds.length === 0) {
+    if (selectedIds.length === 0) {
       return;
     }
 
-    await bulkLabelsMutation.mutateAsync(visibleSelectedIds);
+    await bulkLabelsMutation.mutateAsync(selectedIds);
   };
 
   return (
@@ -1032,7 +1048,7 @@ export function OrdersEcotrackManager({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
-                  <Badge variant="outline">{t('labels.bulkSelectionCount', { count: visibleSelectedIds.length })}</Badge>
+                  <Badge variant="outline">{t('labels.bulkSelectionCount', { count: selectedIds.length })}</Badge>
                   <Field orientation="horizontal" className="gap-3">
                     <FieldLabel htmlFor="ecotrack-stale-only">{t('ordersEcotrackManager.filters.staleOnly')}</FieldLabel>
                     <Switch
@@ -1058,12 +1074,12 @@ export function OrdersEcotrackManager({
                       {
                         key: 'refresh-selected',
                         label: t('ordersEcotrackManager.actions.refreshSelected'),
-                        disabled: visibleSelectedIds.length === 0,
-                        onSelect: () => refreshManyMutation.mutate({ orderIds: visibleSelectedIds }),
+                        disabled: selectedIds.length === 0,
+                        onSelect: () => refreshManyMutation.mutate({ orderIds: selectedIds }),
                       },
                     ]}
                   />
-                  <Button type="button" variant="outline" disabled={visibleSelectedIds.length === 0} onClick={() => void handleBulkLabels()}>
+                  <Button type="button" variant="outline" disabled={selectedIds.length === 0} onClick={() => void handleBulkLabels()}>
                     <Printer data-icon="inline-start" />
                     {t('ordersEcotrackManager.actions.printSelected')}
                   </Button>
@@ -1087,8 +1103,8 @@ export function OrdersEcotrackManager({
                   <SplitActionButton
                     label={t('ordersEcotrackManager.actions.showHistorySelected')}
                     icon={<History data-icon="inline-start" />}
-                    primaryDisabled={visibleSelectedIds.length === 0}
-                    onPrimaryClick={() => toggleHistoryForIds(visibleSelectedIds)}
+                    primaryDisabled={selectedIds.length === 0}
+                    onPrimaryClick={() => toggleHistoryForIds(selectedIds)}
                     options={[
                       {
                         key: 'history-visible',
@@ -1104,18 +1120,8 @@ export function OrdersEcotrackManager({
           </div>
         </div>
 
-        {showRefreshingProgress ? (
-          <div className="px-4 pb-4 sm:px-5" aria-live="polite">
-            <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-              <span>{t('ordersEcotrackManager.loading.refreshing')}</span>
-              <span>{t('ordersEcotrackManager.loading.inProgress')}</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-muted">
-              <div className="h-full w-1/3 animate-pulse rounded-full bg-foreground/70" />
-            </div>
-          </div>
-        ) : null}
-
+        <div className="relative" aria-busy={showRefreshingProgress}>
+          <div className={cn('transition-[opacity,filter] duration-200', showRefreshingProgress && 'opacity-70')}>
         {isInitialLoading ? (
           <>
             <OrdersEcotrackTableSkeleton />
@@ -1442,6 +1448,9 @@ export function OrdersEcotrackManager({
             ) : null}
           </>
         ) : null}
+          </div>
+          <SurfacePendingOverlay active={showRefreshingProgress} label={t('ordersEcotrackManager.loading.refreshing')} />
+        </div>
       </motion.section>
 
       <Dialog open={editDialog !== null} onOpenChange={(open) => !open && setEditDialog(null)}>

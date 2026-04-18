@@ -141,6 +141,40 @@ const baseResponse = {
       ctr: 2.3,
       conversionRate: 5.4,
     },
+    metaAds: {
+      events: [
+        {
+          name: 'ViewContent',
+          total: 18,
+          pixelFired: 18,
+          capiSent: 18,
+          capiDelivered: 16,
+          capiFailed: 2,
+          lastOccurredAt: '2026-03-30T11:45:00.000Z',
+        },
+      ],
+      recentPayloads: [
+        {
+          eventId: 'meta-evt-1',
+          analyticsEventName: 'view_item',
+          metaEventName: 'ViewContent',
+          pagePath: '/products/drill',
+          occurredAt: '2026-03-30T11:45:00.000Z',
+          pixelPayload: {
+            content_ids: ['1'],
+            value: 64000,
+            currency: 'DZD',
+          },
+          capiPayload: {
+            content_ids: ['1'],
+            value: 64000,
+            currency: 'DZD',
+          },
+          capiStatus: 200,
+          capiOk: true,
+        },
+      ],
+    },
     website: {
       sessions: 1200,
       journeys: 950,
@@ -155,6 +189,32 @@ const baseResponse = {
       viewToCartRate: 13.7,
       cartToPurchaseRate: 26.9,
       checkoutToPurchaseRate: 63.6,
+      variants: [
+        {
+          variant: 'new',
+          sessions: 700,
+          pageViews: 2900,
+          productViews: 1200,
+          addToCarts: 170,
+          checkoutStarts: 80,
+          purchases: 48,
+          sessionConversionRate: 6.9,
+          cartToPurchaseRate: 28.2,
+          checkoutToPurchaseRate: 60,
+        },
+        {
+          variant: 'legacy',
+          sessions: 500,
+          pageViews: 1900,
+          productViews: 700,
+          addToCarts: 90,
+          checkoutStarts: 30,
+          purchases: 22,
+          sessionConversionRate: 4.4,
+          cartToPurchaseRate: 24.4,
+          checkoutToPurchaseRate: 73.3,
+        },
+      ],
       funnel: [
         { name: 'Sessions', value: 1200 },
         { name: 'Product views', value: 1900 },
@@ -367,6 +427,11 @@ describe('StatsDashboard', () => {
 
     expect((await screen.findAllByText('Stats')).length).toBeGreaterThan(0);
     expect(screen.getByText('metaAds.performanceTitle')).toBeInTheDocument();
+    expect(screen.getByText('metaAds.eventsTitle')).toBeInTheDocument();
+    expect(screen.getAllByText('ViewContent').length).toBeGreaterThan(0);
+    expect(screen.getByText('metaAds.payloadsTitle')).toBeInTheDocument();
+    expect(screen.getByText('metaAds.payloads.pixel')).toBeInTheDocument();
+    expect(screen.getAllByText(/content_ids/).length).toBeGreaterThan(0);
     expect(screen.getByText('ad-costs-manager:90d::')).toBeInTheDocument();
 
     const totalSpendCard = screen.getByText('overview.adPerformance.totalSpend').closest('div[class*="min-w-0"]')?.parentElement?.parentElement;

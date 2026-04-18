@@ -4,16 +4,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DELETE, GET, PATCH, PUT } from '../route';
 import { productPatchSchema, productPayloadSchema } from '../../../../../lib/products';
 
-const { hasDbMock, getDbMock, requireAppAccessMock, requireMutationAccessMock, authMock, mutateEntityWithHistoryMock } = vi.hoisted(() => ({
+const {
+  hasDbMock,
+  getDbMock,
+  requireAppAccessMock,
+  requireMutationAccessMock,
+  authMock,
+  mutateEntityWithHistoryMock,
+  startProductCatalogFeedRefreshJobMock,
+} = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
   requireAppAccessMock: vi.fn(),
   requireMutationAccessMock: vi.fn(),
   authMock: vi.fn(),
   mutateEntityWithHistoryMock: vi.fn(),
+  startProductCatalogFeedRefreshJobMock: vi.fn(),
 }));
-const { revalidateServerTagsMock } = vi.hoisted(() => ({
+const { revalidateServerTagsMock, captureAdminExceptionMock } = vi.hoisted(() => ({
   revalidateServerTagsMock: vi.fn(),
+  captureAdminExceptionMock: vi.fn(),
 }));
 
 vi.mock('../../../../../db/client', () => ({
@@ -34,12 +44,21 @@ vi.mock('../../../../../lib/action-history', () => ({
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
 }));
 
+vi.mock('../../../../../lib/background-jobs', () => ({
+  startProductCatalogFeedRefreshJob: startProductCatalogFeedRefreshJobMock,
+}));
+
 vi.mock('../../../../../lib/server-cache', () => ({
   CACHE_TAGS: {
     products: 'products',
     productsMeta: 'products-meta',
   },
   revalidateServerTags: revalidateServerTagsMock,
+}));
+
+vi.mock('../../../../../lib/sentry', () => ({
+  getRequestId: vi.fn(() => 'request-2'),
+  captureAdminException: captureAdminExceptionMock,
 }));
 
 describe('app/api/products/[id]/route', () => {
@@ -54,7 +73,10 @@ describe('app/api/products/[id]/route', () => {
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mutateEntityWithHistoryMock.mockReset();
     mutateEntityWithHistoryMock.mockResolvedValue(undefined);
+    startProductCatalogFeedRefreshJobMock.mockReset();
+    startProductCatalogFeedRefreshJobMock.mockResolvedValue({ kind: 'started', job: null });
     revalidateServerTagsMock.mockReset();
+    captureAdminExceptionMock.mockReset();
   });
 
   it('returns 503 when DB is unavailable for GET', async () => {
@@ -184,6 +206,7 @@ describe('app/api/products/[id]/route', () => {
       inventoryQuantity: 3,
       updatedAt: expect.any(Date),
     }));
+    expect(startProductCatalogFeedRefreshJobMock).toHaveBeenCalledWith('product:update', 'request-2');
     expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
     await expect(res.json()).resolves.toEqual({ ok: true });
   });
@@ -224,6 +247,7 @@ describe('app/api/products/[id]/route', () => {
       inStock: false,
       updatedAt: expect.any(Date),
     }));
+    expect(startProductCatalogFeedRefreshJobMock).toHaveBeenCalledWith('product:patch', 'request-2');
     expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
     await expect(res.json()).resolves.toEqual({ ok: true });
   });
@@ -252,8 +276,26 @@ describe('app/api/products/[id]/route', () => {
     await execute({ delete: deleteMock });
 
     expect(deleteMock).toHaveBeenCalledOnce();
+    expect(startProductCatalogFeedRefreshJobMock).toHaveBeenCalledWith('product:delete', 'request-2');
     expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ ok: true });
+  });
+
+  it('does not fail product deletion when feed enqueue fails', async () => {
+    hasDbMock.mockReturnValue(true);
+    const db = { marker: 'db' };
+    getDbMock.mockReturnValue(db);
+    startProductCatalogFeedRefreshJobMock.mockRejectedValue(new Error('queue unavailable'));
+
+    const res = await DELETE(new NextRequest('http://localhost/api/products/4', { method: 'DELETE' }), {
+      params: Promise.resolve({ id: '4' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(captureAdminExceptionMock).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+      operation: 'product-catalog-feed-enqueue',
+      context: { trigger: 'product:delete', productId: 4 },
+    }));
   });
 });

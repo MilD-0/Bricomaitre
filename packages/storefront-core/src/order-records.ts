@@ -131,6 +131,7 @@ export function toOrderRecord(
   return {
     id: row.id,
     publicToken: row.publicToken ?? null,
+    ecotrackTrackingNumber: row.ecotrackTrackingNumber ?? null,
     variant: row.variant ?? null,
     isDegradedCapture: row.variant === DEGRADED_CAPTURE_VARIANT,
     createdAt: row.createdAt.toISOString(),

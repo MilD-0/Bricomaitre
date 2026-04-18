@@ -50,7 +50,7 @@ jobs:
           run_step "Admin unit and jsdom tests" pnpm test:admin
           run_step "Admin integration tests" pnpm test:admin:integration
           run_step "Storefront API tests" pnpm test:storefront-api
-          run_step "Storefront tests" pnpm test:storefront
+          run_step "Storefront tests (including Meta route and deploy verification coverage)" pnpm test:storefront
           echo >> "$GITHUB_STEP_SUMMARY"
 
       - name: Analyze storefront bundle

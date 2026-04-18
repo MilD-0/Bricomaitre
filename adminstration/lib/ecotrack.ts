@@ -211,6 +211,7 @@ const ecotrackMissingWilayaNames = new Map<number, string>([
   [50, 'In Salah'],
   [54, 'In Guezzam'],
 ]);
+const ECOTRACK_PLACEHOLDER_ADDRESS = 'Adresse non renseignee';
 
 export type EcotrackServiceType = (typeof ecotrackServiceTypes)[number];
 export type EcotrackWeightServiceType = (typeof ecotrackWeightServiceTypes)[number];
@@ -850,11 +851,12 @@ function resolveEcotrackCommune(
 
 export function buildEcotrackOrderPayload(order: OrderRecord, catalog: EcotrackCatalogRecord): EcotrackOrderPayload {
   const commune = resolveEcotrackCommune(catalog, order.state, order.city);
+  const normalizedAddress = normalizeEcotrackText(order.homeAddress);
   const payload: EcotrackOrderPayload = {
     reference: String(order.id),
     nom_client: normalizeEcotrackText(order.fullName),
     telephone: normalizeEcotrackPhone(order.phoneNumber1),
-    adresse: normalizeEcotrackText(order.homeAddress),
+    adresse: normalizedAddress || ECOTRACK_PLACEHOLDER_ADDRESS,
     commune: commune?.name ?? normalizeEcotrackText(order.city),
     code_wilaya: order.state === null ? '' : String(order.state),
     montant: String(Math.round(order.totalAmount * 100) / 100),
@@ -932,7 +934,7 @@ export function classifyOrdersForEcotrackPosting(
       continue;
     }
 
-    if (!normalizeEcotrackText(record.homeAddress)) {
+    if (record.delivery !== 1 && !normalizeEcotrackText(record.homeAddress)) {
       invalid.push({ orderId: row.id, customerName, reason: 'missing_address', message: 'Delivery address is required.' });
       continue;
     }

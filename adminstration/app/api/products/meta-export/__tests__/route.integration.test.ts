@@ -7,8 +7,6 @@ const {
   requireMutationAccessMock,
   hasDbMock,
   getDbMock,
-  createSquareCatalogImageMock,
-  buildMetaCatalogImageKeySeedMock,
   buildMetaCatalogExportRowsMock,
   buildMetaCatalogWorkbookMock,
   toXlsxBufferMock,
@@ -17,8 +15,6 @@ const {
   requireMutationAccessMock: vi.fn(),
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
-  createSquareCatalogImageMock: vi.fn(),
-  buildMetaCatalogImageKeySeedMock: vi.fn(),
   buildMetaCatalogExportRowsMock: vi.fn(),
   buildMetaCatalogWorkbookMock: vi.fn(),
   toXlsxBufferMock: vi.fn(),
@@ -35,8 +31,6 @@ vi.mock('../../../../../db/client', () => ({
 }));
 
 vi.mock('../../../../../lib/meta-catalog', () => ({
-  createSquareCatalogImage: createSquareCatalogImageMock,
-  buildMetaCatalogImageKeySeed: buildMetaCatalogImageKeySeedMock,
   buildMetaCatalogExportRows: buildMetaCatalogExportRowsMock,
   buildMetaCatalogWorkbook: buildMetaCatalogWorkbookMock,
   toXlsxBuffer: toXlsxBufferMock,
@@ -48,8 +42,6 @@ describe('app/api/products/meta-export/route', () => {
     requireMutationAccessMock.mockReset();
     hasDbMock.mockReset();
     getDbMock.mockReset();
-    createSquareCatalogImageMock.mockReset();
-    buildMetaCatalogImageKeySeedMock.mockReset();
     buildMetaCatalogExportRowsMock.mockReset();
     buildMetaCatalogWorkbookMock.mockReset();
     toXlsxBufferMock.mockReset();
@@ -57,9 +49,7 @@ describe('app/api/products/meta-export/route', () => {
 
     requireMutationAccessMock.mockResolvedValue(null);
     hasDbMock.mockReturnValue(true);
-    createSquareCatalogImageMock.mockResolvedValue('https://cdn.example.com/products/meta-catalog/square.jpg');
-    buildMetaCatalogImageKeySeedMock.mockReturnValue('seed-1');
-    buildMetaCatalogExportRowsMock.mockReturnValue([{ id: '1' }]);
+    buildMetaCatalogExportRowsMock.mockReturnValue([{ id: '1', contentId: '1' }]);
     buildMetaCatalogWorkbookMock.mockReturnValue({ workbook: true });
     toXlsxBufferMock.mockReturnValue(Buffer.from('sheet'));
     buildMetaCatalogExportFileNameMock.mockReturnValue('meta-catalog-export-20260331-120000.xlsx');
@@ -111,12 +101,15 @@ describe('app/api/products/meta-export/route', () => {
     await expect(response.json()).resolves.toEqual({ error: 'No matching products found.' });
   });
 
-  it('builds a meta catalog export with squared cloudfront images', async () => {
+  it('builds a meta catalog export with the original product image links', async () => {
+    process.env.NEXTAUTH_URL = 'https://admin.example.com';
     const productsFromDb = [
       {
         id: 1,
+        slug: 'roller',
         title: 'Roller',
         description: 'Paint roller',
+        inStock: false,
         price: 12,
         inventoryQuantity: 4,
         brandId: 9,
@@ -141,14 +134,12 @@ describe('app/api/products/meta-export/route', () => {
     const response = await GET(new NextRequest('http://localhost/api/products/meta-export?ids=1'));
 
     expect(response.status).toBe(200);
-    expect(buildMetaCatalogImageKeySeedMock).toHaveBeenCalledWith(productsFromDb[0]);
-    expect(createSquareCatalogImageMock).toHaveBeenCalledWith('https://raw.example.com/roller.jpg', 'seed-1');
     expect(buildMetaCatalogExportRowsMock).toHaveBeenCalledWith(
       productsFromDb,
       new Map([[9, 'Acme']]),
-      new Map([[1, 'https://cdn.example.com/products/meta-catalog/square.jpg']]),
+      new Map([[1, 'https://raw.example.com/roller.jpg']]),
     );
-    expect(buildMetaCatalogWorkbookMock).toHaveBeenCalledWith([{ id: '1' }]);
+    expect(buildMetaCatalogWorkbookMock).toHaveBeenCalledWith([{ id: '1', contentId: '1' }]);
     expect(toXlsxBufferMock).toHaveBeenCalledWith({ workbook: true });
     expect(response.headers.get('content-disposition')).toBe('attachment; filename="meta-catalog-export-20260331-120000.xlsx"');
   });

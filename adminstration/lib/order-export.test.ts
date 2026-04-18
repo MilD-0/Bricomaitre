@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildOrderExportRows,
   buildOrderExportWorkbook,
+  filterRecentConfirmedOrders,
   ORDER_EXPORT_HEADERS,
   type EcotrackCatalogExportData,
 } from './order-export';
@@ -105,6 +106,27 @@ describe('buildOrderExportWorkbook', () => {
       'OUI',
       'OUI',
       '',
+    ]);
+  });
+});
+
+describe('filterRecentConfirmedOrders', () => {
+  it('keeps only orders created within the last seven days', () => {
+    const result = filterRecentConfirmedOrders([
+      order,
+      {
+        ...order,
+        id: 22,
+        createdAt: '2026-03-09T10:00:00.000Z',
+      },
+    ], new Date('2026-03-10T10:00:00.000Z'));
+
+    expect(result).toEqual([
+      {
+        ...order,
+        id: 22,
+        createdAt: '2026-03-09T10:00:00.000Z',
+      },
     ]);
   });
 });

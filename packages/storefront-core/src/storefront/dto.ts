@@ -7,6 +7,7 @@ export type StorefrontProductDtoRow = Pick<
   typeof products.$inferSelect,
   | 'id'
   | 'slug'
+  | 'mongoId'
   | 'title'
   | 'titleAr'
   | 'description'
@@ -30,6 +31,7 @@ export function toStorefrontProductDto(row: StorefrontProductDtoRow) {
   return {
     id: row.id,
     slug: row.slug,
+    mongoId: row.mongoId,
     title: row.title,
     titleAr: row.titleAr,
     description: row.description,

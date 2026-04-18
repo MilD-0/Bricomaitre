@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -61,6 +61,37 @@ describe('ImageUploadField', () => {
 
     expect(await screen.findByText('preview.png')).toBeInTheDocument();
     expect(screen.getByText('50%')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith(['https://cdn.example.com/uploaded.jpg']);
+    });
+  });
+
+  it('uploads an image dropped on the upload field', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ImageUploadField
+        uploadUrl="/api/uploads/test"
+        label="Images"
+        value={[]}
+        onChange={onChange}
+      />,
+    );
+
+    const dropzone = screen.getByRole('button', { name: /choose image/i });
+    const file = new File(['img'], 'dropped.png', { type: 'image/png' });
+
+    fireEvent.dragEnter(dropzone, {
+      dataTransfer: { files: [file] },
+    });
+    expect(screen.getByRole('button', { name: /drop images to upload/i })).toHaveClass('border-primary/80');
+
+    fireEvent.drop(dropzone, {
+      dataTransfer: { files: [file] },
+    });
+
+    expect(await screen.findByText('dropped.png')).toBeInTheDocument();
 
     await waitFor(() => {
       expect(onChange).toHaveBeenCalledWith(['https://cdn.example.com/uploaded.jpg']);
