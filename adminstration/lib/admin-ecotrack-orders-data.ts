@@ -29,6 +29,7 @@ import {
 import { recordExplicitActionLog, type ActionActor } from './action-history';
 import { getOrderProductLookup, toOrderRecord } from './order-records';
 import { buildEcotrackOrderPayload, readEcotrackCatalog, resolveEcotrackDeliveryFee } from './ecotrack';
+import { parseSortRuleStrings, type SortRule } from './multi-sort';
 import {
   coerceOrderStatus,
   isConfirmedLifecycleStatus,
@@ -39,8 +40,20 @@ import {
   type OrderStatus,
 } from './orders';
 
-const ecotrackShipmentSortKeySchema = z.enum(['createdAt', 'trackingNumber', 'clientName', 'currentStatus', 'lastStatusSyncedAt']);
+const ecotrackShipmentSortKeyValues = ['createdAt', 'trackingNumber', 'clientName', 'currentStatus', 'lastStatusSyncedAt'] as const;
+const ecotrackShipmentSortKeySchema = z.enum(ecotrackShipmentSortKeyValues);
 const ecotrackShipmentSortDirectionSchema = z.enum(['asc', 'desc']);
+const defaultEcotrackShipmentSortRules = [{ key: 'createdAt', direction: 'desc' }] as const satisfies readonly SortRule<(typeof ecotrackShipmentSortKeyValues)[number]>[];
+type EcotrackShipmentListQueryInput = {
+  page?: string | number | undefined;
+  limit?: string | number | undefined;
+  search?: string | undefined;
+  status?: string | undefined;
+  staleOnly?: string | boolean | undefined;
+  sort?: string[] | undefined;
+  sortKey?: string | undefined;
+  sortDirection?: string | undefined;
+};
 
 const ecotrackShipmentListQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -48,8 +61,28 @@ const ecotrackShipmentListQuerySchema = z.object({
   search: z.string().trim().default(''),
   status: z.string().trim().default('all'),
   staleOnly: z.union([z.boolean(), z.string(), z.undefined()]).transform((value) => value === true || value === 'true').default(false),
+  sort: z.array(z.string().trim()).optional().default([]),
   sortKey: ecotrackShipmentSortKeySchema.default('createdAt'),
   sortDirection: ecotrackShipmentSortDirectionSchema.default('desc'),
+}).transform((value, ctx) => {
+  const parsedSortRules = parseSortRuleStrings(value.sort, ecotrackShipmentSortKeyValues);
+
+  if (!parsedSortRules.ok) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: parsedSortRules.issue,
+      path: ['sort'],
+    });
+
+    return z.NEVER;
+  }
+
+  return {
+    ...value,
+    sortRules: parsedSortRules.rules.length > 0
+      ? parsedSortRules.rules
+      : [{ key: value.sortKey, direction: value.sortDirection }],
+  };
 });
 
 const ecotrackShipmentUpdateDraftSchema = z.object({
@@ -60,9 +93,17 @@ const ecotrackShipmentUpdateDraftSchema = z.object({
   delivery: z.union([z.literal(0), z.literal(1)]),
   state: z.number().int().min(1).max(58).nullable(),
   city: z.string().trim().min(1).max(120),
-  homeAddress: z.string().trim().min(1).max(300),
+  homeAddress: z.string().trim().max(300),
   note: z.string().trim().max(500).nullable().optional().default(null),
   cartProducts: z.array(z.string().trim().min(1).max(160)).max(50).optional(),
+}).superRefine((value, ctx) => {
+  if (value.delivery === 0 && value.homeAddress.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Delivery address is required.',
+      path: ['homeAddress'],
+    });
+  }
 });
 
 const ecotrackMajCreateRequestSchema = z.object({
@@ -80,6 +121,8 @@ const ecotrackBulkActionSchema = z.object({
 type Database = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 type EcotrackShipmentListQuery = z.infer<typeof ecotrackShipmentListQuerySchema>;
+export type EcotrackShipmentSortKey = z.infer<typeof ecotrackShipmentSortKeySchema>;
+export type EcotrackShipmentSortRule = SortRule<EcotrackShipmentSortKey>;
 export type EcotrackOrderUpdateDraft = z.infer<typeof ecotrackShipmentUpdateDraftSchema>;
 export type EcotrackMajCreateRequest = z.infer<typeof ecotrackMajCreateRequestSchema>;
 export type EcotrackDispatchRequest = z.infer<typeof ecotrackDispatchRequestSchema>;
@@ -167,6 +210,7 @@ export type EcotrackOrderListResponse = {
   writable: boolean;
   pagination: PaginationMeta;
 };
+export const defaultEcotrackShipmentSort = [...defaultEcotrackShipmentSortRules] as EcotrackShipmentSortRule[];
 
 type ShipmentRow = typeof ecotrackOrderStates.$inferSelect & {
   order: typeof orders.$inferSelect;
@@ -503,27 +547,49 @@ function applySearch(items: EcotrackOrderListItem[], search: string) {
 }
 
 function applySort(items: EcotrackOrderListItem[], query: EcotrackShipmentListQuery) {
-  const direction = query.sortDirection === 'asc' ? 1 : -1;
   return [...items].sort((left, right) => {
-    if (query.sortKey === 'trackingNumber') {
-      return left.trackingNumber.localeCompare(right.trackingNumber) * direction;
+    for (const rule of query.sortRules) {
+      const direction = rule.direction === 'asc' ? 1 : -1;
+
+      if (rule.key === 'trackingNumber') {
+        const delta = left.trackingNumber.localeCompare(right.trackingNumber);
+        if (delta !== 0) {
+          return delta * direction;
+        }
+        continue;
+      }
+
+      if (rule.key === 'clientName') {
+        const delta = left.fullName.localeCompare(right.fullName);
+        if (delta !== 0) {
+          return delta * direction;
+        }
+        continue;
+      }
+
+      if (rule.key === 'currentStatus') {
+        const delta = left.status.currentStatus.localeCompare(right.status.currentStatus);
+        if (delta !== 0) {
+          return delta * direction;
+        }
+        continue;
+      }
+
+      if (rule.key === 'lastStatusSyncedAt') {
+        const delta = getStatusTimestamp(new Date(left.status.lastStatusSyncedAt ?? 0)) - getStatusTimestamp(new Date(right.status.lastStatusSyncedAt ?? 0));
+        if (delta !== 0) {
+          return delta * direction;
+        }
+        continue;
+      }
+
+      const delta = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+      if (delta !== 0) {
+        return delta * direction;
+      }
     }
 
-    if (query.sortKey === 'clientName') {
-      return left.fullName.localeCompare(right.fullName) * direction;
-    }
-
-    if (query.sortKey === 'currentStatus') {
-      return left.status.currentStatus.localeCompare(right.status.currentStatus) * direction;
-    }
-
-    if (query.sortKey === 'lastStatusSyncedAt') {
-      const delta = getStatusTimestamp(new Date(left.status.lastStatusSyncedAt ?? 0)) - getStatusTimestamp(new Date(right.status.lastStatusSyncedAt ?? 0));
-      return delta === 0 ? (right.orderId - left.orderId) * direction : delta * direction;
-    }
-
-    const delta = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
-    return delta === 0 ? (right.orderId - left.orderId) * direction : delta * direction;
+    return right.orderId - left.orderId;
   });
 }
 
@@ -1013,7 +1079,7 @@ export function buildUpdatePayload(
   };
 }
 
-export function parseEcotrackShipmentListQuery(input: Record<string, string | number | boolean | undefined>) {
+export function parseEcotrackShipmentListQuery(input: EcotrackShipmentListQueryInput) {
   return ecotrackShipmentListQuerySchema.parse(input);
 }
 
@@ -1034,7 +1100,7 @@ export function parseEcotrackBulkAction(input: unknown) {
 }
 
 export async function loadEcotrackOrdersPageData(
-  input: Record<string, string | number | boolean | undefined>,
+  input: EcotrackShipmentListQueryInput,
   writable: boolean,
 ): Promise<EcotrackOrderListResponse> {
   if (!hasDb()) {
@@ -1221,7 +1287,7 @@ export async function updatePostedEcotrackOrder(
       delivery: draft.delivery,
       state: draft.state,
       city: draft.city,
-      homeAddress: draft.homeAddress,
+      homeAddress: sanitizeNullableText(draft.homeAddress),
       note: sanitizeNullableText(draft.note),
       cartProducts: draft.cartProducts ?? row.order.cartProducts,
       delPr: nextDeliveryFeeValue,

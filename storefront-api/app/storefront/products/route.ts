@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     page: req.nextUrl.searchParams.get('page') ?? undefined,
     limit: req.nextUrl.searchParams.get('limit') ?? undefined,
     id: req.nextUrl.searchParams.get('id'),
+    mongoId: req.nextUrl.searchParams.get('mongoId') ?? undefined,
     search: req.nextUrl.searchParams.get('search') ?? undefined,
     brandId: req.nextUrl.searchParams.get('brandId'),
     categoryId: req.nextUrl.searchParams.get('categoryId'),

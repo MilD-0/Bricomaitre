@@ -2,9 +2,6 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
   ChevronDown,
   Copy,
   Eye,
@@ -27,6 +24,7 @@ import { cn } from '../lib/utils';
 import {
   buildOrderExportFileName,
   buildOrderExportRows,
+  filterRecentConfirmedOrders,
   ORDER_EXPORT_HEADERS,
 } from '../lib/order-export';
 import {
@@ -38,8 +36,9 @@ import {
   type OrderProductSummary,
   type OrderRecord,
   type OrderSortKey,
-  type SortDirection,
+  type OrderSortRule,
 } from '../lib/orders';
+import { appendSortParams, getSortRuleState, toggleSortRule } from '../lib/multi-sort';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -54,11 +53,12 @@ import {
 } from './ui/dialog';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from './ui/empty';
 import { Input } from './ui/input';
-import { PendingInline, sectionTransitionProps } from './ui/motion';
+import { PendingInline, sectionTransitionProps, SurfacePendingOverlay } from './ui/motion';
 import { NativeSelect, NativeSelectOption } from './ui/native-select';
 import { Skeleton } from './ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { TablePaginationControls } from './table-pagination-controls';
+import { MultiSortHeader } from './multi-sort-header';
 
 type PaginationMeta = { page: number; limit: number; totalItems: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean };
 type OrdersResponse = { items: OrderRecord[]; writable: boolean; pagination: PaginationMeta };
@@ -408,27 +408,6 @@ function resolveCommuneLabel(catalog: EcotrackCatalogResponse | undefined, state
 
   const commune = catalog.communes.find((entry) => entry.wilayaId === state && (String(entry.communeId) === rawCity || entry.name === rawCity));
   return commune?.name ?? rawCity;
-}
-
-function SortHeader({
-  label,
-  active,
-  direction,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  direction: 'asc' | 'desc';
-  onClick: () => void;
-}) {
-  const Icon = !active ? ArrowUpDown : direction === 'asc' ? ArrowUp : ArrowDown;
-
-  return (
-    <button type="button" className="inline-flex items-center gap-2 text-left font-medium" onClick={onClick}>
-      <span>{label}</span>
-      <Icon className="size-4" />
-    </button>
-  );
 }
 
 function captureQueries<T>(queryClient: ReturnType<typeof useQueryClient>, queryKey: readonly unknown[]) {
@@ -1019,6 +998,28 @@ function normalizeCommuneValue(state: number | null, city: string | null, catalo
   return byName ? String(byName.communeId) : rawCity;
 }
 
+function formatRegionLabel(
+  catalog: EcotrackCatalogResponse | undefined,
+  state: number | string | null,
+  city: string | null,
+  placeholder: string,
+) {
+  const rawState = typeof state === 'number' ? String(state) : (state ?? '').trim();
+  const rawCity = (city ?? '').trim();
+  const wilayaId = Number.parseInt(rawState, 10);
+  const wilayaName = catalog && Number.isInteger(wilayaId)
+    ? catalog.wilayas.find((entry) => entry.wilayaId === wilayaId)?.name
+    : undefined;
+  const communeName = catalog && Number.isInteger(wilayaId) && rawCity
+    ? (
+        catalog.communes.find((entry) => entry.wilayaId === wilayaId && String(entry.communeId) === rawCity)
+        ?? catalog.communes.find((entry) => entry.wilayaId === wilayaId && entry.name.toLowerCase() === rawCity.toLowerCase())
+      )?.name
+    : undefined;
+
+  return [wilayaName ?? rawState, communeName ?? rawCity].filter(Boolean).join(' / ') || placeholder;
+}
+
 function resolveDeliveryFeePreview(
   catalog: EcotrackCatalogResponse | undefined,
   delivery: 0 | 1,
@@ -1089,10 +1090,6 @@ function DetailsDialog({
     staleTime: 60_000,
   });
   const detail = detailQuery.data?.item ?? order;
-  const wilaya = detail && catalog ? catalog.wilayas.find((entry) => entry.wilayaId === detail.state) : null;
-  const commune = detail && catalog && detail.state !== null
-    ? catalog.communes.find((entry) => entry.wilayaId === detail.state && (String(entry.communeId) === (detail.city ?? '') || entry.name === detail.city))
-    : null;
 
   return (
     <Dialog open={Boolean(order)} onOpenChange={onOpenChange}>
@@ -1143,7 +1140,7 @@ function DetailsDialog({
             <div className="rounded-2xl border border-border/70 p-4">
               <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{t('ordersManager.columns.address')}</p>
               <p className="mt-2 text-sm">{t(`ordersManager.delivery.${getDeliveryTypeLabelKey(detail.delivery)}`)}</p>
-              <p className="text-sm text-muted-foreground">{[wilaya?.name ?? detail.state, commune?.name ?? detail.city].filter(Boolean).join(' / ') || t('ordersManager.placeholders.region')}</p>
+              <p className="text-sm text-muted-foreground">{formatRegionLabel(catalog, detail.state, detail.city, t('ordersManager.placeholders.region'))}</p>
               <p className="text-sm text-muted-foreground">{detail.homeAddress || t('ordersManager.placeholders.street')}</p>
             </div>
             <div className="rounded-2xl border border-border/70 p-4">
@@ -1616,12 +1613,14 @@ function ShoppingListDialog({
 function ExportOrdersDialog({
   state,
   progress,
+  errorMessage,
   onOpenChange,
   onConfirm,
   onCancelJob,
 }: {
   state: ExportPreviewState;
   progress: ExportProgressState;
+  errorMessage: string | null;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
   onCancelJob: () => void;
@@ -1653,6 +1652,11 @@ function ExportOrdersDialog({
                     style={{ width: `${progress.total === 0 ? 0 : (progress.current / progress.total) * 100}%` }}
                   />
                 </div>
+              </div>
+            ) : null}
+            {errorMessage ? (
+              <div role="alert" className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                {errorMessage}
               </div>
             ) : null}
             <div className="flex items-center justify-end gap-3">
@@ -1862,8 +1866,7 @@ export function OrdersManager({
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [sortKey, setSortKey] = useState<OrderSortKey>('createdAt');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [sortRules, setSortRules] = useState<OrderSortRule[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [phoneDrafts, setPhoneDrafts] = useState<Record<number, string>>({});
@@ -1877,6 +1880,7 @@ export function OrdersManager({
   const [shoppingListState, setShoppingListState] = useState<ShoppingListState>(null);
   const [shoppingListOpen, setShoppingListOpen] = useState(false);
   const [exportPreviewState, setExportPreviewState] = useState<ExportPreviewState>(null);
+  const [exportPreviewError, setExportPreviewError] = useState<string | null>(null);
   const [ecotrackPreviewState, setEcotrackPreviewState] = useState<EcotrackPostingPreviewState>(null);
   const [activeEcotrackJobId, setActiveEcotrackJobId] = useState<string | null>(null);
   const [hoveredProductKey, setHoveredProductKey] = useState<string | null>(null);
@@ -1890,13 +1894,40 @@ export function OrdersManager({
   const deferredStatusFilter = useDeferredValue(statusFilter);
   const [initialOrdersUpdatedAt] = useState(() => (initialOrders ? Date.now() : 0));
   const [initialCatalogUpdatedAt] = useState(() => (initialCatalog ? Date.now() : 0));
+  const canUseInitialOrders = page === 1
+    && deferredSearch.length === 0
+    && deferredStatusFilter === 'all'
+    && sortRules.length === 0;
 
   const ordersQuery = useQuery({
-    queryKey: ['orders-table', page, deferredSearch, deferredStatusFilter, sortKey, sortDirection],
-    queryFn: () => request<OrdersResponse>(`/api/orders?page=${page}&limit=25&search=${encodeURIComponent(deferredSearch)}&confirmed=${deferredStatusFilter === 'all' ? '' : deferredStatusFilter}&sortKey=${sortKey}&sortDirection=${sortDirection}`),
-    initialData: initialOrders,
-    initialDataUpdatedAt: initialOrdersUpdatedAt,
-    placeholderData: keepPreviousData,
+    queryKey: ['orders-table', page, deferredSearch, deferredStatusFilter, sortRules],
+    queryFn: () => {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: '25',
+        search: deferredSearch,
+        confirmed: deferredStatusFilter === 'all' ? '' : deferredStatusFilter,
+      });
+      appendSortParams(params, sortRules);
+      return request<OrdersResponse>(`/api/orders?${params.toString()}`);
+    },
+    initialData: canUseInitialOrders ? initialOrders : undefined,
+    initialDataUpdatedAt: canUseInitialOrders ? initialOrdersUpdatedAt : undefined,
+    placeholderData: (previousData, previousQuery) => {
+      const previousKey = previousQuery?.queryKey;
+
+      if (!Array.isArray(previousKey) || previousKey.length !== 5) {
+        return undefined;
+      }
+
+      const [, previousPage, previousSearch, previousConfirmed, previousSortRules] = previousKey;
+      const isPaginationOnlyChange = previousSearch === deferredSearch
+        && previousConfirmed === deferredStatusFilter
+        && previousSortRules === sortRules
+        && previousPage !== page;
+
+      return isPaginationOnlyChange ? keepPreviousData(previousData) : undefined;
+    },
     staleTime: 60_000,
   });
   const ecotrackCatalogQuery = useQuery({
@@ -2011,9 +2042,13 @@ export function OrdersManager({
     }),
     onMutate: () => ({ toastId: toast.loading(t('ordersManager.export.loading')) }),
     onError: (error, _variables, context) => {
-      toast.error(error.message || t('ordersManager.export.error'), { id: context?.toastId });
+      setExportPreviewError(error.message || t('ordersManager.export.error'));
+      if (context?.toastId) {
+        toast.dismiss(context.toastId);
+      }
     },
     onSuccess: async (_data, _variables, context) => {
+      setExportPreviewError(null);
       toast.success(t('ordersManager.export.ready'), { id: context?.toastId });
       await queryClient.invalidateQueries({ queryKey: ['orders-export-job'] });
     },
@@ -2163,6 +2198,7 @@ export function OrdersManager({
     }
 
     if (orderExportJob.status === 'completed') {
+      setExportPreviewError(null);
       toast.success(t('ordersManager.export.success'));
       if (orderExportJob.downloadPath) {
         window.open(orderExportJob.downloadPath, '_self');
@@ -2172,7 +2208,7 @@ export function OrdersManager({
     } else if (orderExportJob.status === 'cancelled') {
       toast.success(t('products.exportAll.notifications.status.cancelled'));
     } else if (orderExportJob.status === 'failed') {
-      toast.error(orderExportJob.errorMessage || t('ordersManager.export.error'));
+      setExportPreviewError(orderExportJob.errorMessage || t('ordersManager.export.error'));
     }
   }, [orderExportJob, queryClient, t]);
 
@@ -2214,8 +2250,7 @@ export function OrdersManager({
   function toggleSort(nextKey: OrderSortKey) {
     startFilterTransition(() => {
       setPage(1);
-      setSortDirection((current) => (sortKey === nextKey ? (current === 'asc' ? 'desc' : 'asc') : sortKey === nextKey ? current : nextKey === 'createdAt' ? 'desc' : 'asc'));
-      setSortKey(nextKey);
+      setSortRules((current) => toggleSortRule(current, nextKey, 'asc'));
     });
   }
 
@@ -2496,6 +2531,7 @@ export function OrdersManager({
       return;
     }
 
+    setExportPreviewError(null);
     setExportPreviewState({
       mode,
       title,
@@ -2513,7 +2549,7 @@ export function OrdersManager({
     const toastId = toast.loading(t('ordersManager.export.loading'));
 
     try {
-      const orders = await fetchOrdersByStatus(2);
+      const orders = filterRecentConfirmedOrders(await fetchOrdersByStatus(2));
       if (orders.length === 0) {
         toast.error(t('ordersManager.export.emptyConfirmed'), { id: toastId });
         return;
@@ -2532,12 +2568,13 @@ export function OrdersManager({
     }
 
     try {
+      setExportPreviewError(null);
       await startOrderExportMutation.mutateAsync({
         mode: exportPreviewState.mode,
         orderIds: exportPreviewState.orders.map((order) => order.id),
       });
     } catch {
-      toast.error(t('ordersManager.export.error'));
+      // Error state is rendered inside the export preview dialog.
     }
   }
 
@@ -2975,18 +3012,8 @@ export function OrdersManager({
         </div>
       </div>
 
-      {showRefreshingProgress ? (
-        <div className="px-4 pb-4 sm:px-5" aria-live="polite">
-          <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-            <span>{t('ordersManager.loading.refreshing')}</span>
-            <span>{t('ordersManager.loading.inProgress')}</span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div className="h-full w-1/3 animate-pulse rounded-full bg-foreground/70" />
-          </div>
-        </div>
-      ) : null}
-
+      <div className="relative" aria-busy={showRefreshingProgress}>
+        <div className={cn('transition-[opacity,filter] duration-200', showRefreshingProgress && 'opacity-70')}>
       {isInitialLoading ? (
         <>
           <OrdersTableSkeleton />
@@ -3024,16 +3051,16 @@ export function OrdersManager({
                 />
               </TableHead>
               <TableHead className="min-w-40">
-                <SortHeader label={t('ordersManager.columns.date')} active={sortKey === 'createdAt'} direction={sortDirection} onClick={() => toggleSort('createdAt')} />
+                <MultiSortHeader label={t('ordersManager.columns.date')} sortState={getSortRuleState(sortRules, 'createdAt')} onClick={() => toggleSort('createdAt')} />
               </TableHead>
               <TableHead className="min-w-[26rem]">
-                <SortHeader label={t('ordersManager.columns.client')} active={sortKey === 'fullName'} direction={sortDirection} onClick={() => toggleSort('fullName')} />
+                <MultiSortHeader label={t('ordersManager.columns.client')} sortState={getSortRuleState(sortRules, 'fullName')} onClick={() => toggleSort('fullName')} />
               </TableHead>
               <TableHead className="min-w-60">{t('ordersManager.columns.products')}</TableHead>
               <TableHead className="min-w-80">{t('ordersManager.columns.address')}</TableHead>
               <TableHead className="min-w-52">{t('ordersManager.columns.amount')}</TableHead>
               <TableHead className="min-w-48">
-                <SortHeader label={t('ordersManager.columns.status')} active={sortKey === 'confirmed'} direction={sortDirection} onClick={() => toggleSort('confirmed')} />
+                <MultiSortHeader label={t('ordersManager.columns.status')} sortState={getSortRuleState(sortRules, 'confirmed')} onClick={() => toggleSort('confirmed')} />
               </TableHead>
               <TableHead className="min-w-52">{t('ordersManager.columns.confirmedBy')}</TableHead>
               <TableHead className="min-w-64">{t('ordersManager.columns.notes')}</TableHead>
@@ -3075,6 +3102,9 @@ export function OrdersManager({
                       <span className="text-sm font-semibold text-foreground">{createdAt.date}</span>
                       <span className="mt-1 block text-xs text-muted-foreground">{createdAt.time}</span>
                       <Badge variant="outline" className="mt-3 rounded-full">#{order.id}</Badge>
+                      {order.ecotrackTrackingNumber ? (
+                        <p className="mt-2 font-mono text-xs text-muted-foreground">{order.ecotrackTrackingNumber}</p>
+                      ) : null}
                     </div>
                   </TableCell>
                   <TableCell className="align-top">
@@ -3198,23 +3228,30 @@ export function OrdersManager({
                         </NativeSelect>
                       </div>
                       <div className="mt-2 flex items-center gap-2">
-                        <Input
-                          value={addressDraft.homeAddress}
-                          disabled={!writable}
-                          onChange={(event) =>
-                            setAddressDrafts((current) => ({
-                              ...current,
-                              [order.id]: { ...addressDraft, homeAddress: event.target.value },
-                            }))
-                          }
-                          placeholder={t('ordersManager.placeholders.street')}
-                        />
+                        {addressDraft.delivery === 0 ? (
+                          <Input
+                            value={addressDraft.homeAddress}
+                            disabled={!writable}
+                            onChange={(event) =>
+                              setAddressDrafts((current) => ({
+                                ...current,
+                                [order.id]: { ...addressDraft, homeAddress: event.target.value },
+                              }))
+                            }
+                            placeholder={t('ordersManager.placeholders.street')}
+                          />
+                        ) : null}
                         <Button type="button" size="sm" disabled={!writable} onClick={() => void saveAddress(order)}>
                           {t('actions.save')}
                         </Button>
                       </div>
                       <p className="mt-2 text-xs text-muted-foreground">
-                        {[selectedWilaya?.name ?? (order.state ? String(order.state) : ''), selectedCommune?.name ?? order.city].filter(Boolean).join(' / ') || t('ordersManager.placeholders.region')}
+                        {formatRegionLabel(
+                          ecotrackCatalogQuery.data,
+                          addressDraft.state || order.state,
+                          selectedCommune?.name ?? order.city ?? addressDraft.city,
+                          t('ordersManager.placeholders.region'),
+                        )}
                       </p>
                     </div>
                   </TableCell>
@@ -3364,6 +3401,9 @@ export function OrdersManager({
                       </Badge>
                     ) : null}
                     <p className="mt-1 text-xs text-muted-foreground">#{order.id}</p>
+                    {order.ecotrackTrackingNumber ? (
+                      <p className="mt-1 font-mono text-xs text-muted-foreground">{order.ecotrackTrackingNumber}</p>
+                    ) : null}
                     <p className="text-sm text-muted-foreground">{createdAt.date}</p>
                     <p className="text-xs text-muted-foreground">{createdAt.time}</p>
                   </div>
@@ -3498,7 +3538,14 @@ export function OrdersManager({
                 <details className="group rounded-2xl border border-border/70 bg-background">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-foreground outline-none [&::-webkit-details-marker]:hidden">
                     <span className="min-w-0 whitespace-normal text-left">{t('ordersManager.columns.address')}</span>
-                    <span className="min-w-0 whitespace-normal text-right text-xs text-muted-foreground">{[wilayaOptions.find((entry) => String(entry.wilayaId) === addressDraft.state)?.name, communeOptions.find((entry) => String(entry.communeId) === addressDraft.city)?.name].filter(Boolean).join(' / ') || t('ordersManager.placeholders.region')}</span>
+                    <span className="min-w-0 whitespace-normal text-right text-xs text-muted-foreground">
+                      {formatRegionLabel(
+                        ecotrackCatalogQuery.data,
+                        addressDraft.state,
+                        communeOptions.find((entry) => String(entry.communeId) === addressDraft.city)?.name ?? order.city ?? addressDraft.city,
+                        t('ordersManager.placeholders.region'),
+                      )}
+                    </span>
                   </summary>
                   <div className="px-3 pb-3">
                     <div className="grid grid-cols-2 gap-2">
@@ -3533,18 +3580,20 @@ export function OrdersManager({
                           <NativeSelectOption key={entry.communeId} value={String(entry.communeId)}>{entry.name}</NativeSelectOption>
                         ))}
                       </NativeSelect>
-                      <Input
-                        className="col-span-2"
-                        value={addressDraft.homeAddress}
-                        disabled={!writable}
-                        onChange={(event) =>
-                          setAddressDrafts((current) => ({
-                            ...current,
-                            [order.id]: { ...addressDraft, homeAddress: event.target.value },
-                          }))
-                        }
-                        placeholder={t('ordersManager.placeholders.street')}
-                      />
+                      {addressDraft.delivery === 0 ? (
+                        <Input
+                          className="col-span-2"
+                          value={addressDraft.homeAddress}
+                          disabled={!writable}
+                          onChange={(event) =>
+                            setAddressDrafts((current) => ({
+                              ...current,
+                              [order.id]: { ...addressDraft, homeAddress: event.target.value },
+                            }))
+                          }
+                          placeholder={t('ordersManager.placeholders.street')}
+                        />
+                      ) : null}
                     </div>
                     <Button type="button" size="sm" className="mt-2 w-full" disabled={!writable} onClick={() => void saveAddress(order)}>
                       {t('actions.save')}
@@ -3622,6 +3671,11 @@ export function OrdersManager({
       ) : null}
 
       <TablePaginationControls currentPage={currentPage} totalPages={totalPages} onPageChange={(nextPage) => startFilterTransition(() => setPage(nextPage))} />
+      </>
+      ) : null}
+        </div>
+        <SurfacePendingOverlay active={showRefreshingProgress} label={t('ordersManager.loading.refreshing')} />
+      </div>
 
       <DetailsDialog
         order={detailsOrder}
@@ -3682,9 +3736,11 @@ export function OrdersManager({
       <ExportOrdersDialog
         state={exportPreviewState}
         progress={exportProgressState}
+        errorMessage={exportPreviewError}
         onOpenChange={(open) => {
           if (!open && !exportProgressState) {
             setExportPreviewState(null);
+            setExportPreviewError(null);
           }
         }}
         onConfirm={() => void confirmExport()}
@@ -3703,7 +3759,6 @@ export function OrdersManager({
         onConfirm={() => void confirmEcotrackPosting()}
         onCancelJob={() => void cancelOrderEcotrackMutation.mutateAsync()}
       />
-      </>) : null}
     </motion.section>
   );
 }

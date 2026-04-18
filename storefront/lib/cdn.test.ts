@@ -29,7 +29,7 @@ describe('storefront cdn helpers', () => {
 
   it('returns a normalized asset prefix in production only', async () => {
     vi.resetModules();
-    process.env.NODE_ENV = 'production';
+    (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
     process.env.NEXT_PUBLIC_ASSET_PREFIX = 'https://cdn.example.com/_next/';
 
     const { getStorefrontAssetPrefix } = await import('./cdn');

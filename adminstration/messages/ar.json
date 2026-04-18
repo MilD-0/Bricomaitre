@@ -333,7 +333,95 @@
       "products": "المنتجات والفئات",
       "geography": "الجغرافيا",
       "time": "التحليل الزمني",
-      "metaAds": "إعلانات ميتا"
+      "metaAds": "إعلانات ميتا",
+      "paidClicks": "النقرات المدفوعة"
+    },
+    "paidClicks": {
+      "filters": {
+        "range24h": "آخر 24 ساعة",
+        "range7d": "آخر 7 أيام",
+        "range30d": "آخر 30 يوماً",
+        "variantAll": "كل النسخ",
+        "variantNew": "الواجهة الجديدة",
+        "variantLegacy": "الواجهة القديمة",
+        "sourceAll": "كل المصادر",
+        "outcomeAll": "كل النتائج",
+        "hasOrderAll": "مع وبدون طلب",
+        "hasOrderYes": "مع طلب",
+        "hasOrderNo": "بدون طلب",
+        "searchPlaceholder": "ابحث عن مسار الهبوط أو slug"
+      },
+      "summary": {
+        "visits": "الزيارات",
+        "landedOnly": "هبوط فقط",
+        "viewedProduct": "عرض منتج",
+        "addedToCart": "إضافة للسلة",
+        "beganCheckout": "بدء الدفع",
+        "createdOrder": "إنشاء طلب",
+        "purchased": "شراء",
+        "errored": "خطأ"
+      },
+      "outcomes": {
+        "landedOnly": "هبوط فقط",
+        "viewedProduct": "عرض منتج",
+        "addedToCart": "إضافة للسلة",
+        "beganCheckout": "بدء الدفع",
+        "createdOrder": "إنشاء طلب",
+        "purchased": "شراء",
+        "errored": "خطأ"
+      },
+      "table": {
+        "firstSeen": "أول ظهور",
+        "landingPath": "مسار الهبوط",
+        "productSlug": "Slug المنتج",
+        "variant": "النسخة",
+        "source": "المصدر المدفوع",
+        "lastEvent": "آخر حدث",
+        "eventCount": "الأحداث",
+        "orderId": "الطلب",
+        "age": "المدة"
+      },
+      "actions": {
+        "previous": "السابق",
+        "next": "التالي",
+        "reveal": "إظهار",
+        "hide": "إخفاء"
+      },
+      "detail": {
+        "title": "تفاصيل الزيارة المدفوعة",
+        "description": "رابط الهبوط الدقيق وتسلسل الأحداث لزائر مدفوع واحد.",
+        "visitId": "معرّف الزيارة",
+        "landingUrl": "رابط الهبوط",
+        "variant": "النسخة المعروضة",
+        "requestedVariant": "النسخة المطلوبة",
+        "journeyId": "معرّف الرحلة",
+        "sessionId": "معرّف الجلسة",
+        "fbclid": "fbclid",
+        "utmSource": "UTM source",
+        "utmMedium": "UTM medium",
+        "utmCampaign": "UTM campaign",
+        "orderId": "معرّف الطلب",
+        "lastEvent": "آخر حدث",
+        "firstSeen": "أول ظهور",
+        "lastSeen": "آخر ظهور",
+        "orderSummary": "الطلب المرتبط",
+        "orderStatus": "حالة الطلب",
+        "orderCity": "مدينة الطلب",
+        "timelineTime": "الوقت",
+        "timelineEvent": "الحدث",
+        "timelinePage": "الصفحة",
+        "timelineProduct": "المنتج",
+        "timelineOrder": "الطلب",
+        "timelineMeta": "ميتا",
+        "metaPayloads": "أحداث ميتا والحمولات",
+        "pixelPayload": "حمولة البيكسل",
+        "capiPayload": "حمولة CAPI",
+        "metaDelivered": "تم تسليم CAPI",
+        "metaFailed": "فشل CAPI",
+        "metaPixelOnly": "بيكسل فقط",
+        "metaNoData": "لا توجد حمولة ميتا"
+      },
+      "empty": "لا توجد زيارات مدفوعة تطابق الفلاتر الحالية."
     },
     "upload": {
       "title": "استيراد Excel",
@@ -487,6 +575,22 @@
         "columns": {
           "path": "صفحة الهبوط",
           "sessions": "الجلسات"
+        }
+      },
+      "variants": {
+        "title": "مقارنة نسخ المتجر",
+        "columns": {
+          "variant": "النسخة",
+          "sessions": "الجلسات",
+          "pageViews": "مشاهدات الصفحات",
+          "purchases": "المشتريات",
+          "sessionRate": "تحويل الجلسات %",
+          "cartRate": "تحويل السلة %",
+          "checkoutRate": "تحويل الدفع %"
+        },
+        "values": {
+          "new": "المتجر الجديد",
+          "legacy": "المتجر القديم"
         }
       },
       "search": {
@@ -651,9 +755,34 @@
     },
     "metaAds": {
       "performanceTitle": "كفاءة الإعلانات",
+      "eventsTitle": "أحداث Meta المتتبعة",
+      "payloadsTitle": "حمولات Meta الأخيرة",
       "managerTitle": "تكاليف الإعلانات",
       "conversionRate": "معدل التحويل",
       "unknownCampaign": "حملة غير معروفة",
+      "events": {
+        "empty": "لم يتم تسجيل أي أحداث Meta ضمن هذه الفترة.",
+        "columns": {
+          "event": "الحدث",
+          "total": "المتتبعة",
+          "pixel": "تم إطلاق البكسل",
+          "capiSent": "تم إرسال CAPI",
+          "capiDelivered": "تم تسليم CAPI",
+          "capiFailed": "فشل CAPI",
+          "lastSeen": "آخر ظهور"
+        }
+      },
+      "payloads": {
+        "emptyTitle": "لا توجد حمولات Meta بعد",
+        "emptyDescription": "ستظهر هنا حمولات Meta Pixel وCAPI بعد تسجيل نشاط من المتجر.",
+        "meta": "{analyticsEvent} • {eventId} • {occurredAt}",
+        "pixel": "حمولة البكسل",
+        "capi": "حمولة CAPI",
+        "delivered": "تم التسليم",
+        "failed": "فشل",
+        "noStatus": "لا توجد حالة HTTP",
+        "status": "HTTP {status}"
+      },
       "summary": {
         "spend": "الإنفاق",
         "impressions": "الظهور",

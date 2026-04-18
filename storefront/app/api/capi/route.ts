@@ -4,11 +4,24 @@ import { ParamBuilder } from "capi-param-builder-nodejs";
 
 export const runtime = "nodejs";
 
-const FB_PIXEL_ID = process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID;
-const FB_TOKEN = process.env.TOKEN;
+function getAllowedDomains() {
+  const configuredUrls = [
+    process.env.NEXT_PUBLIC_SITE_URL,
+    process.env.SITE_URL,
+  ].filter((value): value is string => Boolean(value?.trim()));
 
-// Add your domains here
-const DOMAINS = ["bricomaitre.com", "localhost"];
+  const configuredHosts = configuredUrls
+    .map((value) => {
+      try {
+        return new URL(value).hostname;
+      } catch {
+        return null;
+      }
+    })
+    .filter((value): value is string => Boolean(value));
+
+  return Array.from(new Set(["localhost", ...configuredHosts, "bricomaitre.com"]));
+}
 
 const schema = z.object({
   event_name: z.string().min(1),
@@ -18,9 +31,22 @@ const schema = z.object({
   custom_data: z.record(z.string(), z.unknown()).optional().default({}),
   url: z.string().url().optional(),
   test_event_code: z.string().optional(),
+  fbclid: z.string().optional(),
 });
 
 type CapiBody = z.infer<typeof schema>;
+
+function getFacebookCredentials() {
+  return {
+    pixelId: process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID?.trim() || "",
+    token:
+      process.env.FACEBOOK_ACCESS_TOKEN?.trim() ||
+      process.env.META_CONVERSIONS_API_TOKEN?.trim() ||
+      process.env.FB_TOKEN?.trim() ||
+      process.env.TOKEN?.trim() ||
+      "",
+  };
+}
 
 function getClientIpAddress(request: NextRequest) {
   const headerCandidates = [
@@ -79,6 +105,11 @@ function parseQueryParams(url: string): Record<string, string> {
   }
 }
 
+function getStoredFbclid(cookieHeader: string | null) {
+  const cookies = parseCookies(cookieHeader);
+  return cookies?._bric_fbclid;
+}
+
 async function sendToFacebook({
   eventName,
   eventTime,
@@ -95,9 +126,14 @@ async function sendToFacebook({
   customData: Record<string, unknown>;
   url?: string;
   testEventCode?: string;
-}): Promise<{ ok: true; data: unknown } | { ok: false; error: string }> {
-  if (!FB_PIXEL_ID || !FB_TOKEN) {
-    return { ok: false, error: "Missing Facebook credentials." };
+}): Promise<
+  | { ok: true; data: unknown; status: number }
+  | { ok: false; error: string; status: number; response?: unknown }
+> {
+  const { pixelId, token } = getFacebookCredentials();
+
+  if (!pixelId || !token) {
+    return { ok: false, error: "Missing Facebook credentials.", status: 503 };
   }
 
   const payload: Record<string, unknown> = {
@@ -124,7 +160,7 @@ async function sendToFacebook({
       const timeout = setTimeout(() => controller.abort(), 15000);
 
       const response = await fetch(
-        `https://graph.facebook.com/v22.0/${FB_PIXEL_ID}/events?access_token=${FB_TOKEN}`,
+        `https://graph.facebook.com/v22.0/${pixelId}/events?access_token=${token}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -137,10 +173,15 @@ async function sendToFacebook({
       const fbData = (await response.json()) as unknown;
 
       if (!response.ok) {
-        throw new Error(`Facebook API ${response.status}: ${JSON.stringify(fbData)}`);
+        return {
+          ok: false,
+          error: `Facebook API ${response.status}`,
+          status: response.status,
+          response: fbData,
+        };
       }
 
-      return { ok: true, data: fbData };
+      return { ok: true, data: fbData, status: response.status };
     } catch (err) {
       lastErr = err as Error;
       if (attempt < 2) {
@@ -149,7 +190,44 @@ async function sendToFacebook({
     }
   }
 
-  return { ok: false, error: lastErr?.message || "Unknown error" };
+  return {
+    ok: false,
+    error: lastErr?.message || "Unknown error",
+    status: 503,
+  };
+}
+
+function buildEffectivePayload({
+  eventName,
+  eventTime,
+  eventId,
+  userData,
+  customData,
+  url,
+  testEventCode,
+}: {
+  eventName: string;
+  eventTime: number;
+  eventId: string;
+  userData: Record<string, string | undefined>;
+  customData: Record<string, unknown>;
+  url?: string;
+  testEventCode?: string;
+}) {
+  return {
+    data: [
+      {
+        event_name: eventName,
+        event_time: eventTime,
+        event_id: eventId,
+        action_source: "website",
+        event_source_url: url,
+        user_data: userData,
+        custom_data: customData,
+      },
+    ],
+    ...(testEventCode ? { test_event_code: testEventCode } : {}),
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -168,7 +246,7 @@ export async function POST(request: NextRequest) {
     const incomingUserData = data.user_data as Record<string, string | undefined>;
 
     // Initialize ParamBuilder
-    const builder = new ParamBuilder(DOMAINS);
+    const builder = new ParamBuilder(getAllowedDomains());
 
     // Extract request info
     const host = request.headers.get("host") || "localhost";
@@ -183,6 +261,10 @@ export async function POST(request: NextRequest) {
     // Parse cookies and query params from the event URL
     const cookies = parseCookies(cookieHeader);
     const queryParams = data.url ? parseQueryParams(data.url) : {};
+    const fallbackFbclid = data.fbclid?.trim() || getStoredFbclid(cookieHeader);
+    if (!queryParams.fbclid && fallbackFbclid) {
+      queryParams.fbclid = fallbackFbclid;
+    }
 
     // Process request with Meta's SDK
     builder.processRequest(
@@ -257,6 +339,16 @@ if (incomingUserData.external_id) {
     if (clientIpAddress) hashedUserData.client_ip_address = clientIpAddress;
     if (userAgent) hashedUserData.client_user_agent = userAgent;
 
+    const effectivePayload = buildEffectivePayload({
+      eventName: data.event_name,
+      eventTime: data.event_time,
+      eventId: data.event_id,
+      userData: hashedUserData,
+      customData: data.custom_data,
+      url: data.url,
+      testEventCode: data.test_event_code,
+    });
+
     // Send to Facebook
     const fbResult = await sendToFacebook({
       eventName: data.event_name,
@@ -265,19 +357,25 @@ if (incomingUserData.external_id) {
       userData: hashedUserData,
       customData: data.custom_data,
       url: data.url,
-
+      testEventCode: data.test_event_code,
     });
 
-   if (!fbResult.ok) {
-  console.error("CAPI Error:", fbResult.error);
-  return NextResponse.json(
-    { success: false, error: fbResult.error },
-    { status: 503 }
-  );
-}
+    if (!fbResult.ok) {
+      console.error("CAPI Error:", fbResult.error, fbResult.response);
+      return NextResponse.json(
+        {
+          success: false,
+          error: fbResult.error,
+          metaStatus: fbResult.status,
+          metaResponse: fbResult.response ?? null,
+          effectivePayload,
+        },
+        { status: 503 }
+      );
+    }
 
     // Build response with cookies to set
-    const response = NextResponse.json({ success: true, data: fbResult.data });
+    const response = NextResponse.json({ success: true, data: fbResult.data, effectivePayload });
 
     // Set cookies from SDK
     for (const cookie of builder.getCookiesToSet()) {

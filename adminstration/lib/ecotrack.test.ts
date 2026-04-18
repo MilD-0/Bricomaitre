@@ -431,6 +431,26 @@ describe('lib/ecotrack', () => {
     expect(result.invalid).toEqual([expect.objectContaining({ orderId: 13, reason: 'missing_phone' })]);
   });
 
+  it('allows stop desk orders without a home address', () => {
+    const result = classifyOrdersForEcotrackPosting([
+      {
+        row: { ...orderInput.row, id: 14 } as never,
+        record: { ...orderRecord, id: 14, delivery: 1, homeAddress: null } as never,
+      },
+    ], catalog);
+
+    expect(result.invalid).toEqual([]);
+    expect(result.eligible).toEqual([
+      expect.objectContaining({
+        orderId: 14,
+        payload: expect.objectContaining({
+          adresse: 'Adresse non renseignee',
+          stop_desk: 1,
+        }),
+      }),
+    ]);
+  });
+
   it('normalizes batch create results keyed by batch index', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       results: {

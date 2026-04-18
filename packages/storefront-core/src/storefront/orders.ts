@@ -96,6 +96,7 @@ export async function createStorefrontOrder(
     phoneNumber2: payload.phoneNumber2,
     publicToken,
     cartProducts: payload.cartProducts,
+    visitId: payload.visitId,
     journeyId: payload.journeyId,
     sessionId: payload.sessionId,
     delivery: coerceDeliveryType(payload.delivery),

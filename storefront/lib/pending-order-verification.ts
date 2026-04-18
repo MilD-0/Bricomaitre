@@ -7,7 +7,7 @@ function getStorage() {
     return null;
   }
 
-  return window.sessionStorage;
+  return window.localStorage;
 }
 
 export function readPendingOrderVerification() {

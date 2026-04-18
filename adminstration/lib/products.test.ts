@@ -75,8 +75,21 @@ describe('productPayloadSchema', () => {
       brandId: 3,
       categoryId: null,
       imageOrigin: 'external',
+      sort: [],
       sortKey: 'price',
       sortDirection: 'asc',
+      sortRules: [{ key: 'price', direction: 'asc' }],
     });
+  });
+
+  it('prefers ordered multi-sort params over legacy single-sort fields', () => {
+    expect(productListQuerySchema.parse({
+      sort: ['active:asc', 'inStock:desc'],
+      sortKey: 'price',
+      sortDirection: 'asc',
+    }).sortRules).toEqual([
+      { key: 'active', direction: 'asc' },
+      { key: 'inStock', direction: 'desc' },
+    ]);
   });
 });

@@ -1,15 +1,18 @@
 'use client';
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useDeferredValue, useMemo, useState } from 'react';
 
+import { appendSortParams, getSortRuleState, toggleSortRule, type SortRule } from '../lib/multi-sort';
 import { toast } from '../lib/toast';
+import { MultiSortHeader } from './multi-sort-header';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
+import { SurfacePendingOverlay } from './ui/motion';
 import { NativeSelect, NativeSelectOption } from './ui/native-select';
 import { TablePaginationControls } from './table-pagination-controls';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
@@ -50,7 +53,7 @@ type ActionHistoryResponse = {
 };
 
 type ActionHistorySortKey = 'operation' | 'resource' | 'createdBy' | 'createdAt' | 'isUndone';
-type ActionHistorySortDirection = 'asc' | 'desc';
+type ActionHistorySortRule = SortRule<ActionHistorySortKey>;
 type ActionHistoryState = 'all' | 'applied' | 'undone';
 type ActionHistoryOperationFilter = 'all' | 'create' | 'update' | 'delete';
 type ActionHistoryResourceFilter = 'all' | 'products' | 'orders' | 'assets' | 'brandsCategories' | 'bulletin' | 'stats' | 'settings' | 'ecotrack';
@@ -106,27 +109,6 @@ function SearchField({ value, onChange, placeholder }: { value: string; onChange
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input className="pl-9" value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
     </div>
-  );
-}
-
-function SortHeader({
-  label,
-  active,
-  direction,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  direction: ActionHistorySortDirection;
-  onClick: () => void;
-}) {
-  const Icon = !active ? ArrowUpDown : direction === 'asc' ? ArrowUp : ArrowDown;
-
-  return (
-    <button type="button" className="inline-flex cursor-pointer items-center gap-2 text-left font-medium" onClick={onClick}>
-      <span>{label}</span>
-      <Icon className="size-4" />
-    </button>
   );
 }
 
@@ -248,13 +230,12 @@ export function ActionHistoryPanel({ invalidateQueryKeys = [] }: { invalidateQue
   const [operation, setOperation] = useState<ActionHistoryOperationFilter>('all');
   const [resource, setResource] = useState<ActionHistoryResourceFilter>('all');
   const [state, setState] = useState<ActionHistoryState>('all');
-  const [sortKey, setSortKey] = useState<ActionHistorySortKey>('createdAt');
-  const [sortDirection, setSortDirection] = useState<ActionHistorySortDirection>('desc');
+  const [sortRules, setSortRules] = useState<ActionHistorySortRule[]>([]);
   const [detailItem, setDetailItem] = useState<ActionHistoryItem | null>(null);
   const deferredSearch = useDeferredValue(search.trim());
 
   const historyQuery = useQuery({
-    queryKey: ['action-history', page, deferredSearch, operation, resource, state, sortKey, sortDirection],
+    queryKey: ['action-history', page, deferredSearch, operation, resource, state, sortRules],
     queryFn: () => {
       const params = new URLSearchParams({
         page: String(page),
@@ -263,9 +244,8 @@ export function ActionHistoryPanel({ invalidateQueryKeys = [] }: { invalidateQue
         operation,
         resource,
         state,
-        sortKey,
-        sortDirection,
       });
+      appendSortParams(params, sortRules);
 
       return request<ActionHistoryResponse>(`/api/action-history?${params.toString()}`);
     },
@@ -351,14 +331,7 @@ export function ActionHistoryPanel({ invalidateQueryKeys = [] }: { invalidateQue
 
   function toggleSort(nextKey: ActionHistorySortKey) {
     setPage(1);
-
-    if (sortKey === nextKey) {
-      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
-      return;
-    }
-
-    setSortKey(nextKey);
-    setSortDirection(nextKey === 'createdAt' ? 'desc' : nextKey === 'isUndone' ? 'desc' : 'asc');
+    setSortRules((current) => toggleSortRule(current, nextKey, 'asc'));
   }
 
   function resetFilters() {
@@ -367,8 +340,7 @@ export function ActionHistoryPanel({ invalidateQueryKeys = [] }: { invalidateQue
     setOperation('all');
     setResource('all');
     setState('all');
-    setSortKey('createdAt');
-    setSortDirection('desc');
+    setSortRules([]);
   }
 
   return (
@@ -455,24 +427,26 @@ export function ActionHistoryPanel({ invalidateQueryKeys = [] }: { invalidateQue
         </div>
       </div>
 
+      <div className="relative" aria-busy={historyQuery.isFetching && historyQuery.data.items.length > 0}>
+        <div className={historyQuery.isFetching && historyQuery.data.items.length > 0 ? 'transition-opacity duration-200 opacity-70' : 'transition-opacity duration-200'}>
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead>
-                <SortHeader label={t('history.columns.action')} active={sortKey === 'operation'} direction={sortDirection} onClick={() => toggleSort('operation')} />
+                <MultiSortHeader label={t('history.columns.action')} sortState={getSortRuleState(sortRules, 'operation')} onClick={() => toggleSort('operation')} />
               </TableHead>
               <TableHead>
-                <SortHeader label={t('history.columns.where')} active={sortKey === 'resource'} direction={sortDirection} onClick={() => toggleSort('resource')} />
+                <MultiSortHeader label={t('history.columns.where')} sortState={getSortRuleState(sortRules, 'resource')} onClick={() => toggleSort('resource')} />
               </TableHead>
               <TableHead>
-                <SortHeader label={t('history.columns.who')} active={sortKey === 'createdBy'} direction={sortDirection} onClick={() => toggleSort('createdBy')} />
+                <MultiSortHeader label={t('history.columns.who')} sortState={getSortRuleState(sortRules, 'createdBy')} onClick={() => toggleSort('createdBy')} />
               </TableHead>
               <TableHead>
-                <SortHeader label={t('history.columns.when')} active={sortKey === 'createdAt'} direction={sortDirection} onClick={() => toggleSort('createdAt')} />
+                <MultiSortHeader label={t('history.columns.when')} sortState={getSortRuleState(sortRules, 'createdAt')} onClick={() => toggleSort('createdAt')} />
               </TableHead>
               <TableHead className="w-[240px]">
-                <SortHeader label={t('history.columns.actions')} active={sortKey === 'isUndone'} direction={sortDirection} onClick={() => toggleSort('isUndone')} />
+                <MultiSortHeader label={t('history.columns.actions')} sortState={getSortRuleState(sortRules, 'isUndone')} onClick={() => toggleSort('isUndone')} />
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -568,6 +542,9 @@ export function ActionHistoryPanel({ invalidateQueryKeys = [] }: { invalidateQue
       </div>
 
       <TablePaginationControls currentPage={historyQuery.data.pagination.page ?? page} totalPages={totalPages} onPageChange={setPage} />
+        </div>
+        <SurfacePendingOverlay active={historyQuery.isFetching && historyQuery.data.items.length > 0} label={t('history.loading')} />
+      </div>
 
       <HistoryDetailsDialog item={detailItem} onOpenChange={(open) => {
         if (!open) {

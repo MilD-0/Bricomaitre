@@ -5,6 +5,7 @@ import type { getDb } from "../../../db/src/client";
 import {
   analyticsEvents,
   analyticsJourneys,
+  analyticsPaidClickVisits,
   brands,
   categories,
   orders,
@@ -71,6 +72,7 @@ export const storefrontAnalyticsEventNameSchema = z.enum([
 
 export const storefrontAnalyticsEventSchema = z.object({
   eventId: z.string().trim().min(1).max(120),
+  visitId: nullableTrimmedString(120),
   journeyId: z.string().trim().min(1).max(120),
   sessionId: z.string().trim().min(1).max(120),
   eventName: storefrontAnalyticsEventNameSchema,
@@ -100,6 +102,183 @@ export const storefrontAnalyticsEventSchema = z.object({
 });
 
 export type StorefrontAnalyticsEvent = z.infer<typeof storefrontAnalyticsEventSchema>;
+
+function getMetadataString(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getMetadataBoolean(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === "boolean" ? value : null;
+}
+
+function getPageUrl(pagePath: string | null | undefined) {
+  if (!pagePath) {
+    return null;
+  }
+
+  try {
+    return new URL(pagePath, "https://bricomaitre.com");
+  } catch {
+    return null;
+  }
+}
+
+function getLandingQuery(url: URL | null) {
+  if (!url) {
+    return {};
+  }
+
+  const query: Record<string, string> = {};
+  for (const [key, value] of url.searchParams.entries()) {
+    query[key] = value;
+  }
+
+  return query;
+}
+
+function isMetaPaidMedium(value: string | null) {
+  if (!value) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return ["cpc", "ppc", "paid", "paid_social", "social_paid", "cpv", "cpm"].some((item) => normalized.includes(item));
+}
+
+function classifyPaidSource(event: StorefrontAnalyticsEvent) {
+  const metadata = event.metadata;
+  const pageUrl = getPageUrl(event.pagePath);
+  const fbclid = pageUrl?.searchParams.get("fbclid")?.trim();
+  if (fbclid) {
+    return "fbclid" as const;
+  }
+
+  if (
+    event.utmSource
+    && ["fb", "facebook", "meta"].includes(event.utmSource.toLowerCase())
+    && isMetaPaidMedium(event.utmMedium)
+  ) {
+    return "meta_utm" as const;
+  }
+
+  if (getMetadataBoolean(metadata, "paidClickCookie")) {
+    return "unknown" as const;
+  }
+
+  return null;
+}
+
+async function upsertPaidClickVisit(
+  tx: Parameters<Parameters<Database["transaction"]>[0]>[0],
+  event: StorefrontAnalyticsEvent,
+  occurredAt: Date,
+) {
+  const visitId = event.visitId;
+  if (!visitId) {
+    return;
+  }
+
+  const metadata = event.metadata;
+  const now = new Date();
+  const paidSource = classifyPaidSource(event);
+  const shouldCreate = (event.eventName === "session_start" || event.eventName === "page_view") && paidSource;
+
+  if (shouldCreate) {
+    const pageUrl = getPageUrl(event.pagePath);
+    const fbclidRaw = pageUrl?.searchParams.get("fbclid")?.trim() || null;
+    const purchaseCount = event.eventName === "purchase" ? 1 : 0;
+
+    await tx
+      .insert(analyticsPaidClickVisits)
+      .values({
+        visitId,
+        firstSeenAt: occurredAt,
+        lastSeenAt: occurredAt,
+        landingUrl: getMetadataString(metadata, "landingUrl") ?? pageUrl?.toString() ?? event.pagePath ?? "/",
+        landingPath: pageUrl ? `${pageUrl.pathname}${pageUrl.search}` : event.pagePath ?? "/",
+        landingQuery: getLandingQuery(pageUrl),
+        landingHost: getMetadataString(metadata, "landingHost") ?? pageUrl?.host ?? null,
+        referrer: event.referrer,
+        userAgent: getMetadataString(metadata, "userAgent"),
+        storefrontVariant: getMetadataString(metadata, "storefrontVariant"),
+        requestedVariant: getMetadataString(metadata, "requestedVariant"),
+        experimentMode: getMetadataString(metadata, "experimentMode"),
+        experimentSource: getMetadataString(metadata, "experimentSource"),
+        fbclidRaw,
+        fbc: getMetadataString(metadata, "fbc"),
+        utmSource: event.utmSource,
+        utmMedium: event.utmMedium,
+        utmCampaign: event.utmCampaign,
+        utmTerm: event.utmTerm,
+        utmContent: event.utmContent,
+        paidSource,
+        journeyId: event.journeyId,
+        sessionId: event.sessionId,
+        orderId: event.orderId,
+        entryEventId: event.eventId,
+        lastEventName: event.eventName,
+        lastEventAt: occurredAt,
+        eventCount: 1,
+        purchaseCount,
+        expiresAt: new Date(occurredAt.getTime() + 7 * 24 * 60 * 60 * 1000),
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: analyticsPaidClickVisits.visitId,
+        set: {
+          lastSeenAt: occurredAt,
+          referrer: event.referrer ?? sql`${analyticsPaidClickVisits.referrer}`,
+          storefrontVariant: getMetadataString(metadata, "storefrontVariant") ?? sql`${analyticsPaidClickVisits.storefrontVariant}`,
+          requestedVariant: getMetadataString(metadata, "requestedVariant") ?? sql`${analyticsPaidClickVisits.requestedVariant}`,
+          experimentMode: getMetadataString(metadata, "experimentMode") ?? sql`${analyticsPaidClickVisits.experimentMode}`,
+          experimentSource: getMetadataString(metadata, "experimentSource") ?? sql`${analyticsPaidClickVisits.experimentSource}`,
+          fbclidRaw: fbclidRaw ?? sql`${analyticsPaidClickVisits.fbclidRaw}`,
+          fbc: getMetadataString(metadata, "fbc") ?? sql`${analyticsPaidClickVisits.fbc}`,
+          utmSource: sql`coalesce(${analyticsPaidClickVisits.utmSource}, ${event.utmSource})`,
+          utmMedium: sql`coalesce(${analyticsPaidClickVisits.utmMedium}, ${event.utmMedium})`,
+          utmCampaign: sql`coalesce(${analyticsPaidClickVisits.utmCampaign}, ${event.utmCampaign})`,
+          utmTerm: sql`coalesce(${analyticsPaidClickVisits.utmTerm}, ${event.utmTerm})`,
+          utmContent: sql`coalesce(${analyticsPaidClickVisits.utmContent}, ${event.utmContent})`,
+          paidSource: paidSource === "unknown"
+            ? sql`case
+                when ${analyticsPaidClickVisits.paidSource} in ('fbclid', 'meta_utm')
+                  then ${analyticsPaidClickVisits.paidSource}
+                else 'unknown'
+              end`
+            : paidSource,
+          journeyId: sql`coalesce(${analyticsPaidClickVisits.journeyId}, ${event.journeyId})`,
+          sessionId: sql`coalesce(${analyticsPaidClickVisits.sessionId}, ${event.sessionId})`,
+          orderId: sql`coalesce(${analyticsPaidClickVisits.orderId}, ${event.orderId})`,
+          entryEventId: sql`coalesce(${analyticsPaidClickVisits.entryEventId}, ${event.eventId})`,
+          lastEventName: event.eventName,
+          lastEventAt: occurredAt,
+          eventCount: sql`${analyticsPaidClickVisits.eventCount} + 1`,
+          purchaseCount: sql`${analyticsPaidClickVisits.purchaseCount} + ${purchaseCount}`,
+          updatedAt: now,
+        },
+      });
+    return;
+  }
+
+  const purchaseCount = event.eventName === "purchase" ? 1 : 0;
+  await tx
+    .update(analyticsPaidClickVisits)
+    .set({
+      journeyId: sql`coalesce(${analyticsPaidClickVisits.journeyId}, ${event.journeyId})`,
+      sessionId: sql`coalesce(${analyticsPaidClickVisits.sessionId}, ${event.sessionId})`,
+      orderId: sql`coalesce(${analyticsPaidClickVisits.orderId}, ${event.orderId})`,
+      lastSeenAt: occurredAt,
+      lastEventName: event.eventName,
+      lastEventAt: occurredAt,
+      eventCount: sql`${analyticsPaidClickVisits.eventCount} + 1`,
+      purchaseCount: sql`${analyticsPaidClickVisits.purchaseCount} + ${purchaseCount}`,
+      updatedAt: now,
+    })
+    .where(eq(analyticsPaidClickVisits.visitId, visitId));
+}
 
 function computePopularitySql(
   table: typeof products | typeof categories | typeof brands,
@@ -270,6 +449,7 @@ export async function ingestStorefrontAnalyticsEvent(
       .insert(analyticsEvents)
       .values({
         eventId: event.eventId,
+        visitId: event.visitId,
         journeyId: event.journeyId,
         sessionId: event.sessionId,
         eventName: event.eventName,
@@ -304,6 +484,8 @@ export async function ingestStorefrontAnalyticsEvent(
     if (insertedRows.length === 0) {
       return { ok: true as const, deduped: true };
     }
+
+    await upsertPaidClickVisit(tx, event, occurredAt);
 
     if (event.eventName === "purchase") {
       await tx

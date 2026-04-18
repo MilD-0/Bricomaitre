@@ -6,17 +6,17 @@ import {
   writePendingOrderVerification,
 } from "./pending-order-verification";
 
-function createSessionStorage() {
+function createLocalStorage() {
   const store = new Map();
 
   return {
-    getItem(key) {
+    getItem(key: string) {
       return store.has(key) ? store.get(key) : null;
     },
-    setItem(key, value) {
+    setItem(key: string, value: string) {
       store.set(key, value);
     },
-    removeItem(key) {
+    removeItem(key: string) {
       store.delete(key);
     },
   };
@@ -25,7 +25,7 @@ function createSessionStorage() {
 describe("pending-order-verification", () => {
   beforeEach(() => {
     vi.stubGlobal("window", {
-      sessionStorage: createSessionStorage(),
+      localStorage: createLocalStorage(),
     });
   });
 
@@ -45,7 +45,7 @@ describe("pending-order-verification", () => {
   });
 
   it("clears invalid pending verification data", () => {
-    window.sessionStorage.setItem("pendingOrderVerification", JSON.stringify({
+    window.localStorage.setItem("pendingOrderVerification", JSON.stringify({
       orderId: "bad",
       token: "",
     }));

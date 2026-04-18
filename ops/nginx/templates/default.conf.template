@@ -3,6 +3,35 @@ map $http_upgrade $connection_upgrade {
   '' close;
 }
 
+resolver 127.0.0.11 ipv6=off valid=30s;
+
+map $arg_sf_variant $storefront_variant_query {
+  default '';
+  new new;
+  legacy legacy;
+  clear clear;
+}
+
+map $cookie_bric_sf_variant $storefront_variant_cookie {
+  default '';
+  new new;
+  legacy legacy;
+}
+
+map "$storefront_variant_query:$storefront_variant_cookie" $storefront_variant {
+  default new;
+  "~^new:" new;
+  "~^legacy:" legacy;
+  "~^clear:" new;
+  "~^:legacy$" legacy;
+  "~^:new$" new;
+}
+
+map $storefront_variant $storefront_upstream {
+  default storefront-${BRIC_ACTIVE_SLOT}:3002;
+  legacy storefront-old-${BRIC_ACTIVE_SLOT}:3002;
+}
+
 server {
   listen 80;
   server_name ${BRIC_API_DOMAIN};
@@ -88,12 +117,13 @@ server {
 
   location / {
     proxy_next_upstream error timeout http_502 http_503 http_504;
-    proxy_pass http://storefront-${BRIC_ACTIVE_SLOT}:3002;
+    proxy_pass http://$storefront_upstream;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Bric-Storefront-Variant $storefront_variant;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $connection_upgrade;
   }

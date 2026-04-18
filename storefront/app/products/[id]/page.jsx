@@ -1,5 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { getLocale } from "next-intl/server";
+import { notFound } from "next/navigation";
 
 import {
   fetchStorefrontProductBuildFeed,
@@ -63,7 +64,7 @@ export default async function Home({ params }) {
   const product = await loadProduct(id);
 
   if (!product) {
-    return <Main id={id} />;
+    notFound();
   }
 
   const structuredData = [

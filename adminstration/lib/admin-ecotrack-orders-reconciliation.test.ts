@@ -34,10 +34,10 @@ import {
   deletePostedEcotrackOrder,
   refreshEcotrackOrdersBatch,
 } from './admin-ecotrack-orders-data';
-import { ecotrackOrderStates, orders } from '../db/schema';
+import { ecotrackOrderMajEntries, ecotrackOrderStates, ecotrackOrderTrackingEvents, ecotrackSyncRuns, orders } from '../db/schema';
 
 function createShipmentRow() {
-  const now = new Date('2026-04-09T10:00:00.000Z');
+  const now = new Date();
   return {
     id: 91,
     orderId: 11,
@@ -63,7 +63,27 @@ function createShipmentRow() {
     updatedAt: now,
     order: {
       id: 11,
+      publicToken: null,
+      variant: null,
+      createdAt: now,
       archivedAt: null,
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      email: null,
+      phoneNumber1: '0550000011',
+      phoneNumber2: null,
+      cartProducts: [],
+      delivery: 0,
+      state: 16,
+      city: 'Bab Ezzouar',
+      homeAddress: 'Street 11',
+      note: null,
+      delPr: '0',
+      confirmed: 2,
+      noAnswerCount: 0,
+      confirmedBy: null,
+      confirmedByName: null,
+      confirmedAt: null,
       ecotrackTrackingNumber: 'TRK-11',
       ecotrackReference: '11',
       ecotrackStatus: 'prete_a_expedier',
@@ -77,6 +97,32 @@ function createShipmentRow() {
 function createDbMock(row: ReturnType<typeof createShipmentRow>) {
   const updates: Array<{ target: unknown; values: Record<string, unknown> }> = [];
   const insertValues = vi.fn().mockResolvedValue(undefined);
+  const makeFromChain = (table: unknown) => ({
+    innerJoin: vi.fn(() => ({
+      where: vi.fn(() => ({
+        limit: vi.fn(async () => [{ state: row, order: row.order }]),
+      })),
+    })),
+    where: vi.fn(() => ({
+      orderBy: vi.fn(async () => {
+        if (table === ecotrackOrderMajEntries || table === ecotrackOrderTrackingEvents) {
+          return [];
+        }
+
+        return [{ state: row, order: row.order }];
+      }),
+      limit: vi.fn(async () => []),
+    })),
+    orderBy: vi.fn(() => {
+      if (table === ecotrackSyncRuns) {
+        return {
+          limit: vi.fn(async () => []),
+        };
+      }
+
+      return [];
+    }),
+  });
   const tx = {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
@@ -96,13 +142,7 @@ function createDbMock(row: ReturnType<typeof createShipmentRow>) {
 
   const db = {
     select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        innerJoin: vi.fn(() => ({
-          where: vi.fn(() => ({
-            limit: vi.fn(async () => [{ state: row, order: row.order }]),
-          })),
-        })),
-      })),
+      from: vi.fn((table: unknown) => makeFromChain(table)),
     })),
     transaction: vi.fn(async (callback: (trx: typeof tx) => Promise<void>) => callback(tx)),
   };

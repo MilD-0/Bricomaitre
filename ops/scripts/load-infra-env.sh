@@ -5,7 +5,7 @@ default_infra_env="/srv/bric/env/infra.env"
 infra_env_file="${BRIC_INFRA_ENV_FILE:-$default_infra_env}"
 
 if [[ ! -f "$infra_env_file" ]]; then
-  exit 0
+  return 0 2>/dev/null || exit 0
 fi
 
 set -a

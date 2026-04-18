@@ -295,6 +295,13 @@
       "when": 1775685183335,
       "tag": "0041_violet_doorman",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1776490255021,
+      "tag": "0042_bouncy_exiles",
+      "breakpoints": true
     }
   ]
 }

@@ -333,7 +333,95 @@
       "products": "Produits & catégories",
       "geography": "Géographie",
       "time": "Analyse temporelle",
-      "metaAds": "Meta Ads"
+      "metaAds": "Meta Ads",
+      "paidClicks": "Clics payants"
+    },
+    "paidClicks": {
+      "filters": {
+        "range24h": "Dernières 24 h",
+        "range7d": "Derniers 7 jours",
+        "range30d": "Derniers 30 jours",
+        "variantAll": "Toutes les variantes",
+        "variantNew": "Nouveau storefront",
+        "variantLegacy": "Storefront legacy",
+        "sourceAll": "Toutes les sources",
+        "outcomeAll": "Tous les résultats",
+        "hasOrderAll": "Avec et sans commande",
+        "hasOrderYes": "Avec commande",
+        "hasOrderNo": "Sans commande",
+        "searchPlaceholder": "Rechercher un chemin ou un slug"
+      },
+      "summary": {
+        "visits": "Visites",
+        "landedOnly": "Arrivées seules",
+        "viewedProduct": "Produit vu",
+        "addedToCart": "Ajout panier",
+        "beganCheckout": "Début checkout",
+        "createdOrder": "Commande créée",
+        "purchased": "Acheté",
+        "errored": "En erreur"
+      },
+      "outcomes": {
+        "landedOnly": "Arrivées seules",
+        "viewedProduct": "Produit vu",
+        "addedToCart": "Ajout panier",
+        "beganCheckout": "Début checkout",
+        "createdOrder": "Commande créée",
+        "purchased": "Acheté",
+        "errored": "En erreur"
+      },
+      "table": {
+        "firstSeen": "Première vue",
+        "landingPath": "Chemin d'arrivée",
+        "productSlug": "Slug produit",
+        "variant": "Variante",
+        "source": "Source payante",
+        "lastEvent": "Dernier évènement",
+        "eventCount": "Évènements",
+        "orderId": "Commande",
+        "age": "Âge"
+      },
+      "actions": {
+        "previous": "Précédent",
+        "next": "Suivant",
+        "reveal": "Afficher",
+        "hide": "Masquer"
+      },
+      "detail": {
+        "title": "Détail de la visite payante",
+        "description": "Landing exacte et chronologie de funnel pour un visiteur payant.",
+        "visitId": "ID visite",
+        "landingUrl": "URL d'arrivée",
+        "variant": "Variante servie",
+        "requestedVariant": "Variante demandée",
+        "journeyId": "ID journey",
+        "sessionId": "ID session",
+        "fbclid": "fbclid",
+        "utmSource": "UTM source",
+        "utmMedium": "UTM medium",
+        "utmCampaign": "UTM campaign",
+        "orderId": "ID commande",
+        "lastEvent": "Dernier évènement",
+        "firstSeen": "Première vue",
+        "lastSeen": "Dernière vue",
+        "orderSummary": "Commande liée",
+        "orderStatus": "Statut commande",
+        "orderCity": "Ville commande",
+        "timelineTime": "Heure",
+        "timelineEvent": "Évènement",
+        "timelinePage": "Page",
+        "timelineProduct": "Produit",
+        "timelineOrder": "Commande",
+        "timelineMeta": "Meta",
+        "metaPayloads": "Évènements Meta et payloads",
+        "pixelPayload": "Payload pixel",
+        "capiPayload": "Payload CAPI",
+        "metaDelivered": "CAPI livré",
+        "metaFailed": "CAPI échoué",
+        "metaPixelOnly": "Pixel uniquement",
+        "metaNoData": "Aucun payload Meta"
+      },
+      "empty": "Aucune visite payante ne correspond aux filtres actuels."
     },
     "upload": {
       "title": "Import Excel",
@@ -487,6 +575,22 @@
         "columns": {
           "path": "Page d'entrée",
           "sessions": "Sessions"
+        }
+      },
+      "variants": {
+        "title": "Comparaison des variantes storefront",
+        "columns": {
+          "variant": "Variante",
+          "sessions": "Sessions",
+          "pageViews": "Pages vues",
+          "purchases": "Achats",
+          "sessionRate": "Conv. session %",
+          "cartRate": "Conv. panier %",
+          "checkoutRate": "Conv. checkout %"
+        },
+        "values": {
+          "new": "Nouveau storefront",
+          "legacy": "Storefront legacy"
         }
       },
       "search": {
@@ -651,9 +755,34 @@
     },
     "metaAds": {
       "performanceTitle": "Efficacité publicitaire",
+      "eventsTitle": "Événements Meta suivis",
+      "payloadsTitle": "Charges utiles Meta récentes",
       "managerTitle": "Coûts publicitaires",
       "conversionRate": "Taux de conversion",
       "unknownCampaign": "Campagne inconnue",
+      "events": {
+        "empty": "Aucun événement Meta n'a été enregistré pour cette période.",
+        "columns": {
+          "event": "Événement",
+          "total": "Suivis",
+          "pixel": "Pixel déclenché",
+          "capiSent": "CAPI envoyé",
+          "capiDelivered": "CAPI livré",
+          "capiFailed": "CAPI en échec",
+          "lastSeen": "Dernière activité"
+        }
+      },
+      "payloads": {
+        "emptyTitle": "Aucune charge utile Meta",
+        "emptyDescription": "Les charges utiles du pixel Meta et de la CAPI apparaîtront ici après l'activité storefront.",
+        "meta": "{analyticsEvent} • {eventId} • {occurredAt}",
+        "pixel": "Charge utile pixel",
+        "capi": "Charge utile CAPI",
+        "delivered": "Livré",
+        "failed": "Échec",
+        "noStatus": "Aucun statut HTTP",
+        "status": "HTTP {status}"
+      },
       "summary": {
         "spend": "Dépense",
         "impressions": "Impressions",

@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTranslations } from 'next-intl';
 import { useDeferredValue, useMemo, useState, useTransition } from 'react';
@@ -20,14 +20,16 @@ import {
   type InventoryRow,
   type InventoryScanResponse,
 } from '../lib/inventory';
+import { applyClientMultiSort, getEffectiveSortRules, getSortRuleState, toggleSortRule, type SortRule } from '../lib/multi-sort';
 import { toast } from '../lib/toast';
+import { MultiSortHeader } from './multi-sort-header';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './ui/empty';
 import { Field, FieldError, FieldGroup, FieldLabel } from './ui/field';
 import { Input } from './ui/input';
-import { PendingInline, sectionTransitionProps } from './ui/motion';
+import { PendingInline, sectionTransitionProps, SurfacePendingOverlay } from './ui/motion';
 import { Skeleton } from './ui/skeleton';
 import { Switch } from './ui/switch';
 import { TablePaginationControls } from './table-pagination-controls';
@@ -75,6 +77,8 @@ type ScanOrderState = {
 };
 
 type InventorySortKey = 'title' | 'inventoryQuantity' | 'inStock';
+type InventorySortRule = SortRule<InventorySortKey>;
+const defaultInventorySort: InventorySortRule[] = [{ key: 'title', direction: 'asc' }];
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -137,27 +141,6 @@ function SearchField({ value, onChange, placeholder }: { value: string; onChange
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input className="pl-9" value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
     </div>
-  );
-}
-
-function SortHeader({
-  label,
-  active,
-  direction,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  direction: 'asc' | 'desc';
-  onClick: () => void;
-}) {
-  const Icon = !active ? ArrowUpDown : direction === 'asc' ? ArrowUp : ArrowDown;
-
-  return (
-    <button type="button" className="inline-flex cursor-pointer items-center gap-2 text-left font-medium" onClick={onClick}>
-      <span>{label}</span>
-      <Icon className="size-4" />
-    </button>
   );
 }
 
@@ -363,8 +346,7 @@ export function InventoryManager({ title }: { title: string }) {
   const [search, setSearch] = useState('');
   const [scanQuery, setScanQuery] = useState('');
   const deferredSearch = useDeferredValue(search.trim());
-  const [sortKey, setSortKey] = useState<InventorySortKey>('title');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [sortRules, setSortRules] = useState<InventorySortRule[]>([]);
   const [barcodeDialogState, setBarcodeDialogState] = useState<BarcodeDialogState>({ open: false, item: null });
   const [scanBarcodeState, setScanBarcodeState] = useState<ScanBarcodeState>({ open: false, item: null });
   const [scanOrderState, setScanOrderState] = useState<ScanOrderState>({ open: false, order: null, items: [] });
@@ -477,37 +459,20 @@ export function InventoryManager({ title }: { title: string }) {
   });
 
   const items = useMemo(() => {
-    const rows = [...(query.data?.items ?? [])];
-
-    rows.sort((left, right) => {
-      const leftValue = left[sortKey];
-      const rightValue = right[sortKey];
-      const normalizedLeft = typeof leftValue === 'string' ? leftValue.toLowerCase() : Number(leftValue);
-      const normalizedRight = typeof rightValue === 'string' ? rightValue.toLowerCase() : Number(rightValue);
-
-      if (normalizedLeft < normalizedRight) {
-        return sortDirection === 'asc' ? -1 : 1;
-      }
-
-      if (normalizedLeft > normalizedRight) {
-        return sortDirection === 'asc' ? 1 : -1;
-      }
-
-      return 0;
-    });
-
-    return rows;
-  }, [query.data?.items, sortDirection, sortKey]);
+    return applyClientMultiSort(
+      query.data?.items ?? [],
+      getEffectiveSortRules(sortRules, defaultInventorySort),
+      {
+        title: (row) => row.title,
+        inventoryQuantity: (row) => row.inventoryQuantity,
+        inStock: (row) => row.inStock,
+      },
+    );
+  }, [query.data?.items, sortRules]);
 
   const toggleSort = (key: InventorySortKey) => {
     startFilterTransition(() => {
-      if (sortKey === key) {
-        setSortDirection((value) => (value === 'asc' ? 'desc' : 'asc'));
-        return;
-      }
-
-      setSortKey(key);
-      setSortDirection(key === 'title' ? 'asc' : 'desc');
+      setSortRules((current) => toggleSortRule(current, key, 'asc'));
     });
   };
 
@@ -666,9 +631,6 @@ export function InventoryManager({ title }: { title: string }) {
             <h2 className="text-lg font-semibold">{title}</h2>
             <PendingInline active={isFilterPending || query.isFetching} label={t('labels.loading')} />
           </div>
-          {query.isFetching && !isLoading ? (
-            <p className="text-sm text-muted-foreground">{t('inventory.refreshing')}</p>
-          ) : null}
         </div>
 
         <div className="flex flex-col gap-3">
@@ -705,39 +667,38 @@ export function InventoryManager({ title }: { title: string }) {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead>
-                <SortHeader
-                  label={t('inventory.columns.product')}
-                  active={sortKey === 'title'}
-                  direction={sortDirection}
-                  onClick={() => toggleSort('title')}
-                />
-              </TableHead>
-              <TableHead>{t('inventory.columns.barcode')}</TableHead>
-              <TableHead>
-                <SortHeader
-                  label={t('inventory.columns.quantity')}
-                  active={sortKey === 'inventoryQuantity'}
-                  direction={sortDirection}
-                  onClick={() => toggleSort('inventoryQuantity')}
-                />
-              </TableHead>
-              <TableHead className="w-40">
-                <SortHeader
-                  label={t('inventory.columns.inStock')}
-                  active={sortKey === 'inStock'}
-                  direction={sortDirection}
-                  onClick={() => toggleSort('inStock')}
-                />
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? <InventoryTableSkeleton /> : null}
+      <div className="relative" aria-busy={query.isFetching && !isLoading}>
+        <div className={query.isFetching && !isLoading ? 'transition-opacity duration-200 opacity-70' : 'transition-opacity duration-200'}>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>
+                    <MultiSortHeader
+                      label={t('inventory.columns.product')}
+                      sortState={getSortRuleState(sortRules, 'title')}
+                      onClick={() => toggleSort('title')}
+                    />
+                  </TableHead>
+                  <TableHead>{t('inventory.columns.barcode')}</TableHead>
+                  <TableHead>
+                    <MultiSortHeader
+                      label={t('inventory.columns.quantity')}
+                      sortState={getSortRuleState(sortRules, 'inventoryQuantity')}
+                      onClick={() => toggleSort('inventoryQuantity')}
+                    />
+                  </TableHead>
+                  <TableHead className="w-40">
+                    <MultiSortHeader
+                      label={t('inventory.columns.inStock')}
+                      sortState={getSortRuleState(sortRules, 'inStock')}
+                      onClick={() => toggleSort('inStock')}
+                    />
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? <InventoryTableSkeleton /> : null}
 
             {!isLoading && items.length === 0 ? (
               <TableRow className="hover:bg-transparent">
@@ -755,7 +716,7 @@ export function InventoryManager({ title }: { title: string }) {
               </TableRow>
             ) : null}
 
-            {!isLoading ? items.map((item) => (
+                {!isLoading ? items.map((item) => (
               <TableRow key={item.id}>
                 <TableCell>
                   <div className="flex flex-col gap-1">
@@ -842,12 +803,15 @@ export function InventoryManager({ title }: { title: string }) {
                   />
                 </TableCell>
               </TableRow>
-            )) : null}
-          </TableBody>
-        </Table>
-      </div>
+                )) : null}
+              </TableBody>
+            </Table>
+          </div>
 
-      <TablePaginationControls currentPage={query.data?.pagination.page ?? page} totalPages={query.data?.pagination.totalPages ?? 1} onPageChange={(nextPage) => startFilterTransition(() => setPage(nextPage))} />
+          <TablePaginationControls currentPage={query.data?.pagination.page ?? page} totalPages={query.data?.pagination.totalPages ?? 1} onPageChange={(nextPage) => startFilterTransition(() => setPage(nextPage))} />
+        </div>
+        <SurfacePendingOverlay active={query.isFetching && !isLoading} label={t('inventory.refreshing')} />
+      </div>
 
       <BarcodeDialog
         state={barcodeDialogState}

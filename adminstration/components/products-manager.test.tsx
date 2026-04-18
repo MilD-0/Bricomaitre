@@ -98,8 +98,13 @@ describe('ProductsManager', () => {
     const brandId = url.searchParams.get('brandId');
     const categoryId = url.searchParams.get('categoryId');
     const imageOrigin = url.searchParams.get('imageOrigin') ?? 'all';
-    const sortKey = url.searchParams.get('sortKey') ?? 'updatedAt';
-    const sortDirection = url.searchParams.get('sortDirection') ?? 'desc';
+    const sortRules = url.searchParams.getAll('sort')
+      .map((value) => {
+        const [key, direction] = value.split(':');
+        return key && (direction === 'asc' || direction === 'desc') ? { key, direction } : null;
+      })
+      .filter((value): value is { key: string; direction: 'asc' | 'desc' } => value !== null);
+    const effectiveSortRules = sortRules.length > 0 ? sortRules : [{ key: 'updatedAt', direction: 'desc' as const }];
 
     const filtered = products.filter((product) => {
       if (brandId && product.brandId !== Number(brandId)) {
@@ -122,20 +127,22 @@ describe('ProductsManager', () => {
     });
 
     const sorted = [...filtered].sort((left, right) => {
-      const leftValue = left[sortKey as keyof Product] ?? '';
-      const rightValue = right[sortKey as keyof Product] ?? '';
-      const normalizedLeft = typeof leftValue === 'string' ? leftValue.toLowerCase() : leftValue;
-      const normalizedRight = typeof rightValue === 'string' ? rightValue.toLowerCase() : rightValue;
+      for (const rule of effectiveSortRules) {
+        const leftValue = left[rule.key as keyof Product] ?? '';
+        const rightValue = right[rule.key as keyof Product] ?? '';
+        const normalizedLeft = typeof leftValue === 'string' ? leftValue.toLowerCase() : leftValue;
+        const normalizedRight = typeof rightValue === 'string' ? rightValue.toLowerCase() : rightValue;
 
-      if (normalizedLeft < normalizedRight) {
-        return sortDirection === 'asc' ? -1 : 1;
+        if (normalizedLeft < normalizedRight) {
+          return rule.direction === 'asc' ? -1 : 1;
+        }
+
+        if (normalizedLeft > normalizedRight) {
+          return rule.direction === 'asc' ? 1 : -1;
+        }
       }
 
-      if (normalizedLeft > normalizedRight) {
-        return sortDirection === 'asc' ? 1 : -1;
-      }
-
-      return 0;
+      return right.id - left.id;
     });
 
     const start = (page - 1) * limit;
@@ -352,6 +359,61 @@ describe('ProductsManager', () => {
     });
   });
 
+  it('supports hierarchical multi-sort with three-click toggles', async () => {
+    products = [
+      {
+        ...products[0],
+        title: 'Active in stock',
+        active: true,
+        inStock: true,
+      },
+      {
+        ...products[1],
+        title: 'Active out of stock',
+        active: true,
+        inStock: false,
+      },
+      {
+        ...products[1],
+        id: 3,
+        title: 'Inactive in stock',
+        active: false,
+        inStock: true,
+        sku: 'INA-3',
+        barcode: '333',
+        createdAt: '2026-01-04T00:00:00.000Z',
+        updatedAt: '2026-01-04T00:00:00.000Z',
+      },
+    ];
+
+    renderProductsManager();
+
+    expect((await screen.findAllByText('Active in stock')).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /^Active\d*$/ })).toHaveClass('cursor-pointer');
+
+    const getVisibleOrder = () =>
+      screen.getAllByRole('row').slice(1).map((row) => within(row).getByText(/Active in stock|Active out of stock|Inactive in stock/).textContent);
+
+    await userEvent.click(screen.getByRole('button', { name: /^Active\d*$/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^In stock\d*$/ }));
+
+    await waitFor(() => {
+      expect(getVisibleOrder().slice(0, 3)).toEqual(['Inactive in stock', 'Active out of stock', 'Active in stock']);
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /^Active\d*$/ }));
+
+    await waitFor(() => {
+      expect(getVisibleOrder().slice(0, 3)).toEqual(['Active out of stock', 'Active in stock', 'Inactive in stock']);
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /^Active\d*$/ }));
+
+    await waitFor(() => {
+      expect(getVisibleOrder().slice(0, 3)).toEqual(['Active out of stock', 'Inactive in stock', 'Active in stock']);
+    });
+  });
+
   it('supports row toggle mutations and bulk actions with toasts', async () => {
     renderProductsManager();
 
@@ -446,18 +508,18 @@ describe('ProductsManager', () => {
 
     renderProductsManager();
 
-    expect((await screen.findAllByRole('button', { name: 'Product 1' })).length).toBeGreaterThan(0);
-    expect(screen.queryAllByRole('button', { name: 'Product 51' })).toHaveLength(0);
+    expect((await screen.findAllByRole('button', { name: 'Product 55' })).length).toBeGreaterThan(0);
+    expect(screen.queryAllByRole('button', { name: 'Product 5' })).toHaveLength(0);
 
     await userEvent.click(screen.getByRole('button', { name: 'Go to page 2' }));
-    expect((await screen.findAllByRole('button', { name: 'Product 51' })).length).toBeGreaterThan(0);
+    expect((await screen.findAllByRole('button', { name: 'Product 5' })).length).toBeGreaterThan(0);
 
     const jumpInput = screen.getByRole('spinbutton', { name: 'Go to page' });
     await userEvent.clear(jumpInput);
     await userEvent.type(jumpInput, '1');
     await userEvent.click(screen.getByRole('button', { name: 'Go' }));
 
-    expect((await screen.findAllByRole('button', { name: 'Product 1' })).length).toBeGreaterThan(0);
+    expect((await screen.findAllByRole('button', { name: 'Product 55' })).length).toBeGreaterThan(0);
   }, 20000);
 
   it('deletes selected products from the bulk action flow', async () => {
@@ -499,6 +561,56 @@ describe('ProductsManager', () => {
 
     expect(openSpy).toHaveBeenCalledWith('/api/products/meta-export?ids=1', '_self');
   });
+
+  it('exports selected products across pages, not just the current page', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    products = Array.from({ length: 55 }, (_, index) => ({
+      id: index + 1,
+      title: `Product ${index + 1}`,
+      titleAr: null,
+      description: `Description ${index + 1}`,
+      descriptionAr: null,
+      sku: `SKU-${index + 1}`,
+      barcode: `${1000 + index}`,
+      price: 10 + index,
+      oldPrice: null,
+      purchasePrice: 5 + index,
+      active: true,
+      inStock: true,
+      availabilityStatus: 'in_stock',
+      inventoryQuantity: index + 1,
+      brandId: 1,
+      categoryId: 10,
+      images: [`https://cdn.example.com/p-${index + 1}.jpg`],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    }));
+
+    renderProductsManager();
+
+    const pageOneTitle = (await screen.findAllByRole('button', { name: 'Product 55' }))[0];
+    const pageOneRow = pageOneTitle.closest('tr') as HTMLElement;
+    await userEvent.click(within(pageOneRow).getByRole('checkbox', { name: 'Select Product 55' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Go to page 2' }));
+
+    const pageTwoTitle = (await screen.findAllByRole('button', { name: 'Product 5' }))[0];
+    const pageTwoRow = pageTwoTitle.closest('tr') as HTMLElement;
+    await userEvent.click(within(pageTwoRow).getByRole('checkbox', { name: 'Select Product 5' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Go to page 1' }));
+    await screen.findAllByRole('button', { name: 'Product 55' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Export Meta catalog' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Product 55')).toBeInTheDocument();
+    expect(within(dialog).getByText('Product 5')).toBeInTheDocument();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Export XLSX' }));
+
+    expect(openSpy).toHaveBeenCalledWith('/api/products/meta-export?ids=55&ids=5', '_self');
+  }, 20_000);
 
   it('shows the all-products export only for privileged users and supports cancellation', async () => {
     renderProductsManager();

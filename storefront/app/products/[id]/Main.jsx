@@ -4,6 +4,7 @@ import React from "react";
 import { v4 as uuidv4 } from "uuid";
 import {handleInitiateCheckout,handleViewProduct} from "@/app/components/Init";
 import { Link, useRouter } from "@/i18n/navigation";
+import { useSearchParams } from "next/navigation";
 
 
 import "slick-carousel/slick/slick.css";
@@ -23,8 +24,18 @@ import {
 } from "@/lib/storefront-api";
 import { ProductDetailSkeleton } from "@/app/components/ui";
 
+function waitForTracking(promise, timeoutMs = 250) {
+  return Promise.race([
+    promise.catch((error) => {
+      console.error("InitiateCheckout error:", error);
+    }),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+}
+
 export default function Page({ id, initialProduct = null }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const locale = useLocale();
   const [showMore, setShowMore] = useState(false);
   const [product, setProduct] = useState(initialProduct);
@@ -34,6 +45,17 @@ export default function Page({ id, initialProduct = null }) {
   const parent = product?.parentCategoryInfo ?? null;
 
   const t = useTranslations("common");
+
+  async function goToCheckout(currentProduct) {
+    await waitForTracking(handleInitiateCheckout({
+      products: [currentProduct],
+      totalValue: currentProduct.price,
+    }));
+
+    const nextSearchParams = new URLSearchParams(searchParams?.toString() ?? "");
+    nextSearchParams.set("id", currentProduct.slug);
+    router.push(`/checkout?${nextSearchParams.toString()}`);
+  }
 
   useEffect(() => {
     if (initialProduct) {
@@ -205,10 +227,11 @@ export default function Page({ id, initialProduct = null }) {
           {product.stock > 0 ? (
             <>
             {cartProducts.length > 0 ? (
-              <div className="fixed bottom-24 right-4 z-50 md:hidden">
+              <div className="fixed bottom-24 left-3 right-3 z-50 md:hidden">
+                <div className="flex justify-end">
                 <Link
                   href="/cart"
-                  className="flex h-14 w-14 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-xl shadow-slate-900/10 transition-all duration-200 hover:-translate-y-0.5 hover:text-teal-700"
+                  className="flex h-16 w-16 items-center justify-center rounded-full border border-teal-200 bg-white text-slate-900 shadow-xl shadow-slate-900/10 transition-all duration-200 hover:-translate-y-0.5 hover:text-teal-700"
                   aria-label={t("cart")}
                 >
                   <span className="relative">
@@ -220,38 +243,31 @@ export default function Page({ id, initialProduct = null }) {
                     </span>
                   </span>
                 </Link>
+                </div>
               </div>
             ) : null}
-            <div className="fixed bottom-3 left-3 right-3 z-50 flex gap-2.5 rounded-[1.5rem] border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur">
+            <div className="fixed bottom-3 left-3 right-3 z-50 flex gap-2.5 rounded-[1.6rem] border border-slate-200 bg-white/95 p-3 shadow-2xl shadow-slate-900/15 backdrop-blur">
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  goToCheckout(product);
+                }}
+                className="sf-button-accent flex-grow shadow-lg shadow-teal-900/20"
+              >
+                {t("ach")}
+              </button>
               <button
                 onClick={() => addProduct(product._id, product)}
                 className="sf-button-secondary flex-grow"
               >
                 {t("ajt")}
               </button>
-<button
-   onClick={(e) => {
-    e.preventDefault();
-
-    // Fire the FB event asynchronously (do not await)
-    handleInitiateCheckout({
-      products: [product],
-      totalValue: product.price,
-    }).catch((err) => console.error("InitiateCheckout error:", err));
-
-    // Immediately navigate to checkout
-    router.push("/checkout?id=" + product.slug);
-  }}
-  className="sf-button-accent flex-grow"
->
-  {t("ach")}
-</button>
             </div>
             </>
           ) : (
             <></>
           )}
-          <div className="pb-16">
+          <div className="pb-24">
             <div>
               {category && (
                 <Category
@@ -282,31 +298,33 @@ export default function Page({ id, initialProduct = null }) {
                   }
                 />
               </div>
-             {product.stock > 0 && <div className="mt-8 flex flex-row justify-center gap-6">
+             {product.stock > 0 && <div className="mt-8 rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+                {cartProducts.length > 0 ? (
+                  <div className="mb-4 flex items-center justify-between rounded-[1.2rem] border border-teal-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900">
+                    <span>{t("cart")}</span>
+                    <Link href="/cart" className="sf-button-secondary px-4 py-2 text-sm">
+                      {t("cart")}
+                    </Link>
+                  </div>
+                ) : null}
+                <div className="flex flex-row justify-center gap-4">
                 <button
-              onClick={(e) => {
-    e.preventDefault();
+                  onClick={(e) => {
+                    e.preventDefault();
+                    goToCheckout(product);
+                  }}
 
-    // Fire the FB event asynchronously (do not await)
-    handleInitiateCheckout({
-      products: [product],
-      totalValue: product.price,
-    }).catch((err) => console.error("InitiateCheckout error:", err));
-
-    // Immediately navigate to checkout
-    router.push("/checkout?id=" + product.slug);
-  }}
-
-                  className="sf-button-accent 2xl:px-24 xl:px-20 lg:px-12 py-2 2xl:py-3 lg:text-lg xl:text-xl"
+                  className="sf-button-accent flex-1 py-3 text-lg shadow-lg shadow-teal-900/20 xl:text-xl"
                 >
                   {t("ach")}
                 </button>
                 <button
                   onClick={() => addProduct(product._id, product)}
-                  className="sf-button 2xl:px-26 xl:px-20 lg:px-14 py-1 2xl:py-2 lg:text-lg xl:text-xl"
+                  className="sf-button flex-1 py-3 text-lg xl:text-xl"
                 >
                   {t("ajt")}
                 </button>
+                </div>
               </div>}
             </div>
             <div>
