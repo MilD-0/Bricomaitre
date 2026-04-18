@@ -112,6 +112,7 @@ export const storefrontOrderCreateSchema = z.object({
   city: optionalNullableTrimmedString(120),
   homeAddress: optionalNullableTrimmedString(300),
   note: optionalNullableTrimmedString(500),
+  visitId: optionalNullableTrimmedString(120),
   journeyId: optionalNullableTrimmedString(120),
   sessionId: optionalNullableTrimmedString(120),
 });
@@ -182,6 +183,7 @@ export type OrderProductSummary = {
 export type OrderRecord = {
   id: number;
   publicToken?: string | null;
+  ecotrackTrackingNumber?: string | null;
   variant?: string | null;
   isDegradedCapture?: boolean;
   createdAt: string;

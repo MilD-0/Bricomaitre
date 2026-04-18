@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { parseSortRuleStrings, type SortRule } from './multi-sort';
+
 export const orderStatusValues = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 export const deliveryTypeValues = [0, 1] as const;
 export const DEGRADED_CAPTURE_VARIANT = 'degraded_capture' as const;
@@ -146,14 +148,35 @@ export type DeliveryType = z.infer<typeof deliveryTypeSchema>;
 
 export const orderSortKeyValues = ['confirmed', 'createdAt', 'fullName'] as const;
 export const sortDirectionValues = ['asc', 'desc'] as const;
+const defaultOrderSortRules = [{ key: 'createdAt', direction: 'desc' }] as const satisfies readonly SortRule<(typeof orderSortKeyValues)[number]>[];
 
 export const orderListQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(25),
   search: z.string().trim().default(''),
   confirmed: z.union([orderStatusSchema, z.null()]).optional(),
+  sort: z.array(z.string().trim()).optional().default([]),
   sortKey: z.enum(orderSortKeyValues).default('createdAt'),
   sortDirection: z.enum(sortDirectionValues).default('desc'),
+}).transform((value, ctx) => {
+  const parsedSortRules = parseSortRuleStrings(value.sort, orderSortKeyValues);
+
+  if (!parsedSortRules.ok) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: parsedSortRules.issue,
+      path: ['sort'],
+    });
+
+    return z.NEVER;
+  }
+
+  return {
+    ...value,
+    sortRules: parsedSortRules.rules.length > 0
+      ? parsedSortRules.rules
+      : [{ key: value.sortKey, direction: value.sortDirection }],
+  };
 });
 
 export type OrderStatusHistoryRecord = {
@@ -180,6 +203,7 @@ export type OrderProductSummary = {
 export type OrderRecord = {
   id: number;
   publicToken?: string | null;
+  ecotrackTrackingNumber?: string | null;
   variant?: string | null;
   isDegradedCapture?: boolean;
   createdAt: string;
@@ -211,6 +235,8 @@ export type OrderRecord = {
 
 export type OrderSortKey = z.infer<typeof orderListQuerySchema>['sortKey'];
 export type SortDirection = z.infer<typeof orderListQuerySchema>['sortDirection'];
+export type OrderSortRule = SortRule<OrderSortKey>;
+export const defaultOrderSort = [...defaultOrderSortRules] as OrderSortRule[];
 
 export function parseNumericAmount(value: string | number | null | undefined) {
   if (typeof value === 'number') {

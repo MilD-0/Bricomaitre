@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
+  fetchStorefrontEcotrackCatalog,
+  findWilayaByName,
+} from "@/lib/storefront-api";
+import {
   StorefrontUpstreamError,
   fetchStorefrontUpstream,
   isStorefrontUpstreamTimeoutError,
@@ -12,9 +16,49 @@ function mapDelivery(value: unknown) {
   return value === "office" || value === 1 ? 1 : 0;
 }
 
+async function normalizeState(value: unknown) {
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? value : null;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const numericValue = Number(trimmed);
+  if (Number.isFinite(numericValue)) {
+    return Number(numericValue);
+  }
+
+  try {
+    const catalog = await fetchStorefrontEcotrackCatalog();
+    return findWilayaByName(catalog.wilayas, trimmed)?.wilayaId ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(request: NextRequest) {
   const body = await request.json();
   const idempotencyKey = request.headers.get("idempotency-key")?.trim();
+  const normalizedState = await normalizeState(body.state);
+  const normalizedCity =
+    typeof body.city === "string" && body.city.trim().length > 0
+      ? body.city.trim()
+      : null;
+
+  if (normalizedState == null || normalizedCity == null) {
+    return NextResponse.json(
+      { error: "Wilaya and commune are required" },
+      { status: 400 },
+    );
+  }
+
   const payload = {
     firstName: body.firstName ?? null,
     lastName: body.lastName ?? null,
@@ -25,15 +69,11 @@ export async function POST(request: NextRequest) {
       ? body.cartProducts.map((value: unknown) => String(value))
       : [],
     delivery: mapDelivery(body.delivery),
-    state:
-      typeof body.state === "number"
-        ? body.state
-        : Number.isFinite(Number(body.state))
-          ? Number(body.state)
-          : null,
-    city: body.city ?? null,
+    state: normalizedState,
+    city: normalizedCity,
     homeAddress: body.homeAddress ?? null,
     note: body.note ?? null,
+    visitId: body.visitId ?? null,
     journeyId: body.journeyId ?? null,
     sessionId: body.sessionId ?? null,
   };

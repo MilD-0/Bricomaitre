@@ -5,8 +5,12 @@ x-storefront-api-blue: &storefront-api-blue
     context: ../..
     dockerfile: ops/docker/Dockerfile.storefront-api
   restart: unless-stopped
+  mem_limit: ${BRIC_STOREFRONT_API_MEM_LIMIT:-768m}
+  mem_reservation: ${BRIC_STOREFRONT_API_MEM_RESERVATION:-512m}
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront-api.env
+  environment:
+    NODE_OPTIONS: ${BRIC_STOREFRONT_API_NODE_OPTIONS:---max-old-space-size=512}
   depends_on:
     postgres:
       condition: service_healthy
@@ -30,9 +34,12 @@ x-admin-blue: &admin-blue
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-}
       STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
   restart: unless-stopped
+  mem_limit: ${BRIC_ADMIN_WEB_MEM_LIMIT:-1400m}
+  mem_reservation: ${BRIC_ADMIN_WEB_MEM_RESERVATION:-1024m}
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/admin.env
   environment:
+    NODE_OPTIONS: ${BRIC_ADMIN_WEB_NODE_OPTIONS:---max-old-space-size=1024}
     STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
   depends_on:
     storefront-api-blue:
@@ -55,9 +62,12 @@ x-admin-worker-blue: &admin-worker-blue
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-}
       STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
   restart: unless-stopped
+  mem_limit: ${BRIC_ADMIN_WORKER_MEM_LIMIT:-768m}
+  mem_reservation: ${BRIC_ADMIN_WORKER_MEM_RESERVATION:-512m}
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/admin.env
   environment:
+    NODE_OPTIONS: ${BRIC_ADMIN_WORKER_NODE_OPTIONS:---max-old-space-size=512}
     STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
   depends_on:
     storefront-api-blue:
@@ -75,9 +85,12 @@ x-admin-migrations-blue: &admin-migrations-blue
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-}
       STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
   restart: "no"
+  mem_limit: ${BRIC_ADMIN_MIGRATIONS_MEM_LIMIT:-768m}
+  mem_reservation: ${BRIC_ADMIN_MIGRATIONS_MEM_RESERVATION:-512m}
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/admin.env
   environment:
+    NODE_OPTIONS: ${BRIC_ADMIN_MIGRATIONS_NODE_OPTIONS:---max-old-space-size=512}
     STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
     ADMIN_DB_TASK: ${ADMIN_DB_TASK:-verify}
   depends_on:
@@ -95,10 +108,39 @@ x-storefront-blue: &storefront-blue
     network: host
     args:
       STOREFRONT_API_BASE_URL: http://127.0.0.1:3101
+      NEXT_PUBLIC_FACEBOOK_PIXEL_ID: ${NEXT_PUBLIC_FACEBOOK_PIXEL_ID:-}
   restart: unless-stopped
+  mem_limit: ${BRIC_STOREFRONT_WEB_MEM_LIMIT:-1200m}
+  mem_reservation: ${BRIC_STOREFRONT_WEB_MEM_RESERVATION:-768m}
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront.env
   environment:
+    NODE_OPTIONS: ${BRIC_STOREFRONT_WEB_NODE_OPTIONS:---max-old-space-size=768}
+    STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
+  depends_on:
+    storefront-api-blue:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3002/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+
+x-storefront-old-blue: &storefront-old-blue
+  build:
+    context: ../..
+    dockerfile: ops/docker/Dockerfile.storefront-old
+    network: host
+    args:
+      STOREFRONT_API_BASE_URL: http://127.0.0.1:3101
+      NEXT_PUBLIC_FACEBOOK_PIXEL_ID: ${NEXT_PUBLIC_FACEBOOK_PIXEL_ID:-}
+  restart: unless-stopped
+  mem_limit: ${BRIC_STOREFRONT_OLD_WEB_MEM_LIMIT:-1200m}
+  mem_reservation: ${BRIC_STOREFRONT_OLD_WEB_MEM_RESERVATION:-768m}
+  env_file:
+    - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront.env
+  environment:
+    NODE_OPTIONS: ${BRIC_STOREFRONT_OLD_WEB_NODE_OPTIONS:---max-old-space-size=768}
     STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
   depends_on:
     storefront-api-blue:
@@ -219,6 +261,25 @@ services:
       network: host
       args:
         STOREFRONT_API_BASE_URL: http://127.0.0.1:3102
+        NEXT_PUBLIC_FACEBOOK_PIXEL_ID: ${NEXT_PUBLIC_FACEBOOK_PIXEL_ID:-}
+    environment:
+      STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
+    depends_on:
+      storefront-api-green:
+        condition: service_healthy
+
+  storefront-old-blue:
+    <<: *storefront-old-blue
+
+  storefront-old-green:
+    <<: *storefront-old-blue
+    build:
+      context: ../..
+      dockerfile: ops/docker/Dockerfile.storefront-old
+      network: host
+      args:
+        STOREFRONT_API_BASE_URL: http://127.0.0.1:3102
+        NEXT_PUBLIC_FACEBOOK_PIXEL_ID: ${NEXT_PUBLIC_FACEBOOK_PIXEL_ID:-}
     environment:
       STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
     depends_on:

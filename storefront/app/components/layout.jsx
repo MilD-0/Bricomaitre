@@ -3,17 +3,16 @@
 import { Suspense, useContext, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { usePathname as useBrowserPathname } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import { Link } from "@/i18n/navigation";
-import { defaultLocale, isLocale } from "@/i18n/config";
+import { isLocale } from "@/i18n/config";
 import Logo from "./logo";
 import LocaleSwitcher, { LocaleSwitcherFallback } from "./LocaleSwitcher";
 import Footer from "./Footer";
 import HeaderSearch from "./HeaderSearch";
 import PhoneBadge from "./PhoneBadge";
 import Search from "./search";
-import { handlePageView } from "./Init";
 import { CartContext } from "./cartContext";
 
 function NavIcon({ children, href, active, badge = 0 }) {
@@ -36,6 +35,7 @@ function NavIcon({ children, href, active, badge = 0 }) {
 
 export default function Layout({ children }) {
   const browserPathname = useBrowserPathname();
+  const locale = useLocale();
   const t = useTranslations("Layout");
   const { cartProducts } = useContext(CartContext);
   const [results, setResults] = useState([]);
@@ -43,11 +43,6 @@ export default function Layout({ children }) {
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const lastScrollYRef = useRef(0);
   const lastToggleYRef = useRef(0);
-
-  const locale = useMemo(() => {
-    const maybeLocale = browserPathname?.split("/")[1] ?? "";
-    return isLocale(maybeLocale) ? maybeLocale : defaultLocale;
-  }, [browserPathname]);
 
   const pathname = useMemo(() => {
     if (!browserPathname) {
@@ -59,12 +54,12 @@ export default function Layout({ children }) {
       return browserPathname;
     }
 
-    return rest.length > 0 ? `/${rest.join("/")}` : "/";
+    return isLocale(maybeLocale)
+      ? rest.length > 0
+        ? `/${rest.join("/")}`
+        : "/"
+      : browserPathname;
   }, [browserPathname]);
-
-  useEffect(() => {
-    handlePageView();
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {

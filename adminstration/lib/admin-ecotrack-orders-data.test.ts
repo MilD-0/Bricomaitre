@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { buildUpdatePayload, deriveLatestUpstreamActivityAt, mapEcotrackStatusToOrderStatus } from './admin-ecotrack-orders-data';
+import { buildUpdatePayload, deriveLatestUpstreamActivityAt, mapEcotrackStatusToOrderStatus, parseEcotrackShipmentUpdateDraft } from './admin-ecotrack-orders-data';
 import type { EcotrackCatalogRecord } from './ecotrack';
 
 describe('admin ECOTRACK shipment mapping', () => {
@@ -106,6 +106,23 @@ describe('admin ECOTRACK shipment mapping', () => {
       stop_desk: 1,
       fragile: 0,
       gps_link: 'https://www.google.com/maps',
+    });
+  });
+
+  it('allows office shipment edits without a home address', () => {
+    expect(parseEcotrackShipmentUpdateDraft({
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      phoneNumber1: '0550123456',
+      phoneNumber2: null,
+      delivery: 1,
+      state: 16,
+      city: 'Bab Ezzouar',
+      homeAddress: '',
+      note: null,
+    })).toMatchObject({
+      delivery: 1,
+      homeAddress: '',
     });
   });
 });

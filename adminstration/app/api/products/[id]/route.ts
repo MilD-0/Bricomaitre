@@ -5,8 +5,10 @@ import { getDb, hasDb } from '../../../../db/client';
 import { products } from '../../../../db/schema';
 import { mutateEntityWithHistory } from '../../../../lib/action-history';
 import { auth } from '../../../../lib/auth';
+import { startProductCatalogFeedRefreshJob } from '../../../../lib/background-jobs';
 import { productPatchSchema, productPayloadSchema } from '../../../../lib/products';
 import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
+import { captureAdminException, getRequestId } from '../../../../lib/sentry';
 import { CACHE_TAGS, revalidateServerTags } from '../../../../lib/server-cache';
 import { resolveUniqueSlug } from '../../../../lib/slug';
 
@@ -81,6 +83,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const requestId = getRequestId(req);
   const denied = await requireMutationAccess('products');
   if (denied) {
     return denied;
@@ -120,10 +123,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
 
+  try {
+    await startProductCatalogFeedRefreshJob('product:update', requestId);
+  } catch (error) {
+    captureAdminException(error, {
+      requestId,
+      operation: 'product-catalog-feed-enqueue',
+      route: '/api/products/[id]',
+      session,
+      context: { trigger: 'product:update', productId: numericId },
+    });
+  }
+
   return NextResponse.json({ ok: true });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const requestId = getRequestId(req);
   const denied = await requireMutationAccess('products');
   if (denied) {
     return denied;
@@ -161,10 +177,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
 
+  try {
+    await startProductCatalogFeedRefreshJob('product:patch', requestId);
+  } catch (error) {
+    captureAdminException(error, {
+      requestId,
+      operation: 'product-catalog-feed-enqueue',
+      route: '/api/products/[id]',
+      session,
+      context: { trigger: 'product:patch', productId: numericId },
+    });
+  }
+
   return NextResponse.json({ ok: true });
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const requestId = getRequestId();
   const denied = await requireMutationAccess('products');
   if (denied) {
     return denied;
@@ -189,6 +218,18 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   });
 
   revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
+
+  try {
+    await startProductCatalogFeedRefreshJob('product:delete', requestId);
+  } catch (error) {
+    captureAdminException(error, {
+      requestId,
+      operation: 'product-catalog-feed-enqueue',
+      route: '/api/products/[id]',
+      session,
+      context: { trigger: 'product:delete', productId: numericId },
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }

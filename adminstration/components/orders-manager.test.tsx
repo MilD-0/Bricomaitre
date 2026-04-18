@@ -12,6 +12,7 @@ import { server } from '../test/mocks/server';
     loading: vi.fn(() => 'toast-id'),
     success: vi.fn(),
     error: vi.fn(),
+    dismiss: vi.fn(),
   },
   xlsxMock: {
     aoa_to_sheet: vi.fn(() => ({})),
@@ -131,6 +132,7 @@ describe('OrdersManager', () => {
     toastMock.loading.mockClear();
     toastMock.success.mockClear();
     toastMock.error.mockClear();
+    toastMock.dismiss.mockClear();
     xlsxMock.aoa_to_sheet.mockClear();
     xlsxMock.book_new.mockClear();
     xlsxMock.book_append_sheet.mockClear();
@@ -146,6 +148,7 @@ describe('OrdersManager', () => {
     const items = [
       {
         id: 1,
+        ecotrackTrackingNumber: 'TRK-1',
         createdAt: '2026-03-01T10:00:00.000Z',
         updatedAt: '2026-03-01T10:00:00.000Z',
         firstName: 'Ada',
@@ -226,6 +229,7 @@ describe('OrdersManager', () => {
 
     expect((await screen.findAllByText('Ada Lovelace')).length).toBeGreaterThan(0);
     expect(screen.getAllByText('Grace Hopper').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('TRK-1').length).toBeGreaterThan(0);
 
     // Mobile card layout must not force horizontal overflow on narrow screens.
     // The phone row should preserve a readable phone width while still wrapping controls.
@@ -245,7 +249,7 @@ describe('OrdersManager', () => {
     });
   });
 
-  it('keeps previous rows visible while a filtered refetch is pending', async () => {
+  it('clears stale rows while a filtered refetch is pending, even with initial orders', async () => {
     const items = [
       {
         id: 1,
@@ -302,30 +306,81 @@ describe('OrdersManager', () => {
         statusHistory: [],
       },
     ];
+    const initialOrders = paginatedOrdersResponse(items, 'http://localhost/api/orders?page=1&limit=25');
 
     server.use(
       http.get('/api/orders', async ({ request }) => {
         const url = new URL(request.url);
 
-        if ((url.searchParams.get('search') ?? '').length > 0) {
+        if ((url.searchParams.get('confirmed') ?? '').length > 0) {
           await delay(150);
         }
 
-        return HttpResponse.json(paginatedOrdersResponse(items, request.url));
+        const confirmed = url.searchParams.get('confirmed');
+        const filtered = confirmed == null || confirmed === ''
+          ? items
+          : items.filter((item) => String(item.confirmed) === confirmed);
+
+        return HttpResponse.json(paginatedOrdersResponse(filtered, request.url));
       }),
+    );
+
+    renderOrdersManager({ initialOrders });
+
+    expect((await screen.findAllByText('Ada Lovelace')).length).toBeGreaterThan(0);
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'ordersManager.filters.statusLabel' }), '2');
+
+    await waitFor(() => {
+      expect(screen.queryAllByText('Ada Lovelace')).toHaveLength(0);
+    });
+
+    expect(screen.queryAllByText('Grace Hopper').length).toBe(0);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Grace Hopper').length).toBeGreaterThan(0);
+    });
+  });
+
+  it('renders wilaya and commune labels when legacy orders store commune names', async () => {
+    const items = [
+      {
+        id: 21,
+        createdAt: '2026-03-02T10:00:00.000Z',
+        updatedAt: '2026-03-02T10:00:00.000Z',
+        firstName: 'Grace',
+        lastName: 'Hopper',
+        fullName: 'Grace Hopper',
+        phoneNumber1: '0550000021',
+        phoneNumber2: null,
+        cartProducts: ['2'],
+        orderProducts: [],
+        delivery: 1,
+        state: 16,
+        city: 'Bab Ezzouar',
+        homeAddress: 'Street 21',
+        productSubtotal: 2000,
+        deliveryFee: 150,
+        totalAmount: 2150,
+        note: null,
+        confirmed: 2,
+        noAnswerCount: 0,
+        confirmedBy: 'admin@example.com',
+        confirmedByName: 'Admin',
+        confirmedAt: '2026-03-02T12:00:00.000Z',
+        hasStatusHistory: false,
+        statusHistory: [],
+      },
+    ];
+
+    server.use(
+      http.get('/api/orders', ({ request }) => HttpResponse.json(paginatedOrdersResponse(items, request.url))),
     );
 
     renderOrdersManager();
 
-    expect((await screen.findAllByText('Ada Lovelace')).length).toBeGreaterThan(0);
-
-    await userEvent.type(screen.getByPlaceholderText('ordersManager.searchPlaceholder'), 'Grace');
-
-    expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
-    expect(await screen.findByText('ordersManager.loading.refreshing')).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.queryAllByText('Ada Lovelace')).toHaveLength(0);
-    });
+    expect((await screen.findAllByText('Grace Hopper')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Alger / Bab Ezzouar').length).toBeGreaterThan(0);
   });
 
   it('fetches full order history when opening the history dialog', async () => {
@@ -989,6 +1044,74 @@ describe('OrdersManager', () => {
     });
   });
 
+  it('hides the street input after switching delivery to office', async () => {
+    const items = [
+      {
+        id: 61,
+        createdAt: '2026-03-06T10:00:00.000Z',
+        updatedAt: '2026-03-06T10:00:00.000Z',
+        firstName: 'Mary',
+        lastName: 'Jackson',
+        fullName: 'Mary Jackson',
+        phoneNumber1: '0550000006',
+        phoneNumber2: null,
+        cartProducts: ['12'],
+        orderProducts: [{
+          productId: 12,
+          rawValue: '12',
+          title: 'Shelf',
+          unitPrice: 900,
+          quantity: 1,
+          lineTotal: 900,
+          thumbnailUrl: null,
+          missing: false,
+        }],
+        delivery: 0,
+        state: 16,
+        city: 'Bab Ezzouar',
+        homeAddress: 'Street 12',
+        productSubtotal: 900,
+        deliveryFee: 200,
+        totalAmount: 1100,
+        note: null,
+        confirmed: 0,
+        noAnswerCount: 0,
+        confirmedBy: null,
+        confirmedByName: null,
+        confirmedAt: null,
+        hasStatusHistory: false,
+        statusHistory: [],
+      },
+    ];
+
+    server.use(
+      http.get('/api/orders', ({ request }) => HttpResponse.json(paginatedOrdersResponse(items, request.url))),
+      http.patch('/api/orders/61', async ({ request }) => {
+        const body = (await request.json()) as { delivery?: number };
+        items[0] = {
+          ...items[0],
+          delivery: body.delivery ?? items[0].delivery,
+          updatedAt: '2026-03-07T10:00:00.000Z',
+        };
+
+        return HttpResponse.json({ ok: true, item: items[0] });
+      }),
+    );
+
+    renderOrdersManager();
+
+    expect((await screen.findAllByText('Mary Jackson')).length).toBeGreaterThan(0);
+    expect(screen.getAllByPlaceholderText('ordersManager.placeholders.street').length).toBeGreaterThan(0);
+
+    const deliverySelects = screen.getAllByLabelText('ordersManager.address.delivery');
+    await userEvent.selectOptions(deliverySelects[0], '1');
+
+    await waitFor(() => {
+      expect(toastMock.success).toHaveBeenCalled();
+      expect(screen.queryByPlaceholderText('ordersManager.placeholders.street')).not.toBeInTheDocument();
+    });
+  });
+
   it('updates the region immediately and switches to the first commune in that wilaya', async () => {
     const items = [
       {
@@ -1465,4 +1588,165 @@ describe('OrdersManager', () => {
     await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.ecotrack.confirmedAction menu' }))[0]);
     await userEvent.click(screen.getByRole('menuitem', { name: 'ordersManager.export.confirmedAction' }));
     expect(toastMock.error).toHaveBeenCalledWith('ordersManager.export.emptyConfirmed', { id: 'toast-id' });
+  });
+
+  it('ignores confirmed orders older than a week when preparing the confirmed export', async () => {
+    const confirmedItems = [
+      {
+        id: 31,
+        createdAt: '2026-04-17T10:00:00.000Z',
+        updatedAt: '2026-04-17T10:00:00.000Z',
+        firstName: 'Recent',
+        lastName: 'Order',
+        fullName: 'Recent Order',
+        phoneNumber1: '0550000031',
+        phoneNumber2: null,
+        cartProducts: ['1'],
+        orderProducts: [
+          { productId: 1, brandId: 9, rawValue: '1', title: 'Chair', unitPrice: 1000, quantity: 1, lineTotal: 1000, thumbnailUrl: null, missing: false },
+        ],
+        delivery: 0,
+        state: 16,
+        city: 'Bab Ezzouar',
+        homeAddress: 'Street 31',
+        productSubtotal: 1000,
+        deliveryFee: 200,
+        totalAmount: 1200,
+        note: null,
+        confirmed: 2,
+        noAnswerCount: 0,
+        confirmedBy: null,
+        confirmedByName: null,
+        confirmedAt: null,
+        hasStatusHistory: false,
+        statusHistory: [],
+      },
+      {
+        id: 32,
+        createdAt: '2026-04-01T10:00:00.000Z',
+        updatedAt: '2026-04-01T10:00:00.000Z',
+        firstName: 'Old',
+        lastName: 'Order',
+        fullName: 'Old Order',
+        phoneNumber1: '0550000032',
+        phoneNumber2: null,
+        cartProducts: ['1'],
+        orderProducts: [
+          { productId: 1, brandId: 9, rawValue: '1', title: 'Chair', unitPrice: 1000, quantity: 1, lineTotal: 1000, thumbnailUrl: null, missing: false },
+        ],
+        delivery: 0,
+        state: 16,
+        city: 'Bab Ezzouar',
+        homeAddress: 'Street 32',
+        productSubtotal: 1000,
+        deliveryFee: 200,
+        totalAmount: 1200,
+        note: null,
+        confirmed: 2,
+        noAnswerCount: 0,
+        confirmedBy: null,
+        confirmedByName: null,
+        confirmedAt: null,
+        hasStatusHistory: false,
+        statusHistory: [],
+      },
+    ];
+    const exportBodies: Array<Record<string, unknown>> = [];
+
+    server.use(
+      http.get('/api/ecotrack/catalog', () => HttpResponse.json({ wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null })),
+      http.get('/api/orders/export', () => HttpResponse.json({ job: null })),
+      http.get('/api/orders/ecotrack', () => HttpResponse.json({ job: null })),
+      http.get('/api/orders', ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get('confirmed') === '2') {
+          return HttpResponse.json({
+            writable: true,
+            items: confirmedItems,
+            pagination: { page: 1, limit: 100, totalItems: confirmedItems.length, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+          });
+        }
+
+        return HttpResponse.json(paginatedOrdersResponse([], request.url));
+      }),
+      http.post('/api/orders/export', async ({ request }) => {
+        const body = await request.json();
+        exportBodies.push(body as Record<string, unknown>);
+        return HttpResponse.json({ job: { id: 'export-1', status: 'queued', fileName: null, progress: { phase: 'loading', current: 0, total: 1, percentage: 0 }, errorMessage: null, downloadPath: null, resultSummary: null } });
+      }),
+    );
+
+    renderOrdersManager();
+
+    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.ecotrack.confirmedAction menu' }))[0]);
+    await userEvent.click(screen.getByRole('menuitem', { name: 'ordersManager.export.confirmedAction' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'ordersManager.export.confirmAndDispatch' }));
+
+    await waitFor(() => {
+      expect(exportBodies).toContainEqual({ mode: 'confirmed', orderIds: [31] });
+    });
+  });
+
+  it('shows export start failures inside the export modal instead of a toast', async () => {
+    const confirmedItems = [
+      {
+        id: 41,
+        createdAt: '2026-04-17T10:00:00.000Z',
+        updatedAt: '2026-04-17T10:00:00.000Z',
+        firstName: 'Export',
+        lastName: 'Failure',
+        fullName: 'Export Failure',
+        phoneNumber1: '0550000041',
+        phoneNumber2: null,
+        cartProducts: ['1'],
+        orderProducts: [
+          { productId: 1, brandId: 9, rawValue: '1', title: 'Chair', unitPrice: 1000, quantity: 1, lineTotal: 1000, thumbnailUrl: null, missing: false },
+        ],
+        delivery: 0,
+        state: 16,
+        city: 'Bab Ezzouar',
+        homeAddress: 'Street 41',
+        productSubtotal: 1000,
+        deliveryFee: 200,
+        totalAmount: 1200,
+        note: null,
+        confirmed: 2,
+        noAnswerCount: 0,
+        confirmedBy: null,
+        confirmedByName: null,
+        confirmedAt: null,
+        hasStatusHistory: false,
+        statusHistory: [],
+      },
+    ];
+
+    server.use(
+      http.get('/api/ecotrack/catalog', () => HttpResponse.json({ wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null })),
+      http.get('/api/orders/export', () => HttpResponse.json({ job: null })),
+      http.get('/api/orders/ecotrack', () => HttpResponse.json({ job: null })),
+      http.get('/api/orders', ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get('confirmed') === '2') {
+          return HttpResponse.json({
+            writable: true,
+            items: confirmedItems,
+            pagination: { page: 1, limit: 100, totalItems: confirmedItems.length, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+          });
+        }
+
+        return HttpResponse.json(paginatedOrdersResponse([], request.url));
+      }),
+      http.post('/api/orders/export', () => new HttpResponse('Export failed hard', { status: 500 })),
+    );
+
+    renderOrdersManager();
+
+    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.ecotrack.confirmedAction menu' }))[0]);
+    await userEvent.click(screen.getByRole('menuitem', { name: 'ordersManager.export.confirmedAction' }));
+    const toastErrorCallCount = toastMock.error.mock.calls.length;
+    await userEvent.click(await screen.findByRole('button', { name: 'ordersManager.export.confirmAndDispatch' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Export failed hard');
+    expect(toastMock.error).toHaveBeenCalledTimes(toastErrorCallCount);
+    expect(toastMock.dismiss).toHaveBeenCalledWith('toast-id');
   });

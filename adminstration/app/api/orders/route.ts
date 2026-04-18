@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
     limit: searchParams.get('limit') ?? undefined,
     search: searchParams.get('search') ?? undefined,
     confirmed: searchParams.get('confirmed') ? Number(searchParams.get('confirmed')) : undefined,
+    sort: searchParams.getAll('sort'),
     sortKey: searchParams.get('sortKey') ?? undefined,
     sortDirection: searchParams.get('sortDirection') ?? undefined,
   }, writable));

@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 
 import {
+  buildCloudfrontUrl,
   buildDatedObjectKey,
   ensureS3UploadConfig,
   getS3UploadClient,
@@ -26,6 +27,29 @@ export async function uploadExportArtifact(options: {
     bucket,
     cloudfrontDomain,
     key,
+    body: options.body,
+    contentType: options.contentType,
+  });
+}
+
+export function getStableArtifactUrl(key: string) {
+  const { cloudfrontDomain } = ensureS3UploadConfig();
+  return buildCloudfrontUrl(cloudfrontDomain, key);
+}
+
+export async function uploadStableArtifact(options: {
+  key: string;
+  contentType: string;
+  body: Buffer;
+}) {
+  const { region, bucket, cloudfrontDomain } = ensureS3UploadConfig();
+  const client = getS3UploadClient(region);
+
+  return uploadBufferToS3({
+    client,
+    bucket,
+    cloudfrontDomain,
+    key: options.key,
     body: options.body,
     contentType: options.contentType,
   });

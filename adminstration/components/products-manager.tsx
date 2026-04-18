@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
@@ -24,10 +24,12 @@ import {
   type ProductPayloadInput,
   type ProductRecord,
   type ProductSortKey,
-  type SortDirection,
+  type ProductSortRule,
 } from '../lib/products';
+import { appendSortParams, getSortRuleState, toggleSortRule } from '../lib/multi-sort';
 import { toast } from '../lib/toast';
 import { useAppStore } from '../store/app-store';
+import { MultiSortHeader } from './multi-sort-header';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -36,7 +38,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field, FieldError, FieldGroup, FieldLabel } from './ui/field';
 import { ImageUploadField } from './image-upload-field';
 import { Input } from './ui/input';
-import { PendingInline, sectionTransitionProps } from './ui/motion';
+import { PendingInline, sectionTransitionProps, SurfacePendingOverlay } from './ui/motion';
 import { NativeSelect, NativeSelectOption } from './ui/native-select';
 import { Separator } from './ui/separator';
 import { Spinner } from './ui/spinner';
@@ -61,11 +63,13 @@ type ProductDeleteMutationVariables = { ids: number[]; messages: MutationMessage
 type MutationContext<T> = { messages: MutationMessages; snapshot: QuerySnapshot<T>; toastId: string };
 type MetaCatalogExportRow = {
   id: string;
+  contentId: string;
   title: string;
   description: string;
   availability: string;
   condition: string;
   price: string;
+  salePrice: string;
   link: string;
   imageLink: string;
   brand: string;
@@ -141,27 +145,6 @@ function SearchField({ value, onChange, placeholder }: { value: string; onChange
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input className="pl-9" value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
     </div>
-  );
-}
-
-function SortHeader({
-  label,
-  active,
-  direction,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  direction: 'asc' | 'desc';
-  onClick: () => void;
-}) {
-  const Icon = !active ? ArrowUpDown : direction === 'asc' ? ArrowUp : ArrowDown;
-
-  return (
-    <button type="button" className="inline-flex cursor-pointer items-center gap-2 text-left font-medium" onClick={onClick}>
-      <span>{label}</span>
-      <Icon className="size-4" />
-    </button>
   );
 }
 
@@ -510,11 +493,13 @@ function MetaCatalogExportDialog({
                       {state.rows.map((row) => (
                         <TableRow key={row.id}>
                           <TableCell className="px-2 py-2 whitespace-nowrap">{row.id}</TableCell>
+                          <TableCell className="px-2 py-2 whitespace-nowrap">{row.contentId}</TableCell>
                           <TableCell className="px-2 py-2 whitespace-nowrap">{row.title}</TableCell>
                           <TableCell className="px-2 py-2">{row.description}</TableCell>
                           <TableCell className="px-2 py-2 whitespace-nowrap">{row.availability}</TableCell>
                           <TableCell className="px-2 py-2 whitespace-nowrap">{row.condition}</TableCell>
                           <TableCell className="px-2 py-2 whitespace-nowrap">{row.price}</TableCell>
+                          <TableCell className="px-2 py-2 whitespace-nowrap">{row.salePrice}</TableCell>
                           <TableCell className="px-2 py-2">{row.link}</TableCell>
                           <TableCell className="px-2 py-2">{row.imageLink}</TableCell>
                           <TableCell className="px-2 py-2 whitespace-nowrap">{row.brand}</TableCell>
@@ -610,8 +595,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [selectedImageOrigin, setSelectedImageOrigin] = useState<ImageOriginFilter>('all');
   const deferredSearch = useDeferredValue(search.trim().toLowerCase());
-  const [sortKey, setSortKey] = useState<ProductSortKey>('updatedAt');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [sortRules, setSortRules] = useState<ProductSortRule[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [metaCatalogExportState, setMetaCatalogExportState] = useState<MetaCatalogExportPreviewState>(null);
   const [deleteState, setDeleteState] = useState<{ ids: number[]; label: string } | null>(null);
@@ -629,7 +613,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
   const draftValues = useWatch({ control: form.control });
 
   const productsQuery = useQuery({
-    queryKey: ['products-table', page, deferredSearch, selectedBrandId, selectedCategoryId, selectedImageOrigin, sortKey, sortDirection],
+    queryKey: ['products-table', page, deferredSearch, selectedBrandId, selectedCategoryId, selectedImageOrigin, sortRules],
     queryFn: () => {
       const params = productListQuerySchema.parse({
         page,
@@ -638,16 +622,14 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
         brandId: selectedBrandId,
         categoryId: selectedCategoryId,
         imageOrigin: selectedImageOrigin,
-        sortKey,
-        sortDirection,
+        sort: sortRules.map((rule) => `${rule.key}:${rule.direction}`),
       });
       const searchParams = new URLSearchParams({
         page: String(params.page),
         limit: String(params.limit),
         search: params.search,
-        sortKey: params.sortKey,
-        sortDirection: params.sortDirection,
       });
+      appendSortParams(searchParams, params.sortRules);
       if (params.brandId !== null) {
         searchParams.set('brandId', String(params.brandId));
       }
@@ -945,13 +927,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
   const toggleSort = (key: ProductSortKey) => {
     startFilterTransition(() => {
       setPage(1);
-      if (sortKey === key) {
-        setSortDirection((value) => (value === 'asc' ? 'desc' : 'asc'));
-        return;
-      }
-
-      setSortKey(key);
-      setSortDirection(key === 'title' ? 'asc' : 'desc');
+      setSortRules((current) => toggleSortRule(current, key, 'asc'));
     });
   };
 
@@ -977,10 +953,22 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
     () => new Map(metaQuery.data.categories.map((category) => [category.id, category.name])),
     [metaQuery.data.categories],
   );
-  const selectedProducts = useMemo(
-    () => paginatedItems.filter((item) => selectedIds.includes(item.id)),
-    [paginatedItems, selectedIds],
-  );
+  const selectedProducts = useMemo(() => {
+    const selectedIdSet = new Set(selectedIds);
+    const selectedProductById = new Map<number, ProductRecord>();
+
+    queryClient.getQueriesData<ProductsResponse>({ queryKey: ['products-table'] }).forEach(([, data]) => {
+      data?.items.forEach((item) => {
+        if (selectedIdSet.has(item.id) && !selectedProductById.has(item.id)) {
+          selectedProductById.set(item.id, item);
+        }
+      });
+    });
+
+    return selectedIds
+      .map((id) => selectedProductById.get(id))
+      .filter((product): product is ProductRecord => product !== undefined);
+  }, [queryClient, selectedIds, productsQuery.data]);
 
   const openEdit = (product: ProductRecord) => {
     form.reset(product);
@@ -1024,13 +1012,13 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
   }
 
   function confirmMetaCatalogExport() {
-    if (!metaCatalogExportState) {
+    if (!metaCatalogExportState || selectedIds.length === 0) {
       return;
     }
 
     const searchParams = new URLSearchParams();
-    selectedProducts.forEach((product) => {
-      searchParams.append('ids', String(product.id));
+    selectedIds.forEach((id) => {
+      searchParams.append('ids', String(id));
     });
 
     window.open(`/api/products/meta-export?${searchParams.toString()}`, '_self');
@@ -1220,6 +1208,8 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
         ) : null}
       </div>
 
+      <div className="relative" aria-busy={productsQuery.isFetching}>
+        <div className={productsQuery.isFetching ? 'transition-opacity duration-200 opacity-70' : 'transition-opacity duration-200'}>
       <div className="hidden overflow-x-auto md:block">
         <Table>
           <TableHeader>
@@ -1232,25 +1222,25 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
                 />
               </TableHead>
               <TableHead className="w-28">
-                <SortHeader label={t('labels.active')} active={sortKey === 'active'} direction={sortDirection} onClick={() => toggleSort('active')} />
+                <MultiSortHeader label={t('labels.active')} sortState={getSortRuleState(sortRules, 'active')} onClick={() => toggleSort('active')} />
               </TableHead>
               <TableHead>
-                <SortHeader label={t('labels.productName')} active={sortKey === 'title'} direction={sortDirection} onClick={() => toggleSort('title')} />
+                <MultiSortHeader label={t('labels.productName')} sortState={getSortRuleState(sortRules, 'title')} onClick={() => toggleSort('title')} />
               </TableHead>
               <TableHead>
-                <SortHeader label={t('labels.price')} active={sortKey === 'price'} direction={sortDirection} onClick={() => toggleSort('price')} />
+                <MultiSortHeader label={t('labels.price')} sortState={getSortRuleState(sortRules, 'price')} onClick={() => toggleSort('price')} />
               </TableHead>
               <TableHead>
-                <SortHeader label={t('labels.purchasePrice')} active={sortKey === 'purchasePrice'} direction={sortDirection} onClick={() => toggleSort('purchasePrice')} />
+                <MultiSortHeader label={t('labels.purchasePrice')} sortState={getSortRuleState(sortRules, 'purchasePrice')} onClick={() => toggleSort('purchasePrice')} />
               </TableHead>
               <TableHead className="w-28">
-                <SortHeader label={t('labels.inStock')} active={sortKey === 'inStock'} direction={sortDirection} onClick={() => toggleSort('inStock')} />
+                <MultiSortHeader label={t('labels.inStock')} sortState={getSortRuleState(sortRules, 'inStock')} onClick={() => toggleSort('inStock')} />
               </TableHead>
               <TableHead>
-                <SortHeader label={t('labels.modified')} active={sortKey === 'updatedAt'} direction={sortDirection} onClick={() => toggleSort('updatedAt')} />
+                <MultiSortHeader label={t('labels.modified')} sortState={getSortRuleState(sortRules, 'updatedAt')} onClick={() => toggleSort('updatedAt')} />
               </TableHead>
               <TableHead>
-                <SortHeader label={t('labels.created')} active={sortKey === 'createdAt'} direction={sortDirection} onClick={() => toggleSort('createdAt')} />
+                <MultiSortHeader label={t('labels.created')} sortState={getSortRuleState(sortRules, 'createdAt')} onClick={() => toggleSort('createdAt')} />
               </TableHead>
               <TableHead className="w-48 text-right">{t('labels.actions')}</TableHead>
             </TableRow>
@@ -1477,6 +1467,9 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
       </div>
 
       <TablePaginationControls currentPage={productsQuery.data.pagination?.page ?? page} totalPages={totalPages} onPageChange={setPage} />
+        </div>
+        <SurfacePendingOverlay active={productsQuery.isFetching} label={t('labels.loading')} />
+      </div>
 
       <ProductDialogForm
         open={dialogState.open}

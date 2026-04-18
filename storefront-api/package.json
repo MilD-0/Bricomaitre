@@ -13,6 +13,7 @@
     "test:integration": "vitest run --project integration"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.909.0",
     "@bric/db": "workspace:*",
     "@bric/runtime": "workspace:*",
     "@bric/storefront-core": "workspace:*",

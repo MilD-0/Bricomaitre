@@ -147,8 +147,19 @@ describe('lib/orders', () => {
       page: 3,
       limit: 25,
       search: 'ada',
+      sort: [],
       sortKey: 'fullName',
       sortDirection: 'asc',
+      sortRules: [{ key: 'fullName', direction: 'asc' }],
     });
+  });
+
+  it('parses repeated multi-sort order rules', () => {
+    expect(orderListQuerySchema.parse({
+      sort: ['confirmed:asc', 'createdAt:desc'],
+    }).sortRules).toEqual([
+      { key: 'confirmed', direction: 'asc' },
+      { key: 'createdAt', direction: 'desc' },
+    ]);
   });
 });

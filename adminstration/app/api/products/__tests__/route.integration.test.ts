@@ -4,15 +4,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET, POST } from '../route';
 import { productPayloadSchema } from '../../../../lib/products';
 
-const { hasDbMock, getDbMock, requireMutationAccessMock, authMock, mutateEntityWithHistoryMock } = vi.hoisted(() => ({
+const {
+  hasDbMock,
+  getDbMock,
+  requireMutationAccessMock,
+  authMock,
+  mutateEntityWithHistoryMock,
+  startProductCatalogFeedRefreshJobMock,
+} = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
   requireMutationAccessMock: vi.fn(),
   authMock: vi.fn(),
   mutateEntityWithHistoryMock: vi.fn(),
+  startProductCatalogFeedRefreshJobMock: vi.fn(),
 }));
-const { revalidateServerTagsMock } = vi.hoisted(() => ({
+const { revalidateServerTagsMock, captureAdminExceptionMock } = vi.hoisted(() => ({
   revalidateServerTagsMock: vi.fn(),
+  captureAdminExceptionMock: vi.fn(),
 }));
 
 vi.mock('../../../../db/client', () => ({
@@ -32,6 +41,10 @@ vi.mock('../../../../lib/action-history', () => ({
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
 }));
 
+vi.mock('../../../../lib/background-jobs', () => ({
+  startProductCatalogFeedRefreshJob: startProductCatalogFeedRefreshJobMock,
+}));
+
 vi.mock('../../../../lib/server-cache', () => ({
   CACHE_TAGS: {
     products: 'products',
@@ -39,6 +52,11 @@ vi.mock('../../../../lib/server-cache', () => ({
   },
   applyServerCache: vi.fn(),
   revalidateServerTags: revalidateServerTagsMock,
+}));
+
+vi.mock('../../../../lib/sentry', () => ({
+  getRequestId: vi.fn(() => 'request-1'),
+  captureAdminException: captureAdminExceptionMock,
 }));
 
 describe('app/api/products/route', () => {
@@ -51,7 +69,10 @@ describe('app/api/products/route', () => {
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mutateEntityWithHistoryMock.mockReset();
     mutateEntityWithHistoryMock.mockResolvedValue(undefined);
+    startProductCatalogFeedRefreshJobMock.mockReset();
+    startProductCatalogFeedRefreshJobMock.mockResolvedValue({ kind: 'started', job: null });
     revalidateServerTagsMock.mockReset();
+    captureAdminExceptionMock.mockReset();
   });
 
   it('returns 401 when the caller is not authorized to mutate products', async () => {
@@ -258,8 +279,51 @@ describe('app/api/products/route', () => {
       active: true,
       inventoryQuantity: 8,
     }));
+    expect(startProductCatalogFeedRefreshJobMock).toHaveBeenCalledWith('product:create', 'request-1');
     expect(resolveEntityId([{ id: 55 }])).toBe(55);
     expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
     await expect(res.json()).resolves.toEqual({ ok: true });
+  });
+
+  it('does not fail product creation when feed enqueue fails', async () => {
+    hasDbMock.mockReturnValue(true);
+    const db = { marker: 'db' };
+    getDbMock.mockReturnValue(db);
+    startProductCatalogFeedRefreshJobMock.mockRejectedValue(new Error('queue unavailable'));
+
+    vi.spyOn(productPayloadSchema, 'safeParse').mockReturnValue({
+      success: true,
+      data: {
+        title: 'Test Product',
+        slug: 'test-product',
+        titleAr: null,
+        description: null,
+        descriptionAr: null,
+        sku: null,
+        barcode: null,
+        price: 1,
+        oldPrice: null,
+        purchasePrice: null,
+        active: true,
+        inStock: true,
+        availabilityStatus: 'in_stock',
+        inventoryQuantity: 0,
+        brandId: null,
+        categoryId: null,
+        images: [],
+      },
+    } as never);
+
+    const res = await POST(new NextRequest('http://localhost/api/products', {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    expect(res.status).toBe(200);
+    expect(captureAdminExceptionMock).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+      operation: 'product-catalog-feed-enqueue',
+      context: { trigger: 'product:create' },
+    }));
   });
 });

@@ -3,6 +3,7 @@
 import { ImagePlus, LoaderCircle, Pencil, Trash2, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { cn } from '../lib/utils';
 import { Field, FieldContent, FieldLabel } from './ui/field';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
@@ -76,6 +77,7 @@ function uploadSingleImage({
 export function ImageUploadField({
   uploadUrl,
   label,
+  hint,
   multiple = false,
   value,
   onChange,
@@ -83,6 +85,7 @@ export function ImageUploadField({
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const pickerStateRef = useRef<PickerState>({ multiple, replaceIndex: null });
   const cleanupTimeoutRef = useRef<number | null>(null);
@@ -194,6 +197,13 @@ export function ImageUploadField({
     onChange(value.filter((_, currentIndex) => currentIndex !== index));
   };
 
+  const handleDrop = (event: React.DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setIsDragActive(false);
+    pickerStateRef.current = { multiple, replaceIndex: null };
+    void uploadImages(event.dataTransfer.files);
+  };
+
   return (
     <Field className="rounded-2xl border border-border/70 bg-background/60 p-3.5">
       <FieldLabel>{label}</FieldLabel>
@@ -206,6 +216,8 @@ export function ImageUploadField({
           className="sr-only"
           onChange={(event) => void uploadImages(event.target.files)}
         />
+
+        {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
 
         {existingImages.length > 0 || uploads.length > 0 ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -296,11 +308,37 @@ export function ImageUploadField({
 
         <button
           type="button"
-          className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-border/80 bg-muted/30 px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/50"
+          className={cn(
+            'flex cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border border-dashed px-4 py-4 text-center text-sm font-medium text-foreground transition-colors',
+            isDragActive
+              ? 'border-primary/80 bg-primary/10 text-primary'
+              : 'border-border/80 bg-muted/30 hover:bg-muted/50',
+          )}
           onClick={() => openPicker({ multiple, replaceIndex: null })}
+          onDragEnter={(event) => {
+            event.preventDefault();
+            setIsDragActive(true);
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            if (!isDragActive) {
+              setIsDragActive(true);
+            }
+          }}
+          onDragLeave={(event) => {
+            event.preventDefault();
+            if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              return;
+            }
+            setIsDragActive(false);
+          }}
+          onDrop={handleDrop}
         >
           <ImagePlus className="size-4" />
-          <span>{multiple ? 'Add images' : 'Choose image'}</span>
+          <span>{isDragActive ? 'Drop images to upload' : multiple ? 'Add images' : 'Choose image'}</span>
+          <span className="text-xs font-normal text-muted-foreground">
+            {multiple ? 'Drag and drop images here, or click to browse' : 'Drag and drop an image here, or click to browse'}
+          </span>
         </button>
       </FieldContent>
 

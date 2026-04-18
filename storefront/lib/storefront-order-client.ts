@@ -79,14 +79,23 @@ export async function createStorefrontOrder(input: {
   payload: unknown;
   submissionKey: string;
 }) {
-  const response = await fetch("/api/orders", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "idempotency-key": input.submissionKey,
-    },
-    body: JSON.stringify(input.payload),
-  });
+  let response: Response;
+
+  try {
+    response = await fetch("/api/orders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "idempotency-key": input.submissionKey,
+      },
+      body: JSON.stringify(input.payload),
+    });
+  } catch {
+    throw new StorefrontOrderClientError("Could not reach the order endpoint.", {
+      code: "request_network_error",
+    });
+  }
+
   const responseData = await readJson(response);
 
   if (!response.ok) {
@@ -107,13 +116,22 @@ export async function patchStorefrontOrder(input: {
   token: string;
   payload: unknown;
 }) {
-  const response = await fetch(`/api/storefront/orders/${input.orderId}?token=${encodeURIComponent(input.token)}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(input.payload),
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`/api/storefront/orders/${input.orderId}?token=${encodeURIComponent(input.token)}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input.payload),
+    });
+  } catch {
+    throw new StorefrontOrderClientError("Could not reach the order endpoint.", {
+      code: "request_network_error",
+    });
+  }
+
   const responseData = await readJson(response);
 
   if (!response.ok) {
@@ -133,12 +151,21 @@ export async function readVerifiedStorefrontOrder(input: {
   orderId: number | string;
   token: string;
 }) {
-  const response = await fetch(`/api/storefront/orders/${input.orderId}?token=${encodeURIComponent(input.token)}`, {
-    method: "GET",
-    headers: {
-      accept: "application/json",
-    },
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`/api/storefront/orders/${input.orderId}?token=${encodeURIComponent(input.token)}`, {
+      method: "GET",
+      headers: {
+        accept: "application/json",
+      },
+    });
+  } catch {
+    throw new StorefrontOrderClientError("Could not verify the order confirmation.", {
+      code: "verification_network_error",
+    });
+  }
+
   const responseData = await readJson(response);
 
   if (!response.ok) {

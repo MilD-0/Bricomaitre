@@ -5,8 +5,10 @@ import { getDb, hasDb } from '../../../db/client';
 import { products } from '../../../db/schema';
 import { mutateEntityWithHistory } from '../../../lib/action-history';
 import { auth } from '../../../lib/auth';
+import { startProductCatalogFeedRefreshJob } from '../../../lib/background-jobs';
 import { productListQuerySchema, productPayloadSchema } from '../../../lib/products';
 import { requireMutationAccess } from '../../../lib/rbac';
+import { captureAdminException, getRequestId } from '../../../lib/sentry';
 import { applyServerCache, CACHE_TAGS, revalidateServerTags } from '../../../lib/server-cache';
 import { resolveUniqueSlug } from '../../../lib/slug';
 
@@ -140,22 +142,25 @@ async function getCachedPaginatedProducts(query: ProductListQuery) {
   const [{ value: totalItems }] = await db.select({ value: count() }).from(products).where(whereClause);
   const totalPages = Math.max(1, Math.ceil(totalItems / query.limit));
   const page = Math.min(query.page, totalPages);
-  const direction = query.sortDirection === 'asc' ? asc : desc;
-  const orderBy = {
-    active: direction(products.active),
-    title: direction(products.title),
-    price: direction(products.price),
-    purchasePrice: direction(products.purchasePrice),
-    inStock: direction(products.inStock),
-    updatedAt: direction(products.updatedAt),
-    createdAt: direction(products.createdAt),
-  }[query.sortKey];
+  const orderBy = query.sortRules.flatMap((rule) => {
+    const direction = rule.direction === 'asc' ? asc : desc;
+
+    return [{
+      active: direction(products.active),
+      title: direction(products.title),
+      price: direction(products.price),
+      purchasePrice: direction(products.purchasePrice),
+      inStock: direction(products.inStock),
+      updatedAt: direction(products.updatedAt),
+      createdAt: direction(products.createdAt),
+    }[rule.key]];
+  });
 
   const rows = await db
     .select()
     .from(products)
     .where(whereClause)
-    .orderBy(orderBy)
+    .orderBy(...orderBy, desc(products.id))
     .limit(query.limit)
     .offset((page - 1) * query.limit);
 
@@ -183,7 +188,7 @@ export async function GET(req: NextRequest) {
   }
 
   const searchParams = req.nextUrl.searchParams;
-  const shouldPaginate = ['page', 'limit', 'search', 'brandId', 'categoryId', 'imageOrigin', 'sortKey', 'sortDirection']
+  const shouldPaginate = ['page', 'limit', 'search', 'brandId', 'categoryId', 'imageOrigin', 'sort', 'sortKey', 'sortDirection']
     .some((key) => searchParams.has(key));
 
   if (!shouldPaginate) {
@@ -198,6 +203,7 @@ export async function GET(req: NextRequest) {
     brandId: searchParams?.get('brandId'),
     categoryId: searchParams?.get('categoryId'),
     imageOrigin: searchParams?.get('imageOrigin') ?? undefined,
+    sort: searchParams.getAll('sort'),
     sortKey: searchParams?.get('sortKey') ?? undefined,
     sortDirection: searchParams?.get('sortDirection') ?? undefined,
   });
@@ -206,6 +212,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const requestId = getRequestId(req);
   const denied = await requireMutationAccess('products');
   if (denied) {
     return denied;
@@ -235,6 +242,18 @@ export async function POST(req: NextRequest) {
   });
 
   revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
+
+  try {
+    await startProductCatalogFeedRefreshJob('product:create', requestId);
+  } catch (error) {
+    captureAdminException(error, {
+      requestId,
+      operation: 'product-catalog-feed-enqueue',
+      route: '/api/products',
+      session,
+      context: { trigger: 'product:create' },
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }

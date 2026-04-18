@@ -56,19 +56,41 @@ export function PendingInline({
   className?: string;
 }) {
   return (
-    <AnimatePresence initial={false}>
-      {active ? (
-        <motion.div
-          key="pending"
-          initial={{ opacity: 0, y: -6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
-          className={cn('inline-flex items-center gap-2 text-xs font-medium text-muted-foreground', className)}
-        >
-          <Spinner className="size-3.5" />
-          <span>{label}</span>
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
+    <div className={cn('min-h-4', className)} aria-live="polite">
+      <motion.div
+        initial={false}
+        animate={{ opacity: active ? 1 : 0, y: active ? 0 : -4 }}
+        transition={{ duration: 0.18, ease: defaultTransition.ease }}
+        className={cn('inline-flex items-center gap-2 text-xs font-medium text-muted-foreground', !active && 'pointer-events-none')}
+      >
+        <Spinner className="size-3.5" />
+        <span>{label}</span>
+      </motion.div>
+    </div>
+  );
+}
+
+export function SurfacePendingOverlay({
+  active,
+  label,
+  className,
+}: {
+  active: boolean;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <motion.div
+      initial={false}
+      animate={{ opacity: active ? 1 : 0, y: active ? 0 : -6 }}
+      transition={{ duration: 0.18, ease: defaultTransition.ease }}
+      aria-hidden={!active}
+      className={cn('pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-end px-3 py-3 sm:px-4', className)}
+    >
+      <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/92 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur">
+        <Spinner className="size-3.5" />
+        <span>{label}</span>
+      </div>
+    </motion.div>
   );
 }

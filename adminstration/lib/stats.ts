@@ -155,6 +155,41 @@ type WebsiteFunnelPoint = {
   value: number;
 };
 
+type WebsiteVariantPoint = {
+  variant: string;
+  sessions: number;
+  pageViews: number;
+  productViews: number;
+  addToCarts: number;
+  checkoutStarts: number;
+  purchases: number;
+  sessionConversionRate: number;
+  cartToPurchaseRate: number;
+  checkoutToPurchaseRate: number;
+};
+
+type MetaTrackedEventSummary = {
+  name: string;
+  total: number;
+  pixelFired: number;
+  capiSent: number;
+  capiDelivered: number;
+  capiFailed: number;
+  lastOccurredAt: string | null;
+};
+
+type MetaTrackedEventLog = {
+  eventId: string;
+  analyticsEventName: string;
+  metaEventName: string;
+  pagePath: string | null;
+  occurredAt: string;
+  pixelPayload: Record<string, unknown>;
+  capiPayload: Record<string, unknown>;
+  capiStatus: number | null;
+  capiOk: boolean;
+};
+
 type ProfitabilityPoint = {
   name: string;
   value: number;
@@ -272,6 +307,10 @@ export type StatsDashboardData = {
     ctr: number;
     conversionRate: number;
   };
+  metaAds: {
+    events: MetaTrackedEventSummary[];
+    recentPayloads: MetaTrackedEventLog[];
+  };
   wilayas: BreakdownPoint[];
   wilayaDetails: BreakdownPoint[];
   deliveries: BreakdownPoint[];
@@ -297,6 +336,7 @@ export type StatsDashboardData = {
     viewToCartRate: number;
     cartToPurchaseRate: number;
     checkoutToPurchaseRate: number;
+    variants: WebsiteVariantPoint[];
     topLandingPages: WebsiteLandingPoint[];
     topSearches: WebsiteSearchPoint[];
     funnel: WebsiteFunnelPoint[];
@@ -449,9 +489,51 @@ type WebsiteMetricRow = {
   websiteConversionRate: number;
 };
 
+type WebsiteVariantRow = {
+  variant: string;
+  sessions: number;
+  pageViews: number;
+  productViews: number;
+  addToCarts: number;
+  checkoutStarts: number;
+  purchases: number;
+};
+
+type MetaTrackedEventSummaryRow = {
+  name: string;
+  total: number;
+  pixelFired: number;
+  capiSent: number;
+  capiDelivered: number;
+  capiFailed: number;
+  lastOccurredAt: Date | string | null;
+};
+
+type MetaTrackedEventLogRow = {
+  eventId: string;
+  analyticsEventName: string;
+  metaEventName: string;
+  pagePath: string | null;
+  occurredAt: Date | string;
+  pixelPayload: Record<string, unknown>;
+  capiPayload: Record<string, unknown>;
+  capiStatus: number | null;
+  capiOk: boolean;
+};
+
+function toIsoDateString(value: Date | string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 async function getWebsiteAnalyticsData(db: ReturnType<typeof getDb>, analyticsWhere: ReturnType<typeof buildAnalyticsWhere>) {
   const [
     websiteSummaryRows,
+    websiteVariantRows,
     websiteLandingRows,
     websiteSearchRows,
     websiteTopProductRows,
@@ -471,6 +553,20 @@ async function getWebsiteAnalyticsData(db: ReturnType<typeof getDb>, analyticsWh
       })
       .from(analyticsEvents)
       .where(analyticsWhere),
+    db
+      .select({
+        variant: sql<string>`coalesce(nullif(${analyticsEvents.metadata}->>'storefrontVariant', ''), 'new')`,
+        sessions: sql<number>`count(distinct case when ${analyticsEvents.eventName} = 'page_view' then ${analyticsEvents.sessionId} end)::int`,
+        pageViews: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'page_view')::int`,
+        productViews: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'view_item')::int`,
+        addToCarts: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'add_to_cart')::int`,
+        checkoutStarts: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'begin_checkout')::int`,
+        purchases: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'purchase')::int`,
+      })
+      .from(analyticsEvents)
+      .where(analyticsWhere)
+      .groupBy(sql`1`)
+      .orderBy(sql`1 asc`),
     db
       .select({
         path: sql<string>`coalesce(${analyticsEvents.pagePath}, '/')`,
@@ -534,10 +630,59 @@ async function getWebsiteAnalyticsData(db: ReturnType<typeof getDb>, analyticsWh
 
   return {
     websiteSummaryRows: websiteSummaryRows as WebsiteSummaryRow[],
+    websiteVariantRows: websiteVariantRows as WebsiteVariantRow[],
     websiteLandingRows: websiteLandingRows as WebsiteLandingRow[],
     websiteSearchRows: websiteSearchRows as WebsiteSearchRow[],
     websiteTopProductRows: websiteTopProductRows as WebsiteTopProductRow[],
     websiteMetricRows: websiteMetricRows as WebsiteMetricRow[],
+  };
+}
+
+async function getMetaAdsTrackingData(db: ReturnType<typeof getDb>, analyticsWhere: ReturnType<typeof buildAnalyticsWhere>) {
+  const metaTrackingExists = sql`${analyticsEvents.metadata} ? 'metaTracking'`;
+  const metaEventName = sql<string>`coalesce(nullif(${analyticsEvents.metadata}->'metaTracking'->>'eventName', ''), ${analyticsEvents.eventName})`;
+  const capiStatusExpression = sql<number | null>`case
+    when coalesce(${analyticsEvents.metadata}->'metaTracking'->'capi'->>'status', '') ~ '^-?[0-9]+$'
+      then (${analyticsEvents.metadata}->'metaTracking'->'capi'->>'status')::int
+    else null
+  end`;
+
+  const [eventRows, payloadRows] = await Promise.all([
+    db
+      .select({
+        name: metaEventName,
+        total: sql<number>`count(*)::int`,
+        pixelFired: sql<number>`count(*) filter (where coalesce(${analyticsEvents.metadata}->'metaTracking'->'pixel'->>'fired', 'false') = 'true')::int`,
+        capiSent: sql<number>`count(*) filter (where coalesce(${analyticsEvents.metadata}->'metaTracking'->'capi'->>'attempted', 'false') = 'true')::int`,
+        capiDelivered: sql<number>`count(*) filter (where coalesce(${analyticsEvents.metadata}->'metaTracking'->'capi'->>'ok', 'false') = 'true')::int`,
+        capiFailed: sql<number>`count(*) filter (where coalesce(${analyticsEvents.metadata}->'metaTracking'->'capi'->>'ok', 'false') = 'false')::int`,
+        lastOccurredAt: sql<Date | null>`max(${analyticsEvents.occurredAt})`,
+      })
+      .from(analyticsEvents)
+      .where(and(analyticsWhere, metaTrackingExists))
+      .groupBy(metaEventName)
+      .orderBy(sql`2 desc, 1 asc`),
+    db
+      .select({
+        eventId: analyticsEvents.eventId,
+        analyticsEventName: analyticsEvents.eventName,
+        metaEventName,
+        pagePath: analyticsEvents.pagePath,
+        occurredAt: analyticsEvents.occurredAt,
+        pixelPayload: sql<Record<string, unknown>>`coalesce(${analyticsEvents.metadata}->'metaTracking'->'pixel'->'payload', '{}'::jsonb)`,
+        capiPayload: sql<Record<string, unknown>>`coalesce(${analyticsEvents.metadata}->'metaTracking'->'capi'->'payload', '{}'::jsonb)`,
+        capiStatus: capiStatusExpression,
+        capiOk: sql<boolean>`coalesce(${analyticsEvents.metadata}->'metaTracking'->'capi'->>'ok', 'false') = 'true'`,
+      })
+      .from(analyticsEvents)
+      .where(and(analyticsWhere, metaTrackingExists))
+      .orderBy(desc(analyticsEvents.occurredAt))
+      .limit(12),
+  ]);
+
+  return {
+    eventRows: eventRows as MetaTrackedEventSummaryRow[],
+    payloadRows: payloadRows as MetaTrackedEventLogRow[],
   };
 }
 
@@ -736,6 +881,10 @@ function emptyDashboard(filters: Required<StatsFilters>): StatsDashboardData {
       ctr: 0,
       conversionRate: 0,
     },
+    metaAds: {
+      events: [],
+      recentPayloads: [],
+    },
     wilayas: [],
     wilayaDetails: [],
     deliveries: [],
@@ -761,6 +910,7 @@ function emptyDashboard(filters: Required<StatsFilters>): StatsDashboardData {
       viewToCartRate: 0,
       cartToPurchaseRate: 0,
       checkoutToPurchaseRate: 0,
+      variants: [],
       topLandingPages: [],
       topSearches: [],
       funnel: [],
@@ -854,6 +1004,7 @@ export async function getStatsDashboard(input: StatsFilters) {
   const adWhere = buildAdCostWhere(filters);
   const analyticsWhere = buildAnalyticsWhere(filters);
   const websiteAnalyticsPromise = getWebsiteAnalyticsData(db, analyticsWhere);
+  const metaAdsTrackingPromise = getMetaAdsTrackingData(db, analyticsWhere);
 
   const [
     summaryRows,
@@ -1000,11 +1151,13 @@ export async function getStatsDashboard(input: StatsFilters) {
   ]);
   const {
     websiteSummaryRows,
+    websiteVariantRows,
     websiteLandingRows,
     websiteSearchRows,
     websiteTopProductRows,
     websiteMetricRows,
   } = await websiteAnalyticsPromise;
+  const { eventRows: metaEventRows, payloadRows: metaPayloadRows } = await metaAdsTrackingPromise;
 
   const summaryRow = summaryRows[0];
   const adSummary = adSpendRows[0];
@@ -1038,6 +1191,18 @@ export async function getStatsDashboard(input: StatsFilters) {
     viewToCartRate: websiteSummary?.productViews ? round(((websiteSummary?.addToCarts ?? 0) / websiteSummary.productViews) * 100) : 0,
     cartToPurchaseRate: websiteSummary?.addToCarts ? round(((websiteSummary?.purchases ?? 0) / websiteSummary.addToCarts) * 100) : 0,
     checkoutToPurchaseRate: websiteSummary?.checkoutStarts ? round(((websiteSummary?.purchases ?? 0) / websiteSummary.checkoutStarts) * 100) : 0,
+    variants: websiteVariantRows.map((row) => ({
+      variant: row.variant,
+      sessions: row.sessions,
+      pageViews: row.pageViews,
+      productViews: row.productViews,
+      addToCarts: row.addToCarts,
+      checkoutStarts: row.checkoutStarts,
+      purchases: row.purchases,
+      sessionConversionRate: row.sessions ? round((row.purchases / row.sessions) * 100) : 0,
+      cartToPurchaseRate: row.addToCarts ? round((row.purchases / row.addToCarts) * 100) : 0,
+      checkoutToPurchaseRate: row.checkoutStarts ? round((row.purchases / row.checkoutStarts) * 100) : 0,
+    })),
     topLandingPages: websiteLandingRows.map((row) => ({
       path: row.path,
       sessions: row.sessions,
@@ -1073,6 +1238,28 @@ export async function getStatsDashboard(input: StatsFilters) {
       websiteConversionRate: round(numberOrZero(row.websiteConversionRate) * 100),
     })),
   };
+  const metaAds = {
+    events: metaEventRows.map((row) => ({
+      name: row.name,
+      total: row.total,
+      pixelFired: row.pixelFired,
+      capiSent: row.capiSent,
+      capiDelivered: row.capiDelivered,
+      capiFailed: row.capiFailed,
+      lastOccurredAt: toIsoDateString(row.lastOccurredAt),
+    })),
+    recentPayloads: metaPayloadRows.map((row) => ({
+      eventId: row.eventId,
+      analyticsEventName: row.analyticsEventName,
+      metaEventName: row.metaEventName,
+      pagePath: row.pagePath,
+      occurredAt: toIsoDateString(row.occurredAt) ?? new Date(0).toISOString(),
+      pixelPayload: row.pixelPayload,
+      capiPayload: row.capiPayload,
+      capiStatus: row.capiStatus,
+      capiOk: row.capiOk,
+    })),
+  };
 
   if (!summaryRow || summaryRow.totalOrders === 0) {
     const data = emptyDashboard(filters);
@@ -1083,6 +1270,7 @@ export async function getStatsDashboard(input: StatsFilters) {
       batchId: importHistory[0]!.batchId,
     }));
     data.website = website;
+    data.metaAds = metaAds;
     return data;
   }
 
@@ -1304,6 +1492,7 @@ export async function getStatsDashboard(input: StatsFilters) {
       ctr: numberOrZero(adSummary?.impressions) > 0 ? round((numberOrZero(adSummary?.clicks) / numberOrZero(adSummary?.impressions)) * 100) : 0,
       conversionRate: numberOrZero(adSummary?.clicks) > 0 ? round((numberOrZero(adSummary?.conversions) / numberOrZero(adSummary?.clicks)) * 100) : 0,
     },
+    metaAds,
     wilayas: wilayaRows.map((row) => ({
       name: row.name,
       orders: row.orders,

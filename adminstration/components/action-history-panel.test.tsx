@@ -86,8 +86,13 @@ function buildHistoryResponse(requestUrl: string, items: Array<Record<string, un
   const operation = url.searchParams.get('operation') ?? 'all';
   const resource = url.searchParams.get('resource') ?? 'all';
   const state = url.searchParams.get('state') ?? 'all';
-  const sortKey = (url.searchParams.get('sortKey') ?? 'createdAt') as 'operation' | 'resource' | 'createdBy' | 'createdAt' | 'isUndone';
-  const sortDirection = url.searchParams.get('sortDirection') === 'asc' ? 'asc' : 'desc';
+  const sortRules = url.searchParams.getAll('sort')
+    .map((value) => {
+      const [key, direction] = value.split(':');
+      return key && (direction === 'asc' || direction === 'desc') ? { key, direction } : null;
+    })
+    .filter((value): value is { key: 'operation' | 'resource' | 'createdBy' | 'createdAt' | 'isUndone'; direction: 'asc' | 'desc' } => value !== null);
+  const effectiveSortRules = sortRules.length > 0 ? sortRules : [{ key: 'createdAt' as const, direction: 'desc' as const }];
 
   const filtered = items
     .filter((item) => {
@@ -109,27 +114,50 @@ function buildHistoryResponse(requestUrl: string, items: Array<Record<string, un
     .filter((item) => state === 'all' || (state === 'undone' ? item.isUndone === true : item.isUndone === false));
 
   const sorted = [...filtered].sort((left, right) => {
-    const factor = sortDirection === 'asc' ? 1 : -1;
+    for (const rule of effectiveSortRules) {
+      const factor = rule.direction === 'asc' ? 1 : -1;
 
-    if (sortKey === 'operation') {
-      return String(left.operation).localeCompare(String(right.operation)) * factor;
+      if (rule.key === 'operation') {
+        const delta = String(left.operation).localeCompare(String(right.operation));
+        if (delta !== 0) {
+          return delta * factor;
+        }
+        continue;
+      }
+
+      if (rule.key === 'resource') {
+        const delta = String(left.resource).localeCompare(String(right.resource));
+        if (delta !== 0) {
+          return delta * factor;
+        }
+        continue;
+      }
+
+      if (rule.key === 'createdBy') {
+        const leftActor = String(left.createdByName ?? left.createdBy ?? '');
+        const rightActor = String(right.createdByName ?? right.createdBy ?? '');
+        const delta = leftActor.localeCompare(rightActor);
+        if (delta !== 0) {
+          return delta * factor;
+        }
+        continue;
+      }
+
+      if (rule.key === 'isUndone') {
+        const delta = Number(left.isUndone) - Number(right.isUndone);
+        if (delta !== 0) {
+          return delta * factor;
+        }
+        continue;
+      }
+
+      const delta = new Date(String(left.createdAt)).getTime() - new Date(String(right.createdAt)).getTime();
+      if (delta !== 0) {
+        return delta * factor;
+      }
     }
 
-    if (sortKey === 'resource') {
-      return String(left.resource).localeCompare(String(right.resource)) * factor;
-    }
-
-    if (sortKey === 'createdBy') {
-      const leftActor = String(left.createdByName ?? left.createdBy ?? '');
-      const rightActor = String(right.createdByName ?? right.createdBy ?? '');
-      return leftActor.localeCompare(rightActor) * factor;
-    }
-
-    if (sortKey === 'isUndone') {
-      return (Number(left.isUndone) - Number(right.isUndone)) * factor;
-    }
-
-    return (new Date(String(left.createdAt)).getTime() - new Date(String(right.createdAt)).getTime()) * factor;
+    return Number(right.id) - Number(left.id);
   });
 
   const start = (page - 1) * limit;
@@ -187,7 +215,8 @@ describe('ActionHistoryPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'actions.first' }));
     expect(await screen.findByText('Paged order')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'history.columns.actions' }));
+    await userEvent.click(screen.getByRole('button', { name: /^history\.columns\.actions/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^history\.columns\.actions/ }));
 
     await waitFor(() => {
       const rows = screen.getAllByRole('row');
@@ -204,6 +233,59 @@ describe('ActionHistoryPanel', () => {
     expect(screen.getByText('Reverted dashboard activity')).toBeInTheDocument();
     expect(screen.getByText('Spend')).toBeInTheDocument();
     expect(screen.getByText('150')).toBeInTheDocument();
+  });
+
+  it('serializes hierarchical sort rules from header clicks', async () => {
+    const items = [
+      {
+        id: 1,
+        resource: 'products',
+        entityType: 'products',
+        entityId: 101,
+        entityLabel: 'Bravo',
+        operation: 'update',
+        createdBy: 'b@example.com',
+        createdByName: 'Beta',
+        isReversible: true,
+        isUndone: false,
+        changes: [],
+        createdAt: '2026-03-02T00:00:00.000Z',
+        undoneAt: null,
+        redoneAt: null,
+      },
+      {
+        id: 2,
+        resource: 'products',
+        entityType: 'products',
+        entityId: 102,
+        entityLabel: 'First entity',
+        operation: 'update',
+        createdBy: 'a@example.com',
+        createdByName: 'Alpha',
+        isReversible: true,
+        isUndone: true,
+        changes: [],
+        createdAt: '2026-03-01T00:00:00.000Z',
+        undoneAt: null,
+        redoneAt: null,
+      },
+    ];
+
+    server.use(
+      http.get('/api/action-history', ({ request }) => HttpResponse.json(buildHistoryResponse(request.url, items))),
+    );
+
+    renderPanel();
+
+    expect((await screen.findAllByText('First entity')).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /^history\.columns\.actions/ })).toHaveClass('cursor-pointer');
+    await userEvent.click(screen.getByRole('button', { name: /^history\.columns\.actions/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^history\.columns\.who/ }));
+
+    await waitFor(() => {
+      const rows = screen.getAllByRole('row').slice(1);
+      expect(within(rows[0]).getByText('Bravo')).toBeInTheDocument();
+    });
   });
 
   it('allows undo and redo transitions with toast feedback', async () => {

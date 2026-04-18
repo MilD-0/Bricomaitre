@@ -22,9 +22,18 @@ vi.mock('../../../../lib/action-history', () => ({
     operation: z.enum(['all', 'create', 'update', 'delete']).default('all'),
     resource: z.enum(['all', 'products', 'orders', 'assets', 'brandsCategories', 'bulletin', 'stats', 'settings', 'ecotrack']).default('all'),
     state: z.enum(['all', 'applied', 'undone']).default('all'),
+    sort: z.array(z.string()).optional().default([]),
     sortKey: z.enum(['operation', 'resource', 'createdBy', 'createdAt', 'isUndone']).default('createdAt'),
     sortDirection: z.enum(['asc', 'desc']).default('desc'),
-  }),
+  }).transform((value) => ({
+    ...value,
+    sortRules: value.sort.length > 0
+      ? value.sort.map((entry) => {
+        const [key, direction] = entry.split(':');
+        return { key, direction };
+      })
+      : [{ key: value.sortKey, direction: value.sortDirection }],
+  })),
   listActionHistory: listActionHistoryMock,
   toActionHistoryItem: toActionHistoryItemMock,
 }));
@@ -83,7 +92,7 @@ describe('app/api/action-history/route', () => {
       },
     });
 
-    const res = await GET(new NextRequest('http://localhost/api/action-history?page=2&limit=10&search=admin&operation=update&resource=products&state=undone&sortKey=isUndone&sortDirection=asc'));
+    const res = await GET(new NextRequest('http://localhost/api/action-history?page=2&limit=10&search=admin&operation=update&resource=products&state=undone&sort=isUndone:asc&sort=createdAt:desc'));
 
     expect(listActionHistoryMock).toHaveBeenCalledWith(db, {
       page: 2,
@@ -92,8 +101,13 @@ describe('app/api/action-history/route', () => {
       operation: 'update',
       resource: 'products',
       state: 'undone',
-      sortKey: 'isUndone',
-      sortDirection: 'asc',
+      sort: ['isUndone:asc', 'createdAt:desc'],
+      sortKey: 'createdAt',
+      sortDirection: 'desc',
+      sortRules: [
+        { key: 'isUndone', direction: 'asc' },
+        { key: 'createdAt', direction: 'desc' },
+      ],
     });
     await expect(res.json()).resolves.toEqual({
       items: [{ id: 1, createdAt: '2026-03-21T00:00:00.000Z' }],

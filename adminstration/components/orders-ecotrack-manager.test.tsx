@@ -15,7 +15,11 @@ vi.mock('next-intl', () => ({
   },
 }));
 
-function renderOrdersEcotrackManager() {
+function renderOrdersEcotrackManager({
+  initialOrders,
+}: {
+  initialOrders?: Parameters<typeof OrdersEcotrackManager>[0]['initialOrders'];
+} = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -30,7 +34,7 @@ function renderOrdersEcotrackManager() {
           weightFees: [],
           lastSync: null,
         }}
-        initialOrders={{
+        initialOrders={initialOrders ?? {
           writable: true,
           items: [{
             orderId: 11,

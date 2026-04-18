@@ -120,3 +120,18 @@ export async function requireAdministrationPageAccess(locale: string) {
 
   return session;
 }
+
+export async function requireDeveloperPageAccess(locale: string) {
+  const session = await requireAllowedAppUser(locale);
+
+  if (session.user.role !== 'developer') {
+    redirect(getDefaultAuthorizedHref({
+      isAllowed: session.user.isAllowed,
+      locale,
+      permissions: session.user.permissions,
+      role: session.user.role,
+    }));
+  }
+
+  return session;
+}

@@ -1,30 +1,50 @@
 "use client";
 import Layout from "../components/layout";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useEffectEvent, useRef, useState } from "react";
 import { CartContext } from "../components/cartContext";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { handleInitiateCheckout } from "../components/Init";
 import { buildItemArray, trackAnalyticsEvent } from "@/lib/analytics";
-import { Link } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
+import { useSearchParams } from "next/navigation";
+
+function waitForTracking(promise, timeoutMs = 250) {
+  return Promise.race([
+    promise.catch((error) => {
+      console.error("InitiateCheckout error:", error);
+    }),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+}
 
 function CartPage() {
   const t = useTranslations("common");
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { cartProducts, addProduct, removeProduct, cartSummary, rememberProducts } = useContext(CartContext);
   const [products, setProducts] = useState([]);
+  const lastLoadedCartKeyRef = useRef("");
+  const checkoutHref = (() => {
+    const query = searchParams?.toString() ?? "";
+    return query ? `/checkout?${query}` : "/checkout";
+  })();
 
   useEffect(() => {
-    const snapshotProducts = cartSummary.items
-      .map((item) => item.product)
-      .filter(Boolean);
-
-    setProducts(snapshotProducts);
-
     if (cartProducts.length === 0) {
       setProducts([]);
-      return;
-    }
+    } else {
+      const snapshotProducts = cartSummary.items
+        .map((item) => item.product)
+        .filter(Boolean);
 
+      if (snapshotProducts.length > 0) {
+        setProducts(snapshotProducts);
+      }
+    }
+  }, [cartProducts, cartSummary.items]);
+
+  const loadCartProducts = useEffectEvent(async () => {
     fetch("/api/cart", {
       method: "POST",
       headers: {
@@ -45,7 +65,22 @@ function CartPage() {
       .catch((error) => {
         console.error(error);
       });
-  }, [cartProducts, cartSummary.items, rememberProducts]);
+  });
+
+  useEffect(() => {
+    if (cartProducts.length === 0) {
+      lastLoadedCartKeyRef.current = "";
+      return;
+    }
+
+    const cartKey = cartProducts.join(",");
+    if (lastLoadedCartKeyRef.current === cartKey) {
+      return;
+    }
+
+    lastLoadedCartKeyRef.current = cartKey;
+    void loadCartProducts();
+  }, [cartProducts, loadCartProducts]);
 
   useEffect(() => {
     if (products.length === 0) {
@@ -73,6 +108,14 @@ function CartPage() {
 
   const total = cartSummary.subtotal;
 
+  async function goToCheckout() {
+    await waitForTracking(handleInitiateCheckout({
+      products,
+      totalValue: total,
+    }));
+    router.push(checkoutHref);
+  }
+
   if (!cartProducts?.length) {
     return (
       <Layout>
@@ -91,7 +134,7 @@ function CartPage() {
 
   return (
     <Layout>
-      <section className="sf-container grid gap-6 py-6 lg:grid-cols-[1.1fr_0.9fr]">
+      <section className="sf-container grid gap-6 pb-28 pt-6 lg:grid-cols-[1.1fr_0.9fr] lg:pb-6">
         <div className="space-y-4">
           {products.map((product) => {
             const quantity = cartProducts.filter((id) => id === product._id).length;
@@ -135,31 +178,47 @@ function CartPage() {
           })}
         </div>
 
-        <aside className="sf-panel h-fit lg:sticky lg:top-28">
+        <aside className="sf-panel h-fit border border-teal-100 shadow-xl shadow-slate-900/5 lg:sticky lg:top-24">
           <p className="sf-kicker">{t("cart")}</p>
           <h2 className="mt-3 text-2xl font-semibold text-slate-900">{t("ent")}</h2>
-          <div className="sf-metric mt-6">
+          <div className="mt-6 rounded-[1.25rem] border border-slate-200 bg-slate-50 p-4">
+          <div className="sf-metric mt-0">
             <span className="font-semibold text-slate-700">{t("sous")}</span>
             <span className="font-bold text-teal-700">
               {total}
               {t("da")}
             </span>
           </div>
-          <Link href={"/checkout"} className="mt-6 block w-full">
-            <button
-              onClick={() =>
-                handleInitiateCheckout({
-                  products,
-                  totalValue: total,
-                })
-              }
-              className="sf-button w-full justify-center"
-            >
-              {t("ent")}
-            </button>
-          </Link>
+          </div>
+          <button
+            onClick={() => {
+              void goToCheckout();
+            }}
+            className="sf-button-accent mt-6 w-full justify-center shadow-lg shadow-teal-900/20"
+          >
+            {t("ent")}
+          </button>
         </aside>
       </section>
+      <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/95 p-3 shadow-2xl backdrop-blur lg:hidden">
+        <div className="sf-container flex items-center gap-3 px-0">
+          <div className="min-w-0 flex-1 rounded-[1.2rem] border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{t("sous")}</div>
+            <div className="truncate text-lg font-bold text-teal-700">
+              {total}
+              {t("da")}
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              void goToCheckout();
+            }}
+            className="sf-button-accent flex-1 justify-center"
+          >
+            {t("ent")}
+          </button>
+        </div>
+      </div>
     </Layout>
   );
 }

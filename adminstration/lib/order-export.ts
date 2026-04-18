@@ -49,6 +49,8 @@ export const ORDER_EXPORT_HEADERS = [
   'Lien map',
 ] as const;
 
+const CONFIRMED_EXPORT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 export function formatPhoneForOrderExport(value: string | null | undefined) {
   const trimmed = value?.trim() ?? '';
   if (!trimmed) {
@@ -105,6 +107,15 @@ export function buildOrderExportRows(orders: OrderRecord[], catalog: EcotrackCat
     stopdesk: order.delivery === 1 ? 'OUI' : '',
     mapLink: '',
   }));
+}
+
+export function filterRecentConfirmedOrders(orders: OrderRecord[], now = new Date()) {
+  const cutoff = now.getTime() - CONFIRMED_EXPORT_MAX_AGE_MS;
+
+  return orders.filter((order) => {
+    const createdAt = Date.parse(order.createdAt);
+    return Number.isFinite(createdAt) && createdAt >= cutoff;
+  });
 }
 
 export function buildOrderExportWorkbook(rows: OrderExportRow[]) {

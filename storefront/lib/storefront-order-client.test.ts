@@ -74,6 +74,17 @@ describe("storefront-order-client", () => {
     });
   });
 
+  it("surfaces create network failures as client errors", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+    await expect(createStorefrontOrder({
+      payload: { phoneNumber1: "0550111111" },
+      submissionKey: "submission-key",
+    })).rejects.toMatchObject({
+      code: "request_network_error",
+    } satisfies Partial<StorefrontOrderClientError>);
+  });
+
   it("rejects a create response missing the order token", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       ok: true,

@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
+import { buildSearchParams } from "@/lib/seo";
 
-export default function ClesAChocsLandingRedirect() {
-  redirect("/products");
+export default async function ClesAChocsLandingRedirect({ searchParams }) {
+  const resolvedSearchParams = (await searchParams) ?? {};
+  redirect(`/products${buildSearchParams(resolvedSearchParams)}`);
 }

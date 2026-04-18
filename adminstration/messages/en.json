@@ -328,7 +328,95 @@
       "products": "Products & categories",
       "geography": "Geography",
       "time": "Time analysis",
-      "metaAds": "Meta Ads"
+      "metaAds": "Meta Ads",
+      "paidClicks": "Paid clicks"
+    },
+    "paidClicks": {
+      "filters": {
+        "range24h": "Last 24 hours",
+        "range7d": "Last 7 days",
+        "range30d": "Last 30 days",
+        "variantAll": "All variants",
+        "variantNew": "New storefront",
+        "variantLegacy": "Legacy storefront",
+        "sourceAll": "All paid sources",
+        "outcomeAll": "All outcomes",
+        "hasOrderAll": "Orders and non-orders",
+        "hasOrderYes": "Has order",
+        "hasOrderNo": "No order",
+        "searchPlaceholder": "Search landing path or slug"
+      },
+      "summary": {
+        "visits": "Visits",
+        "landedOnly": "Landed only",
+        "viewedProduct": "Viewed product",
+        "addedToCart": "Added to cart",
+        "beganCheckout": "Began checkout",
+        "createdOrder": "Created order",
+        "purchased": "Purchased",
+        "errored": "Errored"
+      },
+      "outcomes": {
+        "landedOnly": "Landed only",
+        "viewedProduct": "Viewed product",
+        "addedToCart": "Added to cart",
+        "beganCheckout": "Began checkout",
+        "createdOrder": "Created order",
+        "purchased": "Purchased",
+        "errored": "Errored"
+      },
+      "table": {
+        "firstSeen": "First seen",
+        "landingPath": "Landing path",
+        "productSlug": "Product slug",
+        "variant": "Variant",
+        "source": "Paid source",
+        "lastEvent": "Last event",
+        "eventCount": "Events",
+        "orderId": "Order",
+        "age": "Age"
+      },
+      "actions": {
+        "previous": "Previous",
+        "next": "Next",
+        "reveal": "Reveal",
+        "hide": "Hide"
+      },
+      "detail": {
+        "title": "Paid visit detail",
+        "description": "Exact landing and funnel timeline for one paid visitor.",
+        "visitId": "Visit ID",
+        "landingUrl": "Landing URL",
+        "variant": "Variant served",
+        "requestedVariant": "Requested variant",
+        "journeyId": "Journey ID",
+        "sessionId": "Session ID",
+        "fbclid": "fbclid",
+        "utmSource": "UTM source",
+        "utmMedium": "UTM medium",
+        "utmCampaign": "UTM campaign",
+        "orderId": "Order ID",
+        "lastEvent": "Last event",
+        "firstSeen": "First seen",
+        "lastSeen": "Last seen",
+        "orderSummary": "Linked order",
+        "orderStatus": "Order status",
+        "orderCity": "Order city",
+        "timelineTime": "Time",
+        "timelineEvent": "Event",
+        "timelinePage": "Page",
+        "timelineProduct": "Product",
+        "timelineOrder": "Order",
+        "timelineMeta": "Meta",
+        "metaPayloads": "Meta events and payloads",
+        "pixelPayload": "Pixel payload",
+        "capiPayload": "CAPI payload",
+        "metaDelivered": "CAPI delivered",
+        "metaFailed": "CAPI failed",
+        "metaPixelOnly": "Pixel only",
+        "metaNoData": "No Meta payload"
+      },
+      "empty": "No paid click visits match the current filters."
     },
     "upload": {
       "title": "Excel import",
@@ -482,6 +570,22 @@
         "columns": {
           "path": "Landing page",
           "sessions": "Sessions"
+        }
+      },
+      "variants": {
+        "title": "Storefront variant comparison",
+        "columns": {
+          "variant": "Variant",
+          "sessions": "Sessions",
+          "pageViews": "Page views",
+          "purchases": "Purchases",
+          "sessionRate": "Session conv. %",
+          "cartRate": "Cart conv. %",
+          "checkoutRate": "Checkout conv. %"
+        },
+        "values": {
+          "new": "New storefront",
+          "legacy": "Legacy storefront"
         }
       },
       "search": {
@@ -646,9 +750,34 @@
     },
   "metaAds": {
       "performanceTitle": "Advertising efficiency",
+      "eventsTitle": "Meta tracked events",
+      "payloadsTitle": "Recent Meta payloads",
       "managerTitle": "Ad costs",
       "conversionRate": "Conversion rate",
       "unknownCampaign": "Unknown campaign",
+      "events": {
+        "empty": "No Meta tracking events were recorded for this range.",
+        "columns": {
+          "event": "Event",
+          "total": "Tracked",
+          "pixel": "Pixel fired",
+          "capiSent": "CAPI sent",
+          "capiDelivered": "CAPI delivered",
+          "capiFailed": "CAPI failed",
+          "lastSeen": "Last seen"
+        }
+      },
+      "payloads": {
+        "emptyTitle": "No Meta payloads yet",
+        "emptyDescription": "Meta pixel and CAPI payloads will appear here after storefront activity is tracked.",
+        "meta": "{analyticsEvent} • {eventId} • {occurredAt}",
+        "pixel": "Pixel payload",
+        "capi": "CAPI payload",
+        "delivered": "Delivered",
+        "failed": "Failed",
+        "noStatus": "No HTTP status",
+        "status": "HTTP {status}"
+      },
       "summary": {
         "spend": "Spend",
         "impressions": "Impressions",

@@ -10,6 +10,7 @@ const DEFAULT_PAGE_SIZE = 100;
 type StorefrontProduct = {
   id: number;
   slug: string | null;
+  mongoId: string | null;
   title: string;
   titleAr: string | null;
   description: string | null;
@@ -202,6 +203,7 @@ export type LegacyCategory = {
 
 export type LegacyProduct = {
   _id: string;
+  mongo_id: string | null;
   id: number;
   slug: string;
   title: string;
@@ -391,6 +393,7 @@ export async function fetchStorefrontProductsPage(params: {
   page?: number;
   limit?: number;
   id?: string | number | null;
+  mongoId?: string | null;
   search?: string;
   categoryId?: string | number | null;
   brandId?: string | number | null;
@@ -408,6 +411,9 @@ export async function fetchStorefrontProductsPage(params: {
   }
   if (params.id != null && params.id !== "") {
     searchParams.set("id", String(params.id));
+  }
+  if (params.mongoId) {
+    searchParams.set("mongoId", params.mongoId);
   }
   if (params.search) {
     searchParams.set("search", params.search);
@@ -540,11 +546,13 @@ export function normalizeProduct(
 
   const price = Number(product.price ?? 0);
   const oldPrice = product.oldPrice == null ? null : Number(product.oldPrice);
+  const mongoId = product.mongoId?.trim() ? product.mongoId.trim() : null;
 
   return {
-    _id: String(product.id),
+    _id: mongoId ?? String(product.id),
+    mongo_id: mongoId,
     id: product.id,
-    slug: product.slug ?? String(product.id),
+    slug: product.slug ?? mongoId ?? String(product.id),
     title: product.title,
     title_ar: product.titleAr ?? productCard?.titleAr ?? "",
     description: product.description ?? productCard?.descriptionFr ?? "",
@@ -860,6 +868,11 @@ export async function fetchLegacyProductByToken(id: string) {
     return normalizeProduct(bySlug[0], context);
   }
 
+  const byMongoId = await fetchStorefrontProductsPage({ mongoId: id, limit: 1 });
+  if (byMongoId[0]) {
+    return normalizeProduct(byMongoId[0], context);
+  }
+
   const numericId = Number(id);
   if (Number.isFinite(numericId) && numericId > 0) {
     const matched = (await fetchStorefrontProductsPage({ id: numericId, limit: 1 }))[0] ?? null;
@@ -889,6 +902,11 @@ export async function fetchLegacyProductsByTokens(ids: Array<string | number>) {
       return normalizeProduct(bySlug[0], context);
     }
 
+    const byMongoId = await fetchStorefrontProductsPage({ mongoId: token, limit: 1 });
+    if (byMongoId[0]) {
+      return normalizeProduct(byMongoId[0], context);
+    }
+
     const numericId = Number(token);
     if (Number.isFinite(numericId) && numericId > 0) {
       const matched = (await fetchStorefrontProductsPage({ id: numericId, limit: 1 }))[0] ?? null;
@@ -900,7 +918,17 @@ export async function fetchLegacyProductsByTokens(ids: Array<string | number>) {
     return null;
   }));
 
-  const lookup = new Map(products.filter((product): product is LegacyProduct => Boolean(product)).map((product) => [product._id, product]));
+  const lookup = new Map<string, LegacyProduct>();
+  products
+    .filter((product): product is LegacyProduct => Boolean(product))
+    .forEach((product) => {
+      lookup.set(product._id, product);
+      lookup.set(String(product.id), product);
+      lookup.set(product.slug, product);
+      if (product.mongo_id) {
+        lookup.set(product.mongo_id, product);
+      }
+    });
 
   return uniqueTokens
     .map((token) => lookup.get(token) ?? null)
@@ -1011,6 +1039,7 @@ export function buildFeaturedGroupProducts(
   limit?: number,
 ) {
   const directIds = group.productIds.map(String);
+  const directNumericIds = new Set(group.productIds.map(String));
   const dynamicIds = products
     .filter((product) => {
       if (group.brandIds.length > 0 && product.brand && group.brandIds.includes(Number(product.brand))) {
@@ -1029,7 +1058,13 @@ export function buildFeaturedGroupProducts(
     })
     .map((product) => product._id);
 
-  const matchedProducts = filterProductsByIds(products, [...directIds, ...dynamicIds]);
+  const matchedProducts = filterProductsByIds(products, [
+    ...directIds,
+    ...products
+      .filter((product) => directNumericIds.has(String(product.id)))
+      .map((product) => product._id),
+    ...dynamicIds,
+  ]);
 
   return typeof limit === "number" ? matchedProducts.slice(0, limit) : matchedProducts;
 }
@@ -1056,7 +1091,14 @@ export function filterProductsByIds(
   ids: Array<string | number>,
 ) {
   const wanted = ids.map(String);
-  const productMap = new Map(products.map((product) => [product._id, product]));
+  const productMap = new Map<string, LegacyProduct>();
+  products.forEach((product) => {
+    productMap.set(product._id, product);
+    productMap.set(String(product.id), product);
+    if (product.mongo_id) {
+      productMap.set(product.mongo_id, product);
+    }
+  });
   const uniqueOrderedIds = wanted.filter(
     (value, index) => wanted.indexOf(value) === index,
   );
@@ -1122,6 +1164,7 @@ export function matchesSearch(product: LegacyProduct, query?: string | null) {
     product.brandInfo?.name ?? "",
     product.categoryInfo?.name ?? "",
     product.categoryInfo?.name_ar ?? "",
+    product.mongo_id ?? "",
   ];
 
   return haystacks.some((value) => value.toLowerCase().includes(text));
@@ -1237,13 +1280,13 @@ export function findCategoryByToken(
 }
 
 export function buildProductHref(product: Pick<LegacyProduct, "slug" | "_id">) {
-  return `/products/${product.slug}`;
+  return `/products/${product.slug || product._id}`;
 }
 
 export function buildLandingProductHref(
   product: Pick<LegacyProduct, "slug" | "_id">,
 ) {
-  return `/landing/${product.slug}`;
+  return `/landing/${product.slug || product._id}`;
 }
 
 export function buildBrandHref(brand?: Pick<LegacyBrand, "slug"> | null) {

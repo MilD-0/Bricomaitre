@@ -19,6 +19,14 @@ const optionalNumericFilter = z.union([z.coerce.number().int().positive(), z.lit
 
 export const storefrontProductListQuerySchema = productListQuerySchema.extend({
   id: optionalNumericFilter,
+  mongoId: z.string().trim().optional().nullable().transform((value) => {
+    if (value == null) {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }),
   slug: z.string().trim().optional().nullable().transform((value) => {
     if (value == null) {
       return null;
@@ -35,6 +43,7 @@ export const storefrontOrderPatchRequestSchema = storefrontOrderPatchSchema;
 export const storefrontProductResponseItemSchema = z.object({
   id: z.number().int().positive(),
   slug: z.string().nullable(),
+  mongoId: z.string().nullable(),
   title: z.string(),
   titleAr: z.string().nullable(),
   description: z.string().nullable(),
