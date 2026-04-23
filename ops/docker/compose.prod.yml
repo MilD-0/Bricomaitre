@@ -126,31 +126,6 @@ x-storefront-blue: &storefront-blue
     timeout: 5s
     retries: 12
 
-x-storefront-old-blue: &storefront-old-blue
-  build:
-    context: ../..
-    dockerfile: ops/docker/Dockerfile.storefront-old
-    network: host
-    args:
-      STOREFRONT_API_BASE_URL: http://127.0.0.1:3101
-      NEXT_PUBLIC_FACEBOOK_PIXEL_ID: ${NEXT_PUBLIC_FACEBOOK_PIXEL_ID:-}
-  restart: unless-stopped
-  mem_limit: ${BRIC_STOREFRONT_OLD_WEB_MEM_LIMIT:-1200m}
-  mem_reservation: ${BRIC_STOREFRONT_OLD_WEB_MEM_RESERVATION:-768m}
-  env_file:
-    - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront.env
-  environment:
-    NODE_OPTIONS: ${BRIC_STOREFRONT_OLD_WEB_NODE_OPTIONS:---max-old-space-size=768}
-    STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
-  depends_on:
-    storefront-api-blue:
-      condition: service_healthy
-  healthcheck:
-    test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3002/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
-    interval: 10s
-    timeout: 5s
-    retries: 12
-
 services:
   postgres:
     image: postgres:16-bookworm
@@ -258,24 +233,6 @@ services:
     build:
       context: ../..
       dockerfile: ops/docker/Dockerfile.storefront
-      network: host
-      args:
-        STOREFRONT_API_BASE_URL: http://127.0.0.1:3102
-        NEXT_PUBLIC_FACEBOOK_PIXEL_ID: ${NEXT_PUBLIC_FACEBOOK_PIXEL_ID:-}
-    environment:
-      STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
-    depends_on:
-      storefront-api-green:
-        condition: service_healthy
-
-  storefront-old-blue:
-    <<: *storefront-old-blue
-
-  storefront-old-green:
-    <<: *storefront-old-blue
-    build:
-      context: ../..
-      dockerfile: ops/docker/Dockerfile.storefront-old
       network: host
       args:
         STOREFRONT_API_BASE_URL: http://127.0.0.1:3102

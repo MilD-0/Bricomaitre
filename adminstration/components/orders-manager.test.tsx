@@ -97,6 +97,7 @@ describe('OrdersManager', () => {
   }
 
   beforeEach(() => {
+    window.localStorage.clear();
     Object.assign(navigator, {
       clipboard: {
         writeText: vi.fn().mockResolvedValue(undefined),
@@ -141,7 +142,116 @@ describe('OrdersManager', () => {
 
   afterEach(() => {
     cleanup();
+    window.localStorage.clear();
     vi.restoreAllMocks();
+  });
+
+  it('defaults to card view, persists table view, and restores it from local storage', async () => {
+    const items = [
+      {
+        id: 1,
+        createdAt: '2026-03-01T10:00:00.000Z',
+        updatedAt: '2026-03-01T10:00:00.000Z',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        fullName: 'Ada Lovelace',
+        phoneNumber1: '0550000001',
+        phoneNumber2: null,
+        cartProducts: ['1'],
+        orderProducts: [],
+        delivery: 0,
+        state: 16,
+        city: 'Bab Ezzouar',
+        homeAddress: 'Street 1',
+        productSubtotal: 1000,
+        deliveryFee: 200,
+        totalAmount: 1200,
+        note: 'Call first',
+        confirmed: 0,
+        noAnswerCount: 0,
+        confirmedBy: null,
+        confirmedByName: null,
+        confirmedAt: null,
+        hasStatusHistory: false,
+        statusHistory: [],
+      },
+    ];
+
+    server.use(
+      http.get('/api/orders', ({ request }) => HttpResponse.json(paginatedOrdersResponse(items, request.url))),
+    );
+
+    const firstRender = renderOrdersManager();
+
+    expect(await screen.findByTestId('orders-card-view')).toHaveClass('grid');
+    expect(screen.getByTestId('orders-table-view')).toHaveClass('hidden');
+
+    await userEvent.click(screen.getByRole('button', { name: 'ordersManager.view.table' }));
+
+    expect(window.localStorage.getItem('orders-view-mode-v1')).toBe(JSON.stringify('table'));
+    expect(screen.getByTestId('orders-card-view')).toHaveClass('hidden');
+    expect(screen.getByTestId('orders-table-view')).toHaveClass('block');
+
+    firstRender.unmount();
+    renderOrdersManager();
+
+    await screen.findAllByDisplayValue('Ada Lovelace');
+    expect(screen.getByTestId('orders-table-view')).toHaveClass('block');
+  });
+
+  it('keeps inline order controls available in card view', async () => {
+    const items = [
+      {
+        id: 11,
+        createdAt: '2026-03-01T10:00:00.000Z',
+        updatedAt: '2026-03-01T10:00:00.000Z',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        fullName: 'Ada Lovelace',
+        phoneNumber1: '0550000001',
+        phoneNumber2: null,
+        cartProducts: ['1'],
+        orderProducts: [{
+          productId: 1,
+          rawValue: '1',
+          title: 'Chair',
+          unitPrice: 1000,
+          quantity: 1,
+          lineTotal: 1000,
+          thumbnailUrl: 'https://cdn.example.com/chair.jpg',
+          missing: false,
+        }],
+        delivery: 0,
+        state: 16,
+        city: 'Bab Ezzouar',
+        homeAddress: 'Street 1',
+        productSubtotal: 1000,
+        deliveryFee: 200,
+        totalAmount: 1200,
+        note: 'Call first',
+        confirmed: 1,
+        noAnswerCount: 1,
+        confirmedBy: 'admin@example.com',
+        confirmedByName: 'Admin',
+        confirmedAt: '2026-03-01T11:00:00.000Z',
+        hasStatusHistory: true,
+        statusHistory: [],
+      },
+    ];
+
+    server.use(
+      http.get('/api/orders', ({ request }) => HttpResponse.json(paginatedOrdersResponse(items, request.url))),
+    );
+
+    renderOrdersManager();
+
+    await screen.findAllByDisplayValue('Ada Lovelace');
+    const cardView = screen.getByTestId('orders-card-view');
+    expect(within(cardView).getAllByRole('button', { name: 'ordersManager.actions.editProducts' }).length).toBeGreaterThan(0);
+    expect(within(cardView).getAllByLabelText('ordersManager.phone.label').length).toBeGreaterThan(0);
+    expect(within(cardView).getByRole('combobox', { name: 'ordersManager.columns.status' })).toBeInTheDocument();
+    expect(within(cardView).getByRole('combobox', { name: 'ordersManager.address.region' })).toBeInTheDocument();
+    expect(within(cardView).getByRole('button', { name: 'ordersManager.notes.save' })).toBeInTheDocument();
   });
 
   it('renders the orders table and filters by search', async () => {
@@ -227,24 +337,24 @@ describe('OrdersManager', () => {
 
     renderOrdersManager();
 
-    expect((await screen.findAllByText('Ada Lovelace')).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Grace Hopper').length).toBeGreaterThan(0);
+    expect((await screen.findAllByDisplayValue('Ada Lovelace')).length).toBeGreaterThan(0);
+    expect(screen.getAllByDisplayValue('Grace Hopper').length).toBeGreaterThan(0);
     expect(screen.getAllByText('TRK-1').length).toBeGreaterThan(0);
 
     // Mobile card layout must not force horizontal overflow on narrow screens.
     // The phone row should preserve a readable phone width while still wrapping controls.
     const phoneInputs = await screen.findAllByLabelText('ordersManager.phone.label');
-    const phoneInput = phoneInputs.find((node) => node.className.includes('basis-48'));
+    const phoneInput = phoneInputs.find((node) => node.className.includes('w-[9.5rem]'));
     expect(phoneInput).toBeTruthy();
-    expect(phoneInput).toHaveClass('min-w-[13rem]');
-    expect(phoneInput).toHaveClass('flex-1');
-    expect(phoneInput).toHaveClass('basis-48');
+    expect(phoneInput).toHaveClass('h-8');
+    expect(phoneInput).toHaveClass('w-[9.5rem]');
+    expect(phoneInput).toHaveClass('flex-none');
 
     await userEvent.type(screen.getByPlaceholderText('ordersManager.searchPlaceholder'), '0550000002');
 
     await waitFor(() => {
-      expect(screen.queryAllByText('Ada Lovelace')).toHaveLength(0);
-      expect(screen.getAllByText('Grace Hopper').length).toBeGreaterThan(0);
+      expect(screen.queryAllByDisplayValue('Ada Lovelace')).toHaveLength(0);
+      expect(screen.getAllByDisplayValue('Grace Hopper').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Alger').length).toBeGreaterThan(0);
     });
   });
@@ -327,18 +437,18 @@ describe('OrdersManager', () => {
 
     renderOrdersManager({ initialOrders });
 
-    expect((await screen.findAllByText('Ada Lovelace')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByDisplayValue('Ada Lovelace')).length).toBeGreaterThan(0);
 
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'ordersManager.filters.statusLabel' }), '2');
 
     await waitFor(() => {
-      expect(screen.queryAllByText('Ada Lovelace')).toHaveLength(0);
+      expect(screen.queryAllByDisplayValue('Ada Lovelace')).toHaveLength(0);
     });
 
-    expect(screen.queryAllByText('Grace Hopper').length).toBe(0);
+    expect(screen.queryAllByDisplayValue('Grace Hopper').length).toBe(0);
 
     await waitFor(() => {
-      expect(screen.getAllByText('Grace Hopper').length).toBeGreaterThan(0);
+      expect(screen.getAllByDisplayValue('Grace Hopper').length).toBeGreaterThan(0);
     });
   });
 
@@ -379,7 +489,7 @@ describe('OrdersManager', () => {
 
     renderOrdersManager();
 
-    expect((await screen.findAllByText('Grace Hopper')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByDisplayValue('Grace Hopper')).length).toBeGreaterThan(0);
     expect(screen.getAllByText('Alger / Bab Ezzouar').length).toBeGreaterThan(0);
   });
 
@@ -437,7 +547,7 @@ describe('OrdersManager', () => {
 
     renderOrdersManager();
 
-    expect(await screen.findAllByText('Grace Hopper')).not.toHaveLength(0);
+    expect(await screen.findAllByDisplayValue('Grace Hopper')).not.toHaveLength(0);
     await userEvent.click(screen.getAllByRole('button', { name: 'ordersManager.history.button' })[0]);
 
     const dialog = await screen.findByRole('dialog');
@@ -577,15 +687,15 @@ describe('OrdersManager', () => {
 
     renderOrdersManager();
 
-    expect((await screen.findAllByText('Ada Lovelace')).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Grace Hopper').length).toBeGreaterThan(0);
+    expect((await screen.findAllByDisplayValue('Ada Lovelace')).length).toBeGreaterThan(0);
+    expect(screen.getAllByDisplayValue('Grace Hopper').length).toBeGreaterThan(0);
 
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'ordersManager.filters.statusLabel' }), '3');
 
     await waitFor(() => {
-      expect(screen.queryAllByText('Ada Lovelace')).toHaveLength(0);
+      expect(screen.queryAllByDisplayValue('Ada Lovelace')).toHaveLength(0);
     });
-    expect(screen.getAllByText('Grace Hopper').length).toBeGreaterThan(0);
+    expect(screen.getAllByDisplayValue('Grace Hopper').length).toBeGreaterThan(0);
   });
 
   it('saves phone updates and deletes orders with toast feedback', async () => {
@@ -648,7 +758,7 @@ describe('OrdersManager', () => {
 
     renderOrdersManager();
 
-    expect((await screen.findAllByText('Ada Lovelace')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByDisplayValue('Ada Lovelace')).length).toBeGreaterThan(0);
 
     const phoneInput = screen.getAllByDisplayValue('0550000001')[0]!;
     await userEvent.clear(phoneInput);
@@ -666,8 +776,78 @@ describe('OrdersManager', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'actions.delete' }));
 
     await waitFor(() => {
-      expect(screen.queryAllByText('Ada Lovelace')).toHaveLength(0);
+      expect(screen.queryAllByDisplayValue('Ada Lovelace')).toHaveLength(0);
     });
+  });
+
+  it('saves customer name updates inline', async () => {
+    const items = [
+      {
+        id: 1,
+        createdAt: '2026-03-01T10:00:00.000Z',
+        updatedAt: '2026-03-01T10:00:00.000Z',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        fullName: 'Ada Lovelace',
+        phoneNumber1: '0550000001',
+        phoneNumber2: null,
+        cartProducts: ['1'],
+        orderProducts: [{
+          productId: 1,
+          rawValue: '1',
+          title: 'Chair',
+          unitPrice: 1000,
+          quantity: 1,
+          lineTotal: 1000,
+          thumbnailUrl: 'https://cdn.example.com/chair.jpg',
+          missing: false,
+        }],
+        delivery: 0,
+        state: 16,
+        city: 'Bab Ezzouar',
+        homeAddress: 'Street 1',
+        productSubtotal: 1000,
+        deliveryFee: 200,
+        totalAmount: 1200,
+        note: null,
+        confirmed: 1,
+        noAnswerCount: 0,
+        confirmedBy: null,
+        confirmedByName: null,
+        confirmedAt: null,
+        hasStatusHistory: false,
+        statusHistory: [],
+      },
+    ];
+
+    server.use(
+      http.get('/api/orders', ({ request }) => HttpResponse.json(paginatedOrdersResponse(items, request.url))),
+      http.patch('/api/orders/1', async ({ request }) => {
+        const body = (await request.json()) as { firstName?: string | null; lastName?: string | null };
+        items[0] = {
+          ...items[0],
+          firstName: body.firstName ?? items[0].firstName,
+          lastName: body.lastName ?? items[0].lastName,
+          fullName: [body.firstName ?? items[0].firstName, body.lastName ?? items[0].lastName].filter(Boolean).join(' '),
+          updatedAt: '2026-03-02T10:00:00.000Z',
+        };
+
+        return HttpResponse.json({ ok: true, item: items[0] });
+      }),
+    );
+
+    renderOrdersManager();
+
+    const nameInput = (await screen.findAllByLabelText('ordersManager.name.label'))[0]!;
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, 'Ada Byron');
+    await userEvent.click(screen.getAllByRole('button', { name: 'ordersManager.name.save' })[0]!);
+
+    await waitFor(() => {
+      expect(screen.getAllByDisplayValue('Ada Byron')[0]).toBeInTheDocument();
+    });
+    expect(toastMock.loading).toHaveBeenCalled();
+    expect(toastMock.success).toHaveBeenCalled();
   });
 
   it('shows a leading zero for stored phone numbers that do not include it', async () => {
@@ -814,7 +994,7 @@ describe('OrdersManager', () => {
 
     renderOrdersManager();
 
-    expect((await screen.findAllByText('Margaret Hamilton')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByDisplayValue('Margaret Hamilton')).length).toBeGreaterThan(0);
 
     await userEvent.click(screen.getAllByRole('button', { name: 'ordersManager.actions.editProducts' })[0]);
 
@@ -969,7 +1149,7 @@ describe('OrdersManager', () => {
 
     renderOrdersManager();
 
-    expect((await screen.findAllByText('Dorothy Vaughan')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByDisplayValue('Dorothy Vaughan')).length).toBeGreaterThan(0);
 
     await userEvent.click(screen.getAllByRole('button', { name: 'ordersManager.status.increaseNoAnswer:3' })[0]);
 
@@ -1034,7 +1214,7 @@ describe('OrdersManager', () => {
 
     renderOrdersManager();
 
-    expect((await screen.findAllByText('Mary Jackson')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByDisplayValue('Mary Jackson')).length).toBeGreaterThan(0);
 
     const deliverySelects = screen.getAllByLabelText('ordersManager.address.delivery');
     await userEvent.selectOptions(deliverySelects[0], '1');
@@ -1100,7 +1280,7 @@ describe('OrdersManager', () => {
 
     renderOrdersManager();
 
-    expect((await screen.findAllByText('Mary Jackson')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByDisplayValue('Mary Jackson')).length).toBeGreaterThan(0);
     expect(screen.getAllByPlaceholderText('ordersManager.placeholders.street').length).toBeGreaterThan(0);
 
     const deliverySelects = screen.getAllByLabelText('ordersManager.address.delivery');
@@ -1184,7 +1364,7 @@ describe('OrdersManager', () => {
 
     renderOrdersManager();
 
-    expect((await screen.findAllByText('Annie Easley')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByDisplayValue('Annie Easley')).length).toBeGreaterThan(0);
 
     const regionSelects = screen.getAllByLabelText('ordersManager.address.region');
     await userEvent.selectOptions(regionSelects[0], '31');
@@ -1268,7 +1448,7 @@ describe('OrdersManager', () => {
 
     renderOrdersManager();
 
-    expect((await screen.findAllByText('Sally Ride')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByDisplayValue('Sally Ride')).length).toBeGreaterThan(0);
 
     const citySelects = screen.getAllByLabelText('ordersManager.address.city');
     await userEvent.selectOptions(citySelects[0], '43');

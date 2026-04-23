@@ -11,7 +11,7 @@ storefront_domain="${BRIC_STOREFRONT_DOMAIN:-www.example.com}"
 curl --fail --silent --show-error --header "Host: $admin_domain" "$proxy_url/api/health" >/dev/null
 curl --fail --silent --show-error --header "Host: $api_domain" "$proxy_url/api/health" >/dev/null
 curl --fail --silent --show-error --header "Host: $storefront_domain" "$proxy_url/api/health" >/dev/null
-curl --fail --silent --show-error --header "Host: $storefront_domain" "$proxy_url/api/health?sf_variant=new" >/dev/null
-curl --fail --silent --show-error --header "Host: $storefront_domain" "$proxy_url/api/health?sf_variant=legacy" >/dev/null
+curl --fail --silent --show-error --header "Host: $storefront_domain" "$proxy_url/api/health?sf_variant=control" >/dev/null
+curl --fail --silent --show-error --header "Host: $storefront_domain" "$proxy_url/api/health?sf_variant=fast_checkout" >/dev/null
 
 echo "smoke checks passed"

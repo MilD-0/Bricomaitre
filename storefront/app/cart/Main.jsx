@@ -5,7 +5,12 @@ import { CartContext } from "../components/cartContext";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { handleInitiateCheckout } from "../components/Init";
-import { buildItemArray, trackAnalyticsEvent } from "@/lib/analytics";
+import {
+  buildItemArray,
+  getAnalyticsContextMetadata,
+  trackAnalyticsEvent,
+} from "@/lib/analytics";
+import { isPaidTrafficSession } from "@/lib/paid-session";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useSearchParams } from "next/navigation";
 
@@ -25,6 +30,7 @@ function CartPage() {
   const { cartProducts, addProduct, removeProduct, cartSummary, rememberProducts } = useContext(CartContext);
   const [products, setProducts] = useState([]);
   const lastLoadedCartKeyRef = useRef("");
+  const paidSession = isPaidTrafficSession();
   const checkoutHref = (() => {
     const query = searchParams?.toString() ?? "";
     return query ? `/checkout?${query}` : "/checkout";
@@ -80,7 +86,7 @@ function CartPage() {
 
     lastLoadedCartKeyRef.current = cartKey;
     void loadCartProducts();
-  }, [cartProducts, loadCartProducts]);
+  }, [cartProducts]);
 
   useEffect(() => {
     if (products.length === 0) {
@@ -109,6 +115,21 @@ function CartPage() {
   const total = cartSummary.subtotal;
 
   async function goToCheckout() {
+    void trackAnalyticsEvent({
+      eventName: "cart_checkout_click",
+      gaEventName: "cart_checkout_click",
+      quantity: cartProducts.length,
+      value: total,
+      metadata: {
+        ...getAnalyticsContextMetadata({
+          paidSession,
+          sourceSurface: "cart",
+        }),
+        cartItemCount: cartProducts.length,
+        cartSubtotal: total,
+      },
+    }).catch((error) => console.error(error));
+
     await waitForTracking(handleInitiateCheckout({
       products,
       totalValue: total,
@@ -181,6 +202,9 @@ function CartPage() {
         <aside className="sf-panel h-fit border border-teal-100 shadow-xl shadow-slate-900/5 lg:sticky lg:top-24">
           <p className="sf-kicker">{t("cart")}</p>
           <h2 className="mt-3 text-2xl font-semibold text-slate-900">{t("ent")}</h2>
+          <p className="mt-3 rounded-[1rem] border border-teal-100 bg-teal-50 px-4 py-3 text-sm text-teal-900">
+            {t("cartFastNote")}
+          </p>
           <div className="mt-6 rounded-[1.25rem] border border-slate-200 bg-slate-50 p-4">
           <div className="sf-metric mt-0">
             <span className="font-semibold text-slate-700">{t("sous")}</span>
