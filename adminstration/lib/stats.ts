@@ -54,6 +54,54 @@ export const statsQuerySchema = z
 
 export type StatsFilters = z.infer<typeof statsQuerySchema>;
 
+const PHONE_MATCH_MAX_AGE_MS = 21 * 24 * 60 * 60 * 1000;
+
+export function isNumericOrderReference(value: string) {
+  return /^\d+$/.test(value.trim());
+}
+
+export function normalizePhoneDigits(value: string) {
+  return value.replace(/\D+/g, '');
+}
+
+export function resolveOrderByPhoneAndDate<T extends { createdAt: Date | null; id?: number | string }>(
+  candidates: T[],
+  phoneDate: Date | null,
+) {
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  if (candidates.length === 1) {
+    return candidates[0] ?? null;
+  }
+
+  if (!(phoneDate instanceof Date) || Number.isNaN(phoneDate.getTime())) {
+    return null;
+  }
+
+  const ranked = candidates
+    .filter((candidate) => candidate.createdAt instanceof Date && !Number.isNaN(candidate.createdAt.getTime()))
+    .map((candidate) => ({
+      candidate,
+      delta: Math.abs(candidate.createdAt!.getTime() - phoneDate.getTime()),
+    }))
+    .sort((left, right) => left.delta - right.delta);
+
+  const best = ranked[0];
+  const next = ranked[1];
+
+  if (!best || best.delta > PHONE_MATCH_MAX_AGE_MS) {
+    return null;
+  }
+
+  if (next && next.delta === best.delta) {
+    return null;
+  }
+
+  return best.candidate;
+}
+
 type SpreadsheetRow = {
   encaisseLe: Date | null;
   montant: number;
@@ -555,7 +603,7 @@ async function getWebsiteAnalyticsData(db: ReturnType<typeof getDb>, analyticsWh
       .where(analyticsWhere),
     db
       .select({
-        variant: sql<string>`coalesce(nullif(${analyticsEvents.metadata}->>'storefrontVariant', ''), 'new')`,
+        variant: sql<string>`coalesce(nullif(${analyticsEvents.metadata}->>'requestedVariant', ''), nullif(${analyticsEvents.metadata}->>'storefrontVariant', ''), 'control')`,
         sessions: sql<number>`count(distinct case when ${analyticsEvents.eventName} = 'page_view' then ${analyticsEvents.sessionId} end)::int`,
         pageViews: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'page_view')::int`,
         productViews: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'view_item')::int`,
@@ -1554,7 +1602,9 @@ export async function importStatsSpreadsheet(buffer: Buffer, fileName: string): 
 
   const references = [...new Set(rows.map((row) => row.reference).filter(Boolean))];
   const trackings = [...new Set(rows.map((row) => row.tracking).filter(Boolean))];
+  const phones = [...new Set(rows.map((row) => normalizePhoneDigits(row.telephone)).filter(Boolean))];
   const numericReferences = references
+    .filter(isNumericOrderReference)
     .map((value) => Number.parseInt(value, 10))
     .filter((value) => Number.isFinite(value));
 
@@ -1566,22 +1616,50 @@ export async function importStatsSpreadsheet(buffer: Buffer, fileName: string): 
 
   if (references.length > 0) {
     orderConditions.push(inArray(orders.ecotrackReference, references));
+    orderConditions.push(inArray(orders.mongoId, references));
   }
 
   if (trackings.length > 0) {
     orderConditions.push(inArray(orders.ecotrackTrackingNumber, trackings));
   }
 
-  const [candidateOrders, existingRows] = await Promise.all([
+  const [candidateOrders, phoneCandidateOrders, existingRows] = await Promise.all([
     orderConditions.length > 0
       ? db.select().from(orders).where(or(...orderConditions))
+      : Promise.resolve([]),
+    phones.length > 0
+      ? db
+        .select({
+          id: orders.id,
+          mongoId: orders.mongoId,
+          firstName: orders.firstName,
+          lastName: orders.lastName,
+          state: orders.state,
+          city: orders.city,
+          delivery: orders.delivery,
+          createdAt: orders.createdAt,
+          cartProducts: orders.cartProducts,
+          ecotrackReference: orders.ecotrackReference,
+          ecotrackTrackingNumber: orders.ecotrackTrackingNumber,
+          phoneNumber1: sql<string>`regexp_replace(coalesce(${orders.phoneNumber1}, ''), '\\D', '', 'g')`,
+          phoneNumber2: sql<string>`regexp_replace(coalesce(${orders.phoneNumber2}, ''), '\\D', '', 'g')`,
+        })
+        .from(orders)
+        .where(or(
+          inArray(sql<string>`regexp_replace(coalesce(${orders.phoneNumber1}, ''), '\\D', '', 'g')`, phones),
+          inArray(sql<string>`regexp_replace(coalesce(${orders.phoneNumber2}, ''), '\\D', '', 'g')`, phones),
+        ))
       : Promise.resolve([]),
     trackings.length > 0
       ? db.select({ tracking: processedOrders.tracking }).from(processedOrders).where(inArray(processedOrders.tracking, trackings))
       : Promise.resolve([]),
   ]);
 
-  const cartProductReferences = collectCartProductReferenceBuckets(candidateOrders);
+  const allCandidateOrders = [
+    ...candidateOrders,
+    ...phoneCandidateOrders.filter((phoneOrder) => !candidateOrders.some((order) => order.id === phoneOrder.id)),
+  ];
+  const cartProductReferences = collectCartProductReferenceBuckets(allCandidateOrders);
 
   const productRows = cartProductReferences.productIds.length === 0 && cartProductReferences.mongoIds.length === 0
     ? []
@@ -1606,17 +1684,32 @@ export async function importStatsSpreadsheet(buffer: Buffer, fileName: string): 
         ...(cartProductReferences.mongoIds.length > 0 ? [inArray(products.mongoId, cartProductReferences.mongoIds)] : []),
       ));
 
-  const orderById = new Map(candidateOrders.map((order) => [String(order.id), order]));
+  const orderById = new Map(allCandidateOrders.map((order) => [String(order.id), order]));
   const orderByReference = new Map(
-    candidateOrders
+    allCandidateOrders
       .filter((order) => order.ecotrackReference)
       .map((order) => [order.ecotrackReference ?? '', order]),
   );
+  const orderByMongoId = new Map(
+    allCandidateOrders
+      .filter((order) => order.mongoId)
+      .map((order) => [order.mongoId ?? '', order]),
+  );
   const orderByTracking = new Map(
-    candidateOrders
+    allCandidateOrders
       .filter((order) => order.ecotrackTrackingNumber)
       .map((order) => [order.ecotrackTrackingNumber ?? '', order]),
   );
+  const orderByPhone = new Map<string, typeof allCandidateOrders>();
+  for (const order of phoneCandidateOrders) {
+    for (const phone of [order.phoneNumber1, order.phoneNumber2].filter(Boolean)) {
+      const current = orderByPhone.get(phone) ?? [];
+      if (!current.some((candidate) => candidate.id === order.id)) {
+        current.push(order);
+      }
+      orderByPhone.set(phone, current);
+    }
+  }
   const productLookup = buildCartProductLookup(productRows);
   const existingTrackings = new Set(existingRows.map((row) => row.tracking));
 
@@ -1635,9 +1728,12 @@ export async function importStatsSpreadsheet(buffer: Buffer, fileName: string): 
     const matchedOrder =
       orderById.get(row.reference)
       ?? orderByReference.get(row.reference)
+      ?? orderByMongoId.get(row.reference)
       ?? orderByTracking.get(row.tracking);
+    const phoneMatchedOrder = matchedOrder
+      ?? resolveOrderByPhoneAndDate(orderByPhone.get(normalizePhoneDigits(row.telephone)) ?? [], row.creeLe);
 
-    if (!matchedOrder) {
+    if (!phoneMatchedOrder) {
       unmatchedReferences.push(row.reference || row.tracking);
       unmatchedDetails.push({
         reference: row.reference,
@@ -1653,7 +1749,7 @@ export async function importStatsSpreadsheet(buffer: Buffer, fileName: string): 
       continue;
     }
 
-    const matchedProducts = matchedOrder.cartProducts
+    const matchedProducts = phoneMatchedOrder.cartProducts
       .map((value) => getCartProductLookupKey(value))
       .filter((value): value is string => Boolean(value))
       .map((lookupKey) => productLookup.get(lookupKey))
@@ -1668,12 +1764,12 @@ export async function importStatsSpreadsheet(buffer: Buffer, fileName: string): 
     const profit = netRevenue - productCost;
 
     processedOrderValues.push({
-      orderId: String(matchedOrder.id),
+      orderId: String(phoneMatchedOrder.id),
       tracking: row.tracking,
-      customerName: row.destinataire || [matchedOrder.firstName, matchedOrder.lastName].filter(Boolean).join(' '),
-      wilaya: row.wilaya || String(matchedOrder.state || ''),
-      commune: row.commune || matchedOrder.city || '',
-      deliveryType: row.typePrestation || row.type || String(matchedOrder.delivery || ''),
+      customerName: row.destinataire || [phoneMatchedOrder.firstName, phoneMatchedOrder.lastName].filter(Boolean).join(' '),
+      wilaya: row.wilaya || String(phoneMatchedOrder.state || ''),
+      commune: row.commune || phoneMatchedOrder.city || '',
+      deliveryType: row.typePrestation || row.type || String(phoneMatchedOrder.delivery || ''),
       amountCollected: amountCollected.toFixed(2),
       totalFees: totalFees.toFixed(2),
       netRevenue: netRevenue.toFixed(2),
@@ -1686,7 +1782,7 @@ export async function importStatsSpreadsheet(buffer: Buffer, fileName: string): 
       feeStockage: row.fraisStockage.toFixed(2),
       feeCommission: row.commissionRecouvrement.toFixed(2),
       deliveredAt: row.encaisseLe,
-      orderCreatedAt: matchedOrder.createdAt,
+      orderCreatedAt: phoneMatchedOrder.createdAt,
       encaissedAt: row.encaisseLe ?? row.creeLe,
       importBatchId: batchId,
     });

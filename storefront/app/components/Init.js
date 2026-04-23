@@ -174,6 +174,30 @@ function buildMetaCommerceData(products, value) {
   };
 }
 
+function consumeInitialViewContentEvent(product) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const pending = window.__bricInitialViewContent;
+  if (!pending || typeof pending !== "object") {
+    return null;
+  }
+
+  const productKey = getMetaContentId(product);
+  if (!productKey || pending.productKey !== productKey) {
+    return null;
+  }
+
+  const eventId =
+    typeof pending.eventId === "string" && pending.eventId.trim().length > 0
+      ? pending.eventId.trim()
+      : null;
+
+  window.__bricInitialViewContent = null;
+  return eventId ? { eventId } : null;
+}
+
 // -------------------- Core Tracking --------------------
 function waitForFbq(timeoutMs = 3000) {
   if (typeof window === "undefined") {
@@ -214,8 +238,22 @@ async function trackFacebookEvent({
   eventTime,
   skipStorage = false,
   skipPixel = false,
+  initialBrowserEventAlreadySent = false,
 }) {
-  const ev_id = eventId || uuidv4();
+  const useInitialBrowserPageView =
+    name === "PageView"
+    && typeof window !== "undefined"
+    && window.__bricInitialPageViewSent === true;
+
+  const sharedInitialPageViewEventId =
+    useInitialBrowserPageView
+    && typeof window !== "undefined"
+    && typeof window.__bricInitialPageViewEventId === "string"
+    && window.__bricInitialPageViewEventId.length > 0
+      ? window.__bricInitialPageViewEventId
+      : null;
+
+  const ev_id = sharedInitialPageViewEventId || eventId || uuidv4();
   const ev_time = eventTime || Math.floor(Date.now() / 1000);
   let metaOk = true;
   let metaStatus = null;
@@ -225,7 +263,13 @@ async function trackFacebookEvent({
   const hasPixelData =
     pixelData && typeof pixelData === "object" && Object.keys(pixelData).length;
 
-  if (!skipPixel && (await waitForFbq())) {
+  if (initialBrowserEventAlreadySent || useInitialBrowserPageView) {
+    pixelFired = true;
+    if (useInitialBrowserPageView) {
+      window.__bricInitialPageViewSent = false;
+      window.__bricInitialPageViewEventId = null;
+    }
+  } else if (!skipPixel && (await waitForFbq())) {
     pixelFired = true;
     // PageView commonly has no params; still fire it.
     if (hasPixelData) {
@@ -337,11 +381,14 @@ function buildMetaAnalyticsMetadata(result, pixelData, capiData) {
 export async function handleViewProduct({ product, additionalUserData = {} }) {
   const analyticsItem = buildItemArray([product])[0];
   const data = buildMetaCommerceData([product], product.price);
+  const initialViewContentEvent = consumeInitialViewContentEvent(product);
   const metaResult = await trackFacebookEvent({
     name: "ViewContent",
     pixelData: data,
     capiData: data,
     additionalUserData,
+    eventId: initialViewContentEvent?.eventId,
+    initialBrowserEventAlreadySent: Boolean(initialViewContentEvent),
   });
 
   void trackAnalyticsEvent({
@@ -492,17 +539,32 @@ export async function enrichPastEvents() {
   if (!pastEvents.length) return;
 
   const enrichedUserData = buildFacebookUserData();
+  const replayFailures = [];
 
   for (const ev of pastEvents) {
-    await trackFacebookEvent({
-      name: ev.name,
-      capiData: ev.capiData || {},
-      additionalUserData: enrichedUserData,
-      eventId: ev.eventId,
-      eventTime: ev.eventTime,
-      skipStorage: true,
-      skipPixel: true,
-    });
+    try {
+      const result = await trackFacebookEvent({
+        name: ev.name,
+        capiData: ev.capiData || {},
+        additionalUserData: enrichedUserData,
+        eventId: ev.eventId,
+        eventTime: ev.eventTime,
+        skipStorage: true,
+        skipPixel: true,
+      });
+
+      if (result?.metaOk === false) {
+        replayFailures.push(ev);
+      }
+    } catch (error) {
+      console.error(error);
+      replayFailures.push(ev);
+    }
+  }
+
+  if (replayFailures.length > 0) {
+    sessionStorage.setItem("pastEvents", JSON.stringify(replayFailures));
+    return;
   }
 
   sessionStorage.removeItem("pastEvents");

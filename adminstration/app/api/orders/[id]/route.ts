@@ -99,6 +99,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const update: Partial<InferInsertModel<typeof orders>> & { updatedAt: Date } = {
         updatedAt: now,
       };
+      if (changes.firstName !== undefined) {
+        update.firstName = changes.firstName;
+      }
+      if (changes.lastName !== undefined) {
+        update.lastName = changes.lastName;
+      }
       const nextPhoneNumber1 = changes.phoneNumber1 ?? existing.phoneNumber1;
       const nextDelivery = coerceDeliveryType(changes.delivery ?? existing.delivery);
       const nextState = changes.state !== undefined ? changes.state : existing.state;

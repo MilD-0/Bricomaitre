@@ -259,6 +259,11 @@
         "success": "تم تحديث {count} من الطلبات.",
         "error": "تعذر تحديث {count} من الطلبات."
       },
+      "name": {
+        "loading": "جارٍ حفظ الاسم لـ {name}...",
+        "success": "تم حفظ الاسم لـ {name}.",
+        "error": "تعذر حفظ الاسم لـ {name}."
+      },
       "phone": {
         "loading": "جارٍ حفظ رقم الهاتف لـ {name}...",
         "success": "تم حفظ رقم الهاتف لـ {name}.",
@@ -342,14 +347,14 @@
         "range7d": "آخر 7 أيام",
         "range30d": "آخر 30 يوماً",
         "variantAll": "كل النسخ",
-        "variantNew": "الواجهة الجديدة",
-        "variantLegacy": "الواجهة القديمة",
+        "variantControl": "النسخة القياسية",
+        "variantFastCheckout": "الدفع السريع",
         "sourceAll": "كل المصادر",
         "outcomeAll": "كل النتائج",
         "hasOrderAll": "مع وبدون طلب",
         "hasOrderYes": "مع طلب",
         "hasOrderNo": "بدون طلب",
-        "searchPlaceholder": "ابحث عن مسار الهبوط أو slug"
+        "searchPlaceholder": "ابحث عن مسار الدخول أو slug"
       },
       "summary": {
         "visits": "الزيارات",
@@ -372,7 +377,7 @@
       },
       "table": {
         "firstSeen": "أول ظهور",
-        "landingPath": "مسار الهبوط",
+        "landingPath": "مسار الدخول",
         "productSlug": "Slug المنتج",
         "variant": "النسخة",
         "source": "المصدر المدفوع",
@@ -389,9 +394,9 @@
       },
       "detail": {
         "title": "تفاصيل الزيارة المدفوعة",
-        "description": "رابط الهبوط الدقيق وتسلسل الأحداث لزائر مدفوع واحد.",
+        "description": "مسار الدخول الدقيق وتسلسل الأحداث لزائر مدفوع واحد.",
         "visitId": "معرّف الزيارة",
-        "landingUrl": "رابط الهبوط",
+        "landingUrl": "رابط الدخول",
         "variant": "النسخة المعروضة",
         "requestedVariant": "النسخة المطلوبة",
         "journeyId": "معرّف الرحلة",
@@ -571,14 +576,14 @@
         "cartRate": "من السلة إلى الشراء"
       },
       "landing": {
-        "title": "أهم صفحات الهبوط",
+        "title": "أهم صفحات الدخول",
         "columns": {
-          "path": "صفحة الهبوط",
+          "path": "صفحة الدخول",
           "sessions": "الجلسات"
         }
       },
       "variants": {
-        "title": "مقارنة نسخ المتجر",
+        "title": "مقارنة نسخ تصميم المتجر",
         "columns": {
           "variant": "النسخة",
           "sessions": "الجلسات",
@@ -590,7 +595,9 @@
         },
         "values": {
           "new": "المتجر الجديد",
-          "legacy": "المتجر القديم"
+          "legacy": "المتجر القديم",
+          "control": "النسخة القياسية",
+          "fastCheckout": "الدفع السريع"
         }
       },
       "search": {
@@ -921,6 +928,15 @@
     "administration": "نظرة عامة على الإدارة وسجل الإجراءات."
   },
   "products": {
+    "view": {
+      "cards": "بطاقات",
+      "table": "جدول"
+    },
+    "copy": {
+      "action": "نسخ معرّفات المنتجات",
+      "success": "تم نسخ معرّفات {count} من المنتجات.",
+      "error": "تعذّر نسخ معرّفات {count} من المنتجات."
+    },
     "export": {
       "action": "تصدير كتالوج Meta",
       "title": "تصدير {count} من المنتجات إلى كتالوج Meta",
@@ -967,6 +983,10 @@
     }
   },
   "ordersManager": {
+    "view": {
+      "cards": "بطاقات",
+      "table": "جدول"
+    },
     "searchPlaceholder": "ابحث باسم العميل أو رقم الهاتف",
     "filters": {
       "statusLabel": "تصفية حسب الحالة",
@@ -987,6 +1007,11 @@
       "call": "الاتصال برقم الهاتف",
       "save": "حفظ الهاتف",
       "cancel": "إلغاء تعديل الهاتف"
+    },
+    "name": {
+      "label": "اسم العميل",
+      "save": "حفظ الاسم",
+      "cancel": "إلغاء تعديل الاسم"
     },
     "copy": {
       "label": "نسخ رقم الهاتف",

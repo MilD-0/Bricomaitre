@@ -46,6 +46,7 @@ import { Switch } from './ui/switch';
 import { TablePaginationControls } from './table-pagination-controls';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Textarea } from './ui/textarea';
+import { ViewModeToggle, type ViewMode } from './view-mode-toggle';
 
 type BrandOption = { id: number; name: string };
 type CategoryOption = { id: number; name: string; parentId: number | null };
@@ -96,6 +97,7 @@ type ProductExportJobResponse = { job: ProductExportAllJob | null };
 type ImageOriginFilter = (typeof imageOriginFilterValues)[number];
 
 const PRODUCT_DIALOG_STORAGE_KEY = 'products-dialog-state-v2';
+const PRODUCTS_VIEW_MODE_STORAGE_KEY = 'products-view-mode-v1';
 const defaults: ProductPayloadInput = {
   title: '',
   titleAr: null,
@@ -602,6 +604,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
   const [dialogState, setDialogState] = useState<ProductDialogState>({ open: false, mode: 'create', editingId: null });
   const [isFilterPending, startFilterTransition] = useTransition();
   const [hoveredProductId, setHoveredProductId] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const hydratedRef = useRef(false);
   const initializedExportStatusRef = useRef(false);
   const lastExportStatusKeyRef = useRef<string | null>(null);
@@ -677,6 +680,13 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
     }
     hydratedRef.current = true;
   }, [form]);
+
+  useEffect(() => {
+    const stored = readStorage<ViewMode>(PRODUCTS_VIEW_MODE_STORAGE_KEY);
+    if (stored === 'cards' || stored === 'table') {
+      setViewMode(stored);
+    }
+  }, []);
 
   useEffect(() => {
     if (!hydratedRef.current) {
@@ -1025,6 +1035,19 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
     setMetaCatalogExportState(null);
   }
 
+  async function copySelectedProductIds() {
+    if (selectedIds.length === 0) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(selectedIds.join(','));
+      toast.success(t('products.copy.success', { count: selectedIds.length }));
+    } catch {
+      toast.error(t('products.copy.error', { count: selectedIds.length }));
+    }
+  }
+
   function downloadExportJob() {
     if (!exportJob?.downloadPath) {
       return;
@@ -1061,6 +1084,15 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
                   setPage(1);
                   setSearch(value);
                 });
+              }}
+            />
+            <ViewModeToggle
+              value={viewMode}
+              cardsLabel={t('products.view.cards')}
+              tableLabel={t('products.view.table')}
+              onChange={(nextViewMode) => {
+                setViewMode(nextViewMode);
+                writeStorage(PRODUCTS_VIEW_MODE_STORAGE_KEY, nextViewMode);
               }}
             />
             <div className="grid gap-3 sm:grid-cols-3 lg:w-[42rem]">
@@ -1172,6 +1204,15 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
               variant="outline"
               size="sm"
               disabled={selectedIds.length === 0}
+              onClick={() => void copySelectedProductIds()}
+            >
+              {t('products.copy.action')}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={selectedIds.length === 0}
               onClick={openMetaCatalogExportPreview}
             >
               {t('products.export.action')}
@@ -1210,7 +1251,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
 
       <div className="relative" aria-busy={productsQuery.isFetching}>
         <div className={productsQuery.isFetching ? 'transition-opacity duration-200 opacity-70' : 'transition-opacity duration-200'}>
-      <div className="hidden overflow-x-auto md:block">
+      <div className={cn('overflow-x-auto px-4 pb-4', viewMode === 'table' ? 'block' : 'hidden')} data-testid="products-table-view">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -1337,7 +1378,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
         </Table>
       </div>
 
-      <div className="grid gap-3 px-4 pb-4 md:hidden">
+      <div className={cn('grid gap-3 px-4 pb-4', viewMode === 'cards' ? 'grid' : 'hidden')} data-testid="products-card-view">
         {paginatedItems.map((product) => (
           <Card key={product.id} className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-card p-0 shadow-sm">
             <div className="relative aspect-[4/3] overflow-hidden border-b border-border/60 bg-muted/60">

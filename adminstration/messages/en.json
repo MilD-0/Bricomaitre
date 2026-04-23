@@ -254,6 +254,11 @@
       }
     },
     "orders": {
+      "name": {
+        "loading": "Saving name for {name}...",
+        "success": "Saved name for {name}.",
+        "error": "Failed to save name for {name}."
+      },
       "phone": {
         "loading": "Saving phone for {name}...",
         "success": "Saved phone for {name}.",
@@ -337,14 +342,14 @@
         "range7d": "Last 7 days",
         "range30d": "Last 30 days",
         "variantAll": "All variants",
-        "variantNew": "New storefront",
-        "variantLegacy": "Legacy storefront",
+        "variantControl": "Control",
+        "variantFastCheckout": "Fast checkout",
         "sourceAll": "All paid sources",
         "outcomeAll": "All outcomes",
         "hasOrderAll": "Orders and non-orders",
         "hasOrderYes": "Has order",
         "hasOrderNo": "No order",
-        "searchPlaceholder": "Search landing path or slug"
+        "searchPlaceholder": "Search entry path or slug"
       },
       "summary": {
         "visits": "Visits",
@@ -367,7 +372,7 @@
       },
       "table": {
         "firstSeen": "First seen",
-        "landingPath": "Landing path",
+        "landingPath": "Entry path",
         "productSlug": "Product slug",
         "variant": "Variant",
         "source": "Paid source",
@@ -384,9 +389,9 @@
       },
       "detail": {
         "title": "Paid visit detail",
-        "description": "Exact landing and funnel timeline for one paid visitor.",
+        "description": "Exact entry path and funnel timeline for one paid visitor.",
         "visitId": "Visit ID",
-        "landingUrl": "Landing URL",
+        "landingUrl": "Entry URL",
         "variant": "Variant served",
         "requestedVariant": "Requested variant",
         "journeyId": "Journey ID",
@@ -566,14 +571,14 @@
         "cartRate": "Cart to purchase"
       },
       "landing": {
-        "title": "Top landing pages",
+        "title": "Top entry pages",
         "columns": {
-          "path": "Landing page",
+          "path": "Entry page",
           "sessions": "Sessions"
         }
       },
       "variants": {
-        "title": "Storefront variant comparison",
+        "title": "Storefront design variant comparison",
         "columns": {
           "variant": "Variant",
           "sessions": "Sessions",
@@ -585,7 +590,9 @@
         },
         "values": {
           "new": "New storefront",
-          "legacy": "Legacy storefront"
+          "legacy": "Legacy storefront",
+          "control": "Control",
+          "fastCheckout": "Fast checkout"
         }
       },
       "search": {
@@ -916,6 +923,15 @@
     "administration": "Administration overview and action history."
   },
   "products": {
+    "view": {
+      "cards": "Cards",
+      "table": "Table"
+    },
+    "copy": {
+      "action": "Copy product IDs",
+      "success": "Copied {count} product IDs.",
+      "error": "Unable to copy {count} product IDs."
+    },
     "export": {
       "action": "Export Meta catalog",
       "title": "Export {count} products to Meta catalog",
@@ -962,6 +978,10 @@
     }
   },
   "ordersManager": {
+    "view": {
+      "cards": "Cards",
+      "table": "Table"
+    },
     "searchPlaceholder": "Search by client name or phone number",
     "filters": {
       "statusLabel": "Filter by status",
@@ -982,6 +1002,11 @@
       "call": "Call phone number",
       "save": "Save phone",
       "cancel": "Cancel phone edits"
+    },
+    "name": {
+      "label": "Customer name",
+      "save": "Save name",
+      "cancel": "Cancel name edits"
     },
     "copy": {
       "label": "Copy phone number",

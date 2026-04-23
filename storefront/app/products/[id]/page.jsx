@@ -16,6 +16,7 @@ import {
   serializeJsonLd,
 } from "@/lib/seo";
 
+import MetaViewContentBootstrap from "@/app/components/MetaViewContentBootstrap";
 import Main from "./Main";
 
 export const revalidate = 120;
@@ -88,6 +89,7 @@ export default async function Home({ params }) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
       />
+      <MetaViewContentBootstrap product={product} />
       <Main id={id} initialProduct={product} />
     </>
   );

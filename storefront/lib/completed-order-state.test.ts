@@ -13,13 +13,13 @@ import {
 
 describe("completed-order-state", () => {
   beforeEach(() => {
-    const storage = new Map();
+    const storage = new Map<string, string>();
 
     vi.stubGlobal("window", {
       localStorage: {
-        getItem: (key) => storage.get(key) ?? null,
-        setItem: (key, value) => storage.set(key, value),
-        removeItem: (key) => storage.delete(key),
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value),
+        removeItem: (key: string) => storage.delete(key),
       },
     });
   });

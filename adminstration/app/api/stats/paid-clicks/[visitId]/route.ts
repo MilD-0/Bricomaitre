@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '../../../../../db/client';
 import { getPaidClickVisitDetail } from '../../../../../lib/paid-clicks';
-import { requireDeveloperAccess } from '../../../../../lib/rbac';
+import { requireAdministrationAccess } from '../../../../../lib/rbac';
 
 export async function GET(
   _request: NextRequest,
   context: { params: Promise<{ visitId: string }> },
 ) {
-  const denied = await requireDeveloperAccess();
+  const denied = await requireAdministrationAccess();
   if (denied) {
     return denied;
   }

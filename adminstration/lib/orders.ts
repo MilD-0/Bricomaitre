@@ -61,7 +61,44 @@ const optionalNullableTrimmedString = (max: number) =>
     return trimmed.length === 0 ? null : trimmed.slice(0, max);
   });
 
+const optionalPatchNullableTrimmedString = (max: number) =>
+  z.union([z.string(), z.null()]).optional().transform((value) => {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    if (value === null) {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? null : trimmed.slice(0, max);
+  });
+
 const nullableWilayaCode = z.union([z.number(), z.string(), z.null()]).transform((value) => {
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    return Number.isInteger(value) && value >= 1 && value <= 58 ? value : null;
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 58 ? parsed : null;
+});
+
+const optionalPatchNullableWilayaCode = z.union([z.number(), z.string(), z.null()]).optional().transform((value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
   if (value === null) {
     return null;
   }
@@ -82,17 +119,19 @@ const nullableWilayaCode = z.union([z.number(), z.string(), z.null()]).transform
 
 export const orderPatchSchema = z
   .object({
+    firstName: optionalPatchNullableTrimmedString(80),
+    lastName: optionalPatchNullableTrimmedString(80),
     phoneNumber1: z.string().trim().min(1).max(50).optional(),
     note: nullableTrimmedString(500).optional(),
     confirmed: orderStatusSchema.optional(),
     noAnswerCount: noAnswerCountSchema.optional(),
     delivery: deliveryTypeSchema.optional(),
-    state: nullableWilayaCode.optional(),
+    state: optionalPatchNullableWilayaCode,
     city: nullableTrimmedString(120).optional(),
     homeAddress: nullableTrimmedString(300).optional(),
     cartProducts: z.array(z.string().trim().min(1).max(160)).max(50).optional(),
   })
-  .refine((value) => Object.keys(value).length > 0, {
+  .refine((value) => Object.values(value).some((field) => field !== undefined), {
     message: 'At least one field must be provided.',
   });
 

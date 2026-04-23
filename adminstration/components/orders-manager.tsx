@@ -30,6 +30,7 @@ import {
 import {
   buildOrderProductSummaries,
   getDeliveryTypeLabelKey,
+  getOrderFullName,
   getOrderStatusLabelKey,
   parseNumericAmount,
   type OrderPatch,
@@ -59,6 +60,7 @@ import { Skeleton } from './ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { TablePaginationControls } from './table-pagination-controls';
 import { MultiSortHeader } from './multi-sort-header';
+import { ViewModeToggle, type ViewMode } from './view-mode-toggle';
 
 type PaginationMeta = { page: number; limit: number; totalItems: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean };
 type OrdersResponse = { items: OrderRecord[]; writable: boolean; pagination: PaginationMeta };
@@ -75,7 +77,8 @@ type EditableOrderProduct = {
   thumbnailUrl: string | null;
   missing: boolean;
 };
-type PatchMutationVariables = { id: number; values: OrderPatch; messages: MutationMessages; optimisticProducts?: EditableOrderProduct[] };
+type PartialOrderPatch = Partial<OrderPatch>;
+type PatchMutationVariables = { id: number; values: PartialOrderPatch; messages: MutationMessages; optimisticProducts?: EditableOrderProduct[] };
 type DeleteMutationVariables = { id: number; messages: MutationMessages };
 type DeleteState = { id: number; label: string } | null;
 type ProductsDialogState = { order: OrderRecord; items: EditableOrderProduct[]; search: string } | null;
@@ -241,6 +244,7 @@ type InventoryApplyResponse = {
   items: Array<{ productId: number; previousQuantity: number; nextQuantity: number }>;
   skipped: Array<{ productId: number; reason: string }>;
 };
+const ORDERS_VIEW_MODE_STORAGE_KEY = 'orders-view-mode-v1';
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -256,6 +260,36 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+function readStorage<T>(key: string) {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem(key);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage<T>(key: string, value: T | null) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  if (value === null) {
+    window.localStorage.removeItem(key);
+    return;
+  }
+
+  window.localStorage.setItem(key, JSON.stringify(value));
 }
 
 function SearchField({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
@@ -499,7 +533,7 @@ function areCartProductsEqual(left: string[], right: string[]) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-function optimisticOrder(order: OrderRecord, values: OrderPatch, optimisticProducts?: EditableOrderProduct[]): OrderRecord {
+function optimisticOrder(order: OrderRecord, values: PartialOrderPatch, optimisticProducts?: EditableOrderProduct[]): OrderRecord {
   const cartProducts = values.cartProducts ?? order.cartProducts;
   const orderProducts = values.cartProducts !== undefined
     ? optimisticProducts
@@ -511,9 +545,14 @@ function optimisticOrder(order: OrderRecord, values: OrderPatch, optimisticProdu
   const noAnswerCount = confirmed === 1
     ? Math.max(values.noAnswerCount ?? order.noAnswerCount ?? 0, 1)
     : 0;
+  const firstName = values.firstName !== undefined ? values.firstName : order.firstName;
+  const lastName = values.lastName !== undefined ? values.lastName : order.lastName;
 
   return {
     ...order,
+    firstName,
+    lastName,
+    fullName: getOrderFullName(firstName, lastName, values.phoneNumber1 ?? order.phoneNumber1),
     phoneNumber1: values.phoneNumber1 ?? order.phoneNumber1,
     note: values.note !== undefined ? values.note : order.note,
     confirmed,
@@ -542,6 +581,19 @@ function formatOrderStatusLabel(
   const key = getOrderStatusLabelKey(status);
 
   return t(`ordersManager.status.${key}`);
+}
+
+function splitFullNameDraft(value: string) {
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  if (!normalized) {
+    return { firstName: null, lastName: null };
+  }
+
+  const [firstName, ...rest] = normalized.split(' ');
+  return {
+    firstName,
+    lastName: rest.length > 0 ? rest.join(' ') : null,
+  };
 }
 
 function OrdersTableSkeleton() {
@@ -1870,6 +1922,7 @@ export function OrdersManager({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [phoneDrafts, setPhoneDrafts] = useState<Record<number, string>>({});
+  const [nameDrafts, setNameDrafts] = useState<Record<number, string>>({});
   const [noteDrafts, setNoteDrafts] = useState<Record<number, string>>({});
   const [addressDrafts, setAddressDrafts] = useState<Record<number, AddressDraft>>({});
   const [deleteState, setDeleteState] = useState<DeleteState>(null);
@@ -1884,6 +1937,7 @@ export function OrdersManager({
   const [ecotrackPreviewState, setEcotrackPreviewState] = useState<EcotrackPostingPreviewState>(null);
   const [activeEcotrackJobId, setActiveEcotrackJobId] = useState<string | null>(null);
   const [hoveredProductKey, setHoveredProductKey] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [isFilterPending, startFilterTransition] = useTransition();
   const initializedExportStatusRef = useRef(false);
   const lastExportStatusKeyRef = useRef<string | null>(null);
@@ -1898,6 +1952,13 @@ export function OrdersManager({
     && deferredSearch.length === 0
     && deferredStatusFilter === 'all'
     && sortRules.length === 0;
+
+  useEffect(() => {
+    const stored = readStorage<ViewMode>(ORDERS_VIEW_MODE_STORAGE_KEY);
+    if (stored === 'cards' || stored === 'table') {
+      setViewMode(stored);
+    }
+  }, []);
 
   const ordersQuery = useQuery({
     queryKey: ['orders-table', page, deferredSearch, deferredStatusFilter, sortRules],
@@ -2271,6 +2332,7 @@ export function OrdersManager({
     }).format(value);
 
   const getPhoneDraft = (order: OrderRecord) => phoneDrafts[order.id] ?? formatPhoneForDisplay(order.phoneNumber1);
+  const getNameDraft = (order: OrderRecord) => nameDrafts[order.id] ?? order.fullName;
   const getNoteDraft = (order: OrderRecord) => noteDrafts[order.id] ?? (order.note ?? '');
   const getAddressDraft = (order: OrderRecord): AddressDraft => addressDrafts[order.id] ?? {
     delivery: order.delivery,
@@ -2278,6 +2340,24 @@ export function OrdersManager({
     city: normalizeCommuneValue(order.state, order.city, ecotrackCatalogQuery.data),
     homeAddress: order.homeAddress ?? '',
   };
+
+  async function saveName(order: OrderRecord) {
+    const normalizedValue = getNameDraft(order).trim().replace(/\s+/g, ' ');
+    if (!normalizedValue || normalizedValue === order.fullName) {
+      setNameDrafts((current) => ({ ...current, [order.id]: order.fullName }));
+      return;
+    }
+
+    const nextName = splitFullNameDraft(normalizedValue);
+    await patchMutation.mutateAsync({
+      id: order.id,
+      values: {
+        firstName: nextName.firstName,
+        lastName: nextName.lastName,
+      },
+      messages: buildMessages(t, 'notifications.orders.name.loading', 'notifications.orders.name.success', 'notifications.orders.name.error', { name: order.fullName }),
+    });
+  }
 
   async function savePhone(order: OrderRecord) {
     const displayValue = getPhoneDraft(order).trim();
@@ -2900,15 +2980,15 @@ export function OrdersManager({
       className="scroll-mt-24 overflow-hidden rounded-[1.75rem] border border-border/70 bg-background/95 shadow-sm"
       {...sectionTransitionProps}
     >
-      <div className="border-b border-border/70 bg-linear-to-b from-background to-muted/20 px-4 py-4 sm:px-5">
-        <div className="flex flex-col gap-4">
+      <div className="border-b border-border/70 bg-linear-to-b from-background to-muted/20 px-3 py-3 sm:px-5 sm:py-4">
+        <div className="flex flex-col gap-3 sm:gap-4">
           <div className="flex flex-col gap-2">
             <h2 className="text-lg font-semibold">{t('nav.orders')}</h2>
             <PendingInline active={isFilterPending || ordersQuery.isFetching} label={t('labels.loading')} />
           </div>
 
-          <div className="rounded-[1.5rem] border border-border/70 bg-background/90 p-3">
-            <div className="flex flex-col gap-4">
+          <div className="sm:rounded-[1.5rem] sm:border sm:border-border/70 sm:bg-background/90 sm:p-3">
+            <div className="flex flex-col gap-3 sm:gap-4">
               <div className="flex flex-col gap-3">
                 <SearchField
                   value={search}
@@ -2918,6 +2998,15 @@ export function OrdersManager({
                       setPage(1);
                       setSearch(value);
                     });
+                  }}
+                />
+                <ViewModeToggle
+                  value={viewMode}
+                  cardsLabel={t('ordersManager.view.cards')}
+                  tableLabel={t('ordersManager.view.table')}
+                  onChange={(nextViewMode) => {
+                    setViewMode(nextViewMode);
+                    writeStorage(ORDERS_VIEW_MODE_STORAGE_KEY, nextViewMode);
                   }}
                 />
               </div>
@@ -2946,7 +3035,7 @@ export function OrdersManager({
                   <NativeSelectOption value="9">{t('ordersManager.status.failed')}</NativeSelectOption>
                 </NativeSelect>
                 <Badge variant="outline">{t('labels.bulkSelectionCount', { count: selectedIds.length })}</Badge>
-                <NativeSelect aria-label={t('ordersManager.bulk.statusLabel')} value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value)} className="min-w-44">
+                <NativeSelect aria-label={t('ordersManager.bulk.statusLabel')} value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value)} className="w-full sm:min-w-44 sm:w-auto">
                   <NativeSelectOption value="0">{t('ordersManager.status.notContacted')}</NativeSelectOption>
                   <NativeSelectOption value="1">{t('ordersManager.status.noAnswer')}</NativeSelectOption>
                   <NativeSelectOption value="2">{t('ordersManager.status.confirmed')}</NativeSelectOption>
@@ -3024,7 +3113,7 @@ export function OrdersManager({
       {!isInitialLoading ? (
       <>
       {ordersQuery.isError ? (
-        <div className="px-4 pb-4 sm:px-5">
+        <div className="px-3 pb-3 sm:px-5 sm:pb-4">
           <Empty className="rounded-[1.5rem] border border-dashed border-border/70 bg-muted/20">
             <EmptyHeader>
               <EmptyTitle>{t('ordersManager.empty.title')}</EmptyTitle>
@@ -3033,7 +3122,7 @@ export function OrdersManager({
           </Empty>
         </div>
       ) : null}
-      <div className="hidden overflow-x-auto lg:block">
+      <div className={cn('overflow-x-auto px-3 pb-3 sm:px-4 sm:pb-4', viewMode === 'table' ? 'block' : 'hidden')} data-testid="orders-table-view">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -3083,6 +3172,7 @@ export function OrdersManager({
                 ?? (order.city ? communeOptions.find((entry) => entry.name === order.city) : undefined);
               const previewDeliveryFee = resolveDeliveryFeePreview(ecotrackCatalogQuery.data, addressDraft.delivery, addressDraft.state, order.deliveryFee);
               const phoneHref = buildPhoneTelHref(phoneDraft);
+              const nameDraft = getNameDraft(order);
 
               return (
                 <TableRow key={order.id}>
@@ -3109,7 +3199,36 @@ export function OrdersManager({
                   </TableCell>
                   <TableCell className="align-top">
                     <div className="rounded-[1.15rem] border border-border/70 bg-background p-3">
-                      <p className="text-balance font-semibold text-foreground">{order.fullName}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Input
+                          className="min-w-[13rem] flex-1 font-semibold"
+                          value={nameDraft}
+                          disabled={!writable}
+                          onChange={(event) => setNameDrafts((current) => ({ ...current, [order.id]: event.target.value }))}
+                          aria-label={t('ordersManager.name.label')}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="size-9 shrink-0 px-0"
+                          disabled={!writable || nameDraft.trim().replace(/\s+/g, ' ') === order.fullName}
+                          aria-label={t('ordersManager.name.save')}
+                          onClick={() => void saveName(order)}
+                        >
+                          <Save />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="size-9 shrink-0 px-0"
+                          variant="outline"
+                          disabled={!writable || nameDraft.trim().replace(/\s+/g, ' ') === order.fullName}
+                          aria-label={t('ordersManager.name.cancel')}
+                          onClick={() => setNameDrafts((current) => ({ ...current, [order.id]: order.fullName }))}
+                        >
+                          <X />
+                        </Button>
+                      </div>
                       {order.isDegradedCapture ? (
                         <Badge variant="outline" className="mt-2 rounded-full">
                           {t('ordersManager.capture.degraded')}
@@ -3367,188 +3486,122 @@ export function OrdersManager({
         </Table>
       </div>
 
-      <div className="grid gap-3 px-4 pb-4 lg:hidden">
+      <div className={cn('grid gap-2.5 px-3 pb-3 sm:gap-3 sm:px-4 sm:pb-4', viewMode === 'cards' ? 'grid' : 'hidden')} data-testid="orders-card-view">
         {paginatedOrders.map((order) => {
           const createdAt = formatDateParts(order.createdAt);
           const noteDraft = getNoteDraft(order);
+          const phoneDraft = getPhoneDraft(order);
           const addressDraft = getAddressDraft(order);
           const wilayaId = Number.parseInt(addressDraft.state, 10);
           const wilayaOptions = ecotrackCatalogQuery.data?.wilayas ?? [];
           const communeOptions = Number.isInteger(wilayaId)
             ? (ecotrackCatalogQuery.data?.communes ?? []).filter((entry) => entry.wilayaId === wilayaId)
             : [];
+          const selectedCommune = communeOptions.find((entry) => String(entry.communeId) === addressDraft.city)
+            ?? (order.city ? communeOptions.find((entry) => entry.name === order.city) : undefined);
           const previewDeliveryFee = resolveDeliveryFeePreview(ecotrackCatalogQuery.data, addressDraft.delivery, addressDraft.state, order.deliveryFee);
-          const phoneHref = buildPhoneTelHref(getPhoneDraft(order));
+          const phoneHref = buildPhoneTelHref(phoneDraft);
+          const nameDraft = getNameDraft(order);
 
           return (
-            <Card key={order.id} className="rounded-[1.5rem] border border-border/70 bg-background/95 p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-3">
-                  <Checkbox
-                    aria-label={t('labels.selectRow', { name: order.fullName })}
-                    checked={selectedIds.includes(order.id)}
-                    onChange={(event) => {
-                      setSelectedIds((current) =>
-                        event.target.checked ? [...new Set([...current, order.id])] : current.filter((id) => id !== order.id),
-                      );
-                    }}
-                  />
+            <Card key={order.id} className="overflow-hidden rounded-[1.2rem] border border-border/70 bg-background shadow-sm sm:rounded-[1.5rem]">
+              <div className="border-b border-border/70 bg-linear-to-r from-muted/30 via-background to-muted/15 p-3 sm:p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <p className="line-clamp-2 font-semibold">{order.fullName}</p>
-                    {order.isDegradedCapture ? (
-                      <Badge variant="outline" className="mt-2 rounded-full">
-                        {t('ordersManager.capture.degraded')}
-                      </Badge>
-                    ) : null}
-                    <p className="mt-1 text-xs text-muted-foreground">#{order.id}</p>
-                    {order.ecotrackTrackingNumber ? (
-                      <p className="mt-1 font-mono text-xs text-muted-foreground">{order.ecotrackTrackingNumber}</p>
-                    ) : null}
-                    <p className="text-sm text-muted-foreground">{createdAt.date}</p>
-                    <p className="text-xs text-muted-foreground">{createdAt.time}</p>
+                    <Input
+                      className="h-9 max-w-full text-lg font-bold"
+                      value={nameDraft}
+                      disabled={!writable}
+                      onChange={(event) => setNameDrafts((current) => ({ ...current, [order.id]: event.target.value }))}
+                      aria-label={t('ordersManager.name.label')}
+                    />
+                    <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>{createdAt.date}</span>
+                      <span className="text-xs">{createdAt.time}</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Badge variant="outline" className="rounded-full">#{order.id}</Badge>
+                      {order.isDegradedCapture ? (
+                        <Badge variant="outline" className="rounded-full">
+                          {t('ordersManager.capture.degraded')}
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="flex flex-row items-center justify-between gap-2 sm:flex-col sm:items-end">
+                    <Badge>{formatOrderStatusLabel(t, order.confirmed, order.noAnswerCount)}</Badge>
+                    <p className="text-xs text-muted-foreground">{order.confirmedByName ?? order.confirmedBy ?? t('ordersManager.unconfirmed')}</p>
+                    <div className="flex w-full gap-2 sm:w-auto">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="w-full sm:w-auto"
+                        disabled={!writable || nameDraft.trim().replace(/\s+/g, ' ') === order.fullName}
+                        onClick={() => void saveName(order)}
+                      >
+                        <Save data-icon="inline-start" />
+                        {t('ordersManager.name.save')}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="w-full sm:w-auto"
+                        disabled={!writable || nameDraft.trim().replace(/\s+/g, ' ') === order.fullName}
+                        onClick={() => setNameDrafts((current) => ({ ...current, [order.id]: order.fullName }))}
+                      >
+                        <X data-icon="inline-start" />
+                        {t('ordersManager.name.cancel')}
+                      </Button>
+                    </div>
                   </div>
                 </div>
-                <Badge className="shrink-0">{formatOrderStatusLabel(t, order.confirmed, order.noAnswerCount)}</Badge>
-              </div>
 
-              <div className="mt-4 flex flex-col gap-2">
-                <details open className="group rounded-2xl border border-border/70 bg-muted/10">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-foreground outline-none [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0 whitespace-normal text-left">{t('ordersManager.columns.client')}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{t('ordersManager.phone.label')}</span>
-                  </summary>
-                  <div className="px-3 pb-3">
-                    <p className="mb-3 font-mono text-sm font-medium tracking-[0.08em] text-foreground">
-                      {formatPhoneForDisplay(order.phoneNumber1) || t('ordersManager.unconfirmed')}
-                    </p>
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                {order.ecotrackTrackingNumber ? (
+                  <div className="mt-3 rounded-[0.9rem] border border-border/70 bg-background/80 p-2.5 sm:mt-4 sm:rounded-[1rem] sm:p-3">
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">ECOTRACK</p>
+                    <p className="mt-2 font-mono text-xs text-foreground">{order.ecotrackTrackingNumber}</p>
+                  </div>
+                ) : null}
+
+                <div className="mt-3 flex flex-col gap-2">
+                  <div className="rounded-[0.9rem] bg-background px-2.5 py-2.5 shadow-[var(--shadow-vapor)] sm:rounded-[1rem] sm:px-3 sm:py-3">
+                    <div className="flex items-center gap-2">
+                      <Phone className="size-4 text-primary" />
+                      <p className="font-mono text-sm font-medium tracking-[0.08em] text-foreground">
+                        {formatPhoneForDisplay(order.phoneNumber1) || t('ordersManager.unconfirmed')}
+                      </p>
+                    </div>
+                    <div className="mt-2 flex min-w-0 flex-col gap-2 sm:mt-3 sm:flex-row sm:flex-wrap sm:items-center">
                       <Input
-                        className="min-w-[13rem] flex-1 basis-48 font-mono tracking-[0.08em]"
-                        value={getPhoneDraft(order)}
+                        className="h-8 w-[9.5rem] max-w-full flex-none rounded-[0.8rem] px-2.5 py-0 text-xs leading-none font-mono tracking-[0.08em]"
+                        value={phoneDraft}
                         disabled={!writable}
                         onChange={(event) => setPhoneDrafts((current) => ({ ...current, [order.id]: event.target.value }))}
                         aria-label={t('ordersManager.phone.label')}
                       />
-                      {phoneHref ? (
-                        <a
-                          className={cn(
-                            'inline-flex size-9 shrink-0 items-center justify-center rounded-[0.75rem] border border-transparent bg-secondary text-secondary-foreground shadow-[var(--shadow-vapor)] transition-[background-color,color,box-shadow,transform] hover:bg-accent hover:text-accent-foreground',
-                          )}
-                          aria-label={t('ordersManager.phone.call')}
-                          href={phoneHref}
-                        >
-                          <Phone className="size-4" />
-                        </a>
-                      ) : null}
-                      <div className="flex shrink-0 items-center gap-2">
-                        <Button type="button" size="sm" className="size-9 shrink-0 px-0" variant="outline" aria-label={t('ordersManager.copy.label')} onClick={() => void handleCopyPhone(order)}>
-                          <Copy />
+                      <div className="flex min-w-0 w-full flex-col gap-2 sm:w-auto sm:flex-1 sm:flex-row sm:flex-wrap sm:items-center">
+                        <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => void handleCopyPhone(order)}>
+                          <Copy data-icon="inline-start" />
+                          {t('ordersManager.copy.label')}
                         </Button>
-                        <Button type="button" size="sm" className="size-9 shrink-0 px-0" disabled={!writable} aria-label={t('ordersManager.phone.save')} onClick={() => void savePhone(order)}>
-                          <Save />
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="size-9 shrink-0 px-0"
-                          variant="outline"
-                          disabled={!writable}
-                          aria-label={t('ordersManager.phone.cancel')}
-                          onClick={() => setPhoneDrafts((current) => ({ ...current, [order.id]: formatPhoneForDisplay(order.phoneNumber1) }))}
-                        >
-                          <X />
-                        </Button>
+                        {phoneHref ? (
+                          <a
+                            className="inline-flex h-9 w-full items-center justify-center rounded-[0.85rem] border border-border/70 bg-background px-3 text-sm sm:w-auto"
+                            aria-label={t('ordersManager.phone.call')}
+                            href={phoneHref}
+                          >
+                            <Phone data-icon="inline-start" />
+                            {t('ordersManager.phone.call')}
+                          </a>
+                        ) : null}
                       </div>
                     </div>
                   </div>
-                </details>
 
-                <details className="group rounded-2xl border border-border/70 bg-background">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-foreground outline-none [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0 whitespace-normal text-left">{t('ordersManager.columns.products')}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{t('ordersManager.actions.editProducts')}</span>
-                  </summary>
-                  <div className="px-3 pb-3">
-                    <div className="flex flex-wrap gap-2">
-                      <OrderProductsPreview
-                        orderId={order.id}
-                        products={order.orderProducts}
-                        emptyLabel={t('ordersManager.products.empty')}
-                        hoveredProductKey={hoveredProductKey}
-                        onHoverChange={setHoveredProductKey}
-                        formatMoney={formatMoney}
-                        limit={4}
-                      />
-                    </div>
-                    <Button type="button" variant="outline" className="mt-3 w-full" onClick={() => setProductsDialog(buildProductsDialogState(order))}>
-                      <Package data-icon="inline-start" />
-                      {t('ordersManager.actions.editProducts')}
-                    </Button>
-                  </div>
-                </details>
-
-                <details className="group rounded-2xl border border-border/70 bg-background">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-foreground outline-none [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0 whitespace-normal text-left">{t('ordersManager.columns.amount')}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{formatMoney(order.productSubtotal + previewDeliveryFee)}</span>
-                  </summary>
-                  <div className="px-3 pb-3">
-                    <p className="text-sm text-muted-foreground">{t('ordersManager.amount.subtotal')}: <span className="text-foreground">{formatMoney(order.productSubtotal)}</span></p>
-                    <p className="mt-1 text-sm text-muted-foreground">{t('ordersManager.amount.deliveryFee')}: <span className="text-foreground">{formatMoney(previewDeliveryFee)}</span></p>
-                    <p className="mt-2 text-sm font-semibold">{t('ordersManager.amount.total')}: {formatMoney(order.productSubtotal + previewDeliveryFee)}</p>
-                  </div>
-                </details>
-
-                <details className="group rounded-2xl border border-border/70 bg-background">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-foreground outline-none [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0 whitespace-normal text-left">{t('ordersManager.columns.status')}</span>
-                    <span className="min-w-0 whitespace-normal text-right text-xs text-muted-foreground">{formatOrderStatusLabel(t, order.confirmed, order.noAnswerCount)}</span>
-                  </summary>
-                  <div className="px-3 pb-3">
-                    <NativeSelect
-                      className="mt-1"
-                      aria-label={t('ordersManager.columns.status')}
-                      value={String(order.confirmed)}
-                      disabled={!writable}
-                      onChange={(event) => updateOrderStatus(order, Number(event.target.value) as OrderRecord['confirmed'])}
-                    >
-                      <NativeSelectOption value="0">{t('ordersManager.status.notContacted')}</NativeSelectOption>
-                      <NativeSelectOption value="1">{t('ordersManager.status.noAnswer')}</NativeSelectOption>
-                      <NativeSelectOption value="2">{t('ordersManager.status.confirmed')}</NativeSelectOption>
-                      <NativeSelectOption value="3">{t('ordersManager.status.dispatched')}</NativeSelectOption>
-                      <NativeSelectOption value="4">{t('ordersManager.status.completed')}</NativeSelectOption>
-                      <NativeSelectOption value="5">{t('ordersManager.status.delayed')}</NativeSelectOption>
-                      <NativeSelectOption value="6">{t('ordersManager.status.cancelled')}</NativeSelectOption>
-                      <NativeSelectOption value="7">{t('ordersManager.status.inDelivery')}</NativeSelectOption>
-                      <NativeSelectOption value="8">{t('ordersManager.status.returned')}</NativeSelectOption>
-                      <NativeSelectOption value="9">{t('ordersManager.status.failed')}</NativeSelectOption>
-                    </NativeSelect>
-                    {order.confirmed === 1 ? (
-                      <NoAnswerCounter
-                        compact
-                        count={Math.max(order.noAnswerCount, 1)}
-                        disabled={!writable}
-                        onDecrease={() => updateOrderStatus(order, 1, Math.max(order.noAnswerCount - 1, 1))}
-                        onIncrease={() => updateOrderStatus(order, 1, order.noAnswerCount + 1)}
-                      />
-                    ) : null}
-                  </div>
-                </details>
-
-                <details className="group rounded-2xl border border-border/70 bg-background">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-foreground outline-none [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0 whitespace-normal text-left">{t('ordersManager.columns.address')}</span>
-                    <span className="min-w-0 whitespace-normal text-right text-xs text-muted-foreground">
-                      {formatRegionLabel(
-                        ecotrackCatalogQuery.data,
-                        addressDraft.state,
-                        communeOptions.find((entry) => String(entry.communeId) === addressDraft.city)?.name ?? order.city ?? addressDraft.city,
-                        t('ordersManager.placeholders.region'),
-                      )}
-                    </span>
-                  </summary>
-                  <div className="px-3 pb-3">
-                    <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-[0.9rem] bg-background px-2.5 py-2.5 shadow-[var(--shadow-vapor)] sm:rounded-[1rem] sm:px-3 sm:py-3">
+                    <div className="grid gap-2 sm:grid-cols-3">
                       <NativeSelect
                         aria-label={t('ordersManager.address.delivery')}
                         value={String(addressDraft.delivery)}
@@ -3580,77 +3633,136 @@ export function OrdersManager({
                           <NativeSelectOption key={entry.communeId} value={String(entry.communeId)}>{entry.name}</NativeSelectOption>
                         ))}
                       </NativeSelect>
-                      {addressDraft.delivery === 0 ? (
-                        <Input
-                          className="col-span-2"
-                          value={addressDraft.homeAddress}
-                          disabled={!writable}
-                          onChange={(event) =>
-                            setAddressDrafts((current) => ({
-                              ...current,
-                              [order.id]: { ...addressDraft, homeAddress: event.target.value },
-                            }))
-                          }
-                          placeholder={t('ordersManager.placeholders.street')}
-                        />
-                      ) : null}
                     </div>
-                    <Button type="button" size="sm" className="mt-2 w-full" disabled={!writable} onClick={() => void saveAddress(order)}>
-                      {t('actions.save')}
-                    </Button>
-                  </div>
-                </details>
-
-                <details className="group rounded-2xl border border-border/70 bg-background">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-foreground outline-none [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0 whitespace-normal text-left">{t('ordersManager.columns.confirmedBy')}</span>
-                    <span className="min-w-0 whitespace-normal text-right text-xs text-muted-foreground">{order.confirmedByName ?? order.confirmedBy ?? t('ordersManager.unconfirmed')}</span>
-                  </summary>
-                  <div className="px-3 pb-3">
-                    <p className="font-semibold text-foreground">{order.confirmedByName ?? order.confirmedBy ?? t('ordersManager.unconfirmed')}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{order.confirmedAt ? `${formatDateParts(order.confirmedAt).date} ${formatDateParts(order.confirmedAt).time}` : t('ordersManager.unconfirmedDate')}</p>
-                    {order.hasStatusHistory ? (
-                      <Button type="button" size="sm" variant="outline" className="mt-3 w-full" onClick={() => setHistoryOrder(order)}>
-                        <History data-icon="inline-start" />
-                        {t('ordersManager.history.button')}
-                      </Button>
+                    {addressDraft.delivery === 0 ? (
+                      <Input
+                        className="mt-2"
+                        value={addressDraft.homeAddress}
+                        disabled={!writable}
+                        onChange={(event) =>
+                          setAddressDrafts((current) => ({
+                            ...current,
+                            [order.id]: { ...addressDraft, homeAddress: event.target.value },
+                          }))
+                        }
+                        placeholder={t('ordersManager.placeholders.street')}
+                      />
                     ) : null}
                   </div>
-                </details>
+                </div>
+              </div>
 
-                <details className="group rounded-2xl border border-border/70 bg-background">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-foreground outline-none [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0 whitespace-normal text-left">{t('ordersManager.columns.notes')}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{t('ordersManager.notes.save')}</span>
-                  </summary>
-                  <div className="px-3 pb-3">
-                    <Input
-                      className="mt-1"
-                      value={noteDraft}
-                      disabled={!writable}
-                      onChange={(event) => setNoteDrafts((current) => ({ ...current, [order.id]: event.target.value }))}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault();
-                          void saveNote(order);
-                        }
-                      }}
-                    />
-                    <Button type="button" size="sm" className="mt-3 w-full" disabled={!writable} onClick={() => void saveNote(order)}>
-                      <Save data-icon="inline-start" />
-                      {t('ordersManager.notes.save')}
+              <div className="space-y-3 p-3 sm:space-y-4 sm:p-4">
+                <div>
+                  <div className="mb-2 flex flex-col gap-2 sm:mb-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="font-semibold text-foreground">{t('ordersManager.columns.products')}</p>
+                    <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setProductsDialog(buildProductsDialogState(order))}>
+                      <Package data-icon="inline-start" />
+                      {t('ordersManager.actions.editProducts')}
                     </Button>
                   </div>
-                </details>
+                  <div className="flex flex-wrap gap-2">
+                    <OrderProductsPreview
+                      orderId={order.id}
+                      products={order.orderProducts}
+                      emptyLabel={t('ordersManager.products.empty')}
+                      hoveredProductKey={hoveredProductKey}
+                      onHoverChange={setHoveredProductKey}
+                      formatMoney={formatMoney}
+                      limit={4}
+                    />
+                  </div>
+                </div>
 
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Button type="button" variant="outline" onClick={() => setDetailsOrder(order)}>
-                    <Eye data-icon="inline-start" />
-                    {t('ordersManager.actions.viewDetails')}
+                <div className="rounded-[0.9rem] border border-border/70 bg-muted/15 p-2.5 sm:rounded-[1rem] sm:p-3">
+                  <p className="text-sm font-medium text-muted-foreground">{t('ordersManager.columns.address')}</p>
+                  <p className="mt-2 text-sm text-foreground">{addressDraft.homeAddress || order.homeAddress || t('ordersManager.placeholders.street')}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {formatRegionLabel(
+                      ecotrackCatalogQuery.data,
+                      addressDraft.state,
+                      selectedCommune?.name ?? order.city ?? addressDraft.city,
+                      t('ordersManager.placeholders.region'),
+                    )}
+                  </p>
+                  <Button type="button" size="sm" className="mt-3 w-full" disabled={!writable} onClick={() => void saveAddress(order)}>
+                    {t('actions.save')}
                   </Button>
-                  <Button type="button" variant="destructive" disabled={!writable} onClick={() => setDeleteState({ id: order.id, label: order.fullName })}>
-                    <Trash2 data-icon="inline-start" />
-                    {t('actions.delete')}
+                </div>
+
+                <div className="rounded-[0.9rem] border border-border/70 bg-muted/15 p-2.5 sm:rounded-[1rem] sm:p-3">
+                  <p className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">{t('ordersManager.amount.subtotal')}</span>
+                    <span className="font-medium text-foreground">{formatMoney(order.productSubtotal)}</span>
+                  </p>
+                  <p className="mt-2 flex items-center justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">{t('ordersManager.amount.deliveryFee')}</span>
+                    <span className="font-medium text-foreground">{formatMoney(previewDeliveryFee)}</span>
+                  </p>
+                  <p className="mt-3 flex items-center justify-between gap-3 border-t border-border/70 pt-3 font-semibold text-foreground">
+                    <span>{t('ordersManager.amount.total')}</span>
+                    <span>{formatMoney(order.productSubtotal + previewDeliveryFee)}</span>
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2 min-[420px]:flex-row">
+                  <Input
+                    value={noteDraft}
+                    disabled={!writable}
+                    aria-label={t('ordersManager.columns.notes')}
+                    onChange={(event) => setNoteDrafts((current) => ({ ...current, [order.id]: event.target.value }))}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        void saveNote(order);
+                      }
+                    }}
+                  />
+                  <Button type="button" size="sm" variant="outline" className="w-full min-[420px]:w-auto" aria-label={t('ordersManager.notes.save')} disabled={!writable} onClick={() => void saveNote(order)}>
+                    <Save />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex flex-col items-stretch gap-2 border-t border-border/70 bg-muted/20 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-4 sm:py-3">
+                <Checkbox
+                  aria-label={t('labels.selectRow', { name: order.fullName })}
+                  checked={selectedIds.includes(order.id)}
+                  onChange={(event) => {
+                    setSelectedIds((current) =>
+                      event.target.checked ? [...new Set([...current, order.id])] : current.filter((id) => id !== order.id),
+                    );
+                  }}
+                />
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+                  <NativeSelect
+                    className="w-full sm:w-auto"
+                    aria-label={t('ordersManager.columns.status')}
+                    value={String(order.confirmed)}
+                    disabled={!writable}
+                    onChange={(event) => updateOrderStatus(order, Number(event.target.value) as OrderRecord['confirmed'])}
+                  >
+                    <NativeSelectOption value="0">{t('ordersManager.status.notContacted')}</NativeSelectOption>
+                    <NativeSelectOption value="1">{t('ordersManager.status.noAnswer')}</NativeSelectOption>
+                    <NativeSelectOption value="2">{t('ordersManager.status.confirmed')}</NativeSelectOption>
+                    <NativeSelectOption value="3">{t('ordersManager.status.dispatched')}</NativeSelectOption>
+                    <NativeSelectOption value="4">{t('ordersManager.status.completed')}</NativeSelectOption>
+                    <NativeSelectOption value="5">{t('ordersManager.status.delayed')}</NativeSelectOption>
+                    <NativeSelectOption value="6">{t('ordersManager.status.cancelled')}</NativeSelectOption>
+                    <NativeSelectOption value="7">{t('ordersManager.status.inDelivery')}</NativeSelectOption>
+                    <NativeSelectOption value="8">{t('ordersManager.status.returned')}</NativeSelectOption>
+                    <NativeSelectOption value="9">{t('ordersManager.status.failed')}</NativeSelectOption>
+                  </NativeSelect>
+                  <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setDetailsOrder(order)}>
+                    <Eye />
+                  </Button>
+                  {order.hasStatusHistory ? (
+                    <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setHistoryOrder(order)}>
+                      <History />
+                    </Button>
+                  ) : null}
+                  <Button type="button" size="sm" variant="destructive" className="w-full sm:w-auto" disabled={!writable} onClick={() => setDeleteState({ id: order.id, label: order.fullName })}>
+                    <Trash2 />
                   </Button>
                 </div>
               </div>
@@ -3660,7 +3772,7 @@ export function OrdersManager({
       </div>
 
       {((ordersQuery.data?.pagination?.totalItems ?? ordersQuery.data?.items.length) ?? 0) === 0 ? (
-        <div className="px-4 pb-4">
+        <div className="px-3 pb-3 sm:px-4 sm:pb-4">
           <Empty className="rounded-[1.5rem] border border-dashed border-border/70 bg-muted/20">
             <EmptyHeader>
               <EmptyTitle>{t('ordersManager.empty.title')}</EmptyTitle>
