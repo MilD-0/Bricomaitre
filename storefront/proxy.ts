@@ -7,8 +7,6 @@ const PAID_CLICK_COOKIE_NAME = "bric_paid_click";
 const PAID_CLICK_SEEN_AT_COOKIE_NAME = "bric_paid_click_seen_at";
 const LOCALE_COOKIE_NAME = "lo";
 const LOCALE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
-const VARIANT_COOKIE_NAME = "bric_sf_variant";
-const VARIANT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 const SUPPORTED_LOCALES = new Set(["ar", "fr"]);
 
 function buildFbcValue(fbclid: string, timestampMs: number) {
@@ -84,26 +82,6 @@ function applyTrackingCookies(request: NextRequest, response: NextResponse) {
   return response;
 }
 
-function applyExperimentCookie(request: NextRequest, response: NextResponse) {
-  const requestedVariant = request.nextUrl.searchParams.get("sf_variant");
-
-  if (requestedVariant === "new" || requestedVariant === "legacy" || requestedVariant === "old") {
-    response.cookies.set(VARIANT_COOKIE_NAME, requestedVariant === "old" ? "legacy" : requestedVariant, {
-      path: "/",
-      sameSite: "lax",
-      maxAge: VARIANT_MAX_AGE_SECONDS,
-    });
-  } else if (requestedVariant === "clear") {
-    response.cookies.set(VARIANT_COOKIE_NAME, "", {
-      path: "/",
-      sameSite: "lax",
-      maxAge: 0,
-    });
-  }
-
-  return response;
-}
-
 export default function proxy(request: NextRequest) {
   const [, maybeLocale, ...rest] = request.nextUrl.pathname.split("/");
 
@@ -119,10 +97,10 @@ export default function proxy(request: NextRequest) {
       maxAge: LOCALE_MAX_AGE_SECONDS,
     });
 
-    return applyExperimentCookie(request, applyTrackingCookies(request, applyVisitCookie(request, response)));
+    return applyTrackingCookies(request, applyVisitCookie(request, response));
   }
 
-  return applyExperimentCookie(request, applyTrackingCookies(request, applyVisitCookie(request, NextResponse.next())));
+  return applyTrackingCookies(request, applyVisitCookie(request, NextResponse.next()));
 }
 
 export const config = {

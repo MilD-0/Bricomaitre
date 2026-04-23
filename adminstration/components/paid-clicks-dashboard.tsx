@@ -148,8 +148,8 @@ export function PaidClicksDashboard({ title, description }: PaidClicksDashboardP
           </NativeSelect>
           <NativeSelect value={variant} onChange={(event) => { setVariant(event.target.value); setCursorStack([]); }}>
             <option value="all">{t('filters.variantAll')}</option>
-            <option value="new">{t('filters.variantNew')}</option>
-            <option value="legacy">{t('filters.variantLegacy')}</option>
+            <option value="control">{t('filters.variantControl')}</option>
+            <option value="fast_checkout">{t('filters.variantFastCheckout')}</option>
           </NativeSelect>
           <NativeSelect value={paidSource} onChange={(event) => { setPaidSource(event.target.value); setCursorStack([]); }}>
             <option value="all">{t('filters.sourceAll')}</option>
@@ -230,7 +230,7 @@ export function PaidClicksDashboard({ title, description }: PaidClicksDashboardP
                   <TableCell>{formatDate(locale, item.firstSeenAt)}</TableCell>
                   <TableCell className="max-w-[360px] truncate">{item.landingPath}</TableCell>
                   <TableCell>{item.landingProductSlug ?? '—'}</TableCell>
-                  <TableCell>{item.storefrontVariant ?? '—'}</TableCell>
+                  <TableCell>{item.requestedVariant ?? item.storefrontVariant ?? '—'}</TableCell>
                   <TableCell>{item.paidSource}</TableCell>
                   <TableCell>{item.lastEventName ?? '—'}</TableCell>
                   <TableCell>{item.eventCount}</TableCell>
@@ -287,7 +287,7 @@ export function PaidClicksDashboard({ title, description }: PaidClicksDashboardP
                   <div className="space-y-2 text-sm">
                     <div><span className="font-semibold">{t('detail.visitId')}:</span> {detailQuery.data.visit.visitId}</div>
                     <div><span className="font-semibold">{t('detail.landingUrl')}:</span> <span className="break-all">{detailQuery.data.visit.landingUrl}</span></div>
-                    <div><span className="font-semibold">{t('detail.variant')}:</span> {detailQuery.data.visit.storefrontVariant ?? '—'}</div>
+                    <div><span className="font-semibold">{t('detail.variant')}:</span> {detailQuery.data.visit.requestedVariant ?? detailQuery.data.visit.storefrontVariant ?? '—'}</div>
                     <div><span className="font-semibold">{t('detail.requestedVariant')}:</span> {detailQuery.data.visit.requestedVariant ?? '—'}</div>
                     <div><span className="font-semibold">{t('detail.journeyId')}:</span> {detailQuery.data.visit.journeyId ?? '—'}</div>
                     <div><span className="font-semibold">{t('detail.sessionId')}:</span> {detailQuery.data.visit.sessionId ?? '—'}</div>

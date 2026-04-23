@@ -5,7 +5,8 @@ import { delay, http, HttpResponse } from 'msw';
 import { NextIntlClientProvider } from 'next-intl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { xlsxMock } = vi.hoisted(() => ({
+const { clipboardWriteTextMock, xlsxMock } = vi.hoisted(() => ({
+  clipboardWriteTextMock: vi.fn().mockResolvedValue(undefined),
   xlsxMock: {
     aoa_to_sheet: vi.fn(() => ({})),
     book_new: vi.fn(() => ({ Sheets: {}, SheetNames: [] })),
@@ -161,6 +162,12 @@ describe('ProductsManager', () => {
   }
 
   beforeEach(() => {
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: clipboardWriteTextMock,
+      },
+    });
+
     products = [
       {
         id: 1,
@@ -212,6 +219,7 @@ describe('ProductsManager', () => {
     exportAllStartCalls.length = 0;
     exportAllCancelCalls.length = 0;
     exportAllJob = null;
+    clipboardWriteTextMock.mockClear();
     xlsxMock.aoa_to_sheet.mockClear();
     xlsxMock.book_new.mockClear();
     xlsxMock.book_append_sheet.mockClear();
@@ -330,6 +338,42 @@ describe('ProductsManager', () => {
     const restoredDialog = await screen.findByRole('dialog');
     expect(within(restoredDialog).getByRole('textbox', { name: 'Product name' })).toHaveValue('Nova drill');
     expect(within(restoredDialog).getByRole('spinbutton', { name: 'Price' })).toHaveValue(12.75);
+  });
+
+  it('defaults to card view, persists table view, and restores it from local storage', async () => {
+    const firstRender = renderProductsManager();
+
+    await screen.findAllByRole('button', { name: 'Existing product' });
+    expect(screen.getByTestId('products-card-view')).toHaveClass('grid');
+    expect(screen.getByTestId('products-table-view')).toHaveClass('hidden');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Table' }));
+
+    expect(window.localStorage.getItem('products-view-mode-v1')).toBe(JSON.stringify('table'));
+    expect(screen.getByTestId('products-card-view')).toHaveClass('hidden');
+    expect(screen.getByTestId('products-table-view')).toHaveClass('block');
+
+    firstRender.unmount();
+    renderProductsManager();
+
+    await screen.findAllByRole('button', { name: 'Existing product' });
+    expect(screen.getByTestId('products-table-view')).toHaveClass('block');
+  });
+
+  it('keeps selection and bulk actions working after switching views', async () => {
+    renderProductsManager();
+
+    await userEvent.click((await screen.findAllByRole('checkbox', { name: 'Select Existing product' }))[0]);
+    await userEvent.click(screen.getByRole('button', { name: 'Table' }));
+
+    expect(screen.getByTestId('products-table-view')).toHaveClass('block');
+    await userEvent.click(screen.getByRole('button', { name: 'Delete selected' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await screen.findByText('Deleted 1 selected.');
+    await waitFor(() => {
+      expect(deleteCalls).toContain('http://localhost:3000/api/products/1');
+    });
   });
 
   it('opens the edit popup, shows image preview on hover, and saves changes', async () => {
@@ -560,6 +604,23 @@ describe('ProductsManager', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Export XLSX' }));
 
     expect(openSpy).toHaveBeenCalledWith('/api/products/meta-export?ids=1', '_self');
+  });
+
+  it('copies selected product ids to the clipboard', async () => {
+    renderProductsManager();
+
+    const firstTitleButton = (await screen.findAllByRole('button', { name: 'Existing product' }))[0];
+    const firstRow = firstTitleButton.closest('tr') as HTMLElement;
+    await userEvent.click(within(firstRow).getByRole('checkbox', { name: 'Select Existing product' }));
+
+    const secondTitleButton = screen.getAllByRole('button', { name: 'Paint bucket' })[0];
+    const secondRow = secondTitleButton.closest('tr') as HTMLElement;
+    await userEvent.click(within(secondRow).getByRole('checkbox', { name: 'Select Paint bucket' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Copy product IDs' }));
+
+    expect(clipboardWriteTextMock).toHaveBeenCalledWith('1,2');
+    await screen.findByText('Copied 2 product IDs.');
   });
 
   it('exports selected products across pages, not just the current page', async () => {

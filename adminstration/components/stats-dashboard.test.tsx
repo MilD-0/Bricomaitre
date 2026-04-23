@@ -427,11 +427,6 @@ describe('StatsDashboard', () => {
 
     expect((await screen.findAllByText('Stats')).length).toBeGreaterThan(0);
     expect(screen.getByText('metaAds.performanceTitle')).toBeInTheDocument();
-    expect(screen.getByText('metaAds.eventsTitle')).toBeInTheDocument();
-    expect(screen.getAllByText('ViewContent').length).toBeGreaterThan(0);
-    expect(screen.getByText('metaAds.payloadsTitle')).toBeInTheDocument();
-    expect(screen.getByText('metaAds.payloads.pixel')).toBeInTheDocument();
-    expect(screen.getAllByText(/content_ids/).length).toBeGreaterThan(0);
     expect(screen.getByText('ad-costs-manager:90d::')).toBeInTheDocument();
 
     const totalSpendCard = screen.getByText('overview.adPerformance.totalSpend').closest('div[class*="min-w-0"]')?.parentElement?.parentElement;

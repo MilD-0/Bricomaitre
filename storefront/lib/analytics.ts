@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  resolveStorefrontVariant,
+} from "./storefront-variant";
+
 declare global {
   interface Window {
     dataLayer: unknown[];
@@ -11,7 +15,6 @@ const JOURNEY_STORAGE_KEY = "analytics:journey-id";
 const SESSION_STORAGE_KEY = "analytics:session-id";
 const SESSION_STARTED_KEY = "analytics:session-started";
 const VISIT_COOKIE_NAME = "bric_visit_id";
-const VARIANT_COOKIE_NAME = "bric_sf_variant";
 
 type AnalyticsItem = {
   productId?: number | null;
@@ -174,31 +177,28 @@ function getClientMetadata() {
 }
 
 function getExperimentMetadata() {
-  if (typeof window === "undefined") {
-    return {
-      storefrontVariant: "new",
-    };
-  }
-
-  const params = new URLSearchParams(window.location.search);
-  const queryVariant = params.get("sf_variant");
-  const cookieVariant = readCookie(VARIANT_COOKIE_NAME);
-  const pinnedVariant =
-    queryVariant === "legacy" || queryVariant === "new"
-      ? queryVariant
-      : cookieVariant === "legacy" || cookieVariant === "new"
-        ? cookieVariant
-        : null;
-
   return {
     storefrontVariant: "new",
-    ...(pinnedVariant
-      ? {
-          experimentMode: "campaign_pinned",
-          experimentSource: "meta_campaign",
-          requestedVariant: pinnedVariant,
-        }
-      : {}),
+    requestedVariant: resolveStorefrontVariant(),
+    experimentMode: "winner_rollout",
+    experimentSource: "storefront_default",
+  };
+}
+
+export function getAnalyticsContextMetadata({
+  paidSession,
+  sourceSurface,
+}: {
+  paidSession?: boolean;
+  sourceSurface?: string | null;
+}) {
+  return {
+    ...getExperimentMetadata(),
+    paidSession: paidSession ?? false,
+    sourceSurface: sourceSurface ?? null,
+    visitId: getVisitIdFromCookie(),
+    journeyId: getOrCreateJourneyId(),
+    sessionId: getOrCreateSessionId(),
   };
 }
 

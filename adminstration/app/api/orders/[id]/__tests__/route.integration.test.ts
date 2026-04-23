@@ -329,6 +329,108 @@ describe('app/api/orders/[id]/route', () => {
     );
   });
 
+  it('patches first and last name fields', async () => {
+    hasDbMock.mockReturnValue(true);
+    vi.spyOn(orderPatchSchema, 'safeParse').mockReturnValue({
+      success: true,
+      data: {
+        firstName: 'Grace',
+        lastName: 'Murray Hopper',
+      },
+    } as never);
+
+    const existingOrder = {
+      id: 7,
+      firstName: 'Grace',
+      lastName: 'Hopper',
+      phoneNumber1: '0550111111',
+      phoneNumber2: null,
+      cartProducts: ['8'],
+      delivery: 0,
+      state: 31,
+      city: 'Bir El Djir',
+      homeAddress: 'Street 5',
+      delPr: '150.00',
+      price: '1200.00',
+      note: null,
+      confirmed: 0,
+      noAnswerCount: 0,
+      confirmedBy: null,
+      confirmedByName: null,
+      confirmedAt: null,
+      createdAt: new Date('2026-03-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-01T10:00:00.000Z'),
+    };
+
+    const db = {
+      query: {
+        orders: {
+          findFirst: vi.fn().mockResolvedValue(existingOrder),
+        },
+      },
+      select: vi.fn().mockReturnValue({
+        from: vi.fn()
+          .mockReturnValueOnce({
+            where: vi.fn().mockReturnValue({
+              orderBy: vi.fn().mockResolvedValue([]),
+            }),
+          })
+          .mockReturnValueOnce({
+            where: vi.fn().mockResolvedValue([]),
+          }),
+      }),
+    };
+    getDbMock.mockReturnValue(db);
+    mutateEntityWithHistoryMock.mockImplementation(async (_db, params) => {
+      const updateRows = [
+        {
+          ...existingOrder,
+          firstName: 'Grace',
+          lastName: 'Murray Hopper',
+          updatedAt: new Date('2026-03-02T11:00:00.000Z'),
+        },
+      ];
+
+      return params.execute({
+        update: () => ({
+          set: (values: Record<string, unknown>) => {
+            expect(values.firstName).toBe('Grace');
+            expect(values.lastName).toBe('Murray Hopper');
+
+            return {
+              where: () => ({
+                returning: () => Promise.resolve(updateRows),
+              }),
+            };
+          },
+        }),
+        insert: () => ({
+          values: () => Promise.resolve(undefined),
+        }),
+      });
+    });
+
+    const response = await PATCH(
+      new NextRequest('http://localhost/api/orders/7', {
+        method: 'PATCH',
+        body: JSON.stringify({ firstName: 'Grace', lastName: 'Murray Hopper' }),
+        headers: { 'content-type': 'application/json' },
+      }),
+      { params: Promise.resolve({ id: '7' }) },
+    );
+
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        ok: true,
+        item: expect.objectContaining({
+          firstName: 'Grace',
+          lastName: 'Murray Hopper',
+          fullName: 'Grace Murray Hopper',
+        }),
+      }),
+    );
+  });
+
   it('clears the degraded capture variant once an order becomes complete', async () => {
     hasDbMock.mockReturnValue(true);
     vi.spyOn(orderPatchSchema, 'safeParse').mockReturnValue({

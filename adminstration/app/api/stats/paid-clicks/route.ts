@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '../../../../db/client';
 import { listPaidClickVisits, paidClickListQuerySchema } from '../../../../lib/paid-clicks';
-import { requireDeveloperAccess } from '../../../../lib/rbac';
+import { requireAdministrationAccess } from '../../../../lib/rbac';
 
 export async function GET(request: NextRequest) {
-  const denied = await requireDeveloperAccess();
+  const denied = await requireAdministrationAccess();
   if (denied) {
     return denied;
   }

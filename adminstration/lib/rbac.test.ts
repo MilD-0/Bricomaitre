@@ -10,7 +10,7 @@ vi.mock('./auth', () => ({
 }));
 
 import { normalizePermissions, normalizeRole } from './permissions';
-import { canMutateResource, requireMutationAccess, requireOpsAccess } from './rbac';
+import { canMutateResource, requireAdministrationAccess, requireMutationAccess, requireOpsAccess } from './rbac';
 
 describe('rbac helpers', () => {
   beforeEach(() => {
@@ -58,6 +58,21 @@ describe('rbac helpers', () => {
     authMock.mockResolvedValue({ user: { isAllowed: true, role: 'developer', permissions: ['ops_view'] } });
 
     await expect(requireOpsAccess()).resolves.toBeNull();
+  });
+
+  it('allows admins through requireAdministrationAccess', async () => {
+    authMock.mockResolvedValue({ user: { isAllowed: true, role: 'admin', permissions: [] } });
+
+    await expect(requireAdministrationAccess()).resolves.toBeNull();
+  });
+
+  it('rejects non-admin and non-developer users through requireAdministrationAccess', async () => {
+    authMock.mockResolvedValue({ user: { isAllowed: true, role: 'employee', permissions: ['ops_view'] } });
+
+    const res = await requireAdministrationAccess();
+
+    expect(res?.status).toBe(403);
+    await expect(res?.json()).resolves.toEqual({ error: 'Forbidden' });
   });
 
   it('returns null when the user is authorized', async () => {

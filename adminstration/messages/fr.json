@@ -259,6 +259,11 @@
         "success": "{count} commandes mises à jour.",
         "error": "Impossible de mettre à jour {count} commandes."
       },
+      "name": {
+        "loading": "Enregistrement du nom pour {name}...",
+        "success": "Nom enregistré pour {name}.",
+        "error": "Impossible d’enregistrer le nom pour {name}."
+      },
       "phone": {
         "loading": "Enregistrement du téléphone pour {name}...",
         "success": "Téléphone enregistré pour {name}.",
@@ -342,14 +347,14 @@
         "range7d": "Derniers 7 jours",
         "range30d": "Derniers 30 jours",
         "variantAll": "Toutes les variantes",
-        "variantNew": "Nouveau storefront",
-        "variantLegacy": "Storefront legacy",
+        "variantControl": "Controle",
+        "variantFastCheckout": "Checkout rapide",
         "sourceAll": "Toutes les sources",
         "outcomeAll": "Tous les résultats",
         "hasOrderAll": "Avec et sans commande",
         "hasOrderYes": "Avec commande",
         "hasOrderNo": "Sans commande",
-        "searchPlaceholder": "Rechercher un chemin ou un slug"
+        "searchPlaceholder": "Rechercher un chemin d'entrée ou un slug"
       },
       "summary": {
         "visits": "Visites",
@@ -389,9 +394,9 @@
       },
       "detail": {
         "title": "Détail de la visite payante",
-        "description": "Landing exacte et chronologie de funnel pour un visiteur payant.",
+        "description": "Chemin d'entrée exact et chronologie de funnel pour un visiteur payant.",
         "visitId": "ID visite",
-        "landingUrl": "URL d'arrivée",
+        "landingUrl": "URL d'entrée",
         "variant": "Variante servie",
         "requestedVariant": "Variante demandée",
         "journeyId": "ID journey",
@@ -578,7 +583,7 @@
         }
       },
       "variants": {
-        "title": "Comparaison des variantes storefront",
+        "title": "Comparaison des variantes de design storefront",
         "columns": {
           "variant": "Variante",
           "sessions": "Sessions",
@@ -590,7 +595,9 @@
         },
         "values": {
           "new": "Nouveau storefront",
-          "legacy": "Storefront legacy"
+          "legacy": "Storefront legacy",
+          "control": "Controle",
+          "fastCheckout": "Checkout rapide"
         }
       },
       "search": {
@@ -921,6 +928,15 @@
     "administration": "Vue d’ensemble de l’administration et historique des actions."
   },
   "products": {
+    "view": {
+      "cards": "Cartes",
+      "table": "Tableau"
+    },
+    "copy": {
+      "action": "Copier les ID produits",
+      "success": "{count} ID produit copiés.",
+      "error": "Impossible de copier {count} ID produit."
+    },
     "export": {
       "action": "Exporter le catalogue Meta",
       "title": "Exporter {count} produits vers le catalogue Meta",
@@ -967,6 +983,10 @@
     }
   },
   "ordersManager": {
+    "view": {
+      "cards": "Cartes",
+      "table": "Tableau"
+    },
     "searchPlaceholder": "Rechercher par nom client ou numéro de téléphone",
     "filters": {
       "statusLabel": "Filtrer par statut",
@@ -987,6 +1007,11 @@
       "call": "Appeler le numéro",
       "save": "Enregistrer le téléphone",
       "cancel": "Annuler la modification du téléphone"
+    },
+    "name": {
+      "label": "Nom du client",
+      "save": "Enregistrer le nom",
+      "cancel": "Annuler la modification du nom"
     },
     "copy": {
       "label": "Copier le numéro",

@@ -30,7 +30,6 @@ api_service="$(service_name storefront-api "$target_slot")"
 admin_service="$(service_name adminstration "$target_slot")"
 worker_service="$(service_name admin-worker "$target_slot")"
 storefront_service="$(service_name storefront "$target_slot")"
-storefront_old_service="$(service_name storefront-old "$target_slot")"
 api_host_port="$(slot_api_host_port "$target_slot")"
 storefront_build_log="$runtime_dir/storefront-build-${RELEASE_ID:-$target_slot}.log"
 storefront_static_pages_baseline_file="$runtime_dir/storefront-static-pages.env"
@@ -192,7 +191,6 @@ append_summary "- Upstream counts: ${PRODUCT_COUNT} products, ${BRAND_COUNT} bra
 
 compose build --progress plain "$admin_service"
 compose build --progress plain "$storefront_service" 2>&1 | tee "$storefront_build_log"
-compose build --progress plain "$storefront_old_service"
 
 actual_static_pages="$(extract_static_page_count "$storefront_build_log")"
 printf 'storefront build generated %s static pages\n' "$actual_static_pages"
@@ -228,10 +226,9 @@ fi
 
 append_summary "- ✅ Static page count passed live-catalog validation (${actual_static_pages} >= ${minimum_static_pages})"
 
-compose up -d "$admin_service" "$storefront_service" "$storefront_old_service"
+compose up -d "$admin_service" "$storefront_service"
 bash "$script_dir/wait-for-health.sh" "$admin_service"
 bash "$script_dir/wait-for-health.sh" "$storefront_service"
-bash "$script_dir/wait-for-health.sh" "$storefront_old_service"
 
 if meta_verify_output="$(bash "$script_dir/verify-storefront-meta.sh" "$target_slot" 2>&1)"; then
   printf '%s\n' "$meta_verify_output"

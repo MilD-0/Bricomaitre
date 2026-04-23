@@ -21,7 +21,7 @@ import {
 } from '../db/schema';
 
 const rangeValues = ['24h', '7d', '30d', 'custom'] as const;
-const variantValues = ['all', 'new', 'legacy'] as const;
+const variantValues = ['all', 'control', 'fast_checkout'] as const;
 const paidSourceFilterValues = ['all', 'fbclid', 'meta_utm', 'unknown'] as const;
 const outcomeValues = [
   'all',
@@ -214,7 +214,7 @@ function encodeCursor(value: { firstSeenAt: Date; visitId: string }) {
 function deriveLandingProductSlug(path: string) {
   try {
     const url = new URL(path, 'https://bricomaitre.com');
-    const match = url.pathname.match(/^\/products\/([^/?#]+)/);
+    const match = url.pathname.match(/^\/(?:products|landing)\/([^/?#]+)/);
     return match?.[1] ?? null;
   } catch {
     return null;
@@ -265,12 +265,13 @@ function buildOutcomeCondition(outcome: PaidClickListQuery['outcome']): SQL | un
     where ${analyticsEvents.visitId} = ${visitIdColumn}
       and ${analyticsEvents.eventName} = ${eventName}
   )`;
+  const hasCheckoutStart = sql`(${hasEvent('begin_checkout')} or ${hasEvent('checkout_view')})`;
 
   if (outcome === 'landed_only') {
     return and(
       sql`not ${hasEvent('view_item')}`,
       sql`not ${hasEvent('add_to_cart')}`,
-      sql`not ${hasEvent('begin_checkout')}`,
+      sql`not ${hasCheckoutStart}`,
       isNull(analyticsPaidClickVisits.orderId),
       sql`${analyticsPaidClickVisits.purchaseCount} = 0`,
       sql`not ${hasEvent('api_error')}`,
@@ -281,7 +282,7 @@ function buildOutcomeCondition(outcome: PaidClickListQuery['outcome']): SQL | un
     return and(
       hasEvent('view_item'),
       sql`not ${hasEvent('add_to_cart')}`,
-      sql`not ${hasEvent('begin_checkout')}`,
+      sql`not ${hasCheckoutStart}`,
       isNull(analyticsPaidClickVisits.orderId),
       sql`${analyticsPaidClickVisits.purchaseCount} = 0`,
     ) as SQL;
@@ -290,7 +291,7 @@ function buildOutcomeCondition(outcome: PaidClickListQuery['outcome']): SQL | un
   if (outcome === 'added_to_cart') {
     return and(
       hasEvent('add_to_cart'),
-      sql`not ${hasEvent('begin_checkout')}`,
+      sql`not ${hasCheckoutStart}`,
       isNull(analyticsPaidClickVisits.orderId),
       sql`${analyticsPaidClickVisits.purchaseCount} = 0`,
     ) as SQL;
@@ -298,7 +299,7 @@ function buildOutcomeCondition(outcome: PaidClickListQuery['outcome']): SQL | un
 
   if (outcome === 'began_checkout') {
     return and(
-      hasEvent('begin_checkout'),
+      hasCheckoutStart,
       isNull(analyticsPaidClickVisits.orderId),
       sql`${analyticsPaidClickVisits.purchaseCount} = 0`,
     ) as SQL;
@@ -326,7 +327,7 @@ function buildListWhere(input: PaidClickListQuery) {
   ];
 
   if (input.variant !== 'all') {
-    conditions.push(eq(analyticsPaidClickVisits.storefrontVariant, input.variant));
+    conditions.push(eq(analyticsPaidClickVisits.requestedVariant, input.variant));
   }
 
   if (input.paidSource !== 'all') {

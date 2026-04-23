@@ -349,14 +349,6 @@ function SectionCard({
   );
 }
 
-function JsonPayloadBlock({ value }: { value: Record<string, unknown> }) {
-  return (
-    <pre className="max-h-72 overflow-auto rounded-2xl bg-muted/40 p-4 text-xs leading-6 text-foreground">
-      {JSON.stringify(value, null, 2)}
-    </pre>
-  );
-}
-
 function StatsPageSkeleton() {
   return (
     <div className="flex flex-col gap-6">
@@ -1174,7 +1166,11 @@ export function StatsDashboard({ description: _description, initialData = null, 
                           ? t('website.variants.values.legacy')
                           : item.variant === 'new'
                             ? t('website.variants.values.new')
-                            : item.variant}
+                            : item.variant === 'control'
+                              ? t('website.variants.values.control')
+                              : item.variant === 'fast_checkout'
+                                ? t('website.variants.values.fastCheckout')
+                                : item.variant}
                       </TableCell>
                       <TableCell>{formatNumber(locale, item.sessions)}</TableCell>
                       <TableCell>{formatNumber(locale, item.pageViews)}</TableCell>
@@ -1268,89 +1264,6 @@ export function StatsDashboard({ description: _description, initialData = null, 
               <MetricCard accent="bg-[hsl(var(--chart-3)/0.82)]" icon={MousePointer} title={t('overview.adPerformance.cpc')} value={formatCurrency(locale, ensuredStats.adCosts.cpc)} />
               <MetricCard accent="bg-[hsl(var(--chart-2))]" icon={TrendingUp} title={t('metaAds.conversionRate')} value={formatPercent(locale, ensuredStats.adCosts.conversionRate)} />
             </div>
-          </SectionCard>
-
-          <SectionCard title={t('metaAds.eventsTitle')}>
-            <div className="overflow-hidden rounded-[1.5rem] border border-border/70">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t('metaAds.events.columns.event')}</TableHead>
-                    <TableHead>{t('metaAds.events.columns.total')}</TableHead>
-                    <TableHead>{t('metaAds.events.columns.pixel')}</TableHead>
-                    <TableHead>{t('metaAds.events.columns.capiSent')}</TableHead>
-                    <TableHead>{t('metaAds.events.columns.capiDelivered')}</TableHead>
-                    <TableHead>{t('metaAds.events.columns.capiFailed')}</TableHead>
-                    <TableHead>{t('metaAds.events.columns.lastSeen')}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {ensuredStats.metaAds.events.length > 0 ? ensuredStats.metaAds.events.map((event) => (
-                    <TableRow key={event.name}>
-                      <TableCell className="font-medium">{event.name}</TableCell>
-                      <TableCell>{formatNumber(locale, event.total)}</TableCell>
-                      <TableCell>{formatNumber(locale, event.pixelFired)}</TableCell>
-                      <TableCell>{formatNumber(locale, event.capiSent)}</TableCell>
-                      <TableCell>{formatNumber(locale, event.capiDelivered)}</TableCell>
-                      <TableCell>{formatNumber(locale, event.capiFailed)}</TableCell>
-                      <TableCell>{formatDateTime(locale, event.lastOccurredAt)}</TableCell>
-                    </TableRow>
-                  )) : (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground">{t('metaAds.events.empty')}</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </SectionCard>
-
-          <SectionCard title={t('metaAds.payloadsTitle')}>
-            {ensuredStats.metaAds.recentPayloads.length > 0 ? (
-              <div className="grid gap-4">
-                {ensuredStats.metaAds.recentPayloads.map((event) => (
-                  <Card key={`${event.eventId}-${event.occurredAt}`} className="rounded-[1.5rem] border border-border/70 bg-muted/15 p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">{event.metaEventName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {t('metaAds.payloads.meta', {
-                            analyticsEvent: event.analyticsEventName,
-                            eventId: event.eventId,
-                            occurredAt: formatDateTime(locale, event.occurredAt),
-                          })}
-                        </p>
-                      </div>
-                      <div className="text-right text-xs text-muted-foreground">
-                        <p>{event.pagePath || '—'}</p>
-                        <p>{event.capiStatus == null ? t('metaAds.payloads.noStatus') : t('metaAds.payloads.status', { status: event.capiStatus })}</p>
-                        <p>{event.capiOk ? t('metaAds.payloads.delivered') : t('metaAds.payloads.failed')}</p>
-                      </div>
-                    </div>
-                    <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('metaAds.payloads.pixel')}</p>
-                        <JsonPayloadBlock value={event.pixelPayload} />
-                      </div>
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('metaAds.payloads.capi')}</p>
-                        <JsonPayloadBlock value={event.capiPayload} />
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <Empty className="border-none">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <MousePointer />
-                  </EmptyMedia>
-                  <EmptyTitle>{t('metaAds.payloads.emptyTitle')}</EmptyTitle>
-                  <EmptyDescription>{t('metaAds.payloads.emptyDescription')}</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            )}
           </SectionCard>
 
           <SectionCard title={t('metaAds.managerTitle')}>

@@ -54,6 +54,20 @@ export async function requireDeveloperAccess() {
   return null;
 }
 
+export async function requireAdministrationAccess() {
+  const session = await auth();
+
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (!session.user.isAllowed || (session.user.role !== 'admin' && session.user.role !== 'developer')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  return null;
+}
+
 export async function requireMutationAccess(resource: MutationResource) {
   const session = await auth();
 
