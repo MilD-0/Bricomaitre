@@ -14,6 +14,7 @@ import { ProductDetailSkeleton } from "@/app/components/ui";
 import Layout from "@/app/components/layout";
 import { CartContext } from "@/app/components/cartContext";
 import Carousel from "@/app/components/Carousel";
+import { getDisplayImages } from "@/lib/image-order";
 import {
   getAnalyticsContextMetadata,
   trackAnalyticsEvent,
@@ -97,6 +98,7 @@ export default function Page({ id, initialProduct = null }) {
   const parent = product?.parentCategoryInfo ?? null;
   const cartItemCount = cartProducts.length;
   const hasCartItems = cartItemCount > 0;
+  const displayImages = getDisplayImages(product?.images);
 
   async function goToCheckout(currentProduct) {
     const analyticsMetadata = getAnalyticsContextMetadata({
@@ -176,7 +178,8 @@ export default function Page({ id, initialProduct = null }) {
           <div className="pb-28">
             <div className="sf-card sf-container overflow-hidden p-4">
               <Carousel
-                data={locale === "ar" ? [...product.images].reverse() : product.images}
+                key={`${product._id}-${locale}`}
+                data={displayImages}
               />
             </div>
 
@@ -366,7 +369,8 @@ export default function Page({ id, initialProduct = null }) {
               <div>
                 <div className="sf-card p-6">
                   <Carousel
-                    data={locale === "ar" ? [...product.images].reverse() : product.images}
+                    key={`${product._id}-${locale}-desktop`}
+                    data={displayImages}
                   />
                 </div>
               </div>

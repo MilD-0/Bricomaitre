@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const orderStatusValues = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
+export const orderStatusValues = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 export const deliveryTypeValues = [0, 1] as const;
 export const DEGRADED_CAPTURE_VARIANT = 'degraded_capture' as const;
 
@@ -16,6 +16,7 @@ export const orderStatusSchema = z.union(
     z.ZodLiteral<7>,
     z.ZodLiteral<8>,
     z.ZodLiteral<9>,
+    z.ZodLiteral<10>,
   ],
 );
 export const deliveryTypeSchema = z.union(deliveryTypeValues.map((value) => z.literal(value)) as [z.ZodLiteral<0>, z.ZodLiteral<1>]);
@@ -32,6 +33,7 @@ export const ORDER_STATUS_LABEL_KEYS = {
   7: 'inDelivery',
   8: 'returned',
   9: 'failed',
+  10: 'manualCompleted',
 } as const satisfies Record<(typeof orderStatusValues)[number], string>;
 
 export const DELIVERY_TYPE_LABEL_KEYS = {
@@ -171,6 +173,7 @@ export type OrderStatusHistoryRecord = {
 export type OrderProductSummary = {
   productId: number | null;
   brandId?: number | null;
+  slug?: string | null;
   rawValue: string;
   title: string;
   unitPrice: number;
@@ -200,6 +203,7 @@ export type OrderRecord = {
   state: number | null;
   city: string | null;
   homeAddress: string | null;
+  subtotalOverride: number | null;
   productSubtotal: number;
   deliveryFee: number;
   totalAmount: number;
@@ -251,6 +255,8 @@ const legacyOrderStatusMap = {
   'in delivery': 7,
   returned: 8,
   failed: 9,
+  manual_completed: 10,
+  'manual completed': 10,
 } as const;
 
 const legacyNoAnswerCountMap = {
@@ -311,7 +317,7 @@ export function coerceNoAnswerCount(status: OrderStatus, count: unknown, legacyS
 }
 
 export function isConfirmedLifecycleStatus(status: OrderStatus) {
-  return status === 2 || status === 3 || status === 4 || status === 5 || status === 7 || status === 8 || status === 9;
+  return status === 2 || status === 3 || status === 4 || status === 5 || status === 7 || status === 8 || status === 9 || status === 10;
 }
 
 export function getOrderStatusLabelKey(status: OrderStatus) {
@@ -394,6 +400,7 @@ export function buildOrderProductSummaries(
       summaries.set(key, {
         productId: resolved?.productId ?? productId,
         brandId: resolved?.brandId ?? null,
+        ...(resolved?.slug !== undefined ? { slug: resolved.slug } : {}),
         rawValue,
         title: resolved?.title ?? rawValue,
         unitPrice: resolved?.unitPrice ?? 0,

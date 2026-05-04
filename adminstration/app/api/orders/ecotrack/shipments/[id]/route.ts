@@ -30,7 +30,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const session = await auth();
 
   try {
-    const item = await loadEcotrackOrderDetail(await readOrderId(params));
+    const item = await loadEcotrackOrderDetail(await readOrderId(params), {
+      email: null,
+      name: 'ECOTRACK sync',
+    });
     if (!item) {
       return NextResponse.json({ error: 'Not found' }, { status: 404, headers: withRequestIdHeaders(requestId) });
     }
@@ -43,7 +46,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       route: '/api/orders/ecotrack/shipments/[id]',
       session,
     });
-    throw error;
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to load ECOTRACK shipment detail.' }, {
+      status: 400,
+      headers: withRequestIdHeaders(requestId),
+    });
   }
 }
 

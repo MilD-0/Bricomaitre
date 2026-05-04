@@ -67,6 +67,16 @@ export type StatsQueryResponse = {
   data: StatsDashboardData;
 };
 
+type StatsImportHistoryResponse = {
+  data: {
+    items: StatsDashboardData['importHistory'];
+    page: number;
+    pageSize: number;
+    totalItems: number;
+    totalPages: number;
+  };
+};
+
 export type StatsSection = 'overview' | 'website' | 'products' | 'geography' | 'time' | 'metaAds' | 'manualOrders' | 'imports';
 type TrendMode = 'daily' | 'weekly' | 'monthly';
 type BackgroundJob = {
@@ -446,6 +456,13 @@ export function StatsDashboard({ description: _description, initialData = null, 
     staleTime: 0,
     enabled: section === 'imports',
   });
+  const importHistoryQuery = useQuery({
+    queryKey: ['stats-import-history', historyPage, TABLE_PAGE_SIZE],
+    queryFn: () => request<StatsImportHistoryResponse>(`/api/stats?history=true&page=${historyPage}&pageSize=${TABLE_PAGE_SIZE}`),
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
+    enabled: section === 'imports',
+  });
 
   const deleteBatchMutation = useMutation({
     mutationFn: (batchId: string) => request(`/api/stats?batchId=${encodeURIComponent(batchId)}`, { method: 'DELETE' }),
@@ -455,7 +472,10 @@ export function StatsDashboard({ description: _description, initialData = null, 
     },
     onSuccess: async (_, batchId, context) => {
       toast.success(t('notifications.delete.success', { batchId }), { id: context?.toastId });
-      await queryClient.invalidateQueries({ queryKey: ['stats-dashboard'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['stats-dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['stats-import-history'] }),
+      ]);
     },
     onError: (error, _batchId, context) => {
       toast.error(error.message, { id: context?.toastId });
@@ -476,7 +496,10 @@ export function StatsDashboard({ description: _description, initialData = null, 
     onSuccess: async (_, _payload, context) => {
       toast.success(t('notifications.unmatched.success'), { id: context?.toastId });
       setSelectedUnmatchedReference(null);
-      await queryClient.invalidateQueries({ queryKey: ['stats-dashboard'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['stats-dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['stats-import-history'] }),
+      ]);
     },
     onError: (error, _payload, context) => {
       toast.error(error.message, { id: context?.toastId });
@@ -513,7 +536,11 @@ export function StatsDashboard({ description: _description, initialData = null, 
       { id: 'stats-upload' },
     );
     setUploadedFiles([]);
-    await queryClient.invalidateQueries({ queryKey: ['stats-dashboard'] });
+    setHistoryPage(1);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['stats-dashboard'] }),
+      queryClient.invalidateQueries({ queryKey: ['stats-import-history'] }),
+    ]);
     setImportStage('idle');
   };
 
@@ -549,8 +576,12 @@ export function StatsDashboard({ description: _description, initialData = null, 
       queueMicrotask(() => {
         setUploadedFiles([]);
         setImportStage('idle');
+        setHistoryPage(1);
       });
-      void queryClient.invalidateQueries({ queryKey: ['stats-dashboard'] });
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['stats-dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['stats-import-history'] }),
+      ]);
     } else if (job.status === 'failed') {
       toast.error(job.errorMessage || t('notifications.upload.error'), { id: 'stats-upload' });
       queueMicrotask(() => {
@@ -679,7 +710,11 @@ export function StatsDashboard({ description: _description, initialData = null, 
     [stats],
   );
   const importTrendRows = useMemo(() => [...importTrendData].reverse(), [importTrendData]);
-  const importHistoryRows = useMemo(() => stats?.importHistory ?? [], [stats]);
+  const importHistoryPageData = importHistoryQuery.data?.data;
+  const importHistoryRows = useMemo(
+    () => (section === 'imports' ? importHistoryPageData?.items ?? stats?.importHistory ?? [] : stats?.importHistory ?? []),
+    [importHistoryPageData?.items, section, stats],
+  );
   const productsPageItems = useMemo(
     () => paginatedProducts.slice((productsPage - 1) * TABLE_PAGE_SIZE, productsPage * TABLE_PAGE_SIZE),
     [paginatedProducts, productsPage],
@@ -692,10 +727,11 @@ export function StatsDashboard({ description: _description, initialData = null, 
     () => importTrendRows.slice((importsTrendPage - 1) * TABLE_PAGE_SIZE, importsTrendPage * TABLE_PAGE_SIZE),
     [importTrendRows, importsTrendPage],
   );
-  const historyPageItems = useMemo(
-    () => importHistoryRows.slice((historyPage - 1) * TABLE_PAGE_SIZE, historyPage * TABLE_PAGE_SIZE),
-    [historyPage, importHistoryRows],
-  );
+  const historyPageItems = importHistoryRows;
+  const historyTotalPages =
+    section === 'imports'
+      ? importHistoryPageData?.totalPages ?? Math.max(1, Math.ceil((stats?.importHistory ?? []).length / TABLE_PAGE_SIZE))
+      : Math.max(1, Math.ceil(importHistoryRows.length / TABLE_PAGE_SIZE));
   const productUnitsData = useMemo(
     () =>
       (stats?.topProducts ?? []).map((product) => ({
@@ -837,15 +873,28 @@ export function StatsDashboard({ description: _description, initialData = null, 
   }, [locale, stats, t]);
 
   const activeQuery = statsQuery;
+  const isRefreshing = activeQuery.isFetching || (section === 'imports' && importHistoryQuery.isFetching);
+  const handleRefresh = () => {
+    void activeQuery.refetch();
+
+    if (section === 'imports') {
+      void importHistoryQuery.refetch();
+    }
+  };
 
   useEffect(() => {
     queueMicrotask(() => {
       setProductsPage(1);
       setWilayasPage(1);
       setImportsTrendPage(1);
-      setHistoryPage(1);
     });
   }, [stats]);
+
+  useEffect(() => {
+    if (section === 'imports' && !importHistoryQuery.isPlaceholderData && importHistoryPageData?.page && importHistoryPageData.page !== historyPage) {
+      setHistoryPage(importHistoryPageData.page);
+    }
+  }, [historyPage, importHistoryPageData?.page, importHistoryQuery.isPlaceholderData, section]);
 
   if (activeQuery.isLoading && !stats) {
     return <StatsPageSkeleton />;
@@ -870,7 +919,7 @@ export function StatsDashboard({ description: _description, initialData = null, 
           <div className="flex flex-col gap-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{title}</p>
-              <Button type="button" variant="outline" disabled={activeQuery.isFetching} onClick={() => void activeQuery.refetch()}>
+              <Button type="button" variant="outline" disabled={isRefreshing} onClick={handleRefresh}>
                 <RefreshCcw data-icon="inline-start" />
                 {t('refresh')}
               </Button>
@@ -897,7 +946,7 @@ export function StatsDashboard({ description: _description, initialData = null, 
               </div>
             ) : null}
 
-            {activeQuery.isFetching && stats ? (
+            {isRefreshing && stats ? (
               <div className="rounded-[1.4rem] border border-border/70 bg-muted/20 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-medium text-foreground">{t('loading.refreshingTitle')}</p>
@@ -1650,7 +1699,7 @@ export function StatsDashboard({ description: _description, initialData = null, 
             <TablePaginationControls
               className="mt-4 rounded-[1.5rem] border"
               currentPage={historyPage}
-              totalPages={Math.max(1, Math.ceil(importHistoryRows.length / TABLE_PAGE_SIZE))}
+              totalPages={historyTotalPages}
               onPageChange={setHistoryPage}
             />
           </>

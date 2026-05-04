@@ -218,6 +218,46 @@ describe('BrandsCategoriesManager', () => {
     });
   });
 
+  it('supports creating brands without an uploaded image', async () => {
+    renderManager(<BrandsManager />);
+
+    await screen.findByText('Acme');
+
+    await userEvent.click(screen.getByRole('button', { name: 'New brand' }));
+    const brandDialog = screen.getByRole('dialog');
+    await userEvent.type(within(brandDialog).getByRole('textbox', { name: 'Name' }), 'No Image Brand');
+    await userEvent.click(within(brandDialog).getByRole('button', { name: 'New brand' }));
+    await screen.findByText('Created brand No Image Brand.');
+
+    await waitFor(() => {
+      expect(postCalls).toContainEqual({
+        url: 'http://localhost:3000/api/brands',
+        body: { name: 'No Image Brand', imageUrl: null },
+      });
+    });
+  });
+
+  it('supports popup create flow for categories on the categories page', async () => {
+    renderManager(<CategoriesManager />);
+
+    await screen.findByText('Paint');
+
+    await userEvent.click(screen.getByRole('button', { name: 'New category' }));
+    const categoryDialog = screen.getByRole('dialog');
+    await userEvent.type(within(categoryDialog).getByRole('textbox', { name: 'Name' }), 'Sealants');
+    await userEvent.type(within(categoryDialog).getByRole('textbox', { name: 'Arabic name' }), 'مواد مانعة للتسرب');
+    await userEvent.click(within(categoryDialog).getByRole('button', { name: 'New category' }));
+    await waitFor(() => expect(postCalls.length).toBeGreaterThan(0));
+    await screen.findByText('Created category Sealants.');
+
+    await waitFor(() => {
+      expect(postCalls).toContainEqual({
+        url: 'http://localhost:3000/api/categories',
+        body: { name: 'Sealants', nameAr: 'مواد مانعة للتسرب', imageUrl: null, parentId: null },
+      });
+    });
+  });
+
   it('supports popup edit flow for categories on the categories page', async () => {
     renderManager(<CategoriesManager />);
 
@@ -334,6 +374,6 @@ describe('BrandsCategoriesManager', () => {
     await waitFor(() => {
       expect(brandSwitch).toHaveAttribute('data-state', 'checked');
     });
-    await screen.findByText('Failed to deactivate brand Acme.');
+    await screen.findByText('Failed to deactivate brand Acme. broken');
   });
 });

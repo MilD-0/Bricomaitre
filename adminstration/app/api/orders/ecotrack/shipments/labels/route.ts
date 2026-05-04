@@ -22,16 +22,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => null);
     const parsed = parseEcotrackBulkAction(body);
-    const label = await fetchMergedEcotrackLabels(parsed.orderIds);
+    const result = await fetchMergedEcotrackLabels(parsed.orderIds);
 
-    return new NextResponse(Buffer.from(label.body), {
-      status: 200,
-      headers: {
-        'Content-Type': label.contentType,
-        'Content-Disposition': `attachment; filename="${label.fileName}"`,
-        ...withRequestIdHeaders(requestId),
-      },
-    });
+    return NextResponse.json(result, { headers: withRequestIdHeaders(requestId) });
   } catch (error) {
     captureAdminException(error, {
       requestId,

@@ -3,7 +3,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { hasDb } from '../../../db/client';
 import { auth } from '../../../lib/auth';
 import { ADMIN_STATS_IMPORT_QUEUE, getLatestExportJob, startStatsImportJob } from '../../../lib/background-jobs';
-import { deleteImportBatch, dismissUnmatchedReference, getStatsDashboard, listImportHistory, statsQuerySchema } from '../../../lib/stats';
+import {
+  deleteImportBatch,
+  dismissUnmatchedReference,
+  getStatsDashboard,
+  IMPORT_HISTORY_PAGE_SIZE,
+  listImportHistoryPage,
+  statsQuerySchema,
+} from '../../../lib/stats';
 import { requireOpsAccess } from '../../../lib/rbac';
 import { CACHE_TAGS, revalidateServerTags } from '../../../lib/server-cache';
 
@@ -26,7 +33,15 @@ export async function GET(request: NextRequest) {
   const jobOnly = request.nextUrl.searchParams.get('job') === 'true';
 
   if (historyOnly) {
-    return NextResponse.json({ data: await listImportHistory() });
+    const page = Number.parseInt(request.nextUrl.searchParams.get('page') ?? '1', 10);
+    const pageSize = Number.parseInt(request.nextUrl.searchParams.get('pageSize') ?? String(IMPORT_HISTORY_PAGE_SIZE), 10);
+
+    return NextResponse.json({
+      data: await listImportHistoryPage({
+        page: Number.isFinite(page) ? page : 1,
+        pageSize: Number.isFinite(pageSize) ? pageSize : IMPORT_HISTORY_PAGE_SIZE,
+      }),
+    });
   }
 
   if (jobOnly) {

@@ -52,7 +52,7 @@ vi.mock('../../../../lib/stats', async () => {
   return {
     ...actual,
     getStatsDashboard: getStatsDashboardMock,
-    listImportHistory: listImportHistoryMock,
+    listImportHistoryPage: listImportHistoryMock,
     deleteImportBatch: deleteImportBatchMock,
     dismissUnmatchedReference: dismissUnmatchedReferenceMock,
   };
@@ -104,12 +104,27 @@ describe('app/api/stats/route', () => {
   });
 
   it('returns history when requested', async () => {
-    listImportHistoryMock.mockResolvedValue([{ batchId: 'batch-1' }]);
+    listImportHistoryMock.mockResolvedValue({
+      items: [{ batchId: 'batch-1' }],
+      page: 2,
+      pageSize: 10,
+      totalItems: 11,
+      totalPages: 2,
+    });
 
-    const response = await GET(new NextRequest('http://localhost/api/stats?history=true'));
+    const response = await GET(new NextRequest('http://localhost/api/stats?history=true&page=2&pageSize=10'));
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ data: [{ batchId: 'batch-1' }] });
+    expect(listImportHistoryMock).toHaveBeenCalledWith({ page: 2, pageSize: 10 });
+    await expect(response.json()).resolves.toEqual({
+      data: {
+        items: [{ batchId: 'batch-1' }],
+        page: 2,
+        pageSize: 10,
+        totalItems: 11,
+        totalPages: 2,
+      },
+    });
   });
 
   it('returns the latest import job when requested', async () => {

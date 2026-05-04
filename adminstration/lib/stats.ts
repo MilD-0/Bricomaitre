@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import * as XLSX from 'xlsx';
 import { z } from 'zod';
 
@@ -140,6 +140,14 @@ type ImportHistoryItem = {
   unmatchedDetails: UnmatchedImportRow[];
   dateRangeStart: string | null;
   dateRangeEnd: string | null;
+};
+
+export type ImportHistoryPage = {
+  items: ImportHistoryItem[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
 };
 
 export type UnmatchedOrderDetail = UnmatchedImportRow & {
@@ -603,7 +611,11 @@ async function getWebsiteAnalyticsData(db: ReturnType<typeof getDb>, analyticsWh
       .where(analyticsWhere),
     db
       .select({
-        variant: sql<string>`coalesce(nullif(${analyticsEvents.metadata}->>'requestedVariant', ''), nullif(${analyticsEvents.metadata}->>'storefrontVariant', ''), 'control')`,
+        variant: sql<string>`case
+          when coalesce(nullif(${analyticsEvents.metadata}->>'requestedVariant', ''), nullif(${analyticsEvents.metadata}->>'storefrontVariant', ''), 'new') = 'legacy' then 'legacy'
+          when coalesce(nullif(${analyticsEvents.metadata}->>'requestedVariant', ''), nullif(${analyticsEvents.metadata}->>'storefrontVariant', ''), 'new') in ('fast_checkout', 'control', 'new') then 'new'
+          else coalesce(nullif(${analyticsEvents.metadata}->>'requestedVariant', ''), nullif(${analyticsEvents.metadata}->>'storefrontVariant', ''), 'new')
+        end`,
         sessions: sql<number>`count(distinct case when ${analyticsEvents.eventName} = 'page_view' then ${analyticsEvents.sessionId} end)::int`,
         pageViews: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'page_view')::int`,
         productViews: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'view_item')::int`,
@@ -1022,13 +1034,11 @@ export function parseSpreadsheet(buffer: Buffer) {
   }));
 }
 
-export async function listImportHistory() {
-  applyServerCache({ stale: 60, revalidate: 300, expire: 3600 }, CACHE_TAGS.statsHistory, CACHE_TAGS.stats);
+const DEFAULT_IMPORT_HISTORY_LIMIT = 8;
+export const IMPORT_HISTORY_PAGE_SIZE = 10;
 
-  const db = getDb();
-  const rows = await db.select().from(importBatches).orderBy(desc(importBatches.importedAt)).limit(8);
-
-  return rows.map<ImportHistoryItem>((row) => ({
+function mapImportHistoryRow(row: typeof importBatches.$inferSelect): ImportHistoryItem {
+  return {
     id: row.id,
     batchId: row.batchId,
     fileName: row.fileName,
@@ -1040,7 +1050,47 @@ export async function listImportHistory() {
     unmatchedDetails: row.unmatchedDetails,
     dateRangeStart: row.dateRangeStart,
     dateRangeEnd: row.dateRangeEnd,
-  }));
+  };
+}
+
+export async function listImportHistory(limit = DEFAULT_IMPORT_HISTORY_LIMIT) {
+  applyServerCache({ stale: 60, revalidate: 300, expire: 3600 }, CACHE_TAGS.statsHistory, CACHE_TAGS.stats);
+
+  const db = getDb();
+  const rows = await db.select().from(importBatches).orderBy(desc(importBatches.importedAt)).limit(limit);
+
+  return rows.map(mapImportHistoryRow);
+}
+
+export async function listImportHistoryPage({
+  page,
+  pageSize,
+}: {
+  page: number;
+  pageSize: number;
+}): Promise<ImportHistoryPage> {
+  applyServerCache({ stale: 60, revalidate: 300, expire: 3600 }, CACHE_TAGS.statsHistory, CACHE_TAGS.stats);
+
+  const db = getDb();
+  const requestedPage = Math.max(1, page);
+  const normalizedPageSize = Math.min(50, Math.max(1, pageSize));
+  const [{ totalItems = 0 } = { totalItems: 0 }] = await db.select({ totalItems: count() }).from(importBatches);
+  const totalPages = Math.max(1, Math.ceil(totalItems / normalizedPageSize));
+  const normalizedPage = Math.min(requestedPage, totalPages);
+  const rows = await db
+    .select()
+    .from(importBatches)
+    .orderBy(desc(importBatches.importedAt))
+    .limit(normalizedPageSize)
+    .offset((normalizedPage - 1) * normalizedPageSize);
+
+  return {
+    items: rows.map(mapImportHistoryRow),
+    page: normalizedPage,
+    pageSize: normalizedPageSize,
+    totalItems,
+    totalPages,
+  };
 }
 
 export async function getStatsDashboard(input: StatsFilters) {
@@ -1093,7 +1143,7 @@ export async function getStatsDashboard(input: StatsFilters) {
         totalConfirmedOrders: sql<number>`count(*)::int`,
       })
       .from(orders)
-      .where(inArray(orders.confirmed, [2, 3, 4, 5])),
+      .where(inArray(orders.confirmed, [2, 3, 4, 5, 10])),
     db
       .select({
         bucket: sql<string>`to_char(date_trunc('day', ${statsDateExpression}), 'YYYY-MM-DD')`,

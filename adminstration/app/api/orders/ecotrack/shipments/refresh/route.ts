@@ -22,11 +22,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => null);
     const parsed = parseEcotrackBulkAction(body);
-    const items = await refreshEcotrackOrdersBatch(parsed.orderIds, {
+    const result = await refreshEcotrackOrdersBatch(parsed.orderIds, {
       email: session?.user?.email ?? null,
       name: session?.user?.name ?? null,
     });
-    return NextResponse.json({ ok: true, items }, { headers: withRequestIdHeaders(requestId) });
+    return NextResponse.json(result, { headers: withRequestIdHeaders(requestId) });
   } catch (error) {
     captureAdminException(error, {
       requestId,

@@ -1,14 +1,23 @@
 export type ToastTone = 'loading' | 'success' | 'error';
+export type ToastPriority = 'default' | 'critical';
+export type ToastScope = 'page' | 'modal-safe';
 
 export type ToastRecord = {
   id: string;
   message: string;
   tone: ToastTone;
+  priority: ToastPriority;
+  scope: ToastScope;
 };
 
-type ToastInput = {
+type ToastOptions = {
   id?: string;
-  duration?: number;
+  duration?: number | null;
+  priority?: ToastPriority;
+  scope?: ToastScope;
+};
+
+type ToastInput = ToastOptions & {
   message: string;
   tone: ToastTone;
 };
@@ -34,8 +43,15 @@ function scheduleRemoval(id: string, duration = 3000) {
   timeouts.set(id, timeout);
 }
 
-function upsertToast({ duration, id = crypto.randomUUID(), message, tone }: ToastInput) {
-  const record = { id, message, tone };
+function upsertToast({
+  duration,
+  id = crypto.randomUUID(),
+  message,
+  tone,
+  priority = 'default',
+  scope = 'page',
+}: ToastInput) {
+  const record = { id, message, tone, priority, scope };
   const existingIndex = toasts.findIndex((toast) => toast.id === id);
 
   if (existingIndex === -1) {
@@ -50,8 +66,14 @@ function upsertToast({ duration, id = crypto.randomUUID(), message, tone }: Toas
       clearTimeout(existingTimeout);
       timeouts.delete(id);
     }
-  } else {
+  } else if (duration !== null) {
     scheduleRemoval(id, duration);
+  } else {
+    const existingTimeout = timeouts.get(id);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+      timeouts.delete(id);
+    }
   }
 
   emit();
@@ -90,11 +112,23 @@ export const toast = {
   loading(message: string) {
     return upsertToast({ message, tone: 'loading' });
   },
-  success(message: string, options?: { id?: string; duration?: number }) {
+  success(message: string, options?: ToastOptions) {
     return upsertToast({ ...options, message, tone: 'success' });
   },
-  error(message: string, options?: { id?: string; duration?: number }) {
+  error(message: string, options?: ToastOptions) {
     return upsertToast({ ...options, message, tone: 'error' });
+  },
+  criticalError(message: string, options?: Omit<ToastOptions, 'priority' | 'scope' | 'duration'> & {
+    duration?: number | null;
+  }) {
+    return upsertToast({
+      ...options,
+      message,
+      tone: 'error',
+      priority: 'critical',
+      scope: 'modal-safe',
+      duration: options?.duration ?? null,
+    });
   },
   dismiss: dismissToast,
   clear: clearToasts,

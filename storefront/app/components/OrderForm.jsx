@@ -32,6 +32,7 @@ import {
   findDeliveryFee,
   findWilayaByName,
   getCommunesForWilaya,
+  hasStopDeskForWilaya,
 } from "@/lib/storefront-api";
 import { formatCommuneOptionLabel } from "@/lib/commune-label";
 import {
@@ -130,6 +131,9 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
   const modify = Boolean(order);
   const submissionLockRef = useRef(false);
   const lastLoadedCartKeyRef = useRef("");
+  const phoneInputRef = useRef(null);
+  const wilayaSelectRef = useRef(null);
+  const communeSelectRef = useRef(null);
 
   const { clearCart, cartProducts, cartSummary, rememberProducts, setCart } = useContext(CartContext);
 
@@ -140,6 +144,7 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
   const [pendingVerification, setPendingVerification] = useState(null);
   const [pendingSubmission, setPendingSubmission] = useState(null);
   const [verificationError, setVerificationError] = useState("");
+  const [checkoutAttempted, setCheckoutAttempted] = useState(false);
   const [isRetryingVerification, setIsRetryingVerification] = useState(false);
 
   const [firstName, setFirstName] = useState(storage?.getItem("firstName") || "");
@@ -280,7 +285,10 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
   const availableCommunes = getCommunesForWilaya(deliveryCatalog, selectedWilayaId);
   const selectedCommune =
     availableCommunes.find((commune) => commune.name === city) ?? null;
-  const officeAvailable = selectedCommune ? selectedCommune.hasStopDesk : true;
+  const hasSelectedCommune = selectedCommune != null;
+  const officeAvailable = selectedWilayaId == null
+    ? true
+    : hasStopDeskForWilaya(deliveryCatalog, selectedWilayaId);
   const stopDeskSuffix = t("stopDeskOptionSuffix");
 
   useEffect(() => {
@@ -290,16 +298,16 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
   }, [availableCommunes, city]);
 
   useEffect(() => {
-    if (delivery === "office" && city && !officeAvailable) {
+    if (delivery === "office" && selectedWilayaId != null && !officeAvailable) {
       setDelivery("home");
       setShowOfficeFallbackNotice(true);
       return;
     }
 
-    if (!city || officeAvailable) {
+    if (selectedWilayaId == null || officeAvailable) {
       setShowOfficeFallbackNotice(false);
     }
-  }, [city, delivery, officeAvailable]);
+  }, [delivery, officeAvailable, selectedWilayaId]);
 
   const hasFreeShippingProduct = cart
     ? cartProducts.length > 0 &&
@@ -322,11 +330,18 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
   const coreFieldsComplete = isCheckoutCoreComplete({
     phoneNumber1,
     selectedWilayaId,
-    city,
+    city: hasSelectedCommune ? city : "",
   });
-  const submitDisabled =
-    isSubmitting || pendingVerification != null || !coreFieldsComplete;
+  const submitDisabled = isSubmitting || pendingVerification != null;
   const addressHelperKey = getAddressHelperKey(delivery);
+  const showLocationRequiredHint =
+    checkoutAttempted && (selectedWilayaId == null || !hasSelectedCommune);
+
+  useEffect(() => {
+    if (coreFieldsComplete) {
+      setCheckoutAttempted(false);
+    }
+  }, [coreFieldsComplete]);
 
   useEffect(() => {
     if (checkoutViewTrackedRef.current) {
@@ -679,7 +694,25 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
   async function saveOrder(event) {
     event.preventDefault();
 
-    if (submissionLockRef.current || isSubmitting || !coreFieldsComplete) {
+    if (submissionLockRef.current || isSubmitting) {
+      return;
+    }
+
+    if (!coreFieldsComplete) {
+      setCheckoutAttempted(true);
+
+      if (normalizeText(phoneNumber1) == null) {
+        setVerificationError(t("phoneRequiredHint"));
+        phoneInputRef.current?.focus();
+        return;
+      }
+
+      setVerificationError(t("locationRequired"));
+      if (selectedWilayaId == null) {
+        wilayaSelectRef.current?.focus();
+      } else {
+        communeSelectRef.current?.focus();
+      }
       return;
     }
 
@@ -702,7 +735,7 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
       return;
     }
 
-    if (selectedWilayaId == null || normalizeText(city) == null) {
+    if (selectedWilayaId == null || !hasSelectedCommune) {
       setVerificationError(t("locationRequired"));
       return;
     }
@@ -750,6 +783,7 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
 
     submissionLockRef.current = true;
     setIsSubmitting(true);
+    setCheckoutAttempted(false);
     setVerificationError("");
     writeRecentOrderSignature(signature);
 
@@ -1093,7 +1127,7 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
             </p>
           ) : null}
 
-          <form id="checkout-order-form" onSubmit={saveOrder} className="mt-6 space-y-6">
+          <form id="checkout-order-form" onSubmit={saveOrder} className="mt-6 space-y-6" noValidate>
             <section className="rounded-[1.75rem] border border-teal-200 bg-gradient-to-br from-teal-50 via-white to-emerald-50 p-5 shadow-sm">
               <p className="sf-kicker">{t("fastTitle")}</p>
               <h2 className="mt-3 text-2xl font-semibold text-slate-900">{t("fastTitle")}</h2>
@@ -1103,6 +1137,7 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
                 <label className="block text-sm font-semibold text-slate-900 sm:col-span-2">
                   {t("tel")}
                   <input
+                    ref={phoneInputRef}
                     required
                     value={phoneNumber1}
                     onChange={(e) => setPhoneNumber1(e.target.value)}
@@ -1122,6 +1157,7 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
                     {t("wil")}
                   </label>
                   <select
+                    ref={wilayaSelectRef}
                     required
                     value={selectedWilayaId ?? ""}
                     onChange={(e) => {
@@ -1133,6 +1169,8 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
                       setCity("");
                       setShowOfficeFallbackNotice(false);
                     }}
+                    aria-invalid={checkoutAttempted && selectedWilayaId == null ? "true" : undefined}
+                    aria-describedby={showLocationRequiredHint ? "checkout-location-error" : undefined}
                     className="sf-select mt-2"
                   >
                     <option value="">{t("wil")}</option>
@@ -1149,12 +1187,15 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
                     {t("comm")}
                   </label>
                   <select
+                    ref={communeSelectRef}
                     required
                     value={city}
                     onChange={(e) => {
                       setCity(e.target.value);
                       setShowOfficeFallbackNotice(false);
                     }}
+                    aria-invalid={checkoutAttempted && !hasSelectedCommune ? "true" : undefined}
+                    aria-describedby={showLocationRequiredHint ? "checkout-location-error" : undefined}
                     className="sf-select mt-2"
                     disabled={selectedWilayaId == null || availableCommunes.length === 0}
                   >
@@ -1165,6 +1206,11 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
                       </option>
                     ))}
                   </select>
+                  {showLocationRequiredHint ? (
+                    <p id="checkout-location-error" className="mt-2 text-xs font-semibold text-rose-600">
+                      {t("locationRequired")}
+                    </p>
+                  ) : null}
                 </div>
               </div>
 

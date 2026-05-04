@@ -247,6 +247,10 @@ export type CatalogContext = {
   assets: StorefrontAssets;
 };
 
+export type LegacyAdapterOptions = {
+  idMode?: "mongo_or_numeric" | "numeric";
+};
+
 export type LegacyProductsPageParams = {
   page?: number;
   limit?: number;
@@ -356,6 +360,7 @@ export function withCategoryChildren(categories: LegacyCategory[]) {
 export function normalizeProduct(
   product: StorefrontProduct,
   context?: Partial<CatalogContext>,
+  options?: LegacyAdapterOptions,
 ): LegacyProduct {
   const brand = context?.brands?.find((item) => item.id === product.brandId) ?? null;
   const category = context?.categories?.find((item) => item.id === product.categoryId) ?? null;
@@ -369,9 +374,11 @@ export function normalizeProduct(
   const price = Number(product.price ?? 0);
   const oldPrice = product.oldPrice == null ? null : Number(product.oldPrice);
   const mongoId = product.mongoId?.trim() ? product.mongoId.trim() : null;
+  const idMode = options?.idMode ?? "mongo_or_numeric";
+  const resolvedId = idMode === "numeric" ? String(product.id) : (mongoId ?? String(product.id));
 
   return {
-    _id: mongoId ?? String(product.id),
+    _id: resolvedId,
     mongo_id: mongoId,
     id: product.id,
     slug: product.slug ?? mongoId ?? String(product.id),
@@ -428,8 +435,8 @@ export function normalizeBanner(
     image: banner.imageUrl,
     link: linkedProduct
       ? buildLandingProductHref({
-          _id: linkedProduct.mongoId ?? String(linkedProduct.id),
-          slug: linkedProduct.slug ?? linkedProduct.mongoId ?? String(linkedProduct.id),
+          _id: String(linkedProduct.id),
+          slug: linkedProduct.slug ?? String(linkedProduct.id),
         })
       : "/products",
     createdAt: banner.createdAt,
@@ -505,12 +512,13 @@ export function sortStorefrontProductCards(cards: StorefrontProductCard[]) {
 export function buildLegacyHomepageData(
   context: CatalogContext,
   rawHomepageProducts: StorefrontProduct[],
+  options?: LegacyAdapterOptions,
 ): LegacyHomepageData {
   const activeBanners = sortStorefrontBanners(context.assets.banners);
   const activeProductCards = sortStorefrontProductCards(context.assets.productCards).filter(
     (card) => card.active,
   );
-  const products = rawHomepageProducts.map((product) => normalizeProduct(product, context));
+  const products = rawHomepageProducts.map((product) => normalizeProduct(product, context, options));
   const productById = new Map(
     products.flatMap((product) => [
       [product._id, product] as const,
@@ -839,22 +847,23 @@ export async function fetchLegacyProductByTokenFromSource(
   id: string,
   context: CatalogContext,
   fetchProductsPage: ProductFetcher,
+  options?: LegacyAdapterOptions,
 ) {
   const bySlug = await fetchProductsPage({ slug: id, limit: 1 });
   if (bySlug[0]) {
-    return normalizeProduct(bySlug[0], context);
+    return normalizeProduct(bySlug[0], context, options);
   }
 
   const byMongoId = await fetchProductsPage({ mongoId: id, limit: 1 });
   if (byMongoId[0]) {
-    return normalizeProduct(byMongoId[0], context);
+    return normalizeProduct(byMongoId[0], context, options);
   }
 
   const numericId = Number(id);
   if (Number.isFinite(numericId) && numericId > 0) {
     const matched = (await fetchProductsPage({ id: numericId, limit: 1 }))[0] ?? null;
     if (matched) {
-      return normalizeProduct(matched, context);
+      return normalizeProduct(matched, context, options);
     }
   }
 
@@ -865,6 +874,7 @@ export async function fetchLegacyProductsByTokensFromSource(
   ids: Array<string | number>,
   context: CatalogContext,
   fetchProductsPage: ProductFetcher,
+  options?: LegacyAdapterOptions,
 ) {
   const uniqueTokens = ids
     .map((value) => String(value).trim())
@@ -877,7 +887,7 @@ export async function fetchLegacyProductsByTokensFromSource(
 
   const products = await Promise.all(
     uniqueTokens.map((token) =>
-      fetchLegacyProductByTokenFromSource(token, context, fetchProductsPage),
+      fetchLegacyProductByTokenFromSource(token, context, fetchProductsPage, options),
     ),
   );
 
@@ -906,6 +916,7 @@ export async function fetchLegacyProductsPageFromSource(
   context: CatalogContext,
   fetchProductsPage: ProductFetcher,
   listAllProducts: ProductListFetcher,
+  options?: LegacyAdapterOptions,
 ): Promise<LegacyProductsPageResult> {
   const filters = buildLegacyFilters(context.categories, context.brands);
   const safePage = Number.isFinite(params.page) && Number(params.page) > 0 ? Number(params.page) : 1;
@@ -925,7 +936,7 @@ export async function fetchLegacyProductsPageFromSource(
   if (params.instock || categoryIds.length > 1 || shouldUseFeaturedNewestSort) {
     const allProducts = (await listAllProducts({
       search: normalizeSearchToken(params.search) ?? undefined,
-    })).map((product) => normalizeProduct(product, context));
+    })).map((product) => normalizeProduct(product, context, options));
 
     const filteredProducts = allProducts.filter((product) => {
       if (params.instock && product.stock <= 0) {
@@ -977,7 +988,7 @@ export async function fetchLegacyProductsPageFromSource(
     slug: normalizeSearchToken(params.slug),
   });
 
-  let products = upstreamPage.map((product) => normalizeProduct(product, context));
+  let products = upstreamPage.map((product) => normalizeProduct(product, context, options));
   let hasMore = products.length > safeLimit;
 
   if (params.instock) {

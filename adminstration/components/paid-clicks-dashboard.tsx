@@ -148,8 +148,8 @@ export function PaidClicksDashboard({ title, description }: PaidClicksDashboardP
           </NativeSelect>
           <NativeSelect value={variant} onChange={(event) => { setVariant(event.target.value); setCursorStack([]); }}>
             <option value="all">{t('filters.variantAll')}</option>
-            <option value="control">{t('filters.variantControl')}</option>
-            <option value="fast_checkout">{t('filters.variantFastCheckout')}</option>
+            <option value="new">{t('filters.variantNew')}</option>
+            <option value="legacy">{t('filters.variantLegacy')}</option>
           </NativeSelect>
           <NativeSelect value={paidSource} onChange={(event) => { setPaidSource(event.target.value); setCursorStack([]); }}>
             <option value="all">{t('filters.sourceAll')}</option>

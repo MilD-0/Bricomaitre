@@ -38,12 +38,23 @@ export const categoryRowSchema = z.object({
 
 export const brandFormSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  imageUrl: z.string().trim().min(1),
+  imageUrl: z.string().trim().optional().nullable().transform((value) => {
+    const normalized = value?.trim() ?? '';
+    return normalized.length > 0 ? normalized : null;
+  }),
 });
 
 export const brandUpdateSchema = brandFormSchema.partial().extend({
   status: z.enum(['active', 'draft']).optional(),
 });
+
+const categoryParentIdSchema = z.union([
+  z.coerce.number().int().positive(),
+  z.literal(''),
+  z.literal(0),
+  z.nan(),
+  z.null(),
+]).transform((value) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null));
 
 export const categoryFormSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -55,7 +66,7 @@ export const categoryFormSchema = z.object({
     const normalized = value?.trim() ?? '';
     return normalized.length > 0 ? normalized : null;
   }),
-  parentId: z.coerce.number().int().positive().nullable().optional(),
+  parentId: categoryParentIdSchema.optional(),
 });
 
 export const categoryUpdateSchema = categoryFormSchema.partial().extend({

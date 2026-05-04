@@ -193,9 +193,10 @@ function consumeInitialViewContentEvent(product) {
     typeof pending.eventId === "string" && pending.eventId.trim().length > 0
       ? pending.eventId.trim()
       : null;
+  const browserEventSent = pending.browserEventSent === true;
 
   window.__bricInitialViewContent = null;
-  return eventId ? { eventId } : null;
+  return eventId ? { eventId, browserEventSent } : null;
 }
 
 // -------------------- Core Tracking --------------------
@@ -388,7 +389,7 @@ export async function handleViewProduct({ product, additionalUserData = {} }) {
     capiData: data,
     additionalUserData,
     eventId: initialViewContentEvent?.eventId,
-    initialBrowserEventAlreadySent: Boolean(initialViewContentEvent),
+    initialBrowserEventAlreadySent: initialViewContentEvent?.browserEventSent === true,
   });
 
   void trackAnalyticsEvent({

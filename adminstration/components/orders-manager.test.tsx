@@ -64,7 +64,12 @@ describe('OrdersManager', () => {
     const page = Number(url.searchParams.get('page') ?? '1');
     const limit = Number(url.searchParams.get('limit') ?? '25');
     const search = (url.searchParams.get('search') ?? '').toLowerCase();
+    const confirmed = url.searchParams.get('confirmed');
     const filtered = items.filter((item) => {
+      if (confirmed !== null && confirmed !== '' && String(item.confirmed) !== confirmed) {
+        return false;
+      }
+
       if (!search) {
         return true;
       }
@@ -340,6 +345,7 @@ describe('OrdersManager', () => {
     expect((await screen.findAllByDisplayValue('Ada Lovelace')).length).toBeGreaterThan(0);
     expect(screen.getAllByDisplayValue('Grace Hopper').length).toBeGreaterThan(0);
     expect(screen.getAllByText('TRK-1').length).toBeGreaterThan(0);
+    expect(screen.getByText('ordersManager.totalOrders:2')).toBeInTheDocument();
 
     // Mobile card layout must not force horizontal overflow on narrow screens.
     // The phone row should preserve a readable phone width while still wrapping controls.
@@ -356,6 +362,7 @@ describe('OrdersManager', () => {
       expect(screen.queryAllByDisplayValue('Ada Lovelace')).toHaveLength(0);
       expect(screen.getAllByDisplayValue('Grace Hopper').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Alger').length).toBeGreaterThan(0);
+      expect(screen.getByText('ordersManager.totalOrders:1')).toBeInTheDocument();
     });
   });
 
@@ -1041,6 +1048,7 @@ describe('OrdersManager', () => {
         orderProducts: [
           {
             productId: 7,
+            slug: 'standing-desk',
             rawValue: '7',
             title: 'Desk',
             unitPrice: 1500,
@@ -1086,6 +1094,9 @@ describe('OrdersManager', () => {
 
     const [groupedProduct] = await screen.findAllByText(/Desk x2/);
     expect((await screen.findAllByText(/Lamp/)).length).toBeGreaterThan(0);
+    const [deskLink] = await screen.findAllByRole('link', { name: /Desk x2/ });
+    expect(deskLink).toHaveAttribute('href', 'https://bricomaitre.com/products/standing-desk');
+    expect(deskLink).toHaveAttribute('target', '_blank');
 
     await userEvent.hover(groupedProduct);
 
@@ -1771,11 +1782,13 @@ describe('OrdersManager', () => {
   });
 
   it('ignores confirmed orders older than a week when preparing the confirmed export', async () => {
+    const recentCreatedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    const oldCreatedAt = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
     const confirmedItems = [
       {
         id: 31,
-        createdAt: '2026-04-17T10:00:00.000Z',
-        updatedAt: '2026-04-17T10:00:00.000Z',
+        createdAt: recentCreatedAt,
+        updatedAt: recentCreatedAt,
         firstName: 'Recent',
         lastName: 'Order',
         fullName: 'Recent Order',
@@ -1803,8 +1816,8 @@ describe('OrdersManager', () => {
       },
       {
         id: 32,
-        createdAt: '2026-04-01T10:00:00.000Z',
-        updatedAt: '2026-04-01T10:00:00.000Z',
+        createdAt: oldCreatedAt,
+        updatedAt: oldCreatedAt,
         firstName: 'Old',
         lastName: 'Order',
         fullName: 'Old Order',
@@ -1868,11 +1881,12 @@ describe('OrdersManager', () => {
   });
 
   it('shows export start failures inside the export modal instead of a toast', async () => {
+    const recentCreatedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
     const confirmedItems = [
       {
         id: 41,
-        createdAt: '2026-04-17T10:00:00.000Z',
-        updatedAt: '2026-04-17T10:00:00.000Z',
+        createdAt: recentCreatedAt,
+        updatedAt: recentCreatedAt,
         firstName: 'Export',
         lastName: 'Failure',
         fullName: 'Export Failure',

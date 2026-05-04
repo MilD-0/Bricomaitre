@@ -11,7 +11,7 @@ import { getDb, hasDb } from '@bric/db/client';
 import { storefrontOrderCreateRequestSchema } from '@bric/storefront-core/contracts';
 import { createStorefrontOrder } from '@bric/storefront-core/orders';
 
-import { buildRateLimitHeaders, enforceRequestRateLimit } from '../../../lib/request-security';
+import { buildRateLimitHeaders, enforceOrderVelocityLimit, enforceRequestRateLimit } from '../../../lib/request-security';
 import { captureStorefrontApiException, getRequestId, withRequestIdHeaders } from '../../../lib/sentry';
 
 const SLOW_ORDER_CREATE_THRESHOLD_MS = 2_000;
@@ -67,6 +67,18 @@ export async function POST(req: NextRequest) {
   const parsed = storefrontOrderCreateRequestSchema.safeParse(payload);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400, headers: withRequestIdHeaders(requestId) });
+  }
+
+  const orderVelocityLimit = await enforceOrderVelocityLimit(req, {
+    journeyId: parsed.data.journeyId,
+    visitId: parsed.data.visitId,
+    sessionId: parsed.data.sessionId,
+  });
+  if (!orderVelocityLimit.ok) {
+    return NextResponse.json({ error: 'Too many order attempts. Try again later.' }, {
+      status: 429,
+      headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(orderVelocityLimit)),
+    });
   }
 
   const idempotencyKey = req.headers.get('idempotency-key')?.trim();

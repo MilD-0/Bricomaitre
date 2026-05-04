@@ -19,13 +19,12 @@ function BannerCarousel({ banners, locale }) {
     direction: locale === "ar" ? "rtl" : "ltr",
     loop: banners.length > 1,
   });
-  const orderedBanners = locale === "ar" ? [...banners].reverse() : banners;
 
   return (
     <section className="sf-container">
       <div className="embla__viewport sf-card overflow-hidden rounded-[1.75rem]" ref={emblaRef}>
         <div className="embla__container">
-          {orderedBanners.map((banner, index) => (
+          {banners.map((banner, index) => (
             <div key={banner._id} className="embla__slide !flex-[0_0_100%]">
               <Link className="block" href={banner.link}>
                 <Image
@@ -142,7 +141,7 @@ export default function Home({
         <div className="space-y-10 pb-8 md:space-y-14 md:pb-16">
           <div className="overflow-hidden pt-2">
             {banners.length > 0 ? (
-              <BannerCarousel banners={banners} locale={locale} />
+              <BannerCarousel key={locale} banners={banners} locale={locale} />
             ) : (
               <HeroSkeleton />
             )}

@@ -21,7 +21,7 @@ import {
 } from '../db/schema';
 
 const rangeValues = ['24h', '7d', '30d', 'custom'] as const;
-const variantValues = ['all', 'control', 'fast_checkout'] as const;
+const variantValues = ['all', 'new', 'legacy'] as const;
 const paidSourceFilterValues = ['all', 'fbclid', 'meta_utm', 'unknown'] as const;
 const outcomeValues = [
   'all',
@@ -326,8 +326,14 @@ function buildListWhere(input: PaidClickListQuery) {
     lte(analyticsPaidClickVisits.firstSeenAt, end),
   ];
 
+  const normalizedRequestedVariant = sql<string>`case
+    when coalesce(nullif(${analyticsPaidClickVisits.requestedVariant}, ''), 'new') in ('control', 'fast_checkout', 'new') then 'new'
+    when coalesce(nullif(${analyticsPaidClickVisits.requestedVariant}, ''), '') = 'legacy' then 'legacy'
+    else coalesce(nullif(${analyticsPaidClickVisits.requestedVariant}, ''), 'new')
+  end`;
+
   if (input.variant !== 'all') {
-    conditions.push(eq(analyticsPaidClickVisits.requestedVariant, input.variant));
+    conditions.push(eq(normalizedRequestedVariant, input.variant));
   }
 
   if (input.paidSource !== 'all') {
@@ -379,6 +385,11 @@ export async function listPaidClickVisits(rawInput: PaidClickListQuery) {
   const input = paidClickListQuerySchema.parse(rawInput);
   const db = getDb();
   const where = buildListWhere(input);
+  const normalizedRequestedVariant = sql<string>`case
+    when coalesce(nullif(${analyticsPaidClickVisits.requestedVariant}, ''), 'new') in ('control', 'fast_checkout', 'new') then 'new'
+    when coalesce(nullif(${analyticsPaidClickVisits.requestedVariant}, ''), '') = 'legacy' then 'legacy'
+    else coalesce(nullif(${analyticsPaidClickVisits.requestedVariant}, ''), 'new')
+  end`;
 
   const rows = await db
     .select({
@@ -388,7 +399,7 @@ export async function listPaidClickVisits(rawInput: PaidClickListQuery) {
       landingUrl: analyticsPaidClickVisits.landingUrl,
       landingPath: analyticsPaidClickVisits.landingPath,
       storefrontVariant: analyticsPaidClickVisits.storefrontVariant,
-      requestedVariant: analyticsPaidClickVisits.requestedVariant,
+      requestedVariant: normalizedRequestedVariant,
       paidSource: analyticsPaidClickVisits.paidSource,
       lastEventName: analyticsPaidClickVisits.lastEventName,
       eventCount: analyticsPaidClickVisits.eventCount,
@@ -463,6 +474,13 @@ export async function getPaidClickVisitDetail(visitId: string) {
     return null;
   }
 
+  const normalizedRequestedVariant =
+    visitRow.requestedVariant === 'legacy'
+      ? 'legacy'
+      : visitRow.requestedVariant === 'fast_checkout' || visitRow.requestedVariant === 'control' || visitRow.requestedVariant === 'new'
+        ? 'new'
+        : (visitRow.requestedVariant ?? null);
+
   const eventRows = await db
     .select({
       eventId: analyticsEvents.eventId,
@@ -506,7 +524,7 @@ export async function getPaidClickVisitDetail(visitId: string) {
       referrer: visitRow.referrer,
       userAgent: visitRow.userAgent,
       storefrontVariant: visitRow.storefrontVariant,
-      requestedVariant: visitRow.requestedVariant,
+      requestedVariant: normalizedRequestedVariant,
       experimentMode: visitRow.experimentMode,
       experimentSource: visitRow.experimentSource,
       fbclidRaw: visitRow.fbclidRaw,

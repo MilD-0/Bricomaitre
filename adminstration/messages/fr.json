@@ -347,8 +347,8 @@
         "range7d": "Derniers 7 jours",
         "range30d": "Derniers 30 jours",
         "variantAll": "Toutes les variantes",
-        "variantControl": "Controle",
-        "variantFastCheckout": "Checkout rapide",
+        "variantNew": "Nouveau",
+        "variantLegacy": "Legacy",
         "sourceAll": "Toutes les sources",
         "outcomeAll": "Tous les résultats",
         "hasOrderAll": "Avec et sans commande",
@@ -988,6 +988,7 @@
       "table": "Tableau"
     },
     "searchPlaceholder": "Rechercher par nom client ou numéro de téléphone",
+    "totalOrders": "Total commandes : {count}",
     "filters": {
       "statusLabel": "Filtrer par statut",
       "allStatuses": "Tous les statuts"
@@ -1122,6 +1123,7 @@
       "confirmed": "Confirmée",
       "dispatched": "Expédié",
       "completed": "Complétée",
+      "manualCompleted": "Complétée manuellement",
       "delayed": "Reportée",
       "inDelivery": "En livraison",
       "returned": "Retournée",
@@ -1275,6 +1277,7 @@
       "emptyTimeline": "Aucun evenement tracking en cache."
     },
     "actions": {
+      "scanTrackingNumber": "Scanner un tracking",
       "printSelected": "Imprimer les etiquettes selectionnees",
       "refreshSelected": "Rafraichir la selection",
       "clearSelection": "Vider la selection",
@@ -1286,6 +1289,9 @@
       "label": "Etiquette",
       "refresh": "Rafraichir",
       "dispatch": "Expedier",
+      "saveOnly": "Enregistrer seulement",
+      "saveAndDispatch": "Enregistrer et expedier",
+      "editAndRecreate": "Modifier et recreer",
       "maj": "Ajouter une mise a jour",
       "return": "Demander un retour",
       "showHistory": "Afficher l'historique",
@@ -1302,7 +1308,11 @@
     "dialogs": {
       "editTitle": "Modifier l'expedition ECOTRACK",
       "editDescription": "Mettez a jour la commande locale puis ECOTRACK tant que l'expedition est encore prete_a_expedier.",
-      "editHint": "Les produits et le split du montant restent derives de la commande locale.",
+      "editHint": "Le sous-total suit les produits selectionnes sauf si vous le remplacez manuellement. Le frais de livraison est recalcule quand le type de livraison ou la wilaya change.",
+      "recreateTitle": "Modifier et recreer l'expedition ECOTRACK",
+      "recreateDescription": "Mettez a jour {name}, supprimez le lien de suivi ECOTRACK local actuel, puis creez immediatement une nouvelle expedition ECOTRACK.",
+      "finalizeTitle": "Verification finale avant expedition ECOTRACK",
+      "finalizeDescription": "Verifiez et mettez a jour {name} une derniere fois, puis enregistrez les changements et expediez l'envoi.",
       "deleteTitle": "Supprimer l'expedition ECOTRACK",
       "deleteDescription": "Supprimer l'expedition ECOTRACK pour {name}. La commande locale restera disponible pour un repost plus tard.",
       "dispatchTitle": "Expedier l'expedition ECOTRACK",
@@ -1315,6 +1325,8 @@
       "lastName": "Nom",
       "phoneNumber1": "Telephone principal",
       "phoneNumber2": "Telephone secondaire",
+      "scanTrackingNumber": "Scanner un tracking",
+      "scanTrackingNumberPlaceholder": "Scannez ou collez un numero de tracking ECOTRACK",
       "delivery": "Type de livraison",
       "state": "Wilaya",
       "statePlaceholder": "Selectionner une wilaya",
@@ -1334,12 +1346,19 @@
       "refresh": {
         "loading": "Rafraichissement de l'expedition ECOTRACK...",
         "success": "Expedition ECOTRACK rafraichie.",
+        "partial": "{successCount} expeditions rafraichies, {failedCount} en echec.",
+        "allFailed": "Echec du rafraichissement de toutes les expeditions ECOTRACK selectionnees.",
         "error": "Echec du rafraichissement ECOTRACK."
       },
       "update": {
         "loading": "Enregistrement de l'expedition ECOTRACK...",
         "success": "Expedition ECOTRACK enregistree.",
         "error": "Echec de l'enregistrement ECOTRACK."
+      },
+      "recreate": {
+        "loading": "Recreation de l'expedition ECOTRACK...",
+        "success": "Expedition ECOTRACK recreee.",
+        "error": "Echec de la recreation ECOTRACK."
       },
       "delete": {
         "loading": "Suppression de l'expedition ECOTRACK...",
@@ -1350,6 +1369,7 @@
         "loading": "Expedition ECOTRACK en cours...",
         "success": "Expedition ECOTRACK envoyee.",
         "partial": "{successCount} expeditions envoyees, {failedCount} en echec.",
+        "allFailed": "Echec de l'expedition de toutes les expeditions ECOTRACK selectionnees.",
         "error": "Echec de l'expedition ECOTRACK."
       },
       "maj": {
@@ -1365,7 +1385,22 @@
       "labels": {
         "loading": "Preparation des etiquettes ECOTRACK...",
         "success": "Etiquettes ECOTRACK pretes.",
+        "partial": "{successCount} etiquettes preparees, {failedCount} en echec.",
+        "allFailed": "Echec de la preparation de toutes les etiquettes ECOTRACK selectionnees.",
         "error": "Echec de la preparation des etiquettes ECOTRACK."
+      },
+      "scan": {
+        "loading": "Recherche du numero de tracking ECOTRACK...",
+        "success": "Le tracking {trackingNumber} est pret pour la verification finale.",
+        "notFound": "Aucune expedition ECOTRACK trouvee pour le tracking {trackingNumber}.",
+        "notDispatchable": "Le tracking {trackingNumber} est actuellement {status}. Seules les expeditions prete_a_expedier peuvent etre finalisees apres scan.",
+        "error": "Echec de la recherche du tracking ECOTRACK."
+      },
+      "finalize": {
+        "loading": "Enregistrement puis expedition ECOTRACK...",
+        "success": "Expedition ECOTRACK enregistree puis expediee.",
+        "partialFailure": "Changements enregistres, expedition echouee : {message}",
+        "error": "Echec de l'enregistrement et de l'expedition ECOTRACK."
       }
     },
     "statuses": {

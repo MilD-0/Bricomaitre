@@ -149,7 +149,7 @@
     "dom": "Livraison à domicile",
     "off": "Livraison au poste",
     "stopDeskOptionSuffix": "(poste disponible)",
-    "officeFallbackNotice": "Livraison au poste indisponible pour cette commune. Bascule automatique vers livraison à domicile.",
+    "officeFallbackNotice": "Livraison au poste indisponible pour cette wilaya. Bascule automatique vers livraison à domicile.",
     "modi": "Modifier",
     "verifying": "Verification en cours...",
     "verificationFailed": "Une commande precedente existe peut-etre deja. Verifiez-la avant d'en envoyer une nouvelle.",

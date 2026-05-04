@@ -449,6 +449,12 @@ describe('StatsDashboard', () => {
 
   it('uploads and deletes import batches on the import history page', async () => {
     let statsImportJobFetchCount = 0;
+    const historyRows = Array.from({ length: 11 }, (_, index) => ({
+      ...baseResponse.data.importHistory[0],
+      id: index + 1,
+      batchId: `batch-${index + 1}`,
+      fileName: `import-${index + 1}.xlsx`,
+    }));
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
@@ -475,7 +481,27 @@ describe('StatsDashboard', () => {
         };
       }
 
-      if (url === '/api/stats?batchId=batch-1' && init?.method === 'DELETE') {
+      if (url.startsWith('/api/stats?history=true')) {
+        const params = new URL(`http://localhost${url}`).searchParams;
+        const page = Number(params.get('page') ?? '1');
+        const pageSize = Number(params.get('pageSize') ?? '10');
+        const start = (page - 1) * pageSize;
+
+        return {
+          ok: true,
+          json: async () => ({
+            data: {
+              items: historyRows.slice(start, start + pageSize),
+              page,
+              pageSize,
+              totalItems: historyRows.length,
+              totalPages: Math.ceil(historyRows.length / pageSize),
+            },
+          }),
+        };
+      }
+
+      if (url.startsWith('/api/stats?batchId=') && init?.method === 'DELETE') {
         return {
           ok: true,
           json: async () => ({ data: { deletedOrders: 12, deletedBatch: { id: 1 } } }),
@@ -499,6 +525,12 @@ describe('StatsDashboard', () => {
     renderDashboard('imports');
 
     expect((await screen.findAllByText('Stats')).length).toBeGreaterThan(0);
+    expect(await screen.findByText('import-10.xlsx')).toBeInTheDocument();
+    expect(screen.queryByText('import-11.xlsx')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'labels.goToPage:2' }));
+
+    expect(await screen.findByText('import-11.xlsx')).toBeInTheDocument();
     await userEvent.click(screen.getAllByRole('button', { name: 'upload.fieldLabel' })[0]);
 
     expect((await screen.findAllByText('notifications.upload.success:4|1')).length).toBeGreaterThan(0);
@@ -513,6 +545,7 @@ describe('StatsDashboard', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/stats?batchId=batch-1', expect.objectContaining({ method: 'DELETE' }));
+      expect(fetchMock).toHaveBeenCalledWith('/api/stats?history=true&page=2&pageSize=10', undefined);
       expect(fetchMock).toHaveBeenCalledWith(
         '/api/stats',
         expect.objectContaining({

@@ -82,10 +82,46 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   });
 
   if (!res.ok) {
-    throw new Error(await res.text());
+    const body = await res.text();
+    let message = body.trim();
+
+    try {
+      const parsed = JSON.parse(body) as { error?: unknown };
+      if (typeof parsed.error === 'string') {
+        message = parsed.error;
+      } else if (parsed.error && typeof parsed.error === 'object') {
+        message = JSON.stringify(parsed.error);
+      }
+    } catch {
+      // Keep the plain response body.
+    }
+
+    throw new Error(message || `Request failed with status ${res.status}`);
   }
 
   return res.json() as Promise<T>;
+}
+
+function mutationErrorMessage(fallback: string, error: Error) {
+  const detail = error.message.trim();
+  return detail ? `${fallback} ${detail}` : fallback;
+}
+
+function firstFormErrorMessage(errors: Record<string, unknown>): string | null {
+  for (const value of Object.values(errors)) {
+    if (value && typeof value === 'object' && 'message' in value && typeof value.message === 'string') {
+      return value.message;
+    }
+
+    if (value && typeof value === 'object') {
+      const nested: string | null = firstFormErrorMessage(value as Record<string, unknown>);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  return null;
 }
 
 function actorLabel(name?: string | null, email?: string | null, fallback?: string) {
@@ -469,10 +505,10 @@ export function BrandsManager() {
 
       return { messages, snapshot, toastId };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       if (!context) return;
       restoreQueries(queryClient, context.snapshot);
-      toast.error(context.messages.error, { id: context.toastId });
+      toast.error(mutationErrorMessage(context.messages.error, error), { id: context.toastId });
     },
     onSuccess: (_data, _variables, context) => {
       if (!context) return;
@@ -525,10 +561,10 @@ export function BrandsManager() {
 
       return { messages, snapshot, toastId };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       if (!context) return;
       restoreQueries(queryClient, context.snapshot);
-      toast.error(context.messages.error, { id: context.toastId });
+      toast.error(mutationErrorMessage(context.messages.error, error), { id: context.toastId });
     },
     onSuccess: (_data, _variables, context) => {
       if (!context) return;
@@ -557,10 +593,10 @@ export function BrandsManager() {
 
       return { messages, snapshot, toastId };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       if (!context) return;
       restoreQueries(queryClient, context.snapshot);
-      toast.error(context.messages.error, { id: context.toastId });
+      toast.error(mutationErrorMessage(context.messages.error, error), { id: context.toastId });
     },
     onSuccess: (_data, _variables, context) => {
       if (!context) return;
@@ -584,10 +620,10 @@ export function BrandsManager() {
 
       return { messages, snapshot, toastId };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       if (!context) return;
       restoreQueries(queryClient, context.snapshot);
-      toast.error(context.messages.error, { id: context.toastId });
+      toast.error(mutationErrorMessage(context.messages.error, error), { id: context.toastId });
     },
     onSuccess: (_data, _variables, context) => {
       if (!context) return;
@@ -617,22 +653,27 @@ export function BrandsManager() {
     });
   };
 
-  const submitBrandDialog = form.handleSubmit(async (rawValues) => {
-    const values = brandFormSchema.parse(rawValues);
-    if (dialogState.mode === 'edit' && dialogState.editingId) {
-      await updateMutation.mutateAsync({
-        id: dialogState.editingId,
-        values,
-        messages: buildMessages(t, 'notifications.brands.save.loading', 'notifications.brands.save.success', 'notifications.brands.save.error', { name: values.name }),
-      });
-      return;
-    }
+  const submitBrandDialog = form.handleSubmit(
+    async (rawValues) => {
+      const values = brandFormSchema.parse(rawValues);
+      if (dialogState.mode === 'edit' && dialogState.editingId) {
+        await updateMutation.mutateAsync({
+          id: dialogState.editingId,
+          values,
+          messages: buildMessages(t, 'notifications.brands.save.loading', 'notifications.brands.save.success', 'notifications.brands.save.error', { name: values.name }),
+        });
+        return;
+      }
 
-    await createMutation.mutateAsync({
-      values,
-      messages: buildMessages(t, 'notifications.brands.create.loading', 'notifications.brands.create.success', 'notifications.brands.create.error', { name: values.name }),
-    });
-  });
+      await createMutation.mutateAsync({
+        values,
+        messages: buildMessages(t, 'notifications.brands.create.loading', 'notifications.brands.create.success', 'notifications.brands.create.error', { name: values.name }),
+      });
+    },
+    (errors) => {
+      toast.error(firstFormErrorMessage(errors) ?? t('notifications.brands.create.error', { name: form.getValues('name') || t('labels.brandNamePlaceholder') }));
+    },
+  );
 
   return (
     <motion.section id="brands" className="scroll-mt-24 overflow-hidden rounded-[1.75rem] border border-border/70 bg-background/95 shadow-sm" {...sectionTransitionProps}>
@@ -953,10 +994,10 @@ export function CategoriesManager() {
 
       return { messages, snapshot, toastId };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       if (!context) return;
       restoreQueries(queryClient, context.snapshot);
-      toast.error(context.messages.error, { id: context.toastId });
+      toast.error(mutationErrorMessage(context.messages.error, error), { id: context.toastId });
     },
     onSuccess: (_data, _variables, context) => {
       if (!context) return;
@@ -1015,10 +1056,10 @@ export function CategoriesManager() {
 
       return { messages, snapshot, toastId };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       if (!context) return;
       restoreQueries(queryClient, context.snapshot);
-      toast.error(context.messages.error, { id: context.toastId });
+      toast.error(mutationErrorMessage(context.messages.error, error), { id: context.toastId });
     },
     onSuccess: (_data, _variables, context) => {
       if (!context) return;
@@ -1047,10 +1088,10 @@ export function CategoriesManager() {
 
       return { messages, snapshot, toastId };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       if (!context) return;
       restoreQueries(queryClient, context.snapshot);
-      toast.error(context.messages.error, { id: context.toastId });
+      toast.error(mutationErrorMessage(context.messages.error, error), { id: context.toastId });
     },
     onSuccess: (_data, _variables, context) => {
       if (!context) return;
@@ -1074,10 +1115,10 @@ export function CategoriesManager() {
 
       return { messages, snapshot, toastId };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       if (!context) return;
       restoreQueries(queryClient, context.snapshot);
-      toast.error(context.messages.error, { id: context.toastId });
+      toast.error(mutationErrorMessage(context.messages.error, error), { id: context.toastId });
     },
     onSuccess: (_data, _variables, context) => {
       if (!context) return;
@@ -1108,22 +1149,27 @@ export function CategoriesManager() {
     });
   };
 
-  const submitCategoryDialog = form.handleSubmit(async (rawValues) => {
-    const values = categoryFormSchema.parse(rawValues);
-    if (dialogState.mode === 'edit' && dialogState.editingId) {
-      await updateMutation.mutateAsync({
-        id: dialogState.editingId,
-        values,
-        messages: buildMessages(t, 'notifications.categories.save.loading', 'notifications.categories.save.success', 'notifications.categories.save.error', { name: values.name }),
-      });
-      return;
-    }
+  const submitCategoryDialog = form.handleSubmit(
+    async (rawValues) => {
+      const values = categoryFormSchema.parse(rawValues);
+      if (dialogState.mode === 'edit' && dialogState.editingId) {
+        await updateMutation.mutateAsync({
+          id: dialogState.editingId,
+          values,
+          messages: buildMessages(t, 'notifications.categories.save.loading', 'notifications.categories.save.success', 'notifications.categories.save.error', { name: values.name }),
+        });
+        return;
+      }
 
-    await createMutation.mutateAsync({
-      values,
-      messages: buildMessages(t, 'notifications.categories.create.loading', 'notifications.categories.create.success', 'notifications.categories.create.error', { name: values.name }),
-    });
-  });
+      await createMutation.mutateAsync({
+        values,
+        messages: buildMessages(t, 'notifications.categories.create.loading', 'notifications.categories.create.success', 'notifications.categories.create.error', { name: values.name }),
+      });
+    },
+    (errors) => {
+      toast.error(firstFormErrorMessage(errors) ?? t('notifications.categories.create.error', { name: form.getValues('name') || t('labels.categoryNamePlaceholder') }));
+    },
+  );
 
   return (
     <motion.section id="categories" className="scroll-mt-24 overflow-hidden rounded-[1.75rem] border border-border/70 bg-background/95 shadow-sm" {...sectionTransitionProps}>
