@@ -12,6 +12,7 @@
     "./dto": "./src/storefront/dto.ts",
     "./ecotrack-catalog": "./src/storefront/ecotrack-catalog.ts",
     "./legacy-adapter": "./src/storefront/legacy-adapter.ts",
+    "./project-routing": "./src/storefront/project-routing.ts",
     "./order-access": "./src/storefront/order-access.ts",
     "./order-records": "./src/order-records.ts",
     "./orders": "./src/storefront/orders.ts",

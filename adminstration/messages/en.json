@@ -342,8 +342,8 @@
         "range7d": "Last 7 days",
         "range30d": "Last 30 days",
         "variantAll": "All variants",
-        "variantControl": "Control",
-        "variantFastCheckout": "Fast checkout",
+        "variantNew": "New",
+        "variantLegacy": "Legacy",
         "sourceAll": "All paid sources",
         "outcomeAll": "All outcomes",
         "hasOrderAll": "Orders and non-orders",
@@ -983,6 +983,7 @@
       "table": "Table"
     },
     "searchPlaceholder": "Search by client name or phone number",
+    "totalOrders": "Total orders: {count}",
     "filters": {
       "statusLabel": "Filter by status",
       "allStatuses": "All statuses"
@@ -1117,6 +1118,7 @@
       "confirmed": "Confirmed",
       "dispatched": "Dispatched",
       "completed": "Completed",
+      "manualCompleted": "Manually completed",
       "delayed": "Delayed",
       "inDelivery": "In delivery",
       "returned": "Returned",
@@ -1270,6 +1272,7 @@
       "emptyTimeline": "No tracking events cached yet."
     },
     "actions": {
+      "scanTrackingNumber": "Scan tracking number",
       "printSelected": "Print selected labels",
       "refreshSelected": "Refresh selected",
       "clearSelection": "Clear selection",
@@ -1281,6 +1284,9 @@
       "label": "Label",
       "refresh": "Refresh",
       "dispatch": "Dispatch",
+      "saveOnly": "Save only",
+      "saveAndDispatch": "Save and dispatch",
+      "editAndRecreate": "Edit and recreate",
       "maj": "Add mise a jour",
       "return": "Request return",
       "showHistory": "Show history",
@@ -1297,7 +1303,11 @@
     "dialogs": {
       "editTitle": "Edit ECOTRACK shipment",
       "editDescription": "Update the local order and propagate the changes to ECOTRACK while the shipment is still prete_a_expedier.",
-      "editHint": "Product and montant splits stay derived from the local order items and delivery fee.",
+      "editHint": "Subtotal follows selected products unless you overwrite it manually. Delivery fee resets when delivery type or wilaya changes.",
+      "recreateTitle": "Edit and recreate ECOTRACK shipment",
+      "recreateDescription": "Update {name}, clear the current local ECOTRACK tracking link, and create a brand-new ECOTRACK shipment immediately.",
+      "finalizeTitle": "Final review before ECOTRACK dispatch",
+      "finalizeDescription": "Review and update {name} one last time, then save the changes and dispatch the shipment.",
       "deleteTitle": "Delete ECOTRACK shipment",
       "deleteDescription": "Delete the ECOTRACK shipment for {name}. The local order will stay available for reposting later.",
       "dispatchTitle": "Dispatch ECOTRACK shipment",
@@ -1310,6 +1320,8 @@
       "lastName": "Last name",
       "phoneNumber1": "Primary phone",
       "phoneNumber2": "Secondary phone",
+      "scanTrackingNumber": "Scan tracking number",
+      "scanTrackingNumberPlaceholder": "Scan or paste an ECOTRACK tracking number",
       "delivery": "Delivery type",
       "state": "Wilaya",
       "statePlaceholder": "Select a wilaya",
@@ -1329,12 +1341,19 @@
       "refresh": {
         "loading": "Refreshing ECOTRACK shipment...",
         "success": "ECOTRACK shipment refreshed.",
+        "partial": "{successCount} shipments refreshed, {failedCount} failed.",
+        "allFailed": "Failed to refresh all selected ECOTRACK shipments.",
         "error": "Failed to refresh the ECOTRACK shipment."
       },
       "update": {
         "loading": "Saving ECOTRACK shipment...",
         "success": "ECOTRACK shipment saved.",
         "error": "Failed to save the ECOTRACK shipment."
+      },
+      "recreate": {
+        "loading": "Recreating ECOTRACK shipment...",
+        "success": "ECOTRACK shipment recreated.",
+        "error": "Failed to recreate the ECOTRACK shipment."
       },
       "delete": {
         "loading": "Deleting ECOTRACK shipment...",
@@ -1345,6 +1364,7 @@
         "loading": "Dispatching ECOTRACK shipment...",
         "success": "ECOTRACK shipment dispatched.",
         "partial": "{successCount} shipments dispatched, {failedCount} failed.",
+        "allFailed": "Failed to dispatch all selected ECOTRACK shipments.",
         "error": "Failed to dispatch the ECOTRACK shipment."
       },
       "maj": {
@@ -1360,7 +1380,22 @@
       "labels": {
         "loading": "Preparing ECOTRACK labels...",
         "success": "ECOTRACK labels ready.",
+        "partial": "{successCount} labels prepared, {failedCount} failed.",
+        "allFailed": "Failed to prepare all selected ECOTRACK labels.",
         "error": "Failed to prepare the ECOTRACK labels."
+      },
+      "scan": {
+        "loading": "Looking up ECOTRACK tracking number...",
+        "success": "Tracking number {trackingNumber} ready for final review.",
+        "notFound": "No ECOTRACK shipment found for tracking number {trackingNumber}.",
+        "notDispatchable": "Tracking number {trackingNumber} is currently {status}. Only prete_a_expedier shipments can be finalized from scan.",
+        "error": "Failed to look up the ECOTRACK tracking number."
+      },
+      "finalize": {
+        "loading": "Saving and dispatching ECOTRACK shipment...",
+        "success": "ECOTRACK shipment saved and dispatched.",
+        "partialFailure": "Changes saved, dispatch failed: {message}",
+        "error": "Failed to save and dispatch the ECOTRACK shipment."
       }
     },
     "statuses": {

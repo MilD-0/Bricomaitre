@@ -65,10 +65,12 @@ export default function MetaViewContentBootstrap({ product }) {
                 : String(Date.now()) + '-' + Math.random().toString(36).slice(2, 12);
             window.__bricInitialViewContent = {
               eventId: eventId,
-              productKey: ${JSON.stringify(payload.productKey)}
+              productKey: ${JSON.stringify(payload.productKey)},
+              browserEventSent: false
             };
             if (typeof window.fbq === 'function') {
               window.fbq('track', 'ViewContent', ${JSON.stringify(payload.pixelData)}, { eventID: eventId });
+              window.__bricInitialViewContent.browserEventSent = true;
             }
           })();
         `,

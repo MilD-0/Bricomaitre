@@ -71,6 +71,7 @@ type Product = {
   images: string[];
   createdAt: string;
   updatedAt: string;
+  slug?: string | null;
 };
 
 const postCalls: Array<{ url: string; body: unknown }> = [];
@@ -379,11 +380,12 @@ describe('ProductsManager', () => {
   it('opens the edit popup, shows image preview on hover, and saves changes', async () => {
     renderProductsManager();
 
-    const titleButton = (await screen.findAllByRole('button', { name: 'Existing product' }))[0];
+    const titleLink = (await screen.findAllByRole('link', { name: 'Existing product' }))[0];
+    const productRow = titleLink.closest('tr') as HTMLElement;
     expect(screen.getAllByAltText('Existing product thumbnail').length).toBeGreaterThan(0);
-    await userEvent.hover(titleButton);
+    await userEvent.hover(titleLink);
     expect(await screen.findByAltText('Existing product')).toBeInTheDocument();
-    await userEvent.click(titleButton);
+    await userEvent.click(within(productRow).getByRole('button', { name: 'Modify' }));
 
     const dialog = screen.getByRole('dialog');
     const titleInput = within(dialog).getByRole('textbox', { name: 'Product name' });
@@ -401,6 +403,28 @@ describe('ProductsManager', () => {
         }),
       });
     });
+  });
+
+  it('links product table titles to the storefront product page', async () => {
+    products = [
+      {
+        ...products[0],
+        slug: 'existing-product',
+      },
+      {
+        ...products[1],
+        slug: null,
+      },
+    ];
+
+    renderProductsManager();
+
+    const existingProductLink = (await screen.findAllByRole('link', { name: 'Existing product' }))[0];
+    expect(existingProductLink).toHaveAttribute('href', 'https://bricomaitre.com/products/existing-product');
+    expect(existingProductLink).toHaveAttribute('target', '_blank');
+
+    const paintBucketLink = screen.getAllByRole('link', { name: 'Paint bucket' })[0];
+    expect(paintBucketLink).toHaveAttribute('href', 'https://bricomaitre.com/products/2');
   });
 
   it('supports hierarchical multi-sort with three-click toggles', async () => {
@@ -461,8 +485,8 @@ describe('ProductsManager', () => {
   it('supports row toggle mutations and bulk actions with toasts', async () => {
     renderProductsManager();
 
-    const titleButton = (await screen.findAllByRole('button', { name: 'Existing product' }))[0];
-    const productRow = titleButton.closest('tr') as HTMLElement;
+    const titleLink = (await screen.findAllByRole('link', { name: 'Existing product' }))[0];
+    const productRow = titleLink.closest('tr') as HTMLElement;
 
     const activeSwitch = within(productRow).getByRole('switch', { name: 'Active' });
     await userEvent.click(activeSwitch);
@@ -569,8 +593,8 @@ describe('ProductsManager', () => {
   it('deletes selected products from the bulk action flow', async () => {
     renderProductsManager();
 
-    const titleButton = (await screen.findAllByRole('button', { name: 'Existing product' }))[0];
-    const productRow = titleButton.closest('tr') as HTMLElement;
+    const titleLink = (await screen.findAllByRole('link', { name: 'Existing product' }))[0];
+    const productRow = titleLink.closest('tr') as HTMLElement;
     await userEvent.click(within(productRow).getByRole('checkbox', { name: 'Select Existing product' }));
     await userEvent.click(screen.getByRole('button', { name: 'Delete selected' }));
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
@@ -585,8 +609,8 @@ describe('ProductsManager', () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
     renderProductsManager();
 
-    const titleButton = (await screen.findAllByRole('button', { name: 'Existing product' }))[0];
-    const productRow = titleButton.closest('tr') as HTMLElement;
+    const titleLink = (await screen.findAllByRole('link', { name: 'Existing product' }))[0];
+    const productRow = titleLink.closest('tr') as HTMLElement;
     await userEvent.click(within(productRow).getByRole('checkbox', { name: 'Select Existing product' }));
     await userEvent.click(screen.getByRole('button', { name: 'Export Meta catalog' }));
 
@@ -609,12 +633,12 @@ describe('ProductsManager', () => {
   it('copies selected product ids to the clipboard', async () => {
     renderProductsManager();
 
-    const firstTitleButton = (await screen.findAllByRole('button', { name: 'Existing product' }))[0];
-    const firstRow = firstTitleButton.closest('tr') as HTMLElement;
+    const firstTitleLink = (await screen.findAllByRole('link', { name: 'Existing product' }))[0];
+    const firstRow = firstTitleLink.closest('tr') as HTMLElement;
     await userEvent.click(within(firstRow).getByRole('checkbox', { name: 'Select Existing product' }));
 
-    const secondTitleButton = screen.getAllByRole('button', { name: 'Paint bucket' })[0];
-    const secondRow = secondTitleButton.closest('tr') as HTMLElement;
+    const secondTitleLink = screen.getAllByRole('link', { name: 'Paint bucket' })[0];
+    const secondRow = secondTitleLink.closest('tr') as HTMLElement;
     await userEvent.click(within(secondRow).getByRole('checkbox', { name: 'Select Paint bucket' }));
 
     await userEvent.click(screen.getByRole('button', { name: 'Copy product IDs' }));
@@ -649,13 +673,13 @@ describe('ProductsManager', () => {
 
     renderProductsManager();
 
-    const pageOneTitle = (await screen.findAllByRole('button', { name: 'Product 55' }))[0];
+    const pageOneTitle = (await screen.findAllByRole('link', { name: 'Product 55' }))[0];
     const pageOneRow = pageOneTitle.closest('tr') as HTMLElement;
     await userEvent.click(within(pageOneRow).getByRole('checkbox', { name: 'Select Product 55' }));
 
     await userEvent.click(screen.getByRole('button', { name: 'Go to page 2' }));
 
-    const pageTwoTitle = (await screen.findAllByRole('button', { name: 'Product 5' }))[0];
+    const pageTwoTitle = (await screen.findAllByRole('link', { name: 'Product 5' }))[0];
     const pageTwoRow = pageTwoTitle.closest('tr') as HTMLElement;
     await userEvent.click(within(pageTwoRow).getByRole('checkbox', { name: 'Select Product 5' }));
 
@@ -706,8 +730,8 @@ describe('ProductsManager', () => {
 
     renderProductsManager();
 
-    const titleButton = (await screen.findAllByRole('button', { name: 'Existing product' }))[0];
-    const productRow = titleButton.closest('tr') as HTMLElement;
+    const titleLink = (await screen.findAllByRole('link', { name: 'Existing product' }))[0];
+    const productRow = titleLink.closest('tr') as HTMLElement;
 
     const activeSwitch = within(productRow).getByRole('switch', { name: 'Active' });
     expect(activeSwitch).toHaveAttribute('data-state', 'checked');

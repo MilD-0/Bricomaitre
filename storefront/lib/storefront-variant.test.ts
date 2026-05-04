@@ -1,29 +1,40 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  getStorefrontVariant,
-  isFastCheckoutVariant,
-  normalizeStorefrontVariant,
-  readStorefrontVariantCookie,
-  resolveStorefrontVariant,
-} from "./storefront-variant";
+  normalizeStorefrontProject,
+  resolveRequestedStorefrontProject,
+  STOREFRONT_PROJECT_COOKIE_NAME,
+} from "@bric/storefront-core/project-routing";
 
-describe("storefront variant helpers", () => {
-  it("always resolves to the fast checkout winner", () => {
-    expect(normalizeStorefrontVariant()).toBe("fast_checkout");
-    expect(resolveStorefrontVariant()).toBe("fast_checkout");
-    expect(readStorefrontVariantCookie()).toBe("fast_checkout");
+import { getRequestedStorefrontProject } from "./storefront-project";
+
+describe("storefront project routing helpers", () => {
+  it("normalizes projects from query/cookies", () => {
+    expect(normalizeStorefrontProject("legacy")).toBe("new");
+    expect(normalizeStorefrontProject("new")).toBe("new");
+    expect(normalizeStorefrontProject("fast_checkout")).toBe("new");
+    expect(normalizeStorefrontProject("control")).toBe(null);
+    expect(normalizeStorefrontProject("something_else")).toBe(null);
   });
 
-  it("reads the active storefront variant from the browser environment", () => {
+  it("resolves query param over cookie and falls back to new", () => {
+    expect(
+      resolveRequestedStorefrontProject({ queryValue: "legacy", cookieValue: "new" }),
+    ).toBe("new");
+    expect(resolveRequestedStorefrontProject({ cookieValue: "legacy" })).toBe("new");
+    expect(resolveRequestedStorefrontProject({ queryValue: "control", cookieValue: "legacy" })).toBe("new");
+    expect(resolveRequestedStorefrontProject({ queryValue: "control" })).toBe("new");
+    expect(resolveRequestedStorefrontProject({ queryValue: "wat" })).toBe("new");
+  });
+
+  it("reads the requested storefront project from the browser environment", () => {
     vi.stubGlobal("window", {
       location: { search: "?sf_variant=fast_checkout" },
     });
     vi.stubGlobal("document", {
-      cookie: "bric_sf_variant=control",
+      cookie: `${STOREFRONT_PROJECT_COOKIE_NAME}=legacy`,
     });
 
-    expect(getStorefrontVariant()).toBe("fast_checkout");
-    expect(isFastCheckoutVariant()).toBe(true);
+    expect(getRequestedStorefrontProject()).toBe("new");
   });
 });

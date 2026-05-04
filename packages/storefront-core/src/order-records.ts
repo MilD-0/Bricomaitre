@@ -21,6 +21,7 @@ export type ProductLookupEntry = {
   id: number;
   mongoId: string | null;
   brandId: number | null;
+  slug: string | null;
   title: string;
   price: number;
   thumbnailUrl: string | null;
@@ -54,6 +55,7 @@ export async function getOrderProductLookup(
       id: products.id,
       mongoId: products.mongoId,
       brandId: products.brandId,
+      slug: products.slug,
       title: products.title,
       price: sql<number>`coalesce(${products.price}, 0)::double precision`,
       images: products.images,
@@ -71,6 +73,7 @@ export async function getOrderProductLookup(
       id: product.id,
       mongoId: product.mongoId,
       brandId: product.brandId,
+      slug: product.slug,
       title: product.title,
       price: parseNumericAmount(product.price),
       thumbnailUrl: product.images[0] ?? null,
@@ -94,6 +97,7 @@ export function toOrderRecord(
   const confirmed = coerceOrderStatus(row.confirmed);
   const noAnswerCount = coerceNoAnswerCount(confirmed, row.noAnswerCount, row.confirmed);
   const deliveryFee = parseNumericAmount(row.delPr);
+  const subtotalOverride = row.price === null ? null : parseNumericAmount(row.price);
   const orderProducts = buildOrderProductSummaries(row.cartProducts ?? [], (_rawValue, productId) => {
     const rawValue = _rawValue.trim();
     const lookupKey = isMongoObjectId(rawValue)
@@ -119,13 +123,15 @@ export function toOrderRecord(
     return {
       productId: product.id,
       brandId: product.brandId,
+      ...(product.slug !== null ? { slug: product.slug } : {}),
       title: product.title,
       unitPrice: product.price,
       thumbnailUrl: product.thumbnailUrl,
       missing: false,
     };
   });
-  const productSubtotal = orderProducts.reduce((sum, product) => sum + product.lineTotal, 0);
+  const derivedSubtotal = orderProducts.reduce((sum, product) => sum + product.lineTotal, 0);
+  const productSubtotal = subtotalOverride ?? derivedSubtotal;
   const totalAmount = productSubtotal + deliveryFee;
 
   return {
@@ -148,6 +154,7 @@ export function toOrderRecord(
     state: row.state,
     city: row.city,
     homeAddress: row.homeAddress,
+    subtotalOverride,
     productSubtotal,
     deliveryFee,
     totalAmount,
@@ -188,6 +195,7 @@ export function toStorefrontOrderRecord(
     state: record.state,
     city: record.city,
     homeAddress: record.homeAddress,
+    subtotalOverride: record.subtotalOverride,
     productSubtotal: record.productSubtotal,
     deliveryFee: record.deliveryFee,
     totalAmount: record.totalAmount,

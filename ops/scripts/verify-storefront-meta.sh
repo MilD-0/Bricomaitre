@@ -9,6 +9,8 @@ slot="${1:-}"
 storefront_domain="${BRIC_STOREFRONT_APEX_DOMAIN:-${BRIC_STOREFRONT_DOMAIN:-www.example.com}}"
 meta_verify_enabled="${META_DEPLOY_VERIFY_ENABLED:-1}"
 meta_test_event_code="${META_TEST_EVENT_CODE:-}"
+meta_service_base="${STOREFRONT_META_VERIFY_SERVICE:-storefront}"
+meta_service_port="${STOREFRONT_META_VERIFY_PORT:-3002}"
 
 append_meta_summary() {
   local line="${1:?summary line is required}"
@@ -43,7 +45,7 @@ else
   source "$script_dir/blue-green.sh"
   require_slot "$slot"
 
-  service="$(service_name storefront "$slot")"
+  service="$(service_name "$meta_service_base" "$slot")"
   container_id="$(compose ps -q "$service")"
   if [[ -z "$container_id" ]]; then
     echo "could not resolve candidate storefront container for slot $slot" >&2
@@ -56,7 +58,7 @@ else
     exit 1
   fi
 
-  base_url="http://${container_ip}:3002"
+  base_url="http://${container_ip}:${meta_service_port}"
 fi
 
 python3 - "$base_url" "$storefront_domain" "$meta_test_event_code" <<'PY'

@@ -70,7 +70,7 @@ describe('lib/orders', () => {
   it('groups repeated cart products into summarized order products', () => {
     expect(buildOrderProductSummaries(['12', '12', '7'], (_rawValue, productId) => {
       if (productId === 12) {
-        return { title: 'Desk', unitPrice: 1500, thumbnailUrl: 'https://cdn.example.com/desk.jpg', missing: false };
+        return { slug: 'desk', title: 'Desk', unitPrice: 1500, thumbnailUrl: 'https://cdn.example.com/desk.jpg', missing: false };
       }
 
       if (productId === 7) {
@@ -82,6 +82,7 @@ describe('lib/orders', () => {
       {
         productId: 12,
         brandId: null,
+        slug: 'desk',
         rawValue: '12',
         title: 'Desk',
         unitPrice: 1500,
@@ -118,6 +119,7 @@ describe('lib/orders', () => {
     expect(coerceOrderStatus('in_delivery')).toBe(7);
     expect(coerceOrderStatus('returned')).toBe(8);
     expect(coerceOrderStatus('failed')).toBe(9);
+    expect(coerceOrderStatus('manual completed')).toBe(10);
     expect(coerceDeliveryType('home')).toBe(0);
     expect(coerceDeliveryType('office')).toBe(1);
     expect(coerceDeliveryType(1)).toBe(1);
@@ -128,11 +130,13 @@ describe('lib/orders', () => {
     expect(getOrderStatusLabelKey(7)).toBe('inDelivery');
     expect(getOrderStatusLabelKey(8)).toBe('returned');
     expect(getOrderStatusLabelKey(9)).toBe('failed');
+    expect(getOrderStatusLabelKey(10)).toBe('manualCompleted');
     expect(getDeliveryTypeLabelKey(1)).toBe('office');
     expect(isConfirmedLifecycleStatus(5)).toBe(true);
     expect(isConfirmedLifecycleStatus(7)).toBe(true);
     expect(isConfirmedLifecycleStatus(8)).toBe(true);
     expect(isConfirmedLifecycleStatus(9)).toBe(true);
+    expect(isConfirmedLifecycleStatus(10)).toBe(true);
     expect(isConfirmedLifecycleStatus(6)).toBe(false);
   });
 

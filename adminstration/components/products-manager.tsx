@@ -98,6 +98,7 @@ type ImageOriginFilter = (typeof imageOriginFilterValues)[number];
 
 const PRODUCT_DIALOG_STORAGE_KEY = 'products-dialog-state-v2';
 const PRODUCTS_VIEW_MODE_STORAGE_KEY = 'products-view-mode-v1';
+const DEFAULT_STOREFRONT_BASE_URL = 'https://bricomaitre.com';
 const defaults: ProductPayloadInput = {
   title: '',
   titleAr: null,
@@ -116,6 +117,19 @@ const defaults: ProductPayloadInput = {
   categoryId: null,
   images: [],
 };
+
+function normalizeBaseUrl(value: string) {
+  return value.endsWith('/') ? value.slice(0, -1) : value;
+}
+
+function getStorefrontBaseUrl() {
+  return normalizeBaseUrl(process.env.NEXT_PUBLIC_STOREFRONT_BASE_URL ?? DEFAULT_STOREFRONT_BASE_URL);
+}
+
+function buildStorefrontProductHref(product: Pick<ProductRecord, 'id' | 'slug'>) {
+  const token = product.slug ?? product.id;
+  return `${getStorefrontBaseUrl()}/products/${encodeURIComponent(String(token))}`;
+}
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -1289,6 +1303,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
           <TableBody>
             {paginatedItems.map((product) => {
               const previewVisible = hoveredProductId === product.id && Boolean(product.images[0]);
+              const storefrontHref = buildStorefrontProductHref(product);
 
               return (
                 <TableRow key={product.id}>
@@ -1326,9 +1341,14 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
                       onMouseEnter={() => setHoveredProductId(product.id)}
                       onMouseLeave={() => setHoveredProductId((current) => (current === product.id ? null : current))}
                     >
-                      <button type="button" className="font-medium" onClick={() => openEdit(product)}>
+                      <a
+                        href={storefrontHref}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      >
                         {product.title}
-                      </button>
+                      </a>
                       {previewVisible ? (
                         <div className="pointer-events-none absolute left-0 top-full z-10 mt-2 w-40 overflow-hidden rounded-2xl border border-border/70 bg-background shadow-lg">
                           <img src={product.images[0]} alt={product.title} className="aspect-square w-full object-cover" />
