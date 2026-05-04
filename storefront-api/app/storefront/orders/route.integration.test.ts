@@ -20,8 +20,9 @@ const {
   clearIdempotentRequestMock: vi.fn(),
   completeIdempotentRequestMock: vi.fn(),
 }));
-const { buildRateLimitHeadersMock, enforceRequestRateLimitMock } = vi.hoisted(() => ({
+const { buildRateLimitHeadersMock, enforceOrderVelocityLimitMock, enforceRequestRateLimitMock } = vi.hoisted(() => ({
   buildRateLimitHeadersMock: vi.fn(),
+  enforceOrderVelocityLimitMock: vi.fn(),
   enforceRequestRateLimitMock: vi.fn(),
 }));
 
@@ -43,6 +44,7 @@ vi.mock('@bric/runtime/idempotency', () => ({
 
 vi.mock('../../../lib/request-security', () => ({
   buildRateLimitHeaders: buildRateLimitHeadersMock,
+  enforceOrderVelocityLimit: enforceOrderVelocityLimitMock,
   enforceRequestRateLimit: enforceRequestRateLimitMock,
 }));
 
@@ -56,6 +58,7 @@ describe('app/storefront/orders/route', () => {
     clearIdempotentRequestMock.mockReset();
     completeIdempotentRequestMock.mockReset();
     buildRateLimitHeadersMock.mockReset();
+    enforceOrderVelocityLimitMock.mockReset();
     enforceRequestRateLimitMock.mockReset();
     createStorefrontOrderMock.mockResolvedValue({ id: 11, publicToken: 'public-token' });
     beginIdempotentRequestMock.mockResolvedValue({ kind: 'started' });
@@ -67,6 +70,12 @@ describe('app/storefront/orders/route', () => {
       ok: true,
       limit: 20,
       remaining: 19,
+      resetAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    enforceOrderVelocityLimitMock.mockResolvedValue({
+      ok: true,
+      limit: 2,
+      remaining: 1,
       resetAt: new Date(Date.now() + 60_000).toISOString(),
     });
   });
@@ -137,6 +146,14 @@ describe('app/storefront/orders/route', () => {
       headers: { 'content-type': 'application/json' },
     }));
 
+    expect(enforceOrderVelocityLimitMock).toHaveBeenCalledWith(
+      expect.any(NextRequest),
+      expect.objectContaining({
+        journeyId: undefined,
+        visitId: undefined,
+        sessionId: undefined,
+      }),
+    );
     expect(createStorefrontOrderMock).toHaveBeenCalledWith(
       { tag: 'db' },
       expect.objectContaining({
@@ -148,6 +165,42 @@ describe('app/storefront/orders/route', () => {
       }),
     );
     await expect(res.json()).resolves.toEqual({ ok: true, item: { id: 11, publicToken: 'public-token' } });
+  });
+
+  it('returns 429 when order velocity escalates for the identity', async () => {
+    hasDbMock.mockReturnValue(true);
+    buildRateLimitHeadersMock.mockReturnValue({ 'retry-after': '3600' });
+    enforceOrderVelocityLimitMock.mockResolvedValue({
+      ok: false,
+      limit: 2,
+      remaining: 0,
+      resetAt: Date.now() + 3_600_000,
+      retryAfterSeconds: 3600,
+    });
+    vi.spyOn(storefrontOrderCreateRequestSchema, 'safeParse').mockReturnValue({
+      success: true,
+      data: {
+        phoneNumber1: '0550111111',
+        cartProducts: ['9'],
+        delivery: 0,
+        state: 31,
+        city: 'Oran',
+        journeyId: 'journey-1',
+        visitId: 'visit-1',
+        sessionId: 'session-1',
+      },
+    } as never);
+
+    const res = await POST(new NextRequest('http://localhost/storefront/orders', {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    expect(res.status).toBe(429);
+    expect(createStorefrontOrderMock).not.toHaveBeenCalled();
+    expect(res.headers.get('retry-after')).toBe('3600');
+    await expect(res.json()).resolves.toEqual({ error: 'Too many order attempts. Try again later.' });
   });
 
   it('logs slow order creation timings without changing the response', async () => {

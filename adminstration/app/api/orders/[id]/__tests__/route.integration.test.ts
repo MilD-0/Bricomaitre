@@ -308,8 +308,9 @@ describe('app/api/orders/[id]/route', () => {
           confirmed: 2,
           noAnswerCount: 0,
           note: 'Handle with care',
-          productSubtotal: 800,
-          totalAmount: 950,
+          subtotalOverride: 1200,
+          productSubtotal: 1200,
+          totalAmount: 1350,
           orderProducts: [
             {
               productId: 8,

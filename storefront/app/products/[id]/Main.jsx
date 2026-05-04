@@ -18,6 +18,7 @@ import {
   buildBrandFilterHref,
   buildCategoryFilterHref,
 } from "@/lib/storefront-api";
+import { getDisplayImages } from "@/lib/image-order";
 import { Link } from "@/i18n/navigation";
 
 function CartBadge({ count, label = "Panier" }) {
@@ -82,6 +83,7 @@ export default function Page({ id, initialProduct = null }) {
   const parent = product?.parentCategoryInfo ?? null;
   const cartItemCount = cartProducts.length;
   const hasCartItems = cartItemCount > 0;
+  const displayImages = getDisplayImages(product?.images);
 
   function scrollToOrderSection() {
     orderSectionRef.current?.scrollIntoView({
@@ -156,7 +158,7 @@ export default function Page({ id, initialProduct = null }) {
         <section className="overflow-hidden rounded-[2rem] border border-teal-100 bg-gradient-to-br from-teal-50 via-white to-emerald-50 shadow-[0_22px_70px_rgba(15,23,42,0.08)]">
           <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
             <div className="border-b border-teal-100/80 p-5 md:p-6 lg:border-b-0 lg:border-r">
-              <Carousel data={locale === "ar" ? [...product.images].reverse() : product.images} />
+              <Carousel key={`${product._id}-${locale}`} data={displayImages} />
             </div>
 
             <div className="p-5 md:p-6">

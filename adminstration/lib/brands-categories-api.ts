@@ -1,4 +1,4 @@
-import { asc, count, desc, eq, ilike, inArray } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, inArray, ne } from 'drizzle-orm';
 
 import { getDb } from '../db/client';
 import { brands, categories } from '../db/schema';
@@ -59,32 +59,15 @@ async function resolveTaxonomySlug(
   value: string,
   currentId?: number,
 ) {
-  const db = getDb() as {
-    query?: {
-      brands?: { findFirst?: (input: unknown) => Promise<{ id: number } | undefined> };
-      categories?: { findFirst?: (input: unknown) => Promise<{ id: number } | undefined> };
-    };
-  };
-
-  const findFirst = entityType === 'brands' ? db.query?.brands?.findFirst : db.query?.categories?.findFirst;
-
-  if (!findFirst) {
-    return resolveUniqueSlug(value, async () => false);
-  }
+  const db = getDb();
+  const table = entityType === 'brands' ? brands : categories;
 
   return resolveUniqueSlug(value, async (slug) => {
-    const existing = await findFirst({
-      columns: { id: true },
-      where: (
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        table: any,
-        helpers: { and: typeof import('drizzle-orm').and; eq: typeof import('drizzle-orm').eq; ne: typeof import('drizzle-orm').ne },
-      ) => (
-        currentId == null
-          ? helpers.eq(table.slug, slug)
-          : helpers.and(helpers.eq(table.slug, slug), helpers.ne(table.id, currentId))
-      ),
-    });
+    const [existing] = await db
+      .select({ id: table.id })
+      .from(table)
+      .where(currentId == null ? eq(table.slug, slug) : and(eq(table.slug, slug), ne(table.id, currentId)))
+      .limit(1);
 
     return Boolean(existing);
   });

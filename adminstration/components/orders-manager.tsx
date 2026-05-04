@@ -40,6 +40,15 @@ import {
   type OrderSortRule,
 } from '../lib/orders';
 import { appendSortParams, getSortRuleState, toggleSortRule } from '../lib/multi-sort';
+import {
+  areCartProductsEqual,
+  buildEditableProducts,
+  OrderProductsEditor,
+  type ProductSearchResponse,
+  summarizeEditableProducts,
+  type EditableOrderProduct,
+  type ProductSearchItem,
+} from './order-products-editor';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -64,19 +73,9 @@ import { ViewModeToggle, type ViewMode } from './view-mode-toggle';
 
 type PaginationMeta = { page: number; limit: number; totalItems: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean };
 type OrdersResponse = { items: OrderRecord[]; writable: boolean; pagination: PaginationMeta };
-type ProductSearchItem = { id: number; title: string; price: number | string; images: string[]; sku?: string | null; barcode?: string | null; mongoId?: string | null };
-type ProductSearchResponse = { items: ProductSearchItem[] };
 type MutationMessages = { loading: string; success: string; error: string };
 type QuerySnapshot<T> = Array<[readonly unknown[], T | undefined]>;
 type SplitActionOption = { key: string; label: string; onSelect: () => void | Promise<void>; disabled?: boolean };
-type EditableOrderProduct = {
-  rawValue: string;
-  productId: number | null;
-  title: string;
-  unitPrice: number;
-  thumbnailUrl: string | null;
-  missing: boolean;
-};
 type PartialOrderPatch = Partial<OrderPatch>;
 type PatchMutationVariables = { id: number; values: PartialOrderPatch; messages: MutationMessages; optimisticProducts?: EditableOrderProduct[] };
 type DeleteMutationVariables = { id: number; messages: MutationMessages };
@@ -229,6 +228,22 @@ type EcotrackPostingPreviewState = {
   orderIds: number[];
   preview: EcotrackPreviewResponse;
 } | null;
+
+const DEFAULT_STOREFRONT_BASE_URL = 'https://bricomaitre.com';
+
+function normalizeBaseUrl(value: string) {
+  return value.trim().replace(/\/+$/, '');
+}
+
+function getStorefrontBaseUrl() {
+  const configured = process.env.NEXT_PUBLIC_STOREFRONT_BASE_URL?.trim();
+  return normalizeBaseUrl(configured || DEFAULT_STOREFRONT_BASE_URL);
+}
+
+function buildStorefrontProductHref(product: OrderProductSummary) {
+  const token = product.slug ?? product.productId;
+  return token ? `${getStorefrontBaseUrl()}/products/${encodeURIComponent(String(token))}` : null;
+}
 type EcotrackCatalogResponse = {
   wilayas: Array<{ wilayaId: number; name: string }>;
   communes: Array<{ communeId: number; wilayaId: number; name: string; postalCode: string | null; hasStopDesk: boolean }>;
@@ -237,7 +252,7 @@ type EcotrackCatalogResponse = {
   lastSync: Record<string, unknown> | null;
 };
 type BrandLookupResponse = { id: number; name: string };
-type ProductLookupResponse = { item: { id: number; inventoryQuantity: number; brandId?: number | null; title?: string; images?: string[] } };
+type ProductLookupResponse = { item: { id: number; inventoryQuantity: number; brandId?: number | null; slug?: string | null; title?: string; images?: string[] } };
 type OrderDetailResponse = { ok: true; item: OrderRecord };
 type InventoryApplyResponse = {
   ok: true;
@@ -481,56 +496,12 @@ function buildMessages(
   };
 }
 
-function findProductSummary(order: OrderRecord, rawValue: string) {
-  const trimmed = rawValue.trim();
-  const numericId = /^\d+$/.test(trimmed) ? Number.parseInt(trimmed, 10) : null;
-
-  return order.orderProducts.find((product) => product.rawValue === trimmed || (numericId !== null && product.productId === numericId)) ?? null;
-}
-
-function buildEditableProducts(order: OrderRecord): EditableOrderProduct[] {
-  return order.cartProducts.map((rawValue) => {
-    const product = findProductSummary(order, rawValue);
-
-    return {
-      rawValue,
-      productId: product?.productId ?? null,
-      title: product?.title ?? rawValue,
-      unitPrice: product?.unitPrice ?? 0,
-      thumbnailUrl: product?.thumbnailUrl ?? null,
-      missing: product?.missing ?? true,
-    };
-  });
-}
-
-function summarizeEditableProducts(items: EditableOrderProduct[]) {
-  return buildOrderProductSummaries(items.map((item) => item.rawValue), (rawValue) => {
-    const product = items.find((entry) => entry.rawValue === rawValue.trim());
-
-    if (!product) {
-      return { missing: true };
-    }
-
-    return {
-      productId: product.productId,
-      title: product.title,
-      unitPrice: product.unitPrice,
-      thumbnailUrl: product.thumbnailUrl,
-      missing: product.missing,
-    };
-  });
-}
-
 function buildProductsDialogState(order: OrderRecord) {
   return {
     order,
     items: buildEditableProducts(order),
     search: '',
   };
-}
-
-function areCartProductsEqual(left: string[], right: string[]) {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function optimisticOrder(order: OrderRecord, values: PartialOrderPatch, optimisticProducts?: EditableOrderProduct[]): OrderRecord {
@@ -958,6 +929,8 @@ function OrderProductsPreview({
       {visibleProducts.map((product) => {
         const hoverKey = getOrderProductHoverKey(orderId, product);
         const previewVisible = hoveredProductKey === hoverKey && Boolean(product.thumbnailUrl);
+        const storefrontHref = buildStorefrontProductHref(product);
+        const productLabel = formatOrderProductLabel(product, formatMoney);
 
         return (
           <div
@@ -966,9 +939,23 @@ function OrderProductsPreview({
             onMouseEnter={() => onHoverChange(hoverKey)}
             onMouseLeave={() => onHoverChange((current) => (current === hoverKey ? null : current))}
           >
-            <Badge variant="outline" className="max-w-full truncate">
-              {formatOrderProductLabel(product, formatMoney)}
-            </Badge>
+            {storefrontHref ? (
+              <a
+                href={storefrontHref}
+                target="_blank"
+                rel="noreferrer"
+                className="max-w-full truncate rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <Badge variant="outline" className="max-w-full truncate hover:bg-primary/10 hover:text-primary">
+                  {productLabel}
+                </Badge>
+              </a>
+            ) : (
+              <Badge variant="outline" className="max-w-full truncate">
+                {productLabel}
+              </Badge>
+            )}
             {previewVisible ? (
               <div className="pointer-events-none absolute left-0 top-full z-10 mt-2 w-40 overflow-hidden rounded-2xl border border-border/70 bg-background shadow-lg">
                 <img src={product.thumbnailUrl ?? ''} alt={`${product.title} thumbnail`} className="aspect-square w-full object-cover" />
@@ -1229,7 +1216,6 @@ function ProductsDialog({
 }) {
   const t = useTranslations();
   const locale = useLocale();
-  const deferredSearch = useDeferredValue(state?.search ?? '');
   const selectedProducts = state ? summarizeEditableProducts(state.items) : [];
   const productSubtotal = selectedProducts.reduce((sum, product) => sum + product.lineTotal, 0);
   const totalAmount = productSubtotal + (state?.order.deliveryFee ?? 0);
@@ -1240,18 +1226,6 @@ function ProductsDialog({
       currency: 'DZD',
       maximumFractionDigits: 2,
     }).format(value);
-  const searchQuery = useQuery({
-    queryKey: ['order-products-search', deferredSearch],
-    enabled: Boolean(state) && deferredSearch.trim().length > 0,
-    queryFn: async () => {
-      const response = await request<ProductSearchResponse>(`/api/products?page=1&limit=8&search=${encodeURIComponent(deferredSearch)}`);
-
-      return response.items.map((item) => ({
-        ...item,
-        price: parseNumericAmount(item.price),
-      }));
-    },
-  });
 
   return (
     <Dialog open={Boolean(state)} onOpenChange={onOpenChange}>
@@ -1260,86 +1234,25 @@ function ProductsDialog({
           <DialogTitle>{t('ordersManager.products.title')}</DialogTitle>
           <DialogDescription>{state?.order.fullName}</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(18rem,1fr)]">
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium">{t('ordersManager.products.searchTitle')}</p>
-              <SearchField
-                value={state?.search ?? ''}
-                onChange={onSearchChange}
-                placeholder={t('ordersManager.products.searchPlaceholder')}
-              />
-            </div>
-
-            {state?.search.trim().length ? (
-              <div className="flex flex-col gap-3">
-                {searchQuery.isFetching ? <p className="text-sm text-muted-foreground">{t('ordersManager.products.searchLoading')}</p> : null}
-                {!searchQuery.isFetching && searchQuery.data?.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">{t('ordersManager.products.searchEmpty')}</p>
-                ) : null}
-                {searchQuery.data?.map((product) => (
-                  <Card key={product.id} className="flex items-center gap-3 rounded-2xl border border-border/70 p-3">
-                    <ProductThumbnail src={product.images[0] ?? null} alt={product.title} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{product.title}</p>
-                      <p className="text-sm text-muted-foreground">{formatMoney(parseNumericAmount(product.price))}</p>
-                      {product.sku || product.barcode ? (
-                        <p className="truncate text-xs text-muted-foreground">{[product.sku, product.barcode].filter(Boolean).join(' • ')}</p>
-                      ) : null}
-                    </div>
-                    <Button type="button" size="sm" onClick={() => onAddProduct(product)}>
-                      {t('ordersManager.products.add')}
-                    </Button>
-                  </Card>
-                ))}
+        {state ? (
+          <OrderProductsEditor
+            customerName={state.order.fullName}
+            items={state.items}
+            search={state.search}
+            onSearchChange={onSearchChange}
+            onAddProduct={onAddProduct}
+            onIncreaseQuantity={onIncreaseQuantity}
+            onDecreaseQuantity={onDecreaseQuantity}
+            onRemoveProduct={onRemoveProduct}
+            footer={(
+              <div className="rounded-2xl bg-muted/40 p-3 text-sm">
+                <p>{t('ordersManager.amount.subtotal')}: {formatMoney(productSubtotal)}</p>
+                <p>{t('ordersManager.amount.deliveryFee')}: {formatMoney(state.order.deliveryFee ?? 0)}</p>
+                <p className="font-semibold">{t('ordersManager.amount.total')}: {formatMoney(totalAmount)}</p>
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">{t('ordersManager.products.searchHint')}</p>
             )}
-          </div>
-
-          <div className="flex flex-col gap-4 rounded-2xl border border-border/70 p-4">
-            <div>
-              <p className="text-sm font-medium">{t('ordersManager.products.selectedTitle')}</p>
-              <p className="text-xs text-muted-foreground">{t('ordersManager.products.selectedDescription')}</p>
-            </div>
-            <div className="flex flex-col gap-3">
-              {selectedProducts.length ? selectedProducts.map((product) => (
-                <Card key={product.rawValue} className="rounded-2xl border border-border/70 p-3">
-                  <div className="flex items-start gap-3">
-                    <ProductThumbnail src={product.thumbnailUrl} alt={product.title} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{product.title}</p>
-                      <p className="text-sm text-muted-foreground">{t('ordersManager.products.unitPrice')}: {formatMoney(product.unitPrice)}</p>
-                      <p className="text-sm text-muted-foreground">{t('ordersManager.products.lineTotal')}: {formatMoney(product.lineTotal)}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <Badge variant="outline">{t('ordersManager.products.quantity', { count: product.quantity })}</Badge>
-                    <div className="flex items-center gap-2">
-                      <Button type="button" size="sm" variant="outline" onClick={() => onDecreaseQuantity(product.rawValue)} aria-label={t('ordersManager.products.decreaseQuantity', { title: product.title })}>
-                        -
-                      </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={() => onIncreaseQuantity(product.rawValue)} aria-label={t('ordersManager.products.increaseQuantity', { title: product.title })}>
-                        +
-                      </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={() => onRemoveProduct(product.rawValue)} aria-label={t('ordersManager.products.removeProduct', { title: product.title })}>
-                        <X />
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              )) : (
-                <p className="text-sm text-muted-foreground">{t('ordersManager.products.empty')}</p>
-              )}
-            </div>
-            <div className="rounded-2xl bg-muted/40 p-3 text-sm">
-              <p>{t('ordersManager.amount.subtotal')}: {formatMoney(productSubtotal)}</p>
-              <p>{t('ordersManager.amount.deliveryFee')}: {formatMoney(state?.order.deliveryFee ?? 0)}</p>
-              <p className="font-semibold">{t('ordersManager.amount.total')}: {formatMoney(totalAmount)}</p>
-            </div>
-          </div>
-        </div>
+          />
+        ) : null}
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             {t('actions.cancel')}
@@ -2206,6 +2119,7 @@ export function OrdersManager({
   });
   const totalPages = ordersQuery.data?.pagination?.totalPages ?? 1;
   const currentPage = ordersQuery.data?.pagination?.page ?? page;
+  const totalOrders = ordersQuery.data?.pagination?.totalItems ?? 0;
   const paginatedOrders = ordersQuery.data?.items ?? [];
   const selectedOrders = useMemo(() => getCachedOrders(queryClient).filter((order) => selectedIds.includes(order.id)), [queryClient, selectedIds, ordersQuery.data]);
   const allSelected = paginatedOrders.length > 0 && paginatedOrders.every((order) => selectedIds.includes(order.id));
@@ -2453,6 +2367,7 @@ export function OrdersManager({
       {
         rawValue: String(product.id),
         productId: product.id,
+        ...(product.slug !== undefined ? { slug: product.slug } : {}),
         title: product.title,
         unitPrice: parseNumericAmount(product.price),
         thumbnailUrl: product.images[0] ?? null,
@@ -3033,7 +2948,9 @@ export function OrdersManager({
                   <NativeSelectOption value="7">{t('ordersManager.status.inDelivery')}</NativeSelectOption>
                   <NativeSelectOption value="8">{t('ordersManager.status.returned')}</NativeSelectOption>
                   <NativeSelectOption value="9">{t('ordersManager.status.failed')}</NativeSelectOption>
+                  <NativeSelectOption value="10">{t('ordersManager.status.manualCompleted')}</NativeSelectOption>
                 </NativeSelect>
+                <Badge variant="outline">{t('ordersManager.totalOrders', { count: totalOrders })}</Badge>
                 <Badge variant="outline">{t('labels.bulkSelectionCount', { count: selectedIds.length })}</Badge>
                 <NativeSelect aria-label={t('ordersManager.bulk.statusLabel')} value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value)} className="w-full sm:min-w-44 sm:w-auto">
                   <NativeSelectOption value="0">{t('ordersManager.status.notContacted')}</NativeSelectOption>
@@ -3046,6 +2963,7 @@ export function OrdersManager({
                   <NativeSelectOption value="7">{t('ordersManager.status.inDelivery')}</NativeSelectOption>
                   <NativeSelectOption value="8">{t('ordersManager.status.returned')}</NativeSelectOption>
                   <NativeSelectOption value="9">{t('ordersManager.status.failed')}</NativeSelectOption>
+                  <NativeSelectOption value="10">{t('ordersManager.status.manualCompleted')}</NativeSelectOption>
                 </NativeSelect>
                 <Button type="button" variant="outline" disabled={!writable || selectedOrders.length === 0} onClick={() => void applyBulkStatus()}>
                   {t('ordersManager.bulk.applyStatus')}
@@ -3408,6 +3326,7 @@ export function OrdersManager({
                         <NativeSelectOption value="7">{t('ordersManager.status.inDelivery')}</NativeSelectOption>
                         <NativeSelectOption value="8">{t('ordersManager.status.returned')}</NativeSelectOption>
                         <NativeSelectOption value="9">{t('ordersManager.status.failed')}</NativeSelectOption>
+                        <NativeSelectOption value="10">{t('ordersManager.status.manualCompleted')}</NativeSelectOption>
                       </NativeSelect>
                       {order.confirmed === 1 ? (
                         <NoAnswerCounter
@@ -3752,6 +3671,7 @@ export function OrdersManager({
                     <NativeSelectOption value="7">{t('ordersManager.status.inDelivery')}</NativeSelectOption>
                     <NativeSelectOption value="8">{t('ordersManager.status.returned')}</NativeSelectOption>
                     <NativeSelectOption value="9">{t('ordersManager.status.failed')}</NativeSelectOption>
+                    <NativeSelectOption value="10">{t('ordersManager.status.manualCompleted')}</NativeSelectOption>
                   </NativeSelect>
                   <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setDetailsOrder(order)}>
                     <Eye />

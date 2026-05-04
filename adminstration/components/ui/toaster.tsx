@@ -5,7 +5,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 
 import { cn } from '../../lib/utils';
-import { dismissToast, getToastSnapshot, subscribeToToasts, type ToastTone } from '../../lib/toast';
+import { dismissToast, getToastSnapshot, subscribeToToasts, type ToastRecord, type ToastTone } from '../../lib/toast';
 
 const toneStyles: Record<ToastTone, { card: string; icon: string; progress: string; Icon: typeof LoaderCircle; label: string }> = {
   loading: {
@@ -43,8 +43,25 @@ export function Toaster() {
     return null;
   }
 
+  const criticalToasts = toasts.filter((toast) => toast.priority === 'critical' || toast.scope === 'modal-safe');
+  const standardToasts = toasts.filter((toast) => toast.priority !== 'critical' && toast.scope !== 'modal-safe');
+
   return createPortal(
-    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-100 flex w-full flex-col gap-3 px-4 sm:inset-x-auto sm:end-6 sm:bottom-6 sm:max-w-sm sm:px-0">
+    <>
+      <ToastStack toasts={standardToasts} className="z-100" />
+      <ToastStack toasts={criticalToasts} className="z-[120]" />
+    </>,
+    document.body,
+  );
+}
+
+function ToastStack({ className, toasts }: { className: string; toasts: ToastRecord[] }) {
+  if (toasts.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={cn('pointer-events-none fixed inset-x-0 bottom-4 flex w-full flex-col gap-3 px-4 sm:inset-x-auto sm:end-6 sm:bottom-6 sm:max-w-sm sm:px-0', className)}>
       {toasts.map((toast) => {
         const { Icon, card, icon, label, progress } = toneStyles[toast.tone];
 
@@ -80,16 +97,10 @@ export function Toaster() {
               </div>
             </div>
 
-            <div
-              className={cn(
-                'h-1 w-full bg-linear-to-r',
-                progress,
-              )}
-            />
+            <div className={cn('h-1 w-full bg-linear-to-r', progress)} />
           </div>
         );
       })}
-    </div>,
-    document.body,
+    </div>
   );
 }

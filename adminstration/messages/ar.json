@@ -347,8 +347,8 @@
         "range7d": "آخر 7 أيام",
         "range30d": "آخر 30 يوماً",
         "variantAll": "كل النسخ",
-        "variantControl": "النسخة القياسية",
-        "variantFastCheckout": "الدفع السريع",
+        "variantNew": "الجديد",
+        "variantLegacy": "القديم",
         "sourceAll": "كل المصادر",
         "outcomeAll": "كل النتائج",
         "hasOrderAll": "مع وبدون طلب",
@@ -1119,6 +1119,7 @@
       "confirmed": "مؤكد",
       "dispatched": "تم الشحن",
       "completed": "مكتملة",
+      "manualCompleted": "مكتملة يدويًا",
       "delayed": "مؤجلة",
       "inDelivery": "قيد التوصيل",
       "returned": "مرتجعة",
@@ -1272,6 +1273,7 @@
       "emptyTimeline": "لا توجد احداث تتبع محفوظة."
     },
     "actions": {
+      "scanTrackingNumber": "مسح رقم التتبع",
       "printSelected": "طباعة الملصقات المحددة",
       "refreshSelected": "تحديث المحدد",
       "clearSelection": "مسح التحديد",
@@ -1283,6 +1285,9 @@
       "label": "الملصق",
       "refresh": "تحديث",
       "dispatch": "ارسال",
+      "saveOnly": "حفظ فقط",
+      "saveAndDispatch": "حفظ وارسال",
+      "editAndRecreate": "تعديل واعادة الانشاء",
       "maj": "اضافة تحديث",
       "return": "طلب ارجاع",
       "showHistory": "اظهار السجل",
@@ -1299,7 +1304,11 @@
     "dialogs": {
       "editTitle": "تعديل شحنة ECOTRACK",
       "editDescription": "قم بتحديث الطلب المحلي ثم ECOTRACK ما دامت الشحنة ما زالت prete_a_expedier.",
-      "editHint": "قيمة المنتجات وتقسيم المبلغ يبقيان مشتقين من الطلب المحلي.",
+      "editHint": "المجموع الفرعي يتبع المنتجات المحددة ما لم يتم استبداله يدويا. وسعر التوصيل يعاد حسابه عندما يتغير نوع التوصيل او الولاية.",
+      "recreateTitle": "تعديل واعادة انشاء شحنة ECOTRACK",
+      "recreateDescription": "حدّث {name} ثم احذف رابط التتبع المحلي الحالي من ECOTRACK وانشئ شحنة ECOTRACK جديدة مباشرة.",
+      "finalizeTitle": "مراجعة نهائية قبل ارسال ECOTRACK",
+      "finalizeDescription": "راجع وحدّث {name} للمرة الاخيرة، ثم احفظ التغييرات وارسِل الشحنة.",
       "deleteTitle": "حذف شحنة ECOTRACK",
       "deleteDescription": "حذف شحنة ECOTRACK الخاصة بـ {name}. سيبقى الطلب المحلي متاحا لاعادة الارسال لاحقا.",
       "dispatchTitle": "ارسال شحنة ECOTRACK",
@@ -1312,6 +1321,8 @@
       "lastName": "اللقب",
       "phoneNumber1": "الهاتف الرئيسي",
       "phoneNumber2": "الهاتف الثانوي",
+      "scanTrackingNumber": "مسح رقم التتبع",
+      "scanTrackingNumberPlaceholder": "امسح او الصق رقم تتبع ECOTRACK",
       "delivery": "نوع التوصيل",
       "state": "الولاية",
       "statePlaceholder": "اختر ولاية",
@@ -1331,12 +1342,19 @@
       "refresh": {
         "loading": "جار تحديث شحنة ECOTRACK...",
         "success": "تم تحديث شحنة ECOTRACK.",
+        "partial": "تم تحديث {successCount} شحنات وفشل {failedCount}.",
+        "allFailed": "فشل تحديث جميع شحنات ECOTRACK المحددة.",
         "error": "فشل تحديث شحنة ECOTRACK."
       },
       "update": {
         "loading": "جار حفظ شحنة ECOTRACK...",
         "success": "تم حفظ شحنة ECOTRACK.",
         "error": "فشل حفظ شحنة ECOTRACK."
+      },
+      "recreate": {
+        "loading": "جار اعادة انشاء شحنة ECOTRACK...",
+        "success": "تمت اعادة انشاء شحنة ECOTRACK.",
+        "error": "فشلت اعادة انشاء شحنة ECOTRACK."
       },
       "delete": {
         "loading": "جار حذف شحنة ECOTRACK...",
@@ -1347,6 +1365,7 @@
         "loading": "جار ارسال شحنة ECOTRACK...",
         "success": "تم ارسال شحنة ECOTRACK.",
         "partial": "تم ارسال {successCount} شحنات وفشل {failedCount}.",
+        "allFailed": "فشل ارسال جميع شحنات ECOTRACK المحددة.",
         "error": "فشل ارسال شحنة ECOTRACK."
       },
       "maj": {
@@ -1362,7 +1381,22 @@
       "labels": {
         "loading": "جار تحضير ملصقات ECOTRACK...",
         "success": "ملصقات ECOTRACK جاهزة.",
+        "partial": "تم تحضير {successCount} ملصقات وفشل {failedCount}.",
+        "allFailed": "فشل تحضير جميع ملصقات ECOTRACK المحددة.",
         "error": "فشل تحضير ملصقات ECOTRACK."
+      },
+      "scan": {
+        "loading": "جار البحث عن رقم تتبع ECOTRACK...",
+        "success": "رقم التتبع {trackingNumber} جاهز للمراجعة النهائية.",
+        "notFound": "لم يتم العثور على شحنة ECOTRACK لرقم التتبع {trackingNumber}.",
+        "notDispatchable": "رقم التتبع {trackingNumber} حالته الحالية {status}. فقط شحنات prete_a_expedier يمكن اكمالها بعد المسح.",
+        "error": "فشل البحث عن رقم تتبع ECOTRACK."
+      },
+      "finalize": {
+        "loading": "جار الحفظ ثم ارسال شحنة ECOTRACK...",
+        "success": "تم حفظ شحنة ECOTRACK وارسالها.",
+        "partialFailure": "تم حفظ التغييرات لكن فشل الارسال: {message}",
+        "error": "فشل حفظ شحنة ECOTRACK وارسالها."
       }
     },
     "statuses": {

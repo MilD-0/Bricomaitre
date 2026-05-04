@@ -104,4 +104,21 @@ describe('app/api/brands/route', () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true });
   });
+
+  it('creates brands without requiring an image URL', async () => {
+    const response = await POST(new NextRequest('http://localhost/api/brands', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Nova' }),
+    }));
+
+    expect(mutateEntityWithHistoryMock).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({
+        entityType: 'brands',
+        operation: 'create',
+      }),
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true });
+  });
 });

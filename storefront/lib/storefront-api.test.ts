@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   fetchStorefrontBrands,
   findDeliveryFee,
+  hasStopDeskForWilaya,
   normalizeFeaturedGroup,
   normalizeFeaturedGroupLink,
   type LegacyProduct,
@@ -72,6 +73,49 @@ describe("storefront-api delivery fee lookup", () => {
     };
 
     expect(findDeliveryFee(pickupOnlyCatalog, 16, "home")).toBe(0);
+  });
+});
+
+describe("storefront-api stop desk availability", () => {
+  const catalog = {
+    wilayas: [
+      { wilayaId: 16, name: "Alger" },
+      { wilayaId: 31, name: "Oran" },
+    ],
+    communes: [
+      {
+        communeId: 1,
+        wilayaId: 16,
+        name: "Bab Ezzouar",
+        postalCode: "16024",
+        hasStopDesk: false,
+      },
+      {
+        communeId: 2,
+        wilayaId: 16,
+        name: "Dar El Beida",
+        postalCode: "16033",
+        hasStopDesk: true,
+      },
+      {
+        communeId: 3,
+        wilayaId: 31,
+        name: "Es Senia",
+        postalCode: "31000",
+        hasStopDesk: false,
+      },
+    ],
+    serviceFees: [],
+    weightFees: [],
+    lastSync: null,
+  };
+
+  it("returns true when any commune in the wilaya supports stop desk", () => {
+    expect(hasStopDeskForWilaya(catalog, 16)).toBe(true);
+  });
+
+  it("returns false when no commune in the wilaya supports stop desk", () => {
+    expect(hasStopDeskForWilaya(catalog, 31)).toBe(false);
   });
 });
 

@@ -1330,3 +1330,16 @@ export function getCommunesForWilaya(
 
   return catalog.communes.filter((commune) => commune.wilayaId === wilayaId);
 }
+
+export function hasStopDeskForWilaya(
+  catalog: StorefrontEcotrackCatalog | null,
+  wilayaId?: number | null,
+) {
+  if (!catalog || wilayaId == null) {
+    return false;
+  }
+
+  return catalog.communes.some(
+    (commune) => commune.wilayaId === wilayaId && commune.hasStopDesk,
+  );
+}

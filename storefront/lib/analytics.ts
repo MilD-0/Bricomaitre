@@ -1,8 +1,6 @@
 "use client";
 
-import {
-  resolveStorefrontVariant,
-} from "./storefront-variant";
+import { getRequestedStorefrontProject } from "./storefront-project";
 
 declare global {
   interface Window {
@@ -179,9 +177,11 @@ function getClientMetadata() {
 function getExperimentMetadata() {
   return {
     storefrontVariant: "new",
-    requestedVariant: resolveStorefrontVariant(),
-    experimentMode: "winner_rollout",
-    experimentSource: "storefront_default",
+    requestedVariant: getRequestedStorefrontProject(),
+    storefrontProject: "new",
+    requestedStorefrontProject: getRequestedStorefrontProject(),
+    experimentMode: "project_routing",
+    experimentSource: "sf_variant",
   };
 }
 

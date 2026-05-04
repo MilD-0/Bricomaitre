@@ -5,6 +5,7 @@ import {
   ChevronDown,
   History,
   MapPin,
+  MoreHorizontal,
   Package,
   Printer,
   RefreshCw,
@@ -18,8 +19,17 @@ import { motion } from 'motion/react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Fragment, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
+import { parseNumericAmount } from '../lib/orders';
 import { cn } from '../lib/utils';
 import { toast } from '../lib/toast';
+import {
+  areCartProductsEqual,
+  buildEditableProducts,
+  OrderProductsEditor,
+  summarizeEditableProducts,
+  type EditableOrderProduct,
+  type ProductSearchItem,
+} from './order-products-editor';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -93,6 +103,10 @@ type EcotrackTrackingEvent = {
 };
 
 type OrderProductSummary = {
+  rawValue?: string;
+  productId?: number | null;
+  unitPrice?: number;
+  thumbnailUrl?: string | null;
   title: string;
   quantity: number;
   lineTotal: number;
@@ -116,6 +130,7 @@ type EcotrackShipmentListItem = {
   city: string | null;
   homeAddress: string | null;
   orderProducts: OrderProductSummary[];
+  subtotalOverride: number | null;
   productSubtotal: number;
   deliveryFee: number;
   totalAmount: number;
@@ -124,6 +139,7 @@ type EcotrackShipmentListItem = {
   canEdit: boolean;
   canDelete: boolean;
   canDispatch: boolean;
+  canEditAndRecreate: boolean;
   canAddMaj: boolean;
   canAskReturn: boolean;
   canPrintLabel: boolean;
@@ -144,6 +160,29 @@ type EcotrackShipmentDetailResponse = {
   item: EcotrackShipmentDetail;
 };
 
+type EcotrackBulkActionFailure = {
+  orderId: number;
+  reference: string | null;
+  trackingNumber: string | null;
+  message: string;
+};
+
+type EcotrackBulkActionResponse<TItem = unknown> = {
+  ok: boolean;
+  items: TItem[];
+  failures: EcotrackBulkActionFailure[];
+  successCount: number;
+  failureCount: number;
+  totalRequested: number;
+};
+
+type EcotrackRefreshBatchResponse = EcotrackBulkActionResponse<EcotrackShipmentDetail>;
+type EcotrackDispatchBatchResponse = EcotrackBulkActionResponse<EcotrackShipmentDetail>;
+type EcotrackLabelsResponse = EcotrackBulkActionResponse<{ orderId: number; reference: string | null; trackingNumber: string }> & {
+  fileName: string | null;
+  pdfBase64: string | null;
+};
+
 type SortKey = 'createdAt' | 'trackingNumber' | 'clientName' | 'currentStatus' | 'lastStatusSyncedAt';
 type SortDirection = 'asc' | 'desc';
 
@@ -153,7 +192,9 @@ type OrdersEcotrackManagerProps = {
 };
 
 type EditDialogState = {
+  mode: 'edit' | 'recreate' | 'finalize';
   orderId: number;
+  fullName: string;
   firstName: string;
   lastName: string;
   phoneNumber1: string;
@@ -163,6 +204,13 @@ type EditDialogState = {
   city: string;
   homeAddress: string;
   note: string;
+  cartProducts: string[];
+  editableProducts: EditableOrderProduct[];
+  search: string;
+  subtotalInput: string;
+  subtotalOverride: number | null;
+  hasManualSubtotalOverride: boolean;
+  deliveryFeeInput: string;
 };
 
 type DispatchDialogState = {
@@ -170,6 +218,12 @@ type DispatchDialogState = {
   label: string;
   count: number;
   askCollection: boolean;
+};
+
+type RowPrimaryAction = {
+  label: string;
+  icon: React.ReactNode;
+  onPrimaryClick: () => void | Promise<void>;
 };
 
 type DeleteDialogState = {
@@ -227,24 +281,6 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
 
   return response.json() as Promise<T>;
-}
-
-async function requestPdf(url: string, init?: RequestInit) {
-  const response = await fetch(url, init);
-
-  if (!response.ok) {
-    const text = await response.text();
-    let message = text || response.statusText;
-
-    try {
-      const payload = JSON.parse(text) as { error?: string };
-      message = payload.error || message;
-    } catch {}
-
-    throw new Error(message);
-  }
-
-  return response.blob();
 }
 
 type SplitActionOption = {
@@ -393,6 +429,26 @@ function openPdfBlob(blob: Blob) {
   }, 60_000);
 }
 
+function decodeBase64Pdf(base64: string) {
+  const binary = window.atob(base64);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return new Blob([bytes], { type: 'application/pdf' });
+}
+
+function buildFailureSummary(
+  failures: EcotrackBulkActionFailure[],
+  limit = 2,
+) {
+  return failures
+    .slice(0, limit)
+    .map((failure) => failure.message)
+    .join(' ');
+}
+
+function criticalEcotrackToast(message: string, toastId?: string | null) {
+  toast.criticalError(message, toastId ? { id: toastId } : undefined);
+}
+
 function formatDateTime(locale: string, value: string | null) {
   if (!value) {
     return null;
@@ -419,6 +475,37 @@ function formatMoney(locale: string, value: number | null | undefined) {
     currency: 'DZD',
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function formatAmountInput(value: number | null | undefined) {
+  if (value == null || Number.isNaN(value)) {
+    return '';
+  }
+
+  return Number(value).toFixed(2);
+}
+
+function resolveDeliveryFeePreview(
+  catalog: EcotrackCatalogResponse | undefined,
+  delivery: 0 | 1,
+  stateValue: string,
+  fallback: number,
+) {
+  if (!catalog) {
+    return fallback;
+  }
+
+  const wilayaId = Number.parseInt(stateValue, 10);
+  if (!Number.isInteger(wilayaId)) {
+    return fallback;
+  }
+
+  const serviceFee = catalog.serviceFees.find((entry) => entry.serviceType === 'livraison' && entry.wilayaId === wilayaId);
+  if (!serviceFee) {
+    return fallback;
+  }
+
+  return parseNumericAmount(delivery === 0 ? serviceFee.homeFee : serviceFee.stopDeskFee);
 }
 
 function getDeliveryLabelKey(value: 0 | 1) {
@@ -647,6 +734,7 @@ export function OrdersEcotrackManager({
   const queryClient = useQueryClient();
   const [page, setPage] = useState(initialOrders?.pagination.page ?? 1);
   const [search, setSearch] = useState('');
+  const [scanQuery, setScanQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [staleOnly, setStaleOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('createdAt');
@@ -654,11 +742,11 @@ export function OrdersEcotrackManager({
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [expandedIds, setExpandedIds] = useState<number[]>([]);
   const [editDialog, setEditDialog] = useState<EditDialogState | null>(null);
+  const [isFinalizeSubmitting, setIsFinalizeSubmitting] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(null);
   const [dispatchDialog, setDispatchDialog] = useState<DispatchDialogState | null>(null);
   const [majDialog, setMajDialog] = useState<MajDialogState | null>(null);
   const [isFilterPending, startFilterTransition] = useTransition();
-  const autoRefreshKeyRef = useRef<string | null>(null);
   const deferredSearch = useDeferredValue(search);
   const deferredStatusFilter = useDeferredValue(statusFilter);
   const deferredStaleOnly = useDeferredValue(staleOnly);
@@ -693,7 +781,7 @@ export function OrdersEcotrackManager({
 
   const refreshManyMutation = useMutation({
     mutationFn: async ({ orderIds, silent }: { orderIds: number[]; silent?: boolean }) => {
-      return requestJson<{ ok: true; items: EcotrackShipmentDetail[] }>('/api/orders/ecotrack/shipments/refresh', {
+      return requestJson<EcotrackRefreshBatchResponse>('/api/orders/ecotrack/shipments/refresh', {
         method: 'POST',
         body: JSON.stringify({ orderIds }),
       });
@@ -701,15 +789,27 @@ export function OrdersEcotrackManager({
     onMutate: (variables) => ({
       toastId: variables.silent ? null : toast.loading(t('ordersEcotrackManager.notifications.refresh.loading')),
     }),
-    onSuccess: async (_response, variables, context) => {
+    onSuccess: async (response, variables, context) => {
       if (!variables.silent && context?.toastId) {
-        toast.success(t('ordersEcotrackManager.notifications.refresh.success'), { id: context.toastId });
+        if (response.failureCount === 0) {
+          toast.success(t('ordersEcotrackManager.notifications.refresh.success'), { id: context.toastId });
+        } else if (response.successCount > 0) {
+          criticalEcotrackToast(`${t('ordersEcotrackManager.notifications.refresh.partial', {
+            successCount: response.successCount,
+            failedCount: response.failureCount,
+          })} ${buildFailureSummary(response.failures)}`.trim(), context.toastId);
+        } else {
+          criticalEcotrackToast(`${t('ordersEcotrackManager.notifications.refresh.allFailed')} ${buildFailureSummary(response.failures)}`.trim(), context.toastId);
+        }
       }
-      await invalidateShipmentQueries();
+
+      if (response.successCount > 0) {
+        await invalidateShipmentQueries();
+      }
     },
     onError: (error, variables, context) => {
       if (!variables.silent && context?.toastId) {
-        toast.error(error.message || t('ordersEcotrackManager.notifications.refresh.error'), { id: context.toastId });
+        criticalEcotrackToast(error.message || t('ordersEcotrackManager.notifications.refresh.error'), context.toastId);
       }
     },
   });
@@ -726,7 +826,60 @@ export function OrdersEcotrackManager({
       await invalidateShipmentQueries(variables.orderId);
     },
     onError: (error, _variables, context) => {
-      toast.error(error.message || t('ordersEcotrackManager.notifications.update.error'), { id: context?.toastId });
+      criticalEcotrackToast(error.message || t('ordersEcotrackManager.notifications.update.error'), context?.toastId);
+    },
+  });
+
+  const scanLookupMutation = useMutation({
+    mutationFn: async (trackingNumber: string) => {
+      const normalized = trackingNumber.trim().toLowerCase();
+      const response = await requestJson<EcotrackShipmentsResponse>(
+        `/api/orders/ecotrack/shipments?page=1&limit=25&search=${encodeURIComponent(trackingNumber)}&status=all&staleOnly=false&sortKey=createdAt&sortDirection=desc`,
+      );
+      const item = response.items.find((entry) => entry.trackingNumber.trim().toLowerCase() === normalized);
+
+      if (!item) {
+        throw new Error(t('ordersEcotrackManager.notifications.scan.notFound', { trackingNumber: trackingNumber.trim() }));
+      }
+
+      return item;
+    },
+    onMutate: () => ({ toastId: toast.loading(t('ordersEcotrackManager.notifications.scan.loading')) }),
+    onSuccess: (item, _trackingNumber, context) => {
+      if (!(item.canEdit && item.canDispatch)) {
+        criticalEcotrackToast(
+          t('ordersEcotrackManager.notifications.scan.notDispatchable', {
+            trackingNumber: item.trackingNumber,
+            status: t(`ordersEcotrackManager.statuses.${item.status.currentStatus}`),
+          }),
+          context?.toastId,
+        );
+        return;
+      }
+
+      toast.success(t('ordersEcotrackManager.notifications.scan.success', { trackingNumber: item.trackingNumber }), { id: context?.toastId });
+      setScanQuery('');
+      openEditDialogForItem(item, 'finalize');
+    },
+    onError: (error, _trackingNumber, context) => {
+      criticalEcotrackToast(error.message || t('ordersEcotrackManager.notifications.scan.error'), context?.toastId);
+    },
+  });
+
+  const recreateMutation = useMutation({
+    mutationFn: ({ orderId, payload }: { orderId: number; payload: Record<string, unknown> }) => requestJson<{ ok: true; item: EcotrackShipmentDetail }>(`/api/orders/ecotrack/shipments/${orderId}/recreate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+    onMutate: () => ({ toastId: toast.loading(t('ordersEcotrackManager.notifications.recreate.loading')) }),
+    onSuccess: async (_response, variables, context) => {
+      toast.success(t('ordersEcotrackManager.notifications.recreate.success'), { id: context?.toastId });
+      setEditDialog(null);
+      await invalidateShipmentQueries(variables.orderId);
+      await queryClient.invalidateQueries({ queryKey: ['orders-table'] });
+    },
+    onError: (error, _variables, context) => {
+      criticalEcotrackToast(error.message || t('ordersEcotrackManager.notifications.recreate.error'), context?.toastId);
     },
   });
 
@@ -742,52 +895,35 @@ export function OrdersEcotrackManager({
       await queryClient.invalidateQueries({ queryKey: ['orders-table'] });
     },
     onError: (error, _variables, context) => {
-      toast.error(error.message || t('ordersEcotrackManager.notifications.delete.error'), { id: context?.toastId });
+      criticalEcotrackToast(error.message || t('ordersEcotrackManager.notifications.delete.error'), context?.toastId);
     },
   });
 
   const dispatchMutation = useMutation({
-    mutationFn: async ({ orderIds, askCollection }: { orderIds: number[]; askCollection: boolean }) => {
-      const results: Array<{ orderId: number; ok: boolean; error?: string }> = [];
-
-      for (const orderId of orderIds) {
-        try {
-          await requestJson<{ ok: true; item: EcotrackShipmentDetail }>(`/api/orders/ecotrack/shipments/${orderId}/dispatch`, {
-            method: 'POST',
-            body: JSON.stringify({ askCollection }),
-          });
-          results.push({ orderId, ok: true });
-        } catch (error) {
-          results.push({ orderId, ok: false, error: error instanceof Error ? error.message : 'Unknown error' });
-        }
-      }
-
-      const failed = results.filter((entry) => !entry.ok);
-      if (failed.length === orderIds.length) {
-        throw new Error(failed[0]?.error ?? t('ordersEcotrackManager.notifications.dispatch.error'));
-      }
-
-      return {
-        results,
-        failed,
-      };
-    },
+    mutationFn: ({ orderIds, askCollection }: { orderIds: number[]; askCollection: boolean }) => requestJson<EcotrackDispatchBatchResponse>('/api/orders/ecotrack/shipments/dispatch', {
+      method: 'POST',
+      body: JSON.stringify({ orderIds, askCollection }),
+    }),
     onMutate: () => ({ toastId: toast.loading(t('ordersEcotrackManager.notifications.dispatch.loading')) }),
     onSuccess: async (response, variables, context) => {
-      if (response.failed.length > 0) {
-        toast.success(t('ordersEcotrackManager.notifications.dispatch.partial', {
-          successCount: variables.orderIds.length - response.failed.length,
-          failedCount: response.failed.length,
-        }), { id: context?.toastId });
-      } else {
+      if (response.failureCount > 0 && response.successCount > 0) {
+        criticalEcotrackToast(`${t('ordersEcotrackManager.notifications.dispatch.partial', {
+          successCount: response.successCount,
+          failedCount: response.failureCount,
+        })} ${buildFailureSummary(response.failures)}`.trim(), context?.toastId);
+      } else if (response.failureCount === 0) {
         toast.success(t('ordersEcotrackManager.notifications.dispatch.success'), { id: context?.toastId });
+      } else {
+        criticalEcotrackToast(`${t('ordersEcotrackManager.notifications.dispatch.allFailed')} ${buildFailureSummary(response.failures)}`.trim(), context?.toastId);
       }
-      setDispatchDialog(null);
-      await invalidateShipmentQueries();
-      await queryClient.invalidateQueries({ queryKey: ['orders-table'] });
+      if (response.successCount > 0) {
+        setDispatchDialog(null);
+        await invalidateShipmentQueries();
+        await queryClient.invalidateQueries({ queryKey: ['orders-table'] });
+      }
     },
     onError: (error, _variables, context) => {
-      toast.error(error.message || t('ordersEcotrackManager.notifications.dispatch.error'), { id: context?.toastId });
+      criticalEcotrackToast(error.message || t('ordersEcotrackManager.notifications.dispatch.error'), context?.toastId);
     },
   });
 
@@ -803,7 +939,7 @@ export function OrdersEcotrackManager({
       await invalidateShipmentQueries(variables.orderId);
     },
     onError: (error, _variables, context) => {
-      toast.error(error.message || t('ordersEcotrackManager.notifications.maj.error'), { id: context?.toastId });
+      criticalEcotrackToast(error.message || t('ordersEcotrackManager.notifications.maj.error'), context?.toastId);
     },
   });
 
@@ -815,23 +951,34 @@ export function OrdersEcotrackManager({
       await invalidateShipmentQueries(orderId);
     },
     onError: (error, _orderId, context) => {
-      toast.error(error.message || t('ordersEcotrackManager.notifications.return.error'), { id: context?.toastId });
+      criticalEcotrackToast(error.message || t('ordersEcotrackManager.notifications.return.error'), context?.toastId);
     },
   });
 
   const bulkLabelsMutation = useMutation({
-    mutationFn: async (orderIds: number[]) => requestPdf('/api/orders/ecotrack/shipments/labels', {
+    mutationFn: async (orderIds: number[]) => requestJson<EcotrackLabelsResponse>('/api/orders/ecotrack/shipments/labels', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ orderIds }),
     }),
     onMutate: () => ({ toastId: toast.loading(t('ordersEcotrackManager.notifications.labels.loading')) }),
-    onSuccess: (blob, _orderIds, context) => {
-      openPdfBlob(blob);
-      toast.success(t('ordersEcotrackManager.notifications.labels.success'), { id: context?.toastId });
+    onSuccess: (response, _orderIds, context) => {
+      if (response.pdfBase64) {
+        openPdfBlob(decodeBase64Pdf(response.pdfBase64));
+      }
+
+      if (response.failureCount > 0 && response.successCount > 0) {
+        criticalEcotrackToast(`${t('ordersEcotrackManager.notifications.labels.partial', {
+          successCount: response.successCount,
+          failedCount: response.failureCount,
+        })} ${buildFailureSummary(response.failures)}`.trim(), context?.toastId);
+      } else if (response.successCount > 0) {
+        toast.success(t('ordersEcotrackManager.notifications.labels.success'), { id: context?.toastId });
+      } else {
+        criticalEcotrackToast(`${t('ordersEcotrackManager.notifications.labels.allFailed')} ${buildFailureSummary(response.failures)}`.trim(), context?.toastId);
+      }
     },
     onError: (error, _orderIds, context) => {
-      toast.error(error.message || t('ordersEcotrackManager.notifications.labels.error'), { id: context?.toastId });
+      criticalEcotrackToast(error.message || t('ordersEcotrackManager.notifications.labels.error'), context?.toastId);
     },
   });
 
@@ -872,26 +1019,6 @@ export function OrdersEcotrackManager({
     }
   }, [page, pagination.page, shipmentsQuery.isFetching]);
 
-  useEffect(() => {
-    const staleVisibleIds = items
-      .filter((item) => item.status.isStatusStale || item.status.isTrackingStale || item.status.isMajStale)
-      .map((item) => item.orderId)
-      .sort((left, right) => left - right);
-
-    if (staleVisibleIds.length === 0) {
-      autoRefreshKeyRef.current = null;
-      return;
-    }
-
-    const key = staleVisibleIds.join(',');
-    if (autoRefreshKeyRef.current === key || refreshManyMutation.isPending) {
-      return;
-    }
-
-    autoRefreshKeyRef.current = key;
-    refreshManyMutation.mutate({ orderIds: staleVisibleIds, silent: true });
-  }, [items, refreshManyMutation]);
-
   const communeOptions = useMemo(() => {
     if (!editDialog?.state || !catalogQuery.data) {
       return [];
@@ -905,25 +1032,130 @@ export function OrdersEcotrackManager({
     return catalogQuery.data.communes.filter((entry) => entry.wilayaId === wilayaId);
   }, [catalogQuery.data, editDialog?.state]);
 
-  const handleSaveEdit = async () => {
+  const selectedEditProducts = useMemo(
+    () => (editDialog ? summarizeEditableProducts(editDialog.editableProducts) : []),
+    [editDialog],
+  );
+
+  const derivedEditSubtotal = useMemo(
+    () => selectedEditProducts.reduce((sum, product) => sum + product.lineTotal, 0),
+    [selectedEditProducts],
+  );
+
+  const editSubtotalValue = editDialog
+    ? parseNumericAmount(editDialog.subtotalInput || (editDialog.hasManualSubtotalOverride ? '0' : String(derivedEditSubtotal)))
+    : 0;
+  const editDeliveryFeeValue = editDialog ? parseNumericAmount(editDialog.deliveryFeeInput) : 0;
+  const editTotalValue = editSubtotalValue + editDeliveryFeeValue;
+
+  const updateEditDialog = (updater: (current: EditDialogState) => EditDialogState) => {
+    setEditDialog((current) => (current ? updater(current) : current));
+  };
+
+  const applyDerivedDeliveryFee = (current: EditDialogState, nextDelivery: 0 | 1, nextState: string) => {
+    const nextDeliveryFee = resolveDeliveryFeePreview(
+      catalogQuery.data,
+      nextDelivery,
+      nextState,
+      parseNumericAmount(current.deliveryFeeInput),
+    );
+
+    return {
+      ...current,
+      delivery: nextDelivery,
+      state: nextState,
+      deliveryFeeInput: formatAmountInput(nextDeliveryFee),
+    };
+  };
+
+  const buildEditPayload = (current: EditDialogState) => ({
+    firstName: current.firstName,
+    lastName: current.lastName,
+    phoneNumber1: current.phoneNumber1,
+    phoneNumber2: current.phoneNumber2 || null,
+    delivery: current.delivery,
+    state: current.state ? Number.parseInt(current.state, 10) : null,
+    city: current.city,
+    homeAddress: current.homeAddress,
+    note: current.note || null,
+    cartProducts: current.editableProducts.map((item) => item.rawValue.trim()).filter(Boolean),
+    deliveryFee: parseNumericAmount(current.deliveryFeeInput),
+    subtotalOverride: current.hasManualSubtotalOverride
+      ? parseNumericAmount(current.subtotalInput || '0')
+      : null,
+  });
+
+  const handleSaveEdit = async ({ dispatchAfterSave = false }: { dispatchAfterSave?: boolean } = {}) => {
     if (!editDialog) {
       return;
     }
 
-    await updateMutation.mutateAsync({
-      orderId: editDialog.orderId,
-      payload: {
-        firstName: editDialog.firstName,
-        lastName: editDialog.lastName,
-        phoneNumber1: editDialog.phoneNumber1,
-        phoneNumber2: editDialog.phoneNumber2 || null,
-        delivery: editDialog.delivery,
-        state: editDialog.state ? Number.parseInt(editDialog.state, 10) : null,
-        city: editDialog.city,
-        homeAddress: editDialog.homeAddress,
-        note: editDialog.note || null,
-      },
-    });
+    const payload = buildEditPayload(editDialog);
+
+    if (editDialog.mode === 'recreate') {
+      try {
+        await recreateMutation.mutateAsync({
+          orderId: editDialog.orderId,
+          payload,
+        });
+      } catch {}
+      return;
+    }
+
+    if (dispatchAfterSave && editDialog.mode === 'finalize') {
+      const toastId = toast.loading(t('ordersEcotrackManager.notifications.finalize.loading'));
+      let saved = false;
+      setIsFinalizeSubmitting(true);
+
+      try {
+        await requestJson<{ ok: true; item: EcotrackShipmentDetail }>(`/api/orders/ecotrack/shipments/${editDialog.orderId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+        saved = true;
+
+        const dispatchResponse = await requestJson<EcotrackDispatchBatchResponse>('/api/orders/ecotrack/shipments/dispatch', {
+          method: 'POST',
+          body: JSON.stringify({ orderIds: [editDialog.orderId], askCollection: false }),
+        });
+
+        await invalidateShipmentQueries(editDialog.orderId);
+        await queryClient.invalidateQueries({ queryKey: ['orders-table'] });
+
+        if (dispatchResponse.failureCount > 0) {
+          setEditDialog(null);
+          criticalEcotrackToast(
+            t('ordersEcotrackManager.notifications.finalize.partialFailure', {
+              message: buildFailureSummary(dispatchResponse.failures, 1) || t('ordersEcotrackManager.notifications.dispatch.error'),
+            }),
+            toastId,
+          );
+          return;
+        }
+
+        setEditDialog(null);
+        toast.success(t('ordersEcotrackManager.notifications.finalize.success'), { id: toastId });
+      } catch (error) {
+        criticalEcotrackToast(
+          saved
+            ? t('ordersEcotrackManager.notifications.finalize.partialFailure', {
+              message: error instanceof Error ? error.message : t('ordersEcotrackManager.notifications.dispatch.error'),
+            })
+            : (error instanceof Error ? error.message : t('ordersEcotrackManager.notifications.finalize.error')),
+          toastId,
+        );
+      } finally {
+        setIsFinalizeSubmitting(false);
+      }
+      return;
+    }
+
+    try {
+      await updateMutation.mutateAsync({
+        orderId: editDialog.orderId,
+        payload,
+      });
+    } catch {}
   };
 
   const handleBulkRefresh = async () => {
@@ -971,6 +1203,197 @@ export function OrdersEcotrackManager({
     await bulkLabelsMutation.mutateAsync(selectedIds);
   };
 
+  const openEditDialogForItem = (item: EcotrackShipmentListItem, mode: EditDialogState['mode']) => {
+    setEditDialog({
+      mode,
+      orderId: item.orderId,
+      fullName: item.fullName,
+      firstName: item.firstName ?? '',
+      lastName: item.lastName ?? '',
+      phoneNumber1: item.phoneNumber1,
+      phoneNumber2: item.phoneNumber2 ?? '',
+      delivery: item.delivery,
+      state: item.state === null ? '' : String(item.state),
+      city: item.city ?? '',
+      homeAddress: item.homeAddress ?? '',
+      note: item.note ?? '',
+      cartProducts: item.orderProducts.flatMap((product) => Array.from({ length: product.quantity }, () => product.rawValue ?? String(product.productId ?? product.title))),
+      editableProducts: buildEditableProducts({
+        id: item.orderId,
+        fullName: item.fullName,
+        firstName: item.firstName,
+        lastName: item.lastName,
+        phoneNumber1: item.phoneNumber1,
+        phoneNumber2: item.phoneNumber2,
+        cartProducts: item.orderProducts.flatMap((product) => Array.from({ length: product.quantity }, () => product.rawValue ?? String(product.productId ?? product.title))),
+        orderProducts: item.orderProducts.map((product) => ({
+          rawValue: product.rawValue ?? String(product.productId ?? product.title),
+          productId: product.productId ?? null,
+          title: product.title,
+          unitPrice: product.unitPrice ?? product.lineTotal / Math.max(product.quantity, 1),
+          quantity: product.quantity,
+          lineTotal: product.lineTotal,
+          thumbnailUrl: product.thumbnailUrl ?? null,
+          missing: false,
+        })),
+        delivery: item.delivery,
+        state: item.state,
+        city: item.city,
+        homeAddress: item.homeAddress,
+        subtotalOverride: item.subtotalOverride,
+        productSubtotal: item.productSubtotal,
+        deliveryFee: item.deliveryFee,
+        totalAmount: item.totalAmount,
+        note: item.note,
+        confirmed: 3,
+        noAnswerCount: 0,
+        confirmedBy: null,
+        confirmedByName: null,
+        confirmedAt: null,
+        hasStatusHistory: false,
+        statusHistory: [],
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      }),
+      search: '',
+      subtotalInput: formatAmountInput(item.productSubtotal),
+      subtotalOverride: item.subtotalOverride,
+      hasManualSubtotalOverride: item.subtotalOverride !== null,
+      deliveryFeeInput: formatAmountInput(item.deliveryFee),
+    });
+  };
+
+  const handleScanSubmit = async () => {
+    const normalized = scanQuery.trim();
+    if (!normalized || scanLookupMutation.isPending) {
+      return;
+    }
+
+    try {
+      await scanLookupMutation.mutateAsync(normalized);
+    } catch {}
+  };
+
+  const buildRowActionModel = (item: EcotrackShipmentListItem, expanded: boolean): {
+    primary: RowPrimaryAction;
+    options: SplitActionOption[];
+  } => {
+    const options: SplitActionOption[] = [];
+
+    if (item.canEdit) {
+      options.push({
+        key: `edit-${item.orderId}`,
+        label: t('actions.edit'),
+        disabled: !writable,
+        onSelect: () => openEditDialogForItem(item, 'edit'),
+      });
+    }
+
+    if (item.canEditAndRecreate) {
+      options.push({
+        key: `recreate-${item.orderId}`,
+        label: t('ordersEcotrackManager.actions.editAndRecreate'),
+        disabled: !writable,
+        onSelect: () => openEditDialogForItem(item, 'recreate'),
+      });
+    }
+
+    if (item.canDelete) {
+      options.push({
+        key: `delete-${item.orderId}`,
+        label: t('actions.delete'),
+        disabled: !writable,
+        onSelect: () => setDeleteDialog({ orderId: item.orderId, fullName: item.fullName }),
+      });
+    }
+
+    if (item.canDispatch) {
+      options.push({
+        key: `dispatch-${item.orderId}`,
+        label: t('ordersEcotrackManager.actions.dispatch'),
+        disabled: !writable,
+        onSelect: () => openDispatchDialog([item.orderId], item.fullName),
+      });
+    }
+
+    if (item.canAddMaj) {
+      options.push({
+        key: `maj-${item.orderId}`,
+        label: t('ordersEcotrackManager.actions.maj'),
+        disabled: !writable,
+        onSelect: () => setMajDialog({ orderId: item.orderId, fullName: item.fullName, content: '' }),
+      });
+    }
+
+    if (item.canAskReturn) {
+      options.push({
+        key: `return-${item.orderId}`,
+        label: t('ordersEcotrackManager.actions.return'),
+        disabled: !writable,
+        onSelect: () => {
+          if (!window.confirm(t('ordersEcotrackManager.confirmations.return'))) {
+            return;
+          }
+
+          returnMutation.mutate(item.orderId);
+        },
+      });
+    }
+
+    options.push({
+      key: `refresh-${item.orderId}`,
+      label: t('ordersEcotrackManager.actions.refresh'),
+      onSelect: () => refreshManyMutation.mutate({ orderIds: [item.orderId] }),
+    });
+
+    if (item.canPrintLabel) {
+      options.push({
+        key: `label-${item.orderId}`,
+        label: t('ordersEcotrackManager.actions.label'),
+        onSelect: async () => {
+          await bulkLabelsMutation.mutateAsync([item.orderId]);
+        },
+      });
+    }
+
+    options.push({
+      key: `history-${item.orderId}`,
+      label: t(expanded ? 'ordersEcotrackManager.actions.hideHistory' : 'ordersEcotrackManager.actions.showHistory'),
+      onSelect: () => toggleHistoryForIds([item.orderId]),
+    });
+
+    if (item.canDispatch) {
+      return {
+        primary: {
+          label: t('ordersEcotrackManager.actions.dispatch'),
+          icon: <Send data-icon="inline-start" />,
+          onPrimaryClick: () => openDispatchDialog([item.orderId], item.fullName),
+        },
+        options,
+      };
+    }
+
+    if (item.canAddMaj) {
+      return {
+        primary: {
+          label: t('ordersEcotrackManager.actions.maj'),
+          icon: <Package data-icon="inline-start" />,
+          onPrimaryClick: () => setMajDialog({ orderId: item.orderId, fullName: item.fullName, content: '' }),
+        },
+        options,
+      };
+    }
+
+    return {
+      primary: {
+        label: t('labels.actions'),
+        icon: <MoreHorizontal data-icon="inline-start" />,
+        onPrimaryClick: () => refreshManyMutation.mutate({ orderIds: [item.orderId] }),
+      },
+      options,
+    };
+  };
+
   return (
     <>
       <motion.section
@@ -986,7 +1409,30 @@ export function OrdersEcotrackManager({
             </div>
 
             <div className="rounded-[1.5rem] border border-border/70 bg-background/90 p-3">
-              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4">
+                <form
+                  className="flex flex-col gap-3 xl:flex-row xl:items-end"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void handleScanSubmit();
+                  }}
+                >
+                  <Field className="w-full xl:max-w-sm">
+                    <FieldLabel htmlFor="ecotrack-scan-tracking">{t('ordersEcotrackManager.fields.scanTrackingNumber')}</FieldLabel>
+                    <Input
+                      id="ecotrack-scan-tracking"
+                      value={scanQuery}
+                      disabled={!writable || scanLookupMutation.isPending}
+                      placeholder={t('ordersEcotrackManager.fields.scanTrackingNumberPlaceholder')}
+                      onChange={(event) => setScanQuery(event.target.value)}
+                    />
+                  </Field>
+                  <Button type="submit" disabled={!writable || scanLookupMutation.isPending || scanQuery.trim().length === 0}>
+                    <Search data-icon="inline-start" />
+                    {t('ordersEcotrackManager.actions.scanTrackingNumber')}
+                  </Button>
+                </form>
+
                 <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
                   <SearchField
                     value={search}
@@ -1184,58 +1630,16 @@ export function OrdersEcotrackManager({
                   <TableBody>
                       {items.map((item) => {
                         const expanded = expandedIds.includes(item.orderId);
-                        const rowActionControl = item.canDispatch ? (
+                        const rowActionModel = buildRowActionModel(item, expanded);
+                        const rowActionControl = (
                           <SplitActionButton
-                            label={t('ordersEcotrackManager.actions.dispatch')}
-                            icon={<Send data-icon="inline-start" />}
-                            primaryDisabled={!writable}
-                            onPrimaryClick={() => openDispatchDialog([item.orderId], item.fullName)}
-                            options={[
-                              {
-                                key: 'edit',
-                                label: t('actions.edit'),
-                                disabled: !writable,
-                                onSelect: () => setEditDialog({
-                                  orderId: item.orderId,
-                                  firstName: item.firstName ?? '',
-                                  lastName: item.lastName ?? '',
-                                  phoneNumber1: item.phoneNumber1,
-                                  phoneNumber2: item.phoneNumber2 ?? '',
-                                  delivery: item.delivery,
-                                  state: item.state === null ? '' : String(item.state),
-                                  city: item.city ?? '',
-                                  homeAddress: item.homeAddress ?? '',
-                                  note: item.note ?? '',
-                                }),
-                              },
-                              {
-                                key: 'delete',
-                                label: t('actions.delete'),
-                                disabled: !writable,
-                                onSelect: () => setDeleteDialog({ orderId: item.orderId, fullName: item.fullName }),
-                              },
-                            ]}
+                            label={rowActionModel.primary.label}
+                            icon={rowActionModel.primary.icon}
+                            primaryDisabled={item.canDispatch || item.canAddMaj ? !writable : false}
+                            onPrimaryClick={rowActionModel.primary.onPrimaryClick}
+                            options={rowActionModel.options}
                           />
-                        ) : item.canAddMaj ? (
-                          <SplitActionButton
-                            label={t('ordersEcotrackManager.actions.maj')}
-                            icon={<Package data-icon="inline-start" />}
-                            primaryDisabled={!writable}
-                            onPrimaryClick={() => setMajDialog({ orderId: item.orderId, fullName: item.fullName, content: '' })}
-                            options={item.canAskReturn ? [{
-                              key: 'return',
-                              label: t('ordersEcotrackManager.actions.return'),
-                              disabled: !writable,
-                              onSelect: () => {
-                                if (!window.confirm(t('ordersEcotrackManager.confirmations.return'))) {
-                                  return;
-                                }
-
-                                returnMutation.mutate(item.orderId);
-                              },
-                            }] : []}
-                          />
-                        ) : null;
+                        );
 
                         return (
                           <Fragment key={item.orderId}>
@@ -1321,58 +1725,16 @@ export function OrdersEcotrackManager({
                 <div className="grid gap-4 p-4 lg:hidden">
                   {items.map((item) => {
                     const expanded = expandedIds.includes(item.orderId);
-                    const mobileActionControl = item.canDispatch ? (
+                    const rowActionModel = buildRowActionModel(item, expanded);
+                    const mobileActionControl = (
                       <SplitActionButton
-                        label={t('ordersEcotrackManager.actions.dispatch')}
-                        icon={<Send data-icon="inline-start" />}
-                        primaryDisabled={!writable}
-                        onPrimaryClick={() => openDispatchDialog([item.orderId], item.fullName)}
-                        options={[
-                          {
-                            key: 'edit',
-                            label: t('actions.edit'),
-                            disabled: !writable,
-                            onSelect: () => setEditDialog({
-                              orderId: item.orderId,
-                              firstName: item.firstName ?? '',
-                              lastName: item.lastName ?? '',
-                              phoneNumber1: item.phoneNumber1,
-                              phoneNumber2: item.phoneNumber2 ?? '',
-                              delivery: item.delivery,
-                              state: item.state === null ? '' : String(item.state),
-                              city: item.city ?? '',
-                              homeAddress: item.homeAddress ?? '',
-                              note: item.note ?? '',
-                            }),
-                          },
-                          {
-                            key: 'delete',
-                            label: t('actions.delete'),
-                            disabled: !writable,
-                            onSelect: () => setDeleteDialog({ orderId: item.orderId, fullName: item.fullName }),
-                          },
-                        ]}
+                        label={rowActionModel.primary.label}
+                        icon={rowActionModel.primary.icon}
+                        primaryDisabled={item.canDispatch || item.canAddMaj ? !writable : false}
+                        onPrimaryClick={rowActionModel.primary.onPrimaryClick}
+                        options={rowActionModel.options}
                       />
-                    ) : item.canAddMaj ? (
-                      <SplitActionButton
-                        label={t('ordersEcotrackManager.actions.maj')}
-                        icon={<Package data-icon="inline-start" />}
-                        primaryDisabled={!writable}
-                        onPrimaryClick={() => setMajDialog({ orderId: item.orderId, fullName: item.fullName, content: '' })}
-                        options={item.canAskReturn ? [{
-                          key: 'return',
-                          label: t('ordersEcotrackManager.actions.return'),
-                          disabled: !writable,
-                          onSelect: () => {
-                            if (!window.confirm(t('ordersEcotrackManager.confirmations.return'))) {
-                              return;
-                            }
-
-                            returnMutation.mutate(item.orderId);
-                          },
-                        }] : []}
-                      />
-                    ) : null;
+                    );
 
                     return (
                       <Card key={item.orderId} className="border border-border/70 bg-background/90 shadow-none">
@@ -1430,7 +1792,7 @@ export function OrdersEcotrackManager({
                             </div>
                           </div>
 
-                          {mobileActionControl ? <div className="flex flex-wrap gap-2">{mobileActionControl}</div> : null}
+                          <div className="flex flex-wrap gap-2">{mobileActionControl}</div>
 
                           {expanded ? (
                             <div className="rounded-[1rem] border border-border/70 bg-muted/10 p-3">
@@ -1454,39 +1816,62 @@ export function OrdersEcotrackManager({
       </motion.section>
 
       <Dialog open={editDialog !== null} onOpenChange={(open) => !open && setEditDialog(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
-            <DialogTitle>{t('ordersEcotrackManager.dialogs.editTitle')}</DialogTitle>
-            <DialogDescription>{t('ordersEcotrackManager.dialogs.editDescription')}</DialogDescription>
+            <DialogTitle>
+              {editDialog?.mode === 'recreate'
+                ? t('ordersEcotrackManager.dialogs.recreateTitle')
+                : editDialog?.mode === 'finalize'
+                  ? t('ordersEcotrackManager.dialogs.finalizeTitle')
+                  : t('ordersEcotrackManager.dialogs.editTitle')}
+            </DialogTitle>
+            <DialogDescription>
+              {editDialog?.mode === 'recreate'
+                ? t('ordersEcotrackManager.dialogs.recreateDescription', { name: editDialog?.fullName ?? '' })
+                : editDialog?.mode === 'finalize'
+                  ? t('ordersEcotrackManager.dialogs.finalizeDescription', { name: editDialog?.fullName ?? '' })
+                  : t('ordersEcotrackManager.dialogs.editDescription')}
+            </DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <div className="grid gap-4 md:grid-cols-2">
               <Field>
                 <FieldLabel htmlFor="ecotrack-edit-first-name">{t('ordersEcotrackManager.fields.firstName')}</FieldLabel>
-                <Input id="ecotrack-edit-first-name" value={editDialog?.firstName ?? ''} onChange={(event) => setEditDialog((current) => (current ? { ...current, firstName: event.target.value } : current))} />
+                <Input id="ecotrack-edit-first-name" value={editDialog?.firstName ?? ''} onChange={(event) => updateEditDialog((current) => ({ ...current, firstName: event.target.value }))} />
               </Field>
               <Field>
                 <FieldLabel htmlFor="ecotrack-edit-last-name">{t('ordersEcotrackManager.fields.lastName')}</FieldLabel>
-                <Input id="ecotrack-edit-last-name" value={editDialog?.lastName ?? ''} onChange={(event) => setEditDialog((current) => (current ? { ...current, lastName: event.target.value } : current))} />
+                <Input id="ecotrack-edit-last-name" value={editDialog?.lastName ?? ''} onChange={(event) => updateEditDialog((current) => ({ ...current, lastName: event.target.value }))} />
               </Field>
               <Field>
                 <FieldLabel htmlFor="ecotrack-edit-phone">{t('ordersEcotrackManager.fields.phoneNumber1')}</FieldLabel>
-                <Input id="ecotrack-edit-phone" value={editDialog?.phoneNumber1 ?? ''} onChange={(event) => setEditDialog((current) => (current ? { ...current, phoneNumber1: event.target.value } : current))} />
+                <Input id="ecotrack-edit-phone" value={editDialog?.phoneNumber1 ?? ''} onChange={(event) => updateEditDialog((current) => ({ ...current, phoneNumber1: event.target.value }))} />
               </Field>
               <Field>
                 <FieldLabel htmlFor="ecotrack-edit-phone-2">{t('ordersEcotrackManager.fields.phoneNumber2')}</FieldLabel>
-                <Input id="ecotrack-edit-phone-2" value={editDialog?.phoneNumber2 ?? ''} onChange={(event) => setEditDialog((current) => (current ? { ...current, phoneNumber2: event.target.value } : current))} />
+                <Input id="ecotrack-edit-phone-2" value={editDialog?.phoneNumber2 ?? ''} onChange={(event) => updateEditDialog((current) => ({ ...current, phoneNumber2: event.target.value }))} />
               </Field>
               <Field>
                 <FieldLabel htmlFor="ecotrack-edit-delivery">{t('ordersEcotrackManager.fields.delivery')}</FieldLabel>
-                <NativeSelect id="ecotrack-edit-delivery" value={String(editDialog?.delivery ?? 0)} onChange={(event) => setEditDialog((current) => (current ? { ...current, delivery: Number.parseInt(event.target.value, 10) as 0 | 1 } : current))}>
+                <NativeSelect
+                  id="ecotrack-edit-delivery"
+                  value={String(editDialog?.delivery ?? 0)}
+                  onChange={(event) => updateEditDialog((current) => applyDerivedDeliveryFee(current, Number.parseInt(event.target.value, 10) as 0 | 1, current.state))}
+                >
                   <NativeSelectOption value="0">{t('ordersManager.delivery.home')}</NativeSelectOption>
                   <NativeSelectOption value="1">{t('ordersManager.delivery.office')}</NativeSelectOption>
                 </NativeSelect>
               </Field>
               <Field>
                 <FieldLabel htmlFor="ecotrack-edit-state">{t('ordersEcotrackManager.fields.state')}</FieldLabel>
-                <NativeSelect id="ecotrack-edit-state" value={editDialog?.state ?? ''} onChange={(event) => setEditDialog((current) => (current ? { ...current, state: event.target.value, city: '' } : current))}>
+                <NativeSelect
+                  id="ecotrack-edit-state"
+                  value={editDialog?.state ?? ''}
+                  onChange={(event) => updateEditDialog((current) => ({
+                    ...applyDerivedDeliveryFee(current, current.delivery, event.target.value),
+                    city: '',
+                  }))}
+                >
                   <NativeSelectOption value="">{t('ordersEcotrackManager.fields.statePlaceholder')}</NativeSelectOption>
                   {(catalogQuery.data?.wilayas ?? []).map((wilaya) => (
                     <NativeSelectOption key={wilaya.wilayaId} value={String(wilaya.wilayaId)}>{wilaya.name}</NativeSelectOption>
@@ -1498,33 +1883,154 @@ export function OrdersEcotrackManager({
               <Field>
                 <FieldLabel htmlFor="ecotrack-edit-city">{t('ordersEcotrackManager.fields.city')}</FieldLabel>
                 {communeOptions.length > 0 ? (
-                  <NativeSelect id="ecotrack-edit-city" value={editDialog?.city ?? ''} onChange={(event) => setEditDialog((current) => (current ? { ...current, city: event.target.value } : current))}>
+                  <NativeSelect id="ecotrack-edit-city" value={editDialog?.city ?? ''} onChange={(event) => updateEditDialog((current) => ({ ...current, city: event.target.value }))}>
                     <NativeSelectOption value="">{t('ordersEcotrackManager.fields.cityPlaceholder')}</NativeSelectOption>
                     {communeOptions.map((commune) => (
                       <NativeSelectOption key={commune.communeId} value={commune.name}>{commune.name}</NativeSelectOption>
                     ))}
                   </NativeSelect>
                 ) : (
-                  <Input id="ecotrack-edit-city" value={editDialog?.city ?? ''} onChange={(event) => setEditDialog((current) => (current ? { ...current, city: event.target.value } : current))} />
+                  <Input id="ecotrack-edit-city" value={editDialog?.city ?? ''} onChange={(event) => updateEditDialog((current) => ({ ...current, city: event.target.value }))} />
                 )}
               </Field>
               <Field>
                 <FieldLabel htmlFor="ecotrack-edit-address">{t('ordersEcotrackManager.fields.homeAddress')}</FieldLabel>
-                <Input id="ecotrack-edit-address" value={editDialog?.homeAddress ?? ''} onChange={(event) => setEditDialog((current) => (current ? { ...current, homeAddress: event.target.value } : current))} />
+                <Input id="ecotrack-edit-address" value={editDialog?.homeAddress ?? ''} onChange={(event) => updateEditDialog((current) => ({ ...current, homeAddress: event.target.value }))} />
               </Field>
             </div>
             <Field>
               <FieldLabel htmlFor="ecotrack-edit-note">{t('ordersEcotrackManager.fields.note')}</FieldLabel>
-              <Textarea id="ecotrack-edit-note" value={editDialog?.note ?? ''} onChange={(event) => setEditDialog((current) => (current ? { ...current, note: event.target.value } : current))} />
+              <Textarea id="ecotrack-edit-note" value={editDialog?.note ?? ''} onChange={(event) => updateEditDialog((current) => ({ ...current, note: event.target.value }))} />
               <FieldDescription>{t('ordersEcotrackManager.dialogs.editHint')}</FieldDescription>
             </Field>
+            {editDialog ? (
+              <OrderProductsEditor
+                customerName={editDialog.fullName}
+                items={editDialog.editableProducts}
+                search={editDialog.search}
+                onSearchChange={(value) => updateEditDialog((current) => ({ ...current, search: value }))}
+                onAddProduct={(product: ProductSearchItem) => updateEditDialog((current) => {
+                  const nextItems = [
+                    ...current.editableProducts,
+                    {
+                      rawValue: String(product.id),
+                      productId: product.id,
+                      title: product.title,
+                      unitPrice: parseNumericAmount(product.price),
+                      thumbnailUrl: product.images[0] ?? null,
+                      missing: false,
+                    },
+                  ];
+                  const nextDerivedSubtotal = summarizeEditableProducts(nextItems).reduce((sum, item) => sum + item.lineTotal, 0);
+                  return {
+                    ...current,
+                    editableProducts: nextItems,
+                    cartProducts: nextItems.map((item) => item.rawValue),
+                    subtotalInput: formatAmountInput(nextDerivedSubtotal),
+                    subtotalOverride: null,
+                    hasManualSubtotalOverride: false,
+                  };
+                })}
+                onIncreaseQuantity={(rawValue) => updateEditDialog((current) => {
+                  const item = current.editableProducts.find((entry) => entry.rawValue === rawValue);
+                  if (!item) {
+                    return current;
+                  }
+                  const nextItems = [...current.editableProducts, { ...item }];
+                  const nextDerivedSubtotal = summarizeEditableProducts(nextItems).reduce((sum, entry) => sum + entry.lineTotal, 0);
+                  return {
+                    ...current,
+                    editableProducts: nextItems,
+                    cartProducts: nextItems.map((entry) => entry.rawValue),
+                    subtotalInput: formatAmountInput(nextDerivedSubtotal),
+                    subtotalOverride: null,
+                    hasManualSubtotalOverride: false,
+                  };
+                })}
+                onDecreaseQuantity={(rawValue) => updateEditDialog((current) => {
+                  const index = current.editableProducts.findIndex((entry) => entry.rawValue === rawValue);
+                  if (index === -1) {
+                    return current;
+                  }
+                  const nextItems = current.editableProducts.filter((_, itemIndex) => itemIndex !== index);
+                  const nextDerivedSubtotal = summarizeEditableProducts(nextItems).reduce((sum, entry) => sum + entry.lineTotal, 0);
+                  return {
+                    ...current,
+                    editableProducts: nextItems,
+                    cartProducts: nextItems.map((entry) => entry.rawValue),
+                    subtotalInput: formatAmountInput(nextDerivedSubtotal),
+                    subtotalOverride: null,
+                    hasManualSubtotalOverride: false,
+                  };
+                })}
+                onRemoveProduct={(rawValue) => updateEditDialog((current) => {
+                  const nextItems = current.editableProducts.filter((entry) => entry.rawValue !== rawValue);
+                  const nextDerivedSubtotal = summarizeEditableProducts(nextItems).reduce((sum, entry) => sum + entry.lineTotal, 0);
+                  return {
+                    ...current,
+                    editableProducts: nextItems,
+                    cartProducts: nextItems.map((entry) => entry.rawValue),
+                    subtotalInput: formatAmountInput(nextDerivedSubtotal),
+                    subtotalOverride: null,
+                    hasManualSubtotalOverride: false,
+                  };
+                })}
+                footer={(
+                  <div className="grid gap-4">
+                    <Field>
+                      <FieldLabel htmlFor="ecotrack-edit-subtotal">{t('ordersEcotrackManager.amounts.subtotal')}</FieldLabel>
+                      <Input
+                        id="ecotrack-edit-subtotal"
+                        type="number"
+                        step="0.01"
+                        value={editDialog.subtotalInput}
+                        onChange={(event) => updateEditDialog((current) => ({
+                          ...current,
+                          subtotalInput: event.target.value,
+                          subtotalOverride: parseNumericAmount(event.target.value),
+                          hasManualSubtotalOverride: true,
+                        }))}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="ecotrack-edit-delivery-fee">{t('ordersEcotrackManager.amounts.deliveryFee')}</FieldLabel>
+                      <Input
+                        id="ecotrack-edit-delivery-fee"
+                        type="number"
+                        step="0.01"
+                        value={editDialog.deliveryFeeInput}
+                        onChange={(event) => updateEditDialog((current) => ({ ...current, deliveryFeeInput: event.target.value }))}
+                      />
+                    </Field>
+                    <div className="rounded-2xl bg-muted/40 p-3 text-sm">
+                      <p>{t('ordersEcotrackManager.amounts.subtotal')}: {formatMoney(locale, editSubtotalValue)}</p>
+                      <p>{t('ordersEcotrackManager.amounts.deliveryFee')}: {formatMoney(locale, editDeliveryFeeValue)}</p>
+                      <p className="font-semibold">{t('ordersEcotrackManager.amounts.total')}: {formatMoney(locale, editTotalValue)}</p>
+                    </div>
+                  </div>
+                )}
+              />
+            ) : null}
           </FieldGroup>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setEditDialog(null)}>{t('actions.cancel')}</Button>
-            <Button type="button" onClick={() => void handleSaveEdit()} disabled={updateMutation.isPending}>
-              <Save data-icon="inline-start" />
-              {t('actions.save')}
-            </Button>
+            {editDialog?.mode === 'finalize' ? (
+              <>
+                <Button type="button" variant="outline" onClick={() => void handleSaveEdit()} disabled={updateMutation.isPending || recreateMutation.isPending || isFinalizeSubmitting}>
+                  <Save data-icon="inline-start" />
+                  {t('ordersEcotrackManager.actions.saveOnly')}
+                </Button>
+                <Button type="button" onClick={() => void handleSaveEdit({ dispatchAfterSave: true })} disabled={updateMutation.isPending || recreateMutation.isPending || isFinalizeSubmitting}>
+                  <Send data-icon="inline-start" />
+                  {t('ordersEcotrackManager.actions.saveAndDispatch')}
+                </Button>
+              </>
+            ) : (
+              <Button type="button" onClick={() => void handleSaveEdit()} disabled={updateMutation.isPending || recreateMutation.isPending || isFinalizeSubmitting}>
+                <Save data-icon="inline-start" />
+                {editDialog?.mode === 'recreate' ? t('ordersEcotrackManager.actions.editAndRecreate') : t('actions.save')}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
