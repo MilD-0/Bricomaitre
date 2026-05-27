@@ -58,8 +58,9 @@ export async function generateMetadata({ params }) {
   });
 }
 
-export default async function Home({ params }) {
+export default async function Home({ params, searchParams }) {
   const { id } = await params;
+  const resolvedSearchParams = (await searchParams) ?? {};
   const locale = await getLocale();
   const t = await getTranslations("Layout");
   const product = await loadProduct(id);
@@ -90,7 +91,7 @@ export default async function Home({ params }) {
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
       />
       <MetaViewContentBootstrap product={product} />
-      <Main id={id} initialProduct={product} />
+      <Main id={id} initialProduct={product} promoCode={resolvedSearchParams.promo ?? null} />
     </>
   );
 }

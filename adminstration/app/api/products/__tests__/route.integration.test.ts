@@ -117,7 +117,7 @@ describe('app/api/products/route', () => {
     const orderByMock = vi.fn().mockResolvedValue(rows);
     const fromMock = vi.fn(() => ({ orderBy: orderByMock }));
     const selectMock = vi.fn(() => ({ from: fromMock }));
-    getDbMock.mockReturnValue({ select: selectMock });
+    getDbMock.mockReturnValue({ select: selectMock, execute: vi.fn() });
 
     const res = await GET(new NextRequest('http://localhost/api/products'));
 
@@ -156,12 +156,13 @@ describe('app/api/products/route', () => {
     const fromRowsMock = vi.fn(() => ({ where: whereRowsMock }));
     const whereCountMock = vi.fn().mockResolvedValue([{ value: 1 }]);
     const fromCountMock = vi.fn(() => ({ where: whereCountMock }));
+    const executeMock = vi.fn().mockResolvedValue({ rows: [] });
     const selectMock = vi
       .fn()
       .mockReturnValueOnce({ from: fromCountMock })
       .mockReturnValueOnce({ from: fromRowsMock });
 
-    getDbMock.mockReturnValue({ select: selectMock });
+    getDbMock.mockReturnValue({ select: selectMock, execute: executeMock });
 
     const res = await GET(new NextRequest('http://localhost/api/products?page=1&limit=50&imageOrigin=external'));
 
@@ -173,12 +174,91 @@ describe('app/api/products/route', () => {
           id: 3,
           title: 'External image product',
           updatedAt: '2026-03-06T00:00:00.000Z',
+          orderPurchaseCount: 0,
+          confirmedOrderCount: 0,
+          confirmationRate: null,
         },
       ],
       pagination: {
         page: 1,
         limit: 50,
         totalItems: 1,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    });
+  });
+
+  it('adds paginated product order metrics with one aggregate query', async () => {
+    hasDbMock.mockReturnValue(true);
+
+    const rows = [
+      {
+        id: 1,
+        mongoId: 'f00000000000000000000005',
+        title: 'Metric product',
+        updatedAt: new Date('2026-03-06T00:00:00.000Z'),
+      },
+      {
+        id: 2,
+        mongoId: null,
+        title: 'No orders product',
+        updatedAt: new Date('2026-03-05T00:00:00.000Z'),
+      },
+    ];
+
+    const offsetMock = vi.fn().mockResolvedValue(rows);
+    const limitMock = vi.fn(() => ({ offset: offsetMock }));
+    const orderByMock = vi.fn(() => ({ limit: limitMock }));
+    const whereRowsMock = vi.fn(() => ({ orderBy: orderByMock }));
+    const fromRowsMock = vi.fn(() => ({ where: whereRowsMock }));
+    const whereCountMock = vi.fn().mockResolvedValue([{ value: 2 }]);
+    const fromCountMock = vi.fn(() => ({ where: whereCountMock }));
+    const executeMock = vi.fn().mockResolvedValue({
+      rows: [
+        {
+          productId: 1,
+          orderPurchaseCount: 12,
+          confirmedOrderCount: 9,
+        },
+      ],
+    });
+    const selectMock = vi
+      .fn()
+      .mockReturnValueOnce({ from: fromCountMock })
+      .mockReturnValueOnce({ from: fromRowsMock });
+
+    getDbMock.mockReturnValue({ select: selectMock, execute: executeMock });
+
+    const res = await GET(new NextRequest('http://localhost/api/products?page=1&limit=50'));
+
+    expect(executeMock).toHaveBeenCalledOnce();
+    await expect(res.json()).resolves.toEqual({
+      items: [
+        {
+          id: 1,
+          mongoId: 'f00000000000000000000005',
+          title: 'Metric product',
+          updatedAt: '2026-03-06T00:00:00.000Z',
+          orderPurchaseCount: 12,
+          confirmedOrderCount: 9,
+          confirmationRate: 75,
+        },
+        {
+          id: 2,
+          mongoId: null,
+          title: 'No orders product',
+          updatedAt: '2026-03-05T00:00:00.000Z',
+          orderPurchaseCount: 0,
+          confirmedOrderCount: 0,
+          confirmationRate: null,
+        },
+      ],
+      pagination: {
+        page: 1,
+        limit: 50,
+        totalItems: 2,
         totalPages: 1,
         hasNextPage: false,
         hasPreviousPage: false,

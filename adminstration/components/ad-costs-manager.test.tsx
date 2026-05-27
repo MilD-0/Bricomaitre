@@ -48,9 +48,39 @@ describe('AdCostsManager', () => {
   });
 
   it('renders grouped ad costs and saves a new entry', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url === '/api/stats/ad-costs?batches=true') {
+        return {
+          ok: true,
+          json: async () => ({
+            data: [
+              {
+                batchId: 'batch-1',
+                fileName: 'ads.xlsx',
+                importedAt: '2026-03-30T10:00:00.000Z',
+                totalRows: 1,
+                importedRows: 1,
+                updatedRows: 0,
+                currentRows: 1,
+                currentSpend: 1200,
+                dateRangeStart: '2026-03-30',
+                dateRangeEnd: '2026-03-30',
+              },
+            ],
+          }),
+        };
+      }
+
+      if (url === '/api/stats/ad-costs' && init?.method === 'POST') {
+        return {
+          ok: true,
+          json: async () => ({ data: { id: 2, created: true } }),
+        };
+      }
+
+      return {
         ok: true,
         json: async () => ({
           data: [
@@ -66,20 +96,14 @@ describe('AdCostsManager', () => {
             },
           ],
         }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ data: { id: 2, created: true } }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ data: [] }),
-      });
+      };
+    });
     vi.stubGlobal('fetch', fetchMock);
 
     renderManager();
 
     expect(await screen.findByText('Prospecting')).toBeInTheDocument();
+    expect(await screen.findByText('ads.xlsx')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'actions.import' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'actions.add' }));
     await userEvent.type(screen.getByPlaceholderText('fields.spend'), '500');
@@ -92,6 +116,56 @@ describe('AdCostsManager', () => {
           method: 'POST',
         }),
       );
+    });
+  });
+
+  it('deletes an imported ad spend spreadsheet batch', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url === '/api/stats/ad-costs?batches=true') {
+        return {
+          ok: true,
+          json: async () => ({
+            data: [
+              {
+                batchId: 'batch-1',
+                fileName: 'ads.xlsx',
+                importedAt: '2026-03-30T10:00:00.000Z',
+                totalRows: 1,
+                importedRows: 1,
+                updatedRows: 0,
+                currentRows: 1,
+                currentSpend: 1200,
+                dateRangeStart: '2026-03-30',
+                dateRangeEnd: '2026-03-30',
+              },
+            ],
+          }),
+        };
+      }
+
+      if (url === '/api/stats/ad-costs?batchId=batch-1' && init?.method === 'DELETE') {
+        return {
+          ok: true,
+          json: async () => ({ data: { batchId: 'batch-1', deletedRows: 1 } }),
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ data: [] }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderManager();
+
+    expect(await screen.findByText('ads.xlsx')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'batches.delete' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/stats/ad-costs?batchId=batch-1', expect.objectContaining({ method: 'DELETE' }));
     });
   });
 });

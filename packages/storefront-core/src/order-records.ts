@@ -14,6 +14,7 @@ import {
   type OrderRecord,
   type OrderStatusHistoryRecord,
 } from './orders-support';
+import { applyPromoToOrderProducts } from './storefront/promos';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -98,7 +99,7 @@ export function toOrderRecord(
   const noAnswerCount = coerceNoAnswerCount(confirmed, row.noAnswerCount, row.confirmed);
   const deliveryFee = parseNumericAmount(row.delPr);
   const subtotalOverride = row.price === null ? null : parseNumericAmount(row.price);
-  const orderProducts = buildOrderProductSummaries(row.cartProducts ?? [], (_rawValue, productId) => {
+  const rawOrderProducts = buildOrderProductSummaries(row.cartProducts ?? [], (_rawValue, productId) => {
     const rawValue = _rawValue.trim();
     const lookupKey = isMongoObjectId(rawValue)
       ? `mongo:${rawValue}`
@@ -130,7 +131,12 @@ export function toOrderRecord(
       missing: false,
     };
   });
-  const derivedSubtotal = orderProducts.reduce((sum, product) => sum + product.lineTotal, 0);
+  const promoDiscountAmount = parseNumericAmount(row.promoDiscountAmount);
+  const orderProducts = applyPromoToOrderProducts(rawOrderProducts, {
+    productId: row.promoProductId,
+    discountAmount: promoDiscountAmount,
+  });
+  const derivedSubtotal = rawOrderProducts.reduce((sum, product) => sum + product.lineTotal, 0);
   const productSubtotal = subtotalOverride ?? derivedSubtotal;
   const totalAmount = productSubtotal + deliveryFee;
 
@@ -158,6 +164,11 @@ export function toOrderRecord(
     productSubtotal,
     deliveryFee,
     totalAmount,
+    promoCode: row.promoCode ?? null,
+    promoProductId: row.promoProductId ?? null,
+    promoOriginalSubtotal: row.promoOriginalSubtotal === null ? null : parseNumericAmount(row.promoOriginalSubtotal),
+    promoDiscountAmount,
+    promoFinalSubtotal: row.promoFinalSubtotal === null ? null : parseNumericAmount(row.promoFinalSubtotal),
     note: row.note,
     confirmed,
     noAnswerCount,
@@ -199,6 +210,11 @@ export function toStorefrontOrderRecord(
     productSubtotal: record.productSubtotal,
     deliveryFee: record.deliveryFee,
     totalAmount: record.totalAmount,
+    promoCode: record.promoCode,
+    promoProductId: record.promoProductId,
+    promoOriginalSubtotal: record.promoOriginalSubtotal,
+    promoDiscountAmount: record.promoDiscountAmount,
+    promoFinalSubtotal: record.promoFinalSubtotal,
     note: record.note,
     confirmed: record.confirmed,
     noAnswerCount: record.noAnswerCount,

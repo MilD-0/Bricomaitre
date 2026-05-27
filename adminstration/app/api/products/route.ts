@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, asc, count, desc, eq, ilike, or, sql } from 'drizzle-orm';
 
 import { getDb, hasDb } from '../../../db/client';
-import { products } from '../../../db/schema';
+import { orders, productPromoCodes, products } from '../../../db/schema';
 import { mutateEntityWithHistory } from '../../../lib/action-history';
 import { auth } from '../../../lib/auth';
 import { startProductCatalogFeedRefreshJob } from '../../../lib/background-jobs';
-import { productListQuerySchema, productPayloadSchema } from '../../../lib/products';
+import { normalizePromoCode, productListQuerySchema, productPayloadSchema, type ProductPromoCodePayload } from '../../../lib/products';
 import { requireMutationAccess } from '../../../lib/rbac';
 import { captureAdminException, getRequestId } from '../../../lib/sentry';
 import { applyServerCache, CACHE_TAGS, revalidateServerTags } from '../../../lib/server-cache';
@@ -52,8 +52,9 @@ async function toProductMutationValues(
   data: ReturnType<typeof productPayloadSchema.parse>,
   currentId?: number,
 ) {
+  const { promoCodes: _promoCodes, ...productValues } = data;
   return {
-    ...data,
+    ...productValues,
     slug: await resolveProductSlug(data, currentId),
     price: data.price.toFixed(2),
     oldPrice: data.oldPrice == null ? null : data.oldPrice.toFixed(2),
@@ -61,7 +62,32 @@ async function toProductMutationValues(
   };
 }
 
+function toPromoDate(value: string | null) {
+  return value === null ? null : new Date(value);
+}
+
+function toProductPromoRows(productId: number, promoCodes: ProductPromoCodePayload[]) {
+  const now = new Date();
+
+  return promoCodes.map((promo) => ({
+    productId,
+    code: promo.code,
+    normalizedCode: normalizePromoCode(promo.code),
+    promoPrice: promo.promoPrice.toFixed(2),
+    active: promo.active,
+    startsAt: toPromoDate(promo.startsAt),
+    endsAt: toPromoDate(promo.endsAt),
+    createdAt: now,
+    updatedAt: now,
+  }));
+}
+
 type ProductListQuery = ReturnType<typeof productListQuerySchema.parse>;
+type ProductMetricRow = {
+  productId: number;
+  orderPurchaseCount: number;
+  confirmedOrderCount: number;
+};
 
 function normalizeHostname(value: string | undefined) {
   return String(value ?? '')
@@ -115,6 +141,104 @@ function buildExternalImageWhereClause() {
   )`;
 }
 
+function roundRate(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+function withDefaultOrderMetrics<T extends { id: number }>(row: T) {
+  return {
+    ...row,
+    orderPurchaseCount: 0,
+    confirmedOrderCount: 0,
+    confirmationRate: null,
+  };
+}
+
+function buildProductReferenceArray(rows: Array<{ id: number; mongoId?: string | null }>) {
+  const references = new Set<string>();
+
+  for (const row of rows) {
+    references.add(String(row.id));
+
+    const mongoId = row.mongoId?.trim();
+    if (mongoId) {
+      references.add(mongoId);
+    }
+  }
+
+  return [...references];
+}
+
+async function getProductOrderMetrics(rows: Array<{ id: number; mongoId?: string | null }>): Promise<Map<number, ProductMetricRow>> {
+  if (rows.length === 0) {
+    return new Map();
+  }
+
+  const references = buildProductReferenceArray(rows);
+  if (references.length === 0) {
+    return new Map();
+  }
+
+  const selectedProductValues = sql.join(
+    rows.map((row) => sql`(${row.id}::bigint, ${row.mongoId ?? null}::text)`),
+    sql`, `,
+  );
+  const referenceValues = sql.join(references.map((reference) => sql`${reference}`), sql`, `);
+  const result = await getDb().execute(sql`
+    with selected_products(id, mongo_id) as (
+      values ${selectedProductValues}
+    ),
+    matched_orders as (
+      select distinct
+        sp.id as product_id,
+        ${orders.id} as order_id,
+        ${orders.confirmed} as confirmed
+      from ${orders}
+      inner join selected_products sp
+        on sp.id::text = any(${orders.cartProducts})
+        or (sp.mongo_id is not null and sp.mongo_id = any(${orders.cartProducts}))
+      where ${orders.cartProducts} && array[${referenceValues}]::text[]
+    )
+    select
+      product_id::bigint as "productId",
+      count(*)::int as "orderPurchaseCount",
+      count(*) filter (where confirmed in (2, 3, 4, 5, 7, 8, 9, 10, 11))::int as "confirmedOrderCount"
+    from matched_orders
+    group by product_id
+  `);
+
+  return new Map((result.rows ?? []).map((row: unknown) => {
+    const typedRow = row as Record<string, unknown>;
+    const productId = Number(typedRow.productId);
+
+    return [productId, {
+      productId,
+      orderPurchaseCount: Number(typedRow.orderPurchaseCount ?? 0),
+      confirmedOrderCount: Number(typedRow.confirmedOrderCount ?? 0),
+    }];
+  }));
+}
+
+async function addOrderMetricsToProducts<T extends { id: number; mongoId?: string | null }>(rows: T[]) {
+  const metricsByProductId = await getProductOrderMetrics(rows);
+
+  return rows.map((row) => {
+    const metrics = metricsByProductId.get(row.id);
+    if (!metrics) {
+      return withDefaultOrderMetrics(row);
+    }
+
+    return {
+      ...row,
+      orderPurchaseCount: metrics.orderPurchaseCount,
+      confirmedOrderCount: metrics.confirmedOrderCount,
+      confirmationRate: metrics.orderPurchaseCount > 0
+        ? roundRate((metrics.confirmedOrderCount / metrics.orderPurchaseCount) * 100)
+        : null,
+    };
+  });
+}
+
 async function getCachedAllProducts() {
   applyServerCache({ stale: 60, revalidate: 300, expire: 3600 }, CACHE_TAGS.products);
 
@@ -163,9 +287,10 @@ async function getCachedPaginatedProducts(query: ProductListQuery) {
     .orderBy(...orderBy, desc(products.id))
     .limit(query.limit)
     .offset((page - 1) * query.limit);
+  const items = await addOrderMetricsToProducts(rows);
 
   return {
-    items: rows,
+    items,
     pagination: {
       page,
       limit: query.limit,
@@ -237,7 +362,15 @@ export async function POST(req: NextRequest) {
     entityType: 'products',
     operation: 'create',
     actor,
-    execute: (tx) => tx.insert(products).values(values).returning({ id: products.id }),
+    execute: async (tx) => {
+      const rows = await tx.insert(products).values(values).returning({ id: products.id });
+      const productId = rows[0]?.id;
+      const promoCodes = data.promoCodes ?? [];
+      if (productId && promoCodes.length > 0) {
+        await tx.insert(productPromoCodes).values(toProductPromoRows(productId, promoCodes));
+      }
+      return rows;
+    },
     resolveEntityId: (rows) => rows[0]?.id,
   });
 

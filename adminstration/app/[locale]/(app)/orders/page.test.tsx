@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { loadOrdersPageDataMock, readEcotrackCatalogMock, getDbMock, hasDbMock, requireOrdersPageAccessMock } = vi.hoisted(() => ({
+const { loadDailyOrderStatusOverviewMock, loadOrdersPageDataMock, readEcotrackCatalogMock, getDbMock, hasDbMock, requireOrdersPageAccessMock } = vi.hoisted(() => ({
+  loadDailyOrderStatusOverviewMock: vi.fn(),
   loadOrdersPageDataMock: vi.fn(),
   readEcotrackCatalogMock: vi.fn(),
   getDbMock: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock('../../../../components/orders-manager', () => ({
 }));
 
 vi.mock('../../../../lib/admin-orders-data', () => ({
+  loadDailyOrderStatusOverview: loadDailyOrderStatusOverviewMock,
   loadOrdersPageData: loadOrdersPageDataMock,
 }));
 
@@ -41,6 +43,11 @@ describe('OrdersPage', () => {
       writable: true,
       items: [],
       pagination: { page: 1, limit: 25, totalItems: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+    });
+    loadDailyOrderStatusOverviewMock.mockResolvedValue({
+      available: false,
+      reportDay: null,
+      timezone: 'Africa/Algiers',
     });
     readEcotrackCatalogMock.mockResolvedValue({
       wilayas: [],

@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     operation: req.nextUrl.searchParams.get('operation') ?? undefined,
     resource: req.nextUrl.searchParams.get('resource') ?? undefined,
     state: req.nextUrl.searchParams.get('state') ?? undefined,
+    includeEcotrackSync: req.nextUrl.searchParams.get('includeEcotrackSync') ?? undefined,
     sort: req.nextUrl.searchParams.getAll('sort'),
     sortKey: req.nextUrl.searchParams.get('sortKey') ?? undefined,
     sortDirection: req.nextUrl.searchParams.get('sortDirection') ?? undefined,

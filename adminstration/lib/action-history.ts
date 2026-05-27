@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, getTableColumns, ilike, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, getTableColumns, ilike, isNull, ne, or } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { getDb } from '../db/client';
@@ -32,6 +32,7 @@ export type ActionHistorySortDirection = 'asc' | 'desc';
 export type ActionHistoryResource = 'products' | 'orders' | 'assets' | 'brandsCategories' | 'bulletin' | 'stats' | 'settings' | 'ecotrack';
 const actionHistorySortKeyValues = ['operation', 'resource', 'createdBy', 'createdAt', 'isUndone'] as const;
 const defaultActionHistorySortRules = [{ key: 'createdAt', direction: 'desc' }] as const satisfies readonly SortRule<ActionHistorySortKey>[];
+const ECOTRACK_SYNC_ACTOR_NAME = 'ECOTRACK sync';
 
 type Database = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -86,6 +87,17 @@ export const actionHistoryQuerySchema = z.object({
   operation: z.enum(['all', 'create', 'update', 'delete']).default('all'),
   resource: z.enum(['all', 'products', 'orders', 'assets', 'brandsCategories', 'bulletin', 'stats', 'settings', 'ecotrack']).default('all'),
   state: z.enum(['all', 'applied', 'undone']).default('all'),
+  includeEcotrackSync: z.preprocess((value) => {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      return value === 'true';
+    }
+
+    return false;
+  }, z.boolean()).default(false),
   sort: z.array(z.string().trim()).optional().default([]),
   sortKey: z.enum(actionHistorySortKeyValues).default('createdAt'),
   sortDirection: z.enum(['asc', 'desc']).default('desc'),
@@ -669,6 +681,7 @@ export async function listActionHistory(db: Database, queryInput: Partial<Action
     query.operation === 'all' ? undefined : eq(actionLogs.operation, query.operation),
     query.resource === 'all' ? undefined : eq(actionLogs.resource, query.resource),
     query.state === 'all' ? undefined : eq(actionLogs.isUndone, query.state === 'undone'),
+    query.includeEcotrackSync ? undefined : or(isNull(actionLogs.createdByName), ne(actionLogs.createdByName, ECOTRACK_SYNC_ACTOR_NAME)),
   ].filter((value) => value !== undefined);
   const whereClause = filters.length > 0 ? and(...filters) : undefined;
 

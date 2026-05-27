@@ -27,16 +27,41 @@ function BannerCarousel({ banners, locale }) {
           {banners.map((banner, index) => (
             <div key={banner._id} className="embla__slide !flex-[0_0_100%]">
               <Link className="block" href={banner.link}>
-                <Image
-                  alt={(locale === "ar" ? (banner.titleAr || banner.title) : banner.title) || "featured"}
-                  className="h-auto min-h-[220px] w-full rounded-[1.75rem] object-cover md:min-h-[420px]"
-                  height={1600}
-                  priority={index === 0}
-                  quality={60}
-                  sizes="(max-width: 768px) 100vw, 85vw"
-                  src={banner.image}
-                  width={2400}
-                />
+                {banner.imagePortrait && banner.imageLandscape && banner.imagePortrait !== banner.imageLandscape ? (
+                  <>
+                    <Image
+                      alt={(locale === "ar" ? (banner.titleAr || banner.title) : banner.title) || "featured"}
+                      className="hidden h-auto min-h-[220px] w-full rounded-[1.75rem] object-cover [@media_(orientation:landscape)]:block md:min-h-[420px]"
+                      height={1600}
+                      priority={index === 0}
+                      quality={60}
+                      sizes="(orientation: landscape) 85vw, 0px"
+                      src={banner.imageLandscape}
+                      width={2400}
+                    />
+                    <Image
+                      alt={(locale === "ar" ? (banner.titleAr || banner.title) : banner.title) || "featured"}
+                      className="h-auto min-h-[220px] w-full rounded-[1.75rem] object-cover [@media_(orientation:landscape)]:hidden md:min-h-[420px]"
+                      height={1600}
+                      priority={index === 0}
+                      quality={60}
+                      sizes="(orientation: portrait) 100vw, 0px"
+                      src={banner.imagePortrait}
+                      width={1200}
+                    />
+                  </>
+                ) : (
+                  <Image
+                    alt={(locale === "ar" ? (banner.titleAr || banner.title) : banner.title) || "featured"}
+                    className="h-auto min-h-[220px] w-full rounded-[1.75rem] object-cover md:min-h-[420px]"
+                    height={1600}
+                    priority={index === 0}
+                    quality={60}
+                    sizes="(max-width: 768px) 100vw, 85vw"
+                    src={banner.imageLandscape || banner.imagePortrait || banner.image}
+                    width={2400}
+                  />
+                )}
               </Link>
             </div>
           ))}

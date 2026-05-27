@@ -3,11 +3,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DELETE } from '../route';
 
-const { hasDbMock, requireOpsAccessMock, deleteManualOrderMock, authMock } = vi.hoisted(() => ({
+const {
+  hasDbMock,
+  requireOpsAccessMock,
+  deleteManualOrderMock,
+  authMock,
+  triggerAdminReportingRefreshMock,
+} = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   requireOpsAccessMock: vi.fn(),
   deleteManualOrderMock: vi.fn(),
   authMock: vi.fn(),
+  triggerAdminReportingRefreshMock: vi.fn(),
 }));
 
 vi.mock('../../../../../../db/client', () => ({
@@ -22,6 +29,10 @@ vi.mock('../../../../../../lib/auth', () => ({
   auth: authMock,
 }));
 
+vi.mock('../../../../../../lib/reporting-refresh-trigger', () => ({
+  triggerAdminReportingRefresh: triggerAdminReportingRefreshMock,
+}));
+
 vi.mock('../../../../../../lib/stats', () => ({
   deleteManualOrder: deleteManualOrderMock,
 }));
@@ -32,10 +43,12 @@ describe('app/api/stats/manual-order/[id]/route', () => {
     requireOpsAccessMock.mockReset();
     deleteManualOrderMock.mockReset();
     authMock.mockReset();
+    triggerAdminReportingRefreshMock.mockReset();
 
     hasDbMock.mockReturnValue(true);
     requireOpsAccessMock.mockResolvedValue(null);
     authMock.mockResolvedValue({ user: { email: 'ops@example.com', name: 'Ops' } });
+    triggerAdminReportingRefreshMock.mockResolvedValue(null);
   });
 
   it('returns 404 when the order does not exist', async () => {

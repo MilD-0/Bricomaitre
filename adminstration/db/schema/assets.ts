@@ -21,6 +21,8 @@ export const assetBanners = pgTable(
     title: text('title').notNull(),
     titleAr: text('title_ar'),
     imageUrl: text('image_url').notNull(),
+    imageUrlPortrait: text('image_url_portrait'),
+    imageUrlLandscape: text('image_url_landscape'),
     productId: bigint('product_id', { mode: 'number' }).references(() => products.id, { onDelete: 'set null' }),
     sortOrder: integer('sort_order').notNull().default(0),
     active: boolean('active').notNull().default(true),

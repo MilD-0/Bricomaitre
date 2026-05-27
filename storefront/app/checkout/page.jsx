@@ -19,5 +19,5 @@ export async function generateMetadata() {
 export default async function Home({ searchParams }) {
   const resolvedSearchParams = (await searchParams) ?? {};
 
-  return <Main order={resolvedSearchParams.order ?? null} product={resolvedSearchParams.id ?? null} />
+  return <Main order={resolvedSearchParams.order ?? null} product={resolvedSearchParams.id ?? null} promoCode={resolvedSearchParams.promo ?? null} />
 }

@@ -1,6 +1,7 @@
 export * from "./brands";
 export * from "./categories";
 export * from "./products";
+export * from "./productPromoCodes";
 export * from "./orders";
 export * from "./analytics";
 export * from "./adCosts";
@@ -16,3 +17,5 @@ export * from './userAccessGrants';
 
 export * from "./actionLogs";
 export * from "./bulletin";
+export * from './shoppingLists';
+export * from './adminReporting';

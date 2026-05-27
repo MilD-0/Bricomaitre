@@ -89,7 +89,11 @@ describe('app/api/uploads/stats/route', () => {
     expect(response.status).toBe(200);
     expect(startStatsImportJobMock).toHaveBeenCalledWith(
       'ops@example.com',
-      expect.objectContaining({ fileName: 'report.xlsx', fileBuffer: expect.any(Buffer) }),
+      {
+        files: [
+          expect.objectContaining({ fileName: 'report.xlsx', fileBuffer: expect.any(Buffer) }),
+        ],
+      },
       expect.any(String),
     );
     await expect(response.json()).resolves.toEqual({
@@ -97,10 +101,41 @@ describe('app/api/uploads/stats/route', () => {
         {
           fileName: 'report.xlsx',
           fileUrl: '/api/uploads/stats?jobId=job-1',
-          fileKey: 'job-1',
+          fileKey: 'job-1:0',
           contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           size: 5,
         },
+      ],
+      job: { id: 'job-1', status: 'queued' },
+    });
+  });
+
+  it('queues all bundled spreadsheets in one import job', async () => {
+    const formData = new FormData();
+    formData.append('files', new File(['one'], 'one.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    formData.append('files', new File(['two'], 'two.xls', { type: 'application/vnd.ms-excel' }));
+    const request = new NextRequest('http://localhost/api/uploads/stats', { method: 'POST' });
+    Object.defineProperty(request, 'formData', {
+      value: vi.fn().mockResolvedValue(formData),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(startStatsImportJobMock).toHaveBeenCalledWith(
+      'ops@example.com',
+      {
+        files: [
+          expect.objectContaining({ fileName: 'one.xlsx', fileBuffer: expect.any(Buffer) }),
+          expect.objectContaining({ fileName: 'two.xls', fileBuffer: expect.any(Buffer) }),
+        ],
+      },
+      expect.any(String),
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      files: [
+        { fileName: 'one.xlsx', fileKey: 'job-1:0', size: 3 },
+        { fileName: 'two.xls', fileKey: 'job-1:1', size: 3 },
       ],
       job: { id: 'job-1', status: 'queued' },
     });

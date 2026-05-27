@@ -5,6 +5,7 @@ import { auth } from '../../../../lib/auth';
 import { getRequestSearchParams } from '../../../../lib/request';
 import { createManualOrder, listManualOrders, manualOrderInputSchema, manualOrderListQuerySchema } from '../../../../lib/stats';
 import { requireOpsAccess } from '../../../../lib/rbac';
+import { triggerAdminReportingRefresh } from '../../../../lib/reporting-refresh-trigger';
 
 export async function GET(request: NextRequest) {
   const denied = await requireOpsAccess();
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await auth();
     const result = await createManualOrder(parsed.data, { email: session?.user?.email, name: session?.user?.name });
+    await triggerAdminReportingRefresh('manual-order-create');
     return NextResponse.json({ data: result });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to create manual order' }, { status: 400 });

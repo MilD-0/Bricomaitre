@@ -69,11 +69,12 @@ function TrustStrip({ t }) {
   );
 }
 
-export default function Page({ id, initialProduct = null }) {
+export default function Page({ id, initialProduct = null, promoCode = null }) {
   const locale = useLocale();
   const t = useTranslations("common");
   const [showMore, setShowMore] = useState(false);
   const [product, setProduct] = useState(initialProduct);
+  const [promo, setPromo] = useState(null);
   const [isOrderSectionInView, setIsOrderSectionInView] = useState(false);
   const orderSectionRef = useRef(null);
   const { addProduct, cartProducts } = useContext(CartContext);
@@ -84,6 +85,9 @@ export default function Page({ id, initialProduct = null }) {
   const cartItemCount = cartProducts.length;
   const hasCartItems = cartItemCount > 0;
   const displayImages = getDisplayImages(product?.images);
+  const effectivePrice = promo?.promoPrice ?? product?.price;
+  const compareAtPrice = promo ? promo.originalPrice : product?.OldPrice;
+  const promoQuery = promoCode ? `?promo=${encodeURIComponent(promoCode)}` : "";
 
   function scrollToOrderSection() {
     orderSectionRef.current?.scrollIntoView({
@@ -111,6 +115,38 @@ export default function Page({ id, initialProduct = null }) {
 
     fetchProduct();
   }, [id, initialProduct]);
+
+  useEffect(() => {
+    if (!product?.id || !promoCode) {
+      setPromo(null);
+      return;
+    }
+
+    let cancelled = false;
+    const validatePromo = async () => {
+      try {
+        const response = await fetch(`/api/storefront/products/${product.id}/promo?code=${encodeURIComponent(promoCode)}`);
+        if (!response.ok) {
+          throw new Error("Failed to validate promo");
+        }
+        const data = await response.json();
+        if (!cancelled) {
+          setPromo(data?.ok ? data.promo : null);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setPromo(null);
+        }
+      }
+    };
+
+    validatePromo();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [product?.id, promoCode]);
 
   useEffect(() => {
     const orderSection = orderSectionRef.current;
@@ -219,18 +255,23 @@ export default function Page({ id, initialProduct = null }) {
               ) : null}
 
               <div className="mt-6 flex flex-wrap items-end gap-x-4 gap-y-2">
-                {product.OldPrice ? (
+                {compareAtPrice ? (
                   <span className="text-lg font-medium text-orange-600">
                     <span className="line-through">
-                      {product.OldPrice} {t("da")}
+                      {compareAtPrice} {t("da")}
                     </span>
                   </span>
                 ) : null}
                 <span className="text-3xl font-bold text-teal-700">
-                  {product.price}
+                  {effectivePrice}
                   {t("da")}
                 </span>
               </div>
+              {promo ? (
+                <p className="mt-2 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700">
+                  Promo {promo.code} applied
+                </p>
+              ) : null}
 
               <p
                 className={`mt-2 text-sm font-medium ${
@@ -263,7 +304,7 @@ export default function Page({ id, initialProduct = null }) {
                   </div>
                   {hasCartItems ? (
                     <Link
-                      href="/cart"
+                      href={`/cart${promoQuery}`}
                       className="mt-3 sf-chip inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-700"
                     >
                       <CartBadge count={cartItemCount} label={t("cart")} />
@@ -299,7 +340,7 @@ export default function Page({ id, initialProduct = null }) {
                 {t("ent")}
               </h2>
             </div>
-            <OrderForm prod={id} cart={false} showMobileStickySubmit={isOrderSectionInView} />
+            <OrderForm prod={id} cart={false} promoCode={promo?.code ?? promoCode} showMobileStickySubmit={isOrderSectionInView} />
           </section>
         ) : (
           <div className="text-center text-lg text-red-500">{t("ns")}</div>
@@ -369,7 +410,7 @@ export default function Page({ id, initialProduct = null }) {
             </button>
             {hasCartItems ? (
               <Link
-                href="/cart"
+                href={`/cart${promoQuery}`}
                 className="inline-flex items-center justify-center rounded-[1.2rem] border border-slate-200 bg-white px-4 text-slate-900 shadow-sm"
                 aria-label={t("cart")}
               >

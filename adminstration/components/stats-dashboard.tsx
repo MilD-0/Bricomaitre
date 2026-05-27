@@ -433,6 +433,7 @@ export function StatsDashboard({ description: _description, initialData = null, 
   const importStatusInitializedRef = useRef(false);
   const lastImportStatusKeyRef = useRef<string | null>(null);
   const [initialStatsUpdatedAt] = useState(() => (initialData ? Date.now() : 0));
+  const needsDashboardStats = section !== 'imports' && section !== 'manualOrders';
 
   const statsQuery = useQuery({
     queryKey: ['stats-dashboard', range, startDate, endDate],
@@ -441,7 +442,7 @@ export function StatsDashboard({ description: _description, initialData = null, 
     initialDataUpdatedAt: initialStatsUpdatedAt,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
-    enabled: true,
+    enabled: needsDashboardStats,
   });
   const importJobQuery = useQuery({
     queryKey: ['stats-import-job'],
@@ -462,6 +463,25 @@ export function StatsDashboard({ description: _description, initialData = null, 
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     enabled: section === 'imports',
+  });
+  const refreshStatsMutation = useMutation({
+    mutationFn: () =>
+      request<StatsQueryResponse>('/api/stats', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          range,
+          startDate: range === 'custom' ? startDate || undefined : undefined,
+          endDate: range === 'custom' ? endDate || undefined : undefined,
+        }),
+      }),
+    onSuccess: async (response) => {
+      queryClient.setQueryData(['stats-dashboard', range, startDate, endDate], response);
+      await queryClient.invalidateQueries({ queryKey: ['stats-dashboard'] });
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
   });
 
   const deleteBatchMutation = useMutation({
@@ -732,6 +752,15 @@ export function StatsDashboard({ description: _description, initialData = null, 
     section === 'imports'
       ? importHistoryPageData?.totalPages ?? Math.max(1, Math.ceil((stats?.importHistory ?? []).length / TABLE_PAGE_SIZE))
       : Math.max(1, Math.ceil(importHistoryRows.length / TABLE_PAGE_SIZE));
+  const latestUnmatchedDetails = useMemo(
+    () =>
+      stats?.latestUnmatchedDetails ??
+      (importHistoryRows[0]?.unmatchedDetails ?? []).slice(0, 8).map((item) => ({
+        ...item,
+        batchId: importHistoryRows[0]!.batchId,
+      })),
+    [importHistoryRows, stats?.latestUnmatchedDetails],
+  );
   const productUnitsData = useMemo(
     () =>
       (stats?.topProducts ?? []).map((product) => ({
@@ -872,10 +901,11 @@ export function StatsDashboard({ description: _description, initialData = null, 
     ];
   }, [locale, stats, t]);
 
-  const activeQuery = statsQuery;
-  const isRefreshing = activeQuery.isFetching || (section === 'imports' && importHistoryQuery.isFetching);
+  const isRefreshing = (needsDashboardStats && (statsQuery.isFetching || refreshStatsMutation.isPending)) || (section === 'imports' && importHistoryQuery.isFetching);
   const handleRefresh = () => {
-    void activeQuery.refetch();
+    if (needsDashboardStats) {
+      refreshStatsMutation.mutate();
+    }
 
     if (section === 'imports') {
       void importHistoryQuery.refetch();
@@ -896,20 +926,19 @@ export function StatsDashboard({ description: _description, initialData = null, 
     }
   }, [historyPage, importHistoryPageData?.page, importHistoryQuery.isPlaceholderData, section]);
 
-  if (activeQuery.isLoading && !stats) {
+  if (needsDashboardStats && statsQuery.isLoading && !stats) {
     return <StatsPageSkeleton />;
   }
 
-  if (statsQuery.isError || !stats) {
+  if (needsDashboardStats && (statsQuery.isError || !stats)) {
     return (
       <Alert variant="destructive">
         <AlertCircle />
         <AlertTitle>{t('errorTitle')}</AlertTitle>
-        <AlertDescription>{activeQuery.error instanceof Error ? activeQuery.error.message : t('errorDescription')}</AlertDescription>
+        <AlertDescription>{statsQuery.error instanceof Error ? statsQuery.error.message : t('errorDescription')}</AlertDescription>
       </Alert>
     );
   }
-
   const ensuredStats = stats as StatsDashboardData;
 
   return (
@@ -958,6 +987,19 @@ export function StatsDashboard({ description: _description, initialData = null, 
                 <p className="mt-2 text-xs text-muted-foreground">{t('loading.refreshingDescription')}</p>
               </div>
             ) : null}
+
+            {stats?.snapshot ? (
+              <Alert variant={stats.snapshot.isStale ? 'destructive' : 'default'}>
+                <AlertCircle />
+                <AlertTitle>{stats.snapshot.isStale ? t('snapshotMeta.staleTitle') : t('snapshotMeta.title')}</AlertTitle>
+                <AlertDescription>
+                  {t('snapshotMeta.description', {
+                    generatedAt: formatDateTime(locale, stats.snapshot.generatedAt),
+                    reportThroughDate: formatDate(locale, stats.snapshot.reportThroughDate),
+                  })}
+                </AlertDescription>
+              </Alert>
+            ) : null}
           </div>
         </Card>
 
@@ -992,6 +1034,8 @@ export function StatsDashboard({ description: _description, initialData = null, 
                 onChange={setUploadedFiles}
                 onUploadStart={handleUploadStarted}
                 onUploaded={({ body }) => void handleUploadCompleted(body)}
+                bundleUploads
+                maxNumberOfFiles={100}
               />
             </div>
           </Card>
@@ -1706,13 +1750,13 @@ export function StatsDashboard({ description: _description, initialData = null, 
         </SectionCard>
       ) : null}
 
-      {section === 'imports' && ensuredStats.latestUnmatchedDetails.length > 0 ? (
+      {section === 'imports' && latestUnmatchedDetails.length > 0 ? (
         <Alert>
           <AlertCircle />
           <AlertTitle>{t('unmatched.title')}</AlertTitle>
           <AlertDescription>
             <div className="flex flex-wrap gap-2 pt-3">
-              {ensuredStats.latestUnmatchedDetails.map((item) => (
+              {latestUnmatchedDetails.map((item) => (
                 <button
                   key={`${item.batchId}-${item.reference}-${item.tracking}`}
                   type="button"

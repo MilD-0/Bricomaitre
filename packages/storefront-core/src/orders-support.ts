@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const orderStatusValues = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+export const orderStatusValues = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 export const deliveryTypeValues = [0, 1] as const;
 export const DEGRADED_CAPTURE_VARIANT = 'degraded_capture' as const;
 
@@ -17,6 +17,7 @@ export const orderStatusSchema = z.union(
     z.ZodLiteral<8>,
     z.ZodLiteral<9>,
     z.ZodLiteral<10>,
+    z.ZodLiteral<11>,
   ],
 );
 export const deliveryTypeSchema = z.union(deliveryTypeValues.map((value) => z.literal(value)) as [z.ZodLiteral<0>, z.ZodLiteral<1>]);
@@ -34,6 +35,7 @@ export const ORDER_STATUS_LABEL_KEYS = {
   8: 'returned',
   9: 'failed',
   10: 'manualCompleted',
+  11: 'posted',
 } as const satisfies Record<(typeof orderStatusValues)[number], string>;
 
 export const DELIVERY_TYPE_LABEL_KEYS = {
@@ -85,7 +87,7 @@ export const orderPatchSchema = z
     phoneNumber1: z.string().trim().min(1).max(50).optional(),
     note: nullableTrimmedString(500).optional(),
     confirmed: orderStatusSchema.optional(),
-    noAnswerCount: noAnswerCountSchema.optional(),
+    noAnswerCount: z.coerce.number().int().min(0).max(99).optional(),
     delivery: deliveryTypeSchema.optional(),
     state: nullableWilayaCode.optional(),
     city: nullableTrimmedString(120).optional(),
@@ -114,6 +116,7 @@ export const storefrontOrderCreateSchema = z.object({
   city: optionalNullableTrimmedString(120),
   homeAddress: optionalNullableTrimmedString(300),
   note: optionalNullableTrimmedString(500),
+  promoCode: optionalNullableTrimmedString(120),
   visitId: optionalNullableTrimmedString(120),
   journeyId: optionalNullableTrimmedString(120),
   sessionId: optionalNullableTrimmedString(120),
@@ -138,6 +141,7 @@ export const storefrontOrderPatchSchema = z
     city: nullableTrimmedString(120).optional(),
     homeAddress: nullableTrimmedString(300).optional(),
     cartProducts: z.array(z.string().trim().min(1).max(160)).min(1).max(50).optional(),
+    promoCode: optionalNullableTrimmedString(120).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field must be provided.',
@@ -157,6 +161,7 @@ export const orderListQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(25),
   search: z.string().trim().default(''),
   confirmed: z.union([orderStatusSchema, z.null()]).optional(),
+  noAnswerCount: z.union([z.coerce.number().int().min(0).max(99), z.null()]).optional(),
   sortKey: z.enum(orderSortKeyValues).default('createdAt'),
   sortDirection: z.enum(sortDirectionValues).default('desc'),
 });
@@ -207,6 +212,11 @@ export type OrderRecord = {
   productSubtotal: number;
   deliveryFee: number;
   totalAmount: number;
+  promoCode?: string | null;
+  promoProductId?: number | null;
+  promoOriginalSubtotal?: number | null;
+  promoDiscountAmount?: number;
+  promoFinalSubtotal?: number | null;
   note: string | null;
   confirmed: OrderStatus;
   noAnswerCount: number;
@@ -257,6 +267,7 @@ const legacyOrderStatusMap = {
   failed: 9,
   manual_completed: 10,
   'manual completed': 10,
+  posted: 11,
 } as const;
 
 const legacyNoAnswerCountMap = {
@@ -317,7 +328,7 @@ export function coerceNoAnswerCount(status: OrderStatus, count: unknown, legacyS
 }
 
 export function isConfirmedLifecycleStatus(status: OrderStatus) {
-  return status === 2 || status === 3 || status === 4 || status === 5 || status === 7 || status === 8 || status === 9 || status === 10;
+  return status === 2 || status === 3 || status === 4 || status === 5 || status === 7 || status === 8 || status === 9 || status === 10 || status === 11;
 }
 
 export function getOrderStatusLabelKey(status: OrderStatus) {

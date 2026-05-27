@@ -179,6 +179,11 @@ export const storefrontOrderResponseItemSchema = z.object({
   productSubtotal: z.number(),
   deliveryFee: z.number(),
   totalAmount: z.number(),
+  promoCode: z.string().nullable().default(null),
+  promoProductId: z.number().int().positive().nullable().default(null),
+  promoOriginalSubtotal: z.number().nullable().default(null),
+  promoDiscountAmount: z.number().default(0),
+  promoFinalSubtotal: z.number().nullable().default(null),
   note: z.string().nullable(),
   confirmed: orderStatusSchema,
   noAnswerCount: z.number().int().min(0),
@@ -199,6 +204,17 @@ export const storefrontReadOrderResponseSchema = z.object({
 export const storefrontPatchOrderResponseSchema = z.object({
   ok: z.literal(true),
   item: storefrontOrderResponseItemSchema,
+});
+
+export const storefrontProductPromoResponseSchema = z.object({
+  ok: z.boolean(),
+  promo: z.object({
+    code: z.string(),
+    productId: z.number().int().positive(),
+    originalPrice: z.number(),
+    promoPrice: z.number(),
+    discountAmount: z.number(),
+  }).nullable(),
 });
 
 export type StorefrontProductListQuery = z.infer<typeof storefrontProductListQuerySchema>;

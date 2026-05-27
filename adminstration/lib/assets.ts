@@ -38,12 +38,52 @@ const optionalLinkSchema = z.string().trim().max(2048).optional().nullable().tra
   return z.NEVER;
 });
 
+const optionalImageUrlSchema = z.string().trim().optional().nullable().transform((value, ctx) => {
+  if (value == null) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    new URL(trimmed);
+    return trimmed;
+  } catch {}
+
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    message: 'Enter a valid image URL.',
+  });
+  return z.NEVER;
+});
+
 export const assetBannerSchema = z.object({
   title: z.string().trim().min(1).max(120),
   titleAr: z.string().trim().min(1).max(120),
-  imageUrl: z.string().trim().url(),
+  imageUrl: optionalImageUrlSchema,
+  imageUrlPortrait: optionalImageUrlSchema,
+  imageUrlLandscape: optionalImageUrlSchema,
   productId: productLinkSchema,
   active: z.boolean().default(true),
+}).transform((value, ctx) => {
+  const imageUrl = value.imageUrl ?? value.imageUrlLandscape ?? value.imageUrlPortrait;
+
+  if (!imageUrl) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['imageUrlLandscape'],
+      message: 'Add at least one banner image.',
+    });
+    return z.NEVER;
+  }
+
+  return {
+    ...value,
+    imageUrl,
+  };
 });
 
 export const featuredProductGroupSchema = z.object({

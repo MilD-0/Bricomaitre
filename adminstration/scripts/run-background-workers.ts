@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/node';
 import { createQueueWorker } from '@bric/runtime/jobs';
+import cron from 'node-cron';
 
 import { readSampleRate } from '../lib/sentry';
 import {
@@ -10,6 +11,7 @@ import {
   ADMIN_ORDER_EXPORT_QUEUE,
   ADMIN_PRODUCT_CATALOG_FEED_QUEUE,
   ADMIN_PRODUCT_EXPORT_QUEUE,
+  ADMIN_REPORTING_REFRESH_QUEUE,
   ADMIN_STATS_IMPORT_QUEUE,
   STOREFRONT_ANALYTICS_QUEUE,
   runAdCostsImportJob,
@@ -20,8 +22,13 @@ import {
   runOrderExportJob,
   runProductCatalogFeedRefreshJob,
   runProductExportJob,
+  runAdminReportingRefreshJob,
   runStatsImportJob,
+  startAdminReportingRefreshJob,
 } from '../lib/background-jobs';
+
+const DEFAULT_REPORTING_REFRESH_CRON = '11 3 * * *';
+const DEFAULT_REPORTING_REFRESH_TIMEZONE = 'Africa/Algiers';
 
 const workerDsn = process.env.SENTRY_DSN_WORKER?.trim() || process.env.SENTRY_DSN_ADMIN?.trim();
 
@@ -45,10 +52,21 @@ const workers = [
   createQueueWorker(ADMIN_ORDER_ECOTRACK_QUEUE, runOrderEcotrackJob),
   createQueueWorker(ADMIN_STATS_IMPORT_QUEUE, runStatsImportJob),
   createQueueWorker(ADMIN_AD_COST_IMPORT_QUEUE, runAdCostsImportJob),
+  createQueueWorker(ADMIN_REPORTING_REFRESH_QUEUE, runAdminReportingRefreshJob),
   createQueueWorker(ADMIN_ECOTRACK_SYNC_QUEUE, runEcotrackSyncJob),
   createQueueWorker(ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE, runEcotrackShipmentSyncJob),
   createQueueWorker(STOREFRONT_ANALYTICS_QUEUE, runAnalyticsJob),
 ];
+
+const reportingRefreshCron = (process.env.ADMIN_REPORTING_REFRESH_CRON ?? DEFAULT_REPORTING_REFRESH_CRON).trim();
+const reportingRefreshTimezone = (process.env.ADMIN_REPORTING_REFRESH_TIMEZONE ?? DEFAULT_REPORTING_REFRESH_TIMEZONE).trim();
+if (!cron.validate(reportingRefreshCron)) {
+  throw new Error(`Invalid ADMIN_REPORTING_REFRESH_CRON expression: ${reportingRefreshCron}`);
+}
+
+const reportingRefreshTask = cron.schedule(reportingRefreshCron, () => {
+  void startAdminReportingRefreshJob('daily-schedule');
+}, { timezone: reportingRefreshTimezone });
 
 for (const worker of workers) {
   worker.on('ready', () => {
@@ -90,6 +108,7 @@ for (const worker of workers) {
 
 async function shutdown(signal: string) {
   console.log(`[worker] shutting down on ${signal}`);
+  reportingRefreshTask.stop();
   await Promise.all(workers.map((worker) => worker.close()));
   await Sentry.close(2000);
   process.exit(0);

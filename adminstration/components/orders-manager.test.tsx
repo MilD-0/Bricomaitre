@@ -65,8 +65,13 @@ describe('OrdersManager', () => {
     const limit = Number(url.searchParams.get('limit') ?? '25');
     const search = (url.searchParams.get('search') ?? '').toLowerCase();
     const confirmed = url.searchParams.get('confirmed');
+    const noAnswerCount = url.searchParams.get('noAnswerCount');
     const filtered = items.filter((item) => {
       if (confirmed !== null && confirmed !== '' && String(item.confirmed) !== confirmed) {
+        return false;
+      }
+
+      if (confirmed === '1' && noAnswerCount !== null && noAnswerCount !== '' && String(item.noAnswerCount) !== noAnswerCount) {
         return false;
       }
 
@@ -134,6 +139,34 @@ describe('OrdersManager', () => {
       })),
       http.get('/api/orders/export', () => HttpResponse.json({ job: null })),
       http.get('/api/orders/ecotrack', () => HttpResponse.json({ job: null })),
+      http.get('/api/orders/overview', () => HttpResponse.json({
+        overview: {
+          available: true,
+          reportDay: '2026-05-24',
+          timezone: 'Africa/Algiers',
+          newOrders: 0,
+          confirmationStatusChanges: 0,
+          confirmedToday: 0,
+          noAnswerAttempts: 0,
+          adminCancelled: 0,
+          carrierCancelled: 0,
+          shipmentUpdates: 0,
+        },
+      })),
+      http.get('/api/orders/shopping-list-draft', () => HttpResponse.json({ draft: null })),
+      http.put('/api/orders/shopping-list-draft', async ({ request }) => {
+        const body = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({
+          ok: true,
+          draft: {
+            scopeKey: body.sourceMode === 'selected' ? `selected:${(body.orderIds as number[]).join(',')}` : `status:${body.sourceMode}`,
+            ...body,
+            updatedAt: '2026-03-01T11:00:00.000Z',
+            updatedByName: 'Admin',
+          },
+        });
+      }),
+      http.delete('/api/orders/shopping-list-draft', () => HttpResponse.json({ ok: true })),
     );
     toastMock.loading.mockClear();
     toastMock.success.mockClear();
@@ -149,6 +182,34 @@ describe('OrdersManager', () => {
     cleanup();
     window.localStorage.clear();
     vi.restoreAllMocks();
+  });
+
+  it('renders the passive daily order status overview', async () => {
+    server.use(
+      http.get('/api/orders', ({ request }) => HttpResponse.json(paginatedOrdersResponse([], request.url))),
+    );
+
+    renderOrdersManager({
+      initialOverview: {
+        available: true,
+        reportDay: '2026-05-24',
+        timezone: 'Africa/Algiers',
+        newOrders: 3,
+        confirmationStatusChanges: 7,
+        confirmedToday: 2,
+        noAnswerAttempts: 4,
+        adminCancelled: 1,
+        carrierCancelled: 1,
+        shipmentUpdates: 5,
+      },
+    });
+
+    expect(await screen.findByRole('region', { name: 'title' })).toBeInTheDocument();
+    expect(screen.getByText('metrics.newOrders')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByText('metrics.adminCancelled')).toBeInTheDocument();
+    expect(screen.getByText('metrics.carrierCancelled')).toBeInTheDocument();
+    expect(screen.getByText('5')).toBeInTheDocument();
   });
 
   it('defaults to card view, persists table view, and restores it from local storage', async () => {
@@ -698,6 +759,101 @@ describe('OrdersManager', () => {
     expect(screen.getAllByDisplayValue('Grace Hopper').length).toBeGreaterThan(0);
 
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'ordersManager.filters.statusLabel' }), '3');
+
+    await waitFor(() => {
+      expect(screen.queryAllByDisplayValue('Ada Lovelace')).toHaveLength(0);
+    });
+    expect(screen.getAllByDisplayValue('Grace Hopper').length).toBeGreaterThan(0);
+  });
+
+  it('filters no-answer orders by counter', async () => {
+    const items = [
+      {
+        id: 1,
+        createdAt: '2026-03-01T10:00:00.000Z',
+        updatedAt: '2026-03-01T10:00:00.000Z',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        fullName: 'Ada Lovelace',
+        phoneNumber1: '0550000001',
+        phoneNumber2: null,
+        cartProducts: ['1'],
+        orderProducts: [{
+          productId: 1,
+          rawValue: '1',
+          title: 'Chair',
+          unitPrice: 1000,
+          quantity: 1,
+          lineTotal: 1000,
+          thumbnailUrl: 'https://cdn.example.com/chair.jpg',
+          missing: false,
+        }],
+        delivery: 0,
+        state: 16,
+        city: 'Bab Ezzouar',
+        homeAddress: 'Street 1',
+        productSubtotal: 1000,
+        deliveryFee: 200,
+        totalAmount: 1200,
+        note: null,
+        confirmed: 1,
+        noAnswerCount: 1,
+        confirmedBy: null,
+        confirmedByName: null,
+        confirmedAt: null,
+        hasStatusHistory: false,
+        statusHistory: [],
+      },
+      {
+        id: 2,
+        createdAt: '2026-03-02T10:00:00.000Z',
+        updatedAt: '2026-03-02T10:00:00.000Z',
+        firstName: 'Grace',
+        lastName: 'Hopper',
+        fullName: 'Grace Hopper',
+        phoneNumber1: '0550000002',
+        phoneNumber2: null,
+        cartProducts: ['2'],
+        orderProducts: [{
+          productId: 2,
+          rawValue: '2',
+          title: 'Desk',
+          unitPrice: 1500,
+          quantity: 1,
+          lineTotal: 1500,
+          thumbnailUrl: 'https://cdn.example.com/desk.jpg',
+          missing: false,
+        }],
+        delivery: 1,
+        state: 31,
+        city: 'Bir El Djir',
+        homeAddress: 'Street 2',
+        productSubtotal: 1500,
+        deliveryFee: 150,
+        totalAmount: 1650,
+        note: null,
+        confirmed: 1,
+        noAnswerCount: 3,
+        confirmedBy: null,
+        confirmedByName: null,
+        confirmedAt: null,
+        hasStatusHistory: false,
+        statusHistory: [],
+      },
+    ];
+
+    server.use(
+      http.get('/api/orders', ({ request }) => HttpResponse.json(paginatedOrdersResponse(items, request.url))),
+    );
+
+    renderOrdersManager();
+
+    expect((await screen.findAllByDisplayValue('Ada Lovelace')).length).toBeGreaterThan(0);
+    expect(screen.getAllByDisplayValue('Grace Hopper').length).toBeGreaterThan(0);
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'ordersManager.filters.statusLabel' }), '1');
+    const noAnswerSelect = await screen.findByRole('combobox', { name: 'ordersManager.filters.noAnswerCountLabel' });
+    await userEvent.selectOptions(noAnswerSelect, '3');
 
     await waitFor(() => {
       expect(screen.queryAllByDisplayValue('Ada Lovelace')).toHaveLength(0);
@@ -1487,7 +1643,7 @@ describe('OrdersManager', () => {
     expect(bulkStatus).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'ordersManager.bulk.applyStatus' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'ordersManager.ecotrack.confirmedAction' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'ordersManager.shoppingList.confirmedAction' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ordersManager.shoppingList.postedAction' })).toBeInTheDocument();
     expect(statusFilter.closest('div.flex')).toContainElement(applyButton);
 
     await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.ecotrack.confirmedAction menu' }))[0]);
@@ -1495,9 +1651,11 @@ describe('OrdersManager', () => {
     expect(screen.getByRole('menuitem', { name: 'ordersManager.export.confirmedAction' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'ordersManager.ecotrack.selectedAction' })).toBeDisabled();
 
-    await userEvent.click(screen.getByRole('button', { name: 'ordersManager.shoppingList.confirmedAction menu' }));
+    await userEvent.click(screen.getByRole('button', { name: 'ordersManager.shoppingList.postedAction menu' }));
     expect(screen.getByRole('menuitem', { name: 'ordersManager.shoppingList.selectedAction' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'ordersManager.shoppingList.confirmedAction' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'ordersManager.shoppingList.dispatchedAction' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'ordersManager.shoppingList.postedAndConfirmedAction' })).toBeInTheDocument();
   });
 
   it('opens the confirmed ecotrack preview from the split button primary action', async () => {
@@ -1538,6 +1696,8 @@ describe('OrdersManager', () => {
       http.get('/api/ecotrack/catalog', () => HttpResponse.json({ wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null })),
       http.get('/api/orders/export', () => HttpResponse.json({ job: null })),
       http.get('/api/orders/ecotrack', () => HttpResponse.json({ job: null })),
+      http.get('/api/orders/shopping-list-draft', () => HttpResponse.json({ draft: null })),
+      http.delete('/api/orders/shopping-list-draft', () => HttpResponse.json({ ok: true })),
       http.get('/api/orders', ({ request }) => {
         const url = new URL(request.url);
         if (url.searchParams.get('confirmed') === '2') {
@@ -1677,6 +1837,8 @@ describe('OrdersManager', () => {
       http.get('/api/ecotrack/catalog', () => HttpResponse.json({ wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null })),
       http.get('/api/orders/export', () => HttpResponse.json({ job: null })),
       http.get('/api/orders/ecotrack', () => HttpResponse.json({ job: null })),
+      http.get('/api/orders/shopping-list-draft', () => HttpResponse.json({ draft: null })),
+      http.delete('/api/orders/shopping-list-draft', () => HttpResponse.json({ ok: true })),
       http.get('/api/orders', ({ request }) => {
         const url = new URL(request.url);
         if (url.searchParams.get('confirmed') === '2') {
@@ -1710,7 +1872,8 @@ describe('OrdersManager', () => {
 
     renderOrdersManager();
 
-    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.shoppingList.confirmedAction' }))[0]);
+    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.shoppingList.postedAction menu' }))[0]);
+    await userEvent.click(screen.getByRole('menuitem', { name: 'ordersManager.shoppingList.confirmedAction' }));
 
     expect(await screen.findByText('Acme')).toBeInTheDocument();
     expect(screen.getByText('Chair x2')).toBeInTheDocument();
@@ -1755,11 +1918,185 @@ describe('OrdersManager', () => {
     expect(screen.queryByText('Lamp x1')).not.toBeInTheDocument();
   });
 
+  it('loads shared shopping list drafts, merges new generated items, saves edits, and clears shared reset', async () => {
+    const savedDraftItem = {
+      draftId: '9:1',
+      productId: 1,
+      brandId: 9,
+      brandName: 'Acme',
+      title: 'Chair',
+      quantity: 5,
+      thumbnailUrl: 'https://cdn.example.com/chair.jpg',
+      inventoryQuantity: 5,
+      inventoryDecreaseQuantity: 5,
+      inventoryShortageQuantity: 0,
+      inventoryAppliedQuantity: 0,
+      inventoryActionEligible: true,
+      notes: ['Saved note'],
+      checked: true,
+      isCustom: false,
+    };
+    const customDraftItem = {
+      draftId: 'custom:3',
+      productId: 3,
+      brandId: 11,
+      brandName: 'Nova',
+      title: 'Lamp',
+      quantity: 1,
+      thumbnailUrl: 'https://cdn.example.com/lamp.jpg',
+      inventoryQuantity: 7,
+      inventoryDecreaseQuantity: 1,
+      inventoryShortageQuantity: 0,
+      inventoryAppliedQuantity: 0,
+      inventoryActionEligible: true,
+      notes: [],
+      checked: false,
+      isCustom: true,
+    };
+    const confirmedItems = [
+      {
+        id: 31,
+        createdAt: '2026-03-01T10:00:00.000Z',
+        updatedAt: '2026-03-01T10:00:00.000Z',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        fullName: 'Ada Lovelace',
+        phoneNumber1: '0550000031',
+        phoneNumber2: null,
+        cartProducts: ['1', '2'],
+        orderProducts: [
+          { productId: 1, brandId: 9, rawValue: '1', title: 'Chair', unitPrice: 1000, quantity: 2, lineTotal: 2000, thumbnailUrl: 'https://cdn.example.com/chair.jpg', missing: false },
+          { productId: 2, brandId: 10, rawValue: '2', title: 'Desk', unitPrice: 1500, quantity: 1, lineTotal: 1500, thumbnailUrl: 'https://cdn.example.com/desk.jpg', missing: false },
+        ],
+        delivery: 0,
+        state: 16,
+        city: 'Bab Ezzouar',
+        homeAddress: 'Street 31',
+        productSubtotal: 3500,
+        deliveryFee: 200,
+        totalAmount: 3700,
+        note: 'New order note',
+        confirmed: 2,
+        noAnswerCount: 0,
+        confirmedBy: null,
+        confirmedByName: null,
+        confirmedAt: null,
+        hasStatusHistory: false,
+        statusHistory: [],
+      },
+    ];
+    const getDraftRequests: string[] = [];
+    const ordersRequests: string[] = [];
+    const putBodies: Array<Record<string, unknown>> = [];
+    const deleteRequests: string[] = [];
+
+    server.use(
+      http.get('/api/ecotrack/catalog', () => HttpResponse.json({ wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null })),
+      http.get('/api/orders/export', () => HttpResponse.json({ job: null })),
+      http.get('/api/orders/ecotrack', () => HttpResponse.json({ job: null })),
+      http.get('/api/orders', ({ request }) => {
+        const url = new URL(request.url);
+        ordersRequests.push(request.url);
+        return HttpResponse.json({
+          writable: true,
+          items: url.searchParams.get('confirmed') === '2' ? confirmedItems : [],
+          pagination: { page: 1, limit: 100, totalItems: confirmedItems.length, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+        });
+      }),
+      http.get('/api/orders/shopping-list-draft', ({ request }) => {
+        getDraftRequests.push(request.url);
+        return HttpResponse.json({
+          draft: {
+            scopeKey: 'status:confirmed',
+            sourceMode: 'confirmed',
+            orderIds: [31],
+            title: 'Saved title',
+            draftItems: [savedDraftItem, customDraftItem],
+            generatedItems: [savedDraftItem],
+            orders: [{
+              orderId: 31,
+              customerName: 'Ada Lovelace',
+              note: 'Saved note',
+              products: [{
+                title: 'Chair',
+                quantity: 5,
+                brandId: 9,
+                brandName: 'Acme',
+                thumbnailUrl: 'https://cdn.example.com/chair.jpg',
+              }],
+            }],
+            updatedAt: '2026-03-01T11:00:00.000Z',
+            updatedByName: 'Admin',
+          },
+        });
+      }),
+      http.put('/api/orders/shopping-list-draft', async ({ request }) => {
+        const body = await request.json() as Record<string, unknown>;
+        putBodies.push(body);
+        return HttpResponse.json({
+          ok: true,
+          draft: {
+            scopeKey: 'status:confirmed',
+            ...body,
+            updatedAt: '2026-03-01T12:00:00.000Z',
+            updatedByName: 'Admin',
+          },
+        });
+      }),
+      http.delete('/api/orders/shopping-list-draft', ({ request }) => {
+        deleteRequests.push(request.url);
+        return HttpResponse.json({ ok: true });
+      }),
+      http.get('/api/brands/9', () => HttpResponse.json({ id: 9, name: 'Acme' })),
+      http.get('/api/brands/10', () => HttpResponse.json({ id: 10, name: 'Globex' })),
+      http.get('/api/products/1', () => HttpResponse.json({ item: { id: 1, inventoryQuantity: 5 } })),
+      http.get('/api/products/2', () => HttpResponse.json({ item: { id: 2, inventoryQuantity: 0 } })),
+    );
+
+    renderOrdersManager();
+
+    await screen.findAllByRole('button', { name: 'ordersManager.shoppingList.postedAction' });
+    ordersRequests.length = 0;
+    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.shoppingList.postedAction menu' }))[0]);
+    await userEvent.click(screen.getByRole('menuitem', { name: 'ordersManager.shoppingList.confirmedAction' }));
+
+    expect(await screen.findByText('Chair x5')).toBeInTheDocument();
+    expect(screen.getByText('Lamp x1')).toBeInTheDocument();
+    expect(screen.queryByText('Desk x1')).not.toBeInTheDocument();
+    expect(ordersRequests).toHaveLength(0);
+    expect(getDraftRequests[0]).toContain('sourceMode=confirmed');
+
+    await userEvent.click(screen.getByRole('button', { name: 'ordersManager.shoppingList.refresh' }));
+
+    expect(await screen.findByText('Desk x1')).toBeInTheDocument();
+    expect(screen.getAllByText(/^ordersManager\.shoppingList\.generatedAt:/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('ordersManager.shoppingList.generatedAt:ordersManager.shoppingList.previousGeneration').length).toBeGreaterThan(0);
+    expect(screen.getByText('Chair x5').closest('div.rounded-lg')).toHaveClass('line-through');
+
+    putBodies.length = 0;
+    await userEvent.click(screen.getByRole('checkbox', { name: 'ordersManager.shoppingList.toggleItem:Chair' }));
+
+    await waitFor(() => {
+      expect(putBodies.length).toBeGreaterThan(0);
+    });
+    expect((putBodies.at(-1)?.draftItems as Array<{ draftId: string; checked: boolean }>).find((item) => item.draftId === '9:1')?.checked).toBe(false);
+    expect((putBodies.at(-1)?.draftItems as Array<{ draftId: string }>).some((item) => item.draftId === 'custom:3')).toBe(true);
+
+    await userEvent.click(screen.getByRole('button', { name: 'ordersManager.shoppingList.reset' }));
+    await waitFor(() => {
+      expect(deleteRequests.length).toBe(1);
+    });
+    expect(await screen.findByText('Chair x2')).toBeInTheDocument();
+    expect(screen.getByText('Desk x1')).toBeInTheDocument();
+    expect(screen.queryByText('Lamp x1')).not.toBeInTheDocument();
+  });
+
   it('shows confirmed and dispatched empty-state toasts for generated shopping lists and exports', async () => {
     server.use(
       http.get('/api/ecotrack/catalog', () => HttpResponse.json({ wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null })),
       http.get('/api/orders/export', () => HttpResponse.json({ job: null })),
       http.get('/api/orders/ecotrack', () => HttpResponse.json({ job: null })),
+      http.get('/api/orders/shopping-list-draft', () => HttpResponse.json({ draft: null })),
       http.get('/api/orders', () => HttpResponse.json({
         writable: true,
         items: [],
@@ -1769,10 +2106,10 @@ describe('OrdersManager', () => {
 
     renderOrdersManager();
 
-    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.shoppingList.confirmedAction' }))[0]);
-    expect(toastMock.error).toHaveBeenCalledWith('ordersManager.shoppingList.emptyConfirmed', { id: 'toast-id' });
+    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.shoppingList.postedAction' }))[0]);
+    expect(toastMock.error).toHaveBeenCalledWith('ordersManager.shoppingList.emptyPosted', { id: 'toast-id' });
 
-    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.shoppingList.confirmedAction menu' }))[0]);
+    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.shoppingList.postedAction menu' }))[0]);
     await userEvent.click(screen.getByRole('menuitem', { name: 'ordersManager.shoppingList.dispatchedAction' }));
     expect(toastMock.error).toHaveBeenCalledWith('ordersManager.shoppingList.emptyDispatched', { id: 'toast-id' });
 

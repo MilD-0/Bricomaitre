@@ -8,9 +8,14 @@ import { FileUploadField } from './file-upload-field';
 const mockUse = vi.fn();
 const mockOn = vi.fn();
 const mockDestroy = vi.fn();
+const mockUppyConstructor = vi.fn();
 
 vi.mock('@uppy/core', () => ({
   default: class MockUppy {
+    constructor(options: unknown) {
+      mockUppyConstructor(options);
+    }
+
     use = mockUse;
     on = mockOn;
     addFile = vi.fn();
@@ -48,6 +53,7 @@ describe('FileUploadField', () => {
     mockUse.mockReset();
     mockOn.mockReset();
     mockDestroy.mockReset();
+    mockUppyConstructor.mockReset();
     URL.createObjectURL = vi.fn(() => 'blob:preview');
     URL.revokeObjectURL = vi.fn();
   });
@@ -146,5 +152,26 @@ describe('FileUploadField', () => {
       file: uploaded,
       body: { files: [uploaded], import: { newOrders: 4 } },
     });
+  });
+
+  it('can bundle uploads and override the file count limit', () => {
+    render(
+      <FileUploadField
+        uploadUrl="/api/uploads/stats"
+        label="Stats imports"
+        value={[]}
+        onChange={vi.fn()}
+        bundleUploads
+        maxNumberOfFiles={100}
+      />,
+    );
+
+    expect(mockUppyConstructor).toHaveBeenCalledWith(expect.objectContaining({
+      restrictions: expect.objectContaining({ maxNumberOfFiles: 100 }),
+    }));
+    expect(mockUse).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      bundle: true,
+      fieldName: 'files',
+    }));
   });
 });
