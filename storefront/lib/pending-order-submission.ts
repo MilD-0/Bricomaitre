@@ -18,6 +18,7 @@ type PendingOrderSubmissionPayload = {
   city: string | null;
   homeAddress: string | null;
   note: null;
+  promoCode: string | null;
   visitId: string | null;
   journeyId: string | null;
   sessionId: string | null;
@@ -91,6 +92,7 @@ function isPayload(value: unknown): value is PendingOrderSubmissionPayload {
     && isNullableString(candidate.city)
     && isNullableString(candidate.homeAddress)
     && candidate.note === null
+    && (candidate.promoCode === undefined || isNullableString(candidate.promoCode))
     && isNullableString(candidate.visitId)
     && isNullableString(candidate.journeyId)
     && isNullableString(candidate.sessionId)

@@ -19,6 +19,8 @@ type FileUploadFieldProps = {
   onUploadStart?: () => void;
   onUploaded?: (payload: { file: BulletinAttachment; body: unknown }) => void;
   extraFields?: Record<string, string>;
+  bundleUploads?: boolean;
+  maxNumberOfFiles?: number;
 };
 
 type UploadState = {
@@ -43,7 +45,18 @@ function formatSize(size: number) {
   return `${Math.max(1, Math.round(size / 1024))} KB`;
 }
 
-export function FileUploadField({ uploadUrl, label, hint, value, onChange, onUploadStart, onUploaded, extraFields }: FileUploadFieldProps) {
+export function FileUploadField({
+  uploadUrl,
+  label,
+  hint,
+  value,
+  onChange,
+  onUploadStart,
+  onUploaded,
+  extraFields,
+  bundleUploads = false,
+  maxNumberOfFiles = 8,
+}: FileUploadFieldProps) {
   const [uploads, setUploads] = useState<UploadState[]>([]);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
   const [previewFile, setPreviewFile] = useState<{ src: string; alt: string } | null>(null);
@@ -64,7 +77,7 @@ export function FileUploadField({ uploadUrl, label, hint, value, onChange, onUpl
       autoProceed: false,
       restrictions: {
         maxFileSize,
-        maxNumberOfFiles: 8,
+        maxNumberOfFiles,
       },
     });
 
@@ -72,7 +85,7 @@ export function FileUploadField({ uploadUrl, label, hint, value, onChange, onUpl
       endpoint: uploadUrl,
       fieldName: 'files',
       formData: true,
-      bundle: false,
+      bundle: bundleUploads,
       limit: 2,
       headers: {},
     });
@@ -109,23 +122,28 @@ export function FileUploadField({ uploadUrl, label, hint, value, onChange, onUpl
       }
 
       const body = response.body as { files?: BulletinAttachment[] } | undefined;
-      const uploadedFile = body?.files?.[0];
+      const uploadedFiles = body?.files ?? [];
+      const uploadedFile = uploadedFiles[0];
+      const uploadedIds = bundleUploads ? Array.from(uppy.getFiles()).map((uppyFile) => uppyFile.id) : [file.id];
 
       if (!uploadedFile) {
-        setUploads((current) => current.map((upload) => (upload.id === file.id ? { ...upload, status: 'error' } : upload)));
+        setUploads((current) => current.map((upload) => (uploadedIds.includes(upload.id) ? { ...upload, status: 'error' } : upload)));
         return;
       }
 
-      setUploads((current) => current.map((upload) => (upload.id === file.id ? { ...upload, progress: 100, status: 'success' } : upload)));
-      onChangeRef.current([...valueRef.current, uploadedFile]);
+      setUploads((current) => current.map((upload) => (uploadedIds.includes(upload.id) ? { ...upload, progress: 100, status: 'success' } : upload)));
+      onChangeRef.current([...valueRef.current, ...uploadedFiles]);
       onUploaded?.({ file: uploadedFile, body });
       window.setTimeout(() => {
         setUploads((current) => {
-          const next = current.filter((upload) => upload.id !== file.id);
-          const removed = current.find((upload) => upload.id === file.id);
-          if (removed?.previewUrl) {
-            URL.revokeObjectURL(removed.previewUrl);
-          }
+          const next = current.filter((upload) => !uploadedIds.includes(upload.id));
+          current
+            .filter((upload) => uploadedIds.includes(upload.id))
+            .forEach((removed) => {
+              if (removed.previewUrl) {
+                URL.revokeObjectURL(removed.previewUrl);
+              }
+            });
           return next;
         });
       }, 800);
@@ -153,7 +171,7 @@ export function FileUploadField({ uploadUrl, label, hint, value, onChange, onUpl
       uppy.destroy();
       uppyRef.current = null;
     };
-  }, [extraFields, uploadUrl]);
+  }, [bundleUploads, extraFields, maxNumberOfFiles, uploadUrl]);
 
   const openPicker = () => {
     if (inputRef.current) {

@@ -41,6 +41,18 @@ import {
 } from '../lib/orders';
 import { appendSortParams, getSortRuleState, toggleSortRule } from '../lib/multi-sort';
 import {
+  buildShoppingListScopeKey,
+  legacyShoppingListGeneratedAt,
+  mergeShoppingListDraft,
+  normalizeShoppingListOrderIds,
+  type ShoppingListDraftItem,
+  type ShoppingListDraftPayload,
+  type ShoppingListDraftRecord,
+  type ShoppingListDraftResponse,
+  type ShoppingListOrderGroup,
+  type ShoppingListSourceMode,
+} from '../lib/shopping-list-drafts';
+import {
   areCartProductsEqual,
   buildEditableProducts,
   OrderProductsEditor,
@@ -73,6 +85,23 @@ import { ViewModeToggle, type ViewMode } from './view-mode-toggle';
 
 type PaginationMeta = { page: number; limit: number; totalItems: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean };
 type OrdersResponse = { items: OrderRecord[]; writable: boolean; pagination: PaginationMeta };
+type DailyOrderStatusOverview = {
+  available: true;
+  reportDay: string;
+  timezone: string;
+  newOrders: number;
+  confirmationStatusChanges: number;
+  confirmedToday: number;
+  noAnswerAttempts: number;
+  adminCancelled: number;
+  carrierCancelled: number;
+  shipmentUpdates: number;
+} | {
+  available: false;
+  reportDay: string | null;
+  timezone: string;
+};
+type DailyOrderStatusOverviewResponse = { overview: DailyOrderStatusOverview };
 type MutationMessages = { loading: string; success: string; error: string };
 type QuerySnapshot<T> = Array<[readonly unknown[], T | undefined]>;
 type SplitActionOption = { key: string; label: string; onSelect: () => void | Promise<void>; disabled?: boolean };
@@ -82,43 +111,24 @@ type DeleteMutationVariables = { id: number; messages: MutationMessages };
 type DeleteState = { id: number; label: string } | null;
 type ProductsDialogState = { order: OrderRecord; items: EditableOrderProduct[]; search: string } | null;
 type AddressDraft = { delivery: 0 | 1; state: string; city: string; homeAddress: string };
-type ShoppingListSourceMode = 'selected' | 'confirmed' | 'dispatched';
-type ShoppingListDraftItem = {
-  draftId: string;
-  productId: number | null;
-  brandId: number | null;
-  brandName: string;
-  title: string;
-  quantity: number;
-  thumbnailUrl: string | null;
-  inventoryQuantity: number | null;
-  inventoryDecreaseQuantity: number;
-  inventoryShortageQuantity: number;
-  inventoryAppliedQuantity: number;
-  inventoryActionEligible: boolean;
-  notes: string[];
-  checked: boolean;
-  isCustom: boolean;
-};
 type ShoppingListBrandGroup = {
   brandId: number | null;
   brandName: string;
   products: ShoppingListDraftItem[];
 };
-type ShoppingListOrderGroup = {
-  orderId: number;
-  customerName: string;
-  note: string | null;
-  products: Array<{ title: string; quantity: number; brandId: number | null; brandName: string; thumbnailUrl: string | null }>;
-};
-type ShoppingListState = {
-  sourceMode: ShoppingListSourceMode;
-  title: string;
-  generatedItems: ShoppingListDraftItem[];
-  draftItems: ShoppingListDraftItem[];
+type ShoppingListGenerationGroup = {
+  generatedAt: string;
+  label: string;
+  brandGroups: ShoppingListBrandGroup[];
   orders: ShoppingListOrderGroup[];
+};
+type ShoppingListState = ShoppingListDraftPayload & {
+  scopeKey: string;
   search: string;
+  updatedAt: string | null;
+  updatedByName: string | null;
 } | null;
+type ShoppingListSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 type ExportRow = {
   reference: string;
   fullName: string;
@@ -259,6 +269,7 @@ type InventoryApplyResponse = {
   items: Array<{ productId: number; previousQuantity: number; nextQuantity: number }>;
   skipped: Array<{ productId: number; reason: string }>;
 };
+type ShoppingListDraftSaveResponse = { ok: true; draft: ShoppingListDraftRecord };
 const ORDERS_VIEW_MODE_STORAGE_KEY = 'orders-view-mode-v1';
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -275,6 +286,120 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+function buildShoppingListDraftUrl(sourceMode: ShoppingListSourceMode, orderIds: readonly number[]) {
+  const params = new URLSearchParams({ sourceMode });
+  normalizeShoppingListOrderIds(orderIds).forEach((orderId) => {
+    params.append('orderIds', String(orderId));
+  });
+
+  return `/api/orders/shopping-list-draft?${params.toString()}`;
+}
+
+function formatShoppingListGeneratedAt(value: string, locale: string, fallback: string) {
+  if (value === legacyShoppingListGeneratedAt) {
+    return fallback;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return fallback;
+  }
+
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
+
+function groupShoppingListGenerations(
+  state: NonNullable<ShoppingListState>,
+  locale: string,
+  fallbackLabel: string,
+) {
+  const groups = new Map<string, { products: ShoppingListDraftItem[]; orders: ShoppingListOrderGroup[] }>();
+
+  for (const product of state.draftItems) {
+    const generatedAt = product.generatedAt || legacyShoppingListGeneratedAt;
+    const group = groups.get(generatedAt) ?? { products: [], orders: [] };
+    group.products.push(product);
+    groups.set(generatedAt, group);
+  }
+
+  for (const order of state.orders) {
+    const generatedAt = order.generatedAt || legacyShoppingListGeneratedAt;
+    const group = groups.get(generatedAt) ?? { products: [], orders: [] };
+    group.orders.push(order);
+    groups.set(generatedAt, group);
+  }
+
+  return [...groups.entries()]
+    .sort(([left], [right]) => {
+      if (left === legacyShoppingListGeneratedAt) {
+        return 1;
+      }
+      if (right === legacyShoppingListGeneratedAt) {
+        return -1;
+      }
+      return new Date(right).getTime() - new Date(left).getTime();
+    })
+    .map(([generatedAt, group]): ShoppingListGenerationGroup => {
+      const brandGroupsMap = new Map<string, ShoppingListBrandGroup>();
+      for (const product of group.products) {
+        const key = `${product.brandId ?? 'none'}:${product.brandName}`;
+        const brandGroup = brandGroupsMap.get(key) ?? { brandId: product.brandId, brandName: product.brandName, products: [] };
+        brandGroup.products.push(product);
+        brandGroupsMap.set(key, brandGroup);
+      }
+
+      return {
+        generatedAt,
+        label: formatShoppingListGeneratedAt(generatedAt, locale, fallbackLabel),
+        brandGroups: [...brandGroupsMap.values()]
+          .map((brandGroup) => ({
+            ...brandGroup,
+            products: [...brandGroup.products].sort((left, right) => left.title.localeCompare(right.title)),
+          }))
+          .sort((left, right) => left.brandName.localeCompare(right.brandName)),
+        orders: [...group.orders].sort((left, right) => left.orderId - right.orderId),
+      };
+    });
+}
+
+async function fetchShoppingListDraft(sourceMode: ShoppingListSourceMode, orderIds: readonly number[]) {
+  return request<ShoppingListDraftResponse>(buildShoppingListDraftUrl(sourceMode, orderIds));
+}
+
+async function saveShoppingListDraft(state: NonNullable<ShoppingListState>) {
+  const payload: ShoppingListDraftPayload = {
+    sourceMode: state.sourceMode,
+    orderIds: state.orderIds,
+    title: state.title,
+    generatedItems: state.generatedItems,
+    draftItems: state.draftItems,
+    orders: state.orders,
+  };
+
+  return request<ShoppingListDraftSaveResponse>('/api/orders/shopping-list-draft', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+function buildShoppingListStateFromDraft(draft: ShoppingListDraftRecord, title?: string): NonNullable<ShoppingListState> {
+  return {
+    sourceMode: draft.sourceMode,
+    orderIds: normalizeShoppingListOrderIds(draft.orderIds),
+    scopeKey: draft.scopeKey,
+    title: title ?? draft.title,
+    generatedItems: draft.generatedItems,
+    draftItems: draft.draftItems,
+    orders: draft.orders,
+    search: '',
+    updatedAt: draft.updatedAt,
+    updatedByName: draft.updatedByName,
+  };
 }
 
 function readStorage<T>(key: string) {
@@ -732,6 +857,8 @@ async function buildShoppingListState(
   sourceMode: ShoppingListSourceMode,
   title: string,
 ) {
+  const orderIds = normalizeShoppingListOrderIds(orders.map((order) => order.id));
+  const generatedAt = new Date().toISOString();
   const brandCache = new Map<number, string>();
   const inventoryCache = new Map<number, number>();
   const productMap = new Map<string, ShoppingListDraftItem>();
@@ -765,6 +892,7 @@ async function buildShoppingListState(
         notes: note ? [note] : [],
         checked: false,
         isCustom: false,
+        generatedAt,
       });
     }
   }
@@ -774,6 +902,7 @@ async function buildShoppingListState(
       orderId: order.id,
       customerName: order.fullName,
       note: order.note,
+      generatedAt,
       products: await Promise.all(
         order.orderProducts.map(async (product) => ({
           title: product.title,
@@ -793,15 +922,40 @@ async function buildShoppingListState(
 
   return {
     sourceMode,
+    orderIds,
+    scopeKey: buildShoppingListScopeKey(sourceMode, orderIds),
     title,
     generatedItems,
     draftItems: generatedItems.map((item) => ({ ...item, notes: [...item.notes] })),
     orders: ordersPanel,
     search: '',
+    updatedAt: null,
+    updatedByName: null,
   };
 }
 
-function buildShoppingListPrintHtml(state: NonNullable<ShoppingListState>) {
+async function buildMergedShoppingListState(orders: OrderRecord[], sourceMode: ShoppingListSourceMode, title: string) {
+  const generatedState = await buildShoppingListState(orders, sourceMode, title);
+  const response = await fetchShoppingListDraft(sourceMode, generatedState.orderIds);
+
+  if (!response.draft) {
+    return { state: generatedState, loadedSharedDraft: false };
+  }
+
+  const merged = mergeShoppingListDraft(generatedState, response.draft);
+  return {
+    state: {
+      ...merged,
+      scopeKey: response.draft.scopeKey,
+      search: '',
+      updatedAt: response.draft.updatedAt,
+      updatedByName: response.draft.updatedByName,
+    },
+    loadedSharedDraft: true,
+  };
+}
+
+function buildShoppingListPrintHtml(state: NonNullable<ShoppingListState>, locale: string, previousGenerationLabel: string) {
   const escapeHtml = (value: string) =>
     value
       .replaceAll('&', '&amp;')
@@ -810,55 +964,56 @@ function buildShoppingListPrintHtml(state: NonNullable<ShoppingListState>) {
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#39;');
 
-  const groupedBrands = state.draftItems.reduce<Map<string, ShoppingListBrandGroup>>((groups, product) => {
-    const key = `${product.brandId ?? 'none'}:${product.brandName}`;
-    const group = groups.get(key) ?? { brandId: product.brandId, brandName: product.brandName, products: [] };
-    group.products.push(product);
-    groups.set(key, group);
-    return groups;
-  }, new Map());
+  const generationGroups = groupShoppingListGenerations(state, locale, previousGenerationLabel);
 
-  const brandsHtml = [...groupedBrands.values()]
-    .sort((left, right) => left.brandName.localeCompare(right.brandName))
-    .map((group) => `
+  const brandsHtml = generationGroups.map((generation) => `
     <section>
-      <h2>${escapeHtml(group.brandName)}</h2>
-      <ul>
-        ${group.products
-          .sort((left, right) => left.title.localeCompare(right.title))
-          .map((product) => `
-          <li style="${
-            product.checked
-              ? 'opacity: 0.65; text-decoration: line-through;'
-              : product.inventoryQuantity != null && product.inventoryQuantity > 0
-                ? 'color: #166534; background: #dcfce7; border: 1px solid #86efac; border-radius: 10px; padding: 8px 10px;'
-                : ''
-          }">
-            <div style="display: flex; align-items: flex-start; gap: 10px;">
-              ${product.thumbnailUrl ? `<img src="${escapeHtml(product.thumbnailUrl)}" alt="${escapeHtml(product.title)}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 8px; border: 1px solid #d4d4d8; flex: none;" />` : ''}
-              <div>
-                <strong>${product.checked ? '&#10003; ' : ''}${escapeHtml(product.title)}</strong> x${product.quantity}
-                ${product.inventoryActionEligible ? `<div>Inventory decrease: ${product.inventoryDecreaseQuantity}${product.inventoryShortageQuantity > 0 ? ` | Short: ${product.inventoryShortageQuantity}` : ''}</div>` : ''}
-                ${product.notes.length ? `<div>Notes: ${escapeHtml(product.notes.join(' | '))}</div>` : ''}
+      <h2>Generated ${escapeHtml(generation.label)}</h2>
+      ${generation.brandGroups.map((group) => `
+        <h3>${escapeHtml(group.brandName)}</h3>
+        <ul>
+          ${group.products
+            .map((product) => `
+            <li style="${
+              product.checked
+                ? 'opacity: 0.65; text-decoration: line-through;'
+                : product.inventoryQuantity != null && product.inventoryQuantity > 0
+                  ? 'color: #166534; background: #dcfce7; border: 1px solid #86efac; border-radius: 10px; padding: 8px 10px;'
+                  : ''
+            }">
+              <div style="display: flex; align-items: flex-start; gap: 10px;">
+                ${product.thumbnailUrl ? `<img src="${escapeHtml(product.thumbnailUrl)}" alt="${escapeHtml(product.title)}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 8px; border: 1px solid #d4d4d8; flex: none;" />` : ''}
+                <div>
+                  <strong>${product.checked ? '&#10003; ' : ''}${escapeHtml(product.title)}</strong> x${product.quantity}
+                  ${product.inventoryActionEligible ? `<div>Inventory decrease: ${product.inventoryDecreaseQuantity}${product.inventoryShortageQuantity > 0 ? ` | Short: ${product.inventoryShortageQuantity}` : ''}</div>` : ''}
+                  ${product.notes.length ? `<div>Notes: ${escapeHtml(product.notes.join(' | '))}</div>` : ''}
+                </div>
               </div>
-            </div>
-          </li>
-        `).join('')}
-      </ul>
+            </li>
+          `).join('')}
+        </ul>
+      `).join('')}
     </section>
   `).join('');
 
-  const ordersHtml = state.orders.map((order) => `
+  const ordersHtml = generationGroups.map((generation) => `
     <section>
-      <h2>#${order.orderId} ${escapeHtml(order.customerName)}</h2>
-      ${order.note ? `<p>Note: ${escapeHtml(order.note)}</p>` : ''}
+      <h2>Generated ${escapeHtml(generation.label)}</h2>
       <ul>
-        ${order.products.map((product) => `
+        ${generation.orders.map((order) => `
           <li>
-            <div style="display: flex; align-items: center; gap: 10px;">
-              ${product.thumbnailUrl ? `<img src="${escapeHtml(product.thumbnailUrl)}" alt="${escapeHtml(product.title)}" style="width: 32px; height: 32px; object-fit: cover; border-radius: 6px; border: 1px solid #d4d4d8; flex: none;" />` : ''}
-              <span>${escapeHtml(product.brandName)} / ${escapeHtml(product.title)} x${product.quantity}</span>
-            </div>
+            <h3>#${order.orderId} ${escapeHtml(order.customerName)}</h3>
+            ${order.note ? `<p>Note: ${escapeHtml(order.note)}</p>` : ''}
+            <ul>
+              ${order.products.map((product) => `
+                <li>
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    ${product.thumbnailUrl ? `<img src="${escapeHtml(product.thumbnailUrl)}" alt="${escapeHtml(product.title)}" style="width: 32px; height: 32px; object-fit: cover; border-radius: 6px; border: 1px solid #d4d4d8; flex: none;" />` : ''}
+                    <span>${escapeHtml(product.brandName)} / ${escapeHtml(product.title)} x${product.quantity}</span>
+                  </div>
+                </li>
+              `).join('')}
+            </ul>
           </li>
         `).join('')}
       </ul>
@@ -875,6 +1030,7 @@ function buildShoppingListPrintHtml(state: NonNullable<ShoppingListState>) {
       .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
       h1 { margin-bottom: 24px; }
       h2 { margin: 0 0 8px; font-size: 18px; }
+      h3 { margin: 10px 0 6px; font-size: 14px; }
       section { margin-bottom: 20px; break-inside: avoid; }
       ul { margin: 0; padding-left: 20px; }
       li { margin-bottom: 6px; }
@@ -1308,11 +1464,13 @@ function ShoppingListDialog({
   state,
   pending,
   inventoryPending,
+  saveStatus,
   onOpenChange,
   onPrint,
   onSearchChange,
   onAddProduct,
   onReset,
+  onRefresh,
   onToggleItem,
   onIncreaseQuantity,
   onDecreaseQuantity,
@@ -1326,11 +1484,13 @@ function ShoppingListDialog({
   state: ShoppingListState;
   pending: boolean;
   inventoryPending: boolean;
+  saveStatus: ShoppingListSaveStatus;
   onOpenChange: (open: boolean) => void;
   onPrint: () => void;
   onSearchChange: (value: string) => void;
   onAddProduct: (product: ProductSearchItem) => void;
-  onReset: () => void;
+  onReset: () => void | Promise<void>;
+  onRefresh: () => void | Promise<void>;
   onToggleItem: (draftId: string) => void;
   onIncreaseQuantity: (draftId: string) => void;
   onDecreaseQuantity: (draftId: string) => void;
@@ -1341,6 +1501,7 @@ function ShoppingListDialog({
   onApplySelectedInventoryChanges: () => void;
 }) {
   const t = useTranslations();
+  const locale = useLocale();
   const deferredSearch = useDeferredValue(state?.search ?? '');
   const searchQuery = useQuery({
     queryKey: ['shopping-list-products-search', deferredSearch],
@@ -1354,33 +1515,30 @@ function ShoppingListDialog({
       }));
     },
   });
-  const groupedBrands = useMemo(() => {
+  const generationGroups = useMemo(() => {
     if (!state) {
       return [];
     }
 
-    const brandGroupsMap = new Map<string, ShoppingListBrandGroup>();
-    for (const product of state.draftItems) {
-      const key = `${product.brandId ?? 'none'}:${product.brandName}`;
-      const group = brandGroupsMap.get(key) ?? { brandId: product.brandId, brandName: product.brandName, products: [] };
-      group.products.push(product);
-      brandGroupsMap.set(key, group);
-    }
-
-    return [...brandGroupsMap.values()]
-      .map((group) => ({
-        ...group,
-        products: [...group.products].sort((left, right) => left.title.localeCompare(right.title)),
-      }))
-      .sort((left, right) => left.brandName.localeCompare(right.brandName));
-  }, [state]);
+    return groupShoppingListGenerations(state, locale, t('ordersManager.shoppingList.previousGeneration'));
+  }, [locale, state, t]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>{state?.title ?? t('ordersManager.shoppingList.title')}</DialogTitle>
-          <DialogDescription>{t('ordersManager.shoppingList.description')}</DialogDescription>
+          <DialogDescription className="flex flex-col gap-1">
+            <span>{t('ordersManager.shoppingList.description')}</span>
+            {state ? (
+              <span className={cn('text-xs', saveStatus === 'error' ? 'text-destructive' : 'text-muted-foreground')}>
+                {saveStatus === 'saving' ? t('ordersManager.shoppingList.saving') : null}
+                {saveStatus === 'saved' ? t('ordersManager.shoppingList.saved') : null}
+                {saveStatus === 'error' ? t('ordersManager.shoppingList.saveError') : null}
+                {saveStatus === 'idle' && state.updatedByName ? t('ordersManager.shoppingList.lastSavedBy', { name: state.updatedByName }) : null}
+              </span>
+            ) : null}
+          </DialogDescription>
         </DialogHeader>
         {state ? (
           <div className="grid gap-4 lg:grid-cols-2">
@@ -1391,8 +1549,11 @@ function ShoppingListDialog({
                     <Printer data-icon="inline-start" />
                     {t('ordersManager.shoppingList.print')}
                   </Button>
-                  <Button type="button" variant="outline" onClick={onReset}>
+                  <Button type="button" variant="outline" onClick={() => void onReset()}>
                     {t('ordersManager.shoppingList.reset')}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => void onRefresh()}>
+                    {t('ordersManager.shoppingList.refresh')}
                   </Button>
                   <Button type="button" variant="outline" disabled={inventoryPending} onClick={onApplyAllInventoryChanges}>
                     {t('ordersManager.shoppingList.acceptAllInventoryChanges')}
@@ -1431,110 +1592,119 @@ function ShoppingListDialog({
                 </div>
               </div>
               <div className="flex flex-col gap-4">
-                {groupedBrands.map((group) => (
-                  <div key={`${group.brandId ?? 'none'}-${group.brandName}`} className="rounded-xl border border-border/70 p-3">
-                    <p className="font-medium">{group.brandName}</p>
-                    <div className="mt-3 flex flex-col gap-2">
-                      {group.products.map((product) => (
-                        <div
-                          key={product.draftId}
-                          className={cn(
-                            'rounded-lg border p-2 text-sm',
-                            product.checked
-                              ? 'border-border/70 bg-muted/30 text-muted-foreground line-through'
-                              : product.inventoryQuantity != null && product.inventoryQuantity > 0
-                              ? 'border border-emerald-200 bg-emerald-50 text-emerald-900'
-                              : 'border-border/70 bg-muted/30',
-                          )}
-                        >
-                          <div className="flex items-start gap-3">
-                            <Checkbox
-                              checked={product.checked}
-                              onChange={() => onToggleItem(product.draftId)}
-                              aria-label={t('ordersManager.shoppingList.toggleItem', { title: product.title })}
-                            />
-                            {product.thumbnailUrl ? (
-                              <img
-                                src={product.thumbnailUrl}
-                                alt={product.title}
-                                className="size-10 rounded-md border border-border/70 object-cover"
-                              />
-                            ) : null}
-                            <div className="min-w-0 flex-1">
-                              <p className="font-medium">{product.title} x{product.quantity}</p>
-                              {product.notes.length ? <p className="text-muted-foreground">{t('ordersManager.shoppingList.notes')}: {product.notes.join(' | ')}</p> : null}
-                              {product.isCustom ? <p className="text-xs text-muted-foreground">{t('ordersManager.shoppingList.customItem')}</p> : null}
-                              {product.inventoryActionEligible ? (
-                                <p className="text-xs font-medium text-emerald-700">
-                                  {t('ordersManager.shoppingList.inventoryDecreasePreview', { count: product.inventoryDecreaseQuantity })}
-                                  {product.inventoryShortageQuantity > 0 ? ` • ${t('ordersManager.shoppingList.inventoryShortage', { count: product.inventoryShortageQuantity })}` : ''}
-                                </p>
-                              ) : null}
-                              {product.inventoryAppliedQuantity > 0 ? (
-                                <p className="text-xs text-muted-foreground">
-                                  {t('ordersManager.shoppingList.inventoryApplied', { count: product.inventoryAppliedQuantity })}
-                                </p>
-                              ) : null}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={pending || product.quantity <= 1}
-                                onClick={() => onDecreaseQuantity(product.draftId)}
-                                aria-label={t('ordersManager.shoppingList.decreaseQuantity', { title: product.title })}
+                {generationGroups.map((generation) => (
+                  <div key={`products-${generation.generatedAt}`} className="rounded-xl border border-border/70 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+                      {t('ordersManager.shoppingList.generatedAt', { date: generation.label })}
+                    </p>
+                    <div className="mt-3 flex flex-col gap-4">
+                      {generation.brandGroups.map((group) => (
+                        <div key={`${generation.generatedAt}-${group.brandId ?? 'none'}-${group.brandName}`} className="rounded-xl border border-border/70 p-3">
+                          <p className="font-medium">{group.brandName}</p>
+                          <div className="mt-3 flex flex-col gap-2">
+                            {group.products.map((product) => (
+                              <div
+                                key={product.draftId}
+                                className={cn(
+                                  'rounded-lg border p-2 text-sm',
+                                  product.checked
+                                    ? 'border-border/70 bg-muted/30 text-muted-foreground line-through'
+                                    : product.inventoryQuantity != null && product.inventoryQuantity > 0
+                                    ? 'border border-emerald-200 bg-emerald-50 text-emerald-900'
+                                    : 'border-border/70 bg-muted/30',
+                                )}
                               >
-                                -
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={pending}
-                                onClick={() => onIncreaseQuantity(product.draftId)}
-                                aria-label={t('ordersManager.shoppingList.increaseQuantity', { title: product.title })}
-                              >
-                                +
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={pending}
-                                onClick={() => onRemoveItem(product.draftId)}
-                                aria-label={t('ordersManager.shoppingList.removeItem', { title: product.title })}
-                              >
-                                <X />
-                              </Button>
-                            </div>
+                                <div className="flex items-start gap-3">
+                                  <Checkbox
+                                    checked={product.checked}
+                                    onChange={() => onToggleItem(product.draftId)}
+                                    aria-label={t('ordersManager.shoppingList.toggleItem', { title: product.title })}
+                                  />
+                                  {product.thumbnailUrl ? (
+                                    <img
+                                      src={product.thumbnailUrl}
+                                      alt={product.title}
+                                      className="size-10 rounded-md border border-border/70 object-cover"
+                                    />
+                                  ) : null}
+                                  <div className="min-w-0 flex-1">
+                                    <p className="font-medium">{product.title} x{product.quantity}</p>
+                                    {product.notes.length ? <p className="text-muted-foreground">{t('ordersManager.shoppingList.notes')}: {product.notes.join(' | ')}</p> : null}
+                                    {product.isCustom ? <p className="text-xs text-muted-foreground">{t('ordersManager.shoppingList.customItem')}</p> : null}
+                                    {product.inventoryActionEligible ? (
+                                      <p className="text-xs font-medium text-emerald-700">
+                                        {t('ordersManager.shoppingList.inventoryDecreasePreview', { count: product.inventoryDecreaseQuantity })}
+                                        {product.inventoryShortageQuantity > 0 ? ` • ${t('ordersManager.shoppingList.inventoryShortage', { count: product.inventoryShortageQuantity })}` : ''}
+                                      </p>
+                                    ) : null}
+                                    {product.inventoryAppliedQuantity > 0 ? (
+                                      <p className="text-xs text-muted-foreground">
+                                        {t('ordersManager.shoppingList.inventoryApplied', { count: product.inventoryAppliedQuantity })}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={pending || product.quantity <= 1}
+                                      onClick={() => onDecreaseQuantity(product.draftId)}
+                                      aria-label={t('ordersManager.shoppingList.decreaseQuantity', { title: product.title })}
+                                    >
+                                      -
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={pending}
+                                      onClick={() => onIncreaseQuantity(product.draftId)}
+                                      aria-label={t('ordersManager.shoppingList.increaseQuantity', { title: product.title })}
+                                    >
+                                      +
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={pending}
+                                      onClick={() => onRemoveItem(product.draftId)}
+                                      aria-label={t('ordersManager.shoppingList.removeItem', { title: product.title })}
+                                    >
+                                      <X />
+                                    </Button>
+                                  </div>
+                                </div>
+                                {product.productId != null ? (
+                                  <div className="mt-3 flex items-center gap-2 pl-7">
+                                    <span className="text-xs text-muted-foreground">{t('ordersManager.shoppingList.inventoryAdjustLabel')}</span>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={inventoryPending || product.inventoryDecreaseQuantity <= 0}
+                                      onClick={() => onDecreaseInventoryDecrease(product.draftId)}
+                                      aria-label={t('ordersManager.shoppingList.decreaseInventoryDelta', { title: product.title })}
+                                    >
+                                      -1
+                                    </Button>
+                                    <span className="min-w-10 text-center text-sm font-medium">{product.inventoryDecreaseQuantity}</span>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={inventoryPending || product.inventoryDecreaseQuantity >= Math.min(product.quantity, product.inventoryQuantity ?? 0)}
+                                      onClick={() => onIncreaseInventoryDecrease(product.draftId)}
+                                      aria-label={t('ordersManager.shoppingList.increaseInventoryDelta', { title: product.title })}
+                                    >
+                                      +1
+                                    </Button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ))}
                           </div>
-                          {product.productId != null ? (
-                            <div className="mt-3 flex items-center gap-2 pl-7">
-                              <span className="text-xs text-muted-foreground">{t('ordersManager.shoppingList.inventoryAdjustLabel')}</span>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={inventoryPending || product.inventoryDecreaseQuantity <= 0}
-                                onClick={() => onDecreaseInventoryDecrease(product.draftId)}
-                                aria-label={t('ordersManager.shoppingList.decreaseInventoryDelta', { title: product.title })}
-                              >
-                                -1
-                              </Button>
-                              <span className="min-w-10 text-center text-sm font-medium">{product.inventoryDecreaseQuantity}</span>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={inventoryPending || product.inventoryDecreaseQuantity >= Math.min(product.quantity, product.inventoryQuantity ?? 0)}
-                                onClick={() => onIncreaseInventoryDecrease(product.draftId)}
-                                aria-label={t('ordersManager.shoppingList.increaseInventoryDelta', { title: product.title })}
-                              >
-                                +1
-                              </Button>
-                            </div>
-                          ) : null}
                         </div>
                       ))}
                     </div>
@@ -1544,23 +1714,32 @@ function ShoppingListDialog({
             </div>
             <div className="rounded-2xl border border-border/70 p-4">
               <div className="flex flex-col gap-4">
-                {state.orders.map((order) => (
-                  <div key={order.orderId} className="rounded-xl border border-border/70 p-3">
-                    <p className="font-medium">#{order.orderId} {order.customerName}</p>
-                    {order.note ? <p className="mt-1 text-sm text-muted-foreground">{t('ordersManager.shoppingList.notes')}: {order.note}</p> : null}
-                    <div className="mt-3 flex flex-col gap-2">
-                      {order.products.map((product, index) => (
-                        <div key={`${order.orderId}-${index}`} className="flex items-center gap-3 text-sm">
-                          {product.thumbnailUrl ? (
-                            <img
-                              src={product.thumbnailUrl}
-                              alt={product.title}
-                              className="size-8 rounded-md border border-border/70 object-cover"
-                            />
-                          ) : null}
-                          <p>
-                            {product.brandName} / {product.title} x{product.quantity}
-                          </p>
+                {generationGroups.map((generation) => (
+                  <div key={`orders-${generation.generatedAt}`} className="rounded-xl border border-border/70 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+                      {t('ordersManager.shoppingList.generatedAt', { date: generation.label })}
+                    </p>
+                    <div className="mt-3 flex flex-col gap-3">
+                      {generation.orders.map((order) => (
+                        <div key={order.orderId} className="rounded-xl border border-border/70 p-3">
+                          <p className="font-medium">#{order.orderId} {order.customerName}</p>
+                          {order.note ? <p className="mt-1 text-sm text-muted-foreground">{t('ordersManager.shoppingList.notes')}: {order.note}</p> : null}
+                          <div className="mt-3 flex flex-col gap-2">
+                            {order.products.map((product, index) => (
+                              <div key={`${order.orderId}-${index}`} className="flex items-center gap-3 text-sm">
+                                {product.thumbnailUrl ? (
+                                  <img
+                                    src={product.thumbnailUrl}
+                                    alt={product.title}
+                                    className="size-8 rounded-md border border-border/70 object-cover"
+                                  />
+                                ) : null}
+                                <p>
+                                  {product.brandName} / {product.title} x{product.quantity}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1819,12 +1998,78 @@ function EcotrackPostingDialog({
   );
 }
 
+function DailyOrderStatusOverviewPanel({
+  overview,
+  loading,
+}: {
+  overview: DailyOrderStatusOverview | undefined;
+  loading: boolean;
+}) {
+  const t = useTranslations('ordersManager.overview');
+  const locale = useLocale();
+
+  if (!overview && loading) {
+    return (
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <Skeleton key={index} className="h-20 rounded-lg" />
+        ))}
+      </div>
+    );
+  }
+
+  if (!overview?.available) {
+    return (
+      <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 p-4">
+        <p className="text-sm font-medium">{t('title')}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{t('unavailable')}</p>
+      </div>
+    );
+  }
+
+  const reportDate = new Date(`${overview.reportDay}T00:00:00`);
+  const formattedReportDay = Number.isNaN(reportDate.getTime())
+    ? overview.reportDay
+    : new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(reportDate);
+  const items = [
+    { key: 'newOrders', value: overview.newOrders },
+    { key: 'confirmationStatusChanges', value: overview.confirmationStatusChanges },
+    { key: 'confirmedToday', value: overview.confirmedToday },
+    { key: 'noAnswerAttempts', value: overview.noAnswerAttempts },
+    { key: 'adminCancelled', value: overview.adminCancelled },
+    { key: 'carrierCancelled', value: overview.carrierCancelled },
+    { key: 'shipmentUpdates', value: overview.shipmentUpdates },
+  ] as const;
+
+  return (
+    <section className="rounded-xl border border-border/70 bg-background/90 p-3" aria-label={t('title')}>
+      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold">{t('title')}</h3>
+          <p className="text-xs text-muted-foreground">{t('subtitle', { date: formattedReportDay })}</p>
+        </div>
+        {loading ? <PendingInline active label={t('refreshing')} /> : null}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {items.map((item) => (
+          <Card key={item.key} className="rounded-lg p-3">
+            <p className="text-xs text-muted-foreground">{t(`metrics.${item.key}`)}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">{item.value}</p>
+          </Card>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function OrdersManager({
   initialOrders,
   initialCatalog,
+  initialOverview,
 }: {
   initialOrders?: OrdersResponse;
   initialCatalog?: EcotrackCatalogResponse;
+  initialOverview?: DailyOrderStatusOverview;
 }) {
   const t = useTranslations();
   const locale = useLocale();
@@ -1833,6 +2078,7 @@ export function OrdersManager({
   const [page, setPage] = useState(1);
   const [sortRules, setSortRules] = useState<OrderSortRule[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [noAnswerFilter, setNoAnswerFilter] = useState<string>('all');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [phoneDrafts, setPhoneDrafts] = useState<Record<number, string>>({});
   const [nameDrafts, setNameDrafts] = useState<Record<number, string>>({});
@@ -1845,6 +2091,7 @@ export function OrdersManager({
   const [bulkStatus, setBulkStatus] = useState<string>('2');
   const [shoppingListState, setShoppingListState] = useState<ShoppingListState>(null);
   const [shoppingListOpen, setShoppingListOpen] = useState(false);
+  const [shoppingListSaveStatus, setShoppingListSaveStatus] = useState<ShoppingListSaveStatus>('idle');
   const [exportPreviewState, setExportPreviewState] = useState<ExportPreviewState>(null);
   const [exportPreviewError, setExportPreviewError] = useState<string | null>(null);
   const [ecotrackPreviewState, setEcotrackPreviewState] = useState<EcotrackPostingPreviewState>(null);
@@ -1857,13 +2104,18 @@ export function OrdersManager({
   const initializedEcotrackStatusRef = useRef(false);
   const lastEcotrackStatusKeyRef = useRef<string | null>(null);
   const sessionStartedEcotrackJobIdsRef = useRef<Set<string>>(new Set());
+  const shoppingListSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shoppingListSaveSeqRef = useRef(0);
   const deferredSearch = useDeferredValue(search);
   const deferredStatusFilter = useDeferredValue(statusFilter);
+  const deferredNoAnswerFilter = useDeferredValue(noAnswerFilter);
   const [initialOrdersUpdatedAt] = useState(() => (initialOrders ? Date.now() : 0));
   const [initialCatalogUpdatedAt] = useState(() => (initialCatalog ? Date.now() : 0));
+  const [initialOverviewUpdatedAt] = useState(() => (initialOverview ? Date.now() : 0));
   const canUseInitialOrders = page === 1
     && deferredSearch.length === 0
     && deferredStatusFilter === 'all'
+    && deferredNoAnswerFilter === 'all'
     && sortRules.length === 0;
 
   useEffect(() => {
@@ -1873,8 +2125,14 @@ export function OrdersManager({
     }
   }, []);
 
+  useEffect(() => () => {
+    if (shoppingListSaveTimeoutRef.current) {
+      clearTimeout(shoppingListSaveTimeoutRef.current);
+    }
+  }, []);
+
   const ordersQuery = useQuery({
-    queryKey: ['orders-table', page, deferredSearch, deferredStatusFilter, sortRules],
+    queryKey: ['orders-table', page, deferredSearch, deferredStatusFilter, deferredNoAnswerFilter, sortRules],
     queryFn: () => {
       const params = new URLSearchParams({
         page: String(page),
@@ -1882,6 +2140,9 @@ export function OrdersManager({
         search: deferredSearch,
         confirmed: deferredStatusFilter === 'all' ? '' : deferredStatusFilter,
       });
+      if (deferredStatusFilter === '1' && deferredNoAnswerFilter !== 'all') {
+        params.set('noAnswerCount', deferredNoAnswerFilter);
+      }
       appendSortParams(params, sortRules);
       return request<OrdersResponse>(`/api/orders?${params.toString()}`);
     },
@@ -1890,18 +2151,26 @@ export function OrdersManager({
     placeholderData: (previousData, previousQuery) => {
       const previousKey = previousQuery?.queryKey;
 
-      if (!Array.isArray(previousKey) || previousKey.length !== 5) {
+      if (!Array.isArray(previousKey) || previousKey.length !== 6) {
         return undefined;
       }
 
-      const [, previousPage, previousSearch, previousConfirmed, previousSortRules] = previousKey;
+      const [, previousPage, previousSearch, previousConfirmed, previousNoAnswerCount, previousSortRules] = previousKey;
       const isPaginationOnlyChange = previousSearch === deferredSearch
         && previousConfirmed === deferredStatusFilter
+        && previousNoAnswerCount === deferredNoAnswerFilter
         && previousSortRules === sortRules
         && previousPage !== page;
 
       return isPaginationOnlyChange ? keepPreviousData(previousData) : undefined;
     },
+    staleTime: 60_000,
+  });
+  const overviewQuery = useQuery({
+    queryKey: ['orders-overview'],
+    queryFn: () => request<DailyOrderStatusOverviewResponse>('/api/orders/overview'),
+    initialData: initialOverview ? { overview: initialOverview } : undefined,
+    initialDataUpdatedAt: initialOverview ? initialOverviewUpdatedAt : undefined,
     staleTime: 60_000,
   });
   const ecotrackCatalogQuery = useQuery({
@@ -1968,6 +2237,7 @@ export function OrdersManager({
     },
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: ['orders-table'] });
+      await queryClient.invalidateQueries({ queryKey: ['orders-overview'] });
     },
   });
 
@@ -2002,6 +2272,7 @@ export function OrdersManager({
     },
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: ['orders-table'] });
+      await queryClient.invalidateQueries({ queryKey: ['orders-overview'] });
     },
   });
   const startOrderExportMutation = useMutation<
@@ -2180,6 +2451,7 @@ export function OrdersManager({
       }
       queueMicrotask(() => setExportPreviewState(null));
       void queryClient.invalidateQueries({ queryKey: ['orders-table'] });
+      void queryClient.invalidateQueries({ queryKey: ['orders-overview'] });
     } else if (orderExportJob.status === 'cancelled') {
       toast.success(t('products.exportAll.notifications.status.cancelled'));
     } else if (orderExportJob.status === 'failed') {
@@ -2212,6 +2484,7 @@ export function OrdersManager({
     if (orderEcotrackJob.status === 'completed') {
       toast.success(t('ordersManager.ecotrack.success'));
       void queryClient.invalidateQueries({ queryKey: ['orders-table'] });
+      void queryClient.invalidateQueries({ queryKey: ['orders-overview'] });
       sessionStartedEcotrackJobIdsRef.current.delete(orderEcotrackJob.id);
     } else if (orderEcotrackJob.status === 'cancelled') {
       toast.success(t('ordersManager.ecotrack.cancelled'));
@@ -2448,11 +2721,66 @@ export function OrdersManager({
       );
 
       await queryClient.invalidateQueries({ queryKey: ['orders-table'] });
+      await queryClient.invalidateQueries({ queryKey: ['orders-overview'] });
       toast.success(t('notifications.orders.bulkStatus.success', { count: orders.length }), { id: toastId });
       setSelectedIds([]);
     } catch {
       toast.error(t('notifications.orders.bulkStatus.error', { count: orders.length }), { id: toastId });
     }
+  }
+
+  async function saveShoppingListDraftNow(nextState: NonNullable<ShoppingListState>) {
+    if (shoppingListSaveTimeoutRef.current) {
+      clearTimeout(shoppingListSaveTimeoutRef.current);
+      shoppingListSaveTimeoutRef.current = null;
+    }
+
+    const saveSeq = shoppingListSaveSeqRef.current + 1;
+    shoppingListSaveSeqRef.current = saveSeq;
+    setShoppingListSaveStatus('saving');
+
+    try {
+      const response = await saveShoppingListDraft(nextState);
+      if (shoppingListSaveSeqRef.current === saveSeq) {
+        setShoppingListSaveStatus('saved');
+      }
+      setShoppingListState((current) => (
+        current && current.scopeKey === response.draft.scopeKey
+          ? { ...current, updatedAt: response.draft.updatedAt, updatedByName: response.draft.updatedByName }
+          : current
+      ));
+      return response;
+    } catch {
+      if (shoppingListSaveSeqRef.current === saveSeq) {
+        setShoppingListSaveStatus('error');
+      }
+      throw new Error('Unable to save shopping list draft');
+    }
+  }
+
+  function scheduleShoppingListDraftSave(nextState: NonNullable<ShoppingListState>) {
+    if (shoppingListSaveTimeoutRef.current) {
+      clearTimeout(shoppingListSaveTimeoutRef.current);
+    }
+
+    setShoppingListSaveStatus('saving');
+    shoppingListSaveTimeoutRef.current = setTimeout(() => {
+      void saveShoppingListDraftNow(nextState).catch(() => {
+        toast.error(t('ordersManager.shoppingList.saveError'));
+      });
+    }, 400);
+  }
+
+  async function openCachedShoppingListDraft(sourceMode: ShoppingListSourceMode, orderIds: readonly number[], title: string) {
+    const response = await fetchShoppingListDraft(sourceMode, orderIds);
+    if (!response.draft) {
+      return false;
+    }
+
+    setShoppingListState(buildShoppingListStateFromDraft(response.draft, title));
+    setShoppingListSaveStatus('idle');
+    setShoppingListOpen(true);
+    return true;
   }
 
   async function openShoppingListForOrders(orders: OrderRecord[], title: string) {
@@ -2464,10 +2792,17 @@ export function OrdersManager({
     const toastId = toast.loading(t('ordersManager.shoppingList.loading'));
 
     try {
-      const nextState = await buildShoppingListState(orders, 'selected', title);
+      const orderIds = orders.map((order) => order.id);
+      if (await openCachedShoppingListDraft('selected', orderIds, title)) {
+        toast.success(t('ordersManager.shoppingList.sharedDraftLoaded'), { id: toastId });
+        return;
+      }
+
+      const { state: nextState, loadedSharedDraft } = await buildMergedShoppingListState(orders, 'selected', title);
       setShoppingListState(nextState);
+      setShoppingListSaveStatus('idle');
       setShoppingListOpen(true);
-      toast.success(t('ordersManager.shoppingList.ready'), { id: toastId });
+      toast.success(t(loadedSharedDraft ? 'ordersManager.shoppingList.sharedDraftLoaded' : 'ordersManager.shoppingList.ready'), { id: toastId });
     } catch {
       toast.error(t('ordersManager.shoppingList.error'), { id: toastId });
     }
@@ -2488,36 +2823,94 @@ export function OrdersManager({
     return items;
   }
 
-  async function openStatusBasedShoppingList(status: 2 | 3, sourceMode: Exclude<ShoppingListSourceMode, 'selected'>) {
+  const shoppingListStatusConfig: Record<Exclude<ShoppingListSourceMode, 'selected'>, {
+    statuses: Array<OrderRecord['confirmed']>;
+    titleKey: string;
+    emptyKey: string;
+  }> = {
+    confirmed: {
+      statuses: [2],
+      titleKey: 'ordersManager.shoppingList.confirmedTitle',
+      emptyKey: 'ordersManager.shoppingList.emptyConfirmed',
+    },
+    dispatched: {
+      statuses: [3],
+      titleKey: 'ordersManager.shoppingList.dispatchedTitle',
+      emptyKey: 'ordersManager.shoppingList.emptyDispatched',
+    },
+    posted: {
+      statuses: [11],
+      titleKey: 'ordersManager.shoppingList.postedTitle',
+      emptyKey: 'ordersManager.shoppingList.emptyPosted',
+    },
+    'posted-and-confirmed': {
+      statuses: [11, 2],
+      titleKey: 'ordersManager.shoppingList.postedAndConfirmedTitle',
+      emptyKey: 'ordersManager.shoppingList.emptyPostedAndConfirmed',
+    },
+  };
+
+  async function fetchOrdersForShoppingListSource(sourceMode: Exclude<ShoppingListSourceMode, 'selected'>) {
+    const config = shoppingListStatusConfig[sourceMode];
+    const batches = await Promise.all(config.statuses.map((status) => fetchOrdersByStatus(status)));
+    const seen = new Set<number>();
+    return batches.flat().filter((order) => {
+      if (seen.has(order.id)) {
+        return false;
+      }
+
+      seen.add(order.id);
+      return true;
+    });
+  }
+
+  async function openStatusBasedShoppingList(sourceMode: Exclude<ShoppingListSourceMode, 'selected'>) {
     const toastId = toast.loading(t('ordersManager.shoppingList.loading'));
+    const config = shoppingListStatusConfig[sourceMode];
 
     try {
-      const items = await fetchOrdersByStatus(status);
+      const title = t(config.titleKey);
 
-      if (items.length === 0) {
-        toast.error(t(status === 2 ? 'ordersManager.shoppingList.emptyConfirmed' : 'ordersManager.shoppingList.emptyDispatched'), { id: toastId });
+      if (await openCachedShoppingListDraft(sourceMode, [], title)) {
+        toast.success(t('ordersManager.shoppingList.sharedDraftLoaded'), { id: toastId });
         return;
       }
 
-      const nextState = await buildShoppingListState(
+      const items = await fetchOrdersForShoppingListSource(sourceMode);
+
+      if (items.length === 0) {
+        toast.error(t(config.emptyKey), { id: toastId });
+        return;
+      }
+
+      const { state: nextState, loadedSharedDraft } = await buildMergedShoppingListState(
         items,
         sourceMode,
-        t(status === 2 ? 'ordersManager.shoppingList.confirmedTitle' : 'ordersManager.shoppingList.dispatchedTitle'),
+        title,
       );
       setShoppingListState(nextState);
+      setShoppingListSaveStatus('idle');
       setShoppingListOpen(true);
-      toast.success(t('ordersManager.shoppingList.ready'), { id: toastId });
+      toast.success(t(loadedSharedDraft ? 'ordersManager.shoppingList.sharedDraftLoaded' : 'ordersManager.shoppingList.ready'), { id: toastId });
     } catch {
       toast.error(t('ordersManager.shoppingList.error'), { id: toastId });
     }
   }
 
   async function openConfirmedShoppingList() {
-    await openStatusBasedShoppingList(2, 'confirmed');
+    await openStatusBasedShoppingList('confirmed');
   }
 
   async function openDispatchedShoppingList() {
-    await openStatusBasedShoppingList(3, 'dispatched');
+    await openStatusBasedShoppingList('dispatched');
+  }
+
+  async function openPostedShoppingList() {
+    await openStatusBasedShoppingList('posted');
+  }
+
+  async function openPostedAndConfirmedShoppingList() {
+    await openStatusBasedShoppingList('posted-and-confirmed');
   }
 
   function openExportPreview(orders: OrderRecord[], mode: 'selected' | 'confirmed', title: string) {
@@ -2631,24 +3024,92 @@ export function OrdersManager({
     }
 
     printWindow.document.open();
-    printWindow.document.write(buildShoppingListPrintHtml(shoppingListState));
+    printWindow.document.write(buildShoppingListPrintHtml(shoppingListState, locale, t('ordersManager.shoppingList.previousGeneration')));
     printWindow.document.close();
   }
 
-  function updateShoppingListState(updater: (state: NonNullable<ShoppingListState>) => NonNullable<ShoppingListState>) {
-    setShoppingListState((current) => (current ? updater(current) : current));
+  function handleShoppingListOpenChange(open: boolean) {
+    if (!open && shoppingListState && shoppingListSaveTimeoutRef.current) {
+      void saveShoppingListDraftNow(shoppingListState).catch(() => {
+        toast.error(t('ordersManager.shoppingList.saveError'));
+      });
+    }
+
+    setShoppingListOpen(open);
+  }
+
+  function updateShoppingListState(
+    updater: (state: NonNullable<ShoppingListState>) => NonNullable<ShoppingListState>,
+    options?: { persist?: boolean },
+  ) {
+    setShoppingListState((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const nextState = updater(current);
+      if (options?.persist) {
+        scheduleShoppingListDraftSave(nextState);
+      }
+      return nextState;
+    });
   }
 
   function updateShoppingListDraftItems(updater: (items: ShoppingListDraftItem[]) => ShoppingListDraftItem[]) {
-    updateShoppingListState((current) => ({ ...current, draftItems: updater(current.draftItems) }));
+    updateShoppingListState((current) => ({ ...current, draftItems: updater(current.draftItems) }), { persist: true });
   }
 
-  function resetShoppingListDraft() {
-    updateShoppingListState((current) => ({
-      ...current,
-      draftItems: current.generatedItems.map((item) => ({ ...item, notes: [...item.notes] })),
-      search: '',
-    }));
+  async function resetShoppingListDraft() {
+    if (!shoppingListState) {
+      return;
+    }
+
+    if (shoppingListSaveTimeoutRef.current) {
+      clearTimeout(shoppingListSaveTimeoutRef.current);
+      shoppingListSaveTimeoutRef.current = null;
+    }
+
+    try {
+      await request<{ ok: true }>(buildShoppingListDraftUrl(shoppingListState.sourceMode, shoppingListState.orderIds), { method: 'DELETE' });
+      setShoppingListState((current) => current ? ({
+        ...current,
+        draftItems: current.generatedItems.map((item) => ({ ...item, notes: [...item.notes], checked: false })),
+        search: '',
+        updatedAt: null,
+        updatedByName: null,
+      }) : current);
+      setShoppingListSaveStatus('idle');
+    } catch {
+      toast.error(t('ordersManager.shoppingList.saveError'));
+      setShoppingListSaveStatus('error');
+    }
+  }
+
+  async function refreshShoppingListDraft() {
+    if (!shoppingListState) {
+      return;
+    }
+
+    const toastId = toast.loading(t('ordersManager.shoppingList.refreshing'));
+
+    try {
+      const orders = shoppingListState.sourceMode === 'selected'
+        ? getCachedOrders(queryClient).filter((order) => shoppingListState.orderIds.includes(order.id))
+        : await fetchOrdersForShoppingListSource(shoppingListState.sourceMode);
+
+      if (orders.length === 0) {
+        toast.error(t('ordersManager.shoppingList.emptySelection'), { id: toastId });
+        return;
+      }
+
+      const { state: nextState } = await buildMergedShoppingListState(orders, shoppingListState.sourceMode, shoppingListState.title);
+      setShoppingListState(nextState);
+      setShoppingListOpen(true);
+      await saveShoppingListDraftNow(nextState);
+      toast.success(t('ordersManager.shoppingList.refreshReady'), { id: toastId });
+    } catch {
+      toast.error(t('ordersManager.shoppingList.error'), { id: toastId });
+    }
   }
 
   function toggleShoppingListItem(draftId: string) {
@@ -2726,6 +3187,7 @@ export function OrdersManager({
           notes: [],
           checked: false,
           isCustom: true,
+          generatedAt: new Date().toISOString(),
         };
 
         return {
@@ -2733,7 +3195,7 @@ export function OrdersManager({
           search: '',
           draftItems: [...current.draftItems, nextItem],
         };
-      });
+      }, { persist: true });
     } catch {
       toast.error(t('ordersManager.shoppingList.addProductError'));
     }
@@ -2902,6 +3364,11 @@ export function OrdersManager({
             <PendingInline active={isFilterPending || ordersQuery.isFetching} label={t('labels.loading')} />
           </div>
 
+          <DailyOrderStatusOverviewPanel
+            overview={overviewQuery.data?.overview}
+            loading={overviewQuery.isFetching}
+          />
+
           <div className="sm:rounded-[1.5rem] sm:border sm:border-border/70 sm:bg-background/90 sm:p-3">
             <div className="flex flex-col gap-3 sm:gap-4">
               <div className="flex flex-col gap-3">
@@ -2934,6 +3401,9 @@ export function OrdersManager({
                     startFilterTransition(() => {
                       setPage(1);
                       setStatusFilter(event.target.value);
+                      if (event.target.value !== '1') {
+                        setNoAnswerFilter('all');
+                      }
                     });
                   }}
                 >
@@ -2941,6 +3411,7 @@ export function OrdersManager({
                   <NativeSelectOption value="0">{t('ordersManager.status.notContacted')}</NativeSelectOption>
                   <NativeSelectOption value="1">{t('ordersManager.status.noAnswer')}</NativeSelectOption>
                   <NativeSelectOption value="2">{t('ordersManager.status.confirmed')}</NativeSelectOption>
+                  <NativeSelectOption value="11">{t('ordersManager.status.posted')}</NativeSelectOption>
                   <NativeSelectOption value="3">{t('ordersManager.status.dispatched')}</NativeSelectOption>
                   <NativeSelectOption value="4">{t('ordersManager.status.completed')}</NativeSelectOption>
                   <NativeSelectOption value="5">{t('ordersManager.status.delayed')}</NativeSelectOption>
@@ -2950,6 +3421,26 @@ export function OrdersManager({
                   <NativeSelectOption value="9">{t('ordersManager.status.failed')}</NativeSelectOption>
                   <NativeSelectOption value="10">{t('ordersManager.status.manualCompleted')}</NativeSelectOption>
                 </NativeSelect>
+                {statusFilter === '1' ? (
+                  <NativeSelect
+                    aria-label={t('ordersManager.filters.noAnswerCountLabel')}
+                    className="w-full sm:w-44"
+                    value={noAnswerFilter}
+                    onChange={(event) => {
+                      startFilterTransition(() => {
+                        setPage(1);
+                        setNoAnswerFilter(event.target.value);
+                      });
+                    }}
+                  >
+                    <NativeSelectOption value="all">{t('ordersManager.filters.allNoAnswerCounts')}</NativeSelectOption>
+                    {[1, 2, 3, 4, 5].map((count) => (
+                      <NativeSelectOption key={count} value={String(count)}>
+                        {t('ordersManager.status.noAnswerWithCount', { count })}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                ) : null}
                 <Badge variant="outline">{t('ordersManager.totalOrders', { count: totalOrders })}</Badge>
                 <Badge variant="outline">{t('labels.bulkSelectionCount', { count: selectedIds.length })}</Badge>
                 <NativeSelect aria-label={t('ordersManager.bulk.statusLabel')} value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value)} className="w-full sm:min-w-44 sm:w-auto">
@@ -2996,9 +3487,9 @@ export function OrdersManager({
                   ]}
                 />
                 <SplitActionButton
-                  label={t('ordersManager.shoppingList.confirmedAction')}
+                  label={t('ordersManager.shoppingList.postedAction')}
                   icon={<ShoppingBasket data-icon="inline-start" />}
-                  onPrimaryClick={() => void openConfirmedShoppingList()}
+                  onPrimaryClick={() => void openPostedShoppingList()}
                   options={[
                     {
                       key: 'shopping-selected',
@@ -3007,9 +3498,19 @@ export function OrdersManager({
                       disabled: selectedOrders.length === 0,
                     },
                     {
+                      key: 'shopping-confirmed',
+                      label: t('ordersManager.shoppingList.confirmedAction'),
+                      onSelect: () => openConfirmedShoppingList(),
+                    },
+                    {
                       key: 'shopping-dispatched',
                       label: t('ordersManager.shoppingList.dispatchedAction'),
                       onSelect: () => openDispatchedShoppingList(),
+                    },
+                    {
+                      key: 'shopping-posted-and-confirmed',
+                      label: t('ordersManager.shoppingList.postedAndConfirmedAction'),
+                      onSelect: () => openPostedAndConfirmedShoppingList(),
                     },
                   ]}
                 />
@@ -3298,6 +3799,12 @@ export function OrdersManager({
                         <span className="text-muted-foreground">{t('ordersManager.amount.subtotal')}</span>
                         <span className="font-medium text-foreground">{formatMoney(order.productSubtotal)}</span>
                       </p>
+                      {(order.promoDiscountAmount ?? 0) > 0 ? (
+                        <p className="mt-2 flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">{t('ordersManager.amount.promoDiscount', { code: order.promoCode ?? '' })}</span>
+                          <span className="font-medium text-emerald-700">-{formatMoney(order.promoDiscountAmount ?? 0)}</span>
+                        </p>
+                      ) : null}
                       <p className="mt-2 flex items-center justify-between gap-3">
                         <span className="text-muted-foreground">{t('ordersManager.amount.deliveryFee')}</span>
                         <span className="font-medium text-foreground">{formatMoney(previewDeliveryFee)}</span>
@@ -3319,6 +3826,7 @@ export function OrdersManager({
                         <NativeSelectOption value="0">{t('ordersManager.status.notContacted')}</NativeSelectOption>
                         <NativeSelectOption value="1">{t('ordersManager.status.noAnswer')}</NativeSelectOption>
                         <NativeSelectOption value="2">{t('ordersManager.status.confirmed')}</NativeSelectOption>
+                        <NativeSelectOption value="11" disabled>{t('ordersManager.status.posted')}</NativeSelectOption>
                         <NativeSelectOption value="3">{t('ordersManager.status.dispatched')}</NativeSelectOption>
                         <NativeSelectOption value="4">{t('ordersManager.status.completed')}</NativeSelectOption>
                         <NativeSelectOption value="5">{t('ordersManager.status.delayed')}</NativeSelectOption>
@@ -3614,6 +4122,12 @@ export function OrdersManager({
                     <span className="text-muted-foreground">{t('ordersManager.amount.subtotal')}</span>
                     <span className="font-medium text-foreground">{formatMoney(order.productSubtotal)}</span>
                   </p>
+                  {(order.promoDiscountAmount ?? 0) > 0 ? (
+                    <p className="mt-2 flex items-center justify-between gap-3 text-sm">
+                      <span className="text-muted-foreground">{t('ordersManager.amount.promoDiscount', { code: order.promoCode ?? '' })}</span>
+                      <span className="font-medium text-emerald-700">-{formatMoney(order.promoDiscountAmount ?? 0)}</span>
+                    </p>
+                  ) : null}
                   <p className="mt-2 flex items-center justify-between gap-3 text-sm">
                     <span className="text-muted-foreground">{t('ordersManager.amount.deliveryFee')}</span>
                     <span className="font-medium text-foreground">{formatMoney(previewDeliveryFee)}</span>
@@ -3664,6 +4178,7 @@ export function OrdersManager({
                     <NativeSelectOption value="0">{t('ordersManager.status.notContacted')}</NativeSelectOption>
                     <NativeSelectOption value="1">{t('ordersManager.status.noAnswer')}</NativeSelectOption>
                     <NativeSelectOption value="2">{t('ordersManager.status.confirmed')}</NativeSelectOption>
+                    <NativeSelectOption value="11" disabled>{t('ordersManager.status.posted')}</NativeSelectOption>
                     <NativeSelectOption value="3">{t('ordersManager.status.dispatched')}</NativeSelectOption>
                     <NativeSelectOption value="4">{t('ordersManager.status.completed')}</NativeSelectOption>
                     <NativeSelectOption value="5">{t('ordersManager.status.delayed')}</NativeSelectOption>
@@ -3751,11 +4266,13 @@ export function OrdersManager({
         state={shoppingListState}
         pending={addShoppingListProductMutation.isPending}
         inventoryPending={applyShoppingListInventoryMutation.isPending}
-        onOpenChange={setShoppingListOpen}
+        saveStatus={shoppingListSaveStatus}
+        onOpenChange={handleShoppingListOpenChange}
         onPrint={openShoppingListPrintView}
         onSearchChange={(value) => updateShoppingListState((current) => ({ ...current, search: value }))}
         onAddProduct={(product) => void addProductToShoppingList(product)}
         onReset={resetShoppingListDraft}
+        onRefresh={refreshShoppingListDraft}
         onToggleItem={toggleShoppingListItem}
         onIncreaseQuantity={increaseShoppingListItemQuantity}
         onDecreaseQuantity={decreaseShoppingListItemQuantity}

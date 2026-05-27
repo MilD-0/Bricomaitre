@@ -41,6 +41,8 @@ const bannerDefaults: AssetBannerInput = {
   title: '',
   titleAr: '',
   imageUrl: '',
+  imageUrlPortrait: '',
+  imageUrlLandscape: '',
   productId: null,
   active: true,
 };
@@ -543,7 +545,8 @@ function BannerDialogForm({
   onSubmit: () => void;
 }) {
   const t = useTranslations('assetsManager');
-  const imageValue = useWatch({ control: form.control, name: 'imageUrl' }) ?? '';
+  const portraitImageValue = useWatch({ control: form.control, name: 'imageUrlPortrait' }) ?? '';
+  const landscapeImageValue = useWatch({ control: form.control, name: 'imageUrlLandscape' }) ?? '';
   const selectedProductId = useWatch({ control: form.control, name: 'productId' }) ?? null;
 
   return (
@@ -591,10 +594,19 @@ function BannerDialogForm({
 
           <ImageUploadField
             uploadUrl="/api/uploads/assets"
-            label={t('bannerImageLabel')}
-            value={imageValue ? [imageValue] : []}
-            onChange={(urls) => form.setValue('imageUrl', urls[0] ?? '', { shouldDirty: true, shouldValidate: true })}
+            label={t('bannerLandscapeImageLabel')}
+            value={landscapeImageValue ? [landscapeImageValue] : []}
+            onChange={(urls) => form.setValue('imageUrlLandscape', urls[0] ?? '', { shouldDirty: true, shouldValidate: true })}
           />
+          {form.formState.errors.imageUrlLandscape ? <FieldError>{form.formState.errors.imageUrlLandscape.message}</FieldError> : null}
+
+          <ImageUploadField
+            uploadUrl="/api/uploads/assets"
+            label={t('bannerPortraitImageLabel')}
+            value={portraitImageValue ? [portraitImageValue] : []}
+            onChange={(urls) => form.setValue('imageUrlPortrait', urls[0] ?? '', { shouldDirty: true, shouldValidate: true })}
+          />
+          {form.formState.errors.imageUrlPortrait ? <FieldError>{form.formState.errors.imageUrlPortrait.message}</FieldError> : null}
           {form.formState.errors.imageUrl ? <FieldError>{form.formState.errors.imageUrl.message}</FieldError> : null}
 
           <DialogFooter>

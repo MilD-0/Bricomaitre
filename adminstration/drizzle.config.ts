@@ -5,6 +5,7 @@ export default defineConfig({
   schema: [
     "./db/schema/actionLogs.ts",
     "./db/schema/adCosts.ts",
+    "./db/schema/adminReporting.ts",
     "./db/schema/analytics.ts",
     "./db/schema/assets.ts",
     "./db/schema/auth.ts",
@@ -18,7 +19,9 @@ export default defineConfig({
     "./db/schema/orders.ts",
     "./db/schema/processedOrders.ts",
     "./db/schema/products.ts",
+    "./db/schema/productPromoCodes.ts",
     "./db/schema/roleDefinitions.ts",
+    "./db/schema/shoppingLists.ts",
     "./db/schema/userAccessGrants.ts",
   ],
   out: "./drizzle/migrations",

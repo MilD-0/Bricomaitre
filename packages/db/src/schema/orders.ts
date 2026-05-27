@@ -11,6 +11,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import { products } from "./products";
 
 export const orders = pgTable(
   "orders",
@@ -34,6 +35,14 @@ export const orders = pgTable(
     delivery: integer("delivery").notNull().default(0),
     delPr: numeric("del_pr", { precision: 10, scale: 2 }),
     price: numeric("price", { precision: 12, scale: 2 }),
+    promoCode: text("promo_code"),
+    promoProductId: bigint("promo_product_id", { mode: "number" }).references(
+      () => products.id,
+      { onDelete: "set null" }
+    ),
+    promoOriginalSubtotal: numeric("promo_original_subtotal", { precision: 12, scale: 2 }),
+    promoDiscountAmount: numeric("promo_discount_amount", { precision: 12, scale: 2 }),
+    promoFinalSubtotal: numeric("promo_final_subtotal", { precision: 12, scale: 2 }),
     note: text("note"),
 
     confirmed: integer("confirmed").notNull().default(0),
@@ -66,6 +75,7 @@ export const orders = pgTable(
     index("idx_orders_journey").on(t.journeyId),
     index("idx_orders_session").on(t.sessionId),
     index("idx_orders_archived_at").on(t.archivedAt),
+    index("idx_orders_cart_products_gin").using("gin", t.cartProducts),
     uniqueIndex("orders_public_token_unique").on(t.publicToken),
     index("idx_orders_active_created_at")
       .on(t.createdAt.desc())

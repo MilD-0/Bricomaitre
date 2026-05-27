@@ -5,6 +5,9 @@ import { z } from 'zod';
 import { getDb } from '../db/client';
 import {
   adCosts,
+  adSpendImportBatches,
+  adminReportingSnapshotRuns,
+  adminReportingSnapshots,
   analyticsEvents,
   analyticsJourneys,
   brands,
@@ -319,6 +322,14 @@ export function buildCartProductLookup<T extends CartProductLookupRow>(rows: T[]
 
 export type StatsDashboardData = {
   filters: Required<StatsFilters>;
+  snapshot?: {
+    generatedAt: string;
+    staleAt: string;
+    isStale: boolean;
+    trigger: string;
+    sourceImportBatchId: string | null;
+    reportThroughDate: string | null;
+  };
   summary: {
     totalOrders: number;
     totalAmountCollected: number;
@@ -458,6 +469,7 @@ export const adCostEntrySchema = z.object({
   conversions: z.number().int().nonnegative().optional(),
   reach: z.number().int().nonnegative().optional(),
   notes: z.string().trim().optional().nullable(),
+  importBatchId: z.string().uuid().optional().nullable(),
 });
 
 export type ManualOrderInput = z.infer<typeof manualOrderInputSchema>;
@@ -497,6 +509,14 @@ const analyticsResultsCountExpression = sql<number>`case
     then (${analyticsEvents.metadata}->>'resultsCount')::int
   else -1
 end`;
+const LEGACY_AD_SPEND_IMPORT_BATCH_ID = '00000000-0000-4000-8000-000000000001';
+const ADMIN_REPORTING_STALE_AFTER_MS = 26 * 60 * 60 * 1000;
+const ADMIN_REPORTING_STANDARD_INPUTS = [
+  { range: '30d' },
+  { range: '90d' },
+  { range: 'year' },
+  { range: 'all' },
+] satisfies StatsFilters[];
 
 type WebsiteSummaryRow = {
   sessions: number;
@@ -808,6 +828,16 @@ function numberOrZero(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function valueFor(row: Record<string, unknown>, names: string[]) {
+  for (const name of names) {
+    if (row[name] !== undefined && row[name] !== null && row[name] !== '') {
+      return row[name];
+    }
+  }
+
+  return undefined;
+}
+
 function buildResolvedFilters(input: StatsFilters): Required<StatsFilters> {
   const today = new Date();
   const endDate = toDateInput(today);
@@ -850,6 +880,60 @@ function buildResolvedFilters(input: StatsFilters): Required<StatsFilters> {
     startDate,
     endDate,
   };
+}
+
+function getSnapshotKey(filters: Required<StatsFilters>) {
+  return `${filters.range}:${filters.startDate || '*'}:${filters.endDate || '*'}`;
+}
+
+function getReportThroughDate(data: StatsDashboardData) {
+  const candidates = [
+    ...data.trends.daily.map((point) => point.bucket),
+    ...data.trends.imports.map((point) => point.bucket),
+  ].filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value));
+
+  return candidates.length > 0 ? candidates.sort().at(-1)! : null;
+}
+
+function withSnapshotMeta(
+  data: StatsDashboardData,
+  row: typeof adminReportingSnapshots.$inferSelect,
+): StatsDashboardData {
+  return {
+    ...data,
+    filters: buildResolvedFilters(statsQuerySchema.parse({
+      range: row.range as StatsFilters['range'],
+      startDate: row.startDate ?? undefined,
+      endDate: row.endDate ?? undefined,
+    })),
+    snapshot: {
+      generatedAt: row.generatedAt.toISOString(),
+      staleAt: row.staleAt.toISOString(),
+      isStale: row.staleAt.getTime() < Date.now(),
+      trigger: row.trigger,
+      sourceImportBatchId: row.sourceImportBatchId,
+      reportThroughDate: row.reportThroughDate,
+    },
+  };
+}
+
+function stripSnapshotMeta(data: StatsDashboardData) {
+  const { snapshot: _snapshot, ...payload } = data;
+  return payload;
+}
+
+async function readLatestStatsSnapshot(input: StatsFilters) {
+  const db = getDb();
+  const filters = buildResolvedFilters(statsQuerySchema.parse(input));
+  const rows = await db
+    .select()
+    .from(adminReportingSnapshots)
+    .where(eq(adminReportingSnapshots.snapshotKey, getSnapshotKey(filters)))
+    .orderBy(desc(adminReportingSnapshots.generatedAt), desc(adminReportingSnapshots.id))
+    .limit(1);
+  const row = rows[0];
+
+  return row ? withSnapshotMeta(row.payload as StatsDashboardData, row) : null;
 }
 
 function buildStatsWhere(filters: Required<StatsFilters>) {
@@ -1093,7 +1177,7 @@ export async function listImportHistoryPage({
   };
 }
 
-export async function getStatsDashboard(input: StatsFilters) {
+export async function computeStatsDashboard(input: StatsFilters) {
   applyServerCache({ stale: 60, revalidate: 300, expire: 1800 }, CACHE_TAGS.stats, CACHE_TAGS.statsHistory);
 
   const db = getDb();
@@ -1645,6 +1729,159 @@ export async function getStatsDashboard(input: StatsFilters) {
   };
 }
 
+export async function getStatsDashboard(input: StatsFilters) {
+  applyServerCache({ stale: 60, revalidate: 300, expire: 1800 }, CACHE_TAGS.stats, CACHE_TAGS.statsHistory);
+
+  const snapshot = await readLatestStatsSnapshot(input);
+  if (snapshot) {
+    return snapshot;
+  }
+
+  const data = await computeStatsDashboard(input);
+  await writeAdminReportingSnapshot({
+    runId: `bootstrap-${crypto.randomUUID()}`,
+    trigger: 'bootstrap-request',
+    data,
+  });
+  return readLatestStatsSnapshot(input) ?? data;
+}
+
+export async function refreshStatsDashboard(input: StatsFilters, trigger = 'manual-refresh') {
+  const data = await computeStatsDashboard(input);
+  await writeAdminReportingSnapshot({
+    runId: `${trigger}-${crypto.randomUUID()}`,
+    trigger,
+    data,
+  });
+
+  return readLatestStatsSnapshot(input) ?? data;
+}
+
+async function writeAdminReportingSnapshot({
+  runId,
+  trigger,
+  sourceImportBatchId = null,
+  data,
+}: {
+  runId: string;
+  trigger: string;
+  sourceImportBatchId?: string | null;
+  data: StatsDashboardData;
+}) {
+  const db = getDb();
+  const filters = buildResolvedFilters(data.filters);
+  const now = new Date();
+  const staleAt = new Date(now.getTime() + ADMIN_REPORTING_STALE_AFTER_MS);
+  await db
+    .insert(adminReportingSnapshots)
+    .values({
+      snapshotKey: getSnapshotKey(filters),
+      runId,
+      trigger,
+      sourceImportBatchId,
+      range: filters.range,
+      startDate: filters.startDate || null,
+      endDate: filters.endDate || null,
+      reportThroughDate: getReportThroughDate(data),
+      payload: stripSnapshotMeta(data),
+      generatedAt: now,
+      staleAt,
+    })
+    .onConflictDoUpdate({
+      target: [adminReportingSnapshots.snapshotKey, adminReportingSnapshots.runId],
+      set: {
+        trigger,
+        sourceImportBatchId,
+        range: filters.range,
+        startDate: filters.startDate || null,
+        endDate: filters.endDate || null,
+        reportThroughDate: getReportThroughDate(data),
+        payload: stripSnapshotMeta(data),
+        generatedAt: now,
+        staleAt,
+      },
+    });
+}
+
+export async function refreshAdminReportingSnapshots({
+  runId = crypto.randomUUID(),
+  trigger,
+  sourceImportBatchId = null,
+}: {
+  runId?: string;
+  trigger: string;
+  sourceImportBatchId?: string | null;
+}) {
+  const db = getDb();
+  const startedAt = new Date();
+
+  await db
+    .insert(adminReportingSnapshotRuns)
+    .values({
+      runId,
+      trigger,
+      sourceImportBatchId,
+      status: 'running',
+      startedAt,
+      updatedAt: startedAt,
+    })
+    .onConflictDoUpdate({
+      target: adminReportingSnapshotRuns.runId,
+      set: {
+        trigger,
+        sourceImportBatchId,
+        status: 'running',
+        startedAt,
+        updatedAt: startedAt,
+        errorMessage: null,
+      },
+    });
+
+  try {
+    let built = 0;
+    for (const input of ADMIN_REPORTING_STANDARD_INPUTS) {
+      const data = await computeStatsDashboard(input);
+      await writeAdminReportingSnapshot({
+        runId,
+        trigger,
+        sourceImportBatchId,
+        data,
+      });
+      built += 1;
+    }
+
+    const completedAt = new Date();
+    await db
+      .update(adminReportingSnapshotRuns)
+      .set({
+        status: 'completed',
+        completedAt,
+        updatedAt: completedAt,
+        errorMessage: null,
+      })
+      .where(eq(adminReportingSnapshotRuns.runId, runId));
+
+    return {
+      runId,
+      trigger,
+      sourceImportBatchId,
+      snapshots: built,
+    };
+  } catch (error) {
+    const failedAt = new Date();
+    await db
+      .update(adminReportingSnapshotRuns)
+      .set({
+        status: 'failed',
+        completedAt: failedAt,
+        updatedAt: failedAt,
+        errorMessage: error instanceof Error ? error.message : 'Unknown reporting refresh failure',
+      })
+      .where(eq(adminReportingSnapshotRuns.runId, runId));
+    throw error;
+  }
+}
+
 export async function importStatsSpreadsheet(buffer: Buffer, fileName: string): Promise<StatsImportResult> {
   const db = getDb();
   const rows = parseSpreadsheet(buffer).filter((row) => row.reference || row.tracking);
@@ -1897,7 +2134,7 @@ export async function importStatsSpreadsheet(buffer: Buffer, fileName: string): 
     }
   });
 
-  const stats = await getStatsDashboard({ range: '90d' });
+  const stats = await computeStatsDashboard({ range: '90d' });
 
   return {
     batchId,
@@ -2159,7 +2396,98 @@ export async function listAdCosts(filters: StatsFilters | Required<StatsFilters>
     conversions: row.conversions ?? 0,
     reach: row.reach ?? 0,
     notes: row.notes,
+    importBatchId: row.importBatchId,
   }));
+}
+
+export async function listAdSpendImportBatches() {
+  const db = getDb();
+  await ensureLegacyAdSpendImportBatch();
+  const rows = await db
+    .select({
+      batchId: adSpendImportBatches.batchId,
+      fileName: adSpendImportBatches.fileName,
+      rate: adSpendImportBatches.rate,
+      totalRows: adSpendImportBatches.totalRows,
+      importedRows: adSpendImportBatches.importedRows,
+      updatedRows: adSpendImportBatches.updatedRows,
+      importedAt: adSpendImportBatches.importedAt,
+      currentRows: sql<number>`coalesce(count(${adCosts.id})::int, 0)`,
+      currentSpend: sql<number>`coalesce(sum(${adCosts.spend})::double precision, 0)`,
+      dateRangeStart: sql<string | null>`min(${adCosts.date})`,
+      dateRangeEnd: sql<string | null>`max(${adCosts.date})`,
+    })
+    .from(adSpendImportBatches)
+    .leftJoin(adCosts, eq(adCosts.importBatchId, adSpendImportBatches.batchId))
+    .groupBy(
+      adSpendImportBatches.id,
+      adSpendImportBatches.batchId,
+      adSpendImportBatches.fileName,
+      adSpendImportBatches.rate,
+      adSpendImportBatches.totalRows,
+      adSpendImportBatches.importedRows,
+      adSpendImportBatches.updatedRows,
+      adSpendImportBatches.importedAt,
+    )
+    .orderBy(desc(adSpendImportBatches.importedAt), desc(adSpendImportBatches.id))
+    .limit(100);
+
+  return rows.map((row) => ({
+    batchId: row.batchId,
+    fileName: row.fileName,
+    rate: numberOrZero(row.rate),
+    totalRows: row.totalRows,
+    importedRows: row.importedRows,
+    updatedRows: row.updatedRows,
+    importedAt: row.importedAt.toISOString(),
+    currentRows: row.currentRows,
+    currentSpend: numberOrZero(row.currentSpend),
+    dateRangeStart: row.dateRangeStart,
+    dateRangeEnd: row.dateRangeEnd,
+  }));
+}
+
+async function ensureLegacyAdSpendImportBatch() {
+  const db = getDb();
+  const legacyImportWhere = and(sql`${adCosts.importBatchId} is null`, sql`${adCosts.notes} like 'Imported at rate %'`);
+  const [{ rows = 0 } = { rows: 0 }] = await db
+    .select({ rows: count() })
+    .from(adCosts)
+    .where(legacyImportWhere);
+
+  if (rows === 0) {
+    return;
+  }
+
+  const now = new Date();
+  await db
+    .insert(adSpendImportBatches)
+    .values({
+      batchId: LEGACY_AD_SPEND_IMPORT_BATCH_ID,
+      fileName: 'Legacy ad spend rows',
+      rate: '1.0000',
+      totalRows: rows,
+      importedRows: rows,
+      updatedRows: 0,
+      importedAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: adSpendImportBatches.batchId,
+      set: {
+        totalRows: rows,
+        importedRows: rows,
+        updatedAt: now,
+      },
+    });
+
+  await db
+    .update(adCosts)
+    .set({
+      importBatchId: LEGACY_AD_SPEND_IMPORT_BATCH_ID,
+      updatedAt: now,
+    })
+    .where(legacyImportWhere);
 }
 
 export async function upsertAdCostEntry(input: AdCostEntryInput, actor?: ActionActor) {
@@ -2196,6 +2524,7 @@ export async function upsertAdCostEntry(input: AdCostEntryInput, actor?: ActionA
             conversions: value.conversions,
             reach: value.reach,
             notes: value.notes ?? null,
+            importBatchId: value.importBatchId ?? null,
             updatedAt: now,
           })
           .where(eq(adCosts.id, existing[0].id))
@@ -2227,6 +2556,7 @@ export async function upsertAdCostEntry(input: AdCostEntryInput, actor?: ActionA
           conversions: value.conversions,
           reach: value.reach,
           notes: value.notes ?? null,
+          importBatchId: value.importBatchId ?? null,
           updatedAt: now,
         })
         .returning({ id: adCosts.id }),
@@ -2260,45 +2590,103 @@ export async function deleteAdCostEntry(id: string, actor?: ActionActor) {
   return deleted[0] ?? null;
 }
 
-export async function importAdCostsSpreadsheet(buffer: Buffer, rate: number, actor?: ActionActor) {
+export async function deleteAdSpendImportBatch(batchId: string) {
+  const db = getDb();
+  const batch = batchId.trim();
+  if (!batch) {
+    return null;
+  }
+
+  const existing = await db
+    .select({
+      batchId: adSpendImportBatches.batchId,
+      fileName: adSpendImportBatches.fileName,
+    })
+    .from(adSpendImportBatches)
+    .where(eq(adSpendImportBatches.batchId, batch))
+    .limit(1);
+
+  if (!existing[0]) {
+    return null;
+  }
+
+  const rows = await db.transaction(async (tx) => {
+    const deletedRows = await tx.delete(adCosts).where(eq(adCosts.importBatchId, batch)).returning({ id: adCosts.id });
+    await tx.delete(adSpendImportBatches).where(eq(adSpendImportBatches.batchId, batch));
+    return deletedRows.length;
+  });
+
+  return {
+    ...existing[0],
+    deletedRows: rows,
+  };
+}
+
+export function buildAdCostEntriesFromSpreadsheetRow(row: Record<string, unknown>, rate: number) {
+  const startDate = parseDate(valueFor(row, ['Reporting starts', 'Start Date', 'Date', 'date']));
+  const endDate = parseDate(valueFor(row, ['Reporting ends', 'End Date', 'Date', 'date'])) ?? startDate;
+  const spendRaw = valueFor(row, ['Amount spent (EUR)', 'Amount spent', 'spend']);
+
+  if (!startDate || !endDate || spendRaw == null) {
+    return [];
+  }
+
+  const spend = numberOrZero(spendRaw) * rate;
+  const days = Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000) + 1);
+  const dailySpend = spend / days;
+
+  const entries: AdCostEntryInput[] = [];
+  for (let index = 0; index < days; index += 1) {
+    const date = new Date(startDate);
+    date.setDate(startDate.getDate() + index);
+    entries.push({
+      date: toDateInput(date),
+      platform: normalizeText(valueFor(row, ['platform', 'Platform'])) || 'facebook',
+      campaignName: normalizeText(valueFor(row, ['Campaign name', 'Campaign Name', 'Campaign'])) || null,
+      campaignId: normalizeText(valueFor(row, ['Campaign ID', 'campaign_id'])) || null,
+      spend: round(dailySpend),
+      impressions: Math.round(numberOrZero(valueFor(row, ['Impressions', 'impressions'])) / days) || undefined,
+      clicks: Math.round(numberOrZero(valueFor(row, ['Clicks (all)', 'Link clicks', 'Clicks', 'clicks'])) / days) || undefined,
+      conversions: Math.round(numberOrZero(valueFor(row, ['Results', 'results', 'Conversions', 'Website checkouts initiated', 'Website purchases'])) / days) || undefined,
+      reach: Math.round(numberOrZero(valueFor(row, ['Reach', 'reach'])) / days) || undefined,
+      notes: `Imported at rate ${rate}`,
+    });
+  }
+
+  return entries;
+}
+
+export async function importAdCostsSpreadsheet(buffer: Buffer, rate: number, fileName: string, actor?: ActionActor) {
+  const db = getDb();
   const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = sheet ? XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet) : [];
+  const batchId = crypto.randomUUID();
+  const now = new Date();
+
+  await db.insert(adSpendImportBatches).values({
+    batchId,
+    fileName,
+    rate: rate.toFixed(4),
+    totalRows: rows.length,
+    uploadedByEmail: actor?.email ?? null,
+    uploadedByName: actor?.name ?? null,
+    updatedAt: now,
+  });
 
   let imported = 0;
   let updated = 0;
   let skipped = 0;
 
   for (const row of rows) {
-    const startDate = parseDate(row['Reporting starts'] ?? row['Start Date'] ?? row['Date'] ?? row.date);
-    const endDate = parseDate(row['Reporting ends'] ?? row['End Date'] ?? row['Date'] ?? row.date) ?? startDate;
-    const spendRaw = row['Amount spent (EUR)'] ?? row['Amount spent'] ?? row.spend;
-
-    if (!startDate || !endDate || spendRaw == null) {
+    const entries = buildAdCostEntriesFromSpreadsheetRow(row, rate);
+    if (entries.length === 0) {
       skipped += 1;
       continue;
     }
 
-    const spend = numberOrZero(spendRaw) * rate;
-    const days = Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000) + 1);
-    const dailySpend = spend / days;
-
-    for (let index = 0; index < days; index += 1) {
-      const date = new Date(startDate);
-      date.setDate(startDate.getDate() + index);
-      const entry = await upsertAdCostEntry({
-        date: toDateInput(date),
-        platform: normalizeText(row.platform ?? row.Platform) || 'facebook',
-        campaignName: normalizeText(row['Campaign name'] ?? row['Campaign Name'] ?? row.Campaign) || null,
-        campaignId: normalizeText(row['Campaign ID'] ?? row.campaign_id) || null,
-        spend: round(dailySpend),
-        impressions: Math.round(numberOrZero(row.Impressions ?? row.impressions) / days) || undefined,
-        clicks: Math.round(numberOrZero(row['Clicks (all)'] ?? row.Clicks ?? row.clicks) / days) || undefined,
-        conversions: Math.round(numberOrZero(row.Results ?? row.results ?? row.Conversions) / days) || undefined,
-        reach: Math.round(numberOrZero(row.Reach ?? row.reach) / days) || undefined,
-        notes: `Imported at rate ${rate}`,
-      }, actor);
-
+    for (const costEntry of entries) {
+      const entry = await upsertAdCostEntry({ ...costEntry, importBatchId: batchId }, actor);
       if (entry.created) {
         imported += 1;
       } else {
@@ -2307,7 +2695,16 @@ export async function importAdCostsSpreadsheet(buffer: Buffer, rate: number, act
     }
   }
 
-  return { imported, updated, skipped, total: rows.length };
+  await db
+    .update(adSpendImportBatches)
+    .set({
+      importedRows: imported,
+      updatedRows: updated,
+      updatedAt: new Date(),
+    })
+    .where(eq(adSpendImportBatches.batchId, batchId));
+
+  return { batchId, fileName, imported, updated, skipped, total: rows.length };
 }
 
 export function formatCompactNumber(value: number) {

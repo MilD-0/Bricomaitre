@@ -24,6 +24,10 @@ export type CompletedOrderSnapshot = {
   deliveryFee: number;
   productSubtotal: number;
   totalAmount: number;
+  promoCode?: string | null;
+  promoOriginalSubtotal?: number | null;
+  promoDiscountAmount?: number;
+  promoFinalSubtotal?: number | null;
   state: string | null;
   city: string | null;
   homeAddress: string | null;

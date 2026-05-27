@@ -137,6 +137,7 @@ describe('app/storefront/orders/route', () => {
         city: 'Oran',
         homeAddress: 'Street 1',
         note: 'Call first',
+        promoCode: 'Spring-50',
       },
     } as never);
 
@@ -159,6 +160,7 @@ describe('app/storefront/orders/route', () => {
       expect.objectContaining({
         phoneNumber1: '0550111111',
         delivery: 0,
+        promoCode: 'Spring-50',
       }),
       expect.objectContaining({
         reportTiming: expect.any(Function),

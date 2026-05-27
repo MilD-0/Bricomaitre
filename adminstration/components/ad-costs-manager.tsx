@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, Eye, MousePointer, Target, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, FileSpreadsheet, MousePointer, Target, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -12,6 +12,7 @@ import { Button } from './ui/button';
 import { FileUploadField } from './file-upload-field';
 import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './ui/empty';
 
 type AdCostRow = {
   id: string;
@@ -28,6 +29,18 @@ type BackgroundJob = {
   status: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed';
   errorMessage: string | null;
   resultSummary?: Record<string, unknown> | null;
+};
+type AdSpendImportBatch = {
+  batchId: string;
+  fileName: string;
+  importedAt: string;
+  totalRows: number;
+  importedRows: number;
+  updatedRows: number;
+  currentRows: number;
+  currentSpend: number;
+  dateRangeStart: string | null;
+  dateRangeEnd: string | null;
 };
 
 function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -89,6 +102,10 @@ export function AdCostsManager({
     },
     refetchIntervalInBackground: true,
     staleTime: 0,
+  });
+  const batchesQuery = useQuery({
+    queryKey: ['ad-spend-import-batches'],
+    queryFn: () => request<{ data: AdSpendImportBatch[] }>('/api/stats/ad-costs?batches=true'),
   });
 
   const grouped = useMemo(() => {
@@ -193,6 +210,19 @@ export function AdCostsManager({
     },
   });
 
+  const deleteBatchMutation = useMutation({
+    mutationFn: (batchId: string) => request(`/api/stats/ad-costs?batchId=${encodeURIComponent(batchId)}`, { method: 'DELETE' }),
+    onSuccess: async () => {
+      toast.success(t('notifications.deleteBatchSuccess'));
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['ad-costs'] }),
+        queryClient.invalidateQueries({ queryKey: ['ad-spend-import-batches'] }),
+        queryClient.invalidateQueries({ queryKey: ['stats-dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['action-history'] }),
+      ]);
+    },
+  });
+
   const toggleCampaign = (key: string) => {
     setExpandedCampaigns((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]));
   };
@@ -201,6 +231,9 @@ export function AdCostsManager({
 
   const formatDate = (value: string) =>
     new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(`${value}T00:00:00Z`));
+
+  const formatDateTime = (value: string) =>
+    new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 
   const handleImportStarted = () => {
     toast.loading(t('notifications.importLoading'));
@@ -233,6 +266,7 @@ export function AdCostsManager({
       toast.success(t('notifications.importSuccess'));
       queueMicrotask(() => setUploadedFiles([]));
       void queryClient.invalidateQueries({ queryKey: ['ad-costs'] });
+      void queryClient.invalidateQueries({ queryKey: ['ad-spend-import-batches'] });
       void queryClient.invalidateQueries({ queryKey: ['stats-dashboard'] });
       void queryClient.invalidateQueries({ queryKey: ['action-history'] });
     } else if (job.status === 'failed') {
@@ -294,6 +328,66 @@ export function AdCostsManager({
           </div>
         </div>
       ) : null}
+
+      <div className="rounded-[1.6rem] border border-border/70 bg-card p-4">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t('batches.eyebrow')}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{t('batches.description')}</p>
+          </div>
+        </div>
+        <div className="grid gap-3">
+          {(batchesQuery.data?.data ?? []).length > 0 ? (
+            batchesQuery.data!.data.map((batch) => (
+              <div key={batch.batchId} className="rounded-[1.35rem] border border-border/70 bg-muted/20 p-3.5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-foreground">{batch.fileName}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {t('batches.meta', {
+                        importedAt: formatDateTime(batch.importedAt),
+                        currentRows: String(batch.currentRows),
+                        totalRows: String(batch.totalRows),
+                      })}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {batch.dateRangeStart && batch.dateRangeEnd
+                        ? t('batches.range', {
+                            start: formatDate(batch.dateRangeStart),
+                            end: formatDate(batch.dateRangeEnd),
+                          })
+                        : t('batches.noRows')}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <p className="text-sm font-semibold">{formatNumber(batch.currentSpend)}</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={deleteBatchMutation.isPending}
+                      onClick={() => deleteBatchMutation.mutate(batch.batchId)}
+                    >
+                      <Trash2 data-icon="inline-start" />
+                      {t('batches.delete')}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <Empty className="border-none">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <FileSpreadsheet />
+                </EmptyMedia>
+                <EmptyTitle>{t('batches.emptyTitle')}</EmptyTitle>
+                <EmptyDescription>{t('batches.emptyDescription')}</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          )}
+        </div>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-[1.35rem] border border-border/70 bg-linear-to-br from-card via-card to-muted/25 p-3.5">

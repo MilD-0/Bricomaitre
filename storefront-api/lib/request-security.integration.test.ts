@@ -35,7 +35,7 @@ describe('request-security order velocity limit', () => {
     getRedisMock.mockReturnValue(redis);
   });
 
-  it('allows two order attempts per minute for the selected identity', async () => {
+  it('allows two order attempts per hour for the selected identity', async () => {
     redis.ttl.mockResolvedValue(-2);
     applyRateLimitMock.mockResolvedValue({
       ok: true,
@@ -57,7 +57,7 @@ describe('request-security order velocity limit', () => {
       scope: 'storefront-order-velocity',
       key: 'journey:journey-1',
       limit: 2,
-      windowSeconds: 60,
+      windowSeconds: 3600,
     });
     expect(redis.incr).not.toHaveBeenCalled();
   });

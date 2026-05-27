@@ -79,6 +79,7 @@ function buildDuplicateSignatureValue({
   delivery,
   total,
   cartProducts,
+  promoCode,
 }) {
   return JSON.stringify({
     phoneNumber1,
@@ -86,10 +87,11 @@ function buildDuplicateSignatureValue({
     delivery,
     total: Number(total.toFixed(2)),
     cartProducts: [...cartProducts].sort(),
+    promoCode: promoCode ?? null,
   });
 }
 
-function toSnapshotItems({ cart, cartSummary, singleProduct, quantity }) {
+function toSnapshotItems({ cart, cartSummary, singleProduct, quantity, promo }) {
   if (!cart) {
     if (!singleProduct) {
       return [];
@@ -100,9 +102,9 @@ function toSnapshotItems({ cart, cartSummary, singleProduct, quantity }) {
         rawValue: String(singleProduct._id),
         productId: typeof singleProduct.id === "number" ? singleProduct.id : null,
         title: typeof singleProduct.title === "string" ? singleProduct.title : "",
-        unitPrice: typeof singleProduct.price === "number" ? singleProduct.price : Number(singleProduct.price ?? 0),
+        unitPrice: promo?.promoPrice ?? (typeof singleProduct.price === "number" ? singleProduct.price : Number(singleProduct.price ?? 0)),
         quantity,
-        lineTotal: (typeof singleProduct.price === "number" ? singleProduct.price : Number(singleProduct.price ?? 0)) * quantity,
+        lineTotal: (promo?.promoPrice ?? (typeof singleProduct.price === "number" ? singleProduct.price : Number(singleProduct.price ?? 0))) * quantity,
         thumbnailUrl: Array.isArray(singleProduct.images) ? singleProduct.images[0] ?? null : null,
         missing: false,
       },
@@ -123,7 +125,7 @@ function toSnapshotItems({ cart, cartSummary, singleProduct, quantity }) {
     }));
 }
 
-export default function OrderForm({ prod, cart, order, showMobileStickySubmit = true }) {
+export default function OrderForm({ prod, cart, order, promoCode = null, showMobileStickySubmit = true }) {
   const t = useTranslations("checkout");
   const router = useRouter();
   const pathname = usePathname() || "none";
@@ -139,6 +141,7 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [singleProduct, setSingleProduct] = useState(null);
+  const [activePromo, setActivePromo] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [deliveryCatalog, setDeliveryCatalog] = useState(null);
   const [pendingVerification, setPendingVerification] = useState(null);
@@ -282,6 +285,39 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
     loadSingleProduct();
   }, [prod]);
 
+  useEffect(() => {
+    if (cart || !singleProduct?.id || !promoCode) {
+      setActivePromo(null);
+      return;
+    }
+
+    let cancelled = false;
+    const validatePromo = async () => {
+      try {
+        const response = await fetch(`/api/storefront/products/${singleProduct.id}/promo?code=${encodeURIComponent(promoCode)}`);
+        if (!response.ok) {
+          throw new Error("Failed to validate promo");
+        }
+
+        const data = await response.json();
+        if (!cancelled) {
+          setActivePromo(data?.ok ? data.promo : null);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setActivePromo(null);
+        }
+      }
+    };
+
+    validatePromo();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cart, singleProduct?.id, promoCode]);
+
   const availableCommunes = getCommunesForWilaya(deliveryCatalog, selectedWilayaId);
   const selectedCommune =
     availableCommunes.find((commune) => commune.name === city) ?? null;
@@ -317,7 +353,12 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
   const deliveryFee = hasFreeShippingProduct
     ? 0
     : findDeliveryFee(deliveryCatalog, selectedWilayaId, delivery);
-  const singleProductPrice = singleProduct?.price ?? 0;
+  const singleProductPrice = activePromo?.promoPrice ?? singleProduct?.price ?? 0;
+  const promoDiscountAmount = !cart && activePromo
+    ? Math.max(0, (activePromo.originalPrice - activePromo.promoPrice) * quantity)
+    : 0;
+  const promoOriginalSubtotal = !cart && activePromo ? activePromo.originalPrice * quantity : null;
+  const appliedPromoCode = !cart ? (activePromo?.code ?? promoCode ?? null) : null;
   const subtotal = cart ? cartSummary.subtotal : singleProductPrice * quantity;
   const totalAmount = subtotal + deliveryFee;
   const paidSession = isPaidTrafficSession();
@@ -570,6 +611,10 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
           deliveryFee,
           productSubtotal: subtotal,
           totalAmount,
+          promoCode: currentPendingSubmission.payload.promoCode ?? null,
+          promoOriginalSubtotal,
+          promoDiscountAmount,
+          promoFinalSubtotal: activePromo ? subtotal : null,
           state: selectedWilayaName || null,
           city: currentPendingSubmission.payload.city,
           homeAddress: currentPendingSubmission.payload.homeAddress,
@@ -578,6 +623,7 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
             cartSummary,
             singleProduct,
             quantity,
+            promo: activePromo,
           }),
         },
       });
@@ -749,6 +795,7 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
       delivery,
       total: totalAmount,
       cartProducts: effectiveCartProducts,
+      promoCode: appliedPromoCode,
     });
 
     const duplicateSignature = {
@@ -778,6 +825,8 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
         delivery,
         hasAddress: normalizeText(homeAddress) != null,
         itemCount: effectiveCartProducts.length,
+        promoCode: appliedPromoCode,
+        promoDiscountAmount,
       },
     }).catch((error) => console.error(error));
 
@@ -819,6 +868,7 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
       cartSummary,
       singleProduct,
       quantity,
+      promo: activePromo,
     });
     const storefrontPayload = {
       firstName: normalizedFirstName,
@@ -832,6 +882,7 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
       city: normalizedCity,
       homeAddress: normalizedAddress,
       note: null,
+      promoCode: appliedPromoCode,
       visitId: getVisitIdFromCookie(),
       journeyId: getOrCreateJourneyId(),
       sessionId: getOrCreateSessionId(),
@@ -878,6 +929,10 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
             deliveryFee,
             productSubtotal: subtotal,
             totalAmount,
+            promoCode: activePromo?.code ?? null,
+            promoOriginalSubtotal,
+            promoDiscountAmount,
+            promoFinalSubtotal: activePromo ? subtotal : null,
             state: selectedWilayaName || null,
             city: normalizedCity,
             homeAddress: normalizedAddress,
@@ -931,6 +986,10 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
             deliveryFee,
             productSubtotal: subtotal,
             totalAmount,
+            promoCode: activePromo?.code ?? null,
+            promoOriginalSubtotal,
+            promoDiscountAmount,
+            promoFinalSubtotal: activePromo ? subtotal : null,
             state: selectedWilayaName || null,
             city: normalizedCity,
             homeAddress: normalizedAddress,
@@ -1372,6 +1431,15 @@ export default function OrderForm({ prod, cart, order, showMobileStickySubmit = 
                   {t("da")}
                 </span>
               </div>
+              {promoDiscountAmount > 0 ? (
+                <div className="sf-metric">
+                  <span className="font-semibold text-slate-700">Promo {activePromo?.code}</span>
+                  <span className="font-bold text-emerald-700">
+                    -{promoDiscountAmount}
+                    {t("da")}
+                  </span>
+                </div>
+              ) : null}
 
               {deliveryAvailable ? (
                 <>

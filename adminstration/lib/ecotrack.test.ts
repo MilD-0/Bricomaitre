@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ecotrackOrderStates } from '../db/schema';
+import { ecotrackOrderStates, orderStatusHistory } from '../db/schema';
 import {
   buildEcotrackOrderPayload,
   classifyOrdersForEcotrackPosting,
@@ -509,6 +509,7 @@ describe('lib/ecotrack', () => {
 
     const updateSetMock = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
     const upsertValuesMock = vi.fn().mockReturnValue({ onConflictDoUpdate: vi.fn().mockResolvedValue(undefined) });
+    const statusHistoryValuesMock = vi.fn().mockResolvedValue(undefined);
     const actionLogValuesMock = vi.fn().mockResolvedValue(undefined);
     const db = {
       transaction: async (callback: (tx: Record<string, unknown>) => Promise<void>) => callback({
@@ -520,9 +521,17 @@ describe('lib/ecotrack', () => {
           }),
         }),
         update: vi.fn().mockReturnValue({ set: updateSetMock }),
-        insert: vi.fn((table: unknown) => table === ecotrackOrderStates
-          ? { values: upsertValuesMock }
-          : { values: actionLogValuesMock }),
+        insert: vi.fn((table: unknown) => {
+          if (table === ecotrackOrderStates) {
+            return { values: upsertValuesMock };
+          }
+
+          if (table === orderStatusHistory) {
+            return { values: statusHistoryValuesMock };
+          }
+
+          return { values: actionLogValuesMock };
+        }),
       }),
     } as never;
 
@@ -540,5 +549,17 @@ describe('lib/ecotrack', () => {
     expect(summary.results).toEqual([
       expect.objectContaining({ orderId: 11, status: 'created', tracking: 'TRK-11' }),
     ]);
+    expect(updateSetMock).toHaveBeenCalledWith(expect.objectContaining({
+      confirmed: 11,
+      noAnswerCount: 0,
+      ecotrackTrackingNumber: 'TRK-11',
+    }));
+    expect(statusHistoryValuesMock).toHaveBeenCalledWith(expect.objectContaining({
+      orderId: 11,
+      status: 11,
+      noAnswerCount: 0,
+      changedBy: 'ops@example.com',
+      changedByName: 'Ops',
+    }));
   });
 });

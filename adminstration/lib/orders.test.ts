@@ -120,6 +120,7 @@ describe('lib/orders', () => {
     expect(coerceOrderStatus('returned')).toBe(8);
     expect(coerceOrderStatus('failed')).toBe(9);
     expect(coerceOrderStatus('manual completed')).toBe(10);
+    expect(coerceOrderStatus('posted')).toBe(11);
     expect(coerceDeliveryType('home')).toBe(0);
     expect(coerceDeliveryType('office')).toBe(1);
     expect(coerceDeliveryType(1)).toBe(1);
@@ -131,12 +132,14 @@ describe('lib/orders', () => {
     expect(getOrderStatusLabelKey(8)).toBe('returned');
     expect(getOrderStatusLabelKey(9)).toBe('failed');
     expect(getOrderStatusLabelKey(10)).toBe('manualCompleted');
+    expect(getOrderStatusLabelKey(11)).toBe('posted');
     expect(getDeliveryTypeLabelKey(1)).toBe('office');
     expect(isConfirmedLifecycleStatus(5)).toBe(true);
     expect(isConfirmedLifecycleStatus(7)).toBe(true);
     expect(isConfirmedLifecycleStatus(8)).toBe(true);
     expect(isConfirmedLifecycleStatus(9)).toBe(true);
     expect(isConfirmedLifecycleStatus(10)).toBe(true);
+    expect(isConfirmedLifecycleStatus(11)).toBe(true);
     expect(isConfirmedLifecycleStatus(6)).toBe(false);
   });
 
@@ -145,12 +148,14 @@ describe('lib/orders', () => {
       page: '3',
       limit: '25',
       search: 'ada',
+      noAnswerCount: '2',
       sortKey: 'fullName',
       sortDirection: 'asc',
     })).toEqual({
       page: 3,
       limit: 25,
       search: 'ada',
+      noAnswerCount: 2,
       sort: [],
       sortKey: 'fullName',
       sortDirection: 'asc',

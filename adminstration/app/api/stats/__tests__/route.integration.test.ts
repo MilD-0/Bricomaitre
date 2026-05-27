@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DELETE, GET, PATCH, POST } from '../route';
+import { DELETE, GET, PATCH, POST, PUT } from '../route';
 
 const {
   hasDbMock,
@@ -11,6 +11,7 @@ const {
   getLatestExportJobMock,
   startStatsImportJobMock,
   listImportHistoryMock,
+  refreshStatsDashboardMock,
   deleteImportBatchMock,
   dismissUnmatchedReferenceMock,
 } = vi.hoisted(() => ({
@@ -21,6 +22,7 @@ const {
   getLatestExportJobMock: vi.fn(),
   startStatsImportJobMock: vi.fn(),
   listImportHistoryMock: vi.fn(),
+  refreshStatsDashboardMock: vi.fn(),
   deleteImportBatchMock: vi.fn(),
   dismissUnmatchedReferenceMock: vi.fn(),
 }));
@@ -53,6 +55,7 @@ vi.mock('../../../../lib/stats', async () => {
     ...actual,
     getStatsDashboard: getStatsDashboardMock,
     listImportHistoryPage: listImportHistoryMock,
+    refreshStatsDashboard: refreshStatsDashboardMock,
     deleteImportBatch: deleteImportBatchMock,
     dismissUnmatchedReference: dismissUnmatchedReferenceMock,
   };
@@ -75,6 +78,7 @@ describe('app/api/stats/route', () => {
     getLatestExportJobMock.mockReset();
     startStatsImportJobMock.mockReset();
     listImportHistoryMock.mockReset();
+    refreshStatsDashboardMock.mockReset();
     deleteImportBatchMock.mockReset();
     dismissUnmatchedReferenceMock.mockReset();
     revalidateServerTagsMock.mockReset();
@@ -168,6 +172,26 @@ describe('app/api/stats/route', () => {
     await expect(response.json()).resolves.toEqual({
       job: { id: 'job-1', status: 'queued' },
     });
+  });
+
+  it('refreshes a stats snapshot for the requested filters', async () => {
+    refreshStatsDashboardMock.mockResolvedValue({ summary: { totalOrders: 8 } });
+
+    const request = new NextRequest('http://localhost/api/stats', {
+      method: 'PUT',
+      body: JSON.stringify({ range: 'custom', startDate: '2026-05-01', endDate: '2026-05-27' }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    const response = await PUT(request);
+
+    expect(response.status).toBe(200);
+    expect(refreshStatsDashboardMock).toHaveBeenCalledWith(
+      { range: 'custom', startDate: '2026-05-01', endDate: '2026-05-27' },
+      'manual-refresh',
+    );
+    expect(revalidateServerTagsMock).toHaveBeenCalledWith('stats', 'stats-history');
+    await expect(response.json()).resolves.toEqual({ data: { summary: { totalOrders: 8 } } });
   });
 
   it('deletes an import batch', async () => {

@@ -21,6 +21,7 @@ import { coerceOrderStatus, parseNumericAmount, type DeliveryType, type OrderRec
 type Database = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 const ECOTRACK_SYNC_ACTOR_NAME = 'ECOTRACK sync';
+const ORDER_STATUS_POSTED = 11;
 
 function serializeActionValue(value: unknown): unknown {
   if (value instanceof Date) {
@@ -1017,6 +1018,8 @@ export async function persistEcotrackPostedOrder(
     await tx
       .update(orders)
       .set({
+        confirmed: existingShipment ? input.row.confirmed : ORDER_STATUS_POSTED,
+        noAnswerCount: 0,
         ecotrackReference: String(input.row.id),
         ecotrackTrackingNumber: createResult.tracking,
         ecotrackStatus: 'prete_a_expedier',
@@ -1033,6 +1036,17 @@ export async function persistEcotrackPostedOrder(
         updatedAt: now,
       })
       .where(eq(orders.id, input.row.id));
+
+    if (!existingShipment) {
+      await tx.insert(orderStatusHistory).values({
+        orderId: input.row.id,
+        status: ORDER_STATUS_POSTED,
+        noAnswerCount: 0,
+        changedBy: actor.email ?? null,
+        changedByName: actor.name ?? null,
+        changedAt: now,
+      });
+    }
 
     await tx.insert(ecotrackOrderStates).values({
       orderId: input.row.id,
@@ -1066,6 +1080,8 @@ export async function persistEcotrackPostedOrder(
 
     const afterOrderState = {
       ...beforeOrderState,
+      confirmed: existingShipment ? input.row.confirmed : ORDER_STATUS_POSTED,
+      noAnswerCount: 0,
       ecotrackReference: String(input.row.id),
       ecotrackTrackingNumber: createResult.tracking,
       ecotrackStatus: 'prete_a_expedier',

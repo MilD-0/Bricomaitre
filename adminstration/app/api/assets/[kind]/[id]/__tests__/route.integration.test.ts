@@ -81,6 +81,8 @@ describe('app/api/assets/[kind]/[id]/route', () => {
         title: 'Updated banner',
         titleAr: 'بنر محدث',
         imageUrl: 'https://cdn.example.com/updated.jpg',
+        imageUrlPortrait: 'https://cdn.example.com/updated-portrait.jpg',
+        imageUrlLandscape: 'https://cdn.example.com/updated.jpg',
         productId: 4,
         active: false,
       },

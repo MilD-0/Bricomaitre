@@ -9,10 +9,12 @@ import {
   getStatsDashboard,
   IMPORT_HISTORY_PAGE_SIZE,
   listImportHistoryPage,
+  refreshStatsDashboard,
   statsQuerySchema,
 } from '../../../lib/stats';
 import { requireOpsAccess } from '../../../lib/rbac';
 import { CACHE_TAGS, revalidateServerTags } from '../../../lib/server-cache';
+import { triggerAdminReportingRefresh } from '../../../lib/reporting-refresh-trigger';
 
 function getRequesterKey(email: string | null | undefined) {
   return email?.trim() || 'ops';
@@ -93,6 +95,34 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ job: result.job }, { status: result.kind === 'started' ? 201 : 200 });
 }
 
+export async function PUT(request: NextRequest) {
+  const denied = await requireOpsAccess();
+
+  if (denied) {
+    return denied;
+  }
+
+  if (!hasDb()) {
+    return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
+  }
+
+  const body = await request.json().catch(() => ({}));
+  const parsed = statsQuerySchema.safeParse({
+    range: body?.range ?? undefined,
+    startDate: body?.startDate ?? undefined,
+    endDate: body?.endDate ?? undefined,
+  });
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const data = await refreshStatsDashboard(parsed.data, 'manual-refresh');
+  revalidateServerTags(CACHE_TAGS.stats, CACHE_TAGS.statsHistory);
+
+  return NextResponse.json({ data });
+}
+
 export async function DELETE(request: NextRequest) {
   const denied = await requireOpsAccess();
 
@@ -116,6 +146,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Import batch not found' }, { status: 404 });
   }
 
+  await triggerAdminReportingRefresh('stats-import-delete');
   revalidateServerTags(CACHE_TAGS.stats, CACHE_TAGS.statsHistory);
 
   return NextResponse.json({ data: result });
