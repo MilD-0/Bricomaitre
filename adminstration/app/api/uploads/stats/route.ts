@@ -42,33 +42,37 @@ export async function POST(request: NextRequest) {
   }
 
   const formData = await request.formData();
-  const file = formData.getAll('files').find((entry): entry is File => entry instanceof File);
+  const files = formData.getAll('files').filter((entry): entry is File => entry instanceof File);
 
-  if (!file) {
+  if (files.length === 0) {
     return NextResponse.json({ error: 'No files uploaded' }, { status: 400, headers: withRequestIdHeaders(requestId) });
   }
 
-  if (!/\.(xlsx|xls)$/i.test(file.name)) {
+  const unsupportedFile = files.find((file) => !/\.(xlsx|xls)$/i.test(file.name));
+  if (unsupportedFile) {
     return NextResponse.json({ error: 'Unsupported file type' }, { status: 400, headers: withRequestIdHeaders(requestId) });
   }
 
   const session = await auth();
   try {
-    const startResult = await startStatsImportJob(getRequesterKey(session?.user?.email), {
+    const importFiles = await Promise.all(files.map(async (file) => ({
       fileName: file.name,
       fileBuffer: Buffer.from(await file.arrayBuffer()),
+    })));
+    const startResult = await startStatsImportJob(getRequesterKey(session?.user?.email), {
+      files: importFiles,
     }, requestId);
 
     return NextResponse.json({
-      files: [
+      files: files.map((file, index) => (
         {
           fileName: file.name,
           fileUrl: `/api/uploads/stats?jobId=${startResult.job.id}`,
-          fileKey: startResult.job.id,
+          fileKey: `${startResult.job.id}:${index}`,
           contentType: file.type || 'application/octet-stream',
           size: file.size,
-        },
-      ],
+        }
+      )),
       job: startResult.job,
     }, { headers: withRequestIdHeaders(requestId) });
   } catch (error) {
@@ -78,9 +82,11 @@ export async function POST(request: NextRequest) {
       route: '/api/uploads/stats',
       session,
       context: {
-        fileName: file.name,
-        contentType: file.type || null,
-        size: file.size,
+        files: files.map((file) => ({
+          fileName: file.name,
+          contentType: file.type || null,
+          size: file.size,
+        })),
       },
     });
     throw error;

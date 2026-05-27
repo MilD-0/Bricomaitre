@@ -3,12 +3,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET, POST } from '../route';
 
-const { hasDbMock, requireOpsAccessMock, createManualOrderMock, listManualOrdersMock, authMock } = vi.hoisted(() => ({
+const {
+  hasDbMock,
+  requireOpsAccessMock,
+  createManualOrderMock,
+  listManualOrdersMock,
+  authMock,
+  triggerAdminReportingRefreshMock,
+} = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   requireOpsAccessMock: vi.fn(),
   createManualOrderMock: vi.fn(),
   listManualOrdersMock: vi.fn(),
   authMock: vi.fn(),
+  triggerAdminReportingRefreshMock: vi.fn(),
 }));
 
 vi.mock('../../../../../db/client', () => ({
@@ -21,6 +29,10 @@ vi.mock('../../../../../lib/rbac', () => ({
 
 vi.mock('../../../../../lib/auth', () => ({
   auth: authMock,
+}));
+
+vi.mock('../../../../../lib/reporting-refresh-trigger', () => ({
+  triggerAdminReportingRefresh: triggerAdminReportingRefreshMock,
 }));
 
 vi.mock('../../../../../lib/stats', async () => {
@@ -40,10 +52,12 @@ describe('app/api/stats/manual-order/route', () => {
     createManualOrderMock.mockReset();
     listManualOrdersMock.mockReset();
     authMock.mockReset();
+    triggerAdminReportingRefreshMock.mockReset();
 
     hasDbMock.mockReturnValue(true);
     requireOpsAccessMock.mockResolvedValue(null);
     authMock.mockResolvedValue({ user: { email: 'ops@example.com', name: 'Ops' } });
+    triggerAdminReportingRefreshMock.mockResolvedValue(null);
   });
 
   it('blocks GET when ops access is denied', async () => {

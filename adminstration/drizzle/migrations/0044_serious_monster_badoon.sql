@@ -1,0 +1,1 @@
+CREATE INDEX "idx_orders_cart_products_gin" ON "orders" USING gin ("cart_products");

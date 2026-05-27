@@ -348,4 +348,29 @@ describe('app/api/orders/route', () => {
     expect(countWhereMock).toHaveBeenCalledOnce();
     expect(rowsWhereMock).toHaveBeenCalledOnce();
   });
+
+  it('accepts no-answer count filtering for no-answer orders', async () => {
+    hasDbMock.mockReturnValue(true);
+    const countWhereMock = vi.fn().mockResolvedValue([{ value: 0 }]);
+    const rowsWhereMock = vi.fn().mockReturnValue({
+      orderBy: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          offset: vi.fn().mockResolvedValue([]),
+        }),
+      }),
+    });
+    const historyWhereMock = vi.fn().mockResolvedValue([]);
+    const selectMock = vi
+      .fn()
+      .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: countWhereMock }) })
+      .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: rowsWhereMock }) })
+      .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: historyWhereMock }) });
+
+    getDbMock.mockReturnValue({ select: selectMock });
+
+    await GET(new NextRequest('http://localhost/api/orders?confirmed=1&noAnswerCount=3'));
+
+    expect(countWhereMock).toHaveBeenCalledOnce();
+    expect(rowsWhereMock).toHaveBeenCalledOnce();
+  });
 });

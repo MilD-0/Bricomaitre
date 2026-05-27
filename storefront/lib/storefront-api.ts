@@ -65,6 +65,8 @@ type StorefrontBanner = {
   title: string;
   titleAr: string | null;
   imageUrl: string;
+  imageUrlPortrait: string | null;
+  imageUrlLandscape: string | null;
   productId: number | null;
   sortOrder: number;
   active: boolean;
@@ -110,6 +112,8 @@ export type LegacyStorefrontBanner = {
   title: string;
   titleAr: string | null;
   image: string;
+  imagePortrait: string | null;
+  imageLandscape: string | null;
   link: string;
   createdAt: string;
   updatedAt: string;
@@ -667,6 +671,8 @@ export function normalizeBanner(
     title: banner.title,
     titleAr: banner.titleAr,
     image: banner.imageUrl,
+    imagePortrait: banner.imageUrlPortrait,
+    imageLandscape: banner.imageUrlLandscape,
     link: linkedProduct ? buildLandingProductHref({
       _id: String(linkedProduct.id),
       slug: linkedProduct.slug ?? String(linkedProduct.id),

@@ -70,6 +70,8 @@
     "barcode": "Code-barres",
     "price": "Prix",
     "purchasePrice": "Prix d'achat",
+    "purchases": "Achats",
+    "confirmationRate": "Taux de confirmation",
     "compareAtPrice": "Prix comparé",
     "inventoryQuantity": "Quantité en stock",
     "active": "Actif",
@@ -326,6 +328,11 @@
     "refreshingTitle": "Actualisation des analyses",
     "refreshingBadge": "Chargement",
     "refreshingDescription": "Les chiffres mis à jour sont en cours de calcul pour la période sélectionnée."
+  },
+  "snapshotMeta": {
+    "title": "Instantané prêt",
+    "staleTitle": "Instantané obsolète",
+    "description": "Généré le {generatedAt}. Données jusqu'au {reportThroughDate}."
   },
   "hero": {
       "averageOrder": "Moyenne encaissée par commande",
@@ -822,12 +829,23 @@
         "cpa": "CPA",
         "actions": "Actions"
       },
+      "batches": {
+        "eyebrow": "Feuilles importées",
+        "description": "Feuilles de dépenses publicitaires déjà ajoutées et lignes qu'elles possèdent encore.",
+        "meta": "{importedAt} • {currentRows}/{totalRows} lignes actuelles",
+        "range": "Période de dépense : {start} à {end}",
+        "noRows": "Aucune ligne actuelle",
+        "delete": "Supprimer le lot",
+        "emptyTitle": "Aucune feuille de dépenses publicitaires importée",
+        "emptyDescription": "Importez un rapport de campagne Meta pour créer un lot supprimable."
+      },
     "notifications": {
       "addSuccess": "Entrée publicitaire enregistrée.",
       "importLoading": "Import des coûts publicitaires...",
       "importSuccess": "Coûts publicitaires importés.",
         "deleteSuccess": "Entrée publicitaire supprimée.",
-        "deleteCampaignSuccess": "Entrées de campagne supprimées."
+        "deleteCampaignSuccess": "Entrées de campagne supprimées.",
+        "deleteBatchSuccess": "Lot de dépenses publicitaires supprimé."
       }
     },
     "profitability": {
@@ -937,6 +955,22 @@
       "success": "{count} ID produit copiés.",
       "error": "Impossible de copier {count} ID produit."
     },
+    "promos": {
+      "title": "URLs promo",
+      "description": "Créez des liens de remise cachés avec un prix promotionnel fixe.",
+      "add": "Ajouter une promo",
+      "empty": "Aucune URL promo pour ce produit.",
+      "code": "Code promo",
+      "price": "Prix promo",
+      "startsAt": "Début",
+      "endsAt": "Fin",
+      "active": "Active",
+      "copy": "Copier l'URL",
+      "remove": "Supprimer la promo",
+      "copySuccess": "URL promo copiée.",
+      "copyError": "Impossible de copier l'URL promo.",
+      "loadError": "Impossible de charger les URLs promo du produit."
+    },
     "export": {
       "action": "Exporter le catalogue Meta",
       "title": "Exporter {count} produits vers le catalogue Meta",
@@ -989,9 +1023,26 @@
     },
     "searchPlaceholder": "Rechercher par nom client ou numéro de téléphone",
     "totalOrders": "Total commandes : {count}",
+    "overview": {
+      "title": "Statut quotidien des commandes",
+      "subtitle": "Activité du {date}",
+      "refreshing": "Actualisation de l'aperçu",
+      "unavailable": "L'aperçu du statut des commandes est indisponible car la base de données n'est pas connectée.",
+      "metrics": {
+        "newOrders": "Nouvelles commandes",
+        "confirmationStatusChanges": "Changements de statut de confirmation",
+        "confirmedToday": "Confirmées aujourd'hui",
+        "noAnswerAttempts": "Tentatives sans réponse",
+        "adminCancelled": "Annulées par admin",
+        "carrierCancelled": "Annulées par transporteur",
+        "shipmentUpdates": "Mises à jour livraison"
+      }
+    },
     "filters": {
       "statusLabel": "Filtrer par statut",
-      "allStatuses": "Tous les statuts"
+      "allStatuses": "Tous les statuts",
+      "noAnswerCountLabel": "Filtrer par nombre sans réponse",
+      "allNoAnswerCounts": "Tous les nombres sans réponse"
     },
     "columns": {
       "date": "Date",
@@ -1030,6 +1081,7 @@
     "amount": {
       "subtotal": "Produits",
       "deliveryFee": "Livraison",
+      "promoDiscount": "Promo {code}",
       "total": "Total"
     },
     "actions": {
@@ -1121,6 +1173,7 @@
       "noAnswer": "Sans réponse",
       "noAnswerWithCount": "Sans réponse {count}",
       "confirmed": "Confirmée",
+      "posted": "Envoyée",
       "dispatched": "Expédié",
       "completed": "Complétée",
       "manualCompleted": "Complétée manuellement",
@@ -1152,14 +1205,21 @@
       "selectedAction": "Liste sélectionnée",
       "confirmedAction": "Liste des commandes confirmées",
       "dispatchedAction": "Liste expédiée",
+      "postedAction": "Liste des commandes envoyées",
+      "postedAndConfirmedAction": "Liste des commandes envoyées et confirmées",
       "selectedTitle": "Liste pour {count} commandes sélectionnées",
       "confirmedTitle": "Liste pour les commandes confirmées",
       "dispatchedTitle": "Liste pour les commandes expédiées",
+      "postedTitle": "Liste pour les commandes envoyées",
+      "postedAndConfirmedTitle": "Liste pour les commandes envoyées et confirmées",
       "consolidatedTitle": "À préparer",
       "ordersTitle": "Détail par commande",
+      "generatedAt": "Générée le {date}",
+      "previousGeneration": "Liste enregistrée précédente",
       "notes": "Notes",
       "print": "Version impression",
       "reset": "Réinitialiser la liste",
+      "refresh": "Actualiser la liste",
       "acceptAllInventoryChanges": "Accepter toutes les baisses de stock",
       "applySelectedInventoryChanges": "Appliquer les baisses sélectionnées",
       "addProductTitle": "Ajouter un produit",
@@ -1183,10 +1243,19 @@
       "removeItem": "Retirer {title}",
       "loading": "Création de la liste...",
       "ready": "Liste prête.",
+      "saving": "Enregistrement de la liste...",
+      "saved": "Liste enregistrée.",
+      "saveError": "Impossible d’enregistrer les changements de la liste.",
+      "lastSavedBy": "Dernier enregistrement par {name}",
+      "sharedDraftLoaded": "Liste partagée chargée.",
+      "refreshing": "Actualisation de la liste...",
+      "refreshReady": "Liste actualisée.",
       "error": "Échec de création de la liste.",
       "emptySelection": "Sélectionnez au moins une commande.",
       "emptyConfirmed": "Aucune commande confirmée disponible pour la liste.",
       "emptyDispatched": "Aucune commande expédiée disponible pour la liste.",
+      "emptyPosted": "Aucune commande envoyée disponible pour la liste.",
+      "emptyPostedAndConfirmed": "Aucune commande envoyée ou confirmée disponible pour la liste.",
       "printError": "Impossible d’ouvrir la version impression."
     },
     "products": {
@@ -1669,6 +1738,8 @@
       "actionLabel": "Filtrer par action",
       "areaLabel": "Filtrer par zone",
       "stateLabel": "Filtrer par état",
+      "includeEcotrackSyncLabel": "Afficher les changements ECOTRACK sync",
+      "includeEcotrackSyncDescription": "Masqués par défaut pour garder le tableau lisible.",
       "allActions": "Toutes les actions",
       "allAreas": "Toutes les zones",
       "allStates": "Tous les états"
@@ -1735,7 +1806,7 @@
     "newBanner": "Nouvelle bannière",
     "createBannerTitle": "Créer une bannière",
     "editBannerTitle": "Modifier la bannière",
-    "bannerDialogDescription": "Définissez le titre, le produit lié et l’image de la bannière.",
+    "bannerDialogDescription": "Définissez le titre, le produit lié et les images selon l’orientation.",
     "bannerTitlePlaceholder": "Titre de la bannière",
     "bannerTitleArPlaceholder": "Titre arabe de la bannière",
     "titleLabel": "Titre",
@@ -1745,6 +1816,8 @@
     "linkedProductColumn": "Produit lié",
     "orderColumn": "Ordre",
     "bannerImageLabel": "Image de bannière",
+    "bannerLandscapeImageLabel": "Image écran horizontal",
+    "bannerPortraitImageLabel": "Image écran vertical",
     "uploadHint": "Upload vers S3 puis stockage des URLs CloudFront.",
     "singleImagePlaceholder": "URL de l'image de bannière",
     "createBanner": "Créer la bannière",

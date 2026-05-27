@@ -3,6 +3,7 @@ import {
   coerceNoAnswerCount,
   coerceOrderStatus,
   isConfirmedLifecycleStatus,
+  type OrderStatus,
 } from './orders';
 import { createSlugAssigner, slugify } from './slug';
 
@@ -157,7 +158,7 @@ export type ImportedOrderRow = {
   delPr: string | null;
   price: string | null;
   note: string | null;
-  confirmed: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+  confirmed: OrderStatus;
   noAnswerCount: number;
   confirmedBy: null;
   confirmedByName: null;

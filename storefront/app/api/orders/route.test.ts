@@ -183,6 +183,39 @@ describe("app/api/orders/route", () => {
     expect(forwardedBody.state).toBe(16);
   });
 
+  it("forwards promoCode to storefront-api", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      item: { id: 11, publicToken: "public-token" },
+    }), {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+      },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new Request("http://localhost/api/orders", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        phoneNumber1: "0550123456",
+        cartProducts: ["1"],
+        delivery: "home",
+        state: 16,
+        city: "Algiers",
+        promoCode: "Spring-50",
+      }),
+    });
+
+    await POST(request as never);
+
+    const forwardedBody = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body);
+    expect(forwardedBody.promoCode).toBe("Spring-50");
+  });
+
   it("rejects orders without a wilaya and commune", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

@@ -10,6 +10,30 @@ import {
 } from "drizzle-orm/pg-core";
 import { adminSchema } from './namespaces';
 
+export const adSpendImportBatches = adminSchema.table(
+  "ad_spend_import_batches",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    batchId: text("batch_id").notNull().unique(),
+    fileName: text("file_name").notNull(),
+    rate: numeric("rate", { precision: 12, scale: 4 }).notNull(),
+    totalRows: integer("total_rows").notNull().default(0),
+    importedRows: integer("imported_rows").notNull().default(0),
+    updatedRows: integer("updated_rows").notNull().default(0),
+    uploadedByEmail: text("uploaded_by_email"),
+    uploadedByName: text("uploaded_by_name"),
+    importedAt: timestamp("imported_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  }
+);
+
 export const adCosts = adminSchema.table(
   "ad_costs",
   {
@@ -26,6 +50,9 @@ export const adCosts = adminSchema.table(
     conversions: integer("conversions"),
     reach: integer("reach"),
     notes: text("notes"),
+    importBatchId: text("import_batch_id").references(() => adSpendImportBatches.batchId, {
+      onDelete: "cascade",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

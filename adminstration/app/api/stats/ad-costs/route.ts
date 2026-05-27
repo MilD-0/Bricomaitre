@@ -2,8 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '../../../../db/client';
 import { auth } from '../../../../lib/auth';
-import { adCostEntrySchema, deleteAdCostEntry, listAdCosts, statsQuerySchema, upsertAdCostEntry } from '../../../../lib/stats';
+import {
+  adCostEntrySchema,
+  deleteAdCostEntry,
+  deleteAdSpendImportBatch,
+  listAdCosts,
+  listAdSpendImportBatches,
+  statsQuerySchema,
+  upsertAdCostEntry,
+} from '../../../../lib/stats';
 import { requireOpsAccess } from '../../../../lib/rbac';
+import { triggerAdminReportingRefresh } from '../../../../lib/reporting-refresh-trigger';
 
 export async function GET(request: NextRequest) {
   const denied = await requireOpsAccess();
@@ -11,6 +20,10 @@ export async function GET(request: NextRequest) {
 
   if (!hasDb()) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
+  }
+
+  if (request.nextUrl.searchParams.get('batches') === 'true') {
+    return NextResponse.json({ data: await listAdSpendImportBatches() });
   }
 
   const parsed = statsQuerySchema.safeParse({
@@ -42,6 +55,7 @@ export async function POST(request: NextRequest) {
 
   const session = await auth();
   const row = await upsertAdCostEntry(parsed.data, { email: session?.user?.email, name: session?.user?.name });
+  await triggerAdminReportingRefresh('ad-cost-upsert');
   return NextResponse.json({ data: row });
 }
 
@@ -51,6 +65,17 @@ export async function DELETE(request: NextRequest) {
 
   if (!hasDb()) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
+  }
+
+  const batchId = request.nextUrl.searchParams.get('batchId')?.trim();
+  if (batchId) {
+    const deleted = await deleteAdSpendImportBatch(batchId);
+    if (!deleted) {
+      return NextResponse.json({ error: 'Ad spend import batch not found' }, { status: 404 });
+    }
+
+    await triggerAdminReportingRefresh('ad-spend-import-batch-delete');
+    return NextResponse.json({ data: deleted });
   }
 
   const id = request.nextUrl.searchParams.get('id')?.trim();
@@ -64,5 +89,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Ad cost entry not found' }, { status: 404 });
   }
 
+  await triggerAdminReportingRefresh('ad-cost-delete');
   return NextResponse.json({ data: deleted });
 }

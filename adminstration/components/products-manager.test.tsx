@@ -71,6 +71,9 @@ type Product = {
   images: string[];
   createdAt: string;
   updatedAt: string;
+  orderPurchaseCount: number;
+  confirmedOrderCount: number;
+  confirmationRate: number | null;
   slug?: string | null;
 };
 
@@ -190,6 +193,9 @@ describe('ProductsManager', () => {
         images: ['https://cdn.example.com/p-1.jpg'],
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-02T00:00:00.000Z',
+        orderPurchaseCount: 12,
+        confirmedOrderCount: 9,
+        confirmationRate: 75,
       },
       {
         id: 2,
@@ -211,6 +217,9 @@ describe('ProductsManager', () => {
         images: ['https://cdn.example.com/p-2.jpg'],
         createdAt: '2026-01-02T00:00:00.000Z',
         updatedAt: '2026-01-03T00:00:00.000Z',
+        orderPurchaseCount: 0,
+        confirmedOrderCount: 0,
+        confirmationRate: null,
       },
     ];
     postCalls.length = 0;
@@ -292,6 +301,12 @@ describe('ProductsManager', () => {
           ? HttpResponse.json({ job: exportAllJob })
           : HttpResponse.json({ error: 'No export job is currently running.' }, { status: 404 });
       }),
+      http.get('/api/products/:id', ({ params }) => {
+        const product = products.find((item) => item.id === Number(params.id));
+        return product
+          ? HttpResponse.json({ item: { ...product, promoCodes: [] } })
+          : HttpResponse.json({ error: 'Not found' }, { status: 404 });
+      }),
       http.delete('/api/products/:id', ({ request, params }) => {
         deleteCalls.push(request.url);
         products = products.filter((product) => product.id !== Number(params.id));
@@ -360,6 +375,23 @@ describe('ProductsManager', () => {
     await screen.findAllByRole('button', { name: 'Existing product' });
     expect(screen.getByTestId('products-table-view')).toHaveClass('block');
   });
+
+  it('renders product order metrics in table view', async () => {
+    renderProductsManager();
+
+    await screen.findAllByRole('button', { name: 'Existing product' });
+    await userEvent.click(screen.getByRole('button', { name: 'Table' }));
+
+    expect(screen.getByText('Purchases')).toBeInTheDocument();
+    expect(screen.getByText('Confirmation rate')).toBeInTheDocument();
+
+    const titleLink = screen.getAllByRole('link', { name: 'Existing product' })[0];
+    const productRow = titleLink.closest('tr') as HTMLElement;
+
+    expect(within(productRow).getByText('12')).toBeInTheDocument();
+    expect(within(productRow).getByText('75%')).toBeInTheDocument();
+  });
+
 
   it('keeps selection and bulk actions working after switching views', async () => {
     renderProductsManager();
@@ -572,6 +604,9 @@ describe('ProductsManager', () => {
       images: [`https://cdn.example.com/p-${index + 1}.jpg`],
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-02T00:00:00.000Z',
+      orderPurchaseCount: 0,
+      confirmedOrderCount: 0,
+      confirmationRate: null,
     }));
 
     renderProductsManager();
@@ -669,6 +704,9 @@ describe('ProductsManager', () => {
       images: [`https://cdn.example.com/p-${index + 1}.jpg`],
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-02T00:00:00.000Z',
+      orderPurchaseCount: 0,
+      confirmedOrderCount: 0,
+      confirmationRate: null,
     }));
 
     renderProductsManager();

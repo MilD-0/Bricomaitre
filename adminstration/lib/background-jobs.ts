@@ -5,6 +5,7 @@ import { getOrderProductLookup, toOrderRecord } from '@bric/storefront-core/orde
 
 import { getDb } from '../db/client';
 import {
+  adminReportingSnapshotRuns,
   brands,
   orderStatusHistory,
   orders,
@@ -28,7 +29,7 @@ import {
   type EcotrackCatalogExportData,
 } from './order-export';
 import type { OrderStatusHistoryRecord } from './orders';
-import { importAdCostsSpreadsheet, importStatsSpreadsheet } from './stats';
+import { importAdCostsSpreadsheet, importStatsSpreadsheet, refreshAdminReportingSnapshots } from './stats';
 
 export const ADMIN_PRODUCT_EXPORT_QUEUE = 'admin-product-export';
 export const ADMIN_PRODUCT_CATALOG_FEED_QUEUE = 'admin-product-catalog-feed';
@@ -36,6 +37,7 @@ export const ADMIN_ORDER_EXPORT_QUEUE = 'admin-order-export';
 export const ADMIN_ORDER_ECOTRACK_QUEUE = 'admin-order-ecotrack';
 export const ADMIN_STATS_IMPORT_QUEUE = 'admin-stats-import';
 export const ADMIN_AD_COST_IMPORT_QUEUE = 'admin-ad-cost-import';
+export const ADMIN_REPORTING_REFRESH_QUEUE = 'admin-reporting-refresh';
 export const ADMIN_ECOTRACK_SYNC_QUEUE = 'admin-ecotrack-sync';
 export const ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE = 'admin-ecotrack-shipment-sync';
 export const STOREFRONT_ANALYTICS_QUEUE = 'storefront-analytics';
@@ -78,8 +80,10 @@ type OrderEcotrackPayload = QueueJobMeta & {
   };
 };
 type StatsImportPayload = QueueJobMeta & {
-  fileName: string;
-  fileBufferBase64: string;
+  files: Array<{
+    fileName: string;
+    fileBufferBase64: string;
+  }>;
 };
 type AdCostsImportPayload = QueueJobMeta & {
   fileName: string;
@@ -89,6 +93,10 @@ type AdCostsImportPayload = QueueJobMeta & {
     email?: string | null;
     name?: string | null;
   };
+};
+type ReportingRefreshPayload = QueueJobMeta & {
+  trigger: string;
+  sourceImportBatchId?: string | null;
 };
 type EcotrackSyncPayload = QueueJobMeta & {
   trigger: string;
@@ -229,15 +237,19 @@ export async function startOrderEcotrackJob(
   };
 }
 
-export async function startStatsImportJob(ownerKey: string, payload: { fileName: string; fileBuffer: Buffer }, requestId?: string) {
+export async function startStatsImportJob(ownerKey: string, payload: { fileName: string; fileBuffer: Buffer } | { files: Array<{ fileName: string; fileBuffer: Buffer }> }, requestId?: string) {
+  const files = 'files' in payload ? payload.files : [payload];
+
   return startOwnedJob<StatsImportPayload>({
     queueName: ADMIN_STATS_IMPORT_QUEUE,
     kind: 'stats-import',
     ownerKey,
     requestId,
     data: {
-      fileName: payload.fileName,
-      fileBufferBase64: payload.fileBuffer.toString('base64'),
+      files: files.map((file) => ({
+        fileName: file.fileName,
+        fileBufferBase64: file.fileBuffer.toString('base64'),
+      })),
     } as StatsImportPayload,
   });
 }
@@ -255,6 +267,36 @@ export async function startAdCostsImportJob(ownerKey: string, payload: { fileNam
       actor: payload.actor,
     } as AdCostsImportPayload,
   });
+}
+
+export async function startAdminReportingRefreshJob(trigger: string, sourceImportBatchId?: string | null, requestId?: string) {
+  const result = await startOwnedJob<ReportingRefreshPayload>({
+    queueName: ADMIN_REPORTING_REFRESH_QUEUE,
+    kind: 'admin-reporting-refresh',
+    ownerKey: 'admin-reporting',
+    requestId,
+    activeScope: 'global',
+    data: {
+      trigger,
+      sourceImportBatchId: sourceImportBatchId ?? null,
+    } as ReportingRefreshPayload,
+  });
+
+  if (result.kind !== 'started') {
+    await getDb()
+      .update(adminReportingSnapshotRuns)
+      .set({
+        pendingRefresh: true,
+        pendingTrigger: trigger,
+        updatedAt: new Date(),
+      })
+      .where(eq(adminReportingSnapshotRuns.runId, result.job.id));
+  }
+
+  return {
+    kind: result.kind,
+    job: toClientJob(result.job),
+  };
 }
 
 export async function startEcotrackSyncJob(
@@ -584,20 +626,89 @@ export async function runStatsImportJob(
     updateSummary: (summary: Record<string, unknown>) => Promise<void>;
   },
 ) {
-  const result = await importStatsSpreadsheet(Buffer.from(payload.fileBufferBase64, 'base64'), payload.fileName);
+  const legacyPayload = payload as StatsImportPayload & { fileName?: string; fileBufferBase64?: string };
+  const files = payload.files ?? (
+    legacyPayload.fileName && legacyPayload.fileBufferBase64
+      ? [{ fileName: legacyPayload.fileName, fileBufferBase64: legacyPayload.fileBufferBase64 }]
+      : []
+  );
+  const results = [];
+
+  for (const [index, file] of files.entries()) {
+    const result = await importStatsSpreadsheet(Buffer.from(file.fileBufferBase64, 'base64'), file.fileName);
+    results.push({
+      fileName: file.fileName,
+      batchId: result.batchId,
+      newOrders: result.newOrders,
+      duplicateOrders: result.duplicateOrders,
+      unmatchedReferences: result.unmatchedReferences.length,
+    });
+    await helpers.updateSummary({
+      fileName: file.fileName,
+      currentFile: index + 1,
+      totalFiles: files.length,
+      batchId: result.batchId,
+      newOrders: results.reduce((sum, item) => sum + item.newOrders, 0),
+      duplicateOrders: results.reduce((sum, item) => sum + item.duplicateOrders, 0),
+    });
+  }
+
+  const batchIds = results.map((result) => result.batchId);
+  await startAdminReportingRefreshJob('stats-import', batchIds.join(','));
   await helpers.updateSummary({
-    fileName: payload.fileName,
-    batchId: result.batchId,
-    newOrders: result.newOrders,
-    duplicateOrders: result.duplicateOrders,
+    fileName: results.length === 1 ? results[0]?.fileName : `${results.length} spreadsheets`,
+    batchId: batchIds.at(-1) ?? null,
+    batchIds,
+    files: results,
+    newOrders: results.reduce((sum, item) => sum + item.newOrders, 0),
+    duplicateOrders: results.reduce((sum, item) => sum + item.duplicateOrders, 0),
   });
 
   return {
-    fileName: payload.fileName,
-    batchId: result.batchId,
-    newOrders: result.newOrders,
-    duplicateOrders: result.duplicateOrders,
+    fileName: results.length === 1 ? results[0]?.fileName : `${results.length} spreadsheets`,
+    batchId: batchIds.at(-1) ?? null,
+    batchIds,
+    files: results,
+    newOrders: results.reduce((sum, item) => sum + item.newOrders, 0),
+    duplicateOrders: results.reduce((sum, item) => sum + item.duplicateOrders, 0),
   };
+}
+
+export async function runAdminReportingRefreshJob(payload: ReportingRefreshPayload) {
+  const result = await refreshAdminReportingSnapshots({
+    runId: payload.__jobMeta.id,
+    trigger: payload.trigger,
+    sourceImportBatchId: payload.sourceImportBatchId ?? null,
+  });
+  const db = getDb();
+  const [run] = await db
+    .select({
+      pendingRefresh: adminReportingSnapshotRuns.pendingRefresh,
+      pendingTrigger: adminReportingSnapshotRuns.pendingTrigger,
+    })
+    .from(adminReportingSnapshotRuns)
+    .where(eq(adminReportingSnapshotRuns.runId, payload.__jobMeta.id))
+    .limit(1);
+
+  if (!run?.pendingRefresh) {
+    return result;
+  }
+
+  const pendingTrigger = run.pendingTrigger || 'coalesced-refresh';
+  await db
+    .update(adminReportingSnapshotRuns)
+    .set({
+      pendingRefresh: false,
+      pendingTrigger: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(adminReportingSnapshotRuns.runId, payload.__jobMeta.id));
+
+  return refreshAdminReportingSnapshots({
+    runId: payload.__jobMeta.id,
+    trigger: pendingTrigger,
+    sourceImportBatchId: payload.sourceImportBatchId ?? null,
+  });
 }
 
 export async function runAdCostsImportJob(
@@ -609,10 +720,13 @@ export async function runAdCostsImportJob(
   const result = await importAdCostsSpreadsheet(
     Buffer.from(payload.fileBufferBase64, 'base64'),
     payload.rate,
+    payload.fileName,
     payload.actor,
   );
+  await startAdminReportingRefreshJob('ad-cost-import');
   await helpers.updateSummary({
     fileName: payload.fileName,
+    batchId: result.batchId,
     total: result.total,
     imported: result.imported,
     updated: result.updated,
@@ -620,6 +734,7 @@ export async function runAdCostsImportJob(
 
   return {
     fileName: payload.fileName,
+    batchId: result.batchId,
     total: result.total,
     imported: result.imported,
     updated: result.updated,

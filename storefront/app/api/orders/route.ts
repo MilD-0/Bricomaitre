@@ -73,6 +73,9 @@ export async function POST(request: NextRequest) {
     city: normalizedCity,
     homeAddress: body.homeAddress ?? null,
     note: body.note ?? null,
+    promoCode: typeof body.promoCode === "string" && body.promoCode.trim().length > 0
+      ? body.promoCode.trim()
+      : null,
     visitId: body.visitId ?? null,
     journeyId: body.journeyId ?? null,
     sessionId: body.sessionId ?? null,

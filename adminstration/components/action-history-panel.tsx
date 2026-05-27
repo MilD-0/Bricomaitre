@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from './ui/input';
 import { SurfacePendingOverlay } from './ui/motion';
 import { NativeSelect, NativeSelectOption } from './ui/native-select';
+import { Switch } from './ui/switch';
 import { TablePaginationControls } from './table-pagination-controls';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 
@@ -230,12 +231,13 @@ export function ActionHistoryPanel({ invalidateQueryKeys = [] }: { invalidateQue
   const [operation, setOperation] = useState<ActionHistoryOperationFilter>('all');
   const [resource, setResource] = useState<ActionHistoryResourceFilter>('all');
   const [state, setState] = useState<ActionHistoryState>('all');
+  const [includeEcotrackSync, setIncludeEcotrackSync] = useState(false);
   const [sortRules, setSortRules] = useState<ActionHistorySortRule[]>([]);
   const [detailItem, setDetailItem] = useState<ActionHistoryItem | null>(null);
   const deferredSearch = useDeferredValue(search.trim());
 
   const historyQuery = useQuery({
-    queryKey: ['action-history', page, deferredSearch, operation, resource, state, sortRules],
+    queryKey: ['action-history', page, deferredSearch, operation, resource, state, includeEcotrackSync, sortRules],
     queryFn: () => {
       const params = new URLSearchParams({
         page: String(page),
@@ -244,6 +246,7 @@ export function ActionHistoryPanel({ invalidateQueryKeys = [] }: { invalidateQue
         operation,
         resource,
         state,
+        includeEcotrackSync: String(includeEcotrackSync),
       });
       appendSortParams(params, sortRules);
 
@@ -327,7 +330,7 @@ export function ActionHistoryPanel({ invalidateQueryKeys = [] }: { invalidateQue
 
   const pendingHistoryId = undoMutation.variables?.id ?? redoMutation.variables?.id ?? null;
   const totalPages = historyQuery.data.pagination.totalPages || 1;
-  const hasActiveFilters = deferredSearch.length > 0 || operation !== 'all' || resource !== 'all' || state !== 'all';
+  const hasActiveFilters = deferredSearch.length > 0 || operation !== 'all' || resource !== 'all' || state !== 'all' || includeEcotrackSync;
 
   function toggleSort(nextKey: ActionHistorySortKey) {
     setPage(1);
@@ -340,6 +343,7 @@ export function ActionHistoryPanel({ invalidateQueryKeys = [] }: { invalidateQue
     setOperation('all');
     setResource('all');
     setState('all');
+    setIncludeEcotrackSync(false);
     setSortRules([]);
   }
 
@@ -416,6 +420,20 @@ export function ActionHistoryPanel({ invalidateQueryKeys = [] }: { invalidateQue
                 ))}
               </NativeSelect>
             </div>
+            <label className="flex min-w-fit items-center gap-3 rounded-lg border border-border/70 bg-background px-3 py-2 text-sm">
+              <Switch
+                checked={includeEcotrackSync}
+                aria-label={t('history.filters.includeEcotrackSyncLabel')}
+                onCheckedChange={(checked) => {
+                  setPage(1);
+                  setIncludeEcotrackSync(checked);
+                }}
+              />
+              <span className="flex flex-col">
+                <span className="font-medium text-foreground">{t('history.filters.includeEcotrackSyncLabel')}</span>
+                <span className="text-xs text-muted-foreground">{t('history.filters.includeEcotrackSyncDescription')}</span>
+              </span>
+            </label>
           </div>
 
           <p className="text-sm text-muted-foreground">

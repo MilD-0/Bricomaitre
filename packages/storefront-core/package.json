@@ -16,6 +16,7 @@
     "./order-access": "./src/storefront/order-access.ts",
     "./order-records": "./src/order-records.ts",
     "./orders": "./src/storefront/orders.ts",
+    "./promos": "./src/storefront/promos.ts",
     "./server-cache": "./src/server-cache.ts"
   },
   "dependencies": {

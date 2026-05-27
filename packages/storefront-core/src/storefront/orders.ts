@@ -15,6 +15,7 @@ import { getOrderProductLookup, type ProductLookupEntry } from '../order-records
 import type { StorefrontOrderCreateRequest, StorefrontOrderPatchRequest } from './contracts';
 import { toStorefrontOrderDto } from './dto';
 import { createPublicOrderToken, requireStorefrontOrderAccess } from './order-access';
+import { resolveOrderPromo } from './promos';
 
 type Database = ReturnType<typeof getDb>;
 type TimingStep =
@@ -87,6 +88,11 @@ export async function createStorefrontOrder(
   const publicToken = createPublicOrderToken();
   let currentOrder: typeof orders.$inferSelect;
   let degradedCapture = shouldStartAsDegradedCapture(payload);
+  const orderPromo = await resolveOrderPromo(db, {
+    cartProducts: payload.cartProducts,
+    promoCode: payload.promoCode,
+    now,
+  });
 
   const [createdOrder] = await measureStep('insertOrder', reportTiming, () => db.insert(orders).values({
     firstName: payload.firstName,
@@ -105,6 +111,12 @@ export async function createStorefrontOrder(
     homeAddress: payload.homeAddress,
     note: payload.note,
     delPr: null,
+    price: orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null,
+    promoCode: orderPromo?.code ?? null,
+    promoProductId: orderPromo?.productId ?? null,
+    promoOriginalSubtotal: orderPromo ? orderPromo.originalSubtotal.toFixed(2) : null,
+    promoDiscountAmount: orderPromo ? orderPromo.discountAmount.toFixed(2) : null,
+    promoFinalSubtotal: orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null,
     variant: degradedCapture ? DEGRADED_CAPTURE_VARIANT : null,
     createdAt: now,
     updatedAt: now,
@@ -248,6 +260,22 @@ export async function updateStorefrontOrder(
   if (changes.city !== undefined) update.city = changes.city;
   if (changes.homeAddress !== undefined) update.homeAddress = changes.homeAddress;
   if (changes.cartProducts !== undefined) update.cartProducts = changes.cartProducts;
+
+  if (changes.cartProducts !== undefined || changes.promoCode !== undefined) {
+    const nextCartProducts = changes.cartProducts ?? access.order.cartProducts ?? [];
+    const nextPromoCode = changes.promoCode !== undefined ? changes.promoCode : access.order.promoCode;
+    const orderPromo = await resolveOrderPromo(db, {
+      cartProducts: nextCartProducts,
+      promoCode: nextPromoCode,
+    });
+
+    update.price = orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null;
+    update.promoCode = orderPromo?.code ?? null;
+    update.promoProductId = orderPromo?.productId ?? null;
+    update.promoOriginalSubtotal = orderPromo ? orderPromo.originalSubtotal.toFixed(2) : null;
+    update.promoDiscountAmount = orderPromo ? orderPromo.discountAmount.toFixed(2) : null;
+    update.promoFinalSubtotal = orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null;
+  }
 
   if (shouldResolveDeliveryFee) {
     const nextDelivery = coerceDeliveryType(changes.delivery ?? access.order.delivery);

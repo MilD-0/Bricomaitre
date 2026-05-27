@@ -6,7 +6,7 @@ import { Search } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 
 import {
   buildMetaCatalogExportFileName,
@@ -52,6 +52,7 @@ type BrandOption = { id: number; name: string };
 type CategoryOption = { id: number; name: string; parentId: number | null };
 type PaginationMeta = { page: number; limit: number; totalItems: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean };
 type ProductsResponse = { items: ProductRecord[]; pagination: PaginationMeta };
+type ProductDetailResponse = { item: ProductRecord };
 type ProductsMetaResponse = { brands: BrandOption[]; categories: CategoryOption[] };
 type MutationMessages = { loading: string; success: string; error: string };
 type QuerySnapshot<T> = Array<[readonly unknown[], T | undefined]>;
@@ -116,6 +117,7 @@ const defaults: ProductPayloadInput = {
   brandId: null,
   categoryId: null,
   images: [],
+  promoCodes: [],
 };
 
 function normalizeBaseUrl(value: string) {
@@ -129,6 +131,23 @@ function getStorefrontBaseUrl() {
 function buildStorefrontProductHref(product: Pick<ProductRecord, 'id' | 'slug'>) {
   const token = product.slug ?? product.id;
   return `${getStorefrontBaseUrl()}/products/${encodeURIComponent(String(token))}`;
+}
+
+function slugifyDraftProduct(value: string) {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return slug || 'product';
+}
+
+function buildDraftPromoHref(values: Pick<Partial<ProductPayloadInput>, 'slug' | 'title'>, code: string) {
+  const token = values.slug?.trim() || slugifyDraftProduct(values.title ?? '');
+  const url = new URL(`/products/${encodeURIComponent(token)}`, getStorefrontBaseUrl());
+  url.searchParams.set('promo', code);
+  return url.toString();
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -289,6 +308,17 @@ function ProductDialogForm({
 }) {
   const t = useTranslations();
   const images = useWatch({ control: form.control, name: 'images' }) ?? [];
+  const draftValues = useWatch({ control: form.control });
+  const promoFields = useFieldArray({ control: form.control, name: 'promoCodes' });
+
+  async function copyPromoUrl(code: string) {
+    try {
+      await navigator.clipboard.writeText(buildDraftPromoHref(draftValues, code));
+      toast.success(t('products.promos.copySuccess'));
+    } catch {
+      toast.error(t('products.promos.copyError'));
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -357,6 +387,77 @@ function ProductDialogForm({
               />
               {form.formState.errors.oldPrice ? <FieldError>{form.formState.errors.oldPrice.message}</FieldError> : null}
             </Field>
+
+            <div className="md:col-span-2 rounded-2xl border border-border/70 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium">{t('products.promos.title')}</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => promoFields.append({ code: '', promoPrice: 0, active: true, startsAt: null, endsAt: null })}
+                >
+                  {t('products.promos.add')}
+                </Button>
+              </div>
+              <div className="mt-4 flex flex-col gap-4">
+                {promoFields.fields.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t('products.promos.empty')}</p>
+                ) : null}
+                {promoFields.fields.map((field, index) => {
+                  const code = draftValues.promoCodes?.[index]?.code?.trim() ?? '';
+                  return (
+                    <div key={field.id} className="grid gap-3 rounded-xl border border-border/70 p-3 md:grid-cols-2">
+                      <Field>
+                        <FieldLabel htmlFor={`product-promo-code-${field.id}`}>{t('products.promos.code')}</FieldLabel>
+                        <Input id={`product-promo-code-${field.id}`} {...form.register(`promoCodes.${index}.code`)} />
+                        {form.formState.errors.promoCodes?.[index]?.code ? <FieldError>{form.formState.errors.promoCodes[index]?.code?.message}</FieldError> : null}
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor={`product-promo-price-${field.id}`}>{t('products.promos.price')}</FieldLabel>
+                        <Input
+                          id={`product-promo-price-${field.id}`}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          {...form.register(`promoCodes.${index}.promoPrice`, { valueAsNumber: true })}
+                        />
+                        {form.formState.errors.promoCodes?.[index]?.promoPrice ? <FieldError>{form.formState.errors.promoCodes[index]?.promoPrice?.message}</FieldError> : null}
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor={`product-promo-start-${field.id}`}>{t('products.promos.startsAt')}</FieldLabel>
+                        <Input id={`product-promo-start-${field.id}`} type="datetime-local" {...form.register(`promoCodes.${index}.startsAt`)} />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor={`product-promo-end-${field.id}`}>{t('products.promos.endsAt')}</FieldLabel>
+                        <Input id={`product-promo-end-${field.id}`} type="datetime-local" {...form.register(`promoCodes.${index}.endsAt`)} />
+                      </Field>
+                      <Field orientation="horizontal" className="md:col-span-2">
+                        <Switch checked={Boolean(draftValues.promoCodes?.[index]?.active ?? true)} onCheckedChange={(checked) => form.setValue(`promoCodes.${index}.active`, checked, { shouldDirty: true })} />
+                        <FieldLabel>{t('products.promos.active')}</FieldLabel>
+                      </Field>
+                      {code ? (
+                        <div className="md:col-span-2 rounded-lg bg-muted/60 px-3 py-2 text-xs">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <span className="break-all font-mono">{buildDraftPromoHref(draftValues, code)}</span>
+                            <Button type="button" variant="outline" size="sm" onClick={() => copyPromoUrl(code)}>
+                              {t('products.promos.copy')}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
+                      <div className="md:col-span-2 flex justify-end">
+                        <Button type="button" variant="outline" size="sm" onClick={() => promoFields.remove(index)}>
+                          {t('products.promos.remove')}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
             <Field>
               <FieldLabel htmlFor="product-quantity">{t('labels.inventoryQuantity')}</FieldLabel>
@@ -716,6 +817,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
       dialogState,
       values: {
         title: draftValues.title ?? '',
+        slug: draftValues.slug ?? null,
         titleAr: draftValues.titleAr ?? null,
         description: draftValues.description ?? null,
         descriptionAr: draftValues.descriptionAr ?? null,
@@ -731,6 +833,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
         brandId: draftValues.brandId ?? null,
         categoryId: draftValues.categoryId ?? null,
         images: draftValues.images ?? [],
+        promoCodes: draftValues.promoCodes ?? [],
       },
     });
   }, [dialogState, draftValues]);
@@ -969,6 +1072,17 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
   };
 
   const formatDate = (value: string) => new Date(value).toLocaleString(locale);
+  const formatPercent = (value: number | null | undefined) => {
+    if (value == null) {
+      return '—';
+    }
+
+    return new Intl.NumberFormat(locale, {
+      style: 'percent',
+      minimumFractionDigits: value % 1 === 0 ? 0 : 1,
+      maximumFractionDigits: 1,
+    }).format(value / 100);
+  };
   const brandNameById = useMemo(
     () => new Map(metaQuery.data.brands.map((brand) => [brand.id, brand.name])),
     [metaQuery.data.brands],
@@ -995,10 +1109,24 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
   }, [queryClient, selectedIds, productsQuery.data]);
 
   const openEdit = (product: ProductRecord) => {
-    form.reset(product);
+    form.reset({
+      ...product,
+      promoCodes: product.promoCodes ?? [],
+    });
     startFilterTransition(() => {
       setDialogState({ open: true, mode: 'edit', editingId: product.id });
     });
+
+    void request<ProductDetailResponse>(`/api/products/${product.id}`)
+      .then((detail) => {
+        form.reset({
+          ...detail.item,
+          promoCodes: detail.item.promoCodes ?? [],
+        });
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : t('products.promos.loadError'));
+      });
   };
 
   const submitDialog = form.handleSubmit(async (rawValues) => {
@@ -1288,6 +1416,8 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
               <TableHead>
                 <MultiSortHeader label={t('labels.purchasePrice')} sortState={getSortRuleState(sortRules, 'purchasePrice')} onClick={() => toggleSort('purchasePrice')} />
               </TableHead>
+              <TableHead>{t('labels.purchases')}</TableHead>
+              <TableHead>{t('labels.confirmationRate')}</TableHead>
               <TableHead className="w-28">
                 <MultiSortHeader label={t('labels.inStock')} sortState={getSortRuleState(sortRules, 'inStock')} onClick={() => toggleSort('inStock')} />
               </TableHead>
@@ -1358,6 +1488,8 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
                   </TableCell>
                   <TableCell>{formatCurrency(product.price, 0)}</TableCell>
                   <TableCell>{formatCurrency(product.purchasePrice)}</TableCell>
+                  <TableCell>{product.orderPurchaseCount}</TableCell>
+                  <TableCell>{formatPercent(product.confirmationRate)}</TableCell>
                   <TableCell>
                     <Switch
                       checked={product.inStock}
@@ -1383,7 +1515,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-2">
-                      <Button type="button" variant="outline" size="sm" onClick={() => openEdit(product)}>
+                      <Button type="button" variant="outline" size="sm" onClick={() => void openEdit(product)}>
                         {t('actions.modify')}
                       </Button>
                       <Button type="button" variant="destructive" size="sm" onClick={() => setDeleteState({ ids: [product.id], label: product.title })}>
@@ -1431,7 +1563,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
               </div>
               <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4">
                 <div className="min-w-0">
-                  <button type="button" className="line-clamp-2 text-left text-base font-semibold" onClick={() => openEdit(product)}>
+                  <button type="button" className="line-clamp-2 text-left text-base font-semibold" onClick={() => void openEdit(product)}>
                     {product.title}
                   </button>
                   <p className="text-sm text-muted-foreground">
@@ -1515,7 +1647,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
               </div>
 
               <div className="flex gap-2">
-                <Button type="button" variant="outline" className="flex-1" onClick={() => openEdit(product)}>
+                <Button type="button" variant="outline" className="flex-1" onClick={() => void openEdit(product)}>
                   {t('actions.modify')}
                 </Button>
                 <Button type="button" variant="destructive" className="flex-1" onClick={() => setDeleteState({ ids: [product.id], label: product.title })}>

@@ -327,6 +327,11 @@
     "refreshingBadge": "تحميل",
     "refreshingDescription": "يتم الآن احتساب الأرقام المحدثة للفترة المحددة."
   },
+  "snapshotMeta": {
+    "title": "اللقطة جاهزة",
+    "staleTitle": "اللقطة قديمة",
+    "description": "تم إنشاؤها في {generatedAt}. البيانات حتى {reportThroughDate}."
+  },
   "hero": {
       "averageOrder": "متوسط التحصيل لكل طلب",
       "averageProfit": "متوسط الربح لكل طلب",
@@ -822,12 +827,23 @@
         "cpa": "CPA",
         "actions": "الإجراءات"
       },
+      "batches": {
+        "eyebrow": "الجداول المستوردة",
+        "description": "جداول إنفاق الإعلانات التي تمت إضافتها سابقا والصفوف التي تملكها حاليا.",
+        "meta": "{importedAt} • {currentRows}/{totalRows} صفوف حالية",
+        "range": "نطاق الإنفاق: {start} إلى {end}",
+        "noRows": "لا توجد صفوف حالية",
+        "delete": "حذف الدفعة",
+        "emptyTitle": "لم يتم استيراد جداول إنفاق إعلاني",
+        "emptyDescription": "ارفع تقرير حملة Meta لإنشاء دفعة استيراد قابلة للحذف."
+      },
     "notifications": {
       "addSuccess": "تم حفظ إدخال الإعلان.",
       "importLoading": "جارٍ استيراد تكاليف الإعلانات...",
       "importSuccess": "تم استيراد تكاليف الإعلانات.",
         "deleteSuccess": "تم حذف إدخال الإعلان.",
-        "deleteCampaignSuccess": "تم حذف إدخالات الحملة."
+        "deleteCampaignSuccess": "تم حذف إدخالات الحملة.",
+        "deleteBatchSuccess": "تم حذف دفعة إنفاق الإعلانات."
       }
     },
     "profitability": {
@@ -937,6 +953,22 @@
       "success": "تم نسخ معرّفات {count} من المنتجات.",
       "error": "تعذّر نسخ معرّفات {count} من المنتجات."
     },
+    "promos": {
+      "title": "روابط العروض",
+      "description": "أنشئ روابط خصم مخفية بسعر ترويجي ثابت.",
+      "add": "إضافة عرض",
+      "empty": "لا توجد روابط عروض لهذا المنتج.",
+      "code": "كود العرض",
+      "price": "سعر العرض",
+      "startsAt": "يبدأ في",
+      "endsAt": "ينتهي في",
+      "active": "نشط",
+      "copy": "نسخ الرابط",
+      "remove": "حذف العرض",
+      "copySuccess": "تم نسخ رابط العرض.",
+      "copyError": "تعذر نسخ رابط العرض.",
+      "loadError": "تعذر تحميل روابط عروض المنتج."
+    },
     "export": {
       "action": "تصدير كتالوج Meta",
       "title": "تصدير {count} من المنتجات إلى كتالوج Meta",
@@ -988,9 +1020,27 @@
       "table": "جدول"
     },
     "searchPlaceholder": "ابحث باسم العميل أو رقم الهاتف",
+    "totalOrders": "إجمالي الطلبات: {count}",
+    "overview": {
+      "title": "حالة الطلبات اليومية",
+      "subtitle": "نشاط {date}",
+      "refreshing": "تحديث الملخص",
+      "unavailable": "ملخص حالة الطلبات غير متاح لأن قاعدة البيانات غير متصلة.",
+      "metrics": {
+        "newOrders": "طلبات جديدة",
+        "confirmationStatusChanges": "تغييرات حالة التأكيد",
+        "confirmedToday": "تم تأكيدها اليوم",
+        "noAnswerAttempts": "محاولات عدم الرد",
+        "adminCancelled": "ألغيت من الإدارة",
+        "carrierCancelled": "ألغيت من شركة التوصيل",
+        "shipmentUpdates": "تحديثات الشحن"
+      }
+    },
     "filters": {
       "statusLabel": "تصفية حسب الحالة",
-      "allStatuses": "كل الحالات"
+      "allStatuses": "كل الحالات",
+      "noAnswerCountLabel": "تصفية حسب عدد عدم الرد",
+      "allNoAnswerCounts": "كل أعداد عدم الرد"
     },
     "columns": {
       "date": "التاريخ",
@@ -1026,6 +1076,7 @@
     "amount": {
       "subtotal": "المنتجات",
       "deliveryFee": "التوصيل",
+      "promoDiscount": "عرض {code}",
       "total": "الإجمالي"
     },
     "actions": {
@@ -1117,6 +1168,7 @@
       "noAnswer": "بدون رد",
       "noAnswerWithCount": "بدون رد {count}",
       "confirmed": "مؤكد",
+      "posted": "مرسل",
       "dispatched": "تم الشحن",
       "completed": "مكتملة",
       "manualCompleted": "مكتملة يدويًا",
@@ -1148,14 +1200,21 @@
       "selectedAction": "قائمة المحدد",
       "confirmedAction": "قائمة الطلبات المؤكدة",
       "dispatchedAction": "قائمة الطلبات المرسلة",
+      "postedAction": "قائمة الطلبات المنشورة",
+      "postedAndConfirmedAction": "قائمة الطلبات المنشورة والمؤكدة",
       "selectedTitle": "قائمة لـ {count} طلبات محددة",
       "confirmedTitle": "قائمة الطلبات المؤكدة",
       "dispatchedTitle": "قائمة الطلبات المرسلة",
+      "postedTitle": "قائمة الطلبات المنشورة",
+      "postedAndConfirmedTitle": "قائمة الطلبات المنشورة والمؤكدة",
       "consolidatedTitle": "ما يجب جمعه",
       "ordersTitle": "تفصيل حسب الطلب",
+      "generatedAt": "تم الإنشاء {date}",
+      "previousGeneration": "قائمة محفوظة سابقة",
       "notes": "ملاحظات",
       "print": "نسخة للطباعة",
       "reset": "إعادة تعيين القائمة",
+      "refresh": "تحديث القائمة",
       "acceptAllInventoryChanges": "قبول كل تخفيضات المخزون",
       "applySelectedInventoryChanges": "تطبيق التخفيضات المحددة",
       "addProductTitle": "إضافة منتج",
@@ -1179,10 +1238,19 @@
       "removeItem": "إزالة {title}",
       "loading": "جارٍ إنشاء القائمة...",
       "ready": "القائمة جاهزة.",
+      "saving": "جارٍ حفظ قائمة التجهيز...",
+      "saved": "تم حفظ قائمة التجهيز.",
+      "saveError": "تعذر حفظ تغييرات قائمة التجهيز.",
+      "lastSavedBy": "آخر حفظ بواسطة {name}",
+      "sharedDraftLoaded": "تم تحميل قائمة التجهيز المشتركة.",
+      "refreshing": "جارٍ تحديث قائمة التجهيز...",
+      "refreshReady": "تم تحديث قائمة التجهيز.",
       "error": "تعذر إنشاء القائمة.",
       "emptySelection": "حدد طلبًا واحدًا على الأقل.",
       "emptyConfirmed": "لا توجد طلبات مؤكدة متاحة لقائمة التجهيز.",
       "emptyDispatched": "لا توجد طلبات مرسلة متاحة لقائمة التجهيز.",
+      "emptyPosted": "لا توجد طلبات منشورة متاحة لقائمة التجهيز.",
+      "emptyPostedAndConfirmed": "لا توجد طلبات منشورة أو مؤكدة متاحة لقائمة التجهيز.",
       "printError": "تعذر فتح نسخة الطباعة."
     },
     "products": {
@@ -1576,6 +1644,8 @@
       "actionLabel": "التصفية حسب الإجراء",
       "areaLabel": "التصفية حسب القسم",
       "stateLabel": "التصفية حسب الحالة",
+      "includeEcotrackSyncLabel": "إظهار تغييرات ECOTRACK sync",
+      "includeEcotrackSyncDescription": "مخفية افتراضيًا لإبقاء الجدول سهل القراءة.",
       "allActions": "كل الإجراءات",
       "allAreas": "كل الأقسام",
       "allStates": "كل الحالات"
@@ -1731,7 +1801,7 @@
     "newBanner": "بنر جديد",
     "createBannerTitle": "إنشاء بنر",
     "editBannerTitle": "تعديل البنر",
-    "bannerDialogDescription": "حدّد عنوان البنر والمنتج المرتبط والصورة.",
+    "bannerDialogDescription": "حدّد عنوان البنر والمنتج المرتبط وصور الشاشات المختلفة.",
     "bannerTitlePlaceholder": "عنوان البنر",
     "bannerTitleArPlaceholder": "عنوان البنر بالعربية",
     "titleLabel": "العنوان",
@@ -1741,6 +1811,8 @@
     "linkedProductColumn": "المنتج المرتبط",
     "orderColumn": "الترتيب",
     "bannerImageLabel": "صورة البنر",
+    "bannerLandscapeImageLabel": "صورة الشاشة الأفقية",
+    "bannerPortraitImageLabel": "صورة الشاشة العمودية",
     "uploadHint": "يتم الرفع إلى S3 ثم حفظ روابط CloudFront.",
     "singleImagePlaceholder": "رابط صورة البنر",
     "createBanner": "إنشاء البنر",

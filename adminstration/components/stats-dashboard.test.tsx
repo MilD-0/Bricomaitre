@@ -377,6 +377,48 @@ describe('StatsDashboard', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('rebuilds dashboard stats when refresh is clicked', async () => {
+    const refreshedResponse = {
+      data: {
+        ...baseResponse.data,
+        adCosts: {
+          ...baseResponse.data.adCosts,
+          totalSpend: 0,
+        },
+      },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url === '/api/stats' && init?.method === 'PUT') {
+        return {
+          ok: true,
+          json: async () => refreshedResponse,
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => baseResponse,
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderDashboard('overview', baseResponse.data);
+
+    await userEvent.click(screen.getByRole('button', { name: 'refresh' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/stats',
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({ range: '90d' }),
+        }),
+      );
+    });
+  });
+
   it('renders the products stats page', async () => {
     const paginatedResponse = {
       ...baseResponse,

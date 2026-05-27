@@ -1,7 +1,7 @@
 import { and, asc, count, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 
 import { getDb, hasDb } from '../db/client';
-import { orderStatusHistory, orders } from '../db/schema';
+import { ecotrackOrderMajEntries, ecotrackOrderStates, ecotrackOrderTrackingEvents, orderStatusHistory, orders } from '../db/schema';
 import {
   coerceNoAnswerCount,
   coerceOrderStatus,
@@ -17,6 +17,7 @@ type OrdersQueryInput = {
   limit?: string | number | undefined;
   search?: string | undefined;
   confirmed?: number | undefined;
+  noAnswerCount?: number | undefined;
   sort?: string[] | undefined;
   sortKey?: string | undefined;
   sortDirection?: string | undefined;
@@ -36,6 +37,26 @@ export type OrdersResponse = {
   writable: boolean;
   pagination: PaginationMeta;
 };
+
+export type DailyOrderStatusOverview = {
+  available: true;
+  reportDay: string;
+  timezone: string;
+  newOrders: number;
+  confirmationStatusChanges: number;
+  confirmedToday: number;
+  noAnswerAttempts: number;
+  adminCancelled: number;
+  carrierCancelled: number;
+  shipmentUpdates: number;
+} | {
+  available: false;
+  reportDay: string | null;
+  timezone: string;
+};
+
+export const DAILY_ORDER_STATUS_TIMEZONE = 'Africa/Algiers';
+const ECOTRACK_SYNC_ACTOR_NAME = 'ECOTRACK sync';
 
 function getOrderBy(sortRules: OrderSortRule[]) {
   const orderBy = sortRules.flatMap((rule) => {
@@ -70,6 +91,163 @@ function buildOrderHistory(rows: typeof orderStatusHistory.$inferSelect[]): Orde
   });
 }
 
+function getAlgiersReportDay(now = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: DAILY_ORDER_STATUS_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
+async function readCount(db: ReturnType<typeof getDb>, query: ReturnType<typeof sql<number>>) {
+  const result = await db.execute(query);
+  const row = (result.rows?.[0] ?? {}) as { value?: number | string | bigint };
+  const value = row?.value ?? 0;
+  return typeof value === 'bigint' ? Number(value) : Number(value);
+}
+
+function activeReportDayPredicate(timestampExpression: ReturnType<typeof sql>) {
+  return sql`${timestampExpression} >= (((now() at time zone ${DAILY_ORDER_STATUS_TIMEZONE})::date)::timestamp at time zone ${DAILY_ORDER_STATUS_TIMEZONE})
+    and ${timestampExpression} < ((((now() at time zone ${DAILY_ORDER_STATUS_TIMEZONE})::date + 1))::timestamp at time zone ${DAILY_ORDER_STATUS_TIMEZONE})`;
+}
+
+function activeOrdersJoinPredicate() {
+  return sql`${orders.archivedAt} is null`;
+}
+
+export async function loadDailyOrderStatusOverview(): Promise<DailyOrderStatusOverview> {
+  if (!hasDb()) {
+    return {
+      available: false,
+      reportDay: null,
+      timezone: DAILY_ORDER_STATUS_TIMEZONE,
+    };
+  }
+
+  const db = getDb();
+  const reportDay = getAlgiersReportDay();
+  const newOrders = await readCount(db, sql`
+    select count(distinct ${orders.id})::int as value
+    from ${orders}
+    where ${activeOrdersJoinPredicate()}
+      and ${activeReportDayPredicate(sql`${orders.createdAt}`)}
+  `);
+  const confirmationStatusChanges = await readCount(db, sql`
+    select count(*)::int as value
+    from ${orderStatusHistory}
+    inner join ${orders} on ${orders.id} = ${orderStatusHistory.orderId}
+    where ${activeOrdersJoinPredicate()}
+      and ${activeReportDayPredicate(sql`${orderStatusHistory.changedAt}`)}
+  `);
+  const confirmedToday = await readCount(db, sql`
+    select count(*)::int as value
+    from ${orderStatusHistory}
+    inner join ${orders} on ${orders.id} = ${orderStatusHistory.orderId}
+    where ${activeOrdersJoinPredicate()}
+      and ${orderStatusHistory.status} = 2
+      and ${activeReportDayPredicate(sql`${orderStatusHistory.changedAt}`)}
+  `);
+  const noAnswerAttempts = await readCount(db, sql`
+    select count(*)::int as value
+    from ${orderStatusHistory}
+    inner join ${orders} on ${orders.id} = ${orderStatusHistory.orderId}
+    where ${activeOrdersJoinPredicate()}
+      and ${orderStatusHistory.status} = 1
+      and ${activeReportDayPredicate(sql`${orderStatusHistory.changedAt}`)}
+  `);
+  const adminCancelled = await readCount(db, sql`
+    select count(*)::int as value
+    from ${orderStatusHistory}
+    inner join ${orders} on ${orders.id} = ${orderStatusHistory.orderId}
+    where ${activeOrdersJoinPredicate()}
+      and ${orderStatusHistory.status} = 6
+      and coalesce(${orderStatusHistory.changedByName}, '') <> ${ECOTRACK_SYNC_ACTOR_NAME}
+      and ${activeReportDayPredicate(sql`${orderStatusHistory.changedAt}`)}
+  `);
+  const carrierCancelled = await readCount(db, sql`
+    with carrier_cancelled as (
+      select
+        ${ecotrackOrderStates.orderId} as order_id,
+        coalesce(
+          (
+            select max(
+              case
+                when activity.value->>'date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                  and coalesce(nullif(activity.value->>'time', ''), '00:00:00') ~ '^[0-9]{2}:[0-9]{2}(:[0-9]{2})?$'
+                then ((activity.value->>'date') || 'T' || coalesce(nullif(activity.value->>'time', ''), '00:00:00') || 'Z')::timestamptz
+                else null
+              end
+            )
+            from jsonb_array_elements(coalesce(${ecotrackOrderStates.rawStatusPayload}->'activity', '[]'::jsonb)) as activity(value)
+          ),
+          ${ecotrackOrderStates.lastActionAt},
+          ${ecotrackOrderStates.lastStatusSyncedAt},
+          ${ecotrackOrderStates.updatedAt}
+        ) as activity_at
+      from ${ecotrackOrderStates}
+      where lower(${ecotrackOrderStates.currentStatus}) = 'annule'
+    )
+    select count(distinct carrier_cancelled.order_id)::int as value
+    from carrier_cancelled
+    inner join ${orders} on ${orders.id} = carrier_cancelled.order_id
+    where ${activeOrdersJoinPredicate()}
+      and ${activeReportDayPredicate(sql`carrier_cancelled.activity_at`)}
+  `);
+  const shipmentUpdates = await readCount(db, sql`
+    select count(distinct shipment_activity.order_id)::int as value
+    from (
+      select
+        ${ecotrackOrderStates.orderId} as order_id,
+        coalesce(
+          (
+            select max(
+              case
+                when activity.value->>'date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                  and coalesce(nullif(activity.value->>'time', ''), '00:00:00') ~ '^[0-9]{2}:[0-9]{2}(:[0-9]{2})?$'
+                then ((activity.value->>'date') || 'T' || coalesce(nullif(activity.value->>'time', ''), '00:00:00') || 'Z')::timestamptz
+                else null
+              end
+            )
+            from jsonb_array_elements(coalesce(${ecotrackOrderStates.rawStatusPayload}->'activity', '[]'::jsonb)) as activity(value)
+          ),
+          ${ecotrackOrderStates.lastActionAt},
+          ${ecotrackOrderStates.lastStatusSyncedAt},
+          ${ecotrackOrderStates.updatedAt}
+        ) as activity_at
+      from ${ecotrackOrderStates}
+      inner join ${orders} on ${orders.id} = ${ecotrackOrderStates.orderId}
+      where ${activeOrdersJoinPredicate()}
+      union
+      select ${ecotrackOrderMajEntries.orderId} as order_id, ${ecotrackOrderMajEntries.remoteCreatedAt} as activity_at
+      from ${ecotrackOrderMajEntries}
+      inner join ${orders} on ${orders.id} = ${ecotrackOrderMajEntries.orderId}
+      where ${activeOrdersJoinPredicate()}
+      union
+      select
+        ${ecotrackOrderTrackingEvents.orderId} as order_id,
+        (${ecotrackOrderTrackingEvents.eventDate}::timestamp at time zone ${DAILY_ORDER_STATUS_TIMEZONE}) as activity_at
+      from ${ecotrackOrderTrackingEvents}
+      inner join ${orders} on ${orders.id} = ${ecotrackOrderTrackingEvents.orderId}
+      where ${activeOrdersJoinPredicate()}
+    ) shipment_activity
+    where ${activeReportDayPredicate(sql`shipment_activity.activity_at`)}
+  `);
+
+  return {
+    available: true,
+    reportDay,
+    timezone: DAILY_ORDER_STATUS_TIMEZONE,
+    newOrders,
+    confirmationStatusChanges,
+    confirmedToday,
+    noAnswerAttempts,
+    adminCancelled,
+    carrierCancelled,
+    shipmentUpdates,
+  };
+}
+
 export async function loadOrdersPageData(
   input: OrdersQueryInput,
   writable: boolean,
@@ -98,6 +276,7 @@ export async function loadOrdersPageData(
   const whereClause = and(
     isNull(orders.archivedAt),
     query.confirmed !== undefined ? sql`${orders.confirmed} = ${query.confirmed}` : undefined,
+    query.confirmed === 1 && query.noAnswerCount !== undefined ? sql`${orders.noAnswerCount} = ${query.noAnswerCount}` : undefined,
     ...(searchFilter ? [searchFilter] : []),
   );
   const [{ value: totalItems }] = await db.select({ value: count() }).from(orders).where(whereClause);

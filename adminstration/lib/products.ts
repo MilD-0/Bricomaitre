@@ -4,6 +4,26 @@ import { parseSortRuleStrings, type SortRule } from './multi-sort';
 
 const nullableText = z.string().trim().optional().nullable();
 const nullableNumber = z.coerce.number().min(0).optional().nullable();
+const nullableDateText = z.union([z.string(), z.null(), z.undefined()]).transform((value) => {
+  if (value == null) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+});
+
+export function normalizePromoCode(value: string) {
+  return value.trim().toLowerCase();
+}
+
+export const productPromoCodePayloadSchema = z.object({
+  code: z.string().trim().min(1).max(120),
+  promoPrice: z.coerce.number().min(0),
+  active: z.boolean().default(true),
+  startsAt: nullableDateText,
+  endsAt: nullableDateText,
+});
 
 export const productPayloadSchema = z.object({
   title: z.string().trim().min(1),
@@ -30,10 +50,50 @@ export const productPayloadSchema = z.object({
   brandId: z.coerce.number().int().positive().optional().nullable(),
   categoryId: z.coerce.number().int().positive().optional().nullable(),
   images: z.array(z.string().trim().url()).default([]),
+  promoCodes: z.array(productPromoCodePayloadSchema).default([]),
+}).superRefine((value, ctx) => {
+  const seenCodes = new Set<string>();
+
+  value.promoCodes.forEach((promo, index) => {
+    const normalizedCode = normalizePromoCode(promo.code);
+    if (seenCodes.has(normalizedCode)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Promo codes must be unique per product.',
+        path: ['promoCodes', index, 'code'],
+      });
+    }
+    seenCodes.add(normalizedCode);
+
+    if (promo.active && promo.promoPrice >= value.price) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Active promo price must be lower than the product price.',
+        path: ['promoCodes', index, 'promoPrice'],
+      });
+    }
+
+    if (promo.startsAt && Number.isNaN(Date.parse(promo.startsAt))) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Start date must be a valid date.',
+        path: ['promoCodes', index, 'startsAt'],
+      });
+    }
+
+    if (promo.endsAt && Number.isNaN(Date.parse(promo.endsAt))) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'End date must be a valid date.',
+        path: ['promoCodes', index, 'endsAt'],
+      });
+    }
+  });
 });
 
 export type ProductPayloadInput = z.input<typeof productPayloadSchema>;
 export type ProductPayload = z.output<typeof productPayloadSchema>;
+export type ProductPromoCodePayload = z.output<typeof productPromoCodePayloadSchema>;
 
 export const productPatchSchema = z.object({
   active: z.boolean().optional(),
@@ -89,10 +149,14 @@ export const productListQuerySchema = z.object({
   };
 });
 
-export type ProductRecord = ProductPayload & {
+export type ProductRecord = Omit<ProductPayload, 'promoCodes'> & {
   id: number;
   createdAt: string;
   updatedAt: string;
+  promoCodes?: ProductPromoCodePayload[];
+  orderPurchaseCount: number;
+  confirmedOrderCount: number;
+  confirmationRate: number | null;
 };
 
 export type ProductSortKey = z.infer<typeof productListQuerySchema>['sortKey'];

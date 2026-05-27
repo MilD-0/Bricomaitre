@@ -53,6 +53,8 @@ describe('AssetsManager', () => {
               title: 'Existing banner',
               titleAr: 'البنر الحالي',
               imageUrl: 'https://cdn.example.com/banner-1.jpg',
+              imageUrlPortrait: null,
+              imageUrlLandscape: 'https://cdn.example.com/banner-1.jpg',
               productId: 10,
               sortOrder: 0,
               active: true,
@@ -159,7 +161,7 @@ describe('AssetsManager', () => {
     await userEvent.type(within(bannerDialog).getByRole('textbox', { name: 'Title' }), 'Hero banner');
     await userEvent.type(within(bannerDialog).getByRole('textbox', { name: 'Arabic title' }), 'بانر رئيسي');
     await userEvent.click(within(bannerDialog).getByRole('button', { name: 'Choose Roller' }));
-    await userEvent.type(within(bannerDialog).getByRole('textbox', { name: 'Banner image' }), 'https://cdn.example.com/new-banner.jpg');
+    await userEvent.type(within(bannerDialog).getByRole('textbox', { name: 'Horizontal screen image' }), 'https://cdn.example.com/new-banner.jpg');
     await userEvent.click(within(bannerDialog).getByRole('button', { name: 'Create banner' }));
 
     await waitFor(() => {
@@ -173,6 +175,8 @@ describe('AssetsManager', () => {
             title: 'Hero banner',
             titleAr: 'بانر رئيسي',
             imageUrl: 'https://cdn.example.com/new-banner.jpg',
+            imageUrlPortrait: null,
+            imageUrlLandscape: 'https://cdn.example.com/new-banner.jpg',
             productId: 10,
             active: true,
         },
@@ -391,7 +395,10 @@ describe('AssetsManager', () => {
             {
               id: 1,
               title: 'Existing banner',
+              titleAr: 'البنر الحالي',
               imageUrl: 'https://cdn.example.com/banner-1.jpg',
+              imageUrlPortrait: null,
+              imageUrlLandscape: 'https://cdn.example.com/banner-1.jpg',
               productId: 10,
               sortOrder: 0,
               active: true,
@@ -401,7 +408,10 @@ describe('AssetsManager', () => {
             {
               id: 4,
               title: 'Secondary banner',
+              titleAr: 'البنر الثاني',
               imageUrl: 'https://cdn.example.com/banner-2.jpg',
+              imageUrlPortrait: null,
+              imageUrlLandscape: 'https://cdn.example.com/banner-2.jpg',
               productId: null,
               sortOrder: 1,
               active: true,

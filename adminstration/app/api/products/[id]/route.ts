@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 
 import { getDb, hasDb } from '../../../../db/client';
-import { products } from '../../../../db/schema';
+import { productPromoCodes, products } from '../../../../db/schema';
 import { mutateEntityWithHistory } from '../../../../lib/action-history';
 import { auth } from '../../../../lib/auth';
 import { startProductCatalogFeedRefreshJob } from '../../../../lib/background-jobs';
-import { productPatchSchema, productPayloadSchema } from '../../../../lib/products';
+import { normalizePromoCode, productPatchSchema, productPayloadSchema, type ProductPromoCodePayload } from '../../../../lib/products';
 import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
 import { captureAdminException, getRequestId } from '../../../../lib/sentry';
 import { CACHE_TAGS, revalidateServerTags } from '../../../../lib/server-cache';
@@ -52,12 +52,48 @@ async function toProductMutationValues(
   data: ReturnType<typeof productPayloadSchema.parse>,
   currentId?: number,
 ) {
+  const { promoCodes: _promoCodes, ...productValues } = data;
   return {
-    ...data,
+    ...productValues,
     slug: await resolveProductSlug(data, currentId),
     price: data.price.toFixed(2),
     oldPrice: data.oldPrice == null ? null : data.oldPrice.toFixed(2),
     purchasePrice: data.purchasePrice == null ? null : data.purchasePrice.toFixed(2),
+  };
+}
+
+function toPromoDate(value: string | null) {
+  return value === null ? null : new Date(value);
+}
+
+function toProductPromoRows(productId: number, promoCodes: ProductPromoCodePayload[]) {
+  const now = new Date();
+
+  return promoCodes.map((promo) => ({
+    productId,
+    code: promo.code,
+    normalizedCode: normalizePromoCode(promo.code),
+    promoPrice: promo.promoPrice.toFixed(2),
+    active: promo.active,
+    startsAt: toPromoDate(promo.startsAt),
+    endsAt: toPromoDate(promo.endsAt),
+    createdAt: now,
+    updatedAt: now,
+  }));
+}
+
+function toProductPromoResponse(row: typeof productPromoCodes.$inferSelect) {
+  return {
+    id: row.id,
+    productId: row.productId,
+    code: row.code,
+    normalizedCode: row.normalizedCode,
+    promoPrice: row.promoPrice,
+    active: row.active,
+    startsAt: row.startsAt?.toISOString() ?? null,
+    endsAt: row.endsAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
@@ -73,13 +109,19 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 
   const { id } = await params;
   const numericId = Number(id);
-  const row = await getDb().query.products.findFirst({ where: eq(products.id, numericId) });
+  const db = getDb();
+  const row = await db.query.products.findFirst({ where: eq(products.id, numericId) });
 
   if (!row) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  return NextResponse.json({ item: row });
+  const promoRows = await db
+    .select()
+    .from(productPromoCodes)
+    .where(eq(productPromoCodes.productId, numericId));
+
+  return NextResponse.json({ item: { ...row, promoCodes: promoRows.map(toProductPromoResponse) } });
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -112,13 +154,22 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     entityId: numericId,
     operation: 'update',
     actor,
-    execute: (tx) => tx
-      .update(products)
-      .set({
-        ...values,
-        updatedAt: new Date(),
-      })
-      .where(eq(products.id, numericId)),
+    execute: async (tx) => {
+      await tx
+        .update(products)
+        .set({
+          ...values,
+          updatedAt: new Date(),
+        })
+        .where(eq(products.id, numericId));
+      if (Array.isArray(data.promoCodes)) {
+        await tx.delete(productPromoCodes).where(eq(productPromoCodes.productId, numericId));
+        const promoRows = toProductPromoRows(numericId, data.promoCodes);
+        if (promoRows.length > 0) {
+          await tx.insert(productPromoCodes).values(promoRows);
+        }
+      }
+    },
   });
 
   revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);

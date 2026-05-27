@@ -70,6 +70,8 @@
     "barcode": "Barcode",
     "price": "Price",
     "purchasePrice": "Purchase price",
+    "purchases": "Purchases",
+    "confirmationRate": "Confirmation rate",
     "compareAtPrice": "Compare-at price",
     "inventoryQuantity": "Inventory quantity",
     "active": "Active",
@@ -321,6 +323,11 @@
     "refreshingTitle": "Refreshing analytics",
     "refreshingBadge": "Loading",
     "refreshingDescription": "Updated figures are being calculated for the selected range."
+  },
+  "snapshotMeta": {
+    "title": "Snapshot ready",
+    "staleTitle": "Snapshot is stale",
+    "description": "Generated {generatedAt}. Data through {reportThroughDate}."
   },
   "hero": {
       "averageOrder": "Average collected per order",
@@ -817,12 +824,23 @@
         "cpa": "CPA",
         "actions": "Actions"
       },
+      "batches": {
+        "eyebrow": "Imported spreadsheets",
+        "description": "Previously added ad spend spreadsheets and the rows they currently own.",
+        "meta": "{importedAt} • {currentRows}/{totalRows} current rows",
+        "range": "Spend range: {start} to {end}",
+        "noRows": "No current rows",
+        "delete": "Delete batch",
+        "emptyTitle": "No ad spend spreadsheets imported",
+        "emptyDescription": "Upload a Meta campaign report to create a deletable import batch."
+      },
     "notifications": {
       "addSuccess": "Ad cost entry saved.",
       "importLoading": "Importing ad costs...",
       "importSuccess": "Ad costs imported.",
         "deleteSuccess": "Ad cost entry deleted.",
-        "deleteCampaignSuccess": "Campaign entries deleted."
+        "deleteCampaignSuccess": "Campaign entries deleted.",
+        "deleteBatchSuccess": "Ad spend import batch deleted."
       }
     },
     "profitability": {
@@ -932,6 +950,22 @@
       "success": "Copied {count} product IDs.",
       "error": "Unable to copy {count} product IDs."
     },
+    "promos": {
+      "title": "Promo URLs",
+      "description": "Create hidden product discount links with fixed promotional prices.",
+      "add": "Add promo",
+      "empty": "No promo URLs for this product.",
+      "code": "Promo code",
+      "price": "Promo price",
+      "startsAt": "Starts at",
+      "endsAt": "Ends at",
+      "active": "Active",
+      "copy": "Copy URL",
+      "remove": "Remove promo",
+      "copySuccess": "Promo URL copied.",
+      "copyError": "Unable to copy promo URL.",
+      "loadError": "Unable to load product promo URLs."
+    },
     "export": {
       "action": "Export Meta catalog",
       "title": "Export {count} products to Meta catalog",
@@ -984,9 +1018,26 @@
     },
     "searchPlaceholder": "Search by client name or phone number",
     "totalOrders": "Total orders: {count}",
+    "overview": {
+      "title": "Daily order status",
+      "subtitle": "Activity for {date}",
+      "refreshing": "Refreshing overview",
+      "unavailable": "Order status overview is unavailable because the database is not connected.",
+      "metrics": {
+        "newOrders": "New orders",
+        "confirmationStatusChanges": "Confirmation status changes",
+        "confirmedToday": "Confirmed today",
+        "noAnswerAttempts": "No-answer attempts",
+        "adminCancelled": "Admin cancelled",
+        "carrierCancelled": "Carrier cancelled",
+        "shipmentUpdates": "Shipment updates"
+      }
+    },
     "filters": {
       "statusLabel": "Filter by status",
-      "allStatuses": "All statuses"
+      "allStatuses": "All statuses",
+      "noAnswerCountLabel": "Filter by no-answer count",
+      "allNoAnswerCounts": "All no-answer counts"
     },
     "columns": {
       "date": "Date",
@@ -1025,6 +1076,7 @@
     "amount": {
       "subtotal": "Products",
       "deliveryFee": "Delivery",
+      "promoDiscount": "Promo {code}",
       "total": "Total"
     },
     "actions": {
@@ -1116,6 +1168,7 @@
       "noAnswer": "No answer",
       "noAnswerWithCount": "No answer {count}",
       "confirmed": "Confirmed",
+      "posted": "Posted",
       "dispatched": "Dispatched",
       "completed": "Completed",
       "manualCompleted": "Manually completed",
@@ -1147,14 +1200,21 @@
       "selectedAction": "Shopping list",
       "confirmedAction": "Shopping list for confirmed orders",
       "dispatchedAction": "Dispatched shopping list",
+      "postedAction": "Shopping list for posted orders",
+      "postedAndConfirmedAction": "Shopping list for posted and confirmed orders",
       "selectedTitle": "Shopping list for {count} selected orders",
       "confirmedTitle": "Shopping list for confirmed orders",
       "dispatchedTitle": "Shopping list for dispatched orders",
+      "postedTitle": "Shopping list for posted orders",
+      "postedAndConfirmedTitle": "Shopping list for posted and confirmed orders",
       "consolidatedTitle": "What to gather",
       "ordersTitle": "Order breakdown",
+      "generatedAt": "Generated {date}",
+      "previousGeneration": "Previous saved list",
       "notes": "Notes",
       "print": "Print view",
       "reset": "Reset list",
+      "refresh": "Refresh list",
       "acceptAllInventoryChanges": "Accept all inventory changes",
       "applySelectedInventoryChanges": "Apply selected inventory changes",
       "addProductTitle": "Add a product",
@@ -1178,10 +1238,19 @@
       "removeItem": "Remove {title}",
       "loading": "Building shopping list...",
       "ready": "Shopping list ready.",
+      "saving": "Saving shopping list...",
+      "saved": "Shopping list saved.",
+      "saveError": "Shopping list changes could not be saved.",
+      "lastSavedBy": "Last saved by {name}",
+      "sharedDraftLoaded": "Shared shopping list loaded.",
+      "refreshing": "Refreshing shopping list...",
+      "refreshReady": "Shopping list refreshed.",
       "error": "Failed to build shopping list.",
       "emptySelection": "Select at least one order first.",
       "emptyConfirmed": "No confirmed orders are available for a shopping list.",
       "emptyDispatched": "No dispatched orders are available for a shopping list.",
+      "emptyPosted": "No posted orders are available for a shopping list.",
+      "emptyPostedAndConfirmed": "No posted or confirmed orders are available for a shopping list.",
       "printError": "Unable to open the print view."
     },
     "products": {
@@ -1664,6 +1733,8 @@
       "actionLabel": "Filter by action",
       "areaLabel": "Filter by area",
       "stateLabel": "Filter by state",
+      "includeEcotrackSyncLabel": "Show ECOTRACK sync changes",
+      "includeEcotrackSyncDescription": "Hidden by default to keep the table manageable.",
       "allActions": "All actions",
       "allAreas": "All areas",
       "allStates": "All states"
@@ -1730,7 +1801,7 @@
     "newBanner": "New banner",
     "createBannerTitle": "Create banner",
     "editBannerTitle": "Edit banner",
-    "bannerDialogDescription": "Set the banner title, linked product, and image.",
+    "bannerDialogDescription": "Set the banner title, linked product, and screen-specific images.",
     "bannerTitlePlaceholder": "Banner title",
     "bannerTitleArPlaceholder": "Arabic banner title",
     "titleLabel": "Title",
@@ -1740,6 +1811,8 @@
     "linkedProductColumn": "Linked product",
     "orderColumn": "Order",
     "bannerImageLabel": "Banner image",
+    "bannerLandscapeImageLabel": "Horizontal screen image",
+    "bannerPortraitImageLabel": "Vertical screen image",
     "uploadHint": "Uploads to S3, then stores CloudFront URLs.",
     "singleImagePlaceholder": "Banner image URL",
     "createBanner": "Create banner",

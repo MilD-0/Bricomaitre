@@ -22,6 +22,7 @@ vi.mock('../../../../lib/action-history', () => ({
     operation: z.enum(['all', 'create', 'update', 'delete']).default('all'),
     resource: z.enum(['all', 'products', 'orders', 'assets', 'brandsCategories', 'bulletin', 'stats', 'settings', 'ecotrack']).default('all'),
     state: z.enum(['all', 'applied', 'undone']).default('all'),
+    includeEcotrackSync: z.preprocess((value) => value === 'true', z.boolean()).default(false),
     sort: z.array(z.string()).optional().default([]),
     sortKey: z.enum(['operation', 'resource', 'createdBy', 'createdAt', 'isUndone']).default('createdAt'),
     sortDirection: z.enum(['asc', 'desc']).default('desc'),
@@ -92,7 +93,7 @@ describe('app/api/action-history/route', () => {
       },
     });
 
-    const res = await GET(new NextRequest('http://localhost/api/action-history?page=2&limit=10&search=admin&operation=update&resource=products&state=undone&sort=isUndone:asc&sort=createdAt:desc'));
+    const res = await GET(new NextRequest('http://localhost/api/action-history?page=2&limit=10&search=admin&operation=update&resource=products&state=undone&includeEcotrackSync=true&sort=isUndone:asc&sort=createdAt:desc'));
 
     expect(listActionHistoryMock).toHaveBeenCalledWith(db, {
       page: 2,
@@ -101,6 +102,7 @@ describe('app/api/action-history/route', () => {
       operation: 'update',
       resource: 'products',
       state: 'undone',
+      includeEcotrackSync: true,
       sort: ['isUndone:asc', 'createdAt:desc'],
       sortKey: 'createdAt',
       sortDirection: 'desc',
