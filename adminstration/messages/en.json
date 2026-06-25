@@ -769,6 +769,15 @@
       "managerTitle": "Ad costs",
       "conversionRate": "Conversion rate",
       "unknownCampaign": "Unknown campaign",
+      "health": {
+        "title": "CAPI delivery health",
+        "pending": "Pending / retrying",
+        "delivered": "Delivered",
+        "failed": "Failed / skipped",
+        "purchaseCoverage": "Submission Purchase coverage",
+        "orderConfirmedCoverage": "orderconfirmed coverage",
+        "worker": "Worker heartbeat: {heartbeat} • Oldest pending: {oldest} • Confirmed purchases later in a negative outcome: {negative}"
+      },
       "events": {
         "empty": "No Meta tracking events were recorded for this range.",
         "columns": {
@@ -1027,7 +1036,7 @@
         "newOrders": "New orders",
         "confirmationStatusChanges": "Confirmation status changes",
         "confirmedToday": "Confirmed today",
-        "noAnswerAttempts": "No-answer attempts",
+        "noAnswerOrders": "No-answer orders",
         "adminCancelled": "Admin cancelled",
         "carrierCancelled": "Carrier cancelled",
         "shipmentUpdates": "Shipment updates"

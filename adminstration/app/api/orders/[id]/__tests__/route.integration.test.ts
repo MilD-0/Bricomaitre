@@ -4,13 +4,31 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DELETE, GET, PATCH } from '../route';
 import { orderPatchSchema } from '../../../../../lib/orders';
 
-const { hasDbMock, getDbMock, requireMutationAccessMock, authMock, mutateEntityWithHistoryMock, readEcotrackCatalogMock } = vi.hoisted(() => ({
+const {
+  ensureOrderConfirmedEventForOrderMock,
+  ensureOrderCompletedEventForOrderMock,
+  hasDbMock,
+  getDbMock,
+  requireMutationAccessMock,
+  authMock,
+  mutateEntityWithHistoryMock,
+  readEcotrackCatalogMock,
+} = vi.hoisted(() => ({
+  ensureOrderConfirmedEventForOrderMock: vi.fn(),
+  ensureOrderCompletedEventForOrderMock: vi.fn(),
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
   requireMutationAccessMock: vi.fn(),
   authMock: vi.fn(),
   mutateEntityWithHistoryMock: vi.fn(),
   readEcotrackCatalogMock: vi.fn(),
+}));
+
+vi.mock('@bric/storefront-core/meta', () => ({
+  ensureOrderConfirmedEventForOrder: ensureOrderConfirmedEventForOrderMock,
+  ensureOrderCompletedEventForOrder: ensureOrderCompletedEventForOrderMock,
+  isMetaOrderConfirmedStatus: (status: number) => status === 2,
+  isMetaCompletedStatus: (status: number) => status === 4 || status === 10,
 }));
 
 vi.mock('../../../../../db/client', () => ({
@@ -48,6 +66,10 @@ describe('app/api/orders/[id]/route', () => {
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mutateEntityWithHistoryMock.mockReset();
     readEcotrackCatalogMock.mockReset();
+    ensureOrderConfirmedEventForOrderMock.mockReset();
+    ensureOrderConfirmedEventForOrderMock.mockResolvedValue({ created: true });
+    ensureOrderCompletedEventForOrderMock.mockReset();
+    ensureOrderCompletedEventForOrderMock.mockResolvedValue({ created: true });
     readEcotrackCatalogMock.mockResolvedValue({
       wilayas: [],
       communes: [],
@@ -300,6 +322,12 @@ describe('app/api/orders/[id]/route', () => {
         actor: { email: 'admin@example.com', name: 'Admin' },
       }),
     );
+    expect(ensureOrderConfirmedEventForOrderMock).toHaveBeenCalledWith(db, expect.objectContaining({
+      orderId: 7,
+      statusHistoryId: 3,
+      status: 2,
+      changedAt: new Date('2026-03-02T11:00:00.000Z'),
+    }));
     await expect(response.json()).resolves.toEqual(
       expect.objectContaining({
         ok: true,
@@ -328,6 +356,183 @@ describe('app/api/orders/[id]/route', () => {
         }),
       }),
     );
+  });
+
+  it('queues OrderCompleted after a completed status update', async () => {
+    hasDbMock.mockReturnValue(true);
+    vi.spyOn(orderPatchSchema, 'safeParse').mockReturnValue({
+      success: true,
+      data: { confirmed: 4, noAnswerCount: 0 },
+    } as never);
+    const existingOrder = {
+      id: 7,
+      firstName: 'Grace',
+      lastName: 'Hopper',
+      phoneNumber1: '0550111111',
+      phoneNumber2: null,
+      cartProducts: ['8'],
+      delivery: 0,
+      state: 31,
+      city: 'Bir El Djir',
+      homeAddress: 'Street 5',
+      delPr: '150.00',
+      price: '1200.00',
+      note: null,
+      confirmed: 2,
+      noAnswerCount: 0,
+      confirmedBy: 'admin@example.com',
+      confirmedByName: 'Admin',
+      confirmedAt: new Date('2026-03-02T11:00:00.000Z'),
+      createdAt: new Date('2026-03-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-02T11:00:00.000Z'),
+    };
+    const db = {
+      query: { orders: { findFirst: vi.fn().mockResolvedValue(existingOrder) } },
+      select: vi.fn().mockReturnValue({
+        from: vi.fn()
+          .mockReturnValueOnce({
+            where: vi.fn().mockReturnValue({
+              orderBy: vi.fn().mockResolvedValue([{
+                id: 40,
+                orderId: 7,
+                status: 10,
+                noAnswerCount: 0,
+                changedBy: 'admin@example.com',
+                changedByName: 'Admin',
+                changedAt: new Date('2026-03-02T12:00:00.000Z'),
+              }, {
+                id: 44,
+                orderId: 7,
+                status: 4,
+                noAnswerCount: 0,
+                changedBy: 'admin@example.com',
+                changedByName: 'Admin',
+                changedAt: new Date('2026-03-03T11:00:00.000Z'),
+              }]),
+            }),
+          })
+          .mockReturnValueOnce({
+            where: vi.fn().mockResolvedValue([{
+              id: 8,
+              mongoId: null,
+              title: 'Keyboard',
+              price: 800,
+              images: ['https://cdn.example.com/keyboard.jpg'],
+            }]),
+          }),
+      }),
+    };
+    getDbMock.mockReturnValue(db);
+    mutateEntityWithHistoryMock.mockImplementation(async (_db, params) => params.execute({
+      update: () => ({
+        set: (values: Record<string, unknown>) => ({
+          where: () => ({
+            returning: () => Promise.resolve([{ ...existingOrder, ...values, confirmed: 4 }]),
+          }),
+        }),
+      }),
+      insert: () => ({
+        values: () => Promise.resolve(undefined),
+      }),
+    }));
+
+    const response = await PATCH(
+      new NextRequest('http://localhost/api/orders/7', {
+        method: 'PATCH',
+        body: JSON.stringify({ confirmed: 4, noAnswerCount: 0 }),
+        headers: { 'content-type': 'application/json' },
+      }),
+      { params: Promise.resolve({ id: '7' }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(ensureOrderCompletedEventForOrderMock).toHaveBeenCalledWith(db, expect.objectContaining({
+      orderId: 7,
+      statusHistoryId: 40,
+      status: 10,
+      changedAt: new Date('2026-03-02T12:00:00.000Z'),
+    }));
+  });
+
+  it('keeps the admin update successful when OrderCompleted enqueue fails', async () => {
+    ensureOrderCompletedEventForOrderMock.mockRejectedValue(new Error('Meta unavailable'));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    hasDbMock.mockReturnValue(true);
+    vi.spyOn(orderPatchSchema, 'safeParse').mockReturnValue({
+      success: true,
+      data: { confirmed: 10, noAnswerCount: 0 },
+    } as never);
+    const existingOrder = {
+      id: 7,
+      firstName: 'Grace',
+      lastName: 'Hopper',
+      phoneNumber1: '0550111111',
+      phoneNumber2: null,
+      cartProducts: ['8'],
+      delivery: 0,
+      state: 31,
+      city: 'Bir El Djir',
+      homeAddress: 'Street 5',
+      delPr: '150.00',
+      price: '1200.00',
+      note: null,
+      confirmed: 2,
+      noAnswerCount: 0,
+      confirmedBy: 'admin@example.com',
+      confirmedByName: 'Admin',
+      confirmedAt: new Date('2026-03-02T11:00:00.000Z'),
+      createdAt: new Date('2026-03-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-02T11:00:00.000Z'),
+    };
+    const db = {
+      query: { orders: { findFirst: vi.fn().mockResolvedValue(existingOrder) } },
+      select: vi.fn().mockReturnValue({
+        from: vi.fn()
+          .mockReturnValueOnce({
+            where: vi.fn().mockReturnValue({
+              orderBy: vi.fn().mockResolvedValue([{
+                id: 45,
+                orderId: 7,
+                status: 10,
+                noAnswerCount: 0,
+                changedBy: 'admin@example.com',
+                changedByName: 'Admin',
+                changedAt: new Date('2026-03-03T11:00:00.000Z'),
+              }]),
+            }),
+          })
+          .mockReturnValueOnce({ where: vi.fn().mockResolvedValue([]) }),
+      }),
+    };
+    getDbMock.mockReturnValue(db);
+    mutateEntityWithHistoryMock.mockImplementation(async (_db, params) => params.execute({
+      update: () => ({
+        set: (values: Record<string, unknown>) => ({
+          where: () => ({
+            returning: () => Promise.resolve([{ ...existingOrder, ...values, confirmed: 10 }]),
+          }),
+        }),
+      }),
+      insert: () => ({
+        values: () => Promise.resolve(undefined),
+      }),
+    }));
+
+    const response = await PATCH(
+      new NextRequest('http://localhost/api/orders/7', {
+        method: 'PATCH',
+        body: JSON.stringify({ confirmed: 10, noAnswerCount: 0 }),
+        headers: { 'content-type': 'application/json' },
+      }),
+      { params: Promise.resolve({ id: '7' }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to queue Meta OrderCompleted event',
+      expect.objectContaining({ orderId: 7, message: 'Meta unavailable' }),
+    );
+    consoleError.mockRestore();
   });
 
   it('patches first and last name fields', async () => {

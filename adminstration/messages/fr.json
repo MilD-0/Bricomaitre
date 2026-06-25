@@ -774,6 +774,15 @@
       "managerTitle": "Coûts publicitaires",
       "conversionRate": "Taux de conversion",
       "unknownCampaign": "Campagne inconnue",
+      "health": {
+        "title": "Santé de livraison CAPI",
+        "pending": "En attente / nouvelle tentative",
+        "delivered": "Livrés",
+        "failed": "Échecs / ignorés",
+        "purchaseCoverage": "Couverture Purchase à la soumission",
+        "orderConfirmedCoverage": "Couverture orderconfirmed",
+        "worker": "Dernier signal du worker : {heartbeat} • Plus ancien en attente : {oldest} • Purchases confirmés ensuite négatifs : {negative}"
+      },
       "events": {
         "empty": "Aucun événement Meta n'a été enregistré pour cette période.",
         "columns": {
@@ -1032,7 +1041,7 @@
         "newOrders": "Nouvelles commandes",
         "confirmationStatusChanges": "Changements de statut de confirmation",
         "confirmedToday": "Confirmées aujourd'hui",
-        "noAnswerAttempts": "Tentatives sans réponse",
+        "noAnswerOrders": "Commandes sans réponse",
         "adminCancelled": "Annulées par admin",
         "carrierCancelled": "Annulées par transporteur",
         "shipmentUpdates": "Mises à jour livraison"

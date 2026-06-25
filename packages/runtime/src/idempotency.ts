@@ -19,6 +19,17 @@ export async function readIdempotencyRecord(scope: string, key: string) {
   return raw ? JSON.parse(raw) as IdempotencyRecord : null;
 }
 
+export async function readIdempotencyRecordWithTtl(scope: string, key: string) {
+  const redis = getRedis();
+  const storageKey = getIdempotencyKey(scope, key);
+  const [raw, ttlSeconds] = await Promise.all([redis.get(storageKey), redis.ttl(storageKey)]);
+
+  return {
+    record: raw ? JSON.parse(raw) as IdempotencyRecord : null,
+    ttlSeconds: ttlSeconds > 0 ? ttlSeconds : null,
+  };
+}
+
 export async function beginIdempotentRequest(options: {
   scope: string;
   key: string;
@@ -26,9 +37,9 @@ export async function beginIdempotentRequest(options: {
   ttlSeconds?: number;
 }) {
   const redis = getRedis();
-  const existing = await readIdempotencyRecord(options.scope, options.key);
-  if (existing) {
-    return { kind: 'existing' as const, record: existing };
+  const existing = await readIdempotencyRecordWithTtl(options.scope, options.key);
+  if (existing.record) {
+    return { kind: 'existing' as const, record: existing.record, ttlSeconds: existing.ttlSeconds };
   }
 
   const record: IdempotencyRecord = {
@@ -45,8 +56,8 @@ export async function beginIdempotentRequest(options: {
   );
 
   if (!applied) {
-    const current = await readIdempotencyRecord(options.scope, options.key);
-    return { kind: 'existing' as const, record: current };
+    const current = await readIdempotencyRecordWithTtl(options.scope, options.key);
+    return { kind: 'existing' as const, record: current.record, ttlSeconds: current.ttlSeconds };
   }
 
   return { kind: 'started' as const };

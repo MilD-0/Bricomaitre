@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 import { usePathname, useRouter } from "@/i18n/navigation";
+import { handleSearch } from "./Init";
 
 const Search = ({ setResults }: any) => {
   const t = useTranslations("Layout");
@@ -16,6 +17,7 @@ const Search = ({ setResults }: any) => {
   const lmt = searchParams.get("limit");
   const stk = searchParams.get("instock");
   const [previousQuery, setPreviousQuery] = useState("");
+  const lastTrackedQuery = useRef("");
 
   const sortby = searchParams.get("sortby");
   const brand = searchParams.get("brand");
@@ -29,9 +31,13 @@ const Search = ({ setResults }: any) => {
         const response = await fetch("/api/products4?limit=4&search=" + query);
         const results = await response.json();
         setResults(results);
+        if (response.ok && lastTrackedQuery.current !== query) {
+          lastTrackedQuery.current = query;
+          void handleSearch(query);
+        }
       };
 
-      fetchProducts();
+      void fetchProducts();
     } else {
       setResults([]);
     }
@@ -60,6 +66,10 @@ const Search = ({ setResults }: any) => {
         }${stk === "true" ? `&instock=${stk}` : ""}&#products`
       );
       setPreviousQuery(query);
+      if (query.length >= 2 && lastTrackedQuery.current !== query) {
+        lastTrackedQuery.current = query;
+        void handleSearch(query);
+      }
     }
   }, [
     query,
@@ -72,14 +82,21 @@ const Search = ({ setResults }: any) => {
     previousQuery,
     stk,
   ]);
-  const searchButton = () => {
-    router.push(`/products?search=${query}&#products`);
+  const submitSearch = () => {
+    const submittedQuery = text.trim();
+    void handleSearch(submittedQuery);
+    router.push(`/products?search=${encodeURIComponent(submittedQuery)}&#products`);
   };
   const isProductsListPage = pathname === "/products";
   return (
     <div className={isProductsListPage ? "relative hidden md:block" : "relative"}>
       <input
-        onKeyDown={(e) => (e.key === "Enter" ? searchButton() : null)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            submitSearch();
+          }
+        }}
         spellCheck="false"
         placeholder={t("srch") + "..."}
         className="sf-input h-11 py-2.5 pr-14 md:h-10"
@@ -88,7 +105,7 @@ const Search = ({ setResults }: any) => {
         onChange={(e) => setText(e.target.value)}
       />
       <button
-        onClick={searchButton}
+        onClick={submitSearch}
         className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-teal-700 p-1.5 text-white transition-colors duration-200 hover:bg-teal-600"
       >
         <svg

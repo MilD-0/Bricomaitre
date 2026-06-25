@@ -3,15 +3,10 @@
 import { useTranslations } from "next-intl";
 import { useState, useEffect, useContext, useEffectEvent, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { getCookie } from "cookies-next";
 
 import { CartContext } from "./cartContext";
 import PhoneBadge from "./PhoneBadge";
-import {
-  enrichPastEvents,
-  getOrCreateExternalId,
-  handlePurchase,
-} from "./Init";
+import { handlePurchase } from "./Init";
 import {
   buildItemArray,
   getAnalyticsContextMetadata,
@@ -21,10 +16,8 @@ import {
   trackAnalyticsEvent,
 } from "@/lib/analytics";
 import {
-  getAddressHelperKey,
   getCheckoutCartMode,
   getCheckoutItemCount,
-  getDefaultOptionalDetailsExpanded,
   isCheckoutCoreComplete,
 } from "@/lib/checkout-fast-path";
 import { isPaidTrafficSession } from "@/lib/paid-session";
@@ -45,23 +38,29 @@ import {
   readPendingOrderVerification,
   writePendingOrderVerification,
 } from "@/lib/pending-order-verification";
+import { getPendingSubmissionConflict } from "@/lib/order-submission-guard";
 import {
   clearRecentOrderSignature,
   hasRecentOrderSignature,
-  hasTrackedPurchase,
-  markPurchaseTracked,
   writeRecentOrderSignature,
   writeCompletedOrderSnapshot,
 } from "@/lib/completed-order-state";
+import {
+  canonicalizeCartProducts,
+  getCanonicalProductId,
+  getProductReferenceTokens,
+} from "@/lib/cart-state";
 import {
   StorefrontOrderClientError,
   createStorefrontOrder,
   patchStorefrontOrder,
   readVerifiedStorefrontOrder,
 } from "@/lib/storefront-order-client";
-import { usePathname, useRouter } from "@/i18n/navigation";
+import { useRouter } from "@/i18n/navigation";
 
-const FREE_SHIPPING_PRODUCT_ID = "f00000000000000000000005";
+const FREE_SHIPPING_PRODUCT_ID = "2137";
+const FREE_SHIPPING_LEGACY_PRODUCT_IDS = new Set(["f00000000000000000000005"]);
+const DUPLICATE_ORDER_WINDOW_MS = 30 * 1000;
 
 function normalizeText(value) {
   const trimmed = value.trim();
@@ -91,6 +90,19 @@ function buildDuplicateSignatureValue({
   });
 }
 
+function getProductCartId(product) {
+  return getCanonicalProductId(product) ?? String(product?._id ?? "").trim();
+}
+
+function isFreeShippingReference(value) {
+  const normalized = String(value ?? "").trim();
+  return normalized === FREE_SHIPPING_PRODUCT_ID || FREE_SHIPPING_LEGACY_PRODUCT_IDS.has(normalized);
+}
+
+function isFreeShippingProduct(product) {
+  return getProductReferenceTokens(product).some(isFreeShippingReference);
+}
+
 function toSnapshotItems({ cart, cartSummary, singleProduct, quantity, promo }) {
   if (!cart) {
     if (!singleProduct) {
@@ -99,7 +111,7 @@ function toSnapshotItems({ cart, cartSummary, singleProduct, quantity, promo }) 
 
     return [
       {
-        rawValue: String(singleProduct._id),
+        rawValue: getProductCartId(singleProduct),
         productId: typeof singleProduct.id === "number" ? singleProduct.id : null,
         title: typeof singleProduct.title === "string" ? singleProduct.title : "",
         unitPrice: promo?.promoPrice ?? (typeof singleProduct.price === "number" ? singleProduct.price : Number(singleProduct.price ?? 0)),
@@ -114,7 +126,7 @@ function toSnapshotItems({ cart, cartSummary, singleProduct, quantity, promo }) 
   return cartSummary.items
     .filter((item) => item.product)
     .map((item) => ({
-      rawValue: String(item.product._id),
+      rawValue: getProductCartId(item.product),
       productId: typeof item.product.id === "number" ? item.product.id : null,
       title: typeof item.product.title === "string" ? item.product.title : "",
       unitPrice: typeof item.product.price === "number" ? item.product.price : Number(item.product.price ?? 0),
@@ -125,10 +137,16 @@ function toSnapshotItems({ cart, cartSummary, singleProduct, quantity, promo }) 
     }));
 }
 
-export default function OrderForm({ prod, cart, order, promoCode = null, showMobileStickySubmit = true }) {
+function buildQuantityAwareAnalyticsItems(products) {
+  return buildItemArray(products).map((item, index) => ({
+    ...item,
+    quantity: products[index]?.quantity ?? 1,
+  }));
+}
+
+export default function OrderForm({ prod, cart, order, promoCode = null }) {
   const t = useTranslations("checkout");
   const router = useRouter();
-  const pathname = usePathname() || "none";
   const storage = typeof window !== "undefined" ? window.localStorage : null;
   const modify = Boolean(order);
   const submissionLockRef = useRef(false);
@@ -169,10 +187,6 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
   );
   const [city, setCity] = useState(storage?.getItem("city") || "");
   const [showOfficeFallbackNotice, setShowOfficeFallbackNotice] = useState(false);
-  const [optionalDetailsExpanded, setOptionalDetailsExpanded] = useState(
-    getDefaultOptionalDetailsExpanded(),
-  );
-  const optionalExpandTrackedRef = useRef(false);
   const checkoutViewTrackedRef = useRef(false);
 
   useEffect(() => {
@@ -347,8 +361,9 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
 
   const hasFreeShippingProduct = cart
     ? cartProducts.length > 0 &&
-      cartProducts.every((productId) => productId === FREE_SHIPPING_PRODUCT_ID)
-    : singleProduct?._id === FREE_SHIPPING_PRODUCT_ID;
+      cartSummary.items.every((item) =>
+        isFreeShippingReference(item.productId) || isFreeShippingProduct(item.product))
+    : isFreeShippingProduct(singleProduct);
 
   const deliveryFee = hasFreeShippingProduct
     ? 0
@@ -373,8 +388,7 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
     selectedWilayaId,
     city: hasSelectedCommune ? city : "",
   });
-  const submitDisabled = isSubmitting || pendingVerification != null;
-  const addressHelperKey = getAddressHelperKey(delivery);
+  const submitDisabled = isSubmitting || pendingVerification != null || (!modify && pendingSubmission != null);
   const showLocationRequiredHint =
     checkoutAttempted && (selectedWilayaId == null || !hasSelectedCommune);
 
@@ -410,27 +424,6 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
     }).catch((error) => console.error(error));
   }, [cartMode, itemCount, paidSession, subtotal, totalAmount]);
 
-  function expandOptionalDetails() {
-    setOptionalDetailsExpanded(true);
-
-    if (optionalExpandTrackedRef.current) {
-      return;
-    }
-
-    optionalExpandTrackedRef.current = true;
-    void trackAnalyticsEvent({
-      eventName: "checkout_optional_details_expand",
-      gaEventName: "checkout_optional_details_expand",
-      metadata: {
-        ...getAnalyticsContextMetadata({
-          paidSession,
-          sourceSurface: "checkout",
-        }),
-        cartMode,
-      },
-    }).catch((error) => console.error(error));
-  }
-
   function isDuplicateOrder(currentOrder) {
     const lastOrder = storage?.getItem("lastOrder");
     if (!lastOrder) {
@@ -439,7 +432,7 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
 
     try {
       const parsedLastOrder = JSON.parse(lastOrder);
-      if (Date.now() - parsedLastOrder.timestamp > 300000) {
+      if (Date.now() - parsedLastOrder.timestamp > DUPLICATE_ORDER_WINDOW_MS) {
         return false;
       }
 
@@ -584,8 +577,10 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
         submissionKey: currentPendingSubmission.submissionKey,
       });
       const trackingProducts = cart
-        ? cartSummary.items.map((item) => item.product).filter(Boolean)
-        : [singleProduct].filter(Boolean);
+        ? cartSummary.items
+          .filter((item) => item.product)
+          .map((item) => ({ ...item.product, quantity: item.quantity }))
+        : [{ ...singleProduct, quantity }].filter((item) => item.id);
 
       persistSuccessfulOrder({
         orderId: successfulOrder.id,
@@ -627,22 +622,7 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
           }),
         },
       });
-      const analyticsItems = buildItemArray(trackingProducts);
-      void trackAnalyticsEvent({
-        eventName: "order_create_success",
-        gaEventName: "order_create_success",
-        pageType: "checkout",
-        orderId: successfulOrder.id,
-        metadata: {
-          storefrontVariant: "new",
-          verificationAttempted: false,
-          verificationSucceeded: false,
-          items: analyticsItems,
-          delivery,
-          state: selectedWilayaName,
-          city,
-        },
-      }).catch((error) => console.error(error));
+      const analyticsItems = buildQuantityAwareAnalyticsItems(trackingProducts);
       void trackAnalyticsEvent({
         eventName: "checkout_submit",
         gaEventName: "checkout_submit",
@@ -657,53 +637,17 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
           city,
         },
       }).catch((error) => console.error(error));
-      enrichPastEvents().catch((error) => console.error(error));
-      if (!hasTrackedPurchase(successfulOrder.id)) {
-        markPurchaseTracked(successfulOrder.id);
-        void handlePurchase({
-          products: trackingProducts,
-          totalValue: totalAmount,
-          eventId: currentPendingSubmission.payload.ev_id,
-          eventTime: currentPendingSubmission.payload.time,
-          orderId: successfulOrder.id,
-          additionalUserData: {
-            em: currentPendingSubmission.payload.email,
-            fn: currentPendingSubmission.payload.firstName,
-            ln: currentPendingSubmission.payload.lastName,
-            ph: currentPendingSubmission.payload.phoneNumber1,
-            ct: currentPendingSubmission.payload.city,
-            st: selectedWilayaName,
-            external_id: getOrCreateExternalId(),
-          },
-        })
-          .then((result) => {
-            if (result?.metaOk === false) {
-              void trackAnalyticsEvent({
-                eventName: "purchase_tracking_failed",
-                gaEventName: "purchase_tracking_failed",
-                pageType: "checkout",
-                orderId: successfulOrder.id,
-                metadata: {
-                  storefrontVariant: "new",
-                  metaStatus: result.metaStatus,
-                },
-              }).catch((analyticsError) => console.error(analyticsError));
-            }
-          })
-          .catch((error) => {
-            console.error(error);
-            void trackAnalyticsEvent({
-              eventName: "purchase_tracking_failed",
-              gaEventName: "purchase_tracking_failed",
-              pageType: "checkout",
-              orderId: successfulOrder.id,
-              metadata: {
-                storefrontVariant: "new",
-                metaStatus: null,
-              },
-            }).catch((analyticsError) => console.error(analyticsError));
-          });
-      }
+      void handlePurchase(successfulOrder.meta, {
+        orderId: successfulOrder.id,
+        metadata: {
+          storefrontVariant: "new",
+          verificationAttempted: false,
+          verificationSucceeded: false,
+          delivery,
+          state: selectedWilayaName,
+          city,
+        },
+      }).catch((error) => console.error(error));
       pushThankYou({
         orderId: successfulOrder.id,
         token: successfulOrder.publicToken,
@@ -733,6 +677,7 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
 
   function discardPendingSubmission() {
     clearPendingOrderSubmission();
+    clearRecentOrderSignature();
     setPendingSubmission(null);
     setVerificationError("");
   }
@@ -762,33 +707,17 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
       return;
     }
 
-    const currentPendingVerification = readPendingOrderVerification();
-    if (currentPendingVerification) {
-      setPendingVerification(currentPendingVerification);
-      setVerificationError(t("verificationFailed"));
-      return;
-    }
-
-    const currentPendingSubmission = readPendingOrderSubmission();
-    if (!modify && currentPendingSubmission) {
-      if (hasRecentOrderSignature(currentPendingSubmission.duplicateSignature.signature)) {
-        setPendingSubmission(currentPendingSubmission);
-        setVerificationError(t("pendingSubmissionExists"));
-        return;
-      }
-      setPendingSubmission(currentPendingSubmission);
-      setVerificationError(t("pendingSubmissionExists"));
-      return;
-    }
-
     if (selectedWilayaId == null || !hasSelectedCommune) {
       setVerificationError(t("locationRequired"));
       return;
     }
 
     const effectiveCartProducts = cart
-      ? cartProducts
-      : Array(quantity).fill(singleProduct?._id).filter(Boolean);
+      ? canonicalizeCartProducts(
+        cartProducts,
+        cartSummary.items.map((item) => item.product).filter(Boolean),
+      )
+      : Array(quantity).fill(getProductCartId(singleProduct)).filter(Boolean);
     const signature = buildDuplicateSignatureValue({
       phoneNumber1: phoneNumber1.trim(),
       city: normalizeText(city),
@@ -805,6 +734,47 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
       total: totalAmount,
       signature,
     };
+
+    const normalizedFirstName = normalizeText(firstName);
+    const normalizedLastName = normalizeText(lastName);
+    const normalizedEmail = normalizeText(email);
+    const normalizedPhoneNumber1 = phoneNumber1.trim();
+    const normalizedPhoneNumber2 = normalizeText(phoneNumber2);
+    const normalizedCity = normalizeText(city);
+    const normalizedAddress = normalizeText(homeAddress);
+    const storefrontPayload = {
+      firstName: normalizedFirstName,
+      lastName: normalizedLastName,
+      email: normalizedEmail,
+      phoneNumber1: normalizedPhoneNumber1,
+      phoneNumber2: normalizedPhoneNumber2,
+      cartProducts: effectiveCartProducts,
+      delivery: delivery === "office" ? 1 : 0,
+      state: selectedWilayaId,
+      city: normalizedCity,
+      homeAddress: normalizedAddress,
+      note: null,
+      promoCode: appliedPromoCode,
+      visitId: getVisitIdFromCookie(),
+      journeyId: getOrCreateJourneyId(),
+      sessionId: getOrCreateSessionId(),
+    };
+
+    const currentPendingVerification = readPendingOrderVerification();
+    if (currentPendingVerification) {
+      setPendingVerification(currentPendingVerification);
+      setVerificationError(t("verificationFailed"));
+      return;
+    }
+
+    const pendingSubmissionConflict = !modify
+      ? getPendingSubmissionConflict(readPendingOrderSubmission(), storefrontPayload)
+      : null;
+    if (pendingSubmissionConflict) {
+      setPendingSubmission(pendingSubmissionConflict.pendingSubmission);
+      setVerificationError(t("pendingSubmissionExists"));
+      return;
+    }
 
     if (isDuplicateOrder(duplicateSignature) || hasRecentOrderSignature(signature)) {
       alert("Cette commande a déjà été envoyée récemment...");
@@ -854,15 +824,7 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
     storage?.setItem("del_pr", String(deliveryFee));
     storage?.setItem("subtotal", String(subtotal));
 
-    const eventTime = Math.floor(Date.now() / 1000);
-    const eventId = uuidv4();
-    const normalizedFirstName = normalizeText(firstName);
-    const normalizedLastName = normalizeText(lastName);
-    const normalizedEmail = normalizeText(email);
-    const normalizedPhoneNumber1 = phoneNumber1.trim();
-    const normalizedPhoneNumber2 = normalizeText(phoneNumber2);
-    const normalizedCity = normalizeText(city);
-    const normalizedAddress = normalizeText(homeAddress);
+    const purchaseEventId = uuidv4();
     const snapshotItems = toSnapshotItems({
       cart,
       cartSummary,
@@ -870,29 +832,14 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
       quantity,
       promo: activePromo,
     });
-    const storefrontPayload = {
-      firstName: normalizedFirstName,
-      lastName: normalizedLastName,
-      email: normalizedEmail,
-      phoneNumber1: normalizedPhoneNumber1,
-      phoneNumber2: normalizedPhoneNumber2,
-      cartProducts: effectiveCartProducts,
-      delivery: delivery === "office" ? 1 : 0,
-      state: selectedWilayaId,
-      city: normalizedCity,
-      homeAddress: normalizedAddress,
-      note: null,
-      promoCode: appliedPromoCode,
-      visitId: getVisitIdFromCookie(),
-      journeyId: getOrCreateJourneyId(),
-      sessionId: getOrCreateSessionId(),
-    };
 
     try {
       let successfulOrder;
       const trackingProducts = cart
-        ? cartSummary.items.map((item) => item.product).filter(Boolean)
-        : [singleProduct].filter(Boolean);
+        ? cartSummary.items
+          .filter((item) => item.product)
+          .map((item) => ({ ...item.product, quantity: item.quantity }))
+        : [{ ...singleProduct, quantity }].filter((item) => item.id);
 
       if (modify) {
         const orderId = storage?.getItem("orderId");
@@ -949,11 +896,11 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
           submissionKey: uuidv4(),
           payload: {
             ...storefrontPayload,
-            time: eventTime,
-            ev_id: eventId,
-            url: pathname,
-            fbp: getCookie("_fbp") || null,
-            fbc: getCookie("_fbc") || null,
+            meta: {
+              semanticsVersion: "confirmed_purchase_v1",
+              leadEventId: purchaseEventId,
+              eventSourceUrl: window.location.href,
+            },
           },
           duplicateSignature,
           createdAt: new Date().toISOString(),
@@ -996,22 +943,7 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
             orderProducts: snapshotItems,
           },
         });
-        const analyticsItems = buildItemArray(trackingProducts);
-        void trackAnalyticsEvent({
-          eventName: "order_create_success",
-          gaEventName: "order_create_success",
-          pageType: "checkout",
-          orderId: successfulOrder.id,
-          metadata: {
-            storefrontVariant: "new",
-            verificationAttempted: false,
-            verificationSucceeded: false,
-            items: analyticsItems,
-            delivery,
-            state: selectedWilayaName,
-            city,
-          },
-        }).catch((error) => console.error(error));
+        const analyticsItems = buildQuantityAwareAnalyticsItems(trackingProducts);
         void trackAnalyticsEvent({
           eventName: "checkout_submit",
           gaEventName: "checkout_submit",
@@ -1026,53 +958,17 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
             city,
           },
         }).catch((error) => console.error(error));
-        enrichPastEvents().catch((error) => console.error(error));
-        if (!hasTrackedPurchase(successfulOrder.id)) {
-          markPurchaseTracked(successfulOrder.id);
-          void handlePurchase({
-            products: trackingProducts,
-            totalValue: totalAmount,
-            eventId,
-            eventTime,
-            orderId: successfulOrder.id,
-            additionalUserData: {
-              em: normalizedEmail,
-              fn: normalizedFirstName,
-              ln: normalizedLastName,
-              ph: normalizedPhoneNumber1,
-              ct: normalizedCity,
-              st: selectedWilayaName,
-              external_id: getOrCreateExternalId(),
-            },
-          })
-            .then((result) => {
-              if (result?.metaOk === false) {
-                void trackAnalyticsEvent({
-                  eventName: "purchase_tracking_failed",
-                  gaEventName: "purchase_tracking_failed",
-                  pageType: "checkout",
-                  orderId: successfulOrder.id,
-                  metadata: {
-                    storefrontVariant: "new",
-                    metaStatus: result.metaStatus,
-                  },
-                }).catch((analyticsError) => console.error(analyticsError));
-              }
-            })
-            .catch((error) => {
-              console.error(error);
-              void trackAnalyticsEvent({
-                eventName: "purchase_tracking_failed",
-                gaEventName: "purchase_tracking_failed",
-                pageType: "checkout",
-                orderId: successfulOrder.id,
-                metadata: {
-                  storefrontVariant: "new",
-                  metaStatus: null,
-                },
-              }).catch((analyticsError) => console.error(analyticsError));
-            });
-        }
+        void handlePurchase(successfulOrder.meta, {
+          orderId: successfulOrder.id,
+          metadata: {
+            storefrontVariant: "new",
+            verificationAttempted: false,
+            verificationSucceeded: false,
+            delivery,
+            state: selectedWilayaName,
+            city,
+          },
+        }).catch((error) => console.error(error));
         pushThankYou({
           orderId: successfulOrder.id,
           token: successfulOrder.publicToken,
@@ -1186,234 +1082,133 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
             </p>
           ) : null}
 
-          <form id="checkout-order-form" onSubmit={saveOrder} className="mt-6 space-y-6" noValidate>
-            <section className="rounded-[1.75rem] border border-teal-200 bg-gradient-to-br from-teal-50 via-white to-emerald-50 p-5 shadow-sm">
-              <p className="sf-kicker">{t("fastTitle")}</p>
-              <h2 className="mt-3 text-2xl font-semibold text-slate-900">{t("fastTitle")}</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{t("fastSubtitle")}</p>
+          <form id="checkout-order-form" onSubmit={saveOrder} className="mt-6" noValidate>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm font-semibold text-slate-900">
+                {t("tel")}
+                <input
+                  ref={phoneInputRef}
+                  required
+                  value={phoneNumber1}
+                  onChange={(e) => setPhoneNumber1(e.target.value)}
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder={t("phonePlaceholder")}
+                  className="sf-input mt-2"
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                {t("nom")}
+                <input value={lastName} onChange={(e) => setLastName(e.target.value)} type="text" className="sf-input mt-2" />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                {t("pre")}
+                <input value={firstName} onChange={(e) => setFirstName(e.target.value)} type="text" className="sf-input mt-2" />
+              </label>
+            </div>
 
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <label className="block text-sm font-semibold text-slate-900 sm:col-span-2">
-                  {t("tel")}
-                  <input
-                    ref={phoneInputRef}
-                    required
-                    value={phoneNumber1}
-                    onChange={(e) => setPhoneNumber1(e.target.value)}
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="tel"
-                    placeholder={t("phonePlaceholder")}
-                    className="sf-input mt-2"
-                  />
-                  <span className="mt-2 block text-xs font-medium leading-5 text-slate-500">
-                    {t("phoneHelp")}
-                  </span>
-                </label>
-
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700">
-                    {t("wil")}
-                  </label>
-                  <select
-                    ref={wilayaSelectRef}
-                    required
-                    value={selectedWilayaId ?? ""}
-                    onChange={(e) => {
-                      const wilaya = deliveryCatalog?.wilayas.find(
-                        (item) => item.wilayaId === Number(e.target.value),
-                      );
-                      setSelectedWilayaId(wilaya?.wilayaId ?? null);
-                      setSelectedWilayaName(wilaya?.name ?? "");
-                      setCity("");
-                      setShowOfficeFallbackNotice(false);
-                    }}
-                    aria-invalid={checkoutAttempted && selectedWilayaId == null ? "true" : undefined}
-                    aria-describedby={showLocationRequiredHint ? "checkout-location-error" : undefined}
-                    className="sf-select mt-2"
-                  >
-                    <option value="">{t("wil")}</option>
-                    {(deliveryCatalog?.wilayas ?? []).map((wilaya) => (
-                      <option key={wilaya.wilayaId} value={wilaya.wilayaId}>
-                        {wilaya.wilayaId}. {wilaya.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700">
-                    {t("comm")}
-                  </label>
-                  <select
-                    ref={communeSelectRef}
-                    required
-                    value={city}
-                    onChange={(e) => {
-                      setCity(e.target.value);
-                      setShowOfficeFallbackNotice(false);
-                    }}
-                    aria-invalid={checkoutAttempted && !hasSelectedCommune ? "true" : undefined}
-                    aria-describedby={showLocationRequiredHint ? "checkout-location-error" : undefined}
-                    className="sf-select mt-2"
-                    disabled={selectedWilayaId == null || availableCommunes.length === 0}
-                  >
-                    <option value="">{t("comm")}</option>
-                    {availableCommunes.map((commune) => (
-                      <option key={commune.communeId} value={commune.name}>
-                        {formatCommuneOptionLabel(commune, stopDeskSuffix)}
-                      </option>
-                    ))}
-                  </select>
-                  {showLocationRequiredHint ? (
-                    <p id="checkout-location-error" className="mt-2 text-xs font-semibold text-rose-600">
-                      {t("locationRequired")}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-5">
-                <label className="block text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  {t("selec")}
-                </label>
-                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <label htmlFor="rad1">
-                    <div className={`sf-chip flex min-h-[3.25rem] w-full justify-center px-4 py-3 text-center leading-snug whitespace-normal ${delivery === "home" ? " sf-chip-active " : ""}`}>
-                      <input
-                        type="radio"
-                        className="appearance-none"
-                        id="rad1"
-                        name="livraison"
-                        value="home"
-                        checked={delivery === "home"}
-                        onChange={(e) => handleDeliveryChange(e.target.value)}
-                      />
-                      <span className="font-medium">{t("dom")}</span>
-                    </div>
-                  </label>
-                  <label htmlFor="rad2">
-                    <div className={`sf-chip flex min-h-[3.25rem] w-full justify-center px-4 py-3 text-center leading-snug whitespace-normal ${delivery === "office" ? " sf-chip-active " : ""}${!officeAvailable ? " opacity-50" : ""}`}>
-                      <input
-                        type="radio"
-                        className="appearance-none"
-                        id="rad2"
-                        name="livraison"
-                        value="office"
-                        checked={delivery === "office"}
-                        onChange={(e) => handleDeliveryChange(e.target.value)}
-                        disabled={!officeAvailable}
-                      />
-                      <span className="font-medium">{t("off")}</span>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {showOfficeFallbackNotice ? (
-                <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                  {t("officeFallbackNotice")}
-                </p>
-              ) : null}
-            </section>
-
-            <section className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900">
-                    {t("optionalDetailsTitle")}
-                  </h3>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">
-                    {t("optionalDetailsBody")}
-                  </p>
-                </div>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  {t("optionalBadge")}
-                </span>
-              </div>
-
-              {!optionalDetailsExpanded ? (
-                <button
-                  type="button"
-                  onClick={expandOptionalDetails}
-                  className="sf-button-secondary mt-4 justify-center"
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700">{t("wil")}</label>
+                <select
+                  ref={wilayaSelectRef}
+                  required
+                  value={selectedWilayaId ?? ""}
+                  onChange={(e) => {
+                    const wilaya = deliveryCatalog?.wilayas.find(
+                      (item) => item.wilayaId === Number(e.target.value),
+                    );
+                    setSelectedWilayaId(wilaya?.wilayaId ?? null);
+                    setSelectedWilayaName(wilaya?.name ?? "");
+                    setCity("");
+                    setShowOfficeFallbackNotice(false);
+                  }}
+                  aria-invalid={checkoutAttempted && selectedWilayaId == null ? "true" : undefined}
+                  aria-describedby={showLocationRequiredHint ? "checkout-location-error" : undefined}
+                  className="sf-select mt-2"
                 >
-                  {t("optionalDetailsToggle")}
-                </button>
-              ) : (
-                <div className="mt-5 space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="block text-sm font-semibold text-slate-700">
-                      {t("pre")}
-                      <input
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                        type="text"
-                        className="sf-input mt-2"
-                      />
-                    </label>
-                    <label className="block text-sm font-semibold text-slate-700">
-                      {t("nom")}
-                      <input
-                        value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
-                        type="text"
-                        className="sf-input mt-2"
-                      />
-                    </label>
-                  </div>
+                  <option value="">{t("wil")}</option>
+                  {(deliveryCatalog?.wilayas ?? []).map((wilaya) => (
+                    <option key={wilaya.wilayaId} value={wilaya.wilayaId}>
+                      {wilaya.wilayaId}. {wilaya.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                  <label className="block text-sm font-semibold text-slate-700">
-                    {t("mail")}
-                    <input
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      type="email"
-                      className="sf-input mt-2"
-                    />
-                  </label>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700">{t("comm")}</label>
+                <select
+                  ref={communeSelectRef}
+                  required
+                  value={city}
+                  onChange={(e) => {
+                    setCity(e.target.value);
+                    setShowOfficeFallbackNotice(false);
+                  }}
+                  aria-invalid={checkoutAttempted && !hasSelectedCommune ? "true" : undefined}
+                  aria-describedby={showLocationRequiredHint ? "checkout-location-error" : undefined}
+                  className="sf-select mt-2"
+                  disabled={selectedWilayaId == null || availableCommunes.length === 0}
+                >
+                  <option value="">{t("comm")}</option>
+                  {availableCommunes.map((commune) => (
+                    <option key={commune.communeId} value={commune.name}>
+                      {formatCommuneOptionLabel(commune, stopDeskSuffix)}
+                    </option>
+                  ))}
+                </select>
+                {showLocationRequiredHint ? (
+                  <p id="checkout-location-error" className="mt-2 text-xs font-semibold text-rose-600">
+                    {t("locationRequired")}
+                  </p>
+                ) : null}
+              </div>
+            </div>
 
-                  <label className="block text-sm font-semibold text-slate-700">
-                    {t("addr")}
-                    <input
-                      value={homeAddress}
-                      onChange={(e) => setHomeAddress(e.target.value)}
-                      type="text"
-                      className="sf-input mt-2"
-                    />
-                    <span className="mt-2 block text-xs font-medium leading-5 text-slate-500">
-                      {t(addressHelperKey)}
-                    </span>
-                  </label>
+            <div className="mt-4 grid gap-4">
+              <label className="block text-sm font-semibold text-slate-700">
+                {t("addr")}
+                <input value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)} type="text" className="sf-input mt-2" />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                {t("mail")}
+                <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="sf-input mt-2" />
+              </label>
+            </div>
+
+            <label className="mt-6 block text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">{t("selec")}</label>
+            <div className="mt-2 mb-2 grid grid-cols-1 gap-2 sm:grid-cols-2 md:mx-12">
+              <label htmlFor="rad1">
+                <div className={`sf-chip mb-2 flex min-h-[3.25rem] w-full justify-center px-4 py-3 text-center leading-snug whitespace-normal ${delivery === "home" ? " sf-chip-active " : ""}`}>
+                  <input type="radio" className="appearance-none" id="rad1" name="livraison" value="home" checked={delivery === "home"} onChange={(e) => handleDeliveryChange(e.target.value)} />
+                  <span className="font-medium">{t("dom")}</span>
                 </div>
-              )}
-            </section>
+              </label>
+              <label htmlFor="rad2">
+                <div className={`sf-chip mb-2 flex min-h-[3.25rem] w-full justify-center px-4 py-3 text-center leading-snug whitespace-normal ${delivery === "office" ? " sf-chip-active " : ""}${!officeAvailable ? " opacity-50" : ""}`}>
+                  <input type="radio" className="appearance-none" id="rad2" name="livraison" value="office" checked={delivery === "office"} onChange={(e) => handleDeliveryChange(e.target.value)} disabled={!officeAvailable} />
+                  <span className="font-medium">{t("off")}</span>
+                </div>
+              </label>
+            </div>
+
+            {showOfficeFallbackNotice ? (
+              <p className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                {t("officeFallbackNotice")}
+              </p>
+            ) : null}
 
             {!cart ? (
-              <section className="rounded-[1.5rem] border border-slate-200 bg-white p-5">
-                <label className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  {t("quant")}
-                </label>
-                <div dir="ltr" className="mt-3 inline-flex w-full items-center justify-center">
-                  <button
-                    type="button"
-                    onClick={() => setQuantity((value) => Math.max(1, value - 1))}
-                    className="sf-button h-12 w-14 rounded-r-none"
-                  >
-                    -
-                  </button>
-                  <div className="flex h-12 w-20 items-center justify-center border-y border-slate-300 bg-white text-2xl font-bold text-slate-900">
-                    {quantity}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setQuantity((value) => value + 1)}
-                    className="sf-button h-12 w-14 rounded-l-none"
-                  >
-                    +
-                  </button>
+              <div>
+                <label className="text-lg">{t("quant")}</label>
+                <div dir="ltr" className="mt-2 inline-flex w-full items-center justify-center">
+                  <button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))} className="sf-button h-12 w-14 rounded-r-none">-</button>
+                  <div className="flex h-12 w-20 items-center justify-center border-y border-slate-300 bg-white text-2xl font-bold text-slate-900">{quantity}</div>
+                  <button type="button" onClick={() => setQuantity((value) => value + 1)} className="sf-button h-12 w-14 rounded-l-none">+</button>
                 </div>
-              </section>
+              </div>
             ) : null}
           </form>
         </section>
@@ -1421,102 +1216,44 @@ export default function OrderForm({ prod, cart, order, promoCode = null, showMob
         <aside className="space-y-6">
           <section className="sf-panel lg:sticky lg:top-28">
             <p className="sf-kicker">{t("tot")}</p>
-            <h3 className="mt-3 text-2xl font-semibold text-slate-900">{t("summaryTitle")}</h3>
-
-            <div className="mt-5 rounded-[1.25rem] border border-slate-200 bg-slate-50 p-4">
-              <div className="sf-metric mt-0">
-                <span className="font-semibold text-slate-700">{t("sous")}</span>
-                <span className="font-bold text-teal-700">
-                  {subtotal}
-                  {t("da")}
-                </span>
-              </div>
-              {promoDiscountAmount > 0 ? (
-                <div className="sf-metric">
-                  <span className="font-semibold text-slate-700">Promo {activePromo?.code}</span>
-                  <span className="font-bold text-emerald-700">
-                    -{promoDiscountAmount}
-                    {t("da")}
-                  </span>
-                </div>
-              ) : null}
-
-              {deliveryAvailable ? (
-                <>
-                  <div className="sf-metric">
-                    <span className="font-semibold text-slate-700">{t("liv")}</span>
-                    <span className="font-bold text-teal-700">
-                      {deliveryFee}
-                      {t("da")}
-                    </span>
-                  </div>
-                  <div className="sf-metric border-b-0">
-                    <span className="font-semibold text-slate-900">{t("tot")}</span>
-                    <span className="text-xl font-bold text-teal-700">
-                      {totalAmount}
-                      {t("da")}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <span className="mt-4 block font-semibold text-red-500">{t("pd")}</span>
-              )}
+            <div className="sf-metric mt-4">
+              <span className="font-semibold text-slate-700">{t("sous")}</span>
+              <span className="font-bold text-teal-700">{subtotal}{t("da")}</span>
             </div>
-
-            <p className="mt-4 text-sm leading-6 text-slate-600">{t("summaryReassurance")}</p>
+            {promoDiscountAmount > 0 ? (
+              <div className="sf-metric">
+                <span className="font-semibold text-slate-700">Promo {activePromo?.code}</span>
+                <span className="font-bold text-emerald-700">-{promoDiscountAmount}{t("da")}</span>
+              </div>
+            ) : null}
+            {deliveryAvailable ? (
+              <>
+                <div className="sf-metric">
+                  <span className="font-semibold text-slate-700">{t("liv")}</span>
+                  <span className="font-bold text-teal-700">{deliveryFee}{t("da")}</span>
+                </div>
+                <div className="sf-metric border-b-0">
+                  <span className="font-semibold text-slate-900">{t("tot")}</span>
+                  <span className="text-xl font-bold text-teal-700">{totalAmount}{t("da")}</span>
+                </div>
+              </>
+            ) : (
+              <span className="mt-4 block font-semibold text-red-500">{t("pd")}</span>
+            )}
 
             {subtotal > 0 ? (
-              <>
-                <button
-                  type="submit"
-                  form="checkout-order-form"
-                  disabled={submitDisabled}
-                  className={`${modify ? "sf-button" : "sf-button-accent"} mt-6 w-full justify-center disabled:opacity-60`}
-                >
-                  {isSubmitting ? t("verifying") : modify ? t("modi") : t("conf")}
-                </button>
-                <p className="mt-3 text-sm leading-6 text-slate-600">{t("motivationLine")}</p>
-                {!coreFieldsComplete ? (
-                  <p className="mt-2 text-xs font-medium text-slate-500">
-                    {t("phoneRequiredHint")}
-                  </p>
-                ) : null}
-              </>
-            ) : null}
-          </section>
-        </aside>
-      </div>
-
-      {subtotal > 0 && showMobileStickySubmit ? (
-        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/95 p-3 shadow-2xl backdrop-blur lg:hidden">
-          <div className="sf-container px-0">
-            <div className="flex items-center gap-3">
-              <div className="min-w-0 flex-1 rounded-[1.2rem] border border-slate-200 bg-slate-50 px-4 py-3">
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  {t("tot")}
-                </div>
-                <div className="truncate text-lg font-bold text-teal-700">
-                  {totalAmount}
-                  {t("da")}
-                </div>
-              </div>
               <button
                 type="submit"
                 form="checkout-order-form"
                 disabled={submitDisabled}
-                className={`${modify ? "sf-button" : "sf-button-accent"} flex-1 justify-center disabled:opacity-60`}
+                className={`${modify ? "sf-button" : "sf-button-accent"} mt-6 w-full justify-center disabled:opacity-60`}
               >
                 {isSubmitting ? t("verifying") : modify ? t("modi") : t("conf")}
               </button>
-            </div>
-            {!coreFieldsComplete ? (
-              <p className="mt-2 text-center text-xs font-medium text-slate-500">
-                {t("stickySubmitHelper")}
-              </p>
             ) : null}
-          </div>
-        </div>
-      ) : null}
+          </section>
+        </aside>
+      </div>
     </>
   );
 }

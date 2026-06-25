@@ -16,6 +16,13 @@ import type { StorefrontOrderCreateRequest, StorefrontOrderPatchRequest } from '
 import { toStorefrontOrderDto } from './dto';
 import { createPublicOrderToken, requireStorefrontOrderAccess } from './order-access';
 import { resolveOrderPromo } from './promos';
+import {
+  createOrderMetaArtifacts,
+  replaceOrderLineSnapshots,
+  resolveOrderLineSnapshots,
+  type MetaCommerceLine,
+  type MetaRequestContext,
+} from './meta';
 
 type Database = ReturnType<typeof getDb>;
 type TimingStep =
@@ -76,11 +83,24 @@ function toStorefrontHistoryEntries(rows: typeof orderStatusHistory.$inferSelect
   });
 }
 
+function buildCanonicalCartProducts(
+  fallback: string[],
+  lines: MetaCommerceLine[],
+) {
+  if (lines.length === 0) {
+    return fallback;
+  }
+
+  return lines.flatMap((line) =>
+    Array.from({ length: line.quantity }, () => line.contentId));
+}
+
 export async function createStorefrontOrder(
   db: Database,
   payload: StorefrontOrderCreateRequest,
   options?: {
     reportTiming?: TimingReporter;
+    metaRequestContext?: MetaRequestContext;
   },
 ) {
   const now = new Date();
@@ -93,35 +113,67 @@ export async function createStorefrontOrder(
     promoCode: payload.promoCode,
     now,
   });
-
-  const [createdOrder] = await measureStep('insertOrder', reportTiming, () => db.insert(orders).values({
-    firstName: payload.firstName,
-    lastName: payload.lastName,
-    email: payload.email,
-    phoneNumber1: payload.phoneNumber1,
-    phoneNumber2: payload.phoneNumber2,
-    publicToken,
+  const orderLines = await resolveOrderLineSnapshots(db, {
     cartProducts: payload.cartProducts,
-    visitId: payload.visitId,
-    journeyId: payload.journeyId,
-    sessionId: payload.sessionId,
-    delivery: coerceDeliveryType(payload.delivery),
-    state: payload.state,
-    city: payload.city,
-    homeAddress: payload.homeAddress,
-    note: payload.note,
-    delPr: null,
-    price: orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null,
     promoCode: orderPromo?.code ?? null,
-    promoProductId: orderPromo?.productId ?? null,
-    promoOriginalSubtotal: orderPromo ? orderPromo.originalSubtotal.toFixed(2) : null,
-    promoDiscountAmount: orderPromo ? orderPromo.discountAmount.toFixed(2) : null,
-    promoFinalSubtotal: orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null,
-    variant: degradedCapture ? DEGRADED_CAPTURE_VARIANT : null,
-    createdAt: now,
-    updatedAt: now,
-  }).returning());
-  currentOrder = createdOrder;
+    now,
+  });
+  const canonicalCartProducts = buildCanonicalCartProducts(payload.cartProducts, orderLines);
+  let historyRows: typeof orderStatusHistory.$inferSelect[] = [];
+  let metaResponse: Awaited<ReturnType<typeof createOrderMetaArtifacts>> | undefined;
+  const created = await db.transaction(async (tx) => {
+    const [createdOrder] = await measureStep('insertOrder', reportTiming, () => tx.insert(orders).values({
+      firstName: payload.firstName,
+      lastName: payload.lastName,
+      email: payload.email,
+      phoneNumber1: payload.phoneNumber1,
+      phoneNumber2: payload.phoneNumber2,
+      publicToken,
+      cartProducts: canonicalCartProducts,
+      visitId: payload.visitId,
+      journeyId: payload.journeyId,
+      sessionId: payload.sessionId,
+      delivery: coerceDeliveryType(payload.delivery),
+      state: payload.state,
+      city: payload.city,
+      homeAddress: payload.homeAddress,
+      note: payload.note,
+      delPr: null,
+      price: orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null,
+      promoCode: orderPromo?.code ?? null,
+      promoProductId: orderPromo?.productId ?? null,
+      promoOriginalSubtotal: orderPromo ? orderPromo.originalSubtotal.toFixed(2) : null,
+      promoDiscountAmount: orderPromo ? orderPromo.discountAmount.toFixed(2) : null,
+      promoFinalSubtotal: orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null,
+      variant: degradedCapture ? DEGRADED_CAPTURE_VARIANT : null,
+      createdAt: now,
+      updatedAt: now,
+    }).returning());
+    const insertedHistory = await measureStep('insertStatusHistory', reportTiming, () => tx
+      .insert(orderStatusHistory)
+      .values({
+        orderId: createdOrder.id,
+        status: createdOrder.confirmed,
+        noAnswerCount: createdOrder.noAnswerCount,
+        changedAt: now,
+      })
+      .returning());
+    historyRows = insertedHistory;
+    if (payload.meta) {
+      metaResponse = await createOrderMetaArtifacts(tx, {
+        order: createdOrder,
+        lines: orderLines,
+        eventId: payload.meta.leadEventId,
+        eventSourceUrl: payload.meta.eventSourceUrl,
+        requestContext: options?.metaRequestContext ?? {},
+        now,
+      });
+    } else {
+      await replaceOrderLineSnapshots(tx, createdOrder.id, orderLines, now);
+    }
+    return createdOrder;
+  });
+  currentOrder = created;
   const pendingTimings: Promise<unknown>[] = [];
 
   async function markDegradedCapture() {
@@ -173,24 +225,7 @@ export async function createStorefrontOrder(
       });
   }
 
-  let historyRows: typeof orderStatusHistory.$inferSelect[] = [];
   let productLookup = new Map<string, ProductLookupEntry>();
-  pendingTimings.push((async () => {
-    try {
-      const insertedHistory = await measureStep('insertStatusHistory', reportTiming, () => db
-        .insert(orderStatusHistory)
-        .values({
-          orderId: currentOrder.id,
-          status: currentOrder.confirmed,
-          noAnswerCount: currentOrder.noAnswerCount,
-          changedAt: now,
-        })
-        .returning());
-      historyRows = insertedHistory;
-    } catch {
-      await markDegradedCapture();
-    }
-  })());
 
   pendingTimings.push((async () => {
     try {
@@ -203,8 +238,9 @@ export async function createStorefrontOrder(
 
   await Promise.all(pendingTimings);
 
-  return measureStep('buildOrderDto', reportTiming, async () =>
+  const item = await measureStep('buildOrderDto', reportTiming, async () =>
     toStorefrontOrderDto(currentOrder, toStorefrontHistoryEntries(historyRows), productLookup));
+  return { item, meta: metaResponse };
 }
 
 export async function readStorefrontOrder(
@@ -259,7 +295,7 @@ export async function updateStorefrontOrder(
   if (changes.state !== undefined) update.state = changes.state;
   if (changes.city !== undefined) update.city = changes.city;
   if (changes.homeAddress !== undefined) update.homeAddress = changes.homeAddress;
-  if (changes.cartProducts !== undefined) update.cartProducts = changes.cartProducts;
+  let nextOrderLines: MetaCommerceLine[] | null = null;
 
   if (changes.cartProducts !== undefined || changes.promoCode !== undefined) {
     const nextCartProducts = changes.cartProducts ?? access.order.cartProducts ?? [];
@@ -268,7 +304,12 @@ export async function updateStorefrontOrder(
       cartProducts: nextCartProducts,
       promoCode: nextPromoCode,
     });
+    nextOrderLines = await resolveOrderLineSnapshots(db, {
+      cartProducts: nextCartProducts,
+      promoCode: orderPromo?.code ?? null,
+    });
 
+    update.cartProducts = buildCanonicalCartProducts(nextCartProducts, nextOrderLines);
     update.price = orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null;
     update.promoCode = orderPromo?.code ?? null;
     update.promoProductId = orderPromo?.productId ?? null;
@@ -283,11 +324,18 @@ export async function updateStorefrontOrder(
     update.delPr = (await readEcotrackDeliveryFee(db, nextState, nextDelivery)).toFixed(2);
   }
 
-  const [updatedOrder] = await db
-    .update(orders)
-    .set(update)
-    .where(eq(orders.id, id))
-    .returning();
+  let updatedOrder!: typeof orders.$inferSelect;
+  await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(orders)
+      .set(update)
+      .where(eq(orders.id, id))
+      .returning();
+    updatedOrder = row;
+    if (changes.cartProducts !== undefined || changes.promoCode !== undefined) {
+      await replaceOrderLineSnapshots(tx, id, nextOrderLines ?? []);
+    }
+  });
   const historyRows = await db
     .select()
     .from(orderStatusHistory)

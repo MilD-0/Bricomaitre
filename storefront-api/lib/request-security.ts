@@ -3,11 +3,11 @@ import type { NextRequest } from 'next/server';
 import { applyRateLimit, type RateLimitResult } from '@bric/runtime/rate-limit';
 import { getRedis } from '@bric/runtime/redis';
 
-const ORDER_VELOCITY_LIMIT = 2;
-const ORDER_VELOCITY_WINDOW_SECONDS = 3600;
-const ORDER_VELOCITY_FIRST_PENALTY_SECONDS = 60 * 60;
-const ORDER_VELOCITY_REPEAT_PENALTY_SECONDS = 24 * 60 * 60;
-const ORDER_VELOCITY_VIOLATION_TTL_SECONDS = 24 * 60 * 60;
+const ORDER_VELOCITY_LIMIT = 6;
+const ORDER_VELOCITY_WINDOW_SECONDS = 15 * 60;
+const ORDER_VELOCITY_FIRST_PENALTY_SECONDS = 10 * 60;
+const ORDER_VELOCITY_REPEAT_PENALTY_SECONDS = 60 * 60;
+const ORDER_VELOCITY_VIOLATION_TTL_SECONDS = 2 * 60 * 60;
 
 export function getRequestClientKey(request: NextRequest) {
   const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();

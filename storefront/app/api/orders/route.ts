@@ -11,9 +11,34 @@ import {
 } from "@/lib/storefront-upstream";
 
 const ORDER_UPSTREAM_TIMEOUT_MS = 15_000;
+const FORWARDED_UPSTREAM_RESPONSE_HEADERS = [
+  "content-type",
+  "retry-after",
+  "x-ratelimit-limit",
+  "x-ratelimit-remaining",
+  "x-ratelimit-reset",
+  "x-request-id",
+];
 
 function mapDelivery(value: unknown) {
   return value === "office" || value === 1 ? 1 : 0;
+}
+
+function buildForwardedResponseHeaders(upstream: Response) {
+  const headers = new Headers();
+
+  for (const name of FORWARDED_UPSTREAM_RESPONSE_HEADERS) {
+    const value = upstream.headers.get(name);
+    if (value) {
+      headers.set(name, value);
+    }
+  }
+
+  if (!headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+
+  return headers;
 }
 
 async function normalizeState(value: unknown) {
@@ -44,7 +69,15 @@ async function normalizeState(value: unknown) {
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid JSON request body." },
+      { status: 400 },
+    );
+  }
   const idempotencyKey = request.headers.get("idempotency-key")?.trim();
   const normalizedState = await normalizeState(body.state);
   const normalizedCity =
@@ -79,6 +112,7 @@ export async function POST(request: NextRequest) {
     visitId: body.visitId ?? null,
     journeyId: body.journeyId ?? null,
     sessionId: body.sessionId ?? null,
+    meta: body.meta ?? undefined,
   };
 
   try {
@@ -88,6 +122,13 @@ export async function POST(request: NextRequest) {
         accept: "application/json",
         "content-type": "application/json",
         ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
+        "x-storefront-meta-proxy-secret": process.env.STOREFRONT_META_PROXY_SECRET ?? "",
+        "x-real-ip": request.headers.get("x-real-ip") ?? "",
+        "x-forwarded-for": request.headers.get("x-forwarded-for") ?? "",
+        "user-agent": request.headers.get("user-agent") ?? "",
+        cookie: request.headers.get("cookie") ?? "",
+        origin: request.headers.get("origin") ?? "",
+        host: request.headers.get("host") ?? "",
       },
       body: JSON.stringify(payload),
       timeoutMs: ORDER_UPSTREAM_TIMEOUT_MS,
@@ -97,9 +138,7 @@ export async function POST(request: NextRequest) {
 
     return new NextResponse(responseText, {
       status: upstream.status,
-      headers: {
-        "content-type": upstream.headers.get("content-type") ?? "application/json",
-      },
+      headers: buildForwardedResponseHeaders(upstream),
     });
   } catch (error) {
     if (error instanceof StorefrontUpstreamError) {

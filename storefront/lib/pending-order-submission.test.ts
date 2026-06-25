@@ -24,6 +24,7 @@ function createLocalStorage() {
 
 describe("pending-order-submission", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     vi.stubGlobal("window", {
       localStorage: createLocalStorage(),
     });
@@ -80,6 +81,47 @@ describe("pending-order-submission", () => {
     }));
 
     expect(readPendingOrderSubmission()).toBeNull();
+  });
+
+  it("clears stale pending submission data", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-30T12:31:00Z"));
+    window.localStorage.setItem("pendingOrderSubmission", JSON.stringify({
+      submissionKey: "submission-key",
+      duplicateSignature: {
+        phoneNumber1: "0550111111",
+        city: null,
+        delivery: "home",
+        total: 1400,
+        signature: "sig-1",
+      },
+      payload: {
+        firstName: null,
+        lastName: null,
+        email: null,
+        phoneNumber1: "0550111111",
+        phoneNumber2: null,
+        cartProducts: ["1"],
+        delivery: 0,
+        state: null,
+        city: null,
+        homeAddress: null,
+        note: null,
+        visitId: null,
+        journeyId: null,
+        sessionId: null,
+        time: 123,
+        ev_id: "event-1",
+        url: "/checkout",
+        fbp: null,
+        fbc: null,
+      },
+      createdAt: "2026-05-30T12:00:00Z",
+    }));
+
+    expect(readPendingOrderSubmission()).toBeNull();
+    expect(window.localStorage.getItem("pendingOrderSubmission")).toBeNull();
+    vi.useRealTimers();
   });
 
   it("removes the pending submission record", () => {

@@ -92,7 +92,7 @@ type DailyOrderStatusOverview = {
   newOrders: number;
   confirmationStatusChanges: number;
   confirmedToday: number;
-  noAnswerAttempts: number;
+  noAnswerOrders: number;
   adminCancelled: number;
   carrierCancelled: number;
   shipmentUpdates: number;
@@ -2035,7 +2035,7 @@ function DailyOrderStatusOverviewPanel({
     { key: 'newOrders', value: overview.newOrders },
     { key: 'confirmationStatusChanges', value: overview.confirmationStatusChanges },
     { key: 'confirmedToday', value: overview.confirmedToday },
-    { key: 'noAnswerAttempts', value: overview.noAnswerAttempts },
+    { key: 'noAnswerOrders', value: overview.noAnswerOrders },
     { key: 'adminCancelled', value: overview.adminCancelled },
     { key: 'carrierCancelled', value: overview.carrierCancelled },
     { key: 'shipmentUpdates', value: overview.shipmentUpdates },

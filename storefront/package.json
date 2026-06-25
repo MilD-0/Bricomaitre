@@ -17,7 +17,6 @@
     "@sentry/nextjs": "10.47.0",
     "axios": "^1.7.7",
     "bootstrap": "^5.3.3",
-    "capi-param-builder-nodejs": "^1.2.1",
     "cookies-next": "^4.3.0",
     "crypto-js": "^4.2.0",
     "embla-carousel-react": "^8.6.0",

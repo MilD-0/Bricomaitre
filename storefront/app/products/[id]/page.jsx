@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import {
   fetchStorefrontProductBuildFeed,
+  fetchStorefrontProductPromo,
   fetchLegacyProductByToken,
 } from "@/lib/storefront-api";
 import {
@@ -68,6 +69,10 @@ export default async function Home({ params, searchParams }) {
   if (!product) {
     notFound();
   }
+  const promo = await fetchStorefrontProductPromo(
+    product.id,
+    resolvedSearchParams.promo ?? null,
+  );
 
   const structuredData = [
     buildProductSchema(product, {
@@ -90,8 +95,16 @@ export default async function Home({ params, searchParams }) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
       />
-      <MetaViewContentBootstrap product={product} />
-      <Main id={id} initialProduct={product} promoCode={resolvedSearchParams.promo ?? null} />
+      <MetaViewContentBootstrap
+        product={product}
+        effectivePrice={promo?.promoPrice ?? product.price}
+      />
+      <Main
+        id={id}
+        initialProduct={product}
+        promoCode={resolvedSearchParams.promo ?? null}
+        initialPromo={promo}
+      />
     </>
   );
 }

@@ -15,6 +15,7 @@ export default defineConfig({
     "./db/schema/ecotrack.ts",
     "./db/schema/importBatches.ts",
     "./db/schema/migrationIdMap.ts",
+    "./db/schema/meta.ts",
     "./db/schema/namespaces.ts",
     "./db/schema/orders.ts",
     "./db/schema/processedOrders.ts",

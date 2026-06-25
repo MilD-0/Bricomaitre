@@ -2,32 +2,24 @@ function getMetaContentId(product) {
   if (!product || typeof product !== "object") {
     return null;
   }
-
-  const candidates = [product.id, product._id, product.slug];
-  for (const candidate of candidates) {
-    if (typeof candidate !== "string" && typeof candidate !== "number") {
-      continue;
-    }
-
-    const value = String(candidate).trim();
-    if (value && value !== "undefined" && value !== "null") {
-      return value;
-    }
-  }
-
-  return null;
+  return typeof product.id === "number"
+    && Number.isInteger(product.id)
+    && product.id > 0
+      ? String(product.id)
+      : null;
 }
 
-function buildMetaCommerceData(product) {
+function buildMetaCommerceData(product, effectivePrice) {
   const id = getMetaContentId(product);
   if (!id) {
     return null;
   }
 
+  const rawPrice = effectivePrice ?? product?.price;
   const price =
-    typeof product?.price === "number" && Number.isFinite(product.price)
-      ? product.price
-      : Number(product?.price ?? 0);
+    typeof rawPrice === "number" && Number.isFinite(rawPrice)
+      ? rawPrice
+      : Number(rawPrice ?? 0);
 
   return {
     productKey: id,
@@ -47,8 +39,8 @@ function buildMetaCommerceData(product) {
   };
 }
 
-export default function MetaViewContentBootstrap({ product }) {
-  const payload = buildMetaCommerceData(product);
+export default function MetaViewContentBootstrap({ product, effectivePrice }) {
+  const payload = buildMetaCommerceData(product, effectivePrice);
 
   if (!payload) {
     return null;

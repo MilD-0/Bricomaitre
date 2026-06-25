@@ -2,6 +2,7 @@ packages:
   - adminstration
   - storefront-api
   - storefront
+  - storefront-new
   - packages/*
 
 allowBuilds:

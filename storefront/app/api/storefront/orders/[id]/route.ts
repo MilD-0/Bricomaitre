@@ -10,10 +10,36 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
+const FORWARDED_UPSTREAM_RESPONSE_HEADERS = [
+  "content-type",
+  "retry-after",
+  "x-ratelimit-limit",
+  "x-ratelimit-remaining",
+  "x-ratelimit-reset",
+  "x-request-id",
+];
+
 function buildUpstreamPath(id: string, request: NextRequest) {
   const url = new URL(buildStorefrontApiUrl(`/api/storefront/orders/${id}`));
   url.search = request.nextUrl.search;
   return `${url.pathname}${url.search}`;
+}
+
+function buildForwardedResponseHeaders(upstream: Response) {
+  const headers = new Headers();
+
+  for (const name of FORWARDED_UPSTREAM_RESPONSE_HEADERS) {
+    const value = upstream.headers.get(name);
+    if (value) {
+      headers.set(name, value);
+    }
+  }
+
+  if (!headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+
+  return headers;
 }
 
 function forwardHeaders(request: NextRequest) {
@@ -46,9 +72,7 @@ async function proxy(method: "GET" | "PATCH", request: NextRequest, context: Rou
 
     return new NextResponse(responseText, {
       status: upstream.status,
-      headers: {
-        "content-type": upstream.headers.get("content-type") ?? "application/json",
-      },
+      headers: buildForwardedResponseHeaders(upstream),
     });
   } catch (error) {
     if (error instanceof StorefrontUpstreamError) {

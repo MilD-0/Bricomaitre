@@ -30,6 +30,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+bricomaitre-postgres-*.sql.gz
+
 .vercel/
 .turbo/
 
@@ -44,3 +46,5 @@ ops/runtime/
 *.sw?
 *.save
 *.save.*
+.gitignore
+.gitignore

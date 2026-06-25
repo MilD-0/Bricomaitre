@@ -93,6 +93,20 @@ describe('app/storefront/orders/route', () => {
     await expect(res.json()).resolves.toEqual({ error: 'DATABASE_URL is not configured' });
   });
 
+  it('returns 400 for invalid JSON bodies', async () => {
+    hasDbMock.mockReturnValue(true);
+
+    const res = await POST(new NextRequest('http://localhost/storefront/orders', {
+      method: 'POST',
+      body: '{',
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    expect(res.status).toBe(400);
+    expect(createStorefrontOrderMock).not.toHaveBeenCalled();
+    await expect(res.json()).resolves.toEqual({ error: 'Invalid JSON request body.' });
+  });
+
   it('returns validation errors for invalid payloads', async () => {
     hasDbMock.mockReturnValue(true);
     vi.spyOn(storefrontOrderCreateRequestSchema, 'safeParse').mockReturnValue({
@@ -107,7 +121,10 @@ describe('app/storefront/orders/route', () => {
     }));
 
     expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({ error: { fieldErrors: { cartProducts: ['Required'] } } });
+    await expect(res.json()).resolves.toEqual({
+      error: 'Invalid order request.',
+      details: { fieldErrors: { cartProducts: ['Required'] } },
+    });
   });
 
   it('accepts phone-only payloads in the create request schema', () => {
@@ -118,6 +135,26 @@ describe('app/storefront/orders/route', () => {
     expect(parsed.success).toBe(true);
     expect(parsed.success ? parsed.data.cartProducts : []).toEqual([]);
     expect(parsed.success ? parsed.data.state : undefined).toBeNull();
+  });
+
+  it('treats malformed optional emails as absent in the create request schema', () => {
+    const parsed = storefrontOrderCreateRequestSchema.safeParse({
+      phoneNumber1: '0550111111',
+      email: 'not an email',
+    });
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.success ? parsed.data.email : undefined).toBeNull();
+  });
+
+  it('normalizes valid optional emails in the create request schema', () => {
+    const parsed = storefrontOrderCreateRequestSchema.safeParse({
+      phoneNumber1: '0550111111',
+      email: '  ADA@EXAMPLE.COM  ',
+    });
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.success ? parsed.data.email : undefined).toBe('ada@example.com');
   });
 
   it('creates a storefront order and returns the public token-backed record', async () => {
@@ -155,6 +192,7 @@ describe('app/storefront/orders/route', () => {
         sessionId: undefined,
       }),
     );
+    expect(beginIdempotentRequestMock).not.toHaveBeenCalled();
     expect(createStorefrontOrderMock).toHaveBeenCalledWith(
       { tag: 'db' },
       expect.objectContaining({
@@ -167,6 +205,82 @@ describe('app/storefront/orders/route', () => {
       }),
     );
     await expect(res.json()).resolves.toEqual({ ok: true, item: { id: 11, publicToken: 'public-token' } });
+  });
+
+  it('passes trusted Meta context into the transactional order create flow', async () => {
+    hasDbMock.mockReturnValue(true);
+    getDbMock.mockReturnValue({ tag: 'db' });
+    process.env.STOREFRONT_META_PROXY_SECRET = 'proxy-secret';
+    createStorefrontOrderMock.mockResolvedValue({
+      item: { id: 12, publicToken: 'public-token-12' },
+      meta: {
+        eventName: 'Purchase',
+        eventId: 'purchase-12',
+        value: 2400,
+        currency: 'DZD',
+        contents: [{ id: '9', quantity: 2, item_price: 1200 }],
+      },
+    });
+
+    const res = await POST(new NextRequest('http://localhost/storefront/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        phoneNumber1: '0550111111',
+        cartProducts: ['9', '9'],
+        meta: {
+          semanticsVersion: 'confirmed_purchase_v1',
+          leadEventId: 'purchase-12',
+          eventSourceUrl: 'https://bricomaitre.com/checkout',
+        },
+      }),
+      headers: {
+        'content-type': 'application/json',
+        'x-storefront-meta-proxy-secret': 'proxy-secret',
+        'x-real-ip': '203.0.113.12',
+        'user-agent': 'Vitest',
+        cookie: '_fbc=fb.1.1700000000.click; _fbp=fb.1.1700000000.1',
+      },
+    }));
+
+    expect(res.status).toBe(200);
+    expect(createStorefrontOrderMock).toHaveBeenCalledWith(
+      { tag: 'db' },
+      expect.objectContaining({
+        meta: expect.objectContaining({ leadEventId: 'purchase-12' }),
+      }),
+      expect.objectContaining({
+        metaRequestContext: expect.objectContaining({
+          clientIpAddress: '203.0.113.12',
+          clientUserAgent: 'Vitest',
+        }),
+      }),
+    );
+    await expect(res.json()).resolves.toMatchObject({
+      ok: true,
+      item: { id: 12 },
+      meta: { eventName: 'Purchase', eventId: 'purchase-12', value: 2400 },
+    });
+  });
+
+  it('starts idempotent keyed requests with a short processing TTL', async () => {
+    hasDbMock.mockReturnValue(true);
+    getDbMock.mockReturnValue({ tag: 'db' });
+
+    const res = await POST(new NextRequest('http://localhost/storefront/orders', {
+      method: 'POST',
+      body: JSON.stringify({ phoneNumber1: '0550111111' }),
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'submission-key',
+      },
+    }));
+
+    expect(res.status).toBe(200);
+    expect(beginIdempotentRequestMock).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'storefront-order-create',
+      key: 'submission-key',
+      ttlSeconds: 120,
+    }));
   });
 
   it('returns 429 when order velocity escalates for the identity', async () => {
@@ -202,7 +316,7 @@ describe('app/storefront/orders/route', () => {
     expect(res.status).toBe(429);
     expect(createStorefrontOrderMock).not.toHaveBeenCalled();
     expect(res.headers.get('retry-after')).toBe('3600');
-    await expect(res.json()).resolves.toEqual({ error: 'Too many order attempts. Try again later.' });
+    await expect(res.json()).resolves.toEqual({ error: 'Too many order attempts. Try again in about 60 minutes.' });
   });
 
   it('logs slow order creation timings without changing the response', async () => {
@@ -282,8 +396,64 @@ describe('app/storefront/orders/route', () => {
       },
     }));
 
+    expect(enforceOrderVelocityLimitMock).not.toHaveBeenCalled();
     expect(createStorefrontOrderMock).not.toHaveBeenCalled();
     await expect(res.json()).resolves.toEqual({ ok: true, item: { id: 11, publicToken: 'public-token' } });
+  });
+
+  it('returns retry guidance for an in-flight idempotent request without counting velocity', async () => {
+    hasDbMock.mockReturnValue(true);
+    beginIdempotentRequestMock.mockResolvedValue({
+      kind: 'existing',
+      ttlSeconds: 73,
+      record: {
+        status: 'processing',
+        fingerprint: 'fingerprint',
+        createdAt: new Date().toISOString(),
+      },
+    });
+
+    const res = await POST(new NextRequest('http://localhost/storefront/orders', {
+      method: 'POST',
+      body: JSON.stringify({ phoneNumber1: '0550111111' }),
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'submission-key',
+      },
+    }));
+
+    expect(res.status).toBe(409);
+    expect(res.headers.get('retry-after')).toBe('73');
+    expect(enforceOrderVelocityLimitMock).not.toHaveBeenCalled();
+    expect(createStorefrontOrderMock).not.toHaveBeenCalled();
+    await expect(res.json()).resolves.toEqual({
+      error: 'Order request is already being processed.',
+    });
+  });
+
+  it('clears a newly started idempotency record when velocity rejects the attempt', async () => {
+    hasDbMock.mockReturnValue(true);
+    buildRateLimitHeadersMock.mockReturnValue({ 'retry-after': '600' });
+    enforceOrderVelocityLimitMock.mockResolvedValue({
+      ok: false,
+      limit: 2,
+      remaining: 0,
+      resetAt: Date.now() + 600_000,
+      retryAfterSeconds: 600,
+    });
+
+    const res = await POST(new NextRequest('http://localhost/storefront/orders', {
+      method: 'POST',
+      body: JSON.stringify({ phoneNumber1: '0550111111' }),
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'submission-key',
+      },
+    }));
+
+    expect(res.status).toBe(429);
+    expect(clearIdempotentRequestMock).toHaveBeenCalledWith('storefront-order-create', 'submission-key');
+    expect(createStorefrontOrderMock).not.toHaveBeenCalled();
   });
 
   it('returns 409 when an idempotency key is reused with a different payload fingerprint', async () => {

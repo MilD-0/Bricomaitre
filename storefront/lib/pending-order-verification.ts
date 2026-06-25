@@ -1,6 +1,7 @@
 import type { PendingOrderVerification } from "./storefront-order-client";
 
 export const PENDING_ORDER_VERIFICATION_KEY = "pendingOrderVerification";
+const PENDING_ORDER_VERIFICATION_TTL_MS = 30 * 60 * 1000;
 
 function getStorage() {
   if (typeof window === "undefined") {
@@ -28,6 +29,8 @@ export function readPendingOrderVerification() {
       || parsed.token.trim().length === 0
       || (parsed.mode !== "create" && parsed.mode !== "patch")
       || typeof parsed.createdAt !== "string"
+      || !Number.isFinite(Date.parse(parsed.createdAt))
+      || Date.now() - Date.parse(parsed.createdAt) > PENDING_ORDER_VERIFICATION_TTL_MS
     ) {
       storage?.removeItem(PENDING_ORDER_VERIFICATION_KEY);
       return null;

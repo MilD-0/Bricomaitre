@@ -91,7 +91,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     });
   }
 
-  const parsed = storefrontOrderPatchRequestSchema.safeParse(await req.json());
+  let payload: unknown;
+  try {
+    payload = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: 'Invalid JSON request body.' },
+      { status: 400, headers: withRequestIdHeaders(requestId) },
+    );
+  }
+
+  const parsed = storefrontOrderPatchRequestSchema.safeParse(payload);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400, headers: withRequestIdHeaders(requestId) });
   }

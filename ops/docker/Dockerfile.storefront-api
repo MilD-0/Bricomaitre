@@ -22,18 +22,26 @@ COPY . .
 
 RUN mkdir -p storefront-api/public
 
+FROM base AS worker
+
+ENV NODE_ENV=production
+
+CMD ["pnpm", "--filter", "storefront-api", "worker:meta"]
+
+FROM base AS build
+
 RUN pnpm --filter storefront-api build
 
-FROM node:20-bookworm-slim AS runner
+FROM node:20-bookworm-slim AS web
 
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
 ENV HOSTNAME=0.0.0.0
 
-COPY --from=base /workspace/storefront-api/.next/standalone ./
-COPY --from=base /workspace/storefront-api/.next/static ./storefront-api/.next/static
-COPY --from=base /workspace/storefront-api/public ./storefront-api/public
+COPY --from=build /workspace/storefront-api/.next/standalone ./
+COPY --from=build /workspace/storefront-api/.next/static ./storefront-api/.next/static
+COPY --from=build /workspace/storefront-api/public ./storefront-api/public
 
 EXPOSE 3001
 

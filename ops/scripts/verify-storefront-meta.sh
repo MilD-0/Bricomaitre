@@ -9,8 +9,9 @@ slot="${1:-}"
 storefront_domain="${BRIC_STOREFRONT_APEX_DOMAIN:-${BRIC_STOREFRONT_DOMAIN:-www.example.com}}"
 meta_verify_enabled="${META_DEPLOY_VERIFY_ENABLED:-1}"
 meta_test_event_code="${META_TEST_EVENT_CODE:-}"
-meta_service_base="${STOREFRONT_META_VERIFY_SERVICE:-storefront}"
-meta_service_port="${STOREFRONT_META_VERIFY_PORT:-3002}"
+deploy_token="${STOREFRONT_API_DEPLOY_TOKEN:-}"
+meta_service_base="${STOREFRONT_META_VERIFY_SERVICE:-storefront-api}"
+meta_service_port="${STOREFRONT_META_VERIFY_PORT:-3001}"
 
 append_meta_summary() {
   local line="${1:?summary line is required}"
@@ -31,6 +32,11 @@ if [[ -z "$meta_test_event_code" ]]; then
   echo "META_TEST_EVENT_CODE is required for storefront Meta deploy verification" >&2
   append_meta_summary "### Meta verification"
   append_meta_summary "- ❌ Missing \`META_TEST_EVENT_CODE\`"
+  exit 1
+fi
+
+if [[ -z "$deploy_token" ]]; then
+  echo "STOREFRONT_API_DEPLOY_TOKEN is required for Meta deploy verification" >&2
   exit 1
 fi
 
@@ -61,7 +67,7 @@ else
   base_url="http://${container_ip}:${meta_service_port}"
 fi
 
-python3 - "$base_url" "$storefront_domain" "$meta_test_event_code" <<'PY'
+python3 - "$base_url" "$storefront_domain" "$deploy_token" <<'PY'
 import json
 import sys
 import time
@@ -71,29 +77,22 @@ import uuid
 
 base_url = sys.argv[1].rstrip("/")
 storefront_domain = sys.argv[2]
-test_event_code = sys.argv[3]
+deploy_token = sys.argv[3]
 
 event_id = f"deploy-meta-{uuid.uuid4()}"
 payload = {
-    "event_name": "PageView",
-    "event_time": int(time.time()),
-    "event_id": event_id,
-    "user_data": {
-        "client_user_agent": "BricMetaDeployVerification/1.0",
-    },
-    "custom_data": {
-        "source": "deploy_verification",
-    },
-    "url": f"https://{storefront_domain}/?meta_deploy_verification=1",
-    "test_event_code": test_event_code,
+    "eventId": event_id,
+    "eventSourceUrl": f"https://{storefront_domain}/?meta_deploy_verification=1",
 }
 
 request = urllib.request.Request(
-    f"{base_url}/api/capi",
+    f"{base_url}/internal/meta/verify",
     data=json.dumps(payload).encode(),
     headers={
+        "Authorization": f"Bearer {deploy_token}",
         "Content-Type": "application/json",
         "Host": storefront_domain,
+        "X-Real-IP": "127.0.0.1",
         "User-Agent": "BricMetaDeployVerification/1.0",
     },
     method="POST",
@@ -103,16 +102,15 @@ try:
     with urllib.request.urlopen(request, timeout=30) as response:
         body = response.read().decode()
         parsed = json.loads(body)
-        meta_data = parsed.get("data") if isinstance(parsed, dict) else None
-        events_received = meta_data.get("events_received") if isinstance(meta_data, dict) else None
-        fbtrace_id = meta_data.get("fbtrace_id") if isinstance(meta_data, dict) else ""
+        events_received = parsed.get("eventsReceived") if isinstance(parsed, dict) else None
+        fbtrace_id = parsed.get("fbtraceId") if isinstance(parsed, dict) else ""
 
         print(f"Meta verification event id: {event_id}")
         print(f"Meta verification HTTP status: {response.status}")
         if fbtrace_id:
             print(f"Meta verification fbtrace_id: {fbtrace_id}")
 
-        if not isinstance(parsed, dict) or not parsed.get("success") or not isinstance(events_received, int) or events_received < 1:
+        if not isinstance(parsed, dict) or not parsed.get("ok") or not isinstance(events_received, int) or events_received < 1:
             print("Meta verification response body:", body, file=sys.stderr)
             raise SystemExit(1)
 except urllib.error.HTTPError as error:

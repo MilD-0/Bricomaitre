@@ -45,7 +45,7 @@ export type DailyOrderStatusOverview = {
   newOrders: number;
   confirmationStatusChanges: number;
   confirmedToday: number;
-  noAnswerAttempts: number;
+  noAnswerOrders: number;
   adminCancelled: number;
   carrierCancelled: number;
   shipmentUpdates: number;
@@ -148,13 +148,11 @@ export async function loadDailyOrderStatusOverview(): Promise<DailyOrderStatusOv
       and ${orderStatusHistory.status} = 2
       and ${activeReportDayPredicate(sql`${orderStatusHistory.changedAt}`)}
   `);
-  const noAnswerAttempts = await readCount(db, sql`
+  const noAnswerOrders = await readCount(db, sql`
     select count(*)::int as value
-    from ${orderStatusHistory}
-    inner join ${orders} on ${orders.id} = ${orderStatusHistory.orderId}
+    from ${orders}
     where ${activeOrdersJoinPredicate()}
-      and ${orderStatusHistory.status} = 1
-      and ${activeReportDayPredicate(sql`${orderStatusHistory.changedAt}`)}
+      and ${orders.confirmed} = 1
   `);
   const adminCancelled = await readCount(db, sql`
     select count(*)::int as value
@@ -241,7 +239,7 @@ export async function loadDailyOrderStatusOverview(): Promise<DailyOrderStatusOv
     newOrders,
     confirmationStatusChanges,
     confirmedToday,
-    noAnswerAttempts,
+    noAnswerOrders,
     adminCancelled,
     carrierCancelled,
     shipmentUpdates,

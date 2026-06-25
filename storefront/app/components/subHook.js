@@ -49,12 +49,6 @@ export function useOrderSubmission() {
       const result = await submitWithRetry(orderData);
       if (result.success) {
         orderQueue.remove(_queueId);
-         if (typeof window !== "undefined" && order._trackingData) {
-        import("./Init").then(({ handlePurchase }) => {
-          handlePurchase(order._trackingData).catch(console.error);
-        });
-      }
-
       }
     }
   }, [submitWithRetry]);

@@ -6,6 +6,8 @@ export * from './storefront/contracts';
 export * from './storefront/dto';
 export * from './storefront/ecotrack-catalog';
 export * from './storefront/legacy-adapter';
+export * from './storefront/meta-contracts';
+export * from './storefront/meta';
 export * from './storefront/project-routing';
 export * from './storefront/order-access';
 export * from './storefront/orders';

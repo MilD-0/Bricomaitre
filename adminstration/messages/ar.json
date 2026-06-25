@@ -772,6 +772,15 @@
       "managerTitle": "تكاليف الإعلانات",
       "conversionRate": "معدل التحويل",
       "unknownCampaign": "حملة غير معروفة",
+      "health": {
+        "title": "حالة تسليم CAPI",
+        "pending": "قيد الانتظار / إعادة المحاولة",
+        "delivered": "تم التسليم",
+        "failed": "فشل / تم التجاوز",
+        "purchaseCoverage": "تغطية Purchase عند الإرسال",
+        "orderConfirmedCoverage": "تغطية orderconfirmed",
+        "worker": "آخر نبضة للعامل: {heartbeat} • أقدم حدث معلق: {oldest} • مشتريات مؤكدة انتهت بنتيجة سلبية: {negative}"
+      },
       "events": {
         "empty": "لم يتم تسجيل أي أحداث Meta ضمن هذه الفترة.",
         "columns": {
@@ -1030,7 +1039,7 @@
         "newOrders": "طلبات جديدة",
         "confirmationStatusChanges": "تغييرات حالة التأكيد",
         "confirmedToday": "تم تأكيدها اليوم",
-        "noAnswerAttempts": "محاولات عدم الرد",
+        "noAnswerOrders": "طلبات بدون رد",
         "adminCancelled": "ألغيت من الإدارة",
         "carrierCancelled": "ألغيت من شركة التوصيل",
         "shipmentUpdates": "تحديثات الشحن"

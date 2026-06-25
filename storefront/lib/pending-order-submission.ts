@@ -6,7 +6,7 @@ type PendingOrderDuplicateSignature = {
   signature: string;
 };
 
-type PendingOrderSubmissionPayload = {
+export type PendingOrderSubmissionPayload = {
   firstName: string | null;
   lastName: string | null;
   email: string | null;
@@ -18,15 +18,20 @@ type PendingOrderSubmissionPayload = {
   city: string | null;
   homeAddress: string | null;
   note: null;
-  promoCode: string | null;
+  promoCode?: string | null;
   visitId: string | null;
   journeyId: string | null;
   sessionId: string | null;
-  time: number;
-  ev_id: string;
-  url: string;
-  fbp: string | null;
-  fbc: string | null;
+  time?: number;
+  ev_id?: string;
+  url?: string;
+  fbp?: string | null;
+  fbc?: string | null;
+  meta?: {
+    semanticsVersion: "confirmed_purchase_v1";
+    leadEventId: string;
+    eventSourceUrl: string;
+  };
 };
 
 export type PendingOrderSubmission = {
@@ -37,6 +42,7 @@ export type PendingOrderSubmission = {
 };
 
 export const PENDING_ORDER_SUBMISSION_KEY = "pendingOrderSubmission";
+const PENDING_ORDER_SUBMISSION_TTL_MS = 30 * 60 * 1000;
 
 function getStorage() {
   if (typeof window === "undefined") {
@@ -78,6 +84,20 @@ function isPayload(value: unknown): value is PendingOrderSubmissionPayload {
   }
 
   const candidate = value as Record<string, unknown>;
+  const meta = candidate.meta as Record<string, unknown> | undefined;
+  const hasNewMeta = Boolean(
+    meta
+    && meta.semanticsVersion === "confirmed_purchase_v1"
+    && typeof meta.leadEventId === "string"
+    && meta.leadEventId.trim().length > 0
+    && typeof meta.eventSourceUrl === "string"
+    && meta.eventSourceUrl.trim().length > 0,
+  );
+  const hasLegacyMeta = Number.isInteger(candidate.time)
+    && typeof candidate.ev_id === "string"
+    && typeof candidate.url === "string"
+    && isNullableString(candidate.fbp)
+    && isNullableString(candidate.fbc);
 
   return (
     isNullableString(candidate.firstName)
@@ -96,11 +116,7 @@ function isPayload(value: unknown): value is PendingOrderSubmissionPayload {
     && isNullableString(candidate.visitId)
     && isNullableString(candidate.journeyId)
     && isNullableString(candidate.sessionId)
-    && Number.isInteger(candidate.time)
-    && typeof candidate.ev_id === "string"
-    && typeof candidate.url === "string"
-    && isNullableString(candidate.fbp)
-    && isNullableString(candidate.fbc)
+    && (hasNewMeta || hasLegacyMeta)
   );
 }
 
@@ -114,10 +130,13 @@ export function readPendingOrderSubmission() {
 
   try {
     const parsed = JSON.parse(rawValue) as PendingOrderSubmission;
+    const createdAtMs = Date.parse(parsed.createdAt);
     if (
       typeof parsed?.submissionKey !== "string"
       || parsed.submissionKey.trim().length === 0
       || typeof parsed.createdAt !== "string"
+      || !Number.isFinite(createdAtMs)
+      || Date.now() - createdAtMs > PENDING_ORDER_SUBMISSION_TTL_MS
       || !isPayload(parsed.payload)
       || !isDuplicateSignature(parsed.duplicateSignature)
     ) {

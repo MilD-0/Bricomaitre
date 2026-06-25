@@ -1,0 +1,80 @@
+{
+  "Navigation": {
+    "checkout": "Checkout",
+    "collections": "Collections",
+    "home": "Accueil",
+    "label": "Navigation principale",
+    "landing": "Landing",
+    "products": "Produits",
+    "storefront": "Nouveau storefront"
+  },
+  "Home": {
+    "apiStatusLabel": "API amont",
+    "apiStatusValue": "A connecter",
+    "checkoutAction": "Preparer le checkout",
+    "eyebrow": "Fondation v1",
+    "intro": "Point de depart propre pour reconstruire le storefront autour de l API publique, du checkout rapide et de l internationalisation.",
+    "localeLabel": "Langue",
+    "localeValue": "Francais",
+    "primaryAction": "Ouvrir le catalogue",
+    "statusKicker": "Etat du rebuild",
+    "statusTitle": "Shell pret pour les prochaines fondations",
+    "title": "Nouveau storefront"
+  },
+  "Products": {
+    "description": "La base du catalogue public: contenu rendu cote serveur, filtres simples, priorite mobile et place reservee pour les futures regles de merchandising admin.",
+    "eyebrow": "Catalogue",
+    "foundationBody": "Cette page deviendra la surface principale de decouverte produit avec recherche, filtres, tri et priorite produits controlee par les donnees admin.",
+    "foundationKicker": "A venir",
+    "foundationTitle": "Structure catalogue",
+    "primaryAction": "Voir une collection",
+    "title": "Catalogue produits"
+  },
+  "ProductDetail": {
+    "description": "La page produit doit rendre le prix, les images, la disponibilite, les preuves de confiance et l action d achat immediatement comprehensibles.",
+    "eyebrow": "Produit",
+    "foundationBody": "Le token produit pourra resoudre un slug, un ancien identifiant Mongo ou un id numerique pour proteger les liens existants.",
+    "foundationKicker": "Resolution produit",
+    "foundationTitle": "Token stable",
+    "primaryAction": "Preparer le checkout",
+    "secondaryAction": "Retour au catalogue",
+    "title": "Fondation produit: {token}"
+  },
+  "Collection": {
+    "description": "Une collection represente une intention precise: categorie, marque, groupe admin ou campagne. Elle reste plus structuree et SEO-friendly qu une landing page.",
+    "eyebrow": "Collection",
+    "foundationBody": "Les collections permettront les pages SEO et les sliders de homepage bases sur des ensembles de produits admin.",
+    "foundationKicker": "Merchandising",
+    "foundationTitle": "Collection admin-ready",
+    "primaryAction": "Parcourir le catalogue",
+    "title": "Collection: {slug}"
+  },
+  "Landing": {
+    "description": "Les landing pages sont les surfaces les plus personnalisables: elles seront composees de blocs performants, types et limites.",
+    "eyebrow": "Landing admin",
+    "foundationBody": "Les variantes de layout resteront contraintes par des blocs connus pour eviter le poids, les scripts arbitraires et les pages difficiles a maintenir.",
+    "foundationKicker": "Blocs gardes",
+    "foundationTitle": "Personnalisation controlee",
+    "primaryAction": "Continuer vers le checkout",
+    "title": "Landing: {slug}"
+  },
+  "Checkout": {
+    "description": "Le checkout doit rester court, mobile-first, tolerant aux erreurs et compatible avec le checkout produit direct comme le checkout panier.",
+    "eyebrow": "Commande",
+    "foundationBody": "La prochaine passe ajoutera validation Zod, catalogue Ecotrack, prevention des doublons, idempotence et erreurs recuperables.",
+    "foundationKicker": "Fiabilite",
+    "foundationTitle": "Fondation checkout",
+    "primaryAction": "Simuler confirmation",
+    "secondaryAction": "Retour aux produits",
+    "title": "Checkout"
+  },
+  "ThankYou": {
+    "description": "La confirmation doit rassurer le client, expliquer les prochaines etapes et afficher le resume de commande quand le token public est disponible.",
+    "eyebrow": "Confirmation",
+    "foundationBody": "Cette page ne doit pas etre indexee. Elle servira aussi de support aux snapshots de commande et au suivi des evenements Purchase.",
+    "foundationKicker": "Apres commande",
+    "foundationTitle": "Confirmation non indexable",
+    "primaryAction": "Retour au catalogue",
+    "title": "Merci pour votre commande"
+  }
+}
