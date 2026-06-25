@@ -25,24 +25,5 @@ export default function AnalyticsTracker() {
     }
   }, [pathname]);
 
-  useEffect(() => {
-    const query = window.location.search.slice(1);
-    const pagePath = query ? `${pathname}?${query}` : pathname;
-
-    void trackAnalyticsEvent({
-      eventName: "page_view",
-      gaEventName: "page_view",
-      pagePath,
-      pageType: getPageType(pathname),
-      gaParams: {
-        page_title: document.title,
-      },
-      metadata: {
-        title: document.title,
-        isEntry: pathname === window.location.pathname && window.history.length <= 1,
-      },
-    });
-  }, [pathname]);
-
   return null;
 }

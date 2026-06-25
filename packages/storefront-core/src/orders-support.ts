@@ -63,6 +63,19 @@ const optionalNullableTrimmedString = (max: number) =>
     return trimmed.length === 0 ? null : trimmed.slice(0, max);
   });
 
+const optionalNullableEmail = z.union([z.string(), z.null(), z.undefined()]).transform((value) => {
+  if (value == null) {
+    return null;
+  }
+
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  return z.email().safeParse(trimmed).success ? trimmed : null;
+});
+
 const nullableWilayaCode = z.union([z.number(), z.string(), z.null()]).transform((value) => {
   if (value === null) {
     return null;
@@ -101,13 +114,7 @@ export const orderPatchSchema = z
 export const storefrontOrderCreateSchema = z.object({
   firstName: optionalNullableTrimmedString(80),
   lastName: optionalNullableTrimmedString(80),
-  email: z.email().optional().nullable().or(z.literal('')).transform((value) => {
-    if (value == null || value === '') {
-      return null;
-    }
-
-    return value.trim().toLowerCase();
-  }),
+  email: optionalNullableEmail,
   phoneNumber1: z.string().trim().min(1).max(50),
   phoneNumber2: optionalNullableTrimmedString(50),
   cartProducts: z.array(z.string().trim().min(1).max(160)).max(50).default([]),
@@ -126,13 +133,7 @@ export const storefrontOrderPatchSchema = z
   .object({
     firstName: optionalNullableTrimmedString(80).optional(),
     lastName: optionalNullableTrimmedString(80).optional(),
-    email: z.email().optional().nullable().or(z.literal('')).transform((value) => {
-      if (value == null || value === '') {
-        return null;
-      }
-
-      return value.trim().toLowerCase();
-    }).optional(),
+    email: optionalNullableEmail.optional(),
     phoneNumber1: z.string().trim().min(1).max(50).optional(),
     phoneNumber2: optionalNullableTrimmedString(50).optional(),
     note: nullableTrimmedString(500).optional(),

@@ -39,10 +39,12 @@ function isMetaPaidRequest(request: NextRequest) {
 }
 
 function applyVisitCookie(request: NextRequest, response: NextResponse) {
+  const secure = process.env.NODE_ENV === "production";
   if (!hasCookie(request, VISIT_ID_COOKIE_NAME)) {
     response.cookies.set(VISIT_ID_COOKIE_NAME, crypto.randomUUID(), {
       path: "/",
       sameSite: "lax",
+      secure,
       maxAge: VISIT_ID_MAX_AGE_SECONDS,
     });
   }
@@ -51,11 +53,13 @@ function applyVisitCookie(request: NextRequest, response: NextResponse) {
     response.cookies.set(PAID_CLICK_COOKIE_NAME, "1", {
       path: "/",
       sameSite: "lax",
+      secure,
       maxAge: FBC_MAX_AGE_SECONDS,
     });
     response.cookies.set(PAID_CLICK_SEEN_AT_COOKIE_NAME, String(Date.now()), {
       path: "/",
       sameSite: "lax",
+      secure,
       maxAge: FBC_MAX_AGE_SECONDS,
     });
   }
@@ -70,17 +74,25 @@ function applyTrackingCookies(request: NextRequest, response: NextResponse) {
     return response;
   }
 
+  const existingFbclid = request.cookies.get("_bric_fbclid")?.value?.trim();
+  if (existingFbclid === fbclid && hasCookie(request, "_fbc")) {
+    return response;
+  }
+
   const timestampMs = Date.now();
+  const secure = process.env.NODE_ENV === "production";
 
   response.cookies.set("_bric_fbclid", fbclid, {
     path: "/",
     sameSite: "lax",
+    secure,
     maxAge: FBC_MAX_AGE_SECONDS,
   });
 
   response.cookies.set("_fbc", buildFbcValue(fbclid, timestampMs), {
     path: "/",
     sameSite: "lax",
+    secure,
     maxAge: FBC_MAX_AGE_SECONDS,
   });
 
@@ -96,6 +108,7 @@ function applyStorefrontProjectCookie(request: NextRequest, response: NextRespon
   response.cookies.set(STOREFRONT_PROJECT_COOKIE_NAME, project, {
     path: "/",
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
     maxAge: STOREFRONT_PROJECT_MAX_AGE_SECONDS,
   });
 
@@ -114,6 +127,7 @@ export default function proxy(request: NextRequest) {
     response.cookies.set(LOCALE_COOKIE_NAME, maybeLocale, {
       path: "/",
       sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
       maxAge: LOCALE_MAX_AGE_SECONDS,
     });
 

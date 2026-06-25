@@ -303,7 +303,7 @@ export async function trackAnalyticsEvent(input: AnalyticsEventInput) {
   }
 
   try {
-    await fetch("/api/analytics", {
+    const response = await fetch("/api/analytics", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -311,6 +311,12 @@ export async function trackAnalyticsEvent(input: AnalyticsEventInput) {
       keepalive: true,
       body: JSON.stringify(payload),
     });
+    if (!response.ok) {
+      console.error(`Analytics event failed with HTTP ${response.status}`, {
+        eventId,
+        eventName: input.eventName,
+      });
+    }
   } catch (error) {
     console.error("Analytics event failed", error);
   }

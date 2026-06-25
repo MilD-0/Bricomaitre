@@ -9,7 +9,8 @@ export async function GET(request: NextRequest) {
   const products = (await listAllStorefrontProducts()).map((product) =>
     normalizeProduct(product, context),
   );
-  const matched = products.find((product) => product._id === id || product.slug === id);
+  const matched = products.find((product) =>
+    product._id === id || product.mongo_id === id || product.slug === id);
 
   return NextResponse.json({ price: matched?.price ?? 0 });
 }

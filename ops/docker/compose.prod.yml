@@ -9,8 +9,10 @@ x-storefront-api-blue: &storefront-api-blue
   mem_reservation: ${BRIC_STOREFRONT_API_MEM_RESERVATION:-512m}
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront-api.env
+    - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront.env
   environment:
     NODE_OPTIONS: ${BRIC_STOREFRONT_API_NODE_OPTIONS:---max-old-space-size=512}
+    PORT: 3001
   depends_on:
     postgres:
       condition: service_healthy
@@ -21,6 +23,23 @@ x-storefront-api-blue: &storefront-api-blue
     interval: 10s
     timeout: 5s
     retries: 12
+
+x-storefront-meta-worker: &storefront-meta-worker
+  build:
+    context: ../..
+    dockerfile: ops/docker/Dockerfile.storefront-api
+    target: worker
+  restart: unless-stopped
+  mem_limit: ${BRIC_STOREFRONT_META_WORKER_MEM_LIMIT:-512m}
+  mem_reservation: ${BRIC_STOREFRONT_META_WORKER_MEM_RESERVATION:-256m}
+  env_file:
+    - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront-api.env
+    - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront.env
+  environment:
+    NODE_OPTIONS: ${BRIC_STOREFRONT_META_WORKER_NODE_OPTIONS:---max-old-space-size=384}
+  depends_on:
+    postgres:
+      condition: service_healthy
 
 x-admin-blue: &admin-blue
   build:
@@ -163,6 +182,9 @@ services:
     <<: *storefront-api-blue
     ports:
       - "127.0.0.1:3102:3001"
+
+  storefront-meta-worker:
+    <<: *storefront-meta-worker
 
   adminstration-blue:
     <<: *admin-blue

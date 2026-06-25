@@ -378,14 +378,14 @@ export function normalizeProduct(
   const price = Number(product.price ?? 0);
   const oldPrice = product.oldPrice == null ? null : Number(product.oldPrice);
   const mongoId = product.mongoId?.trim() ? product.mongoId.trim() : null;
-  const idMode = options?.idMode ?? "mongo_or_numeric";
+  const idMode = options?.idMode ?? "numeric";
   const resolvedId = idMode === "numeric" ? String(product.id) : (mongoId ?? String(product.id));
 
   return {
     _id: resolvedId,
     mongo_id: mongoId,
     id: product.id,
-    slug: product.slug ?? mongoId ?? String(product.id),
+    slug: product.slug ?? String(product.id),
     title: product.title,
     title_ar: product.titleAr ?? productCard?.titleAr ?? "",
     description: product.description ?? productCard?.descriptionFr ?? "",

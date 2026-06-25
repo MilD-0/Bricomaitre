@@ -35,12 +35,12 @@ describe('request-security order velocity limit', () => {
     getRedisMock.mockReturnValue(redis);
   });
 
-  it('allows two order attempts per hour for the selected identity', async () => {
+  it('allows six order attempts per fifteen minutes for the selected identity', async () => {
     redis.ttl.mockResolvedValue(-2);
     applyRateLimitMock.mockResolvedValue({
       ok: true,
-      limit: 2,
-      remaining: 1,
+      limit: 6,
+      remaining: 5,
       resetAt: Date.now() + 60_000,
       retryAfterSeconds: 60,
     });
@@ -56,18 +56,18 @@ describe('request-security order velocity limit', () => {
     expect(applyRateLimitMock).toHaveBeenCalledWith({
       scope: 'storefront-order-velocity',
       key: 'journey:journey-1',
-      limit: 2,
-      windowSeconds: 3600,
+      limit: 6,
+      windowSeconds: 900,
     });
     expect(redis.incr).not.toHaveBeenCalled();
   });
 
-  it('locks an identity for one hour on the first velocity breach', async () => {
+  it('locks an identity for ten minutes on the first velocity breach', async () => {
     redis.ttl.mockResolvedValue(-2);
     redis.incr.mockResolvedValue(1);
     applyRateLimitMock.mockResolvedValue({
       ok: false,
-      limit: 2,
+      limit: 6,
       remaining: 0,
       resetAt: Date.now() + 60_000,
       retryAfterSeconds: 60,
@@ -79,25 +79,25 @@ describe('request-security order velocity limit', () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.retryAfterSeconds).toBe(3600);
+    expect(result.retryAfterSeconds).toBe(600);
     expect(redis.expire).toHaveBeenCalledWith(
       'bric:ratelimit:storefront-order-velocity:violations:journey:journey-1',
-      86400,
+      7200,
     );
     expect(redis.set).toHaveBeenCalledWith(
       'bric:ratelimit:storefront-order-velocity:penalty:journey:journey-1',
       '1',
       'EX',
-      3600,
+      600,
     );
   });
 
-  it('escalates a repeat velocity breach to one day', async () => {
+  it('escalates a repeat velocity breach to one hour', async () => {
     redis.ttl.mockResolvedValue(-2);
     redis.incr.mockResolvedValue(2);
     applyRateLimitMock.mockResolvedValue({
       ok: false,
-      limit: 2,
+      limit: 6,
       remaining: 0,
       resetAt: Date.now() + 60_000,
       retryAfterSeconds: 60,
@@ -109,13 +109,13 @@ describe('request-security order velocity limit', () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.retryAfterSeconds).toBe(86400);
+    expect(result.retryAfterSeconds).toBe(3600);
     expect(redis.expire).not.toHaveBeenCalled();
     expect(redis.set).toHaveBeenCalledWith(
       'bric:ratelimit:storefront-order-velocity:penalty:visit:visit-1',
       '2',
       'EX',
-      86400,
+      3600,
     );
   });
 

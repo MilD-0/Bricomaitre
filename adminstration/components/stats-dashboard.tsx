@@ -940,6 +940,26 @@ export function StatsDashboard({ description: _description, initialData = null, 
     );
   }
   const ensuredStats = stats as StatsDashboardData;
+  const metaHealth = stats?.metaAds?.health ?? {
+    pending: 0,
+    retryable: 0,
+    delivered: 0,
+    failed: 0,
+    skipped: 0,
+    oldestPendingAt: null,
+    eligibleOrders: 0,
+    confirmedOrders: 0,
+    orderConfirmedOrders: 0,
+    purchaseOrders: 0,
+    negativeOutcomePurchases: 0,
+    workerLastHeartbeatAt: null,
+  };
+  const purchaseCoverage = metaHealth.eligibleOrders > 0
+    ? (metaHealth.purchaseOrders / metaHealth.eligibleOrders) * 100
+    : 0;
+  const orderConfirmedCoverage = metaHealth.confirmedOrders > 0
+    ? (metaHealth.orderConfirmedOrders / metaHealth.confirmedOrders) * 100
+    : 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -1361,6 +1381,106 @@ export function StatsDashboard({ description: _description, initialData = null, 
 
           <SectionCard title={t('metaAds.managerTitle')}>
             <AdCostsManager range={range} startDate={startDate} endDate={endDate} />
+          </SectionCard>
+
+          <SectionCard title={t('metaAds.health.title')}>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <MetricCard accent="bg-amber-500" icon={RefreshCcw} title={t('metaAds.health.pending')} value={formatNumber(locale, metaHealth.pending + metaHealth.retryable)} />
+              <MetricCard accent="bg-emerald-500" icon={Target} title={t('metaAds.health.delivered')} value={formatNumber(locale, metaHealth.delivered)} />
+              <MetricCard accent="bg-red-500" icon={AlertCircle} title={t('metaAds.health.failed')} value={formatNumber(locale, metaHealth.failed + metaHealth.skipped)} />
+              <MetricCard accent="bg-blue-500" icon={MousePointer} title={t('metaAds.health.purchaseCoverage')} value={formatPercent(locale, purchaseCoverage)} />
+              <MetricCard accent="bg-violet-500" icon={TrendingUp} title={t('metaAds.health.orderConfirmedCoverage')} value={formatPercent(locale, orderConfirmedCoverage)} />
+            </div>
+            <div className="mt-3 text-xs text-muted-foreground">
+              {t('metaAds.health.worker', {
+                heartbeat: formatDateTime(locale, metaHealth.workerLastHeartbeatAt),
+                oldest: formatDateTime(locale, metaHealth.oldestPendingAt),
+                negative: metaHealth.negativeOutcomePurchases,
+              })}
+            </div>
+          </SectionCard>
+
+          <SectionCard title={t('metaAds.eventsTitle')}>
+            {ensuredStats.metaAds.events.length > 0 ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t('metaAds.events.columns.event')}</TableHead>
+                      <TableHead>{t('metaAds.events.columns.total')}</TableHead>
+                      <TableHead>{t('metaAds.events.columns.pixel')}</TableHead>
+                      <TableHead>{t('metaAds.events.columns.capiSent')}</TableHead>
+                      <TableHead>{t('metaAds.events.columns.capiDelivered')}</TableHead>
+                      <TableHead>{t('metaAds.events.columns.capiFailed')}</TableHead>
+                      <TableHead>{t('metaAds.events.columns.lastSeen')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {ensuredStats.metaAds.events.map((event) => (
+                      <TableRow key={event.name}>
+                        <TableCell className="font-medium">{event.name}</TableCell>
+                        <TableCell>{formatNumber(locale, event.total)}</TableCell>
+                        <TableCell>{formatNumber(locale, event.pixelFired)}</TableCell>
+                        <TableCell>{formatNumber(locale, event.capiSent)}</TableCell>
+                        <TableCell>{formatNumber(locale, event.capiDelivered)}</TableCell>
+                        <TableCell>{formatNumber(locale, event.capiFailed)}</TableCell>
+                        <TableCell>{formatDateTime(locale, event.lastOccurredAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">{t('metaAds.events.empty')}</div>
+            )}
+          </SectionCard>
+
+          <SectionCard title={t('metaAds.payloadsTitle')}>
+            {ensuredStats.metaAds.recentPayloads.length > 0 ? (
+              <div className="grid gap-3">
+                {ensuredStats.metaAds.recentPayloads.map((event) => (
+                  <Card key={`${event.metaEventName}-${event.eventId}`} className="rounded-xl p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="font-semibold">{event.metaEventName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {t('metaAds.payloads.meta', {
+                            analyticsEvent: event.analyticsEventName,
+                            eventId: event.eventId,
+                            occurredAt: formatDateTime(locale, event.occurredAt),
+                          })}
+                        </div>
+                      </div>
+                      <div className={cn(
+                        'rounded-full px-2 py-1 text-xs font-medium',
+                        event.capiOk ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800',
+                      )}>
+                        {event.capiOk
+                          ? t('metaAds.payloads.delivered')
+                          : typeof event.capiPayload.status === 'string'
+                            ? event.capiPayload.status
+                            : t('metaAds.payloads.failed')}
+                        {' · '}
+                        {event.capiStatus == null
+                          ? t('metaAds.payloads.noStatus')
+                          : t('metaAds.payloads.status', { status: event.capiStatus })}
+                      </div>
+                    </div>
+                    <pre className="mt-3 max-h-56 overflow-auto rounded-lg bg-muted p-3 text-xs">
+                      {JSON.stringify(event.capiPayload, null, 2)}
+                    </pre>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Empty className="border-none">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon"><Target /></EmptyMedia>
+                  <EmptyTitle>{t('metaAds.payloads.emptyTitle')}</EmptyTitle>
+                  <EmptyDescription>{t('metaAds.payloads.emptyDescription')}</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            )}
           </SectionCard>
         </div>
       ) : null}

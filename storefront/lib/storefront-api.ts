@@ -381,6 +381,27 @@ export async function fetchStorefrontProductBuildFeed() {
   });
 }
 
+export async function fetchStorefrontProductPromo(
+  productId: number,
+  code?: string | null,
+) {
+  if (!code?.trim()) {
+    return null;
+  }
+  const pathname = `/api/storefront/products/${productId}/promo?code=${encodeURIComponent(code.trim())}`;
+  return withStorefrontFallback(pathname, null, async () => {
+    const data = await storefrontFetchJson<{
+      ok: boolean;
+      promo: {
+        code: string;
+        originalPrice: number;
+        promoPrice: number;
+      } | null;
+    }>(pathname, { cache: "no-store" });
+    return data.ok ? data.promo : null;
+  });
+}
+
 export async function fetchStorefrontEcotrackCatalog() {
   return withStorefrontFallback(
     "/api/storefront/ecotrack/catalog",
@@ -553,10 +574,10 @@ export function normalizeProduct(
   const mongoId = product.mongoId?.trim() ? product.mongoId.trim() : null;
 
   return {
-    _id: mongoId ?? String(product.id),
+    _id: String(product.id),
     mongo_id: mongoId,
     id: product.id,
-    slug: product.slug ?? mongoId ?? String(product.id),
+    slug: product.slug ?? String(product.id),
     title: product.title,
     title_ar: product.titleAr ?? productCard?.titleAr ?? "",
     description: product.description ?? productCard?.descriptionFr ?? "",

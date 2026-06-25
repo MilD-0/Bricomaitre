@@ -24,6 +24,7 @@ function createLocalStorage() {
 
 describe("pending-order-verification", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     vi.stubGlobal("window", {
       localStorage: createLocalStorage(),
     });
@@ -51,6 +52,21 @@ describe("pending-order-verification", () => {
     }));
 
     expect(readPendingOrderVerification()).toBeNull();
+  });
+
+  it("clears stale pending verification data", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-02T12:31:00Z"));
+    window.localStorage.setItem("pendingOrderVerification", JSON.stringify({
+      orderId: 11,
+      token: "public-token",
+      mode: "create",
+      createdAt: "2026-06-02T12:00:00Z",
+    }));
+
+    expect(readPendingOrderVerification()).toBeNull();
+    expect(window.localStorage.getItem("pendingOrderVerification")).toBeNull();
+    vi.useRealTimers();
   });
 
   it("removes the pending verification record", () => {

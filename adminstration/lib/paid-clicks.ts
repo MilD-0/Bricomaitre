@@ -17,6 +17,7 @@ import { getDb } from '../db/client';
 import {
   analyticsEvents,
   analyticsPaidClickVisits,
+  metaEventOutbox,
   orders,
 } from '../db/schema';
 
@@ -244,7 +245,7 @@ function parseMetaTracking(value: unknown): PaidClickTimelineEvent['metaTracking
 
   return {
     eventName: typeof candidate.eventName === 'string' ? candidate.eventName : null,
-    pixelFired: pixel.fired === true,
+    pixelFired: pixel.fired === true || pixel.invoked === true,
     pixelPayload: pixel.payload && typeof pixel.payload === 'object' ? pixel.payload as Record<string, unknown> : {},
     capiAttempted: capi.attempted === true,
     capiPayload: capi.payload && typeof capi.payload === 'object' ? capi.payload as Record<string, unknown> : {},
@@ -491,8 +492,14 @@ export async function getPaidClickVisitDetail(visitId: string) {
       orderId: analyticsEvents.orderId,
       occurredAt: analyticsEvents.occurredAt,
       metadata: analyticsEvents.metadata,
+      metaStatus: metaEventOutbox.status,
+      metaAttemptCount: metaEventOutbox.attemptCount,
+      metaHttpStatus: metaEventOutbox.lastHttpStatus,
+      metaMatchKeys: metaEventOutbox.matchKeySummary,
+      metaCustomData: metaEventOutbox.customData,
     })
     .from(analyticsEvents)
+    .leftJoin(metaEventOutbox, eq(metaEventOutbox.eventId, analyticsEvents.eventId))
     .where(eq(analyticsEvents.visitId, visitId))
     .orderBy(asc(analyticsEvents.occurredAt), asc(analyticsEvents.id));
 
@@ -544,21 +551,40 @@ export async function getPaidClickVisitDetail(visitId: string) {
       eventCount: visitRow.eventCount,
       purchaseCount: visitRow.purchaseCount,
     },
-    timeline: eventRows.map<PaidClickTimelineEvent>((row) => ({
-      eventId: row.eventId,
-      eventName: row.eventName,
-      pagePath: row.pagePath,
-      pageType: row.pageType,
-      productSlug: row.productSlug,
-      orderId: row.orderId,
-      occurredAt: toIsoDateString(row.occurredAt) ?? new Date(0).toISOString(),
-      metadata: (row.metadata ?? {}) as Record<string, unknown>,
-      metaTracking: parseMetaTracking(
+    timeline: eventRows.map<PaidClickTimelineEvent>((row) => {
+      const parsedTracking = parseMetaTracking(
         row.metadata && typeof row.metadata === 'object'
           ? (row.metadata as Record<string, unknown>).metaTracking
           : null,
-      ),
-    })),
+      );
+      return {
+        eventId: row.eventId,
+        eventName: row.eventName,
+        pagePath: row.pagePath,
+        pageType: row.pageType,
+        productSlug: row.productSlug,
+        orderId: row.orderId,
+        occurredAt: toIsoDateString(row.occurredAt) ?? new Date(0).toISOString(),
+        metadata: (row.metadata ?? {}) as Record<string, unknown>,
+        metaTracking: row.metaStatus
+          ? {
+            eventName: parsedTracking?.eventName ?? row.eventName,
+            pixelFired: parsedTracking?.pixelFired ?? false,
+            pixelPayload: {},
+            capiAttempted: (row.metaAttemptCount ?? 0) > 0,
+            capiPayload: {
+              status: row.metaStatus,
+              matchKeys: row.metaMatchKeys,
+              value: row.metaCustomData && typeof row.metaCustomData === 'object'
+                ? (row.metaCustomData as Record<string, unknown>).value
+                : null,
+            },
+            capiStatus: row.metaHttpStatus,
+            capiOk: row.metaStatus === 'delivered',
+          }
+          : parsedTracking,
+      };
+    }),
     order: orderRow ? {
       id: orderRow.id,
       publicToken: orderRow.publicToken,

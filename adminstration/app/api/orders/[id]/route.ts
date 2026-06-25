@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { type InferInsertModel, asc, eq } from 'drizzle-orm';
+import { type InferInsertModel, asc, eq, inArray } from 'drizzle-orm';
+import {
+  ensureOrderCompletedEventForOrder,
+  ensureOrderConfirmedEventForOrder,
+  isMetaCompletedStatus,
+  isMetaOrderConfirmedStatus,
+} from '@bric/storefront-core/meta';
 
 import { getDb, hasDb } from '../../../../db/client';
 import { loadOrderDetail } from '../../../../lib/admin-orders-data';
-import { orderStatusHistory, orders } from '../../../../db/schema';
+import { orderStatusHistory, orders, products } from '../../../../db/schema';
 import { mutateEntityWithHistory } from '../../../../lib/action-history';
 import { auth } from '../../../../lib/auth';
 import { readEcotrackCatalog, resolveEcotrackDeliveryFee } from '../../../../lib/ecotrack';
@@ -28,6 +34,45 @@ function shouldUseDegradedCaptureVariant(input: {
     || input.state == null
     || isBlank(input.city)
     || (input.delivery === 0 && isBlank(input.homeAddress));
+}
+
+type Database = ReturnType<typeof getDb>;
+type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+
+function isMongoObjectId(value: string) {
+  return /^[a-f\d]{24}$/i.test(value.trim());
+}
+
+async function canonicalizeOrderCartProducts(
+  db: Transaction,
+  cartProducts: string[],
+) {
+  const normalized = cartProducts
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) =>
+      /^\d+$/.test(value) && !isMongoObjectId(value)
+        ? String(Number.parseInt(value, 10))
+        : value);
+  const mongoIds = [...new Set(normalized.filter(isMongoObjectId))];
+
+  if (mongoIds.length === 0) {
+    return normalized;
+  }
+
+  const productRows = await db
+    .select({ id: products.id, mongoId: products.mongoId })
+    .from(products)
+    .where(inArray(products.mongoId, mongoIds));
+  const lookup = new Map<string, string>();
+
+  for (const product of productRows) {
+    if (product.mongoId) {
+      lookup.set(product.mongoId, String(product.id));
+    }
+  }
+
+  return normalized.map((value) => lookup.get(value) ?? value);
 }
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -80,6 +125,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const catalog = (changes.delivery !== undefined || changes.state !== undefined || changes.city !== undefined)
     ? await readEcotrackCatalog(db)
     : null;
+  let shouldQueueConfirmation = false;
+  let shouldQueueCompletion = false;
 
   const [updated] = await mutateEntityWithHistory(db, {
     entityType: 'orders',
@@ -110,7 +157,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const nextState = changes.state !== undefined ? changes.state : existing.state;
       const nextCity = changes.city !== undefined ? changes.city : existing.city;
       const nextHomeAddress = changes.homeAddress !== undefined ? changes.homeAddress : existing.homeAddress;
-      const nextCartProducts = changes.cartProducts ?? (existing.cartProducts ?? []);
+      const nextCartProducts = changes.cartProducts !== undefined
+        ? await canonicalizeOrderCartProducts(tx, changes.cartProducts)
+        : (existing.cartProducts ?? []);
 
       if (changes.phoneNumber1 !== undefined) {
         update.phoneNumber1 = changes.phoneNumber1;
@@ -131,7 +180,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         update.homeAddress = changes.homeAddress;
       }
       if (changes.cartProducts !== undefined) {
-        update.cartProducts = changes.cartProducts;
+        update.cartProducts = nextCartProducts;
       }
       if (changes.confirmed !== undefined) {
         update.confirmed = nextStatus;
@@ -178,6 +227,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           changedByName: actor.name ?? null,
           changedAt: now,
         });
+        shouldQueueConfirmation = isMetaOrderConfirmedStatus(nextStatus);
+        shouldQueueCompletion = isMetaCompletedStatus(nextStatus);
       }
 
       return rows;
@@ -189,6 +240,43 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .from(orderStatusHistory)
     .where(eq(orderStatusHistory.orderId, numericId))
     .orderBy(asc(orderStatusHistory.changedAt));
+
+  const firstCompletion = shouldQueueCompletion
+    ? historyRows.find((entry) => isMetaCompletedStatus(coerceOrderStatus(entry.status)))
+    : undefined;
+  const firstConfirmation = shouldQueueConfirmation
+    ? historyRows.find((entry) => isMetaOrderConfirmedStatus(coerceOrderStatus(entry.status)))
+    : undefined;
+  if (firstConfirmation) {
+    try {
+      await ensureOrderConfirmedEventForOrder(db, {
+        orderId: numericId,
+        statusHistoryId: firstConfirmation.id,
+        status: coerceOrderStatus(firstConfirmation.status),
+        changedAt: firstConfirmation.changedAt,
+      });
+    } catch (error) {
+      console.error('Failed to queue Meta orderconfirmed event', {
+        orderId: numericId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  if (firstCompletion) {
+    try {
+      await ensureOrderCompletedEventForOrder(db, {
+        orderId: numericId,
+        statusHistoryId: firstCompletion.id,
+        status: coerceOrderStatus(firstCompletion.status),
+        changedAt: firstCompletion.changedAt,
+      });
+    } catch (error) {
+      console.error('Failed to queue Meta OrderCompleted event', {
+        orderId: numericId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
   const productLookup = await getOrderProductLookup(db, [updated]);
 
   return NextResponse.json({

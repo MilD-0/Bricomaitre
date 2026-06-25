@@ -35,9 +35,8 @@ export type CompletedOrderSnapshot = {
 };
 
 const COMPLETED_ORDER_SNAPSHOT_KEY = "completedOrderSnapshot";
-const TRACKED_PURCHASES_KEY = "trackedPurchases";
 const RECENT_ORDER_SIGNATURE_KEY = "recentOrderSignature";
-const RECENT_ORDER_SIGNATURE_WINDOW_MS = 5 * 60 * 1000;
+const RECENT_ORDER_SIGNATURE_WINDOW_MS = 30 * 1000;
 
 function getStorage() {
   if (typeof window === "undefined") {
@@ -107,33 +106,6 @@ function isSnapshot(value: unknown): value is CompletedOrderSnapshot {
   );
 }
 
-function readTrackedPurchasesMap() {
-  const storage = getStorage();
-  const rawValue = storage?.getItem(TRACKED_PURCHASES_KEY);
-  if (!rawValue) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(rawValue) as Record<string, string>;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      storage?.removeItem(TRACKED_PURCHASES_KEY);
-      return {};
-    }
-
-    return Object.fromEntries(
-      Object.entries(parsed).filter(([key, value]) => key.trim().length > 0 && typeof value === "string"),
-    );
-  } catch {
-    storage?.removeItem(TRACKED_PURCHASES_KEY);
-    return {};
-  }
-}
-
-function writeTrackedPurchasesMap(value: Record<string, string>) {
-  getStorage()?.setItem(TRACKED_PURCHASES_KEY, JSON.stringify(value));
-}
-
 function isRecentSignatureRecord(value: unknown): value is { signature: string; timestamp: number } {
   if (!value || typeof value !== "object") {
     return false;
@@ -201,16 +173,6 @@ export function writeCompletedOrderSnapshot(value: CompletedOrderSnapshot) {
 
 export function clearCompletedOrderSnapshot() {
   getStorage()?.removeItem(COMPLETED_ORDER_SNAPSHOT_KEY);
-}
-
-export function hasTrackedPurchase(orderId: number) {
-  return Boolean(readTrackedPurchasesMap()[String(orderId)]);
-}
-
-export function markPurchaseTracked(orderId: number) {
-  const tracked = readTrackedPurchasesMap();
-  tracked[String(orderId)] = new Date().toISOString();
-  writeTrackedPurchasesMap(tracked);
 }
 
 export function hasRecentOrderSignature(signature: string) {

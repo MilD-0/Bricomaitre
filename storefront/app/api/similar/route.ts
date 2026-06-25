@@ -96,7 +96,8 @@ export async function GET(req: NextRequest) {
   if (productId) {
     const currentProduct =
       allProducts.find(
-        (product) => product._id === productId || product.slug === productId,
+        (product) =>
+          product._id === productId || product.mongo_id === productId || product.slug === productId,
       ) ?? null;
 
     if (!currentProduct) {

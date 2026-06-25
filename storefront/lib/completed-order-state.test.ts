@@ -3,9 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearRecentOrderSignature,
   clearCompletedOrderSnapshot,
-  hasTrackedPurchase,
   hasRecentOrderSignature,
-  markPurchaseTracked,
   readCompletedOrderSnapshot,
   writeRecentOrderSignature,
   writeCompletedOrderSnapshot,
@@ -69,15 +67,6 @@ describe("completed-order-state", () => {
     expect(window.localStorage.getItem("completedOrderSnapshot")).toBeNull();
   });
 
-  it("tracks purchases by order id for dedupe", () => {
-    expect(hasTrackedPurchase(11)).toBe(false);
-
-    markPurchaseTracked(11);
-
-    expect(hasTrackedPurchase(11)).toBe(true);
-    expect(hasTrackedPurchase(12)).toBe(false);
-  });
-
   it("clears snapshots explicitly", () => {
     writeCompletedOrderSnapshot({
       orderId: 11,
@@ -106,14 +95,21 @@ describe("completed-order-state", () => {
   });
 
   it("tracks recent order signatures for duplicate suppression", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-30T12:00:00Z"));
+
     expect(hasRecentOrderSignature("sig-1")).toBe(false);
 
     writeRecentOrderSignature("sig-1");
 
     expect(hasRecentOrderSignature("sig-1")).toBe(true);
 
+    vi.setSystemTime(new Date("2026-05-30T12:00:31Z"));
+    expect(hasRecentOrderSignature("sig-1")).toBe(false);
+
     clearRecentOrderSignature();
 
     expect(hasRecentOrderSignature("sig-1")).toBe(false);
+    vi.useRealTimers();
   });
 });

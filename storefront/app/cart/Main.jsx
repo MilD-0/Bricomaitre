@@ -11,6 +11,7 @@ import {
   trackAnalyticsEvent,
 } from "@/lib/analytics";
 import { isPaidTrafficSession } from "@/lib/paid-session";
+import { buildCartTrackingProducts, getCanonicalProductId } from "@/lib/cart-state";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useSearchParams } from "next/navigation";
 
@@ -30,6 +31,7 @@ function CartPage() {
   const { cartProducts, addProduct, removeProduct, cartSummary, rememberProducts } = useContext(CartContext);
   const [products, setProducts] = useState([]);
   const lastLoadedCartKeyRef = useRef("");
+  const lastTrackedCartViewKeyRef = useRef("");
   const paidSession = isPaidTrafficSession();
   const checkoutHref = (() => {
     const query = searchParams?.toString() ?? "";
@@ -93,8 +95,20 @@ function CartPage() {
       return;
     }
 
-    const items = buildItemArray(products);
+    const trackingProducts = buildCartTrackingProducts(cartSummary.items);
+    if (trackingProducts.length === 0) {
+      return;
+    }
+    const items = buildItemArray(trackingProducts).map((item, index) => ({
+      ...item,
+      quantity: trackingProducts[index]?.quantity ?? 1,
+    }));
     const totalValue = cartSummary.subtotal;
+    const cartViewKey = `${cartProducts.join(",")}:${totalValue}`;
+    if (lastTrackedCartViewKeyRef.current === cartViewKey) {
+      return;
+    }
+    lastTrackedCartViewKeyRef.current = cartViewKey;
 
     void trackAnalyticsEvent({
       eventName: "view_cart",
@@ -131,7 +145,7 @@ function CartPage() {
     }).catch((error) => console.error(error));
 
     await waitForTracking(handleInitiateCheckout({
-      products,
+      products: buildCartTrackingProducts(cartSummary.items),
       totalValue: total,
     }));
     router.push(checkoutHref);
@@ -158,9 +172,10 @@ function CartPage() {
       <section className="sf-container grid gap-6 pb-28 pt-6 lg:grid-cols-[1.1fr_0.9fr] lg:pb-6">
         <div className="space-y-4">
           {products.map((product) => {
-            const quantity = cartProducts.filter((id) => id === product._id).length;
+            const productId = getCanonicalProductId(product) ?? product._id;
+            const quantity = cartProducts.filter((id) => id === productId).length;
             return (
-              <article key={product._id} className="sf-panel grid grid-cols-[110px_1fr_auto] items-center gap-4">
+              <article key={productId} className="sf-panel grid grid-cols-[110px_1fr_auto] items-center gap-4">
                 <Link href={`/products/${product.slug}`} className="sf-image-frame aspect-square p-3">
                   <Image
                     src={product.images[0]}
@@ -186,11 +201,11 @@ function CartPage() {
                 </div>
 
                 <div className="flex flex-col items-center gap-2">
-                  <button onClick={() => addProduct(product._id, product)} className="sf-chip h-10 w-10 p-0">
+                  <button onClick={() => addProduct(productId, product)} className="sf-chip h-10 w-10 p-0">
                     +
                   </button>
                   <div className="min-w-8 text-center text-lg font-semibold text-slate-700">{quantity}</div>
-                  <button onClick={() => removeProduct(product._id)} className="sf-chip h-10 w-10 p-0">
+                  <button onClick={() => removeProduct(productId)} className="sf-chip h-10 w-10 p-0">
                     {quantity === 1 ? "×" : "−"}
                   </button>
                 </div>
