@@ -6,6 +6,7 @@ import {
   hasStopDeskForWilaya,
   normalizeFeaturedGroup,
   normalizeFeaturedGroupLink,
+  normalizeProduct,
   type LegacyProduct,
 } from "./storefront-api";
 
@@ -39,6 +40,37 @@ describe("storefront-api upstream fallback logging", () => {
       "[storefront] upstream request failed for /api/storefront/brands during runtime",
       "Storefront API is unavailable: /api/storefront/brands",
     );
+  });
+});
+
+describe("storefront-api product identity", () => {
+  it("emits numeric ids as product _id while retaining Mongo as an alias", () => {
+    const product = normalizeProduct({
+      id: 2137,
+      slug: "perforateur-hitachi",
+      mongoId: "f00000000000000000000005",
+      title: "Perforateur",
+      titleAr: null,
+      description: null,
+      descriptionAr: null,
+      sku: null,
+      barcode: null,
+      price: "12000",
+      oldPrice: null,
+      active: true,
+      inStock: true,
+      availabilityStatus: "in_stock",
+      inventoryQuantity: 4,
+      brandId: null,
+      categoryId: null,
+      images: [],
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-02T00:00:00.000Z",
+    });
+
+    expect(product._id).toBe("2137");
+    expect(product.id).toBe(2137);
+    expect(product.mongo_id).toBe("f00000000000000000000005");
   });
 });
 

@@ -1,0 +1,36 @@
+{
+  "name": "storefront-new",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3003",
+    "build": "next build",
+    "start": "node ../ops/scripts/start-next-standalone.mjs --app-dir . --nested-dir storefront-new --default-port 3003",
+    "lint": "eslint .",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration"
+  },
+  "dependencies": {
+    "@bric/runtime": "workspace:*",
+    "@bric/storefront-core": "workspace:*",
+    "next": "16.2.2",
+    "next-intl": "^4.9.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@types/node": "20.19.37",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.2.2",
+    "jsdom": "^28.1.0",
+    "tailwindcss": "^4.2.2",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.2"
+  },
+  "license": "AGPL-3.0-only"
+}

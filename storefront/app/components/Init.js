@@ -1,166 +1,58 @@
-// lib/tracking-events.js
 import { v4 as uuidv4 } from "uuid";
+
 import {
   buildItemArray,
+  getOrCreateJourneyId,
+  getOrCreateSessionId,
+  getVisitIdFromCookie,
   trackAnalyticsEvent,
 } from "@/lib/analytics";
+import {
+  getMetaNavigationKey,
+  runMetaEventOnce,
+} from "@/lib/meta-event-dedupe";
 
-const BRIC_FBCLID_COOKIE = "_bric_fbclid";
-const FBC_COOKIE = "_fbc";
-const FBC_MAX_AGE_SECONDS = 60 * 60 * 24 * 90;
-
-// -------------------- Helpers --------------------
 function getCookie(name) {
   if (typeof document === "undefined") return null;
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop().split(";").shift();
-  return null;
-}
-
-function setCookie(name, value, maxAgeSeconds = FBC_MAX_AGE_SECONDS) {
-  if (typeof document === "undefined") return;
-  document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=${maxAgeSeconds}; Path=/; SameSite=Lax`;
-}
-
-function buildFbcValue(fbclid) {
-  return `fb.1.${Date.now()}.${fbclid}`;
+  return parts.length === 2 ? parts.pop().split(";").shift() : null;
 }
 
 export function captureFbclidFromLocation() {
   if (typeof window === "undefined") return null;
-
-  const fbclid = new URLSearchParams(window.location.search).get("fbclid")?.trim();
-  if (!fbclid) {
-    return getCookie(BRIC_FBCLID_COOKIE);
-  }
-
-  setCookie(BRIC_FBCLID_COOKIE, fbclid);
-  setCookie(FBC_COOKIE, buildFbcValue(fbclid));
-  return fbclid;
-}
-
-function getUserDataFromStorage() {
-  if (typeof window === "undefined") return {};
-  const s = window.localStorage;
-  if (!s) return {};
-  return {
-    email: s.getItem("email") || "",
-    firstName: s.getItem("firstName") || "",
-    lastName: s.getItem("lastName") || "",
-    state: s.getItem("state") || "",
-    city: s.getItem("city") || "",
-    country:"dz",
-    zipCode: s.getItem("zipCode") || "",
-    homeAddress: s.getItem("homeAddress") || "",
-    phoneNumber1: s.getItem("phoneNumber1") || "",
-  };
-}
-
-export async function handlePageView() {
-  // Fire on every page load to ensure fbclid is captured
-  // The server SDK will generate _fbc/_fbp cookies from the URL
-  const metaResult = await trackFacebookEvent({
-    name: "PageView",
-    pixelData: {},
-    capiData: {},
-    skipStorage: true, // Don't store PageView events
-  });
-
-  void trackAnalyticsEvent({
-    eventId: metaResult.eventId,
-    eventName: "page_view",
-    gaEventName: "page_view",
-    occurredAt: new Date(metaResult.eventTime * 1000).toISOString(),
-    metadata: buildMetaAnalyticsMetadata(metaResult, {}, {}),
-  });
-
-  return metaResult;
-}
-
-// -------------------- External ID --------------------
-export function getOrCreateExternalId() {
-  if (typeof window === "undefined") return null;
-
-  const STORAGE_KEY = "_ext_id";
-  let extId = localStorage.getItem(STORAGE_KEY);
-
-  if (!extId) {
-    extId = `${Date.now()}.${Math.random().toString(36).substring(2, 15)}`;
-    localStorage.setItem(STORAGE_KEY, extId);
-  }
-
-  return extId;
-}
-
-// -------------------- User Data Builder --------------------
-// Send RAW data - server will hash using Meta's SDK
-function buildFacebookUserData() {
-  captureFbclidFromLocation();
-  const storage = getUserDataFromStorage();
-  const userData = {};
-
-  // Send raw values - server handles normalization & hashing
-  if (storage.email) userData.em = storage.email;
-  if (storage.firstName) userData.fn = storage.firstName;
-  if (storage.lastName) userData.ln = storage.lastName;
-  if (storage.phoneNumber1) userData.ph = storage.phoneNumber1; // Raw phone
-  if (storage.city) userData.ct = storage.city;
-  if (storage.state) userData.st = storage.state;
-  if (storage.zipCode) userData.zp = storage.zipCode;
-
-  userData.country = "dz";
-
-  const extId = getOrCreateExternalId();
-  if (extId) userData.external_id = extId;
-
-  // Include existing cookies - server SDK will validate/regenerate
-  const fbp = getCookie("_fbp");
-  const fbc = getCookie(FBC_COOKIE);
-  if (fbp) userData.fbp = fbp;
-  if (fbc) userData.fbc = fbc;
-
-  return userData;
+  return new URLSearchParams(window.location.search).get("fbclid")?.trim()
+    || getCookie("_bric_fbclid");
 }
 
 function getMetaContentId(product) {
-  if (!product || typeof product !== "object") {
+  const value = product?.id;
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
     return null;
   }
+  return String(value);
+}
 
-  const candidates = [product.id, product._id, product.slug];
-  for (const candidate of candidates) {
-    if (typeof candidate !== "string" && typeof candidate !== "number") {
-      continue;
-    }
-
-    const value = String(candidate).trim();
-    if (value && value !== "undefined" && value !== "null") {
-      return value;
-    }
-  }
-
-  return null;
+function getQuantity(product) {
+  return typeof product?.quantity === "number"
+    && Number.isInteger(product.quantity)
+    && product.quantity > 0
+      ? product.quantity
+      : 1;
 }
 
 function buildMetaCommerceData(products, value) {
   const contents = (Array.isArray(products) ? products : [])
     .map((product) => {
       const id = getMetaContentId(product);
-      if (!id) {
-        return null;
-      }
-
+      if (!id) return null;
+      const price = typeof product?.price === "number"
+        ? product.price
+        : Number(product?.price ?? 0);
       return {
         id,
-        quantity:
-          typeof product?.quantity === "number" && Number.isFinite(product.quantity)
-            ? product.quantity
-            : 1,
-        item_price:
-          typeof product?.price === "number" && Number.isFinite(product.price)
-            ? product.price
-            : Number(product?.price ?? 0),
+        quantity: getQuantity(product),
+        item_price: Number.isFinite(price) ? price : 0,
       };
     })
     .filter(Boolean);
@@ -175,57 +67,29 @@ function buildMetaCommerceData(products, value) {
 }
 
 function consumeInitialViewContentEvent(product) {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
+  if (typeof window === "undefined") return null;
   const pending = window.__bricInitialViewContent;
-  if (!pending || typeof pending !== "object") {
-    return null;
-  }
-
+  if (!pending || typeof pending !== "object") return null;
   const productKey = getMetaContentId(product);
-  if (!productKey || pending.productKey !== productKey) {
-    return null;
-  }
-
-  const eventId =
-    typeof pending.eventId === "string" && pending.eventId.trim().length > 0
-      ? pending.eventId.trim()
-      : null;
+  if (!productKey || pending.productKey !== productKey) return null;
+  const eventId = typeof pending.eventId === "string" && pending.eventId.trim()
+    ? pending.eventId.trim()
+    : null;
   const browserEventSent = pending.browserEventSent === true;
-
   window.__bricInitialViewContent = null;
   return eventId ? { eventId, browserEventSent } : null;
 }
 
-// -------------------- Core Tracking --------------------
 function waitForFbq(timeoutMs = 3000) {
-  if (typeof window === "undefined") {
-    return Promise.resolve(false);
-  }
-
-  if (typeof window.fbq === "function") {
-    return Promise.resolve(true);
-  }
-
+  if (typeof window === "undefined") return Promise.resolve(false);
+  if (typeof window.fbq === "function") return Promise.resolve(true);
   return new Promise((resolve) => {
-    const start = Date.now();
-
+    const startedAt = Date.now();
     const check = () => {
-      if (typeof window.fbq === "function") {
-        resolve(true);
-        return;
-      }
-
-      if (Date.now() - start >= timeoutMs) {
-        resolve(false);
-        return;
-      }
-
+      if (typeof window.fbq === "function") return resolve(true);
+      if (Date.now() - startedAt >= timeoutMs) return resolve(false);
       window.setTimeout(check, 50);
     };
-
     check();
   });
 }
@@ -234,10 +98,9 @@ async function trackFacebookEvent({
   name,
   pixelData = {},
   capiData = {},
-  additionalUserData = {},
+  searchTerm = null,
   eventId,
   eventTime,
-  skipStorage = false,
   skipPixel = false,
   initialBrowserEventAlreadySent = false,
 }) {
@@ -245,328 +108,291 @@ async function trackFacebookEvent({
     name === "PageView"
     && typeof window !== "undefined"
     && window.__bricInitialPageViewSent === true;
-
-  const sharedInitialPageViewEventId =
+  const initialPageViewEventId =
     useInitialBrowserPageView
-    && typeof window !== "undefined"
     && typeof window.__bricInitialPageViewEventId === "string"
-    && window.__bricInitialPageViewEventId.length > 0
       ? window.__bricInitialPageViewEventId
       : null;
-
-  const ev_id = sharedInitialPageViewEventId || eventId || uuidv4();
-  const ev_time = eventTime || Math.floor(Date.now() / 1000);
-  let metaOk = true;
-  let metaStatus = null;
-  let pixelFired = false;
-  let effectiveCapiPayload = null;
-
-  const hasPixelData =
-    pixelData && typeof pixelData === "object" && Object.keys(pixelData).length;
+  const resolvedEventId = initialPageViewEventId || eventId || uuidv4();
+  const resolvedEventTime = eventTime || Math.floor(Date.now() / 1000);
+  let pixelInvoked = false;
 
   if (initialBrowserEventAlreadySent || useInitialBrowserPageView) {
-    pixelFired = true;
+    pixelInvoked = true;
     if (useInitialBrowserPageView) {
       window.__bricInitialPageViewSent = false;
       window.__bricInitialPageViewEventId = null;
     }
-  } else if (!skipPixel && (await waitForFbq())) {
-    pixelFired = true;
-    // PageView commonly has no params; still fire it.
-    if (hasPixelData) {
-      window.fbq("track", name, pixelData, { eventID: ev_id });
-    } else {
-      window.fbq("track", name, undefined, { eventID: ev_id });
-    }
+  } else if (!skipPixel && await waitForFbq()) {
+    pixelInvoked = true;
+    const hasPixelData = Object.keys(pixelData ?? {}).length > 0;
+    window.fbq(
+      "track",
+      name,
+      hasPixelData ? pixelData : undefined,
+      { eventID: resolvedEventId },
+    );
   }
 
-  const storageUserData = buildFacebookUserData();
-  const mergedUserData = {
-    ...storageUserData,
-    ...additionalUserData,
-  };
-  const fbclid = captureFbclidFromLocation();
-
+  let capiQueued = false;
+  let capiStatus = null;
   try {
-    const response = await fetch("/api/capi", {
+    const response = await fetch("/api/meta/events", {
       method: "POST",
       keepalive: true,
-      credentials: "include", // Important: include cookies
-      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        event_name: name,
-        event_time: ev_time,
-        event_id: ev_id,
-        user_data: mergedUserData,
-        custom_data: capiData,
-        action_source: "website",
-        url: typeof window !== "undefined" ? window.location.href : undefined,
-        fbclid: fbclid || undefined,
+        eventId: resolvedEventId,
+        eventName: name,
+        occurredAt: new Date(resolvedEventTime * 1000).toISOString(),
+        eventSourceUrl: window.location.href,
+        visitId: getVisitIdFromCookie(),
+        journeyId: getOrCreateJourneyId(),
+        sessionId: getOrCreateSessionId(),
+        promoCode: new URLSearchParams(window.location.search).get("promo"),
+        searchTerm,
+        items: (capiData.contents ?? []).flatMap((item) => {
+          const id = String(item.id ?? "").trim();
+          return /^\d+$/.test(id)
+            ? [{ productId: Number.parseInt(id, 10), quantity: item.quantity ?? 1 }]
+            : [];
+        }),
       }),
     });
-
+    capiStatus = response.status;
+    capiQueued = response.ok;
     if (!response.ok) {
-      metaOk = false;
-      metaStatus = response.status;
-      const payload = await response.clone().json().catch(() => null);
-      effectiveCapiPayload =
-        payload && typeof payload === "object" && payload.effectivePayload && typeof payload.effectivePayload === "object"
-          ? payload.effectivePayload
-          : effectiveCapiPayload;
-      const errorText = payload ? JSON.stringify(payload) : await response.text();
-      console.error(`CAPI ${name} failed with ${response.status}:`, errorText);
-    } else {
-      metaStatus = response.status;
-      const payload = await response.json().catch(() => null);
-      effectiveCapiPayload =
-        payload && typeof payload === "object" && payload.effectivePayload && typeof payload.effectivePayload === "object"
-          ? payload.effectivePayload
-          : effectiveCapiPayload;
+      console.error(`Meta ${name} queue failed with HTTP ${response.status}`);
     }
-  } catch (err) {
-    metaOk = false;
-    console.error(`CAPI ${name} failed:`, err);
+  } catch (error) {
+    console.error(`Meta ${name} queue failed`, error);
   }
 
-  const pixelPayload = {
-    event_name: name,
-    event_id: ev_id,
-    event_time: ev_time,
-    payload: pixelData ?? {},
-    options: {
-      eventID: ev_id,
-    },
-  };
-  const result = {
-    eventId: ev_id,
-    eventTime: ev_time,
+  return {
+    eventId: resolvedEventId,
+    eventTime: resolvedEventTime,
     name,
-    capiData,
-    metaOk,
-    metaStatus,
-    pixelFired,
-    pixelPayload,
-    capiPayload: effectiveCapiPayload,
+    pixelInvoked,
+    capiQueued,
+    capiStatus,
   };
-
-  if (!skipStorage && Object.keys(additionalUserData).length === 0) {
-    const pastEvents = JSON.parse(sessionStorage.getItem("pastEvents") || "[]");
-    pastEvents.push(result);
-    sessionStorage.setItem("pastEvents", JSON.stringify(pastEvents));
-  }
-
-  return result;
 }
 
-function buildMetaAnalyticsMetadata(result, pixelData, capiData) {
+function buildMetaAnalyticsMetadata(result) {
   return {
     metaTracking: {
       eventName: result.name,
       eventId: result.eventId,
       eventTime: result.eventTime,
-      pixel: {
-        fired: result.pixelFired,
-        payload: result.pixelPayload ?? pixelData ?? {},
-      },
+      pixel: { invoked: result.pixelInvoked },
       capi: {
-        attempted: true,
-        payload: result.capiPayload ?? capiData ?? {},
-        ok: result.metaOk,
-        status: result.metaStatus,
+        queued: result.capiQueued,
+        status: result.capiStatus,
       },
     },
   };
 }
 
-// -------------------- Event Helpers (unchanged) --------------------
-export async function handleViewProduct({ product, additionalUserData = {} }) {
-  const analyticsItem = buildItemArray([product])[0];
-  const data = buildMetaCommerceData([product], product.price);
-  const initialViewContentEvent = consumeInitialViewContentEvent(product);
-  const metaResult = await trackFacebookEvent({
-    name: "ViewContent",
-    pixelData: data,
-    capiData: data,
-    additionalUserData,
-    eventId: initialViewContentEvent?.eventId,
-    initialBrowserEventAlreadySent: initialViewContentEvent?.browserEventSent === true,
-  });
-
-  void trackAnalyticsEvent({
-    eventId: metaResult.eventId,
-    eventName: "view_item",
-    gaEventName: "view_item",
-    occurredAt: new Date(metaResult.eventTime * 1000).toISOString(),
-    pageType: "product_detail",
-    productId: analyticsItem.productId ?? null,
-    productSlug: analyticsItem.productSlug ?? null,
-    categoryId: analyticsItem.categoryId ?? null,
-    categorySlug: analyticsItem.categorySlug ?? null,
-    brandId: analyticsItem.brandId ?? null,
-    brandSlug: analyticsItem.brandSlug ?? null,
-    value: typeof product.price === "number" ? product.price : Number(product.price ?? 0),
-    metadata: {
-      items: [analyticsItem],
-      ...buildMetaAnalyticsMetadata(metaResult, data, data),
-    },
-    gaParams: {
-      currency: "DZD",
-      value: typeof product.price === "number" ? product.price : Number(product.price ?? 0),
-      items: [analyticsItem],
-    },
-  });
-
-  return metaResult;
+export function handlePageView() {
+  const navigationKey = getMetaNavigationKey();
+  return runMetaEventOnce(`PageView:${navigationKey}`, async () => {
+    const result = await trackFacebookEvent({
+      name: "PageView",
+      pixelData: {},
+      capiData: {},
+    });
+    void trackAnalyticsEvent({
+      eventId: result.eventId,
+      eventName: "page_view",
+      gaEventName: "page_view",
+      occurredAt: new Date(result.eventTime * 1000).toISOString(),
+      pagePath: `${window.location.pathname}${window.location.search}`,
+      metadata: {
+        title: document.title,
+        isEntry: window.history.length <= 1,
+        ...buildMetaAnalyticsMetadata(result),
+      },
+    });
+    return result;
+  }, { windowMs: Number.POSITIVE_INFINITY });
 }
 
-export async function handleAddToCart({ product, additionalUserData = {} }) {
+export function handleViewProduct({ product }) {
   const analyticsItem = buildItemArray([product])[0];
-  const data = buildMetaCommerceData([product], product.price);
-  const metaResult = await trackFacebookEvent({
+  const data = buildMetaCommerceData([product], Number(product.price ?? 0));
+  const navigationKey = getMetaNavigationKey();
+  const productId = getMetaContentId(product) ?? "unknown";
+  return runMetaEventOnce(`ViewContent:${navigationKey}:${productId}`, async () => {
+    const initial = consumeInitialViewContentEvent(product);
+    const result = await trackFacebookEvent({
+      name: "ViewContent",
+      pixelData: data,
+      capiData: data,
+      eventId: initial?.eventId,
+      initialBrowserEventAlreadySent: initial?.browserEventSent === true,
+    });
+    void trackAnalyticsEvent({
+      eventId: result.eventId,
+      eventName: "view_item",
+      gaEventName: "view_item",
+      occurredAt: new Date(result.eventTime * 1000).toISOString(),
+      pageType: "product_detail",
+      productId: analyticsItem.productId ?? null,
+      productSlug: analyticsItem.productSlug ?? null,
+      categoryId: analyticsItem.categoryId ?? null,
+      categorySlug: analyticsItem.categorySlug ?? null,
+      brandId: analyticsItem.brandId ?? null,
+      brandSlug: analyticsItem.brandSlug ?? null,
+      value: Number(product.price ?? 0),
+      metadata: {
+        items: [analyticsItem],
+        ...buildMetaAnalyticsMetadata(result),
+      },
+      gaParams: {
+        currency: "DZD",
+        value: Number(product.price ?? 0),
+        items: [analyticsItem],
+      },
+    });
+    return result;
+  }, { windowMs: Number.POSITIVE_INFINITY });
+}
+
+export async function handleAddToCart({ product }) {
+  const analyticsProduct = { ...product, quantity: getQuantity(product) };
+  const analyticsItem = {
+    ...buildItemArray([analyticsProduct])[0],
+    quantity: analyticsProduct.quantity,
+  };
+  const value = Number(product.price ?? 0) * analyticsProduct.quantity;
+  const data = buildMetaCommerceData([analyticsProduct], value);
+  const result = await trackFacebookEvent({
     name: "AddToCart",
     pixelData: data,
     capiData: data,
-    additionalUserData,
   });
-
   void trackAnalyticsEvent({
-    eventId: metaResult.eventId,
+    eventId: result.eventId,
     eventName: "add_to_cart",
     gaEventName: "add_to_cart",
-    occurredAt: new Date(metaResult.eventTime * 1000).toISOString(),
+    occurredAt: new Date(result.eventTime * 1000).toISOString(),
     productId: analyticsItem.productId ?? null,
     productSlug: analyticsItem.productSlug ?? null,
     categoryId: analyticsItem.categoryId ?? null,
     categorySlug: analyticsItem.categorySlug ?? null,
     brandId: analyticsItem.brandId ?? null,
     brandSlug: analyticsItem.brandSlug ?? null,
-    quantity: 1,
-    value: typeof product.price === "number" ? product.price : Number(product.price ?? 0),
+    quantity: analyticsProduct.quantity,
+    value,
     metadata: {
       items: [analyticsItem],
-      ...buildMetaAnalyticsMetadata(metaResult, data, data),
+      ...buildMetaAnalyticsMetadata(result),
     },
-    gaParams: {
-      currency: "DZD",
-      value: typeof product.price === "number" ? product.price : Number(product.price ?? 0),
-      items: [analyticsItem],
-    },
+    gaParams: { currency: "DZD", value, items: [analyticsItem] },
   });
-
-  return metaResult;
+  return result;
 }
 
-export async function handleInitiateCheckout({
-  products,
-  totalValue,
-  additionalUserData = {},
-}) {
-  const analyticsItems = buildItemArray(products);
+export async function handleInitiateCheckout({ products, totalValue }) {
+  const analyticsItems = buildItemArray(products).map((item, index) => ({
+    ...item,
+    quantity: getQuantity(products[index]),
+  }));
   const data = buildMetaCommerceData(products, totalValue);
-  const metaResult = await trackFacebookEvent({
+  const result = await trackFacebookEvent({
     name: "InitiateCheckout",
     pixelData: data,
     capiData: data,
-    additionalUserData,
   });
-
   void trackAnalyticsEvent({
-    eventId: metaResult.eventId,
+    eventId: result.eventId,
     eventName: "begin_checkout",
     gaEventName: "begin_checkout",
-    occurredAt: new Date(metaResult.eventTime * 1000).toISOString(),
-    quantity: products.length,
+    occurredAt: new Date(result.eventTime * 1000).toISOString(),
+    quantity: products.reduce((sum, product) => sum + getQuantity(product), 0),
     value: totalValue,
     metadata: {
       items: analyticsItems,
-      ...buildMetaAnalyticsMetadata(metaResult, data, data),
+      ...buildMetaAnalyticsMetadata(result),
     },
-    gaParams: {
-      currency: "DZD",
-      value: totalValue,
-      items: analyticsItems,
-    },
+    gaParams: { currency: "DZD", value: totalValue, items: analyticsItems },
   });
-
-  return metaResult;
+  return result;
 }
 
-export async function handlePurchase({
-  products,
-  totalValue,
-  additionalUserData = {},
-  eventId,
-  eventTime,
-  orderId,
-}) {
-  const analyticsItems = buildItemArray(products);
-  const data = buildMetaCommerceData(products, totalValue);
-  const metaResult = await trackFacebookEvent({
-    name: "Purchase",
-    pixelData: data,
-    capiData: data,
-    additionalUserData,
-    eventId,
-    eventTime,
-  });
+export async function handleSearch(searchTerm) {
+  const normalizedTerm = typeof searchTerm === "string"
+    ? searchTerm.trim().replace(/\s+/g, " ")
+    : "";
+  if (normalizedTerm.length < 2) return null;
 
+  const result = await trackFacebookEvent({
+    name: "Search",
+    pixelData: { search_string: normalizedTerm },
+    searchTerm: normalizedTerm,
+  });
   void trackAnalyticsEvent({
-    eventId: metaResult.eventId,
+    eventId: result.eventId,
+    eventName: "search",
+    gaEventName: "search",
+    occurredAt: new Date(result.eventTime * 1000).toISOString(),
+    searchTerm: normalizedTerm,
+    pagePath: `${window.location.pathname}${window.location.search}`,
+    metadata: {
+      query: normalizedTerm,
+      ...buildMetaAnalyticsMetadata(result),
+    },
+    gaParams: {
+      search_term: normalizedTerm,
+    },
+  });
+  return result;
+}
+
+export async function handlePurchase(meta, options = {}) {
+  if (!meta || meta.eventName !== "Purchase") return null;
+  const pixelData = {
+    content_ids: meta.contents.map((item) => item.id),
+    contents: meta.contents,
+    content_type: "product",
+    currency: meta.currency,
+    value: meta.value,
+    ...(options.orderId ? { order_id: String(options.orderId) } : {}),
+  };
+  let pixelInvoked = false;
+  if (await waitForFbq()) {
+    pixelInvoked = true;
+    window.fbq("track", "Purchase", pixelData, { eventID: meta.eventId });
+  }
+  void trackAnalyticsEvent({
+    eventId: meta.eventId,
     eventName: "purchase",
     gaEventName: "purchase",
-    occurredAt: new Date(metaResult.eventTime * 1000).toISOString(),
-    orderId: orderId ?? null,
-    quantity: products.length,
-    value: totalValue,
+    pageType: "checkout",
+    orderId: options.orderId ?? null,
+    quantity: meta.contents.reduce((sum, item) => sum + item.quantity, 0),
+    value: meta.value,
+    currency: meta.currency,
     metadata: {
-      items: analyticsItems,
-      ...buildMetaAnalyticsMetadata(metaResult, data, data),
-    },
-    gaParams: {
-      transaction_id: orderId ? String(orderId) : metaResult.eventId,
-      currency: "DZD",
-      value: totalValue,
-      items: analyticsItems,
+      items: meta.contents.map((item) => ({
+        productId: Number(item.id),
+        quantity: item.quantity,
+        price: item.item_price,
+      })),
+      ...(options.metadata ?? {}),
+      metaTracking: {
+        eventName: "Purchase",
+        eventId: meta.eventId,
+        pixel: { invoked: pixelInvoked },
+        capi: { queued: true },
+      },
     },
   });
-
-  return metaResult;
-}
-
-// -------------------- Enrichment --------------------
-export async function enrichPastEvents() {
-  if (typeof window === "undefined") return;
-  const pastEvents = JSON.parse(sessionStorage.getItem("pastEvents") || "[]");
-  if (!pastEvents.length) return;
-
-  const enrichedUserData = buildFacebookUserData();
-  const replayFailures = [];
-
-  for (const ev of pastEvents) {
-    try {
-      const result = await trackFacebookEvent({
-        name: ev.name,
-        capiData: ev.capiData || {},
-        additionalUserData: enrichedUserData,
-        eventId: ev.eventId,
-        eventTime: ev.eventTime,
-        skipStorage: true,
-        skipPixel: true,
-      });
-
-      if (result?.metaOk === false) {
-        replayFailures.push(ev);
-      }
-    } catch (error) {
-      console.error(error);
-      replayFailures.push(ev);
-    }
-  }
-
-  if (replayFailures.length > 0) {
-    sessionStorage.setItem("pastEvents", JSON.stringify(replayFailures));
-    return;
-  }
-
-  sessionStorage.removeItem("pastEvents");
+  return {
+    eventId: meta.eventId,
+    name: "Purchase",
+    pixelInvoked,
+    capiQueued: true,
+  };
 }

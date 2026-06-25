@@ -3,8 +3,8 @@
 import { useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { trackAnalyticsEvent } from "@/lib/analytics";
 import { usePathname, useRouter } from "@/i18n/navigation";
+import { handleSearch } from "./Init";
 
 export default function SearchBar() {
   const t = useTranslations("common");
@@ -33,7 +33,8 @@ export default function SearchBar() {
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter") {
-      updateURL(text);
+      e.preventDefault();
+      performSearch();
     }
   };
 
@@ -42,18 +43,7 @@ export default function SearchBar() {
   };
 
   const performSearch = () => {
-    void trackAnalyticsEvent({
-      eventName: "search",
-      gaEventName: "search",
-      searchTerm: text.trim() || null,
-      pagePath: `${pathname}?${new URLSearchParams(searchParams.toString()).toString()}`,
-      metadata: {
-        query: text.trim(),
-      },
-      gaParams: {
-        search_term: text.trim(),
-      },
-    });
+    void handleSearch(text);
     updateURL(text);
   };
 

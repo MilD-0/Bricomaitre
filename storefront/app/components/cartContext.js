@@ -6,7 +6,12 @@ import { handleAddToCart } from "./Init";
 import { buildItemArray, trackAnalyticsEvent } from "@/lib/analytics";
 import {
   buildCartProductSummary,
+  canonicalizeCartProducts,
+  findProductSnapshotByToken,
+  getCanonicalProductId,
+  getProductReferenceTokens,
   mergeCartProductSnapshots,
+  normalizeCartProductSnapshots,
 } from "@/lib/cart-state";
 
 export const CartContext = createContext({});
@@ -30,15 +35,26 @@ export function CartContextProvider({ children, locale }) {
   }, [cartProductSnapshots, ls]);
 
   useEffect(() => {
-    if (ls && ls.getItem("cart")) {
-      setCartProducts(JSON.parse(ls.getItem("cart")));
-    }
-
+    let snapshots = {};
     if (ls && ls.getItem("cartProductSnapshots")) {
       try {
-        setCartProductSnapshots(JSON.parse(ls.getItem("cartProductSnapshots")) || {});
+        snapshots = normalizeCartProductSnapshots(JSON.parse(ls.getItem("cartProductSnapshots")) || {});
+        setCartProductSnapshots(snapshots);
       } catch (error) {
         console.error(error);
+      }
+    }
+
+    if (ls && ls.getItem("cart")) {
+      try {
+        const parsedCart = JSON.parse(ls.getItem("cart"));
+        const nextCart = Array.isArray(parsedCart)
+          ? canonicalizeCartProducts(parsedCart, Object.values(snapshots))
+          : [];
+        setCartProducts(nextCart);
+      } catch (error) {
+        console.error(error);
+        setCartProducts([]);
       }
     }
   }, [ls]);
@@ -46,28 +62,47 @@ export function CartContextProvider({ children, locale }) {
   const cartSummary = buildCartProductSummary(cartProducts, cartProductSnapshots);
 
   function rememberProducts(products) {
-    setCartProductSnapshots((prev) => mergeCartProductSnapshots(prev, products));
+    const resolvedProducts = products.filter(Boolean);
+    setCartProductSnapshots((prev) => mergeCartProductSnapshots(prev, resolvedProducts));
+    setCartProducts((prev) => canonicalizeCartProducts(prev, resolvedProducts));
   }
 
-  async function addProduct(productId, product = null) {
+  async function addProduct(productId, product = null, options = {}) {
     try {
+      const requestedToken = String(productId ?? "").trim();
       let nextProduct = product;
 
+      if (!requestedToken && !nextProduct) {
+        throw new Error("Missing product id");
+      }
+
       if (!nextProduct) {
-        const cachedProduct = cartProductSnapshots[String(productId)];
+        const cachedProduct = findProductSnapshotByToken(cartProductSnapshots, requestedToken);
         if (cachedProduct) {
           nextProduct = cachedProduct;
         } else {
-          const res = await fetch(`/api/products?id=${productId}`);
+          const res = await fetch(`/api/products?id=${encodeURIComponent(requestedToken)}`);
           if (!res.ok) throw new Error("Failed to fetch product");
           nextProduct = await res.json();
         }
       }
 
-      rememberProducts([nextProduct]);
-      setCartProducts((prev) => [...prev, productId]);
+      const canonicalProductId = getCanonicalProductId(nextProduct);
+      if (!canonicalProductId) {
+        throw new Error("Product is missing a canonical numeric id");
+      }
 
-      handleAddToCart({ product: nextProduct });
+      rememberProducts([nextProduct]);
+      setCartProducts((prev) => [
+        ...canonicalizeCartProducts(prev, [nextProduct]),
+        canonicalProductId,
+      ]);
+
+      handleAddToCart({
+        product: options.trackingPrice == null
+          ? nextProduct
+          : { ...nextProduct, price: options.trackingPrice },
+      });
 
       toast.success(
         locale == "ar" ? "تمت الإضافة إلى السلة." : "Produit ajouté."
@@ -82,10 +117,18 @@ export function CartContextProvider({ children, locale }) {
 
   // Remove product by ID
   function removeProduct(productId) {
+    const requestedToken = String(productId ?? "").trim();
+    const cachedProduct = findProductSnapshotByToken(cartProductSnapshots, requestedToken);
+    const removalTokens = new Set([
+      requestedToken,
+      getCanonicalProductId(cachedProduct),
+      ...getProductReferenceTokens(cachedProduct),
+    ].filter(Boolean));
+
     void (async () => {
       try {
-        const product = cartProductSnapshots[String(productId)]
-          ?? await fetch(`/api/products?id=${productId}`)
+        const product = cachedProduct
+          ?? await fetch(`/api/products?id=${encodeURIComponent(requestedToken)}`)
             .then((res) => (res.ok ? res.json() : null));
         if (!product) return;
         const analyticsItem = buildItemArray([product])[0];
@@ -112,16 +155,15 @@ export function CartContextProvider({ children, locale }) {
       }
     })();
 
-    if (cartProducts?.length === 1) {
-      localStorage.removeItem("cart");
-      setCartProducts([]);
-    }
     setCartProducts((prev) => {
-      const pos = prev.indexOf(productId);
+      const normalized = cachedProduct
+        ? canonicalizeCartProducts(prev, [cachedProduct])
+        : prev.map((value) => String(value));
+      const pos = normalized.findIndex((value) => removalTokens.has(value));
       if (pos !== -1) {
-        return prev.filter((value, index) => index !== pos);
+        return normalized.filter((_value, index) => index !== pos);
       }
-      return prev;
+      return normalized;
     });
   }
   function clearCart() {
@@ -132,8 +174,9 @@ export function CartContextProvider({ children, locale }) {
   }
   function setCart() {
     const newb = ls?.getItem("cartProducts")?.split(",").filter(Boolean) ?? [];
-    if (newb.join(",") !== cartProducts.join(",")) {
-      setCartProducts(newb);
+    const canonical = canonicalizeCartProducts(newb, Object.values(cartProductSnapshots));
+    if (canonical.join(",") !== cartProducts.join(",")) {
+      setCartProducts(canonical);
     }
   }
   return (

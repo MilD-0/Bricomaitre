@@ -7,6 +7,10 @@ import {
   storefrontOrderCreateSchema,
   storefrontOrderPatchSchema,
 } from '../orders-support';
+import {
+  storefrontOrderMetaResponseSchema,
+  storefrontOrderMetaSchema,
+} from './meta-contracts';
 
 const isoTimestampSchema = z.string().datetime({ offset: true });
 const optionalNumericFilter = z.union([z.coerce.number().int().positive(), z.literal(''), z.null(), z.undefined()]).transform((value) => {
@@ -37,7 +41,9 @@ export const storefrontProductListQuerySchema = productListQuerySchema.extend({
   }),
 });
 
-export const storefrontOrderCreateRequestSchema = storefrontOrderCreateSchema;
+export const storefrontOrderCreateRequestSchema = storefrontOrderCreateSchema.extend({
+  meta: storefrontOrderMetaSchema.optional(),
+});
 export const storefrontOrderPatchRequestSchema = storefrontOrderPatchSchema;
 
 export const storefrontProductResponseItemSchema = z.object({
@@ -195,6 +201,7 @@ export const storefrontOrderResponseItemSchema = z.object({
 export const storefrontCreateOrderResponseSchema = z.object({
   ok: z.literal(true),
   item: storefrontOrderResponseItemSchema,
+  meta: storefrontOrderMetaResponseSchema.optional(),
 });
 
 export const storefrontReadOrderResponseSchema = z.object({

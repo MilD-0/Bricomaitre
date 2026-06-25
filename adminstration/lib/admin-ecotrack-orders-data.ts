@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, max, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, max, sql } from 'drizzle-orm';
 import { PDFDocument } from 'pdf-lib';
 import { z } from 'zod';
 
@@ -25,6 +25,7 @@ import {
   ecotrackOrderTrackingEvents,
   orderStatusHistory,
   orders,
+  products,
 } from '../db/schema';
 import { recordExplicitActionLog, type ActionActor } from './action-history';
 import { getOrderProductLookup, toOrderRecord } from './order-records';
@@ -547,6 +548,39 @@ function mapDeliveryLabel(delivery: DeliveryType) {
 function sanitizeNullableText(value: string | null | undefined) {
   const trimmed = String(value ?? '').trim();
   return trimmed ? trimmed : null;
+}
+
+function isMongoObjectId(value: string) {
+  return /^[a-f\d]{24}$/i.test(value.trim());
+}
+
+async function canonicalizeOrderCartProducts(db: Database, cartProducts: string[]) {
+  const normalized = cartProducts
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) =>
+      /^\d+$/.test(value) && !isMongoObjectId(value)
+        ? String(Number.parseInt(value, 10))
+        : value);
+  const mongoIds = [...new Set(normalized.filter(isMongoObjectId))];
+
+  if (mongoIds.length === 0) {
+    return normalized;
+  }
+
+  const productRows = await db
+    .select({ id: products.id, mongoId: products.mongoId })
+    .from(products)
+    .where(inArray(products.mongoId, mongoIds));
+  const lookup = new Map<string, string>();
+
+  for (const product of productRows) {
+    if (product.mongoId) {
+      lookup.set(product.mongoId, String(product.id));
+    }
+  }
+
+  return normalized.map((value) => lookup.get(value) ?? value);
 }
 
 function getActionFlags(currentStatus: string, deletedAt: Date | null) {
@@ -1614,6 +1648,9 @@ export async function updatePostedEcotrackOrder(
   const nextDeliveryFeeValue = draft.deliveryFee === null
     ? (row.order.delPr ?? '0.00')
     : String(Number(draft.deliveryFee).toFixed(2));
+  const nextCartProducts = draft.cartProducts === undefined
+    ? row.order.cartProducts
+    : await canonicalizeOrderCartProducts(db, draft.cartProducts);
 
   const [updatedOrder] = await db
     .update(orders)
@@ -1627,7 +1664,7 @@ export async function updatePostedEcotrackOrder(
       city: draft.city,
       homeAddress: sanitizeNullableText(draft.homeAddress),
       note: sanitizeNullableText(draft.note),
-      cartProducts: draft.cartProducts ?? row.order.cartProducts,
+      cartProducts: nextCartProducts,
       delPr: nextDeliveryFeeValue,
       price: draft.subtotalOverride === null ? null : String(Number(draft.subtotalOverride).toFixed(2)),
       updatedAt: now,
@@ -1728,6 +1765,9 @@ export async function recreatePostedEcotrackOrder(
   };
 
   const now = new Date();
+  const nextCartProducts = draft.cartProducts === undefined
+    ? row.order.cartProducts
+    : await canonicalizeOrderCartProducts(db, draft.cartProducts);
   const [updatedOrder] = await db
     .update(orders)
     .set({
@@ -1740,7 +1780,7 @@ export async function recreatePostedEcotrackOrder(
       city: draft.city,
       homeAddress: sanitizeNullableText(draft.homeAddress),
       note: sanitizeNullableText(draft.note),
-      cartProducts: draft.cartProducts ?? row.order.cartProducts,
+      cartProducts: nextCartProducts,
       delPr: draft.deliveryFee === null ? (row.order.delPr ?? '0.00') : String(Number(draft.deliveryFee).toFixed(2)),
       price: draft.subtotalOverride === null ? null : String(Number(draft.subtotalOverride).toFixed(2)),
       updatedAt: now,

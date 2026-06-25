@@ -6,6 +6,7 @@
     "dev": "next dev --port 3001",
     "build": "next build",
     "start": "node ../ops/scripts/start-next-standalone.mjs --app-dir . --nested-dir storefront-api --default-port 3001",
+    "worker:meta": "tsx scripts/run-meta-worker.ts",
     "lint": "eslint",
     "test": "vitest run --project integration",
     "test:watch": "vitest --project unit",
@@ -18,6 +19,7 @@
     "@bric/runtime": "workspace:*",
     "@bric/storefront-core": "workspace:*",
     "@sentry/nextjs": "10.47.0",
+    "@sentry/node": "10.47.0",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.2",
     "pg": "^8.20.0",
@@ -36,6 +38,7 @@
     "jsdom": "^28.1.0",
     "msw": "^2.12.14",
     "typescript": "5.9.3",
+    "tsx": "^4.21.0",
     "vitest": "^4.1.2"
   },
   "license": "AGPL-3.0-only"

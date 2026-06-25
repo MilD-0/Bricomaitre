@@ -12,9 +12,11 @@ import { storefrontOrderCreateRequestSchema } from '@bric/storefront-core/contra
 import { createStorefrontOrder } from '@bric/storefront-core/orders';
 
 import { buildRateLimitHeaders, enforceOrderVelocityLimit, enforceRequestRateLimit } from '../../../lib/request-security';
+import { authorizeMetaSourceRequest, getMetaRequestContext } from '../../../lib/meta-request';
 import { captureStorefrontApiException, getRequestId, withRequestIdHeaders } from '../../../lib/sentry';
 
 const SLOW_ORDER_CREATE_THRESHOLD_MS = 2_000;
+const ORDER_CREATE_PROCESSING_TTL_SECONDS = 120;
 
 type OrderTimingEntry = {
   step: string;
@@ -63,21 +65,30 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const payload = await req.json();
-  const parsed = storefrontOrderCreateRequestSchema.safeParse(payload);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400, headers: withRequestIdHeaders(requestId) });
+  let payload: unknown;
+  try {
+    payload = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: 'Invalid JSON request body.' },
+      { status: 400, headers: withRequestIdHeaders(requestId) },
+    );
   }
 
-  const orderVelocityLimit = await enforceOrderVelocityLimit(req, {
-    journeyId: parsed.data.journeyId,
-    visitId: parsed.data.visitId,
-    sessionId: parsed.data.sessionId,
-  });
-  if (!orderVelocityLimit.ok) {
-    return NextResponse.json({ error: 'Too many order attempts. Try again later.' }, {
-      status: 429,
-      headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(orderVelocityLimit)),
+  const parsed = storefrontOrderCreateRequestSchema.safeParse(payload);
+  if (!parsed.success) {
+    return NextResponse.json(
+      {
+        error: 'Invalid order request.',
+        details: parsed.error.flatten(),
+      },
+      { status: 400, headers: withRequestIdHeaders(requestId) },
+    );
+  }
+  if (parsed.data.meta && !authorizeMetaSourceRequest(req, parsed.data.meta.eventSourceUrl)) {
+    return NextResponse.json({ error: 'Order Meta source is not allowed.' }, {
+      status: 403,
+      headers: withRequestIdHeaders(requestId),
     });
   }
 
@@ -91,11 +102,15 @@ export async function POST(req: NextRequest) {
       scope: 'storefront-order-create',
       key: idempotencyKey,
       fingerprint,
+      ttlSeconds: ORDER_CREATE_PROCESSING_TTL_SECONDS,
     });
 
     if (started.kind === 'existing' && started.record) {
       if (started.record.fingerprint !== fingerprint) {
-        return NextResponse.json({ error: 'Idempotency key already used with a different payload.' }, { status: 409 });
+        return NextResponse.json({ error: 'Idempotency key already used with a different payload.' }, {
+          status: 409,
+          headers: withRequestIdHeaders(requestId),
+        });
       }
 
       if (started.record.status === 'completed') {
@@ -105,21 +120,52 @@ export async function POST(req: NextRequest) {
         });
       }
 
+      const retryAfterSeconds = started.ttlSeconds ?? ORDER_CREATE_PROCESSING_TTL_SECONDS;
       return NextResponse.json({ error: 'Order request is already being processed.' }, {
         status: 409,
-        headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)),
+        headers: withRequestIdHeaders(requestId, {
+          ...buildRateLimitHeaders(rateLimit),
+          'retry-after': String(retryAfterSeconds),
+        }),
       });
     }
   }
 
+  const orderVelocityLimit = await enforceOrderVelocityLimit(req, {
+    journeyId: parsed.data.journeyId,
+    visitId: parsed.data.visitId,
+    sessionId: parsed.data.sessionId,
+  });
+  if (!orderVelocityLimit.ok) {
+    if (idempotencyKey) {
+      await clearIdempotentRequest('storefront-order-create', idempotencyKey);
+    }
+
+    const retryAfterMinutes = Math.max(1, Math.ceil(orderVelocityLimit.retryAfterSeconds / 60));
+    return NextResponse.json({ error: `Too many order attempts. Try again in about ${retryAfterMinutes} minute${retryAfterMinutes === 1 ? '' : 's'}.` }, {
+      status: 429,
+      headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(orderVelocityLimit)),
+    });
+  }
+
   try {
-    const body = {
-      ok: true,
-      item: await createStorefrontOrder(getDb(), parsed.data, {
+    const created = await createStorefrontOrder(getDb(), parsed.data, {
         reportTiming: (entry) => {
           timings.push(entry);
         },
-      }),
+        metaRequestContext: getMetaRequestContext(req),
+      });
+    const createdResult = created as typeof created | (typeof created)['item'];
+    const item = createdResult && typeof createdResult === 'object' && 'item' in createdResult
+      ? createdResult.item
+      : createdResult;
+    const meta = createdResult && typeof createdResult === 'object' && 'meta' in createdResult
+      ? createdResult.meta
+      : undefined;
+    const body = {
+      ok: true,
+      item,
+      ...(meta ? { meta } : {}),
     };
     const totalDurationMs = Number((performance.now() - startedAt).toFixed(1));
 

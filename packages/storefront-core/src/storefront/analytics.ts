@@ -68,6 +68,13 @@ export const storefrontAnalyticsEventNameSchema = z.enum([
   "checkout_submit",
   "purchase",
   "api_error",
+  "buy_now_click",
+  "cart_checkout_click",
+  "checkout_view",
+  "checkout_submit_attempt",
+  "order_create_success",
+  "order_create_failed",
+  "order_verification_failed_after_create",
 ]);
 
 export const storefrontAnalyticsEventSchema = z.object({
@@ -78,7 +85,7 @@ export const storefrontAnalyticsEventSchema = z.object({
   eventName: storefrontAnalyticsEventNameSchema,
   gaEventName: nullableTrimmedString(120),
   occurredAt: z.string().datetime({ offset: true }).optional(),
-  pagePath: nullableTrimmedString(250),
+  pagePath: nullableTrimmedString(2048),
   pageType: nullableTrimmedString(80),
   locale: nullableTrimmedString(12),
   referrer: nullableTrimmedString(500),
@@ -125,6 +132,11 @@ function getPageUrl(pagePath: string | null | undefined) {
   }
 }
 
+function getEventPageUrl(event: StorefrontAnalyticsEvent) {
+  return getPageUrl(getMetadataString(event.metadata, "landingUrl"))
+    ?? getPageUrl(event.pagePath);
+}
+
 function getLandingQuery(url: URL | null) {
   if (!url) {
     return {};
@@ -149,7 +161,7 @@ function isMetaPaidMedium(value: string | null) {
 
 function classifyPaidSource(event: StorefrontAnalyticsEvent) {
   const metadata = event.metadata;
-  const pageUrl = getPageUrl(event.pagePath);
+  const pageUrl = getEventPageUrl(event);
   const fbclid = pageUrl?.searchParams.get("fbclid")?.trim();
   if (fbclid) {
     return "fbclid" as const;
@@ -186,7 +198,7 @@ async function upsertPaidClickVisit(
   const shouldCreate = (event.eventName === "session_start" || event.eventName === "page_view") && paidSource;
 
   if (shouldCreate) {
-    const pageUrl = getPageUrl(event.pagePath);
+    const pageUrl = getEventPageUrl(event);
     const fbclidRaw = pageUrl?.searchParams.get("fbclid")?.trim() || null;
     const purchaseCount = event.eventName === "purchase" ? 1 : 0;
 

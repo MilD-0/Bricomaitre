@@ -4,6 +4,7 @@ export * from "./products";
 export * from "./productPromoCodes";
 export * from "./orders";
 export * from "./analytics";
+export * from "./meta";
 export * from "./adCosts";
 export * from "./importBatches";
 export * from "./assets";

@@ -66,9 +66,11 @@ describe("ops/scripts/verify-storefront-meta.sh", () => {
     });
   });
 
-  it("fails on non-2xx responses from /api/capi", async () => {
+  it("fails on non-2xx responses from the protected verifier", async () => {
     const { baseUrl } = await startServer((request, response) => {
-      expect(request.url).toBe("/api/capi");
+      expect(request.url).toBe("/internal/meta/verify");
+      expect(request.headers.authorization).toBe("Bearer deploy-token");
+      expect(request.headers["x-real-ip"]).toBe("127.0.0.1");
       response.writeHead(503, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ success: false, error: "Meta unavailable" }));
     });
@@ -80,6 +82,7 @@ describe("ops/scripts/verify-storefront-meta.sh", () => {
         STOREFRONT_META_VERIFY_BASE_URL: baseUrl,
         META_DEPLOY_VERIFY_ENABLED: "1",
         META_TEST_EVENT_CODE: "TEST5350",
+        STOREFRONT_API_DEPLOY_TOKEN: "deploy-token",
         BRIC_STOREFRONT_APEX_DOMAIN: "bricomaitre.com",
       },
     })).rejects.toMatchObject({
@@ -95,15 +98,16 @@ describe("ops/scripts/verify-storefront-meta.sh", () => {
       }
 
       const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-      expect(body.test_event_code).toBe("TEST5350");
+      expect(request.url).toBe("/internal/meta/verify");
+      expect(request.headers.authorization).toBe("Bearer deploy-token");
+      expect(request.headers["x-real-ip"]).toBe("127.0.0.1");
+      expect(body.eventSourceUrl).toContain("bricomaitre.com");
 
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({
-        success: true,
-        data: {
-          events_received: 0,
-          fbtrace_id: "trace-none",
-        },
+        ok: true,
+        eventsReceived: 0,
+        fbtraceId: "trace-none",
       }));
     });
 
@@ -114,6 +118,7 @@ describe("ops/scripts/verify-storefront-meta.sh", () => {
         STOREFRONT_META_VERIFY_BASE_URL: baseUrl,
         META_DEPLOY_VERIFY_ENABLED: "1",
         META_TEST_EVENT_CODE: "TEST5350",
+        STOREFRONT_API_DEPLOY_TOKEN: "deploy-token",
         BRIC_STOREFRONT_APEX_DOMAIN: "bricomaitre.com",
       },
     })).rejects.toMatchObject({
@@ -129,17 +134,17 @@ describe("ops/scripts/verify-storefront-meta.sh", () => {
       }
 
       const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-      expect(body.event_name).toBe("PageView");
-      expect(body.test_event_code).toBe("TEST5350");
-      expect(body.custom_data).toEqual({ source: "deploy_verification" });
+      expect(request.url).toBe("/internal/meta/verify");
+      expect(request.headers.authorization).toBe("Bearer deploy-token");
+      expect(request.headers["x-real-ip"]).toBe("127.0.0.1");
+      expect(body.eventId).toMatch(/^deploy-meta-/);
+      expect(body.eventSourceUrl).toContain("meta_deploy_verification=1");
 
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({
-        success: true,
-        data: {
-          events_received: 1,
-          fbtrace_id: "trace-ok",
-        },
+        ok: true,
+        eventsReceived: 1,
+        fbtraceId: "trace-ok",
       }));
     });
 
@@ -150,6 +155,7 @@ describe("ops/scripts/verify-storefront-meta.sh", () => {
         STOREFRONT_META_VERIFY_BASE_URL: baseUrl,
         META_DEPLOY_VERIFY_ENABLED: "1",
         META_TEST_EVENT_CODE: "TEST5350",
+        STOREFRONT_API_DEPLOY_TOKEN: "deploy-token",
         BRIC_STOREFRONT_APEX_DOMAIN: "bricomaitre.com",
       },
     });

@@ -13,6 +13,10 @@ import {
   brands,
   categories,
   importBatches,
+  metaEventOutbox,
+  metaWorkerHeartbeat,
+  orderMetaAttribution,
+  orderStatusHistory,
   type UnmatchedImportRow,
   orders,
   processedOrderProducts,
@@ -377,6 +381,20 @@ export type StatsDashboardData = {
   metaAds: {
     events: MetaTrackedEventSummary[];
     recentPayloads: MetaTrackedEventLog[];
+    health?: {
+      pending: number;
+      retryable: number;
+      delivered: number;
+      failed: number;
+      skipped: number;
+      oldestPendingAt: string | null;
+      eligibleOrders: number;
+      confirmedOrders: number;
+      orderConfirmedOrders: number;
+      purchaseOrders: number;
+      negativeOutcomePurchases: number;
+      workerLastHeartbeatAt: string | null;
+    };
   };
   wilayas: BreakdownPoint[];
   wilayaDetails: BreakdownPoint[];
@@ -718,51 +736,127 @@ async function getWebsiteAnalyticsData(db: ReturnType<typeof getDb>, analyticsWh
   };
 }
 
-async function getMetaAdsTrackingData(db: ReturnType<typeof getDb>, analyticsWhere: ReturnType<typeof buildAnalyticsWhere>) {
-  const metaTrackingExists = sql`${analyticsEvents.metadata} ? 'metaTracking'`;
-  const metaEventName = sql<string>`coalesce(nullif(${analyticsEvents.metadata}->'metaTracking'->>'eventName', ''), ${analyticsEvents.eventName})`;
-  const capiStatusExpression = sql<number | null>`case
-    when coalesce(${analyticsEvents.metadata}->'metaTracking'->'capi'->>'status', '') ~ '^-?[0-9]+$'
-      then (${analyticsEvents.metadata}->'metaTracking'->'capi'->>'status')::int
-    else null
-  end`;
+async function getMetaAdsTrackingData(db: ReturnType<typeof getDb>, filters: Required<StatsFilters>) {
+  const conditions = [];
+  if (filters.startDate) {
+    conditions.push(sql`${metaEventOutbox.eventTime}::date >= ${filters.startDate}`);
+  }
+  if (filters.endDate) {
+    conditions.push(sql`${metaEventOutbox.eventTime}::date <= ${filters.endDate}`);
+  }
+  const metaWhere = conditions.length > 0 ? and(...conditions) : undefined;
+  const pixelInvoked = sql`coalesce(${analyticsEvents.metadata}->'metaTracking'->'pixel'->>'invoked', 'false') = 'true'`;
 
-  const [eventRows, payloadRows] = await Promise.all([
+  const [eventRows, payloadRows, [statusRow], coverageResult, [heartbeat]] = await Promise.all([
     db
       .select({
-        name: metaEventName,
+        name: metaEventOutbox.eventName,
         total: sql<number>`count(*)::int`,
-        pixelFired: sql<number>`count(*) filter (where coalesce(${analyticsEvents.metadata}->'metaTracking'->'pixel'->>'fired', 'false') = 'true')::int`,
-        capiSent: sql<number>`count(*) filter (where coalesce(${analyticsEvents.metadata}->'metaTracking'->'capi'->>'attempted', 'false') = 'true')::int`,
-        capiDelivered: sql<number>`count(*) filter (where coalesce(${analyticsEvents.metadata}->'metaTracking'->'capi'->>'ok', 'false') = 'true')::int`,
-        capiFailed: sql<number>`count(*) filter (where coalesce(${analyticsEvents.metadata}->'metaTracking'->'capi'->>'ok', 'false') = 'false')::int`,
-        lastOccurredAt: sql<Date | null>`max(${analyticsEvents.occurredAt})`,
+        pixelFired: sql<number>`count(*) filter (where ${pixelInvoked})::int`,
+        capiSent: sql<number>`count(*) filter (where ${metaEventOutbox.attemptCount} > 0)::int`,
+        capiDelivered: sql<number>`count(*) filter (where ${metaEventOutbox.status} = 'delivered')::int`,
+        capiFailed: sql<number>`count(*) filter (where ${metaEventOutbox.status} in ('failed', 'skipped'))::int`,
+        lastOccurredAt: sql<Date | null>`max(${metaEventOutbox.eventTime})`,
       })
-      .from(analyticsEvents)
-      .where(and(analyticsWhere, metaTrackingExists))
-      .groupBy(metaEventName)
+      .from(metaEventOutbox)
+      .leftJoin(analyticsEvents, eq(analyticsEvents.eventId, metaEventOutbox.eventId))
+      .where(metaWhere)
+      .groupBy(metaEventOutbox.eventName)
       .orderBy(sql`2 desc, 1 asc`),
     db
       .select({
-        eventId: analyticsEvents.eventId,
-        analyticsEventName: analyticsEvents.eventName,
-        metaEventName,
-        pagePath: analyticsEvents.pagePath,
-        occurredAt: analyticsEvents.occurredAt,
-        pixelPayload: sql<Record<string, unknown>>`coalesce(${analyticsEvents.metadata}->'metaTracking'->'pixel'->'payload', '{}'::jsonb)`,
-        capiPayload: sql<Record<string, unknown>>`coalesce(${analyticsEvents.metadata}->'metaTracking'->'capi'->'payload', '{}'::jsonb)`,
-        capiStatus: capiStatusExpression,
-        capiOk: sql<boolean>`coalesce(${analyticsEvents.metadata}->'metaTracking'->'capi'->>'ok', 'false') = 'true'`,
+        eventId: metaEventOutbox.eventId,
+        analyticsEventName: sql<string>`coalesce(${analyticsEvents.eventName}, ${metaEventOutbox.source})`,
+        metaEventName: metaEventOutbox.eventName,
+        pagePath: metaEventOutbox.eventSourceUrl,
+        occurredAt: metaEventOutbox.eventTime,
+        pixelPayload: sql<Record<string, unknown>>`jsonb_build_object('invoked', ${pixelInvoked})`,
+        capiPayload: sql<Record<string, unknown>>`jsonb_build_object(
+          'status', ${metaEventOutbox.status},
+          'attemptCount', ${metaEventOutbox.attemptCount},
+          'eventsReceived', ${metaEventOutbox.eventsReceived},
+          'matchKeys', ${metaEventOutbox.matchKeySummary},
+          'value', ${metaEventOutbox.customData}->'value',
+          'numItems', ${metaEventOutbox.customData}->'num_items',
+          'errorCode', ${metaEventOutbox.metaErrorCode},
+          'errorSubcode', ${metaEventOutbox.metaErrorSubcode},
+          'errorMessage', ${metaEventOutbox.metaErrorMessage},
+          'fbtraceId', ${metaEventOutbox.fbtraceId}
+        )`,
+        capiStatus: metaEventOutbox.lastHttpStatus,
+        capiOk: sql<boolean>`${metaEventOutbox.status} = 'delivered'`,
       })
-      .from(analyticsEvents)
-      .where(and(analyticsWhere, metaTrackingExists))
-      .orderBy(desc(analyticsEvents.occurredAt))
+      .from(metaEventOutbox)
+      .leftJoin(analyticsEvents, eq(analyticsEvents.eventId, metaEventOutbox.eventId))
+      .where(metaWhere)
+      .orderBy(desc(metaEventOutbox.eventTime))
       .limit(12),
+    db
+      .select({
+        pending: sql<number>`count(*) filter (where ${metaEventOutbox.status} = 'pending')::int`,
+        retryable: sql<number>`count(*) filter (where ${metaEventOutbox.status} = 'retryable')::int`,
+        delivered: sql<number>`count(*) filter (where ${metaEventOutbox.status} = 'delivered')::int`,
+        failed: sql<number>`count(*) filter (where ${metaEventOutbox.status} = 'failed')::int`,
+        skipped: sql<number>`count(*) filter (where ${metaEventOutbox.status} = 'skipped')::int`,
+        oldestPendingAt: sql<Date | null>`min(${metaEventOutbox.createdAt}) filter (
+          where ${metaEventOutbox.status} in ('pending', 'retryable', 'processing')
+        )`,
+      })
+      .from(metaEventOutbox)
+      .where(metaWhere),
+    db.execute(sql`
+      select
+        count(distinct attribution.order_id)::int as eligible_orders,
+        count(distinct attribution.order_id) filter (
+          where exists (
+            select 1 from ${orderStatusHistory} history
+            where history.order_id = attribution.order_id
+              and history.status = 2
+          )
+        )::int as confirmed_orders,
+        count(distinct purchase.order_id)::int as purchase_orders,
+        count(distinct orderconfirmed.order_id)::int as orderconfirmed_orders,
+        count(distinct purchase.order_id) filter (
+          where current_order.confirmed in (6, 8, 9)
+        )::int as negative_outcome_purchases
+      from ${orderMetaAttribution} attribution
+      left join ${metaEventOutbox} purchase
+        on purchase.order_id = attribution.order_id and purchase.event_name = 'Purchase'
+      left join ${metaEventOutbox} orderconfirmed
+        on orderconfirmed.order_id = attribution.order_id and orderconfirmed.event_name = 'orderconfirmed'
+      left join ${orders} current_order on current_order.id = attribution.order_id
+      where (${filters.startDate || null}::text is null or attribution.created_at::date >= ${filters.startDate || null})
+        and (${filters.endDate || null}::text is null or attribution.created_at::date <= ${filters.endDate || null})
+    `),
+    db.select().from(metaWorkerHeartbeat)
+      .where(eq(metaWorkerHeartbeat.workerKey, 'storefront-meta-worker'))
+      .limit(1),
   ]);
+  const coverage = coverageResult.rows[0] as {
+    eligible_orders?: number | string;
+    confirmed_orders?: number | string;
+    orderconfirmed_orders?: number | string;
+    purchase_orders?: number | string;
+    negative_outcome_purchases?: number | string;
+  } | undefined;
 
   return {
     eventRows: eventRows as MetaTrackedEventSummaryRow[],
     payloadRows: payloadRows as MetaTrackedEventLogRow[],
+    health: {
+      pending: statusRow?.pending ?? 0,
+      retryable: statusRow?.retryable ?? 0,
+      delivered: statusRow?.delivered ?? 0,
+      failed: statusRow?.failed ?? 0,
+      skipped: statusRow?.skipped ?? 0,
+      oldestPendingAt: toIsoDateString(statusRow?.oldestPendingAt),
+      eligibleOrders: Number(coverage?.eligible_orders ?? 0),
+      confirmedOrders: Number(coverage?.confirmed_orders ?? 0),
+      orderConfirmedOrders: Number(coverage?.orderconfirmed_orders ?? 0),
+      purchaseOrders: Number(coverage?.purchase_orders ?? 0),
+      negativeOutcomePurchases: Number(coverage?.negative_outcome_purchases ?? 0),
+      workerLastHeartbeatAt: toIsoDateString(heartbeat?.lastHeartbeatAt),
+    },
   };
 }
 
@@ -1186,7 +1280,7 @@ export async function computeStatsDashboard(input: StatsFilters) {
   const adWhere = buildAdCostWhere(filters);
   const analyticsWhere = buildAnalyticsWhere(filters);
   const websiteAnalyticsPromise = getWebsiteAnalyticsData(db, analyticsWhere);
-  const metaAdsTrackingPromise = getMetaAdsTrackingData(db, analyticsWhere);
+  const metaAdsTrackingPromise = getMetaAdsTrackingData(db, filters);
 
   const [
     summaryRows,
@@ -1339,7 +1433,11 @@ export async function computeStatsDashboard(input: StatsFilters) {
     websiteTopProductRows,
     websiteMetricRows,
   } = await websiteAnalyticsPromise;
-  const { eventRows: metaEventRows, payloadRows: metaPayloadRows } = await metaAdsTrackingPromise;
+  const {
+    eventRows: metaEventRows,
+    payloadRows: metaPayloadRows,
+    health: metaHealth,
+  } = await metaAdsTrackingPromise;
 
   const summaryRow = summaryRows[0];
   const adSummary = adSpendRows[0];
@@ -1441,6 +1539,7 @@ export async function computeStatsDashboard(input: StatsFilters) {
       capiStatus: row.capiStatus,
       capiOk: row.capiOk,
     })),
+    health: metaHealth,
   };
 
   if (!summaryRow || summaryRow.totalOrders === 0) {

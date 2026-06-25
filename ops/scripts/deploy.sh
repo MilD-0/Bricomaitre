@@ -27,6 +27,7 @@ else
 fi
 
 api_service="$(service_name storefront-api "$target_slot")"
+meta_worker_service="storefront-meta-worker"
 admin_service="$(service_name adminstration "$target_slot")"
 worker_service="$(service_name admin-worker "$target_slot")"
 storefront_service="$(service_name storefront "$target_slot")"
@@ -188,6 +189,7 @@ append_summary "## Storefront build"
 append_summary "- Upstream counts: ${PRODUCT_COUNT} products, ${BRAND_COUNT} brands, ${CATEGORY_COUNT} categories"
 
 "$script_dir/run-admin-migrations.sh" "$target_slot"
+compose up -d --build "$meta_worker_service"
 
 compose build --progress plain "$admin_service"
 compose build --progress plain "$storefront_service" 2>&1 | tee "$storefront_build_log"

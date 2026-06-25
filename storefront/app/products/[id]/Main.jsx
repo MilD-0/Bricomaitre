@@ -1,17 +1,17 @@
 "use client";
 
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import Image from "next/image";
 import { useLocale, useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
 
-import { handleViewProduct } from "@/app/components/Init";
+import { handleInitiateCheckout, handleViewProduct } from "@/app/components/Init";
 import Carousel from "@/app/components/Carousel";
 import { CartContext } from "@/app/components/cartContext";
 import Category from "@/app/components/Similar";
-import OrderForm from "@/app/components/OrderForm";
 import Layout from "@/app/components/layout";
 import { ProductDetailSkeleton } from "@/app/components/ui";
 import {
@@ -19,7 +19,17 @@ import {
   buildCategoryFilterHref,
 } from "@/lib/storefront-api";
 import { getDisplayImages } from "@/lib/image-order";
-import { Link } from "@/i18n/navigation";
+import { withTrackingPrice } from "@/lib/cart-state";
+import { Link, useRouter } from "@/i18n/navigation";
+
+function waitForTracking(promise, timeoutMs = 250) {
+  return Promise.race([
+    promise.catch((error) => {
+      console.error("InitiateCheckout error:", error);
+    }),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+}
 
 function CartBadge({ count, label = "Panier" }) {
   return (
@@ -69,14 +79,19 @@ function TrustStrip({ t }) {
   );
 }
 
-export default function Page({ id, initialProduct = null, promoCode = null }) {
+export default function Page({
+  id,
+  initialProduct = null,
+  promoCode = null,
+  initialPromo = null,
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const locale = useLocale();
   const t = useTranslations("common");
   const [showMore, setShowMore] = useState(false);
   const [product, setProduct] = useState(initialProduct);
-  const [promo, setPromo] = useState(null);
-  const [isOrderSectionInView, setIsOrderSectionInView] = useState(false);
-  const orderSectionRef = useRef(null);
+  const [promo, setPromo] = useState(initialPromo);
   const { addProduct, cartProducts } = useContext(CartContext);
 
   const brand = product?.brandInfo ?? null;
@@ -89,11 +104,18 @@ export default function Page({ id, initialProduct = null, promoCode = null }) {
   const compareAtPrice = promo ? promo.originalPrice : product?.OldPrice;
   const promoQuery = promoCode ? `?promo=${encodeURIComponent(promoCode)}` : "";
 
-  function scrollToOrderSection() {
-    orderSectionRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
+  async function goToCheckout(currentProduct) {
+    await waitForTracking(handleInitiateCheckout({
+      products: [withTrackingPrice(currentProduct, effectivePrice)],
+      totalValue: effectivePrice,
+    }));
+
+    const nextSearchParams = new URLSearchParams(searchParams?.toString() ?? "");
+    nextSearchParams.set("id", currentProduct.slug);
+    if (promo?.code ?? promoCode) {
+      nextSearchParams.set("promo", promo?.code ?? promoCode);
+    }
+    router.push(`/checkout?${nextSearchParams.toString()}`);
   }
 
   useEffect(() => {
@@ -121,6 +143,10 @@ export default function Page({ id, initialProduct = null, promoCode = null }) {
       setPromo(null);
       return;
     }
+    if (initialPromo?.code === promoCode) {
+      setPromo(initialPromo);
+      return;
+    }
 
     let cancelled = false;
     const validatePromo = async () => {
@@ -146,30 +172,7 @@ export default function Page({ id, initialProduct = null, promoCode = null }) {
     return () => {
       cancelled = true;
     };
-  }, [product?.id, promoCode]);
-
-  useEffect(() => {
-    const orderSection = orderSectionRef.current;
-    if (!orderSection || typeof window === "undefined") {
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setIsOrderSectionInView(entry.isIntersecting);
-      },
-      {
-        root: null,
-        threshold: 0.2,
-      },
-    );
-
-    observer.observe(orderSection);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [product?._id]);
+  }, [initialPromo, product?.id, promoCode]);
 
   if (!product) {
     return (
@@ -286,14 +289,14 @@ export default function Page({ id, initialProduct = null, promoCode = null }) {
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <button
                       type="button"
-                      onClick={scrollToOrderSection}
+                      onClick={() => void goToCheckout(product)}
                       className="sf-button-accent justify-center shadow-lg shadow-teal-900/20"
                     >
                       {t("ach")}
                     </button>
                     <button
                       type="button"
-                      onClick={() => addProduct(product._id, product)}
+                      onClick={() => addProduct(product._id, product, { trackingPrice: effectivePrice })}
                       className="sf-button-secondary justify-center"
                     >
                       {t("ajt")}
@@ -332,19 +335,9 @@ export default function Page({ id, initialProduct = null, promoCode = null }) {
           ) : null}
         </section>
 
-        {product.stock > 0 ? (
-          <section id="order" ref={orderSectionRef} className="scroll-mt-28">
-            <div className="mb-4 text-center">
-              <p className="sf-kicker">{t("ach")}</p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
-                {t("ent")}
-              </h2>
-            </div>
-            <OrderForm prod={id} cart={false} promoCode={promo?.code ?? promoCode} showMobileStickySubmit={isOrderSectionInView} />
-          </section>
-        ) : (
+        {product.stock <= 0 ? (
           <div className="text-center text-lg text-red-500">{t("ns")}</div>
-        )}
+        ) : null}
 
         {product.vidlink ? (
           <section className="sf-card p-5 md:p-6">
@@ -362,7 +355,7 @@ export default function Page({ id, initialProduct = null, promoCode = null }) {
             <div className="mt-6">
               <button
                 type="button"
-                onClick={scrollToOrderSection}
+                onClick={() => void goToCheckout(product)}
                 className="sf-button-accent justify-center"
               >
                 {t("ach")}
@@ -391,19 +384,19 @@ export default function Page({ id, initialProduct = null, promoCode = null }) {
 
         {category ? <Category key={category._id} categoryid={category._id} productId={product._id} /> : null}
       </div>
-      {product.stock > 0 && !isOrderSectionInView ? (
+      {product.stock > 0 ? (
         <div className="fixed bottom-3 left-3 right-3 z-50 md:hidden">
           <div className="flex gap-2 rounded-[1.6rem] border border-slate-200 bg-white/95 p-3 shadow-2xl shadow-slate-900/15 backdrop-blur">
             <button
               type="button"
-              onClick={scrollToOrderSection}
+              onClick={() => void goToCheckout(product)}
               className="sf-button-accent flex-1 justify-center shadow-2xl shadow-teal-900/20"
             >
               {t("ach")}
             </button>
             <button
               type="button"
-              onClick={() => addProduct(product._id, product)}
+              onClick={() => addProduct(product._id, product, { trackingPrice: effectivePrice })}
               className="sf-button-secondary px-4"
             >
               {t("ajt")}

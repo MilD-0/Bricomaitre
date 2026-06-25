@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCartProductSummary,
+  buildCartTrackingProducts,
+  canonicalizeCartProducts,
+  findProductSnapshotByToken,
   mergeCartProductSnapshots,
+  normalizeCartProductSnapshots,
   toCartProductSnapshot,
+  withTrackingPrice,
 } from "./cart-state";
 
 describe("cart-state", () => {
@@ -24,6 +29,7 @@ describe("cart-state", () => {
     })).toEqual({
       _id: "12",
       id: 12,
+      mongo_id: null,
       slug: "hammer",
       title: "Hammer",
       title_ar: "مطرقة",
@@ -38,6 +44,49 @@ describe("cart-state", () => {
       availabilityStatus: "in_stock",
       updatedAt: "2026-04-04T00:00:00.000Z",
     });
+  });
+
+  it("uses numeric product ids as canonical snapshots and keeps Mongo ids as aliases", () => {
+    const snapshot = toCartProductSnapshot({
+      _id: "f00000000000000000000005",
+      id: 2137,
+      mongo_id: "f00000000000000000000005",
+      slug: "perforateur-hitachi",
+      title: "Perforateur",
+      price: 12000,
+    });
+
+    expect(snapshot).toEqual(expect.objectContaining({
+      _id: "2137",
+      id: 2137,
+      mongo_id: "f00000000000000000000005",
+    }));
+    expect(canonicalizeCartProducts(
+      ["f00000000000000000000005", "2137"],
+      [snapshot],
+    )).toEqual(["2137", "2137"]);
+  });
+
+  it("normalizes legacy snapshot maps without losing ObjectId lookup", () => {
+    const snapshots = normalizeCartProductSnapshots({
+      "f00000000000000000000005": {
+        ...toCartProductSnapshot({
+          _id: "f00000000000000000000005",
+          id: 2137,
+          title: "Perforateur",
+          price: 12000,
+        }),
+        mongo_id: null,
+      },
+    });
+
+    expect(snapshots["2137"]).toEqual(expect.objectContaining({
+      _id: "2137",
+      mongo_id: "f00000000000000000000005",
+    }));
+    expect(findProductSnapshotByToken(snapshots, "f00000000000000000000005")?._id).toBe("2137");
+    expect(buildCartProductSummary(["f00000000000000000000005"], snapshots).quantityById)
+      .toEqual({ "2137": 1 });
   });
 
   it("merges snapshots and derives subtotal from duplicate cart ids", () => {
@@ -81,5 +130,23 @@ describe("cart-state", () => {
     ]);
 
     expect(merged).toBe(current);
+  });
+
+  it("preserves aggregated quantities for cart tracking", () => {
+    const snapshots = mergeCartProductSnapshots({}, [
+      { _id: "12", id: 12, title: "Hammer", price: 450, slug: "hammer" },
+    ]);
+    const summary = buildCartProductSummary(["12", "12"], snapshots);
+
+    expect(buildCartTrackingProducts(summary.items)).toEqual([
+      expect.objectContaining({ id: 12, price: 450, quantity: 2 }),
+    ]);
+  });
+
+  it("uses an effective tracking price without mutating the cart product", () => {
+    const product = { id: 12, price: 450 };
+
+    expect(withTrackingPrice(product, 400)).toEqual({ id: 12, price: 400 });
+    expect(product.price).toBe(450);
   });
 });
