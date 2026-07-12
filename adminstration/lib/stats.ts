@@ -142,6 +142,7 @@ type ImportHistoryItem = {
   importedAt: string;
   totalRows: number;
   matchedOrders: number;
+  skippedRows?: number;
   unmatchedCount: number;
   unmatchedReferences: string[];
   unmatchedDetails: UnmatchedImportRow[];
@@ -1216,6 +1217,8 @@ const DEFAULT_IMPORT_HISTORY_LIMIT = 8;
 export const IMPORT_HISTORY_PAGE_SIZE = 10;
 
 function mapImportHistoryRow(row: typeof importBatches.$inferSelect): ImportHistoryItem {
+  const unmatchedCount = row.unmatchedReferences.length;
+
   return {
     id: row.id,
     batchId: row.batchId,
@@ -1223,7 +1226,8 @@ function mapImportHistoryRow(row: typeof importBatches.$inferSelect): ImportHist
     importedAt: row.importedAt.toISOString(),
     totalRows: row.totalRows,
     matchedOrders: row.matchedOrders,
-    unmatchedCount: row.unmatchedReferences.length,
+    skippedRows: Math.max(0, row.totalRows - row.matchedOrders - unmatchedCount),
+    unmatchedCount,
     unmatchedReferences: row.unmatchedReferences,
     unmatchedDetails: row.unmatchedDetails,
     dateRangeStart: row.dateRangeStart,
@@ -1988,64 +1992,21 @@ export async function importStatsSpreadsheet(buffer: Buffer, fileName: string): 
 
   const references = [...new Set(rows.map((row) => row.reference).filter(Boolean))];
   const trackings = [...new Set(rows.map((row) => row.tracking).filter(Boolean))];
-  const phones = [...new Set(rows.map((row) => normalizePhoneDigits(row.telephone)).filter(Boolean))];
   const numericReferences = references
     .filter(isNumericOrderReference)
     .map((value) => Number.parseInt(value, 10))
     .filter((value) => Number.isFinite(value));
 
-  const orderConditions = [];
-
-  if (numericReferences.length > 0) {
-    orderConditions.push(inArray(orders.id, numericReferences));
-  }
-
-  if (references.length > 0) {
-    orderConditions.push(inArray(orders.ecotrackReference, references));
-    orderConditions.push(inArray(orders.mongoId, references));
-  }
-
-  if (trackings.length > 0) {
-    orderConditions.push(inArray(orders.ecotrackTrackingNumber, trackings));
-  }
-
-  const [candidateOrders, phoneCandidateOrders, existingRows] = await Promise.all([
-    orderConditions.length > 0
-      ? db.select().from(orders).where(or(...orderConditions))
-      : Promise.resolve([]),
-    phones.length > 0
-      ? db
-        .select({
-          id: orders.id,
-          mongoId: orders.mongoId,
-          firstName: orders.firstName,
-          lastName: orders.lastName,
-          state: orders.state,
-          city: orders.city,
-          delivery: orders.delivery,
-          createdAt: orders.createdAt,
-          cartProducts: orders.cartProducts,
-          ecotrackReference: orders.ecotrackReference,
-          ecotrackTrackingNumber: orders.ecotrackTrackingNumber,
-          phoneNumber1: sql<string>`regexp_replace(coalesce(${orders.phoneNumber1}, ''), '\\D', '', 'g')`,
-          phoneNumber2: sql<string>`regexp_replace(coalesce(${orders.phoneNumber2}, ''), '\\D', '', 'g')`,
-        })
-        .from(orders)
-        .where(or(
-          inArray(sql<string>`regexp_replace(coalesce(${orders.phoneNumber1}, ''), '\\D', '', 'g')`, phones),
-          inArray(sql<string>`regexp_replace(coalesce(${orders.phoneNumber2}, ''), '\\D', '', 'g')`, phones),
-        ))
+  const [candidateOrders, existingRows] = await Promise.all([
+    numericReferences.length > 0
+      ? db.select().from(orders).where(inArray(orders.id, numericReferences))
       : Promise.resolve([]),
     trackings.length > 0
       ? db.select({ tracking: processedOrders.tracking }).from(processedOrders).where(inArray(processedOrders.tracking, trackings))
       : Promise.resolve([]),
   ]);
 
-  const allCandidateOrders = [
-    ...candidateOrders,
-    ...phoneCandidateOrders.filter((phoneOrder) => !candidateOrders.some((order) => order.id === phoneOrder.id)),
-  ];
-  const cartProductReferences = collectCartProductReferenceBuckets(allCandidateOrders);
+  const cartProductReferences = collectCartProductReferenceBuckets(candidateOrders);
 
   const productRows = cartProductReferences.productIds.length === 0 && cartProductReferences.mongoIds.length === 0
     ? []
@@ -2070,32 +2031,7 @@ export async function importStatsSpreadsheet(buffer: Buffer, fileName: string): 
         ...(cartProductReferences.mongoIds.length > 0 ? [inArray(products.mongoId, cartProductReferences.mongoIds)] : []),
       ));
 
-  const orderById = new Map(allCandidateOrders.map((order) => [String(order.id), order]));
-  const orderByReference = new Map(
-    allCandidateOrders
-      .filter((order) => order.ecotrackReference)
-      .map((order) => [order.ecotrackReference ?? '', order]),
-  );
-  const orderByMongoId = new Map(
-    allCandidateOrders
-      .filter((order) => order.mongoId)
-      .map((order) => [order.mongoId ?? '', order]),
-  );
-  const orderByTracking = new Map(
-    allCandidateOrders
-      .filter((order) => order.ecotrackTrackingNumber)
-      .map((order) => [order.ecotrackTrackingNumber ?? '', order]),
-  );
-  const orderByPhone = new Map<string, typeof allCandidateOrders>();
-  for (const order of phoneCandidateOrders) {
-    for (const phone of [order.phoneNumber1, order.phoneNumber2].filter(Boolean)) {
-      const current = orderByPhone.get(phone) ?? [];
-      if (!current.some((candidate) => candidate.id === order.id)) {
-        current.push(order);
-      }
-      orderByPhone.set(phone, current);
-    }
-  }
+  const orderById = new Map(candidateOrders.map((order) => [String(order.id), order]));
   const productLookup = buildCartProductLookup(productRows);
   const existingTrackings = new Set(existingRows.map((row) => row.tracking));
 
@@ -2111,15 +2047,9 @@ export async function importStatsSpreadsheet(buffer: Buffer, fileName: string): 
       continue;
     }
 
-    const matchedOrder =
-      orderById.get(row.reference)
-      ?? orderByReference.get(row.reference)
-      ?? orderByMongoId.get(row.reference)
-      ?? orderByTracking.get(row.tracking);
-    const phoneMatchedOrder = matchedOrder
-      ?? resolveOrderByPhoneAndDate(orderByPhone.get(normalizePhoneDigits(row.telephone)) ?? [], row.creeLe);
+    const matchedOrder = isNumericOrderReference(row.reference) ? orderById.get(row.reference.trim()) : null;
 
-    if (!phoneMatchedOrder) {
+    if (!matchedOrder) {
       unmatchedReferences.push(row.reference || row.tracking);
       unmatchedDetails.push({
         reference: row.reference,
@@ -2135,7 +2065,7 @@ export async function importStatsSpreadsheet(buffer: Buffer, fileName: string): 
       continue;
     }
 
-    const matchedProducts = phoneMatchedOrder.cartProducts
+    const matchedProducts = matchedOrder.cartProducts
       .map((value) => getCartProductLookupKey(value))
       .filter((value): value is string => Boolean(value))
       .map((lookupKey) => productLookup.get(lookupKey))
@@ -2150,12 +2080,12 @@ export async function importStatsSpreadsheet(buffer: Buffer, fileName: string): 
     const profit = netRevenue - productCost;
 
     processedOrderValues.push({
-      orderId: String(phoneMatchedOrder.id),
+      orderId: String(matchedOrder.id),
       tracking: row.tracking,
-      customerName: row.destinataire || [phoneMatchedOrder.firstName, phoneMatchedOrder.lastName].filter(Boolean).join(' '),
-      wilaya: row.wilaya || String(phoneMatchedOrder.state || ''),
-      commune: row.commune || phoneMatchedOrder.city || '',
-      deliveryType: row.typePrestation || row.type || String(phoneMatchedOrder.delivery || ''),
+      customerName: row.destinataire || [matchedOrder.firstName, matchedOrder.lastName].filter(Boolean).join(' '),
+      wilaya: row.wilaya || String(matchedOrder.state || ''),
+      commune: row.commune || matchedOrder.city || '',
+      deliveryType: row.typePrestation || row.type || String(matchedOrder.delivery || ''),
       amountCollected: amountCollected.toFixed(2),
       totalFees: totalFees.toFixed(2),
       netRevenue: netRevenue.toFixed(2),
@@ -2168,7 +2098,7 @@ export async function importStatsSpreadsheet(buffer: Buffer, fileName: string): 
       feeStockage: row.fraisStockage.toFixed(2),
       feeCommission: row.commissionRecouvrement.toFixed(2),
       deliveredAt: row.encaisseLe,
-      orderCreatedAt: phoneMatchedOrder.createdAt,
+      orderCreatedAt: matchedOrder.createdAt,
       encaissedAt: row.encaisseLe ?? row.creeLe,
       importBatchId: batchId,
     });

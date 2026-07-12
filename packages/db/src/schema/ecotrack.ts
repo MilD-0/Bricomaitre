@@ -107,6 +107,7 @@ export const ecotrackOrderStates = adminSchema.table(
       .references(() => orders.id, { onDelete: 'cascade' }),
     reference: text('reference').notNull(),
     trackingNumber: text('tracking_number').notNull(),
+    provider: text('provider').notNull().default('delivro'),
     currentStatus: text('current_status').notNull(),
     driverPhone: text('driver_phone'),
     estimatedFee: numeric('estimated_fee', { precision: 12, scale: 2 }),
@@ -129,6 +130,7 @@ export const ecotrackOrderStates = adminSchema.table(
   (t) => [
     uniqueIndex('ecotrack_order_states_order_id_unique').on(t.orderId),
     uniqueIndex('ecotrack_order_states_tracking_unique').on(t.trackingNumber),
+    index('idx_ecotrack_order_states_provider').on(t.provider),
     index('idx_ecotrack_order_states_current_status').on(t.currentStatus),
     index('idx_ecotrack_order_states_deleted_status_updated')
       .on(t.deletedAt, t.currentStatus, t.updatedAt.desc()),

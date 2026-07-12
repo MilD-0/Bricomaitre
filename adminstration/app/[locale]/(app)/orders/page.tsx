@@ -3,6 +3,7 @@ import { loadDailyOrderStatusOverview, loadOrdersPageData } from '../../../../li
 import { getDb, hasDb } from '../../../../db/client';
 import { readEcotrackCatalog } from '../../../../lib/ecotrack';
 import { requireOrdersPageAccess } from '../../../../lib/page-access';
+import { canViewProfitStats } from '../../../../lib/permissions';
 
 export default async function OrdersPage({
   params,
@@ -10,7 +11,7 @@ export default async function OrdersPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  await requireOrdersPageAccess(locale);
+  const session = await requireOrdersPageAccess(locale);
   const [initialOrders, initialCatalog, initialOverview] = await Promise.all([
     loadOrdersPageData({ page: 1, limit: 25, search: '', sortKey: 'createdAt', sortDirection: 'desc' }, true),
     hasDb()
@@ -22,7 +23,7 @@ export default async function OrdersPage({
           lastSync: catalog.lastSync,
         }))
       : Promise.resolve(undefined),
-    loadDailyOrderStatusOverview(),
+    loadDailyOrderStatusOverview({ includeProfitProjection: canViewProfitStats(session.user.role) }),
   ]);
 
   return <OrdersManager initialOrders={initialOrders} initialCatalog={initialCatalog} initialOverview={initialOverview} />;

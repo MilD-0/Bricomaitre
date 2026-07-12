@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { loadDailyOrderStatusOverview } from '../../../../lib/admin-orders-data';
 import { auth } from '../../../../lib/auth';
 import { canAccessOrders } from '../../../../lib/navigation-access';
-import { normalizePermissions } from '../../../../lib/permissions';
+import { canViewProfitStats, normalizePermissions } from '../../../../lib/permissions';
 
 export async function GET() {
   const session = await auth();
@@ -16,5 +16,9 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  return NextResponse.json({ overview: await loadDailyOrderStatusOverview() });
+  return NextResponse.json({
+    overview: await loadDailyOrderStatusOverview({
+      includeProfitProjection: canViewProfitStats(session.user.role),
+    }),
+  });
 }

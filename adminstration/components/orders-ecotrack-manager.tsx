@@ -116,6 +116,7 @@ type EcotrackShipmentListItem = {
   orderId: number;
   reference: string;
   trackingNumber: string;
+  provider: 'delivro' | 'emir';
   createdAt: string;
   updatedAt: string;
   firstName: string | null;
@@ -1659,6 +1660,7 @@ export function OrdersEcotrackManager({
                               </TableCell>
                               <TableCell className="align-top">
                                 <p className="font-semibold">{item.trackingNumber}</p>
+                                <p className="mt-1 text-xs font-medium uppercase text-muted-foreground">{item.provider}</p>
                                 <p className="mt-1 text-xs text-muted-foreground">{t('ordersEcotrackManager.reference')}: {item.reference}</p>
                                 <p className="mt-1 text-xs text-muted-foreground">{formatDateTime(locale, item.createdAt)}</p>
                               </TableCell>
@@ -1742,6 +1744,7 @@ export function OrdersEcotrackManager({
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex flex-col gap-2">
                               <p className="font-semibold">{item.trackingNumber}</p>
+                              <p className="text-xs font-medium uppercase text-muted-foreground">{item.provider}</p>
                               <p className="text-sm text-muted-foreground">{item.fullName}</p>
                             </div>
                             <Checkbox

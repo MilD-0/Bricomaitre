@@ -23,6 +23,21 @@ type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 const ECOTRACK_SYNC_ACTOR_NAME = 'ECOTRACK sync';
 const ORDER_STATUS_POSTED = 11;
 
+export const ecotrackProviders = ['delivro', 'emir'] as const;
+export type EcotrackProvider = (typeof ecotrackProviders)[number];
+
+export function getEcotrackProviderEnv(provider: EcotrackProvider, env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  if (provider === 'delivro') {
+    return env;
+  }
+
+  return {
+    ...env,
+    ECOTRACK_BASE_URL: env.ECOTRACK_EMIR_BASE_URL,
+    ECOTRACK_TOKEN: env.ECOTRACK_EMIR_TOKEN,
+  };
+}
+
 function serializeActionValue(value: unknown): unknown {
   if (value instanceof Date) {
     return value.toISOString();
@@ -1004,6 +1019,7 @@ export async function persistEcotrackPostedOrder(
   input: EcotrackOrderInput,
   actor: { email?: string | null; name?: string | null },
   createResult: EcotrackCreateOrderResult,
+  provider: EcotrackProvider = 'delivro',
 ) {
   const now = new Date();
   await db.transaction(async (tx) => {
@@ -1052,6 +1068,7 @@ export async function persistEcotrackPostedOrder(
       orderId: input.row.id,
       reference: String(input.row.id),
       trackingNumber: createResult.tracking ?? '',
+      provider,
       currentStatus: 'prete_a_expedier',
       rawCreatePayload: createResult.raw,
       rawStatusPayload: {
@@ -1066,6 +1083,7 @@ export async function persistEcotrackPostedOrder(
       set: {
         reference: String(input.row.id),
         trackingNumber: createResult.tracking ?? '',
+        provider,
         currentStatus: 'prete_a_expedier',
         rawCreatePayload: createResult.raw,
         rawStatusPayload: {
@@ -1103,6 +1121,7 @@ export async function persistEcotrackPostedOrder(
         orderId: input.row.id,
         reference: String(input.row.id),
         trackingNumber: createResult.tracking ?? '',
+        provider,
         currentStatus: 'prete_a_expedier',
         driverPhone: null,
         estimatedFee: null,
@@ -1147,6 +1166,7 @@ export async function buildEcotrackPostingPreview(
   db: Database,
   mode: 'selected' | 'confirmed',
   orderIds: number[],
+  _provider: EcotrackProvider = 'delivro',
 ) {
   const items = await loadEcotrackOrderInputs(db, mode, orderIds);
   const catalog = await readEcotrackCatalog(db);
@@ -1212,10 +1232,12 @@ export async function postOrdersToEcotrack(
     env?: NodeJS.ProcessEnv;
     batchSize?: number;
     mutatingDelayMs?: number;
+    provider?: EcotrackProvider;
   } & EcotrackPostingHooks = {},
 ) {
   const fetchImpl = options.fetchImpl ?? fetch;
-  const env = options.env ?? process.env;
+  const provider = options.provider ?? 'delivro';
+  const env = getEcotrackProviderEnv(provider, options.env ?? process.env);
   const batchSize = Math.min(Math.max(options.batchSize ?? 100, 1), 100);
   const mutatingDelayMs = Math.max(options.mutatingDelayMs ?? Number(env.ECOTRACK_MUTATING_DELAY_MS ?? 250), 0);
   const preview = classifyOrdersForEcotrackPosting(items, catalog);
@@ -1273,7 +1295,7 @@ export async function postOrdersToEcotrack(
           throw new Error(`Missing order input for Ecotrack order ${batchItem.orderId}.`);
         }
 
-        await persistEcotrackPostedOrder(db, input, actor, createResult);
+        await persistEcotrackPostedOrder(db, input, actor, createResult, provider);
       } else {
         summary.failed += 1;
         summary.results.push({

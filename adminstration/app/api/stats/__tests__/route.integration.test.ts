@@ -10,6 +10,7 @@ const {
   getStatsDashboardMock,
   getLatestExportJobMock,
   startStatsImportJobMock,
+  startAdminReportingRefreshJobMock,
   listImportHistoryMock,
   refreshStatsDashboardMock,
   deleteImportBatchMock,
@@ -21,6 +22,7 @@ const {
   getStatsDashboardMock: vi.fn(),
   getLatestExportJobMock: vi.fn(),
   startStatsImportJobMock: vi.fn(),
+  startAdminReportingRefreshJobMock: vi.fn(),
   listImportHistoryMock: vi.fn(),
   refreshStatsDashboardMock: vi.fn(),
   deleteImportBatchMock: vi.fn(),
@@ -46,6 +48,7 @@ vi.mock('../../../../lib/background-jobs', () => ({
   ADMIN_STATS_IMPORT_QUEUE: 'admin-stats-import',
   getLatestExportJob: getLatestExportJobMock,
   startStatsImportJob: startStatsImportJobMock,
+  startAdminReportingRefreshJob: startAdminReportingRefreshJobMock,
 }));
 
 vi.mock('../../../../lib/stats', async () => {
@@ -77,6 +80,7 @@ describe('app/api/stats/route', () => {
     getStatsDashboardMock.mockReset();
     getLatestExportJobMock.mockReset();
     startStatsImportJobMock.mockReset();
+    startAdminReportingRefreshJobMock.mockReset();
     listImportHistoryMock.mockReset();
     refreshStatsDashboardMock.mockReset();
     deleteImportBatchMock.mockReset();
@@ -86,6 +90,7 @@ describe('app/api/stats/route', () => {
     requireOpsAccessMock.mockResolvedValue(null);
     hasDbMock.mockReturnValue(true);
     authMock.mockResolvedValue({ user: { email: 'ops@example.com' } });
+    startAdminReportingRefreshJobMock.mockResolvedValue({ kind: 'started', job: { id: 'refresh-1' } });
   });
 
   it('returns ops access denial for GET', async () => {
@@ -202,6 +207,7 @@ describe('app/api/stats/route', () => {
     expect(response.status).toBe(200);
     expect(deleteImportBatchMock).toHaveBeenCalledWith('batch-1');
     expect(revalidateServerTagsMock).toHaveBeenCalledWith('stats', 'stats-history');
+    expect(startAdminReportingRefreshJobMock).toHaveBeenCalledWith('stats-import-delete', null);
     await expect(response.json()).resolves.toEqual({ data: { deletedOrders: 12, deletedBatch: { id: 4 } } });
   });
 

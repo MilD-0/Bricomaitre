@@ -882,7 +882,7 @@
       "title": "استيراد الجدول",
       "show": "إظهار السجل",
       "hide": "إخفاء السجل",
-      "meta": "{importedAt} • تمت مطابقة {matchedOrders}/{totalRows} صفاً",
+      "meta": "{importedAt} • تم استيراد {matchedOrders} • غير مطابق {unmatchedCount} • تم تخطي {skippedRows} من {totalRows} صفاً",
       "range": "فترة النشاط: {start} إلى {end}",
       "delete": "حذف الدفعة",
       "emptyTitle": "لا توجد دفعات مستوردة",
@@ -1033,6 +1033,8 @@
     "overview": {
       "title": "حالة الطلبات اليومية",
       "subtitle": "نشاط {date}",
+      "today": "اليوم",
+      "yesterday": "أمس",
       "refreshing": "تحديث الملخص",
       "unavailable": "ملخص حالة الطلبات غير متاح لأن قاعدة البيانات غير متصلة.",
       "metrics": {
@@ -1043,6 +1045,14 @@
         "adminCancelled": "ألغيت من الإدارة",
         "carrierCancelled": "ألغيت من شركة التوصيل",
         "shipmentUpdates": "تحديثات الشحن"
+      },
+      "projection": {
+        "title": "الربح المستقبلي المتوقع",
+        "grossProfit": "الربح الإجمالي المستقبلي",
+        "adSpend": "الإنفاق الإعلاني",
+        "returnRate": "معدل الإرجاع / الفشل",
+        "estimatedReturns": "المرتجعات المتوقعة",
+        "returnLoss": "خسارة المرتجعات المتوقعة"
       }
     },
     "filters": {
@@ -1121,10 +1131,14 @@
       }
     },
     "ecotrack": {
-      "selectedAction": "إرسال المحدد إلى Ecotrack",
-      "confirmedAction": "إرسال المؤكد إلى Ecotrack",
-      "selectedTitle": "إرسال {count} من الطلبات المحددة إلى Ecotrack",
-      "confirmedTitle": "إرسال {count} من الطلبات المؤكدة إلى Ecotrack",
+      "selectedAction": "إرسال المحدد إلى Delivro",
+      "confirmedAction": "إرسال المؤكد إلى Delivro",
+      "selectedTitle": "إرسال {count} من الطلبات المحددة إلى Delivro",
+      "confirmedTitle": "إرسال {count} من الطلبات المؤكدة إلى Delivro",
+      "emirSelectedAction": "إرسال المحدد إلى Emir",
+      "emirConfirmedAction": "إرسال المؤكد إلى Emir",
+      "emirSelectedTitle": "إرسال {count} من الطلبات المحددة إلى Emir",
+      "emirConfirmedTitle": "إرسال {count} من الطلبات المؤكدة إلى Emir",
       "previewTitle": "معاينة إرسال Ecotrack",
       "previewEligible": "الطلبات المؤهلة",
       "previewSkipped": "الطلبات المتخطاة",

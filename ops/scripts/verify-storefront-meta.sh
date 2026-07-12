@@ -5,6 +5,24 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 source "$script_dir/load-infra-env.sh"
 
+env_dir="${BRIC_ENV_DIR:-/srv/bric/env}"
+
+load_optional_env_file() {
+  local env_file="${1:?env file path is required}"
+
+  if [[ ! -f "$env_file" ]]; then
+    return 0
+  fi
+
+  set -a
+  # shellcheck disable=SC1090
+  source "$env_file"
+  set +a
+}
+
+load_optional_env_file "$env_dir/storefront.env"
+load_optional_env_file "$env_dir/storefront-api.env"
+
 slot="${1:-}"
 storefront_domain="${BRIC_STOREFRONT_APEX_DOMAIN:-${BRIC_STOREFRONT_DOMAIN:-www.example.com}}"
 meta_verify_enabled="${META_DEPLOY_VERIFY_ENABLED:-1}"
@@ -29,14 +47,14 @@ if [[ "$meta_verify_enabled" == "0" ]]; then
 fi
 
 if [[ -z "$meta_test_event_code" ]]; then
-  echo "META_TEST_EVENT_CODE is required for storefront Meta deploy verification" >&2
+  echo "META_TEST_EVENT_CODE is required for storefront Meta deploy verification; set it in $env_dir/storefront-api.env or $env_dir/storefront.env" >&2
   append_meta_summary "### Meta verification"
   append_meta_summary "- ❌ Missing \`META_TEST_EVENT_CODE\`"
   exit 1
 fi
 
 if [[ -z "$deploy_token" ]]; then
-  echo "STOREFRONT_API_DEPLOY_TOKEN is required for Meta deploy verification" >&2
+  echo "STOREFRONT_API_DEPLOY_TOKEN is required for Meta deploy verification; set it in $env_dir/storefront-api.env" >&2
   exit 1
 fi
 
