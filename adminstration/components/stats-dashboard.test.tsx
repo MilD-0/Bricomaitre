@@ -289,6 +289,7 @@ const baseResponse = {
         importedAt: '2026-03-30T10:00:00.000Z',
         totalRows: 15,
         matchedOrders: 12,
+        skippedRows: 1,
         unmatchedCount: 2,
         unmatchedReferences: ['ref-404'],
         unmatchedDetails: [
@@ -450,12 +451,12 @@ describe('StatsDashboard', () => {
     renderDashboard('products');
 
     expect((await screen.findAllByText('Stats')).length).toBeGreaterThan(0);
-    expect(await screen.findByText('Product 11')).toBeInTheDocument();
-    expect(screen.queryByText('Product 21')).not.toBeInTheDocument();
+    expect(await screen.findByText('Product 1')).toBeInTheDocument();
+    expect(screen.queryByText('Product 11')).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'labels.goToPage:2' }));
 
-    expect(await screen.findByText('Product 21')).toBeInTheDocument();
+    expect(await screen.findByText('Product 11')).toBeInTheDocument();
   });
 
   it('renders the meta ads stats page', async () => {

@@ -2,6 +2,7 @@
   "name": "storefront-new",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "next dev --port 3003",
     "build": "next build",
@@ -31,6 +32,5 @@
     "tailwindcss": "^4.2.2",
     "typescript": "5.9.3",
     "vitest": "^4.1.2"
-  },
-  "license": "AGPL-3.0-only"
+  }
 }

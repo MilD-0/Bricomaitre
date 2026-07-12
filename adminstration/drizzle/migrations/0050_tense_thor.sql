@@ -1,0 +1,2 @@
+ALTER TABLE "admin"."ecotrack_order_states" ADD COLUMN "provider" text DEFAULT 'delivro' NOT NULL;--> statement-breakpoint
+CREATE INDEX "idx_ecotrack_order_states_provider" ON "admin"."ecotrack_order_states" USING btree ("provider");

@@ -5,6 +5,7 @@ import {
   canExportAllProducts,
   canManageSettings,
   canViewOps,
+  canViewProfitStats,
   getPermissionsForRole,
   permissionKeySchema,
   roleDefinitionFormSchema,
@@ -59,5 +60,12 @@ describe('permissions role matrix', () => {
     expect(canExportAllProducts('employee')).toBe(false);
     expect(canExportAllProducts('admin')).toBe(true);
     expect(canExportAllProducts('developer')).toBe(true);
+  });
+
+  it('limits profit stats to admin and developer roles', () => {
+    expect(canViewProfitStats('viewer')).toBe(false);
+    expect(canViewProfitStats('employee')).toBe(false);
+    expect(canViewProfitStats('admin')).toBe(true);
+    expect(canViewProfitStats('developer')).toBe(true);
   });
 });

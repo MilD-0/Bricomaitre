@@ -32,9 +32,9 @@ admin_service="$(service_name adminstration "$target_slot")"
 worker_service="$(service_name admin-worker "$target_slot")"
 storefront_service="$(service_name storefront "$target_slot")"
 api_host_port="$(slot_api_host_port "$target_slot")"
-storefront_build_log="$runtime_dir/storefront-build-${RELEASE_ID:-$target_slot}.log"
 storefront_static_pages_baseline_file="$runtime_dir/storefront-static-pages.env"
 storefront_static_pages_tolerance=2000
+release_images_file="$release_dir/$release_images_marker_name"
 
 append_summary() {
   local line="${1:?summary line is required}"
@@ -79,29 +79,6 @@ if counts["productCount"] <= 0:
 print(f'PRODUCT_COUNT={counts["productCount"]}')
 print(f'BRAND_COUNT={counts["brandCount"]}')
 print(f'CATEGORY_COUNT={counts["categoryCount"]}')
-PY
-}
-
-extract_static_page_count() {
-  local build_log="${1:?build log path is required}"
-
-  python3 - "$build_log" <<'PY'
-import re
-import sys
-
-build_log = sys.argv[1]
-with open(build_log, "r", encoding="utf-8", errors="ignore") as handle:
-    content = handle.read()
-
-matches = re.findall(r'Generating static pages using \d+ workers \((\d+)/(\d+)\)', content)
-if not matches:
-    raise SystemExit(1)
-
-generated, total = matches[-1]
-if generated != total:
-    raise SystemExit(1)
-
-print(generated)
 PY
 }
 
@@ -157,17 +134,17 @@ write_storefront_static_pages_baseline() {
   printf 'STOREFRONT_STATIC_PAGES_BASELINE=%s\n' "$actual_static_pages" >"$baseline_file"
 }
 
+apply_release_images "$target_slot" "$release_images_file"
+
 compose up -d postgres redis
 
 set -a
-# The admin and storefront builds execute app code that reads runtime env during Next.js compilation.
-# Load the app env files before the final build step so compose can pass the required values as build args.
 source "${BRIC_ENV_DIR:-/srv/bric/env}/storefront-api.env"
-source "${BRIC_ENV_DIR:-/srv/bric/env}/admin.env"
-source "${BRIC_ENV_DIR:-/srv/bric/env}/storefront.env"
 set +a
 
-compose up -d --build "$api_service"
+compose pull "$api_service"
+compose up -d --force-recreate "$api_service"
+assert_service_image "$api_service"
 bash "$script_dir/wait-for-health.sh" "$api_service"
 
 build_inputs="$(
@@ -189,12 +166,11 @@ append_summary "## Storefront build"
 append_summary "- Upstream counts: ${PRODUCT_COUNT} products, ${BRAND_COUNT} brands, ${CATEGORY_COUNT} categories"
 
 "$script_dir/run-admin-migrations.sh" "$target_slot"
-compose up -d --build "$meta_worker_service"
+compose pull "$meta_worker_service"
+compose up -d --force-recreate "$meta_worker_service"
+assert_service_image "$meta_worker_service"
 
-compose build --progress plain "$admin_service"
-compose build --progress plain "$storefront_service" 2>&1 | tee "$storefront_build_log"
-
-actual_static_pages="$(extract_static_page_count "$storefront_build_log")"
+actual_static_pages="$BRIC_STOREFRONT_STATIC_PAGES"
 printf 'storefront build generated %s static pages\n' "$actual_static_pages"
 append_summary "- Static pages generated: ${actual_static_pages}"
 
@@ -228,7 +204,10 @@ fi
 
 append_summary "- ✅ Static page count passed live-catalog validation (${actual_static_pages} >= ${minimum_static_pages})"
 
-compose up -d "$admin_service" "$storefront_service"
+compose pull "$admin_service" "$storefront_service"
+compose up -d --force-recreate "$admin_service" "$storefront_service"
+assert_service_image "$admin_service"
+assert_service_image "$storefront_service"
 bash "$script_dir/wait-for-health.sh" "$admin_service"
 bash "$script_dir/wait-for-health.sh" "$storefront_service"
 
@@ -263,7 +242,9 @@ if [[ -n "$previous_slot" ]]; then
   compose stop "$previous_worker_service" || true
 fi
 
-compose up -d --build "$worker_service"
+compose pull "$worker_service"
+compose up -d --force-recreate "$worker_service"
+assert_service_image "$worker_service"
 
 write_storefront_static_pages_baseline "$storefront_static_pages_baseline_file" "$actual_static_pages"
 append_summary "- Baseline stored: ${actual_static_pages}"

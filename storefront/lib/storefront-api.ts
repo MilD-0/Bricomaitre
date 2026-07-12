@@ -6,6 +6,7 @@ import {
 import { STOREFRONT_CACHE_TAGS } from "@/lib/cache-tags";
 
 const DEFAULT_PAGE_SIZE = 100;
+const HOMEPAGE_FEATURED_GROUP_PRODUCT_LIMIT = 24;
 
 type StorefrontProduct = {
   id: number;
@@ -614,6 +615,48 @@ export function normalizeProduct(
   };
 }
 
+function compactFeaturedGroupProduct(product: LegacyProduct): LegacyProduct {
+  return {
+    _id: product._id,
+    mongo_id: product.mongo_id,
+    id: product.id,
+    slug: product.slug,
+    title: product.title,
+    title_ar: product.title_ar,
+    description: "",
+    description_ar: "",
+    summary: product.summary,
+    summary_ar: product.summary_ar,
+    features: [],
+    features_ar: [],
+    images: product.images.slice(0, 1),
+    price: product.price,
+    OldPrice: product.OldPrice,
+    oldPrice: product.oldPrice,
+    stock: product.stock,
+    inStock: product.inStock,
+    availabilityStatus: product.availabilityStatus,
+    inventoryQuantity: product.inventoryQuantity,
+    brand: product.brand,
+    category: product.category,
+    sku: product.sku,
+    barcode: product.barcode,
+    brandInfo: product.brandInfo,
+    categoryInfo: product.categoryInfo,
+    parentCategoryInfo: product.parentCategoryInfo,
+    specValues: [],
+    specIcons: [],
+    specDescs: [],
+    specDescs_ar: [],
+    summary2: "",
+    summary2_ar: "",
+    color: product.color,
+    ShowPercentage: product.ShowPercentage,
+    createdAt: product.createdAt,
+    updatedAt: product.updatedAt,
+  };
+}
+
 function normalizeAutocompleteText(value?: string | null) {
   return (value ?? "")
     .normalize("NFD")
@@ -818,39 +861,120 @@ const getCachedHomepageData = unstable_cache(
   { revalidate: 300 },
 );
 
-const getCachedHomepageFeaturedGroupCatalog = unstable_cache(
-  async () => {
-    const context = await fetchCatalogContext();
-    const rawProducts = await listAllStorefrontProducts();
-
-    return {
-      assets: context.assets,
-      products: rawProducts.map((product) => normalizeProduct(product, context)),
-    };
-  },
-  ["storefront-homepage-featured-group-catalog"],
-  { revalidate: 300 },
-);
-
 export async function fetchHomepageFeaturedGroup(
   id: string | number,
 ): Promise<LegacyFeaturedGroup | null> {
-  const numericId = Number(id);
+  return getCachedHomepageFeaturedGroup(id);
+}
 
-  if (!Number.isFinite(numericId) || numericId <= 0) {
-    return null;
+const getCachedHomepageFeaturedGroup = unstable_cache(
+  async (id: string | number): Promise<LegacyFeaturedGroup | null> => {
+    const numericId = Number(id);
+
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+      return null;
+    }
+
+    const context = await fetchCatalogContext();
+    const group =
+      context.assets.featuredGroups.find((item) => item.active && item.id === numericId) ?? null;
+
+    if (!group) {
+      return null;
+    }
+
+    const products = await fetchHomepageFeaturedGroupProducts(group, context);
+    const normalized = normalizeFeaturedGroup(
+      group,
+      products,
+      HOMEPAGE_FEATURED_GROUP_PRODUCT_LIMIT,
+    );
+
+    return normalized.products.length > 0 ? normalized : null;
+  },
+  ["storefront-homepage-featured-group"],
+  { revalidate: 300 },
+);
+
+async function fetchHomepageFeaturedGroupProducts(
+  group: StorefrontFeaturedGroup,
+  context: CatalogContext,
+) {
+  const selectedProducts: StorefrontProduct[] = [];
+  const seenProductIds = new Set<number>();
+
+  const appendProducts = (products: StorefrontProduct[]) => {
+    for (const product of products) {
+      if (selectedProducts.length >= HOMEPAGE_FEATURED_GROUP_PRODUCT_LIMIT) {
+        return;
+      }
+
+      if (seenProductIds.has(product.id)) {
+        continue;
+      }
+
+      selectedProducts.push(product);
+      seenProductIds.add(product.id);
+    }
+  };
+
+  if (group.productIds.length > 0) {
+    const directProductIds = group.productIds.slice(
+      0,
+      HOMEPAGE_FEATURED_GROUP_PRODUCT_LIMIT,
+    );
+    const directProducts = await Promise.all(
+      directProductIds.map((productId) =>
+        fetchStorefrontProductsPage({ id: productId, limit: 1 }).then(
+          (items) => items[0] ?? null,
+        ),
+      ),
+    );
+
+    appendProducts(
+      directProducts.filter((product): product is StorefrontProduct => Boolean(product)),
+    );
   }
 
-  const { assets, products } = await getCachedHomepageFeaturedGroupCatalog();
-  const group = assets.featuredGroups.find((item) => item.active && item.id === numericId) ?? null;
+  const appendFilteredProducts = async (
+    filter: Pick<Parameters<typeof fetchStorefrontProductsPage>[0], "brandId" | "categoryId">,
+  ) => {
+    let page = 1;
 
-  if (!group) {
-    return null;
+    while (selectedProducts.length < HOMEPAGE_FEATURED_GROUP_PRODUCT_LIMIT) {
+      const pageItems = await fetchStorefrontProductsPage({
+        page,
+        limit: Math.min(DEFAULT_PAGE_SIZE, HOMEPAGE_FEATURED_GROUP_PRODUCT_LIMIT),
+        ...filter,
+      });
+
+      if (pageItems.length === 0) {
+        break;
+      }
+
+      appendProducts(pageItems);
+
+      if (
+        pageItems.length < Math.min(DEFAULT_PAGE_SIZE, HOMEPAGE_FEATURED_GROUP_PRODUCT_LIMIT)
+      ) {
+        break;
+      }
+
+      page += 1;
+    }
+  };
+
+  for (const brandId of group.brandIds) {
+    await appendFilteredProducts({ brandId });
   }
 
-  const normalized = normalizeFeaturedGroup(group, products);
+  for (const categoryId of group.categoryIds) {
+    await appendFilteredProducts({ categoryId });
+  }
 
-  return normalized.products.length > 0 ? normalized : null;
+  return selectedProducts.map((product) =>
+    compactFeaturedGroupProduct(normalizeProduct(product, context)),
+  );
 }
 
 function mapSortParams(sortby?: string | null) {

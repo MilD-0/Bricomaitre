@@ -6,6 +6,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -59,15 +62,234 @@ jobs:
           ANALYZE=true pnpm build:storefront
           echo "- ✅ Storefront bundle analysis build completed" >> "$GITHUB_STEP_SUMMARY"
 
-  deploy:
+  build-api-images:
     needs: verify
-    runs-on:
-      - self-hosted
-      - linux
-      - bric-vps
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
     env:
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-      VPS_PATH: ${{ secrets.VPS_PATH != '' && secrets.VPS_PATH || '/srv/bric/current' }}
+      IMAGE_NAMESPACE: ghcr.io/mild-0/bricomaitre2
+      SHA_TAG: sha-${{ github.sha }}
+      RELEASE_CHANNEL: ${{ github.ref == 'refs/heads/main' && 'main' || '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: sigstore/cosign-installer@v3
+
+      - name: Build, push, and sign storefront API images
+        run: |
+          set -euo pipefail
+          mkdir -p build-metadata release-parts
+          docker buildx bake \
+            --file ops/docker/docker-bake.hcl \
+            --push --provenance=true --sbom=true --progress plain \
+            --metadata-file build-metadata/api.json \
+            api 2>&1 | tee build-metadata/api.log
+
+          echo "## Storefront API images" >> "$GITHUB_STEP_SUMMARY"
+          bash ops/scripts/sign-bake-images.sh \
+            build-metadata/api.json \
+            release-parts/.bric-images-api.env \
+            BRIC_IMAGE_STOREFRONT_API:storefront-api-web:storefront-api-web \
+            BRIC_IMAGE_STOREFRONT_META_WORKER:storefront-api-meta-worker:storefront-api-meta-worker
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bric-images-api
+          path: release-parts/.bric-images-api.env
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
+  build-admin-images:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    env:
+      IMAGE_NAMESPACE: ghcr.io/mild-0/bricomaitre2
+      SHA_TAG: sha-${{ github.sha }}
+      RELEASE_CHANNEL: ${{ github.ref == 'refs/heads/main' && 'main' || '' }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
+      NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+      STOREFRONT_BUILD_API_BASE_URL: ${{ vars.STOREFRONT_BUILD_API_BASE_URL || 'https://api.bricomaitre.com' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: sigstore/cosign-installer@v3
+
+      - name: Build, push, and sign admin images
+        run: |
+          set -euo pipefail
+          mkdir -p build-metadata release-parts
+          docker buildx bake \
+            --file ops/docker/docker-bake.hcl \
+            --push --provenance=true --sbom=true --progress plain \
+            --metadata-file build-metadata/admin.json \
+            admin 2>&1 | tee build-metadata/admin.log
+
+          echo "## Admin images" >> "$GITHUB_STEP_SUMMARY"
+          bash ops/scripts/sign-bake-images.sh \
+            build-metadata/admin.json \
+            release-parts/.bric-images-admin.env \
+            BRIC_IMAGE_ADMIN_WEB:admin-web:admin-web \
+            BRIC_IMAGE_ADMIN_WORKER:admin-worker:admin-worker \
+            BRIC_IMAGE_ADMIN_MIGRATIONS:admin-migrations:admin-migrations
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bric-images-admin
+          path: release-parts/.bric-images-admin.env
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
+  build-storefront-image:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    env:
+      IMAGE_NAMESPACE: ghcr.io/mild-0/bricomaitre2
+      SHA_TAG: sha-${{ github.sha }}
+      RELEASE_CHANNEL: ${{ github.ref == 'refs/heads/main' && 'main' || '' }}
+      NEXT_PUBLIC_FACEBOOK_PIXEL_ID: ${{ secrets.NEXT_PUBLIC_FACEBOOK_PIXEL_ID }}
+      STOREFRONT_BUILD_API_BASE_URL: ${{ vars.STOREFRONT_BUILD_API_BASE_URL || 'https://api.bricomaitre.com' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: sigstore/cosign-installer@v3
+
+      - name: Build, push, and sign storefront image
+        run: |
+          set -euo pipefail
+          mkdir -p build-metadata release-parts
+          docker buildx bake \
+            --file ops/docker/docker-bake.hcl \
+            --push --provenance=true --sbom=true --progress plain \
+            --metadata-file build-metadata/storefront.json \
+            storefront 2>&1 | tee build-metadata/storefront-web.log
+
+          echo "## Storefront image" >> "$GITHUB_STEP_SUMMARY"
+          bash ops/scripts/sign-bake-images.sh \
+            build-metadata/storefront.json \
+            release-parts/.bric-images-storefront.env \
+            BRIC_IMAGE_STOREFRONT_WEB:storefront-web:storefront-web
+
+          storefront_static_pages="$(python3 ops/scripts/extract-static-page-count.py build-metadata/storefront-web.log)"
+          printf 'BRIC_STOREFRONT_STATIC_PAGES=%s\n' "$storefront_static_pages" >> release-parts/.bric-images-storefront.env
+          echo "- Static pages: ${storefront_static_pages}" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bric-images-storefront
+          path: release-parts/.bric-images-storefront.env
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
+  assemble-release-manifest:
+    needs:
+      - build-api-images
+      - build-admin-images
+      - build-storefront-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: bric-images-*
+          path: release-parts
+          merge-multiple: true
+
+      - name: Assemble and validate release manifest
+        run: |
+          set -euo pipefail
+          mkdir -p release-manifest
+          node ops/scripts/assemble-release-image-manifest.mjs \
+            release-manifest/.bric-images.env \
+            release-parts/.bric-images-api.env \
+            release-parts/.bric-images-admin.env \
+            release-parts/.bric-images-storefront.env
+
+          {
+            echo "BRIC_RELEASE_ID=${GITHUB_SHA::12}-${GITHUB_RUN_ID}"
+            echo "BRIC_RELEASE_COMMIT=${GITHUB_SHA}"
+            echo "BRIC_RELEASE_CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "BRIC_WORKFLOW_RUN_ID=${GITHUB_RUN_ID}"
+            echo "BRIC_REGISTRY=ghcr.io"
+          } > release-manifest/.bric-release.env
+
+          echo "## Release manifest" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ✅ Six signed image digests and storefront page count validated" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bric-release-manifest
+          path: |
+            release-manifest/.bric-release.env
+            release-manifest/.bric-images.env
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+
+  deploy:
+    needs: assemble-release-manifest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    env:
+      DEPLOY_HOST: ${{ secrets.BRIC_DEPLOY_SSH_HOST }}
+      DEPLOY_PORT: ${{ secrets.BRIC_DEPLOY_SSH_PORT || '2345' }}
+      DEPLOY_USER: ${{ secrets.BRIC_DEPLOY_SSH_USER }}
+      DEPLOY_KEY: ${{ secrets.BRIC_DEPLOY_SSH_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.BRIC_DEPLOY_KNOWN_HOSTS }}
+      ECOTRACK_EMIR_BASE_URL: ${{ secrets.ECOTRACK_EMIR_BASE_URL }}
+      ECOTRACK_EMIR_TOKEN: ${{ secrets.ECOTRACK_EMIR_TOKEN }}
+      GHCR_USERNAME: ${{ github.actor }}
+      GHCR_READ_TOKEN: ${{ github.token }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -76,55 +298,96 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Prepare release metadata
+      - uses: actions/download-artifact@v7
+        with:
+          name: bric-release-manifest
+          path: release-manifest
+
+      - name: Prepare SSH
         run: |
           set -euo pipefail
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_KEY"
+          test -n "$DEPLOY_KNOWN_HOSTS"
+          test -n "$GHCR_USERNAME"
+          test -n "$GHCR_READ_TOKEN"
 
-          vps_path="${VPS_PATH%/}"
-          release_id="${GITHUB_SHA::12}-${GITHUB_RUN_ID}"
-          deploy_root="${vps_path%/current}"
-          if [ "$deploy_root" = "$vps_path" ]; then
-            deploy_root="$vps_path"
-          fi
-          release_path="$deploy_root/releases/$release_id"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/bric_deploy_key
+          chmod 600 ~/.ssh/bric_deploy_key
 
-          {
-            echo "RELEASE_ID=$release_id"
-            echo "DEPLOY_ROOT=$deploy_root"
-            echo "RELEASE_PATH=$release_path"
-          } >> "$GITHUB_ENV"
-
-          cat > .bric-release.env <<EOF
-          BRIC_RELEASE_ID=$release_id
-          BRIC_RELEASE_COMMIT=$GITHUB_SHA
-          BRIC_RELEASE_CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          BRIC_WORKFLOW_RUN_ID=$GITHUB_RUN_ID
-          EOF
-
-      - name: Prepare release directory on VPS
+      - name: Stage ops-only release on VPS
         run: |
           set -euo pipefail
-          mkdir -p "${DEPLOY_ROOT}/releases"
-          rm -rf "${RELEASE_PATH}"
-          mkdir -p "${RELEASE_PATH}"
+          set -a
+          # shellcheck disable=SC1091
+          source release-manifest/.bric-release.env
+          set +a
 
-      - name: Stage release contents
-        run: |
-          set -euo pipefail
-          rsync -a --delete \
-            --exclude '.git/' \
-            --exclude '.github/' \
-            "${GITHUB_WORKSPACE}/" "${RELEASE_PATH}/"
-          cp .bric-release.env "${RELEASE_PATH}/.bric-release.env"
+          release_path="/srv/bric/releases/${BRIC_RELEASE_ID}"
+          bundle_dir="$(mktemp -d)"
 
-      - name: Deploy on VPS runner
-        run: |
-          set -euo pipefail
-          cd "${RELEASE_PATH}"
-          bash ops/scripts/deploy.sh "${RELEASE_PATH}" "${GITHUB_SHA}"
+          mkdir -p \
+            "$bundle_dir/.cursor/rules" \
+            "$bundle_dir/.github" \
+            "$bundle_dir/.well-known" \
+            "$bundle_dir/ops/scripts" \
+            "$bundle_dir/ops/docker" \
+            "$bundle_dir/ops/nginx" \
+            "$bundle_dir/ops/env" \
+            "$bundle_dir/ops/ownership"
+
+          cp release-manifest/.bric-release.env "$bundle_dir/.bric-release.env"
+          cp release-manifest/.bric-images.env "$bundle_dir/.bric-images.env"
+          rsync -a ops/scripts/ "$bundle_dir/ops/scripts/"
+          cp ops/docker/compose.prod.yml "$bundle_dir/ops/docker/compose.prod.yml"
+          rsync -a ops/nginx/ "$bundle_dir/ops/nginx/"
+          rsync -a ops/env/ "$bundle_dir/ops/env/"
+          rsync -a ops/ownership/ "$bundle_dir/ops/ownership/"
+          cp ops/ownership/AI_AGENT_BOUNDARY.md "$bundle_dir/AGENTS.md"
+          cp ops/ownership/AI_AGENT_BOUNDARY.md "$bundle_dir/CLAUDE.md"
+          cp ops/ownership/AI_AGENT_BOUNDARY.md "$bundle_dir/GEMINI.md"
+          cp ops/ownership/AI_AGENT_BOUNDARY.md "$bundle_dir/.cursorrules"
+          cp ops/ownership/AI_AGENT_BOUNDARY.md "$bundle_dir/.windsurfrules"
+          cp LICENSE "$bundle_dir/LICENSE"
+          cp NOTICE "$bundle_dir/NOTICE"
+          cp SECURITY.md "$bundle_dir/SECURITY.md"
+          cp .well-known/ai-policy.md "$bundle_dir/.well-known/ai-policy.md"
+          cp .cursor/rules/bricomaitre-proprietary.mdc "$bundle_dir/.cursor/rules/bricomaitre-proprietary.mdc"
+          cp .github/copilot-instructions.md "$bundle_dir/.github/copilot-instructions.md"
+
+          ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "mkdir -p '$release_path'"
+
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/bric_deploy_key -p $DEPLOY_PORT" \
+            "$bundle_dir/" "$DEPLOY_USER@$DEPLOY_HOST:$release_path/"
+
+          printf '%s\n' "$GHCR_READ_TOKEN" | ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "docker login ghcr.io -u '$GHCR_USERNAME' --password-stdin >/dev/null"
+
+          printf '%s\n%s\n' "$ECOTRACK_EMIR_BASE_URL" "$ECOTRACK_EMIR_TOKEN" | \
+            ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+              set -euo pipefail
+              IFS= read -r emir_base_url
+              IFS= read -r emir_token
+              test -n "$emir_base_url"
+              test -n "$emir_token"
+              env_file="/srv/bric/env/admin.env"
+              umask 077
+              tmp_file="${env_file}.tmp.$$"
+              grep -v -E "^ECOTRACK_EMIR_(BASE_URL|TOKEN)=" "$env_file" > "$tmp_file" || true
+              printf "ECOTRACK_EMIR_BASE_URL=%s\\nECOTRACK_EMIR_TOKEN=%s\\n" "$emir_base_url" "$emir_token" >> "$tmp_file"
+              mv "$tmp_file" "$env_file"
+            '
+
+          ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "bash '$release_path/ops/scripts/deploy.sh' '$release_path' '${GITHUB_SHA}'"
+
           echo "## Deploy phase" >> "$GITHUB_STEP_SUMMARY"
-          echo "- ✅ Deployed release ${RELEASE_ID}" >> "$GITHUB_STEP_SUMMARY"
-          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "- ✅ Deployed release ${BRIC_RELEASE_ID}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Configure AWS credentials
         if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_REGION != '' && env.CLOUDFRONT_DISTRIBUTION_ID != '' && env.CLOUDFRONT_INVALIDATION_PATHS != ''

@@ -884,7 +884,7 @@
       "title": "Importer le tableur",
       "show": "Afficher l'historique",
       "hide": "Masquer l'historique",
-      "meta": "{importedAt} • {matchedOrders}/{totalRows} lignes appariées",
+      "meta": "{importedAt} • {matchedOrders} importées • {unmatchedCount} non appariées • {skippedRows} ignorées sur {totalRows} lignes",
       "range": "Période d'activité : {start} à {end}",
       "delete": "Supprimer le lot",
       "emptyTitle": "Aucun lot importé",
@@ -1035,6 +1035,8 @@
     "overview": {
       "title": "Statut quotidien des commandes",
       "subtitle": "Activité du {date}",
+      "today": "Aujourd'hui",
+      "yesterday": "Hier",
       "refreshing": "Actualisation de l'aperçu",
       "unavailable": "L'aperçu du statut des commandes est indisponible car la base de données n'est pas connectée.",
       "metrics": {
@@ -1045,6 +1047,14 @@
         "adminCancelled": "Annulées par admin",
         "carrierCancelled": "Annulées par transporteur",
         "shipmentUpdates": "Mises à jour livraison"
+      },
+      "projection": {
+        "title": "Profit futur projeté",
+        "grossProfit": "Profit brut futur",
+        "adSpend": "Dépense pub",
+        "returnRate": "Taux retours / échecs",
+        "estimatedReturns": "Retours estimés",
+        "returnLoss": "Perte estimée liée aux retours"
       }
     },
     "filters": {
@@ -1126,10 +1136,14 @@
       }
     },
     "ecotrack": {
-      "selectedAction": "Envoyer la sélection à Ecotrack",
-      "confirmedAction": "Envoyer les confirmées à Ecotrack",
-      "selectedTitle": "Envoyer {count} commandes sélectionnées à Ecotrack",
-      "confirmedTitle": "Envoyer {count} commandes confirmées à Ecotrack",
+      "selectedAction": "Envoyer la sélection à Delivro",
+      "confirmedAction": "Envoyer les confirmées à Delivro",
+      "selectedTitle": "Envoyer {count} commandes sélectionnées à Delivro",
+      "confirmedTitle": "Envoyer {count} commandes confirmées à Delivro",
+      "emirSelectedAction": "Envoyer la sélection à Emir",
+      "emirConfirmedAction": "Envoyer les confirmées à Emir",
+      "emirSelectedTitle": "Envoyer {count} commandes sélectionnées à Emir",
+      "emirConfirmedTitle": "Envoyer {count} commandes confirmées à Emir",
       "previewTitle": "Aperçu de l'envoi Ecotrack",
       "previewEligible": "Commandes éligibles",
       "previewSkipped": "Commandes ignorées",

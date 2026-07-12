@@ -2,9 +2,11 @@
   "name": "storefront-api",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "next dev --port 3001",
     "build": "next build",
+    "build:worker": "node ../ops/scripts/build-worker.mjs storefront-api/scripts/run-meta-worker.ts storefront-api/dist/run-meta-worker.cjs",
     "start": "node ../ops/scripts/start-next-standalone.mjs --app-dir . --nested-dir storefront-api --default-port 3001",
     "worker:meta": "tsx scripts/run-meta-worker.ts",
     "lint": "eslint",
@@ -14,10 +16,10 @@
     "test:integration": "vitest run --project integration"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.909.0",
     "@bric/db": "workspace:*",
     "@bric/runtime": "workspace:*",
     "@bric/storefront-core": "workspace:*",
+    "@aws-sdk/client-s3": "^3.909.0",
     "@sentry/nextjs": "10.47.0",
     "@sentry/node": "10.47.0",
     "drizzle-orm": "^0.45.2",
@@ -40,6 +42,5 @@
     "typescript": "5.9.3",
     "tsx": "^4.21.0",
     "vitest": "^4.1.2"
-  },
-  "license": "AGPL-3.0-only"
+  }
 }
