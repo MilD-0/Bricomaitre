@@ -1,16 +1,13 @@
-FROM node:20-bookworm-slim AS base
+FROM node:24-bookworm-slim AS base
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+ARG BRIC_BUILD_NODE_OPTIONS=""
 ARG GOOGLE_CLIENT_ID
-ARG GOOGLE_CLIENT_SECRET
 ARG NEXTAUTH_URL
-ARG NEXTAUTH_SECRET
 ARG STOREFRONT_API_BASE_URL
 ENV GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID}"
-ENV GOOGLE_CLIENT_SECRET="${GOOGLE_CLIENT_SECRET}"
 ENV NEXTAUTH_URL="${NEXTAUTH_URL}"
-ENV NEXTAUTH_SECRET="${NEXTAUTH_SECRET}"
 ENV STOREFRONT_API_BASE_URL="${STOREFRONT_API_BASE_URL}"
 
 RUN corepack enable
@@ -26,32 +23,128 @@ COPY packages/runtime/package.json packages/runtime/package.json
 COPY packages/storefront-core/package.json packages/storefront-core/package.json
 COPY storefront/app/components/package.json storefront/app/components/package.json
 
-RUN pnpm install --frozen-lockfile
+RUN NODE_OPTIONS="${BRIC_BUILD_NODE_OPTIONS}" pnpm install --frozen-lockfile
 
-COPY . .
+COPY tsconfig.base.json ./
+COPY adminstration ./adminstration
+COPY packages/db ./packages/db
+COPY packages/runtime ./packages/runtime
+COPY packages/storefront-core ./packages/storefront-core
+COPY ops/scripts/build-worker.mjs ./ops/scripts/build-worker.mjs
+COPY ops/ownership ./ops/ownership
 
 FROM base AS build
 
-RUN pnpm --filter adminstration build
+RUN --mount=type=secret,id=google_client_secret \
+  --mount=type=secret,id=nextauth_secret \
+  GOOGLE_CLIENT_SECRET="$(cat /run/secrets/google_client_secret)" \
+  NEXTAUTH_SECRET="$(cat /run/secrets/nextauth_secret)" \
+  pnpm --filter adminstration build \
+  && pnpm --filter adminstration build:worker \
+  && pnpm --filter adminstration build:db-tasks
 
-FROM node:20-bookworm-slim AS web
+FROM node:24-bookworm-slim AS web
 
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-COPY --from=build /workspace/adminstration/.next/standalone ./
-COPY --from=build /workspace/adminstration/.next/static ./adminstration/.next/static
-COPY --from=build /workspace/adminstration/public ./adminstration/public
+LABEL org.opencontainers.image.title="Bricomaitre admin web" \
+  org.opencontainers.image.vendor="Bricomaitre" \
+  org.opencontainers.image.source="https://github.com/MilD-0/Bricomaitre2" \
+  org.opencontainers.image.licenses="AGPL-3.0-only" \
+  org.opencontainers.image.description="Bricomaitre production image." \
+  com.bricomaitre.repository="MilD-0/Bricomaitre2" \
+  com.bricomaitre.source-license="AGPL-3.0-only"
+
+RUN groupadd --gid 10001 bric \
+  && useradd --uid 10001 --gid bric --home-dir /app --shell /usr/sbin/nologin --no-create-home bric
+COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./BRICOMAITRE_AI_AGENT_BOUNDARY.md
+COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./AGENTS.md
+COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./CLAUDE.md
+COPY --chown=bric:bric ops/ownership/AI_POLICY.md ./AI_POLICY.md
+COPY --chown=bric:bric ops/ownership/BRICOMAITRE_AUTHORIZED_RELEASE.txt ./BRICOMAITRE_AUTHORIZED_RELEASE.txt
+COPY --chown=bric:bric ops/ownership/LICENSE ./LICENSE
+COPY --chown=bric:bric ops/ownership/NOTICE ./NOTICE
+COPY --chown=bric:bric ops/ownership/SECURITY.md ./SECURITY.md
+COPY --from=build --chown=bric:bric /workspace/adminstration/.next/standalone ./
+COPY --from=build --chown=bric:bric /workspace/adminstration/.next/static ./adminstration/.next/static
+COPY --from=build --chown=bric:bric /workspace/adminstration/public ./adminstration/public
+RUN mkdir -p /app/adminstration/.next/cache \
+  && chown -R bric:bric /app/adminstration/.next/cache \
+  && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete
 
 EXPOSE 3000
+USER bric
 
 CMD ["node", "adminstration/server.js"]
 
-FROM base AS worker
+FROM node:24-bookworm-slim AS worker
 
-WORKDIR /workspace
+WORKDIR /app
 ENV NODE_ENV=production
 
-CMD ["pnpm", "--filter", "adminstration", "worker"]
+LABEL org.opencontainers.image.title="Bricomaitre admin worker" \
+  org.opencontainers.image.vendor="Bricomaitre" \
+  org.opencontainers.image.source="https://github.com/MilD-0/Bricomaitre2" \
+  org.opencontainers.image.licenses="AGPL-3.0-only" \
+  org.opencontainers.image.description="Bricomaitre production image." \
+  com.bricomaitre.repository="MilD-0/Bricomaitre2" \
+  com.bricomaitre.source-license="AGPL-3.0-only"
+
+RUN groupadd --gid 10001 bric \
+  && useradd --uid 10001 --gid bric --home-dir /app --shell /usr/sbin/nologin --no-create-home bric
+COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./BRICOMAITRE_AI_AGENT_BOUNDARY.md
+COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./AGENTS.md
+COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./CLAUDE.md
+COPY --chown=bric:bric ops/ownership/AI_POLICY.md ./AI_POLICY.md
+COPY --chown=bric:bric ops/ownership/BRICOMAITRE_AUTHORIZED_RELEASE.txt ./BRICOMAITRE_AUTHORIZED_RELEASE.txt
+COPY --chown=bric:bric ops/ownership/LICENSE ./LICENSE
+COPY --chown=bric:bric ops/ownership/NOTICE ./NOTICE
+COPY --chown=bric:bric ops/ownership/SECURITY.md ./SECURITY.md
+COPY --from=base --chown=bric:bric /workspace/node_modules ./node_modules
+COPY --from=base --chown=bric:bric /workspace/adminstration/node_modules ./adminstration/node_modules
+COPY --from=build --chown=bric:bric /workspace/adminstration/dist/run-background-workers.cjs ./adminstration/dist/run-background-workers.cjs
+RUN node --check adminstration/dist/run-background-workers.cjs \
+  && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete
+
+USER bric
+
+CMD ["node", "adminstration/dist/run-background-workers.cjs"]
+
+FROM node:24-bookworm-slim AS migrations
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+LABEL org.opencontainers.image.title="Bricomaitre admin migrations" \
+  org.opencontainers.image.vendor="Bricomaitre" \
+  org.opencontainers.image.source="https://github.com/MilD-0/Bricomaitre2" \
+  org.opencontainers.image.licenses="AGPL-3.0-only" \
+  org.opencontainers.image.description="Bricomaitre production image." \
+  com.bricomaitre.repository="MilD-0/Bricomaitre2" \
+  com.bricomaitre.source-license="AGPL-3.0-only"
+
+RUN groupadd --gid 10001 bric \
+  && useradd --uid 10001 --gid bric --home-dir /app --shell /usr/sbin/nologin --no-create-home bric
+COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./BRICOMAITRE_AI_AGENT_BOUNDARY.md
+COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./AGENTS.md
+COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./CLAUDE.md
+COPY --chown=bric:bric ops/ownership/AI_POLICY.md ./AI_POLICY.md
+COPY --chown=bric:bric ops/ownership/BRICOMAITRE_AUTHORIZED_RELEASE.txt ./BRICOMAITRE_AUTHORIZED_RELEASE.txt
+COPY --chown=bric:bric ops/ownership/LICENSE ./LICENSE
+COPY --chown=bric:bric ops/ownership/NOTICE ./NOTICE
+COPY --chown=bric:bric ops/ownership/SECURITY.md ./SECURITY.md
+COPY --from=base --chown=bric:bric /workspace/node_modules ./node_modules
+COPY --from=base --chown=bric:bric /workspace/adminstration/node_modules ./adminstration/node_modules
+COPY --from=build --chown=bric:bric /workspace/adminstration/dist/run-db-migrations.cjs ./adminstration/dist/run-db-migrations.cjs
+COPY --from=build --chown=bric:bric /workspace/adminstration/dist/verify-db-migrations.cjs ./adminstration/dist/verify-db-migrations.cjs
+COPY --from=build --chown=bric:bric /workspace/adminstration/drizzle ./drizzle
+RUN node --check adminstration/dist/run-db-migrations.cjs \
+  && node --check adminstration/dist/verify-db-migrations.cjs \
+  && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete
+
+USER bric
+
+CMD ["sh", "-lc", "case \"${ADMIN_DB_TASK:-verify}\" in verify) node adminstration/dist/verify-db-migrations.cjs ;; migrate) node adminstration/dist/run-db-migrations.cjs ;; *) echo \"unsupported ADMIN_DB_TASK: ${ADMIN_DB_TASK}\" >&2; exit 1 ;; esac"]

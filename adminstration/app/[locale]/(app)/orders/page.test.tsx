@@ -37,6 +37,11 @@ import OrdersPage from './page';
 describe('OrdersPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    requireOrdersPageAccessMock.mockResolvedValue({
+      user: {
+        role: 'employee',
+      },
+    });
     hasDbMock.mockReturnValue(true);
     getDbMock.mockReturnValue({});
     loadOrdersPageDataMock.mockResolvedValue({
@@ -68,5 +73,6 @@ describe('OrdersPage', () => {
       { page: 1, limit: 25, search: '', sortKey: 'createdAt', sortDirection: 'desc' },
       true,
     );
+    expect(loadDailyOrderStatusOverviewMock).toHaveBeenCalledWith({ includeProfitProjection: false });
   });
 });

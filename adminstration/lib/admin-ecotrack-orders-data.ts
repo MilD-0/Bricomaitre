@@ -29,7 +29,7 @@ import {
 } from '../db/schema';
 import { recordExplicitActionLog, type ActionActor } from './action-history';
 import { getOrderProductLookup, toOrderRecord } from './order-records';
-import { buildEcotrackOrderPayload, createEcotrackOrdersBatch, persistEcotrackPostedOrder, readEcotrackCatalog, resolveEcotrackDeliveryFee } from './ecotrack';
+import { buildEcotrackOrderPayload, createEcotrackOrdersBatch, getEcotrackProviderEnv, persistEcotrackPostedOrder, readEcotrackCatalog, resolveEcotrackDeliveryFee, type EcotrackProvider } from './ecotrack';
 import { parseSortRuleStrings, type SortRule } from './multi-sort';
 import {
   coerceOrderStatus,
@@ -215,6 +215,7 @@ export type EcotrackOrderListItem = {
   orderId: number;
   reference: string;
   trackingNumber: string;
+  provider: 'delivro' | 'emir';
   createdAt: string;
   updatedAt: string;
   firstName: string | null;
@@ -355,6 +356,7 @@ function buildShipmentActionSnapshot(row: typeof ecotrackOrderStates.$inferSelec
     orderId: row.orderId,
     reference: row.reference,
     trackingNumber: row.trackingNumber,
+    provider: row.provider === 'emir' ? 'emir' : 'delivro',
     currentStatus: row.currentStatus,
     driverPhone: row.driverPhone,
     estimatedFee: row.estimatedFee,
@@ -624,6 +626,7 @@ function toListItem(
     orderId: row.order.id,
     reference: row.reference,
     trackingNumber: row.trackingNumber,
+    provider: row.provider === 'emir' ? 'emir' : 'delivro',
     createdAt: row.order.createdAt.toISOString(),
     updatedAt: row.order.updatedAt.toISOString(),
     firstName: row.order.firstName,
@@ -802,6 +805,10 @@ function getUpstreamTrackingValues(item: EcotrackStatusItem) {
     deskMapLink: sanitizeNullableText(item.desk_map_link),
     deskAddress: sanitizeNullableText(item.desk_address),
   };
+}
+
+function providerRequestOptions(row: Pick<ShipmentRow, 'provider'>) {
+  return { env: getEcotrackProviderEnv(row.provider === 'emir' ? 'emir' : 'delivro') };
 }
 
 function mapMajEntry(entry: UpstreamEcotrackMajEntry) {
@@ -1086,9 +1093,14 @@ async function softDeleteShipmentRow(
   });
 }
 
-async function getEcotrackTrackingsInfoAllowingMissing(trackings: string[]) {
+async function getEcotrackTrackingsInfoAllowingMissing(
+  trackings: string[],
+  options?: Parameters<typeof getEcotrackTrackingsInfo>[1],
+) {
   try {
-    const response = await getEcotrackTrackingsInfo(trackings);
+    const response = options
+      ? await getEcotrackTrackingsInfo(trackings, options)
+      : await getEcotrackTrackingsInfo(trackings);
     return {
       data: response.data,
       missing: new Set<string>(),
@@ -1320,9 +1332,9 @@ async function refreshShipmentRow(
   } = {},
 ) {
   const [statusResponse, trackingResponse, majResponse] = await Promise.all([
-    getEcotrackOrdersStatus([row.trackingNumber], 'all'),
-    options.includeTracking === false ? Promise.resolve(null) : getEcotrackTrackingsInfoAllowingMissing([row.trackingNumber]),
-    options.includeMaj === false ? Promise.resolve(null) : getEcotrackMaj(row.trackingNumber),
+    getEcotrackOrdersStatus([row.trackingNumber], 'all', providerRequestOptions(row)),
+    options.includeTracking === false ? Promise.resolve(null) : getEcotrackTrackingsInfoAllowingMissing([row.trackingNumber], providerRequestOptions(row)),
+    options.includeMaj === false ? Promise.resolve(null) : getEcotrackMaj(row.trackingNumber, providerRequestOptions(row)),
   ]);
 
   if (trackingResponse?.missing.has(row.trackingNumber)) {
@@ -1553,8 +1565,11 @@ export async function refreshEcotrackOrdersBatch(
   const failures: EcotrackRefreshFailure[] = [];
 
   const batches: ShipmentRow[][] = [];
-  for (let index = 0; index < rows.length; index += 100) {
-    batches.push(rows.slice(index, index + 100));
+  for (const provider of ['delivro', 'emir'] as const) {
+    const providerRows = rows.filter((row) => (row.provider === 'emir' ? 'emir' : 'delivro') === provider);
+    for (let index = 0; index < providerRows.length; index += 100) {
+      batches.push(providerRows.slice(index, index + 100));
+    }
   }
 
   for (const batch of batches) {
@@ -1564,8 +1579,12 @@ export async function refreshEcotrackOrdersBatch(
 
     try {
       [statusResponse, trackingResponse] = await Promise.all([
-        getEcotrackOrdersStatus(trackingNumbers, 'all'),
-        getEcotrackTrackingsInfoAllowingMissing(trackingNumbers),
+        batch[0].provider === 'emir'
+          ? getEcotrackOrdersStatus(trackingNumbers, 'all', providerRequestOptions(batch[0]))
+          : getEcotrackOrdersStatus(trackingNumbers, 'all'),
+        batch[0].provider === 'emir'
+          ? getEcotrackTrackingsInfoAllowingMissing(trackingNumbers, providerRequestOptions(batch[0]))
+          : getEcotrackTrackingsInfoAllowingMissing(trackingNumbers),
       ]);
     } catch (error) {
       failures.push(...batch.map((row) => toEcotrackFailureRecord('refresh', row, error)));
@@ -1579,7 +1598,7 @@ export async function refreshEcotrackOrdersBatch(
           continue;
         }
 
-        const majResponse = await getEcotrackMaj(row.trackingNumber);
+        const majResponse = await getEcotrackMaj(row.trackingNumber, providerRequestOptions(row));
         await upsertShipmentState(db, row, {
           statusItem: statusResponse.data.get(row.trackingNumber) ?? null,
           trackingInfo: trackingResponse.data.get(row.trackingNumber) ?? null,
@@ -1675,7 +1694,7 @@ export async function updatePostedEcotrackOrder(
   try {
     const productLookup = await getOrderProductLookup(db, [updatedOrder]);
     const updatedRecord = toOrderRecord(updatedOrder, [], productLookup);
-    await updateEcotrackOrder(buildUpdatePayload(updatedRecord, row.trackingNumber, catalog));
+    await updateEcotrackOrder(buildUpdatePayload(updatedRecord, row.trackingNumber, catalog), providerRequestOptions(row));
   } catch (error) {
     await db
       .update(orders)
@@ -1797,7 +1816,7 @@ export async function recreatePostedEcotrackOrder(
     const productLookup = await getOrderProductLookup(db, [updatedOrder]);
     const updatedRecord = toOrderRecord(updatedOrder, [], productLookup);
     const payload = buildEcotrackOrderPayload(updatedRecord, catalog);
-    const createResponse = await createEcotrackOrdersBatch([payload]);
+    const createResponse = await createEcotrackOrdersBatch([payload], providerRequestOptions(row));
     const createResult = createResponse.results.get(payload.reference);
 
     if (!createResult?.success || !createResult.tracking) {
@@ -1807,7 +1826,7 @@ export async function recreatePostedEcotrackOrder(
     await persistEcotrackPostedOrder(db, {
       row: updatedOrder,
       record: updatedRecord,
-    }, actor, createResult);
+    }, actor, createResult, row.provider === 'emir' ? 'emir' : 'delivro');
     recreated = true;
   } catch (error) {
     await db.transaction(async (tx) => {
@@ -1860,7 +1879,11 @@ export async function deletePostedEcotrackOrder(
   }
 
   try {
-    await deleteEcotrackOrder(row.trackingNumber);
+    if (row.provider === 'emir') {
+      await deleteEcotrackOrder(row.trackingNumber, providerRequestOptions(row));
+    } else {
+      await deleteEcotrackOrder(row.trackingNumber);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
     if (!message.includes(' 400 ') && !message.includes(' 404 ')) {
@@ -1868,8 +1891,12 @@ export async function deletePostedEcotrackOrder(
     }
 
     const [statusResponse, trackingResponse] = await Promise.all([
-      getEcotrackOrdersStatus([row.trackingNumber], 'all'),
-      getEcotrackTrackingsInfoAllowingMissing([row.trackingNumber]),
+      row.provider === 'emir'
+        ? getEcotrackOrdersStatus([row.trackingNumber], 'all', providerRequestOptions(row))
+        : getEcotrackOrdersStatus([row.trackingNumber], 'all'),
+      row.provider === 'emir'
+        ? getEcotrackTrackingsInfoAllowingMissing([row.trackingNumber], providerRequestOptions(row))
+        : getEcotrackTrackingsInfoAllowingMissing([row.trackingNumber]),
     ]);
 
     if (statusResponse.data.has(row.trackingNumber) || trackingResponse.data.has(row.trackingNumber)) {
@@ -1904,7 +1931,7 @@ export async function dispatchPostedEcotrackOrder(
   }
 
   try {
-    await dispatchEcotrackOrder(row.trackingNumber, request.askCollection);
+    await dispatchEcotrackOrder(row.trackingNumber, request.askCollection, providerRequestOptions(row));
   } catch (error) {
     throw new Error(formatEcotrackActionError('dispatch', row, error).summary);
   }
@@ -2008,7 +2035,7 @@ export async function addEcotrackMaj(
   }
 
   try {
-    await addEcotrackMajUpstream(row.trackingNumber, content);
+    await addEcotrackMajUpstream(row.trackingNumber, content, providerRequestOptions(row));
   } catch (error) {
     throw new Error(formatEcotrackActionError('maj', row, error).summary);
   }
@@ -2060,7 +2087,7 @@ export async function requestEcotrackReturn(
   }
 
   try {
-    await requestEcotrackReturnUpstream(row.trackingNumber);
+    await requestEcotrackReturnUpstream(row.trackingNumber, providerRequestOptions(row));
   } catch (error) {
     throw new Error(formatEcotrackActionError('return', row, error).summary);
   }
@@ -2096,7 +2123,7 @@ export async function fetchSingleEcotrackLabel(orderId: number) {
   }
 
   try {
-    return await fetchEcotrackOrderLabel(row.trackingNumber);
+    return await fetchEcotrackOrderLabel(row.trackingNumber, providerRequestOptions(row));
   } catch (error) {
     throw new Error(formatEcotrackActionError('label', row, error).summary);
   }
@@ -2122,7 +2149,7 @@ export async function fetchMergedEcotrackLabels(orderIds: number[]): Promise<Eco
 
   for (const row of rows) {
     try {
-      const label = await fetchEcotrackOrderLabel(row.trackingNumber);
+      const label = await fetchEcotrackOrderLabel(row.trackingNumber, providerRequestOptions(row));
       const source = await PDFDocument.load(label.body);
       const copiedPages = await merged.copyPages(source, source.getPageIndices());
       for (const page of copiedPages) {
@@ -2166,21 +2193,24 @@ export async function syncEcotrackShipmentStates(
       || isStaleAt(row.lastStatusSyncedAt, 7 * 24 * 60 * 60 * 1000));
 
   const batches: ShipmentRow[][] = [];
-  for (let index = 0; index < candidates.length; index += 100) {
-    batches.push(candidates.slice(index, index + 100));
+  for (const provider of ['delivro', 'emir'] as const) {
+    const providerRows = candidates.filter((row) => (row.provider === 'emir' ? 'emir' : 'delivro') === provider);
+    for (let index = 0; index < providerRows.length; index += 100) {
+      batches.push(providerRows.slice(index, index + 100));
+    }
   }
 
   let synced = 0;
   for (const batch of batches) {
     const trackingNumbers = batch.map((row) => row.trackingNumber);
     const [statusResponse, trackingResponse] = await Promise.all([
-      getEcotrackOrdersStatus(trackingNumbers, 'all'),
-      getEcotrackTrackingsInfo(trackingNumbers),
+      getEcotrackOrdersStatus(trackingNumbers, 'all', providerRequestOptions(batch[0])),
+      getEcotrackTrackingsInfo(trackingNumbers, providerRequestOptions(batch[0])),
     ]);
 
     for (const row of batch) {
       const majEntries = options.includeMaj || isStaleAt(row.lastMajSyncedAt, MAJ_STALE_MS)
-        ? (await getEcotrackMaj(row.trackingNumber)).data
+        ? (await getEcotrackMaj(row.trackingNumber, providerRequestOptions(row))).data
         : null;
       await upsertShipmentState(db, row, {
         statusItem: statusResponse.data.get(row.trackingNumber) ?? null,

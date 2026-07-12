@@ -1,7 +1,8 @@
-FROM node:20-bookworm-slim AS base
+FROM node:24-bookworm-slim AS base
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+ARG BRIC_BUILD_NODE_OPTIONS=""
 
 RUN corepack enable
 
@@ -16,9 +17,15 @@ COPY packages/runtime/package.json packages/runtime/package.json
 COPY packages/storefront-core/package.json packages/storefront-core/package.json
 COPY storefront/app/components/package.json storefront/app/components/package.json
 
-RUN pnpm install --frozen-lockfile
+RUN NODE_OPTIONS="${BRIC_BUILD_NODE_OPTIONS}" pnpm install --frozen-lockfile
 
-COPY . .
+COPY tsconfig.base.json ./
+COPY storefront-api ./storefront-api
+COPY packages/db ./packages/db
+COPY packages/runtime ./packages/runtime
+COPY packages/storefront-core ./packages/storefront-core
+COPY ops/scripts/build-worker.mjs ./ops/scripts/build-worker.mjs
+COPY ops/ownership ./ops/ownership
 
 RUN mkdir -p storefront-api/public
 
@@ -26,23 +33,78 @@ FROM base AS worker
 
 ENV NODE_ENV=production
 
-CMD ["pnpm", "--filter", "storefront-api", "worker:meta"]
+RUN pnpm --filter storefront-api build:worker
 
 FROM base AS build
 
 RUN pnpm --filter storefront-api build
 
-FROM node:20-bookworm-slim AS web
+FROM node:24-bookworm-slim AS web
 
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
 ENV HOSTNAME=0.0.0.0
 
-COPY --from=build /workspace/storefront-api/.next/standalone ./
-COPY --from=build /workspace/storefront-api/.next/static ./storefront-api/.next/static
-COPY --from=build /workspace/storefront-api/public ./storefront-api/public
+LABEL org.opencontainers.image.title="Bricomaitre storefront API" \
+  org.opencontainers.image.vendor="Bricomaitre" \
+  org.opencontainers.image.source="https://github.com/MilD-0/Bricomaitre2" \
+  org.opencontainers.image.licenses="AGPL-3.0-only" \
+  org.opencontainers.image.description="Bricomaitre production image." \
+  com.bricomaitre.repository="MilD-0/Bricomaitre2" \
+  com.bricomaitre.source-license="AGPL-3.0-only"
+
+RUN groupadd --gid 10001 bric \
+  && useradd --uid 10001 --gid bric --home-dir /app --shell /usr/sbin/nologin --no-create-home bric
+COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./BRICOMAITRE_AI_AGENT_BOUNDARY.md
+COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./AGENTS.md
+COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./CLAUDE.md
+COPY --chown=bric:bric ops/ownership/AI_POLICY.md ./AI_POLICY.md
+COPY --chown=bric:bric ops/ownership/BRICOMAITRE_AUTHORIZED_RELEASE.txt ./BRICOMAITRE_AUTHORIZED_RELEASE.txt
+COPY --chown=bric:bric ops/ownership/LICENSE ./LICENSE
+COPY --chown=bric:bric ops/ownership/NOTICE ./NOTICE
+COPY --chown=bric:bric ops/ownership/SECURITY.md ./SECURITY.md
+COPY --from=build --chown=bric:bric /workspace/storefront-api/.next/standalone ./
+COPY --from=build --chown=bric:bric /workspace/storefront-api/.next/static ./storefront-api/.next/static
+COPY --from=build --chown=bric:bric /workspace/storefront-api/public ./storefront-api/public
+RUN mkdir -p /app/storefront-api/.next/cache \
+  && chown -R bric:bric /app/storefront-api/.next/cache \
+  && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete
 
 EXPOSE 3001
+USER bric
 
 CMD ["node", "storefront-api/server.js"]
+
+FROM node:24-bookworm-slim AS meta-worker
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+LABEL org.opencontainers.image.title="Bricomaitre storefront Meta worker" \
+  org.opencontainers.image.vendor="Bricomaitre" \
+  org.opencontainers.image.source="https://github.com/MilD-0/Bricomaitre2" \
+  org.opencontainers.image.licenses="AGPL-3.0-only" \
+  org.opencontainers.image.description="Bricomaitre production image." \
+  com.bricomaitre.repository="MilD-0/Bricomaitre2" \
+  com.bricomaitre.source-license="AGPL-3.0-only"
+
+RUN groupadd --gid 10001 bric \
+  && useradd --uid 10001 --gid bric --home-dir /app --shell /usr/sbin/nologin --no-create-home bric
+COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./BRICOMAITRE_AI_AGENT_BOUNDARY.md
+COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./AGENTS.md
+COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./CLAUDE.md
+COPY --chown=bric:bric ops/ownership/AI_POLICY.md ./AI_POLICY.md
+COPY --chown=bric:bric ops/ownership/BRICOMAITRE_AUTHORIZED_RELEASE.txt ./BRICOMAITRE_AUTHORIZED_RELEASE.txt
+COPY --chown=bric:bric ops/ownership/LICENSE ./LICENSE
+COPY --chown=bric:bric ops/ownership/NOTICE ./NOTICE
+COPY --chown=bric:bric ops/ownership/SECURITY.md ./SECURITY.md
+COPY --from=base --chown=bric:bric /workspace/node_modules ./node_modules
+COPY --from=base --chown=bric:bric /workspace/storefront-api/node_modules ./storefront-api/node_modules
+COPY --from=worker --chown=bric:bric /workspace/storefront-api/dist/run-meta-worker.cjs ./storefront-api/dist/run-meta-worker.cjs
+RUN node --check storefront-api/dist/run-meta-worker.cjs \
+  && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete
+
+USER bric
+
+CMD ["node", "storefront-api/dist/run-meta-worker.cjs"]

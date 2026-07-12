@@ -86,6 +86,9 @@ process.on("unhandledRejection", (error) => {
 });
 
 void run().catch(async (error) => {
+  console.error("[storefront-meta-worker] fatal startup failure", {
+    message: error instanceof Error ? error.message : String(error),
+  });
   Sentry.captureException(error);
   await Sentry.close(2_000);
   process.exitCode = 1;

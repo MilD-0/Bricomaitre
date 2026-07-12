@@ -135,3 +135,8 @@ export function canExportAllProducts(role: unknown) {
   const normalizedRole = normalizeRole(role);
   return normalizedRole === 'admin' || normalizedRole === 'developer';
 }
+
+export function canViewProfitStats(role: unknown) {
+  const normalizedRole = normalizeRole(role);
+  return normalizedRole === 'admin' || normalizedRole === 'developer';
+}

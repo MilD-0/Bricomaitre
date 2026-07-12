@@ -12,7 +12,7 @@ import {
   products,
 } from '../db/schema';
 import { syncEcotrackShipmentStates } from './admin-ecotrack-orders-data';
-import { loadEcotrackOrderInputs, postOrdersToEcotrack, readEcotrackCatalog, syncEcotrackCatalog } from './ecotrack';
+import { loadEcotrackOrderInputs, postOrdersToEcotrack, readEcotrackCatalog, syncEcotrackCatalog, type EcotrackProvider } from './ecotrack';
 import { uploadExportArtifact, uploadStableArtifact } from './export-artifacts';
 import {
   buildMetaCatalogExportFileName,
@@ -73,6 +73,7 @@ type OrderExportPayload = QueueJobMeta & {
 };
 type OrderEcotrackPayload = QueueJobMeta & {
   mode: 'selected' | 'confirmed';
+  provider?: EcotrackProvider;
   orderIds: number[];
   actor: {
     email?: string | null;
@@ -219,7 +220,7 @@ export async function startOrderExportJob(ownerKey: string, payload: { mode: 'se
 
 export async function startOrderEcotrackJob(
   ownerKey: string,
-  payload: { mode: 'selected' | 'confirmed'; orderIds: number[]; actor: { email?: string | null; name?: string | null } },
+  payload: { mode: 'selected' | 'confirmed'; provider?: EcotrackProvider; orderIds: number[]; actor: { email?: string | null; name?: string | null } },
   requestId?: string,
 ) {
   const result = await startOwnedJob<OrderEcotrackPayload>({
@@ -612,6 +613,7 @@ export async function runOrderEcotrackJob(
   await helpers.throwIfCancelled();
 
   return postOrdersToEcotrack(db, items, catalog, payload.actor, {
+    provider: payload.provider ?? 'delivro',
     throwIfCancelled: helpers.throwIfCancelled,
     updateProgress: helpers.updateProgress,
     updateSummary: async (summary) => {

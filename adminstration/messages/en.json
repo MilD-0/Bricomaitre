@@ -879,7 +879,7 @@
       "title": "Import spreadsheet",
       "show": "Show history",
       "hide": "Hide history",
-      "meta": "{importedAt} • {matchedOrders}/{totalRows} rows matched",
+      "meta": "{importedAt} • {matchedOrders} imported • {unmatchedCount} unmatched • {skippedRows} skipped from {totalRows} rows",
       "range": "Activity range: {start} to {end}",
       "delete": "Delete batch",
       "emptyTitle": "No spreadsheet batches imported",
@@ -1030,6 +1030,8 @@
     "overview": {
       "title": "Daily order status",
       "subtitle": "Activity for {date}",
+      "today": "Today",
+      "yesterday": "Yesterday",
       "refreshing": "Refreshing overview",
       "unavailable": "Order status overview is unavailable because the database is not connected.",
       "metrics": {
@@ -1040,6 +1042,14 @@
         "adminCancelled": "Admin cancelled",
         "carrierCancelled": "Carrier cancelled",
         "shipmentUpdates": "Shipment updates"
+      },
+      "projection": {
+        "title": "Projected future profit",
+        "grossProfit": "Future gross profit",
+        "adSpend": "Ad spend",
+        "returnRate": "Return / failed rate",
+        "estimatedReturns": "Estimated returned orders",
+        "returnLoss": "Estimated return loss"
       }
     },
     "filters": {
@@ -1121,10 +1131,14 @@
       }
     },
     "ecotrack": {
-      "selectedAction": "Post selected to Ecotrack",
-      "confirmedAction": "Post confirmed to Ecotrack",
-      "selectedTitle": "Post {count} selected orders to Ecotrack",
-      "confirmedTitle": "Post {count} confirmed orders to Ecotrack",
+      "selectedAction": "Post selected to Delivro",
+      "confirmedAction": "Post confirmed to Delivro",
+      "selectedTitle": "Post {count} selected orders to Delivro",
+      "confirmedTitle": "Post {count} confirmed orders to Delivro",
+      "emirSelectedAction": "Post selected to Emir",
+      "emirConfirmedAction": "Post confirmed to Emir",
+      "emirSelectedTitle": "Post {count} selected orders to Emir",
+      "emirConfirmedTitle": "Post {count} confirmed orders to Emir",
       "previewTitle": "Ecotrack posting preview",
       "previewEligible": "Eligible orders",
       "previewSkipped": "Skipped orders",

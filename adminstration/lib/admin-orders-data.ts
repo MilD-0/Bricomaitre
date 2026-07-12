@@ -1,7 +1,15 @@
 import { and, asc, count, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 
 import { getDb, hasDb } from '../db/client';
-import { ecotrackOrderMajEntries, ecotrackOrderStates, ecotrackOrderTrackingEvents, orderStatusHistory, orders } from '../db/schema';
+import {
+  adCosts,
+  ecotrackOrderMajEntries,
+  ecotrackOrderStates,
+  ecotrackOrderTrackingEvents,
+  orderStatusHistory,
+  orders,
+  products,
+} from '../db/schema';
 import {
   coerceNoAnswerCount,
   coerceOrderStatus,
@@ -11,6 +19,7 @@ import {
   type OrderStatusHistoryRecord,
 } from './orders';
 import { getOrderProductLookup, toOrderRecord } from './order-records';
+import { buildCartProductLookup, collectCartProductReferenceBuckets, getCartProductLookupKey } from './stats';
 
 type OrdersQueryInput = {
   page?: string | number | undefined;
@@ -21,6 +30,17 @@ type OrdersQueryInput = {
   sort?: string[] | undefined;
   sortKey?: string | undefined;
   sortDirection?: string | undefined;
+};
+
+type ProjectionOrderRow = {
+  cartProducts: string[];
+};
+
+type ProjectionProductRow = {
+  id: number;
+  mongoId: string | null;
+  price: unknown;
+  purchasePrice: unknown;
 };
 
 export type PaginationMeta = {
@@ -38,10 +58,37 @@ export type OrdersResponse = {
   pagination: PaginationMeta;
 };
 
+export type DailyProfitProjection = {
+  reportDay: string;
+  grossProfit: number;
+  adSpend: number;
+  estimatedReturnRate: number;
+  estimatedReturnedOrders: number;
+  estimatedReturnLoss: number;
+  projectedProfit: number;
+  previousMonthStart: string;
+  previousMonthEnd: string;
+  previousMonthOrders: number;
+  previousMonthNegativeOutcomeOrders: number;
+};
+
+export type DailyOrderStatusReport = {
+  reportDay: string;
+  newOrders: number;
+  confirmationStatusChanges: number;
+  confirmedToday: number;
+  noAnswerOrders: number;
+  adminCancelled: number;
+  carrierCancelled: number;
+  shipmentUpdates: number;
+  profitProjection?: DailyProfitProjection;
+};
+
 export type DailyOrderStatusOverview = {
   available: true;
   reportDay: string;
   timezone: string;
+  reports: DailyOrderStatusReport[];
   newOrders: number;
   confirmationStatusChanges: number;
   confirmedToday: number;
@@ -57,6 +104,8 @@ export type DailyOrderStatusOverview = {
 
 export const DAILY_ORDER_STATUS_TIMEZONE = 'Africa/Algiers';
 const ECOTRACK_SYNC_ACTOR_NAME = 'ECOTRACK sync';
+const CONFIRMED_PROJECTION_STATUS = 2;
+const NEGATIVE_OUTCOME_STATUSES = [8, 9] as const;
 
 function getOrderBy(sortRules: OrderSortRule[]) {
   const orderBy = sortRules.flatMap((rule) => {
@@ -100,6 +149,34 @@ function getAlgiersReportDay(now = new Date()) {
   }).format(now);
 }
 
+function shiftIsoDate(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function getPreviousMonthRange(reportDay: string) {
+  const [yearPart, monthPart] = reportDay.split('-');
+  const year = Number(yearPart);
+  const monthIndex = Number(monthPart) - 1;
+  const start = new Date(Date.UTC(year, monthIndex - 1, 1));
+  const end = new Date(Date.UTC(year, monthIndex, 0));
+
+  return {
+    start: start.toISOString().slice(0, 10),
+    end: end.toISOString().slice(0, 10),
+  };
+}
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function numberOrZero(value: unknown) {
+  const parsed = typeof value === 'number' ? value : Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 async function readCount(db: ReturnType<typeof getDb>, query: ReturnType<typeof sql<number>>) {
   const result = await db.execute(query);
   const row = (result.rows?.[0] ?? {}) as { value?: number | string | bigint };
@@ -107,16 +184,249 @@ async function readCount(db: ReturnType<typeof getDb>, query: ReturnType<typeof 
   return typeof value === 'bigint' ? Number(value) : Number(value);
 }
 
-function activeReportDayPredicate(timestampExpression: ReturnType<typeof sql>) {
-  return sql`${timestampExpression} >= (((now() at time zone ${DAILY_ORDER_STATUS_TIMEZONE})::date)::timestamp at time zone ${DAILY_ORDER_STATUS_TIMEZONE})
-    and ${timestampExpression} < ((((now() at time zone ${DAILY_ORDER_STATUS_TIMEZONE})::date + 1))::timestamp at time zone ${DAILY_ORDER_STATUS_TIMEZONE})`;
+function reportDayPredicate(timestampExpression: ReturnType<typeof sql>, reportDay: string) {
+  return sql`${timestampExpression} >= ((${reportDay}::date)::timestamp at time zone ${DAILY_ORDER_STATUS_TIMEZONE})
+    and ${timestampExpression} < ((((${reportDay}::date + 1))::timestamp) at time zone ${DAILY_ORDER_STATUS_TIMEZONE})`;
+}
+
+function reportDateRangePredicate(timestampExpression: ReturnType<typeof sql>, startDate: string, endDate: string) {
+  return sql`${timestampExpression} >= ((${startDate}::date)::timestamp at time zone ${DAILY_ORDER_STATUS_TIMEZONE})
+    and ${timestampExpression} < ((((${endDate}::date + 1))::timestamp) at time zone ${DAILY_ORDER_STATUS_TIMEZONE})`;
 }
 
 function activeOrdersJoinPredicate() {
   return sql`${orders.archivedAt} is null`;
 }
 
-export async function loadDailyOrderStatusOverview(): Promise<DailyOrderStatusOverview> {
+function calculateCartGrossProfit(orderRows: ProjectionOrderRow[], productRows: ProjectionProductRow[]) {
+  const productLookup = buildCartProductLookup(productRows);
+
+  return orderRows.reduce((sum, order) => {
+    const orderProfit = (order.cartProducts ?? []).reduce((orderSum, rawProduct) => {
+      const lookupKey = getCartProductLookupKey(rawProduct);
+      const product = lookupKey ? productLookup.get(lookupKey) : null;
+
+      return orderSum + (product ? numberOrZero(product.price) - numberOrZero(product.purchasePrice) : 0);
+    }, 0);
+
+    return sum + orderProfit;
+  }, 0);
+}
+
+async function loadProfitProjection(db: ReturnType<typeof getDb>, reportDay: string): Promise<DailyProfitProjection> {
+  const previousMonth = getPreviousMonthRange(reportDay);
+  const [orderRows, adSpendRows, previousMonthRows] = await Promise.all([
+    db
+      .selectDistinct({
+        id: orders.id,
+        cartProducts: orders.cartProducts,
+      })
+      .from(orderStatusHistory)
+      .innerJoin(orders, eq(orders.id, orderStatusHistory.orderId))
+      .where(and(
+        sql`${orders.archivedAt} is null`,
+        eq(orderStatusHistory.status, CONFIRMED_PROJECTION_STATUS),
+        reportDayPredicate(sql`${orderStatusHistory.changedAt}`, reportDay),
+      )),
+    db
+      .select({
+        spend: sql<number>`coalesce(sum(${adCosts.spend})::double precision, 0)`,
+      })
+      .from(adCosts)
+      .where(eq(adCosts.date, reportDay)),
+    db
+      .select({
+        totalOrders: sql<number>`count(distinct ${orders.id})::int`,
+        negativeOutcomeOrders: sql<number>`count(distinct ${orders.id}) filter (where ${inArray(orders.confirmed, [...NEGATIVE_OUTCOME_STATUSES])})::int`,
+      })
+      .from(orderStatusHistory)
+      .innerJoin(orders, eq(orders.id, orderStatusHistory.orderId))
+      .where(and(
+        sql`${orders.archivedAt} is null`,
+        eq(orderStatusHistory.status, CONFIRMED_PROJECTION_STATUS),
+        reportDateRangePredicate(sql`${orderStatusHistory.changedAt}`, previousMonth.start, previousMonth.end),
+      )),
+  ]);
+
+  const cartProductReferences = collectCartProductReferenceBuckets(orderRows);
+  const productRows = cartProductReferences.productIds.length === 0 && cartProductReferences.mongoIds.length === 0
+    ? []
+    : await db
+      .select({
+        id: products.id,
+        mongoId: products.mongoId,
+        price: products.price,
+        purchasePrice: products.purchasePrice,
+      })
+      .from(products)
+      .where(or(
+        ...(cartProductReferences.productIds.length > 0 ? [inArray(products.id, cartProductReferences.productIds)] : []),
+        ...(cartProductReferences.mongoIds.length > 0 ? [inArray(products.mongoId, cartProductReferences.mongoIds)] : []),
+      ));
+  const grossProfit = calculateCartGrossProfit(orderRows, productRows);
+  const previousMonthStats = previousMonthRows[0];
+  const previousMonthOrders = previousMonthStats?.totalOrders ?? 0;
+  const previousMonthNegativeOutcomeOrders = previousMonthStats?.negativeOutcomeOrders ?? 0;
+  const estimatedReturnRate = previousMonthOrders > 0 ? previousMonthNegativeOutcomeOrders / previousMonthOrders : 0;
+  const estimatedReturnedOrders = orderRows.length * estimatedReturnRate;
+  const estimatedReturnLoss = Math.max(0, grossProfit) * estimatedReturnRate;
+  const adSpend = numberOrZero(adSpendRows[0]?.spend);
+
+  return {
+    reportDay,
+    grossProfit: roundMoney(grossProfit),
+    adSpend: roundMoney(adSpend),
+    estimatedReturnRate: roundMoney(estimatedReturnRate * 100),
+    estimatedReturnedOrders: roundMoney(estimatedReturnedOrders),
+    estimatedReturnLoss: roundMoney(estimatedReturnLoss),
+    projectedProfit: roundMoney(grossProfit - adSpend - estimatedReturnLoss),
+    previousMonthStart: previousMonth.start,
+    previousMonthEnd: previousMonth.end,
+    previousMonthOrders,
+    previousMonthNegativeOutcomeOrders,
+  };
+}
+
+async function loadDailyOrderStatusReport(
+  db: ReturnType<typeof getDb>,
+  reportDay: string,
+  includeProfitProjection: boolean,
+): Promise<DailyOrderStatusReport> {
+  const reportDayWhere = (timestampExpression: ReturnType<typeof sql>) => reportDayPredicate(timestampExpression, reportDay);
+
+  const [
+    newOrders,
+    confirmationStatusChanges,
+    confirmedToday,
+    noAnswerOrders,
+    adminCancelled,
+    carrierCancelled,
+    shipmentUpdates,
+    profitProjection,
+  ] = await Promise.all([
+    readCount(db, sql`
+      select count(distinct ${orders.id})::int as value
+      from ${orders}
+      where ${activeOrdersJoinPredicate()}
+        and ${reportDayWhere(sql`${orders.createdAt}`)}
+    `),
+    readCount(db, sql`
+      select count(*)::int as value
+      from ${orderStatusHistory}
+      inner join ${orders} on ${orders.id} = ${orderStatusHistory.orderId}
+      where ${activeOrdersJoinPredicate()}
+        and ${reportDayWhere(sql`${orderStatusHistory.changedAt}`)}
+    `),
+    readCount(db, sql`
+      select count(*)::int as value
+      from ${orderStatusHistory}
+      inner join ${orders} on ${orders.id} = ${orderStatusHistory.orderId}
+      where ${activeOrdersJoinPredicate()}
+        and ${orderStatusHistory.status} = 2
+        and ${reportDayWhere(sql`${orderStatusHistory.changedAt}`)}
+    `),
+    readCount(db, sql`
+      select count(distinct ${orders.id})::int as value
+      from ${orderStatusHistory}
+      inner join ${orders} on ${orders.id} = ${orderStatusHistory.orderId}
+      where ${activeOrdersJoinPredicate()}
+        and ${orderStatusHistory.status} = 1
+        and ${reportDayWhere(sql`${orderStatusHistory.changedAt}`)}
+    `),
+    readCount(db, sql`
+      select count(*)::int as value
+      from ${orderStatusHistory}
+      inner join ${orders} on ${orders.id} = ${orderStatusHistory.orderId}
+      where ${activeOrdersJoinPredicate()}
+        and ${orderStatusHistory.status} = 6
+        and coalesce(${orderStatusHistory.changedByName}, '') <> ${ECOTRACK_SYNC_ACTOR_NAME}
+        and ${reportDayWhere(sql`${orderStatusHistory.changedAt}`)}
+    `),
+    readCount(db, sql`
+      with carrier_cancelled as (
+        select
+          ${ecotrackOrderStates.orderId} as order_id,
+          coalesce(
+            (
+              select max(
+                case
+                  when activity.value->>'date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                    and coalesce(nullif(activity.value->>'time', ''), '00:00:00') ~ '^[0-9]{2}:[0-9]{2}(:[0-9]{2})?$'
+                  then ((activity.value->>'date') || 'T' || coalesce(nullif(activity.value->>'time', ''), '00:00:00') || 'Z')::timestamptz
+                  else null
+                end
+              )
+              from jsonb_array_elements(coalesce(${ecotrackOrderStates.rawStatusPayload}->'activity', '[]'::jsonb)) as activity(value)
+            ),
+            ${ecotrackOrderStates.lastActionAt},
+            ${ecotrackOrderStates.lastStatusSyncedAt},
+            ${ecotrackOrderStates.updatedAt}
+          ) as activity_at
+        from ${ecotrackOrderStates}
+        where lower(${ecotrackOrderStates.currentStatus}) = 'annule'
+      )
+      select count(distinct carrier_cancelled.order_id)::int as value
+      from carrier_cancelled
+      inner join ${orders} on ${orders.id} = carrier_cancelled.order_id
+      where ${activeOrdersJoinPredicate()}
+        and ${reportDayWhere(sql`carrier_cancelled.activity_at`)}
+    `),
+    readCount(db, sql`
+      select count(distinct shipment_activity.order_id)::int as value
+      from (
+        select
+          ${ecotrackOrderStates.orderId} as order_id,
+          coalesce(
+            (
+              select max(
+                case
+                  when activity.value->>'date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                    and coalesce(nullif(activity.value->>'time', ''), '00:00:00') ~ '^[0-9]{2}:[0-9]{2}(:[0-9]{2})?$'
+                  then ((activity.value->>'date') || 'T' || coalesce(nullif(activity.value->>'time', ''), '00:00:00') || 'Z')::timestamptz
+                  else null
+                end
+              )
+              from jsonb_array_elements(coalesce(${ecotrackOrderStates.rawStatusPayload}->'activity', '[]'::jsonb)) as activity(value)
+            ),
+            ${ecotrackOrderStates.lastActionAt},
+            ${ecotrackOrderStates.lastStatusSyncedAt},
+            ${ecotrackOrderStates.updatedAt}
+          ) as activity_at
+        from ${ecotrackOrderStates}
+        inner join ${orders} on ${orders.id} = ${ecotrackOrderStates.orderId}
+        where ${activeOrdersJoinPredicate()}
+        union
+        select ${ecotrackOrderMajEntries.orderId} as order_id, ${ecotrackOrderMajEntries.remoteCreatedAt} as activity_at
+        from ${ecotrackOrderMajEntries}
+        inner join ${orders} on ${orders.id} = ${ecotrackOrderMajEntries.orderId}
+        where ${activeOrdersJoinPredicate()}
+        union
+        select
+          ${ecotrackOrderTrackingEvents.orderId} as order_id,
+          (${ecotrackOrderTrackingEvents.eventDate}::timestamp at time zone ${DAILY_ORDER_STATUS_TIMEZONE}) as activity_at
+        from ${ecotrackOrderTrackingEvents}
+        inner join ${orders} on ${orders.id} = ${ecotrackOrderTrackingEvents.orderId}
+        where ${activeOrdersJoinPredicate()}
+      ) shipment_activity
+      where ${reportDayWhere(sql`shipment_activity.activity_at`)}
+    `),
+    includeProfitProjection ? loadProfitProjection(db, reportDay) : Promise.resolve(undefined),
+  ]);
+
+  return {
+    reportDay,
+    newOrders,
+    confirmationStatusChanges,
+    confirmedToday,
+    noAnswerOrders,
+    adminCancelled,
+    carrierCancelled,
+    shipmentUpdates,
+    ...(profitProjection ? { profitProjection } : {}),
+  };
+}
+
+export async function loadDailyOrderStatusOverview(options: { includeProfitProjection?: boolean } = {}): Promise<DailyOrderStatusOverview> {
   if (!hasDb()) {
     return {
       available: false,
@@ -127,122 +437,24 @@ export async function loadDailyOrderStatusOverview(): Promise<DailyOrderStatusOv
 
   const db = getDb();
   const reportDay = getAlgiersReportDay();
-  const newOrders = await readCount(db, sql`
-    select count(distinct ${orders.id})::int as value
-    from ${orders}
-    where ${activeOrdersJoinPredicate()}
-      and ${activeReportDayPredicate(sql`${orders.createdAt}`)}
-  `);
-  const confirmationStatusChanges = await readCount(db, sql`
-    select count(*)::int as value
-    from ${orderStatusHistory}
-    inner join ${orders} on ${orders.id} = ${orderStatusHistory.orderId}
-    where ${activeOrdersJoinPredicate()}
-      and ${activeReportDayPredicate(sql`${orderStatusHistory.changedAt}`)}
-  `);
-  const confirmedToday = await readCount(db, sql`
-    select count(*)::int as value
-    from ${orderStatusHistory}
-    inner join ${orders} on ${orders.id} = ${orderStatusHistory.orderId}
-    where ${activeOrdersJoinPredicate()}
-      and ${orderStatusHistory.status} = 2
-      and ${activeReportDayPredicate(sql`${orderStatusHistory.changedAt}`)}
-  `);
-  const noAnswerOrders = await readCount(db, sql`
-    select count(*)::int as value
-    from ${orders}
-    where ${activeOrdersJoinPredicate()}
-      and ${orders.confirmed} = 1
-  `);
-  const adminCancelled = await readCount(db, sql`
-    select count(*)::int as value
-    from ${orderStatusHistory}
-    inner join ${orders} on ${orders.id} = ${orderStatusHistory.orderId}
-    where ${activeOrdersJoinPredicate()}
-      and ${orderStatusHistory.status} = 6
-      and coalesce(${orderStatusHistory.changedByName}, '') <> ${ECOTRACK_SYNC_ACTOR_NAME}
-      and ${activeReportDayPredicate(sql`${orderStatusHistory.changedAt}`)}
-  `);
-  const carrierCancelled = await readCount(db, sql`
-    with carrier_cancelled as (
-      select
-        ${ecotrackOrderStates.orderId} as order_id,
-        coalesce(
-          (
-            select max(
-              case
-                when activity.value->>'date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-                  and coalesce(nullif(activity.value->>'time', ''), '00:00:00') ~ '^[0-9]{2}:[0-9]{2}(:[0-9]{2})?$'
-                then ((activity.value->>'date') || 'T' || coalesce(nullif(activity.value->>'time', ''), '00:00:00') || 'Z')::timestamptz
-                else null
-              end
-            )
-            from jsonb_array_elements(coalesce(${ecotrackOrderStates.rawStatusPayload}->'activity', '[]'::jsonb)) as activity(value)
-          ),
-          ${ecotrackOrderStates.lastActionAt},
-          ${ecotrackOrderStates.lastStatusSyncedAt},
-          ${ecotrackOrderStates.updatedAt}
-        ) as activity_at
-      from ${ecotrackOrderStates}
-      where lower(${ecotrackOrderStates.currentStatus}) = 'annule'
-    )
-    select count(distinct carrier_cancelled.order_id)::int as value
-    from carrier_cancelled
-    inner join ${orders} on ${orders.id} = carrier_cancelled.order_id
-    where ${activeOrdersJoinPredicate()}
-      and ${activeReportDayPredicate(sql`carrier_cancelled.activity_at`)}
-  `);
-  const shipmentUpdates = await readCount(db, sql`
-    select count(distinct shipment_activity.order_id)::int as value
-    from (
-      select
-        ${ecotrackOrderStates.orderId} as order_id,
-        coalesce(
-          (
-            select max(
-              case
-                when activity.value->>'date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-                  and coalesce(nullif(activity.value->>'time', ''), '00:00:00') ~ '^[0-9]{2}:[0-9]{2}(:[0-9]{2})?$'
-                then ((activity.value->>'date') || 'T' || coalesce(nullif(activity.value->>'time', ''), '00:00:00') || 'Z')::timestamptz
-                else null
-              end
-            )
-            from jsonb_array_elements(coalesce(${ecotrackOrderStates.rawStatusPayload}->'activity', '[]'::jsonb)) as activity(value)
-          ),
-          ${ecotrackOrderStates.lastActionAt},
-          ${ecotrackOrderStates.lastStatusSyncedAt},
-          ${ecotrackOrderStates.updatedAt}
-        ) as activity_at
-      from ${ecotrackOrderStates}
-      inner join ${orders} on ${orders.id} = ${ecotrackOrderStates.orderId}
-      where ${activeOrdersJoinPredicate()}
-      union
-      select ${ecotrackOrderMajEntries.orderId} as order_id, ${ecotrackOrderMajEntries.remoteCreatedAt} as activity_at
-      from ${ecotrackOrderMajEntries}
-      inner join ${orders} on ${orders.id} = ${ecotrackOrderMajEntries.orderId}
-      where ${activeOrdersJoinPredicate()}
-      union
-      select
-        ${ecotrackOrderTrackingEvents.orderId} as order_id,
-        (${ecotrackOrderTrackingEvents.eventDate}::timestamp at time zone ${DAILY_ORDER_STATUS_TIMEZONE}) as activity_at
-      from ${ecotrackOrderTrackingEvents}
-      inner join ${orders} on ${orders.id} = ${ecotrackOrderTrackingEvents.orderId}
-      where ${activeOrdersJoinPredicate()}
-    ) shipment_activity
-    where ${activeReportDayPredicate(sql`shipment_activity.activity_at`)}
-  `);
+  const reports = await Promise.all([
+    loadDailyOrderStatusReport(db, reportDay, Boolean(options.includeProfitProjection)),
+    loadDailyOrderStatusReport(db, shiftIsoDate(reportDay, -1), Boolean(options.includeProfitProjection)),
+  ]);
+  const today = reports[0]!;
 
   return {
     available: true,
     reportDay,
     timezone: DAILY_ORDER_STATUS_TIMEZONE,
-    newOrders,
-    confirmationStatusChanges,
-    confirmedToday,
-    noAnswerOrders,
-    adminCancelled,
-    carrierCancelled,
-    shipmentUpdates,
+    reports,
+    newOrders: today.newOrders,
+    confirmationStatusChanges: today.confirmationStatusChanges,
+    confirmedToday: today.confirmedToday,
+    noAnswerOrders: today.noAnswerOrders,
+    adminCancelled: today.adminCancelled,
+    carrierCancelled: today.carrierCancelled,
+    shipmentUpdates: today.shipmentUpdates,
   };
 }
 

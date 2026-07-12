@@ -621,7 +621,7 @@ export function StatsDashboard({ description: _description, initialData = null, 
 
   const topWilayas = useMemo(() => stats?.wilayaDetails?.slice(0, 10) ?? [], [stats]);
   const paginatedProducts = useMemo(
-    () => (stats?.allProducts ?? []).filter((product) => product.unitsSold > 10),
+    () => (stats?.allProducts ?? []).filter((product) => product.unitsSold >= 1),
     [stats],
   );
   const paginatedWilayas = useMemo(
@@ -1826,6 +1826,8 @@ export function StatsDashboard({ description: _description, initialData = null, 
                             importedAt: formatDate(locale, batch.importedAt),
                             totalRows: String(batch.totalRows),
                             matchedOrders: String(batch.matchedOrders),
+                            unmatchedCount: String(batch.unmatchedCount),
+                            skippedRows: String(batch.skippedRows ?? Math.max(0, batch.totalRows - batch.matchedOrders - batch.unmatchedCount)),
                           })}
                         </p>
                         <p className="mt-1 text-sm text-muted-foreground">

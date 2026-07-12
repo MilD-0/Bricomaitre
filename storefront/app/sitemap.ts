@@ -10,6 +10,8 @@ import {
   normalizeCategory,
 } from "@/lib/storefront-api";
 
+export const revalidate = 3600;
+
 function buildLocalizedEntries(
   pathname: string,
   options: Omit<MetadataRoute.Sitemap[number], "url">,

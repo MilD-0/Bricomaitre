@@ -2,9 +2,12 @@
   "name": "adminstration",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:db-tasks": "node ../ops/scripts/build-worker.mjs adminstration/scripts/run-db-migrations.ts adminstration/dist/run-db-migrations.cjs && node ../ops/scripts/build-worker.mjs adminstration/scripts/verify-db-migrations.ts adminstration/dist/verify-db-migrations.cjs",
+    "build:worker": "node ../ops/scripts/build-worker.mjs adminstration/scripts/run-background-workers.ts adminstration/dist/run-background-workers.cjs",
     "start": "node ../ops/scripts/start-next-standalone.mjs --app-dir . --nested-dir adminstration --default-port 3000",
     "worker": "tsx scripts/run-background-workers.ts",
     "lint": "eslint",
@@ -89,6 +92,5 @@
     "@types/react-dom": "19.2.3",
     "esbuild": "^0.25.0"
   },
-  "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319",
-  "license": "AGPL-3.0-only"
+  "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319"
 }

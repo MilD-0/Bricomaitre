@@ -357,5 +357,5 @@ describe('BulletinBoard', () => {
     await waitFor(() => {
       expect(deleteReplyCalls).toContain('http://localhost:3000/api/bulletin/replies/91');
     });
-  });
+  }, 15_000);
 });

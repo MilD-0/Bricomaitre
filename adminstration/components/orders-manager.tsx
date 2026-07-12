@@ -85,10 +85,35 @@ import { ViewModeToggle, type ViewMode } from './view-mode-toggle';
 
 type PaginationMeta = { page: number; limit: number; totalItems: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean };
 type OrdersResponse = { items: OrderRecord[]; writable: boolean; pagination: PaginationMeta };
+type DailyProfitProjection = {
+  reportDay: string;
+  grossProfit: number;
+  adSpend: number;
+  estimatedReturnRate: number;
+  estimatedReturnedOrders: number;
+  estimatedReturnLoss: number;
+  projectedProfit: number;
+  previousMonthStart: string;
+  previousMonthEnd: string;
+  previousMonthOrders: number;
+  previousMonthNegativeOutcomeOrders: number;
+};
+type DailyOrderStatusReport = {
+  reportDay: string;
+  newOrders: number;
+  confirmationStatusChanges: number;
+  confirmedToday: number;
+  noAnswerOrders: number;
+  adminCancelled: number;
+  carrierCancelled: number;
+  shipmentUpdates: number;
+  profitProjection?: DailyProfitProjection;
+};
 type DailyOrderStatusOverview = {
   available: true;
   reportDay: string;
   timezone: string;
+  reports?: DailyOrderStatusReport[];
   newOrders: number;
   confirmationStatusChanges: number;
   confirmedToday: number;
@@ -108,6 +133,22 @@ type SplitActionOption = { key: string; label: string; onSelect: () => void | Pr
 type PartialOrderPatch = Partial<OrderPatch>;
 type PatchMutationVariables = { id: number; values: PartialOrderPatch; messages: MutationMessages; optimisticProducts?: EditableOrderProduct[] };
 type DeleteMutationVariables = { id: number; messages: MutationMessages };
+
+function formatCurrency(locale: string, value: number) {
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: 'DZD',
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatNumber(locale: string, value: number, maximumFractionDigits = 0) {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits }).format(value);
+}
+
+function formatPercent(locale: string, value: number) {
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value)}%`;
+}
 type DeleteState = { id: number; label: string } | null;
 type ProductsDialogState = { order: OrderRecord; items: EditableOrderProduct[]; search: string } | null;
 type AddressDraft = { delivery: 0 | 1; state: string; city: string; homeAddress: string };
@@ -234,6 +275,7 @@ type EcotrackPostingSummary = {
 };
 type EcotrackPostingPreviewState = {
   mode: 'selected' | 'confirmed';
+  provider: 'delivro' | 'emir';
   title: string;
   orderIds: number[];
   preview: EcotrackPreviewResponse;
@@ -2031,15 +2073,18 @@ function DailyOrderStatusOverviewPanel({
   const formattedReportDay = Number.isNaN(reportDate.getTime())
     ? overview.reportDay
     : new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(reportDate);
-  const items = [
-    { key: 'newOrders', value: overview.newOrders },
-    { key: 'confirmationStatusChanges', value: overview.confirmationStatusChanges },
-    { key: 'confirmedToday', value: overview.confirmedToday },
-    { key: 'noAnswerOrders', value: overview.noAnswerOrders },
-    { key: 'adminCancelled', value: overview.adminCancelled },
-    { key: 'carrierCancelled', value: overview.carrierCancelled },
-    { key: 'shipmentUpdates', value: overview.shipmentUpdates },
-  ] as const;
+  const reports = overview.reports && overview.reports.length > 0
+    ? overview.reports
+    : [{
+      reportDay: overview.reportDay,
+      newOrders: overview.newOrders,
+      confirmationStatusChanges: overview.confirmationStatusChanges,
+      confirmedToday: overview.confirmedToday,
+      noAnswerOrders: overview.noAnswerOrders,
+      adminCancelled: overview.adminCancelled,
+      carrierCancelled: overview.carrierCancelled,
+      shipmentUpdates: overview.shipmentUpdates,
+    }];
 
   return (
     <section className="rounded-xl border border-border/70 bg-background/90 p-3" aria-label={t('title')}>
@@ -2050,13 +2095,58 @@ function DailyOrderStatusOverviewPanel({
         </div>
         {loading ? <PendingInline active label={t('refreshing')} /> : null}
       </div>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        {items.map((item) => (
-          <Card key={item.key} className="rounded-lg p-3">
-            <p className="text-xs text-muted-foreground">{t(`metrics.${item.key}`)}</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums">{item.value}</p>
-          </Card>
-        ))}
+      <div className="grid gap-3 xl:grid-cols-2">
+        {reports.map((report, reportIndex) => {
+          const date = new Date(`${report.reportDay}T00:00:00`);
+          const formattedDate = Number.isNaN(date.getTime())
+            ? report.reportDay
+            : new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date);
+          const items = [
+            { key: 'newOrders', value: report.newOrders },
+            { key: 'confirmationStatusChanges', value: report.confirmationStatusChanges },
+            { key: 'confirmedToday', value: report.confirmedToday },
+            { key: 'noAnswerOrders', value: report.noAnswerOrders },
+            { key: 'adminCancelled', value: report.adminCancelled },
+            { key: 'carrierCancelled', value: report.carrierCancelled },
+            { key: 'shipmentUpdates', value: report.shipmentUpdates },
+          ] as const;
+
+          return (
+            <div key={report.reportDay} className="rounded-lg border border-border/70 p-3">
+              <div className="mb-3">
+                <p className="text-sm font-medium">{t(reportIndex === 0 ? 'today' : 'yesterday')}</p>
+                <p className="text-xs text-muted-foreground">{formattedDate}</p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-2">
+                {items.map((item) => (
+                  <Card key={item.key} className="rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground">{t(`metrics.${item.key}`)}</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums">{item.value}</p>
+                  </Card>
+                ))}
+              </div>
+              {report.profitProjection ? (
+                <div className="mt-3 rounded-lg border border-border/70 p-3">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold">{t('projection.title')}</p>
+                    </div>
+                    <p className="text-2xl font-semibold tabular-nums">
+                      {formatCurrency(locale, report.profitProjection.projectedProfit)}
+                    </p>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                    <p className="flex justify-between gap-3"><span className="text-muted-foreground">{t('projection.grossProfit')}</span><span className="font-medium">{formatCurrency(locale, report.profitProjection.grossProfit)}</span></p>
+                    <p className="flex justify-between gap-3"><span className="text-muted-foreground">{t('projection.adSpend')}</span><span className="font-medium">{formatCurrency(locale, report.profitProjection.adSpend)}</span></p>
+                    <p className="flex justify-between gap-3"><span className="text-muted-foreground">{t('projection.returnRate')}</span><span className="font-medium">{formatPercent(locale, report.profitProjection.estimatedReturnRate)}</span></p>
+                    <p className="flex justify-between gap-3"><span className="text-muted-foreground">{t('projection.estimatedReturns')}</span><span className="font-medium">{formatNumber(locale, report.profitProjection.estimatedReturnedOrders, 1)}</span></p>
+                    <p className="flex justify-between gap-3"><span className="text-muted-foreground">{t('projection.returnLoss')}</span><span className="font-medium">{formatCurrency(locale, report.profitProjection.estimatedReturnLoss)}</span></p>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </section>
   );
@@ -2309,7 +2399,7 @@ export function OrdersManager({
   const previewOrderEcotrackMutation = useMutation<
     EcotrackPreviewResponse,
     Error,
-    { mode: 'selected' | 'confirmed'; orderIds: number[] },
+    { mode: 'selected' | 'confirmed'; provider?: 'delivro' | 'emir'; orderIds: number[] },
     { toastId: string }
   >({
     mutationFn: (payload) => request<EcotrackPreviewResponse>('/api/orders/ecotrack/preview', {
@@ -2327,7 +2417,7 @@ export function OrdersManager({
   const startOrderEcotrackMutation = useMutation<
     OrderExportJobResponse,
     Error,
-    { mode: 'selected' | 'confirmed'; orderIds: number[] },
+    { mode: 'selected' | 'confirmed'; provider?: 'delivro' | 'emir'; orderIds: number[] },
     { toastId: string }
   >({
     mutationFn: (payload) => request<OrderExportJobResponse>('/api/orders/ecotrack', {
@@ -2966,32 +3056,40 @@ export function OrdersManager({
     }
   }
 
-  async function openEcotrackPreview(mode: 'selected' | 'confirmed', orderIds: number[], title: string) {
+  async function openEcotrackPreview(mode: 'selected' | 'confirmed', provider: 'delivro' | 'emir', orderIds: number[], title: string) {
     if (orderIds.length === 0) {
       toast.error(t('ordersManager.ecotrack.empty'));
       return;
     }
 
     try {
-      const preview = await previewOrderEcotrackMutation.mutateAsync({ mode, orderIds });
+      const preview = await previewOrderEcotrackMutation.mutateAsync({
+        mode,
+        ...(provider === 'emir' ? { provider } : {}),
+        orderIds,
+      });
       setActiveEcotrackJobId(null);
-      setEcotrackPreviewState({ mode, title, orderIds, preview });
+      setEcotrackPreviewState({ mode, provider, title, orderIds, preview });
     } catch {
       toast.error(t('ordersManager.ecotrack.error'));
     }
   }
 
-  async function openSelectedOrdersEcotrackPreview() {
-    await openEcotrackPreview('selected', selectedOrders.map((order) => order.id), t('ordersManager.ecotrack.selectedTitle', { count: selectedOrders.length }));
+  async function openSelectedOrdersEcotrackPreview(provider: 'delivro' | 'emir') {
+    await openEcotrackPreview('selected', provider, selectedOrders.map((order) => order.id), provider === 'delivro'
+      ? t('ordersManager.ecotrack.selectedTitle', { count: selectedOrders.length })
+      : t('ordersManager.ecotrack.emirSelectedTitle', { count: selectedOrders.length }));
   }
 
-  async function openConfirmedOrdersEcotrackPreview() {
+  async function openConfirmedOrdersEcotrackPreview(provider: 'delivro' | 'emir') {
     const orders = await fetchOrdersByStatus(2);
     if (orders.length === 0) {
       toast.error(t('ordersManager.ecotrack.emptyConfirmed'));
       return;
     }
-    await openEcotrackPreview('confirmed', orders.map((order) => order.id), t('ordersManager.ecotrack.confirmedTitle', { count: orders.length }));
+    await openEcotrackPreview('confirmed', provider, orders.map((order) => order.id), provider === 'delivro'
+      ? t('ordersManager.ecotrack.confirmedTitle', { count: orders.length })
+      : t('ordersManager.ecotrack.emirConfirmedTitle', { count: orders.length }));
   }
 
   async function confirmEcotrackPosting() {
@@ -3002,6 +3100,7 @@ export function OrdersManager({
     try {
       const response = await startOrderEcotrackMutation.mutateAsync({
         mode: ecotrackPreviewState.mode,
+        ...(ecotrackPreviewState.provider === 'emir' ? { provider: 'emir' as const } : {}),
         orderIds: ecotrackPreviewState.orderIds,
       });
       if (response.job?.id) {
@@ -3465,7 +3564,7 @@ export function OrdersManager({
                 <SplitActionButton
                   label={t('ordersManager.ecotrack.confirmedAction')}
                   icon={<Package data-icon="inline-start" />}
-                  onPrimaryClick={() => void openConfirmedOrdersEcotrackPreview()}
+                  onPrimaryClick={() => void openConfirmedOrdersEcotrackPreview('delivro')}
                   options={[
                     {
                       key: 'export-selected',
@@ -3481,7 +3580,18 @@ export function OrdersManager({
                     {
                       key: 'post-selected',
                       label: t('ordersManager.ecotrack.selectedAction'),
-                      onSelect: () => openSelectedOrdersEcotrackPreview(),
+                      onSelect: () => openSelectedOrdersEcotrackPreview('delivro'),
+                      disabled: selectedOrders.length === 0,
+                    },
+                    {
+                      key: 'post-confirmed-emir',
+                      label: t('ordersManager.ecotrack.emirConfirmedAction'),
+                      onSelect: () => openConfirmedOrdersEcotrackPreview('emir'),
+                    },
+                    {
+                      key: 'post-selected-emir',
+                      label: t('ordersManager.ecotrack.emirSelectedAction'),
+                      onSelect: () => openSelectedOrdersEcotrackPreview('emir'),
                       disabled: selectedOrders.length === 0,
                     },
                   ]}

@@ -18,9 +18,10 @@ fi
 run_migration_task() {
   local task="${1:?migration task is required}"
 
-  compose build "$service"
+  compose pull "$service"
   ADMIN_DB_TASK="$task" compose run --rm --no-deps "$service"
 }
 
 run_migration_task verify
 run_migration_task migrate
+run_migration_task verify

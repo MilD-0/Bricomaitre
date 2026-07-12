@@ -7,8 +7,13 @@ node_modules/
 .next-stale/
 out/
 build/
+dist/
+**/dist/
 coverage/
-
+gh_build_logs/
+.bric-*.env
+bric-local-build/
+*.build.log
 .env
 .env.local
 .env.development.local
@@ -46,5 +51,3 @@ ops/runtime/
 *.sw?
 *.save
 *.save.*
-.gitignore
-.gitignore
