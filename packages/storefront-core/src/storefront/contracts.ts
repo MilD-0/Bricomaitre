@@ -71,6 +71,60 @@ export const storefrontProductResponseItemSchema = z.object({
 
 export const storefrontProductsResponseSchema = z.object({
   items: z.array(storefrontProductResponseItemSchema),
+  total: z.number().int().nonnegative(),
+});
+
+export const storefrontProductTokenSchema = z.string().trim().min(1).max(200);
+
+export const storefrontProductDetailResponseItemSchema = z.object({
+  id: z.number().int().positive(),
+  canonicalToken: z.string().min(1),
+  title: z.string(),
+  titleAr: z.string().nullable(),
+  description: z.string().nullable(),
+  descriptionAr: z.string().nullable(),
+  sku: z.string().nullable(),
+  barcode: z.string().nullable(),
+  price: z.string(),
+  oldPrice: z.string().nullable(),
+  availability: z.object({
+    status: z.string(),
+    inStock: z.boolean(),
+    quantity: z.number().int(),
+  }),
+  media: z.array(z.object({
+    url: z.string().min(1),
+    position: z.number().int().min(0),
+    width: z.number().int().positive().nullable(),
+    height: z.number().int().positive().nullable(),
+    blurDataUrl: z.string().nullable(),
+  })),
+  brand: z.object({
+    id: z.number().int().positive(),
+    name: z.string(),
+    slug: z.string(),
+    image: z.string().nullable(),
+  }).nullable(),
+  category: z.object({
+    id: z.number().int().positive(),
+    name: z.string(),
+    nameAr: z.string().nullable(),
+    slug: z.string(),
+    image: z.string().nullable(),
+    parentId: z.number().int().positive().nullable(),
+    properties: z.array(z.unknown()),
+  }).nullable(),
+  createdAt: isoTimestampSchema,
+  updatedAt: isoTimestampSchema,
+});
+
+export const storefrontProductDetailResponseSchema = z.object({
+  item: storefrontProductDetailResponseItemSchema,
+  resolution: z.object({
+    requestedToken: storefrontProductTokenSchema,
+    matchedBy: z.enum(['slug', 'mongoId', 'id']),
+    canonicalToken: z.string().min(1),
+  }),
 });
 
 export const storefrontBrandResponseItemSchema = z.object({
@@ -225,5 +279,10 @@ export const storefrontProductPromoResponseSchema = z.object({
 });
 
 export type StorefrontProductListQuery = z.infer<typeof storefrontProductListQuerySchema>;
+export type StorefrontProductsResponse = z.infer<typeof storefrontProductsResponseSchema>;
+export type StorefrontBrandsResponse = z.infer<typeof storefrontBrandsResponseSchema>;
+export type StorefrontCategoriesResponse = z.infer<typeof storefrontCategoriesResponseSchema>;
+export type StorefrontEcotrackCatalogResponse = z.infer<typeof storefrontEcotrackCatalogResponseSchema>;
+export type StorefrontProductDetailResponse = z.infer<typeof storefrontProductDetailResponseSchema>;
 export type StorefrontOrderCreateRequest = z.infer<typeof storefrontOrderCreateRequestSchema>;
 export type StorefrontOrderPatchRequest = z.infer<typeof storefrontOrderPatchRequestSchema>;

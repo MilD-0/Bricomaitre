@@ -1045,6 +1045,9 @@
       },
       "projection": {
         "title": "Projected future profit",
+        "basisLabel": "Projection basis",
+        "confirmedBasis": "Confirmed orders",
+        "postedBasis": "Posted orders",
         "grossProfit": "Future gross profit",
         "adSpend": "Ad spend",
         "returnRate": "Return / failed rate",

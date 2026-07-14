@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
+import { notFound } from 'next/navigation';
 
 import { PageShell } from "@/components/page-shell";
 import { RouteFoundation } from "@/components/route-foundation";
+import { isLocale } from '@/i18n/config';
 
 type CollectionPageProps = {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ locale: string; slug: string }>;
 };
 
 export async function generateMetadata({ params }: CollectionPageProps): Promise<Metadata> {
@@ -18,12 +20,14 @@ export async function generateMetadata({ params }: CollectionPageProps): Promise
 }
 
 export default async function CollectionPage({ params }: CollectionPageProps) {
-  const { slug } = await params;
-  const t = await getTranslations("Collection");
+  const { locale, slug } = await params;
+  if (!isLocale(locale)) notFound();
+  const t = await getTranslations({ locale, namespace: 'Collection' });
 
   return (
-    <PageShell>
+    <PageShell locale={locale}>
       <RouteFoundation
+        locale={locale}
         eyebrow={t("eyebrow")}
         title={t("title", { slug })}
         description={t("description")}

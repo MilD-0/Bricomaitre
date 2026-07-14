@@ -1,0 +1,192 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { cacheLife, cacheTag } from 'next/cache';
+
+import {
+  fetchStorefrontCatalog,
+  fetchStorefrontCatalogMeta,
+  fetchStorefrontProductDetail,
+  getStorefrontProductDetail,
+} from './storefront-api';
+import {
+  getStorefrontApiBaseUrl,
+  getStorefrontApiTimeoutMs,
+  StorefrontUpstreamError,
+} from './storefront-upstream';
+
+const validProductResponse = {
+  item: {
+    id: 12,
+    canonicalToken: 'desk-lamp',
+    title: 'Desk Lamp',
+    titleAr: 'مصباح مكتب',
+    description: 'Warm light',
+    descriptionAr: null,
+    sku: 'DL-1',
+    barcode: null,
+    price: '1500.00',
+    oldPrice: null,
+    availability: {
+      status: 'in_stock',
+      inStock: true,
+      quantity: 4,
+    },
+    media: [],
+    brand: null,
+    category: null,
+    createdAt: '2026-07-01T10:00:00.000Z',
+    updatedAt: '2026-07-02T10:00:00.000Z',
+  },
+  resolution: {
+    requestedToken: 'legacy lamp',
+    matchedBy: 'mongoId',
+    canonicalToken: 'desk-lamp',
+  },
+};
+
+vi.mock('next/cache', () => ({
+  cacheLife: vi.fn(),
+  cacheTag: vi.fn(),
+}));
+
+describe('storefront API client', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+    vi.mocked(cacheLife).mockReset();
+    vi.mocked(cacheTag).mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('normalizes configuration and applies safe timeout defaults', () => {
+    expect(getStorefrontApiBaseUrl({ STOREFRONT_API_BASE_URL: ' https://api.example.com/// ' })).toBe(
+      'https://api.example.com',
+    );
+    expect(getStorefrontApiTimeoutMs({ STOREFRONT_API_TIMEOUT_MS: '2500' })).toBe(2500);
+    expect(getStorefrontApiTimeoutMs({ STOREFRONT_API_TIMEOUT_MS: '-1' })).toBe(5000);
+  });
+
+  it('fetches an encoded token and validates the shared response contract', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(validProductResponse), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    await expect(fetchStorefrontProductDetail(' legacy lamp ')).resolves.toEqual(validProductResponse);
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:3001/storefront/products/legacy%20lamp',
+      expect.objectContaining({
+        headers: expect.objectContaining({ accept: 'application/json' }),
+        signal: expect.any(AbortSignal),
+      }),
+    );
+  });
+
+  it('forwards a validated catalog query and validates listing metadata contracts', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], total: 86 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] }), { status: 200 }));
+
+    await expect(fetchStorefrontCatalog({
+      page: 2,
+      limit: 25,
+      search: 'marteau',
+      brandId: 2,
+      categoryId: 3,
+      sortKey: 'price',
+      sortDirection: 'asc',
+      id: null,
+      mongoId: null,
+      slug: null,
+    })).resolves.toEqual({ items: [], total: 86 });
+    await expect(fetchStorefrontCatalogMeta()).resolves.toEqual({ brands: [], categories: [] });
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:3001/storefront/products?page=2&limit=25&sortKey=price&sortDirection=asc&search=marteau&brandId=2&categoryId=3',
+      expect.any(Object),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(2, 'http://localhost:3001/storefront/brands', expect.any(Object));
+    expect(fetch).toHaveBeenNthCalledWith(3, 'http://localhost:3001/storefront/categories', expect.any(Object));
+  });
+
+  it('rejects malformed catalog responses as controlled upstream failures', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ items: [{ id: 'unsafe' }] }), { status: 200 }));
+
+    await expect(fetchStorefrontCatalog({
+      page: 1,
+      limit: 25,
+      search: '',
+      brandId: null,
+      categoryId: null,
+      sortKey: 'updatedAt',
+      sortDirection: 'desc',
+      id: null,
+      mongoId: null,
+      slug: null,
+    })).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
+  });
+
+  it('returns null only for a real product not-found response', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ error: 'Product not found.' }), {
+      status: 404,
+    }));
+
+    await expect(fetchStorefrontProductDetail('missing')).resolves.toBeNull();
+  });
+
+  it('caches Product Detail reads with global, requested, and canonical tags', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(validProductResponse), {
+      status: 200,
+    }));
+
+    await expect(getStorefrontProductDetail(' legacy lamp ')).resolves.toEqual(validProductResponse);
+
+    expect(cacheLife).toHaveBeenCalledWith({ stale: 30, revalidate: 60, expire: 300 });
+    expect(cacheTag).toHaveBeenNthCalledWith(
+      1,
+      'storefront-new-products',
+      'storefront-new-product:legacy lamp',
+    );
+    expect(cacheTag).toHaveBeenNthCalledWith(2, 'storefront-new-product:desk-lamp');
+  });
+
+  it('distinguishes invalid tokens, upstream failures, and invalid contracts', async () => {
+    await expect(fetchStorefrontProductDetail('   ')).rejects.toMatchObject({
+      code: 'invalid_token',
+      status: null,
+    });
+    expect(fetch).not.toHaveBeenCalled();
+
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Unavailable' }), {
+      status: 503,
+    }));
+    await expect(fetchStorefrontProductDetail('desk-lamp')).rejects.toMatchObject({
+      code: 'unavailable',
+      status: 503,
+    });
+
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ item: { id: 12 } }), {
+      status: 200,
+    }));
+    await expect(fetchStorefrontProductDetail('desk-lamp')).rejects.toMatchObject({
+      code: 'invalid_response',
+      status: 200,
+    });
+  });
+
+  it('wraps network errors without leaking fetch implementation details', async () => {
+    vi.mocked(fetch).mockRejectedValue(new TypeError('connection refused'));
+
+    const error = await fetchStorefrontProductDetail('desk-lamp').catch((caught) => caught);
+    expect(error).toBeInstanceOf(StorefrontUpstreamError);
+    expect(error).toMatchObject({
+      code: 'unavailable',
+      pathname: '/storefront/products/desk-lamp',
+      status: null,
+    });
+  });
+});

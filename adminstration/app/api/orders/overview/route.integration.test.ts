@@ -24,7 +24,7 @@ describe('app/api/orders/overview/route', () => {
   it('requires orders access', async () => {
     authMock.mockResolvedValue({ user: { isAllowed: true, permissions: [], role: 'user' } });
 
-    const response = await GET();
+    const response = await GET(new Request('http://localhost/api/orders/overview'));
 
     expect(response.status).toBe(403);
     expect(loadDailyOrderStatusOverviewMock).not.toHaveBeenCalled();
@@ -45,7 +45,7 @@ describe('app/api/orders/overview/route', () => {
       shipmentUpdates: 3,
     });
 
-    const response = await GET();
+    const response = await GET(new Request('http://localhost/api/orders/overview'));
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -62,5 +62,36 @@ describe('app/api/orders/overview/route', () => {
         shipmentUpdates: 3,
       },
     });
+    expect(loadDailyOrderStatusOverviewMock).toHaveBeenCalledWith({
+      includeProfitProjection: false,
+      profitProjectionBasis: 'confirmed',
+    });
+  });
+
+  it('loads profit projections from posted order transitions when requested', async () => {
+    authMock.mockResolvedValue({ user: { isAllowed: true, permissions: ['orders_write'], role: 'admin' } });
+    loadDailyOrderStatusOverviewMock.mockResolvedValue({
+      available: false,
+      reportDay: null,
+      timezone: 'Africa/Algiers',
+    });
+
+    const response = await GET(new Request('http://localhost/api/orders/overview?projectionBasis=posted'));
+
+    expect(response.status).toBe(200);
+    expect(loadDailyOrderStatusOverviewMock).toHaveBeenCalledWith({
+      includeProfitProjection: true,
+      profitProjectionBasis: 'posted',
+    });
+  });
+
+  it('rejects an unsupported profit projection basis', async () => {
+    authMock.mockResolvedValue({ user: { isAllowed: true, permissions: ['orders_write'], role: 'admin' } });
+
+    const response = await GET(new Request('http://localhost/api/orders/overview?projectionBasis=delivered'));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid projection basis' });
+    expect(loadDailyOrderStatusOverviewMock).not.toHaveBeenCalled();
   });
 });

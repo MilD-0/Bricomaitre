@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" role="img" aria-labelledby="title desc">
+  <title id="title">Lampe de travail Bricomaitre</title>
+  <desc id="desc">Illustration sobre d'une lampe de travail verte et jaune</desc>
+  <rect width="900" height="900" rx="90" fill="#f4f1e8"/>
+  <circle cx="450" cy="430" r="285" fill="#e1eeea"/>
+  <path d="M330 648h240l34 72H296l34-72Z" fill="#073b36"/>
+  <path d="M414 344h72v310h-72z" fill="#006b5f"/>
+  <path d="M354 210h192c31 0 56 25 56 56v162H298V266c0-31 25-56 56-56Z" fill="#0b766a"/>
+  <path d="M326 262h248v118H326z" fill="#f7c948"/>
+  <path d="M366 292h168v58H366z" fill="#fff8d5"/>
+  <circle cx="450" cy="491" r="25" fill="#f7c948"/>
+</svg>

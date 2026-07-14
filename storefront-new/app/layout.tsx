@@ -2,7 +2,10 @@ import type { Metadata, Viewport } from "next";
 
 import "./globals.css";
 
+import { getStorefrontSiteUrl } from '@/lib/product-seo';
+
 export const metadata: Metadata = {
+  metadataBase: new URL(getStorefrontSiteUrl()),
   title: {
     default: "Bricomaitre",
     template: "%s | Bricomaitre"
