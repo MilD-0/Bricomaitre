@@ -11,6 +11,7 @@ import { requireMutationAccess } from '../../../lib/rbac';
 import { captureAdminException, getRequestId } from '../../../lib/sentry';
 import { applyServerCache, CACHE_TAGS, revalidateServerTags } from '../../../lib/server-cache';
 import { resolveUniqueSlug } from '../../../lib/slug';
+import { revalidateStorefrontProducts } from '../../../lib/storefront-revalidate';
 
 async function resolveProductSlug(
   data: ReturnType<typeof productPayloadSchema.parse>,
@@ -375,6 +376,7 @@ export async function POST(req: NextRequest) {
   });
 
   revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
+  await revalidateStorefrontProducts();
 
   try {
     await startProductCatalogFeedRefreshJob('product:create', requestId);

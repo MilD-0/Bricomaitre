@@ -11,6 +11,7 @@ const {
   authMock,
   mutateEntityWithHistoryMock,
   startProductCatalogFeedRefreshJobMock,
+  revalidateStorefrontProductsMock,
 } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
@@ -18,6 +19,7 @@ const {
   authMock: vi.fn(),
   mutateEntityWithHistoryMock: vi.fn(),
   startProductCatalogFeedRefreshJobMock: vi.fn(),
+  revalidateStorefrontProductsMock: vi.fn(),
 }));
 const { revalidateServerTagsMock, captureAdminExceptionMock } = vi.hoisted(() => ({
   revalidateServerTagsMock: vi.fn(),
@@ -43,6 +45,10 @@ vi.mock('../../../../lib/action-history', () => ({
 
 vi.mock('../../../../lib/background-jobs', () => ({
   startProductCatalogFeedRefreshJob: startProductCatalogFeedRefreshJobMock,
+}));
+
+vi.mock('../../../../lib/storefront-revalidate', () => ({
+  revalidateStorefrontProducts: revalidateStorefrontProductsMock,
 }));
 
 vi.mock('../../../../lib/server-cache', () => ({
@@ -71,6 +77,8 @@ describe('app/api/products/route', () => {
     mutateEntityWithHistoryMock.mockResolvedValue(undefined);
     startProductCatalogFeedRefreshJobMock.mockReset();
     startProductCatalogFeedRefreshJobMock.mockResolvedValue({ kind: 'started', job: null });
+    revalidateStorefrontProductsMock.mockReset();
+    revalidateStorefrontProductsMock.mockResolvedValue(undefined);
     revalidateServerTagsMock.mockReset();
     captureAdminExceptionMock.mockReset();
   });
@@ -362,6 +370,7 @@ describe('app/api/products/route', () => {
     expect(startProductCatalogFeedRefreshJobMock).toHaveBeenCalledWith('product:create', 'request-1');
     expect(resolveEntityId([{ id: 55 }])).toBe(55);
     expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
+    expect(revalidateStorefrontProductsMock).toHaveBeenCalledOnce();
     await expect(res.json()).resolves.toEqual({ ok: true });
   });
 

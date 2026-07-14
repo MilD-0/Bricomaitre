@@ -57,7 +57,9 @@ export const storefrontAnalyticsEventNameSchema = z.enum([
   "session_start",
   "page_view",
   "select_item",
+  "view_item_list",
   "view_item",
+  "view_item_media",
   "search",
   "filter_apply",
   "sort_change",
@@ -75,9 +77,14 @@ export const storefrontAnalyticsEventNameSchema = z.enum([
   "order_create_success",
   "order_create_failed",
   "order_verification_failed_after_create",
+  "web_vital",
+  "navigation_click",
+  "navigation_menu_open",
+  "locale_change",
 ]);
 
 export const storefrontAnalyticsEventSchema = z.object({
+  eventVersion: z.literal(1).optional(),
   eventId: z.string().trim().min(1).max(120),
   visitId: nullableTrimmedString(120),
   journeyId: z.string().trim().min(1).max(120),
@@ -486,7 +493,10 @@ export async function ingestStorefrontAnalyticsEvent(
         quantity: event.quantity,
         value: event.value == null ? null : event.value.toFixed(2),
         currency: event.currency,
-        metadata: event.metadata,
+        metadata: {
+          eventVersion: event.eventVersion ?? 0,
+          ...event.metadata,
+        },
         occurredAt,
         createdAt: new Date(),
       })

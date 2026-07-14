@@ -10,6 +10,7 @@ build/
 dist/
 **/dist/
 coverage/
+**/test-results/
 gh_build_logs/
 .bric-*.env
 bric-local-build/

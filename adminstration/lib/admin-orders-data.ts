@@ -59,6 +59,7 @@ export type OrdersResponse = {
 };
 
 export type DailyProfitProjection = {
+  basis: ProfitProjectionBasis;
   reportDay: string;
   grossProfit: number;
   adSpend: number;
@@ -104,8 +105,14 @@ export type DailyOrderStatusOverview = {
 
 export const DAILY_ORDER_STATUS_TIMEZONE = 'Africa/Algiers';
 const ECOTRACK_SYNC_ACTOR_NAME = 'ECOTRACK sync';
-const CONFIRMED_PROJECTION_STATUS = 2;
 const NEGATIVE_OUTCOME_STATUSES = [8, 9] as const;
+
+export type ProfitProjectionBasis = 'confirmed' | 'posted';
+
+const PROFIT_PROJECTION_STATUS: Record<ProfitProjectionBasis, number> = {
+  confirmed: 2,
+  posted: 11,
+};
 
 function getOrderBy(sortRules: OrderSortRule[]) {
   const orderBy = sortRules.flatMap((rule) => {
@@ -213,8 +220,13 @@ function calculateCartGrossProfit(orderRows: ProjectionOrderRow[], productRows: 
   }, 0);
 }
 
-async function loadProfitProjection(db: ReturnType<typeof getDb>, reportDay: string): Promise<DailyProfitProjection> {
+async function loadProfitProjection(
+  db: ReturnType<typeof getDb>,
+  reportDay: string,
+  basis: ProfitProjectionBasis,
+): Promise<DailyProfitProjection> {
   const previousMonth = getPreviousMonthRange(reportDay);
+  const projectionStatus = PROFIT_PROJECTION_STATUS[basis];
   const [orderRows, adSpendRows, previousMonthRows] = await Promise.all([
     db
       .selectDistinct({
@@ -225,7 +237,7 @@ async function loadProfitProjection(db: ReturnType<typeof getDb>, reportDay: str
       .innerJoin(orders, eq(orders.id, orderStatusHistory.orderId))
       .where(and(
         sql`${orders.archivedAt} is null`,
-        eq(orderStatusHistory.status, CONFIRMED_PROJECTION_STATUS),
+        eq(orderStatusHistory.status, projectionStatus),
         reportDayPredicate(sql`${orderStatusHistory.changedAt}`, reportDay),
       )),
     db
@@ -243,7 +255,7 @@ async function loadProfitProjection(db: ReturnType<typeof getDb>, reportDay: str
       .innerJoin(orders, eq(orders.id, orderStatusHistory.orderId))
       .where(and(
         sql`${orders.archivedAt} is null`,
-        eq(orderStatusHistory.status, CONFIRMED_PROJECTION_STATUS),
+        eq(orderStatusHistory.status, projectionStatus),
         reportDateRangePredicate(sql`${orderStatusHistory.changedAt}`, previousMonth.start, previousMonth.end),
       )),
   ]);
@@ -273,6 +285,7 @@ async function loadProfitProjection(db: ReturnType<typeof getDb>, reportDay: str
   const adSpend = numberOrZero(adSpendRows[0]?.spend);
 
   return {
+    basis,
     reportDay,
     grossProfit: roundMoney(grossProfit),
     adSpend: roundMoney(adSpend),
@@ -291,6 +304,7 @@ async function loadDailyOrderStatusReport(
   db: ReturnType<typeof getDb>,
   reportDay: string,
   includeProfitProjection: boolean,
+  profitProjectionBasis: ProfitProjectionBasis,
 ): Promise<DailyOrderStatusReport> {
   const reportDayWhere = (timestampExpression: ReturnType<typeof sql>) => reportDayPredicate(timestampExpression, reportDay);
 
@@ -410,7 +424,7 @@ async function loadDailyOrderStatusReport(
       ) shipment_activity
       where ${reportDayWhere(sql`shipment_activity.activity_at`)}
     `),
-    includeProfitProjection ? loadProfitProjection(db, reportDay) : Promise.resolve(undefined),
+    includeProfitProjection ? loadProfitProjection(db, reportDay, profitProjectionBasis) : Promise.resolve(undefined),
   ]);
 
   return {
@@ -426,7 +440,10 @@ async function loadDailyOrderStatusReport(
   };
 }
 
-export async function loadDailyOrderStatusOverview(options: { includeProfitProjection?: boolean } = {}): Promise<DailyOrderStatusOverview> {
+export async function loadDailyOrderStatusOverview(options: {
+  includeProfitProjection?: boolean;
+  profitProjectionBasis?: ProfitProjectionBasis;
+} = {}): Promise<DailyOrderStatusOverview> {
   if (!hasDb()) {
     return {
       available: false,
@@ -437,9 +454,10 @@ export async function loadDailyOrderStatusOverview(options: { includeProfitProje
 
   const db = getDb();
   const reportDay = getAlgiersReportDay();
+  const profitProjectionBasis = options.profitProjectionBasis ?? 'confirmed';
   const reports = await Promise.all([
-    loadDailyOrderStatusReport(db, reportDay, Boolean(options.includeProfitProjection)),
-    loadDailyOrderStatusReport(db, shiftIsoDate(reportDay, -1), Boolean(options.includeProfitProjection)),
+    loadDailyOrderStatusReport(db, reportDay, Boolean(options.includeProfitProjection), profitProjectionBasis),
+    loadDailyOrderStatusReport(db, shiftIsoDate(reportDay, -1), Boolean(options.includeProfitProjection), profitProjectionBasis),
   ]);
   const today = reports[0]!;
 

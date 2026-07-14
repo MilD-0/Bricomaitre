@@ -212,6 +212,138 @@ describe('OrdersManager', () => {
     expect(screen.getByText('5')).toBeInTheDocument();
   });
 
+  it('switches both profit projections from confirmed to posted order transitions', async () => {
+    const requestedBases: Array<string | null> = [];
+    server.use(
+      http.get('/api/orders', ({ request }) => HttpResponse.json(paginatedOrdersResponse([], request.url))),
+      http.get('/api/orders/overview', async ({ request }) => {
+        const basis = new URL(request.url).searchParams.get('projectionBasis');
+        requestedBases.push(basis);
+        await delay(50);
+
+        return HttpResponse.json({
+          overview: {
+            available: true,
+            reportDay: '2026-05-24',
+            timezone: 'Africa/Algiers',
+            newOrders: 0,
+            confirmationStatusChanges: 0,
+            confirmedToday: 0,
+            noAnswerOrders: 0,
+            adminCancelled: 0,
+            carrierCancelled: 0,
+            shipmentUpdates: 0,
+            reports: [
+              {
+                reportDay: '2026-05-24',
+                newOrders: 0,
+                confirmationStatusChanges: 0,
+                confirmedToday: 0,
+                noAnswerOrders: 0,
+                adminCancelled: 0,
+                carrierCancelled: 0,
+                shipmentUpdates: 0,
+                profitProjection: {
+                  basis: 'posted',
+                  reportDay: '2026-05-24',
+                  grossProfit: 15000,
+                  adSpend: 1000,
+                  estimatedReturnRate: 10,
+                  estimatedReturnedOrders: 1,
+                  estimatedReturnLoss: 1500,
+                  projectedProfit: 12500,
+                  previousMonthStart: '2026-04-01',
+                  previousMonthEnd: '2026-04-30',
+                  previousMonthOrders: 10,
+                  previousMonthNegativeOutcomeOrders: 1,
+                },
+              },
+              {
+                reportDay: '2026-05-23',
+                newOrders: 0,
+                confirmationStatusChanges: 0,
+                confirmedToday: 0,
+                noAnswerOrders: 0,
+                adminCancelled: 0,
+                carrierCancelled: 0,
+                shipmentUpdates: 0,
+                profitProjection: {
+                  basis: 'posted',
+                  reportDay: '2026-05-23',
+                  grossProfit: 8000,
+                  adSpend: 500,
+                  estimatedReturnRate: 10,
+                  estimatedReturnedOrders: 1,
+                  estimatedReturnLoss: 800,
+                  projectedProfit: 6700,
+                  previousMonthStart: '2026-04-01',
+                  previousMonthEnd: '2026-04-30',
+                  previousMonthOrders: 10,
+                  previousMonthNegativeOutcomeOrders: 1,
+                },
+              },
+            ],
+          },
+        });
+      }),
+    );
+
+    renderOrdersManager({
+      initialOverview: {
+        available: true,
+        reportDay: '2026-05-24',
+        timezone: 'Africa/Algiers',
+        newOrders: 0,
+        confirmationStatusChanges: 0,
+        confirmedToday: 0,
+        noAnswerOrders: 0,
+        adminCancelled: 0,
+        carrierCancelled: 0,
+        shipmentUpdates: 0,
+        reports: [
+          {
+            reportDay: '2026-05-24',
+            newOrders: 0,
+            confirmationStatusChanges: 0,
+            confirmedToday: 0,
+            noAnswerOrders: 0,
+            adminCancelled: 0,
+            carrierCancelled: 0,
+            shipmentUpdates: 0,
+            profitProjection: {
+              basis: 'confirmed',
+              reportDay: '2026-05-24',
+              grossProfit: 10000,
+              adSpend: 1000,
+              estimatedReturnRate: 10,
+              estimatedReturnedOrders: 1,
+              estimatedReturnLoss: 1000,
+              projectedProfit: 8000,
+              previousMonthStart: '2026-04-01',
+              previousMonthEnd: '2026-04-30',
+              previousMonthOrders: 10,
+              previousMonthNegativeOutcomeOrders: 1,
+            },
+          },
+        ],
+      },
+    });
+
+    const basisSwitch = screen.getByRole('switch', { name: 'projection.basisLabel' });
+    expect(basisSwitch).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByText('projection.confirmedBasis')).toBeInTheDocument();
+
+    await userEvent.click(basisSwitch);
+
+    expect(basisSwitch).toBeDisabled();
+    await waitFor(() => expect(screen.getByText('projection.postedBasis')).toBeInTheDocument());
+    expect(screen.getByRole('switch', { name: 'projection.basisLabel' })).toHaveAttribute('aria-checked', 'true');
+    expect(requestedBases).toEqual(['posted']);
+    expect(screen.getAllByText('projection.title')).toHaveLength(2);
+    expect(screen.getByText(/12,500/)).toBeInTheDocument();
+    expect(screen.getByText(/6,700/)).toBeInTheDocument();
+  });
+
   it('defaults to card view, persists table view, and restores it from local storage', async () => {
     const items = [
       {

@@ -11,6 +11,7 @@ import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
 import { captureAdminException, getRequestId } from '../../../../lib/sentry';
 import { CACHE_TAGS, revalidateServerTags } from '../../../../lib/server-cache';
 import { resolveUniqueSlug } from '../../../../lib/slug';
+import { revalidateStorefrontProducts } from '../../../../lib/storefront-revalidate';
 
 async function resolveProductSlug(
   data: ReturnType<typeof productPayloadSchema.parse>,
@@ -173,6 +174,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   });
 
   revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
+  await revalidateStorefrontProducts();
 
   try {
     await startProductCatalogFeedRefreshJob('product:update', requestId);
@@ -227,6 +229,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   });
 
   revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
+  await revalidateStorefrontProducts();
 
   try {
     await startProductCatalogFeedRefreshJob('product:patch', requestId);
@@ -269,6 +272,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   });
 
   revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
+  await revalidateStorefrontProducts();
 
   try {
     await startProductCatalogFeedRefreshJob('product:delete', requestId);

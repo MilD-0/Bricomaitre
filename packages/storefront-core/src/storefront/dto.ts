@@ -52,6 +52,50 @@ export function toStorefrontProductDto(row: StorefrontProductDtoRow) {
   };
 }
 
+export type StorefrontProductDetailDtoRow = StorefrontProductDtoRow & {
+  brand: Pick<typeof brands.$inferSelect, 'id' | 'name' | 'slug' | 'image'> | null;
+  category: Pick<
+    typeof categories.$inferSelect,
+    'id' | 'name' | 'nameAr' | 'slug' | 'image' | 'parentId' | 'properties'
+  > | null;
+};
+
+export function toStorefrontProductDetailDto(row: StorefrontProductDetailDtoRow) {
+  return {
+    id: row.id,
+    canonicalToken: row.slug,
+    title: row.title,
+    titleAr: row.titleAr,
+    description: row.description,
+    descriptionAr: row.descriptionAr,
+    sku: row.sku,
+    barcode: row.barcode,
+    price: row.price,
+    oldPrice: row.oldPrice,
+    availability: {
+      status: row.availabilityStatus,
+      inStock: row.inStock,
+      quantity: row.inventoryQuantity,
+    },
+    media: row.images.flatMap((url, position) => {
+      const normalizedUrl = url.trim();
+      return normalizedUrl
+        ? [{
+          url: normalizedUrl,
+          position,
+          width: null,
+          height: null,
+          blurDataUrl: null,
+        }]
+        : [];
+    }),
+    brand: row.brand,
+    category: row.category,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
 export function toStorefrontBrandDto(row: Pick<typeof brands.$inferSelect, 'id' | 'name' | 'slug' | 'image' | 'featured' | 'createdAt' | 'updatedAt'>) {
   return {
     ...row,

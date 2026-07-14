@@ -1,0 +1,99 @@
+import { revalidateTag } from 'next/cache';
+import { NextRequest } from 'next/server';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { signInternalRequest } from '@bric/runtime/internal-signing';
+
+import { POST } from './route';
+
+vi.mock('next/cache', () => ({
+  revalidateTag: vi.fn(),
+}));
+
+const originalSecret = process.env.STOREFRONT_REVALIDATE_SECRET;
+
+describe('app/api/internal/revalidate/route', () => {
+  beforeEach(() => {
+    process.env.STOREFRONT_REVALIDATE_SECRET = 'revalidate-secret';
+    vi.mocked(revalidateTag).mockReset();
+  });
+
+  afterEach(() => {
+    if (originalSecret === undefined) {
+      delete process.env.STOREFRONT_REVALIDATE_SECRET;
+    } else {
+      process.env.STOREFRONT_REVALIDATE_SECRET = originalSecret;
+    }
+  });
+
+  it('fails closed when the shared secret is not configured', async () => {
+    delete process.env.STOREFRONT_REVALIDATE_SECRET;
+
+    const response = await POST(new NextRequest('http://localhost/api/internal/revalidate', {
+      method: 'POST',
+      body: JSON.stringify({ scope: 'products' }),
+    }));
+
+    expect(response.status).toBe(503);
+    expect(revalidateTag).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsigned requests', async () => {
+    const response = await POST(new NextRequest('http://localhost/api/internal/revalidate', {
+      method: 'POST',
+      body: JSON.stringify({ scope: 'products' }),
+    }));
+
+    expect(response.status).toBe(401);
+    expect(revalidateTag).not.toHaveBeenCalled();
+  });
+
+  it('immediately expires global and deduplicated product tags', async () => {
+    const body = JSON.stringify({
+      scope: 'products',
+      tokens: ['desk-lamp', 'legacy-lamp', 'desk-lamp'],
+    });
+    const timestamp = String(Date.now());
+    const signature = signInternalRequest(body, 'revalidate-secret', timestamp);
+
+    const response = await POST(new NextRequest('http://localhost/api/internal/revalidate', {
+      method: 'POST',
+      body,
+      headers: {
+        'x-revalidate-timestamp': timestamp,
+        'x-revalidate-signature': signature,
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(revalidateTag).toHaveBeenNthCalledWith(1, 'storefront-new-products', { expire: 0 });
+    expect(revalidateTag).toHaveBeenNthCalledWith(2, 'storefront-new-product:desk-lamp', { expire: 0 });
+    expect(revalidateTag).toHaveBeenNthCalledWith(3, 'storefront-new-product:legacy-lamp', { expire: 0 });
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      revalidated: [
+        'storefront-new-products',
+        'storefront-new-product:desk-lamp',
+        'storefront-new-product:legacy-lamp',
+      ],
+    });
+  });
+
+  it('rejects signed unsupported scopes', async () => {
+    const body = JSON.stringify({ scope: 'assets' });
+    const timestamp = String(Date.now());
+    const signature = signInternalRequest(body, 'revalidate-secret', timestamp);
+
+    const response = await POST(new NextRequest('http://localhost/api/internal/revalidate', {
+      method: 'POST',
+      body,
+      headers: {
+        'x-revalidate-timestamp': timestamp,
+        'x-revalidate-signature': signature,
+      },
+    }));
+
+    expect(response.status).toBe(400);
+    expect(revalidateTag).not.toHaveBeenCalled();
+  });
+});

@@ -80,4 +80,63 @@ describe('loadDailyOrderStatusOverview', () => {
     expect(noAnswerQueries[0]?.params).toEqual(expect.arrayContaining(['2026-07-02']));
     expect(noAnswerQueries[1]?.params).toEqual(expect.arrayContaining(['2026-07-01']));
   });
+
+  it('uses posted status transitions for both daily and previous-month projection cohorts', async () => {
+    const dialect = new PgDialect();
+    const projectionPredicates: Parameters<PgDialect['sqlToQuery']>[0][] = [];
+    let selectIndex = 0;
+    const selectMock = vi.fn(() => {
+      const currentSelectIndex = selectIndex++;
+      const builder = {
+        from: vi.fn(() => builder),
+        innerJoin: vi.fn(() => builder),
+        where: vi.fn((predicate: Parameters<PgDialect['sqlToQuery']>[0]) => {
+          if (currentSelectIndex % 3 !== 1) {
+            projectionPredicates.push(predicate);
+          }
+
+          return Promise.resolve(currentSelectIndex % 3 === 1 ? [{ spend: 0 }] : []);
+        }),
+      };
+
+      return builder;
+    });
+    const executeMock = vi.fn().mockResolvedValue({ rows: [{ value: 0 }] });
+
+    getDbMock.mockReturnValue({ execute: executeMock, select: selectMock, selectDistinct: selectMock });
+
+    const overview = await loadDailyOrderStatusOverview({
+      includeProfitProjection: true,
+      profitProjectionBasis: 'posted',
+    });
+
+    expect(overview).toMatchObject({
+      available: true,
+      reports: [
+        expect.objectContaining({ profitProjection: expect.objectContaining({ basis: 'posted' }) }),
+        expect.objectContaining({ profitProjection: expect.objectContaining({ basis: 'posted' }) }),
+      ],
+    });
+    expect(projectionPredicates).toHaveLength(4);
+
+    const builtPredicates = projectionPredicates.map((predicate) => dialect.sqlToQuery(predicate));
+    expect(builtPredicates.every((built) => built.params.includes(11))).toBe(true);
+    expect(builtPredicates.filter((built) => built.params.includes('2026-07-02'))).toHaveLength(1);
+    expect(builtPredicates.filter((built) => built.params.includes('2026-07-01'))).toHaveLength(1);
+    expect(builtPredicates.filter((built) => built.params.includes('2026-06-01') && built.params.includes('2026-06-30'))).toHaveLength(2);
+
+    projectionPredicates.length = 0;
+    selectIndex = 0;
+
+    const confirmedOverview = await loadDailyOrderStatusOverview({ includeProfitProjection: true });
+    expect(confirmedOverview).toMatchObject({
+      available: true,
+      reports: [
+        expect.objectContaining({ profitProjection: expect.objectContaining({ basis: 'confirmed' }) }),
+        expect.objectContaining({ profitProjection: expect.objectContaining({ basis: 'confirmed' }) }),
+      ],
+    });
+    expect(projectionPredicates).toHaveLength(4);
+    expect(projectionPredicates.every((predicate) => dialect.sqlToQuery(predicate).params.includes(2))).toBe(true);
+  });
 });

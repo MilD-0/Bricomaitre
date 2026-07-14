@@ -1,4 +1,4 @@
-import { Link } from "@/i18n/navigation";
+import type { Locale } from '@/i18n/config';
 
 type RouteFoundationProps = {
   eyebrow: string;
@@ -9,7 +9,12 @@ type RouteFoundationProps = {
   secondaryLabel?: string;
   secondaryHref?: string;
   children?: React.ReactNode;
+  locale: Locale;
 };
+
+function localizedHref(locale: Locale, href: string) {
+  return href.startsWith('/') ? `/${locale}${href}` : href;
+}
 
 export function RouteFoundation({
   eyebrow,
@@ -19,7 +24,8 @@ export function RouteFoundation({
   primaryHref,
   secondaryLabel,
   secondaryHref,
-  children
+  children,
+  locale,
 }: RouteFoundationProps) {
   return (
     <section className="grid flex-1 items-center gap-6 py-10 lg:grid-cols-[1.1fr_0.9fr]">
@@ -30,14 +36,14 @@ export function RouteFoundation({
         {(primaryLabel && primaryHref) || (secondaryLabel && secondaryHref) ? (
           <div className="flex flex-wrap gap-3">
             {primaryLabel && primaryHref ? (
-              <Link className="rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-vapor" href={primaryHref}>
+              <a className="rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-vapor" href={localizedHref(locale, primaryHref)}>
                 {primaryLabel}
-              </Link>
+              </a>
             ) : null}
             {secondaryLabel && secondaryHref ? (
-              <Link className="rounded-xl bg-secondary px-5 py-3 text-sm font-semibold text-primary" href={secondaryHref}>
+              <a className="rounded-xl bg-secondary px-5 py-3 text-sm font-semibold text-primary" href={localizedHref(locale, secondaryHref)}>
                 {secondaryLabel}
-              </Link>
+              </a>
             ) : null}
           </div>
         ) : null}

@@ -23,7 +23,10 @@ export default async function OrdersPage({
           lastSync: catalog.lastSync,
         }))
       : Promise.resolve(undefined),
-    loadDailyOrderStatusOverview({ includeProfitProjection: canViewProfitStats(session.user.role) }),
+    loadDailyOrderStatusOverview({
+      includeProfitProjection: canViewProfitStats(session.user.role),
+      profitProjectionBasis: 'confirmed',
+    }),
   ]);
 
   return <OrdersManager initialOrders={initialOrders} initialCatalog={initialCatalog} initialOverview={initialOverview} />;

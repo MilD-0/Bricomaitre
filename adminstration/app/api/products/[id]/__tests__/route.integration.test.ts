@@ -12,6 +12,7 @@ const {
   authMock,
   mutateEntityWithHistoryMock,
   startProductCatalogFeedRefreshJobMock,
+  revalidateStorefrontProductsMock,
 } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
@@ -20,6 +21,7 @@ const {
   authMock: vi.fn(),
   mutateEntityWithHistoryMock: vi.fn(),
   startProductCatalogFeedRefreshJobMock: vi.fn(),
+  revalidateStorefrontProductsMock: vi.fn(),
 }));
 const { revalidateServerTagsMock, captureAdminExceptionMock } = vi.hoisted(() => ({
   revalidateServerTagsMock: vi.fn(),
@@ -46,6 +48,10 @@ vi.mock('../../../../../lib/action-history', () => ({
 
 vi.mock('../../../../../lib/background-jobs', () => ({
   startProductCatalogFeedRefreshJob: startProductCatalogFeedRefreshJobMock,
+}));
+
+vi.mock('../../../../../lib/storefront-revalidate', () => ({
+  revalidateStorefrontProducts: revalidateStorefrontProductsMock,
 }));
 
 vi.mock('../../../../../lib/server-cache', () => ({
@@ -75,6 +81,8 @@ describe('app/api/products/[id]/route', () => {
     mutateEntityWithHistoryMock.mockResolvedValue(undefined);
     startProductCatalogFeedRefreshJobMock.mockReset();
     startProductCatalogFeedRefreshJobMock.mockResolvedValue({ kind: 'started', job: null });
+    revalidateStorefrontProductsMock.mockReset();
+    revalidateStorefrontProductsMock.mockResolvedValue(undefined);
     revalidateServerTagsMock.mockReset();
     captureAdminExceptionMock.mockReset();
   });
@@ -208,6 +216,7 @@ describe('app/api/products/[id]/route', () => {
     }));
     expect(startProductCatalogFeedRefreshJobMock).toHaveBeenCalledWith('product:update', 'request-2');
     expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
+    expect(revalidateStorefrontProductsMock).toHaveBeenCalledOnce();
     await expect(res.json()).resolves.toEqual({ ok: true });
   });
 
@@ -249,6 +258,7 @@ describe('app/api/products/[id]/route', () => {
     }));
     expect(startProductCatalogFeedRefreshJobMock).toHaveBeenCalledWith('product:patch', 'request-2');
     expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
+    expect(revalidateStorefrontProductsMock).toHaveBeenCalledOnce();
     await expect(res.json()).resolves.toEqual({ ok: true });
   });
 
@@ -278,6 +288,7 @@ describe('app/api/products/[id]/route', () => {
     expect(deleteMock).toHaveBeenCalledOnce();
     expect(startProductCatalogFeedRefreshJobMock).toHaveBeenCalledWith('product:delete', 'request-2');
     expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
+    expect(revalidateStorefrontProductsMock).toHaveBeenCalledOnce();
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ ok: true });
   });
