@@ -14,6 +14,11 @@ export function getStorefrontBaseUrl() {
   return normalizeBaseUrl(process.env.STOREFRONT_BASE_URL ?? DEFAULT_STOREFRONT_BASE_URL);
 }
 
+export function getStorefrontNewBaseUrl() {
+  const value = process.env.STOREFRONT_NEW_BASE_URL?.trim();
+  return value ? normalizeBaseUrl(value) : null;
+}
+
 function getStorefrontRevalidateSecret() {
   return process.env.STOREFRONT_REVALIDATE_SECRET?.trim() ?? '';
 }
@@ -57,4 +62,26 @@ export async function revalidateStorefrontAssets() {
       });
     }
   });
+}
+
+export async function revalidateStorefrontProducts() {
+  const baseUrl = getStorefrontNewBaseUrl();
+  if (!baseUrl) {
+    return;
+  }
+
+  const secret = getStorefrontRevalidateSecret();
+  if (!secret) {
+    console.warn('[admin] storefront product revalidation skipped because STOREFRONT_REVALIDATE_SECRET is not configured');
+    return;
+  }
+
+  try {
+    await postSignedRevalidationRequest(baseUrl, JSON.stringify({ scope: 'products' }), secret);
+  } catch (error) {
+    console.warn('[admin] storefront product revalidation request failed', {
+      baseUrl,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }

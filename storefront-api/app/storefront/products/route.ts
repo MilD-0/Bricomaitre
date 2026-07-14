@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { readStorefrontProducts } from '@bric/storefront-core/catalog';
+import { countStorefrontProducts, readStorefrontProducts } from '@bric/storefront-core/catalog';
 import { storefrontProductListQuerySchema } from '@bric/storefront-core/contracts';
 import { applyServerCache, CACHE_TAGS } from '@bric/storefront-core/server-cache';
 
 export async function GET(req: NextRequest) {
   if (!hasDb()) {
-    return NextResponse.json({ items: [] });
+    return NextResponse.json({ items: [], total: 0 });
   }
 
   applyServerCache({ stale: 60, revalidate: 300, expire: 3600 }, CACHE_TAGS.products);
@@ -25,5 +25,11 @@ export async function GET(req: NextRequest) {
     slug: req.nextUrl.searchParams.get('slug') ?? undefined,
   });
 
-  return NextResponse.json({ items: await readStorefrontProducts(getDb(), query) });
+  const db = getDb();
+  const [items, total] = await Promise.all([
+    readStorefrontProducts(db, query),
+    countStorefrontProducts(db, query),
+  ]);
+
+  return NextResponse.json({ items, total });
 }

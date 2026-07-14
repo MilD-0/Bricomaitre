@@ -1,14 +1,19 @@
 import { getTranslations } from "next-intl/server";
+import { notFound } from 'next/navigation';
 
 import { PageShell } from "@/components/page-shell";
 import { RouteFoundation } from "@/components/route-foundation";
+import { isLocale } from '@/i18n/config';
 
-export default async function HomePage() {
-  const t = await getTranslations("Home");
+export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  if (!isLocale(locale)) notFound();
+  const t = await getTranslations({ locale, namespace: 'Home' });
 
   return (
-    <PageShell>
+    <PageShell locale={locale}>
       <RouteFoundation
+        locale={locale}
         eyebrow={t("eyebrow")}
         title={t("title")}
         description={t("intro")}

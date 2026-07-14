@@ -8,20 +8,23 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
     alias: [
-      { find: /^@\//, replacement: `${rootDir}/` }
+      { find: "@/", replacement: `${rootDir}/` }
     ]
   },
   test: {
     alias: [
-      { find: /^@\//, replacement: `${rootDir}/` }
+      { find: "@/", replacement: `${rootDir}/` }
     ],
     projects: [
       {
         test: {
           name: "unit",
-          environment: "node",
+          environment: "jsdom",
           setupFiles: ["./test/setup.ts"],
-          include: ["lib/**/*.test.ts"],
+          alias: [
+            { find: "@/", replacement: `${rootDir}/` }
+          ],
+          include: ["lib/**/*.test.ts", "components/**/*.test.ts", "components/**/*.test.tsx", "next-config.test.ts"],
           exclude: ["**/*.integration.test.ts", "**/node_modules/**", "**/.next/**", "**/dist/**"]
         }
       },
@@ -30,7 +33,10 @@ export default defineConfig({
           name: "integration",
           environment: "node",
           setupFiles: ["./test/setup.ts"],
-          include: ["**/*.integration.test.ts"],
+          alias: [
+            { find: "@/", replacement: `${rootDir}/` }
+          ],
+          include: ["**/*.integration.test.ts", "**/*.integration.test.tsx"],
           exclude: ["**/node_modules/**", "**/.next/**", "**/dist/**"]
         }
       }

@@ -78,6 +78,7 @@ import { Input } from './ui/input';
 import { PendingInline, sectionTransitionProps, SurfacePendingOverlay } from './ui/motion';
 import { NativeSelect, NativeSelectOption } from './ui/native-select';
 import { Skeleton } from './ui/skeleton';
+import { Switch } from './ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { TablePaginationControls } from './table-pagination-controls';
 import { MultiSortHeader } from './multi-sort-header';
@@ -85,7 +86,9 @@ import { ViewModeToggle, type ViewMode } from './view-mode-toggle';
 
 type PaginationMeta = { page: number; limit: number; totalItems: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean };
 type OrdersResponse = { items: OrderRecord[]; writable: boolean; pagination: PaginationMeta };
+type ProfitProjectionBasis = 'confirmed' | 'posted';
 type DailyProfitProjection = {
+  basis: ProfitProjectionBasis;
   reportDay: string;
   grossProfit: number;
   adSpend: number;
@@ -2043,9 +2046,13 @@ function EcotrackPostingDialog({
 function DailyOrderStatusOverviewPanel({
   overview,
   loading,
+  projectionBasis,
+  onProjectionBasisChange,
 }: {
   overview: DailyOrderStatusOverview | undefined;
   loading: boolean;
+  projectionBasis: ProfitProjectionBasis;
+  onProjectionBasisChange: (basis: ProfitProjectionBasis) => void;
 }) {
   const t = useTranslations('ordersManager.overview');
   const locale = useLocale();
@@ -2085,6 +2092,7 @@ function DailyOrderStatusOverviewPanel({
       carrierCancelled: overview.carrierCancelled,
       shipmentUpdates: overview.shipmentUpdates,
     }];
+  const hasProfitProjection = reports.some((report) => Boolean(report.profitProjection));
 
   return (
     <section className="rounded-xl border border-border/70 bg-background/90 p-3" aria-label={t('title')}>
@@ -2093,7 +2101,23 @@ function DailyOrderStatusOverviewPanel({
           <h3 className="text-sm font-semibold">{t('title')}</h3>
           <p className="text-xs text-muted-foreground">{t('subtitle', { date: formattedReportDay })}</p>
         </div>
-        {loading ? <PendingInline active label={t('refreshing')} /> : null}
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          {hasProfitProjection ? (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{t('projection.basisLabel')}</span>
+              <Switch
+                checked={projectionBasis === 'posted'}
+                disabled={loading}
+                aria-label={t('projection.basisLabel')}
+                onCheckedChange={(checked) => onProjectionBasisChange(checked ? 'posted' : 'confirmed')}
+              />
+              <span className="font-medium text-foreground">
+                {t(projectionBasis === 'posted' ? 'projection.postedBasis' : 'projection.confirmedBasis')}
+              </span>
+            </label>
+          ) : null}
+          {loading ? <PendingInline active label={t('refreshing')} /> : null}
+        </div>
       </div>
       <div className="grid gap-3 xl:grid-cols-2">
         {reports.map((report, reportIndex) => {
@@ -2188,6 +2212,7 @@ export function OrdersManager({
   const [activeEcotrackJobId, setActiveEcotrackJobId] = useState<string | null>(null);
   const [hoveredProductKey, setHoveredProductKey] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  const [profitProjectionBasis, setProfitProjectionBasis] = useState<ProfitProjectionBasis>('confirmed');
   const [isFilterPending, startFilterTransition] = useTransition();
   const initializedExportStatusRef = useRef(false);
   const lastExportStatusKeyRef = useRef<string | null>(null);
@@ -2257,10 +2282,11 @@ export function OrdersManager({
     staleTime: 60_000,
   });
   const overviewQuery = useQuery({
-    queryKey: ['orders-overview'],
-    queryFn: () => request<DailyOrderStatusOverviewResponse>('/api/orders/overview'),
-    initialData: initialOverview ? { overview: initialOverview } : undefined,
-    initialDataUpdatedAt: initialOverview ? initialOverviewUpdatedAt : undefined,
+    queryKey: ['orders-overview', profitProjectionBasis],
+    queryFn: () => request<DailyOrderStatusOverviewResponse>(`/api/orders/overview?projectionBasis=${profitProjectionBasis}`),
+    initialData: profitProjectionBasis === 'confirmed' && initialOverview ? { overview: initialOverview } : undefined,
+    initialDataUpdatedAt: profitProjectionBasis === 'confirmed' && initialOverview ? initialOverviewUpdatedAt : undefined,
+    placeholderData: keepPreviousData,
     staleTime: 60_000,
   });
   const ecotrackCatalogQuery = useQuery({
@@ -3466,6 +3492,10 @@ export function OrdersManager({
           <DailyOrderStatusOverviewPanel
             overview={overviewQuery.data?.overview}
             loading={overviewQuery.isFetching}
+            projectionBasis={overviewQuery.data?.overview.available
+              ? overviewQuery.data.overview.reports?.find((report) => report.profitProjection)?.profitProjection?.basis ?? 'confirmed'
+              : profitProjectionBasis}
+            onProjectionBasisChange={setProfitProjectionBasis}
           />
 
           <div className="sm:rounded-[1.5rem] sm:border sm:border-border/70 sm:bg-background/90 sm:p-3">

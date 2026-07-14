@@ -10,7 +10,7 @@
     "start": "node ../ops/scripts/start-next-standalone.mjs --app-dir . --nested-dir storefront-api --default-port 3001",
     "worker:meta": "tsx scripts/run-meta-worker.ts",
     "lint": "eslint",
-    "test": "vitest run --project integration",
+    "test": "vitest run --project unit && vitest run --project integration",
     "test:watch": "vitest --project unit",
     "test:coverage": "vitest run --project unit --coverage",
     "test:integration": "vitest run --project integration"

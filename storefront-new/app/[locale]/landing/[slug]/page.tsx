@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
+import { notFound } from 'next/navigation';
 
 import { PageShell } from "@/components/page-shell";
 import { RouteFoundation } from "@/components/route-foundation";
+import { isLocale } from '@/i18n/config';
 
 type LandingPageProps = {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ locale: string; slug: string }>;
 };
 
 export async function generateMetadata({ params }: LandingPageProps): Promise<Metadata> {
@@ -18,12 +20,14 @@ export async function generateMetadata({ params }: LandingPageProps): Promise<Me
 }
 
 export default async function LandingPage({ params }: LandingPageProps) {
-  const { slug } = await params;
-  const t = await getTranslations("Landing");
+  const { locale, slug } = await params;
+  if (!isLocale(locale)) notFound();
+  const t = await getTranslations({ locale, namespace: 'Landing' });
 
   return (
-    <PageShell>
+    <PageShell locale={locale}>
       <RouteFoundation
+        locale={locale}
         eyebrow={t("eyebrow")}
         title={t("title", { slug })}
         description={t("description")}

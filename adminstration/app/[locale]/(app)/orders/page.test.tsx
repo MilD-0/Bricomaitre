@@ -73,6 +73,9 @@ describe('OrdersPage', () => {
       { page: 1, limit: 25, search: '', sortKey: 'createdAt', sortDirection: 'desc' },
       true,
     );
-    expect(loadDailyOrderStatusOverviewMock).toHaveBeenCalledWith({ includeProfitProjection: false });
+    expect(loadDailyOrderStatusOverviewMock).toHaveBeenCalledWith({
+      includeProfitProjection: false,
+      profitProjectionBasis: 'confirmed',
+    });
   });
 });

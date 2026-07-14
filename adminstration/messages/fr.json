@@ -1050,6 +1050,9 @@
       },
       "projection": {
         "title": "Profit futur projeté",
+        "basisLabel": "Base de projection",
+        "confirmedBasis": "Commandes confirmées",
+        "postedBasis": "Commandes envoyées",
         "grossProfit": "Profit brut futur",
         "adSpend": "Dépense pub",
         "returnRate": "Taux retours / échecs",

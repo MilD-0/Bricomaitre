@@ -3,10 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET } from './route';
 
-const { hasDbMock, getDbMock, readStorefrontProductsMock, applyServerCacheMock } = vi.hoisted(() => ({
+const { hasDbMock, getDbMock, readStorefrontProductsMock, countStorefrontProductsMock, applyServerCacheMock } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
   readStorefrontProductsMock: vi.fn(),
+  countStorefrontProductsMock: vi.fn(),
   applyServerCacheMock: vi.fn(),
 }));
 
@@ -17,6 +18,7 @@ vi.mock('@bric/db/client', () => ({
 
 vi.mock('@bric/storefront-core/catalog', () => ({
   readStorefrontProducts: readStorefrontProductsMock,
+  countStorefrontProducts: countStorefrontProductsMock,
 }));
 
 vi.mock('@bric/storefront-core/server-cache', () => ({
@@ -31,6 +33,7 @@ describe('app/storefront/products/route', () => {
     hasDbMock.mockReset();
     getDbMock.mockReset();
     readStorefrontProductsMock.mockReset();
+    countStorefrontProductsMock.mockReset();
     applyServerCacheMock.mockReset();
   });
 
@@ -40,7 +43,7 @@ describe('app/storefront/products/route', () => {
     const res = await GET(new NextRequest('http://localhost/storefront/products'));
 
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ items: [] });
+    await expect(res.json()).resolves.toEqual({ items: [], total: 0 });
   });
 
   it('returns active storefront products with serialized timestamps', async () => {
@@ -69,11 +72,16 @@ describe('app/storefront/products/route', () => {
         updatedAt: '2026-04-02T10:00:00.000Z',
       },
     ]);
+    countStorefrontProductsMock.mockResolvedValue(37);
 
     const res = await GET(new NextRequest('http://localhost/storefront/products?search=lamp'));
 
     expect(applyServerCacheMock).toHaveBeenCalledWith({ stale: 60, revalidate: 300, expire: 3600 }, 'products');
     expect(readStorefrontProductsMock).toHaveBeenCalledWith(
+      { tag: 'db' },
+      expect.objectContaining({ search: 'lamp' }),
+    );
+    expect(countStorefrontProductsMock).toHaveBeenCalledWith(
       { tag: 'db' },
       expect.objectContaining({ search: 'lamp' }),
     );
@@ -101,6 +109,7 @@ describe('app/storefront/products/route', () => {
           updatedAt: '2026-04-02T10:00:00.000Z',
         },
       ],
+      total: 37,
     });
   });
 
@@ -108,6 +117,7 @@ describe('app/storefront/products/route', () => {
     hasDbMock.mockReturnValue(true);
     getDbMock.mockReturnValue({ tag: 'db' });
     readStorefrontProductsMock.mockResolvedValue([]);
+    countStorefrontProductsMock.mockResolvedValue(0);
 
     const res = await GET(new NextRequest('http://localhost/storefront/products?id=42'));
 
@@ -116,6 +126,6 @@ describe('app/storefront/products/route', () => {
       { tag: 'db' },
       expect.objectContaining({ id: 42 }),
     );
-    await expect(res.json()).resolves.toEqual({ items: [] });
+    await expect(res.json()).resolves.toEqual({ items: [], total: 0 });
   });
 });

@@ -15,15 +15,18 @@ import { POST as compatibilityOrdersPost } from './orders/route';
 import { GET as canonicalCatalogFeedGet } from '../../storefront/products/catalog-feed/route';
 import { GET as canonicalProductBuildFeedGet } from '../../storefront/products/build-feed/route';
 import { GET as canonicalProductCatalogFeedGet } from '../../storefront/products/catalog-feed/route';
+import { GET as canonicalProductGet } from '../../storefront/products/[id]/route';
 import { GET as canonicalProductsGet } from '../../storefront/products/route';
 import { GET as compatibilityCatalogFeedGet } from './products/catalog-feed/route';
 import { GET as compatibilityProductBuildFeedGet } from './products/build-feed/route';
 import { GET as compatibilityProductCatalogFeedGet } from './products/catalog-feed/route';
+import { GET as compatibilityProductGet } from './products/[id]/route';
 import { GET as compatibilityProductsGet } from './products/route';
 
 describe('app/api/storefront compatibility routes', () => {
   it('re-exports the canonical storefront route handlers', () => {
     expect(compatibilityProductsGet).toBe(canonicalProductsGet);
+    expect(compatibilityProductGet).toBe(canonicalProductGet);
     expect(compatibilityBrandsGet).toBe(canonicalBrandsGet);
     expect(compatibilityCategoriesGet).toBe(canonicalCategoriesGet);
     expect(compatibilityAssetsGet).toBe(canonicalAssetsGet);
