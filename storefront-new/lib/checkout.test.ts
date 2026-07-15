@@ -7,6 +7,8 @@ import {
   expandCheckoutCart,
   getCheckoutDeliveryFee,
   hasCheckoutStopDesk,
+  readCheckoutDraft,
+  writeCheckoutDraft,
 } from './checkout';
 
 const catalog = {
@@ -18,20 +20,45 @@ const catalog = {
 };
 
 describe('checkout domain', () => {
-  it('validates the legacy storefront fields while keeping optional details optional', () => {
-    const parsed = checkoutFormSchema.parse({
+  it('requires an address for home delivery while keeping other details optional', () => {
+    const form = {
       phoneNumber1: ' 0550 12 34 56 ',
       lastName: '',
       firstName: 'Lina',
       state: '16',
       city: 'Bab Ezzouar',
-      homeAddress: '',
+      homeAddress: '12 rue des Outils',
       email: '',
       delivery: 'home',
-    });
-    expect(parsed).toMatchObject({ phoneNumber1: '0550 12 34 56', firstName: 'Lina', lastName: null, state: 16, email: null });
-    expect(checkoutFormSchema.safeParse({ ...parsed, phoneNumber1: '', state: 0 }).success).toBe(false);
-    expect(checkoutFormSchema.safeParse({ ...parsed, email: 'not-an-email' }).success).toBe(false);
+    } as const;
+    const parsed = checkoutFormSchema.parse(form);
+    expect(parsed).toMatchObject({ phoneNumber1: '0550123456', firstName: 'Lina', lastName: null, state: 16, email: null });
+    expect(checkoutFormSchema.safeParse({ ...form, phoneNumber1: '', state: 0 }).success).toBe(false);
+    expect(checkoutFormSchema.safeParse({ ...form, phoneNumber1: '1234567890' }).error?.issues[0]?.message).toBe('phone_invalid');
+    expect(checkoutFormSchema.parse({ ...form, phoneNumber1: '+213 550 12 34 56' }).phoneNumber1).toBe('0550123456');
+    expect(checkoutFormSchema.safeParse({ ...form, email: 'not-an-email' }).success).toBe(false);
+    expect(checkoutFormSchema.safeParse({ ...form, homeAddress: '', delivery: 'home' }).success).toBe(false);
+    expect(checkoutFormSchema.safeParse({ ...form, homeAddress: '', delivery: 'office' }).success).toBe(true);
+  });
+
+  it('stores and validates a reusable checkout draft', () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    };
+    const draft = {
+      phoneNumber1: '0774246465', lastName: 'Client', firstName: '', state: 17,
+      city: 'Djelfa', homeAddress: 'Centre-ville', email: '', delivery: 'home' as const,
+    };
+
+    writeCheckoutDraft(storage, draft);
+    expect(readCheckoutDraft(storage)).toEqual(draft);
+
+    values.set('bric:checkout:draft:v1', '{"state":"invalid"}');
+    expect(readCheckoutDraft(storage)).toBeNull();
+    expect(values.has('bric:checkout:draft:v1')).toBe(false);
   });
 
   it('calculates home and office delivery from the canonical Ecotrack catalog', () => {

@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET } from './route';
 
-const { hasDbMock, getDbMock, readStorefrontEcotrackCatalogMock } = vi.hoisted(() => ({
+const { hasDbMock, getDbMock, readStorefrontEcotrackCatalogMock, applyServerCacheMock } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
   readStorefrontEcotrackCatalogMock: vi.fn(),
+  applyServerCacheMock: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', () => ({
@@ -17,11 +18,17 @@ vi.mock('@bric/storefront-core/ecotrack-catalog', () => ({
   readStorefrontEcotrackCatalog: readStorefrontEcotrackCatalogMock,
 }));
 
+vi.mock('@bric/storefront-core/server-cache', () => ({
+  CACHE_TAGS: { ecotrackCatalog: 'ecotrack-catalog' },
+  applyServerCache: applyServerCacheMock,
+}));
+
 describe('app/storefront/ecotrack/catalog/route', () => {
   beforeEach(() => {
     hasDbMock.mockReset();
     getDbMock.mockReset();
     readStorefrontEcotrackCatalogMock.mockReset();
+    applyServerCacheMock.mockReset();
   });
 
   it('returns empty catalog payloads when DB is unavailable', async () => {
@@ -52,8 +59,13 @@ describe('app/storefront/ecotrack/catalog/route', () => {
 
     const response = await GET();
 
+    expect(applyServerCacheMock).toHaveBeenCalledWith(
+      { stale: 300, revalidate: 3600, expire: 86400 },
+      'ecotrack-catalog',
+    );
     expect(readStorefrontEcotrackCatalogMock).toHaveBeenCalledWith({ tag: 'db' });
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('public, max-age=300, s-maxage=3600, stale-while-revalidate=86400');
     await expect(response.json()).resolves.toEqual({
       wilayas: [{ wilayaId: 16, name: 'Alger' }],
       communes: [{ communeId: 42, wilayaId: 16, name: 'Bab Ezzouar', postalCode: '1621', hasStopDesk: true }],

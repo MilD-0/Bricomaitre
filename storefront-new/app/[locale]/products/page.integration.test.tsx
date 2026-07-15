@@ -27,12 +27,15 @@ vi.mock('@/components/catalog-telemetry', () => ({ CatalogTelemetry: () => null 
 vi.mock('@/components/catalog-live-search', () => ({
   CatalogLiveSearch: ({ initialValue }: { initialValue: string }) => React.createElement('input', { name: 'q', value: initialValue, readOnly: true }),
 }));
+vi.mock('@/components/catalog-live-sort', () => ({
+  CatalogLiveSort: ({ initialValue, label }: { initialValue: string; label: string }) => React.createElement('select', { name: 'sort', value: initialValue, 'aria-label': label, readOnly: true }),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: vi.fn(async () => (key: string, values?: Record<string, number>) => ({
     eyebrow: 'Catalog', title: 'Products for your work', description: 'Find the right product', controls: 'Controls',
     filterTitle: 'Filter products', resultsLabel: 'Catalog results', applyFilters: 'Apply filters', viewProduct: 'View',
     searchLabel: 'Search', searchPlaceholder: 'Drill', categoryLabel: 'Category', allCategories: 'All categories',
-    brandLabel: 'Brand', allBrands: 'All brands', sortLabel: 'Sort', sortNewest: 'Newest', sortPriceAsc: 'Low price',
+    brandLabel: 'Brand', allBrands: 'All brands', sortLabel: 'Sort', sortRecommended: 'Recommended', sortNewest: 'Newest', sortPriceAsc: 'Low price',
     sortPriceDesc: 'High price', sortNameAsc: 'Name', apply: 'Apply', reset: 'Reset', inStock: 'In stock',
     outOfStock: 'Out of stock', priceOnRequest: 'Ask', unavailableTitle: 'Unavailable',
     unavailableDescription: 'Try later', emptyTitle: 'No products', emptyDescription: 'Change filters',
@@ -91,6 +94,7 @@ describe('localized Catalog Page', () => {
     expect(html).toContain('type="radio"');
     expect(html.match(/class="catalog-filter-options"/g)).toHaveLength(2);
     expect(html.match(/class="catalog-filter-group-heading"/g)).toHaveLength(2);
+    expect(html).not.toContain('Apply</button>');
     expect(mocks.catalog).toHaveBeenCalledWith(expect.objectContaining({ search: 'lamp', categoryId: 3, limit: 24 }));
   });
 

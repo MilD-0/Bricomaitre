@@ -1,7 +1,15 @@
-import { and, asc, count, desc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 
 import type { getDb } from '../../../db/src/client';
-import { brands, categories, products } from '../../../db/src/schema';
+import {
+  brands,
+  categories,
+  featuredProductGroupBrands,
+  featuredProductGroupCategories,
+  featuredProductGroupProducts,
+  featuredProductGroups,
+  products,
+} from '../../../db/src/schema';
 import type { StorefrontProductListQuery } from './contracts';
 import {
   toStorefrontBrandDto,
@@ -59,7 +67,22 @@ export function buildCatalogSearchCondition(value: string) {
   const normalized = normalizeCatalogSearch(value);
   if (!normalized) return undefined;
 
-  const document = sql<string>`translate(replace(replace(lower(regexp_replace(
+  const document = buildCatalogSearchDocument();
+  const exactTokens = normalized.split(' ').map((token) => sql<boolean>`position(${token} in ${document}) > 0`);
+  const threshold = getCatalogSearchSimilarityThreshold(normalized);
+
+  return or(
+    ilike(products.title, `%${value}%`),
+    ilike(products.titleAr, `%${value}%`),
+    ilike(products.sku, `%${value}%`),
+    ilike(products.barcode, `%${value}%`),
+    and(...exactTokens),
+    threshold === null ? undefined : sql<boolean>`word_similarity(${normalized}, ${document}) >= ${threshold}`,
+  );
+}
+
+function buildCatalogSearchDocument() {
+  return sql<string>`translate(replace(replace(lower(regexp_replace(
     coalesce(${products.title}, '') || ' ' ||
     coalesce(${products.titleAr}, '') || ' ' ||
     coalesce(${products.description}, '') || ' ' ||
@@ -73,17 +96,19 @@ export function buildCatalogSearchCondition(value: string) {
     coalesce(${categories.nameAr}, ''),
     '[\u0610-\u061a\u064b-\u065f\u0670\u06d6-\u06ed\u0640]', '', 'g'
   )), 'œ', 'oe'), 'æ', 'ae'), ${SEARCH_DOCUMENT_TRANSLATE_FROM}, ${SEARCH_DOCUMENT_TRANSLATE_TO})`;
-  const exactTokens = normalized.split(' ').map((token) => sql<boolean>`position(${token} in ${document}) > 0`);
+}
+
+export function buildCatalogSearchRelevance(value: string) {
+  const normalized = normalizeCatalogSearch(value);
+  if (!normalized) return undefined;
+
+  const document = buildCatalogSearchDocument();
+  const exactMatch = sql<number>`case when position(${normalized} in ${document}) > 0 then 1 else 0 end`;
   const threshold = getCatalogSearchSimilarityThreshold(normalized);
 
-  return or(
-    ilike(products.title, `%${value}%`),
-    ilike(products.titleAr, `%${value}%`),
-    ilike(products.sku, `%${value}%`),
-    ilike(products.barcode, `%${value}%`),
-    and(...exactTokens),
-    threshold === null ? undefined : sql<boolean>`word_similarity(${normalized}, ${document}) >= ${threshold}`,
-  );
+  return threshold === null
+    ? exactMatch
+    : sql<number>`(${exactMatch} + word_similarity(${normalized}, ${document}))`;
 }
 
 export function normalizeStorefrontProductToken(value: string) {
@@ -196,7 +221,8 @@ export async function readStorefrontProducts(
   query: StorefrontProductListQuery,
 ) {
   const direction = query.sortDirection === 'asc' ? asc : desc;
-  const orderBy = {
+  const standardSortKey = query.sortKey === 'recommended' ? 'updatedAt' : query.sortKey;
+  const standardOrderBy = {
     title: direction(products.title),
     price: direction(products.price),
     updatedAt: direction(products.updatedAt),
@@ -204,7 +230,10 @@ export async function readStorefrontProducts(
     active: direction(products.active),
     inStock: direction(products.inStock),
     purchasePrice: direction(products.purchasePrice),
-  }[query.sortKey];
+  }[standardSortKey];
+  const orderBy = query.sortKey === 'recommended'
+    ? buildRecommendedProductOrderBy(query.search)
+    : [standardOrderBy, direction(products.id)];
   const whereClause = buildStorefrontProductWhereClause(query);
 
   const rows = await db
@@ -234,11 +263,117 @@ export async function readStorefrontProducts(
     .leftJoin(brands, and(eq(products.brandId, brands.id), eq(brands.isActive, true)))
     .leftJoin(categories, and(eq(products.categoryId, categories.id), eq(categories.isActive, true)))
     .where(whereClause)
-    .orderBy(orderBy, direction(products.id))
+    .orderBy(...orderBy)
     .limit(query.limit)
     .offset((query.page - 1) * query.limit);
 
   return rows.map((row) => toStorefrontProductDto(row satisfies StorefrontProductDtoRow));
+}
+
+export async function readStorefrontProductsByIds(db: Database, ids: number[]) {
+  const uniqueIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  if (uniqueIds.length === 0) return [];
+
+  const rows = await db
+    .select({
+      id: products.id, slug: products.slug, mongoId: products.mongoId, title: products.title,
+      titleAr: products.titleAr, description: products.description, descriptionAr: products.descriptionAr,
+      sku: products.sku, barcode: products.barcode, price: products.price, oldPrice: products.oldPrice,
+      active: products.active, inStock: products.inStock, availabilityStatus: products.availabilityStatus,
+      inventoryQuantity: products.inventoryQuantity, brandId: products.brandId, categoryId: products.categoryId,
+      images: products.images, createdAt: products.createdAt, updatedAt: products.updatedAt,
+    })
+    .from(products)
+    .where(and(eq(products.active, true), inArray(products.id, uniqueIds)));
+  const byId = new Map(rows.map((row) => [row.id, toStorefrontProductDto(row satisfies StorefrontProductDtoRow)]));
+  return uniqueIds.flatMap((id) => byId.get(id) ?? []);
+}
+
+export async function readStorefrontProductsForSelections(
+  db: Database,
+  selection: { productIds: number[]; brandIds: number[]; categoryIds: number[] },
+  limit = 12,
+) {
+  const direct = await readStorefrontProductsByIds(db, selection.productIds);
+  const dynamicConditions = [
+    selection.brandIds.length > 0 ? inArray(products.brandId, selection.brandIds) : undefined,
+    selection.categoryIds.length > 0 ? inArray(products.categoryId, selection.categoryIds) : undefined,
+  ].filter((condition): condition is NonNullable<typeof condition> => Boolean(condition));
+  if (dynamicConditions.length === 0) return direct.slice(0, limit);
+
+  const rows = await db
+    .select({
+      id: products.id, slug: products.slug, mongoId: products.mongoId, title: products.title,
+      titleAr: products.titleAr, description: products.description, descriptionAr: products.descriptionAr,
+      sku: products.sku, barcode: products.barcode, price: products.price, oldPrice: products.oldPrice,
+      active: products.active, inStock: products.inStock, availabilityStatus: products.availabilityStatus,
+      inventoryQuantity: products.inventoryQuantity, brandId: products.brandId, categoryId: products.categoryId,
+      images: products.images, createdAt: products.createdAt, updatedAt: products.updatedAt,
+    })
+    .from(products)
+    .where(and(eq(products.active, true), or(...dynamicConditions)))
+    .orderBy(...buildRecommendedProductOrderBy())
+    .limit(limit);
+  return mergeStorefrontProductSelections(
+    direct,
+    rows.map((row) => toStorefrontProductDto(row satisfies StorefrontProductDtoRow)),
+    limit,
+  );
+}
+
+export function mergeStorefrontProductSelections<T extends { id: number }>(direct: T[], dynamic: T[], limit: number) {
+  const seen = new Set<number>();
+  return [...direct, ...dynamic].filter((product) => {
+    if (seen.has(product.id)) return false;
+    seen.add(product.id);
+    return true;
+  }).slice(0, Math.max(0, limit));
+}
+
+export function buildRecommendedProductOrderBy(search = '') {
+  const featuredGroupRank = sql<number>`coalesce((
+    select min(${featuredProductGroups.sortOrder})
+    from ${featuredProductGroups}
+    where ${featuredProductGroups.active} = true
+      and ${featuredProductGroups.showAtTopOfProductsPage} = true
+      and (
+        exists (
+          select 1
+          from ${featuredProductGroupProducts}
+          where ${featuredProductGroupProducts.groupId} = ${featuredProductGroups.id}
+            and ${featuredProductGroupProducts.productId} = ${products.id}
+        )
+        or (${products.brandId} is not null and exists (
+          select 1
+          from ${featuredProductGroupBrands}
+          where ${featuredProductGroupBrands.groupId} = ${featuredProductGroups.id}
+            and ${featuredProductGroupBrands.brandId} = ${products.brandId}
+        ))
+        or (${products.categoryId} is not null and exists (
+          select 1
+          from ${featuredProductGroupCategories}
+          where ${featuredProductGroupCategories.groupId} = ${featuredProductGroups.id}
+            and ${featuredProductGroupCategories.categoryId} = ${products.categoryId}
+        ))
+      )
+  ), 2147483647)`;
+
+  const searchRelevance = buildCatalogSearchRelevance(search);
+
+  return [
+    ...(searchRelevance ? [desc(searchRelevance)] : []),
+    asc(featuredGroupRank),
+    desc(products.inStock),
+    desc(products.popularityScore),
+    desc(products.purchaseCount),
+    desc(products.checkoutCount),
+    desc(products.addToCartCount),
+    desc(products.viewCount),
+    desc(products.conversionRate),
+    sql`${products.lastViewedAt} desc nulls last`,
+    desc(products.updatedAt),
+    desc(products.id),
+  ];
 }
 
 function buildStorefrontProductWhereClause(query: StorefrontProductListQuery) {

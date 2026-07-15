@@ -3,6 +3,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 
 import {
   buildCatalogSearchCondition,
+  buildCatalogSearchRelevance,
   getCatalogSearchSimilarityThreshold,
   normalizeCatalogSearch,
 } from '@bric/storefront-core/catalog';
@@ -36,5 +37,14 @@ describe('storefront catalog search normalization', () => {
     expect(query.sql).toContain('word_similarity');
     expect(query.params).toContain('perceuse');
     expect(query.params).toContain(0.64);
+  });
+
+  it('builds relevance ordering for typo-tolerant searches without weakening exact matches', () => {
+    const relevance = buildCatalogSearchRelevance('Pérceuse');
+    const query = new PgDialect().sqlToQuery(relevance!);
+
+    expect(query.sql).toContain('case when position');
+    expect(query.sql).toContain('word_similarity');
+    expect(query.params).toContain('perceuse');
   });
 });

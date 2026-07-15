@@ -187,10 +187,11 @@ export function normalizeMetaEventTime(value: Date, now = new Date()) {
   return { kind: "valid" as const, value };
 }
 
-function buildProductConditions(productIds: number[], mongoIds: string[]) {
+function buildProductConditions(productIds: number[], mongoIds: string[], slugs: string[] = []) {
   const conditions = [];
   if (productIds.length > 0) conditions.push(inArray(products.id, productIds));
   if (mongoIds.length > 0) conditions.push(inArray(products.mongoId, mongoIds));
+  if (slugs.length > 0) conditions.push(inArray(products.slug, slugs));
   return conditions.length === 1 ? conditions[0] : or(...conditions);
 }
 
@@ -266,14 +267,18 @@ export async function resolveOrderLineSnapshots(
   const mongoIds = [...new Set(input.cartProducts
     .map((value) => value.trim())
     .filter((value) => /^[a-f\d]{24}$/i.test(value)))];
-  if (numericIds.length === 0 && mongoIds.length === 0) return [];
+  const slugs = [...new Set(input.cartProducts
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0 && !/^\d+$/.test(value) && !/^[a-f\d]{24}$/i.test(value)))];
+  if (numericIds.length === 0 && mongoIds.length === 0 && slugs.length === 0) return [];
 
-  const condition = buildProductConditions(numericIds, mongoIds);
+  const condition = buildProductConditions(numericIds, mongoIds, slugs);
   if (!condition) return [];
   const rows = await db
     .select({
       id: products.id,
       mongoId: products.mongoId,
+      slug: products.slug,
       title: products.title,
       price: products.price,
       images: products.images,
@@ -284,6 +289,7 @@ export async function resolveOrderLineSnapshots(
   for (const row of rows) {
     rowByReference.set(String(row.id), row);
     if (row.mongoId) rowByReference.set(row.mongoId, row);
+    if (row.slug) rowByReference.set(row.slug, row);
   }
   const quantities = new Map<number, { row: typeof rows[number]; quantity: number; rawValue: string }>();
   for (const raw of input.cartProducts) {

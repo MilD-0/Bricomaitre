@@ -6,17 +6,17 @@ const product = (id: number, brandId: number | null, inStock: boolean) => ({ id,
 
 describe('similar product matching', () => {
   it('uses category as the strongest relevance boundary and brand as fallback', () => {
-    expect(buildSimilarProductsQuery(3, 2)).toMatchObject({ category: 3, brand: null });
-    expect(buildSimilarProductsQuery(null, 2)).toMatchObject({ category: null, brand: 2 });
+    expect(buildSimilarProductsQuery(3, 2)).toMatchObject({ category: 3, brand: null, sort: 'recommended' });
+    expect(buildSimilarProductsQuery(null, 2)).toMatchObject({ category: null, brand: 2, sort: 'recommended' });
   });
 
-  it('excludes the current product and ranks same-brand, available products first', () => {
+  it('excludes the current product while retaining the relevant recommended order', () => {
     const ranked = rankSimilarProducts([
       product(12, 2, true),
       product(13, 4, true),
       product(14, 2, false),
       product(15, 2, true),
-    ] as never[], 12, 2);
-    expect(ranked.map(({ id }) => id)).toEqual([15, 14, 13]);
+    ] as never[], 12);
+    expect(ranked.map(({ id }) => id)).toEqual([13, 14, 15]);
   });
 });

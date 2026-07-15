@@ -23,6 +23,7 @@ vi.mock('@bric/storefront-core/catalog', () => ({
 
 vi.mock('@bric/storefront-core/server-cache', () => ({
   CACHE_TAGS: {
+    assets: 'assets',
     products: 'products',
   },
   applyServerCache: applyServerCacheMock,
@@ -76,7 +77,11 @@ describe('app/storefront/products/route', () => {
 
     const res = await GET(new NextRequest('http://localhost/storefront/products?search=lamp'));
 
-    expect(applyServerCacheMock).toHaveBeenCalledWith({ stale: 60, revalidate: 300, expire: 3600 }, 'products');
+    expect(applyServerCacheMock).toHaveBeenCalledWith(
+      { stale: 60, revalidate: 300, expire: 3600 },
+      'products',
+      'assets',
+    );
     expect(readStorefrontProductsMock).toHaveBeenCalledWith(
       { tag: 'db' },
       expect.objectContaining({ search: 'lamp' }),
@@ -127,5 +132,19 @@ describe('app/storefront/products/route', () => {
       expect.objectContaining({ id: 42 }),
     );
     await expect(res.json()).resolves.toEqual({ items: [], total: 0 });
+  });
+
+  it('accepts the recommended storefront ranking', async () => {
+    hasDbMock.mockReturnValue(true);
+    getDbMock.mockReturnValue({ tag: 'db' });
+    readStorefrontProductsMock.mockResolvedValue([]);
+    countStorefrontProductsMock.mockResolvedValue(0);
+
+    await GET(new NextRequest('http://localhost/storefront/products?sortKey=recommended'));
+
+    expect(readStorefrontProductsMock).toHaveBeenCalledWith(
+      { tag: 'db' },
+      expect.objectContaining({ sortKey: 'recommended' }),
+    );
   });
 });

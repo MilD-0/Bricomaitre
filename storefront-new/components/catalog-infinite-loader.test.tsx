@@ -103,7 +103,7 @@ describe('CatalogInfiniteLoader', () => {
     );
 
     await expect(screen.findByRole('heading', { name: 'Cordless drill' })).resolves.toBeInTheDocument();
-    expect(fetch).toHaveBeenCalledWith('/api/catalog?page=2&limit=6', expect.any(Object));
+    expect(fetch).toHaveBeenCalledWith('/api/catalog?sort=newest&page=2&limit=6', expect.any(Object));
     await waitFor(() => expect(trackCatalogEvent).toHaveBeenCalledWith(expect.objectContaining({
       eventName: 'view_item_list',
       metadata: expect.objectContaining({ page: 2, listContext: 'similar_products', visibleProductIds: [25] }),

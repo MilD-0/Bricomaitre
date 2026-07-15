@@ -4,6 +4,7 @@ import type { StorefrontProductDetailResponse } from '@bric/storefront-core/cont
 
 import { locales, type Locale } from '@/i18n/config';
 import { isSafeProductImageUrl } from './product-images';
+import type { ProductCategoryBreadcrumb } from './product-breadcrumbs';
 import { getLocalizedProductCopy, parseProductPrice } from './product-presentation';
 
 type Product = StorefrontProductDetailResponse['item'];
@@ -82,7 +83,11 @@ export function buildMissingProductMetadata(locale: Locale): Metadata {
   };
 }
 
-export function buildProductStructuredData(product: Product, locale: Locale) {
+export function buildProductStructuredData(
+  product: Product,
+  locale: Locale,
+  categoryBreadcrumbs: ProductCategoryBreadcrumb[] = [],
+) {
   const copy = getLocalizedProductCopy(product, locale);
   const url = getProductUrl(locale, product.canonicalToken);
 
@@ -126,9 +131,15 @@ export function buildProductStructuredData(product: Product, locale: Locale) {
           name: locale === 'ar' ? 'المنتجات' : 'Produits',
           item: `${getStorefrontSiteUrl()}/${locale}/products`,
         },
+        ...categoryBreadcrumbs.map((category, index) => ({
+          '@type': 'ListItem',
+          position: index + 3,
+          name: category.label,
+          item: `${getStorefrontSiteUrl()}${category.href}`,
+        })),
         {
           '@type': 'ListItem',
-          position: 3,
+          position: categoryBreadcrumbs.length + 3,
           name: copy.title,
           item: url,
         },

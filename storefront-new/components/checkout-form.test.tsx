@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CheckoutForm } from './checkout-form';
 
 const mocks = vi.hoisted(() => ({
-  push: vi.fn(), create: vi.fn(), track: vi.fn(), identity: vi.fn(() => ({ journeyId: 'journey-1', sessionId: 'session-1' })), haptic: vi.fn(),
+  push: vi.fn(), create: vi.fn(), track: vi.fn(), identity: vi.fn(() => ({ journeyId: 'journey-1', sessionId: 'session-1' })), haptic: vi.fn(), iconStart: vi.fn(), iconStop: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
@@ -16,9 +16,18 @@ vi.mock('@/lib/analytics', () => ({ getAnalyticsIdentity: mocks.identity, trackC
 vi.mock('@/lib/haptics', () => ({ prepareHaptics: vi.fn(), triggerHaptic: mocks.haptic }));
 vi.mock('@/components/storefront-image', () => ({ StorefrontImage: ({ src }: { src: string }) => <span data-image-src={src} /> }));
 vi.mock('@number-flow/react', () => ({ default: ({ value }: { value: number }) => <span>{value}</span> }));
+vi.mock('@/components/ui/shield-check', async () => {
+  const React = await import('react');
+  const ShieldCheckIcon = React.forwardRef((_props, ref) => {
+    React.useImperativeHandle(ref, () => ({ startAnimation: mocks.iconStart, stopAnimation: mocks.iconStop }));
+    return <svg data-testid="animated-shield" />;
+  });
+  ShieldCheckIcon.displayName = 'MockShieldCheckIcon';
+  return { ShieldCheckIcon };
+});
 
 const labels = Object.fromEntries([
-  'eyebrow', 'title', 'description', 'phone', 'phonePlaceholder', 'lastName', 'firstName', 'wilaya', 'commune', 'address', 'email', 'optional',
+  'title', 'description', 'phone', 'phonePlaceholder', 'phoneError', 'lastName', 'firstName', 'wilaya', 'commune', 'address', 'email', 'optional',
   'deliveryMode', 'homeDelivery', 'officeDelivery', 'officeUnavailable', 'orderSummary', 'subtotal', 'delivery', 'total', 'quantity', 'submit', 'submitting',
   'emptyTitle', 'emptyBody', 'browseProducts', 'requiredError', 'emailError', 'submitError', 'retry', 'savedAttempt', 'trustPhone', 'trustPayment', 'trustDelivery',
 ].map((key) => [key, key])) as Record<string, string>;
@@ -41,10 +50,14 @@ const order = {
 };
 
 describe('CheckoutForm', () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
   beforeEach(() => {
     window.localStorage.clear();
-    mocks.push.mockReset(); mocks.create.mockReset().mockResolvedValue(order); mocks.track.mockReset(); mocks.haptic.mockReset();
+    mocks.push.mockReset(); mocks.create.mockReset().mockResolvedValue(order); mocks.track.mockReset(); mocks.haptic.mockReset(); mocks.iconStart.mockReset(); mocks.iconStop.mockReset();
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
   });
 
   it('renders the legacy storefront fields without introducing a second phone field', () => {
@@ -68,12 +81,73 @@ describe('CheckoutForm', () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
+  it('uses a specific error for an invalid Algerian phone number', async () => {
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels as never} />);
+    fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), { target: { value: '1234567890' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), { target: { value: '16' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), { target: { value: 'Alger Centre' } });
+    fireEvent.change(screen.getByRole('textbox', { name: /address/ }), { target: { value: '12 rue des Outils' } });
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+
+    expect(await screen.findByText('phoneError')).toBeVisible();
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it('restores and continuously saves checkout details for future visits', async () => {
+    window.localStorage.setItem('bric:checkout:draft:v1', JSON.stringify({
+      phoneNumber1: '0774246465', lastName: 'Client', firstName: 'Test', state: 16,
+      city: 'Alger Centre', homeAddress: '12 rue des Outils', email: 'client@example.com', delivery: 'office',
+    }));
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels as never} />);
+
+    await waitFor(() => expect(screen.getByRole('textbox', { name: /phone/ })).toHaveValue('0774246465'));
+    expect(screen.getByRole('textbox', { name: /lastName/ })).toHaveValue('Client');
+    expect(screen.getByRole('combobox', { name: /wilaya/ })).toHaveValue('16');
+    expect(screen.getByRole('combobox', { name: /commune/ })).toHaveValue('Alger Centre');
+    expect(screen.getByRole('button', { name: /officeDelivery/ })).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.change(screen.getByRole('textbox', { name: /firstName/ }), { target: { value: 'Updated' } });
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem('bric:checkout:draft:v1')!).firstName).toBe('Updated'));
+  });
+
+  it('marks address as required at home and optional at a delivery office', async () => {
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels as never} />);
+    fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), { target: { value: '0550000000' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), { target: { value: '16' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), { target: { value: 'Alger Centre' } });
+    const address = screen.getByRole('textbox', { name: /address/ });
+
+    expect(address).toBeRequired();
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    await waitFor(() => expect(address).toHaveAttribute('aria-invalid', 'true'));
+    expect(mocks.create).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /officeDelivery/ }));
+    expect(address).not.toBeRequired();
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
+    expect(mocks.create.mock.calls[0][0]).toMatchObject({ delivery: 1, homeAddress: null });
+  });
+
+  it('animates the shield from the full submit-button hover target', () => {
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels as never} />);
+    const submit = screen.getByRole('button', { name: 'submit' });
+
+    expect(screen.getByTestId('animated-shield')).toBeVisible();
+    fireEvent.mouseEnter(submit);
+    fireEvent.mouseLeave(submit);
+
+    expect(mocks.iconStart).toHaveBeenCalledOnce();
+    expect(mocks.iconStop).toHaveBeenCalledOnce();
+  });
+
   it('creates an idempotent direct-product order and stores its verified handoff snapshot', async () => {
     render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels as never} />);
     fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), { target: { value: '0550000000' } });
     fireEvent.change(screen.getByRole('textbox', { name: /firstName/ }), { target: { value: 'Ada' } });
     fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), { target: { value: '16' } });
     fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), { target: { value: 'Alger Centre' } });
+    fireEvent.change(screen.getByRole('textbox', { name: /address/ }), { target: { value: '12 rue des Outils' } });
     fireEvent.click(screen.getByRole('button', { name: 'submit' }));
 
     await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
@@ -92,6 +166,7 @@ describe('CheckoutForm', () => {
     fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), { target: { value: '0550000000' } });
     fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), { target: { value: '16' } });
     fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), { target: { value: 'Alger Centre' } });
+    fireEvent.change(screen.getByRole('textbox', { name: /address/ }), { target: { value: '12 rue des Outils' } });
     fireEvent.click(screen.getByRole('button', { name: 'submit' }));
     expect(await screen.findByRole('button', { name: 'retry' })).toBeInTheDocument();
     const firstKey = mocks.create.mock.calls[0][1];

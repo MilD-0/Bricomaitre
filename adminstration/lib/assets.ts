@@ -69,20 +69,27 @@ export const assetBannerSchema = z.object({
   productId: productLinkSchema,
   active: z.boolean().default(true),
 }).transform((value, ctx) => {
-  const imageUrl = value.imageUrl ?? value.imageUrlLandscape ?? value.imageUrlPortrait;
-
-  if (!imageUrl) {
+  if (!value.imageUrlLandscape) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['imageUrlLandscape'],
-      message: 'Add at least one banner image.',
+      message: 'Add a landscape banner image.',
     });
-    return z.NEVER;
   }
+
+  if (!value.imageUrlPortrait) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['imageUrlPortrait'],
+      message: 'Add a portrait banner image.',
+    });
+  }
+
+  if (!value.imageUrlLandscape || !value.imageUrlPortrait) return z.NEVER;
 
   return {
     ...value,
-    imageUrl,
+    imageUrl: value.imageUrl ?? value.imageUrlLandscape,
   };
 });
 
