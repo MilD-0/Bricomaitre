@@ -99,7 +99,7 @@ describe('Product Detail analytics', () => {
       metadata: {
         resultsCount: 2,
         page: 1,
-        sort: 'newest',
+        sort: 'recommended',
         visibleProductIds: [12, 13],
       },
     });
@@ -108,7 +108,7 @@ describe('Product Detail analytics', () => {
       eventName: 'view_item_list',
       pageType: 'catalog',
       searchTerm: 'perceuse',
-      metadata: { resultsCount: 2, visibleProductIds: [12, 13] },
+      metadata: { resultsCount: 2, sort: 'recommended', visibleProductIds: [12, 13] },
     });
   });
 

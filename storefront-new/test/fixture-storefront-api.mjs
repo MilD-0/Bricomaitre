@@ -17,7 +17,7 @@ const product = {
     { url: 'http://127.0.0.1:3003/product-placeholder.svg?view=2', position: 1, width: 900, height: 900, blurDataUrl: null },
   ],
   brand: { id: 2, name: 'Bric Pro', slug: 'bric-pro', image: 'http://127.0.0.1:3003/brand-placeholder.svg' },
-  category: { id: 3, name: 'Éclairage', nameAr: 'الإضاءة', slug: 'lighting', image: null, parentId: null, properties: [] },
+  category: { id: 3, name: 'Éclairage', nameAr: 'الإضاءة', slug: 'lighting', image: null, parentId: 5, properties: [] },
   createdAt: '2026-07-01T10:00:00.000Z',
   updatedAt: '2026-07-02T10:00:00.000Z',
 };
@@ -152,7 +152,8 @@ const brands = [{
 }];
 
 const categories = [
-  { id: 3, name: 'Éclairage', slug: 'lighting', nameEn: 'Lighting', nameAr: 'الإضاءة', image: null, parentId: null, properties: [], featured: true, createdAt: '2026-06-01T10:00:00.000Z', updatedAt: '2026-07-01T10:00:00.000Z' },
+  { id: 5, name: 'Équipement d’atelier', slug: 'workshop-equipment', nameEn: 'Workshop equipment', nameAr: 'معدات الورشة', image: null, parentId: null, properties: [], featured: false, createdAt: '2026-06-01T10:00:00.000Z', updatedAt: '2026-07-01T10:00:00.000Z' },
+  { id: 3, name: 'Éclairage', slug: 'lighting', nameEn: 'Lighting', nameAr: 'الإضاءة', image: null, parentId: 5, properties: [], featured: true, createdAt: '2026-06-01T10:00:00.000Z', updatedAt: '2026-07-01T10:00:00.000Z' },
   { id: 4, name: 'Outillage électrique', slug: 'power-tools', nameEn: 'Power tools', nameAr: 'أدوات كهربائية', image: null, parentId: null, properties: [], featured: true, createdAt: '2026-06-01T10:00:00.000Z', updatedAt: '2026-07-01T10:00:00.000Z' },
 ];
 

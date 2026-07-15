@@ -43,7 +43,7 @@ export const productPatchSchema = z.object({
 export type ProductPatchInput = z.input<typeof productPatchSchema>;
 export type ProductPatch = z.output<typeof productPatchSchema>;
 
-export const productSortKeyValues = ['active', 'title', 'price', 'purchasePrice', 'inStock', 'updatedAt', 'createdAt'] as const;
+export const productSortKeyValues = ['recommended', 'active', 'title', 'price', 'purchasePrice', 'inStock', 'updatedAt', 'createdAt'] as const;
 export const sortDirectionValues = ['asc', 'desc'] as const;
 
 const optionalNumericFilter = z.union([z.coerce.number().int().positive(), z.literal(''), z.null(), z.undefined()]).transform((value) => {

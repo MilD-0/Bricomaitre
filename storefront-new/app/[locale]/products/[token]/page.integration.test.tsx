@@ -7,12 +7,14 @@ import { generateStaticParams, ProductPageContent } from './page';
 const {
   getProductMock,
   getCatalogMock,
+  getCatalogMetaMock,
   notFoundMock,
   permanentRedirectMock,
   captureProductPageExceptionMock,
 } = vi.hoisted(() => ({
   getProductMock: vi.fn(),
   getCatalogMock: vi.fn(),
+  getCatalogMetaMock: vi.fn(),
   notFoundMock: vi.fn(() => { throw new Error('NEXT_NOT_FOUND'); }),
   permanentRedirectMock: vi.fn((path: string) => { throw new Error(`NEXT_REDIRECT:${path}`); }),
   captureProductPageExceptionMock: vi.fn(),
@@ -21,6 +23,7 @@ const {
 vi.mock('@/lib/storefront-api', () => ({
   getStorefrontProductDetail: getProductMock,
   getStorefrontCatalog: getCatalogMock,
+  getStorefrontCatalogMeta: getCatalogMetaMock,
 }));
 vi.mock('@/lib/sentry', () => ({ captureProductPageException: captureProductPageExceptionMock }));
 vi.mock('next/navigation', () => ({ notFound: notFoundMock, permanentRedirect: permanentRedirectMock }));
@@ -67,7 +70,7 @@ const productResponse = {
     availability: { status: 'in_stock', inStock: true, quantity: 4 },
     media: [{ url: '/product.jpg', position: 0, width: 900, height: 900, blurDataUrl: null }],
     brand: { id: 2, name: 'Bric', slug: 'bric', image: '/brand.svg' },
-    category: { id: 3, name: 'Lighting', nameAr: 'إضاءة', slug: 'lighting', image: null, parentId: null, properties: [] },
+    category: { id: 3, name: 'Lighting', nameAr: 'إضاءة', slug: 'lighting', image: null, parentId: 2, properties: [] },
     createdAt: '2026-07-01T10:00:00.000Z',
     updatedAt: '2026-07-02T10:00:00.000Z',
   },
@@ -79,6 +82,13 @@ describe('localized Product Detail Page', () => {
     getProductMock.mockReset();
     getProductMock.mockResolvedValue(productResponse);
     getCatalogMock.mockReset();
+    getCatalogMetaMock.mockReset().mockResolvedValue({
+      brands: [],
+      categories: [
+        { id: 1, name: 'Workshop', nameAr: 'الورشة', parentId: null },
+        { id: 2, name: 'Electrical', nameAr: 'كهربائي', parentId: 1 },
+      ],
+    });
     notFoundMock.mockClear();
     permanentRedirectMock.mockClear();
     captureProductPageExceptionMock.mockClear();
@@ -108,6 +118,13 @@ describe('localized Product Detail Page', () => {
     expect(html).toContain('data-actions="true"');
     expect(html).toMatch(/<img[^>]+alt="Bric"/);
     expect(html).toContain('data-similar-for="12"');
+    expect(html).toContain('product-current-price');
+    expect(html).toContain('product-compare-price');
+    expect(html).toContain('href="/fr/products?category=1"');
+    expect(html).toContain('href="/fr/products?category=2"');
+    expect(html).toContain('href="/fr/products?category=3"');
+    expect(html.indexOf('href="/fr/products?category=1">Workshop')).toBeLessThan(html.indexOf('href="/fr/products?category=2">Electrical'));
+    expect(html.indexOf('href="/fr/products?category=2">Electrical')).toBeLessThan(html.indexOf('href="/fr/products?category=3">Lighting'));
   });
 
   it('server-renders localized Arabic copy from the same contract', async () => {
@@ -116,6 +133,8 @@ describe('localized Product Detail Page', () => {
 
     expect(html).toContain('مصباح مكتب');
     expect(html).toContain('إضاءة دافئة للورشة.');
+    expect(html).toContain('الورشة');
+    expect(html).toContain('كهربائي');
     expect(html).not.toContain('<h1>Desk Lamp</h1>');
   });
 

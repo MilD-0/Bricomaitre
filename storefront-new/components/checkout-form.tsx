@@ -2,11 +2,12 @@
 
 import NumberFlow from '@number-flow/react';
 import type { StorefrontEcotrackCatalogResponse } from '@bric/storefront-core/contracts';
-import { ArrowRight, Check, LoaderCircle, MapPin, PackageCheck, PhoneCall, RotateCcw, ShieldCheck, Truck } from 'lucide-react';
+import { ArrowRight, Check, LoaderCircle, MapPin, PackageCheck, PhoneCall, RotateCcw, Truck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
 import { StorefrontImage } from '@/components/storefront-image';
+import { ShieldCheckIcon, type ShieldCheckIconHandle } from '@/components/ui/shield-check';
 import type { Locale } from '@/i18n/config';
 import { getAnalyticsIdentity, trackCheckoutEvent } from '@/lib/analytics';
 import { readCart, STOREFRONT_CART_KEY, type CartItem } from '@/lib/cart';
@@ -18,7 +19,9 @@ import {
   getCheckoutCommunes,
   getCheckoutDeliveryFee,
   hasCheckoutStopDesk,
+  readCheckoutDraft,
   readPendingCheckout,
+  writeCheckoutDraft,
   writeCheckoutConfirmation,
   writePendingCheckout,
   type PendingCheckout,
@@ -28,11 +31,11 @@ import { CheckoutOrderError, createCheckoutOrder } from '@/lib/orders';
 import { formatProductPrice } from '@/lib/product-presentation';
 
 type CheckoutLabels = {
-  eyebrow: string;
   title: string;
   description: string;
   phone: string;
   phonePlaceholder: string;
+  phoneError: string;
   lastName: string;
   firstName: string;
   wilaya: string;
@@ -81,7 +84,7 @@ export function CheckoutForm({
 }) {
   const router = useRouter();
   const [items, setItems] = useState<CartItem[]>(directItem ? [directItem] : []);
-  const [hydrated, setHydrated] = useState(Boolean(directItem));
+  const [hydrated, setHydrated] = useState(false);
   const [phoneNumber1, setPhoneNumber1] = useState('');
   const [lastName, setLastName] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -95,16 +98,49 @@ export function CheckoutForm({
   const [pending, setPending] = useState<PendingCheckout | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const submissionLock = useRef(false);
+  const submitIconRef = useRef<ShieldCheckIconHandle>(null);
   const viewed = useRef(false);
 
   useEffect(() => {
     if (!directItem) setItems(readCart(window.localStorage));
     const savedAttempt = readPendingCheckout(window.localStorage);
+    const savedDraft = readCheckoutDraft(window.localStorage);
+    const restored = savedDraft ?? (savedAttempt ? {
+      phoneNumber1: savedAttempt.payload.phoneNumber1,
+      lastName: savedAttempt.payload.lastName ?? '',
+      firstName: savedAttempt.payload.firstName ?? '',
+      state: savedAttempt.payload.state,
+      city: savedAttempt.payload.city ?? '',
+      homeAddress: savedAttempt.payload.homeAddress ?? '',
+      email: savedAttempt.payload.email ?? '',
+      delivery: savedAttempt.payload.delivery === 1 ? 'office' as const : 'home' as const,
+    } : null);
+    if (restored) {
+      const validCity = restored.state != null
+        && catalog.communes.some((commune) => commune.wilayaId === restored.state && commune.name === restored.city);
+      const officeAvailableForDraft = restored.state != null
+        && catalog.communes.some((commune) => commune.wilayaId === restored.state && commune.hasStopDesk);
+      setPhoneNumber1(restored.phoneNumber1);
+      setLastName(restored.lastName);
+      setFirstName(restored.firstName);
+      setState(restored.state);
+      setCity(validCity ? restored.city : '');
+      setHomeAddress(restored.homeAddress);
+      setEmail(restored.email);
+      setDelivery(restored.delivery === 'office' && officeAvailableForDraft ? 'office' : 'home');
+    }
     setPending(savedAttempt);
     if (savedAttempt) setRequestError(labels.submitError);
     setHydrated(true);
     void prepareHaptics();
-  }, [directItem, labels.submitError]);
+  }, [catalog.communes, directItem, labels.submitError]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    writeCheckoutDraft(window.localStorage, {
+      phoneNumber1, lastName, firstName, state, city, homeAddress, email, delivery,
+    });
+  }, [city, delivery, email, firstName, homeAddress, hydrated, lastName, phoneNumber1, state]);
 
   const communes = useMemo(() => getCheckoutCommunes(catalog, state), [catalog, state]);
   const officeAvailable = hasCheckoutStopDesk(catalog, state);
@@ -126,8 +162,20 @@ export function CheckoutForm({
   function chooseDelivery(next: 'home' | 'office') {
     if (next === 'office' && !officeAvailable) return;
     setDelivery(next);
+    if (next === 'office') {
+      setErrors((current) => {
+        const remaining = { ...current };
+        delete remaining.homeAddress;
+        return remaining;
+      });
+    }
     setRequestError('');
     void triggerHaptic('selection');
+  }
+
+  function startSubmitIconAnimation() {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    submitIconRef.current?.startAnimation();
   }
 
   async function completeSubmission(attempt: PendingCheckout) {
@@ -175,7 +223,11 @@ export function CheckoutForm({
       const nextErrors: Record<string, string> = {};
       for (const issue of parsed.error.issues) {
         const field = String(issue.path[0] ?? 'form');
-        nextErrors[field] = issue.message === 'invalid_email' ? labels.emailError : labels.requiredError;
+        nextErrors[field] = issue.message === 'invalid_email'
+          ? labels.emailError
+          : issue.message === 'phone_invalid'
+            ? labels.phoneError
+            : labels.requiredError;
       }
       setErrors(nextErrors);
       setRequestError('');
@@ -215,7 +267,6 @@ export function CheckoutForm({
   return (
     <main className="checkout-page">
       <header className="checkout-heading">
-        <p>{labels.eyebrow}</p>
         <h1>{labels.title}</h1>
         <span>{labels.description}</span>
       </header>
@@ -254,15 +305,16 @@ export function CheckoutForm({
             </label>
             <label className="checkout-field">
               <span>{labels.commune} <b>*</b></span>
-              <select name="city" value={city} disabled={state == null} aria-invalid={Boolean(errors.city)} onChange={(event) => setCity(event.target.value)}>
+              <select name="city" value={city} aria-disabled={state == null} aria-invalid={Boolean(errors.city)} onChange={(event) => setCity(event.target.value)}>
                 <option value="">{labels.commune}</option>
                 {communes.map((commune) => <option key={commune.communeId} value={commune.name}>{commune.name}{commune.hasStopDesk ? ' •' : ''}</option>)}
               </select>
               {errors.city ? <small>{errors.city}</small> : null}
             </label>
             <label className="checkout-field checkout-field-wide">
-              <span>{labels.address} <em>{labels.optional}</em></span>
-              <input name="homeAddress" autoComplete="street-address" value={homeAddress} onChange={(event) => setHomeAddress(event.target.value)} />
+              <span>{labels.address} {delivery === 'office' ? <em>{labels.optional}</em> : <b>*</b>}</span>
+              <input name="homeAddress" autoComplete="street-address" required={delivery === 'home'} value={homeAddress} aria-invalid={Boolean(errors.homeAddress)} aria-describedby={errors.homeAddress ? 'address-error' : undefined} onChange={(event) => setHomeAddress(event.target.value)} />
+              {errors.homeAddress ? <small id="address-error">{errors.homeAddress}</small> : null}
             </label>
             <label className="checkout-field checkout-field-wide">
               <span>{labels.email} <em>{labels.optional}</em></span>
@@ -295,8 +347,8 @@ export function CheckoutForm({
             <div><dt>{labels.total}</dt><dd><NumberFlow value={total} locales={locale} format={{ style: 'currency', currency: 'DZD', maximumFractionDigits: 0 }} /></dd></div>
           </dl>
           {requestError && !pending ? <p className="checkout-submit-error" role="alert">{requestError}</p> : null}
-          <button className="checkout-submit" type="submit" disabled={submitting || !hydrated || items.length === 0} onPointerDown={prepareHaptics}>
-            {submitting ? <LoaderCircle className="checkout-spinner" aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}
+          <button className="checkout-submit" type="submit" disabled={submitting || !hydrated || items.length === 0} onPointerDown={prepareHaptics} onMouseEnter={startSubmitIconAnimation} onMouseLeave={() => submitIconRef.current?.stopAnimation()} onFocus={startSubmitIconAnimation} onBlur={() => submitIconRef.current?.stopAnimation()}>
+            {submitting ? <LoaderCircle className="checkout-spinner" aria-hidden="true" /> : <ShieldCheckIcon ref={submitIconRef} className="checkout-submit-icon" size={18} aria-hidden="true" />}
             {submitting ? labels.submitting : labels.submit}
             {!submitting ? <ArrowRight aria-hidden="true" /> : null}
           </button>

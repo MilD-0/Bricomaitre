@@ -7,7 +7,7 @@ import { CheckoutForm } from '@/components/checkout-form';
 import { PageShell } from '@/components/page-shell';
 import { isLocale } from '@/i18n/config';
 import { parseProductPrice } from '@/lib/product-presentation';
-import { fetchStorefrontEcotrackCatalog, getStorefrontProductDetail } from '@/lib/storefront-api';
+import { getStorefrontEcotrackCatalog, getStorefrontProductDetail } from '@/lib/storefront-api';
 
 export const metadata: Metadata = {
   title: 'Checkout',
@@ -32,7 +32,7 @@ export async function CheckoutPageContent({ params, searchParams }: CheckoutPage
   if (!isLocale(locale)) notFound();
   const [t, catalog] = await Promise.all([
     getTranslations({ locale, namespace: 'Checkout' }),
-    fetchStorefrontEcotrackCatalog().catch(() => ({ wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null })),
+    getStorefrontEcotrackCatalog().catch(() => ({ wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null })),
   ]);
   const rawProduct = Array.isArray(query.product) ? query.product[0] : query.product;
   const rawQuantity = Array.isArray(query.quantity) ? query.quantity[0] : query.quantity;
@@ -56,8 +56,8 @@ export async function CheckoutPageContent({ params, searchParams }: CheckoutPage
         catalog={catalog}
         directItem={directItem}
         labels={{
-          eyebrow: t('eyebrow'), title: t('title'), description: t('description'),
-          phone: t('phone'), phonePlaceholder: t('phonePlaceholder'), lastName: t('lastName'), firstName: t('firstName'),
+          title: t('title'), description: t('description'),
+          phone: t('phone'), phonePlaceholder: t('phonePlaceholder'), phoneError: t('phoneError'), lastName: t('lastName'), firstName: t('firstName'),
           wilaya: t('wilaya'), commune: t('commune'), address: t('address'), email: t('email'), optional: t('optional'),
           deliveryMode: t('deliveryMode'), homeDelivery: t('homeDelivery'), officeDelivery: t('officeDelivery'), officeUnavailable: t('officeUnavailable'),
           orderSummary: t('orderSummary'), subtotal: t('subtotal'), delivery: t('delivery'), total: t('total'), quantity: t('quantity'),

@@ -49,10 +49,30 @@ test('renders the French product journey with SEO and governed analytics', async
   await expect(buyNow).toBeVisible();
   expect(await buyNow.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgb(242, 106, 33)');
   expect(await page.getByRole('button', { name: 'Ajouter au panier' }).evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgb(1, 115, 122)');
+  const flattenedCommerce = await page.evaluate(() => {
+    const styles = (selector: string) => {
+      const style = getComputedStyle(document.querySelector(selector)!);
+      return {
+        background: style.backgroundColor,
+        borderRadius: style.borderRadius,
+        boxShadow: style.boxShadow,
+        inlineBorder: style.borderInlineStartWidth,
+      };
+    };
+    return { actions: styles('.product-actions'), trust: styles('.product-trust') };
+  });
+  expect(flattenedCommerce).toEqual({
+    actions: { background: 'rgba(0, 0, 0, 0)', borderRadius: '0px', boxShadow: 'none', inlineBorder: '0px' },
+    trust: { background: 'rgba(0, 0, 0, 0)', borderRadius: '0px', boxShadow: 'none', inlineBorder: '0px' },
+  });
+  await expect(page.locator('.product-trust')).toHaveCSS('border-top-width', '1px');
   await expect(page.locator('.product-trust svg')).toHaveCount(3);
-  const firstTrustIcon = page.locator('.product-trust li').first().locator('span');
+  const firstTrustIcon = page.locator('.product-trust li').first().locator('svg');
   await page.locator('.product-trust li').first().hover();
   await expect.poll(() => firstTrustIcon.evaluate((element) => getComputedStyle(element).transform)).not.toBe('none');
+  const breadcrumbs = page.getByRole('navigation', { name: 'Fil d’Ariane' });
+  await expect(breadcrumbs.getByRole('link', { name: 'Équipement d’atelier' })).toHaveAttribute('href', '/fr/products?category=5');
+  await expect(breadcrumbs.getByRole('link', { name: 'Éclairage' })).toHaveAttribute('href', '/fr/products?category=3');
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'http://127.0.0.1:3003/fr/products/desk-lamp');
   await expect(page.locator('link[hreflang="ar"]')).toHaveAttribute('href', 'http://127.0.0.1:3003/ar/products/desk-lamp');
   const jsonLd = await page.locator('script[type="application/ld+json"]').textContent();

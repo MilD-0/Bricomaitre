@@ -112,8 +112,13 @@ export async function resolveOrderPromo(
       .map((value) => value.trim())
       .filter((value) => isMongoObjectId(value)),
   )];
+  const slugs = [...new Set(
+    input.cartProducts
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0 && !/^\d+$/.test(value) && !isMongoObjectId(value)),
+  )];
 
-  if (productIds.length === 0 && mongoIds.length === 0) {
+  if (productIds.length === 0 && mongoIds.length === 0 && slugs.length === 0) {
     return null;
   }
 
@@ -121,6 +126,7 @@ export async function resolveOrderPromo(
     .select({
       productId: products.id,
       mongoId: products.mongoId,
+      slug: products.slug,
       originalPrice: sql<number>`${products.price}::double precision`,
     })
     .from(products)
@@ -129,6 +135,7 @@ export async function resolveOrderPromo(
       or(
         ...(productIds.length > 0 ? [inArray(products.id, productIds)] : []),
         ...(mongoIds.length > 0 ? [inArray(products.mongoId, mongoIds)] : []),
+        ...(slugs.length > 0 ? [inArray(products.slug, slugs)] : []),
       ),
     ));
 
@@ -141,6 +148,7 @@ export async function resolveOrderPromo(
       code: productPromoCodes.code,
       productId: products.id,
       mongoId: products.mongoId,
+      slug: products.slug,
       promoPrice: sql<number>`${productPromoCodes.promoPrice}::double precision`,
       originalPrice: sql<number>`${products.price}::double precision`,
     })
@@ -152,6 +160,7 @@ export async function resolveOrderPromo(
       or(
         ...(productIds.length > 0 ? [inArray(products.id, productIds)] : []),
         ...(mongoIds.length > 0 ? [inArray(products.mongoId, mongoIds)] : []),
+        ...(slugs.length > 0 ? [inArray(products.slug, slugs)] : []),
       ),
       activePromoWindow(input.now ?? new Date()),
     ));
@@ -171,7 +180,9 @@ export async function resolveOrderPromo(
   const promo = discountableRows[0];
   const matchingQuantity = input.cartProducts.filter((value) => {
     const trimmed = value.trim();
-    return trimmed === String(promo.productId) || (promo.mongoId !== null && trimmed === promo.mongoId);
+    return trimmed === String(promo.productId)
+      || (promo.mongoId !== null && trimmed === promo.mongoId)
+      || (promo.slug !== null && trimmed === promo.slug);
   }).length;
 
   if (matchingQuantity <= 0) {
@@ -180,11 +191,15 @@ export async function resolveOrderPromo(
 
   const originalSubtotal = input.cartProducts.reduce((sum, value) => {
     const trimmed = value.trim();
-    if (trimmed === String(promo.productId) || (promo.mongoId !== null && trimmed === promo.mongoId)) {
+    if (trimmed === String(promo.productId)
+      || (promo.mongoId !== null && trimmed === promo.mongoId)
+      || (promo.slug !== null && trimmed === promo.slug)) {
       return sum + promo.originalPrice;
     }
 
-    const otherRow = productRows.find((row) => trimmed === String(row.productId) || (row.mongoId !== null && trimmed === row.mongoId));
+    const otherRow = productRows.find((row) => trimmed === String(row.productId)
+      || (row.mongoId !== null && trimmed === row.mongoId)
+      || (row.slug !== null && trimmed === row.slug));
     return sum + parseNumericAmount(otherRow?.originalPrice);
   }, 0);
   const discountAmount = Math.max(0, (promo.originalPrice - promo.promoPrice) * matchingQuantity);

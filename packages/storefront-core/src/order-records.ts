@@ -46,8 +46,14 @@ export async function getOrderProductLookup(
       .map((value) => value.trim())
       .filter((value) => isMongoObjectId(value)),
   )];
+  const slugs = [...new Set(
+    rows
+      .flatMap((row) => row.cartProducts ?? [])
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0 && !/^\d+$/.test(value) && !isMongoObjectId(value)),
+  )];
 
-  if (productIds.length === 0 && mongoIds.length === 0) {
+  if (productIds.length === 0 && mongoIds.length === 0 && slugs.length === 0) {
     return new Map<string, ProductLookupEntry>();
   }
 
@@ -65,6 +71,7 @@ export async function getOrderProductLookup(
     .where(or(
       ...(productIds.length > 0 ? [inArray(products.id, productIds)] : []),
       ...(mongoIds.length > 0 ? [inArray(products.mongoId, mongoIds)] : []),
+      ...(slugs.length > 0 ? [inArray(products.slug, slugs)] : []),
     ));
 
   const lookup = new Map<string, ProductLookupEntry>();
@@ -84,6 +91,9 @@ export async function getOrderProductLookup(
 
     if (product.mongoId) {
       lookup.set(`mongo:${product.mongoId}`, entry);
+    }
+    if (product.slug) {
+      lookup.set(`slug:${product.slug}`, entry);
     }
   }
 
@@ -105,13 +115,7 @@ export function toOrderRecord(
       ? `mongo:${rawValue}`
       : productId !== null
         ? `id:${productId}`
-        : null;
-
-    if (lookupKey === null) {
-      return {
-        missing: true,
-      };
-    }
+        : `slug:${rawValue}`;
 
     const product = productLookup.get(lookupKey);
 

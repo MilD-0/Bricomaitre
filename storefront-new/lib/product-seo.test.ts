@@ -47,7 +47,10 @@ describe('Product Detail SEO', () => {
   });
 
   it('publishes Product and breadcrumb JSON-LD with price and availability', () => {
-    const data = buildProductStructuredData(product, 'fr');
+    const data = buildProductStructuredData(product, 'fr', [
+      { id: 1, label: 'Workshop', href: '/fr/products?category=1' },
+      { id: 3, label: 'Lighting', href: '/fr/products?category=3' },
+    ]);
     expect(data[0]).toMatchObject({
       '@type': 'Product',
       name: 'Desk Lamp',
@@ -57,7 +60,16 @@ describe('Product Detail SEO', () => {
         availability: 'https://schema.org/InStock',
       },
     });
-    expect(data[1]).toMatchObject({ '@type': 'BreadcrumbList' });
+    expect(data[1]).toMatchObject({
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { position: 1, name: 'Accueil' },
+        { position: 2, name: 'Produits' },
+        { position: 3, name: 'Workshop', item: 'https://bricomaitre.com/fr/products?category=1' },
+        { position: 4, name: 'Lighting', item: 'https://bricomaitre.com/fr/products?category=3' },
+        { position: 5, name: 'Desk Lamp' },
+      ],
+    });
     expect(serializeStructuredData({ value: '</script>' })).not.toContain('</script>');
   });
 

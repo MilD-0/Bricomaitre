@@ -5,6 +5,8 @@ import { cacheLife, cacheTag } from 'next/cache';
 import {
   fetchStorefrontCatalog,
   fetchStorefrontCatalogMeta,
+  fetchStorefrontHomepage,
+  getStorefrontEcotrackCatalog,
   fetchStorefrontProductDetail,
   getStorefrontProductDetail,
 } from './storefront-api';
@@ -113,6 +115,13 @@ describe('storefront API client', () => {
     expect(fetch).toHaveBeenNthCalledWith(3, 'http://localhost:3001/storefront/categories', expect.any(Object));
   });
 
+  it('fetches and validates the aggregated homepage contract', async () => {
+    const homepage = { banners: [], topProducts: [], categories: [], productCards: [], brands: [], featuredGroups: [] };
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(homepage), { status: 200 }));
+    await expect(fetchStorefrontHomepage()).resolves.toEqual(homepage);
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3001/storefront/homepage', expect.any(Object));
+  });
+
   it('rejects malformed catalog responses as controlled upstream failures', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ items: [{ id: 'unsafe' }] }), { status: 200 }));
 
@@ -152,6 +161,26 @@ describe('storefront API client', () => {
       'storefront-new-product:legacy lamp',
     );
     expect(cacheTag).toHaveBeenNthCalledWith(2, 'storefront-new-product:desk-lamp');
+  });
+
+  it('fetches the canonical API-cached delivery catalog for checkout', async () => {
+    const catalog = {
+      wilayas: [{ wilayaId: 8, name: 'Béchar' }],
+      communes: [{ communeId: 0, wilayaId: 8, name: 'Abadla', postalCode: '817', hasStopDesk: false }],
+      serviceFees: [],
+      weightFees: [],
+      lastSync: null,
+    };
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(catalog), { status: 200 }));
+
+    await expect(getStorefrontEcotrackCatalog()).resolves.toEqual(catalog);
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:3001/storefront/ecotrack/catalog',
+      expect.any(Object),
+    );
+    expect(cacheLife).not.toHaveBeenCalled();
+    expect(cacheTag).not.toHaveBeenCalled();
   });
 
   it('distinguishes invalid tokens, upstream failures, and invalid contracts', async () => {

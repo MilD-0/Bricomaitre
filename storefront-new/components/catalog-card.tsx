@@ -82,8 +82,8 @@ export function CatalogCard({
           </span>
           <div className="catalog-card-footer">
             <div className="catalog-card-price">
-              {product.price ? <strong>{formatProductPrice(product.price, locale)}</strong> : <strong>{labels.priceOnRequest}</strong>}
-              {discount > 0 && product.oldPrice ? <del>{formatProductPrice(product.oldPrice, locale)}</del> : null}
+              {product.price ? <strong className="catalog-card-current-price">{formatProductPrice(product.price, locale)}</strong> : <strong className="catalog-card-price-request">{labels.priceOnRequest}</strong>}
+              {discount > 0 && product.oldPrice ? <del className="catalog-card-compare-price">{formatProductPrice(product.oldPrice, locale)}</del> : null}
             </div>
             <span className="catalog-card-action">
               {labels.viewProduct}

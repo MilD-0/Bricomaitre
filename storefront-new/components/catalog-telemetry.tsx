@@ -40,7 +40,7 @@ export function CatalogTelemetry({ locale, query, resultsCount, visibleProductId
       brandId: query.brand,
       metadata: { ...base.metadata, filterKind: 'brand', filterId: query.brand },
     });
-    if (query.sort !== 'newest') void trackCatalogEvent({ eventName: 'sort_change', ...base });
+    if (query.sort !== 'recommended') void trackCatalogEvent({ eventName: 'sort_change', ...base });
   }, [locale, query, resultsCount, visibleProductIds]);
 
   useEffect(() => {
