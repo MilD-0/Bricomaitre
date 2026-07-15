@@ -112,6 +112,11 @@ test('renders and filters the server-first French catalog with governed analytic
   await expect(page.locator('.catalog-heading > span')).toHaveCount(0);
   await expect(page.locator('.catalog-toolbar')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(page.locator('.catalog-toolbar')).toHaveCSS('box-shadow', 'none');
+  const catalogSort = page.getByRole('combobox', { name: 'Trier par' });
+  await expect(catalogSort).toHaveValue('recommended');
+  await expect(page.getByRole('button', { name: 'Afficher', exact: true })).toHaveCount(0);
+  await catalogSort.selectOption('price-desc');
+  await expect.poll(() => new URL(page.url()).searchParams.get('sort')).toBe('price-desc');
   await expect(page.locator('.catalog-filters')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   const typography = await page.evaluate(() => ({
     family: getComputedStyle(document.body).fontFamily,
@@ -166,8 +171,7 @@ test('renders and filters the server-first French catalog with governed analytic
   await expect(page.getByRole('navigation', { name: 'Pages du catalogue' })).toHaveCount(0);
 
   await page.getByRole('searchbox', { name: 'Recherche' }).fill('perceuse');
-  await page.getByRole('button', { name: 'Afficher', exact: true }).click();
-  await expect(page).toHaveURL(/q=perceuse/);
+  await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe('perceuse');
   await expect(page.getByRole('heading', { level: 2, name: 'Perceuse à percussion' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 2, name: 'Lampe de travail' })).toHaveCount(0);
   await expect(page.locator('meta[name="robots"]').first()).toHaveAttribute('content', /noindex/);

@@ -48,4 +48,20 @@ describe('CatalogTelemetry', () => {
       metadata: expect.objectContaining({ position: 1, page: 2 }),
     }));
   });
+
+  it('does not report the canonical recommended order as a user sort change', async () => {
+    render(
+      <CatalogTelemetry
+        locale="fr"
+        query={{ q: '', category: null, brand: null, sort: 'recommended', page: 1 }}
+        resultsCount={12}
+        visibleProductIds={[12]}
+      />,
+    );
+
+    await waitFor(() => expect(trackCatalogEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventName: 'view_item_list',
+    })));
+    expect(trackCatalogEvent).not.toHaveBeenCalledWith(expect.objectContaining({ eventName: 'sort_change' }));
+  });
 });

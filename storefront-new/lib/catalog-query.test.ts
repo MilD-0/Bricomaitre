@@ -40,7 +40,7 @@ describe('catalog query', () => {
       brand: 'not-a-number',
       sort: 'delete-all',
       page: '0',
-    })).toEqual({ q: '', category: null, brand: null, sort: 'newest', page: 1 });
+    })).toEqual({ q: '', category: null, brand: null, sort: 'recommended', page: 1 });
   });
 
   it('builds stable localized links and omits default parameters', () => {
@@ -51,5 +51,16 @@ describe('catalog query', () => {
     expect(buildCatalogApiPath(parseCatalogPageQuery(), 1)).toBe('/api/catalog?page=1');
     expect(buildCatalogApiPath(parseCatalogPageQuery(), 2, 6)).toBe('/api/catalog?page=2&limit=6');
     expect(parseCatalogBatchSize('999')).toBe(24);
+  });
+
+  it('uses the intelligent recommended rank as the canonical default', () => {
+    const query = parseCatalogPageQuery();
+
+    expect(toStorefrontCatalogQuery(query)).toMatchObject({
+      sortKey: 'recommended',
+      sortDirection: 'desc',
+    });
+    expect(buildCatalogPath('fr', query)).toBe('/fr/products');
+    expect(buildCatalogPath('fr', parseCatalogPageQuery({ sort: 'newest' }))).toBe('/fr/products?sort=newest');
   });
 });

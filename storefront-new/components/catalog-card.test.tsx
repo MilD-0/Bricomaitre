@@ -52,6 +52,8 @@ describe('CatalogCard', () => {
     expect(html).toContain('In stock');
     expect(html).toContain('4 500');
     expect(html).toContain('View');
+    expect(html).toContain('catalog-card-current-price');
+    expect(html).toContain('catalog-card-compare-price');
     expect(html).toContain('/fr/products/desk-lamp');
     expect(html).toContain('loading="eager"');
   });

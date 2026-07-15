@@ -10,6 +10,7 @@ import { CatalogTelemetry } from '@/components/catalog-telemetry';
 import { CatalogCard, getCatalogProductTitle, getCatalogProductToken } from '@/components/catalog-card';
 import { CatalogInfiniteLoader } from '@/components/catalog-infinite-loader';
 import { CatalogLiveSearch } from '@/components/catalog-live-search';
+import { CatalogLiveSort } from '@/components/catalog-live-sort';
 import { PageShell } from '@/components/page-shell';
 import { isLocale } from '@/i18n/config';
 import {
@@ -147,16 +148,17 @@ export async function CatalogPageContent({ params, searchParams }: CatalogPagePr
               placeholder={t('searchPlaceholder')}
               searchingLabel={t('searching')}
             />
-            <label className="catalog-sort">
-              <span>{t('sortLabel')}</span>
-              <select name="sort" defaultValue={query.sort}>
-                <option value="newest">{t('sortNewest')}</option>
-                <option value="price-asc">{t('sortPriceAsc')}</option>
-                <option value="price-desc">{t('sortPriceDesc')}</option>
-                <option value="name-asc">{t('sortNameAsc')}</option>
-              </select>
-            </label>
-            <button type="submit" className="catalog-toolbar-submit">{t('apply')}</button>
+            <CatalogLiveSort
+              initialValue={query.sort}
+              label={t('sortLabel')}
+              options={[
+                { value: 'recommended', label: t('sortRecommended') },
+                { value: 'newest', label: t('sortNewest') },
+                { value: 'price-asc', label: t('sortPriceAsc') },
+                { value: 'price-desc', label: t('sortPriceDesc') },
+                { value: 'name-asc', label: t('sortNameAsc') },
+              ]}
+            />
           </div>
 
           <div className="catalog-results-heading" aria-live="polite">

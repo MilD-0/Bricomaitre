@@ -62,7 +62,7 @@ const productEventInputSchema = z.object({
     mediaCount: z.number().int().positive().optional(),
     resultsCount: z.number().int().min(0).optional(),
     page: z.number().int().positive().optional(),
-    sort: z.enum(['newest', 'price-asc', 'price-desc', 'name-asc']).optional(),
+    sort: z.enum(['recommended', 'newest', 'price-asc', 'price-desc', 'name-asc']).optional(),
     listContext: z.enum(['catalog', 'similar_products']).optional(),
     filterKind: z.enum(['category', 'brand']).optional(),
     filterId: z.number().int().positive().optional(),

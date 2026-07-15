@@ -2,6 +2,7 @@ import {
   storefrontBrandsResponseSchema,
   storefrontCategoriesResponseSchema,
   storefrontEcotrackCatalogResponseSchema,
+  storefrontHomepageResponseSchema,
   storefrontProductDetailResponseSchema,
   storefrontProductListQuerySchema,
   storefrontProductsResponseSchema,
@@ -9,6 +10,7 @@ import {
   type StorefrontBrandsResponse,
   type StorefrontCategoriesResponse,
   type StorefrontEcotrackCatalogResponse,
+  type StorefrontHomepageResponse,
   type StorefrontProductDetailResponse,
   type StorefrontProductListQuery,
   type StorefrontProductsResponse,
@@ -103,6 +105,25 @@ export async function fetchStorefrontEcotrackCatalog(): Promise<StorefrontEcotra
     '/storefront/ecotrack/catalog',
     storefrontEcotrackCatalogResponseSchema,
   );
+}
+
+export async function fetchStorefrontHomepage(): Promise<StorefrontHomepageResponse> {
+  const pathname = '/storefront/homepage';
+  return parseUpstreamJson(await fetchStorefrontUpstream(pathname), pathname, storefrontHomepageResponseSchema);
+}
+
+export async function getStorefrontHomepage() {
+  'use cache';
+  cacheLife({ stale: 30, revalidate: 120, expire: 600 });
+  cacheTag(STOREFRONT_NEW_CACHE_TAGS.assets, STOREFRONT_NEW_CACHE_TAGS.products, STOREFRONT_NEW_CACHE_TAGS.productMeta);
+  return fetchStorefrontHomepage();
+}
+
+export async function getStorefrontEcotrackCatalog() {
+  // The canonical API caches this shared, low-churn catalog. Keeping this
+  // boundary uncached prevents a transient API outage from pinning checkout
+  // to an empty delivery selector for the storefront cache lifetime.
+  return fetchStorefrontEcotrackCatalog();
 }
 
 export async function getStorefrontCatalog(input: StorefrontProductListQuery) {

@@ -10,7 +10,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ items: [], total: 0 });
   }
 
-  applyServerCache({ stale: 60, revalidate: 300, expire: 3600 }, CACHE_TAGS.products);
+  applyServerCache(
+    { stale: 60, revalidate: 300, expire: 3600 },
+    CACHE_TAGS.products,
+    CACHE_TAGS.assets,
+  );
 
   const query = storefrontProductListQuerySchema.parse({
     page: req.nextUrl.searchParams.get('page') ?? undefined,

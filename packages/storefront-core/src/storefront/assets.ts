@@ -14,6 +14,13 @@ import {
   toStorefrontFeaturedGroupDto,
   toStorefrontProductCardDto,
 } from './dto';
+import {
+  readStorefrontBrands,
+  readStorefrontCategories,
+  readStorefrontProducts,
+  readStorefrontProductsByIds,
+  readStorefrontProductsForSelections,
+} from './catalog';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -65,5 +72,32 @@ export async function readStorefrontAssets(db: Database) {
     banners: banners.map(toStorefrontBannerDto),
     featuredGroups: withSelections(groups, groupProducts, groupBrands, groupCategories).map(toStorefrontFeaturedGroupDto),
     productCards: cards.map(toStorefrontProductCardDto),
+  };
+}
+
+export async function readStorefrontHomepage(db: Database) {
+  const [assets, topProducts, categories, brands] = await Promise.all([
+    readStorefrontAssets(db),
+    readStorefrontProducts(db, { page: 1, limit: 8, search: '', brandId: null, categoryId: null, id: null, mongoId: null, slug: null, sortKey: 'recommended', sortDirection: 'desc' }),
+    readStorefrontCategories(db),
+    readStorefrontBrands(db),
+  ]);
+  const cardProducts = await readStorefrontProductsByIds(db, assets.productCards.map((card) => card.productId));
+  const cardProductById = new Map(cardProducts.map((product) => [product.id, product]));
+  const featuredGroups = await Promise.all(assets.featuredGroups.map(async (group) => ({
+    ...group,
+    products: await readStorefrontProductsForSelections(db, group, 12),
+  })));
+
+  return {
+    banners: assets.banners,
+    topProducts,
+    categories: categories.filter((category) => category.featured || category.parentId === null),
+    productCards: assets.productCards.flatMap((card) => {
+      const product = cardProductById.get(card.productId);
+      return product ? [{ ...card, product }] : [];
+    }),
+    brands: brands.filter((brand) => brand.featured && brand.image),
+    featuredGroups: featuredGroups.filter((group) => group.products.length > 0),
   };
 }

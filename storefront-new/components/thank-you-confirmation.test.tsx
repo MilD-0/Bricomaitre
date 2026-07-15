@@ -50,6 +50,29 @@ describe('ThankYouConfirmation', () => {
     }), 'thank_you');
   });
 
+  it('replaces a degraded local product snapshot with the resolved server product', async () => {
+    const missingOrder = {
+      ...order,
+      cartProducts: ['desk-lamp'],
+      orderProducts: [{ productId: null, rawValue: 'desk-lamp', title: 'desk-lamp', unitPrice: 0, quantity: 1, lineTotal: 0, thumbnailUrl: null, missing: true }],
+      productSubtotal: 0,
+      totalAmount: 500,
+    };
+    window.localStorage.setItem(CHECKOUT_CONFIRMATION_KEY, JSON.stringify({ order: missingOrder, cartMode: 'direct', stateName: 'Alger', createdAt: '2026-07-14T10:00:00.000Z' }));
+    mocks.verify.mockResolvedValue(order);
+
+    render(<ThankYouConfirmation locale="fr" orderId={42} token="public-order-token-1234567890" labels={labels} />);
+
+    expect(await screen.findByText('Desk Lamp')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText(/^desk-lamp$/)).not.toBeInTheDocument());
+    expect(JSON.parse(window.localStorage.getItem(CHECKOUT_CONFIRMATION_KEY)!).order.orderProducts[0]).toMatchObject({
+      productId: 12,
+      title: 'Desk Lamp',
+      unitPrice: 4500,
+      missing: false,
+    });
+  });
+
   it('shows a recoverable state for an incomplete confirmation link', async () => {
     render(<ThankYouConfirmation locale="fr" orderId={null} token={null} labels={labels} />);
     expect(await screen.findByRole('heading', { name: 'unavailableTitle' })).toBeInTheDocument();

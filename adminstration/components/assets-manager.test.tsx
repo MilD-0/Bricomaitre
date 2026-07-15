@@ -162,6 +162,7 @@ describe('AssetsManager', () => {
     await userEvent.type(within(bannerDialog).getByRole('textbox', { name: 'Arabic title' }), 'بانر رئيسي');
     await userEvent.click(within(bannerDialog).getByRole('button', { name: 'Choose Roller' }));
     await userEvent.type(within(bannerDialog).getByRole('textbox', { name: 'Horizontal screen image' }), 'https://cdn.example.com/new-banner.jpg');
+    await userEvent.type(within(bannerDialog).getByRole('textbox', { name: 'Vertical screen image' }), 'https://cdn.example.com/new-banner-portrait.jpg');
     await userEvent.click(within(bannerDialog).getByRole('button', { name: 'Create banner' }));
 
     await waitFor(() => {
@@ -175,7 +176,7 @@ describe('AssetsManager', () => {
             title: 'Hero banner',
             titleAr: 'بانر رئيسي',
             imageUrl: 'https://cdn.example.com/new-banner.jpg',
-            imageUrlPortrait: null,
+            imageUrlPortrait: 'https://cdn.example.com/new-banner-portrait.jpg',
             imageUrlLandscape: 'https://cdn.example.com/new-banner.jpg',
             productId: 10,
             active: true,

@@ -4,8 +4,9 @@ import type { Locale } from '@/i18n/config';
 
 export const CATALOG_PAGE_SIZE = 24;
 export const SIMILAR_PRODUCTS_PAGE_SIZE = 6;
-export const catalogSortValues = ['newest', 'price-asc', 'price-desc', 'name-asc'] as const;
+export const catalogSortValues = ['recommended', 'newest', 'price-asc', 'price-desc', 'name-asc'] as const;
 const catalogSortMap = {
+  recommended: { sortKey: 'recommended', sortDirection: 'desc' },
   newest: { sortKey: 'updatedAt', sortDirection: 'desc' },
   'price-asc': { sortKey: 'price', sortDirection: 'asc' },
   'price-desc': { sortKey: 'price', sortDirection: 'desc' },
@@ -22,7 +23,7 @@ const filterIdSchema = z.preprocess(
   z.union([z.coerce.number().int().positive(), z.literal(''), z.null(), z.undefined()])
     .transform((value) => value === '' || value == null ? null : value),
 ).catch(null);
-const sortSchema = z.preprocess(firstValue, z.enum(catalogSortValues)).catch('newest');
+const sortSchema = z.preprocess(firstValue, z.enum(catalogSortValues)).catch('recommended');
 const pageSchema = z.preprocess(firstValue, z.coerce.number().int().positive().max(1_000)).catch(1);
 const batchSizeSchema = z.coerce.number().int().min(1).max(CATALOG_PAGE_SIZE).catch(CATALOG_PAGE_SIZE);
 
@@ -30,7 +31,7 @@ export const catalogPageQuerySchema = z.object({
   q: searchSchema.default(''),
   category: filterIdSchema.default(null),
   brand: filterIdSchema.default(null),
-  sort: sortSchema.default('newest'),
+  sort: sortSchema.default('recommended'),
   page: pageSchema.default(1),
 });
 
@@ -66,7 +67,7 @@ export function buildCatalogPath(locale: Locale, query: CatalogPageQuery, page =
   if (query.q) params.set('q', query.q);
   if (query.category !== null) params.set('category', String(query.category));
   if (query.brand !== null) params.set('brand', String(query.brand));
-  if (query.sort !== 'newest') params.set('sort', query.sort);
+  if (query.sort !== 'recommended') params.set('sort', query.sort);
   if (page > 1) params.set('page', String(page));
   const serialized = params.toString();
   return `/${locale}/products${serialized ? `?${serialized}` : ''}`;
@@ -81,5 +82,5 @@ export function buildCatalogApiPath(query: CatalogPageQuery, page: number, batch
 }
 
 export function isFilteredCatalog(query: CatalogPageQuery) {
-  return Boolean(query.q || query.category || query.brand || query.sort !== 'newest' || query.page > 1);
+  return Boolean(query.q || query.category || query.brand || query.sort !== 'recommended' || query.page > 1);
 }

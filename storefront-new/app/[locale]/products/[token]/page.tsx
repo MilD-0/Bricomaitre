@@ -1,18 +1,19 @@
 import type { Metadata, Route } from 'next';
-import { HandCoins, PhoneCall, Truck } from 'lucide-react';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { Suspense } from 'react';
+import { Fragment, Suspense } from 'react';
 import { ZodError } from 'zod';
 
 import { PageShell } from '@/components/page-shell';
 import { ProductActions } from '@/components/product-actions';
 import { ProductMedia } from '@/components/product-media';
 import { ProductTelemetry } from '@/components/product-telemetry';
+import { ProductTrustSignal } from '@/components/product-trust-signal';
 import { SimilarProducts } from '@/components/similar-products';
 import { StorefrontImage } from '@/components/storefront-image';
 import { isLocale, type Locale } from '@/i18n/config';
 import { isDisplayableProductImageUrl } from '@/lib/product-images';
+import { buildProductCategoryBreadcrumbs } from '@/lib/product-breadcrumbs';
 import {
   formatProductPrice,
   getLocalizedProductCopy,
@@ -26,7 +27,7 @@ import {
   getProductPath,
   serializeStructuredData,
 } from '@/lib/product-seo';
-import { getStorefrontCatalog, getStorefrontProductDetail } from '@/lib/storefront-api';
+import { getStorefrontCatalog, getStorefrontCatalogMeta, getStorefrontProductDetail } from '@/lib/storefront-api';
 import { isStorefrontUpstreamError } from '@/lib/storefront-upstream';
 import { captureProductPageException } from '@/lib/sentry';
 
@@ -117,6 +118,10 @@ export async function ProductPageContent({ params }: ProductPageProps) {
     ? product.brand.image
     : null;
   const price = parseProductPrice(product.price);
+  const categoryMeta = product.category
+    ? await getStorefrontCatalogMeta().then((meta) => meta.categories).catch(() => [])
+    : [];
+  const categoryBreadcrumbs = buildProductCategoryBreadcrumbs(product.category, categoryMeta, locale);
   const analytics = {
     categoryId: product.category?.id ?? null,
     categorySlug: product.category?.slug ?? null,
@@ -129,7 +134,7 @@ export async function ProductPageContent({ params }: ProductPageProps) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: serializeStructuredData(buildProductStructuredData(product, locale)),
+          __html: serializeStructuredData(buildProductStructuredData(product, locale, categoryBreadcrumbs)),
         }}
       />
       <ProductTelemetry
@@ -145,6 +150,12 @@ export async function ProductPageContent({ params }: ProductPageProps) {
         <span aria-hidden="true">/</span>
         <a href={`/${locale}/products`}>{t('products')}</a>
         <span aria-hidden="true">/</span>
+        {categoryBreadcrumbs.map((category) => (
+          <Fragment key={category.id}>
+            <a href={category.href}>{category.label}</a>
+            <span aria-hidden="true">/</span>
+          </Fragment>
+        ))}
         <span aria-current="page">{copy.title}</span>
       </nav>
 
@@ -186,9 +197,9 @@ export async function ProductPageContent({ params }: ProductPageProps) {
 
           <div className="product-purchase-summary">
             <div className="product-price-block" aria-label={t('price')}>
-              <strong>{formatProductPrice(product.price, locale)}</strong>
+              <strong className="product-current-price">{formatProductPrice(product.price, locale)}</strong>
               {hasProductDiscount(product) && product.oldPrice ? (
-                <del>{formatProductPrice(product.oldPrice, locale)}</del>
+                <del className="product-compare-price">{formatProductPrice(product.oldPrice, locale)}</del>
               ) : null}
             </div>
 
@@ -222,9 +233,9 @@ export async function ProductPageContent({ params }: ProductPageProps) {
           />
 
           <ul className="product-trust" aria-label={t('trustTitle')}>
-            <li><span aria-hidden="true"><PhoneCall /></span>{t('trustConfirmation')}</li>
-            <li><span aria-hidden="true"><HandCoins /></span>{t('trustPayment')}</li>
-            <li><span aria-hidden="true"><Truck /></span>{t('trustDelivery')}</li>
+            <ProductTrustSignal icon="confirmation">{t('trustConfirmation')}</ProductTrustSignal>
+            <ProductTrustSignal icon="payment">{t('trustPayment')}</ProductTrustSignal>
+            <ProductTrustSignal icon="delivery">{t('trustDelivery')}</ProductTrustSignal>
           </ul>
         </div>
       </article>

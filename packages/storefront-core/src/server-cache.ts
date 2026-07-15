@@ -2,6 +2,7 @@ import { cacheLife, cacheTag, revalidateTag } from 'next/cache';
 
 export const CACHE_TAGS = {
   assets: 'assets',
+  ecotrackCatalog: 'ecotrack-catalog',
   products: 'products',
   productsMeta: 'products-meta',
   stats: 'stats',
