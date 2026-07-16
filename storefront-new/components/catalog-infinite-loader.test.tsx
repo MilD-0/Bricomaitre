@@ -137,6 +137,51 @@ describe('CatalogInfiniteLoader', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('reserves two product-card slots while the next page is loading', async () => {
+    intersectOnObserve = true;
+    let resolveResponse: (response: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveResponse = resolve; }));
+
+    render(
+      <CatalogInfiniteLoader
+        locale="fr" query={query} initialCount={24} initialProductIds={Array.from({ length: 24 }, (_, index) => index + 1)}
+        initialHasNextPage totalCount={25} brandNames={{}} categoryNames={{}} labels={labels}
+      />,
+    );
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    expect(document.querySelectorAll('.catalog-card-skeleton')).toHaveLength(2);
+    resolveResponse!(new Response(JSON.stringify({ items: [product(25)], page: 2, hasNextPage: false }), { status: 200 }));
+    await expect(screen.findByRole('heading', { name: 'Tool 25' })).resolves.toBeInTheDocument();
+    expect(document.querySelectorAll('.catalog-card-skeleton')).toHaveLength(0);
+  });
+
+  it('renders a product only once when an API page repeats its id', async () => {
+    intersectOnObserve = true;
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      items: [product(25, 'Cordless drill'), product(25, 'Repeated drill')],
+      page: 2,
+      hasNextPage: false,
+    }), { status: 200 }));
+
+    render(
+      <CatalogInfiniteLoader
+        locale="fr"
+        query={query}
+        initialCount={24}
+        initialProductIds={Array.from({ length: 24 }, (_, index) => index + 1)}
+        initialHasNextPage
+        totalCount={25}
+        brandNames={{}}
+        categoryNames={{}}
+        labels={labels}
+      />,
+    );
+
+    await expect(screen.findByRole('heading', { name: 'Cordless drill' })).resolves.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Repeated drill' })).not.toBeInTheDocument();
+  });
+
   it('rebuilds appended pages before restoring the saved scroll offset', async () => {
     window.sessionStorage.setItem('bric:catalog-position:v2:/fr/products', JSON.stringify({
       items: [product(25, 'Restored drill')],
@@ -163,6 +208,67 @@ describe('CatalogInfiniteLoader', () => {
     await expect(screen.findByRole('heading', { name: 'Restored drill' })).resolves.toBeInTheDocument();
     await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 640, behavior: 'auto' }));
     expect(screen.getByText('All products seen')).toBeInTheDocument();
+  });
+
+  it('deduplicates persisted products before restoring the catalog', async () => {
+    window.sessionStorage.setItem('bric:catalog-position:v2:/fr/products', JSON.stringify({
+      items: [product(25, 'Restored drill'), product(25, 'Repeated restored drill')],
+      page: 2,
+      hasNextPage: false,
+      totalCount: 25,
+      scrollY: 640,
+    }));
+
+    render(
+      <CatalogInfiniteLoader
+        locale="fr"
+        query={query}
+        initialCount={24}
+        initialProductIds={Array.from({ length: 24 }, (_, index) => index + 1)}
+        initialHasNextPage
+        totalCount={25}
+        brandNames={{}}
+        categoryNames={{}}
+        labels={labels}
+      />,
+    );
+
+    await expect(screen.findByRole('heading', { name: 'Restored drill' })).resolves.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Repeated restored drill' })).not.toBeInTheDocument();
+  });
+
+  it('continues after the restored page instead of requesting it again', async () => {
+    intersectOnObserve = true;
+    window.sessionStorage.setItem('bric:catalog-position:v2:/fr/products', JSON.stringify({
+      items: [product(25, 'Restored drill')],
+      page: 2,
+      hasNextPage: true,
+      totalCount: 26,
+      scrollY: 640,
+    }));
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      items: [product(26, 'Next restored drill')],
+      page: 3,
+      hasNextPage: false,
+    }), { status: 200 }));
+
+    render(
+      <CatalogInfiniteLoader
+        locale="fr"
+        query={query}
+        initialCount={24}
+        initialProductIds={Array.from({ length: 24 }, (_, index) => index + 1)}
+        initialHasNextPage
+        totalCount={26}
+        brandNames={{}}
+        categoryNames={{}}
+        labels={labels}
+      />,
+    );
+
+    await expect(screen.findByRole('heading', { name: 'Next restored drill' })).resolves.toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith('/api/catalog?sort=newest&page=3', expect.any(Object));
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('ignores restoration state from a different catalog total', async () => {

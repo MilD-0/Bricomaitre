@@ -34,11 +34,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid revalidation payload' }, { status: 400 });
   }
 
-  if (parsed.scope !== 'assets') {
+  if (parsed.scope !== 'assets' && parsed.scope !== 'settings') {
     return NextResponse.json({ error: 'Unsupported revalidation scope' }, { status: 400 });
   }
 
-  revalidateServerTags(CACHE_TAGS.assets);
+  const tag = parsed.scope === 'settings' ? CACHE_TAGS.storefrontSettings : CACHE_TAGS.assets;
+  revalidateServerTags(tag);
 
-  return NextResponse.json({ ok: true, revalidated: [CACHE_TAGS.assets] });
+  return NextResponse.json({ ok: true, revalidated: [tag] });
 }

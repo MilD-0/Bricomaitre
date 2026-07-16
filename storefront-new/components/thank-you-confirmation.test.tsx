@@ -24,6 +24,11 @@ const order = {
   note: null, confirmed: 0, noAnswerCount: 0, confirmedAt: null, hasStatusHistory: false, statusHistory: [],
 };
 
+const support = {
+  contact: { phoneDisplay: '0795 34 28 26', phoneHref: 'tel:+213795342826', phoneEnabled: true },
+  labels: { title: 'Order help', description: 'We are here.', call: 'Call' },
+};
+
 describe('ThankYouConfirmation', () => {
   afterEach(cleanup);
   beforeEach(() => { window.localStorage.clear(); mocks.verify.mockReset(); mocks.track.mockReset(); });
@@ -37,6 +42,12 @@ describe('ThankYouConfirmation', () => {
     expect(mocks.verify).toHaveBeenCalledWith(42, 'public-order-token-1234567890');
     await waitFor(() => expect(mocks.track).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'purchase', orderId: 42 }), 'thank_you'));
     expect(mocks.track.mock.calls.flatMap((call) => JSON.stringify(call))).not.toContain('0550000000');
+  });
+
+  it('shows a layout-matched skeleton while order verification is pending', async () => {
+    mocks.verify.mockImplementationOnce(() => new Promise(() => undefined));
+    render(<ThankYouConfirmation locale="fr" orderId={42} token="public-order-token-1234567890" labels={labels} />);
+    expect(await screen.findByLabelText('Loading order confirmation')).toBeInTheDocument();
   });
 
   it('keeps a locally saved confirmation visible when server verification is unavailable', async () => {
@@ -77,5 +88,11 @@ describe('ThankYouConfirmation', () => {
     render(<ThankYouConfirmation locale="fr" orderId={null} token={null} labels={labels} />);
     expect(await screen.findByRole('heading', { name: 'unavailableTitle' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'retry' })).toBeInTheDocument();
+  });
+
+  it('keeps a direct support route alongside a completed order', async () => {
+    mocks.verify.mockResolvedValue(order);
+    render(<ThankYouConfirmation locale="fr" orderId={42} token="public-order-token-1234567890" labels={labels} support={support} />);
+    expect(await screen.findByRole('link', { name: /Call.*0795 34 28 26/ })).toHaveAttribute('href', 'tel:+213795342826');
   });
 });

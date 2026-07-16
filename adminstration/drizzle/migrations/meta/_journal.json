@@ -358,6 +358,34 @@
       "when": 1783823265678,
       "tag": "0050_tense_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1784184578581,
+      "tag": "0051_sparkling_lake",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1784190642727,
+      "tag": "0052_shocking_shinko_yamashiro",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1784213296721,
+      "tag": "0053_classy_lord_tyger",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1784214897920,
+      "tag": "0054_flowery_puff_adder",
+      "breakpoints": true
     }
   ]
 }

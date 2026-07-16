@@ -8,6 +8,7 @@ const {
   getProductMock,
   getCatalogMock,
   getCatalogMetaMock,
+  getSettingsMock,
   notFoundMock,
   permanentRedirectMock,
   captureProductPageExceptionMock,
@@ -15,6 +16,7 @@ const {
   getProductMock: vi.fn(),
   getCatalogMock: vi.fn(),
   getCatalogMetaMock: vi.fn(),
+  getSettingsMock: vi.fn(),
   notFoundMock: vi.fn(() => { throw new Error('NEXT_NOT_FOUND'); }),
   permanentRedirectMock: vi.fn((path: string) => { throw new Error(`NEXT_REDIRECT:${path}`); }),
   captureProductPageExceptionMock: vi.fn(),
@@ -24,6 +26,7 @@ vi.mock('@/lib/storefront-api', () => ({
   getStorefrontProductDetail: getProductMock,
   getStorefrontCatalog: getCatalogMock,
   getStorefrontCatalogMeta: getCatalogMetaMock,
+  getStorefrontSettings: getSettingsMock,
 }));
 vi.mock('@/lib/sentry', () => ({ captureProductPageException: captureProductPageExceptionMock }));
 vi.mock('next/navigation', () => ({ notFound: notFoundMock, permanentRedirect: permanentRedirectMock }));
@@ -48,7 +51,7 @@ vi.mock('@/components/product-media', () => ({
   ProductMedia: ({ productName }: { productName: string }) => React.createElement('div', { 'data-media': productName }),
 }));
 vi.mock('@/components/product-actions', () => ({
-  ProductActions: ({ available }: { available: boolean }) => React.createElement('div', { 'data-actions': available }),
+  ProductActions: ({ available, support }: { available: boolean; support?: { contact: { phoneDisplay: string } } }) => React.createElement('div', { 'data-actions': available, 'data-support-phone': support?.contact.phoneDisplay }),
 }));
 vi.mock('@/components/product-telemetry', () => ({ ProductTelemetry: () => null }));
 vi.mock('@/components/similar-products', () => ({
@@ -85,10 +88,11 @@ describe('localized Product Detail Page', () => {
     getCatalogMetaMock.mockReset().mockResolvedValue({
       brands: [],
       categories: [
-        { id: 1, name: 'Workshop', nameAr: 'الورشة', parentId: null },
-        { id: 2, name: 'Electrical', nameAr: 'كهربائي', parentId: 1 },
+        { id: 1, name: 'Workshop', nameAr: 'الورشة', slug: 'workshop', parentId: null },
+        { id: 2, name: 'Electrical', nameAr: 'كهربائي', slug: 'electrical', parentId: 1 },
       ],
     });
+    getSettingsMock.mockReset().mockResolvedValue({ phoneDisplay: '0795 34 28 26', phoneHref: 'tel:+213795342826', phoneEnabled: true });
     notFoundMock.mockClear();
     permanentRedirectMock.mockClear();
     captureProductPageExceptionMock.mockClear();
@@ -116,15 +120,16 @@ describe('localized Product Detail Page', () => {
     expect(html).toContain('application/ld+json');
     expect(html).toContain('schema.org');
     expect(html).toContain('data-actions="true"');
+    expect(html).toContain('data-support-phone="0795 34 28 26"');
     expect(html).toMatch(/<img[^>]+alt="Bric"/);
     expect(html).toContain('data-similar-for="12"');
     expect(html).toContain('product-current-price');
     expect(html).toContain('product-compare-price');
-    expect(html).toContain('href="/fr/products?category=1"');
-    expect(html).toContain('href="/fr/products?category=2"');
-    expect(html).toContain('href="/fr/products?category=3"');
-    expect(html.indexOf('href="/fr/products?category=1">Workshop')).toBeLessThan(html.indexOf('href="/fr/products?category=2">Electrical'));
-    expect(html.indexOf('href="/fr/products?category=2">Electrical')).toBeLessThan(html.indexOf('href="/fr/products?category=3">Lighting'));
+    expect(html).toContain('href="/fr/categories/workshop"');
+    expect(html).toContain('href="/fr/categories/electrical"');
+    expect(html).toContain('href="/fr/categories/lighting"');
+    expect(html.indexOf('href="/fr/categories/workshop">Workshop')).toBeLessThan(html.indexOf('href="/fr/categories/electrical">Electrical'));
+    expect(html.indexOf('href="/fr/categories/electrical">Electrical')).toBeLessThan(html.indexOf('href="/fr/categories/lighting">Lighting'));
   });
 
   it('server-renders localized Arabic copy from the same contract', async () => {

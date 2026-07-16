@@ -23,6 +23,7 @@ export default defineConfig({
     "./db/schema/productPromoCodes.ts",
     "./db/schema/roleDefinitions.ts",
     "./db/schema/shoppingLists.ts",
+    "../packages/db/src/schema/storefrontSettings.ts",
     "./db/schema/userAccessGrants.ts",
   ],
   out: "./drizzle/migrations",

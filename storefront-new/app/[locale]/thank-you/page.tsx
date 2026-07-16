@@ -5,7 +5,10 @@ import { Suspense } from 'react';
 
 import { PageShell } from '@/components/page-shell';
 import { ThankYouConfirmation } from '@/components/thank-you-confirmation';
+import { ThankYouPageSkeleton } from '@/components/storefront-skeletons';
 import { isLocale } from '@/i18n/config';
+import { getStorefrontSettings } from '@/lib/storefront-api';
+import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 export const metadata: Metadata = {
   title: 'Order confirmation',
@@ -18,13 +21,16 @@ type ThankYouPageProps = {
 };
 
 export default function ThankYouPage(props: ThankYouPageProps) {
-  return <Suspense fallback={<div className="thank-you-loading" aria-busy="true" />}><ThankYouPageContent {...props} /></Suspense>;
+  return <Suspense fallback={<ThankYouPageSkeleton />}><ThankYouPageContent {...props} /></Suspense>;
 }
 
 export async function ThankYouPageContent({ params, searchParams }: ThankYouPageProps) {
   const [{ locale }, query] = await Promise.all([params, searchParams]);
   if (!isLocale(locale)) notFound();
-  const t = await getTranslations({ locale, namespace: 'ThankYou' });
+  const [t, contact] = await Promise.all([
+    getTranslations({ locale, namespace: 'ThankYou' }),
+    getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse),
+  ]);
   const rawOrderId = Array.isArray(query.orderId) ? query.orderId[0] : query.orderId;
   const rawToken = Array.isArray(query.token) ? query.token[0] : query.token;
   const orderId = Number.parseInt(rawOrderId ?? '', 10);
@@ -43,6 +49,7 @@ export async function ThankYouPageContent({ params, searchParams }: ThankYouPage
           homeDelivery: t('homeDelivery'), officeDelivery: t('officeDelivery'), fallback: t('fallback'), unavailableTitle: t('unavailableTitle'),
           unavailableBody: t('unavailableBody'), retry: t('retry'), browseProducts: t('browseProducts'),
         }}
+        support={{ contact, labels: { title: t('supportTitle'), description: t('supportDescription'), call: t('supportCall') } }}
       />
     </PageShell>
   );

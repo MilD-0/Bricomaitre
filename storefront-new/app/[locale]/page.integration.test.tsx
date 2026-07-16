@@ -27,6 +27,9 @@ describe('homepage', () => {
     let cursor = -1;
     for (const marker of order) { const next = html.indexOf(marker); expect(next).toBeGreaterThan(cursor); cursor = next; }
     expect(html).toContain('/fr/products/perceuse-sans-fil-20v');
+    expect(html).toContain('home-featured-heading');
+    expect(html).toContain('home-featured-cta');
+    expect(html).toContain('href="/fr/products"');
   });
 
   it('renders localized Arabic section and editorial copy', async () => {
@@ -36,16 +39,21 @@ describe('homepage', () => {
     expect(html).toContain('/ar/products/');
   });
 
-  it('falls back to complete mock content when the homepage API is empty', async () => {
+  it('renders a controlled empty state instead of leaking mock merchandise', async () => {
     mocks.homepage.mockResolvedValue({ banners: [], topProducts: [], categories: [], productCards: [], brands: [], featuredGroups: [] });
     const html = renderToStaticMarkup(await HomePageContent({ params: Promise.resolve({ locale: 'fr' }) }));
-    expect(html).toContain('Top produits');
-    expect(html).toContain('Une seule batterie, tous vos projets');
+    expect(html).toContain('Nos produits sont momentanément indisponibles');
+    expect(html).not.toContain('Une seule batterie, tous vos projets');
   });
 
-  it('publishes indexable localized metadata for the selected homepage', async () => {
+  it('publishes indexable localized metadata and homepage structured data', async () => {
     const metadata = await generateMetadata({ params: Promise.resolve({ locale: 'fr' }) });
-    expect(metadata.title).toContain('Les bons outils');
-    expect(metadata.robots).toBeUndefined();
+    expect(metadata).toMatchObject({
+      alternates: { canonical: 'https://bricomaitre.com/fr' },
+      robots: { index: true, follow: true },
+    });
+    const html = renderToStaticMarkup(await HomePageContent({ params: Promise.resolve({ locale: 'fr' }) }));
+    expect(html).toContain('application/ld+json');
+    expect(html).toContain('https://schema.org');
   });
 });

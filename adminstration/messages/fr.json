@@ -1723,6 +1723,21 @@
       "settings_manage": "Gérer la configuration des paramètres"
     }
   },
+  "storefrontSettings": {
+    "title": "Paramètres de la boutique",
+    "description": "Gérez ici les informations de contact visibles par les clients. Cette page masquée accueillera aussi les futurs réglages de mise en page et d’information de la boutique.",
+    "contactTitle": "Coordonnées",
+    "contactDescription": "La boutique utilise ce numéro pour les appels directs des clients.",
+    "phoneLabel": "Numéro de téléphone client",
+    "phoneHint": "Un numéro mobile algérien au format national ou +213.",
+    "callsLabel": "Autoriser les appels",
+    "callsHint": "Afficher les actions d’appel direct dans la boutique.",
+    "saveAction": "Enregistrer les paramètres",
+    "savingAction": "Enregistrement...",
+    "saving": "Enregistrement des paramètres de la boutique...",
+    "saved": "Paramètres de la boutique enregistrés.",
+    "saveError": "Impossible d’enregistrer les paramètres de la boutique."
+  },
   "auth": {
     "title": "Accès BricoAdmin",
     "description": "Utilisez votre compte Google autorisé pour entrer dans l’espace d’exploitation et continuer avec les permissions attribuées à votre rôle.",
@@ -1843,7 +1858,9 @@
     "orderColumn": "Ordre",
     "bannerImageLabel": "Image de bannière",
     "bannerLandscapeImageLabel": "Image écran horizontal",
+    "bannerLandscapeImageHint": "Format desktop : 20:7 — exportez en 2400 × 840 px.",
     "bannerPortraitImageLabel": "Image écran vertical",
+    "bannerPortraitImageHint": "Format mobile : 19:23 — exportez en 1140 × 1380 px.",
     "uploadHint": "Upload vers S3 puis stockage des URLs CloudFront.",
     "singleImagePlaceholder": "URL de l'image de bannière",
     "createBanner": "Créer la bannière",

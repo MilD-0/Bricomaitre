@@ -15,7 +15,8 @@ export async function generateMetadata({ params }: CollectionPageProps): Promise
 
   return {
     title: `Collection ${slug}`,
-    description: "Bricomaitre collection page foundation."
+    description: "Bricomaitre collection page foundation.",
+    robots: { index: false, follow: false },
   };
 }
 

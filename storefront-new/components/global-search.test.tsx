@@ -63,7 +63,7 @@ describe('GlobalSearch', () => {
     }));
 
     fireEvent.click(screen.getByRole('link', { name: /Lampe de travail/ }));
-    expect(haptic).toHaveBeenCalledWith('selection');
+    expect(haptic).toHaveBeenCalledWith('navigation');
     expect(analytics).toHaveBeenCalledWith(expect.objectContaining({
       eventName: 'select_item',
       productId: 12,
@@ -74,5 +74,18 @@ describe('GlobalSearch', () => {
     render(<GlobalSearch locale="fr" labels={labels} />);
     fireEvent.change(screen.getByRole('combobox', { name: labels.label }), { target: { value: 'p' } });
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('keeps result rows stable with skeletons while suggestions are in flight', async () => {
+    let resolveResponse: (response: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveResponse = resolve; }));
+    render(<GlobalSearch locale="fr" labels={labels} />);
+
+    fireEvent.change(screen.getByRole('combobox', { name: labels.label }), { target: { value: 'per' } });
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    expect(document.querySelector('.global-search-skeleton')).toBeInTheDocument();
+
+    resolveResponse!(new Response(JSON.stringify({ items: [] }), { status: 200 }));
+    await waitFor(() => expect(document.querySelector('.global-search-skeleton')).not.toBeInTheDocument());
   });
 });

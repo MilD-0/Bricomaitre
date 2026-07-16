@@ -8,16 +8,17 @@ vi.mock('@/lib/storefront-api', () => ({ getStorefrontCatalogMeta: getCatalogMet
 describe('GET /api/catalog/meta', () => {
   beforeEach(() => getCatalogMeta.mockReset());
 
-  it('returns only a bounded set of featured navigation categories', async () => {
+  it('returns every active category and brand for progressive navigation menus', async () => {
     getCatalogMeta.mockResolvedValue({
-      brands: [],
+      brands: Array.from({ length: 22 }, (_, index) => ({ id: index + 40, name: `Brand ${index + 1}`, slug: `brand-${index + 1}` })),
       categories: [
         { id: 1, name: 'Hidden', nameAr: null, featured: false },
         ...Array.from({ length: 6 }, (_, index) => ({
           id: index + 2,
           name: `Category ${index + 1}`,
           nameAr: `صنف ${index + 1}`,
-          featured: true,
+          slug: `category-${index + 1}`,
+          featured: index % 2 === 0,
         })),
       ],
     });
@@ -25,11 +26,11 @@ describe('GET /api/catalog/meta', () => {
     const response = await GET();
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      items: Array.from({ length: 4 }, (_, index) => ({
-        id: index + 2,
-        name: `Category ${index + 1}`,
-        nameAr: `صنف ${index + 1}`,
-      })),
+      categories: [
+        { id: 1, name: 'Hidden', nameAr: null, slug: undefined },
+        ...Array.from({ length: 6 }, (_, index) => ({ id: index + 2, name: `Category ${index + 1}`, nameAr: `صنف ${index + 1}`, slug: `category-${index + 1}` })),
+      ],
+      brands: Array.from({ length: 22 }, (_, index) => ({ id: index + 40, name: `Brand ${index + 1}`, slug: `brand-${index + 1}` })),
     });
   });
 
@@ -38,6 +39,6 @@ describe('GET /api/catalog/meta', () => {
       get categories() { throw new Error('unavailable'); },
     });
     const response = await GET();
-    await expect(response.json()).resolves.toEqual({ items: [] });
+    await expect(response.json()).resolves.toEqual({ categories: [], brands: [] });
   });
 });

@@ -6,12 +6,10 @@ export async function GET() {
   try {
     const meta = await getStorefrontCatalogMeta();
     return NextResponse.json({
-      items: meta.categories
-        .filter((category) => category.featured)
-        .slice(0, 4)
-        .map(({ id, name, nameAr }) => ({ id, name, nameAr })),
+      categories: meta.categories.map(({ id, name, nameAr, slug }) => ({ id, name, nameAr, slug })),
+      brands: meta.brands.map(({ id, name, slug }) => ({ id, name, slug })),
     });
   } catch {
-    return NextResponse.json({ items: [] });
+    return NextResponse.json({ categories: [], brands: [] });
   }
 }

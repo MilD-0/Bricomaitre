@@ -36,7 +36,7 @@ describe('haptics', () => {
     const { prepareHaptics, triggerHaptic } = await import('./haptics');
 
     await prepareHaptics();
-    await triggerHaptic('selection');
+    await triggerHaptic('navigation');
 
     expect(mocks.construct).not.toHaveBeenCalled();
     expect(mocks.trigger).not.toHaveBeenCalled();
@@ -47,12 +47,15 @@ describe('haptics', () => {
     const { prepareHaptics, triggerHaptic } = await import('./haptics');
 
     await prepareHaptics();
-    await triggerHaptic('selection');
+    await triggerHaptic('navigation');
     await triggerHaptic('success');
 
     expect(mocks.construct).toHaveBeenCalledOnce();
     expect(mocks.construct).toHaveBeenCalledWith({ debug: false, showSwitch: false });
-    expect(mocks.trigger.mock.calls).toEqual([['selection'], ['success']]);
+    expect(mocks.trigger.mock.calls).toEqual([
+      [expect.objectContaining({ description: expect.any(String), pattern: [{ duration: 22, intensity: 0.58 }] })],
+      [expect.objectContaining({ description: expect.stringContaining('confirmation'), pattern: [{ duration: 30, intensity: 0.66 }, { delay: 56, duration: 68, intensity: 1 }] })],
+    ]);
   });
 
   it('swallows device feedback failures so the customer action remains safe', async () => {
@@ -60,6 +63,6 @@ describe('haptics', () => {
     mocks.trigger.mockRejectedValueOnce(new Error('device rejected vibration'));
     const { triggerHaptic } = await import('./haptics');
 
-    await expect(triggerHaptic('medium')).resolves.toBeUndefined();
+    await expect(triggerHaptic('primary')).resolves.toBeUndefined();
   });
 });

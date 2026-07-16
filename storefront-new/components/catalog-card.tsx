@@ -29,6 +29,7 @@ export function CatalogCard({
   brandName,
   categoryName,
   labels,
+  eagerImage = position <= 3,
 }: {
   product: CatalogProduct;
   locale: Locale;
@@ -36,6 +37,7 @@ export function CatalogCard({
   brandName?: string | null;
   categoryName?: string | null;
   labels: CatalogCardLabels;
+  eagerImage?: boolean;
 }) {
   const token = getCatalogProductToken(product);
   const title = getCatalogProductTitle(product, locale);
@@ -43,7 +45,7 @@ export function CatalogCard({
   const price = product.price ? parseProductPrice(product.price) : 0;
   const oldPrice = product.oldPrice ? parseProductPrice(product.oldPrice) : 0;
   const discount = price > 0 && oldPrice > price ? Math.round((1 - price / oldPrice) * 100) : 0;
-  const firstViewportImage = position <= 3;
+  const firstViewportImage = eagerImage;
 
   return (
     <article className="catalog-card">

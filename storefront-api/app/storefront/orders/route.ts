@@ -85,8 +85,10 @@ export async function POST(req: NextRequest) {
       { status: 400, headers: withRequestIdHeaders(requestId) },
     );
   }
-  if (parsed.data.meta && !authorizeMetaSourceRequest(req, parsed.data.meta.eventSourceUrl)) {
-    return NextResponse.json({ error: 'Order Meta source is not allowed.' }, {
+  const marketingSourceUrls = [parsed.data.marketing?.eventSourceUrl, parsed.data.meta?.eventSourceUrl]
+    .filter((value): value is string => Boolean(value));
+  if (marketingSourceUrls.some((sourceUrl) => !authorizeMetaSourceRequest(req, sourceUrl))) {
+    return NextResponse.json({ error: 'Order marketing source is not allowed.' }, {
       status: 403,
       headers: withRequestIdHeaders(requestId),
     });

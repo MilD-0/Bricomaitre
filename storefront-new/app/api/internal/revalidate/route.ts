@@ -10,7 +10,7 @@ import {
 } from '@/lib/cache-tags';
 
 const revalidationPayloadSchema = z.object({
-  scope: z.literal('products'),
+  scope: z.enum(['products', 'settings']),
   tokens: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
 });
 
@@ -47,10 +47,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unsupported revalidation payload' }, { status: 400 });
   }
 
-  const tags = [
-    STOREFRONT_NEW_CACHE_TAGS.products,
-    ...new Set((parsed.data.tokens ?? []).map(getStorefrontProductCacheTag)),
-  ];
+  const tags = parsed.data.scope === 'settings'
+    ? [STOREFRONT_NEW_CACHE_TAGS.settings]
+    : [
+        STOREFRONT_NEW_CACHE_TAGS.products,
+        ...new Set((parsed.data.tokens ?? []).map(getStorefrontProductCacheTag)),
+      ];
   tags.forEach((tag) => revalidateTag(tag, { expire: 0 }));
 
   return NextResponse.json({ ok: true, revalidated: tags });

@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, inArray, notInArray, or, sql } from 'drizzle-orm';
 
 import type { getDb } from '../../../db/src/client';
 import {
@@ -294,14 +294,37 @@ export async function readStorefrontProductsForSelections(
   selection: { productIds: number[]; brandIds: number[]; categoryIds: number[] },
   limit = 12,
 ) {
+  const page = await readStorefrontProductsForSelectionPage(db, selection, { page: 1, limit });
+  return page.items;
+}
+
+export async function readStorefrontProductsForSelectionPage(
+  db: Database,
+  selection: { productIds: number[]; brandIds: number[]; categoryIds: number[] },
+  { page, limit }: { page: number; limit: number },
+) {
   const direct = await readStorefrontProductsByIds(db, selection.productIds);
+  const uniqueDirect = [...new Map(direct.map((product) => [product.id, product])).values()];
   const dynamicConditions = [
     selection.brandIds.length > 0 ? inArray(products.brandId, selection.brandIds) : undefined,
     selection.categoryIds.length > 0 ? inArray(products.categoryId, selection.categoryIds) : undefined,
   ].filter((condition): condition is NonNullable<typeof condition> => Boolean(condition));
-  if (dynamicConditions.length === 0) return direct.slice(0, limit);
+  const start = Math.max(0, page - 1) * limit;
+  if (dynamicConditions.length === 0) {
+    return { items: uniqueDirect.slice(start, start + limit), total: uniqueDirect.length };
+  }
 
-  const rows = await db
+  const dynamicWhere = and(
+    eq(products.active, true),
+    or(...dynamicConditions),
+    uniqueDirect.length > 0 ? notInArray(products.id, uniqueDirect.map((product) => product.id)) : undefined,
+  );
+  const dynamicOffset = Math.max(0, start - uniqueDirect.length);
+  const dynamicLimit = Math.max(0, limit - Math.max(0, uniqueDirect.length - start));
+
+  const [countRows, rows] = await Promise.all([
+    db.select({ count: count() }).from(products).where(dynamicWhere),
+    dynamicLimit > 0 ? db
     .select({
       id: products.id, slug: products.slug, mongoId: products.mongoId, title: products.title,
       titleAr: products.titleAr, description: products.description, descriptionAr: products.descriptionAr,
@@ -311,14 +334,19 @@ export async function readStorefrontProductsForSelections(
       images: products.images, createdAt: products.createdAt, updatedAt: products.updatedAt,
     })
     .from(products)
-    .where(and(eq(products.active, true), or(...dynamicConditions)))
+    .where(dynamicWhere)
     .orderBy(...buildRecommendedProductOrderBy())
-    .limit(limit);
-  return mergeStorefrontProductSelections(
-    direct,
-    rows.map((row) => toStorefrontProductDto(row satisfies StorefrontProductDtoRow)),
-    limit,
-  );
+    .limit(dynamicLimit)
+    .offset(dynamicOffset) : Promise.resolve([]),
+  ]);
+
+  return {
+    items: [
+      ...uniqueDirect.slice(start, start + limit),
+      ...rows.map((row) => toStorefrontProductDto(row satisfies StorefrontProductDtoRow)),
+    ].slice(0, limit),
+    total: uniqueDirect.length + Number(countRows[0]?.count ?? 0),
+  };
 }
 
 export function mergeStorefrontProductSelections<T extends { id: number }>(direct: T[], dynamic: T[], limit: number) {

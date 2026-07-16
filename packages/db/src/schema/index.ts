@@ -20,3 +20,4 @@ export * from "./actionLogs";
 export * from "./bulletin";
 export * from './shoppingLists';
 export * from './adminReporting';
+export * from './storefrontSettings';

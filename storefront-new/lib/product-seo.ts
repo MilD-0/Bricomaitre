@@ -4,18 +4,16 @@ import type { StorefrontProductDetailResponse } from '@bric/storefront-core/cont
 
 import { locales, type Locale } from '@/i18n/config';
 import { isSafeProductImageUrl } from './product-images';
+import { buildMerchantReturnPolicy, buildOfferShippingDetails, STOREFRONT_MERCHANT } from './merchant-seo';
 import type { ProductCategoryBreadcrumb } from './product-breadcrumbs';
 import { getLocalizedProductCopy, parseProductPrice } from './product-presentation';
+import { getStorefrontSiteUrl } from './site-url';
 
 type Product = StorefrontProductDetailResponse['item'];
 
-const DEFAULT_SITE_URL = 'https://bricomaitre.com';
 const SITE_NAME = 'Bricomaitre';
 
-export function getStorefrontSiteUrl(env: NodeJS.ProcessEnv = process.env) {
-  const configured = env.NEXT_PUBLIC_SITE_URL?.trim() || env.SITE_URL?.trim();
-  return (configured || DEFAULT_SITE_URL).replace(/\/+$/, '');
-}
+export { getStorefrontSiteUrl } from './site-url';
 
 export function getProductPath(locale: Locale, token: string) {
   return `/${locale}/products/${encodeURIComponent(token)}`;
@@ -113,6 +111,9 @@ export function buildProductStructuredData(
           ? 'https://schema.org/InStock'
           : 'https://schema.org/OutOfStock',
         itemCondition: 'https://schema.org/NewCondition',
+        seller: { '@id': `${getStorefrontSiteUrl()}/#organization`, name: STOREFRONT_MERCHANT.name },
+        shippingDetails: buildOfferShippingDetails(locale),
+        hasMerchantReturnPolicy: buildMerchantReturnPolicy(locale),
       },
     },
     {

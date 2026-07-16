@@ -96,4 +96,22 @@ describe('app/api/internal/revalidate/route', () => {
     expect(response.status).toBe(400);
     expect(revalidateTag).not.toHaveBeenCalled();
   });
+
+  it('immediately expires the settings tag without product tags', async () => {
+    const body = JSON.stringify({ scope: 'settings' });
+    const timestamp = String(Date.now());
+    const signature = signInternalRequest(body, 'revalidate-secret', timestamp);
+    const response = await POST(new NextRequest('http://localhost/api/internal/revalidate', {
+      method: 'POST',
+      body,
+      headers: {
+        'x-revalidate-timestamp': timestamp,
+        'x-revalidate-signature': signature,
+      },
+    }));
+
+    expect(revalidateTag).toHaveBeenCalledOnce();
+    expect(revalidateTag).toHaveBeenCalledWith('storefront-new-settings', { expire: 0 });
+    await expect(response.json()).resolves.toEqual({ ok: true, revalidated: ['storefront-new-settings'] });
+  });
 });

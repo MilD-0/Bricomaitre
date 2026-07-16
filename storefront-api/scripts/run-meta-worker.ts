@@ -8,6 +8,11 @@ import {
   reconcileOrderCompletedEvents,
   updateMetaWorkerHeartbeat,
 } from "@bric/storefront-core/meta";
+import {
+  clearExpiredMarketingAttribution,
+  processMarketingOutboxBatch,
+  reconcileMarketingOrderEvents,
+} from "@bric/storefront-core/marketing";
 
 const POLL_INTERVAL_MS = 1_000;
 const HEARTBEAT_INTERVAL_MS = 15_000;
@@ -40,11 +45,14 @@ async function run() {
       if (cycleStartedAt - lastReconciliationAt >= RECONCILIATION_INTERVAL_MS) {
         const confirmations = await reconcileOrderConfirmedEvents(db);
         const completions = await reconcileOrderCompletedEvents(db);
+        const marketing = await reconcileMarketingOrderEvents(db);
         const retention = await clearExpiredMetaAttribution(db);
-        reconciliationResult = { ...confirmations, ...completions, ...retention };
+        const marketingRetention = await clearExpiredMarketingAttribution(db);
+        reconciliationResult = { ...confirmations, ...completions, ...marketing, ...retention, ...marketingRetention };
         lastReconciliationAt = cycleStartedAt;
       }
       const drain = await processMetaOutboxBatch(db);
+      const marketingDrain = await processMarketingOutboxBatch(db);
       if (
         reconciliationResult
         || cycleStartedAt - lastHeartbeatAt >= HEARTBEAT_INTERVAL_MS
@@ -55,7 +63,7 @@ async function run() {
         });
         lastHeartbeatAt = cycleStartedAt;
       }
-      if (drain.claimed >= 50) continue;
+      if (drain.claimed >= 50 || marketingDrain.claimed >= 50) continue;
     } catch (error) {
       console.error("[storefront-meta-worker] cycle failed", {
         message: error instanceof Error ? error.message : String(error),

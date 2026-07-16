@@ -20,6 +20,7 @@ function mockAnimatedIcon(testId: string) {
 vi.mock('@/components/ui/phone', async () => ({ PhoneIcon: await mockAnimatedIcon('phone')() }));
 vi.mock('@/components/ui/hand-coins', async () => ({ HandCoinsIcon: await mockAnimatedIcon('payment')() }));
 vi.mock('@/components/ui/truck', async () => ({ TruckIcon: await mockAnimatedIcon('delivery')() }));
+vi.mock('@/components/ui/package-check', async () => ({ PackageCheckIcon: await mockAnimatedIcon('returns')() }));
 
 describe('ProductTrustSignal', () => {
   beforeEach(() => {
@@ -52,5 +53,13 @@ describe('ProductTrustSignal', () => {
     fireEvent.mouseEnter(screen.getByRole('listitem'));
 
     expect(animation.start).not.toHaveBeenCalled();
+  });
+
+  it('uses an animated package icon for the return policy', () => {
+    render(<ul><ProductTrustSignal icon="returns">Free unopened return</ProductTrustSignal></ul>);
+    fireEvent.mouseEnter(screen.getByRole('listitem'));
+
+    expect(screen.getByTestId('returns')).toBeVisible();
+    expect(animation.start).toHaveBeenCalledOnce();
   });
 });

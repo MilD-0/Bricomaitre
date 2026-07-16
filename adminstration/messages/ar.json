@@ -1629,6 +1629,21 @@
       "settings_manage": "إدارة إعدادات النظام"
     }
   },
+  "storefrontSettings": {
+    "title": "إعدادات المتجر",
+    "description": "أدر هنا معلومات الاتصال الظاهرة للعملاء. ستضم هذه الصفحة المخفية أيضًا إعدادات تخطيط المتجر ومعلوماته مستقبلًا.",
+    "contactTitle": "معلومات الاتصال",
+    "contactDescription": "يستخدم المتجر هذا الرقم لمكالمات العملاء المباشرة.",
+    "phoneLabel": "رقم هاتف العملاء",
+    "phoneHint": "رقم هاتف محمول جزائري بالصيغة المحلية أو +213.",
+    "callsLabel": "تفعيل المكالمات",
+    "callsHint": "إظهار إجراءات الاتصال المباشر في المتجر.",
+    "saveAction": "حفظ إعدادات المتجر",
+    "savingAction": "جارٍ الحفظ...",
+    "saving": "جارٍ حفظ إعدادات المتجر...",
+    "saved": "تم حفظ إعدادات المتجر.",
+    "saveError": "تعذر حفظ إعدادات المتجر."
+  },
   "auth": {
     "title": "الدخول إلى BricoAdmin",
     "description": "استخدم حساب Google المعتمد للدخول إلى مساحة العمل ومتابعة الصلاحيات المرتبطة بدورك.",
@@ -1838,7 +1853,9 @@
     "orderColumn": "الترتيب",
     "bannerImageLabel": "صورة البنر",
     "bannerLandscapeImageLabel": "صورة الشاشة الأفقية",
+    "bannerLandscapeImageHint": "نسبة سطح المكتب: 20:7 — صدّرها بمقاس 2400 × 840 بكسل.",
     "bannerPortraitImageLabel": "صورة الشاشة العمودية",
+    "bannerPortraitImageHint": "نسبة الهاتف: 19:23 — صدّرها بمقاس 1140 × 1380 بكسل.",
     "uploadHint": "يتم الرفع إلى S3 ثم حفظ روابط CloudFront.",
     "singleImagePlaceholder": "رابط صورة البنر",
     "createBanner": "إنشاء البنر",

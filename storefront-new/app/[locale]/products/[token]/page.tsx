@@ -11,6 +11,7 @@ import { ProductTelemetry } from '@/components/product-telemetry';
 import { ProductTrustSignal } from '@/components/product-trust-signal';
 import { SimilarProducts } from '@/components/similar-products';
 import { StorefrontImage } from '@/components/storefront-image';
+import { ProductPageSkeleton, SimilarProductsSkeleton } from '@/components/storefront-skeletons';
 import { isLocale, type Locale } from '@/i18n/config';
 import { isDisplayableProductImageUrl } from '@/lib/product-images';
 import { buildProductCategoryBreadcrumbs } from '@/lib/product-breadcrumbs';
@@ -27,9 +28,10 @@ import {
   getProductPath,
   serializeStructuredData,
 } from '@/lib/product-seo';
-import { getStorefrontCatalog, getStorefrontCatalogMeta, getStorefrontProductDetail } from '@/lib/storefront-api';
+import { getStorefrontCatalog, getStorefrontCatalogMeta, getStorefrontProductDetail, getStorefrontSettings } from '@/lib/storefront-api';
 import { isStorefrontUpstreamError } from '@/lib/storefront-upstream';
 import { captureProductPageException } from '@/lib/sentry';
+import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 type ProductPageProps = {
   params: Promise<{ locale: string; token: string }>;
@@ -110,7 +112,10 @@ export async function ProductPageContent({ params }: ProductPageProps) {
   }
 
   const product = response.item;
-  const t = await getTranslations({ locale, namespace: 'ProductDetail' });
+  const [t, contact] = await Promise.all([
+    getTranslations({ locale, namespace: 'ProductDetail' }),
+    getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse),
+  ]);
   const copy = getLocalizedProductCopy(product, locale);
   const media = product.media.filter((item) => isDisplayableProductImageUrl(item.url));
   const imageUrl = media[0]?.url ?? null;
@@ -230,12 +235,17 @@ export async function ProductPageContent({ params }: ProductPageProps) {
               added: t('addedToCart'),
               unavailable: t('unavailableAction'),
             }}
+            support={{
+              contact,
+              labels: { title: t('supportTitle'), description: t('supportDescription'), call: t('supportCall') },
+            }}
           />
 
           <ul className="product-trust" aria-label={t('trustTitle')}>
             <ProductTrustSignal icon="confirmation">{t('trustConfirmation')}</ProductTrustSignal>
             <ProductTrustSignal icon="payment">{t('trustPayment')}</ProductTrustSignal>
             <ProductTrustSignal icon="delivery">{t('trustDelivery')}</ProductTrustSignal>
+            <ProductTrustSignal icon="returns">{t('trustReturns')}</ProductTrustSignal>
           </ul>
         </div>
       </article>
@@ -248,7 +258,7 @@ export async function ProductPageContent({ params }: ProductPageProps) {
         </section>
       ) : null}
 
-      <Suspense fallback={null}>
+      <Suspense fallback={<SimilarProductsSkeleton />}>
         <SimilarProducts
           locale={locale}
           currentProductId={product.id}
@@ -256,31 +266,6 @@ export async function ProductPageContent({ params }: ProductPageProps) {
           brandId={product.brand?.id ?? null}
         />
       </Suspense>
-    </PageShell>
-  );
-}
-
-async function ProductPageFallback({ params }: ProductPageProps) {
-  const { locale, token } = await resolvePageParams(params);
-  let response;
-  try {
-    response = await getStorefrontProductDetail(token);
-  } catch {
-    return ProductPageLoading();
-  }
-  if (!response) return ProductPageLoading();
-  const t = await getTranslations({ locale, namespace: 'ProductDetail' });
-  const copy = getLocalizedProductCopy(response.item, locale);
-  return (
-    <PageShell locale={locale}>
-      <article className="product-progressive-fallback">
-        <h1>{copy.title}</h1>
-        <p className={response.item.availability.inStock ? 'availability availability-in' : 'availability availability-out'}>
-          <span aria-hidden="true" />
-          {response.item.availability.inStock ? t('inStock') : t('outOfStock')}
-        </p>
-        {copy.description ? <p>{copy.description}</p> : null}
-      </article>
     </PageShell>
   );
 }
@@ -293,11 +278,27 @@ export default function ProductPage(props: ProductPageProps) {
   );
 }
 
-function ProductPageLoading() {
-  return (
-    <div className="product-page-loading" aria-busy="true" aria-label="Loading product">
-      <div />
-      <div><span /><span /><span /></div>
-    </div>
-  );
+/** Keep product title, stock, and description server-rendered when JavaScript is unavailable. */
+async function ProductPageFallback({ params }: ProductPageProps) {
+  const { locale, token } = await resolvePageParams(params);
+  try {
+    const response = await getStorefrontProductDetail(token);
+    if (!response) return <ProductPageSkeleton />;
+    const t = await getTranslations({ locale, namespace: 'ProductDetail' });
+    const copy = getLocalizedProductCopy(response.item, locale);
+    return (
+      <PageShell locale={locale}>
+        <article className="product-progressive-fallback">
+          <h1>{copy.title}</h1>
+          <p className={response.item.availability.inStock ? 'availability availability-in' : 'availability availability-out'}>
+            <span aria-hidden="true" />
+            {response.item.availability.inStock ? t('inStock') : t('outOfStock')}
+          </p>
+          {copy.description ? <p>{copy.description}</p> : null}
+        </article>
+      </PageShell>
+    );
+  } catch {
+    return <ProductPageSkeleton />;
+  }
 }

@@ -2,6 +2,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { Suspense } from 'react';
 
 import { PageShell } from '@/components/page-shell';
+import { ProductPageSkeleton } from '@/components/storefront-skeletons';
 import { isLocale } from '@/i18n/config';
 
 async function ProductNotFoundContent() {
@@ -23,7 +24,7 @@ async function ProductNotFoundContent() {
 
 export default function ProductNotFound() {
   return (
-    <Suspense fallback={<div className="product-state" aria-busy="true" />}>
+    <Suspense fallback={<ProductPageSkeleton />}>
       <ProductNotFoundContent />
     </Suspense>
   );

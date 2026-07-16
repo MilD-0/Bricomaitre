@@ -5,11 +5,14 @@ import { Check, ClipboardCheck, LoaderCircle, PackageCheck, PhoneCall, RotateCcw
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { StorefrontImage } from '@/components/storefront-image';
+import { SupportContactActions, type SupportContactLabels } from '@/components/support-contact-actions';
+import { ThankYouContentSkeleton } from '@/components/storefront-skeletons';
 import type { Locale } from '@/i18n/config';
 import { trackCheckoutEvent } from '@/lib/analytics';
 import { readCheckoutConfirmation, writeCheckoutConfirmation, type CheckoutConfirmation } from '@/lib/checkout';
 import { verifyCheckoutOrder } from '@/lib/orders';
 import { formatProductPrice } from '@/lib/product-presentation';
+import type { StorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 type Labels = {
   verifying: string; title: string; description: string; orderNumber: string;
@@ -20,7 +23,7 @@ type Labels = {
   unavailableBody: string; retry: string; browseProducts: string;
 };
 
-export function ThankYouConfirmation({ locale, orderId, token, labels }: { locale: Locale; orderId: number | null; token: string | null; labels: Labels }) {
+export function ThankYouConfirmation({ locale, orderId, token, labels, support }: { locale: Locale; orderId: number | null; token: string | null; labels: Labels; support?: { contact: StorefrontSettingsResponse; labels: SupportContactLabels } }) {
   const [confirmation, setConfirmation] = useState<CheckoutConfirmation | null>(null);
   const [status, setStatus] = useState<'loading' | 'success' | 'fallback' | 'failure'>('loading');
   const tracked = useRef(false);
@@ -40,7 +43,13 @@ export function ThankYouConfirmation({ locale, orderId, token, labels }: { local
     }
     try {
       const order = await verifyCheckoutOrder(orderId, token);
-      const next = { order, cartMode: matching?.cartMode ?? 'cart' as const, stateName: matching?.stateName ?? null, createdAt: new Date().toISOString() };
+      const next = {
+        order,
+        cartMode: matching?.cartMode ?? 'cart' as const,
+        stateName: matching?.stateName ?? null,
+        createdAt: new Date().toISOString(),
+        purchaseEventId: matching?.purchaseEventId ?? null,
+      };
       writeCheckoutConfirmation(window.localStorage, next);
       setConfirmation(next);
       setStatus('success');
@@ -63,13 +72,14 @@ export function ThankYouConfirmation({ locale, orderId, token, labels }: { local
     tracked.current = true;
     const itemCount = confirmation.order.orderProducts.reduce((sum, item) => sum + item.quantity, 0);
     void trackCheckoutEvent({
+      eventId: confirmation.purchaseEventId ?? undefined,
       eventName: 'purchase', locale, orderId: confirmation.order.id, quantity: itemCount, value: confirmation.order.totalAmount,
       metadata: { cartMode: confirmation.cartMode, itemCount, verificationSource: 'server' },
     }, 'thank_you');
   }, [confirmation, locale, status]);
 
   if (status === 'loading') {
-    return <main className="thank-you-page thank-you-state"><LoaderCircle className="checkout-spinner" aria-hidden="true" /><h1>{labels.verifying}</h1></main>;
+    return <ThankYouContentSkeleton />;
   }
 
   if (!confirmation) {
@@ -95,6 +105,7 @@ export function ThankYouConfirmation({ locale, orderId, token, labels }: { local
         <h2>{labels.nextTitle}</h2>
         <ol><li><PhoneCall aria-hidden="true" /><span>{labels.nextOne}</span></li><li><ClipboardCheck aria-hidden="true" /><span>{labels.nextTwo}</span></li><li><Truck aria-hidden="true" /><span>{labels.nextThree}</span></li></ol>
       </section>
+      {support ? <SupportContactActions locale={locale} contact={support.contact} labels={support.labels} surface="thank_you" variant="panel" /> : null}
 
       <div className="thank-you-grid">
         <section className="thank-you-summary">

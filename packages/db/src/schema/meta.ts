@@ -130,3 +130,74 @@ export const metaWorkerHeartbeat = pgTable("meta_worker_heartbeat", {
   lastReconciliationResult: jsonb("last_reconciliation_result").notNull().default({}),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const orderMarketingAttribution = pgTable(
+  "order_marketing_attribution",
+  {
+    orderId: bigint("order_id", { mode: "number" })
+      .primaryKey()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    semanticsVersion: text("semantics_version").notNull(),
+    eventId: text("event_id").notNull(),
+    eventSourceUrl: text("event_source_url").notNull(),
+    googleClientId: text("google_client_id"),
+    googleSessionId: text("google_session_id"),
+    gclid: text("gclid"),
+    gbraid: text("gbraid"),
+    wbraid: text("wbraid"),
+    tiktokClickId: text("tiktok_click_id"),
+    tiktokCookieId: text("tiktok_cookie_id"),
+    clientIpAddress: text("client_ip_address"),
+    clientUserAgent: text("client_user_agent"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("order_marketing_attribution_event_unique").on(t.eventId),
+    index("idx_order_marketing_attribution_semantics").on(t.semanticsVersion, t.createdAt.desc()),
+    index("idx_order_marketing_attribution_expires").on(t.expiresAt),
+  ],
+);
+
+export const marketingEventOutbox = pgTable(
+  "marketing_event_outbox",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    destination: text("destination").notNull(),
+    eventName: text("event_name").notNull(),
+    eventId: text("event_id").notNull(),
+    source: text("source").notNull(),
+    orderId: bigint("order_id", { mode: "number" }).references(
+      () => orders.id,
+      { onDelete: "set null" },
+    ),
+    orderStatusHistoryId: bigint("order_status_history_id", { mode: "number" }).references(
+      () => orderStatusHistory.id,
+      { onDelete: "set null" },
+    ),
+    eventTime: timestamp("event_time", { withTimezone: true }).notNull(),
+    payload: jsonb("payload").notNull().default({}),
+    status: text("status").notNull().default("pending"),
+    duplicateCount: integer("duplicate_count").notNull().default(0),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    processingStartedAt: timestamp("processing_started_at", { withTimezone: true }),
+    processingLeaseExpiresAt: timestamp("processing_lease_expires_at", { withTimezone: true }),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    lastHttpStatus: integer("last_http_status"),
+    providerRequestId: text("provider_request_id"),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    responseSummary: jsonb("response_summary").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("marketing_event_outbox_destination_name_id_unique").on(t.destination, t.eventName, t.eventId),
+    index("idx_marketing_event_outbox_delivery").on(t.destination, t.status, t.nextAttemptAt),
+    index("idx_marketing_event_outbox_order").on(t.orderId, t.createdAt.desc()),
+    index("idx_marketing_event_outbox_lease").on(t.processingLeaseExpiresAt),
+  ],
+);

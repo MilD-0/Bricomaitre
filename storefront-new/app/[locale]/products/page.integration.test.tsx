@@ -93,7 +93,7 @@ describe('localized Catalog Page', () => {
     expect(html).toContain('Filter products');
     expect(html).toContain('type="radio"');
     expect(html.match(/class="catalog-filter-options"/g)).toHaveLength(2);
-    expect(html.match(/class="catalog-filter-group-heading"/g)).toHaveLength(2);
+    expect(html.match(/<legend>/g)).toHaveLength(2);
     expect(html).not.toContain('Apply</button>');
     expect(mocks.catalog).toHaveBeenCalledWith(expect.objectContaining({ search: 'lamp', categoryId: 3, limit: 24 }));
   });
