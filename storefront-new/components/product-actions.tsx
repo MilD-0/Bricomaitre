@@ -1,13 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import NumberFlow from '@number-flow/react';
 
 import { Button } from '@/components/ui/button';
+import { ArrowUpRightIcon, type ArrowUpRightIconHandle } from '@/components/ui/arrow-up-right';
+import { SupportContactActions, type SupportContactLabels } from '@/components/support-contact-actions';
 import type { Locale } from '@/i18n/config';
 import { addCartItem, readCart, writeCart, type CartItem } from '@/lib/cart';
 import { trackProductEvent } from '@/lib/analytics';
 import { prepareHaptics, triggerHaptic } from '@/lib/haptics';
+import type { StorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 type ProductActionsProps = {
   locale: Locale;
@@ -28,11 +31,13 @@ type ProductActionsProps = {
     added: string;
     unavailable: string;
   };
+  support?: { contact: StorefrontSettingsResponse; labels: SupportContactLabels };
 };
 
-export function ProductActions({ locale, item, analytics, available, labels }: ProductActionsProps) {
+export function ProductActions({ locale, item, analytics, available, labels, support }: ProductActionsProps) {
   const [quantity, setQuantity] = useState(1);
   const [announcement, setAnnouncement] = useState('');
+  const buyNowIconRef = useRef<ArrowUpRightIconHandle>(null);
   const analyticsBase = {
     locale,
     productId: item.productId,
@@ -52,7 +57,7 @@ export function ProductActions({ locale, item, analytics, available, labels }: P
 
     setQuantity(boundedQuantity);
     setAnnouncement('');
-    void triggerHaptic('selection');
+    void triggerHaptic('control');
   }
 
   function addToCart() {
@@ -69,7 +74,7 @@ export function ProductActions({ locale, item, analytics, available, labels }: P
   }
 
   function buyNow() {
-    void triggerHaptic('medium');
+    void triggerHaptic('primary');
     void trackProductEvent({ eventName: 'buy_now_click', ...analyticsBase });
     const params = new URLSearchParams({ product: item.token, quantity: String(quantity) });
     window.location.assign(`/${locale}/checkout?${params.toString()}`);
@@ -100,10 +105,22 @@ export function ProductActions({ locale, item, analytics, available, labels }: P
         </div>
       </div>
       <div className="product-action-buttons">
-        <Button type="button" size="lg" className="button button-primary product-buy-now" onClick={buyNow}>{labels.buyNow}</Button>
+        <Button
+          type="button"
+          size="lg"
+          className="button button-primary product-buy-now"
+          onPointerDown={() => buyNowIconRef.current?.startAnimation()}
+          onPointerEnter={() => buyNowIconRef.current?.startAnimation()}
+          onPointerLeave={() => buyNowIconRef.current?.stopAnimation()}
+          onClick={buyNow}
+        >
+          <span>{labels.buyNow}</span>
+          <ArrowUpRightIcon ref={buyNowIconRef} className="product-buy-now-icon" size={18} aria-hidden="true" />
+        </Button>
         <Button type="button" size="lg" variant="outline" className="button button-secondary product-add-to-cart" onClick={addToCart}>{labels.addToCart}</Button>
       </div>
       <p className="product-action-announcement" role="status" aria-live="polite">{announcement}</p>
+      {support ? <SupportContactActions locale={locale} contact={support.contact} labels={support.labels} surface="product_detail" /> : null}
     </div>
   );
 }

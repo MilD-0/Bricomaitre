@@ -10,6 +10,7 @@ import { trackNavigationEvent } from '@/lib/analytics';
 import { getAdaptiveSearchDelay } from '@/components/catalog-live-search';
 import { triggerHaptic } from '@/lib/haptics';
 import { isDisplayableProductImageUrl } from '@/lib/product-images';
+import { SearchResultsSkeleton } from '@/components/storefront-skeletons';
 import { formatProductPrice } from '@/lib/product-presentation';
 
 const searchProductSchema = z.object({
@@ -29,7 +30,7 @@ const searchResponseSchema = z.object({
 
 type SearchProduct = z.infer<typeof searchProductSchema>;
 
-type GlobalSearchLabels = {
+export type GlobalSearchLabels = {
   label: string;
   placeholder: string;
   searching: string;
@@ -40,7 +41,7 @@ type GlobalSearchLabels = {
   outOfStock: string;
 };
 
-export function GlobalSearch({ locale, labels }: { locale: Locale; labels: GlobalSearchLabels }) {
+export function GlobalSearch({ locale, labels, instanceId = 'header' }: { locale: Locale; labels: GlobalSearchLabels; instanceId?: string }) {
   const [value, setValue] = useState('');
   const [results, setResults] = useState<SearchProduct[]>([]);
   const [open, setOpen] = useState(false);
@@ -48,6 +49,8 @@ export function GlobalSearch({ locale, labels }: { locale: Locale; labels: Globa
   const rootRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const inputId = `global-product-search-${instanceId}`;
+  const resultsId = `global-search-results-${instanceId}`;
 
   useEffect(() => {
     const closeOutside = (event: PointerEvent) => {
@@ -115,9 +118,9 @@ export function GlobalSearch({ locale, labels }: { locale: Locale; labels: Globa
         });
       }}>
         <Search className="global-search-icon" aria-hidden="true" size={19} strokeWidth={1.8} />
-        <label className="sr-only" htmlFor="global-product-search">{labels.label}</label>
+        <label className="sr-only" htmlFor={inputId}>{labels.label}</label>
         <input
-          id="global-product-search"
+          id={inputId}
           type="search"
           name="q"
           value={value}
@@ -127,7 +130,7 @@ export function GlobalSearch({ locale, labels }: { locale: Locale; labels: Globa
           aria-label={labels.label}
           role="combobox"
           aria-expanded={open}
-          aria-controls="global-search-results"
+          aria-controls={resultsId}
           aria-busy={loading}
           onFocus={() => {
             if ([...value.trim()].length >= 2) setOpen(true);
@@ -154,11 +157,11 @@ export function GlobalSearch({ locale, labels }: { locale: Locale; labels: Globa
       </form>
 
       {open ? (
-        <div className="global-search-panel" id="global-search-results" aria-label={labels.results}>
+        <div className="global-search-panel" id={resultsId} aria-label={labels.results}>
           <p className="global-search-state" role="status" aria-live="polite">
             {loading ? labels.searching : results.length === 0 ? labels.noResults : labels.results}
           </p>
-          {results.length > 0 ? (
+          {loading ? <SearchResultsSkeleton /> : results.length > 0 ? (
             <ul>
               {results.map((product, index) => {
                 const token = product.slug || product.mongoId || String(product.id);
@@ -170,7 +173,7 @@ export function GlobalSearch({ locale, labels }: { locale: Locale; labels: Globa
                       href={`/${locale}/products/${encodeURIComponent(token)}`}
                       data-search-result
                       onClick={() => {
-                        triggerHaptic('selection');
+                        void triggerHaptic('navigation');
                         void trackNavigationEvent({
                           eventName: 'select_item',
                           locale,

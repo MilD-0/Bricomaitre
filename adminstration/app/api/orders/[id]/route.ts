@@ -6,6 +6,7 @@ import {
   isMetaCompletedStatus,
   isMetaOrderConfirmedStatus,
 } from '@bric/storefront-core/meta';
+import { ensureMarketingOrderStatusEvents } from '@bric/storefront-core/marketing';
 
 import { getDb, hasDb } from '../../../../db/client';
 import { loadOrderDetail } from '../../../../lib/admin-orders-data';
@@ -261,6 +262,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         message: error instanceof Error ? error.message : String(error),
       });
     }
+    try {
+      await ensureMarketingOrderStatusEvents(db, {
+        orderId: numericId,
+        statusHistoryId: firstConfirmation.id,
+        status: coerceOrderStatus(firstConfirmation.status),
+        changedAt: firstConfirmation.changedAt,
+      });
+    } catch (error) {
+      console.error('Failed to queue destination order-confirmed events', {
+        orderId: numericId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
   if (firstCompletion) {
     try {
@@ -272,6 +286,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       });
     } catch (error) {
       console.error('Failed to queue Meta OrderCompleted event', {
+        orderId: numericId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    try {
+      await ensureMarketingOrderStatusEvents(db, {
+        orderId: numericId,
+        statusHistoryId: firstCompletion.id,
+        status: coerceOrderStatus(firstCompletion.status),
+        changedAt: firstCompletion.changedAt,
+      });
+    } catch (error) {
+      console.error('Failed to queue destination order-completed events', {
         orderId: numericId,
         message: error instanceof Error ? error.message : String(error),
       });

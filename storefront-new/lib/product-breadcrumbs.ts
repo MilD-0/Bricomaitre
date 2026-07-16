@@ -1,9 +1,11 @@
 import type { Locale } from '@/i18n/config';
+import { getCategoryPath } from '@/lib/taxonomy-routes';
 
 type CategoryNode = {
   id: number;
   name: string;
   nameAr: string | null;
+  slug: string | null;
   parentId: number | null;
 };
 
@@ -39,6 +41,6 @@ export function buildProductCategoryBreadcrumbs(
   return chain.reverse().map((entry) => ({
     id: entry.id,
     label: locale === 'ar' && entry.nameAr?.trim() ? entry.nameAr.trim() : entry.name,
-    href: `/${locale}/products?category=${entry.id}`,
+    href: getCategoryPath(locale, entry),
   }));
 }

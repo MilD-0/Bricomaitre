@@ -48,8 +48,8 @@ describe('Product Detail SEO', () => {
 
   it('publishes Product and breadcrumb JSON-LD with price and availability', () => {
     const data = buildProductStructuredData(product, 'fr', [
-      { id: 1, label: 'Workshop', href: '/fr/products?category=1' },
-      { id: 3, label: 'Lighting', href: '/fr/products?category=3' },
+      { id: 1, label: 'Workshop', href: '/fr/categories/workshop' },
+      { id: 3, label: 'Lighting', href: '/fr/categories/lighting' },
     ]);
     expect(data[0]).toMatchObject({
       '@type': 'Product',
@@ -58,6 +58,15 @@ describe('Product Detail SEO', () => {
         priceCurrency: 'DZD',
         price: '1500.00',
         availability: 'https://schema.org/InStock',
+        seller: { name: 'Bricomaitre' },
+        shippingDetails: {
+          shippingDestination: { addressCountry: 'DZ' },
+          shippingRate: { currency: 'DZD', value: 800 },
+        },
+        hasMerchantReturnPolicy: {
+          merchantReturnDays: 0,
+          returnFees: 'https://schema.org/FreeReturn',
+        },
       },
     });
     expect(data[1]).toMatchObject({
@@ -65,8 +74,8 @@ describe('Product Detail SEO', () => {
       itemListElement: [
         { position: 1, name: 'Accueil' },
         { position: 2, name: 'Produits' },
-        { position: 3, name: 'Workshop', item: 'https://bricomaitre.com/fr/products?category=1' },
-        { position: 4, name: 'Lighting', item: 'https://bricomaitre.com/fr/products?category=3' },
+        { position: 3, name: 'Workshop', item: 'https://bricomaitre.com/fr/categories/workshop' },
+        { position: 4, name: 'Lighting', item: 'https://bricomaitre.com/fr/categories/lighting' },
         { position: 5, name: 'Desk Lamp' },
       ],
     });

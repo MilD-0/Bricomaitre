@@ -9,9 +9,11 @@ import type { StorefrontProductsResponse } from '@bric/storefront-core/contracts
 import { CatalogTelemetry } from '@/components/catalog-telemetry';
 import { CatalogCard, getCatalogProductTitle, getCatalogProductToken } from '@/components/catalog-card';
 import { CatalogInfiniteLoader } from '@/components/catalog-infinite-loader';
+import { CatalogFilters } from '@/components/catalog-filters';
 import { CatalogLiveSearch } from '@/components/catalog-live-search';
 import { CatalogLiveSort } from '@/components/catalog-live-sort';
 import { PageShell } from '@/components/page-shell';
+import { CatalogPageSkeleton } from '@/components/storefront-skeletons';
 import { isLocale } from '@/i18n/config';
 import {
   buildCatalogPath,
@@ -27,9 +29,15 @@ import { serializeStructuredData } from '@/lib/product-seo';
 import { captureCatalogPageException } from '@/lib/sentry';
 import { fetchStorefrontCatalog, getStorefrontCatalog, getStorefrontCatalogMeta } from '@/lib/storefront-api';
 
+type CatalogHeading = {
+  title: string;
+  description: string;
+};
+
 type CatalogPageProps = {
   params: Promise<{ locale: string }>;
   searchParams: Promise<CatalogSearchParams>;
+  heading?: CatalogHeading;
 };
 
 async function resolveLocale(params: CatalogPageProps['params']) {
@@ -43,7 +51,7 @@ export async function generateMetadata({ params, searchParams }: CatalogPageProp
   return buildCatalogMetadata(locale, isFilteredCatalog(parseCatalogPageQuery(values)));
 }
 
-export async function CatalogPageContent({ params, searchParams }: CatalogPageProps) {
+export async function CatalogPageContent({ params, searchParams, heading }: CatalogPageProps) {
   const [locale, values] = await Promise.all([resolveLocale(params), searchParams]);
   const query = parseCatalogPageQuery(values);
   const t = await getTranslations({ locale, namespace: 'Products' });
@@ -76,7 +84,7 @@ export async function CatalogPageContent({ params, searchParams }: CatalogPagePr
     <PageShell locale={locale}>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: serializeStructuredData(buildCatalogStructuredData(visibleProducts, locale)) }}
+        dangerouslySetInnerHTML={{ __html: serializeStructuredData(buildCatalogStructuredData(visibleProducts, locale, heading?.title)) }}
       />
       <CatalogTelemetry
         locale={locale}
@@ -86,59 +94,28 @@ export async function CatalogPageContent({ params, searchParams }: CatalogPagePr
       />
 
       <header className="catalog-heading">
-        <h1>{t('title')}</h1>
-        <p>{t('description')}</p>
+        <h1>{heading?.title ?? t('title')}</h1>
+        <p>{heading?.description ?? t('description')}</p>
       </header>
 
-      <form className="catalog-layout" action={`/${locale}/products`} method="get" aria-label={t('controls')}>
-        <aside className="catalog-filters">
-          <input className="catalog-filter-toggle" id={`catalog-filter-toggle-${locale}`} type="checkbox" />
-          <label className="catalog-filter-heading" htmlFor={`catalog-filter-toggle-${locale}`}>
-            <h2>{t('filterTitle')}</h2>
-            <span aria-hidden="true">⌄</span>
-          </label>
-
-          <div className="catalog-filter-content">
-            <fieldset>
-              <legend className="sr-only">{t('categoryLabel')}</legend>
-              <h3 className="catalog-filter-group-heading">{t('categoryLabel')}</h3>
-              <div className="catalog-filter-options">
-                <label>
-                  <input type="radio" name="category" value="" defaultChecked={query.category === null} />
-                  <span>{t('allCategories')}</span>
-                </label>
-                {categories.map((category) => (
-                  <label key={category.id}>
-                    <input type="radio" name="category" value={category.id} defaultChecked={query.category === category.id} />
-                    <span>{locale === 'ar' && category.nameAr?.trim() ? category.nameAr : category.name}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-
-            <fieldset>
-              <legend className="sr-only">{t('brandLabel')}</legend>
-              <h3 className="catalog-filter-group-heading">{t('brandLabel')}</h3>
-              <div className="catalog-filter-options">
-                <label>
-                  <input type="radio" name="brand" value="" defaultChecked={query.brand === null} />
-                  <span>{t('allBrands')}</span>
-                </label>
-                {brands.map((brand) => (
-                  <label key={brand.id}>
-                    <input type="radio" name="brand" value={brand.id} defaultChecked={query.brand === brand.id} />
-                    <span>{brand.name}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-
-            <div className="catalog-filter-actions">
-              <button type="submit" className="button button-primary catalog-filter-submit">{t('applyFilters')}</button>
-              {isFilteredCatalog(query) ? <a href={`/${locale}/products`} className="catalog-reset">{t('reset')}</a> : null}
-            </div>
-          </div>
-        </aside>
+      <div className="catalog-layout" aria-label={t('controls')}>
+        <CatalogFilters
+          locale={locale}
+          categories={categories.map((category) => ({
+            id: category.id,
+            label: locale === 'ar' && category.nameAr?.trim() ? category.nameAr : category.name,
+          }))}
+          brands={brands.map((brand) => ({ id: brand.id, label: brand.name }))}
+          selectedCategory={query.category}
+          selectedBrand={query.brand}
+          search={query.q}
+          sort={query.sort}
+          labels={{
+            title: t('filterTitle'), close: t('closeFilters'), category: t('categoryLabel'),
+            allCategories: t('allCategories'), brand: t('brandLabel'), allBrands: t('allBrands'),
+            apply: t('applyFilters'), reset: t('reset'),
+          }}
+        />
 
         <section className="catalog-listing" aria-label={t('resultsLabel')}>
           <div className="catalog-toolbar">
@@ -237,7 +214,7 @@ export async function CatalogPageContent({ params, searchParams }: CatalogPagePr
             </noscript>
           ) : null}
         </section>
-      </form>
+      </div>
     </PageShell>
   );
 }
@@ -246,7 +223,7 @@ export default function CatalogPage(props: CatalogPageProps) {
   return (
     <>
       <CatalogNoScriptCatalog />
-      <Suspense fallback={<CatalogLoading />}>
+      <Suspense fallback={<CatalogPageSkeleton />}>
         <CatalogPageContent {...props} />
       </Suspense>
     </>
@@ -292,14 +269,5 @@ async function CatalogNoScriptCatalog() {
         ))}
       </main>
     </noscript>
-  );
-}
-
-function CatalogLoading() {
-  return (
-    <div className="catalog-loading" aria-busy="true" aria-label="Loading catalog">
-      <div />
-      <div>{Array.from({ length: 8 }, (_, index) => <span key={index} />)}</div>
-    </div>
   );
 }

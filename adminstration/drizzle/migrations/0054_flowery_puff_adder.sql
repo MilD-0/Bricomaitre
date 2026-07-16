@@ -1,0 +1,1 @@
+ALTER TABLE "marketing_event_outbox" ADD COLUMN "duplicate_count" integer DEFAULT 0 NOT NULL;

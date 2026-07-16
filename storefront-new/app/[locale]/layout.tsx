@@ -1,8 +1,11 @@
 import { notFound } from "next/navigation";
 import { Inter, Noto_Sans_Arabic } from 'next/font/google';
 import { setRequestLocale } from 'next-intl/server';
+import { Suspense } from 'react';
 
 import { isLocale, isRtl, locales } from "@/i18n/config";
+import { MarketingPixels } from '@/components/marketing-pixels';
+import { PageViewTelemetry } from '@/components/page-view-telemetry';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -38,6 +41,10 @@ export default async function LocaleLayout({
   return (
     <html lang={locale} dir={isRtl(locale) ? "rtl" : "ltr"} className={`${inter.variable} ${notoSansArabic.variable}`}>
       <body>
+        <MarketingPixels />
+        <Suspense fallback={null}>
+          <PageViewTelemetry locale={locale} />
+        </Suspense>
         {children}
       </body>
     </html>

@@ -1718,6 +1718,21 @@
       "settings_manage": "Manage settings configuration"
     }
   },
+  "storefrontSettings": {
+    "title": "Storefront settings",
+    "description": "Manage customer-facing contact information here. This hidden page will also house future storefront layout and information controls.",
+    "contactTitle": "Contact information",
+    "contactDescription": "The storefront uses this number for direct customer calls.",
+    "phoneLabel": "Customer phone number",
+    "phoneHint": "An Algerian mobile number in national or +213 format.",
+    "callsLabel": "Allow phone calls",
+    "callsHint": "Show direct tap-to-call actions on the storefront.",
+    "saveAction": "Save storefront settings",
+    "savingAction": "Saving...",
+    "saving": "Saving storefront settings...",
+    "saved": "Storefront settings saved.",
+    "saveError": "Storefront settings could not be saved."
+  },
   "auth": {
     "title": "BricoAdmin access",
     "description": "Use your approved Google account to enter the operations workspace and continue with the permissions assigned to your role.",
@@ -1838,7 +1853,9 @@
     "orderColumn": "Order",
     "bannerImageLabel": "Banner image",
     "bannerLandscapeImageLabel": "Horizontal screen image",
+    "bannerLandscapeImageHint": "Desktop ratio: 20:7 — export at 2400 × 840 px.",
     "bannerPortraitImageLabel": "Vertical screen image",
+    "bannerPortraitImageHint": "Mobile ratio: 19:23 — export at 1140 × 1380 px.",
     "uploadHint": "Uploads to S3, then stores CloudFront URLs.",
     "singleImagePlaceholder": "Banner image URL",
     "createBanner": "Create banner",

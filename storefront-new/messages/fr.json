@@ -4,6 +4,7 @@
     "checkout": "Checkout",
     "cart": "Panier",
     "categories": "Catégories",
+    "brands": "Marques",
     "closeMenu": "Fermer le menu",
     "collections": "Collections",
     "home": "Accueil",
@@ -37,6 +38,8 @@
     "footerAbout": "Les outils et le matériel qu’il vous faut, avec une commande simple et un accompagnement humain.",
     "footerBrowseTitle": "Parcourir",
     "footerContactTitle": "Nous contacter",
+    "drawerSupportTitle": "Besoin d’aide ?",
+    "supportCall": "Appeler",
     "footerRights": "Tous droits réservés."
   },
   "Home": {
@@ -58,6 +61,7 @@
     "applyFilters": "Appliquer les filtres",
     "brandLabel": "Marque",
     "categoryLabel": "Catégorie",
+    "closeFilters": "Fermer les filtres",
     "controls": "Rechercher et filtrer les produits",
     "description": "Trouvez rapidement l’outil ou le matériel adapté à vos travaux.",
     "emptyDescription": "Essayez un autre mot ou retirez un filtre pour afficher davantage de produits.",
@@ -123,14 +127,18 @@
     "similarEyebrow": "Pour le même travail",
     "similarTitle": "Produits similaires",
     "trustConfirmation": "Commande confirmée par téléphone",
-    "trustDelivery": "Livraison disponible partout en Algérie",
+    "trustDelivery": "Livraison partout en Algérie · environ 800 DA",
     "trustPayment": "Paiement à la livraison",
+    "trustReturns": "Retour gratuit avant ouverture",
     "trustTitle": "Informations de commande",
     "unavailableAction": "Ce produit ne peut pas être commandé pour le moment.",
     "unavailableDescription": "Le service produits répond lentement ou est momentanément indisponible. Votre commande et votre panier ne sont pas affectés.",
     "unavailableEyebrow": "Service momentanément indisponible",
     "unavailableTitle": "Impossible de charger ce produit",
     "zoomImage": "Agrandir l’image"
+    ,"supportTitle": "Une question avant de commander ?"
+    ,"supportDescription": "Notre équipe peut vous aider rapidement."
+    ,"supportCall": "Appeler"
   },
   "Collection": {
     "description": "Une collection represente une intention precise: categorie, marque, groupe admin ou campagne. Elle reste plus structuree et SEO-friendly qu une landing page.",
@@ -185,6 +193,9 @@
     "trustPayment": "Paiement à la livraison",
     "trustPhone": "Confirmation par téléphone",
     "wilaya": "Wilaya"
+    ,"supportTitle": "Besoin d’aide pour commander ?"
+    ,"supportDescription": "Appelez-nous, notre équipe est là pour vous aider."
+    ,"supportCall": "Appeler"
   },
   "ThankYou": {
     "address": "Adresse",
@@ -213,5 +224,8 @@
     "unavailableTitle": "Impossible de vérifier cette commande",
     "verifying": "Vérification de votre commande…",
     "wilaya": "Wilaya"
+    ,"supportTitle": "Une question sur votre commande ?"
+    ,"supportDescription": "Notre équipe reste disponible pour vous aider."
+    ,"supportCall": "Appeler"
   }
 }

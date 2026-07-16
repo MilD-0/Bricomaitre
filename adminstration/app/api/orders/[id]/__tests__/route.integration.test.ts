@@ -7,6 +7,7 @@ import { orderPatchSchema } from '../../../../../lib/orders';
 const {
   ensureOrderConfirmedEventForOrderMock,
   ensureOrderCompletedEventForOrderMock,
+  ensureMarketingOrderStatusEventsMock,
   hasDbMock,
   getDbMock,
   requireMutationAccessMock,
@@ -16,6 +17,7 @@ const {
 } = vi.hoisted(() => ({
   ensureOrderConfirmedEventForOrderMock: vi.fn(),
   ensureOrderCompletedEventForOrderMock: vi.fn(),
+  ensureMarketingOrderStatusEventsMock: vi.fn(),
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
   requireMutationAccessMock: vi.fn(),
@@ -29,6 +31,10 @@ vi.mock('@bric/storefront-core/meta', () => ({
   ensureOrderCompletedEventForOrder: ensureOrderCompletedEventForOrderMock,
   isMetaOrderConfirmedStatus: (status: number) => status === 2,
   isMetaCompletedStatus: (status: number) => status === 4 || status === 10,
+}));
+
+vi.mock('@bric/storefront-core/marketing', () => ({
+  ensureMarketingOrderStatusEvents: ensureMarketingOrderStatusEventsMock,
 }));
 
 vi.mock('../../../../../db/client', () => ({
@@ -70,6 +76,8 @@ describe('app/api/orders/[id]/route', () => {
     ensureOrderConfirmedEventForOrderMock.mockResolvedValue({ created: true });
     ensureOrderCompletedEventForOrderMock.mockReset();
     ensureOrderCompletedEventForOrderMock.mockResolvedValue({ created: true });
+    ensureMarketingOrderStatusEventsMock.mockReset();
+    ensureMarketingOrderStatusEventsMock.mockResolvedValue({ created: true });
     readEcotrackCatalogMock.mockResolvedValue({
       wilayas: [],
       communes: [],
@@ -328,6 +336,11 @@ describe('app/api/orders/[id]/route', () => {
       status: 2,
       changedAt: new Date('2026-03-02T11:00:00.000Z'),
     }));
+    expect(ensureMarketingOrderStatusEventsMock).toHaveBeenCalledWith(db, expect.objectContaining({
+      orderId: 7,
+      statusHistoryId: 3,
+      status: 2,
+    }));
     await expect(response.json()).resolves.toEqual(
       expect.objectContaining({
         ok: true,
@@ -451,6 +464,11 @@ describe('app/api/orders/[id]/route', () => {
       statusHistoryId: 40,
       status: 10,
       changedAt: new Date('2026-03-02T12:00:00.000Z'),
+    }));
+    expect(ensureMarketingOrderStatusEventsMock).toHaveBeenCalledWith(db, expect.objectContaining({
+      orderId: 7,
+      statusHistoryId: 40,
+      status: 10,
     }));
   });
 

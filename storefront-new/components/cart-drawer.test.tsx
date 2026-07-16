@@ -57,7 +57,7 @@ describe('CartDrawer', () => {
     expect(JSON.parse(localStorage.getItem(STOREFRONT_CART_KEY) ?? '[]')).toEqual([expect.objectContaining({ productId: 12, quantity: 2 })]);
     expect(onItemsChange).toHaveBeenCalledWith([expect.objectContaining({ quantity: 2 })]);
     expect(haptics.prepare).toHaveBeenCalled();
-    expect(haptics.trigger).toHaveBeenCalledWith('selection');
+    expect(haptics.trigger).toHaveBeenCalledWith('control');
     expect(analytics).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'add_to_cart', productId: 12, quantity: 1 }));
   });
 

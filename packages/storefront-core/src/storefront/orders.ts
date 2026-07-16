@@ -23,6 +23,7 @@ import {
   type MetaCommerceLine,
   type MetaRequestContext,
 } from './meta';
+import { createOrderMarketingArtifacts } from './marketing';
 
 type Database = ReturnType<typeof getDb>;
 type TimingStep =
@@ -170,6 +171,15 @@ export async function createStorefrontOrder(
       });
     } else {
       await replaceOrderLineSnapshots(tx, createdOrder.id, orderLines, now);
+    }
+    if (payload.marketing) {
+      await createOrderMarketingArtifacts(tx, {
+        order: createdOrder,
+        lines: orderLines,
+        marketing: payload.marketing,
+        requestContext: options?.metaRequestContext ?? {},
+        now,
+      });
     }
     return createdOrder;
   });

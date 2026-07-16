@@ -70,6 +70,14 @@ describe('CatalogCard', () => {
     expect(html).toContain('loading="lazy"');
   });
 
+  it('allows below-the-fold carousel images to stay lazy even at the first position', () => {
+    const html = renderToStaticMarkup(
+      <CatalogCard product={product} locale="fr" position={1} eagerImage={false} labels={labels} />,
+    );
+
+    expect(html).toContain('loading="lazy"');
+  });
+
   it('renders a canonical legacy HTTPS image instead of replacing it with a placeholder', () => {
     const html = renderToStaticMarkup(
       <CatalogCard

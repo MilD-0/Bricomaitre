@@ -5,6 +5,7 @@ import {
   buildCatalogAnalyticsPayload,
   buildProductAnalyticsPayload,
   buildNavigationAnalyticsPayload,
+  buildPageAnalyticsPayload,
   sanitizeAnalyticsReferrer,
   trackProductEvent,
 } from './analytics';
@@ -174,5 +175,19 @@ describe('Product Detail analytics', () => {
       locale: 'fr',
       metadata: { cartMode: 'cart', itemCount: 2, phone: '0550000000' } as never,
     })).toThrow();
+  });
+
+  it('builds a first-party page view and preserves an authoritative purchase id', () => {
+    expect(buildPageAnalyticsPayload({ locale: 'fr', pageType: 'homepage' })).toMatchObject({
+      eventName: 'page_view',
+      pageType: 'homepage',
+    });
+    expect(buildCheckoutAnalyticsPayload({
+      eventId: 'purchase-91',
+      eventName: 'purchase',
+      locale: 'fr',
+      orderId: 91,
+      metadata: { cartMode: 'cart', itemCount: 1 },
+    }, 'thank_you')).toMatchObject({ eventId: 'purchase-91', eventName: 'purchase', orderId: 91 });
   });
 });

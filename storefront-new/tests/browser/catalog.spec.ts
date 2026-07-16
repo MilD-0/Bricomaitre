@@ -19,10 +19,25 @@ test('provides responsive global navigation, forgiving suggestions, and a live c
   }])));
 
   await page.goto('/fr/products?brand=2');
+  await expect(page).toHaveURL(/\/fr\/brands\/bric-pro$/);
   const header = page.getByRole('banner');
   await expect(header.getByRole('link', { name: 'Bricomaitre — accueil' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Panier: 3' })).toBeVisible();
-  await expect(header.getByRole('link', { name: /العربية/ })).toHaveAttribute('href', '/ar/products?brand=2');
+  await expect(header.getByRole('link', { name: /العربية/ })).toHaveAttribute('href', '/ar/brands/bric-pro');
+  expect(await page.locator('.site-navigation').evaluate((navigation) => Number.parseFloat(getComputedStyle(navigation).gap))).toBeGreaterThanOrEqual(8);
+  const categoryMenu = page.locator('.site-navigation-menu').filter({ hasText: 'Catégories' });
+  await categoryMenu.locator('.site-navigation-menu-trigger').click();
+  const categoryPanel = categoryMenu.locator('.site-navigation-menu-panel');
+  await expect(categoryPanel).toBeVisible();
+  const categoryPanelLayer = await categoryPanel.evaluate((panel) => {
+    const bounds = panel.getBoundingClientRect();
+    const target = document.elementFromPoint(bounds.left + Math.min(12, bounds.width / 2), bounds.top + Math.min(12, bounds.height / 2));
+    return {
+      extendsBelowHeader: bounds.bottom > document.querySelector('.site-header')!.getBoundingClientRect().bottom,
+      ownsTopLayer: target?.closest('.site-navigation-menu-panel') === panel,
+    };
+  });
+  expect(categoryPanelLayer).toEqual({ extendsBelowHeader: true, ownsTopLayer: true });
 
   const globalSearch = page.getByRole('combobox', { name: 'Rechercher des produits' });
   const globalSearchForm = page.locator('.global-search form');
@@ -41,6 +56,12 @@ test('provides responsive global navigation, forgiving suggestions, and a live c
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: 'Ouvrir le menu' })).toHaveCount(0);
   await expect.poll(() => analyticsEvents).toContain('navigation_menu_open');
+});
+
+test('returns a real permanent redirect for legacy taxonomy URLs', async ({ request }) => {
+  const response = await request.get('/fr/products?category=3', { maxRedirects: 0 });
+  expect(response.status()).toBe(308);
+  expect(response.headers().location).toBe('/fr/categories/lighting');
 });
 
 test('navigates from the cart to checkout and switches locale without losing the route', async ({ page }) => {
@@ -95,11 +116,11 @@ test('renders and filters the server-first French catalog with governed analytic
   await expect(page.locator('.catalog-results-heading').getByText('39 produits', { exact: true })).toBeVisible();
   const footer = page.locator('.site-footer');
   await expect(footer.getByRole('heading', { name: 'Nous contacter' })).toBeVisible();
-  await expect(footer.getByRole('link', { name: '0778 81 03 60' })).toHaveAttribute('href', 'tel:+213778810360');
+  await expect(footer.getByRole('link', { name: '0795 34 28 26', exact: true })).toHaveAttribute('href', 'tel:+213795342826');
   await expect(footer.getByRole('link', { name: 'bricomaitre@gmail.com' })).toHaveAttribute('href', 'mailto:bricomaitre@gmail.com');
   await expect(footer.getByRole('link', { name: /BT N20/ })).toHaveAttribute('href', 'https://maps.app.goo.gl/MpAM58nHS2G5JBah8');
   await expect(footer.getByRole('link', { name: /Facebook/ })).toHaveAttribute('href', 'https://www.facebook.com/profile.php?id=61562272954715');
-  const phoneLink = footer.getByRole('link', { name: '0778 81 03 60' });
+  const phoneLink = footer.getByRole('link', { name: '0795 34 28 26', exact: true });
   await phoneLink.scrollIntoViewIfNeeded();
   const animatedPhone = phoneLink.locator('.site-footer-contact-icon > div svg');
   await expect(animatedPhone).toBeVisible();
@@ -147,7 +168,7 @@ test('renders and filters the server-first French catalog with governed analytic
   await allCategories.hover();
   await expect(allCategories).toHaveCSS('transform', 'none');
   const filterLayout = await page.locator('.catalog-filters fieldset').evaluateAll((fieldsets) => fieldsets.map((fieldset) => {
-    const heading = fieldset.querySelector('.catalog-filter-group-heading');
+    const heading = fieldset.querySelector('legend');
     const options = fieldset.querySelector('.catalog-filter-options');
     return {
       fieldsetOverflow: getComputedStyle(fieldset).overflowY,
@@ -184,8 +205,12 @@ test('preserves Arabic RTL, small-phone cards, and no-JavaScript discovery', asy
 
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
   await expect(page.getByRole('radio', { name: 'كل الأصناف' })).toBeHidden();
-  await page.getByText('تصفية المنتجات', { exact: true }).click();
-  await expect(page.getByRole('radio', { name: 'كل الأصناف' })).toBeVisible();
+  await page.getByRole('button', { name: 'تصفية المنتجات' }).click();
+  const filterSheet = page.getByRole('dialog', { name: 'تصفية المنتجات' });
+  await expect(filterSheet.getByRole('radio', { name: 'كل الأصناف' })).toBeVisible();
+  const filterSheetBody = filterSheet.locator('.mobile-sheet-body');
+  await expect(filterSheetBody).toHaveCSS('overflow-y', 'scroll');
+  await expect(filterSheetBody).toHaveCSS('touch-action', 'pan-y');
   await expect(page.getByRole('heading', { level: 2, name: 'مصباح العمل' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 2, name: 'مثقاب طرقي' })).toBeVisible();
   expect(await page.locator('.catalog-grid').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length)).toBe(2);

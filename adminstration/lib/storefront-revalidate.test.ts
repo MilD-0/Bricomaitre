@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { verifyInternalRequestSignature } from '@bric/runtime/internal-signing';
 
-import { getStorefrontNewBaseUrl, revalidateStorefrontProducts } from './storefront-revalidate';
+import { getStorefrontNewBaseUrl, revalidateStorefrontProducts, revalidateStorefrontSettings } from './storefront-revalidate';
 
 const originalBaseUrl = process.env.STOREFRONT_NEW_BASE_URL;
 const originalSecret = process.env.STOREFRONT_REVALIDATE_SECRET;
@@ -90,5 +90,21 @@ describe('storefront product revalidation', () => {
       '[admin] storefront product revalidation request failed',
       expect.objectContaining({ baseUrl: 'https://storefront-new.example.com' }),
     );
+  });
+
+  it('revalidates settings in the canonical API and the new storefront', async () => {
+    process.env.STOREFRONT_NEW_BASE_URL = 'https://storefront-new.example.com';
+    process.env.STOREFRONT_REVALIDATE_SECRET = 'test-secret';
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await revalidateStorefrontSettings();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'http://localhost:3001/api/internal/revalidate',
+      'https://storefront-new.example.com/api/internal/revalidate',
+    ]);
+    expect(fetchMock.mock.calls.every(([, init]) => init.body === '{"scope":"settings"}')).toBe(true);
   });
 });

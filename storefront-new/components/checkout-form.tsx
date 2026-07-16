@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
 import { StorefrontImage } from '@/components/storefront-image';
+import { SupportContactActions, type SupportContactLabels } from '@/components/support-contact-actions';
 import { ShieldCheckIcon, type ShieldCheckIconHandle } from '@/components/ui/shield-check';
 import type { Locale } from '@/i18n/config';
 import { getAnalyticsIdentity, trackCheckoutEvent } from '@/lib/analytics';
@@ -27,8 +28,11 @@ import {
   type PendingCheckout,
 } from '@/lib/checkout';
 import { prepareHaptics, triggerHaptic } from '@/lib/haptics';
+import { CheckoutContentSkeleton } from '@/components/storefront-skeletons';
 import { CheckoutOrderError, createCheckoutOrder } from '@/lib/orders';
 import { formatProductPrice } from '@/lib/product-presentation';
+import { getMarketingOrderContext } from '@/lib/marketing-attribution';
+import type { StorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 type CheckoutLabels = {
   title: string;
@@ -76,11 +80,13 @@ export function CheckoutForm({
   catalog,
   directItem,
   labels,
+  support,
 }: {
   locale: Locale;
   catalog: StorefrontEcotrackCatalogResponse;
   directItem: CartItem | null;
   labels: CheckoutLabels;
+  support?: { contact: StorefrontSettingsResponse; labels: SupportContactLabels };
 }) {
   const router = useRouter();
   const [items, setItems] = useState<CartItem[]>(directItem ? [directItem] : []);
@@ -170,7 +176,7 @@ export function CheckoutForm({
       });
     }
     setRequestError('');
-    void triggerHaptic('selection');
+    void triggerHaptic('control');
   }
 
   function startSubmitIconAnimation() {
@@ -186,7 +192,13 @@ export function CheckoutForm({
     try {
       const order = await createCheckoutOrder(attempt.payload, attempt.idempotencyKey);
       const stateName = catalog.wilayas.find((wilaya) => wilaya.wilayaId === order.state)?.name ?? null;
-      writeCheckoutConfirmation(window.localStorage, { order, cartMode, stateName, createdAt: new Date().toISOString() });
+      writeCheckoutConfirmation(window.localStorage, {
+        order,
+        cartMode,
+        stateName,
+        createdAt: new Date().toISOString(),
+        purchaseEventId: attempt.payload.marketing?.eventId ?? null,
+      });
       clearPendingCheckout(window.localStorage);
       window.localStorage.removeItem(STOREFRONT_CART_KEY);
       window.dispatchEvent(new CustomEvent('bric:cart-updated'));
@@ -202,7 +214,7 @@ export function CheckoutForm({
       const code = error instanceof CheckoutOrderError ? error.code : 'request_failed';
       setPending(readPendingCheckout(window.localStorage));
       setRequestError(labels.submitError);
-      void triggerHaptic('light');
+      void triggerHaptic('error');
       void trackCheckoutEvent({
         eventName: 'order_create_failed', locale, quantity: itemCount, value: total,
         metadata: { cartMode, itemCount, delivery, failureCode: code },
@@ -236,22 +248,26 @@ export function CheckoutForm({
     }
     setErrors({});
     const identity = getAnalyticsIdentity();
+    const purchaseEventId = createId();
     const payload = buildCheckoutOrderPayload({
       form: parsed.data,
       cartProducts: expandCheckoutCart(items),
       journeyId: identity.journeyId,
       sessionId: identity.sessionId,
+      marketing: getMarketingOrderContext(purchaseEventId),
     });
     const attempt = { idempotencyKey: createId(), payload, createdAt: new Date().toISOString() };
     writePendingCheckout(window.localStorage, attempt);
     setPending(attempt);
-    void triggerHaptic('medium');
+    void triggerHaptic('primary');
     void trackCheckoutEvent({
       eventName: 'checkout_submit_attempt', locale, quantity: itemCount, value: total,
       metadata: { cartMode, itemCount, delivery },
     });
     await completeSubmission(attempt);
   }
+
+  if (!hydrated && !directItem) return <CheckoutContentSkeleton />;
 
   if (hydrated && items.length === 0) {
     return (
@@ -276,6 +292,7 @@ export function CheckoutForm({
           <RotateCcw aria-hidden="true" />
           <div><strong>{labels.savedAttempt}</strong><p>{requestError}</p></div>
           <button type="button" onClick={() => void completeSubmission(pending)} disabled={submitting}>{labels.retry}</button>
+          {support ? <SupportContactActions locale={locale} contact={support.contact} labels={support.labels} surface="checkout" variant="recovery" /> : null}
         </section>
       ) : null}
 
@@ -353,6 +370,7 @@ export function CheckoutForm({
             {!submitting ? <ArrowRight aria-hidden="true" /> : null}
           </button>
           <div className="checkout-trust"><span><PhoneCall aria-hidden="true" />{labels.trustPhone}</span><span><PackageCheck aria-hidden="true" />{labels.trustPayment}</span><span><Truck aria-hidden="true" />{labels.trustDelivery}</span></div>
+          {support ? <SupportContactActions locale={locale} contact={support.contact} labels={support.labels} surface="checkout" /> : null}
         </aside>
       </form>
     </main>

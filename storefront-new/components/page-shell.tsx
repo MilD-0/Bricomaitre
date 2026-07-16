@@ -10,6 +10,8 @@ import { GlobalSearch } from '@/components/global-search';
 import { NavigationActions } from '@/components/navigation-actions';
 import { NavigationCategories } from '@/components/navigation-categories';
 import { isLocale, type Locale } from '@/i18n/config';
+import { getStorefrontSettings } from '@/lib/storefront-api';
+import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 type PageShellProps = {
   children: React.ReactNode;
@@ -22,6 +24,7 @@ export async function PageShell({ children, locale: localeProp }: PageShellProps
   const alternateLocale = locale === 'fr' ? 'ar' : 'fr';
   const t = await getTranslations({ locale, namespace: 'Navigation' });
   const alternateLabel = alternateLocale === 'ar' ? 'العربية' : 'Français';
+  const contactSettings = await getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse);
 
   return (
     <div className="site-shell">
@@ -32,8 +35,10 @@ export async function PageShell({ children, locale: localeProp }: PageShellProps
             <a href={`/${locale}`} className="brand" aria-label={t('brandHome')} data-navigation-target="home">
               <Image src={logo} alt="Bricomaitre" width={168} height={62} priority sizes="(max-width: 600px) 112px, 144px" />
             </a>
-            <GlobalSearch
+            <div className="site-header-search">
+              <GlobalSearch
                 locale={locale}
+                instanceId="desktop-header"
                 labels={{
                   label: t('searchLabel'),
                   placeholder: t('searchPlaceholder'),
@@ -44,7 +49,8 @@ export async function PageShell({ children, locale: localeProp }: PageShellProps
                   inStock: t('inStock'),
                   outOfStock: t('outOfStock'),
                 }}
-            />
+              />
+            </div>
             <NavigationActions
               locale={locale}
               alternateLocale={alternateLocale}
@@ -52,20 +58,27 @@ export async function PageShell({ children, locale: localeProp }: PageShellProps
               categories={[]}
               labels={{
                 menu: t('openMenu'), closeMenu: t('closeMenu'), cart: t('cart'), language: t('language'),
-                home: t('home'), products: t('products'), categories: t('categories'),
+                home: t('home'), products: t('products'), categories: t('categories'), brands: t('brands'),
+                search: {
+                  label: t('searchLabel'), placeholder: t('searchPlaceholder'), searching: t('searching'),
+                  results: t('searchResults'), noResults: t('noSearchResults'), viewAll: t('viewAllProducts'),
+                  inStock: t('inStock'), outOfStock: t('outOfStock'),
+                },
                 cartDrawer: {
                   title: t('cartTitle'), close: t('cartClose'), emptyTitle: t('cartEmptyTitle'),
                   emptyDescription: t('cartEmptyDescription'), continueShopping: t('cartContinueShopping'),
                   subtotal: t('cartSubtotal'), checkout: t('cartCheckout'), quantity: t('cartQuantity'),
                   increase: t('cartIncrease'), decrease: t('cartDecrease'), remove: t('cartRemove'),
                 },
+                support: { title: t('drawerSupportTitle'), call: t('supportCall') },
               }}
+              contact={contactSettings}
             />
           </div>
           <nav className="site-navigation" aria-label={t('label')}>
             <a href={`/${locale}`} data-navigation-target="home">{t('home')}</a>
             <a href={`/${locale}/products`} data-navigation-target="products">{t('products')}</a>
-            <NavigationCategories locale={locale} />
+            <NavigationCategories locale={locale} labels={{ categories: t('categories'), brands: t('brands') }} />
           </nav>
         </div>
       </header>
@@ -87,9 +100,13 @@ export async function PageShell({ children, locale: localeProp }: PageShellProps
           <section className="site-footer-contact" aria-labelledby="footer-contact-title">
             <h2 id="footer-contact-title">{t('footerContactTitle')}</h2>
             <ul>
-              <li>
-                <FooterContactLink icon="phone" href="tel:+213778810360" direction="ltr">0778 81 03 60</FooterContactLink>
-              </li>
+              {contactSettings.phoneEnabled ? (
+                <li>
+                  <FooterContactLink icon="phone" href={contactSettings.phoneHref} direction="ltr">
+                    {contactSettings.phoneDisplay}
+                  </FooterContactLink>
+                </li>
+              ) : null}
               <li>
                 <FooterContactLink icon="email" href="mailto:bricomaitre@gmail.com">bricomaitre@gmail.com</FooterContactLink>
               </li>
@@ -105,7 +122,6 @@ export async function PageShell({ children, locale: localeProp }: PageShellProps
           </section>
         </div>
         <div className="site-footer-bottom">
-          <p>© Bricomaitre. {t('footerRights')}</p>
           <div aria-label={t('language')}>
             <Link href="/fr" hrefLang="fr" aria-current={locale === 'fr' ? 'page' : undefined}>FR</Link>
             <Link href="/ar" hrefLang="ar" aria-current={locale === 'ar' ? 'page' : undefined}>العربية</Link>

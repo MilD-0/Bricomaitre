@@ -141,6 +141,107 @@ for (let id = 43; id <= 50; id += 1) {
   });
 }
 
+function homepage() {
+  return {
+  banners: [
+    {
+      id: 1,
+      title: 'Puissance pour vos travaux',
+      titleAr: 'قوة لأعمالكم',
+      imageUrl: 'http://127.0.0.1:3003/mock/banner-power-wide.svg',
+      imageUrlPortrait: 'http://127.0.0.1:3003/mock/banner-power-portrait.svg',
+      imageUrlLandscape: 'http://127.0.0.1:3003/mock/banner-power-wide.svg',
+      productId: 12,
+      sortOrder: 0,
+      active: true,
+      createdAt: '2026-07-01T10:00:00.000Z',
+      updatedAt: '2026-07-02T10:00:00.000Z',
+    },
+    {
+      id: 2,
+      title: 'Équipez votre atelier',
+      titleAr: 'جهزوا ورشتكم',
+      imageUrl: 'http://127.0.0.1:3003/mock/banner-workshop-wide.svg',
+      imageUrlPortrait: 'http://127.0.0.1:3003/mock/banner-workshop-portrait.svg',
+      imageUrlLandscape: 'http://127.0.0.1:3003/mock/banner-workshop-wide.svg',
+      productId: 13,
+      sortOrder: 1,
+      active: true,
+      createdAt: '2026-07-01T10:00:00.000Z',
+      updatedAt: '2026-07-02T10:00:00.000Z',
+    },
+  ],
+  topProducts: catalogProducts.slice(0, 6),
+  categories,
+  productCards: [
+    {
+      id: 1,
+      productId: 12,
+      titleAr: 'إضاءة موثوقة لكل ورشة',
+      titleFr: 'Une lumière fiable pour chaque atelier',
+      descriptionAr: 'إضاءة قوية وثابتة للأعمال اليومية.',
+      descriptionFr: 'Une lumière stable et puissante pour les travaux du quotidien.',
+      characteristicsAr: ['إضاءة قوية', 'سهل النقل'],
+      characteristicsFr: ['Éclairage puissant', 'Facile à déplacer'],
+      sortOrder: 0,
+      active: true,
+      createdAt: '2026-07-01T10:00:00.000Z',
+      updatedAt: '2026-07-02T10:00:00.000Z',
+      product: catalogProducts[0],
+    },
+    {
+      id: 2,
+      productId: 13,
+      titleAr: 'قوة مدمجة للأعمال اليومية',
+      titleFr: 'La puissance compacte du quotidien',
+      descriptionAr: 'مثقاب عملي للأعمال المتكررة.',
+      descriptionFr: 'Une perceuse pratique pour les travaux courants.',
+      characteristicsAr: ['حجم مدمج', 'استخدام سهل'],
+      characteristicsFr: ['Format compact', 'Prise en main simple'],
+      sortOrder: 1,
+      active: true,
+      createdAt: '2026-07-01T10:00:00.000Z',
+      updatedAt: '2026-07-02T10:00:00.000Z',
+      product: catalogProducts[2],
+    },
+  ],
+  brands,
+  featuredGroups: [{
+    id: 1,
+    name: 'Pour équiper votre atelier',
+    nameAr: 'لتجهيز ورشتكم',
+    cta: 'Voir la sélection',
+    ctaAr: 'عرض المجموعة',
+    link: '/products',
+    sortOrder: 0,
+    showAtTopOfProductsPage: true,
+    active: true,
+    productIds: catalogProducts.slice(0, 6).map((item) => item.id),
+    brandIds: [],
+    categoryIds: [],
+    createdAt: '2026-07-01T10:00:00.000Z',
+    updatedAt: '2026-07-02T10:00:00.000Z',
+    products: catalogProducts.slice(0, 6),
+  }, {
+    id: 2,
+    name: 'Les indispensables du chantier',
+    nameAr: 'أساسيات الورشة',
+    cta: 'Explorer la sélection',
+    ctaAr: 'استكشف المجموعة',
+    link: '/products?category=4',
+    sortOrder: 1,
+    showAtTopOfProductsPage: false,
+    active: true,
+    productIds: catalogProducts.slice(2, 8).map((item) => item.id),
+    brandIds: [],
+    categoryIds: [],
+    createdAt: '2026-07-01T10:00:00.000Z',
+    updatedAt: '2026-07-02T10:00:00.000Z',
+    products: catalogProducts.slice(2, 8),
+  }],
+  };
+}
+
 const brands = [{
   id: 2,
   name: 'Bric Pro',
@@ -283,6 +384,8 @@ const server = createServer((request, response) => {
   } else if (/^\/storefront\/orders\/\d+$/.test(url.pathname)) {
     const order = orders.get(Number(url.pathname.split('/').at(-1)));
     result = order && url.searchParams.get('token') === order.publicToken ? json({ item: order }) : json({ error: 'Not found' }, 404);
+  } else if (url.pathname === '/storefront/homepage') {
+    result = json(homepage());
   } else if (url.pathname === '/storefront/products') {
     const search = url.searchParams.get('search') ?? '';
     const brandId = Number(url.searchParams.get('brandId')) || null;

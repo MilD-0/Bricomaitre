@@ -18,6 +18,7 @@ describe('storefront-new Next configuration', () => {
       output: 'standalone',
       cacheComponents: true,
       typedRoutes: true,
+      allowedDevOrigins: expect.arrayContaining(['127.0.0.1']),
       images: {
         formats: ['image/avif', 'image/webp'],
         qualities: [60, 75],

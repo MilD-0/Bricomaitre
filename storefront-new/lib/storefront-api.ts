@@ -3,17 +3,22 @@ import {
   storefrontCategoriesResponseSchema,
   storefrontEcotrackCatalogResponseSchema,
   storefrontHomepageResponseSchema,
+  storefrontHomepageFeaturedGroupProductsQuerySchema,
+  storefrontHomepageFeaturedGroupProductsResponseSchema,
   storefrontProductDetailResponseSchema,
   storefrontProductListQuerySchema,
   storefrontProductsResponseSchema,
+  storefrontSettingsResponseSchema,
   storefrontProductTokenSchema,
   type StorefrontBrandsResponse,
   type StorefrontCategoriesResponse,
   type StorefrontEcotrackCatalogResponse,
   type StorefrontHomepageResponse,
+  type StorefrontHomepageFeaturedGroupProductsResponse,
   type StorefrontProductDetailResponse,
   type StorefrontProductListQuery,
   type StorefrontProductsResponse,
+  type StorefrontSettingsResponse,
 } from '@bric/storefront-core/contracts';
 import { cacheLife, cacheTag } from 'next/cache';
 
@@ -112,6 +117,38 @@ export async function fetchStorefrontHomepage(): Promise<StorefrontHomepageRespo
   return parseUpstreamJson(await fetchStorefrontUpstream(pathname), pathname, storefrontHomepageResponseSchema);
 }
 
+export async function fetchStorefrontHomepageFeaturedGroupProducts(
+  groupId: number,
+  input: { page?: number; limit?: number } = {},
+): Promise<StorefrontHomepageFeaturedGroupProductsResponse> {
+  const query = storefrontHomepageFeaturedGroupProductsQuerySchema.parse(input);
+  const pathname = `/storefront/homepage/groups/${groupId}?${new URLSearchParams({
+    page: String(query.page),
+    limit: String(query.limit),
+  }).toString()}`;
+  return parseUpstreamJson(
+    await fetchStorefrontUpstream(pathname),
+    pathname,
+    storefrontHomepageFeaturedGroupProductsResponseSchema,
+  );
+}
+
+export async function fetchStorefrontSettings(): Promise<StorefrontSettingsResponse> {
+  const pathname = '/storefront/settings';
+  return parseUpstreamJson(
+    await fetchStorefrontUpstream(pathname),
+    pathname,
+    storefrontSettingsResponseSchema,
+  );
+}
+
+export async function getStorefrontSettings() {
+  'use cache';
+  cacheLife({ stale: 300, revalidate: 3600, expire: 86400 });
+  cacheTag(STOREFRONT_NEW_CACHE_TAGS.settings);
+  return fetchStorefrontSettings();
+}
+
 export async function getStorefrontHomepage() {
   'use cache';
   cacheLife({ stale: 30, revalidate: 120, expire: 600 });
@@ -133,6 +170,39 @@ export async function getStorefrontCatalog(input: StorefrontProductListQuery) {
   cacheLife({ stale: 30, revalidate: 60, expire: 300 });
   cacheTag(STOREFRONT_NEW_CACHE_TAGS.products);
   return fetchStorefrontCatalog(query);
+}
+
+export async function fetchStorefrontSitemapProducts() {
+  const query = storefrontProductListQuerySchema.parse({
+    page: 1,
+    limit: 100,
+    search: '',
+    brandId: null,
+    categoryId: null,
+    sortKey: 'updatedAt',
+    sortDirection: 'desc',
+    id: null,
+    mongoId: null,
+    slug: null,
+  });
+  const firstPage = await fetchStorefrontCatalog(query);
+  const pageCount = Math.ceil(firstPage.total / query.limit);
+  const items = [...firstPage.items];
+
+  for (let page = 2; page <= pageCount; page += 1) {
+    const response = await fetchStorefrontCatalog({ ...query, page });
+    items.push(...response.items);
+  }
+
+  return items;
+}
+
+export async function getStorefrontSitemapProducts() {
+  'use cache';
+
+  cacheLife({ stale: 300, revalidate: 3600, expire: 86400 });
+  cacheTag(STOREFRONT_NEW_CACHE_TAGS.products);
+  return fetchStorefrontSitemapProducts();
 }
 
 export async function getStorefrontCatalogMeta() {

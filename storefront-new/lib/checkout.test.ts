@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { storefrontOrderCreateRequestSchema } from '@bric/storefront-core/contracts';
 
 import type { CartItem } from './cart';
 import {
@@ -87,6 +88,35 @@ describe('checkout domain', () => {
       cartProducts: expandCheckoutCart(items),
       journeyId: 'journey-1',
       sessionId: 'session-1',
-    })).toMatchObject({ delivery: 1, state: 16, cartProducts: ['desk-lamp', 'desk-lamp'], note: null });
+      marketing: {
+        semanticsVersion: 'multi_destination_v1',
+        eventId: 'purchase-1',
+        eventSourceUrl: 'https://bricomaitre.com/fr/checkout',
+      },
+    })).toMatchObject({
+      delivery: 1,
+      state: 16,
+      cartProducts: ['desk-lamp', 'desk-lamp'],
+      note: null,
+      marketing: { eventId: 'purchase-1' },
+      meta: { leadEventId: 'purchase-1' },
+    });
+  });
+
+  it('requires Meta and multi-destination purchase copies to share identity', () => {
+    expect(() => storefrontOrderCreateRequestSchema.parse({
+      phoneNumber1: '0550123456',
+      cartProducts: ['12'],
+      meta: {
+        semanticsVersion: 'confirmed_purchase_v1',
+        leadEventId: 'meta-event',
+        eventSourceUrl: 'https://bricomaitre.com/fr/checkout',
+      },
+      marketing: {
+        semanticsVersion: 'multi_destination_v1',
+        eventId: 'different-event',
+        eventSourceUrl: 'https://bricomaitre.com/fr/checkout',
+      },
+    })).toThrow();
   });
 });

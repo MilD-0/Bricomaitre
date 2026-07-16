@@ -7,6 +7,7 @@ export const CACHE_TAGS = {
   productsMeta: 'products-meta',
   stats: 'stats',
   statsHistory: 'stats-history',
+  storefrontSettings: 'storefront-settings',
 } as const;
 
 export function applyServerCache(profile: Parameters<typeof cacheLife>[0], ...tags: string[]) {

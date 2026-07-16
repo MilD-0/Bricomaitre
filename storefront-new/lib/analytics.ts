@@ -2,6 +2,8 @@
 
 import { z } from 'zod';
 
+import { buildMetaServerEvent, deliverClientMarketingEvent } from '@/lib/marketing-destinations';
+
 const productEventNameSchema = z.enum([
   'view_item',
   'view_item_media',
@@ -93,7 +95,7 @@ const navigationEventInputSchema = z.object({
   quantity: z.number().int().positive().nullable().default(null),
   value: z.number().min(0).nullable().default(null),
   metadata: z.object({
-    surface: z.enum(['header', 'mobile_drawer', 'global_search', 'cart_drawer']),
+    surface: z.enum(['header', 'mobile_drawer', 'global_search', 'cart_drawer', 'product_detail', 'checkout', 'thank_you']),
     target: z.string().trim().min(1).max(120).optional(),
     resultsCount: z.number().int().min(0).optional(),
     position: z.number().int().positive().optional(),
@@ -101,6 +103,7 @@ const navigationEventInputSchema = z.object({
 });
 
 const checkoutEventInputSchema = z.object({
+  eventId: z.string().trim().min(1).max(120).optional(),
   eventName: checkoutEventNameSchema,
   locale: z.enum(['fr', 'ar']),
   orderId: z.number().int().positive().nullable().default(null),
@@ -115,10 +118,17 @@ const checkoutEventInputSchema = z.object({
   }).strict(),
 });
 
+const pageEventInputSchema = z.object({
+  eventId: z.string().trim().min(1).max(120).optional(),
+  locale: z.enum(['fr', 'ar']),
+  pageType: z.enum(['homepage', 'catalog', 'product_detail', 'checkout', 'thank_you']),
+});
+
 export type ProductAnalyticsEventInput = z.input<typeof productEventInputSchema>;
 export type CatalogAnalyticsEventInput = z.input<typeof catalogEventInputSchema>;
 export type NavigationAnalyticsEventInput = z.input<typeof navigationEventInputSchema>;
 export type CheckoutAnalyticsEventInput = z.input<typeof checkoutEventInputSchema>;
+export type PageAnalyticsEventInput = z.input<typeof pageEventInputSchema>;
 
 const JOURNEY_KEY = 'bric:analytics:journey:v1';
 const SESSION_KEY = 'bric:analytics:session:v1';
@@ -158,8 +168,8 @@ export function buildProductAnalyticsPayload(input: ProductAnalyticsEventInput) 
 }
 
 function buildAnalyticsPayload(
-  parsed: z.output<typeof productEventInputSchema> | z.output<typeof catalogEventInputSchema> | z.output<typeof navigationEventInputSchema> | z.output<typeof checkoutEventInputSchema>,
-  pageType: 'product_detail' | 'catalog' | 'global_navigation' | 'checkout' | 'thank_you',
+  parsed: z.output<typeof productEventInputSchema> | z.output<typeof catalogEventInputSchema> | z.output<typeof navigationEventInputSchema> | z.output<typeof checkoutEventInputSchema> | (z.output<typeof pageEventInputSchema> & { eventName: 'page_view' }),
+  pageType: 'homepage' | 'product_detail' | 'catalog' | 'global_navigation' | 'checkout' | 'thank_you',
 ) {
   const connection = navigator as Navigator & {
     connection?: { effectiveType?: string; saveData?: boolean };
@@ -167,7 +177,7 @@ function buildAnalyticsPayload(
 
   return {
     eventVersion: 1 as const,
-    eventId: createId(),
+    eventId: 'eventId' in parsed && parsed.eventId ? parsed.eventId : createId(),
     journeyId: getOrCreateId(window.localStorage, JOURNEY_KEY),
     sessionId: getOrCreateId(window.sessionStorage, SESSION_KEY),
     eventName: parsed.eventName,
@@ -193,7 +203,7 @@ function buildAnalyticsPayload(
       effectiveConnectionType: connection.connection?.effectiveType ?? null,
       saveData: connection.connection?.saveData ?? false,
       release: process.env.NEXT_PUBLIC_RELEASE ?? null,
-      ...parsed.metadata,
+      ...('metadata' in parsed ? parsed.metadata : {}),
     },
   };
 }
@@ -209,6 +219,13 @@ export function buildNavigationAnalyticsPayload(input: NavigationAnalyticsEventI
 export function buildCheckoutAnalyticsPayload(input: CheckoutAnalyticsEventInput, pageType: 'checkout' | 'thank_you' = 'checkout') {
   return buildAnalyticsPayload(checkoutEventInputSchema.parse(input), pageType);
 }
+
+export function buildPageAnalyticsPayload(input: PageAnalyticsEventInput) {
+  const parsed = pageEventInputSchema.parse(input);
+  return buildAnalyticsPayload({ ...parsed, eventName: 'page_view' }, parsed.pageType);
+}
+
+export type StorefrontAnalyticsPayload = ReturnType<typeof buildAnalyticsPayload>;
 
 export function getAnalyticsIdentity() {
   if (typeof window === 'undefined') return { journeyId: null, sessionId: null };
@@ -231,6 +248,28 @@ async function sendAnalyticsPayload(payload: ReturnType<typeof buildAnalyticsPay
   }
 }
 
+async function sendMetaServerPayload(payload: StorefrontAnalyticsPayload) {
+  const event = buildMetaServerEvent(payload);
+  if (!event) return;
+  try {
+    await fetch('/api/marketing/meta', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(event),
+      keepalive: true,
+    });
+  } catch {
+    // The first-party event remains authoritative if Meta is unavailable.
+  }
+}
+
+async function deliverAnalyticsPayload(payload: StorefrontAnalyticsPayload) {
+  const firstParty = sendAnalyticsPayload(payload);
+  deliverClientMarketingEvent(payload);
+  void sendMetaServerPayload(payload);
+  await firstParty;
+}
+
 export async function trackProductEvent(input: ProductAnalyticsEventInput) {
   if (typeof window === 'undefined') return null;
 
@@ -241,7 +280,7 @@ export async function trackProductEvent(input: ProductAnalyticsEventInput) {
     return null;
   }
 
-  await sendAnalyticsPayload(payload);
+  await deliverAnalyticsPayload(payload);
 
   return payload;
 }
@@ -257,7 +296,7 @@ export async function trackCatalogEvent(input: CatalogAnalyticsEventInput) {
     return null;
   }
 
-  await sendAnalyticsPayload(payload);
+  await deliverAnalyticsPayload(payload);
   return payload;
 }
 
@@ -272,7 +311,7 @@ export async function trackNavigationEvent(input: NavigationAnalyticsEventInput)
     return null;
   }
 
-  await sendAnalyticsPayload(payload);
+  await deliverAnalyticsPayload(payload);
   return payload;
 }
 
@@ -284,6 +323,19 @@ export async function trackCheckoutEvent(input: CheckoutAnalyticsEventInput, pag
   } catch {
     return null;
   }
-  await sendAnalyticsPayload(payload);
+  await deliverAnalyticsPayload(payload);
+  return payload;
+}
+
+
+export async function trackPageView(input: PageAnalyticsEventInput) {
+  if (typeof window === 'undefined') return null;
+  let payload;
+  try {
+    payload = buildPageAnalyticsPayload(input);
+  } catch {
+    return null;
+  }
+  await deliverAnalyticsPayload(payload);
   return payload;
 }

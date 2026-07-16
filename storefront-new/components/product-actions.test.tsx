@@ -68,7 +68,7 @@ describe('ProductActions', () => {
       value: 3000,
     }));
     expect(haptics.prepare).toHaveBeenCalledOnce();
-    expect(haptics.trigger.mock.calls).toEqual([['selection'], ['success']]);
+    expect(haptics.trigger.mock.calls).toEqual([['control'], ['success']]);
   });
 
   it('renders a clear non-interactive state when the product is unavailable', () => {
@@ -100,6 +100,7 @@ describe('ProductActions', () => {
     expect(buyNow).toHaveClass('product-buy-now');
     expect(addToCart).toHaveClass('button-secondary');
     expect(addToCart).toHaveClass('product-add-to-cart');
+    expect(buyNow.querySelector('.product-buy-now-icon')).toBeInTheDocument();
     expect(buyNow.compareDocumentPosition(addToCart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

@@ -12,5 +12,6 @@ export * from './storefront/project-routing';
 export * from './storefront/order-access';
 export * from './storefront/orders';
 export * from './storefront/promos';
+export * from './storefront/settings';
 export * from './ecotrack-client';
 export * from './ecotrack-tracking';

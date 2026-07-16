@@ -40,6 +40,10 @@ const catalog = {
 };
 
 const directItem = { productId: 12, token: 'desk-lamp', title: 'Desk Lamp', imageUrl: null, unitPrice: 4500, quantity: 2, availabilityStatus: 'in_stock' };
+const support = {
+  contact: { phoneDisplay: '0795 34 28 26', phoneHref: 'tel:+213795342826', phoneEnabled: true },
+  labels: { title: 'Need help?', description: 'Call us.', call: 'Call' },
+};
 const order = {
   id: 42, publicToken: 'public-order-token-1234567890', createdAt: '2026-07-14T10:00:00.000Z', updatedAt: '2026-07-14T10:00:00.000Z',
   firstName: 'Ada', lastName: null, fullName: 'Ada', email: null, phoneNumber1: '0550000000', phoneNumber2: null,
@@ -61,7 +65,7 @@ describe('CheckoutForm', () => {
   });
 
   it('renders the legacy storefront fields without introducing a second phone field', () => {
-    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels as never} />);
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels as never} support={support} />);
     expect(screen.getByRole('textbox', { name: /phone/ })).toHaveAttribute('name', 'phoneNumber1');
     expect(screen.getByRole('textbox', { name: /lastName/ })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: /firstName/ })).toBeInTheDocument();
@@ -73,7 +77,7 @@ describe('CheckoutForm', () => {
   });
 
   it('announces validation errors and moves focus to the first required field', async () => {
-    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels as never} />);
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels as never} support={support} />);
     fireEvent.click(screen.getByRole('button', { name: 'submit' }));
     const phone = screen.getByRole('textbox', { name: /phone/ });
     await waitFor(() => expect(phone).toHaveFocus());
@@ -162,13 +166,14 @@ describe('CheckoutForm', () => {
 
   it('keeps the attempt and exposes a retry action after a recoverable failure', async () => {
     mocks.create.mockRejectedValueOnce(new TypeError('offline')).mockResolvedValueOnce(order);
-    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels as never} />);
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels as never} support={support} />);
     fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), { target: { value: '0550000000' } });
     fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), { target: { value: '16' } });
     fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), { target: { value: 'Alger Centre' } });
     fireEvent.change(screen.getByRole('textbox', { name: /address/ }), { target: { value: '12 rue des Outils' } });
     fireEvent.click(screen.getByRole('button', { name: 'submit' }));
     expect(await screen.findByRole('button', { name: 'retry' })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /Call.*0795 34 28 26/ }).length).toBeGreaterThan(0);
     const firstKey = mocks.create.mock.calls[0][1];
     fireEvent.click(screen.getByRole('button', { name: 'retry' }));
     await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));

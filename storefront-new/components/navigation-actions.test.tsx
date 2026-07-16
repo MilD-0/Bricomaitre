@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { STOREFRONT_CART_KEY } from '@/lib/cart';
@@ -6,6 +6,7 @@ import { NavigationActions } from './navigation-actions';
 
 const analytics = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const haptics = vi.hoisted(() => ({ prepare: vi.fn(), trigger: vi.fn() }));
+const navigationMeta = vi.hoisted(() => vi.fn());
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/fr/products',
@@ -14,6 +15,7 @@ vi.mock('next/navigation', () => ({
 vi.mock('@number-flow/react', () => ({ default: ({ value }: { value: number }) => <span>{value}</span> }));
 vi.mock('@/lib/analytics', () => ({ trackNavigationEvent: analytics }));
 vi.mock('@/lib/haptics', () => ({ prepareHaptics: haptics.prepare, triggerHaptic: haptics.trigger }));
+vi.mock('@/lib/navigation-categories', () => ({ fetchNavigationMeta: navigationMeta }));
 
 const labels = {
   menu: 'Ouvrir le menu',
@@ -23,12 +25,22 @@ const labels = {
   home: 'Accueil',
   products: 'Produits',
   categories: 'Catégories',
+  brands: 'Marques',
+  search: {
+    label: 'Rechercher des produits', placeholder: 'Quel outil recherchez-vous ?', searching: 'Recherche…',
+    results: 'Résultats', noResults: 'Aucun résultat', viewAll: 'Voir tout', inStock: 'En stock', outOfStock: 'Indisponible',
+  },
   cartDrawer: {
     title: 'Votre panier', close: 'Fermer le panier', emptyTitle: 'Votre panier est vide',
     emptyDescription: 'Ajoutez des outils.', continueShopping: 'Voir les produits', subtotal: 'Sous-total',
     checkout: 'Passer la commande', quantity: 'Quantité', increase: 'Augmenter la quantité',
     decrease: 'Diminuer la quantité', remove: 'Retirer',
   },
+  support: { title: 'Besoin d’aide ?', call: 'Appeler' },
+};
+
+const contact = {
+  phoneDisplay: '0795 34 28 26', phoneHref: 'tel:+213795342826', phoneEnabled: true,
 };
 
 describe('NavigationActions', () => {
@@ -36,6 +48,7 @@ describe('NavigationActions', () => {
     analytics.mockClear();
     haptics.prepare.mockClear();
     haptics.trigger.mockClear();
+    navigationMeta.mockResolvedValue({ categories: [{ id: 3, name: 'Éclairage', nameAr: null, slug: 'eclairage' }], brands: [{ id: 8, name: 'Wadfow', slug: 'wadfow' }] });
     localStorage.clear();
     window.history.replaceState({}, '', '/fr/products?brand=2');
     localStorage.setItem(STOREFRONT_CART_KEY, JSON.stringify([{
@@ -59,6 +72,7 @@ describe('NavigationActions', () => {
         alternateLabel="العربية"
         categories={[{ id: 3, label: 'Éclairage' }]}
         labels={labels}
+        contact={contact}
       />,
     );
 
@@ -71,7 +85,7 @@ describe('NavigationActions', () => {
     fireEvent.click(arabicLink);
     expect(languageToggle).toHaveAttribute('data-selected', 'ar');
     expect(haptics.prepare).toHaveBeenCalled();
-    expect(haptics.trigger).toHaveBeenCalledWith('selection');
+    expect(haptics.trigger).toHaveBeenCalledWith('navigation');
     expect(analytics).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'locale_change' }));
   });
 
@@ -83,6 +97,7 @@ describe('NavigationActions', () => {
         alternateLabel="العربية"
         categories={[]}
         labels={labels}
+        contact={contact}
       />,
     );
 
@@ -94,7 +109,7 @@ describe('NavigationActions', () => {
     expect(analytics).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'view_cart', quantity: 3 }));
   });
 
-  it('opens an accessible drawer with categories and closes it with Escape', () => {
+  it('opens an accessible drawer with every category and brand, then closes it with Escape', async () => {
     render(
       <NavigationActions
         locale="fr"
@@ -102,14 +117,28 @@ describe('NavigationActions', () => {
         alternateLabel="العربية"
         categories={[{ id: 3, label: 'Éclairage' }]}
         labels={labels}
+        contact={contact}
       />,
     );
 
     fireEvent.pointerDown(screen.getByRole('button', { name: labels.menu }));
     fireEvent.click(screen.getByRole('button', { name: labels.menu }));
-    expect(screen.getByRole('dialog', { name: labels.menu })).toBeVisible();
-    expect(screen.getByRole('link', { name: /Éclairage/ })).toHaveAttribute('href', '/fr/products?category=3');
-    expect(haptics.trigger).toHaveBeenCalledWith('light');
+    const drawer = screen.getByRole('dialog', { name: labels.menu });
+    expect(drawer).toBeVisible();
+    expect(drawer.parentElement?.parentElement).toBe(document.body);
+    expect(await screen.findByRole('link', { name: /Éclairage/ })).toHaveAttribute('href', '/fr/categories/eclairage');
+    expect(screen.getByRole('link', { name: /Wadfow/ })).toHaveAttribute('href', '/fr/brands/wadfow');
+    const categorySummary = within(drawer).getByText(labels.categories).closest('summary');
+    expect(categorySummary?.querySelector('svg')).toBeInTheDocument();
+    expect(haptics.trigger).toHaveBeenCalledWith('surface');
+    haptics.trigger.mockClear();
+    fireEvent.pointerDown(screen.getByRole('link', { name: /Éclairage/ }));
+    expect(haptics.trigger).not.toHaveBeenCalled();
+    const drawerLocaleToggle = within(drawer).getByRole('group', { name: labels.language });
+    expect(drawerLocaleToggle).toHaveClass('navigation-drawer-locale-toggle');
+    expect(drawerLocaleToggle).toHaveAttribute('data-selected', 'fr');
+    expect(drawer.querySelector('.navigation-drawer-language')).toBeNull();
+    expect(within(drawer).getByRole('link', { name: /Appeler.*0795 34 28 26/ })).toHaveAttribute('href', 'tel:+213795342826');
     expect(analytics).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'navigation_menu_open' }));
 
     fireEvent.keyDown(window, { key: 'Escape' });
