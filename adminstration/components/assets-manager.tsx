@@ -598,6 +598,7 @@ function BannerDialogForm({
             value={landscapeImageValue ? [landscapeImageValue] : []}
             onChange={(urls) => form.setValue('imageUrlLandscape', urls[0] ?? '', { shouldDirty: true, shouldValidate: true })}
           />
+          <p className="-mt-2 text-xs leading-5 text-muted-foreground">{t('bannerLandscapeImageHint')}</p>
           {form.formState.errors.imageUrlLandscape ? <FieldError>{form.formState.errors.imageUrlLandscape.message}</FieldError> : null}
 
           <ImageUploadField
@@ -606,6 +607,7 @@ function BannerDialogForm({
             value={portraitImageValue ? [portraitImageValue] : []}
             onChange={(urls) => form.setValue('imageUrlPortrait', urls[0] ?? '', { shouldDirty: true, shouldValidate: true })}
           />
+          <p className="-mt-2 text-xs leading-5 text-muted-foreground">{t('bannerPortraitImageHint')}</p>
           {form.formState.errors.imageUrlPortrait ? <FieldError>{form.formState.errors.imageUrlPortrait.message}</FieldError> : null}
           {form.formState.errors.imageUrl ? <FieldError>{form.formState.errors.imageUrl.message}</FieldError> : null}
 

@@ -1,0 +1,1 @@
+ALTER TABLE "storefront_settings" DROP COLUMN "whatsapp_enabled";

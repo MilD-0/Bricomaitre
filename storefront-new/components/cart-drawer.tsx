@@ -69,7 +69,7 @@ export function CartDrawer({
   function changeQuantity(item: CartItem, nextQuantity: number) {
     if (nextQuantity === item.quantity || nextQuantity < 1 || nextQuantity > 20) return;
     commit(updateCartItemQuantity(items, item.productId, nextQuantity));
-    void triggerHaptic('selection');
+    void triggerHaptic('control');
     void trackNavigationEvent({
       eventName: nextQuantity > item.quantity ? 'add_to_cart' : 'remove_from_cart',
       locale,
@@ -83,7 +83,7 @@ export function CartDrawer({
 
   function remove(item: CartItem) {
     commit(removeCartItem(items, item.productId));
-    void triggerHaptic('medium');
+    void triggerHaptic('destructive');
     void trackNavigationEvent({
       eventName: 'remove_from_cart',
       locale,
@@ -96,7 +96,7 @@ export function CartDrawer({
   }
 
   function checkout() {
-    void triggerHaptic('medium');
+    void triggerHaptic('primary');
     void trackNavigationEvent({
       eventName: 'cart_checkout_click',
       locale,

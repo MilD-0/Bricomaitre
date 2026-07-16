@@ -66,13 +66,13 @@ test('renders the French product journey with SEO and governed analytics', async
     trust: { background: 'rgba(0, 0, 0, 0)', borderRadius: '0px', boxShadow: 'none', inlineBorder: '0px' },
   });
   await expect(page.locator('.product-trust')).toHaveCSS('border-top-width', '1px');
-  await expect(page.locator('.product-trust svg')).toHaveCount(3);
+  await expect(page.locator('.product-trust svg')).toHaveCount(4);
   const firstTrustIcon = page.locator('.product-trust li').first().locator('svg');
   await page.locator('.product-trust li').first().hover();
   await expect.poll(() => firstTrustIcon.evaluate((element) => getComputedStyle(element).transform)).not.toBe('none');
   const breadcrumbs = page.getByRole('navigation', { name: 'Fil d’Ariane' });
-  await expect(breadcrumbs.getByRole('link', { name: 'Équipement d’atelier' })).toHaveAttribute('href', '/fr/products?category=5');
-  await expect(breadcrumbs.getByRole('link', { name: 'Éclairage' })).toHaveAttribute('href', '/fr/products?category=3');
+  await expect(breadcrumbs.getByRole('link', { name: 'Équipement d’atelier' })).toHaveAttribute('href', '/fr/categories/workshop-equipment');
+  await expect(breadcrumbs.getByRole('link', { name: 'Éclairage' })).toHaveAttribute('href', '/fr/categories/lighting');
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'http://127.0.0.1:3003/fr/products/desk-lamp');
   await expect(page.locator('link[hreflang="ar"]')).toHaveAttribute('href', 'http://127.0.0.1:3003/ar/products/desk-lamp');
   const jsonLd = await page.locator('script[type="application/ld+json"]').textContent();
@@ -120,6 +120,11 @@ test('preserves Arabic RTL and narrow-phone usability', async ({ page }) => {
   const mobileBuyNow = page.getByRole('button', { name: 'اطلب الآن' });
   await expect(mobileBuyNow).toBeVisible();
   expect(await mobileBuyNow.evaluate((element) => getComputedStyle(element).position)).toBe('fixed');
+  const mobileActionDock = await page.locator('.product-action-buttons').evaluate((element) => {
+    const style = getComputedStyle(element, '::before');
+    return { position: style.position, bottom: style.bottom, background: style.backgroundColor };
+  });
+  expect(mobileActionDock).toEqual({ position: 'fixed', bottom: '0px', background: 'rgb(255, 255, 255)' });
   const mobileBuyBox = await mobileBuyNow.boundingBox();
   expect(mobileBuyBox && mobileBuyBox.y + mobileBuyBox.height).toBeLessThanOrEqual(740);
   const widths = await page.evaluate(() => ({ body: document.body.scrollWidth, viewport: window.innerWidth }));

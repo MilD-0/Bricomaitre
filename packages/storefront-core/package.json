@@ -15,12 +15,15 @@
     "./legacy-adapter": "./src/storefront/legacy-adapter.ts",
     "./meta": "./src/storefront/meta.ts",
     "./meta-contracts": "./src/storefront/meta-contracts.ts",
+    "./marketing-contracts": "./src/storefront/marketing-contracts.ts",
+    "./marketing": "./src/storefront/marketing.ts",
     "./project-routing": "./src/storefront/project-routing.ts",
     "./order-access": "./src/storefront/order-access.ts",
     "./order-records": "./src/order-records.ts",
     "./orders": "./src/storefront/orders.ts",
     "./promos": "./src/storefront/promos.ts",
-    "./server-cache": "./src/server-cache.ts"
+    "./server-cache": "./src/server-cache.ts",
+    "./settings": "./src/storefront/settings.ts"
   },
   "dependencies": {
     "@bric/db": "workspace:*",

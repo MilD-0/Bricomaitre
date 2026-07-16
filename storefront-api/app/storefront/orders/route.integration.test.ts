@@ -232,6 +232,13 @@ describe('app/storefront/orders/route', () => {
           leadEventId: 'purchase-12',
           eventSourceUrl: 'https://bricomaitre.com/checkout',
         },
+        marketing: {
+          semanticsVersion: 'multi_destination_v1',
+          eventId: 'purchase-12',
+          eventSourceUrl: 'https://bricomaitre.com/checkout',
+          google: { clientId: '123.456' },
+          tiktok: { clickId: 'tt-click' },
+        },
       }),
       headers: {
         'content-type': 'application/json',
@@ -247,6 +254,7 @@ describe('app/storefront/orders/route', () => {
       { tag: 'db' },
       expect.objectContaining({
         meta: expect.objectContaining({ leadEventId: 'purchase-12' }),
+        marketing: expect.objectContaining({ eventId: 'purchase-12' }),
       }),
       expect.objectContaining({
         metaRequestContext: expect.objectContaining({

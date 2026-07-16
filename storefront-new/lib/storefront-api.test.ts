@@ -6,6 +6,9 @@ import {
   fetchStorefrontCatalog,
   fetchStorefrontCatalogMeta,
   fetchStorefrontHomepage,
+  fetchStorefrontHomepageFeaturedGroupProducts,
+  fetchStorefrontSitemapProducts,
+  fetchStorefrontSettings,
   getStorefrontEcotrackCatalog,
   fetchStorefrontProductDetail,
   getStorefrontProductDetail,
@@ -120,6 +123,38 @@ describe('storefront API client', () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(homepage), { status: 200 }));
     await expect(fetchStorefrontHomepage()).resolves.toEqual(homepage);
     expect(fetch).toHaveBeenCalledWith('http://localhost:3001/storefront/homepage', expect.any(Object));
+  });
+
+  it('fetches the next bounded page of a featured group on demand', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ items: [], total: 24 }), { status: 200 }));
+    await expect(fetchStorefrontHomepageFeaturedGroupProducts(8, { page: 2, limit: 12 })).resolves.toEqual({ items: [], total: 24 });
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3001/storefront/homepage/groups/8?page=2&limit=12', expect.any(Object));
+  });
+
+  it('reads every active catalog page for sitemap generation', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ ...validProductResponse.item, slug: 'first', mongoId: null, titleAr: null, active: true, inStock: true, availabilityStatus: 'in_stock', inventoryQuantity: 1, brandId: null, categoryId: null, images: [], oldPrice: null }], total: 201 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ ...validProductResponse.item, id: 13, slug: 'second', mongoId: null, titleAr: null, active: true, inStock: true, availabilityStatus: 'in_stock', inventoryQuantity: 1, brandId: null, categoryId: null, images: [], oldPrice: null }], total: 201 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ ...validProductResponse.item, id: 14, slug: 'third', mongoId: null, titleAr: null, active: true, inStock: true, availabilityStatus: 'in_stock', inventoryQuantity: 1, brandId: null, categoryId: null, images: [], oldPrice: null }], total: 201 }), { status: 200 }));
+
+    const items = await fetchStorefrontSitemapProducts();
+
+    expect(items.map((item) => item.slug)).toEqual(['first', 'second', 'third']);
+    expect(fetch).toHaveBeenNthCalledWith(1, expect.stringContaining('page=1&limit=100'), expect.any(Object));
+    expect(fetch).toHaveBeenNthCalledWith(2, expect.stringContaining('page=2&limit=100'), expect.any(Object));
+    expect(fetch).toHaveBeenNthCalledWith(3, expect.stringContaining('page=3&limit=100'), expect.any(Object));
+  });
+
+  it('fetches and validates public contact settings', async () => {
+    const settings = {
+      phoneDisplay: '0795 34 28 26',
+      phoneHref: 'tel:+213795342826',
+      phoneEnabled: true,
+    };
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(settings), { status: 200 }));
+
+    await expect(fetchStorefrontSettings()).resolves.toEqual(settings);
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3001/storefront/settings', expect.any(Object));
   });
 
   it('rejects malformed catalog responses as controlled upstream failures', async () => {

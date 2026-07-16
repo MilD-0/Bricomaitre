@@ -15,6 +15,21 @@ test('renders the production homepage hierarchy with responsive banner media', a
   await expect(page.getByRole('heading', { name: 'Acheter par catégorie' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Bien choisir pour mieux travailler' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Nos marques' })).toBeVisible();
+  await expect(page.locator('.home-category-carousel a').first()).toHaveAttribute('href', /\/fr\/categories\//);
+  await expect(page.locator('.home-brand-carousel a').first()).toHaveAttribute('href', /\/fr\/brands\//);
+  await expect(page.getByText('Les outils les plus appréciés en ce moment.')).toHaveCount(0);
+  await expect(page.getByText('Trouvez plus vite ce qu’il vous faut.')).toHaveCount(0);
+  const featuredHeaders = page.locator('.home-featured-heading');
+  await expect(featuredHeaders).toHaveCount(2);
+  const featuredLayout = await page.locator('.home-featured-groups > .home-section').evaluateAll((sections) => sections.map((section) => {
+    const cta = section.querySelector('.home-featured-cta')!.getBoundingClientRect();
+    const slider = section.querySelector('.home-product-carousel')!.getBoundingClientRect();
+    return { cta, slider, display: getComputedStyle(section.querySelector('.home-featured-cta')!).display };
+  }));
+  for (const group of featuredLayout) {
+    expect(group.cta.y).toBeGreaterThanOrEqual(group.slider.bottom);
+    expect(group.display).toBe('flex');
+  }
   const whiteFrames = await page.locator('.catalog-card-media, .home-category-carousel a > span, .home-editorial-media').evaluateAll((elements) => elements.every((element) => getComputedStyle(element).backgroundColor === 'rgb(255, 255, 255)'));
   expect(whiteFrames).toBe(true);
   const marquee = page.locator('.home-brand-carousel > div');
@@ -28,7 +43,7 @@ test('renders the production homepage hierarchy with responsive banner media', a
   expect(movingTransform).not.toBe(initialTransform);
   await page.waitForTimeout(4_000);
   await expect.poll(() => marquee.evaluate((element) => getComputedStyle(element).transform)).not.toBe(movingTransform);
-  await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /index, follow/);
 });
 
 test('keeps the Arabic homepage readable and within a small-phone viewport', async ({ page }) => {
@@ -37,6 +52,34 @@ test('keeps the Arabic homepage readable and within a small-phone viewport', asy
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
   await expect(page.getByRole('heading', { name: 'أفضل المنتجات' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'تسوق حسب الفئة' })).toBeVisible();
+  const categoryCard = page.locator('.home-category-carousel a').first();
+  const categoryGeometry = await categoryCard.evaluate((element) => ({ width: element.getBoundingClientRect().width, imageHeight: element.querySelector('span')?.getBoundingClientRect().height ?? 0 }));
+  expect(categoryGeometry.width).toBeLessThan(145);
+  expect(categoryGeometry.imageHeight).toBeLessThanOrEqual(100);
+  const brandCard = page.locator('.home-brand-carousel a').first();
+  expect(await brandCard.evaluate((element) => element.getBoundingClientRect().height)).toBeLessThanOrEqual(60);
+  const featuredTitleSize = await page.locator('.home-product-carousel .catalog-card-body h2').first().evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+  expect(featuredTitleSize).toBeGreaterThanOrEqual(15);
+  const editorialCard = page.locator('.home-editorial-card').first();
+  const editorialDesign = await editorialCard.evaluate((element) => ({
+    mediaHeight: element.querySelector('.home-editorial-media')?.getBoundingClientRect().height ?? 0,
+    titleSize: Number.parseFloat(getComputedStyle(element.querySelector('h3')!).fontSize),
+    actionColumns: getComputedStyle(element.querySelector('div > div')!).gridTemplateColumns.split(' ').length,
+  }));
+  expect(editorialDesign.mediaHeight).toBeLessThanOrEqual(285);
+  expect(editorialDesign.titleSize).toBeGreaterThanOrEqual(20);
+  expect(editorialDesign.actionColumns).toBe(2);
   const overflows = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(overflows).toBe(false);
+  const featuredLayout = await page.locator('.home-featured-groups > .home-section').evaluateAll((sections) => sections.map((section) => {
+    const cta = section.querySelector('.home-featured-cta')!.getBoundingClientRect();
+    const slider = section.querySelector('.home-product-carousel')!.getBoundingClientRect();
+    return { cta, slider, viewport: document.documentElement.clientWidth };
+  }));
+  expect(featuredLayout).toHaveLength(2);
+  for (const group of featuredLayout) {
+    expect(group.cta.x).toBeGreaterThanOrEqual(0);
+    expect(group.cta.right).toBeLessThanOrEqual(group.viewport);
+    expect(group.cta.y).toBeGreaterThanOrEqual(group.slider.bottom);
+  }
 });

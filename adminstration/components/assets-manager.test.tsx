@@ -160,6 +160,8 @@ describe('AssetsManager', () => {
     const bannerDialog = screen.getByRole('dialog');
     await userEvent.type(within(bannerDialog).getByRole('textbox', { name: 'Title' }), 'Hero banner');
     await userEvent.type(within(bannerDialog).getByRole('textbox', { name: 'Arabic title' }), 'بانر رئيسي');
+    expect(within(bannerDialog).getByText(/Desktop ratio: 20:7/)).toBeVisible();
+    expect(within(bannerDialog).getByText(/Mobile ratio: 19:23/)).toBeVisible();
     await userEvent.click(within(bannerDialog).getByRole('button', { name: 'Choose Roller' }));
     await userEvent.type(within(bannerDialog).getByRole('textbox', { name: 'Horizontal screen image' }), 'https://cdn.example.com/new-banner.jpg');
     await userEvent.type(within(bannerDialog).getByRole('textbox', { name: 'Vertical screen image' }), 'https://cdn.example.com/new-banner-portrait.jpg');

@@ -31,8 +31,8 @@ describe('FooterContactLink', () => {
   });
 
   it('loads the owned animated icon near the footer and responds to hover and focus', async () => {
-    render(<FooterContactLink icon="phone" href="tel:+213778810360">0778 81 03 60</FooterContactLink>);
-    const link = screen.getByRole('link', { name: '0778 81 03 60' });
+    render(<FooterContactLink icon="phone" href="tel:+213795342826">0795 34 28 26</FooterContactLink>);
+    const link = screen.getByRole('link', { name: '0795 34 28 26' });
 
     await waitFor(() => expect(screen.getByTestId('animated-phone')).toBeVisible());
     fireEvent.mouseEnter(link);
@@ -45,8 +45,8 @@ describe('FooterContactLink', () => {
 
   it('does not start decorative motion when reduced motion is requested', async () => {
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }));
-    render(<FooterContactLink icon="phone" href="tel:+213778810360">0778 81 03 60</FooterContactLink>);
-    const link = screen.getByRole('link', { name: '0778 81 03 60' });
+    render(<FooterContactLink icon="phone" href="tel:+213795342826">0795 34 28 26</FooterContactLink>);
+    const link = screen.getByRole('link', { name: '0795 34 28 26' });
 
     await waitFor(() => expect(screen.getByTestId('animated-phone')).toBeVisible());
     fireEvent.mouseEnter(link);

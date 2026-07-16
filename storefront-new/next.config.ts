@@ -3,6 +3,7 @@ import createNextIntlPlugin from "next-intl/plugin";
 import { withSentryConfig } from '@sentry/nextjs';
 
 import { getStorefrontRemoteImagePatterns } from './lib/product-images';
+import { getAllowedDevOrigins } from './lib/dev-origins';
 
 const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 
@@ -10,7 +11,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   cacheComponents: true,
   typedRoutes: true,
-  allowedDevOrigins: ['127.0.0.1'],
+  allowedDevOrigins: getAllowedDevOrigins(),
   images: {
     formats: ['image/avif', 'image/webp'],
     qualities: [60, 75],

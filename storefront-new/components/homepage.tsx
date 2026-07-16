@@ -8,8 +8,8 @@ import type { Locale } from '@/i18n/config';
 import { formatProductPrice, parseProductPrice } from '@/lib/product-presentation';
 
 const copy = {
-  fr: { top: 'Top produits', topLead: 'Les outils les plus appréciés en ce moment.', categories: 'Acheter par catégorie', categoriesLead: 'Trouvez plus vite ce qu’il vous faut.', featured: 'Nos sélections', brands: 'Nos marques', cards: 'Bien choisir pour mieux travailler', add: 'Ajouter au panier', view: 'Voir le produit', delivery: 'Livraison partout en Algérie', payment: 'Paiement à la livraison', help: 'Conseil par téléphone' },
-  ar: { top: 'أفضل المنتجات', topLead: 'الأدوات الأكثر طلباً في الوقت الحالي.', categories: 'تسوق حسب الفئة', categoriesLead: 'اعثر بسرعة على ما تحتاجه.', featured: 'اختياراتنا', brands: 'علاماتنا', cards: 'الاختيار الصحيح لعمل أفضل', add: 'أضف إلى السلة', view: 'عرض المنتج', delivery: 'توصيل إلى كل ولايات الجزائر', payment: 'الدفع عند الاستلام', help: 'نصيحة عبر الهاتف' },
+  fr: { top: 'Top produits', categories: 'Acheter par catégorie', featured: 'Nos sélections', brands: 'Nos marques', cards: 'Bien choisir pour mieux travailler', add: 'Ajouter au panier', view: 'Voir le produit', delivery: 'Livraison partout en Algérie', payment: 'Paiement à la livraison', help: 'Conseil par téléphone', unavailable: 'Nos produits sont momentanément indisponibles. Veuillez réessayer dans quelques instants.' },
+  ar: { top: 'أفضل المنتجات', categories: 'تسوق حسب الفئة', featured: 'اختياراتنا', brands: 'علاماتنا', cards: 'الاختيار الصحيح لعمل أفضل', add: 'أضف إلى السلة', view: 'عرض المنتج', delivery: 'توصيل إلى كل ولايات الجزائر', payment: 'الدفع عند الاستلام', help: 'نصيحة عبر الهاتف', unavailable: 'منتجاتنا غير متاحة مؤقتًا. يرجى المحاولة مرة أخرى بعد قليل.' },
 } as const;
 
 function SectionHeading({ title, lead }: { title: string; lead?: string }) {
@@ -38,13 +38,15 @@ function EditorialCards({ cards, locale }: { cards: StorefrontHomepageResponse['
 
 export function Homepage({ data, locale }: { data: StorefrontHomepageResponse; locale: Locale }) {
   const text = copy[locale];
+  const hasMerchandising = Object.values(data).some((items) => items.length > 0);
   return <div className="home-page home-production"><h1 className="sr-only">{locale === 'ar' ? 'بريكوميتر، أدوات ومعدات لكل أعمالكم' : 'Bricomaitre, outils et matériel pour tous vos travaux'}</h1>
     <HomepageBannerCarousel banners={data.banners} locale={locale} />
     <TrustSignals locale={locale} />
-    {data.topProducts.length ? <section className="home-section"><SectionHeading title={text.top} lead={text.topLead} /><HomepageProductCarousel products={data.topProducts} locale={locale} brands={data.brands} categories={data.categories} /></section> : null}
-    {data.categories.length ? <section className="home-section"><SectionHeading title={text.categories} lead={text.categoriesLead} /><HomepageCategoryCarousel categories={data.categories} locale={locale} /></section> : null}
+    {!hasMerchandising ? <section className="home-section home-unavailable" role="status"><p>{text.unavailable}</p></section> : null}
+    {data.topProducts.length ? <section className="home-section"><SectionHeading title={text.top} /><HomepageProductCarousel products={data.topProducts} locale={locale} brands={data.brands} categories={data.categories} /></section> : null}
+    {data.categories.length ? <section className="home-section"><SectionHeading title={text.categories} /><HomepageCategoryCarousel categories={data.categories} locale={locale} /></section> : null}
     <EditorialCards cards={data.productCards} locale={locale} />
     {data.brands.length ? <section className="home-section home-brand-section"><SectionHeading title={text.brands} /><div className="home-brand-band"><HomepageBrandCarousel brands={data.brands} locale={locale} /></div></section> : null}
-    {data.featuredGroups.length ? <section className="home-featured-groups" aria-label={text.featured}>{data.featuredGroups.map((group) => <section className="home-section" key={group.id}><header className="home-section-heading"><div><h2>{locale === 'ar' && group.nameAr ? group.nameAr : group.name}</h2></div>{group.cta && group.link ? <a href={localizeHomepageLink(group.link, locale)}>{locale === 'ar' && group.ctaAr ? group.ctaAr : group.cta}</a> : null}</header><HomepageProductCarousel products={group.products} locale={locale} brands={data.brands} categories={data.categories} /></section>)}</section> : null}
+    {data.featuredGroups.length ? <section className="home-featured-groups" aria-label={text.featured}>{data.featuredGroups.map((group) => <section className="home-section" key={group.id}><header className="home-section-heading home-featured-heading"><div><h2>{locale === 'ar' && group.nameAr ? group.nameAr : group.name}</h2></div></header><HomepageProductCarousel products={group.products} locale={locale} brands={data.brands} categories={data.categories} featuredGroupId={group.id} />{group.cta && group.link ? <a className="home-featured-cta" href={localizeHomepageLink(group.link, locale)}>{locale === 'ar' && group.ctaAr ? group.ctaAr : group.cta}</a> : null}</section>)}</section> : null}
   </div>;
 }

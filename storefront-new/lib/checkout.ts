@@ -5,6 +5,8 @@ import {
   type StorefrontOrderCreateRequest,
 } from '@bric/storefront-core/contracts';
 import { z } from 'zod';
+import type { StorefrontOrderMarketing } from '@bric/storefront-core/marketing-contracts';
+import { META_SEMANTICS_VERSION } from '@bric/storefront-core/meta-contracts';
 
 import type { CartItem } from '@/lib/cart';
 
@@ -75,6 +77,7 @@ export function buildCheckoutOrderPayload(options: {
   cartProducts: string[];
   journeyId: string | null;
   sessionId: string | null;
+  marketing?: StorefrontOrderMarketing;
 }): StorefrontOrderCreateRequest {
   return storefrontOrderCreateRequestSchema.parse({
     firstName: options.form.firstName,
@@ -92,6 +95,14 @@ export function buildCheckoutOrderPayload(options: {
     visitId: null,
     journeyId: options.journeyId,
     sessionId: options.sessionId,
+    ...(options.marketing ? {
+      marketing: options.marketing,
+      meta: {
+        semanticsVersion: META_SEMANTICS_VERSION,
+        leadEventId: options.marketing.eventId,
+        eventSourceUrl: options.marketing.eventSourceUrl,
+      },
+    } : {}),
   });
 }
 
@@ -106,6 +117,7 @@ const checkoutConfirmationSchema = z.object({
   cartMode: z.enum(['cart', 'direct']),
   stateName: z.string().nullable(),
   createdAt: z.string().datetime({ offset: true }),
+  purchaseEventId: z.string().min(1).max(120).nullable().default(null),
 });
 
 const checkoutDraftSchema = z.object({

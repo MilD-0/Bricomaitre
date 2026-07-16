@@ -11,6 +11,8 @@ import {
   storefrontOrderMetaResponseSchema,
   storefrontOrderMetaSchema,
 } from './meta-contracts';
+import { storefrontOrderMarketingSchema } from './marketing-contracts';
+import { toStorefrontContactSettings } from './settings';
 
 const isoTimestampSchema = z.string().datetime({ offset: true });
 const optionalNumericFilter = z.union([z.coerce.number().int().positive(), z.literal(''), z.null(), z.undefined()]).transform((value) => {
@@ -43,6 +45,18 @@ export const storefrontProductListQuerySchema = productListQuerySchema.extend({
 
 export const storefrontOrderCreateRequestSchema = storefrontOrderCreateSchema.extend({
   meta: storefrontOrderMetaSchema.optional(),
+  marketing: storefrontOrderMarketingSchema.optional(),
+}).superRefine((value, context) => {
+  if (value.meta && value.marketing && (
+    value.meta.leadEventId !== value.marketing.eventId
+    || value.meta.eventSourceUrl !== value.marketing.eventSourceUrl
+  )) {
+    context.addIssue({
+      code: 'custom',
+      path: ['marketing', 'eventId'],
+      message: 'Meta and multi-destination order events must share identity and source.',
+    });
+  }
 });
 export const storefrontOrderPatchRequestSchema = storefrontOrderPatchSchema;
 
@@ -205,6 +219,19 @@ export const storefrontAssetsResponseSchema = z.object({
   })),
 });
 
+export const storefrontSettingsResponseSchema = z.object({
+  phoneDisplay: z.string().min(1),
+  phoneHref: z.string().startsWith('tel:+'),
+  phoneEnabled: z.boolean(),
+});
+
+export const defaultStorefrontSettingsResponse = storefrontSettingsResponseSchema.parse(
+  toStorefrontContactSettings({
+    contactPhone: '0795342826',
+    phoneEnabled: true,
+  }),
+);
+
 export const storefrontHomepageResponseSchema = z.object({
   banners: storefrontAssetsResponseSchema.shape.banners,
   topProducts: z.array(storefrontProductResponseItemSchema),
@@ -216,6 +243,16 @@ export const storefrontHomepageResponseSchema = z.object({
   featuredGroups: z.array(storefrontAssetsResponseSchema.shape.featuredGroups.element.extend({
     products: z.array(storefrontProductResponseItemSchema),
   })),
+});
+
+export const storefrontHomepageFeaturedGroupProductsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().min(1).max(24).default(12),
+});
+
+export const storefrontHomepageFeaturedGroupProductsResponseSchema = z.object({
+  items: z.array(storefrontProductResponseItemSchema),
+  total: z.number().int().nonnegative(),
 });
 
 export const storefrontEcotrackCatalogResponseSchema = z.object({
@@ -331,7 +368,10 @@ export type StorefrontProductsResponse = z.infer<typeof storefrontProductsRespon
 export type StorefrontBrandsResponse = z.infer<typeof storefrontBrandsResponseSchema>;
 export type StorefrontCategoriesResponse = z.infer<typeof storefrontCategoriesResponseSchema>;
 export type StorefrontAssetsResponse = z.infer<typeof storefrontAssetsResponseSchema>;
+export type StorefrontSettingsResponse = z.infer<typeof storefrontSettingsResponseSchema>;
 export type StorefrontHomepageResponse = z.infer<typeof storefrontHomepageResponseSchema>;
+export type StorefrontHomepageFeaturedGroupProductsQuery = z.infer<typeof storefrontHomepageFeaturedGroupProductsQuerySchema>;
+export type StorefrontHomepageFeaturedGroupProductsResponse = z.infer<typeof storefrontHomepageFeaturedGroupProductsResponseSchema>;
 export type StorefrontEcotrackCatalogResponse = z.infer<typeof storefrontEcotrackCatalogResponseSchema>;
 export type StorefrontProductDetailResponse = z.infer<typeof storefrontProductDetailResponseSchema>;
 export type StorefrontOrderCreateRequest = z.infer<typeof storefrontOrderCreateRequestSchema>;

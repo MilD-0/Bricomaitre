@@ -5,9 +5,11 @@ import { Suspense } from 'react';
 
 import { CheckoutForm } from '@/components/checkout-form';
 import { PageShell } from '@/components/page-shell';
+import { CheckoutPageSkeleton } from '@/components/storefront-skeletons';
 import { isLocale } from '@/i18n/config';
 import { parseProductPrice } from '@/lib/product-presentation';
-import { getStorefrontEcotrackCatalog, getStorefrontProductDetail } from '@/lib/storefront-api';
+import { getStorefrontEcotrackCatalog, getStorefrontProductDetail, getStorefrontSettings } from '@/lib/storefront-api';
+import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 export const metadata: Metadata = {
   title: 'Checkout',
@@ -21,7 +23,7 @@ type CheckoutPageProps = {
 
 export default function CheckoutPage(props: CheckoutPageProps) {
   return (
-    <Suspense fallback={<div className="checkout-loading" aria-busy="true" />}>
+    <Suspense fallback={<CheckoutPageSkeleton />}>
       <CheckoutPageContent {...props} />
     </Suspense>
   );
@@ -30,9 +32,10 @@ export default function CheckoutPage(props: CheckoutPageProps) {
 export async function CheckoutPageContent({ params, searchParams }: CheckoutPageProps) {
   const [{ locale }, query] = await Promise.all([params, searchParams]);
   if (!isLocale(locale)) notFound();
-  const [t, catalog] = await Promise.all([
+  const [t, catalog, contact] = await Promise.all([
     getTranslations({ locale, namespace: 'Checkout' }),
     getStorefrontEcotrackCatalog().catch(() => ({ wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null })),
+    getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse),
   ]);
   const rawProduct = Array.isArray(query.product) ? query.product[0] : query.product;
   const rawQuantity = Array.isArray(query.quantity) ? query.quantity[0] : query.quantity;
@@ -65,6 +68,7 @@ export async function CheckoutPageContent({ params, searchParams }: CheckoutPage
           requiredError: t('requiredError'), emailError: t('emailError'), submitError: t('submitError'), retry: t('retry'), savedAttempt: t('savedAttempt'),
           trustPhone: t('trustPhone'), trustPayment: t('trustPayment'), trustDelivery: t('trustDelivery'),
         }}
+        support={{ contact, labels: { title: t('supportTitle'), description: t('supportDescription'), call: t('supportCall') } }}
       />
     </PageShell>
   );

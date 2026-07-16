@@ -118,7 +118,7 @@ describe('ProductMedia', () => {
     expect(screen.getByRole('img', { name: 'Desk Lamp — Photo 2' })).toHaveAttribute('src', '/two.jpg');
     expect(screen.getByRole('button', { name: 'Photo 2' })).toHaveAttribute('aria-pressed', 'true');
     expect(haptics.prepare).toHaveBeenCalledOnce();
-    expect(haptics.trigger).toHaveBeenCalledWith('selection');
+    expect(haptics.trigger).toHaveBeenCalledWith('control');
   });
 
   it('reserves the media stage and describes the empty state', () => {
@@ -163,7 +163,7 @@ describe('ProductMedia', () => {
       productId: 12,
       metadata: { mediaAction: 'open', mediaIndex: 1, mediaCount: 2 },
     }));
-    expect(haptics.trigger).toHaveBeenCalledWith('light');
+    expect(haptics.trigger).toHaveBeenCalledWith('surface');
   });
 
   it('destroys the lightbox when the interaction island unmounts', async () => {

@@ -25,7 +25,17 @@ export async function POST(request: NextRequest) {
   try {
     const upstream = await fetchStorefrontUpstream('/storefront/orders', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey },
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': idempotencyKey,
+        'x-storefront-meta-proxy-secret': process.env.STOREFRONT_META_PROXY_SECRET ?? '',
+        'x-real-ip': request.headers.get('x-real-ip') ?? '',
+        'x-forwarded-for': request.headers.get('x-forwarded-for') ?? '',
+        'user-agent': request.headers.get('user-agent') ?? '',
+        cookie: request.headers.get('cookie') ?? '',
+        origin: request.headers.get('origin') ?? '',
+        host: request.headers.get('host') ?? '',
+      },
       body,
       cache: 'no-store',
       timeoutMs: 10_000,

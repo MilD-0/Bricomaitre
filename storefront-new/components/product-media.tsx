@@ -163,7 +163,7 @@ export function ProductMedia({ items, productName, analytics, labels }: ProductM
         y: event.clientY,
       });
       if (opened) {
-        void triggerHaptic('light');
+        void triggerHaptic('surface');
         trackMedia('open', activeIndex);
       }
     } catch {
@@ -199,7 +199,7 @@ export function ProductMedia({ items, productName, analytics, labels }: ProductM
             />
             <span className="product-media-zoom-label" aria-hidden="true">
               <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5M10.5 7.5v6M7.5 10.5h6" /></svg>
-              {labels.zoom}
+              <span className="product-media-zoom-text">{labels.zoom}</span>
             </span>
           </a>
         ) : (
@@ -220,7 +220,7 @@ export function ProductMedia({ items, productName, analytics, labels }: ProductM
               onClick={() => {
                 if (index === activeIndex) return;
                 setActiveIndex(index);
-                void triggerHaptic('selection');
+                void triggerHaptic('control');
               }}
             >
               <StorefrontImage
@@ -245,19 +245,19 @@ export function ProductMedia({ items, productName, analytics, labels }: ProductM
             direction={analytics.locale === 'ar' ? 'rtl' : 'ltr'}
             labels={labels}
             onClose={() => {
-              void triggerHaptic('light');
+              void triggerHaptic('surface');
               lightboxRef.current?.pswp?.close();
             }}
             onZoom={() => {
-              void triggerHaptic('light');
+              void triggerHaptic('surface');
               lightboxRef.current?.pswp?.toggleZoom();
             }}
             onPrevious={() => {
-              void triggerHaptic('selection');
+              void triggerHaptic('control');
               lightboxRef.current?.pswp?.prev();
             }}
             onNext={() => {
-              void triggerHaptic('selection');
+              void triggerHaptic('control');
               lightboxRef.current?.pswp?.next();
             }}
           />

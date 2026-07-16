@@ -12,6 +12,7 @@ const { revalidateServerTagsMock } = vi.hoisted(() => ({
 vi.mock('@bric/storefront-core/server-cache', () => ({
   CACHE_TAGS: {
     assets: 'assets',
+    storefrontSettings: 'storefront-settings',
   },
   revalidateServerTags: revalidateServerTagsMock,
 }));
@@ -51,5 +52,22 @@ describe('app/api/internal/revalidate/route', () => {
     expect(response.status).toBe(200);
     expect(revalidateServerTagsMock).toHaveBeenCalledWith('assets');
     await expect(response.json()).resolves.toEqual({ ok: true, revalidated: ['assets'] });
+  });
+
+  it('revalidates storefront settings independently', async () => {
+    const body = JSON.stringify({ scope: 'settings' });
+    const timestamp = String(Date.now());
+    const signature = signInternalRequest(body, 'revalidate-secret', timestamp);
+    const response = await POST(new NextRequest('http://localhost/api/internal/revalidate', {
+      method: 'POST',
+      body,
+      headers: {
+        'x-revalidate-timestamp': timestamp,
+        'x-revalidate-signature': signature,
+      },
+    }));
+
+    expect(revalidateServerTagsMock).toHaveBeenCalledWith('storefront-settings');
+    await expect(response.json()).resolves.toEqual({ ok: true, revalidated: ['storefront-settings'] });
   });
 });

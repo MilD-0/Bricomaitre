@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { CatalogCard, type CatalogCardLabels, type CatalogProduct } from '@/components/catalog-card';
+import { CatalogCardSkeleton } from '@/components/storefront-skeletons';
 import type { Locale } from '@/i18n/config';
 import { trackCatalogEvent } from '@/lib/analytics';
 import { buildCatalogApiPath, type CatalogPageQuery } from '@/lib/catalog-query';
@@ -17,6 +18,18 @@ type StoredCatalogState = {
 
 const MAX_PERSISTED_ITEMS = 240;
 
+function uniqueCatalogProducts(items: unknown[], excludedIds: Iterable<number> = []) {
+  const seenIds = new Set(excludedIds);
+
+  return items.filter((item): item is CatalogProduct => {
+    if (!item || typeof item !== 'object' || !Number.isInteger((item as CatalogProduct).id)) return false;
+    const id = (item as CatalogProduct).id;
+    if (seenIds.has(id)) return false;
+    seenIds.add(id);
+    return true;
+  });
+}
+
 function getStorageKey() {
   const url = new URL(window.location.href);
   url.searchParams.delete('page');
@@ -28,7 +41,7 @@ function readStoredState(): StoredCatalogState | null {
     const value = JSON.parse(window.sessionStorage.getItem(getStorageKey()) ?? 'null') as Partial<StoredCatalogState> | null;
     if (!value || !Array.isArray(value.items) || !Number.isInteger(value.page) || typeof value.hasNextPage !== 'boolean' || !Number.isInteger(value.totalCount)) return null;
     return {
-      items: value.items.filter((item): item is CatalogProduct => Boolean(item && Number.isInteger(item.id))).slice(0, MAX_PERSISTED_ITEMS),
+      items: uniqueCatalogProducts(value.items).slice(0, MAX_PERSISTED_ITEMS),
       page: value.page as number,
       hasNextPage: value.hasNextPage,
       totalCount: value.totalCount as number,
@@ -77,18 +90,23 @@ export function CatalogInfiniteLoader({
   const sentinelRef = useRef<HTMLDivElement>(null);
   const restoringRef = useRef(true);
   const loadingRef = useRef(false);
+  const pageRef = useRef(query.page);
+  const hasNextPageRef = useRef(initialHasNextPage);
 
   useEffect(() => {
     const previousRestoration = history.scrollRestoration;
     history.scrollRestoration = 'manual';
     const stored = readStoredState();
     if (!stored || stored.page < query.page || stored.totalCount !== totalCount) {
+      pageRef.current = query.page;
+      hasNextPageRef.current = initialHasNextPage;
       restoringRef.current = false;
       return () => { history.scrollRestoration = previousRestoration; };
     }
 
-    const initialIds = new Set(initialProductIds);
-    setItems(stored.items.filter((item) => !initialIds.has(item.id)));
+    pageRef.current = stored.page;
+    hasNextPageRef.current = stored.hasNextPage;
+    setItems(uniqueCatalogProducts(stored.items, initialProductIds));
     setPage(stored.page);
     setHasNextPage(stored.hasNextPage);
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -97,7 +115,7 @@ export function CatalogInfiniteLoader({
     }));
 
     return () => { history.scrollRestoration = previousRestoration; };
-  }, [initialProductIds, query.page, totalCount]);
+  }, [initialHasNextPage, initialProductIds, query.page, totalCount]);
 
   useEffect(() => {
     let frame = 0;
@@ -130,11 +148,11 @@ export function CatalogInfiniteLoader({
   }, [hasNextPage, items, page, totalCount]);
 
   const loadNextPage = useCallback(async () => {
-    if (loadingRef.current || !hasNextPage) return;
+    if (loadingRef.current || !hasNextPageRef.current) return;
     loadingRef.current = true;
     setLoading(true);
     setError(false);
-    const nextPage = page + 1;
+    const nextPage = pageRef.current + 1;
     try {
       const response = await fetch(buildCatalogApiPath(query, nextPage, pageSize), { headers: { accept: 'application/json' } });
       if (!response.ok) throw new Error('catalog page unavailable');
@@ -142,9 +160,19 @@ export function CatalogInfiniteLoader({
       if (!Array.isArray(payload.items) || payload.page !== nextPage || typeof payload.hasNextPage !== 'boolean') {
         throw new Error('invalid catalog page');
       }
-      const existingIds = new Set([...initialProductIds, ...items.map((item) => item.id)]);
-      const nextItems = payload.items.filter((item) => item && Number.isInteger(item.id) && !existingIds.has(item.id));
-      setItems((current) => [...current, ...nextItems]);
+      const nextItems = uniqueCatalogProducts(payload.items, [
+        ...initialProductIds,
+        ...items.map((item) => item.id),
+      ]);
+      setItems((current) => [
+        ...current,
+        ...uniqueCatalogProducts(nextItems, [
+          ...initialProductIds,
+          ...current.map((item) => item.id),
+        ]),
+      ]);
+      pageRef.current = nextPage;
+      hasNextPageRef.current = payload.hasNextPage;
       setPage(nextPage);
       setHasNextPage(payload.hasNextPage);
       void trackCatalogEvent({
@@ -164,7 +192,7 @@ export function CatalogInfiniteLoader({
       loadingRef.current = false;
       setLoading(false);
     }
-  }, [hasNextPage, initialProductIds, items, listContext, locale, page, pageSize, query]);
+  }, [initialProductIds, items, listContext, locale, pageSize, query]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -189,6 +217,7 @@ export function CatalogInfiniteLoader({
           labels={labels}
         />
       ))}
+      {loading ? <><CatalogCardSkeleton /><CatalogCardSkeleton /></> : null}
       <div className="catalog-infinite-sentinel" ref={sentinelRef} aria-live="polite">
         {hasNextPage ? (
           <button type="button" className="catalog-load-more" onClick={() => void loadNextPage()} disabled={loading}>

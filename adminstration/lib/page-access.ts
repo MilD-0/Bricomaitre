@@ -10,6 +10,7 @@ import {
   canAccessStats,
   getDefaultAuthorizedHref,
 } from './navigation-access';
+import { canManageSettings } from './permissions';
 
 export async function requireAllowedAppUser(locale: string) {
   const session = await auth();
@@ -125,6 +126,21 @@ export async function requireDeveloperPageAccess(locale: string) {
   const session = await requireAllowedAppUser(locale);
 
   if (session.user.role !== 'developer') {
+    redirect(getDefaultAuthorizedHref({
+      isAllowed: session.user.isAllowed,
+      locale,
+      permissions: session.user.permissions,
+      role: session.user.role,
+    }));
+  }
+
+  return session;
+}
+
+export async function requireStorefrontSettingsPageAccess(locale: string) {
+  const session = await requireAllowedAppUser(locale);
+
+  if (!canManageSettings(session.user.permissions)) {
     redirect(getDefaultAuthorizedHref({
       isAllowed: session.user.isAllowed,
       locale,

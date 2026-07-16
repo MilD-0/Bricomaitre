@@ -4,6 +4,7 @@
     "checkout": "الدفع",
     "cart": "السلة",
     "categories": "الأصناف",
+    "brands": "العلامات التجارية",
     "closeMenu": "إغلاق القائمة",
     "collections": "المجموعات",
     "home": "الرئيسية",
@@ -37,6 +38,8 @@
     "footerAbout": "الأدوات والمعدات التي تحتاجها، بطلب بسيط ومرافقة بشرية.",
     "footerBrowseTitle": "تصفح",
     "footerContactTitle": "تواصل معنا",
+    "drawerSupportTitle": "هل تحتاج إلى مساعدة؟",
+    "supportCall": "اتصل بنا",
     "footerRights": "جميع الحقوق محفوظة."
   },
   "Home": {
@@ -58,6 +61,7 @@
     "applyFilters": "تطبيق الفلاتر",
     "brandLabel": "العلامة",
     "categoryLabel": "الصنف",
+    "closeFilters": "إغلاق الفلاتر",
     "controls": "البحث وتصفية المنتجات",
     "description": "اعثر بسرعة على الأداة أو المادة المناسبة لأعمالك.",
     "emptyDescription": "جرّب كلمة أخرى أو أزل أحد الفلاتر لعرض منتجات أكثر.",
@@ -123,14 +127,18 @@
     "similarEyebrow": "لنفس العمل",
     "similarTitle": "منتجات مشابهة",
     "trustConfirmation": "تأكيد الطلب عبر الهاتف",
-    "trustDelivery": "التوصيل متوفر إلى جميع ولايات الجزائر",
+    "trustDelivery": "التوصيل إلى كل الجزائر · حوالي 800 دج",
     "trustPayment": "الدفع عند الاستلام",
+    "trustReturns": "إرجاع مجاني قبل فتح الطرد",
     "trustTitle": "معلومات الطلب",
     "unavailableAction": "لا يمكن طلب هذا المنتج حالياً.",
     "unavailableDescription": "خدمة المنتجات بطيئة أو غير متاحة مؤقتاً. سلتك وطلباتك غير متأثرة.",
     "unavailableEyebrow": "الخدمة غير متاحة مؤقتاً",
     "unavailableTitle": "تعذر تحميل المنتج",
     "zoomImage": "تكبير الصورة"
+    ,"supportTitle": "هل لديك سؤال قبل الطلب؟"
+    ,"supportDescription": "فريقنا جاهز لمساعدتك بسرعة."
+    ,"supportCall": "اتصل بنا"
   },
   "Collection": {
     "description": "المجموعة تمثل نية محددة: صنف، علامة، مجموعة من الادارة، او حملة. وهي اكثر تنظيما ومناسبة للسيو من صفحة عرض حرة.",
@@ -185,6 +193,9 @@
     "trustPayment": "الدفع عند الاستلام",
     "trustPhone": "تأكيد الطلب عبر الهاتف",
     "wilaya": "الولاية"
+    ,"supportTitle": "هل تحتاج إلى مساعدة لإتمام الطلب؟"
+    ,"supportDescription": "اتصل بنا، فريقنا جاهز لمساعدتك."
+    ,"supportCall": "اتصل بنا"
   },
   "ThankYou": {
     "address": "العنوان",
@@ -213,5 +224,8 @@
     "unavailableTitle": "تعذر التحقق من هذا الطلب",
     "verifying": "جار التحقق من طلبك…",
     "wilaya": "الولاية"
+    ,"supportTitle": "هل لديك سؤال حول طلبك؟"
+    ,"supportDescription": "فريقنا متاح لمساعدتك."
+    ,"supportCall": "اتصل بنا"
   }
 }

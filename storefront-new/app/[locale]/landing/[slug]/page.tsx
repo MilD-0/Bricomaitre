@@ -15,7 +15,8 @@ export async function generateMetadata({ params }: LandingPageProps): Promise<Me
 
   return {
     title: `Landing ${slug}`,
-    description: "Admin-created Bricomaitre landing page foundation."
+    description: "Admin-created Bricomaitre landing page foundation.",
+    robots: { index: false, follow: false },
   };
 }
 
