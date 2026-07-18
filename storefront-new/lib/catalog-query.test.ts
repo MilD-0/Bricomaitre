@@ -14,17 +14,19 @@ describe('catalog query', () => {
       q: '  marteau  ',
       category: '3',
       brand: '2',
+      discounted: '1',
       sort: 'price-asc',
       page: '4',
     });
 
-    expect(query).toEqual({ q: 'marteau', category: 3, brand: 2, sort: 'price-asc', page: 4 });
+    expect(query).toEqual({ q: 'marteau', category: 3, brand: 2, discounted: true, sort: 'price-asc', page: 4 });
     expect(toStorefrontCatalogQuery(query)).toEqual({
       page: 4,
       limit: 24,
       search: 'marteau',
       categoryId: 3,
       brandId: 2,
+      discounted: true,
       id: null,
       mongoId: null,
       slug: null,
@@ -40,14 +42,14 @@ describe('catalog query', () => {
       brand: 'not-a-number',
       sort: 'delete-all',
       page: '0',
-    })).toEqual({ q: '', category: null, brand: null, sort: 'recommended', page: 1 });
+    })).toEqual({ q: '', category: null, brand: null, discounted: false, sort: 'recommended', page: 1 });
   });
 
   it('builds stable localized links and omits default parameters', () => {
-    const query = parseCatalogPageQuery({ q: 'perceuse', category: '3', sort: 'name-asc' });
-    expect(buildCatalogPath('fr', query, 2)).toBe('/fr/products?q=perceuse&category=3&sort=name-asc&page=2');
+    const query = parseCatalogPageQuery({ q: 'perceuse', category: '3', discounted: '1', sort: 'name-asc' });
+    expect(buildCatalogPath('fr', query, 2)).toBe('/fr/products?q=perceuse&category=3&discounted=1&sort=name-asc&page=2');
     expect(buildCatalogPath('ar', parseCatalogPageQuery())).toBe('/ar/products');
-    expect(buildCatalogApiPath(query, 2)).toBe('/api/catalog?q=perceuse&category=3&sort=name-asc&page=2');
+    expect(buildCatalogApiPath(query, 2)).toBe('/api/catalog?q=perceuse&category=3&discounted=1&sort=name-asc&page=2');
     expect(buildCatalogApiPath(parseCatalogPageQuery(), 1)).toBe('/api/catalog?page=1');
     expect(buildCatalogApiPath(parseCatalogPageQuery(), 2, 6)).toBe('/api/catalog?page=2&limit=6');
     expect(parseCatalogBatchSize('999')).toBe(24);
@@ -62,5 +64,6 @@ describe('catalog query', () => {
     });
     expect(buildCatalogPath('fr', query)).toBe('/fr/products');
     expect(buildCatalogPath('fr', parseCatalogPageQuery({ sort: 'newest' }))).toBe('/fr/products?sort=newest');
+    expect(buildCatalogPath('fr', parseCatalogPageQuery({ discounted: '1' }))).toBe('/fr/products?discounted=1');
   });
 });

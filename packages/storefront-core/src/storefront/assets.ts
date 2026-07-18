@@ -78,7 +78,7 @@ export async function readStorefrontAssets(db: Database) {
 export async function readStorefrontHomepage(db: Database) {
   const [assets, topProducts, categories, brands] = await Promise.all([
     readStorefrontAssets(db),
-    readStorefrontProducts(db, { page: 1, limit: 8, search: '', brandId: null, categoryId: null, id: null, mongoId: null, slug: null, sortKey: 'recommended', sortDirection: 'desc' }),
+    readStorefrontProducts(db, { page: 1, limit: 8, search: '', brandId: null, categoryId: null, discounted: false, id: null, mongoId: null, slug: null, sortKey: 'recommended', sortDirection: 'desc' }),
     readStorefrontCategories(db),
     readStorefrontBrands(db),
   ]);

@@ -51,6 +51,7 @@ export const navigationItems: NavigationItem[] = [
       { key: 'banners', href: '/assets#banners', translationKey: 'assetsManager.bannersTitle' },
       { key: 'productGroups', href: '/assets#product-groups', translationKey: 'assetsManager.groupsTitle' },
       { key: 'cards', href: '/assets#cards', translationKey: 'assetsManager.cardsTitle' },
+      { key: 'landingPages', href: '/landing-pages', translationKey: 'nav.landingPages' },
     ],
   },
   {

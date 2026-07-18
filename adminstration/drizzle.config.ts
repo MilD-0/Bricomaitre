@@ -4,6 +4,9 @@ export default defineConfig({
   dialect: "postgresql",
   schema: [
     "./db/schema/actionLogs.ts",
+    "../packages/db/src/schema/ai.ts",
+    "../packages/db/src/schema/bundles.ts",
+    "../packages/db/src/schema/landingPages.ts",
     "./db/schema/adCosts.ts",
     "./db/schema/adminReporting.ts",
     "./db/schema/analytics.ts",
@@ -21,6 +24,7 @@ export default defineConfig({
     "./db/schema/processedOrders.ts",
     "./db/schema/products.ts",
     "./db/schema/productPromoCodes.ts",
+    "../packages/db/src/schema/productKnowledge.ts",
     "./db/schema/roleDefinitions.ts",
     "./db/schema/shoppingLists.ts",
     "../packages/db/src/schema/storefrontSettings.ts",

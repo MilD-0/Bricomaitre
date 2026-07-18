@@ -88,6 +88,33 @@ export async function requireMutationAccess(resource: MutationResource) {
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }
 
+export async function requireAiAccess(permission: Extract<PermissionKey, `ai_${string}`>) {
+  const session = await auth();
+
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (!session.user.isAllowed) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const permissions = normalizePermissions(session.user.permissions);
+  if (!hasPermission(permissions, 'ai_use') || !hasPermission(permissions, permission)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  return null;
+}
+
+export async function requireAiUseAccess() {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!session.user.isAllowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const permissions = normalizePermissions(session.user.permissions);
+  return hasPermission(permissions, 'ai_use') ? null : NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+}
+
 export async function requireAppAccess() {
   const session = await auth();
 

@@ -103,4 +103,30 @@ describe('ProductActions', () => {
     expect(buyNow.querySelector('.product-buy-now-icon')).toBeInTheDocument();
     expect(buyNow.compareDocumentPosition(addToCart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  it('allows a focused campaign to suppress the secondary cart action', () => {
+    render(<ProductActions {...props} showAddToCart={false} />);
+    expect(screen.getByRole('button', { name: labels.buyNow })).toBeVisible();
+    expect(screen.queryByRole('button', { name: labels.addToCart })).not.toBeInTheDocument();
+  });
+
+  it('moves landing-page buyers into the inline form with their selected quantity', () => {
+    const orderSection = document.createElement('section');
+    orderSection.id = 'landing-order';
+    orderSection.innerHTML = '<input aria-label="Order phone" />';
+    orderSection.scrollIntoView = vi.fn();
+    document.body.append(orderSection);
+    const quantityEvents: Array<{ productId: number; quantity: number }> = [];
+    window.addEventListener('bric:landing-order-quantity', ((event: Event) => {
+      quantityEvents.push((event as CustomEvent<{ productId: number; quantity: number }>).detail);
+    }), { once: true });
+
+    render(<ProductActions {...props} buyNowTarget="#landing-order" />);
+    fireEvent.click(screen.getByRole('button', { name: labels.increase }));
+    fireEvent.click(screen.getByRole('button', { name: labels.buyNow }));
+
+    expect(quantityEvents).toEqual([{ productId: 12, quantity: 2 }]);
+    expect(orderSection.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    expect(window.location.hash).toBe('#landing-order');
+  });
 });

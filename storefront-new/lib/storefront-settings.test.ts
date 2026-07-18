@@ -17,7 +17,7 @@ describe('storefront contact settings', () => {
   it('rejects invalid phone numbers', () => {
     expect(storefrontSettingsInputSchema.safeParse({
       contactPhone: '123',
-      phoneEnabled: true,
+      phoneEnabled: false,
     }).success).toBe(false);
   });
 
@@ -25,10 +25,12 @@ describe('storefront contact settings', () => {
     expect(toStorefrontContactSettings({
       contactPhone: '0795342826',
       phoneEnabled: false,
+      aiAssistantEnabled: false,
     })).toEqual({
       phoneDisplay: '0795 34 28 26',
       phoneHref: 'tel:+213795342826',
-      phoneEnabled: false,
+      phoneEnabled: true,
+      aiAssistantEnabled: false,
     });
   });
 });

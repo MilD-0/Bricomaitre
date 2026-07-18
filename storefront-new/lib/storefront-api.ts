@@ -6,6 +6,7 @@ import {
   storefrontHomepageFeaturedGroupProductsQuerySchema,
   storefrontHomepageFeaturedGroupProductsResponseSchema,
   storefrontProductDetailResponseSchema,
+  storefrontReadOrderResponseSchema,
   storefrontProductListQuerySchema,
   storefrontProductsResponseSchema,
   storefrontSettingsResponseSchema,
@@ -18,18 +19,45 @@ import {
   type StorefrontProductDetailResponse,
   type StorefrontProductListQuery,
   type StorefrontProductsResponse,
+  type StorefrontOrderResponseItem,
   type StorefrontSettingsResponse,
 } from '@bric/storefront-core/contracts';
+import { landingPageLocaleSchema, landingPageSlugSchema, storefrontLandingPageResponseSchema, storefrontLandingPageSitemapResponseSchema, type StorefrontLandingPageResponse } from '@bric/storefront-core/landing-pages';
 import { cacheLife, cacheTag } from 'next/cache';
 
 import {
   getStorefrontProductCacheTag,
+  getStorefrontLandingPageCacheTag,
   STOREFRONT_NEW_CACHE_TAGS,
 } from './cache-tags';
 import {
   fetchStorefrontUpstream,
   StorefrontUpstreamError,
 } from './storefront-upstream';
+
+export async function fetchStorefrontLandingPage(locale: string, slug: string): Promise<StorefrontLandingPageResponse | null> {
+  const parsedLocale = landingPageLocaleSchema.parse(locale);
+  const parsedSlug = landingPageSlugSchema.parse(slug);
+  const pathname = `/storefront/landing-pages/${encodeURIComponent(parsedSlug)}?locale=${parsedLocale}`;
+  const response = await fetchStorefrontUpstream(pathname);
+  if (response.status === 404) return null;
+  return parseUpstreamJson(response, pathname, storefrontLandingPageResponseSchema);
+}
+
+export async function getStorefrontLandingPage(locale: string, slug: string) {
+  'use cache';
+  cacheLife({ stale: 30, revalidate: 120, expire: 600 });
+  cacheTag(STOREFRONT_NEW_CACHE_TAGS.landingPages, getStorefrontLandingPageCacheTag(locale, slug));
+  return fetchStorefrontLandingPage(locale, slug);
+}
+
+export async function getStorefrontSitemapLandingPages() {
+  'use cache';
+  cacheLife({ stale: 300, revalidate: 3600, expire: 86400 });
+  cacheTag(STOREFRONT_NEW_CACHE_TAGS.landingPages);
+  const pathname = '/storefront/landing-pages';
+  return parseUpstreamJson(await fetchStorefrontUpstream(pathname), pathname, storefrontLandingPageSitemapResponseSchema);
+}
 
 async function parseUpstreamJson<T>(
   response: Response,
@@ -85,6 +113,7 @@ export async function fetchStorefrontCatalog(
   if (query.search) params.set('search', query.search);
   if (query.brandId !== null) params.set('brandId', String(query.brandId));
   if (query.categoryId !== null) params.set('categoryId', String(query.categoryId));
+  if (query.discounted) params.set('discounted', '1');
   const pathname = `/storefront/products?${params.toString()}`;
   return parseUpstreamJson(await fetchStorefrontUpstream(pathname), pathname, storefrontProductsResponseSchema);
 }
@@ -140,6 +169,36 @@ export async function fetchStorefrontSettings(): Promise<StorefrontSettingsRespo
     pathname,
     storefrontSettingsResponseSchema,
   );
+}
+
+export async function fetchStorefrontOrder(
+  orderId: number,
+  publicToken: string,
+): Promise<StorefrontOrderResponseItem | null> {
+  if (!Number.isInteger(orderId) || orderId <= 0 || publicToken.trim().length < 20 || publicToken.trim().length > 200) {
+    return null;
+  }
+
+  const pathname = `/storefront/orders/${orderId}?token=${encodeURIComponent(publicToken.trim())}`;
+  const response = await fetchStorefrontUpstream(pathname, { cache: 'no-store', timeoutMs: 6_000 });
+  if (response.status === 404) return null;
+  const result = await parseUpstreamJson(response, pathname, storefrontReadOrderResponseSchema);
+  return result.item;
+}
+
+export async function fetchStorefrontOrderByToken(
+  publicToken: string,
+): Promise<StorefrontOrderResponseItem | null> {
+  const token = publicToken.trim();
+  if (token.length < 20 || token.length > 200) {
+    return null;
+  }
+
+  const pathname = `/storefront/orders/track/${encodeURIComponent(token)}`;
+  const response = await fetchStorefrontUpstream(pathname, { cache: 'no-store', timeoutMs: 6_000 });
+  if (response.status === 404) return null;
+  const result = await parseUpstreamJson(response, pathname, storefrontReadOrderResponseSchema);
+  return result.item;
 }
 
 export async function getStorefrontSettings() {

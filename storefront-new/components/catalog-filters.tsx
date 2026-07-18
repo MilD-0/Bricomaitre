@@ -26,6 +26,7 @@ export function CatalogFilters({
   brands,
   selectedCategory,
   selectedBrand,
+  discounted,
   search,
   sort,
   labels,
@@ -35,6 +36,7 @@ export function CatalogFilters({
   brands: FilterOption[];
   selectedCategory: number | null;
   selectedBrand: number | null;
+  discounted: boolean;
   search: string;
   sort: string;
   labels: CatalogFilterLabels;
@@ -42,7 +44,7 @@ export function CatalogFilters({
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const formId = `catalog-mobile-filters-${locale}`;
-  const activeCount = Number(selectedCategory !== null) + Number(selectedBrand !== null);
+  const activeCount = Number(selectedCategory !== null) + Number(selectedBrand !== null) + Number(discounted);
   const action = `/${locale}/products`;
 
   function close() {
@@ -60,6 +62,7 @@ export function CatalogFilters({
   const fields = (surface: 'rail' | 'sheet') => (
     <>
       {search ? <input type="hidden" name="q" value={search} /> : null}
+      {discounted ? <input type="hidden" name="discounted" value="1" /> : null}
       {sort !== 'recommended' ? <input type="hidden" name="sort" value={sort} /> : null}
       <FilterGroup title={labels.category} name="category" allLabel={labels.allCategories} options={categories} selected={selectedCategory} surface={surface} />
       <FilterGroup title={labels.brand} name="brand" allLabel={labels.allBrands} options={brands} selected={selectedBrand} surface={surface} />
@@ -78,7 +81,7 @@ export function CatalogFilters({
       >
         <SlidersHorizontal aria-hidden="true" size={18} />
         <span>{labels.title}</span>
-        {activeCount > 0 ? <b aria-label={`${activeCount}`}>{activeCount}</b> : null}
+        {activeCount > 0 ? <b className="catalog-mobile-filter-count" aria-label={`${activeCount}`}>{activeCount}</b> : null}
       </button>
 
       <div className="catalog-filter-rail">

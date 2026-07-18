@@ -13,6 +13,7 @@ const {
   mutateEntityWithHistoryMock,
   startProductCatalogFeedRefreshJobMock,
   revalidateStorefrontProductsMock,
+  revalidateStorefrontLandingPagesMock,
 } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
@@ -22,6 +23,7 @@ const {
   mutateEntityWithHistoryMock: vi.fn(),
   startProductCatalogFeedRefreshJobMock: vi.fn(),
   revalidateStorefrontProductsMock: vi.fn(),
+  revalidateStorefrontLandingPagesMock: vi.fn(),
 }));
 const { revalidateServerTagsMock, captureAdminExceptionMock } = vi.hoisted(() => ({
   revalidateServerTagsMock: vi.fn(),
@@ -52,6 +54,7 @@ vi.mock('../../../../../lib/background-jobs', () => ({
 
 vi.mock('../../../../../lib/storefront-revalidate', () => ({
   revalidateStorefrontProducts: revalidateStorefrontProductsMock,
+  revalidateStorefrontLandingPages: revalidateStorefrontLandingPagesMock,
 }));
 
 vi.mock('../../../../../lib/server-cache', () => ({
@@ -83,6 +86,8 @@ describe('app/api/products/[id]/route', () => {
     startProductCatalogFeedRefreshJobMock.mockResolvedValue({ kind: 'started', job: null });
     revalidateStorefrontProductsMock.mockReset();
     revalidateStorefrontProductsMock.mockResolvedValue(undefined);
+    revalidateStorefrontLandingPagesMock.mockReset();
+    revalidateStorefrontLandingPagesMock.mockResolvedValue(undefined);
     revalidateServerTagsMock.mockReset();
     captureAdminExceptionMock.mockReset();
   });
@@ -214,9 +219,16 @@ describe('app/api/products/[id]/route', () => {
       inventoryQuantity: 3,
       updatedAt: expect.any(Date),
     }));
+    expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
+      slug: 'updated-product',
+      updatedBy: 'admin@example.com',
+      updatedAt: expect.any(Date),
+    }));
+    expect(updateMock).toHaveBeenCalledTimes(2);
     expect(startProductCatalogFeedRefreshJobMock).toHaveBeenCalledWith('product:update', 'request-2');
     expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
     expect(revalidateStorefrontProductsMock).toHaveBeenCalledOnce();
+    expect(revalidateStorefrontLandingPagesMock).toHaveBeenCalledOnce();
     await expect(res.json()).resolves.toEqual({ ok: true });
   });
 

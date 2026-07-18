@@ -22,6 +22,31 @@ const product = {
   updatedAt: '2026-07-02T10:00:00.000Z',
 };
 
+function landingPage(locale) {
+  const ar = locale === 'ar';
+  return {
+    id: 4,
+    slug: 'lampe-atelier',
+    locale,
+    revision: 2,
+    publishedAt: '2026-07-18T00:00:00.000Z',
+    document: {
+      schemaVersion: 1,
+      theme: { accent: 'orange', density: 'comfortable', shell: 'campaign' },
+      seo: { title: ar ? 'مصباح العمل' : 'Lampe de travail pour atelier', description: ar ? 'إضاءة قوية وثابتة لأعمالك.' : 'Une lumière stable et puissante pour vos travaux.', indexable: false },
+      blocks: [
+        { id: 'hero', type: 'product-hero', variant: 'media-left', heading: ar ? 'أنِر كل مشروع' : 'Éclairez chaque chantier', subheading: ar ? 'إضاءة قوية ومدمجة للعمل اليومي.' : 'Une lumière puissante et compacte pour le travail quotidien.', imageUrl: null, imageAlt: ar ? 'مصباح العمل' : 'Lampe de travail', primaryCtaLabel: ar ? 'اطلب الآن' : 'Commander maintenant', showAddToCart: true },
+        { id: 'benefits', type: 'benefit-grid', variant: 'icons', heading: ar ? 'لماذا تختاره؟' : 'Pourquoi le choisir ?', items: [{ title: ar ? 'إضاءة قوية' : 'Lumière puissante', description: ar ? 'رؤية واضحة أثناء العمل.' : 'Une visibilité nette pendant le travail.', icon: 'power' }, { title: ar ? 'الدفع عند الاستلام' : 'Paiement à la livraison', description: ar ? 'ادفع عند استلام طلبك.' : 'Payez à la réception.', icon: 'payment' }, { title: ar ? 'توصيل سريع' : 'Livraison rapide', description: ar ? 'إلى جميع أنحاء الجزائر.' : 'Partout en Algérie.', icon: 'delivery' }] },
+        { id: 'details', type: 'media-feature', variant: 'media-right', heading: ar ? 'مصمم للعمل' : 'Pensée pour le travail', body: ar ? 'هيكل مدمج وسهل النقل.' : 'Un format compact, stable et facile à déplacer.', imageUrl: null, imageAlt: ar ? 'مصباح مدمج' : 'Lampe compacte', bullets: [] },
+        { id: 'specifications', type: 'specifications', variant: 'table', heading: ar ? 'المواصفات' : 'Caractéristiques', items: [{ label: ar ? 'المرجع' : 'Référence', value: 'DL-1' }] },
+        { id: 'faq', type: 'faq', variant: 'accordion', heading: ar ? 'أسئلة شائعة' : 'Questions fréquentes', items: [{ question: ar ? 'كيف يتم تأكيد الطلب؟' : 'Comment confirmer la commande ?', answer: ar ? 'نتصل بك عبر الهاتف.' : 'Nous vous appelons par téléphone.' }] },
+        { id: 'final', type: 'final-cta', variant: 'solid', heading: ar ? 'جاهز لإضاءة ورشتك؟' : 'Prêt à mieux éclairer votre atelier ?', body: ar ? 'اطلب الآن وادفع عند الاستلام.' : 'Commandez maintenant et payez à la livraison.', primaryCtaLabel: ar ? 'اطلب الآن' : 'Commander maintenant', imageUrl: null, imageAlt: '' },
+      ],
+    },
+    product,
+  };
+}
+
 const catalogProducts = [
   {
     id: 12,
@@ -386,6 +411,11 @@ const server = createServer((request, response) => {
     result = order && url.searchParams.get('token') === order.publicToken ? json({ item: order }) : json({ error: 'Not found' }, 404);
   } else if (url.pathname === '/storefront/homepage') {
     result = json(homepage());
+  } else if (url.pathname === '/storefront/landing-pages/lampe-atelier') {
+    const locale = url.searchParams.get('locale');
+    result = locale === 'fr' || locale === 'ar' ? json(landingPage(locale)) : json({ error: 'Invalid locale' }, 400);
+  } else if (url.pathname === '/storefront/landing-pages') {
+    result = json({ items: [] });
   } else if (url.pathname === '/storefront/products') {
     const search = url.searchParams.get('search') ?? '';
     const brandId = Number(url.searchParams.get('brandId')) || null;

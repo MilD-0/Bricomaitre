@@ -2413,3 +2413,60 @@ describe('OrdersManager', () => {
     expect(toastMock.error).toHaveBeenCalledTimes(toastErrorCallCount);
     expect(toastMock.dismiss).toHaveBeenCalledWith('toast-id');
   });
+
+  it('copies the opaque storefront tracking URL from an order row action', async () => {
+    const item = {
+      id: 52,
+      publicToken: null,
+      createdAt: '2026-07-19T10:00:00.000Z',
+      updatedAt: '2026-07-19T10:00:00.000Z',
+      firstName: 'Track',
+      lastName: 'Order',
+      fullName: 'Track Order',
+      phoneNumber1: '0550000052',
+      phoneNumber2: null,
+      cartProducts: ['1'],
+      orderProducts: [],
+      delivery: 0,
+      state: 16,
+      city: 'Bab Ezzouar',
+      homeAddress: 'Street 52',
+      productSubtotal: 1000,
+      deliveryFee: 200,
+      totalAmount: 1200,
+      note: null,
+      confirmed: 0,
+      noAnswerCount: 0,
+      confirmedBy: null,
+      confirmedByName: null,
+      confirmedAt: null,
+      hasStatusHistory: false,
+      statusHistory: [],
+    };
+    const ordersResponse = {
+      writable: true,
+      items: [item],
+      pagination: { page: 1, limit: 25, totalItems: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false },
+    };
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    server.use(
+      http.get('/api/orders', () => HttpResponse.json(ordersResponse)),
+      http.get('/api/orders/overview', () => HttpResponse.json({ overview: { available: false, reportDay: null, timezone: 'Africa/Algiers' } })),
+      http.get('/api/ecotrack/catalog', () => HttpResponse.json({ wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null })),
+      http.get('/api/orders/export', () => HttpResponse.json({ job: null })),
+      http.get('/api/orders/ecotrack', () => HttpResponse.json({ job: null })),
+      http.post('/api/orders/52', () => HttpResponse.json({ ok: true, publicToken: 'secure-public-token-1234567890' })),
+    );
+
+    renderOrdersManager({
+      initialOrders: ordersResponse as never,
+      initialCatalog: { wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null },
+      initialOverview: { available: false, reportDay: null, timezone: 'Africa/Algiers' },
+    });
+    await userEvent.click((await screen.findAllByRole('button', { name: 'ordersManager.tracking.copy' })).at(-1)!);
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      'https://bricomaitre.com/fr/thank-you?token=secure-public-token-1234567890',
+    );
+    expect(toastMock.success).toHaveBeenCalledWith('ordersManager.tracking.success');
+  });

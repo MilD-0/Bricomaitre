@@ -15,17 +15,18 @@ export async function loadStorefrontSettings(): Promise<StorefrontSettingsInput>
     .select({
       contactPhone: storefrontSettings.contactPhone,
       phoneEnabled: storefrontSettings.phoneEnabled,
+      aiAssistantEnabled: storefrontSettings.aiAssistantEnabled,
     })
     .from(storefrontSettings)
     .limit(1);
 
-  return storefrontSettingsInputSchema.parse(stored ?? DEFAULT_STOREFRONT_SETTINGS);
+  return { ...storefrontSettingsInputSchema.parse(stored ?? DEFAULT_STOREFRONT_SETTINGS), phoneEnabled: true };
 }
 
 export async function saveStorefrontSettings(input: StorefrontSettingsInput) {
   if (!hasDb()) throw new Error('DATABASE_URL is not configured');
 
-  const values = storefrontSettingsInputSchema.parse(input);
+  const values = { ...storefrontSettingsInputSchema.parse(input), phoneEnabled: true };
   const [stored] = await getDb()
     .insert(storefrontSettings)
     .values({ id: 1, ...values, updatedAt: new Date() })
@@ -36,6 +37,7 @@ export async function saveStorefrontSettings(input: StorefrontSettingsInput) {
     .returning({
       contactPhone: storefrontSettings.contactPhone,
       phoneEnabled: storefrontSettings.phoneEnabled,
+      aiAssistantEnabled: storefrontSettings.aiAssistantEnabled,
     });
 
   return storefrontSettingsInputSchema.parse(stored);

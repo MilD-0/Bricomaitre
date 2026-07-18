@@ -53,6 +53,15 @@ type CategoryOption = { id: number; name: string; parentId: number | null };
 type PaginationMeta = { page: number; limit: number; totalItems: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean };
 type ProductsResponse = { items: ProductRecord[]; pagination: PaginationMeta };
 type ProductDetailResponse = { item: ProductRecord };
+type AiContentProposal = {
+  id: number;
+  status: 'proposed';
+  before: Partial<Pick<ProductPayload, 'title' | 'titleAr' | 'description' | 'descriptionAr'>>;
+  changes: Partial<Pick<ProductPayload, 'title' | 'titleAr' | 'description' | 'descriptionAr'>>;
+  reasoning: string | null;
+  expiresAt: string;
+  createdAt?: string;
+};
 type ProductsMetaResponse = { brands: BrandOption[]; categories: CategoryOption[] };
 type MutationMessages = { loading: string; success: string; error: string };
 type QuerySnapshot<T> = Array<[readonly unknown[], T | undefined]>;
@@ -292,6 +301,7 @@ function ProductDialogForm({
   mode,
   form,
   pending,
+  editingId,
   brandOptions,
   categoryOptions,
   onOpenChange,
@@ -301,6 +311,7 @@ function ProductDialogForm({
   mode: 'create' | 'edit';
   form: ReturnType<typeof useForm<ProductPayloadInput>>;
   pending: boolean;
+  editingId: number | null;
   brandOptions: BrandOption[];
   categoryOptions: CategoryOption[];
   onOpenChange: (open: boolean) => void;
@@ -336,6 +347,9 @@ function ProductDialogForm({
           }}
         >
           <FieldGroup className="grid gap-4 md:grid-cols-2">
+            {mode === 'edit' && editingId !== null ? (
+              <AiProductContentPanel productId={editingId} form={form} />
+            ) : null}
             <Field>
               <FieldLabel htmlFor="product-title">{t('labels.productName')}</FieldLabel>
               <Input id="product-title" placeholder={t('labels.productNamePlaceholder')} {...form.register('title')} />
@@ -564,6 +578,109 @@ function ProductDialogForm({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function AiProductContentPanel({
+  productId,
+  form,
+}: {
+  productId: number;
+  form: ReturnType<typeof useForm<ProductPayloadInput>>;
+}) {
+  const t = useTranslations();
+  const queryClient = useQueryClient();
+  const proposalsQuery = useQuery({
+    queryKey: ['ai-product-content-proposals', productId],
+    queryFn: () => request<{ proposals: AiContentProposal[] }>(`/api/ai/products/${productId}/proposals`),
+    staleTime: 0,
+  });
+  const generateMutation = useMutation({
+    mutationFn: () => request<{ proposal: AiContentProposal }>(`/api/ai/products/${productId}/content/propose`, {
+      method: 'POST', body: JSON.stringify({}),
+    }),
+    onSuccess: async () => {
+      toast.success(t('products.ai.generated'));
+      await queryClient.invalidateQueries({ queryKey: ['ai-product-content-proposals', productId] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const reviewMutation = useMutation({
+    mutationFn: ({ proposalId, action }: { proposalId: number; action: 'approve' | 'reject' }) =>
+      request<{ proposal: { status: 'applied' | 'rejected'; product?: ProductRecord } }>(`/api/ai/proposals/${proposalId}`, {
+        method: 'PATCH', body: JSON.stringify({ action }),
+      }),
+    onSuccess: async (data) => {
+      if (data.proposal.product) {
+        const product = data.proposal.product;
+        (['title', 'titleAr', 'description', 'descriptionAr'] as const).forEach((field) => {
+          form.setValue(field, product[field], { shouldDirty: false });
+        });
+      }
+      toast.success(t(data.proposal.status === 'applied' ? 'products.ai.applied' : 'products.ai.rejected'));
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['ai-product-content-proposals', productId] }),
+        queryClient.invalidateQueries({ queryKey: ['products-table'] }),
+      ]);
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const labels = {
+    title: t('labels.productName'),
+    titleAr: t('labels.nameAr'),
+    description: t('labels.description'),
+    descriptionAr: t('labels.descriptionAr'),
+  };
+
+  return (
+    <div className="md:col-span-2 rounded-2xl border border-violet-500/30 bg-violet-500/5 p-4" data-testid="ai-product-content-panel">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="font-medium">{t('products.ai.title')}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t('products.ai.description')}</p>
+        </div>
+        <Button type="button" variant="outline" size="sm" disabled={generateMutation.isPending} onClick={() => generateMutation.mutate()}>
+          {generateMutation.isPending ? <Spinner data-icon="inline-start" className="size-3.5" /> : null}
+          {t('products.ai.generateMissing')}
+        </Button>
+      </div>
+      {proposalsQuery.isLoading ? <PendingInline active label={t('labels.loading')} className="mt-3" /> : null}
+      <div className="mt-4 space-y-3">
+        {proposalsQuery.data?.proposals.map((proposal) => (
+          <Card key={proposal.id} className="space-y-3 p-4">
+            <div className="space-y-3">
+              {Object.entries(proposal.changes).map(([field, value]) => {
+                const key = field as keyof typeof labels;
+                return (
+                  <div key={field} className="grid gap-2 text-sm sm:grid-cols-2">
+                    <div className="rounded-lg bg-muted/60 p-3">
+                      <p className="text-xs font-medium text-muted-foreground">{labels[key]} · {t('products.ai.before')}</p>
+                      <p className="mt-1 whitespace-pre-wrap">{String(proposal.before?.[key] ?? '—')}</p>
+                    </div>
+                    <div className="rounded-lg bg-emerald-500/10 p-3">
+                      <p className="text-xs font-medium text-emerald-700">{labels[key]} · {t('products.ai.proposed')}</p>
+                      <p className="mt-1 whitespace-pre-wrap">{String(value)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {proposal.reasoning ? <p className="text-xs text-muted-foreground">{proposal.reasoning}</p> : null}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" disabled={reviewMutation.isPending} onClick={() => reviewMutation.mutate({ proposalId: proposal.id, action: 'reject' })}>
+                {t('products.ai.reject')}
+              </Button>
+              <Button type="button" size="sm" disabled={reviewMutation.isPending} onClick={() => reviewMutation.mutate({ proposalId: proposal.id, action: 'approve' })}>
+                {t('products.ai.approve')}
+              </Button>
+            </div>
+          </Card>
+        ))}
+        {proposalsQuery.isSuccess && proposalsQuery.data.proposals.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t('products.ai.empty')}</p>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -1669,6 +1786,7 @@ export function ProductsManager({ initialCanExportAll = false }: { initialCanExp
         mode={dialogState.mode}
         form={form}
         pending={createMutation.isPending || updateMutation.isPending}
+        editingId={dialogState.editingId}
         brandOptions={metaQuery.data.brands}
         categoryOptions={metaQuery.data.categories}
         onOpenChange={(open) => {

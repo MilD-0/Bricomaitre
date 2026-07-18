@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { type InferInsertModel, asc, eq, inArray } from 'drizzle-orm';
+import { type InferInsertModel, and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import {
   ensureOrderCompletedEventForOrder,
   ensureOrderConfirmedEventForOrder,
@@ -7,6 +7,7 @@ import {
   isMetaOrderConfirmedStatus,
 } from '@bric/storefront-core/meta';
 import { ensureMarketingOrderStatusEvents } from '@bric/storefront-core/marketing';
+import { createPublicOrderToken } from '@bric/storefront-core/order-access';
 
 import { getDb, hasDb } from '../../../../db/client';
 import { loadOrderDetail } from '../../../../lib/admin-orders-data';
@@ -94,6 +95,44 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   }
 
   return NextResponse.json({ ok: true, item });
+}
+
+export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireMutationAccess('orders');
+  if (denied) return denied;
+  if (!hasDb()) {
+    return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
+  }
+
+  const numericId = Number((await params).id);
+  if (!Number.isInteger(numericId) || numericId <= 0) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  const db = getDb();
+  const existing = await db.query.orders.findFirst({ where: eq(orders.id, numericId) });
+  if (!existing) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+  if (existing.publicToken) {
+    return NextResponse.json({ ok: true, publicToken: existing.publicToken });
+  }
+
+  const publicToken = createPublicOrderToken();
+  const [updated] = await db
+    .update(orders)
+    .set({ publicToken, updatedAt: new Date() })
+    .where(and(eq(orders.id, numericId), isNull(orders.publicToken)))
+    .returning({ publicToken: orders.publicToken });
+
+  if (updated?.publicToken) {
+    return NextResponse.json({ ok: true, publicToken: updated.publicToken });
+  }
+
+  const concurrent = await db.query.orders.findFirst({ where: eq(orders.id, numericId) });
+  return concurrent?.publicToken
+    ? NextResponse.json({ ok: true, publicToken: concurrent.publicToken })
+    : NextResponse.json({ error: 'Unable to create tracking token' }, { status: 503 });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

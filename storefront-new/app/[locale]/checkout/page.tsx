@@ -8,6 +8,7 @@ import { PageShell } from '@/components/page-shell';
 import { CheckoutPageSkeleton } from '@/components/storefront-skeletons';
 import { isLocale } from '@/i18n/config';
 import { parseProductPrice } from '@/lib/product-presentation';
+import { buildCheckoutLabels } from '@/lib/checkout-labels';
 import { getStorefrontEcotrackCatalog, getStorefrontProductDetail, getStorefrontSettings } from '@/lib/storefront-api';
 import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
@@ -40,6 +41,10 @@ export async function CheckoutPageContent({ params, searchParams }: CheckoutPage
   const rawProduct = Array.isArray(query.product) ? query.product[0] : query.product;
   const rawQuantity = Array.isArray(query.quantity) ? query.quantity[0] : query.quantity;
   const quantity = Math.max(1, Math.min(20, Number.parseInt(rawQuantity ?? '1', 10) || 1));
+  const rawLandingPageId = Array.isArray(query.landing) ? query.landing[0] : query.landing;
+  const rawLandingRevision = Array.isArray(query.landingRevision) ? query.landingRevision[0] : query.landingRevision;
+  const landingPageId = Number.parseInt(rawLandingPageId ?? '', 10);
+  const landingRevision = Number.parseInt(rawLandingRevision ?? '', 10);
   const detail = rawProduct ? await getStorefrontProductDetail(rawProduct).catch(() => null) : null;
   const product = detail?.item;
   const directItem = product ? {
@@ -58,16 +63,8 @@ export async function CheckoutPageContent({ params, searchParams }: CheckoutPage
         locale={locale}
         catalog={catalog}
         directItem={directItem}
-        labels={{
-          title: t('title'), description: t('description'),
-          phone: t('phone'), phonePlaceholder: t('phonePlaceholder'), phoneError: t('phoneError'), lastName: t('lastName'), firstName: t('firstName'),
-          wilaya: t('wilaya'), commune: t('commune'), address: t('address'), email: t('email'), optional: t('optional'),
-          deliveryMode: t('deliveryMode'), homeDelivery: t('homeDelivery'), officeDelivery: t('officeDelivery'), officeUnavailable: t('officeUnavailable'),
-          orderSummary: t('orderSummary'), subtotal: t('subtotal'), delivery: t('delivery'), total: t('total'), quantity: t('quantity'),
-          submit: t('submit'), submitting: t('submitting'), emptyTitle: t('emptyTitle'), emptyBody: t('emptyBody'), browseProducts: t('browseProducts'),
-          requiredError: t('requiredError'), emailError: t('emailError'), submitError: t('submitError'), retry: t('retry'), savedAttempt: t('savedAttempt'),
-          trustPhone: t('trustPhone'), trustPayment: t('trustPayment'), trustDelivery: t('trustDelivery'),
-        }}
+        landingAttribution={Number.isInteger(landingPageId) && landingPageId > 0 && Number.isInteger(landingRevision) && landingRevision > 0 ? { landingPageId, landingRevision } : undefined}
+        labels={buildCheckoutLabels(t)}
         support={{ contact, labels: { title: t('supportTitle'), description: t('supportDescription'), call: t('supportCall') } }}
       />
     </PageShell>

@@ -1,46 +1,37 @@
-import type { Metadata } from "next";
-import { getTranslations } from "next-intl/server";
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
 
-import { PageShell } from "@/components/page-shell";
-import { RouteFoundation } from "@/components/route-foundation";
+import { LandingPageRenderer } from '@/components/landing-page-renderer';
+import { LandingOrderForm } from '@/components/landing-order-form';
+import { PageShell } from '@/components/page-shell';
+import { LandingPageSkeleton } from '@/components/storefront-skeletons';
 import { isLocale } from '@/i18n/config';
+import { buildLandingPageMetadata } from '@/lib/landing-page-seo';
+import { getStorefrontLandingPage } from '@/lib/storefront-api';
 
-type LandingPageProps = {
-  params: Promise<{ locale: string; slug: string }>;
-};
+type LandingPageProps = { params: Promise<{ locale: string; slug: string }> };
 
 export async function generateMetadata({ params }: LandingPageProps): Promise<Metadata> {
-  const { slug } = await params;
-
-  return {
-    title: `Landing ${slug}`,
-    description: "Admin-created Bricomaitre landing page foundation.",
-    robots: { index: false, follow: false },
-  };
+  const { locale, slug } = await params;
+  if (!isLocale(locale)) return {};
+  const alternateLocale = locale === 'fr' ? 'ar' : 'fr';
+  const [page, alternatePage] = await Promise.all([
+    getStorefrontLandingPage(locale, slug).catch(() => null),
+    getStorefrontLandingPage(alternateLocale, slug).catch(() => null),
+  ]);
+  if (!page) return { robots: { index: false, follow: false } };
+  return buildLandingPageMetadata(page, locale, Boolean(alternatePage));
 }
 
-export default async function LandingPage({ params }: LandingPageProps) {
+async function LandingPageContent({ params }: LandingPageProps) {
   const { locale, slug } = await params;
   if (!isLocale(locale)) notFound();
-  const t = await getTranslations({ locale, namespace: 'Landing' });
+  const page = await getStorefrontLandingPage(locale, slug).catch(() => null);
+  if (!page) notFound();
+  return <PageShell locale={locale}><LandingPageRenderer page={page} locale={locale} /><LandingOrderForm page={page} locale={locale} /></PageShell>;
+}
 
-  return (
-    <PageShell locale={locale}>
-      <RouteFoundation
-        locale={locale}
-        eyebrow={t("eyebrow")}
-        title={t("title", { slug })}
-        description={t("description")}
-        primaryLabel={t("primaryAction")}
-        primaryHref="/checkout"
-      >
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">
-          {t("foundationKicker")}
-        </p>
-        <h2 className="mt-3 text-xl font-semibold">{t("foundationTitle")}</h2>
-        <p className="mt-3 text-sm leading-6 text-muted">{t("foundationBody")}</p>
-      </RouteFoundation>
-    </PageShell>
-  );
+export default function LandingPage(props: LandingPageProps) {
+  return <Suspense fallback={<LandingPageSkeleton />}><LandingPageContent {...props} /></Suspense>;
 }

@@ -42,8 +42,6 @@ export function SupportContactActions({
     icon?.startAnimation();
   }
 
-  if (!contact.phoneEnabled) return null;
-
   return (
     <section className={`support-contact support-contact-${variant}`} aria-label={labels.title}>
       <div className="support-contact-copy">
@@ -51,12 +49,10 @@ export function SupportContactActions({
         {labels.description ? <span>{labels.description}</span> : null}
       </div>
       <div className="support-contact-actions">
-        {contact.phoneEnabled ? (
-          <a className="support-contact-action support-contact-call" href={contact.phoneHref} dir="ltr" onPointerDown={prepareHaptics} onPointerEnter={() => start(phoneIconRef.current)} onPointerLeave={() => phoneIconRef.current?.stopAnimation()} onFocus={() => start(phoneIconRef.current)} onBlur={() => phoneIconRef.current?.stopAnimation()} onClick={activate}>
-            <PhoneIcon ref={phoneIconRef} size={17} aria-hidden="true" />
-            <span>{labels.call}</span><b>{contact.phoneDisplay}</b>
-          </a>
-        ) : null}
+        <a className="support-contact-action support-contact-call" href={contact.phoneHref} dir="ltr" onPointerDown={prepareHaptics} onPointerEnter={() => start(phoneIconRef.current)} onPointerLeave={() => phoneIconRef.current?.stopAnimation()} onFocus={() => start(phoneIconRef.current)} onBlur={() => phoneIconRef.current?.stopAnimation()} onClick={activate}>
+          <PhoneIcon ref={phoneIconRef} size={17} aria-hidden="true" />
+          <span>{labels.call}</span><b>{contact.phoneDisplay}</b>
+        </a>
       </div>
     </section>
   );

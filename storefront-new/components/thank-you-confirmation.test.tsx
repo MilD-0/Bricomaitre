@@ -2,10 +2,11 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CHECKOUT_CONFIRMATION_KEY } from '@/lib/checkout';
+import type { StorefrontOrderResponseItem } from '@bric/storefront-core/contracts';
 import { ThankYouConfirmation } from './thank-you-confirmation';
 
 const mocks = vi.hoisted(() => ({ verify: vi.fn(), track: vi.fn() }));
-vi.mock('@/lib/orders', () => ({ verifyCheckoutOrder: mocks.verify }));
+vi.mock('@/lib/orders', () => ({ verifyCheckoutOrderByToken: mocks.verify }));
 vi.mock('@/lib/analytics', () => ({ trackCheckoutEvent: mocks.track }));
 vi.mock('@/components/storefront-image', () => ({ StorefrontImage: ({ src }: { src: string }) => <span data-image-src={src} /> }));
 vi.mock('@number-flow/react', () => ({ default: ({ value }: { value: number }) => <span>{value}</span> }));
@@ -13,9 +14,10 @@ vi.mock('@number-flow/react', () => ({ default: ({ value }: { value: number }) =
 const labels = Object.fromEntries([
   'verifying', 'title', 'description', 'orderNumber', 'nextTitle', 'nextOne', 'nextTwo', 'nextThree', 'summary', 'quantity', 'subtotal', 'delivery', 'total',
   'customer', 'phone', 'wilaya', 'commune', 'address', 'deliveryMode', 'homeDelivery', 'officeDelivery', 'fallback', 'unavailableTitle', 'unavailableBody', 'retry', 'browseProducts',
+  'trackingTitle', 'trackingLive', 'trackingWaiting', 'trackingPreparing', 'trackingOnWay', 'trackingDelivered', 'trackingDelayed', 'trackingCancelled', 'trackingReturned', 'trackingFailed',
 ].map((key) => [key, key])) as never;
 
-const order = {
+const order: StorefrontOrderResponseItem = {
   id: 42, publicToken: 'public-order-token-1234567890', createdAt: '2026-07-14T10:00:00.000Z', updatedAt: '2026-07-14T10:00:00.000Z',
   firstName: null, lastName: null, fullName: '', email: null, phoneNumber1: '0550000000', phoneNumber2: null,
   cartProducts: ['desk-lamp'], orderProducts: [{ productId: 12, rawValue: 'desk-lamp', title: 'Desk Lamp', unitPrice: 4500, quantity: 1, lineTotal: 4500, thumbnailUrl: null, missing: false }],
@@ -25,7 +27,7 @@ const order = {
 };
 
 const support = {
-  contact: { phoneDisplay: '0795 34 28 26', phoneHref: 'tel:+213795342826', phoneEnabled: true },
+  contact: { phoneDisplay: '0795 34 28 26', phoneHref: 'tel:+213795342826', phoneEnabled: true, aiAssistantEnabled: true },
   labels: { title: 'Order help', description: 'We are here.', call: 'Call' },
 };
 
@@ -39,7 +41,9 @@ describe('ThankYouConfirmation', () => {
     expect(await screen.findByRole('heading', { name: 'title' })).toBeInTheDocument();
     expect(screen.getByText('Desk Lamp')).toBeInTheDocument();
     expect(screen.getByText('0550000000')).toBeInTheDocument();
-    expect(mocks.verify).toHaveBeenCalledWith(42, 'public-order-token-1234567890');
+    expect(mocks.verify).toHaveBeenCalledWith('public-order-token-1234567890');
+    expect(screen.getByRole('heading', { name: 'trackingTitle' })).toBeInTheDocument();
+    expect(screen.getAllByText('trackingWaiting').length).toBeGreaterThan(0);
     await waitFor(() => expect(mocks.track).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'purchase', orderId: 42 }), 'thank_you'));
     expect(mocks.track.mock.calls.flatMap((call) => JSON.stringify(call))).not.toContain('0550000000');
   });
@@ -48,6 +52,41 @@ describe('ThankYouConfirmation', () => {
     mocks.verify.mockImplementationOnce(() => new Promise(() => undefined));
     render(<ThankYouConfirmation locale="fr" orderId={42} token="public-order-token-1234567890" labels={labels} />);
     expect(await screen.findByLabelText('Loading order confirmation')).toBeInTheDocument();
+  });
+
+  it('renders a server-verified confirmation before client JavaScript re-verifies it', () => {
+    mocks.verify.mockImplementationOnce(() => new Promise(() => undefined));
+    render(<ThankYouConfirmation
+      locale="fr"
+      orderId={42}
+      token="public-order-token-1234567890"
+      labels={labels}
+      initialConfirmation={{ order, cartMode: 'cart', stateName: null, createdAt: order.updatedAt, purchaseEventId: null }}
+    />);
+
+    expect(screen.getByRole('heading', { name: 'title' })).toBeInTheDocument();
+    expect(screen.getByText('Desk Lamp')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Loading order confirmation')).not.toBeInTheDocument();
+    expect(mocks.track).not.toHaveBeenCalled();
+  });
+
+  it('renders a connected rail with completed connectors and one current node', () => {
+    mocks.verify.mockImplementationOnce(() => new Promise(() => undefined));
+    const inDeliveryOrder = { ...order, confirmed: 7 as const };
+    render(<ThankYouConfirmation
+      locale="fr"
+      orderId={42}
+      token="public-order-token-1234567890"
+      labels={labels}
+      initialConfirmation={{ order: inDeliveryOrder, cartMode: 'cart', stateName: null, createdAt: order.updatedAt, purchaseEventId: null }}
+    />);
+
+    const stages = document.querySelectorAll('.order-tracking li');
+    expect(stages).toHaveLength(4);
+    expect(stages[0]).toHaveAttribute('data-connector-complete', 'true');
+    expect(stages[1]).toHaveAttribute('data-connector-complete', 'true');
+    expect(stages[2]).toHaveAttribute('aria-current', 'step');
+    expect(stages[3]).not.toHaveAttribute('data-reached');
   });
 
   it('keeps a locally saved confirmation visible when server verification is unavailable', async () => {

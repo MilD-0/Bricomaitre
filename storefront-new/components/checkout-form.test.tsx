@@ -41,7 +41,7 @@ const catalog = {
 
 const directItem = { productId: 12, token: 'desk-lamp', title: 'Desk Lamp', imageUrl: null, unitPrice: 4500, quantity: 2, availabilityStatus: 'in_stock' };
 const support = {
-  contact: { phoneDisplay: '0795 34 28 26', phoneHref: 'tel:+213795342826', phoneEnabled: true },
+  contact: { phoneDisplay: '0795 34 28 26', phoneHref: 'tel:+213795342826', phoneEnabled: true, aiAssistantEnabled: true },
   labels: { title: 'Need help?', description: 'Call us.', call: 'Call' },
 };
 const order = {
@@ -74,6 +74,25 @@ describe('CheckoutForm', () => {
     expect(screen.getByRole('textbox', { name: /address/ })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: /email/ })).toBeInTheDocument();
     expect(document.querySelector('[name="phoneNumber2"]')).toBeNull();
+  });
+
+  it('carries landing-page revision attribution into checkout events', async () => {
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} landingAttribution={{ landingPageId: 4, landingRevision: 2 }} labels={labels as never} />);
+    await waitFor(() => expect(mocks.track).toHaveBeenCalledWith(expect.objectContaining({
+      eventName: 'begin_checkout',
+      metadata: expect.objectContaining({ landingPageId: 4, landingRevision: 2 }),
+    })));
+  });
+
+  it('embeds with a section heading and accepts landing-page quantity changes', async () => {
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} embedded labels={labels as never} />);
+    expect(screen.getByRole('heading', { level: 2, name: 'title' })).toBeVisible();
+    expect(screen.queryByRole('heading', { level: 1, name: 'title' })).not.toBeInTheDocument();
+    expect(document.querySelector('#landing-order')).toHaveClass('landing-order-section');
+
+    window.dispatchEvent(new CustomEvent('bric:landing-order-quantity', { detail: { productId: 12, quantity: 5 } }));
+    await waitFor(() => expect(screen.getByText('quantity: 5')).toBeVisible());
+    expect(screen.getAllByText('22500')).toHaveLength(2);
   });
 
   it('announces validation errors and moves focus to the first required field', async () => {
@@ -160,7 +179,7 @@ describe('CheckoutForm', () => {
     expect(payload).toMatchObject({ phoneNumber1: '0550000000', firstName: 'Ada', cartProducts: ['desk-lamp', 'desk-lamp'], journeyId: 'journey-1' });
     expect(window.localStorage.getItem('bric:checkout:pending:v1')).toBeNull();
     expect(JSON.parse(window.localStorage.getItem('bric:checkout:confirmation:v1')!)).toMatchObject({ cartMode: 'direct', order: { id: 42 } });
-    expect(mocks.push).toHaveBeenCalledWith('/fr/thank-you?orderId=42&token=public-order-token-1234567890');
+    expect(mocks.push).toHaveBeenCalledWith('/fr/thank-you?token=public-order-token-1234567890');
     expect(mocks.track.mock.calls.flatMap((call) => JSON.stringify(call))).not.toContain('0550000000');
   });
 

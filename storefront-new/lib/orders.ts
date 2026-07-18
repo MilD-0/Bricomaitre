@@ -74,3 +74,20 @@ export async function verifyCheckoutOrder(orderId: number, token: string) {
   }
   return parsed.data.item;
 }
+
+export async function verifyCheckoutOrderByToken(token: string) {
+  let response: Response;
+  try {
+    response = await fetch(`/api/orders/track/${encodeURIComponent(token)}`, {
+      headers: { accept: 'application/json' },
+    });
+  } catch {
+    throw new CheckoutOrderError('order_network_error', { code: 'network' });
+  }
+  if (!response.ok) throw responseError(response);
+  const parsed = storefrontReadOrderResponseSchema.safeParse(await readJson(response));
+  if (!parsed.success) {
+    throw new CheckoutOrderError('order_invalid_response', { code: 'invalid_response', status: response.status });
+  }
+  return parsed.data.item;
+}

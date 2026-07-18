@@ -66,7 +66,7 @@ test('renders the French product journey with SEO and governed analytics', async
     trust: { background: 'rgba(0, 0, 0, 0)', borderRadius: '0px', boxShadow: 'none', inlineBorder: '0px' },
   });
   await expect(page.locator('.product-trust')).toHaveCSS('border-top-width', '1px');
-  await expect(page.locator('.product-trust svg')).toHaveCount(4);
+  await expect(page.locator('.product-trust svg')).toHaveCount(3);
   const firstTrustIcon = page.locator('.product-trust li').first().locator('svg');
   await page.locator('.product-trust li').first().hover();
   await expect.poll(() => firstTrustIcon.evaluate((element) => getComputedStyle(element).transform)).not.toBe('none');

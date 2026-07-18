@@ -29,11 +29,13 @@
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.1",
+    "@bric/ai-core": "workspace:*",
     "@aws-sdk/client-s3": "^3.1022.0",
     "@aws-sdk/lib-storage": "^3.1022.0",
     "@bric/db": "workspace:*",
     "@bric/runtime": "workspace:*",
     "@bric/storefront-core": "workspace:*",
+    "ai": "^7.0.30",
     "@hookform/resolvers": "^5.2.2",
     "@sentry/nextjs": "10.47.0",
     "@sentry/node": "10.47.0",

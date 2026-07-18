@@ -31,6 +31,10 @@ const navigationEventNameSchema = z.enum([
   'add_to_cart',
   'remove_from_cart',
   'cart_checkout_click',
+  'ai_assistant_open',
+  'ai_assistant_message',
+  'ai_assistant_result_click',
+  'ai_assistant_error',
 ]);
 
 const checkoutEventNameSchema = z.enum([
@@ -66,10 +70,14 @@ const productEventInputSchema = z.object({
     page: z.number().int().positive().optional(),
     sort: z.enum(['recommended', 'newest', 'price-asc', 'price-desc', 'name-asc']).optional(),
     listContext: z.enum(['catalog', 'similar_products']).optional(),
-    filterKind: z.enum(['category', 'brand']).optional(),
+    filterKind: z.enum(['category', 'brand', 'discounted']).optional(),
+    discounted: z.boolean().optional(),
     filterId: z.number().int().positive().optional(),
     position: z.number().int().positive().optional(),
     visibleProductIds: z.array(z.number().int().positive()).max(24).optional(),
+    landingPageId: z.number().int().positive().optional(),
+    landingRevision: z.number().int().positive().optional(),
+    landingBlockId: z.string().trim().min(1).max(80).optional(),
   }).strict().default({}),
 });
 
@@ -95,11 +103,19 @@ const navigationEventInputSchema = z.object({
   quantity: z.number().int().positive().nullable().default(null),
   value: z.number().min(0).nullable().default(null),
   metadata: z.object({
-    surface: z.enum(['header', 'mobile_drawer', 'global_search', 'cart_drawer', 'product_detail', 'checkout', 'thank_you']),
+    surface: z.enum(['header', 'mobile_drawer', 'global_search', 'cart_drawer', 'product_detail', 'checkout', 'thank_you', 'ai_assistant']),
     target: z.string().trim().min(1).max(120).optional(),
     resultsCount: z.number().int().min(0).optional(),
     position: z.number().int().positive().optional(),
   }).strict(),
+}).superRefine((input, context) => {
+  if (input.eventName.startsWith('ai_assistant_') && input.searchTerm !== null) {
+    context.addIssue({
+      code: 'custom',
+      path: ['searchTerm'],
+      message: 'Assistant conversation text must not be collected',
+    });
+  }
 });
 
 const checkoutEventInputSchema = z.object({
@@ -115,13 +131,15 @@ const checkoutEventInputSchema = z.object({
     delivery: z.enum(['home', 'office']).optional(),
     failureCode: z.string().trim().min(1).max(80).optional(),
     verificationSource: z.enum(['server', 'snapshot']).optional(),
+    landingPageId: z.number().int().positive().optional(),
+    landingRevision: z.number().int().positive().optional(),
   }).strict(),
 });
 
 const pageEventInputSchema = z.object({
   eventId: z.string().trim().min(1).max(120).optional(),
   locale: z.enum(['fr', 'ar']),
-  pageType: z.enum(['homepage', 'catalog', 'product_detail', 'checkout', 'thank_you']),
+  pageType: z.enum(['homepage', 'catalog', 'product_detail', 'landing', 'checkout', 'thank_you']),
 });
 
 export type ProductAnalyticsEventInput = z.input<typeof productEventInputSchema>;
@@ -169,7 +187,7 @@ export function buildProductAnalyticsPayload(input: ProductAnalyticsEventInput) 
 
 function buildAnalyticsPayload(
   parsed: z.output<typeof productEventInputSchema> | z.output<typeof catalogEventInputSchema> | z.output<typeof navigationEventInputSchema> | z.output<typeof checkoutEventInputSchema> | (z.output<typeof pageEventInputSchema> & { eventName: 'page_view' }),
-  pageType: 'homepage' | 'product_detail' | 'catalog' | 'global_navigation' | 'checkout' | 'thank_you',
+  pageType: 'homepage' | 'product_detail' | 'catalog' | 'landing' | 'global_navigation' | 'checkout' | 'thank_you',
 ) {
   const connection = navigator as Navigator & {
     connection?: { effectiveType?: string; saveData?: boolean };

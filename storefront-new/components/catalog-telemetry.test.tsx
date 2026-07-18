@@ -15,7 +15,7 @@ describe('CatalogTelemetry', () => {
       <>
         <CatalogTelemetry
           locale="fr"
-          query={{ q: 'perceuse', category: 3, brand: 2, sort: 'price-asc', page: 2 }}
+          query={{ q: 'perceuse', category: 3, brand: 2, discounted: true, sort: 'price-asc', page: 2 }}
           resultsCount={1}
           visibleProductIds={[12]}
         />
@@ -38,6 +38,7 @@ describe('CatalogTelemetry', () => {
     expect(trackCatalogEvent).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'search', searchTerm: 'perceuse' }));
     expect(trackCatalogEvent).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'filter_apply', categoryId: 3 }));
     expect(trackCatalogEvent).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'filter_apply', brandId: 2 }));
+    expect(trackCatalogEvent).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'filter_apply', metadata: expect.objectContaining({ filterKind: 'discounted' }) }));
     expect(trackCatalogEvent).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'sort_change' }));
 
     fireEvent.click(view.getByRole('link', { name: 'Desk lamp' }));
@@ -53,7 +54,7 @@ describe('CatalogTelemetry', () => {
     render(
       <CatalogTelemetry
         locale="fr"
-        query={{ q: '', category: null, brand: null, sort: 'recommended', page: 1 }}
+        query={{ q: '', category: null, brand: null, discounted: false, sort: 'recommended', page: 1 }}
         resultsCount={12}
         visibleProductIds={[12]}
       />,

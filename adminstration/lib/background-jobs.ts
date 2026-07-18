@@ -30,6 +30,7 @@ import {
 } from './order-export';
 import type { OrderStatusHistoryRecord } from './orders';
 import { importAdCostsSpreadsheet, importStatsSpreadsheet, refreshAdminReportingSnapshots } from './stats';
+import { proposeProductContent } from './ai-product-content';
 
 export const ADMIN_PRODUCT_EXPORT_QUEUE = 'admin-product-export';
 export const ADMIN_PRODUCT_CATALOG_FEED_QUEUE = 'admin-product-catalog-feed';
@@ -41,6 +42,7 @@ export const ADMIN_REPORTING_REFRESH_QUEUE = 'admin-reporting-refresh';
 export const ADMIN_ECOTRACK_SYNC_QUEUE = 'admin-ecotrack-sync';
 export const ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE = 'admin-ecotrack-shipment-sync';
 export const STOREFRONT_ANALYTICS_QUEUE = 'storefront-analytics';
+export const ADMIN_AI_CONTENT_QUEUE = 'admin-ai-content';
 
 type QueueJobMeta = {
   __jobMeta: {
@@ -116,6 +118,63 @@ type EcotrackShipmentSyncPayload = QueueJobMeta & {
 type AnalyticsPayload = {
   event: ReturnType<typeof storefrontAnalyticsEventSchema.parse>;
 };
+type AiContentPayload = QueueJobMeta & {
+  productIds: number[] | null;
+  fields: Array<'title' | 'titleAr' | 'description' | 'descriptionAr'>;
+  onlyMissing: boolean;
+  context?: string;
+  actor: { email?: string | null; name?: string | null };
+};
+
+export async function startAiContentJob(ownerKey: string, payload: Omit<AiContentPayload, keyof QueueJobMeta>, requestId?: string) {
+  const result = await startOwnedJob<AiContentPayload>({
+    queueName: ADMIN_AI_CONTENT_QUEUE,
+    kind: 'ai-product-content',
+    ownerKey,
+    requestId,
+    data: payload as AiContentPayload,
+  });
+  return { kind: result.kind, job: toClientJob(result.job) };
+}
+
+export async function runAiContentJob(payload: AiContentPayload, helpers: {
+  updateProgress: (progress: { phase: string; current: number; total: number }) => Promise<void>;
+  updateSummary: (summary: Record<string, unknown>) => Promise<void>;
+  throwIfCancelled: () => Promise<void>;
+}) {
+  const db = getDb();
+  const rows = await db.select({
+    id: products.id, title: products.title, titleAr: products.titleAr,
+    description: products.description, descriptionAr: products.descriptionAr,
+  }).from(products).where(and(
+    eq(products.active, true),
+    payload.productIds?.length ? inArray(products.id, payload.productIds) : undefined,
+  )).orderBy(asc(products.id));
+  let proposed = 0;
+  let skipped = 0;
+  const failures: number[] = [];
+  for (let index = 0; index < rows.length; index += 1) {
+    await helpers.throwIfCancelled();
+    const product = rows[index];
+    const fields = payload.onlyMissing
+      ? payload.fields.filter((field) => !product[field]?.trim())
+      : payload.fields;
+    if (fields.length === 0) {
+      skipped += 1;
+    } else {
+      try {
+        await proposeProductContent({ productId: product.id, fields, adminContext: payload.context, actorId: payload.actor.email });
+        proposed += 1;
+      } catch {
+        failures.push(product.id);
+      }
+    }
+    await helpers.updateProgress({ phase: 'generating-proposals', current: index + 1, total: rows.length });
+  }
+  const summary = { proposed, skipped, failed: failures.length, failedProductIds: failures.slice(0, 100) };
+  await helpers.updateSummary(summary);
+  return summary;
+}
 
 export function filterCatalogFeedProducts<T extends { active: boolean; inStock: boolean }>(productRows: T[]) {
   return productRows.filter((product) => product.active && product.inStock);

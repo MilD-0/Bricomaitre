@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CheckoutOrderError, createCheckoutOrder, verifyCheckoutOrder } from './orders';
+import { CheckoutOrderError, createCheckoutOrder, verifyCheckoutOrder, verifyCheckoutOrderByToken } from './orders';
 
 const order = {
   id: 42, publicToken: 'public-order-token-1234567890', createdAt: '2026-07-14T10:00:00.000Z', updatedAt: '2026-07-14T10:00:00.000Z',
@@ -41,6 +41,12 @@ describe('checkout order client', () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ item: order }), { status: 200 }));
     await expect(verifyCheckoutOrder(42, 'token with spaces')).resolves.toEqual(order);
     expect(fetch).toHaveBeenCalledWith('/api/orders/42?token=token%20with%20spaces', { headers: { accept: 'application/json' } });
+  });
+
+  it('verifies a shareable tracking link without requiring the order ID', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ item: order }), { status: 200 }));
+    await expect(verifyCheckoutOrderByToken('token with spaces')).resolves.toEqual(order);
+    expect(fetch).toHaveBeenCalledWith('/api/orders/track/token%20with%20spaces', { headers: { accept: 'application/json' } });
   });
 
   it('turns network errors into a stable recoverable error', async () => {

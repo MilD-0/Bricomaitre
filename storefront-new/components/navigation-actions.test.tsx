@@ -24,6 +24,7 @@ const labels = {
   language: 'Langue',
   home: 'Accueil',
   products: 'Produits',
+  offers: 'Promos',
   categories: 'Catégories',
   brands: 'Marques',
   search: {
@@ -40,7 +41,7 @@ const labels = {
 };
 
 const contact = {
-  phoneDisplay: '0795 34 28 26', phoneHref: 'tel:+213795342826', phoneEnabled: true,
+  phoneDisplay: '0795 34 28 26', phoneHref: 'tel:+213795342826', phoneEnabled: true, aiAssistantEnabled: true,
 };
 
 describe('NavigationActions', () => {
@@ -127,6 +128,7 @@ describe('NavigationActions', () => {
     expect(drawer).toBeVisible();
     expect(drawer.parentElement?.parentElement).toBe(document.body);
     expect(await screen.findByRole('link', { name: /Éclairage/ })).toHaveAttribute('href', '/fr/categories/eclairage');
+    expect(within(drawer).getByRole('link', { name: 'Promos' })).toHaveAttribute('href', '/fr/products?discounted=1');
     expect(screen.getByRole('link', { name: /Wadfow/ })).toHaveAttribute('href', '/fr/brands/wadfow');
     const categorySummary = within(drawer).getByText(labels.categories).closest('summary');
     expect(categorySummary?.querySelector('svg')).toBeInTheDocument();

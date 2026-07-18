@@ -4,11 +4,10 @@ import type { ComponentType, ReactNode, Ref } from 'react';
 import { useRef } from 'react';
 
 import { HandCoinsIcon } from '@/components/ui/hand-coins';
-import { PackageCheckIcon } from '@/components/ui/package-check';
 import { PhoneIcon } from '@/components/ui/phone';
 import { TruckIcon } from '@/components/ui/truck';
 
-type TrustIcon = 'confirmation' | 'payment' | 'delivery' | 'returns';
+type TrustIcon = 'confirmation' | 'payment' | 'delivery';
 type AnimatedIconHandle = { startAnimation: () => void; stopAnimation: () => void };
 type AnimatedIcon = ComponentType<{ size?: number; ref?: Ref<AnimatedIconHandle> }>;
 
@@ -16,7 +15,6 @@ const icons: Record<TrustIcon, AnimatedIcon> = {
   confirmation: PhoneIcon,
   payment: HandCoinsIcon,
   delivery: TruckIcon,
-  returns: PackageCheckIcon,
 };
 
 export function ProductTrustSignal({ icon, children }: { icon: TrustIcon; children: ReactNode }) {

@@ -23,7 +23,11 @@ const optionalNumericFilter = z.union([z.coerce.number().int().positive(), z.lit
   return value;
 });
 
+const optionalBooleanFilter = z.union([z.literal('1'), z.literal('true'), z.literal(true), z.literal(false), z.literal(''), z.null(), z.undefined()])
+  .transform((value) => value === '1' || value === 'true' || value === true);
+
 export const storefrontProductListQuerySchema = productListQuerySchema.extend({
+  discounted: optionalBooleanFilter.default(false),
   id: optionalNumericFilter,
   mongoId: z.string().trim().optional().nullable().transform((value) => {
     if (value == null) {
@@ -223,12 +227,14 @@ export const storefrontSettingsResponseSchema = z.object({
   phoneDisplay: z.string().min(1),
   phoneHref: z.string().startsWith('tel:+'),
   phoneEnabled: z.boolean(),
+  aiAssistantEnabled: z.boolean().default(true),
 });
 
 export const defaultStorefrontSettingsResponse = storefrontSettingsResponseSchema.parse(
   toStorefrontContactSettings({
     contactPhone: '0795342826',
     phoneEnabled: true,
+    aiAssistantEnabled: true,
   }),
 );
 
@@ -375,4 +381,5 @@ export type StorefrontHomepageFeaturedGroupProductsResponse = z.infer<typeof sto
 export type StorefrontEcotrackCatalogResponse = z.infer<typeof storefrontEcotrackCatalogResponseSchema>;
 export type StorefrontProductDetailResponse = z.infer<typeof storefrontProductDetailResponseSchema>;
 export type StorefrontOrderCreateRequest = z.infer<typeof storefrontOrderCreateRequestSchema>;
+export type StorefrontOrderResponseItem = z.infer<typeof storefrontOrderResponseItemSchema>;
 export type StorefrontOrderPatchRequest = z.infer<typeof storefrontOrderPatchRequestSchema>;

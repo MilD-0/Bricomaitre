@@ -21,12 +21,14 @@ describe('CatalogFilters', () => {
       brands={[{ id: 2, label: 'Bric Pro' }]}
       selectedCategory={3}
       selectedBrand={null}
+      discounted={false}
       search="lampe"
       sort="newest"
       labels={labels}
     />);
 
     const trigger = screen.getByRole('button', { name: /Filtrer les produits/ });
+    expect(within(trigger).getByLabelText('1')).toHaveClass('catalog-mobile-filter-count');
     fireEvent.pointerDown(trigger);
     fireEvent.click(trigger);
 
