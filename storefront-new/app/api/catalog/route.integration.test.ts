@@ -13,12 +13,13 @@ describe('GET /api/catalog', () => {
 
   it('normalizes the public query and returns one bounded infinite-scroll page', async () => {
     fetchCatalog.mockResolvedValue({ items: Array.from({ length: 7 }, (_, index) => product(index + 1)), total: 48 });
-    const response = await GET(new NextRequest('http://localhost/api/catalog?q=drill&category=3&sort=price-asc&page=2&limit=6'));
+    const response = await GET(new NextRequest('http://localhost/api/catalog?q=drill&category=3&discounted=1&sort=price-asc&page=2&limit=6'));
 
     expect(response.status).toBe(200);
     expect(fetchCatalog).toHaveBeenCalledWith(expect.objectContaining({
       search: 'drill',
       categoryId: 3,
+      discounted: true,
       page: 2,
       limit: 6,
       sortKey: 'price',

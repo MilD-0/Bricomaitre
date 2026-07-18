@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
     search: req.nextUrl.searchParams.get('search') ?? undefined,
     brandId: req.nextUrl.searchParams.get('brandId'),
     categoryId: req.nextUrl.searchParams.get('categoryId'),
+    discounted: req.nextUrl.searchParams.get('discounted') ?? undefined,
     sortKey: req.nextUrl.searchParams.get('sortKey') ?? undefined,
     sortDirection: req.nextUrl.searchParams.get('sortDirection') ?? undefined,
     slug: req.nextUrl.searchParams.get('slug') ?? undefined,

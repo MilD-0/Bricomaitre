@@ -12,7 +12,7 @@ export function PageViewTelemetry({ locale }: { locale: Locale }) {
   useEffect(() => {
     if (!pathname || previous.current === pathname) return;
     previous.current = pathname;
-    void trackPageView({ locale, pageType: pathname.includes('/checkout') ? 'checkout' : pathname.includes('/thank-you') ? 'thank_you' : pathname.includes('/products/') ? 'product_detail' : pathname.endsWith('/products') ? 'catalog' : 'homepage' });
+    void trackPageView({ locale, pageType: pathname.includes('/checkout') ? 'checkout' : pathname.includes('/thank-you') ? 'thank_you' : pathname.includes('/landing/') ? 'landing' : pathname.includes('/products/') ? 'product_detail' : pathname.endsWith('/products') ? 'catalog' : 'homepage' });
   }, [locale, pathname]);
   return null;
 }

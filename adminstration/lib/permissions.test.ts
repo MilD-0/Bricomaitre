@@ -20,6 +20,7 @@ describe('roleDefinitionFormSchema', () => {
   it('rejects unsupported permission keys', () => {
     expect(permissionKeySchema.safeParse('ops_view').success).toBe(true);
     expect(permissionKeySchema.safeParse('bulletin_moderate').success).toBe(true);
+    expect(permissionKeySchema.safeParse('ai_catalog_propose').success).toBe(true);
     expect(permissionKeySchema.safeParse('unknown_permission').success).toBe(false);
   });
 });

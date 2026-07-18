@@ -69,6 +69,24 @@ export function ProductPageSkeleton() {
   );
 }
 
+export function LandingPageSkeleton() {
+  return (
+    <SkeletonShell page="landing">
+      <div className="landing-page" aria-hidden="true">
+        <div className="landing-hero">
+          <Skeleton className="landing-hero-media" />
+          <div className="landing-hero-copy">
+            <Skeleton style={{ height: '0.8rem', width: '7rem' }} />
+            <Skeleton style={{ height: '4rem', marginTop: '1rem' }} />
+            <Skeleton style={{ height: '1rem', marginTop: '1rem' }} />
+            <Skeleton style={{ height: '3.2rem', marginTop: '1.5rem' }} />
+          </div>
+        </div>
+      </div>
+    </SkeletonShell>
+  );
+}
+
 export function CheckoutPageSkeleton() {
   return (
     <SkeletonShell page="checkout">

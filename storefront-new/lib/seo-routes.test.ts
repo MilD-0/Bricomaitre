@@ -49,7 +49,7 @@ describe('SEO metadata routes', () => {
     }));
   });
 
-  it('keeps private and unfinished routes out of crawling', () => {
+  it('keeps private transactional and unfinished collection routes out of crawling', () => {
     expect(buildStorefrontRobots()).toEqual({
       rules: {
         userAgent: '*',
@@ -59,11 +59,11 @@ describe('SEO metadata routes', () => {
           '/fr/checkout',
           '/ar/thank-you',
           '/fr/collections/',
-          '/ar/landing/',
         ]),
       },
       sitemap: 'https://bricomaitre.com/sitemap.xml',
       host: 'https://bricomaitre.com',
     });
+    expect(buildStorefrontRobots().rules).not.toEqual(expect.objectContaining({ disallow: expect.arrayContaining(['/fr/landing/', '/ar/landing/']) }));
   });
 });

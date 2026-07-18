@@ -28,6 +28,7 @@ type NavigationLabels = {
   language: string;
   home: string;
   products: string;
+  offers: string;
   categories: string;
   brands: string;
   search: GlobalSearchLabels;
@@ -220,6 +221,9 @@ export function NavigationActions({
             </a>
             <a href={`/${locale}/products`} onClick={() => { triggerNavigationHaptic(); setMenuOpen(false); }}>
               {labels.products}<ChevronRight aria-hidden="true" size={18} />
+            </a>
+            <a href={`/${locale}/products?discounted=1`} onClick={() => { triggerNavigationHaptic(); setMenuOpen(false); }}>
+              {labels.offers}<ChevronRight aria-hidden="true" size={18} />
             </a>
             {drawerCategories.length > 0 ? (
               <details open>

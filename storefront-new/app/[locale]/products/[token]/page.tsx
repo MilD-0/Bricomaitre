@@ -44,6 +44,7 @@ export async function generateStaticParams() {
     search: '',
     categoryId: null,
     brandId: null,
+    discounted: false,
     id: null,
     mongoId: null,
     slug: null,
@@ -245,7 +246,6 @@ export async function ProductPageContent({ params }: ProductPageProps) {
             <ProductTrustSignal icon="confirmation">{t('trustConfirmation')}</ProductTrustSignal>
             <ProductTrustSignal icon="payment">{t('trustPayment')}</ProductTrustSignal>
             <ProductTrustSignal icon="delivery">{t('trustDelivery')}</ProductTrustSignal>
-            <ProductTrustSignal icon="returns">{t('trustReturns')}</ProductTrustSignal>
           </ul>
         </div>
       </article>

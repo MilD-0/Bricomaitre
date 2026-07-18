@@ -9,6 +9,7 @@ import logo from '../../storefront/public/logo.png';
 import { GlobalSearch } from '@/components/global-search';
 import { NavigationActions } from '@/components/navigation-actions';
 import { NavigationCategories } from '@/components/navigation-categories';
+import { ShoppingAssistantLauncher } from '@/components/shopping-assistant-launcher';
 import { isLocale, type Locale } from '@/i18n/config';
 import { getStorefrontSettings } from '@/lib/storefront-api';
 import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
@@ -23,6 +24,7 @@ export async function PageShell({ children, locale: localeProp }: PageShellProps
   const locale = isLocale(localeValue) ? localeValue : 'fr';
   const alternateLocale = locale === 'fr' ? 'ar' : 'fr';
   const t = await getTranslations({ locale, namespace: 'Navigation' });
+  const assistant = await getTranslations({ locale, namespace: 'ShoppingAssistant' });
   const alternateLabel = alternateLocale === 'ar' ? 'العربية' : 'Français';
   const contactSettings = await getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse);
 
@@ -58,7 +60,7 @@ export async function PageShell({ children, locale: localeProp }: PageShellProps
               categories={[]}
               labels={{
                 menu: t('openMenu'), closeMenu: t('closeMenu'), cart: t('cart'), language: t('language'),
-                home: t('home'), products: t('products'), categories: t('categories'), brands: t('brands'),
+                home: t('home'), products: t('products'), offers: t('offers'), categories: t('categories'), brands: t('brands'),
                 search: {
                   label: t('searchLabel'), placeholder: t('searchPlaceholder'), searching: t('searching'),
                   results: t('searchResults'), noResults: t('noSearchResults'), viewAll: t('viewAllProducts'),
@@ -78,6 +80,7 @@ export async function PageShell({ children, locale: localeProp }: PageShellProps
           <nav className="site-navigation" aria-label={t('label')}>
             <a href={`/${locale}`} data-navigation-target="home">{t('home')}</a>
             <a href={`/${locale}/products`} data-navigation-target="products">{t('products')}</a>
+            <a href={`/${locale}/products?discounted=1`} data-navigation-target="offers">{t('offers')}</a>
             <NavigationCategories locale={locale} labels={{ categories: t('categories'), brands: t('brands') }} />
           </nav>
         </div>
@@ -100,13 +103,11 @@ export async function PageShell({ children, locale: localeProp }: PageShellProps
           <section className="site-footer-contact" aria-labelledby="footer-contact-title">
             <h2 id="footer-contact-title">{t('footerContactTitle')}</h2>
             <ul>
-              {contactSettings.phoneEnabled ? (
-                <li>
-                  <FooterContactLink icon="phone" href={contactSettings.phoneHref} direction="ltr">
-                    {contactSettings.phoneDisplay}
-                  </FooterContactLink>
-                </li>
-              ) : null}
+              <li>
+                <FooterContactLink icon="phone" href={contactSettings.phoneHref} direction="ltr">
+                  {contactSettings.phoneDisplay}
+                </FooterContactLink>
+              </li>
               <li>
                 <FooterContactLink icon="email" href="mailto:bricomaitre@gmail.com">bricomaitre@gmail.com</FooterContactLink>
               </li>
@@ -128,6 +129,29 @@ export async function PageShell({ children, locale: localeProp }: PageShellProps
           </div>
         </div>
       </footer>
+      {contactSettings.aiAssistantEnabled ? <ShoppingAssistantLauncher
+        locale={locale}
+        labels={{
+          open: assistant('open'),
+          title: assistant('title'),
+          close: assistant('close'),
+          liveCatalog: assistant('liveCatalog'),
+          welcomeTitle: assistant('welcomeTitle'),
+          welcomeDescription: assistant('welcomeDescription'),
+          placeholder: assistant('placeholder'),
+          send: assistant('send'),
+          thinking: assistant('thinking'),
+          error: assistant('error'),
+          rateLimited: assistant('rateLimited'),
+          fallback: assistant('fallback'),
+          inStock: assistant('inStock'),
+          outOfStock: assistant('outOfStock'),
+          priceOnRequest: assistant('priceOnRequest'),
+          viewProduct: assistant('viewProduct'),
+          inputLabel: assistant('inputLabel'),
+          quickPrompts: [assistant('quickPromptOne'), assistant('quickPromptTwo'), assistant('quickPromptThree')],
+        }}
+      /> : null}
     </div>
   );
 }

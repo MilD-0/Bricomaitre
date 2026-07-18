@@ -6,6 +6,7 @@ import {
   Copy,
   Eye,
   History,
+  Link2,
   Package,
   Phone,
   Printer,
@@ -40,6 +41,7 @@ import {
   type OrderSortRule,
 } from '../lib/orders';
 import { appendSortParams, getSortRuleState, toggleSortRule } from '../lib/multi-sort';
+import { buildOrderTrackingUrl } from '../lib/order-tracking-link';
 import {
   buildShoppingListScopeKey,
   legacyShoppingListGeneratedAt,
@@ -2796,6 +2798,33 @@ export function OrdersManager({
     }
   }
 
+  async function handleCopyTrackingLink(order: OrderRecord) {
+    let publicToken = order.publicToken;
+    if (!publicToken) {
+      try {
+        const response = await request<{ ok: true; publicToken: string }>(`/api/orders/${order.id}`, { method: 'POST' });
+        publicToken = response.publicToken;
+        updateOrderLists(queryClient, (current) => current.id === order.id ? { ...current, publicToken } : current);
+      } catch {
+        toast.error(t('ordersManager.tracking.unavailable'));
+        return;
+      }
+    }
+
+    const trackingUrl = buildOrderTrackingUrl(publicToken, locale);
+    if (!trackingUrl) {
+      toast.error(t('ordersManager.tracking.unavailable'));
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(trackingUrl);
+      toast.success(t('ordersManager.tracking.success'));
+    } catch {
+      toast.error(t('ordersManager.tracking.error'));
+    }
+  }
+
   function updateOrderStatus(order: OrderRecord, confirmed: OrderRecord['confirmed'], noAnswerCount?: number) {
     patchMutation.mutate({
       id: order.id,
@@ -4037,6 +4066,16 @@ export function OrdersManager({
                         type="button"
                         size="sm"
                         className="size-9 px-0"
+                        variant="outline"
+                        aria-label={t('ordersManager.tracking.copy')}
+                        onClick={() => void handleCopyTrackingLink(order)}
+                      >
+                        <Link2 />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="size-9 px-0"
                         variant="destructive"
                         disabled={!writable}
                         aria-label={t('ordersManager.actions.deleteOrder')}
@@ -4336,6 +4375,17 @@ export function OrdersManager({
                       <History />
                     </Button>
                   ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    aria-label={t('ordersManager.tracking.copy')}
+                    onClick={() => void handleCopyTrackingLink(order)}
+                  >
+                    <Link2 data-icon="inline-start" />
+                    {t('ordersManager.tracking.copy')}
+                  </Button>
                   <Button type="button" size="sm" variant="destructive" className="w-full sm:w-auto" disabled={!writable} onClick={() => setDeleteState({ id: order.id, label: order.fullName })}>
                     <Trash2 />
                   </Button>

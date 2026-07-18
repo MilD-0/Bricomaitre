@@ -110,3 +110,17 @@ export async function revalidateStorefrontSettings() {
     }
   });
 }
+
+export async function revalidateStorefrontLandingPages() {
+  const secret = getStorefrontRevalidateSecret();
+  if (!secret) {
+    console.warn('[admin] storefront landing-page revalidation skipped because STOREFRONT_REVALIDATE_SECRET is not configured');
+    return;
+  }
+  const targets = [getStorefrontApiBaseUrl(), getStorefrontNewBaseUrl()].filter((baseUrl): baseUrl is string => Boolean(baseUrl));
+  const bodyText = JSON.stringify({ scope: 'landing-pages' });
+  const results = await Promise.allSettled(targets.map((baseUrl) => postSignedRevalidationRequest(baseUrl, bodyText, secret)));
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') console.warn('[admin] storefront landing-page revalidation request failed', { baseUrl: targets[index], error: result.reason instanceof Error ? result.reason.message : String(result.reason) });
+  });
+}

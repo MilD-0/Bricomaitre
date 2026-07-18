@@ -34,6 +34,7 @@ describe('app/storefront/settings/route', () => {
       phoneDisplay: '0795 34 28 26',
       phoneHref: 'tel:+213795342826',
       phoneEnabled: true,
+      aiAssistantEnabled: true,
     });
   });
 
@@ -42,6 +43,7 @@ describe('app/storefront/settings/route', () => {
     mocks.limit.mockResolvedValue([{
       contactPhone: '+213 555 12 34 56',
       phoneEnabled: true,
+      aiAssistantEnabled: false,
     }]);
 
     const response = await GET();
@@ -53,6 +55,23 @@ describe('app/storefront/settings/route', () => {
     await expect(response.json()).resolves.toEqual({
       phoneDisplay: '0555 12 34 56',
       phoneHref: 'tel:+213555123456',
+      phoneEnabled: true,
+      aiAssistantEnabled: false,
+    });
+  });
+
+  it('keeps phone support enabled for rows carrying the retired toggle value', async () => {
+    mocks.hasDb.mockReturnValue(true);
+    mocks.limit.mockResolvedValue([{
+      contactPhone: '0795342826',
+      phoneEnabled: false,
+      aiAssistantEnabled: true,
+    }]);
+
+    const response = await GET();
+
+    await expect(response.json()).resolves.toMatchObject({
+      phoneDisplay: '0795 34 28 26',
       phoneEnabled: true,
     });
   });

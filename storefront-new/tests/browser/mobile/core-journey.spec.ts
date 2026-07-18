@@ -83,7 +83,8 @@ test('supports touch navigation, search, and homepage carousels', async ({ page,
   await expect(filters).toBeVisible();
   await filters.getByRole('radio', { name: 'Éclairage' }).tap();
   await filters.getByRole('button', { name: 'Appliquer les filtres' }).tap();
-  await expect(page).toHaveURL(/\/fr\/categories\/lighting$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Éclairage' })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/fr/categories/lighting');
 });
 
 test('completes the essential product and checkout journey by touch', async ({ page }) => {

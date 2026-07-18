@@ -238,6 +238,7 @@ describe('ProductsManager', () => {
 
     server.use(
       http.get('/api/products/meta-export', ({ request }) => HttpResponse.text(request.url)),
+      http.get('/api/ai/products/:id/proposals', () => HttpResponse.json({ proposals: [] })),
       http.get('/api/products', ({ request }) => HttpResponse.json(paginatedProductsResponse(request.url))),
       http.get('/api/products/meta', () => HttpResponse.json({
         brands: [{ id: 1, name: 'Acme' }, { id: 2, name: 'Nova' }],
@@ -354,6 +355,49 @@ describe('ProductsManager', () => {
     const restoredDialog = await screen.findByRole('dialog');
     expect(within(restoredDialog).getByRole('textbox', { name: 'Product name' })).toHaveValue('Nova drill');
     expect(within(restoredDialog).getByRole('spinbutton', { name: 'Price' })).toHaveValue(12.75);
+  });
+
+  it('generates, reviews, and applies missing AI product content', async () => {
+    let proposals: Array<Record<string, unknown>> = [];
+    server.use(
+      http.get('/api/ai/products/:id/proposals', () => HttpResponse.json({ proposals })),
+      http.post('/api/ai/products/:id/content/propose', () => {
+        const proposal = {
+          id: 91,
+          status: 'proposed',
+          before: { titleAr: null, descriptionAr: null },
+          changes: { titleAr: 'منتج موجود', descriptionAr: 'وصف عربي مقترح' },
+          reasoning: 'Generated only missing Arabic fields.',
+          expiresAt: '2026-08-01T00:00:00.000Z',
+        };
+        proposals = [proposal];
+        return HttpResponse.json({ proposal }, { status: 201 });
+      }),
+      http.patch('/api/ai/proposals/:id', () => {
+        proposals = [];
+        return HttpResponse.json({
+          proposal: {
+            status: 'applied',
+            product: { ...products[0], titleAr: 'منتج موجود', descriptionAr: 'وصف عربي مقترح' },
+          },
+        });
+      }),
+    );
+
+    renderProductsManager();
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Existing product' }))[0]);
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByText('No content proposals awaiting review.')).toBeInTheDocument();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Generate missing content' }));
+    expect(await within(dialog).findByText('وصف عربي مقترح')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve and apply' }));
+
+    await waitFor(() => {
+      expect(within(dialog).getByRole('textbox', { name: 'Arabic name' })).toHaveValue('منتج موجود');
+      expect(within(dialog).getByRole('textbox', { name: 'Arabic description' })).toHaveValue('وصف عربي مقترح');
+    });
+    expect(await screen.findByText('AI content proposal applied.')).toBeInTheDocument();
   });
 
   it('defaults to card view, persists table view, and restores it from local storage', async () => {

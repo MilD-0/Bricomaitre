@@ -155,6 +155,33 @@ describe('Product Detail analytics', () => {
     });
   });
 
+  it('governs assistant outcomes without accepting customer conversation text', () => {
+    expect(buildNavigationAnalyticsPayload({
+      eventName: 'ai_assistant_result_click',
+      locale: 'ar',
+      productId: 12,
+      productSlug: 'perceuse-beton',
+      metadata: { surface: 'ai_assistant', target: 'product_result', position: 1 },
+    })).toMatchObject({
+      eventName: 'ai_assistant_result_click',
+      productId: 12,
+      metadata: { surface: 'ai_assistant', target: 'product_result', position: 1 },
+    });
+
+    expect(() => buildNavigationAnalyticsPayload({
+      eventName: 'ai_assistant_message',
+      locale: 'fr',
+      searchTerm: 'private customer question',
+      metadata: { surface: 'ai_assistant', target: 'submitted' },
+    })).toThrow();
+    const payload = buildNavigationAnalyticsPayload({
+      eventName: 'ai_assistant_message',
+      locale: 'fr',
+      metadata: { surface: 'ai_assistant', target: 'submitted' },
+    });
+    expect(JSON.stringify(payload)).not.toContain('private customer question');
+  });
+
   it('tracks checkout outcomes without accepting customer PII', () => {
     expect(buildCheckoutAnalyticsPayload({
       eventName: 'order_create_success',

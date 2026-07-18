@@ -14,6 +14,7 @@ import {
   ADMIN_REPORTING_REFRESH_QUEUE,
   ADMIN_STATS_IMPORT_QUEUE,
   STOREFRONT_ANALYTICS_QUEUE,
+  ADMIN_AI_CONTENT_QUEUE,
   runAdCostsImportJob,
   runAnalyticsJob,
   runEcotrackShipmentSyncJob,
@@ -25,6 +26,7 @@ import {
   runAdminReportingRefreshJob,
   runStatsImportJob,
   startAdminReportingRefreshJob,
+  runAiContentJob,
 } from '../lib/background-jobs';
 
 const DEFAULT_REPORTING_REFRESH_CRON = '11 3 * * *';
@@ -46,6 +48,7 @@ Sentry.init({
 });
 
 const workers = [
+  createQueueWorker(ADMIN_AI_CONTENT_QUEUE, runAiContentJob),
   createQueueWorker(ADMIN_PRODUCT_EXPORT_QUEUE, runProductExportJob),
   createQueueWorker(ADMIN_PRODUCT_CATALOG_FEED_QUEUE, runProductCatalogFeedRefreshJob),
   createQueueWorker(ADMIN_ORDER_EXPORT_QUEUE, runOrderExportJob),

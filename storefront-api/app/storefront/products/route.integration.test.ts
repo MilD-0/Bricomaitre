@@ -147,4 +147,18 @@ describe('app/storefront/products/route', () => {
       expect.objectContaining({ sortKey: 'recommended' }),
     );
   });
+
+  it('forwards the discount-only filter to the canonical catalog reader', async () => {
+    hasDbMock.mockReturnValue(true);
+    getDbMock.mockReturnValue({ tag: 'db' });
+    readStorefrontProductsMock.mockResolvedValue([]);
+    countStorefrontProductsMock.mockResolvedValue(0);
+
+    await GET(new NextRequest('http://localhost/storefront/products?discounted=1&sortKey=recommended'));
+
+    expect(readStorefrontProductsMock).toHaveBeenCalledWith(
+      { tag: 'db' },
+      expect.objectContaining({ discounted: true, sortKey: 'recommended' }),
+    );
+  });
 });

@@ -87,8 +87,6 @@ export function buildStorefrontRobots(): MetadataRoute.Robots {
     '/ar/cart',
     '/fr/collections/',
     '/ar/collections/',
-    '/fr/landing/',
-    '/ar/landing/',
   ];
 
   return {

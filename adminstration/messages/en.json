@@ -7,6 +7,7 @@
     "ecotrackShipments": "ECOTRACK shipments",
     "inventory": "Inventory",
     "assets": "Assets",
+    "landingPages": "Landing pages",
     "brands": "Brands",
     "categories": "Categories",
     "brandsCategories": "Brands & Categories",
@@ -949,7 +950,52 @@
     "settings": "Theme, language, layout and permission management.",
     "administration": "Administration overview and action history."
   },
+  "aiChat": {
+    "open": "AI assistant",
+    "close": "Close AI assistant",
+    "title": "Admin AI assistant",
+    "description": "Analyze the catalog and create reviewable content, pricing, bundle, featured, and entity-edit proposals.",
+    "reviewMode": "Review required",
+    "conversation": "AI assistant conversation",
+    "emptyTitle": "What would you like to improve?",
+    "capabilityCatalog": "Catalog content",
+    "capabilityAnalytics": "Analytics",
+    "capabilityPricing": "Pricing & bundles",
+    "examples": "Try: fill missing Arabic titles, suggest a 10% discount, create a bundle, show low stock, or feature the best products.",
+    "placeholder": "Ask about catalog content, analytics, pricing, bundles, or edits…",
+    "send": "Send",
+    "sendHint": "Enter to send · Shift + Enter for a new line. Changes remain reviewable before they are applied.",
+    "thinking": "Working…",
+    "completed": "The requested proposal operation completed.",
+    "error": "The AI assistant request failed.",
+    "history": "Progress and history",
+    "historyHint": "Live jobs and reviewable proposals",
+    "noHistory": "No AI jobs or proposals yet.",
+    "approve": "Approve and apply",
+    "reject": "Reject",
+    "cancel": "Cancel",
+    "vs": "vs",
+    "metric": "Metric",
+    "current": "Current",
+    "previous": "Previous",
+    "change": "Change",
+    "yes": "Yes",
+    "no": "No"
+  },
   "products": {
+    "ai": {
+      "title": "AI product content",
+      "description": "Generate missing localized content, review every field, and apply only approved changes.",
+      "generateMissing": "Generate missing content",
+      "generated": "AI content proposal created.",
+      "before": "Current",
+      "proposed": "Proposed",
+      "approve": "Approve and apply",
+      "reject": "Reject",
+      "applied": "AI content proposal applied.",
+      "rejected": "AI content proposal rejected.",
+      "empty": "No content proposals awaiting review."
+    },
     "view": {
       "cards": "Cards",
       "table": "Table"
@@ -1086,6 +1132,12 @@
       "label": "Copy phone number",
       "success": "Phone number copied.",
       "error": "Unable to copy the phone number."
+    },
+    "tracking": {
+      "copy": "Copy tracking link",
+      "success": "Tracking link copied.",
+      "error": "Unable to copy the tracking link.",
+      "unavailable": "This order does not have a tracking link yet."
     },
     "capture": {
       "degraded": "Incomplete capture"
@@ -1715,7 +1767,14 @@
       "brands_categories_write": "Manage brands & categories",
       "bulletin_moderate": "Moderate bulletin posts",
       "ops_view": "View ops dashboards & logs",
-      "settings_manage": "Manage settings configuration"
+      "settings_manage": "Manage settings configuration",
+      "ai_use": "Use the admin AI assistant",
+      "ai_catalog_propose": "Generate AI catalog proposals",
+      "ai_catalog_apply": "Apply AI catalog changes",
+      "ai_analytics_query": "Query analytics with AI",
+      "ai_pricing_analyze": "Analyze pricing and discounts with AI",
+      "ai_pricing_apply": "Apply AI pricing and discount changes",
+      "ai_landing_publish": "Publish AI-generated landing pages"
     }
   },
   "storefrontSettings": {
@@ -1727,6 +1786,10 @@
     "phoneHint": "An Algerian mobile number in national or +213 format.",
     "callsLabel": "Allow phone calls",
     "callsHint": "Show direct tap-to-call actions on the storefront.",
+    "assistantTitle": "AI shopping assistant",
+    "assistantDescription": "Control whether the product advisor is available on the rebuilt storefront.",
+    "assistantLabel": "Enable the AI shopping assistant",
+    "assistantHint": "Show the assistant launcher on browsing and product pages. Checkout and thank-you pages remain assistant-free.",
     "saveAction": "Save storefront settings",
     "savingAction": "Saving...",
     "saving": "Saving storefront settings...",

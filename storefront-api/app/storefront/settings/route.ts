@@ -22,6 +22,7 @@ export async function GET() {
     .select({
       contactPhone: storefrontSettings.contactPhone,
       phoneEnabled: storefrontSettings.phoneEnabled,
+      aiAssistantEnabled: storefrontSettings.aiAssistantEnabled,
     })
     .from(storefrontSettings)
     .limit(1);

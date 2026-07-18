@@ -18,7 +18,7 @@ const labels = {
   loadError: 'Try again',
   end: 'All products seen',
 };
-const query = { q: '', category: null, brand: null, sort: 'newest' as const, page: 1 };
+const query = { q: '', category: null, brand: null, discounted: false, sort: 'newest' as const, page: 1 };
 const product = (id: number, title = `Tool ${id}`) => ({
   id,
   slug: `tool-${id}`,

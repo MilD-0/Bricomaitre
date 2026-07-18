@@ -7,6 +7,7 @@
     "ecotrackShipments": "Expeditions ECOTRACK",
     "inventory": "Inventaire",
     "assets": "Ressources",
+    "landingPages": "Landing pages",
     "brands": "Marques",
     "categories": "Catégories",
     "brandsCategories": "Marques & Catégories",
@@ -954,7 +955,52 @@
     "settings": "Thème, langue, disposition et gestion des permissions.",
     "administration": "Vue d’ensemble de l’administration et historique des actions."
   },
+  "aiChat": {
+    "open": "Assistant IA",
+    "close": "Fermer l’assistant IA",
+    "title": "Assistant IA administrateur",
+    "description": "Recherchez des produits et créez des propositions à vérifier. Aucun contenu n’est appliqué automatiquement.",
+    "reviewMode": "Validation requise",
+    "conversation": "Conversation avec l’assistant IA",
+    "emptyTitle": "Que souhaitez-vous améliorer ?",
+    "capabilityCatalog": "Contenu catalogue",
+    "capabilityAnalytics": "Analyses",
+    "capabilityPricing": "Prix et bundles",
+    "examples": "Exemple : génère le titre arabe du produit 42, régénère les descriptions des produits 10 et 11, ou traite tous les produits sans titre arabe.",
+    "placeholder": "Demandez une action sur le contenu produit…",
+    "send": "Envoyer",
+    "sendHint": "Entrée pour envoyer · Maj + Entrée pour une nouvelle ligne. Les changements restent à valider avant application.",
+    "thinking": "Traitement…",
+    "completed": "L’opération de proposition est terminée.",
+    "error": "La demande à l’assistant IA a échoué.",
+    "history": "Progression et historique",
+    "historyHint": "Tâches actives et propositions à valider",
+    "noHistory": "Aucune tâche ou proposition IA.",
+    "approve": "Approuver et appliquer",
+    "reject": "Refuser",
+    "cancel": "Annuler",
+    "vs": "contre",
+    "metric": "Indicateur",
+    "current": "Actuel",
+    "previous": "Précédent",
+    "change": "Évolution",
+    "yes": "Oui",
+    "no": "Non"
+  },
   "products": {
+    "ai": {
+      "title": "Contenu produit par IA",
+      "description": "Générez le contenu localisé manquant, vérifiez chaque champ et appliquez uniquement les modifications approuvées.",
+      "generateMissing": "Générer le contenu manquant",
+      "generated": "Proposition de contenu IA créée.",
+      "before": "Actuel",
+      "proposed": "Proposé",
+      "approve": "Approuver et appliquer",
+      "reject": "Rejeter",
+      "applied": "Proposition de contenu IA appliquée.",
+      "rejected": "Proposition de contenu IA rejetée.",
+      "empty": "Aucune proposition de contenu en attente."
+    },
     "view": {
       "cards": "Cartes",
       "table": "Tableau"
@@ -1091,6 +1137,12 @@
       "label": "Copier le numéro",
       "success": "Numéro copié.",
       "error": "Impossible de copier le numéro."
+    },
+    "tracking": {
+      "copy": "Copier le lien de suivi",
+      "success": "Lien de suivi copié.",
+      "error": "Impossible de copier le lien de suivi.",
+      "unavailable": "Cette commande ne possède pas encore de lien de suivi."
     },
     "capture": {
       "degraded": "Capture incomplète"
@@ -1720,7 +1772,14 @@
       "brands_categories_write": "Gérer les marques et catégories",
       "bulletin_moderate": "Modérer les publications du bulletin",
       "ops_view": "Voir les tableaux et journaux Ops",
-      "settings_manage": "Gérer la configuration des paramètres"
+      "settings_manage": "Gérer la configuration des paramètres",
+      "ai_use": "Utiliser l’assistant IA d’administration",
+      "ai_catalog_propose": "Générer des propositions IA pour le catalogue",
+      "ai_catalog_apply": "Appliquer les modifications IA au catalogue",
+      "ai_analytics_query": "Interroger les analyses avec l’IA",
+      "ai_pricing_analyze": "Analyser les prix et remises avec l’IA",
+      "ai_pricing_apply": "Appliquer les prix et remises proposés par l’IA",
+      "ai_landing_publish": "Publier les pages de destination générées par l’IA"
     }
   },
   "storefrontSettings": {
@@ -1732,6 +1791,10 @@
     "phoneHint": "Un numéro mobile algérien au format national ou +213.",
     "callsLabel": "Autoriser les appels",
     "callsHint": "Afficher les actions d’appel direct dans la boutique.",
+    "assistantTitle": "Assistant d’achat IA",
+    "assistantDescription": "Contrôlez la disponibilité du conseiller produits sur la nouvelle boutique.",
+    "assistantLabel": "Activer l’assistant d’achat IA",
+    "assistantHint": "Affiche le conseiller sur les pages de navigation et de produits. Il reste absent du checkout et de la page de confirmation.",
     "saveAction": "Enregistrer les paramètres",
     "savingAction": "Enregistrement...",
     "saving": "Enregistrement des paramètres de la boutique...",

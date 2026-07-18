@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 
 import { getDb, hasDb } from '../../../../db/client';
-import { productPromoCodes, products } from '../../../../db/schema';
+import { landingPages, productPromoCodes, products } from '../../../../db/schema';
 import { mutateEntityWithHistory } from '../../../../lib/action-history';
 import { auth } from '../../../../lib/auth';
 import { startProductCatalogFeedRefreshJob } from '../../../../lib/background-jobs';
@@ -11,7 +11,7 @@ import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
 import { captureAdminException, getRequestId } from '../../../../lib/sentry';
 import { CACHE_TAGS, revalidateServerTags } from '../../../../lib/server-cache';
 import { resolveUniqueSlug } from '../../../../lib/slug';
-import { revalidateStorefrontProducts } from '../../../../lib/storefront-revalidate';
+import { revalidateStorefrontLandingPages, revalidateStorefrontProducts } from '../../../../lib/storefront-revalidate';
 
 async function resolveProductSlug(
   data: ReturnType<typeof productPayloadSchema.parse>,
@@ -156,13 +156,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     operation: 'update',
     actor,
     execute: async (tx) => {
+      const updatedAt = new Date();
       await tx
         .update(products)
         .set({
           ...values,
-          updatedAt: new Date(),
+          updatedAt,
         })
         .where(eq(products.id, numericId));
+      await tx
+        .update(landingPages)
+        .set({ slug: values.slug, updatedAt, updatedBy: actor.email })
+        .where(eq(landingPages.productId, numericId));
       if (Array.isArray(data.promoCodes)) {
         await tx.delete(productPromoCodes).where(eq(productPromoCodes.productId, numericId));
         const promoRows = toProductPromoRows(numericId, data.promoCodes);
@@ -174,7 +179,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   });
 
   revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
-  await revalidateStorefrontProducts();
+  await Promise.all([revalidateStorefrontProducts(), revalidateStorefrontLandingPages()]);
 
   try {
     await startProductCatalogFeedRefreshJob('product:update', requestId);

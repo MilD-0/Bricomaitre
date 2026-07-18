@@ -10,7 +10,7 @@ vi.mock('./auth', () => ({
 }));
 
 import { normalizePermissions, normalizeRole } from './permissions';
-import { canMutateResource, requireAdministrationAccess, requireMutationAccess, requireOpsAccess } from './rbac';
+import { canMutateResource, requireAdministrationAccess, requireAiAccess, requireAiUseAccess, requireMutationAccess, requireOpsAccess } from './rbac';
 
 describe('rbac helpers', () => {
   beforeEach(() => {
@@ -64,6 +64,20 @@ describe('rbac helpers', () => {
     authMock.mockResolvedValue({ user: { isAllowed: true, role: 'admin', permissions: [] } });
 
     await expect(requireAdministrationAccess()).resolves.toBeNull();
+  });
+
+  it('requires both base AI and task-specific permissions', async () => {
+    authMock.mockResolvedValue({ user: { isAllowed: true, role: 'employee', permissions: ['ai_catalog_propose'] } });
+    expect((await requireAiAccess('ai_catalog_propose'))?.status).toBe(403);
+
+    authMock.mockResolvedValue({ user: { isAllowed: true, role: 'employee', permissions: ['ai_use', 'ai_catalog_propose'] } });
+    await expect(requireAiAccess('ai_catalog_propose')).resolves.toBeNull();
+  });
+
+  it('allows analytics-only users to open the AI chat while withholding task tools', async () => {
+    authMock.mockResolvedValue({ user: { isAllowed: true, role: 'employee', permissions: ['ai_use', 'ai_analytics_query'] } });
+    await expect(requireAiUseAccess()).resolves.toBeNull();
+    expect((await requireAiAccess('ai_catalog_propose'))?.status).toBe(403);
   });
 
   it('rejects non-admin and non-developer users through requireAdministrationAccess', async () => {

@@ -108,6 +108,7 @@ export async function CatalogPageContent({ params, searchParams, heading }: Cata
           brands={brands.map((brand) => ({ id: brand.id, label: brand.name }))}
           selectedCategory={query.category}
           selectedBrand={query.brand}
+          discounted={query.discounted}
           search={query.q}
           sort={query.sort}
           labels={{

@@ -11,6 +11,7 @@ import { addCartItem, readCart, writeCart, type CartItem } from '@/lib/cart';
 import { trackProductEvent } from '@/lib/analytics';
 import { prepareHaptics, triggerHaptic } from '@/lib/haptics';
 import type { StorefrontSettingsResponse } from '@bric/storefront-core/contracts';
+import { LANDING_ORDER_QUANTITY_EVENT, type LandingOrderQuantityDetail } from '@/lib/landing-order';
 
 type ProductActionsProps = {
   locale: Locale;
@@ -20,8 +21,15 @@ type ProductActionsProps = {
     categorySlug: string | null;
     brandId: number | null;
     brandSlug: string | null;
+    metadata?: {
+      landingPageId?: number;
+      landingRevision?: number;
+      landingBlockId?: string;
+    };
   };
   available: boolean;
+  showAddToCart?: boolean;
+  buyNowTarget?: string;
   labels: {
     quantity: string;
     decrease: string;
@@ -34,7 +42,7 @@ type ProductActionsProps = {
   support?: { contact: StorefrontSettingsResponse; labels: SupportContactLabels };
 };
 
-export function ProductActions({ locale, item, analytics, available, labels, support }: ProductActionsProps) {
+export function ProductActions({ locale, item, analytics, available, showAddToCart = true, buyNowTarget, labels, support }: ProductActionsProps) {
   const [quantity, setQuantity] = useState(1);
   const [announcement, setAnnouncement] = useState('');
   const buyNowIconRef = useRef<ArrowUpRightIconHandle>(null);
@@ -76,7 +84,20 @@ export function ProductActions({ locale, item, analytics, available, labels, sup
   function buyNow() {
     void triggerHaptic('primary');
     void trackProductEvent({ eventName: 'buy_now_click', ...analyticsBase });
+    if (buyNowTarget) {
+      window.dispatchEvent(new CustomEvent<LandingOrderQuantityDetail>(LANDING_ORDER_QUANTITY_EVENT, {
+        detail: { productId: item.productId, quantity },
+      }));
+      const target = document.querySelector<HTMLElement>(buyNowTarget);
+      const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      target?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+      window.history.replaceState(window.history.state, '', buyNowTarget);
+      window.requestAnimationFrame(() => target?.querySelector<HTMLElement>('input, select, button')?.focus({ preventScroll: true }));
+      return;
+    }
     const params = new URLSearchParams({ product: item.token, quantity: String(quantity) });
+    if (analytics.metadata?.landingPageId) params.set('landing', String(analytics.metadata.landingPageId));
+    if (analytics.metadata?.landingRevision) params.set('landingRevision', String(analytics.metadata.landingRevision));
     window.location.assign(`/${locale}/checkout?${params.toString()}`);
   }
 
@@ -117,7 +138,7 @@ export function ProductActions({ locale, item, analytics, available, labels, sup
           <span>{labels.buyNow}</span>
           <ArrowUpRightIcon ref={buyNowIconRef} className="product-buy-now-icon" size={18} aria-hidden="true" />
         </Button>
-        <Button type="button" size="lg" variant="outline" className="button button-secondary product-add-to-cart" onClick={addToCart}>{labels.addToCart}</Button>
+        {showAddToCart ? <Button type="button" size="lg" variant="outline" className="button button-secondary product-add-to-cart" onClick={addToCart}>{labels.addToCart}</Button> : null}
       </div>
       <p className="product-action-announcement" role="status" aria-live="polite">{announcement}</p>
       {support ? <SupportContactActions locale={locale} contact={support.contact} labels={support.labels} surface="product_detail" /> : null}

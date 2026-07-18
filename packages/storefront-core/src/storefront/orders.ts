@@ -14,7 +14,11 @@ import {
 import { getOrderProductLookup, type ProductLookupEntry } from '../order-records';
 import type { StorefrontOrderCreateRequest, StorefrontOrderPatchRequest } from './contracts';
 import { toStorefrontOrderDto } from './dto';
-import { createPublicOrderToken, requireStorefrontOrderAccess } from './order-access';
+import {
+  createPublicOrderToken,
+  requireStorefrontOrderAccess,
+  requireStorefrontOrderAccessByToken,
+} from './order-access';
 import { resolveOrderPromo } from './promos';
 import {
   createOrderMetaArtifacts,
@@ -268,6 +272,30 @@ export async function readStorefrontOrder(
     .select()
     .from(orderStatusHistory)
     .where(eq(orderStatusHistory.orderId, id))
+    .orderBy(asc(orderStatusHistory.changedAt));
+  const productLookup = await getOrderProductLookup(db, [access.order]);
+
+  return {
+    kind: 'ok' as const,
+    item: toStorefrontOrderDto(access.order, toStorefrontHistoryEntries(historyRows), productLookup),
+    token: access.token,
+  };
+}
+
+export async function readStorefrontOrderByToken(
+  db: Database,
+  token: string | null,
+) {
+  const access = await requireStorefrontOrderAccessByToken(db, token);
+
+  if (access.kind !== 'ok') {
+    return access;
+  }
+
+  const historyRows = await db
+    .select()
+    .from(orderStatusHistory)
+    .where(eq(orderStatusHistory.orderId, access.order.id))
     .orderBy(asc(orderStatusHistory.changedAt));
   const productLookup = await getOrderProductLookup(db, [access.order]);
 

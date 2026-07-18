@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DELETE, GET, PATCH } from '../route';
+import { DELETE, GET, PATCH, POST } from '../route';
 import { orderPatchSchema } from '../../../../../lib/orders';
 
 const {
@@ -103,6 +103,31 @@ describe('app/api/orders/[id]/route', () => {
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ error: 'Forbidden' });
+  });
+
+  it('issues an opaque tracking token for an imported order that does not have one', async () => {
+    hasDbMock.mockReturnValue(true);
+    let issuedToken = '';
+    const returning = vi.fn(async () => [{ publicToken: issuedToken }]);
+    const where = vi.fn().mockReturnValue({ returning });
+    const set = vi.fn((values: { publicToken: string }) => {
+      issuedToken = values.publicToken;
+      return { where };
+    });
+    const db = {
+      query: { orders: { findFirst: vi.fn().mockResolvedValue({ id: 7, publicToken: null }) } },
+      update: vi.fn().mockReturnValue({ set }),
+    };
+    getDbMock.mockReturnValue(db);
+
+    const response = await POST(new NextRequest('http://localhost/api/orders/7', { method: 'POST' }), {
+      params: Promise.resolve({ id: '7' }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({ ok: true, publicToken: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    expect(set).toHaveBeenCalledWith(expect.objectContaining({ publicToken: body.publicToken }));
   });
 
   it('loads a single order with full status history', async () => {

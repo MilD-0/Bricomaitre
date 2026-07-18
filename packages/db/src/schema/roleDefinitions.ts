@@ -18,6 +18,13 @@ export const rolePermissionEnum = adminSchema.enum('admin_role_permission', [
   'bulletin_moderate',
   'ops_view',
   'settings_manage',
+  'ai_use',
+  'ai_catalog_propose',
+  'ai_catalog_apply',
+  'ai_analytics_query',
+  'ai_pricing_analyze',
+  'ai_pricing_apply',
+  'ai_landing_publish',
 ]);
 
 export const roleDefinitions = adminSchema.table(

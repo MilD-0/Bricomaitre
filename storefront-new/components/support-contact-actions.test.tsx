@@ -13,6 +13,7 @@ const contact = {
   phoneDisplay: '0795 34 28 26',
   phoneHref: 'tel:+213795342826',
   phoneEnabled: true,
+  aiAssistantEnabled: true,
 };
 
 describe('SupportContactActions', () => {
@@ -35,8 +36,8 @@ describe('SupportContactActions', () => {
     expect(haptics.trigger).toHaveBeenNthCalledWith(1, 'primary');
   });
 
-  it('does not render when calls are disabled', () => {
+  it('keeps phone support visible when a legacy row has the retired flag disabled', () => {
     const { container } = render(<SupportContactActions locale="fr" contact={{ ...contact, phoneEnabled: false }} surface="thank_you" labels={{ title: 'Support', call: 'Call' }} />);
-    expect(container).toBeEmptyDOMElement();
+    expect(container.querySelector('a')).toHaveAttribute('href', 'tel:+213795342826');
   });
 });

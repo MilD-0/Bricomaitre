@@ -10,7 +10,7 @@ import {
 } from '@/lib/cache-tags';
 
 const revalidationPayloadSchema = z.object({
-  scope: z.enum(['products', 'settings']),
+  scope: z.enum(['products', 'settings', 'landing-pages']),
   tokens: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
 });
 
@@ -49,7 +49,9 @@ export async function POST(request: NextRequest) {
 
   const tags = parsed.data.scope === 'settings'
     ? [STOREFRONT_NEW_CACHE_TAGS.settings]
-    : [
+    : parsed.data.scope === 'landing-pages'
+      ? [STOREFRONT_NEW_CACHE_TAGS.landingPages]
+      : [
         STOREFRONT_NEW_CACHE_TAGS.products,
         ...new Set((parsed.data.tokens ?? []).map(getStorefrontProductCacheTag)),
       ];

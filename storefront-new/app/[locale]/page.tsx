@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import type { StorefrontHomepageResponse } from '@bric/storefront-core/contracts';
+import { defaultStorefrontSettingsResponse, type StorefrontHomepageResponse } from '@bric/storefront-core/contracts';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 
@@ -9,7 +9,7 @@ import { HomePageSkeleton } from '@/components/storefront-skeletons';
 import { isLocale } from '@/i18n/config';
 import { buildHomepageMetadata, buildHomepageStructuredData } from '@/lib/homepage-seo';
 import { serializeStructuredData } from '@/lib/product-seo';
-import { getStorefrontHomepage } from '@/lib/storefront-api';
+import { getStorefrontHomepage, getStorefrontSettings } from '@/lib/storefront-api';
 
 type HomePageProps = { params: Promise<{ locale: string }> };
 
@@ -36,10 +36,16 @@ export async function HomePageContent({ params }: HomePageProps) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   let data = emptyHomepage;
+  let contact = defaultStorefrontSettingsResponse;
   try {
     data = await getStorefrontHomepage();
   } catch {
     data = emptyHomepage;
+  }
+  try {
+    contact = await getStorefrontSettings();
+  } catch {
+    contact = defaultStorefrontSettingsResponse;
   }
 
   return (
@@ -48,7 +54,7 @@ export async function HomePageContent({ params }: HomePageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeStructuredData(buildHomepageStructuredData(locale)) }}
       />
-      <Homepage data={data} locale={locale} />
+      <Homepage data={data} locale={locale} contact={contact} />
     </PageShell>
   );
 }
