@@ -21,7 +21,7 @@ export function CatalogTelemetry({ locale, query, resultsCount, visibleProductId
     if (trackedKey.current === key) return;
     trackedKey.current = key;
 
-    const base = { locale, metadata: { resultsCount, page: query.page, sort: query.sort } };
+    const base = { locale, metadata: { resultsCount, page: query.page, sort: query.sort, discounted: query.discounted } };
     void trackCatalogEvent({
       eventName: 'view_item_list',
       ...base,
@@ -39,6 +39,11 @@ export function CatalogTelemetry({ locale, query, resultsCount, visibleProductId
       ...base,
       brandId: query.brand,
       metadata: { ...base.metadata, filterKind: 'brand', filterId: query.brand },
+    });
+    if (query.discounted) void trackCatalogEvent({
+      eventName: 'filter_apply',
+      ...base,
+      metadata: { ...base.metadata, filterKind: 'discounted' },
     });
     if (query.sort !== 'recommended') void trackCatalogEvent({ eventName: 'sort_change', ...base });
   }, [locale, query, resultsCount, visibleProductIds]);

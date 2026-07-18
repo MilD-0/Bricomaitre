@@ -1,16 +1,17 @@
 'use client';
 
 import NumberFlow from '@number-flow/react';
-import { Check, ClipboardCheck, LoaderCircle, PackageCheck, PhoneCall, RotateCcw, Truck } from 'lucide-react';
+import { Check, PackageCheck, RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { StorefrontImage } from '@/components/storefront-image';
+import { OrderTracking } from '@/components/order-tracking';
 import { SupportContactActions, type SupportContactLabels } from '@/components/support-contact-actions';
 import { ThankYouContentSkeleton } from '@/components/storefront-skeletons';
 import type { Locale } from '@/i18n/config';
 import { trackCheckoutEvent } from '@/lib/analytics';
 import { readCheckoutConfirmation, writeCheckoutConfirmation, type CheckoutConfirmation } from '@/lib/checkout';
-import { verifyCheckoutOrder } from '@/lib/orders';
+import { verifyCheckoutOrderByToken } from '@/lib/orders';
 import { formatProductPrice } from '@/lib/product-presentation';
 import type { StorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
@@ -21,46 +22,49 @@ type Labels = {
   customer: string; phone: string; wilaya: string; commune: string; address: string; deliveryMode: string;
   homeDelivery: string; officeDelivery: string; fallback: string; unavailableTitle: string;
   unavailableBody: string; retry: string; browseProducts: string;
+  trackingTitle: string; trackingLive: string; trackingWaiting: string; trackingPreparing: string;
+  trackingOnWay: string; trackingDelivered: string; trackingDelayed: string; trackingCancelled: string;
+  trackingReturned: string; trackingFailed: string;
 };
 
-export function ThankYouConfirmation({ locale, orderId, token, labels, support }: { locale: Locale; orderId: number | null; token: string | null; labels: Labels; support?: { contact: StorefrontSettingsResponse; labels: SupportContactLabels } }) {
-  const [confirmation, setConfirmation] = useState<CheckoutConfirmation | null>(null);
-  const [status, setStatus] = useState<'loading' | 'success' | 'fallback' | 'failure'>('loading');
+export function ThankYouConfirmation({ locale, orderId, token, labels, support, initialConfirmation = null }: { locale: Locale; orderId: number | null; token: string | null; labels: Labels; support?: { contact: StorefrontSettingsResponse; labels: SupportContactLabels }; initialConfirmation?: CheckoutConfirmation | null }) {
+  const [confirmation, setConfirmation] = useState<CheckoutConfirmation | null>(initialConfirmation);
+  const [status, setStatus] = useState<'loading' | 'prerendered' | 'success' | 'fallback' | 'failure'>(initialConfirmation ? 'prerendered' : 'loading');
   const tracked = useRef(false);
 
   const verify = useCallback(async () => {
     const stored = readCheckoutConfirmation(window.localStorage);
     const matching = stored && (orderId == null || stored.order.id === orderId) ? stored : null;
-    if (matching) {
-      setConfirmation(matching);
-      setStatus('fallback');
+    const baseline = matching ?? initialConfirmation;
+    if (baseline) {
+      setConfirmation(baseline);
     } else {
       setStatus('loading');
     }
-    if (!orderId || !token) {
-      if (!matching) setStatus('failure');
+    if (!token) {
+      if (!baseline) setStatus('failure');
       return;
     }
     try {
-      const order = await verifyCheckoutOrder(orderId, token);
+      const order = await verifyCheckoutOrderByToken(token);
       const next = {
         order,
-        cartMode: matching?.cartMode ?? 'cart' as const,
-        stateName: matching?.stateName ?? null,
+        cartMode: baseline?.cartMode ?? 'cart' as const,
+        stateName: baseline?.stateName ?? null,
         createdAt: new Date().toISOString(),
-        purchaseEventId: matching?.purchaseEventId ?? null,
+        purchaseEventId: baseline?.purchaseEventId ?? null,
       };
       writeCheckoutConfirmation(window.localStorage, next);
       setConfirmation(next);
       setStatus('success');
     } catch {
-      setStatus(matching ? 'fallback' : 'failure');
+      setStatus(baseline ? 'fallback' : 'failure');
       void trackCheckoutEvent({
         eventName: 'order_verification_failed_after_create', locale, orderId,
-        metadata: { cartMode: matching?.cartMode ?? 'cart', itemCount: matching?.order.orderProducts.reduce((sum, item) => sum + item.quantity, 0) ?? 0, verificationSource: matching ? 'snapshot' : 'server' },
+        metadata: { cartMode: baseline?.cartMode ?? 'cart', itemCount: baseline?.order.orderProducts.reduce((sum, item) => sum + item.quantity, 0) ?? 0, verificationSource: baseline ? 'snapshot' : 'server' },
       }, 'thank_you');
     }
-  }, [locale, orderId, token]);
+  }, [initialConfirmation, locale, orderId, token]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void verify(), 0);
@@ -101,10 +105,18 @@ export function ThankYouConfirmation({ locale, orderId, token, labels, support }
       </header>
       {status === 'fallback' ? <p className="thank-you-fallback" role="status">{labels.fallback}</p> : null}
 
-      <section className="thank-you-next">
-        <h2>{labels.nextTitle}</h2>
-        <ol><li><PhoneCall aria-hidden="true" /><span>{labels.nextOne}</span></li><li><ClipboardCheck aria-hidden="true" /><span>{labels.nextTwo}</span></li><li><Truck aria-hidden="true" /><span>{labels.nextThree}</span></li></ol>
-      </section>
+      <OrderTracking order={order} labels={{
+        title: labels.trackingTitle,
+        live: labels.trackingLive,
+        waiting: labels.trackingWaiting,
+        preparing: labels.trackingPreparing,
+        onWay: labels.trackingOnWay,
+        delivered: labels.trackingDelivered,
+        delayed: labels.trackingDelayed,
+        cancelled: labels.trackingCancelled,
+        returned: labels.trackingReturned,
+        failed: labels.trackingFailed,
+      }} />
       {support ? <SupportContactActions locale={locale} contact={support.contact} labels={support.labels} surface="thank_you" variant="panel" /> : null}
 
       <div className="thank-you-grid">

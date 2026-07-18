@@ -31,15 +31,15 @@ describe('app/api/storefront-settings/route', () => {
   });
 
   it('validates, saves, and revalidates contact settings', async () => {
-    mocks.save.mockResolvedValue({ contactPhone: '0795342826', phoneEnabled: true });
+    mocks.save.mockResolvedValue({ contactPhone: '0795342826', phoneEnabled: true, aiAssistantEnabled: false });
     const response = await PUT(new NextRequest('http://localhost/api/storefront-settings', {
       method: 'PUT',
-      body: JSON.stringify({ contactPhone: '0795 34 28 26', phoneEnabled: true }),
+      body: JSON.stringify({ contactPhone: '0795 34 28 26', phoneEnabled: false, aiAssistantEnabled: false }),
       headers: { 'content-type': 'application/json' },
     }));
 
     expect(mocks.authorize).toHaveBeenCalledWith('settings');
-    expect(mocks.save).toHaveBeenCalledWith({ contactPhone: '0795342826', phoneEnabled: true });
+    expect(mocks.save).toHaveBeenCalledWith({ contactPhone: '0795342826', phoneEnabled: true, aiAssistantEnabled: false });
     expect(mocks.revalidate).toHaveBeenCalledOnce();
     expect(response.status).toBe(200);
   });

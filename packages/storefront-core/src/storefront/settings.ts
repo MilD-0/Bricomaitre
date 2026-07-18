@@ -19,6 +19,7 @@ export const algerianPhoneNumberSchema = z.string()
 export const storefrontSettingsInputSchema = z.object({
   contactPhone: algerianPhoneNumberSchema,
   phoneEnabled: z.boolean(),
+  aiAssistantEnabled: z.boolean().default(true),
 });
 
 export type StorefrontSettingsInput = z.infer<typeof storefrontSettingsInputSchema>;
@@ -26,6 +27,7 @@ export type StorefrontSettingsInput = z.infer<typeof storefrontSettingsInputSche
 export const DEFAULT_STOREFRONT_SETTINGS: StorefrontSettingsInput = {
   contactPhone: DEFAULT_STOREFRONT_CONTACT_PHONE,
   phoneEnabled: true,
+  aiAssistantEnabled: true,
 };
 
 export function formatAlgerianPhoneNumber(value: string) {
@@ -40,6 +42,9 @@ export function toStorefrontContactSettings(input: StorefrontSettingsInput) {
   return {
     phoneDisplay: formatAlgerianPhoneNumber(settings.contactPhone),
     phoneHref: `tel:+${internationalDigits}`,
-    phoneEnabled: settings.phoneEnabled,
+    // Phone support is always available. Preserve the legacy response field
+    // while preventing outdated stored toggles from hiding contact actions.
+    phoneEnabled: true,
+    aiAssistantEnabled: settings.aiAssistantEnabled,
   };
 }

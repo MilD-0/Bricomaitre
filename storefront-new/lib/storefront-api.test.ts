@@ -7,6 +7,8 @@ import {
   fetchStorefrontCatalogMeta,
   fetchStorefrontHomepage,
   fetchStorefrontHomepageFeaturedGroupProducts,
+  fetchStorefrontOrder,
+  fetchStorefrontOrderByToken,
   fetchStorefrontSitemapProducts,
   fetchStorefrontSettings,
   getStorefrontEcotrackCatalog,
@@ -47,6 +49,15 @@ const validProductResponse = {
     matchedBy: 'mongoId',
     canonicalToken: 'desk-lamp',
   },
+};
+
+const validOrder = {
+  id: 42, publicToken: 'public-order-token-1234567890', createdAt: '2026-07-14T10:00:00.000Z', updatedAt: '2026-07-14T10:00:00.000Z',
+  firstName: null, lastName: null, fullName: '', email: null, phoneNumber1: '0550000000', phoneNumber2: null,
+  cartProducts: ['desk-lamp'], orderProducts: [{ productId: 12, rawValue: 'desk-lamp', title: 'Desk Lamp', unitPrice: 4500, quantity: 1, lineTotal: 4500, thumbnailUrl: null, missing: false }],
+  delivery: 0, state: 16, city: 'Alger Centre', homeAddress: '12 rue des Outils', productSubtotal: 4500, deliveryFee: 500, totalAmount: 5000,
+  promoCode: null, promoProductId: null, promoOriginalSubtotal: null, promoDiscountAmount: 0, promoFinalSubtotal: null,
+  note: null, confirmed: 0, noAnswerCount: 0, confirmedAt: null, hasStatusHistory: false, statusHistory: [],
 };
 
 vi.mock('next/cache', () => ({
@@ -101,6 +112,7 @@ describe('storefront API client', () => {
       search: 'marteau',
       brandId: 2,
       categoryId: 3,
+      discounted: true,
       sortKey: 'price',
       sortDirection: 'asc',
       id: null,
@@ -111,7 +123,7 @@ describe('storefront API client', () => {
 
     expect(fetch).toHaveBeenNthCalledWith(
       1,
-      'http://localhost:3001/storefront/products?page=2&limit=25&sortKey=price&sortDirection=asc&search=marteau&brandId=2&categoryId=3',
+      'http://localhost:3001/storefront/products?page=2&limit=25&sortKey=price&sortDirection=asc&search=marteau&brandId=2&categoryId=3&discounted=1',
       expect.any(Object),
     );
     expect(fetch).toHaveBeenNthCalledWith(2, 'http://localhost:3001/storefront/brands', expect.any(Object));
@@ -153,8 +165,33 @@ describe('storefront API client', () => {
     };
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(settings), { status: 200 }));
 
-    await expect(fetchStorefrontSettings()).resolves.toEqual(settings);
+    await expect(fetchStorefrontSettings()).resolves.toEqual({ ...settings, aiAssistantEnabled: true });
     expect(fetch).toHaveBeenCalledWith('http://localhost:3001/storefront/settings', expect.any(Object));
+  });
+
+  it('server-renders a token-verified order without caching the customer response', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ item: validOrder }), { status: 200 }));
+
+    await expect(fetchStorefrontOrder(42, 'public-order-token-1234567890')).resolves.toEqual(validOrder);
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:3001/storefront/orders/42?token=public-order-token-1234567890',
+      expect.objectContaining({ cache: 'no-store', signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('server-renders an order from an opaque tracking token without exposing its ID in the request', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ item: validOrder }), { status: 200 }));
+
+    await expect(fetchStorefrontOrderByToken('public-order-token-1234567890')).resolves.toEqual(validOrder);
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:3001/storefront/orders/track/public-order-token-1234567890',
+      expect.objectContaining({ cache: 'no-store', signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('does not request malformed public order lookups', async () => {
+    await expect(fetchStorefrontOrder(0, 'short')).resolves.toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('rejects malformed catalog responses as controlled upstream failures', async () => {
@@ -166,6 +203,7 @@ describe('storefront API client', () => {
       search: '',
       brandId: null,
       categoryId: null,
+      discounted: false,
       sortKey: 'updatedAt',
       sortDirection: 'desc',
       id: null,

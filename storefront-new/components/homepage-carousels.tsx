@@ -22,7 +22,7 @@ function Controls({ api, locale, label }: { api: ReturnType<typeof useEmblaCarou
 
 export function HomepageCategoryCarousel({ categories, locale }: { categories: Category[]; locale: Locale }) {
   const [ref, api] = useEmblaCarousel({ ...touchCarouselOptions, direction: locale === 'ar' ? 'rtl' : 'ltr' });
-  return <div className="home-carousel-wrap"><Controls api={api} locale={locale} label={locale === 'ar' ? 'أزرار الفئات' : 'Contrôles des catégories'} /><div className="home-category-carousel" ref={ref}><div>{categories.map((category) => <a key={category.id} href={getCategoryPath(locale, category)}><span>{category.image ? <StorefrontImage src={category.image} alt="" width={220} height={170} sizes="180px" quality={60} /> : <span className="catalog-card-placeholder">BRICO</span>}</span><strong>{locale === 'ar' && category.nameAr ? category.nameAr : category.name}</strong></a>)}</div></div></div>;
+  return <div className="home-carousel-wrap"><Controls api={api} locale={locale} label={locale === 'ar' ? 'أزرار الفئات' : 'Contrôles des catégories'} /><div className="home-category-carousel" ref={ref}><div>{categories.map((category) => <a key={category.id} href={getCategoryPath(locale, category)}><span>{category.image ? <StorefrontImage src={category.image} alt="" width={220} height={170} sizes="180px" quality={60} /> : <span className="catalog-card-placeholder" aria-hidden="true">BRICO</span>}</span><strong>{locale === 'ar' && category.nameAr ? category.nameAr : category.name}</strong></a>)}</div></div></div>;
 }
 
 export function HomepageProductCarousel({ products, locale, brands, categories, featuredGroupId }: { products: Product[]; locale: Locale; brands: Brand[]; categories: Category[]; featuredGroupId?: number }) {

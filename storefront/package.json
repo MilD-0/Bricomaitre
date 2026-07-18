@@ -12,11 +12,13 @@
     "test": "vitest run --project smoke"
   },
   "dependencies": {
+    "@bric/ai-core": "workspace:*",
     "@bric/storefront-core": "workspace:*",
     "@bric/runtime": "workspace:*",
     "@next/third-parties": "16.2.2",
     "@sentry/nextjs": "10.47.0",
     "axios": "^1.7.7",
+    "ai": "^7.0.30",
     "bootstrap": "^5.3.3",
     "cookies-next": "^4.3.0",
     "crypto-js": "^4.2.0",

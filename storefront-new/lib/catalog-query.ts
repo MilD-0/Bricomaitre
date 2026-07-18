@@ -24,6 +24,7 @@ const filterIdSchema = z.preprocess(
     .transform((value) => value === '' || value == null ? null : value),
 ).catch(null);
 const sortSchema = z.preprocess(firstValue, z.enum(catalogSortValues)).catch('recommended');
+const discountedSchema = z.preprocess(firstValue, z.union([z.literal('1'), z.literal('true'), z.literal(true), z.literal(false), z.literal(''), z.null(), z.undefined()]).transform((value) => value === '1' || value === 'true' || value === true)).catch(false);
 const pageSchema = z.preprocess(firstValue, z.coerce.number().int().positive().max(1_000)).catch(1);
 const batchSizeSchema = z.coerce.number().int().min(1).max(CATALOG_PAGE_SIZE).catch(CATALOG_PAGE_SIZE);
 
@@ -31,6 +32,7 @@ export const catalogPageQuerySchema = z.object({
   q: searchSchema.default(''),
   category: filterIdSchema.default(null),
   brand: filterIdSchema.default(null),
+  discounted: discountedSchema.default(false),
   sort: sortSchema.default('recommended'),
   page: pageSchema.default(1),
 });
@@ -55,6 +57,7 @@ export function toStorefrontCatalogQuery(query: CatalogPageQuery) {
     search: query.q,
     categoryId: query.category,
     brandId: query.brand,
+    discounted: query.discounted,
     id: null,
     mongoId: null,
     slug: null,
@@ -67,6 +70,7 @@ export function buildCatalogPath(locale: Locale, query: CatalogPageQuery, page =
   if (query.q) params.set('q', query.q);
   if (query.category !== null) params.set('category', String(query.category));
   if (query.brand !== null) params.set('brand', String(query.brand));
+  if (query.discounted) params.set('discounted', '1');
   if (query.sort !== 'recommended') params.set('sort', query.sort);
   if (page > 1) params.set('page', String(page));
   const serialized = params.toString();
@@ -82,5 +86,5 @@ export function buildCatalogApiPath(query: CatalogPageQuery, page: number, batch
 }
 
 export function isFilteredCatalog(query: CatalogPageQuery) {
-  return Boolean(query.q || query.category || query.brand || query.sort !== 'recommended' || query.page > 1);
+  return Boolean(query.q || query.category || query.brand || query.discounted || query.sort !== 'recommended' || query.page > 1);
 }

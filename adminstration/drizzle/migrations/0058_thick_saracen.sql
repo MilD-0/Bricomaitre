@@ -1,0 +1,1 @@
+ALTER TABLE "storefront_settings" ADD COLUMN "ai_assistant_enabled" boolean DEFAULT true NOT NULL;

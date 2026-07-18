@@ -12,6 +12,21 @@
     "cas": "Caisse",
     "mrc": "Merci"
   },
+  "ShoppingAssistant": {
+    "open": "Assistant shopping",
+    "title": "Assistant shopping",
+    "description": "Trouvez et comparez les produits du catalogue.",
+    "close": "Fermer",
+    "welcome": "Bonjour ! Dites-moi ce que vous cherchez et je vous aiderai à trouver un produit adapté.",
+    "placeholder": "Ex. Je cherche une perceuse pour la maison",
+    "send": "Envoyer",
+    "thinking": "Je cherche dans le catalogue…",
+    "fallback": "Voici ce que j'ai trouvé dans le catalogue.",
+    "unavailable": "L’assistant est momentanément indisponible. Vous pouvez continuer à parcourir le catalogue.",
+    "currency": "DA",
+    "inStock": "En stock",
+    "outOfStock": "Indisponible"
+  },
   "Home": {
     "maga-cat": "Magasiner Par Catégorie",
     "maga-mec": "Outillage Mecanique",

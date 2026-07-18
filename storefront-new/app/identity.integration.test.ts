@@ -2,6 +2,7 @@ import { access, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { metadata, viewport } from './layout';
 import manifest from './manifest';
 
 describe('storefront identity metadata', () => {
@@ -10,12 +11,24 @@ describe('storefront identity metadata', () => {
       name: 'Bricomaitre',
       start_url: '/fr',
       lang: 'fr-DZ',
-      theme_color: '#007d82',
+      theme_color: '#f7f7f5',
       icons: expect.arrayContaining([
         expect.objectContaining({ src: '/icons/icon-192.png', sizes: '192x192' }),
         expect.objectContaining({ src: '/icons/icon-maskable-512.png', purpose: 'maskable' }),
       ]),
     });
+  });
+
+  it('uses the complete Bricomaitre wordmark assets for browser and installed-app identity', () => {
+    expect(metadata.icons).toMatchObject({
+      icon: expect.arrayContaining([
+        expect.objectContaining({ url: '/favicon.ico' }),
+        expect.objectContaining({ url: '/icon.png', sizes: '512x512' }),
+      ]),
+      shortcut: ['/favicon.ico'],
+      apple: [expect.objectContaining({ url: '/apple-icon.png', sizes: '180x180' })],
+    });
+    expect(viewport.themeColor).toBe('#f7f7f5');
   });
 
   it('ships every generated identity asset referenced by metadata', async () => {
@@ -26,7 +39,6 @@ describe('storefront identity metadata', () => {
       'public/icons/icon-192.png',
       'public/icons/icon-512.png',
       'public/icons/icon-maskable-512.png',
-      'public/brand/bricomaitre-icon-master.png',
     ];
 
     await Promise.all(files.map(async (file) => {

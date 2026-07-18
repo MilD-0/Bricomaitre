@@ -22,6 +22,7 @@ import { PageTransition, PendingInline } from '../ui/motion';
 import { Separator } from '../ui/separator';
 import { Spinner } from '../ui/spinner';
 import { ThemeToggle } from '../theme-toggle';
+import { AdminAiChat } from '../admin-ai-chat';
 
 function getRoleDisplayLabel(role: Role, roleLabel: string | null, t: ReturnType<typeof useTranslations>) {
   if (isBuiltInRole(role)) {
@@ -307,6 +308,7 @@ export function AppShell({
           </div>
         </DialogContent>
       </Dialog>
+      {permissions.includes('ai_use') && permissions.some((permission) => permission.startsWith('ai_') && permission !== 'ai_use') ? <AdminAiChat /> : null}
     </div>
   );
 }

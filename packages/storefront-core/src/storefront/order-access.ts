@@ -48,3 +48,34 @@ export async function requireStorefrontOrderAccess(
     token,
   };
 }
+
+export async function requireStorefrontOrderAccessByToken(
+  db: Database,
+  token: string | null,
+) {
+  if (!token) {
+    return {
+      kind: 'missing_token' as const,
+      order: null,
+      token: null,
+    };
+  }
+
+  const order = await db.query.orders.findFirst({
+    where: eq(orders.publicToken, token),
+  });
+
+  if (!order) {
+    return {
+      kind: 'not_found' as const,
+      order: null,
+      token,
+    };
+  }
+
+  return {
+    kind: 'ok' as const,
+    order,
+    token,
+  };
+}

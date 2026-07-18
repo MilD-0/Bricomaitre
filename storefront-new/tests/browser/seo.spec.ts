@@ -31,8 +31,8 @@ test('serves crawl policy, merchant identity, and API-backed localized product d
   }
 
   await page.goto('/fr/products/desk-lamp');
-  await expect(page.getByText('Livraison partout en Algérie · environ 800 DA')).toBeVisible();
-  await expect(page.getByText('Retour gratuit avant ouverture')).toBeVisible();
+  await expect(page.getByText('Livraison rapide partout en Algérie')).toBeVisible();
+  await expect(page.getByText('Retour gratuit avant ouverture')).toHaveCount(0);
   const structuredData = JSON.parse(await page.locator('script[type="application/ld+json"]').first().textContent() ?? '[]');
   expect(structuredData[0].offers).toMatchObject({
     seller: { name: 'Bricomaitre' },

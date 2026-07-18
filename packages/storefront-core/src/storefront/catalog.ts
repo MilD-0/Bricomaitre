@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, inArray, notInArray, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, ilike, inArray, notInArray, or, sql } from 'drizzle-orm';
 
 import type { getDb } from '../../../db/src/client';
 import {
@@ -413,6 +413,7 @@ function buildStorefrontProductWhereClause(query: StorefrontProductListQuery) {
     query.search ? buildCatalogSearchCondition(query.search) : undefined,
     query.brandId === null ? undefined : eq(products.brandId, query.brandId),
     query.categoryId === null ? undefined : eq(products.categoryId, query.categoryId),
+    query.discounted ? and(sql`${products.oldPrice} is not null`, gt(products.oldPrice, products.price)) : undefined,
   );
 }
 

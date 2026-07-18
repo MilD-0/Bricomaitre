@@ -14,6 +14,7 @@ import HeaderSearch from "./HeaderSearch";
 import PhoneBadge from "./PhoneBadge";
 import Search from "./search";
 import { CartContext } from "./cartContext";
+import ShoppingAssistant from "./ShoppingAssistant";
 
 function NavIcon({ children, href, active, badge = 0 }) {
   return (
@@ -225,6 +226,8 @@ export default function Layout({ children }) {
           </nav>
         </div>
       ) : null}
+
+      <ShoppingAssistant />
 
     </div>
   );

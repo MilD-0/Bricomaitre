@@ -12,6 +12,7 @@
     "language": "Langue",
     "landing": "Landing",
     "products": "Produits",
+    "offers": "Promos",
     "openMenu": "Ouvrir le menu",
     "searchLabel": "Rechercher des produits",
     "searchPlaceholder": "Quel outil recherchez-vous ?",
@@ -40,7 +41,30 @@
     "footerContactTitle": "Nous contacter",
     "drawerSupportTitle": "Besoin d’aide ?",
     "supportCall": "Appeler",
+    "headerContact": "Besoin d’aide ? Appelez-nous",
     "footerRights": "Tous droits réservés."
+  },
+  "ShoppingAssistant": {
+    "open": "Trouver le bon outil",
+    "title": "Conseiller produits",
+    "close": "Fermer le conseiller",
+    "liveCatalog": "Catalogue en direct",
+    "welcomeTitle": "Quel projet avez-vous en tête ?",
+    "welcomeDescription": "Décrivez votre besoin. Je chercherai uniquement parmi les produits et informations disponibles dans notre catalogue.",
+    "placeholder": "Ex. Je cherche une perceuse pour du béton…",
+    "inputLabel": "Votre question sur les produits",
+    "send": "Envoyer la question",
+    "thinking": "Recherche dans le catalogue…",
+    "error": "Le conseiller est momentanément indisponible. Réessayez dans un instant.",
+    "rateLimited": "Vous avez envoyé plusieurs demandes. Patientez un instant avant de réessayer.",
+    "fallback": "Résultats du catalogue",
+    "inStock": "En stock",
+    "outOfStock": "Indisponible",
+    "priceOnRequest": "Prix sur demande",
+    "viewProduct": "Voir",
+    "quickPromptOne": "Une perceuse pour travailler le béton",
+    "quickPromptTwo": "Comparer des outils pour la maison",
+    "quickPromptThree": "Trouver un produit disponible pour mon projet"
   },
   "Home": {
     "apiStatusLabel": "API amont",
@@ -127,9 +151,8 @@
     "similarEyebrow": "Pour le même travail",
     "similarTitle": "Produits similaires",
     "trustConfirmation": "Commande confirmée par téléphone",
-    "trustDelivery": "Livraison partout en Algérie · environ 800 DA",
+    "trustDelivery": "Livraison rapide partout en Algérie",
     "trustPayment": "Paiement à la livraison",
-    "trustReturns": "Retour gratuit avant ouverture",
     "trustTitle": "Informations de commande",
     "unavailableAction": "Ce produit ne peut pas être commandé pour le moment.",
     "unavailableDescription": "Le service produits répond lentement ou est momentanément indisponible. Votre commande et votre panier ne sont pas affectés.",
@@ -223,9 +246,19 @@
     "unavailableBody": "Le lien est incomplet ou la confirmation est momentanément indisponible. Vous pouvez réessayer sans créer une nouvelle commande.",
     "unavailableTitle": "Impossible de vérifier cette commande",
     "verifying": "Vérification de votre commande…",
-    "wilaya": "Wilaya"
-    ,"supportTitle": "Une question sur votre commande ?"
-    ,"supportDescription": "Notre équipe reste disponible pour vous aider."
-    ,"supportCall": "Appeler"
+    "wilaya": "Wilaya",
+    "supportTitle": "Une question sur votre commande ?",
+    "supportDescription": "Notre équipe reste disponible pour vous aider.",
+    "supportCall": "Appeler",
+    "trackingTitle": "Suivre ma commande",
+    "trackingLive": "Statut à jour",
+    "trackingWaiting": "En attente de confirmation",
+    "trackingPreparing": "Préparation de votre commande",
+    "trackingOnWay": "Votre commande est en route",
+    "trackingDelivered": "Commande livrée",
+    "trackingDelayed": "La livraison prend un peu plus de temps que prévu. Notre équipe suit votre colis.",
+    "trackingCancelled": "Cette commande a été annulée. Contactez-nous si vous avez besoin d’aide.",
+    "trackingReturned": "Le colis a été retourné. Contactez-nous pour organiser la suite.",
+    "trackingFailed": "Un incident de livraison a été signalé. Notre équipe vous contactera pour trouver une solution."
   }
 }

@@ -13,11 +13,13 @@
     "test:browser": "playwright test"
   },
   "dependencies": {
+    "@bric/ai-core": "workspace:*",
     "@base-ui/react": "^1.6.0",
     "@bric/runtime": "workspace:*",
     "@bric/storefront-core": "workspace:*",
     "@number-flow/react": "^0.6.1",
     "@sentry/nextjs": "10.47.0",
+    "ai": "^7.0.30",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "embla-carousel-auto-scroll": "^8.6.0",
@@ -34,6 +36,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
     "@playwright/test": "1.55.0",
     "@tailwindcss/postcss": "^4.2.2",
     "@testing-library/jest-dom": "^6.9.1",

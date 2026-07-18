@@ -13,6 +13,8 @@
     "./dto": "./src/storefront/dto.ts",
     "./ecotrack-catalog": "./src/storefront/ecotrack-catalog.ts",
     "./legacy-adapter": "./src/storefront/legacy-adapter.ts",
+    "./landing-pages": "./src/storefront/landing-pages.ts",
+    "./landing-page-records": "./src/storefront/landing-page-records.ts",
     "./meta": "./src/storefront/meta.ts",
     "./meta-contracts": "./src/storefront/meta-contracts.ts",
     "./marketing-contracts": "./src/storefront/marketing-contracts.ts",
@@ -23,6 +25,7 @@
     "./orders": "./src/storefront/orders.ts",
     "./promos": "./src/storefront/promos.ts",
     "./server-cache": "./src/server-cache.ts",
+    "./shopping-assistant-contracts": "./src/storefront/shopping-assistant-contracts.ts",
     "./settings": "./src/storefront/settings.ts"
   },
   "dependencies": {

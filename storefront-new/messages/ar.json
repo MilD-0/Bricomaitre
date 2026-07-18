@@ -12,6 +12,7 @@
     "language": "اللغة",
     "landing": "صفحة عرض",
     "products": "المنتجات",
+    "offers": "العروض",
     "openMenu": "فتح القائمة",
     "searchLabel": "البحث عن المنتجات",
     "searchPlaceholder": "ما الأداة التي تبحث عنها؟",
@@ -40,7 +41,30 @@
     "footerContactTitle": "تواصل معنا",
     "drawerSupportTitle": "هل تحتاج إلى مساعدة؟",
     "supportCall": "اتصل بنا",
+    "headerContact": "تحتاج مساعدة؟ اتصل بنا",
     "footerRights": "جميع الحقوق محفوظة."
+  },
+  "ShoppingAssistant": {
+    "open": "اعثر على الأداة المناسبة",
+    "title": "مستشار المنتجات",
+    "close": "إغلاق المستشار",
+    "liveCatalog": "الكتالوج المباشر",
+    "welcomeTitle": "ما هو المشروع الذي تعمل عليه؟",
+    "welcomeDescription": "صف ما تحتاجه، وسأبحث فقط ضمن المنتجات والمعلومات المتوفرة في كتالوجنا.",
+    "placeholder": "مثال: أبحث عن مثقاب للخرسانة…",
+    "inputLabel": "سؤالك حول المنتجات",
+    "send": "إرسال السؤال",
+    "thinking": "جارٍ البحث في الكتالوج…",
+    "error": "المستشار غير متاح مؤقتًا. حاول مرة أخرى بعد قليل.",
+    "rateLimited": "لقد أرسلت عدة طلبات. انتظر قليلاً قبل المحاولة مجددًا.",
+    "fallback": "نتائج الكتالوج",
+    "inStock": "متوفر",
+    "outOfStock": "غير متوفر",
+    "priceOnRequest": "السعر عند الطلب",
+    "viewProduct": "عرض",
+    "quickPromptOne": "مثقاب مناسب للعمل على الخرسانة",
+    "quickPromptTwo": "مقارنة أدوات للاستعمال المنزلي",
+    "quickPromptThree": "العثور على منتج متوفر لمشروعي"
   },
   "Home": {
     "apiStatusLabel": "واجهة البيانات",
@@ -127,9 +151,8 @@
     "similarEyebrow": "لنفس العمل",
     "similarTitle": "منتجات مشابهة",
     "trustConfirmation": "تأكيد الطلب عبر الهاتف",
-    "trustDelivery": "التوصيل إلى كل الجزائر · حوالي 800 دج",
+    "trustDelivery": "توصيل سريع إلى جميع أنحاء الجزائر",
     "trustPayment": "الدفع عند الاستلام",
-    "trustReturns": "إرجاع مجاني قبل فتح الطرد",
     "trustTitle": "معلومات الطلب",
     "unavailableAction": "لا يمكن طلب هذا المنتج حالياً.",
     "unavailableDescription": "خدمة المنتجات بطيئة أو غير متاحة مؤقتاً. سلتك وطلباتك غير متأثرة.",
@@ -223,9 +246,19 @@
     "unavailableBody": "الرابط غير مكتمل أو التأكيد غير متوفر مؤقتا. يمكنك إعادة المحاولة دون إنشاء طلب جديد.",
     "unavailableTitle": "تعذر التحقق من هذا الطلب",
     "verifying": "جار التحقق من طلبك…",
-    "wilaya": "الولاية"
-    ,"supportTitle": "هل لديك سؤال حول طلبك؟"
-    ,"supportDescription": "فريقنا متاح لمساعدتك."
-    ,"supportCall": "اتصل بنا"
+    "wilaya": "الولاية",
+    "supportTitle": "هل لديك سؤال حول طلبك؟",
+    "supportDescription": "فريقنا متاح لمساعدتك.",
+    "supportCall": "اتصل بنا",
+    "trackingTitle": "تتبع طلبي",
+    "trackingLive": "الحالة محدثة",
+    "trackingWaiting": "في انتظار التأكيد",
+    "trackingPreparing": "جاري تحضير طلبك",
+    "trackingOnWay": "طلبك في الطريق",
+    "trackingDelivered": "تم تسليم الطلب",
+    "trackingDelayed": "يستغرق التوصيل وقتا أطول قليلا من المتوقع. فريقنا يتابع طردك.",
+    "trackingCancelled": "تم إلغاء هذا الطلب. اتصل بنا إذا كنت بحاجة إلى مساعدة.",
+    "trackingReturned": "تم إرجاع الطرد. اتصل بنا لترتيب الخطوة التالية.",
+    "trackingFailed": "تم تسجيل مشكلة في التوصيل. سيتصل بك فريقنا لإيجاد حل."
   }
 }

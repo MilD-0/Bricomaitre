@@ -33,43 +33,8 @@ import { CheckoutOrderError, createCheckoutOrder } from '@/lib/orders';
 import { formatProductPrice } from '@/lib/product-presentation';
 import { getMarketingOrderContext } from '@/lib/marketing-attribution';
 import type { StorefrontSettingsResponse } from '@bric/storefront-core/contracts';
-
-type CheckoutLabels = {
-  title: string;
-  description: string;
-  phone: string;
-  phonePlaceholder: string;
-  phoneError: string;
-  lastName: string;
-  firstName: string;
-  wilaya: string;
-  commune: string;
-  address: string;
-  email: string;
-  optional: string;
-  deliveryMode: string;
-  homeDelivery: string;
-  officeDelivery: string;
-  officeUnavailable: string;
-  orderSummary: string;
-  subtotal: string;
-  delivery: string;
-  total: string;
-  quantity: string;
-  submit: string;
-  submitting: string;
-  emptyTitle: string;
-  emptyBody: string;
-  browseProducts: string;
-  requiredError: string;
-  emailError: string;
-  submitError: string;
-  retry: string;
-  savedAttempt: string;
-  trustPhone: string;
-  trustPayment: string;
-  trustDelivery: string;
-};
+import type { CheckoutLabels } from '@/lib/checkout-labels';
+import { LANDING_ORDER_QUANTITY_EVENT, LANDING_ORDER_SECTION_ID, type LandingOrderQuantityDetail } from '@/lib/landing-order';
 
 function createId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -79,12 +44,16 @@ export function CheckoutForm({
   locale,
   catalog,
   directItem,
+  landingAttribution,
+  embedded = false,
   labels,
   support,
 }: {
   locale: Locale;
   catalog: StorefrontEcotrackCatalogResponse;
   directItem: CartItem | null;
+  landingAttribution?: { landingPageId: number; landingRevision: number };
+  embedded?: boolean;
   labels: CheckoutLabels;
   support?: { contact: StorefrontSettingsResponse; labels: SupportContactLabels };
 }) {
@@ -142,6 +111,18 @@ export function CheckoutForm({
   }, [catalog.communes, directItem, labels.submitError]);
 
   useEffect(() => {
+    if (!embedded || !directItem) return;
+    const updateQuantity = (event: Event) => {
+      const detail = (event as CustomEvent<LandingOrderQuantityDetail>).detail;
+      if (!detail || detail.productId !== directItem.productId) return;
+      const quantity = Math.max(1, Math.min(20, detail.quantity));
+      setItems((current) => current.map((item) => item.productId === detail.productId ? { ...item, quantity } : item));
+    };
+    window.addEventListener(LANDING_ORDER_QUANTITY_EVENT, updateQuantity);
+    return () => window.removeEventListener(LANDING_ORDER_QUANTITY_EVENT, updateQuantity);
+  }, [directItem, embedded]);
+
+  useEffect(() => {
     if (!hydrated) return;
     writeCheckoutDraft(window.localStorage, {
       phoneNumber1, lastName, firstName, state, city, homeAddress, email, delivery,
@@ -161,9 +142,9 @@ export function CheckoutForm({
     viewed.current = true;
     void trackCheckoutEvent({
       eventName: 'begin_checkout', locale, quantity: itemCount, value: total,
-      metadata: { cartMode, itemCount },
+      metadata: { cartMode, itemCount, ...landingAttribution },
     });
-  }, [cartMode, hydrated, itemCount, locale, total]);
+  }, [cartMode, hydrated, itemCount, landingAttribution, locale, total]);
 
   function chooseDelivery(next: 'home' | 'office') {
     if (next === 'office' && !officeAvailable) return;
@@ -207,9 +188,9 @@ export function CheckoutForm({
       void trackCheckoutEvent({
         eventName: 'order_create_success', locale, orderId: order.id,
         quantity: itemCount, value: order.totalAmount,
-        metadata: { cartMode, itemCount, delivery },
+        metadata: { cartMode, itemCount, delivery, ...landingAttribution },
       });
-      router.push(`/${locale}/thank-you?orderId=${order.id}&token=${encodeURIComponent(order.publicToken!)}`);
+      router.push(`/${locale}/thank-you?token=${encodeURIComponent(order.publicToken!)}`);
     } catch (error) {
       const code = error instanceof CheckoutOrderError ? error.code : 'request_failed';
       setPending(readPendingCheckout(window.localStorage));
@@ -217,7 +198,7 @@ export function CheckoutForm({
       void triggerHaptic('error');
       void trackCheckoutEvent({
         eventName: 'order_create_failed', locale, quantity: itemCount, value: total,
-        metadata: { cartMode, itemCount, delivery, failureCode: code },
+        metadata: { cartMode, itemCount, delivery, failureCode: code, ...landingAttribution },
       });
     } finally {
       submissionLock.current = false;
@@ -227,7 +208,7 @@ export function CheckoutForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (items.length === 0) return;
+    if (!hydrated || items.length === 0) return;
     const parsed = checkoutFormSchema.safeParse({
       phoneNumber1, lastName, firstName, state, city, homeAddress, email, delivery,
     });
@@ -262,7 +243,7 @@ export function CheckoutForm({
     void triggerHaptic('primary');
     void trackCheckoutEvent({
       eventName: 'checkout_submit_attempt', locale, quantity: itemCount, value: total,
-      metadata: { cartMode, itemCount, delivery },
+      metadata: { cartMode, itemCount, delivery, ...landingAttribution },
     });
     await completeSubmission(attempt);
   }
@@ -280,10 +261,13 @@ export function CheckoutForm({
     );
   }
 
+  const Root = embedded ? 'section' : 'div';
+  const Heading = embedded ? 'h2' : 'h1';
+
   return (
-    <main className="checkout-page">
+    <Root id={embedded ? LANDING_ORDER_SECTION_ID : undefined} className={`checkout-page${embedded ? ' landing-order-section' : ''}`}>
       <header className="checkout-heading">
-        <h1>{labels.title}</h1>
+        <Heading>{labels.title}</Heading>
         <span>{labels.description}</span>
       </header>
 
@@ -364,7 +348,7 @@ export function CheckoutForm({
             <div><dt>{labels.total}</dt><dd><NumberFlow value={total} locales={locale} format={{ style: 'currency', currency: 'DZD', maximumFractionDigits: 0 }} /></dd></div>
           </dl>
           {requestError && !pending ? <p className="checkout-submit-error" role="alert">{requestError}</p> : null}
-          <button className="checkout-submit" type="submit" disabled={submitting || !hydrated || items.length === 0} onPointerDown={prepareHaptics} onMouseEnter={startSubmitIconAnimation} onMouseLeave={() => submitIconRef.current?.stopAnimation()} onFocus={startSubmitIconAnimation} onBlur={() => submitIconRef.current?.stopAnimation()}>
+          <button className="checkout-submit" type="submit" disabled={submitting || items.length === 0} onPointerDown={prepareHaptics} onMouseEnter={startSubmitIconAnimation} onMouseLeave={() => submitIconRef.current?.stopAnimation()} onFocus={startSubmitIconAnimation} onBlur={() => submitIconRef.current?.stopAnimation()}>
             {submitting ? <LoaderCircle className="checkout-spinner" aria-hidden="true" /> : <ShieldCheckIcon ref={submitIconRef} className="checkout-submit-icon" size={18} aria-hidden="true" />}
             {submitting ? labels.submitting : labels.submit}
             {!submitting ? <ArrowRight aria-hidden="true" /> : null}
@@ -373,6 +357,6 @@ export function CheckoutForm({
           {support ? <SupportContactActions locale={locale} contact={support.contact} labels={support.labels} surface="checkout" /> : null}
         </aside>
       </form>
-    </main>
+    </Root>
   );
 }

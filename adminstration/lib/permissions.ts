@@ -13,6 +13,13 @@ export const permissionKeySchema = z.enum([
   'bulletin_moderate',
   'ops_view',
   'settings_manage',
+  'ai_use',
+  'ai_catalog_propose',
+  'ai_catalog_apply',
+  'ai_analytics_query',
+  'ai_pricing_analyze',
+  'ai_pricing_apply',
+  'ai_landing_publish',
 ]);
 
 export type PermissionKey = z.infer<typeof permissionKeySchema>;
@@ -25,6 +32,13 @@ export const permissionCatalog: readonly PermissionKey[] = [
   'bulletin_moderate',
   'ops_view',
   'settings_manage',
+  'ai_use',
+  'ai_catalog_propose',
+  'ai_catalog_apply',
+  'ai_analytics_query',
+  'ai_pricing_analyze',
+  'ai_pricing_apply',
+  'ai_landing_publish',
 ] as const;
 
 export const roleDefinitionFormSchema = z.object({

@@ -23,7 +23,7 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
-    const settings = await saveStorefrontSettings(parsed.data);
+    const settings = await saveStorefrontSettings({ ...parsed.data, phoneEnabled: true });
     await revalidateStorefrontSettings();
     return NextResponse.json(settings);
   } catch (error) {

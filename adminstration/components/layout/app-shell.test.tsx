@@ -75,6 +75,7 @@ describe('AppShell', () => {
       if (key === 'assetsManager.bannersTitle') return 'Banners';
       if (key === 'assetsManager.groupsTitle') return 'Featured product groups';
       if (key === 'assetsManager.cardsTitle') return 'Cards';
+      if (key === 'nav.landingPages') return 'Landing pages';
       if (key === 'statsDashboard.tabs.overview') return 'Overview';
       if (key === 'statsDashboard.tabs.products') return 'Products';
       if (key === 'statsDashboard.tabs.geography') return 'Geography';
@@ -121,6 +122,7 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: 'nav.administration' })).toHaveAttribute('href', '/en/administration');
     expect(screen.getByRole('link', { name: 'nav.administration' }).querySelector('span')).toHaveClass('whitespace-normal');
     expect(screen.getByRole('link', { name: 'Banners' })).toHaveAttribute('href', '/en/assets#banners');
+    expect(screen.getByRole('link', { name: 'Landing pages' })).toHaveAttribute('href', '/en/landing-pages');
     expect(screen.getByRole('link', { name: 'nav.brands' })).toHaveAttribute('href', '/en/brands');
     expect(screen.getByRole('link', { name: 'nav.categories' })).toHaveAttribute('href', '/en/categories');
     expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute('href', '/en/stats');

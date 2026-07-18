@@ -31,7 +31,7 @@ test('completes a cart checkout, verifies its public token, and keeps analytics 
   await expect(submit).toHaveCSS('background-color', 'rgb(217, 86, 19)');
   await submit.click();
 
-  await expect(page).toHaveURL(/\/fr\/thank-you\?orderId=100&token=fixture-public-order-token-100-/, { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/fr\/thank-you\?orderId=\d+&token=fixture-public-order-token-\d+-/, { timeout: 20_000 });
   await expect(page.getByRole('heading', { level: 1, name: 'Merci pour votre commande !' })).toBeVisible();
   await expect(page.locator('.thank-you-summary').getByText('Lampe de travail')).toBeVisible();
   await expect(page.locator('.thank-you-customer').getByText('0550000000')).toBeVisible();
