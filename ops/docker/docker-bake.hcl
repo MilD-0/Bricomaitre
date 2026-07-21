@@ -26,6 +26,30 @@ variable "NEXT_PUBLIC_FACEBOOK_PIXEL_ID" {
   default = ""
 }
 
+variable "NEXT_PUBLIC_GA_MEASUREMENT_ID" {
+  default = ""
+}
+
+variable "NEXT_PUBLIC_TIKTOK_PIXEL_ID" {
+  default = ""
+}
+
+variable "NEXT_PUBLIC_SITE_URL" {
+  default = "https://bricomaitre.com"
+}
+
+variable "NEXT_PUBLIC_CLOUDFRONT_URL" {
+  default = ""
+}
+
+variable "NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS" {
+  default = ""
+}
+
+variable "NEXT_PUBLIC_SENTRY_DSN_STOREFRONT_NEW" {
+  default = ""
+}
+
 function "release_tags" {
   params = [image]
   result = concat(
@@ -120,8 +144,18 @@ target "storefront-web" {
   dockerfile = "ops/docker/Dockerfile.storefront"
   target     = "runner"
   args = {
-    STOREFRONT_API_BASE_URL        = STOREFRONT_BUILD_API_BASE_URL
-    NEXT_PUBLIC_FACEBOOK_PIXEL_ID = NEXT_PUBLIC_FACEBOOK_PIXEL_ID
+    STOREFRONT_API_BASE_URL                                  = STOREFRONT_BUILD_API_BASE_URL
+    NEXT_PUBLIC_SITE_URL                                    = NEXT_PUBLIC_SITE_URL
+    NEXT_PUBLIC_CLOUDFRONT_URL                              = NEXT_PUBLIC_CLOUDFRONT_URL
+    NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS                    = NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS
+    NEXT_PUBLIC_FACEBOOK_PIXEL_ID                           = NEXT_PUBLIC_FACEBOOK_PIXEL_ID
+    NEXT_PUBLIC_GA_MEASUREMENT_ID                           = NEXT_PUBLIC_GA_MEASUREMENT_ID
+    NEXT_PUBLIC_TIKTOK_PIXEL_ID                             = NEXT_PUBLIC_TIKTOK_PIXEL_ID
+    NEXT_PUBLIC_RELEASE                                     = SHA_TAG
+    NEXT_PUBLIC_SENTRY_DSN_STOREFRONT_NEW                   = NEXT_PUBLIC_SENTRY_DSN_STOREFRONT_NEW
+    NEXT_PUBLIC_SENTRY_ENVIRONMENT                          = "production"
+    NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE_STOREFRONT_NEW    = "0.1"
+    SENTRY_RELEASE                                           = SHA_TAG
   }
   tags       = release_tags("storefront-web")
   cache-from = [registry_cache("storefront-web")]

@@ -1,16 +1,19 @@
-import { createOpenAiResponsesModel, getAiConfig } from '@bric/ai-core';
+import { createAiLanguageModel, getAiConfig, resolveAiModel } from '@bric/ai-core';
 import {
   shoppingAssistantCatalogSearchSchema,
   shoppingAssistantProductLookupSchema,
   shoppingAssistantRequestSchema,
   shoppingAssistantResponseSchema,
+  shoppingAssistantStreamEventSchema,
   type ShoppingAssistantProduct,
   type ShoppingAssistantRequest,
+  type ShoppingAssistantStreamEvent,
 } from '@bric/storefront-core/shopping-assistant-contracts';
-import { generateText, stepCountIs, tool } from 'ai';
+import { stepCountIs, streamText, tool } from 'ai';
 import { NextRequest, NextResponse } from 'next/server';
 
 import {
+  catalogSearchQuery,
   deterministicAssistantMessage,
   shoppingAssistantInstructions,
   toAssistantCatalogProduct,
@@ -25,6 +28,7 @@ import {
   fetchStorefrontCatalogMeta,
   fetchStorefrontProductDetail,
   getStorefrontSettings,
+  recordStorefrontAssistantRun,
 } from '@/lib/storefront-api';
 import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
@@ -72,6 +76,15 @@ function conversationPrompt(input: ShoppingAssistantRequest) {
   return input.messages.map((message) => `${message.role === 'user' ? 'Customer' : 'Advisor'}: ${message.content}`).join('\n');
 }
 
+function groundedConversationPrompt(input: ShoppingAssistantRequest, products: ShoppingAssistantProduct[]) {
+  return [
+    conversationPrompt(input),
+    '',
+    'The application already searched the live catalog for this request. Answer directly using only this public catalog evidence; do not ask to search again:',
+    JSON.stringify(products),
+  ].join('\n');
+}
+
 async function deterministicFallback(input: ShoppingAssistantRequest, remembered: ShoppingAssistantProduct[]) {
   let products = [...remembered];
   if (!products.length) {
@@ -88,9 +101,15 @@ async function deterministicFallback(input: ShoppingAssistantRequest, remembered
 }
 
 export async function POST(request: NextRequest) {
-  let rateLimit;
+  let rateLimit: Awaited<ReturnType<typeof enforceShoppingAssistantRateLimit>>;
+  let body: unknown;
+  let settings;
   try {
-    rateLimit = await enforceShoppingAssistantRateLimit(request);
+    [rateLimit, body, settings] = await Promise.all([
+      enforceShoppingAssistantRateLimit(request),
+      request.json().catch(() => null),
+      getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse),
+    ]);
   } catch {
     return NextResponse.json({ error: 'assistant_unavailable' }, { status: 503 });
   }
@@ -101,54 +120,127 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const settings = await getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse);
   if (!settings.aiAssistantEnabled) {
     return NextResponse.json({ error: 'assistant_disabled' }, { status: 404 });
   }
 
-  const parsed = shoppingAssistantRequestSchema.safeParse(await request.json().catch(() => null));
+  const parsed = shoppingAssistantRequestSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: 'invalid_assistant_request' }, { status: 400 });
   const remembered: ShoppingAssistantProduct[] = [];
+  const encoder = new TextEncoder();
+  const responseStream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const write = (event: ShoppingAssistantStreamEvent) => {
+        const validated = shoppingAssistantStreamEventSchema.parse(event);
+        controller.enqueue(encoder.encode(`${JSON.stringify(validated)}\n`));
+      };
+      write({ type: 'status', status: 'thinking' });
 
-  try {
-    const config = getAiConfig();
-    const result = await generateText({
-      model: createOpenAiResponsesModel(config, 'storefront'),
-      instructions: shoppingAssistantInstructions(parsed.data.locale),
-      prompt: conversationPrompt(parsed.data),
-      abortSignal: AbortSignal.timeout(config.requestTimeoutMs),
-      maxRetries: config.maxRetries,
-      stopWhen: stepCountIs(5),
-      tools: {
-        search_catalog: tool({
-          description: 'Search the live public Bricomaitre catalog before recommending products.',
-          inputSchema: shoppingAssistantCatalogSearchSchema,
-          execute: async (input) => {
-            const products = await searchPublicCatalog(input);
-            products.forEach((product) => remember(remembered, product));
-            return { products, count: products.length };
-          },
-        }),
-        inspect_products: tool({
-          description: 'Inspect up to four public products by ID or slug before answering detailed questions or comparisons.',
-          inputSchema: shoppingAssistantProductLookupSchema,
-          execute: async ({ tokens }) => {
-            const products = (await Promise.all(tokens.map((token) => fetchStorefrontProductDetail(token))))
-              .filter((product) => product !== null)
-              .map((product) => toAssistantDetailProduct(product.item));
-            products.forEach((product) => remember(remembered, product));
-            return { products };
-          },
-        }),
-      },
-    });
-    if (!result.text.trim()) return NextResponse.json(await deterministicFallback(parsed.data, remembered));
-    return NextResponse.json(shoppingAssistantResponseSchema.parse({
-      mode: 'ai',
-      message: result.text,
-      products: remembered,
-    }));
-  } catch {
-    return NextResponse.json(await deterministicFallback(parsed.data, remembered));
-  }
+      void (async () => {
+        const startedAt = Date.now();
+        let modelName = 'unconfigured';
+        let toolCallCount = 0;
+        let emittedText = '';
+        let usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } = {};
+        try {
+          const config = getAiConfig();
+          modelName = resolveAiModel(config, 'storefront');
+          const lastQuestion = [...parsed.data.messages].reverse().find((message) => message.role === 'user')?.content ?? '';
+          toolCallCount += 1;
+          const prefetchedProducts = lastQuestion
+            ? await searchPublicCatalog({ query: catalogSearchQuery(lastQuestion), inStockOnly: false, limit: 3 }).catch((error) => {
+                console.error('[shopping-assistant] catalog prefetch failed', error instanceof Error ? error.message : 'unknown error');
+                return [];
+              })
+            : [];
+          prefetchedProducts.forEach((product) => remember(remembered, product));
+          const generationOptions = {
+            model: createAiLanguageModel(config, 'storefront'),
+            instructions: shoppingAssistantInstructions(parsed.data.locale),
+            prompt: prefetchedProducts.length
+              ? groundedConversationPrompt(parsed.data, prefetchedProducts)
+              : conversationPrompt(parsed.data),
+            abortSignal: AbortSignal.timeout(config.requestTimeoutMs),
+            maxRetries: config.maxRetries,
+          };
+          const result = prefetchedProducts.length ? streamText(generationOptions) : streamText({
+            ...generationOptions,
+            stopWhen: stepCountIs(5),
+            tools: {
+              search_catalog: tool({
+                description: 'Search the live public Bricomaitre catalog before recommending products.',
+                inputSchema: shoppingAssistantCatalogSearchSchema,
+                execute: async (input) => {
+                  toolCallCount += 1;
+                  const products = await searchPublicCatalog(input);
+                  products.forEach((product) => remember(remembered, product));
+                  return { products, count: products.length };
+                },
+              }),
+              inspect_products: tool({
+                description: 'Inspect up to four public products by ID or slug before answering detailed questions or comparisons.',
+                inputSchema: shoppingAssistantProductLookupSchema,
+                execute: async ({ tokens }) => {
+                  toolCallCount += 1;
+                  const products = (await Promise.all(tokens.map((token) => fetchStorefrontProductDetail(token))))
+                    .filter((product) => product !== null)
+                    .map((product) => toAssistantDetailProduct(product.item));
+                  products.forEach((product) => remember(remembered, product));
+                  return { products };
+                },
+              }),
+            },
+          });
+
+          for await (const part of result.stream) {
+            if (part.type === 'tool-call') write({ type: 'status', status: 'catalog' });
+            if (part.type === 'text-delta' && part.text && emittedText.length < 4_000) {
+              const delta = part.text.slice(0, 4_000 - emittedText.length);
+              if (delta) {
+                emittedText += delta;
+                write({ type: 'text-delta', delta });
+              }
+            }
+            if (part.type === 'finish') usage = part.totalUsage;
+            if (part.type === 'error') throw part.error;
+          }
+
+          if (!emittedText.trim()) {
+            const fallback = await deterministicFallback(parsed.data, remembered);
+            write({ type: 'text-delta', delta: fallback.message });
+            write({ type: 'result', mode: fallback.mode, products: fallback.products });
+            void recordStorefrontAssistantRun({ telemetry: parsed.data.telemetry, locale: parsed.data.locale, status: 'completed', mode: 'fallback', model: modelName, ...usage, durationMs: Date.now() - startedAt, toolCalls: toolCallCount, resultsCount: remembered.length }).catch(() => {});
+            return;
+          }
+
+          const finalResult = shoppingAssistantResponseSchema.parse({ mode: 'ai', message: emittedText, products: remembered });
+          write({ type: 'result', mode: finalResult.mode, products: finalResult.products });
+          void recordStorefrontAssistantRun({ telemetry: parsed.data.telemetry, locale: parsed.data.locale, status: 'completed', mode: 'ai', model: modelName, ...usage, durationMs: Date.now() - startedAt, toolCalls: toolCallCount, resultsCount: remembered.length }).catch(() => {});
+        } catch {
+          void recordStorefrontAssistantRun({ telemetry: parsed.data.telemetry, locale: parsed.data.locale, status: 'failed', mode: 'fallback', model: modelName, ...usage, durationMs: Date.now() - startedAt, toolCalls: toolCallCount, resultsCount: remembered.length }).catch(() => {});
+          if (emittedText) {
+            write({ type: 'error', code: 'assistant_unavailable' });
+            return;
+          }
+          const fallback = await deterministicFallback(parsed.data, remembered).catch(() => null);
+          if (!fallback) {
+            write({ type: 'error', code: 'assistant_unavailable' });
+            return;
+          }
+          write({ type: 'text-delta', delta: fallback.message });
+          write({ type: 'result', mode: fallback.mode, products: fallback.products });
+        } finally {
+          controller.close();
+        }
+      })();
+    },
+  });
+
+  return new NextResponse(responseStream, {
+    headers: {
+      'cache-control': 'no-cache, no-transform',
+      'content-type': 'application/x-ndjson; charset=utf-8',
+      'x-accel-buffering': 'no',
+    },
+  });
 }

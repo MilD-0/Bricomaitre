@@ -10,7 +10,7 @@ import {
 } from '@/lib/cache-tags';
 
 const revalidationPayloadSchema = z.object({
-  scope: z.enum(['products', 'settings', 'landing-pages']),
+  scope: z.enum(['assets', 'products', 'product-meta', 'settings', 'landing-pages']),
   tokens: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
 });
 
@@ -47,14 +47,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unsupported revalidation payload' }, { status: 400 });
   }
 
-  const tags = parsed.data.scope === 'settings'
-    ? [STOREFRONT_NEW_CACHE_TAGS.settings]
-    : parsed.data.scope === 'landing-pages'
-      ? [STOREFRONT_NEW_CACHE_TAGS.landingPages]
-      : [
-        STOREFRONT_NEW_CACHE_TAGS.products,
-        ...new Set((parsed.data.tokens ?? []).map(getStorefrontProductCacheTag)),
-      ];
+  const tags = parsed.data.scope === 'assets'
+    ? [STOREFRONT_NEW_CACHE_TAGS.assets]
+    : parsed.data.scope === 'product-meta'
+      ? [STOREFRONT_NEW_CACHE_TAGS.productMeta]
+      : parsed.data.scope === 'settings'
+        ? [STOREFRONT_NEW_CACHE_TAGS.settings]
+        : parsed.data.scope === 'landing-pages'
+          ? [STOREFRONT_NEW_CACHE_TAGS.landingPages]
+          : [
+            STOREFRONT_NEW_CACHE_TAGS.products,
+            ...new Set((parsed.data.tokens ?? []).map(getStorefrontProductCacheTag)),
+          ];
   tags.forEach((tag) => revalidateTag(tag, { expire: 0 }));
 
   return NextResponse.json({ ok: true, revalidated: tags });

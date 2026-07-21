@@ -21,7 +21,7 @@ export default async function OrdersEcotrackPage({
       staleOnly: false,
       sortKey: 'createdAt',
       sortDirection: 'desc',
-    }, true, { ensureFreshVisiblePage: true }),
+    }, true),
     hasDb()
       ? readEcotrackCatalog(getDb()).then((catalog) => ({
           wilayas: catalog.wilayas,

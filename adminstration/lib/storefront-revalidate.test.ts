@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { verifyInternalRequestSignature } from '@bric/runtime/internal-signing';
 
-import { getStorefrontNewBaseUrl, revalidateStorefrontProducts, revalidateStorefrontSettings } from './storefront-revalidate';
+import { getStorefrontNewBaseUrl, revalidateStorefrontAssets, revalidateStorefrontProductMeta, revalidateStorefrontProducts, revalidateStorefrontSettings } from './storefront-revalidate';
 
 const originalBaseUrl = process.env.STOREFRONT_NEW_BASE_URL;
 const originalSecret = process.env.STOREFRONT_REVALIDATE_SECRET;
@@ -64,6 +64,19 @@ describe('storefront product revalidation', () => {
     })).toEqual({ ok: true });
   });
 
+  it('posts a signed product metadata invalidation for category and brand changes', async () => {
+    process.env.STOREFRONT_NEW_BASE_URL = 'https://storefront-new.example.com';
+    process.env.STOREFRONT_REVALIDATE_SECRET = 'test-secret';
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await revalidateStorefrontProductMeta();
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://storefront-new.example.com/api/internal/revalidate');
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ body: '{"scope":"product-meta"}' });
+  });
+
   it('fails safely when the URL is enabled without the shared secret', async () => {
     process.env.STOREFRONT_NEW_BASE_URL = 'https://storefront-new.example.com';
     const fetchMock = vi.fn();
@@ -106,5 +119,21 @@ describe('storefront product revalidation', () => {
       'https://storefront-new.example.com/api/internal/revalidate',
     ]);
     expect(fetchMock.mock.calls.every(([, init]) => init.body === '{"scope":"settings"}')).toBe(true);
+  });
+
+  it('revalidates homepage assets in the API, legacy transition target, and new storefront', async () => {
+    process.env.STOREFRONT_NEW_BASE_URL = 'https://storefront-new.example.com';
+    process.env.STOREFRONT_REVALIDATE_SECRET = 'test-secret';
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await revalidateStorefrontAssets();
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'http://localhost:3001/api/internal/revalidate',
+      'http://localhost:3002/api/internal/revalidate',
+      'https://storefront-new.example.com/api/internal/revalidate',
+    ]);
+    expect(fetchMock.mock.calls.every(([, init]) => init.body === '{"scope":"assets"}')).toBe(true);
   });
 });

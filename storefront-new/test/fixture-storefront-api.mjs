@@ -406,6 +406,10 @@ const server = createServer((request, response) => {
     result = json({ ok: true, queued: true });
   } else if (url.pathname === '/storefront/ecotrack/catalog') {
     result = json(ecotrackCatalog);
+  } else if (url.pathname.startsWith('/storefront/orders/track/')) {
+    const token = decodeURIComponent(url.pathname.slice('/storefront/orders/track/'.length));
+    const order = [...orders.values()].find((candidate) => candidate.publicToken === token);
+    result = order ? json({ item: order }) : json({ error: 'Not found' }, 404);
   } else if (/^\/storefront\/orders\/\d+$/.test(url.pathname)) {
     const order = orders.get(Number(url.pathname.split('/').at(-1)));
     result = order && url.searchParams.get('token') === order.publicToken ? json({ item: order }) : json({ error: 'Not found' }, 404);

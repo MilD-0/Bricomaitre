@@ -12,6 +12,13 @@ import { getStorefrontLandingPage } from '@/lib/storefront-api';
 
 type LandingPageProps = { params: Promise<{ locale: string; slug: string }> };
 
+export const revalidate = 120;
+export const dynamicParams = true;
+
+export function generateStaticParams() {
+  return [];
+}
+
 export async function generateMetadata({ params }: LandingPageProps): Promise<Metadata> {
   const { locale, slug } = await params;
   if (!isLocale(locale)) return {};

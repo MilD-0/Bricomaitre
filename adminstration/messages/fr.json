@@ -343,6 +343,9 @@
     "tabs": {
       "overview": "Aperçu",
       "website": "Analytique du site",
+      "landingPages": "Pages d’atterrissage",
+      "aiAssistants": "Assistants IA",
+      "customers": "Clients",
       "products": "Produits & catégories",
       "geography": "Géographie",
       "time": "Analyse temporelle",
@@ -575,8 +578,22 @@
         "sessions": "Sessions",
         "pageViews": "Pages vues",
         "addToCartRate": "Vue vers panier",
-        "purchaseRate": "Taux d'achat par session"
+        "purchaseRate": "Taux d'achat par session",
+        "engagementRate": "Sessions engagées",
+        "returningJourneys": "Parcours récurrents",
+        "errorRate": "Taux d’erreur par session"
       },
+      "trendTitle": "Trafic et résultats du storefront",
+      "pageTypesTitle": "Pages et interactions",
+      "audienceTitle": "Appareils et langues",
+      "devices": "Appareils",
+      "locales": "Langues",
+      "vitalsTitle": "Core Web Vitals",
+      "errorsTitle": "Erreurs du storefront",
+      "referrersTitle": "Principales sources",
+      "recentDiagnosticsHint": "Les diagnostics détaillés utilisent la fenêtre récente de télémétrie brute ; l’historique comparable de l’entonnoir reste continu pendant la migration.",
+      "vitalMeta": "{good} bons · {poor} faibles · {samples} échantillons",
+      "experience": { "columns": { "dimension": "Type de page", "sessions": "Sessions", "pageViews": "Pages vues", "interactions": "Interactions" } },
       "stats": {
         "searches": "Recherches",
         "zeroResults": "Recherches sans résultat",
@@ -647,6 +664,22 @@
           "conversion": "Conv. %"
         }
       }
+    },
+    "landingPages": {
+      "performanceTitle": "Performance des pages d’atterrissage", "blocksTitle": "Blocs de contenu les plus engageants", "empty": "Aucune activité de page d’atterrissage sur le nouveau storefront pour cette période.", "blockMeta": "{adds} ajouts · {checkouts} checkouts",
+      "cards": { "published": "Pages publiées", "sessions": "Sessions attribuées", "purchases": "Achats", "conversion": "Conversion session", "revenue": "Revenu attribué", "drafts": "Brouillons" },
+      "columns": { "page": "Page", "status": "Statut", "sessions": "Sessions", "views": "Vues produit", "adds": "Ajouts", "checkouts": "Checkouts", "purchases": "Achats", "revenue": "Revenu", "conversion": "Conv. %" }
+    },
+    "aiAssistants": {
+      "admin": { "title": "Assistant d’administration" }, "storefront": { "title": "Assistant boutique", "intentsTitle": "Besoins des visiteurs", "modelsTitle": "Modèles et usage" },
+      "cards": { "runs": "Exécutions", "successRate": "Taux de succès", "tokens": "Tokens", "estimatedCost": "Coût estimé", "latency": "Latence moyenne", "toolCalls": "Appels d’outils", "proposals": "Propositions", "applied": "Propositions appliquées", "opens": "Ouvertures", "messages": "Questions", "resultClicks": "Clics produit", "clickThrough": "Taux de clic résultat", "errors": "Erreurs" },
+      "costHint": "Le coût estimé apparaît uniquement lorsque les tarifs par million de tokens sont configurés.", "empty": "Aucun usage des assistants sur cette période.", "tokensShort": "tokens",
+      "intents": { "product_search": "Recherche de produit", "product_comparison": "Comparaison", "compatibility": "Compatibilité", "price": "Prix", "availability": "Disponibilité", "how_to": "Mode d’emploi", "recommendation": "Recommandation", "other": "Autre" }
+    },
+    "customers": {
+      "rankingTitle": "Clients classés par activité d’achat", "empty": "Aucun client n’a commandé sur cette période.",
+      "cards": { "customers": "Clients", "repeat": "Clients récurrents", "repeatRate": "Taux de réachat", "averageOrders": "Commandes moyennes", "averageValue": "Panier moyen", "successfulOrders": "Commandes réussies" },
+      "columns": { "customer": "Client", "phone": "Téléphone", "orders": "Commandes", "confirmed": "Confirmées", "totalValue": "Valeur commandée", "averageValue": "Valeur moyenne", "products": "Produits achetés", "lastOrder": "Dernière commande" }
     },
     "geography": {
       "topWilayas": {
@@ -775,6 +808,7 @@
       "managerTitle": "Coûts publicitaires",
       "conversionRate": "Taux de conversion",
       "unknownCampaign": "Campagne inconnue",
+      "paidAttribution": { "title": "Attribution du trafic Meta payant", "visits": "Visites payantes", "orders": "Commandes créées", "purchases": "Achats", "landedOnly": "Visites sans suite", "conversion": "Conversion visite", "campaign": "Campagne" },
       "health": {
         "title": "Santé de livraison CAPI",
         "pending": "En attente / nouvelle tentative",
@@ -974,10 +1008,20 @@
     "completed": "L’opération de proposition est terminée.",
     "error": "La demande à l’assistant IA a échoué.",
     "history": "Progression et historique",
-    "historyHint": "Tâches actives et propositions à valider",
+    "historyHint": "Conversations enregistrées, tâches actives et propositions à valider",
+    "newChat": "Nouvelle discussion",
+    "chats": "Vos discussions",
+    "untitledChat": "Discussion sans titre",
+    "noChats": "Aucune discussion enregistrée.",
+    "loadingChats": "Chargement des discussions…",
+    "loadingMessages": "Chargement des messages…",
+    "noChartData": "Aucune valeur non nulle n’est disponible pour le graphique ; les résultats complets figurent ci-dessous.",
     "noHistory": "Aucune tâche ou proposition IA.",
     "approve": "Approuver et appliquer",
     "reject": "Refuser",
+    "applied": "Proposition appliquée.",
+    "rejected": "Proposition refusée.",
+    "proposalReviewError": "Impossible de valider la proposition.",
     "cancel": "Annuler",
     "vs": "contre",
     "metric": "Indicateur",

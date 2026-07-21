@@ -77,11 +77,13 @@ describe('AppShell', () => {
       if (key === 'assetsManager.cardsTitle') return 'Cards';
       if (key === 'nav.landingPages') return 'Landing pages';
       if (key === 'statsDashboard.tabs.overview') return 'Overview';
+      if (key === 'statsDashboard.tabs.landingPages') return 'Landing stats';
+      if (key === 'statsDashboard.tabs.aiAssistants') return 'AI assistants';
+      if (key === 'statsDashboard.tabs.customers') return 'Customers';
       if (key === 'statsDashboard.tabs.products') return 'Products';
       if (key === 'statsDashboard.tabs.geography') return 'Geography';
       if (key === 'statsDashboard.tabs.time') return 'Time';
       if (key === 'statsDashboard.tabs.metaAds') return 'Meta ads';
-      if (key === 'statsDashboard.tabs.paidClicks') return 'Paid clicks';
       if (key === 'statsDashboard.manualOrders.sectionTitle') return 'Manual orders';
       if (key === 'statsDashboard.imports.title') return 'Import spreadsheet';
       if (key.startsWith('nav.')) return key;
@@ -127,7 +129,10 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: 'nav.categories' })).toHaveAttribute('href', '/en/categories');
     expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute('href', '/en/stats');
     expect(screen.getByRole('link', { name: 'Products' })).toHaveAttribute('href', '/en/stats/products');
-    expect(screen.getByRole('link', { name: 'Paid clicks' })).toHaveAttribute('href', '/en/stats/paid-clicks');
+    expect(screen.getByRole('link', { name: 'Landing stats' })).toHaveAttribute('href', '/en/stats/landing-pages');
+    expect(screen.getByRole('link', { name: 'AI assistants' })).toHaveAttribute('href', '/en/stats/ai-assistants');
+    expect(screen.getByRole('link', { name: 'Customers' })).toHaveAttribute('href', '/en/stats/customers');
+    expect(screen.queryByRole('link', { name: 'Paid clicks' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Manual orders' })).toHaveAttribute('href', '/en/stats/manual-orders');
     expect(screen.getByRole('link', { name: 'Import spreadsheet' })).toHaveAttribute('href', '/en/stats/import-history');
     expect(screen.queryByRole('link', { name: 'nav.dashboard' })).not.toBeInTheDocument();

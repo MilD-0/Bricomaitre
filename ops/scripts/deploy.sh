@@ -32,8 +32,6 @@ admin_service="$(service_name adminstration "$target_slot")"
 worker_service="$(service_name admin-worker "$target_slot")"
 storefront_service="$(service_name storefront "$target_slot")"
 api_host_port="$(slot_api_host_port "$target_slot")"
-storefront_static_pages_baseline_file="$runtime_dir/storefront-static-pages.env"
-storefront_static_pages_tolerance=2000
 release_images_file="$release_dir/$release_images_marker_name"
 
 append_summary() {
@@ -42,6 +40,46 @@ append_summary() {
   if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
     printf '%s\n' "$line" >>"$GITHUB_STEP_SUMMARY"
   fi
+}
+
+reset_legacy_storefront_cache() {
+  local slot="${1:?target slot is required}"
+  local service="${2:?storefront service is required}"
+  local current_images_file="$current_link/$release_images_marker_name"
+  local container_id=""
+  local volume_name=""
+
+  if [[ -f "$current_images_file" ]] && grep -qx 'BRIC_STOREFRONT_APP=storefront-new' "$current_images_file"; then
+    return 0
+  fi
+
+  container_id="$(compose ps -a -q "$service" | head -n 1)"
+  if [[ -n "$container_id" ]]; then
+    volume_name="$(docker inspect --format '{{range .Mounts}}{{if and (eq .Type "volume") (or (eq .Destination "/app/storefront/.next/cache") (eq .Destination "/app/storefront-new/.next/cache"))}}{{.Name}}{{end}}{{end}}' "$container_id")"
+  fi
+
+  if [[ -z "$volume_name" ]]; then
+    volume_name="$(docker volume ls \
+      --filter 'label=com.docker.compose.project=bricadmin' \
+      --filter "label=com.docker.compose.volume=storefront-cache-${slot}" \
+      --quiet | head -n 1)"
+  fi
+
+  compose rm --stop --force "$service" >/dev/null 2>&1 || true
+
+  if [[ -n "$volume_name" ]]; then
+    case "$volume_name" in
+      *_storefront-cache-"$slot") ;;
+      *)
+        echo "refusing to remove unexpected storefront cache volume: $volume_name" >&2
+        return 1
+        ;;
+    esac
+    docker volume rm "$volume_name" >/dev/null
+  fi
+
+  printf 'cleared legacy storefront cache for candidate slot %s\n' "$slot"
+  append_summary "- Cleared the candidate ${slot} slot's legacy storefront cache before the storefront-new cutover"
 }
 
 capture_storefront_build_inputs() {
@@ -82,58 +120,6 @@ print(f'CATEGORY_COUNT={counts["categoryCount"]}')
 PY
 }
 
-compute_storefront_expected_static_pages() {
-  local product_count="${1:?product count is required}"
-  local brand_count="${2:?brand count is required}"
-  local category_count="${3:?category count is required}"
-
-  python3 - "$product_count" "$brand_count" "$category_count" <<'PY'
-import sys
-
-product_count = int(sys.argv[1])
-brand_count = int(sys.argv[2])
-category_count = int(sys.argv[3])
-
-locale_count = 2
-root_fixed_pages = 11
-localized_fixed_pages = 6 * locale_count
-catalog_pages_per_namespace = product_count + brand_count + category_count
-expected = root_fixed_pages + localized_fixed_pages + ((1 + locale_count) * catalog_pages_per_namespace)
-
-print(expected)
-PY
-}
-
-read_storefront_static_pages_baseline() {
-  local baseline_file="${1:?baseline file path is required}"
-
-  if [[ ! -f "$baseline_file" ]]; then
-    return 1
-  fi
-
-  python3 - "$baseline_file" <<'PY'
-import re
-import sys
-
-baseline_file = sys.argv[1]
-with open(baseline_file, "r", encoding="utf-8") as handle:
-    content = handle.read()
-
-match = re.search(r'^STOREFRONT_STATIC_PAGES_BASELINE=(\d+)$', content, re.M)
-if not match:
-    raise SystemExit(1)
-
-print(match.group(1))
-PY
-}
-
-write_storefront_static_pages_baseline() {
-  local baseline_file="${1:?baseline file path is required}"
-  local actual_static_pages="${2:?actual static pages are required}"
-
-  printf 'STOREFRONT_STATIC_PAGES_BASELINE=%s\n' "$actual_static_pages" >"$baseline_file"
-}
-
 apply_release_images "$target_slot" "$release_images_file"
 
 compose up -d postgres redis
@@ -171,40 +157,20 @@ compose up -d --force-recreate "$meta_worker_service"
 assert_service_image "$meta_worker_service"
 
 actual_static_pages="$BRIC_STOREFRONT_STATIC_PAGES"
-printf 'storefront build generated %s static pages\n' "$actual_static_pages"
-append_summary "- Static pages generated: ${actual_static_pages}"
+printf 'storefront-new build generated %s prerendered routes; remaining catalog routes use ISR\n' "$actual_static_pages"
+append_summary "- Storefront release surface: ${BRIC_STOREFRONT_APP}"
+append_summary "- Prerendered routes: ${actual_static_pages} (remaining catalog routes use ISR)"
 
-expected_static_pages="$(compute_storefront_expected_static_pages "$PRODUCT_COUNT" "$BRAND_COUNT" "$CATEGORY_COUNT")"
-minimum_static_pages="$(( expected_static_pages - storefront_static_pages_tolerance ))"
-if (( minimum_static_pages < 1 )); then
-  minimum_static_pages=1
-fi
-
-printf 'storefront expected approximately %s static pages; enforcing floor %s (tolerance %s)\n' \
-  "$expected_static_pages" \
-  "$minimum_static_pages" \
-  "$storefront_static_pages_tolerance"
-append_summary "- Expected static pages from live catalog: ${expected_static_pages}"
-append_summary "- Enforced minimum after tolerance: ${minimum_static_pages}"
-
-baseline_static_pages=""
-if baseline_static_pages="$(read_storefront_static_pages_baseline "$storefront_static_pages_baseline_file")"; then
-  printf 'previous storefront static-page baseline is %s pages\n' "$baseline_static_pages"
-  append_summary "- Previous successful static-page count: ${baseline_static_pages}"
-else
-  echo "storefront static-page baseline not found; continuing with live-catalog validation"
-  append_summary "- ℹ️ Previous static-page baseline not found; using live-catalog validation only"
-fi
-
-if (( actual_static_pages < minimum_static_pages )); then
-  echo "storefront static-page count regressed versus live catalog: got ${actual_static_pages}, expected at least ${minimum_static_pages} (from ${PRODUCT_COUNT} products, ${BRAND_COUNT} brands, ${CATEGORY_COUNT} categories)" >&2
-  append_summary "- ❌ Static page count regressed versus live catalog: ${actual_static_pages} < ${minimum_static_pages}"
+if (( actual_static_pages < 1 )); then
+  echo "storefront-new build did not report any prerendered routes" >&2
+  append_summary "- ❌ Storefront-new prerender sanity check failed"
   exit 1
 fi
 
-append_summary "- ✅ Static page count passed live-catalog validation (${actual_static_pages} >= ${minimum_static_pages})"
+append_summary "- ✅ Storefront-new release identity, live catalog preflight, and prerender sanity check passed"
 
 compose pull "$admin_service" "$storefront_service"
+reset_legacy_storefront_cache "$target_slot" "$storefront_service"
 compose up -d --force-recreate "$admin_service" "$storefront_service"
 assert_service_image "$admin_service"
 assert_service_image "$storefront_service"
@@ -245,9 +211,6 @@ fi
 compose pull "$worker_service"
 compose up -d --force-recreate "$worker_service"
 assert_service_image "$worker_service"
-
-write_storefront_static_pages_baseline "$storefront_static_pages_baseline_file" "$actual_static_pages"
-append_summary "- Baseline stored: ${actual_static_pages}"
 
 set_current_release "$release_dir"
 set_active_slot "$target_slot"

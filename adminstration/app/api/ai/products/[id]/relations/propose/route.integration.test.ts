@@ -13,6 +13,7 @@ vi.mock('../../../../../../../db/client', () => ({ hasDb: mocks.hasDb }));
 vi.mock('../../../../../../../lib/auth', () => ({ auth: mocks.auth }));
 vi.mock('../../../../../../../lib/ai-product-knowledge', () => ({
   AiProductNotFoundError: class AiProductNotFoundError extends Error {},
+  UnsupportedProductRelationError: class UnsupportedProductRelationError extends Error {},
   proposeProductRelation: mocks.propose,
 }));
 
@@ -79,5 +80,15 @@ describe('admin product relation AI proposal route', () => {
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({ error: 'AI is disabled' });
+  });
+
+  it('rejects a generated relation when catalog evidence is too weak', async () => {
+    const { UnsupportedProductRelationError } = await import('../../../../../../../lib/ai-product-knowledge');
+    mocks.propose.mockRejectedValue(new UnsupportedProductRelationError('Insufficient relationship evidence.'));
+
+    const response = await POST(request({ targetProductId: 2 }), { params: Promise.resolve({ id: '1' }) });
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toEqual({ error: 'Insufficient relationship evidence.' });
   });
 });

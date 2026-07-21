@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { cacheLife } from 'next/cache';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { Suspense } from 'react';
@@ -27,7 +26,7 @@ import { buildCatalogMetadata, buildCatalogStructuredData } from '@/lib/catalog-
 import { formatProductPrice } from '@/lib/product-presentation';
 import { serializeStructuredData } from '@/lib/product-seo';
 import { captureCatalogPageException } from '@/lib/sentry';
-import { fetchStorefrontCatalog, getStorefrontCatalog, getStorefrontCatalogMeta } from '@/lib/storefront-api';
+import { getStorefrontCatalog, getStorefrontCatalogMeta } from '@/lib/storefront-api';
 
 type CatalogHeading = {
   title: string;
@@ -232,13 +231,10 @@ export default function CatalogPage(props: CatalogPageProps) {
 }
 
 async function CatalogNoScriptCatalog() {
-  'use cache';
-
-  cacheLife({ stale: 300, revalidate: 3600, expire: 86400 });
   let products: StorefrontProductsResponse['items'] = [];
   let hasNextPage = false;
   try {
-    const response = await fetchStorefrontCatalog(toStorefrontCatalogQuery(parseCatalogPageQuery()));
+    const response = await getStorefrontCatalog(toStorefrontCatalogQuery(parseCatalogPageQuery()));
     hasNextPage = response.total > CATALOG_PAGE_SIZE;
     products = response.items.slice(0, CATALOG_PAGE_SIZE);
   } catch {

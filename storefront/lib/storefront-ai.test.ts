@@ -12,5 +12,13 @@ describe('storefront shopper AI helpers', () => {
   it('keeps the assistant strictly shopper-facing', () => {
     expect(shopperAssistantInstructions('ar')).toContain('Arabic');
     expect(shopperAssistantInstructions('fr')).toContain('Never mention internal systems');
+    expect(shopperAssistantInstructions('fr')).toContain('Algerian dinars');
+    expect(shopperAssistantInstructions('fr')).toContain('never label them Dhs');
+  });
+
+  it('normalizes contradictory availability using the public in-stock flag', () => {
+    const product = toShopperProduct({ id: 7, slug: 'drill', title: 'Drill', title_ar: 'مثقاب', summary: '', summary_ar: '', description: '', description_ar: '', price: 1200, OldPrice: null, oldPrice: null, inStock: true, availabilityStatus: 'out_of_stock', brandInfo: null, categoryInfo: null, images: [] } as never);
+
+    expect(product.availabilityStatus).toBe('in_stock');
   });
 });

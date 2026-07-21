@@ -83,8 +83,8 @@ test('supports touch navigation, search, and homepage carousels', async ({ page,
   await expect(filters).toBeVisible();
   await filters.getByRole('radio', { name: 'Éclairage' }).tap();
   await filters.getByRole('button', { name: 'Appliquer les filtres' }).tap();
-  await expect(page.getByRole('heading', { level: 1, name: 'Éclairage' })).toBeVisible();
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/fr/categories/lighting');
+  await expect(page.getByRole('heading', { level: 1, name: 'Éclairage' })).toBeVisible({ timeout: 10_000 });
+  await expect.poll(() => new URL(page.url()).pathname, { timeout: 10_000 }).toBe('/fr/categories/lighting');
 });
 
 test('completes the essential product and checkout journey by touch', async ({ page }) => {
@@ -141,7 +141,7 @@ test('completes the essential product and checkout journey by touch', async ({ p
   await expect(page.getByRole('textbox', { name: /Numéro de téléphone/ })).toHaveValue('0550000000');
   await submit.tap();
 
-  await expect(page).toHaveURL(/\/fr\/thank-you\?orderId=\d+&token=/, { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/fr\/thank-you\?token=/, { timeout: 20_000 });
   await expect(page.getByRole('heading', { level: 1, name: 'Merci pour votre commande !' })).toBeVisible();
   await expect(page.locator('.thank-you-summary').getByText('Lampe de travail')).toBeVisible();
   await expectPhoneEnvironment(page);

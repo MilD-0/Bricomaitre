@@ -61,7 +61,7 @@ describe('app/api/orders/ecotrack/shipments/route', () => {
     expect(response.status).toBe(403);
   });
 
-  it('loads shipments with read-time freshness enabled', async () => {
+  it('loads cached shipments without blocking on upstream freshness', async () => {
     const response = await GET(new Request('http://localhost/api/orders/ecotrack/shipments?page=2&status=en_livraison&staleOnly=true'));
 
     expect(response.status).toBe(200);
@@ -74,9 +74,6 @@ describe('app/api/orders/ecotrack/shipments/route', () => {
       sort: [],
       sortKey: undefined,
       sortDirection: undefined,
-    }, true, {
-      ensureFreshVisiblePage: true,
-      actor: { email: null, name: 'ECOTRACK sync' },
-    });
+    }, true);
   });
 });

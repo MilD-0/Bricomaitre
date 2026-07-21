@@ -75,6 +75,7 @@ export function expandCheckoutCart(items: CartItem[]) {
 export function buildCheckoutOrderPayload(options: {
   form: ValidatedCheckoutForm;
   cartProducts: string[];
+  visitId: string | null;
   journeyId: string | null;
   sessionId: string | null;
   marketing?: StorefrontOrderMarketing;
@@ -92,7 +93,7 @@ export function buildCheckoutOrderPayload(options: {
     homeAddress: options.form.homeAddress,
     note: null,
     promoCode: null,
-    visitId: null,
+    visitId: options.visitId,
     journeyId: options.journeyId,
     sessionId: options.sessionId,
     ...(options.marketing ? {

@@ -1,6 +1,7 @@
 import {
   bigint,
   bigserial,
+  date,
   index,
   integer,
   jsonb,
@@ -117,7 +118,30 @@ export const metaEventOutbox = pgTable(
     index("idx_meta_event_outbox_delivery").on(t.status, t.nextAttemptAt),
     index("idx_meta_event_outbox_order").on(t.orderId, t.createdAt.desc()),
     index("idx_meta_event_outbox_event").on(t.eventName, t.createdAt.desc()),
+    index("idx_meta_event_outbox_event_time").on(t.eventTime.desc()),
     index("idx_meta_event_outbox_lease").on(t.processingLeaseExpiresAt),
+  ],
+);
+
+export const metaEventDailyRollups = pgTable(
+  "meta_event_daily_rollups",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    day: date("day").notNull(),
+    eventName: text("event_name").notNull(),
+    total: integer("total").notNull().default(0),
+    pixelFired: integer("pixel_fired").notNull().default(0),
+    capiSent: integer("capi_sent").notNull().default(0),
+    delivered: integer("delivered").notNull().default(0),
+    failed: integer("failed").notNull().default(0),
+    skipped: integer("skipped").notNull().default(0),
+    lastOccurredAt: timestamp("last_occurred_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("meta_event_daily_rollups_day_event_unique").on(t.day, t.eventName),
+    index("idx_meta_event_daily_rollups_event_day").on(t.eventName, t.day),
   ],
 );
 

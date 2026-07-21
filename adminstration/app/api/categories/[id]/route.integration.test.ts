@@ -12,6 +12,7 @@ const {
   readCategoryMock,
   resolveCategorySlugMock,
   mutateEntityWithHistoryMock,
+  revalidateStorefrontProductMetaMock,
 } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
@@ -21,6 +22,7 @@ const {
   readCategoryMock: vi.fn(),
   resolveCategorySlugMock: vi.fn(),
   mutateEntityWithHistoryMock: vi.fn(),
+  revalidateStorefrontProductMetaMock: vi.fn(),
 }));
 
 vi.mock('../../../../db/client', () => ({
@@ -45,6 +47,9 @@ vi.mock('../../../../lib/brands-categories-api', () => ({
 vi.mock('../../../../lib/action-history', () => ({
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
 }));
+vi.mock('../../../../lib/storefront-revalidate', () => ({
+  revalidateStorefrontProductMeta: revalidateStorefrontProductMetaMock,
+}));
 
 describe('app/api/categories/[id]/route', () => {
   beforeEach(() => {
@@ -56,6 +61,7 @@ describe('app/api/categories/[id]/route', () => {
     readCategoryMock.mockReset();
     resolveCategorySlugMock.mockReset();
     mutateEntityWithHistoryMock.mockReset();
+    revalidateStorefrontProductMetaMock.mockReset().mockResolvedValue(undefined);
 
     hasDbMock.mockReturnValue(true);
     getDbMock.mockReturnValue({});
@@ -88,6 +94,7 @@ describe('app/api/categories/[id]/route', () => {
 
     expect(readCategoryMock).toHaveBeenCalledWith(10);
     expect(response.status).toBe(200);
+    expect(revalidateStorefrontProductMetaMock).not.toHaveBeenCalled();
   });
 
   it('updates categories through the dedicated route', async () => {
@@ -98,6 +105,7 @@ describe('app/api/categories/[id]/route', () => {
 
     expect(readCategoryMock).toHaveBeenCalledWith(10);
     expect(response.status).toBe(200);
+    expect(revalidateStorefrontProductMetaMock).toHaveBeenCalledOnce();
     await expect(response.json()).resolves.toEqual({ ok: true });
   });
 

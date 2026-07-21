@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     sessionId: null,
     promoCode: null,
     items,
-  }, getMetaRequestContext(request));
+  }, getMetaRequestContext(request, parsed.data.url));
   return NextResponse.json({
     ok: true,
     queued: true,

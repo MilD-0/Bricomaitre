@@ -8,6 +8,7 @@ import { auth } from '../../../../lib/auth';
 import { readCategory, resolveCategorySlug } from '../../../../lib/brands-categories-api';
 import { categoryUpdateSchema } from '../../../../lib/brands-categories';
 import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
+import { revalidateStorefrontProductMeta } from '../../../../lib/storefront-revalidate';
 
 function parseCategoryId(id: string) {
   const numericId = Number(id);
@@ -104,6 +105,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     },
   });
 
+  await revalidateStorefrontProductMeta();
+
   return NextResponse.json({ ok: true });
 }
 
@@ -139,6 +142,8 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     actor,
     execute: (tx) => tx.delete(categories).where(eq(categories.id, numericId)),
   });
+
+  await revalidateStorefrontProductMeta();
 
   return NextResponse.json({ ok: true });
 }

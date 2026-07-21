@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as Sentry from '@sentry/nextjs';
 
 import {
   beginIdempotentRequest,
@@ -155,7 +154,7 @@ export async function POST(req: NextRequest) {
         reportTiming: (entry) => {
           timings.push(entry);
         },
-        metaRequestContext: getMetaRequestContext(req),
+        metaRequestContext: getMetaRequestContext(req, marketingSourceUrls[0]),
       });
     const createdResult = created as typeof created | (typeof created)['item'];
     const item = createdResult && typeof createdResult === 'object' && 'item' in createdResult

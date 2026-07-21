@@ -11,7 +11,7 @@ import { ProductTelemetry } from '@/components/product-telemetry';
 import { ProductTrustSignal } from '@/components/product-trust-signal';
 import { SimilarProducts } from '@/components/similar-products';
 import { StorefrontImage } from '@/components/storefront-image';
-import { ProductPageSkeleton, SimilarProductsSkeleton } from '@/components/storefront-skeletons';
+import { SimilarProductsSkeleton } from '@/components/storefront-skeletons';
 import { isLocale, type Locale } from '@/i18n/config';
 import { isDisplayableProductImageUrl } from '@/lib/product-images';
 import { buildProductCategoryBreadcrumbs } from '@/lib/product-breadcrumbs';
@@ -28,7 +28,7 @@ import {
   getProductPath,
   serializeStructuredData,
 } from '@/lib/product-seo';
-import { getStorefrontCatalog, getStorefrontCatalogMeta, getStorefrontProductDetail, getStorefrontSettings } from '@/lib/storefront-api';
+import { getStorefrontCatalogMeta, getStorefrontProductDetail, getStorefrontSettings } from '@/lib/storefront-api';
 import { isStorefrontUpstreamError } from '@/lib/storefront-upstream';
 import { captureProductPageException } from '@/lib/sentry';
 import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
@@ -37,23 +37,13 @@ type ProductPageProps = {
   params: Promise<{ locale: string; token: string }>;
 };
 
-export async function generateStaticParams() {
-  const response = await getStorefrontCatalog({
-    page: 1,
-    limit: 24,
-    search: '',
-    categoryId: null,
-    brandId: null,
-    discounted: false,
-    id: null,
-    mongoId: null,
-    slug: null,
-    sortKey: 'updatedAt',
-    sortDirection: 'desc',
-  });
-  return response.items.map((product) => ({
-    token: product.slug || product.mongoId || String(product.id),
-  }));
+export const revalidate = 60;
+export const dynamicParams = true;
+
+// Product HTML is generated and cached on first request. Avoid coupling every
+// deployment to a full catalog read while retaining complete no-JavaScript HTML.
+export function generateStaticParams() {
+  return [];
 }
 
 async function resolvePageParams(params: ProductPageProps['params']) {
@@ -270,35 +260,6 @@ export async function ProductPageContent({ params }: ProductPageProps) {
   );
 }
 
-export default function ProductPage(props: ProductPageProps) {
-  return (
-    <Suspense fallback={<ProductPageFallback {...props} />}>
-      <ProductPageContent {...props} />
-    </Suspense>
-  );
-}
-
-/** Keep product title, stock, and description server-rendered when JavaScript is unavailable. */
-async function ProductPageFallback({ params }: ProductPageProps) {
-  const { locale, token } = await resolvePageParams(params);
-  try {
-    const response = await getStorefrontProductDetail(token);
-    if (!response) return <ProductPageSkeleton />;
-    const t = await getTranslations({ locale, namespace: 'ProductDetail' });
-    const copy = getLocalizedProductCopy(response.item, locale);
-    return (
-      <PageShell locale={locale}>
-        <article className="product-progressive-fallback">
-          <h1>{copy.title}</h1>
-          <p className={response.item.availability.inStock ? 'availability availability-in' : 'availability availability-out'}>
-            <span aria-hidden="true" />
-            {response.item.availability.inStock ? t('inStock') : t('outOfStock')}
-          </p>
-          {copy.description ? <p>{copy.description}</p> : null}
-        </article>
-      </PageShell>
-    );
-  } catch {
-    return <ProductPageSkeleton />;
-  }
+export default async function ProductPage(props: ProductPageProps) {
+  return ProductPageContent(props);
 }

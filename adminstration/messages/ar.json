@@ -341,6 +341,9 @@
     "tabs": {
       "overview": "نظرة عامة",
       "website": "تحليلات الموقع",
+      "landingPages": "صفحات الهبوط",
+      "aiAssistants": "مساعدو الذكاء الاصطناعي",
+      "customers": "العملاء",
       "products": "المنتجات والفئات",
       "geography": "الجغرافيا",
       "time": "التحليل الزمني",
@@ -573,8 +576,22 @@
         "sessions": "الجلسات",
         "pageViews": "مشاهدات الصفحات",
         "addToCartRate": "من العرض إلى السلة",
-        "purchaseRate": "معدل الشراء لكل جلسة"
+        "purchaseRate": "معدل الشراء لكل جلسة",
+        "engagementRate": "الجلسات المتفاعلة",
+        "returningJourneys": "الزيارات المتكررة",
+        "errorRate": "معدل أخطاء الجلسات"
       },
+      "trendTitle": "زيارات ونتائج المتجر",
+      "pageTypesTitle": "أنواع الصفحات والتفاعل",
+      "audienceTitle": "الأجهزة واللغات",
+      "devices": "الأجهزة",
+      "locales": "اللغات",
+      "vitalsTitle": "مؤشرات أداء الويب الأساسية",
+      "errorsTitle": "أخطاء المتجر",
+      "referrersTitle": "أهم مصادر الزيارة",
+      "recentDiagnosticsHint": "تعتمد التفاصيل التشخيصية على نافذة القياس الخام الحديثة، مع استمرار سجل مسار التحويل القابل للمقارنة أثناء الانتقال بين المتجرين.",
+      "vitalMeta": "{good} جيد · {poor} ضعيف · {samples} عينة",
+      "experience": { "columns": { "dimension": "نوع الصفحة", "sessions": "الجلسات", "pageViews": "المشاهدات", "interactions": "التفاعلات" } },
       "stats": {
         "searches": "عمليات البحث",
         "zeroResults": "بحث بدون نتائج",
@@ -645,6 +662,22 @@
           "conversion": "التحويل %"
         }
       }
+    },
+    "landingPages": {
+      "performanceTitle": "أداء صفحات الهبوط", "blocksTitle": "أكثر أقسام المحتوى تفاعلاً", "empty": "لا يوجد نشاط لصفحات الهبوط في المتجر الجديد ضمن هذه الفترة.", "blockMeta": "{adds} إضافة للسلة · {checkouts} بدء دفع",
+      "cards": { "published": "الصفحات المنشورة", "sessions": "الجلسات المنسوبة", "purchases": "المشتريات", "conversion": "تحويل الجلسات", "revenue": "الإيراد المنسوب", "drafts": "المسودات" },
+      "columns": { "page": "صفحة الهبوط", "status": "الحالة", "sessions": "الجلسات", "views": "مشاهدات المنتج", "adds": "الإضافات", "checkouts": "الدفع", "purchases": "المشتريات", "revenue": "الإيراد", "conversion": "التحويل %" }
+    },
+    "aiAssistants": {
+      "admin": { "title": "مساعد الإدارة" }, "storefront": { "title": "مساعد المتجر", "intentsTitle": "ما الذي يحتاجه الزوار", "modelsTitle": "النماذج والاستخدام" },
+      "cards": { "runs": "مرات التشغيل", "successRate": "معدل النجاح", "tokens": "الرموز", "estimatedCost": "التكلفة التقديرية", "latency": "متوسط الاستجابة", "toolCalls": "استدعاءات الأدوات", "proposals": "المقترحات", "applied": "المقترحات المطبقة", "opens": "مرات الفتح", "messages": "الأسئلة", "resultClicks": "نقرات المنتجات", "clickThrough": "معدل نقر النتائج", "errors": "الأخطاء" },
+      "costHint": "تظهر التكلفة التقديرية فقط عند ضبط أسعار كل مليون رمز.", "empty": "لا يوجد استخدام للمساعدين ضمن هذه الفترة.", "tokensShort": "رمز",
+      "intents": { "product_search": "البحث عن منتج", "product_comparison": "مقارنة المنتجات", "compatibility": "التوافق", "price": "السعر", "availability": "التوفر", "how_to": "طريقة الاستخدام", "recommendation": "اقتراح منتج", "other": "أخرى" }
+    },
+    "customers": {
+      "rankingTitle": "ترتيب العملاء حسب نشاط الشراء", "empty": "لا توجد طلبات عملاء ضمن هذه الفترة.",
+      "cards": { "customers": "العملاء", "repeat": "العملاء المتكررون", "repeatRate": "معدل التكرار", "averageOrders": "متوسط الطلبات", "averageValue": "متوسط قيمة الطلب", "successfulOrders": "الطلبات الناجحة" },
+      "columns": { "customer": "العميل", "phone": "الهاتف", "orders": "الطلبات", "confirmed": "المؤكدة", "totalValue": "قيمة الطلبات", "averageValue": "متوسط القيمة", "products": "المنتجات المشتراة", "lastOrder": "آخر طلب" }
     },
     "geography": {
       "topWilayas": {
@@ -773,6 +806,7 @@
       "managerTitle": "تكاليف الإعلانات",
       "conversionRate": "معدل التحويل",
       "unknownCampaign": "حملة غير معروفة",
+      "paidAttribution": { "title": "إسناد زيارات ميتا المدفوعة", "visits": "الزيارات المدفوعة", "orders": "الطلبات المنشأة", "purchases": "المشتريات", "landedOnly": "زيارات صفحة فقط", "conversion": "تحويل الزيارة", "campaign": "الحملة" },
       "health": {
         "title": "حالة تسليم CAPI",
         "pending": "قيد الانتظار / إعادة المحاولة",
@@ -972,10 +1006,20 @@
     "completed": "اكتملت عملية إنشاء المقترحات المطلوبة.",
     "error": "فشل طلب مساعد الذكاء الاصطناعي.",
     "history": "التقدم والسجل",
-    "historyHint": "المهام المباشرة والمقترحات القابلة للمراجعة",
+    "historyHint": "المحادثات المحفوظة والمهام المباشرة والمقترحات القابلة للمراجعة",
+    "newChat": "محادثة جديدة",
+    "chats": "محادثاتك",
+    "untitledChat": "محادثة بلا عنوان",
+    "noChats": "لا توجد محادثات محفوظة بعد.",
+    "loadingChats": "جارٍ تحميل المحادثات…",
+    "loadingMessages": "جارٍ تحميل الرسائل…",
+    "noChartData": "لا توجد قيم غير صفرية لعرضها في مخطط؛ تظهر النتائج الكاملة أدناه.",
     "noHistory": "لا توجد مهام أو اقتراحات بعد.",
     "approve": "الموافقة والتطبيق",
     "reject": "رفض",
+    "applied": "تم تطبيق الاقتراح.",
+    "rejected": "تم رفض الاقتراح.",
+    "proposalReviewError": "تعذرت مراجعة الاقتراح.",
     "cancel": "إلغاء",
     "vs": "مقابل",
     "metric": "المؤشر",

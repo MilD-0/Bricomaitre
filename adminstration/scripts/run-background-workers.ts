@@ -28,9 +28,12 @@ import {
   startAdminReportingRefreshJob,
   runAiContentJob,
 } from '../lib/background-jobs';
+import { runDatabaseMaintenance } from '../lib/database-maintenance';
 
 const DEFAULT_REPORTING_REFRESH_CRON = '11 3 * * *';
 const DEFAULT_REPORTING_REFRESH_TIMEZONE = 'Africa/Algiers';
+const DEFAULT_DATABASE_MAINTENANCE_CRON = '43 * * * *';
+const DEFAULT_DATABASE_MAINTENANCE_TIMEZONE = 'Africa/Algiers';
 
 const workerDsn = process.env.SENTRY_DSN_WORKER?.trim() || process.env.SENTRY_DSN_ADMIN?.trim();
 
@@ -70,6 +73,34 @@ if (!cron.validate(reportingRefreshCron)) {
 const reportingRefreshTask = cron.schedule(reportingRefreshCron, () => {
   void startAdminReportingRefreshJob('daily-schedule');
 }, { timezone: reportingRefreshTimezone });
+
+const databaseMaintenanceCron = (process.env.ADMIN_DATABASE_MAINTENANCE_CRON ?? DEFAULT_DATABASE_MAINTENANCE_CRON).trim();
+const databaseMaintenanceTimezone = (process.env.ADMIN_DATABASE_MAINTENANCE_TIMEZONE ?? DEFAULT_DATABASE_MAINTENANCE_TIMEZONE).trim();
+if (!cron.validate(databaseMaintenanceCron)) {
+  throw new Error(`Invalid ADMIN_DATABASE_MAINTENANCE_CRON expression: ${databaseMaintenanceCron}`);
+}
+
+let databaseMaintenanceRunning = false;
+const databaseMaintenanceTask = cron.schedule(databaseMaintenanceCron, () => {
+  if (databaseMaintenanceRunning) {
+    return;
+  }
+
+  databaseMaintenanceRunning = true;
+  void runDatabaseMaintenance()
+    .then((summary) => console.log('[worker] database maintenance complete', summary))
+    .catch((error) => {
+      Sentry.withScope((scope) => {
+        scope.setTag('service', 'worker');
+        scope.setTag('operation', 'database-maintenance');
+        Sentry.captureException(error);
+      });
+      console.error('[worker] database maintenance failed', error);
+    })
+    .finally(() => {
+      databaseMaintenanceRunning = false;
+    });
+}, { timezone: databaseMaintenanceTimezone });
 
 for (const worker of workers) {
   worker.on('ready', () => {
@@ -112,6 +143,7 @@ for (const worker of workers) {
 async function shutdown(signal: string) {
   console.log(`[worker] shutting down on ${signal}`);
   reportingRefreshTask.stop();
+  databaseMaintenanceTask.stop();
   await Promise.all(workers.map((worker) => worker.close()));
   await Sentry.close(2000);
   process.exit(0);

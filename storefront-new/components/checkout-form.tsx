@@ -142,9 +142,19 @@ export function CheckoutForm({
     viewed.current = true;
     void trackCheckoutEvent({
       eventName: 'begin_checkout', locale, quantity: itemCount, value: total,
-      metadata: { cartMode, itemCount, ...landingAttribution },
+      metadata: {
+        cartMode,
+        itemCount,
+        items: items.map((item) => ({
+          productId: item.productId,
+          productSlug: item.token,
+          quantity: item.quantity,
+          price: item.unitPrice,
+        })),
+        ...landingAttribution,
+      },
     });
-  }, [cartMode, hydrated, itemCount, landingAttribution, locale, total]);
+  }, [cartMode, hydrated, itemCount, items, landingAttribution, locale, total]);
 
   function chooseDelivery(next: 'home' | 'office') {
     if (next === 'office' && !officeAvailable) return;
@@ -233,6 +243,7 @@ export function CheckoutForm({
     const payload = buildCheckoutOrderPayload({
       form: parsed.data,
       cartProducts: expandCheckoutCart(items),
+      visitId: identity.visitId,
       journeyId: identity.journeyId,
       sessionId: identity.sessionId,
       marketing: getMarketingOrderContext(purchaseEventId),

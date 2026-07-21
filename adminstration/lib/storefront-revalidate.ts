@@ -51,7 +51,11 @@ export async function revalidateStorefrontAssets() {
   }
 
   const bodyText = JSON.stringify({ scope: 'assets' });
-  const targets = [getStorefrontApiBaseUrl(), getStorefrontBaseUrl()];
+  const targets = [...new Set([
+    getStorefrontApiBaseUrl(),
+    getStorefrontBaseUrl(),
+    getStorefrontNewBaseUrl(),
+  ].filter((baseUrl): baseUrl is string => Boolean(baseUrl)))];
   const results = await Promise.allSettled(targets.map((baseUrl) => postSignedRevalidationRequest(baseUrl, bodyText, secret)));
 
   results.forEach((result, index) => {
@@ -80,6 +84,26 @@ export async function revalidateStorefrontProducts() {
     await postSignedRevalidationRequest(baseUrl, JSON.stringify({ scope: 'products' }), secret);
   } catch (error) {
     console.warn('[admin] storefront product revalidation request failed', {
+      baseUrl,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+export async function revalidateStorefrontProductMeta() {
+  const baseUrl = getStorefrontNewBaseUrl();
+  if (!baseUrl) return;
+
+  const secret = getStorefrontRevalidateSecret();
+  if (!secret) {
+    console.warn('[admin] storefront product metadata revalidation skipped because STOREFRONT_REVALIDATE_SECRET is not configured');
+    return;
+  }
+
+  try {
+    await postSignedRevalidationRequest(baseUrl, JSON.stringify({ scope: 'product-meta' }), secret);
+  } catch (error) {
+    console.warn('[admin] storefront product metadata revalidation request failed', {
       baseUrl,
       error: error instanceof Error ? error.message : String(error),
     });

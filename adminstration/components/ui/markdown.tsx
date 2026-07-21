@@ -14,7 +14,7 @@ const markdownComponents: Components = {
     />
   ),
   p: ({ className, ...props }) => (
-    <p {...props} className={cn('my-0 whitespace-pre-wrap leading-6 [&+*]:mt-4', className)} />
+    <p {...props} className={cn('my-0 whitespace-pre-wrap leading-6 [overflow-wrap:anywhere] [&+*]:mt-4', className)} />
   ),
   ul: ({ className, ...props }) => (
     <ul {...props} className={cn('my-4 list-disc space-y-1 pl-6', className)} />
@@ -23,7 +23,7 @@ const markdownComponents: Components = {
     <ol {...props} className={cn('my-4 list-decimal space-y-1 pl-6', className)} />
   ),
   li: ({ className, ...props }) => (
-    <li {...props} className={cn('whitespace-pre-wrap leading-6 marker:text-muted-foreground', className)} />
+    <li {...props} className={cn('whitespace-pre-wrap leading-6 [overflow-wrap:anywhere] marker:text-muted-foreground', className)} />
   ),
   blockquote: ({ className, ...props }) => (
     <blockquote
@@ -44,7 +44,25 @@ const markdownComponents: Components = {
   pre: ({ className, ...props }) => (
     <pre
       {...props}
-      className={cn('my-4 overflow-x-auto rounded-xl border border-border/70 bg-muted/50 p-3 text-sm', className)}
+      className={cn('my-4 max-w-full overflow-x-auto rounded-xl border border-border/70 bg-muted/50 p-3 text-sm', className)}
+    />
+  ),
+  table: ({ className, ...props }) => (
+    <table
+      {...props}
+      className={cn('my-4 w-full max-w-full table-fixed border-collapse text-start text-xs leading-5', className)}
+    />
+  ),
+  th: ({ className, ...props }) => (
+    <th
+      {...props}
+      className={cn('border-0 px-2 py-1.5 text-start align-top font-semibold [overflow-wrap:anywhere]', className)}
+    />
+  ),
+  td: ({ className, ...props }) => (
+    <td
+      {...props}
+      className={cn('border-0 px-2 py-1.5 text-start align-top [overflow-wrap:anywhere]', className)}
     />
   ),
   code: ({ className, children, ...props }) => {
@@ -77,7 +95,7 @@ export function Markdown({
   className?: string;
 }) {
   return (
-    <div className={cn('max-w-none text-sm text-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0', className)}>
+    <div className={cn('min-w-0 max-w-full overflow-hidden text-sm text-foreground [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0', className)}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
         {children}
       </ReactMarkdown>
