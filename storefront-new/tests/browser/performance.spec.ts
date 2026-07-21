@@ -83,7 +83,7 @@ test('thank-you meets the weak-phone content, LCP, and layout-stability budgets'
   await emulateWeakPhone(page, context);
   await expectWeakPhoneBudget(
     page,
-    `/fr/thank-you?orderId=${order.id}&token=${encodeURIComponent(order.publicToken)}`,
+    `/fr/thank-you?token=${encodeURIComponent(order.publicToken)}`,
     async () => {
       await expect(page.getByRole('heading', { level: 1, name: 'Merci pour votre commande !' })).toBeVisible({ timeout: 9_000 });
       await expect(page.locator('.thank-you-summary').getByText('Lampe de travail')).toBeVisible({ timeout: 9_000 });

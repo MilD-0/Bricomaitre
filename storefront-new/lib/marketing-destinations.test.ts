@@ -63,19 +63,71 @@ describe('client destination mappings', () => {
     expect(mapGoogleEvent(payload())).toMatchObject({ name: 'view_item', params: { event_id: 'event-1', currency: 'DZD' } });
     expect(mapMetaEvent(payload())).toMatchObject({ name: 'ViewContent', params: { content_ids: ['12'] } });
     expect(mapTikTokEvent(payload())).toMatchObject({ name: 'ViewContent', properties: { content_id: '12' } });
+    expect(mapMetaEvent(payload())).toMatchObject({
+      params: { value: 4500, contents: [{ id: '12', quantity: 2, item_price: 2250 }] },
+    });
   });
 
   it('maps a verified purchase with transaction identity and no customer PII', () => {
-    const purchase = payload({ eventName: 'purchase', orderId: 91 });
+    const purchase = payload({
+      eventName: 'purchase',
+      orderId: 91,
+      productId: null,
+      metadata: {
+        storefrontProject: 'storefront-new', viewportClass: 'desktop', effectiveConnectionType: null, saveData: false, release: null,
+        cartMode: 'cart', itemCount: 3,
+        items: [
+          { productId: 12, productSlug: 'perceuse', quantity: 2, price: 2250 },
+          { productId: 34, productSlug: 'meuleuse', quantity: 1, price: 3500 },
+        ],
+      },
+    });
     const mapped = [mapGoogleEvent(purchase), mapMetaEvent(purchase), mapTikTokEvent(purchase)];
     expect(mapped[0]).toMatchObject({ params: { transaction_id: '91' } });
+    expect(mapped[1]).toMatchObject({
+      name: 'Purchase',
+      params: {
+        value: 8000,
+        content_ids: ['12', '34'],
+        contents: [
+          { id: '12', quantity: 2, item_price: 2250 },
+          { id: '34', quantity: 1, item_price: 3500 },
+        ],
+      },
+    });
     expect(JSON.stringify(mapped)).not.toMatch(/phone|email|address/i);
     expect(buildMetaServerEvent(purchase)).toBeNull();
   });
 
+  it('maps every checkout line to Pixel and server CAPI using numeric catalog ids', () => {
+    const checkout = payload({
+      eventName: 'begin_checkout',
+      productId: null,
+      quantity: 3,
+      value: 8900,
+      metadata: {
+        storefrontProject: 'storefront-new', viewportClass: 'desktop', effectiveConnectionType: null, saveData: false, release: null,
+        cartMode: 'cart', itemCount: 3,
+        items: [
+          { productId: 12, productSlug: 'perceuse', quantity: 2, price: 2250 },
+          { productId: 34, productSlug: 'meuleuse', quantity: 1, price: 3500 },
+        ],
+      },
+    });
+
+    expect(mapMetaEvent(checkout)).toMatchObject({
+      name: 'InitiateCheckout',
+      params: { content_ids: ['12', '34'], value: 8000 },
+    });
+    expect(buildMetaServerEvent(checkout)).toMatchObject({
+      eventName: 'InitiateCheckout',
+      items: [{ productId: 12, quantity: 2 }, { productId: 34, quantity: 1 }],
+    });
+  });
+
   it('keeps throwing or blocked vendor globals non-blocking', () => {
     window.fbq = vi.fn(() => { throw new Error('blocked'); });
-    expect(() => deliverClientMarketingEvent(payload())).not.toThrow();
+    expect(deliverClientMarketingEvent(payload()).meta.invoked).toBe(false);
   });
 
   it('builds an allowlisted Meta server event for non-purchase interactions', () => {

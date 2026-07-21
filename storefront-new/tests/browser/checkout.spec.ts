@@ -31,13 +31,21 @@ test('completes a cart checkout, verifies its public token, and keeps analytics 
   await expect(submit).toHaveCSS('background-color', 'rgb(217, 86, 19)');
   await submit.click();
 
-  await expect(page).toHaveURL(/\/fr\/thank-you\?orderId=\d+&token=fixture-public-order-token-\d+-/, { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/fr\/thank-you\?token=fixture-public-order-token-\d+-/, { timeout: 20_000 });
   await expect(page.getByRole('heading', { level: 1, name: 'Merci pour votre commande !' })).toBeVisible();
   await expect(page.locator('.thank-you-summary').getByText('Lampe de travail')).toBeVisible();
   await expect(page.locator('.thank-you-customer').getByText('0550000000')).toBeVisible();
   await expect.poll(() => analytics.map((event) => event.eventName)).toEqual(expect.arrayContaining([
     'begin_checkout', 'checkout_submit_attempt', 'order_create_success', 'purchase',
   ]));
+  const beginCheckout = analytics.find((event) => event.eventName === 'begin_checkout');
+  const purchase = analytics.find((event) => event.eventName === 'purchase');
+  expect(beginCheckout?.metadata).toMatchObject({
+    items: [{ productId: 12, productSlug: 'desk-lamp', quantity: 2, price: 4500 }],
+  });
+  expect(purchase?.metadata).toMatchObject({
+    items: [{ productId: 12, productSlug: 'desk-lamp', quantity: 2, price: 4500 }],
+  });
   const analyticsBodies = JSON.stringify(analytics);
   expect(analyticsBodies).not.toContain('0550000000');
   expect(analyticsBodies).not.toContain('ada@example.com');

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { hasDb } from '../../../../../../../db/client';
-import { AiProductNotFoundError, proposeProductRelation } from '../../../../../../../lib/ai-product-knowledge';
+import { AiProductNotFoundError, proposeProductRelation, UnsupportedProductRelationError } from '../../../../../../../lib/ai-product-knowledge';
 import { auth } from '../../../../../../../lib/auth';
 import { requireAiAccess } from '../../../../../../../lib/rbac';
 
@@ -43,6 +43,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   } catch (error) {
     if (error instanceof AiProductNotFoundError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
+    }
+    if (error instanceof UnsupportedProductRelationError) {
+      return NextResponse.json({ error: error.message }, { status: 422 });
     }
     if (error instanceof Error && (error.message === 'AI is disabled' || error.message.includes('is not configured'))) {
       return NextResponse.json({ error: error.message }, { status: 503 });

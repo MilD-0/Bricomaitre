@@ -81,6 +81,11 @@ export const storefrontAnalyticsEventNameSchema = z.enum([
   "navigation_click",
   "navigation_menu_open",
   "locale_change",
+  "ai_assistant_open",
+  "ai_assistant_message",
+  "ai_assistant_result_click",
+  "ai_assistant_error",
+  "ai_assistant_run",
 ]);
 
 export const storefrontAnalyticsEventSchema = z.object({
@@ -125,6 +130,58 @@ function getMetadataString(metadata: Record<string, unknown>, key: string) {
 function getMetadataBoolean(metadata: Record<string, unknown>, key: string) {
   const value = metadata[key];
   return typeof value === "boolean" ? value : null;
+}
+
+function compactMetaTracking(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const tracking = value as Record<string, unknown>;
+  const pixel = tracking.pixel && typeof tracking.pixel === "object" && !Array.isArray(tracking.pixel)
+    ? tracking.pixel as Record<string, unknown>
+    : {};
+  const capi = tracking.capi && typeof tracking.capi === "object" && !Array.isArray(tracking.capi)
+    ? tracking.capi as Record<string, unknown>
+    : {};
+
+  return {
+    ...(typeof tracking.eventName === "string" ? { eventName: tracking.eventName } : {}),
+    ...(typeof tracking.eventId === "string" ? { eventId: tracking.eventId } : {}),
+    ...(typeof tracking.eventTime === "number" || typeof tracking.eventTime === "string"
+      ? { eventTime: tracking.eventTime }
+      : {}),
+    pixel: {
+      invoked: pixel.invoked === true || pixel.fired === true,
+    },
+    capi: {
+      queued: capi.queued === true,
+      attempted: capi.attempted === true,
+      ...(typeof capi.status === "number" ? { status: capi.status } : {}),
+      ...(typeof capi.ok === "boolean" ? { ok: capi.ok } : {}),
+    },
+  };
+}
+
+export function buildStoredAnalyticsMetadata(event: StorefrontAnalyticsEvent) {
+  const {
+    landingUrl: _landingUrl,
+    landingHost: _landingHost,
+    userAgent: _userAgent,
+    fbc: _fbc,
+    paidClickSeenAt: _paidClickSeenAt,
+    paidClickCookie: _paidClickCookie,
+    title: _title,
+    metaTracking,
+    ...metadata
+  } = event.metadata;
+  const compactTracking = compactMetaTracking(metaTracking);
+
+  return {
+    eventVersion: event.eventVersion ?? 0,
+    ...metadata,
+    ...(compactTracking ? { metaTracking: compactTracking } : {}),
+  };
 }
 
 function getPageUrl(pagePath: string | null | undefined) {
@@ -493,10 +550,7 @@ export async function ingestStorefrontAnalyticsEvent(
         quantity: event.quantity,
         value: event.value == null ? null : event.value.toFixed(2),
         currency: event.currency,
-        metadata: {
-          eventVersion: event.eventVersion ?? 0,
-          ...event.metadata,
-        },
+        metadata: buildStoredAnalyticsMetadata(event),
         occurredAt,
         createdAt: new Date(),
       })

@@ -36,10 +36,7 @@ export async function GET(request: NextRequest) {
       sort: searchParams.getAll('sort'),
       sortKey: searchParams.get('sortKey') ?? undefined,
       sortDirection: searchParams.get('sortDirection') ?? undefined,
-    }, writable, {
-      ensureFreshVisiblePage: true,
-      actor: { email: null, name: 'ECOTRACK sync' },
-    }), { headers: withRequestIdHeaders(requestId) });
+    }, writable), { headers: withRequestIdHeaders(requestId) });
   } catch (error) {
     captureAdminException(error, {
       requestId,

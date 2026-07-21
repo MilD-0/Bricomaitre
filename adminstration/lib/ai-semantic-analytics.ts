@@ -3,7 +3,7 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 
 import { getDb } from '../db/client';
 import {
-  analyticsEvents, brands, bundleComponents, bundleListings, categories, orders,
+  analyticsDailyRollups, analyticsDistinctDailyMembers, analyticsEvents, brands, bundleComponents, bundleListings, categories, orders,
   processedOrders, products,
 } from '../db/schema';
 
@@ -11,8 +11,8 @@ type AnalyticsAccess = { canViewProfit: boolean };
 
 function dateConditions(column: typeof orders.createdAt | typeof analyticsEvents.occurredAt, query: SemanticAnalyticsQuery) {
   return [
-    query.startDate ? sql`${column}::date >= ${query.startDate}` : undefined,
-    query.endDate ? sql`${column}::date <= ${query.endDate}` : undefined,
+    query.startDate ? sql`${column} >= ${query.startDate}::date` : undefined,
+    query.endDate ? sql`${column} < (${query.endDate}::date + interval '1 day')` : undefined,
   ];
 }
 
@@ -72,16 +72,53 @@ export async function executeSemanticAnalytics(raw: unknown, access: AnalyticsAc
 
   if (query.query === 'funnel_summary') {
     const conditions = dateConditions(analyticsEvents.occurredAt, query);
-    const [row] = await db.select({
-      sessions: sql<number>`count(distinct ${analyticsEvents.sessionId}) filter (where ${analyticsEvents.eventName} = 'page_view')::int`,
-      productViews: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'view_item')::int`,
-      addToCarts: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'add_to_cart')::int`,
-      checkoutStarts: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'begin_checkout')::int`,
-      purchases: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'purchase')::int`,
-    }).from(analyticsEvents).where(and(...conditions));
+    const unrolled = and(...conditions, sql`not exists (
+      select 1 from ${analyticsDailyRollups} rollup
+      where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+        and rollup.dimension = 'overall' and rollup.dimension_key = ''
+    )`);
+    const result = await db.execute(sql`
+      with exact_sessions as (
+        select ${analyticsDistinctDailyMembers.memberId} as session_id
+        from ${analyticsDistinctDailyMembers}
+        where ${analyticsDistinctDailyMembers.metric} = 'session'
+          and ${analyticsDistinctDailyMembers.dimensionKey} = ''
+          and ${query.startDate ? sql`${analyticsDistinctDailyMembers.day} >= ${query.startDate}::date` : sql`true`}
+          and ${query.endDate ? sql`${analyticsDistinctDailyMembers.day} <= ${query.endDate}::date` : sql`true`}
+        union
+        select ${analyticsEvents.sessionId}
+        from ${analyticsEvents}
+        where ${unrolled} and ${analyticsEvents.eventName} = 'page_view'
+      ), raw_counts as (
+        select
+          count(*) filter (where ${analyticsEvents.eventName} = 'view_item')::int as product_views,
+          count(*) filter (where ${analyticsEvents.eventName} = 'add_to_cart')::int as add_to_carts,
+          count(*) filter (where ${analyticsEvents.eventName} = 'begin_checkout')::int as checkout_starts,
+          count(*) filter (where ${analyticsEvents.eventName} = 'purchase')::int as purchases
+        from ${analyticsEvents} where ${unrolled}
+      ), rolled_counts as (
+        select
+          coalesce(sum(${analyticsDailyRollups.productViews}), 0)::int as product_views,
+          coalesce(sum(${analyticsDailyRollups.addToCarts}), 0)::int as add_to_carts,
+          coalesce(sum(${analyticsDailyRollups.checkoutStarts}), 0)::int as checkout_starts,
+          coalesce(sum(${analyticsDailyRollups.purchases}), 0)::int as purchases
+        from ${analyticsDailyRollups}
+        where ${analyticsDailyRollups.dimension} = 'overall'
+          and ${query.startDate ? sql`${analyticsDailyRollups.day} >= ${query.startDate}::date` : sql`true`}
+          and ${query.endDate ? sql`${analyticsDailyRollups.day} <= ${query.endDate}::date` : sql`true`}
+      )
+      select
+        (select count(*)::int from exact_sessions) as sessions,
+        raw_counts.product_views + rolled_counts.product_views as "productViews",
+        raw_counts.add_to_carts + rolled_counts.add_to_carts as "addToCarts",
+        raw_counts.checkout_starts + rolled_counts.checkout_starts as "checkoutStarts",
+        raw_counts.purchases + rolled_counts.purchases as purchases
+      from raw_counts cross join rolled_counts
+    `);
+    const row = result.rows[0] as { sessions: number; productViews: number; addToCarts: number; checkoutStarts: number; purchases: number };
     const rate = (numerator: number, denominator: number) => denominator > 0 ? numerator / denominator : 0;
     const data = { ...row, viewToCartRate: rate(row.addToCarts, row.productViews), cartToCheckoutRate: rate(row.checkoutStarts, row.addToCarts), checkoutToPurchaseRate: rate(row.purchases, row.checkoutStarts), sessionPurchaseRate: rate(row.purchases, row.sessions) };
-    return response(query, data, { source: 'analytics_events', definitions: { viewToCartRate: 'Add-to-cart events ÷ product-view events.', sessionPurchaseRate: 'Purchase events ÷ sessions with page views.' }, caveats: ['Event counts are not unique users and may include repeated actions.'] });
+    return response(query, data, { source: 'analytics_events + analytics_daily_rollups', definitions: { viewToCartRate: 'Add-to-cart events ÷ product-view events.', sessionPurchaseRate: 'Purchase events ÷ sessions with page views.' }, caveats: ['Event counts are not unique users and may include repeated actions.'] });
   }
 
   if (query.query === 'product_performance') {

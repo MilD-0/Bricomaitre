@@ -86,6 +86,7 @@ describe('checkout domain', () => {
         city: 'Bab Ezzouar', homeAddress: '', email: '', delivery: 'office',
       }),
       cartProducts: expandCheckoutCart(items),
+      visitId: 'visit-1',
       journeyId: 'journey-1',
       sessionId: 'session-1',
       marketing: {
@@ -97,6 +98,7 @@ describe('checkout domain', () => {
       delivery: 1,
       state: 16,
       cartProducts: ['desk-lamp', 'desk-lamp'],
+      visitId: 'visit-1',
       note: null,
       marketing: { eventId: 'purchase-1' },
       meta: { leadEventId: 'purchase-1' },

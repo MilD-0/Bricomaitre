@@ -27,7 +27,7 @@ vi.mock("../../../../lib/request-security", () => ({
 
 import { POST } from "./route";
 
-function request(body: Record<string, unknown>) {
+function request(body: Record<string, unknown>, cookie = "_fbc=fb.1.1700000000.click; _fbp=fb.1.1700000000.1") {
   return new NextRequest("https://bricomaitre.com/api/meta/events", {
     method: "POST",
     headers: {
@@ -36,7 +36,7 @@ function request(body: Record<string, unknown>) {
       host: "bricomaitre.com",
       "user-agent": "Vitest",
       "x-real-ip": "203.0.113.10",
-      cookie: "_fbc=fb.1.1700000000.click; _fbp=fb.1.1700000000.1",
+      cookie,
     },
     body: JSON.stringify(body),
   });
@@ -82,6 +82,23 @@ describe("POST /storefront/meta/events", () => {
       expect.objectContaining({
         clientIpAddress: "203.0.113.10",
         clientUserAgent: "Vitest",
+      }),
+    );
+  });
+
+  it("synthesizes fbc from the event source when the Pixel cookie is not ready", async () => {
+    const response = await POST(request({
+      eventId: "event-fbc-fallback",
+      eventName: "PageView",
+      eventSourceUrl: "https://bricomaitre.com/fr/?fbclid=click-from-url",
+    }, ""));
+
+    expect(response.status).toBe(202);
+    expect(enqueueMetaBrowserEventMock).toHaveBeenCalledWith(
+      {},
+      expect.any(Object),
+      expect.objectContaining({
+        fbc: expect.stringMatching(/^fb\.1\.\d+\.click-from-url$/),
       }),
     );
   });

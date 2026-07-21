@@ -3,6 +3,7 @@
 import { z } from 'zod';
 
 import { buildMetaServerEvent, deliverClientMarketingEvent } from '@/lib/marketing-destinations';
+import { captureStorefrontAttribution } from '@/lib/marketing-attribution';
 
 const productEventNameSchema = z.enum([
   'view_item',
@@ -45,6 +46,13 @@ const checkoutEventNameSchema = z.enum([
   'order_verification_failed_after_create',
   'purchase',
 ]);
+
+const checkoutCommerceItemSchema = z.object({
+  productId: z.number().int().positive(),
+  productSlug: z.string().trim().min(1).max(180).nullable().default(null),
+  quantity: z.number().int().positive().max(50),
+  price: z.number().min(0),
+}).strict();
 
 const productEventInputSchema = z.object({
   eventName: productEventNameSchema,
@@ -107,6 +115,7 @@ const navigationEventInputSchema = z.object({
     target: z.string().trim().min(1).max(120).optional(),
     resultsCount: z.number().int().min(0).optional(),
     position: z.number().int().positive().optional(),
+    intent: z.enum(['product_search', 'product_comparison', 'compatibility', 'price', 'availability', 'how_to', 'recommendation', 'other']).optional(),
   }).strict(),
 }).superRefine((input, context) => {
   if (input.eventName.startsWith('ai_assistant_') && input.searchTerm !== null) {
@@ -128,6 +137,7 @@ const checkoutEventInputSchema = z.object({
   metadata: z.object({
     cartMode: z.enum(['cart', 'direct']),
     itemCount: z.number().int().min(0),
+    items: z.array(checkoutCommerceItemSchema).max(50).optional(),
     delivery: z.enum(['home', 'office']).optional(),
     failureCode: z.string().trim().min(1).max(80).optional(),
     verificationSource: z.enum(['server', 'snapshot']).optional(),
@@ -189,6 +199,7 @@ function buildAnalyticsPayload(
   parsed: z.output<typeof productEventInputSchema> | z.output<typeof catalogEventInputSchema> | z.output<typeof navigationEventInputSchema> | z.output<typeof checkoutEventInputSchema> | (z.output<typeof pageEventInputSchema> & { eventName: 'page_view' }),
   pageType: 'homepage' | 'product_detail' | 'catalog' | 'landing' | 'global_navigation' | 'checkout' | 'thank_you',
 ) {
+  const attribution = captureStorefrontAttribution();
   const connection = navigator as Navigator & {
     connection?: { effectiveType?: string; saveData?: boolean };
   };
@@ -196,6 +207,7 @@ function buildAnalyticsPayload(
   return {
     eventVersion: 1 as const,
     eventId: 'eventId' in parsed && parsed.eventId ? parsed.eventId : createId(),
+    visitId: attribution.visitId,
     journeyId: getOrCreateId(window.localStorage, JOURNEY_KEY),
     sessionId: getOrCreateId(window.sessionStorage, SESSION_KEY),
     eventName: parsed.eventName,
@@ -204,6 +216,11 @@ function buildAnalyticsPayload(
     pageType,
     locale: parsed.locale,
     referrer: sanitizeAnalyticsReferrer(document.referrer, window.location.origin),
+    utmSource: attribution.utmSource,
+    utmMedium: attribution.utmMedium,
+    utmCampaign: attribution.utmCampaign,
+    utmTerm: attribution.utmTerm,
+    utmContent: attribution.utmContent,
     productId: 'productId' in parsed ? parsed.productId : null,
     productSlug: 'productSlug' in parsed ? parsed.productSlug : null,
     categoryId: 'categoryId' in parsed ? parsed.categoryId : null,
@@ -221,6 +238,10 @@ function buildAnalyticsPayload(
       effectiveConnectionType: connection.connection?.effectiveType ?? null,
       saveData: connection.connection?.saveData ?? false,
       release: process.env.NEXT_PUBLIC_RELEASE ?? null,
+      landingUrl: attribution.landingUrl,
+      landingHost: attribution.landingHost,
+      fbc: attribution.fbc,
+      paidClickCookie: Boolean(attribution.fbc),
       ...('metadata' in parsed ? parsed.metadata : {}),
     },
   };
@@ -246,8 +267,9 @@ export function buildPageAnalyticsPayload(input: PageAnalyticsEventInput) {
 export type StorefrontAnalyticsPayload = ReturnType<typeof buildAnalyticsPayload>;
 
 export function getAnalyticsIdentity() {
-  if (typeof window === 'undefined') return { journeyId: null, sessionId: null };
+  if (typeof window === 'undefined') return { visitId: null, journeyId: null, sessionId: null };
   return {
+    visitId: captureStorefrontAttribution().visitId,
     journeyId: getOrCreateId(window.localStorage, JOURNEY_KEY),
     sessionId: getOrCreateId(window.sessionStorage, SESSION_KEY),
   };
@@ -282,8 +304,19 @@ async function sendMetaServerPayload(payload: StorefrontAnalyticsPayload) {
 }
 
 async function deliverAnalyticsPayload(payload: StorefrontAnalyticsPayload) {
-  const firstParty = sendAnalyticsPayload(payload);
-  deliverClientMarketingEvent(payload);
+  const destinations = deliverClientMarketingEvent(payload);
+  const observablePayload = {
+    ...payload,
+    metadata: {
+      ...payload.metadata,
+      metaTracking: {
+        eventName: destinations.meta.eventName,
+        eventId: payload.eventId,
+        pixel: { invoked: destinations.meta.invoked },
+      },
+    },
+  };
+  const firstParty = sendAnalyticsPayload(observablePayload);
   void sendMetaServerPayload(payload);
   await firstParty;
 }

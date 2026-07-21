@@ -107,8 +107,33 @@ export function loadMarketingDestinationScripts() {
   }
 }
 
-function item(payload: StorefrontAnalyticsPayload) {
-  return payload.productId ? [{ item_id: String(payload.productId), quantity: payload.quantity ?? 1, price: payload.value ?? undefined }] : [];
+function commerceItems(payload: StorefrontAnalyticsPayload) {
+  const metadataItems = 'items' in payload.metadata && Array.isArray(payload.metadata.items)
+    ? payload.metadata.items
+    : [];
+  if (metadataItems.length > 0) {
+    return metadataItems.map((entry) => ({
+      productId: entry.productId,
+      quantity: entry.quantity,
+      price: entry.price,
+    }));
+  }
+  const quantity = payload.quantity ?? 1;
+  return payload.productId
+    ? [{
+      productId: payload.productId,
+      quantity,
+      price: payload.value == null ? undefined : payload.value / quantity,
+    }]
+    : [];
+}
+
+function googleItems(payload: StorefrontAnalyticsPayload) {
+  return commerceItems(payload).map((entry) => ({
+    item_id: String(entry.productId),
+    quantity: entry.quantity,
+    price: entry.price,
+  }));
 }
 
 export function mapGoogleEvent(payload: StorefrontAnalyticsPayload) {
@@ -125,6 +150,7 @@ export function mapGoogleEvent(payload: StorefrontAnalyticsPayload) {
   };
   const name = names[payload.eventName];
   if (!name) return null;
+  const items = googleItems(payload);
   return {
     name,
     params: {
@@ -134,7 +160,7 @@ export function mapGoogleEvent(payload: StorefrontAnalyticsPayload) {
       ...(payload.value != null ? { value: payload.value } : {}),
       ...(payload.searchTerm ? { search_term: payload.searchTerm } : {}),
       ...(payload.orderId ? { transaction_id: String(payload.orderId) } : {}),
-      ...(item(payload).length ? { items: item(payload) } : {}),
+      ...(items.length ? { items } : {}),
     },
   };
 }
@@ -150,13 +176,25 @@ export function mapMetaEvent(payload: StorefrontAnalyticsPayload) {
   };
   const name = names[payload.eventName];
   if (!name) return null;
+  const items = commerceItems(payload);
+  const commerceValue = items.length && items.every((entry) => entry.price != null)
+    ? items.reduce((total, entry) => total + (entry.price ?? 0) * entry.quantity, 0)
+    : payload.value;
   return {
     name,
     params: {
       currency: payload.currency,
-      ...(payload.value != null ? { value: payload.value } : {}),
+      ...(commerceValue != null ? { value: commerceValue } : {}),
       ...(payload.searchTerm ? { search_string: payload.searchTerm } : {}),
-      ...(payload.productId ? { content_ids: [String(payload.productId)], content_type: 'product' } : {}),
+      ...(items.length ? {
+        content_ids: items.map((entry) => String(entry.productId)),
+        contents: items.map((entry) => ({
+          id: String(entry.productId),
+          quantity: entry.quantity,
+          item_price: entry.price,
+        })),
+        content_type: 'product',
+      } : {}),
       ...(payload.orderId ? { order_id: String(payload.orderId) } : {}),
     },
   };
@@ -187,9 +225,14 @@ export function mapTikTokEvent(payload: StorefrontAnalyticsPayload) {
 
 function once(destination: string, eventId: string, send: () => void) {
   const key = `${destination}:${eventId}`;
-  if (delivered.has(key)) return;
+  if (delivered.has(key)) return true;
   delivered.add(key);
-  try { send(); } catch { /* Destination scripts are optional. */ }
+  try {
+    send();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function deliverClientMarketingEvent(payload: StorefrontAnalyticsPayload) {
@@ -197,9 +240,15 @@ export function deliverClientMarketingEvent(payload: StorefrontAnalyticsPayload)
   const google = mapGoogleEvent(payload);
   if (google && window.gtag) once('google', payload.eventId, () => window.gtag?.('event', google.name, google.params));
   const meta = mapMetaEvent(payload);
-  if (meta && window.fbq) once('meta', payload.eventId, () => window.fbq?.('track', meta.name, meta.params, { eventID: payload.eventId }));
+  const metaInvoked = Boolean(meta && window.fbq && once('meta', payload.eventId, () => window.fbq?.('track', meta.name, meta.params, { eventID: payload.eventId })));
   const tiktok = mapTikTokEvent(payload);
   if (tiktok && window.ttq?.track) once('tiktok', payload.eventId, () => window.ttq?.track?.(tiktok.name, tiktok.properties, { event_id: payload.eventId }));
+  return {
+    meta: {
+      eventName: meta?.name ?? null,
+      invoked: metaInvoked,
+    },
+  };
 }
 
 export function buildMetaServerEvent(payload: StorefrontAnalyticsPayload) {
@@ -213,6 +262,9 @@ export function buildMetaServerEvent(payload: StorefrontAnalyticsPayload) {
     journeyId: payload.journeyId,
     sessionId: payload.sessionId,
     searchTerm: payload.searchTerm,
-    items: payload.productId ? [{ productId: payload.productId, quantity: payload.quantity ?? 1 }] : [],
+    items: commerceItems(payload).map((entry) => ({
+      productId: entry.productId,
+      quantity: entry.quantity,
+    })),
   };
 }

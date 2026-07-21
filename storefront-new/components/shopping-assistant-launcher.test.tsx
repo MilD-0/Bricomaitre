@@ -10,7 +10,7 @@ vi.mock('@/lib/haptics', () => ({ prepareHaptics: vi.fn(), triggerHaptic: vi.fn(
 import { ShoppingAssistantLauncher } from './shopping-assistant-launcher';
 
 const labels = {
-  open: 'Trouver le bon outil', title: 'Conseiller produits', close: 'Fermer', liveCatalog: 'Catalogue',
+  open: 'Trouver le bon outil', title: 'Conseiller produits', close: 'Fermer', liveCatalog: 'Catalogue', newChat: 'Nouvelle discussion',
   welcomeTitle: 'Projet', welcomeDescription: 'Besoin', placeholder: 'Question', inputLabel: 'Question',
   send: 'Envoyer', thinking: 'Recherche', error: 'Erreur', rateLimited: 'Patientez', fallback: 'Catalogue',
   inStock: 'En stock', outOfStock: 'Indisponible', priceOnRequest: 'Sur demande', viewProduct: 'Voir',

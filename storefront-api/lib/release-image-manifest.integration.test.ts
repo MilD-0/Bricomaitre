@@ -78,6 +78,7 @@ describe('release image manifest assembler', () => {
     ],
     [
       `BRIC_IMAGE_STOREFRONT_WEB=${imageRef('storefront-web')}`,
+      'BRIC_STOREFRONT_APP=storefront-new',
       'BRIC_STOREFRONT_STATIC_PAGES=123',
     ],
   ];
@@ -99,8 +100,9 @@ describe('release image manifest assembler', () => {
 
     expect(result.status).toBe(0);
     const manifest = readFileSync(output, 'utf8');
-    expect(manifest.split('\n').filter(Boolean)).toHaveLength(7);
+    expect(manifest.split('\n').filter(Boolean)).toHaveLength(8);
     expect(manifest).toContain(`BRIC_IMAGE_STOREFRONT_API=${imageRef('storefront-api-web')}`);
+    expect(manifest).toContain('BRIC_STOREFRONT_APP=storefront-new');
     expect(manifest).toContain('BRIC_STOREFRONT_STATIC_PAGES=123');
   });
 
@@ -121,6 +123,15 @@ describe('release image manifest assembler', () => {
         ? [`BRIC_IMAGE_STOREFRONT_API=ghcr.io/mild-0/bricomaitre2/storefront-api-web:main`, part[1]]
         : part),
       error: 'must be an immutable Bricomaitre GHCR digest ref',
+    },
+    {
+      name: 'wrong storefront release identity',
+      parts: validParts.map((part, index) => index === 2
+        ? part.map((line) => line === 'BRIC_STOREFRONT_APP=storefront-new'
+          ? 'BRIC_STOREFRONT_APP=storefront'
+          : line)
+        : part),
+      error: 'BRIC_STOREFRONT_APP must identify storefront-new',
     },
   ])('rejects $name', ({ parts, error }) => {
     const { output, inputs } = writeParts(parts);

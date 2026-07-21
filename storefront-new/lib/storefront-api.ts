@@ -1,4 +1,5 @@
 import {
+  defaultStorefrontSettingsResponse,
   storefrontBrandsResponseSchema,
   storefrontCategoriesResponseSchema,
   storefrontEcotrackCatalogResponseSchema,
@@ -23,7 +24,7 @@ import {
   type StorefrontSettingsResponse,
 } from '@bric/storefront-core/contracts';
 import { landingPageLocaleSchema, landingPageSlugSchema, storefrontLandingPageResponseSchema, storefrontLandingPageSitemapResponseSchema, type StorefrontLandingPageResponse } from '@bric/storefront-core/landing-pages';
-import { cacheLife, cacheTag } from 'next/cache';
+import { unstable_cache } from 'next/cache';
 
 import {
   getStorefrontProductCacheTag,
@@ -35,6 +36,54 @@ import {
   StorefrontUpstreamError,
 } from './storefront-upstream';
 
+export async function recordStorefrontAssistantRun(input: {
+  telemetry: { journeyId: string; sessionId: string; pagePath: string; intent: string } | undefined;
+  locale: 'fr' | 'ar';
+  status: 'completed' | 'failed';
+  mode: 'ai' | 'fallback';
+  model: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  durationMs: number;
+  toolCalls: number;
+  resultsCount: number;
+}) {
+  if (!input.telemetry) return;
+  const body = JSON.stringify({
+    eventVersion: 1,
+    eventId: crypto.randomUUID(),
+    journeyId: input.telemetry.journeyId,
+    sessionId: input.telemetry.sessionId,
+    eventName: 'ai_assistant_run',
+    occurredAt: new Date().toISOString(),
+    pagePath: input.telemetry.pagePath,
+    pageType: 'global_navigation',
+    locale: input.locale,
+    currency: 'DZD',
+    metadata: {
+      storefrontProject: 'storefront-new',
+      intent: input.telemetry.intent,
+      status: input.status,
+      mode: input.mode,
+      model: input.model,
+      inputTokens: input.inputTokens ?? 0,
+      outputTokens: input.outputTokens ?? 0,
+      totalTokens: input.totalTokens ?? 0,
+      durationMs: Math.max(0, Math.round(input.durationMs)),
+      toolCalls: Math.max(0, Math.round(input.toolCalls)),
+      resultsCount: Math.max(0, Math.round(input.resultsCount)),
+    },
+  });
+  await fetchStorefrontUpstream('/storefront/analytics', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body,
+    timeoutMs: 2_000,
+    cache: 'no-store',
+  });
+}
+
 export async function fetchStorefrontLandingPage(locale: string, slug: string): Promise<StorefrontLandingPageResponse | null> {
   const parsedLocale = landingPageLocaleSchema.parse(locale);
   const parsedSlug = landingPageSlugSchema.parse(slug);
@@ -45,18 +94,29 @@ export async function fetchStorefrontLandingPage(locale: string, slug: string): 
 }
 
 export async function getStorefrontLandingPage(locale: string, slug: string) {
-  'use cache';
-  cacheLife({ stale: 30, revalidate: 120, expire: 600 });
-  cacheTag(STOREFRONT_NEW_CACHE_TAGS.landingPages, getStorefrontLandingPageCacheTag(locale, slug));
-  return fetchStorefrontLandingPage(locale, slug);
+  const parsedLocale = landingPageLocaleSchema.parse(locale);
+  const parsedSlug = landingPageSlugSchema.parse(slug);
+  return unstable_cache(
+    () => fetchStorefrontLandingPage(parsedLocale, parsedSlug),
+    ['storefront-landing-page', parsedLocale, parsedSlug],
+    {
+      revalidate: 120,
+      tags: [
+        STOREFRONT_NEW_CACHE_TAGS.landingPages,
+        getStorefrontLandingPageCacheTag(parsedLocale, parsedSlug),
+      ],
+    },
+  )();
 }
 
 export async function getStorefrontSitemapLandingPages() {
-  'use cache';
-  cacheLife({ stale: 300, revalidate: 3600, expire: 86400 });
-  cacheTag(STOREFRONT_NEW_CACHE_TAGS.landingPages);
-  const pathname = '/storefront/landing-pages';
-  return parseUpstreamJson(await fetchStorefrontUpstream(pathname), pathname, storefrontLandingPageSitemapResponseSchema);
+  return unstable_cache(async () => {
+    const pathname = '/storefront/landing-pages';
+    return parseUpstreamJson(await fetchStorefrontUpstream(pathname), pathname, storefrontLandingPageSitemapResponseSchema);
+  }, ['storefront-sitemap-landing-pages'], {
+    revalidate: 3600,
+    tags: [STOREFRONT_NEW_CACHE_TAGS.landingPages],
+  })();
 }
 
 async function parseUpstreamJson<T>(
@@ -164,11 +224,14 @@ export async function fetchStorefrontHomepageFeaturedGroupProducts(
 
 export async function fetchStorefrontSettings(): Promise<StorefrontSettingsResponse> {
   const pathname = '/storefront/settings';
-  return parseUpstreamJson(
-    await fetchStorefrontUpstream(pathname),
-    pathname,
-    storefrontSettingsResponseSchema,
-  );
+  const response = await fetchStorefrontUpstream(pathname);
+
+  // During the first blue/green promotion, the storefront image can be built
+  // against the previous API release. Public defaults keep that rolling build
+  // viable until the candidate API (which owns this route) is promoted first.
+  if (response.status === 404) return defaultStorefrontSettingsResponse;
+
+  return parseUpstreamJson(response, pathname, storefrontSettingsResponseSchema);
 }
 
 export async function fetchStorefrontOrder(
@@ -202,17 +265,27 @@ export async function fetchStorefrontOrderByToken(
 }
 
 export async function getStorefrontSettings() {
-  'use cache';
-  cacheLife({ stale: 300, revalidate: 3600, expire: 86400 });
-  cacheTag(STOREFRONT_NEW_CACHE_TAGS.settings);
-  return fetchStorefrontSettings();
+  return unstable_cache(async () => {
+    try {
+      return await fetchStorefrontSettings();
+    } catch {
+      return defaultStorefrontSettingsResponse;
+    }
+  }, ['storefront-settings'], {
+    revalidate: 3600,
+    tags: [STOREFRONT_NEW_CACHE_TAGS.settings],
+  })();
 }
 
 export async function getStorefrontHomepage() {
-  'use cache';
-  cacheLife({ stale: 30, revalidate: 120, expire: 600 });
-  cacheTag(STOREFRONT_NEW_CACHE_TAGS.assets, STOREFRONT_NEW_CACHE_TAGS.products, STOREFRONT_NEW_CACHE_TAGS.productMeta);
-  return fetchStorefrontHomepage();
+  return unstable_cache(fetchStorefrontHomepage, ['storefront-homepage'], {
+    revalidate: 120,
+    tags: [
+      STOREFRONT_NEW_CACHE_TAGS.assets,
+      STOREFRONT_NEW_CACHE_TAGS.products,
+      STOREFRONT_NEW_CACHE_TAGS.productMeta,
+    ],
+  })();
 }
 
 export async function getStorefrontEcotrackCatalog() {
@@ -223,12 +296,12 @@ export async function getStorefrontEcotrackCatalog() {
 }
 
 export async function getStorefrontCatalog(input: StorefrontProductListQuery) {
-  'use cache';
-
   const query = storefrontProductListQuerySchema.parse(input);
-  cacheLife({ stale: 30, revalidate: 60, expire: 300 });
-  cacheTag(STOREFRONT_NEW_CACHE_TAGS.products);
-  return fetchStorefrontCatalog(query);
+  return unstable_cache(
+    () => fetchStorefrontCatalog(query),
+    ['storefront-catalog', JSON.stringify(query)],
+    { revalidate: 60, tags: [STOREFRONT_NEW_CACHE_TAGS.products] },
+  )();
 }
 
 export async function fetchStorefrontSitemapProducts() {
@@ -257,19 +330,17 @@ export async function fetchStorefrontSitemapProducts() {
 }
 
 export async function getStorefrontSitemapProducts() {
-  'use cache';
-
-  cacheLife({ stale: 300, revalidate: 3600, expire: 86400 });
-  cacheTag(STOREFRONT_NEW_CACHE_TAGS.products);
-  return fetchStorefrontSitemapProducts();
+  return unstable_cache(fetchStorefrontSitemapProducts, ['storefront-sitemap-products'], {
+    revalidate: 3600,
+    tags: [STOREFRONT_NEW_CACHE_TAGS.products],
+  })();
 }
 
 export async function getStorefrontCatalogMeta() {
-  'use cache';
-
-  cacheLife({ stale: 300, revalidate: 3600, expire: 86400 });
-  cacheTag(STOREFRONT_NEW_CACHE_TAGS.productMeta);
-  return fetchStorefrontCatalogMeta();
+  return unstable_cache(fetchStorefrontCatalogMeta, ['storefront-catalog-meta'], {
+    revalidate: 3600,
+    tags: [STOREFRONT_NEW_CACHE_TAGS.productMeta],
+  })();
 }
 
 export async function fetchStorefrontProductDetail(
@@ -329,19 +400,16 @@ export async function fetchStorefrontProductDetail(
 export async function getStorefrontProductDetail(
   value: string,
 ): Promise<StorefrontProductDetailResponse | null> {
-  'use cache';
-
   const parsedToken = storefrontProductTokenSchema.parse(value);
-  cacheLife({ stale: 30, revalidate: 60, expire: 300 });
-  cacheTag(
-    STOREFRONT_NEW_CACHE_TAGS.products,
-    getStorefrontProductCacheTag(parsedToken),
-  );
-
-  const product = await fetchStorefrontProductDetail(parsedToken);
-  if (product) {
-    cacheTag(getStorefrontProductCacheTag(product.resolution.canonicalToken));
-  }
-
-  return product;
+  return unstable_cache(
+    () => fetchStorefrontProductDetail(parsedToken),
+    ['storefront-product', parsedToken],
+    {
+      revalidate: 60,
+      tags: [
+        STOREFRONT_NEW_CACHE_TAGS.products,
+        getStorefrontProductCacheTag(parsedToken),
+      ],
+    },
+  )();
 }

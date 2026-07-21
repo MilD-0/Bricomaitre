@@ -3,10 +3,6 @@ FROM node:24-bookworm-slim AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ARG BRIC_BUILD_NODE_OPTIONS=""
-ARG STOREFRONT_API_BASE_URL
-ARG NEXT_PUBLIC_FACEBOOK_PIXEL_ID
-ENV STOREFRONT_API_BASE_URL="${STOREFRONT_API_BASE_URL}"
-ENV NEXT_PUBLIC_FACEBOOK_PIXEL_ID="${NEXT_PUBLIC_FACEBOOK_PIXEL_ID}"
 
 RUN corepack enable
 
@@ -15,36 +11,67 @@ WORKDIR /workspace
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY adminstration/package.json adminstration/package.json
 COPY storefront-api/package.json storefront-api/package.json
-COPY storefront/package.json storefront/package.json
+COPY storefront-new/package.json storefront-new/package.json
+COPY packages/ai-core/package.json packages/ai-core/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/runtime/package.json packages/runtime/package.json
 COPY packages/storefront-core/package.json packages/storefront-core/package.json
-COPY storefront/app/components/package.json storefront/app/components/package.json
 
 RUN NODE_OPTIONS="${BRIC_BUILD_NODE_OPTIONS}" pnpm install --frozen-lockfile
 
 COPY tsconfig.base.json ./
-COPY storefront ./storefront
+COPY storefront-new ./storefront-new
+COPY packages/ai-core ./packages/ai-core
 COPY packages/db ./packages/db
 COPY packages/runtime ./packages/runtime
 COPY packages/storefront-core ./packages/storefront-core
 COPY ops/ownership ./ops/ownership
 
-RUN pnpm --filter storefront build
+ARG STOREFRONT_API_BASE_URL
+ARG NEXT_PUBLIC_SITE_URL="https://bricomaitre.com"
+ARG NEXT_PUBLIC_CLOUDFRONT_URL=""
+ARG NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS=""
+ARG NEXT_PUBLIC_FACEBOOK_PIXEL_ID
+ARG NEXT_PUBLIC_GA_MEASUREMENT_ID
+ARG NEXT_PUBLIC_TIKTOK_PIXEL_ID
+ARG NEXT_PUBLIC_RELEASE
+ARG NEXT_PUBLIC_SENTRY_DSN_STOREFRONT_NEW
+ARG NEXT_PUBLIC_SENTRY_ENVIRONMENT="production"
+ARG NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE_STOREFRONT_NEW="0.1"
+ARG SENTRY_RELEASE
+ENV STOREFRONT_API_BASE_URL="${STOREFRONT_API_BASE_URL}"
+ENV NEXT_PUBLIC_SITE_URL="${NEXT_PUBLIC_SITE_URL}"
+ENV NEXT_PUBLIC_CLOUDFRONT_URL="${NEXT_PUBLIC_CLOUDFRONT_URL}"
+ENV NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS="${NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS}"
+ENV NEXT_PUBLIC_FACEBOOK_PIXEL_ID="${NEXT_PUBLIC_FACEBOOK_PIXEL_ID}"
+ENV NEXT_PUBLIC_GA_MEASUREMENT_ID="${NEXT_PUBLIC_GA_MEASUREMENT_ID}"
+ENV NEXT_PUBLIC_TIKTOK_PIXEL_ID="${NEXT_PUBLIC_TIKTOK_PIXEL_ID}"
+ENV NEXT_PUBLIC_RELEASE="${NEXT_PUBLIC_RELEASE}"
+ENV NEXT_PUBLIC_SENTRY_DSN_STOREFRONT_NEW="${NEXT_PUBLIC_SENTRY_DSN_STOREFRONT_NEW}"
+ENV NEXT_PUBLIC_SENTRY_ENVIRONMENT="${NEXT_PUBLIC_SENTRY_ENVIRONMENT}"
+ENV NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE_STOREFRONT_NEW="${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE_STOREFRONT_NEW}"
+ENV SENTRY_RELEASE="${SENTRY_RELEASE}"
+
+RUN pnpm --filter storefront-new build
 
 FROM node:24-bookworm-slim AS runner
 
 WORKDIR /app
+ARG SENTRY_RELEASE
 ENV NODE_ENV=production
 ENV PORT=3002
 ENV HOSTNAME=0.0.0.0
+ENV SENTRY_RELEASE="${SENTRY_RELEASE}"
+ENV BRIC_STOREFRONT_APP="storefront-new"
 
-LABEL org.opencontainers.image.title="Bricomaitre storefront web" \
+LABEL org.opencontainers.image.title="Bricomaitre storefront-new web" \
   org.opencontainers.image.vendor="Bricomaitre" \
   org.opencontainers.image.source="https://github.com/MilD-0/Bricomaitre2" \
   org.opencontainers.image.licenses="AGPL-3.0-only" \
   org.opencontainers.image.description="Bricomaitre production image." \
   com.bricomaitre.repository="MilD-0/Bricomaitre2" \
+  com.bricomaitre.application="storefront-new" \
+  com.bricomaitre.release-surface="storefront-v1" \
   com.bricomaitre.source-license="AGPL-3.0-only"
 
 RUN groupadd --gid 10001 bric \
@@ -57,14 +84,14 @@ COPY --chown=bric:bric ops/ownership/BRICOMAITRE_AUTHORIZED_RELEASE.txt ./BRICOM
 COPY --chown=bric:bric ops/ownership/LICENSE ./LICENSE
 COPY --chown=bric:bric ops/ownership/NOTICE ./NOTICE
 COPY --chown=bric:bric ops/ownership/SECURITY.md ./SECURITY.md
-COPY --from=base --chown=bric:bric /workspace/storefront/.next/standalone ./
-COPY --from=base --chown=bric:bric /workspace/storefront/.next/static ./storefront/.next/static
-COPY --from=base --chown=bric:bric /workspace/storefront/public ./storefront/public
-RUN mkdir -p /app/storefront/.next/cache \
-  && chown -R bric:bric /app/storefront/.next/cache \
+COPY --from=base --chown=bric:bric /workspace/storefront-new/.next/standalone ./
+COPY --from=base --chown=bric:bric /workspace/storefront-new/.next/static ./storefront-new/.next/static
+COPY --from=base --chown=bric:bric /workspace/storefront-new/public ./storefront-new/public
+RUN mkdir -p /app/storefront-new/.next/cache \
+  && chown -R bric:bric /app/storefront-new/.next/cache \
   && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete
 
 EXPOSE 3002
 USER bric
 
-CMD ["node", "storefront/server.js"]
+CMD ["node", "storefront-new/server.js"]

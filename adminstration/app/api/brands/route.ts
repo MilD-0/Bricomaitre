@@ -8,6 +8,7 @@ import { readBrandsPage, resolveBrandSlug } from '../../../lib/brands-categories
 import { brandFormSchema, paginationQuerySchema } from '../../../lib/brands-categories';
 import { requireMutationAccess } from '../../../lib/rbac';
 import { captureAdminException, getRequestId, withRequestIdHeaders } from '../../../lib/sentry';
+import { revalidateStorefrontProductMeta } from '../../../lib/storefront-revalidate';
 
 function emptyPagination() {
   return {
@@ -98,6 +99,8 @@ export async function POST(req: NextRequest) {
       { status: 500, headers: withRequestIdHeaders(requestId) },
     );
   }
+
+  await revalidateStorefrontProductMeta();
 
   return NextResponse.json({ ok: true }, { headers: withRequestIdHeaders(requestId) });
 }

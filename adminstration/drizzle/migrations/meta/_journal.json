@@ -421,6 +421,27 @@
       "when": 1784377531590,
       "tag": "0059_equal_green_goblin",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1784402380838,
+      "tag": "0060_condemned_forge",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1784402933125,
+      "tag": "0061_flippant_captain_flint",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1784430144481,
+      "tag": "0062_handy_mikhail_rasputin",
+      "breakpoints": true
     }
   ]
 }

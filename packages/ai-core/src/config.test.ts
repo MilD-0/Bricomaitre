@@ -1,17 +1,47 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertAiConfigured, getAiConfig, resolveAiModel } from './config';
+import { assertAiConfigured, createAiLanguageModel, getAiConfig, resolveAiModel } from './config';
 
 describe('AI configuration', () => {
   it('is disabled and credential-free by default', () => {
     expect(getAiConfig({})).toEqual({
       enabled: false,
+      provider: 'openai',
       apiKey: undefined,
       adminModel: undefined,
       storefrontModel: undefined,
       contentModel: undefined,
+      openRouterBaseUrl: undefined,
+      openRouterReferer: undefined,
+      openRouterTitle: undefined,
       requestTimeoutMs: 30_000,
       maxRetries: 2,
+    });
+  });
+
+  it('parses OpenRouter credentials and attribution independently from OpenAI', () => {
+    const config = getAiConfig({
+      AI_ENABLED: 'true',
+      AI_PROVIDER: 'openrouter',
+      OPENAI_API_KEY: 'unused-openai-secret',
+      OPENROUTER_API_KEY: 'openrouter-secret',
+      OPENROUTER_BASE_URL: 'https://openrouter.example/api/v1',
+      OPENROUTER_HTTP_REFERER: 'https://bricomaitre.com',
+      OPENROUTER_APP_TITLE: 'Bricomaitre',
+      AI_STOREFRONT_MODEL: 'anthropic/claude-sonnet-4',
+    });
+
+    expect(config).toMatchObject({
+      provider: 'openrouter',
+      apiKey: 'openrouter-secret',
+      openRouterBaseUrl: 'https://openrouter.example/api/v1',
+      openRouterReferer: 'https://bricomaitre.com',
+      openRouterTitle: 'Bricomaitre',
+    });
+    expect(resolveAiModel(config, 'storefront')).toBe('anthropic/claude-sonnet-4');
+    expect(createAiLanguageModel(config, 'storefront')).toMatchObject({
+      modelId: 'anthropic/claude-sonnet-4',
+      provider: 'openrouter.chat',
     });
   });
 
@@ -33,5 +63,12 @@ describe('AI configuration', () => {
     expect(() => assertAiConfigured(getAiConfig({}))).toThrow('AI is disabled');
     expect(() => resolveAiModel(getAiConfig({ AI_ENABLED: 'true', OPENAI_API_KEY: 'secret' }), 'admin'))
       .toThrow('AI_ADMIN_MODEL is not configured');
+    expect(() => assertAiConfigured(getAiConfig({ AI_ENABLED: 'true', AI_PROVIDER: 'openrouter', OPENAI_API_KEY: 'wrong-provider-key' })))
+      .toThrow('OPENROUTER_API_KEY is not configured');
+  });
+
+  it('rejects unsupported providers and invalid OpenRouter URLs', () => {
+    expect(() => getAiConfig({ AI_PROVIDER: 'other' })).toThrow();
+    expect(() => getAiConfig({ AI_PROVIDER: 'openrouter', OPENROUTER_HTTP_REFERER: 'not-a-url' })).toThrow();
   });
 });

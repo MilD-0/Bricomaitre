@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       headers: withRequestIdHeaders(requestId),
     });
   }
-  await enqueueMetaBrowserEvent(getDb(), parsed.data, getMetaRequestContext(request));
+  await enqueueMetaBrowserEvent(getDb(), parsed.data, getMetaRequestContext(request, parsed.data.eventSourceUrl));
   return NextResponse.json({
     ok: true,
     queued: true,

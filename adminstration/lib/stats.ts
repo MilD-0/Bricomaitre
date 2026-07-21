@@ -8,12 +8,15 @@ import {
   adSpendImportBatches,
   adminReportingSnapshotRuns,
   adminReportingSnapshots,
+  analyticsDailyRollups,
+  analyticsDistinctDailyMembers,
   analyticsEvents,
   analyticsJourneys,
   brands,
   categories,
   importBatches,
   metaEventOutbox,
+  metaEventDailyRollups,
   metaWorkerHeartbeat,
   orderMetaAttribution,
   orderStatusHistory,
@@ -27,6 +30,17 @@ import type { ActionActor } from './action-history';
 import { mutateEntityWithHistory } from './action-history';
 import { coerceOrderStatus, isConfirmedLifecycleStatus, isMongoObjectId, parseOrderProductId } from './orders';
 import { applyServerCache, CACHE_TAGS } from './server-cache';
+import {
+  emptyExperienceStats,
+  getExperienceStats,
+  getLiveAdminAiStats,
+  getLiveStorefrontAiStats,
+  type AiAssistantStats,
+  type CustomerStats,
+  type LandingPageStats,
+  type MetaPaidAttributionStats,
+  type WebsiteExperienceStats,
+} from './stats-experience';
 
 const statsRangeSchema = z.enum(['all', '30d', '90d', 'year', 'custom']);
 const optionalDateSchema = z
@@ -203,11 +217,6 @@ type ProductPerformance = {
   websiteConversionRate?: number;
 };
 
-type WebsiteLandingPoint = {
-  path: string;
-  sessions: number;
-};
-
 type WebsiteSearchPoint = {
   term: string;
   searches: number;
@@ -217,19 +226,6 @@ type WebsiteSearchPoint = {
 type WebsiteFunnelPoint = {
   name: string;
   value: number;
-};
-
-type WebsiteVariantPoint = {
-  variant: string;
-  sessions: number;
-  pageViews: number;
-  productViews: number;
-  addToCarts: number;
-  checkoutStarts: number;
-  purchases: number;
-  sessionConversionRate: number;
-  cartToPurchaseRate: number;
-  checkoutToPurchaseRate: number;
 };
 
 type MetaTrackedEventSummary = {
@@ -382,6 +378,7 @@ export type StatsDashboardData = {
   metaAds: {
     events: MetaTrackedEventSummary[];
     recentPayloads: MetaTrackedEventLog[];
+    paidAttribution: MetaPaidAttributionStats;
     health?: {
       pending: number;
       retryable: number;
@@ -422,12 +419,13 @@ export type StatsDashboardData = {
     viewToCartRate: number;
     cartToPurchaseRate: number;
     checkoutToPurchaseRate: number;
-    variants: WebsiteVariantPoint[];
-    topLandingPages: WebsiteLandingPoint[];
     topSearches: WebsiteSearchPoint[];
     funnel: WebsiteFunnelPoint[];
     topProducts: ProductPerformance[];
-  };
+  } & WebsiteExperienceStats;
+  landingPages: LandingPageStats;
+  aiAssistants: AiAssistantStats;
+  customers: CustomerStats;
 };
 
 export type StatsImportResult = {
@@ -549,11 +547,6 @@ type WebsiteSummaryRow = {
   zeroResultSearches: number;
 };
 
-type WebsiteLandingRow = {
-  path: string;
-  sessions: number;
-};
-
 type WebsiteSearchRow = {
   term: string;
   searches: number;
@@ -582,16 +575,6 @@ type WebsiteMetricRow = {
   websitePurchaseCount: number;
   popularityScore: number;
   websiteConversionRate: number;
-};
-
-type WebsiteVariantRow = {
-  variant: string;
-  sessions: number;
-  pageViews: number;
-  productViews: number;
-  addToCarts: number;
-  checkoutStarts: number;
-  purchases: number;
 };
 
 type MetaTrackedEventSummaryRow = {
@@ -625,14 +608,28 @@ function toIsoDateString(value: Date | string | null | undefined) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-async function getWebsiteAnalyticsData(db: ReturnType<typeof getDb>, analyticsWhere: ReturnType<typeof buildAnalyticsWhere>) {
+async function getWebsiteAnalyticsData(
+  db: ReturnType<typeof getDb>,
+  analyticsWhere: ReturnType<typeof buildAnalyticsWhere>,
+  rollupWhere: ReturnType<typeof buildAnalyticsRollupWhere>,
+  filters: Required<StatsFilters>,
+) {
+  const unrolledAnalyticsWhere = and(
+    analyticsWhere,
+    sql`not exists (
+      select 1 from ${analyticsDailyRollups} rollup
+      where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+        and rollup.dimension = 'overall'
+        and rollup.dimension_key = ''
+    )`,
+  );
   const [
     websiteSummaryRows,
-    websiteVariantRows,
-    websiteLandingRows,
     websiteSearchRows,
-    websiteTopProductRows,
-    websiteMetricRows,
+    websiteProductResult,
+    rollupSummaryRows,
+    rollupSearchRows,
+    exactIdentityResult,
   ] = await Promise.all([
     db
       .select({
@@ -647,39 +644,7 @@ async function getWebsiteAnalyticsData(db: ReturnType<typeof getDb>, analyticsWh
         zeroResultSearches: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'search' and ${analyticsResultsCountExpression} = 0)::int`,
       })
       .from(analyticsEvents)
-      .where(analyticsWhere),
-    db
-      .select({
-        variant: sql<string>`case
-          when coalesce(nullif(${analyticsEvents.metadata}->>'requestedVariant', ''), nullif(${analyticsEvents.metadata}->>'storefrontVariant', ''), 'new') = 'legacy' then 'legacy'
-          when coalesce(nullif(${analyticsEvents.metadata}->>'requestedVariant', ''), nullif(${analyticsEvents.metadata}->>'storefrontVariant', ''), 'new') in ('fast_checkout', 'control', 'new') then 'new'
-          else coalesce(nullif(${analyticsEvents.metadata}->>'requestedVariant', ''), nullif(${analyticsEvents.metadata}->>'storefrontVariant', ''), 'new')
-        end`,
-        sessions: sql<number>`count(distinct case when ${analyticsEvents.eventName} = 'page_view' then ${analyticsEvents.sessionId} end)::int`,
-        pageViews: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'page_view')::int`,
-        productViews: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'view_item')::int`,
-        addToCarts: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'add_to_cart')::int`,
-        checkoutStarts: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'begin_checkout')::int`,
-        purchases: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'purchase')::int`,
-      })
-      .from(analyticsEvents)
-      .where(analyticsWhere)
-      .groupBy(sql`1`)
-      .orderBy(sql`1 asc`),
-    db
-      .select({
-        path: sql<string>`coalesce(${analyticsEvents.pagePath}, '/')`,
-        sessions: sql<number>`count(distinct ${analyticsEvents.sessionId})::int`,
-      })
-      .from(analyticsEvents)
-      .where(and(
-        analyticsWhere,
-        eq(analyticsEvents.eventName, 'page_view'),
-        sql`coalesce(${analyticsEvents.metadata}->>'isEntry', 'false') = 'true'`,
-      ))
-      .groupBy(sql`1`)
-      .orderBy(sql`2 desc`)
-      .limit(8),
+      .where(unrolledAnalyticsWhere),
     db
       .select({
         term: sql<string>`coalesce(nullif(${analyticsEvents.searchTerm}, ''), 'Unknown')`,
@@ -688,67 +653,167 @@ async function getWebsiteAnalyticsData(db: ReturnType<typeof getDb>, analyticsWh
       })
       .from(analyticsEvents)
       .where(and(
-        analyticsWhere,
+        unrolledAnalyticsWhere,
         eq(analyticsEvents.eventName, 'search'),
       ))
       .groupBy(sql`1`)
       .orderBy(sql`2 desc`)
       .limit(8),
+    db.execute(sql`
+      with raw_product_metrics as (
+        select ${analyticsEvents.productId} as product_id,
+          count(*) filter (where ${analyticsEvents.eventName} = 'view_item')::int as view_count,
+          count(*) filter (where ${analyticsEvents.eventName} = 'add_to_cart')::int as add_to_cart_count,
+          count(*) filter (where ${analyticsEvents.eventName} = 'begin_checkout')::int as checkout_count,
+          count(*) filter (where ${analyticsEvents.eventName} = 'purchase')::int as purchase_count
+        from ${analyticsEvents}
+        where ${unrolledAnalyticsWhere ?? sql`true`}
+          and ${analyticsEvents.productId} is not null
+        group by ${analyticsEvents.productId}
+      ), rollup_product_metrics as (
+        select case when ${analyticsDailyRollups.dimensionKey} ~ '^[0-9]+$'
+            then ${analyticsDailyRollups.dimensionKey}::bigint end as product_id,
+          coalesce(sum(${analyticsDailyRollups.productViews}), 0)::int as view_count,
+          coalesce(sum(${analyticsDailyRollups.addToCarts}), 0)::int as add_to_cart_count,
+          coalesce(sum(${analyticsDailyRollups.checkoutStarts}), 0)::int as checkout_count,
+          coalesce(sum(${analyticsDailyRollups.purchases}), 0)::int as purchase_count
+        from ${analyticsDailyRollups}
+        where ${rollupWhere ?? sql`true`}
+          and ${analyticsDailyRollups.dimension} = 'product'
+        group by ${analyticsDailyRollups.dimensionKey}
+      ), merged_product_metrics as (
+        select product_id,
+          sum(view_count)::int as view_count,
+          sum(add_to_cart_count)::int as add_to_cart_count,
+          sum(checkout_count)::int as checkout_count,
+          sum(purchase_count)::int as purchase_count
+        from (
+          select * from raw_product_metrics
+          union all
+          select * from rollup_product_metrics
+        ) source
+        where product_id is not null
+        group by product_id
+      )
+      select product.id, product.title, product.sku,
+        category.name as category_name, brand.name as brand_name,
+        metrics.view_count, metrics.add_to_cart_count, metrics.checkout_count,
+        metrics.purchase_count as website_purchase_count,
+        (metrics.view_count + metrics.add_to_cart_count * 4 + metrics.checkout_count * 7 + metrics.purchase_count * 10)::double precision as popularity_score,
+        coalesce(metrics.purchase_count::double precision / nullif(metrics.view_count, 0), 0) as website_conversion_rate
+      from merged_product_metrics metrics
+      join ${products} product on product.id = metrics.product_id
+      left join ${categories} category on category.id = product.category_id
+      left join ${brands} brand on brand.id = product.brand_id
+      order by popularity_score desc, metrics.view_count desc
+    `),
     db
       .select({
-        id: products.id,
-        title: products.title,
-        sku: products.sku,
-        categoryName: categories.name,
-        brandName: brands.name,
-        viewCount: sql<number>`coalesce(${products.viewCount}, 0)::int`,
-        addToCartCount: sql<number>`coalesce(${products.addToCartCount}, 0)::int`,
-        checkoutCount: sql<number>`coalesce(${products.checkoutCount}, 0)::int`,
-        websitePurchaseCount: sql<number>`coalesce(${products.purchaseCount}, 0)::int`,
-        popularityScore: sql<number>`coalesce(${products.popularityScore}, 0)::double precision`,
-        websiteConversionRate: sql<number>`coalesce(${products.conversionRate}, 0)::double precision`,
+        sessions: sql<number>`coalesce(sum(${analyticsDailyRollups.sessions}), 0)::int`,
+        journeys: sql<number>`coalesce(sum(${analyticsDailyRollups.journeys}), 0)::int`,
+        pageViews: sql<number>`coalesce(sum(${analyticsDailyRollups.pageViews}), 0)::int`,
+        productViews: sql<number>`coalesce(sum(${analyticsDailyRollups.productViews}), 0)::int`,
+        addToCarts: sql<number>`coalesce(sum(${analyticsDailyRollups.addToCarts}), 0)::int`,
+        checkoutStarts: sql<number>`coalesce(sum(${analyticsDailyRollups.checkoutStarts}), 0)::int`,
+        purchases: sql<number>`coalesce(sum(${analyticsDailyRollups.purchases}), 0)::int`,
+        searches: sql<number>`coalesce(sum(${analyticsDailyRollups.searches}), 0)::int`,
+        zeroResultSearches: sql<number>`coalesce(sum(${analyticsDailyRollups.zeroResultSearches}), 0)::int`,
       })
-      .from(products)
-      .leftJoin(categories, eq(products.categoryId, categories.id))
-      .leftJoin(brands, eq(products.brandId, brands.id))
-      .where(sql`${products.viewCount} > 0 or ${products.addToCartCount} > 0 or ${products.purchaseCount} > 0`)
-      .orderBy(sql`${products.popularityScore} desc`)
-      .limit(8),
+      .from(analyticsDailyRollups)
+      .where(and(rollupWhere, eq(analyticsDailyRollups.dimension, 'overall'))),
     db
       .select({
-        id: products.id,
-        viewCount: sql<number>`coalesce(${products.viewCount}, 0)::int`,
-        addToCartCount: sql<number>`coalesce(${products.addToCartCount}, 0)::int`,
-        checkoutCount: sql<number>`coalesce(${products.checkoutCount}, 0)::int`,
-        websitePurchaseCount: sql<number>`coalesce(${products.purchaseCount}, 0)::int`,
-        popularityScore: sql<number>`coalesce(${products.popularityScore}, 0)::double precision`,
-        websiteConversionRate: sql<number>`coalesce(${products.conversionRate}, 0)::double precision`,
+        term: analyticsDailyRollups.dimensionKey,
+        searches: sql<number>`sum(${analyticsDailyRollups.searches})::int`,
+        zeroResults: sql<number>`sum(${analyticsDailyRollups.zeroResultSearches})::int`,
       })
-      .from(products),
+      .from(analyticsDailyRollups)
+      .where(and(rollupWhere, eq(analyticsDailyRollups.dimension, 'search')))
+      .groupBy(analyticsDailyRollups.dimensionKey),
+    db.execute(sql`
+      select metric, dimension_key, count(distinct member_id)::int as members
+      from (
+        select metric, dimension_key, member_id
+        from ${analyticsDistinctDailyMembers}
+        where ${filters.startDate ? sql`${analyticsDistinctDailyMembers.day} >= ${filters.startDate}::date` : sql`true`}
+          and ${filters.endDate ? sql`${analyticsDistinctDailyMembers.day} <= ${filters.endDate}::date` : sql`true`}
+        union all
+        select 'journey', '', ${analyticsEvents.journeyId}
+        from ${analyticsEvents}
+        where ${unrolledAnalyticsWhere ?? sql`true`}
+        union all
+        select 'session', '', ${analyticsEvents.sessionId}
+        from ${analyticsEvents}
+        where ${unrolledAnalyticsWhere ?? sql`true`} and ${analyticsEvents.eventName} = 'page_view'
+      ) identities
+      group by metric, dimension_key
+    `),
   ]);
 
+  const rawSummary = websiteSummaryRows[0] as WebsiteSummaryRow | undefined;
+  const rollupSummary = rollupSummaryRows[0] as WebsiteSummaryRow | undefined;
+  const summaryKeys = ['sessions', 'journeys', 'pageViews', 'productViews', 'addToCarts', 'checkoutStarts', 'purchases', 'searches', 'zeroResultSearches'] as const;
+  const mergedSummary = Object.fromEntries(
+    summaryKeys.map((key) => [key, numberOrZero(rawSummary?.[key]) + numberOrZero(rollupSummary?.[key])]),
+  ) as WebsiteSummaryRow;
+  const exactIdentityRows = exactIdentityResult.rows as Array<{ metric: string; dimension_key: string; members: number | string }>;
+  mergedSummary.sessions = numberOrZero(exactIdentityRows.find((row) => row.metric === 'session' && row.dimension_key === '')?.members);
+  mergedSummary.journeys = numberOrZero(exactIdentityRows.find((row) => row.metric === 'journey' && row.dimension_key === '')?.members);
+
+  const searchMap = new Map<string, WebsiteSearchRow>();
+  for (const row of [...websiteSearchRows, ...rollupSearchRows] as WebsiteSearchRow[]) {
+    const current = searchMap.get(row.term) ?? { term: row.term, searches: 0, zeroResults: 0 };
+    current.searches += numberOrZero(row.searches);
+    current.zeroResults += numberOrZero(row.zeroResults);
+    searchMap.set(row.term, current);
+  }
+
+  const websiteProductRows: WebsiteTopProductRow[] = (websiteProductResult.rows as unknown[]).map((row: unknown) => {
+    const value = row as Record<string, unknown>;
+    return {
+      id: numberOrZero(value.id),
+      title: String(value.title ?? ''),
+      sku: value.sku == null ? null : String(value.sku),
+      categoryName: value.category_name == null ? null : String(value.category_name),
+      brandName: value.brand_name == null ? null : String(value.brand_name),
+      viewCount: numberOrZero(value.view_count),
+      addToCartCount: numberOrZero(value.add_to_cart_count),
+      checkoutCount: numberOrZero(value.checkout_count),
+      websitePurchaseCount: numberOrZero(value.website_purchase_count),
+      popularityScore: numberOrZero(value.popularity_score),
+      websiteConversionRate: numberOrZero(value.website_conversion_rate),
+    } satisfies WebsiteTopProductRow;
+  });
+
   return {
-    websiteSummaryRows: websiteSummaryRows as WebsiteSummaryRow[],
-    websiteVariantRows: websiteVariantRows as WebsiteVariantRow[],
-    websiteLandingRows: websiteLandingRows as WebsiteLandingRow[],
-    websiteSearchRows: websiteSearchRows as WebsiteSearchRow[],
-    websiteTopProductRows: websiteTopProductRows as WebsiteTopProductRow[],
-    websiteMetricRows: websiteMetricRows as WebsiteMetricRow[],
+    websiteSummaryRows: [mergedSummary],
+    websiteSearchRows: Array.from(searchMap.values())
+      .sort((left, right) => right.searches - left.searches).slice(0, 8),
+    websiteTopProductRows: websiteProductRows.slice(0, 8),
+    websiteMetricRows: websiteProductRows satisfies WebsiteMetricRow[],
   };
 }
 
 async function getMetaAdsTrackingData(db: ReturnType<typeof getDb>, filters: Required<StatsFilters>) {
   const conditions = [];
+  const rollupConditions = [];
   if (filters.startDate) {
-    conditions.push(sql`${metaEventOutbox.eventTime}::date >= ${filters.startDate}`);
+    conditions.push(sql`${metaEventOutbox.eventTime} >= ${filters.startDate}::date`);
+    rollupConditions.push(sql`${metaEventDailyRollups.day} >= ${filters.startDate}::date`);
   }
   if (filters.endDate) {
-    conditions.push(sql`${metaEventOutbox.eventTime}::date <= ${filters.endDate}`);
+    conditions.push(sql`${metaEventOutbox.eventTime} < (${filters.endDate}::date + interval '1 day')`);
+    rollupConditions.push(sql`${metaEventDailyRollups.day} <= ${filters.endDate}::date`);
   }
   const metaWhere = conditions.length > 0 ? and(...conditions) : undefined;
+  const rollupWhere = rollupConditions.length > 0 ? and(...rollupConditions) : undefined;
+  const unrolledMetaWhere = and(metaWhere, sql`not exists (
+    select 1 from ${metaEventDailyRollups} rollup
+    where rollup.day = (${metaEventOutbox.eventTime} at time zone 'UTC')::date
+  )`);
   const pixelInvoked = sql`coalesce(${analyticsEvents.metadata}->'metaTracking'->'pixel'->>'invoked', 'false') = 'true'`;
 
-  const [eventRows, payloadRows, [statusRow], coverageResult, [heartbeat]] = await Promise.all([
+  const [eventRows, payloadRows, [statusRow], coverageResult, [heartbeat], rollupEventRows, [rollupStatusRow]] = await Promise.all([
     db
       .select({
         name: metaEventOutbox.eventName,
@@ -761,7 +826,7 @@ async function getMetaAdsTrackingData(db: ReturnType<typeof getDb>, filters: Req
       })
       .from(metaEventOutbox)
       .leftJoin(analyticsEvents, eq(analyticsEvents.eventId, metaEventOutbox.eventId))
-      .where(metaWhere)
+      .where(unrolledMetaWhere)
       .groupBy(metaEventOutbox.eventName)
       .orderBy(sql`2 desc, 1 asc`),
     db
@@ -789,7 +854,7 @@ async function getMetaAdsTrackingData(db: ReturnType<typeof getDb>, filters: Req
       })
       .from(metaEventOutbox)
       .leftJoin(analyticsEvents, eq(analyticsEvents.eventId, metaEventOutbox.eventId))
-      .where(metaWhere)
+      .where(unrolledMetaWhere)
       .orderBy(desc(metaEventOutbox.eventTime))
       .limit(12),
     db
@@ -804,7 +869,7 @@ async function getMetaAdsTrackingData(db: ReturnType<typeof getDb>, filters: Req
         )`,
       })
       .from(metaEventOutbox)
-      .where(metaWhere),
+      .where(unrolledMetaWhere),
     db.execute(sql`
       select
         count(distinct attribution.order_id)::int as eligible_orders,
@@ -832,6 +897,27 @@ async function getMetaAdsTrackingData(db: ReturnType<typeof getDb>, filters: Req
     db.select().from(metaWorkerHeartbeat)
       .where(eq(metaWorkerHeartbeat.workerKey, 'storefront-meta-worker'))
       .limit(1),
+    db
+      .select({
+        name: metaEventDailyRollups.eventName,
+        total: sql<number>`sum(${metaEventDailyRollups.total})::int`,
+        pixelFired: sql<number>`sum(${metaEventDailyRollups.pixelFired})::int`,
+        capiSent: sql<number>`sum(${metaEventDailyRollups.capiSent})::int`,
+        capiDelivered: sql<number>`sum(${metaEventDailyRollups.delivered})::int`,
+        capiFailed: sql<number>`sum(${metaEventDailyRollups.failed} + ${metaEventDailyRollups.skipped})::int`,
+        lastOccurredAt: sql<Date | null>`max(${metaEventDailyRollups.lastOccurredAt})`,
+      })
+      .from(metaEventDailyRollups)
+      .where(rollupWhere)
+      .groupBy(metaEventDailyRollups.eventName),
+    db
+      .select({
+        delivered: sql<number>`coalesce(sum(${metaEventDailyRollups.delivered}), 0)::int`,
+        failed: sql<number>`coalesce(sum(${metaEventDailyRollups.failed}), 0)::int`,
+        skipped: sql<number>`coalesce(sum(${metaEventDailyRollups.skipped}), 0)::int`,
+      })
+      .from(metaEventDailyRollups)
+      .where(rollupWhere),
   ]);
   const coverage = coverageResult.rows[0] as {
     eligible_orders?: number | string;
@@ -841,15 +927,38 @@ async function getMetaAdsTrackingData(db: ReturnType<typeof getDb>, filters: Req
     negative_outcome_purchases?: number | string;
   } | undefined;
 
+  const eventMap = new Map<string, MetaTrackedEventSummaryRow>();
+  for (const row of [...eventRows, ...rollupEventRows] as MetaTrackedEventSummaryRow[]) {
+    const current = eventMap.get(row.name) ?? {
+      name: row.name,
+      total: 0,
+      pixelFired: 0,
+      capiSent: 0,
+      capiDelivered: 0,
+      capiFailed: 0,
+      lastOccurredAt: null,
+    };
+    current.total += numberOrZero(row.total);
+    current.pixelFired += numberOrZero(row.pixelFired);
+    current.capiSent += numberOrZero(row.capiSent);
+    current.capiDelivered += numberOrZero(row.capiDelivered);
+    current.capiFailed += numberOrZero(row.capiFailed);
+    if (row.lastOccurredAt && (!current.lastOccurredAt
+      || new Date(row.lastOccurredAt).getTime() > new Date(current.lastOccurredAt).getTime())) {
+      current.lastOccurredAt = row.lastOccurredAt;
+    }
+    eventMap.set(row.name, current);
+  }
+
   return {
-    eventRows: eventRows as MetaTrackedEventSummaryRow[],
+    eventRows: Array.from(eventMap.values()).sort((left, right) => right.total - left.total || left.name.localeCompare(right.name)),
     payloadRows: payloadRows as MetaTrackedEventLogRow[],
     health: {
       pending: statusRow?.pending ?? 0,
       retryable: statusRow?.retryable ?? 0,
-      delivered: statusRow?.delivered ?? 0,
-      failed: statusRow?.failed ?? 0,
-      skipped: statusRow?.skipped ?? 0,
+      delivered: numberOrZero(statusRow?.delivered) + numberOrZero(rollupStatusRow?.delivered),
+      failed: numberOrZero(statusRow?.failed) + numberOrZero(rollupStatusRow?.failed),
+      skipped: numberOrZero(statusRow?.skipped) + numberOrZero(rollupStatusRow?.skipped),
       oldestPendingAt: toIsoDateString(statusRow?.oldestPendingAt),
       eligibleOrders: Number(coverage?.eligible_orders ?? 0),
       confirmedOrders: Number(coverage?.confirmed_orders ?? 0),
@@ -978,7 +1087,7 @@ function buildResolvedFilters(input: StatsFilters): Required<StatsFilters> {
 }
 
 function getSnapshotKey(filters: Required<StatsFilters>) {
-  return `${filters.range}:${filters.startDate || '*'}:${filters.endDate || '*'}`;
+  return `storefront-history-v3:${filters.range}:${filters.startDate || '*'}:${filters.endDate || '*'}`;
 }
 
 function getReportThroughDate(data: StatsDashboardData) {
@@ -994,13 +1103,15 @@ function withSnapshotMeta(
   data: StatsDashboardData,
   row: typeof adminReportingSnapshots.$inferSelect,
 ): StatsDashboardData {
+  const filters = buildResolvedFilters(statsQuerySchema.parse({
+    range: row.range as StatsFilters['range'],
+    startDate: row.startDate ?? undefined,
+    endDate: row.endDate ?? undefined,
+  }));
+  const normalized = normalizeStatsDashboardData(data, filters);
+
   return {
-    ...data,
-    filters: buildResolvedFilters(statsQuerySchema.parse({
-      range: row.range as StatsFilters['range'],
-      startDate: row.startDate ?? undefined,
-      endDate: row.endDate ?? undefined,
-    })),
+    ...normalized,
     snapshot: {
       generatedAt: row.generatedAt.toISOString(),
       staleAt: row.staleAt.toISOString(),
@@ -1059,21 +1170,33 @@ function buildAdCostWhere(filters: StatsFilters | Required<StatsFilters>) {
   return conditions.length > 0 ? and(...conditions) : undefined;
 }
 
-function buildAnalyticsWhere(filters: StatsFilters | Required<StatsFilters>) {
+export function buildAnalyticsWhere(filters: StatsFilters | Required<StatsFilters>) {
   const conditions = [];
 
   if (filters.startDate) {
-    conditions.push(sql`${analyticsEvents.occurredAt}::date >= ${filters.startDate}`);
+    conditions.push(sql`${analyticsEvents.occurredAt} >= ${filters.startDate}::date`);
   }
 
   if (filters.endDate) {
-    conditions.push(sql`${analyticsEvents.occurredAt}::date <= ${filters.endDate}`);
+    conditions.push(sql`${analyticsEvents.occurredAt} < (${filters.endDate}::date + interval '1 day')`);
   }
 
   return conditions.length > 0 ? and(...conditions) : undefined;
 }
 
+function buildAnalyticsRollupWhere(filters: StatsFilters | Required<StatsFilters>) {
+  const conditions = [];
+  if (filters.startDate) {
+    conditions.push(sql`${analyticsDailyRollups.day} >= ${filters.startDate}::date`);
+  }
+  if (filters.endDate) {
+    conditions.push(sql`${analyticsDailyRollups.day} <= ${filters.endDate}::date`);
+  }
+  return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
 function emptyDashboard(filters: Required<StatsFilters>): StatsDashboardData {
+  const experience = emptyExperienceStats();
   return {
     filters,
     summary: {
@@ -1123,6 +1246,7 @@ function emptyDashboard(filters: Required<StatsFilters>): StatsDashboardData {
     metaAds: {
       events: [],
       recentPayloads: [],
+      paidAttribution: experience.metaPaidAttribution,
     },
     wilayas: [],
     wilayaDetails: [],
@@ -1149,11 +1273,73 @@ function emptyDashboard(filters: Required<StatsFilters>): StatsDashboardData {
       viewToCartRate: 0,
       cartToPurchaseRate: 0,
       checkoutToPurchaseRate: 0,
-      variants: [],
-      topLandingPages: [],
       topSearches: [],
       funnel: [],
       topProducts: [],
+      ...experience.website,
+    },
+    landingPages: experience.landingPages,
+    aiAssistants: experience.aiAssistants,
+    customers: experience.customers,
+  };
+}
+
+export function normalizeStatsDashboardData(
+  payload: unknown,
+  filters: Required<StatsFilters>,
+): StatsDashboardData {
+  const fallback = emptyDashboard(filters);
+  const data = payload && typeof payload === 'object'
+    ? payload as Partial<StatsDashboardData>
+    : {};
+  const website = data.website ?? fallback.website;
+  const metaAds = data.metaAds ?? fallback.metaAds;
+  const landingPages = data.landingPages ?? fallback.landingPages;
+  const aiAssistants = data.aiAssistants ?? fallback.aiAssistants;
+  const customers = data.customers ?? fallback.customers;
+
+  return {
+    ...fallback,
+    ...data,
+    filters,
+    summary: { ...fallback.summary, ...(data.summary ?? {}) },
+    trends: { ...fallback.trends, ...(data.trends ?? {}) },
+    feeBreakdown: { ...fallback.feeBreakdown, ...(data.feeBreakdown ?? {}) },
+    adCosts: { ...fallback.adCosts, ...(data.adCosts ?? {}) },
+    metaAds: {
+      ...fallback.metaAds,
+      ...metaAds,
+      paidAttribution: {
+        ...fallback.metaAds.paidAttribution,
+        ...(metaAds.paidAttribution ?? {}),
+      },
+    },
+    website: { ...fallback.website, ...website },
+    landingPages: {
+      ...fallback.landingPages,
+      ...landingPages,
+      summary: {
+        ...fallback.landingPages.summary,
+        ...(landingPages.summary ?? {}),
+      },
+    },
+    aiAssistants: {
+      admin: {
+        ...fallback.aiAssistants.admin,
+        ...(aiAssistants.admin ?? {}),
+      },
+      storefront: {
+        ...fallback.aiAssistants.storefront,
+        ...(aiAssistants.storefront ?? {}),
+      },
+    },
+    customers: {
+      ...fallback.customers,
+      ...customers,
+      summary: {
+        ...fallback.customers.summary,
+        ...(customers.summary ?? {}),
+      },
     },
   };
 }
@@ -1283,8 +1469,10 @@ export async function computeStatsDashboard(input: StatsFilters) {
   const where = buildStatsWhere(filters);
   const adWhere = buildAdCostWhere(filters);
   const analyticsWhere = buildAnalyticsWhere(filters);
-  const websiteAnalyticsPromise = getWebsiteAnalyticsData(db, analyticsWhere);
+  const analyticsRollupWhere = buildAnalyticsRollupWhere(filters);
+  const websiteAnalyticsPromise = getWebsiteAnalyticsData(db, analyticsWhere, analyticsRollupWhere, filters);
   const metaAdsTrackingPromise = getMetaAdsTrackingData(db, filters);
+  const experienceStatsPromise = getExperienceStats(db, filters);
 
   const [
     summaryRows,
@@ -1431,8 +1619,6 @@ export async function computeStatsDashboard(input: StatsFilters) {
   ]);
   const {
     websiteSummaryRows,
-    websiteVariantRows,
-    websiteLandingRows,
     websiteSearchRows,
     websiteTopProductRows,
     websiteMetricRows,
@@ -1442,14 +1628,15 @@ export async function computeStatsDashboard(input: StatsFilters) {
     payloadRows: metaPayloadRows,
     health: metaHealth,
   } = await metaAdsTrackingPromise;
+  const experience = await experienceStatsPromise;
 
   const summaryRow = summaryRows[0];
   const adSummary = adSpendRows[0];
   const websiteSummary = websiteSummaryRows[0];
   const adSpend = round(numberOrZero(adSummary?.spend));
   const totalConfirmedOrders = totalConfirmedOrderRows[0]?.totalConfirmedOrders ?? 0;
-  const websiteProductMetricsById = new Map(
-    websiteMetricRows.map((row) => [
+  const websiteProductMetricsById = new Map<string, Omit<WebsiteMetricRow, 'id'>>(
+    websiteMetricRows.map((row: WebsiteMetricRow) => [
       String(row.id),
       {
         viewCount: row.viewCount,
@@ -1475,22 +1662,6 @@ export async function computeStatsDashboard(input: StatsFilters) {
     viewToCartRate: websiteSummary?.productViews ? round(((websiteSummary?.addToCarts ?? 0) / websiteSummary.productViews) * 100) : 0,
     cartToPurchaseRate: websiteSummary?.addToCarts ? round(((websiteSummary?.purchases ?? 0) / websiteSummary.addToCarts) * 100) : 0,
     checkoutToPurchaseRate: websiteSummary?.checkoutStarts ? round(((websiteSummary?.purchases ?? 0) / websiteSummary.checkoutStarts) * 100) : 0,
-    variants: websiteVariantRows.map((row) => ({
-      variant: row.variant,
-      sessions: row.sessions,
-      pageViews: row.pageViews,
-      productViews: row.productViews,
-      addToCarts: row.addToCarts,
-      checkoutStarts: row.checkoutStarts,
-      purchases: row.purchases,
-      sessionConversionRate: row.sessions ? round((row.purchases / row.sessions) * 100) : 0,
-      cartToPurchaseRate: row.addToCarts ? round((row.purchases / row.addToCarts) * 100) : 0,
-      checkoutToPurchaseRate: row.checkoutStarts ? round((row.purchases / row.checkoutStarts) * 100) : 0,
-    })),
-    topLandingPages: websiteLandingRows.map((row) => ({
-      path: row.path,
-      sessions: row.sessions,
-    })),
     topSearches: websiteSearchRows.map((row) => ({
       term: row.term,
       searches: row.searches,
@@ -1521,6 +1692,7 @@ export async function computeStatsDashboard(input: StatsFilters) {
       popularityScore: round(numberOrZero(row.popularityScore)),
       websiteConversionRate: round(numberOrZero(row.websiteConversionRate) * 100),
     })),
+    ...experience.website,
   };
   const metaAds = {
     events: metaEventRows.map((row) => ({
@@ -1544,6 +1716,7 @@ export async function computeStatsDashboard(input: StatsFilters) {
       capiOk: row.capiOk,
     })),
     health: metaHealth,
+    paidAttribution: experience.metaPaidAttribution,
   };
 
   if (!summaryRow || summaryRow.totalOrders === 0) {
@@ -1556,6 +1729,9 @@ export async function computeStatsDashboard(input: StatsFilters) {
     }));
     data.website = website;
     data.metaAds = metaAds;
+    data.landingPages = experience.landingPages;
+    data.aiAssistants = experience.aiAssistants;
+    data.customers = experience.customers;
     return data;
   }
 
@@ -1829,6 +2005,9 @@ export async function computeStatsDashboard(input: StatsFilters) {
       batchId: importHistory[0]!.batchId,
     })),
     website,
+    landingPages: experience.landingPages,
+    aiAssistants: experience.aiAssistants,
+    customers: experience.customers,
   };
 }
 
@@ -1837,7 +2016,7 @@ export async function getStatsDashboard(input: StatsFilters) {
 
   const snapshot = await readLatestStatsSnapshot(input);
   if (snapshot) {
-    return snapshot;
+    return withLiveAiStats(snapshot, input);
   }
 
   const data = await computeStatsDashboard(input);
@@ -1846,7 +2025,7 @@ export async function getStatsDashboard(input: StatsFilters) {
     trigger: 'bootstrap-request',
     data,
   });
-  return readLatestStatsSnapshot(input) ?? data;
+  return withLiveAiStats(readLatestStatsSnapshot(input).then((latest) => latest ?? data), input);
 }
 
 export async function refreshStatsDashboard(input: StatsFilters, trigger = 'manual-refresh') {
@@ -1857,7 +2036,18 @@ export async function refreshStatsDashboard(input: StatsFilters, trigger = 'manu
     data,
   });
 
-  return readLatestStatsSnapshot(input) ?? data;
+  return withLiveAiStats(readLatestStatsSnapshot(input).then((latest) => latest ?? data), input);
+}
+
+async function withLiveAiStats(data: StatsDashboardData | Promise<StatsDashboardData>, input: StatsFilters) {
+  const resolved = await data;
+  const filters = buildResolvedFilters(statsQuerySchema.parse(input));
+  const db = getDb();
+  const [admin, storefront] = await Promise.all([
+    getLiveAdminAiStats(db, filters).catch(() => resolved.aiAssistants.admin),
+    getLiveStorefrontAiStats(db, filters).catch(() => resolved.aiAssistants.storefront),
+  ]);
+  return { ...resolved, aiAssistants: { admin, storefront } };
 }
 
 async function writeAdminReportingSnapshot({

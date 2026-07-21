@@ -1,20 +1,40 @@
-import { createOpenAiResponsesModel, getAiConfig, productContentFieldSchema, semanticAnalyticsComparisonSchema, semanticAnalyticsQuerySchema } from '@bric/ai-core';
-import { generateText, stepCountIs, tool } from 'ai';
-import { and, eq, ilike, or } from 'drizzle-orm';
+import { createAiLanguageModel, getAiConfig, productContentFieldSchema, resolveAiModel, semanticAnalyticsComparisonSchema, semanticAnalyticsQuerySchema } from '@bric/ai-core';
+import { stepCountIs, streamText, tool } from 'ai';
+import { and, desc, eq, ilike, or } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getDb, hasDb } from '../../../../db/client';
-import { products } from '../../../../db/schema';
+import { aiConversations, aiMessages, aiRuns, aiToolCalls, products } from '../../../../db/schema';
 import { proposeProductContent } from '../../../../lib/ai-product-content';
+import { ADMIN_AI_CHAT_INSTRUCTIONS } from '../../../../lib/ai-admin-chat';
 import { proposeBundle, proposeDiscount, proposeEntityEdit, proposeFeaturedProducts, proposeLandingPage } from '../../../../lib/ai-admin-capabilities';
 import { executeSemanticAnalytics, executeSemanticAnalyticsComparison } from '../../../../lib/ai-semantic-analytics';
 import { startAiContentJob } from '../../../../lib/background-jobs';
 import { auth } from '../../../../lib/auth';
 import { canViewProfitStats, hasPermission, normalizePermissions } from '../../../../lib/permissions';
 import { requireAiUseAccess } from '../../../../lib/rbac';
+import { adminAiChatStreamEventSchema, type AdminAiChatStreamEvent } from '../../../../lib/admin-ai-chat-stream';
 
-const requestSchema = z.object({ message: z.string().trim().min(1).max(4_000) });
+const requestSchema = z.object({
+  message: z.string().trim().min(1).max(4_000),
+  conversationKey: z.uuid(),
+});
+
+export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-v1';
+
+function storedMessageText(content: unknown) {
+  if (typeof content === 'string') return content;
+  if (content && typeof content === 'object' && typeof (content as { text?: unknown }).text === 'string') {
+    return (content as { text: string }).text;
+  }
+  return null;
+}
+
+function conversationTitle(message: string) {
+  const title = message.replace(/\s+/g, ' ').trim();
+  return title.length > 80 ? `${title.slice(0, 77)}…` : title;
+}
 
 export async function POST(request: NextRequest) {
   const denied = await requireAiUseAccess();
@@ -23,28 +43,67 @@ export async function POST(request: NextRequest) {
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'Invalid AI chat request.' }, { status: 400 });
 
+  let runId: number | null = null;
   try {
     const session = await auth();
     const actor = { email: session?.user?.email, name: session?.user?.name };
+    const actorId = actor.email;
+    if (!actorId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
     const permissions = normalizePermissions(session?.user?.permissions);
     const db = getDb();
     const config = getAiConfig();
-    const result = await generateText({
-      model: createOpenAiResponsesModel(config, 'admin'),
-      instructions: [
-        'You are the Bricomaitre admin catalog assistant.',
-        'For product content requests, resolve product IDs with find_products, then call generate_product_content.',
-        'Never claim that proposals are already applied. Generated content always requires admin review.',
-        'Use scope all_missing only when the user clearly asks for every/all products missing content.',
-        'If a product name is ambiguous, show matches and ask the user to clarify instead of generating.',
-        'Use only the allowlisted analytics tool; never invent or request raw SQL.',
-        'For database questions, choose the narrowest semantic query and report its date range, metric definitions, source, and caveats. Do not combine values with incompatible definitions.',
-        'Use sales_summary for imported fulfilled-order economics and order_summary for submitted storefront orders. Do not describe one as the other.',
-        'Discounts, bundles, featured groups, and edits are reviewable proposals and are never already applied.',
-        'Landing pages use only registered typed blocks. Never generate runtime JavaScript, JSX, CSS, unsupported product claims, fake scarcity, or fabricated testimonials.',
-        'The default minimum gross margin is 15%. A user may explicitly override it for one request; clearly warn when below the default.',
-      ].join(' '),
-      prompt: parsed.data.message,
+    const model = resolveAiModel(config, 'admin');
+    const now = new Date();
+    const title = conversationTitle(parsed.data.message);
+    const [existingConversation] = await db.select({ id: aiConversations.id, title: aiConversations.title })
+      .from(aiConversations)
+      .where(and(
+        eq(aiConversations.surface, 'admin'),
+        eq(aiConversations.sessionKey, parsed.data.conversationKey),
+        eq(aiConversations.actorId, actorId),
+      ))
+      .limit(1);
+    const conversation = existingConversation ?? (await db.insert(aiConversations).values({
+      surface: 'admin',
+      actorId,
+      sessionKey: parsed.data.conversationKey,
+      title,
+    }).returning({ id: aiConversations.id, title: aiConversations.title }))[0];
+    const previousRows = await db.select({ role: aiMessages.role, content: aiMessages.content })
+      .from(aiMessages)
+      .where(eq(aiMessages.conversationId, conversation.id))
+      .orderBy(desc(aiMessages.createdAt))
+      .limit(20);
+    const previousMessages = previousRows.reverse().flatMap((row): Array<{ role: 'user' | 'assistant'; content: string }> => {
+      const content = storedMessageText(row.content);
+      return content && (row.role === 'user' || row.role === 'assistant')
+        ? [{ role: row.role, content }]
+        : [];
+    });
+    const effectiveTitle = previousMessages.length === 0 ? title : (conversation.title || title);
+    await Promise.all([
+      db.insert(aiMessages).values({ conversationId: conversation.id, role: 'user', content: { text: parsed.data.message } }),
+      db.update(aiConversations).set({ title: effectiveTitle, updatedAt: now }).where(eq(aiConversations.id, conversation.id)),
+    ]);
+
+    try {
+      const [run] = await db.insert(aiRuns).values({
+        conversationId: conversation.id,
+        surface: 'admin',
+        task: 'admin_chat',
+        status: 'running',
+        model,
+        promptVersion: ADMIN_AI_CHAT_PROMPT_VERSION,
+        actorId,
+      }).returning({ id: aiRuns.id });
+      runId = run.id;
+    } catch {
+      // AI telemetry must never prevent the assistant from answering.
+    }
+    const result = streamText({
+      model: createAiLanguageModel(config, 'admin'),
+      instructions: ADMIN_AI_CHAT_INSTRUCTIONS,
+      messages: [...previousMessages, { role: 'user', content: parsed.data.message }],
       stopWhen: stepCountIs(6),
       tools: {
         find_products: tool({
@@ -120,8 +179,78 @@ export async function POST(request: NextRequest) {
         }) } : {}),
       },
     });
-    return NextResponse.json({ message: result.text, toolResults: result.toolResults });
+
+    const encoder = new TextEncoder();
+    const responseStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const write = (event: AdminAiChatStreamEvent) => {
+          controller.enqueue(encoder.encode(`${JSON.stringify(adminAiChatStreamEventSchema.parse(event))}\n`));
+        };
+        write({ type: 'status', status: 'thinking' });
+        void (async () => {
+          let text = '';
+          const toolResults: unknown[] = [];
+          const toolNames: string[] = [];
+          let usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } = {};
+          try {
+            for await (const part of result.stream) {
+              if (part.type === 'tool-call') {
+                toolNames.push(part.toolName);
+                write({ type: 'status', status: 'working' });
+              }
+              if (part.type === 'tool-result') toolResults.push(part);
+              if (part.type === 'text-delta' && part.text) {
+                text += part.text;
+                write({ type: 'text-delta', delta: part.text });
+              }
+              if (part.type === 'finish') usage = part.totalUsage;
+              if (part.type === 'error') throw part.error;
+            }
+            if (!text.trim()) {
+              text = 'Completed.';
+              write({ type: 'text-delta', delta: text });
+            }
+            await Promise.all([
+              db.insert(aiMessages).values({ conversationId: conversation.id, role: 'assistant', content: { text } }),
+              db.update(aiConversations).set({ updatedAt: new Date() }).where(eq(aiConversations.id, conversation.id)),
+            ]);
+            if (runId !== null) {
+              const completedRunId = runId;
+              const completedAt = new Date();
+              try {
+                await db.update(aiRuns).set({ status: 'completed', ...usage, completedAt }).where(eq(aiRuns.id, completedRunId));
+                if (toolNames.length > 0) {
+                  await db.insert(aiToolCalls).values(toolNames.map((toolName) => ({ runId: completedRunId, toolName, status: 'completed', completedAt })));
+                }
+              } catch {
+                // AI telemetry must never replace a successful assistant response.
+              }
+            }
+            write({
+              type: 'result',
+              toolResults,
+              conversation: { id: conversation.id, sessionKey: parsed.data.conversationKey, title: effectiveTitle },
+            });
+          } catch (error) {
+            if (runId !== null) {
+              await db.update(aiRuns).set({ status: 'failed', errorCode: error instanceof Error ? error.name : 'UnknownError', completedAt: new Date() }).where(eq(aiRuns.id, runId)).catch(() => undefined);
+            }
+            write({ type: 'error', code: 'admin_ai_failed' });
+          } finally {
+            controller.close();
+          }
+        })();
+      },
+    });
+    return new NextResponse(responseStream, { headers: { 'cache-control': 'no-cache, no-transform', 'content-type': 'application/x-ndjson; charset=utf-8', 'x-accel-buffering': 'no' } });
   } catch (error) {
+    if (runId !== null) {
+      await getDb().update(aiRuns).set({
+        status: 'failed',
+        errorCode: error instanceof Error ? error.name : 'UnknownError',
+        completedAt: new Date(),
+      }).where(eq(aiRuns.id, runId)).catch(() => undefined);
+    }
     if (error instanceof Error && (error.message === 'AI is disabled' || error.message.includes('is not configured'))) {
       return NextResponse.json({ error: error.message }, { status: 503 });
     }

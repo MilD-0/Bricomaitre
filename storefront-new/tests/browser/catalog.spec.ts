@@ -204,6 +204,7 @@ test('preserves Arabic RTL, small-phone cards, and no-JavaScript discovery', asy
   await page.goto('/ar/products');
 
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+  await expect(page.locator('html')).toHaveCSS('--font-arabic', /IBM Plex Sans Arabic/);
   await expect(page.getByRole('radio', { name: 'كل الأصناف' })).toBeHidden();
   await page.getByRole('button', { name: 'تصفية المنتجات' }).click();
   const filterSheet = page.getByRole('dialog', { name: 'تصفية المنتجات' });

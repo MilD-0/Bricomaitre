@@ -80,7 +80,7 @@ describe('app/api/internal/revalidate/route', () => {
   });
 
   it('rejects signed unsupported scopes', async () => {
-    const body = JSON.stringify({ scope: 'assets' });
+    const body = JSON.stringify({ scope: 'customers' });
     const timestamp = String(Date.now());
     const signature = signInternalRequest(body, 'revalidate-secret', timestamp);
 
@@ -113,5 +113,28 @@ describe('app/api/internal/revalidate/route', () => {
     expect(revalidateTag).toHaveBeenCalledOnce();
     expect(revalidateTag).toHaveBeenCalledWith('storefront-new-settings', { expire: 0 });
     await expect(response.json()).resolves.toEqual({ ok: true, revalidated: ['storefront-new-settings'] });
+  });
+
+  it.each([
+    ['assets', 'storefront-new-assets'],
+    ['product-meta', 'storefront-new-product-meta'],
+    ['landing-pages', 'storefront-new-landing-pages'],
+  ] as const)('immediately expires the %s cache scope', async (scope, tag) => {
+    const body = JSON.stringify({ scope });
+    const timestamp = String(Date.now());
+    const signature = signInternalRequest(body, 'revalidate-secret', timestamp);
+    const response = await POST(new NextRequest('http://localhost/api/internal/revalidate', {
+      method: 'POST',
+      body,
+      headers: {
+        'x-revalidate-timestamp': timestamp,
+        'x-revalidate-signature': signature,
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(revalidateTag).toHaveBeenCalledOnce();
+    expect(revalidateTag).toHaveBeenCalledWith(tag, { expire: 0 });
+    await expect(response.json()).resolves.toEqual({ ok: true, revalidated: [tag] });
   });
 });

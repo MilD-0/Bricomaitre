@@ -16,6 +16,7 @@
     "./landing-pages": "./src/storefront/landing-pages.ts",
     "./landing-page-records": "./src/storefront/landing-page-records.ts",
     "./meta": "./src/storefront/meta.ts",
+    "./maintenance": "./src/storefront/maintenance.ts",
     "./meta-contracts": "./src/storefront/meta-contracts.ts",
     "./marketing-contracts": "./src/storefront/marketing-contracts.ts",
     "./marketing": "./src/storefront/marketing.ts",

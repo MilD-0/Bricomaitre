@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { FooterContactLink } from '@/components/footer-contact-link';
 import { getLocale, getTranslations } from 'next-intl/server';
 
-import logo from '../../storefront/public/logo.png';
+import logo from '../public/logo.png';
 
 import { GlobalSearch } from '@/components/global-search';
 import { NavigationActions } from '@/components/navigation-actions';
@@ -136,6 +136,7 @@ export async function PageShell({ children, locale: localeProp }: PageShellProps
           title: assistant('title'),
           close: assistant('close'),
           liveCatalog: assistant('liveCatalog'),
+          newChat: assistant('newChat'),
           welcomeTitle: assistant('welcomeTitle'),
           welcomeDescription: assistant('welcomeDescription'),
           placeholder: assistant('placeholder'),

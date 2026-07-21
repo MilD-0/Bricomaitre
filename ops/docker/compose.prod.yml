@@ -12,7 +12,6 @@ x-storefront-api-blue: &storefront-api-blue
   mem_reservation: ${BRIC_STOREFRONT_API_MEM_RESERVATION:-512m}
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront-api.env
-    - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront.env
   environment:
     NODE_OPTIONS: ${BRIC_STOREFRONT_API_NODE_OPTIONS:---max-old-space-size=512}
     PORT: 3001
@@ -40,7 +39,6 @@ x-storefront-meta-worker: &storefront-meta-worker
   mem_reservation: ${BRIC_STOREFRONT_META_WORKER_MEM_RESERVATION:-256m}
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront-api.env
-    - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront.env
   environment:
     NODE_OPTIONS: ${BRIC_STOREFRONT_META_WORKER_NODE_OPTIONS:---max-old-space-size=384}
   depends_on:
@@ -232,13 +230,13 @@ services:
     <<: *storefront-blue
     image: ${BRIC_IMAGE_STOREFRONT_WEB_BLUE:-bricadmin-storefront-blue}
     volumes:
-      - storefront-cache-blue:/app/storefront/.next/cache
+      - storefront-cache-blue:/app/storefront-new/.next/cache
 
   storefront-green:
     <<: *storefront-blue
     image: ${BRIC_IMAGE_STOREFRONT_WEB_GREEN:-bricadmin-storefront-green}
     volumes:
-      - storefront-cache-green:/app/storefront/.next/cache
+      - storefront-cache-green:/app/storefront-new/.next/cache
     environment:
       NODE_OPTIONS: ${BRIC_STOREFRONT_WEB_NODE_OPTIONS:---max-old-space-size=768}
       STOREFRONT_API_BASE_URL: http://storefront-api-green:3001

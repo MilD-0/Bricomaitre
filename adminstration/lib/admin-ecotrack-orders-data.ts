@@ -28,6 +28,11 @@ import {
   products,
 } from '../db/schema';
 import { recordExplicitActionLog, type ActionActor } from './action-history';
+import {
+  areEcotrackActionSnapshotsEqual,
+  buildEcotrackOrderActionSnapshot,
+  buildEcotrackShipmentActionSnapshot,
+} from './ecotrack-action-snapshots';
 import { getOrderProductLookup, toOrderRecord } from './order-records';
 import { buildEcotrackOrderPayload, createEcotrackOrdersBatch, getEcotrackProviderEnv, persistEcotrackPostedOrder, readEcotrackCatalog, resolveEcotrackDeliveryFee, type EcotrackProvider } from './ecotrack';
 import { parseSortRuleStrings, type SortRule } from './multi-sort';
@@ -320,25 +325,6 @@ const ECOTRACK_RETURNED_STATUSES = new Set([
   'retour_archive',
 ]);
 
-function serializeActionValue(value: unknown): unknown {
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-  if (Array.isArray(value)) {
-    return value.map((entry) => serializeActionValue(entry));
-  }
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, serializeActionValue(entry)]),
-    );
-  }
-  return value;
-}
-
-function areActionSnapshotsEqual(left: unknown, right: unknown) {
-  return JSON.stringify(serializeActionValue(left)) === JSON.stringify(serializeActionValue(right));
-}
-
 function resolveEcotrackActor(actor?: ActionActor | null): ActionActor {
   if (actor?.email || actor?.name) {
     return actor;
@@ -347,62 +333,6 @@ function resolveEcotrackActor(actor?: ActionActor | null): ActionActor {
   return {
     email: null,
     name: ECOTRACK_SYNC_ACTOR_NAME,
-  };
-}
-
-function buildShipmentActionSnapshot(row: typeof ecotrackOrderStates.$inferSelect | ShipmentRow) {
-  return {
-    id: row.id,
-    orderId: row.orderId,
-    reference: row.reference,
-    trackingNumber: row.trackingNumber,
-    provider: row.provider === 'emir' ? 'emir' : 'delivro',
-    currentStatus: row.currentStatus,
-    driverPhone: row.driverPhone,
-    estimatedFee: row.estimatedFee,
-    deskPhone: row.deskPhone,
-    deskCommune: row.deskCommune,
-    deskMapLink: row.deskMapLink,
-    deskAddress: row.deskAddress,
-    rawStatusPayload: row.rawStatusPayload,
-    rawCreatePayload: row.rawCreatePayload,
-    rawLastTrackingPayload: row.rawLastTrackingPayload,
-    rawLastMajPayload: row.rawLastMajPayload,
-    lastStatusSyncedAt: row.lastStatusSyncedAt,
-    lastTrackingSyncedAt: row.lastTrackingSyncedAt,
-    lastMajSyncedAt: row.lastMajSyncedAt,
-    lastActionAt: row.lastActionAt,
-    deletedAt: row.deletedAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
-}
-
-function buildOrderActionSnapshot(row: typeof orders.$inferSelect) {
-  return {
-    id: row.id,
-    confirmed: row.confirmed,
-    noAnswerCount: row.noAnswerCount,
-    confirmedBy: row.confirmedBy,
-    confirmedByName: row.confirmedByName,
-    confirmedAt: row.confirmedAt,
-    ecotrackStatus: row.ecotrackStatus,
-    ecotrackStatusLastUpdate: row.ecotrackStatusLastUpdate,
-    ecotrackStatusData: row.ecotrackStatusData,
-    ecotrackReference: row.ecotrackReference,
-    ecotrackTrackingNumber: row.ecotrackTrackingNumber,
-    firstName: row.firstName,
-    lastName: row.lastName,
-    phoneNumber1: row.phoneNumber1,
-    phoneNumber2: row.phoneNumber2,
-    delivery: row.delivery,
-    state: row.state,
-    city: row.city,
-    homeAddress: row.homeAddress,
-    note: row.note,
-    cartProducts: row.cartProducts,
-    delPr: row.delPr,
-    updatedAt: row.updatedAt,
   };
 }
 
@@ -442,11 +372,13 @@ async function loadTrackingSyncSummary(tx: Database | Transaction, orderId: numb
 
 async function recordEcotrackOrderAction(
   tx: Transaction,
-  beforeState: ReturnType<typeof buildOrderActionSnapshot>,
-  afterState: ReturnType<typeof buildOrderActionSnapshot>,
+  beforeState: ReturnType<typeof buildEcotrackOrderActionSnapshot>,
+  afterState: ReturnType<typeof buildEcotrackOrderActionSnapshot>,
   actor?: ActionActor | null,
 ) {
-  if (areActionSnapshotsEqual(beforeState, afterState)) {
+  const compactBeforeState = buildEcotrackOrderActionSnapshot(beforeState);
+  const compactAfterState = buildEcotrackOrderActionSnapshot(afterState);
+  if (areEcotrackActionSnapshotsEqual(compactBeforeState, compactAfterState)) {
     return;
   }
 
@@ -454,8 +386,8 @@ async function recordEcotrackOrderAction(
     entityType: 'orders',
     entityId: beforeState.id,
     operation: 'update',
-    beforeState,
-    afterState,
+    beforeState: compactBeforeState,
+    afterState: compactAfterState,
     actor: resolveEcotrackActor(actor),
     isReversible: false,
   });
@@ -464,23 +396,26 @@ async function recordEcotrackOrderAction(
 async function recordEcotrackShipmentAction(
   tx: Transaction,
   orderId: number,
-  beforeState: ReturnType<typeof buildShipmentActionSnapshot> | null,
-  afterState: ReturnType<typeof buildShipmentActionSnapshot> | null,
+  beforeState: ReturnType<typeof buildEcotrackShipmentActionSnapshot> | null,
+  afterState: ReturnType<typeof buildEcotrackShipmentActionSnapshot> | null,
   actor?: ActionActor | null,
   operation?: 'create' | 'update' | 'delete',
 ) {
-  if (operation === 'update' && beforeState && afterState && areActionSnapshotsEqual(beforeState, afterState)) {
+  const compactBeforeState = beforeState ? buildEcotrackShipmentActionSnapshot(beforeState) : null;
+  const compactAfterState = afterState ? buildEcotrackShipmentActionSnapshot(afterState) : null;
+  if (operation === 'update' && compactBeforeState && compactAfterState
+    && areEcotrackActionSnapshotsEqual(compactBeforeState, compactAfterState)) {
     return;
   }
 
-  const nextOperation = operation ?? (beforeState ? (afterState ? 'update' : 'delete') : 'create');
+  const nextOperation = operation ?? (compactBeforeState ? (compactAfterState ? 'update' : 'delete') : 'create');
 
   await recordExplicitActionLog(tx, {
     entityType: 'ecotrackShipments',
     entityId: orderId,
     operation: nextOperation,
-    beforeState,
-    afterState,
+    beforeState: compactBeforeState,
+    afterState: compactAfterState,
     actor: resolveEcotrackActor(actor),
   });
 }
@@ -492,7 +427,7 @@ async function recordEcotrackMajAction(
   afterState: Awaited<ReturnType<typeof loadMajSyncSummary>>,
   actor?: ActionActor | null,
 ) {
-  if (areActionSnapshotsEqual(beforeState, afterState)) {
+  if (areEcotrackActionSnapshotsEqual(beforeState, afterState)) {
     return;
   }
 
@@ -513,7 +448,7 @@ async function recordEcotrackTrackingAction(
   afterState: Awaited<ReturnType<typeof loadTrackingSyncSummary>>,
   actor?: ActionActor | null,
 ) {
-  if (areActionSnapshotsEqual(beforeState, afterState)) {
+  if (areEcotrackActionSnapshotsEqual(beforeState, afterState)) {
     return;
   }
 
@@ -1040,8 +975,8 @@ async function softDeleteShipmentRow(
   } = {},
 ) {
   const now = new Date();
-  const beforeOrderState = buildOrderActionSnapshot(row.order);
-  const beforeShipmentState = buildShipmentActionSnapshot(row);
+  const beforeOrderState = buildEcotrackOrderActionSnapshot(row.order);
+  const beforeShipmentState = buildEcotrackShipmentActionSnapshot(row);
 
   await db.transaction(async (tx) => {
     await tx
@@ -1210,8 +1145,8 @@ async function upsertShipmentState(
   }
 
   await db.transaction(async (tx) => {
-    const beforeOrderState = buildOrderActionSnapshot(row.order);
-    const beforeShipmentState = buildShipmentActionSnapshot(row);
+    const beforeOrderState = buildEcotrackOrderActionSnapshot(row.order);
+    const beforeShipmentState = buildEcotrackShipmentActionSnapshot(row);
     const beforeMajState = await loadMajSyncSummary(tx, row.order.id, row.trackingNumber);
     const beforeTrackingState = await loadTrackingSyncSummary(tx, row.order.id, row.trackingNumber);
 
@@ -1707,8 +1642,8 @@ export async function updatePostedEcotrackOrder(
   }
 
   await db.transaction(async (tx) => {
-    const beforeOrderState = buildOrderActionSnapshot(updatedOrder);
-    const beforeShipmentState = buildShipmentActionSnapshot(row);
+    const beforeOrderState = buildEcotrackOrderActionSnapshot(updatedOrder);
+    const beforeShipmentState = buildEcotrackShipmentActionSnapshot(row);
 
     await tx
       .update(ecotrackOrderStates)
@@ -1724,7 +1659,7 @@ export async function updatePostedEcotrackOrder(
       updatedAt: now,
     };
 
-    await recordEcotrackOrderAction(tx, buildOrderActionSnapshot(row.order), beforeOrderState, actor);
+    await recordEcotrackOrderAction(tx, buildEcotrackOrderActionSnapshot(row.order), beforeOrderState, actor);
     await recordEcotrackShipmentAction(tx, row.order.id, beforeShipmentState, afterShipmentState, actor, 'update');
   });
 
@@ -2041,7 +1976,7 @@ export async function addEcotrackMaj(
   }
   const now = new Date();
   await db.transaction(async (tx) => {
-    const beforeShipmentState = buildShipmentActionSnapshot(row);
+    const beforeShipmentState = buildEcotrackShipmentActionSnapshot(row);
     const beforeMajState = await loadMajSyncSummary(tx, row.order.id, row.trackingNumber);
 
     await tx
@@ -2093,7 +2028,7 @@ export async function requestEcotrackReturn(
   }
   const now = new Date();
   await db.transaction(async (tx) => {
-    const beforeShipmentState = buildShipmentActionSnapshot(row);
+    const beforeShipmentState = buildEcotrackShipmentActionSnapshot(row);
 
     await tx
       .update(ecotrackOrderStates)

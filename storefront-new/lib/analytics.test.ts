@@ -18,7 +18,9 @@ describe('Product Detail analytics', () => {
   });
 
   afterEach(() => {
+    delete window.fbq;
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it('builds a versioned, correlated, privacy-limited product event', () => {
@@ -43,7 +45,41 @@ describe('Product Detail analytics', () => {
     expect(payload.eventId).toBeTruthy();
     expect(payload.journeyId).toBeTruthy();
     expect(payload.sessionId).toBeTruthy();
+    expect(payload.visitId).toBeTruthy();
     expect(JSON.stringify(payload)).not.toMatch(/phone|address|email|access.?token/i);
+  });
+
+  it('carries allowlisted first-touch campaign attribution without arbitrary queries', () => {
+    window.localStorage.clear();
+    window.history.replaceState({}, '', '/fr/products/desk-lamp?fbclid=meta-1&utm_source=facebook&utm_medium=paid_social&phone=0550000000');
+    const payload = buildProductAnalyticsPayload({ eventName: 'view_item', locale: 'fr', productId: 12 });
+    expect(payload).toMatchObject({
+      visitId: expect.any(String),
+      utmSource: 'facebook',
+      utmMedium: 'paid_social',
+      metadata: {
+        landingUrl: expect.stringContaining('fbclid=meta-1'),
+        paidClickCookie: true,
+      },
+    });
+    expect(JSON.stringify(payload)).not.toContain('0550000000');
+  });
+
+  it('records whether the Meta Pixel queue was actually invoked', async () => {
+    vi.stubEnv('NEXT_PUBLIC_FACEBOOK_PIXEL_ID', 'meta-id');
+    window.fbq = vi.fn();
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({ url: String(input), body: JSON.parse(String(init?.body ?? '{}')) });
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }));
+
+    await trackProductEvent({ eventName: 'view_item', locale: 'fr', productId: 12 });
+
+    const firstParty = requests.find((request) => request.url === '/api/analytics');
+    expect(firstParty?.body).toMatchObject({
+      metadata: { metaTracking: { eventName: 'ViewContent', pixel: { invoked: true } } },
+    });
   });
 
   it('rejects ungoverned metadata fields before collection', () => {
@@ -214,7 +250,19 @@ describe('Product Detail analytics', () => {
       eventName: 'purchase',
       locale: 'fr',
       orderId: 91,
-      metadata: { cartMode: 'cart', itemCount: 1 },
-    }, 'thank_you')).toMatchObject({ eventId: 'purchase-91', eventName: 'purchase', orderId: 91 });
+      metadata: {
+        cartMode: 'cart',
+        itemCount: 3,
+        items: [
+          { productId: 12, productSlug: 'perceuse', quantity: 2, price: 2250 },
+          { productId: 34, productSlug: 'meuleuse', quantity: 1, price: 3500 },
+        ],
+      },
+    }, 'thank_you')).toMatchObject({
+      eventId: 'purchase-91',
+      eventName: 'purchase',
+      orderId: 91,
+      metadata: { items: [{ productId: 12 }, { productId: 34 }] },
+    });
   });
 });

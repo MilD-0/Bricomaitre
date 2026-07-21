@@ -1,4 +1,4 @@
-import { createProductRelationGenerator, getAiConfig, resolveAiModel, type ProductRelationGenerator } from '@bric/ai-core';
+import { createProductRelationGenerator, getAiConfig, resolveAiModel, UnsupportedProductRelationError, type ProductRelationGenerator } from '@bric/ai-core';
 import { and, eq, inArray } from 'drizzle-orm';
 
 import { getDb } from '../db/client';
@@ -7,6 +7,7 @@ import { aiProposals, aiRuns, brands, categories, products } from '../db/schema'
 export const PRODUCT_RELATION_PROMPT_VERSION = 'product-relation-v1';
 
 export class AiProductNotFoundError extends Error {}
+export { UnsupportedProductRelationError };
 
 export async function proposeProductRelation(input: {
   sourceProductId: number;

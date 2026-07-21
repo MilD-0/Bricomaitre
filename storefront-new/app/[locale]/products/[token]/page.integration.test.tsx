@@ -2,11 +2,10 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { generateStaticParams, ProductPageContent } from './page';
+import ProductPage, { ProductPageContent } from './page';
 
 const {
   getProductMock,
-  getCatalogMock,
   getCatalogMetaMock,
   getSettingsMock,
   notFoundMock,
@@ -14,7 +13,6 @@ const {
   captureProductPageExceptionMock,
 } = vi.hoisted(() => ({
   getProductMock: vi.fn(),
-  getCatalogMock: vi.fn(),
   getCatalogMetaMock: vi.fn(),
   getSettingsMock: vi.fn(),
   notFoundMock: vi.fn(() => { throw new Error('NEXT_NOT_FOUND'); }),
@@ -24,7 +22,6 @@ const {
 
 vi.mock('@/lib/storefront-api', () => ({
   getStorefrontProductDetail: getProductMock,
-  getStorefrontCatalog: getCatalogMock,
   getStorefrontCatalogMeta: getCatalogMetaMock,
   getStorefrontSettings: getSettingsMock,
 }));
@@ -84,7 +81,6 @@ describe('localized Product Detail Page', () => {
   beforeEach(() => {
     getProductMock.mockReset();
     getProductMock.mockResolvedValue(productResponse);
-    getCatalogMock.mockReset();
     getCatalogMetaMock.mockReset().mockResolvedValue({
       brands: [],
       categories: [
@@ -98,17 +94,10 @@ describe('localized Product Detail Page', () => {
     captureProductPageExceptionMock.mockClear();
   });
 
-  it('provides canonical product-token samples for Cache Components validation', async () => {
-    getCatalogMock.mockResolvedValue({ items: [
-      { id: 12, slug: 'desk-lamp', mongoId: 'legacy-lamp' },
-      { id: 13, slug: null, mongoId: 'legacy-drill' },
-      { id: 14, slug: null, mongoId: null },
-    ] });
-    await expect(generateStaticParams()).resolves.toEqual([
-      { token: 'desk-lamp' },
-      { token: 'legacy-drill' },
-      { token: '14' },
-    ]);
+  it('renders complete HTML for on-demand ISR product requests', async () => {
+    const page = await ProductPage({ params: Promise.resolve({ locale: 'fr', token: 'desk-lamp' }) });
+    const html = renderToStaticMarkup(page);
+    expect(html).toContain('<h1>Desk Lamp</h1>');
   });
 
   it('server-renders French product, commerce facts, and structured data', async () => {
