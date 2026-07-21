@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Inter, Noto_Sans_Arabic } from 'next/font/google';
+import { IBM_Plex_Sans_Arabic, Inter } from 'next/font/google';
 import { setRequestLocale } from 'next-intl/server';
 import { Suspense } from 'react';
 
@@ -13,8 +13,9 @@ const inter = Inter({
   variable: '--font-inter',
 });
 
-const notoSansArabic = Noto_Sans_Arabic({
+const ibmPlexSansArabic = IBM_Plex_Sans_Arabic({
   subsets: ['arabic'],
+  weight: ['100', '200', '300', '400', '500', '600', '700'],
   display: 'swap',
   variable: '--font-arabic',
 });
@@ -39,7 +40,7 @@ export default async function LocaleLayout({
   setRequestLocale(locale);
 
   return (
-    <html lang={locale} dir={isRtl(locale) ? "rtl" : "ltr"} className={`${inter.variable} ${notoSansArabic.variable}`}>
+    <html lang={locale} dir={isRtl(locale) ? "rtl" : "ltr"} className={`${inter.variable} ${ibmPlexSansArabic.variable}`}>
       <body>
         <MarketingPixels />
         <Suspense fallback={null}>

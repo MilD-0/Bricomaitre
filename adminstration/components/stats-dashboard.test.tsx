@@ -174,6 +174,7 @@ const baseResponse = {
           capiOk: true,
         },
       ],
+      paidAttribution: { visits: 80, createdOrders: 12, purchases: 8, landedOnly: 20, conversionRate: 10, topCampaigns: [{ name: 'Meta tools', visits: 80, orders: 12, purchases: 8 }] },
     },
     website: {
       sessions: 1200,
@@ -189,32 +190,6 @@ const baseResponse = {
       viewToCartRate: 13.7,
       cartToPurchaseRate: 26.9,
       checkoutToPurchaseRate: 63.6,
-      variants: [
-        {
-          variant: 'new',
-          sessions: 700,
-          pageViews: 2900,
-          productViews: 1200,
-          addToCarts: 170,
-          checkoutStarts: 80,
-          purchases: 48,
-          sessionConversionRate: 6.9,
-          cartToPurchaseRate: 28.2,
-          checkoutToPurchaseRate: 60,
-        },
-        {
-          variant: 'legacy',
-          sessions: 500,
-          pageViews: 1900,
-          productViews: 700,
-          addToCarts: 90,
-          checkoutStarts: 30,
-          purchases: 22,
-          sessionConversionRate: 4.4,
-          cartToPurchaseRate: 24.4,
-          checkoutToPurchaseRate: 73.3,
-        },
-      ],
       funnel: [
         { name: 'Sessions', value: 1200 },
         { name: 'Product views', value: 1900 },
@@ -223,7 +198,6 @@ const baseResponse = {
         { name: 'Purchases', value: 70 },
       ],
       topSearches: [{ term: 'drill', searches: 30, zeroResults: 2 }],
-      topLandingPages: [{ path: '/products/drill', sessions: 140 }],
       topProducts: [
         {
           id: '1',
@@ -236,6 +210,31 @@ const baseResponse = {
           websiteConversionRate: 4.2,
         },
       ],
+      engagedSessions: 720,
+      engagementRate: 60,
+      returningJourneys: 180,
+      errorEvents: 12,
+      errorRate: 1,
+      pageTypes: [{ name: 'catalog', sessions: 500, pageViews: 900, interactions: 240 }],
+      locales: [{ name: 'fr', sessions: 800, pageViews: 3000, purchases: 50 }],
+      devices: [{ name: 'mobile', sessions: 900, pageViews: 3500 }],
+      vitals: [{ name: 'LCP', samples: 100, average: 2200, good: 75, needsImprovement: 20, poor: 5 }],
+      errors: [{ name: 'upstream_timeout', count: 5, lastSeenAt: '2026-03-30T11:45:00.000Z' }],
+      referrers: [{ name: 'Direct', sessions: 500 }],
+      trend: [{ bucket: '2026-03-30', sessions: 120, pageViews: 480, purchases: 7, errors: 1 }],
+    },
+    landingPages: {
+      summary: { total: 3, published: 2, drafts: 1, sessions: 100, productViews: 90, addToCarts: 20, checkoutStarts: 10, purchases: 6, revenue: 72000, conversionRate: 6 },
+      pages: [{ id: 4, slug: 'drill-offer', locale: 'fr', status: 'published', product: 'Cordless Drill', revision: 2, sessions: 100, productViews: 90, addToCarts: 20, checkoutStarts: 10, purchases: 6, revenue: 72000, conversionRate: 6 }],
+      blocks: [{ name: 'hero', interactions: 30, addToCarts: 10, checkouts: 4 }],
+    },
+    aiAssistants: {
+      admin: { runs: 12, completed: 10, failed: 2, successRate: 83.3, conversations: 4, activeUsers: 2, inputTokens: 1000, outputTokens: 500, totalTokens: 1500, estimatedCostUsd: 0.01, costCoverageRate: 100, averageDurationMs: 1200, toolCalls: 8, proposals: 6, appliedProposals: 3, topTasks: [{ name: 'product_content', runs: 5, successRate: 100, tokens: 600 }], models: [{ name: 'gpt-test', runs: 12, tokens: 1500 }], trend: [{ bucket: '2026-03-30', runs: 4, completed: 3, failed: 1, tokens: 500 }] },
+      storefront: { runs: 20, completed: 18, failed: 2, successRate: 90, conversations: 14, activeUsers: 14, inputTokens: 2000, outputTokens: 900, totalTokens: 2900, estimatedCostUsd: 0.02, costCoverageRate: 100, averageDurationMs: 900, toolCalls: 24, proposals: 0, appliedProposals: 0, topTasks: [{ name: 'product_search', runs: 10, successRate: 90, tokens: 1200 }], models: [{ name: 'gpt-test', runs: 20, tokens: 2900 }], trend: [{ bucket: '2026-03-30', runs: 8, completed: 7, failed: 1, tokens: 1000 }], opens: 40, messages: 25, resultClicks: 10, errors: 2, clickThroughRate: 40, topIntents: [{ name: 'product_search', messages: 12 }] },
+    },
+    customers: {
+      summary: { customers: 10, successfulOrders: 15, repeatCustomers: 3, confirmedCustomers: 7, repeatRate: 30, averageOrders: 1.5, averageOrderValue: 10000 },
+      customers: [{ phone: '0555000000', name: 'Ada Doe', city: 'Alger', orders: 3, confirmedOrders: 2, totalValue: 30000, averageOrderValue: 10000, firstOrderAt: '2026-03-01T00:00:00.000Z', lastOrderAt: '2026-03-30T00:00:00.000Z', products: [{ name: 'Cordless Drill', count: 2 }] }],
     },
     wilayas: [{ name: 'Alger', orders: 5, revenue: 40000, profit: 18000 }],
     wilayaDetails: [{ name: 'Alger', orders: 5, collected: 45000, fees: 3500, revenue: 40000, profit: 18000, avgOrder: 8000 }],
@@ -474,6 +473,43 @@ describe('StatsDashboard', () => {
 
     const totalSpendCard = screen.getByText('overview.adPerformance.totalSpend').closest('div[class*="min-w-0"]')?.parentElement?.parentElement;
     expect(totalSpendCard?.firstElementChild).toHaveClass('bg-primary');
+  });
+
+  it.each([
+    ['landingPages', 'landingPages.performanceTitle', 'drill-offer'],
+    ['aiAssistants', 'aiAssistants.admin.title', 'aiAssistants.storefront.title'],
+    ['customers', 'customers.rankingTitle', '0555000000'],
+  ] as const)('renders the %s stats page', async (section, heading, detail) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => baseResponse }));
+    renderDashboard(section);
+    expect(await screen.findByText(heading)).toBeInTheDocument();
+    expect(await screen.findByText(detail)).toBeInTheDocument();
+  });
+
+  it('always refreshes the AI assistant section instead of retaining stale zero metrics', async () => {
+    const staleData = {
+      ...baseResponse.data,
+      aiAssistants: {
+        ...baseResponse.data.aiAssistants,
+        admin: { ...baseResponse.data.aiAssistants.admin, runs: 0, successRate: 0, totalTokens: 0 },
+      },
+    };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => baseResponse });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderDashboard('aiAssistants', staleData);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/stats?range=90d', undefined));
+    expect(await screen.findByText('83.3%')).toBeInTheDocument();
+  });
+
+  it('shows successful order volume instead of the redundant confirmed-customer card', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => baseResponse }));
+    renderDashboard('customers');
+
+    expect(await screen.findByText('customers.cards.successfulOrders')).toBeInTheDocument();
+    expect(screen.getByText('15')).toBeInTheDocument();
+    expect(screen.queryByText('customers.cards.confirmed')).not.toBeInTheDocument();
   });
 
   it('renders the manual orders stats page', async () => {

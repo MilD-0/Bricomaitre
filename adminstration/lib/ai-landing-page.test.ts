@@ -1,8 +1,55 @@
 import { describe, expect, it } from 'vitest';
 
-import { generateLandingPageDraft, LANDING_PAGE_GENERATION_INSTRUCTIONS, normalizeGeneratedLandingPage, type LandingPageGenerationInput } from './ai-landing-page';
+import { createLandingPageGenerator, generateLandingPageDraft, LANDING_PAGE_GENERATION_INSTRUCTIONS, normalizeGeneratedLandingPage, type LandingPageGenerationInput, type LandingPageStageRunner } from './ai-landing-page';
 
 const verifiedImage = 'https://d3.example.com/product.jpg';
+
+const testConfig = {
+  enabled: true,
+  provider: 'openrouter' as const,
+  apiKey: 'test-key',
+  contentModel: 'test/content-model',
+  requestTimeoutMs: 30_000,
+  maxRetries: 0,
+};
+
+const generationInput: LandingPageGenerationInput = {
+  locale: 'fr',
+  campaignAngle: 'Pour les mécaniciens mobiles',
+  product: { id: 1, title: 'Clé à cliquet', titleAr: null, description: 'Une clé sans fil.', descriptionAr: null, brand: 'HONESTPRO', category: 'Clés', sku: 'HP-1', barcode: null, images: [verifiedImage] },
+};
+
+function stagedRunner(options?: { failSecondBlock?: boolean }): LandingPageStageRunner {
+  return {
+    generatePlan: async () => ({
+      plan: {
+        archetype: 'problem-solution',
+        theme: { accent: 'graphite', density: 'spacious' },
+        seo: { title: 'Clé à cliquet sans fil', description: 'Découvrez la clé à cliquet HONESTPRO pour vos travaux.' },
+        hero: { variant: 'media-right', heading: 'Travaillez plus simplement', subheading: 'Une clé sans fil.', primaryCtaLabel: 'Commander' },
+        sections: [
+          { type: 'editorial-intro', purpose: 'Présenter le produit', surface: 'plain', width: 'narrow' },
+          { type: 'trust-band', purpose: 'Expliquer la commande', surface: 'soft', width: 'wide' },
+        ],
+        finalCta: { variant: 'split', heading: 'Prêt à commander ?', body: 'Paiement à la livraison.', primaryCtaLabel: 'Commander maintenant' },
+        reasoning: 'A concise product story followed by verified ordering reassurance.',
+        groundingNotes: ['Copy uses the catalog title and description.'],
+      },
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+    }),
+    generateBlock: async ({ section, index }) => {
+      if (options?.failSecondBlock && index === 1) throw new Error('malformed section');
+      if (section.type === 'editorial-intro') return {
+        block: { id: 'intro', type: 'editorial-intro', surface: section.surface, width: section.width, variant: 'statement', eyebrow: 'HONESTPRO', heading: 'Un outil présenté simplement', body: 'Une clé sans fil pour vos travaux.', highlights: [] },
+        usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
+      };
+      return {
+        block: { id: 'trust', type: 'trust-band', surface: section.surface, width: section.width, variant: 'ribbon', heading: 'Commandez sereinement', items: [{ title: 'Paiement à la livraison', description: 'Payez à la réception.', icon: 'payment' }, { title: 'Confirmation téléphonique', description: 'Bricomaitre confirme votre commande.', icon: 'phone' }] },
+        usage: { inputTokens: 5, outputTokens: 6, totalTokens: 11 },
+      };
+    },
+  };
+}
 
 function generatedDocument() {
   return {
@@ -66,11 +113,6 @@ describe('AI landing-page output guardrails', () => {
 
   it('falls back to the catalog-derived document when generation fails', async () => {
     const fallback = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
-    const generationInput: LandingPageGenerationInput = {
-      locale: 'fr',
-      campaignAngle: 'Pour les mécaniciens mobiles',
-      product: { id: 1, title: 'Clé à cliquet', titleAr: null, description: 'Une clé sans fil.', descriptionAr: null, brand: 'HONESTPRO', category: 'Clés', sku: 'HP-1', barcode: null, images: [verifiedImage] },
-    };
 
     const result = await generateLandingPageDraft({
       generator: { generate: async () => { throw new Error('provider timeout'); } },
@@ -81,6 +123,25 @@ describe('AI landing-page output guardrails', () => {
     expect(result.document).toEqual(fallback);
     expect(result.model).toBe('deterministic-v1');
     expect(result.reasoning).toContain('safe catalog-grounded fallback');
+    expect(result.stages?.status).toBe('full-fallback');
+  });
+
+  it('assembles several backend stages into one complete generation result', async () => {
+    const result = await createLandingPageGenerator(testConfig, stagedRunner()).generate(generationInput);
+
+    expect(result.document.blocks.map((block) => block.type)).toEqual(['product-hero', 'editorial-intro', 'trust-band', 'final-cta']);
+    expect(result.document.seo.indexable).toBe(false);
+    expect(result.stages).toEqual({ status: 'completed', plannedSections: 2, generatedSections: 2, fallbackSections: 0, skippedSections: 0 });
+    expect(result.usage).toEqual({ inputTokens: 18, outputTokens: 30, totalTokens: 48 });
+    expect(result.model).toBe('test/content-model');
+  });
+
+  it('keeps successful sections and fills only the failed stage from catalog-safe content', async () => {
+    const result = await createLandingPageGenerator(testConfig, stagedRunner({ failSecondBlock: true })).generate(generationInput);
+
+    expect(result.document.blocks.map((block) => block.type)).toEqual(['product-hero', 'editorial-intro', 'benefit-grid', 'final-cta']);
+    expect(result.stages).toEqual({ status: 'partial-fallback', plannedSections: 2, generatedSections: 1, fallbackSections: 1, skippedSections: 1 });
+    expect(result.reasoning).toContain('1 of 2 eligible planned sections were generated');
   });
 
   it('reapplies asset and indexing guardrails to injected generator results', async () => {

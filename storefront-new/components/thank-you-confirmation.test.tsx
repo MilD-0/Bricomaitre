@@ -44,7 +44,13 @@ describe('ThankYouConfirmation', () => {
     expect(mocks.verify).toHaveBeenCalledWith('public-order-token-1234567890');
     expect(screen.getByRole('heading', { name: 'trackingTitle' })).toBeInTheDocument();
     expect(screen.getAllByText('trackingWaiting').length).toBeGreaterThan(0);
-    await waitFor(() => expect(mocks.track).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'purchase', orderId: 42 }), 'thank_you'));
+    await waitFor(() => expect(mocks.track).toHaveBeenCalledWith(expect.objectContaining({
+      eventName: 'purchase',
+      orderId: 42,
+      metadata: expect.objectContaining({
+        items: [{ productId: 12, productSlug: 'desk-lamp', quantity: 1, price: 4500 }],
+      }),
+    }), 'thank_you'));
     expect(mocks.track.mock.calls.flatMap((call) => JSON.stringify(call))).not.toContain('0550000000');
   });
 

@@ -3,20 +3,24 @@ import { expect, test } from '@playwright/test';
 test('renders the French product journey with SEO and governed analytics', async ({ page }) => {
   const analyticsEvents: string[] = [];
   const analyticsLists: string[] = [];
+  const analyticsPayloads: Array<Record<string, unknown>> = [];
   const hydrationErrors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error' && /hydrated|hydration/i.test(message.text())) hydrationErrors.push(message.text());
   });
   page.on('request', (request) => {
     if (request.method() === 'POST' && request.url().endsWith('/api/analytics')) {
-      const eventName = request.postDataJSON()?.eventName;
+      const payload = request.postDataJSON() as Record<string, unknown> | null;
+      if (payload) analyticsPayloads.push(payload);
+      const eventName = payload?.eventName;
       if (typeof eventName === 'string') analyticsEvents.push(eventName);
-      const listContext = request.postDataJSON()?.metadata?.listContext;
+      const metadata = payload?.metadata as Record<string, unknown> | undefined;
+      const listContext = metadata?.listContext;
       if (typeof listContext === 'string') analyticsLists.push(listContext);
     }
   });
 
-  const response = await page.goto('/fr/products/desk-lamp');
+  const response = await page.goto('/fr/products/desk-lamp?fbclid=browser-click&utm_source=facebook&utm_medium=paid_social&private=discard-me');
   expect(response?.status()).toBe(200);
   await expect(page.getByRole('heading', { level: 1, name: 'Lampe de travail' })).toBeVisible();
   const productHeading = page.getByRole('heading', { level: 1, name: 'Lampe de travail' });
@@ -85,6 +89,23 @@ test('renders the French product journey with SEO and governed analytics', async
   await expect(page.getByText('Produit ajouté au panier.')).toBeVisible();
   await expect.poll(() => analyticsEvents).toContain('view_item');
   await expect.poll(() => analyticsEvents).toContain('add_to_cart');
+  const viewItemPayload = analyticsPayloads.find((payload) => payload.eventName === 'view_item');
+  const viewItemMetadata = viewItemPayload?.metadata as Record<string, unknown> | undefined;
+  expect(viewItemPayload?.visitId).toMatch(/^[0-9a-f-]{36}$/i);
+  expect(viewItemPayload).toMatchObject({
+    utmSource: 'facebook',
+    utmMedium: 'paid_social',
+  });
+  expect(viewItemMetadata).toMatchObject({
+    fbc: expect.stringContaining('browser-click'),
+    paidClickCookie: true,
+    metaTracking: {
+      eventName: 'ViewContent',
+      pixel: { invoked: false },
+    },
+  });
+  expect(viewItemMetadata?.landingUrl).toContain('fbclid=browser-click');
+  expect(viewItemMetadata?.landingUrl).not.toContain('private=discard-me');
 
   await page.getByRole('link', { name: 'Agrandir l’image' }).click();
   const zoom = page.getByRole('dialog', { name: 'Agrandir l’image — Lampe de travail' });
@@ -143,7 +164,7 @@ test('redirects legacy tokens and distinguishes missing from unavailable product
   await expect(page).toHaveURL(/\/fr\/products\/desk-lamp$/);
 
   const missing = await page.goto('/fr/products/missing');
-  expect(missing?.status()).toBe(200);
+  expect(missing?.status()).toBe(404);
   await expect(page.getByRole('heading', { name: 'Nous n’avons pas trouvé ce produit' })).toBeVisible();
   await expect(page.locator('meta[name="robots"]').first()).toHaveAttribute('content', /noindex/);
 
@@ -159,7 +180,7 @@ test('keeps essential product content useful without JavaScript', async ({ brows
 
   await expect(page.getByRole('heading', { level: 1, name: 'Lampe de travail' })).toBeVisible();
   await expect(page.getByText('Une lumière stable et puissante', { exact: false }).first()).toBeVisible();
-  await expect(page.locator('.product-progressive-fallback').getByText('En stock')).toBeVisible();
+  await expect(page.locator('.product-summary .availability').getByText('En stock')).toBeVisible();
   await context.close();
 });
 

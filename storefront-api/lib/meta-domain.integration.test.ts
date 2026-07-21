@@ -13,6 +13,7 @@ import {
   isMetaOrderConfirmedStatus,
   normalizeAlgeriaPhone,
   normalizeMetaEventTime,
+  resolveMetaOrderLocation,
   sendMetaEvent,
 } from "@bric/storefront-core/meta";
 import { storefrontAnalyticsEventSchema } from "@bric/storefront-core/analytics";
@@ -291,6 +292,19 @@ describe("Meta domain rules", () => {
       value: now,
     });
     expect(normalizeMetaEventTime(new Date("2026-06-01T00:00:00.000Z"), now).kind).toBe("expired");
+  });
+
+  it("resolves normalized wilaya and commune postal matching data", () => {
+    expect(resolveMetaOrderLocation({
+      wilayas: [{ wilayaId: 16, name: "Alger" }],
+      communes: [{ communeId: 42, wilayaId: 16, name: "Bâb Ezzouar", postalCode: " 16042 " }],
+    }, 16, "bab ezzouar")).toEqual({ stateName: "Alger", postalCode: "16042" });
+
+    const userData = buildMetaUserData({ state: "Alger", postalCode: "16042" });
+    expect(userData).toMatchObject({
+      st: expect.stringMatching(/^[a-f0-9]{64}$/),
+      zp: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
   });
 
   it("builds quantity-aware product-subtotal payloads without delivery", () => {

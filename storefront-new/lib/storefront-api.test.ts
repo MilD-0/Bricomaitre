@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { cacheLife, cacheTag } from 'next/cache';
+import { unstable_cache } from 'next/cache';
 
 import {
   fetchStorefrontCatalog,
@@ -11,9 +11,11 @@ import {
   fetchStorefrontOrderByToken,
   fetchStorefrontSitemapProducts,
   fetchStorefrontSettings,
+  getStorefrontSettings,
   getStorefrontEcotrackCatalog,
   fetchStorefrontProductDetail,
   getStorefrontProductDetail,
+  recordStorefrontAssistantRun,
 } from './storefront-api';
 import {
   getStorefrontApiBaseUrl,
@@ -61,15 +63,13 @@ const validOrder = {
 };
 
 vi.mock('next/cache', () => ({
-  cacheLife: vi.fn(),
-  cacheTag: vi.fn(),
+  unstable_cache: vi.fn((read: () => unknown) => read),
 }));
 
 describe('storefront API client', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
-    vi.mocked(cacheLife).mockReset();
-    vi.mocked(cacheTag).mockReset();
+    vi.mocked(unstable_cache).mockClear();
   });
 
   afterEach(() => {
@@ -169,6 +169,70 @@ describe('storefront API client', () => {
     expect(fetch).toHaveBeenCalledWith('http://localhost:3001/storefront/settings', expect.any(Object));
   });
 
+  it('uses public defaults when the previous API release does not yet expose settings', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 404 }));
+
+    await expect(fetchStorefrontSettings()).resolves.toEqual({
+      phoneDisplay: '0795 34 28 26',
+      phoneHref: 'tel:+213795342826',
+      phoneEnabled: true,
+      aiAssistantEnabled: true,
+    });
+  });
+
+  it('keeps cached public settings available during a rolling API timeout', async () => {
+    vi.mocked(fetch).mockRejectedValue(new DOMException('timed out', 'AbortError'));
+
+    await expect(getStorefrontSettings()).resolves.toEqual({
+      phoneDisplay: '0795 34 28 26',
+      phoneHref: 'tel:+213795342826',
+      phoneEnabled: true,
+      aiAssistantEnabled: true,
+    });
+  });
+
+  it('records privacy-safe assistant usage through the canonical analytics endpoint', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 202 }));
+
+    await recordStorefrontAssistantRun({
+      telemetry: {
+        journeyId: 'journey-1',
+        sessionId: 'session-1',
+        pagePath: '/fr/products',
+        intent: 'product_search',
+      },
+      locale: 'fr',
+      status: 'completed',
+      mode: 'ai',
+      model: 'storefront-model-id',
+      inputTokens: 10,
+      outputTokens: 5,
+      totalTokens: 15,
+      durationMs: 420,
+      toolCalls: 1,
+      resultsCount: 2,
+    });
+
+    const [url, options] = vi.mocked(fetch).mock.calls[0] ?? [];
+    expect(url).toBe('http://localhost:3001/storefront/analytics');
+    const payload = JSON.parse(String(options?.body));
+    expect(payload).toMatchObject({
+      eventName: 'ai_assistant_run',
+      journeyId: 'journey-1',
+      sessionId: 'session-1',
+      metadata: {
+        storefrontProject: 'storefront-new',
+        intent: 'product_search',
+        model: 'storefront-model-id',
+        totalTokens: 15,
+        durationMs: 420,
+        toolCalls: 1,
+      },
+    });
+    expect(JSON.stringify(payload)).not.toContain('messages');
+    expect(JSON.stringify(payload)).not.toContain('content');
+  });
+
   it('server-renders a token-verified order without caching the customer response', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ item: validOrder }), { status: 200 }));
 
@@ -220,20 +284,21 @@ describe('storefront API client', () => {
     await expect(fetchStorefrontProductDetail('missing')).resolves.toBeNull();
   });
 
-  it('caches Product Detail reads with global, requested, and canonical tags', async () => {
+  it('caches Product Detail reads with global and requested-token invalidation tags', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(validProductResponse), {
       status: 200,
     }));
 
     await expect(getStorefrontProductDetail(' legacy lamp ')).resolves.toEqual(validProductResponse);
 
-    expect(cacheLife).toHaveBeenCalledWith({ stale: 30, revalidate: 60, expire: 300 });
-    expect(cacheTag).toHaveBeenNthCalledWith(
-      1,
-      'storefront-new-products',
-      'storefront-new-product:legacy lamp',
+    expect(unstable_cache).toHaveBeenCalledWith(
+      expect.any(Function),
+      ['storefront-product', 'legacy lamp'],
+      {
+        revalidate: 60,
+        tags: ['storefront-new-products', 'storefront-new-product:legacy lamp'],
+      },
     );
-    expect(cacheTag).toHaveBeenNthCalledWith(2, 'storefront-new-product:desk-lamp');
   });
 
   it('fetches the canonical API-cached delivery catalog for checkout', async () => {
@@ -252,8 +317,7 @@ describe('storefront API client', () => {
       'http://localhost:3001/storefront/ecotrack/catalog',
       expect.any(Object),
     );
-    expect(cacheLife).not.toHaveBeenCalled();
-    expect(cacheTag).not.toHaveBeenCalled();
+    expect(unstable_cache).not.toHaveBeenCalled();
   });
 
   it('distinguishes invalid tokens, upstream failures, and invalid contracts', async () => {

@@ -1,7 +1,7 @@
 import { generateText, Output } from 'ai';
 import { z } from 'zod';
 
-import { createOpenAiResponsesModel, getAiConfig, type AiConfig } from './config';
+import { createAiLanguageModel, getAiConfig, type AiConfig } from './config';
 
 export const knowledgeSourceSchema = z.enum([
   'manufacturer', 'admin', 'algorithm', 'ai', 'customer_behavior',
@@ -61,6 +61,15 @@ export const productRelationGenerationInputSchema = z.object({
 export type ProductRelationGenerationInput = z.infer<typeof productRelationGenerationInputSchema>;
 export type ProductRelationProposal = z.infer<typeof productRelationProposalSchema>;
 
+export const MIN_AI_PRODUCT_RELATION_CONFIDENCE = 0.5;
+
+export class UnsupportedProductRelationError extends Error {
+  constructor() {
+    super('The supplied catalog evidence does not support a product relationship strongly enough for review.');
+    this.name = 'UnsupportedProductRelationError';
+  }
+}
+
 export interface ProductRelationGenerator {
   generate(input: ProductRelationGenerationInput): Promise<{
     proposal: ProductRelationProposal;
@@ -76,12 +85,16 @@ export function createProductRelationGenerator(config: AiConfig = getAiConfig())
       const input = productRelationGenerationInputSchema.parse(rawInput);
       const modelName = config.adminModel ?? '';
       const result = await generateText({
-        model: createOpenAiResponsesModel(config, 'admin'),
+        model: createAiLanguageModel(config, 'admin'),
         instructions: [
           'You propose product knowledge relationships for a hardware and building-materials catalog.',
           'Use only the supplied product data and administrator context.',
+          'Choose requires only when the source product cannot serve its stated purpose without the target product.',
+          'Choose compatible_with only when supplied evidence explicitly shows the products work together but neither is necessarily required.',
+          'Choose alternative_to only when both products serve the same primary use, and accessory_for only when the target optionally enhances the source.',
+          'Never infer frequently_bought_with without supplied customer-behavior evidence.',
           'Never claim manufacturer verification unless it is explicitly present in the input.',
-          'When evidence is weak, lower confidence and say what must be verified.',
+          `When no relationship is supported, return confidence below ${MIN_AI_PRODUCT_RELATION_CONFIDENCE} and explain the missing evidence.`,
           'The result is a proposal and must never be described as already approved.',
         ].join(' '),
         prompt: JSON.stringify(input),
@@ -90,6 +103,9 @@ export function createProductRelationGenerator(config: AiConfig = getAiConfig())
         timeout: config.requestTimeoutMs,
       });
       const generated = await result.output;
+      if (generated.confidence < MIN_AI_PRODUCT_RELATION_CONFIDENCE) {
+        throw new UnsupportedProductRelationError();
+      }
 
       return {
         proposal: productRelationProposalSchema.parse({

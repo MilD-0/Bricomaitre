@@ -21,6 +21,16 @@ export function getSentryRelease() {
   return process.env.SENTRY_RELEASE?.trim() || undefined;
 }
 
+export function shouldCaptureServerException(
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  if (env.NEXT_PHASE === 'phase-production-build') return false;
+  return Boolean(
+    env.SENTRY_DSN_STOREFRONT_NEW?.trim()
+    || env.SENTRY_DSN_STOREFRONT?.trim(),
+  );
+}
+
 export function sanitizeSentryEvent(event: Sentry.ErrorEvent) {
   const sanitized = scrubValue(event) as Sentry.ErrorEvent;
   if (sanitized.request) sanitized.request.data = undefined;
@@ -32,6 +42,7 @@ export function captureProductPageException(error: unknown, context: {
   requestedToken: string;
   operation: string;
 }) {
+  if (!shouldCaptureServerException()) return;
   Sentry.withScope((scope) => {
     scope.setTag('page_type', 'product_detail');
     scope.setTag('locale', context.locale);
@@ -45,6 +56,7 @@ export function captureCatalogPageException(error: unknown, context: {
   locale: string;
   operation: string;
 }) {
+  if (!shouldCaptureServerException()) return;
   Sentry.withScope((scope) => {
     scope.setTag('page_type', 'catalog');
     scope.setTag('locale', context.locale);

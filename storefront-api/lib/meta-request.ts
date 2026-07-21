@@ -59,14 +59,24 @@ export function authorizeMetaSourceRequest(request: NextRequest, eventSourceUrl:
   }
 }
 
-export function getMetaRequestContext(request: NextRequest) {
+export function buildFbcFromSourceUrl(eventSourceUrl: string | null | undefined, now = new Date()) {
+  if (!eventSourceUrl) return null;
+  try {
+    const fbclid = new URL(eventSourceUrl).searchParams.get("fbclid")?.trim().slice(0, 500);
+    return fbclid ? `fb.1.${Math.floor(now.getTime() / 1000)}.${fbclid}` : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getMetaRequestContext(request: NextRequest, eventSourceUrl?: string | null) {
   const clientIpAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
     || request.headers.get("x-real-ip")?.trim()
     || null;
   return {
     clientIpAddress,
     clientUserAgent: request.headers.get("user-agent"),
-    fbc: request.cookies.get("_fbc")?.value ?? null,
+    fbc: request.cookies.get("_fbc")?.value ?? buildFbcFromSourceUrl(eventSourceUrl),
     fbp: request.cookies.get("_fbp")?.value ?? null,
     externalIdSource: request.cookies.get("bric_visit_id")?.value ?? null,
   };

@@ -1,18 +1,44 @@
 import * as XLSX from 'xlsx';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
 
 import {
   buildCartProductLookup,
+  buildAnalyticsWhere,
   buildAdCostEntriesFromSpreadsheetRow,
   collectCartProductReferenceBuckets,
   getCartProductLookupKey,
   isNumericOrderReference,
   manualOrderListQuerySchema,
+  normalizeStatsDashboardData,
   normalizePhoneDigits,
   parseSpreadsheet,
   resolveOrderByPhoneAndDate,
   statsQuerySchema,
 } from './stats';
+
+describe('normalizeStatsDashboardData', () => {
+  it('upgrades legacy snapshots with safe defaults for newer stats sections', () => {
+    const normalized = normalizeStatsDashboardData({
+      filters: { range: '90d', startDate: '2026-04-22', endDate: '2026-07-20' },
+      summary: { totalOrders: 12 },
+      website: { sessions: 25, pageViews: 80 },
+      metaAds: { events: [], recentPayloads: [] },
+    }, {
+      range: '90d',
+      startDate: '2026-04-22',
+      endDate: '2026-07-20',
+    });
+
+    expect(normalized.summary.totalOrders).toBe(12);
+    expect(normalized.website.sessions).toBe(25);
+    expect(normalized.website.trend).toEqual([]);
+    expect(normalized.landingPages.summary.published).toBe(0);
+    expect(normalized.aiAssistants.admin.runs).toBe(0);
+    expect(normalized.customers.customers).toEqual([]);
+    expect(normalized.metaAds.paidAttribution.topCampaigns).toEqual([]);
+  });
+});
 
 describe('statsQuerySchema', () => {
   it('accepts preset ranges without custom dates', () => {
@@ -21,6 +47,21 @@ describe('statsQuerySchema', () => {
 
   it('rejects invalid custom ranges', () => {
     expect(() => statsQuerySchema.parse({ range: 'custom' })).toThrowError('Provide at least one custom date.');
+  });
+});
+
+describe('website analytics history scope', () => {
+  it('keeps comparable events from both storefront generations in the selected dates', () => {
+    const where = buildAnalyticsWhere({
+      range: 'custom',
+      startDate: '2026-06-01',
+      endDate: '2026-06-30',
+    });
+    const query = new PgDialect().sqlToQuery(where!);
+
+    expect(query.sql).toContain('analytics_events');
+    expect(query.sql).not.toContain('storefrontProject');
+    expect(query.params).toEqual(['2026-06-01', '2026-06-30']);
   });
 });
 

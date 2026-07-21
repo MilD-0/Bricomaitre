@@ -8,6 +8,7 @@ import { auth } from '../../../../lib/auth';
 import { readBrand, resolveBrandSlug } from '../../../../lib/brands-categories-api';
 import { brandUpdateSchema } from '../../../../lib/brands-categories';
 import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
+import { revalidateStorefrontProductMeta } from '../../../../lib/storefront-revalidate';
 
 function parseBrandId(id: string) {
   const numericId = Number(id);
@@ -102,6 +103,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     },
   });
 
+  await revalidateStorefrontProductMeta();
+
   return NextResponse.json({ ok: true });
 }
 
@@ -137,6 +140,8 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     actor,
     execute: (tx) => tx.delete(brands).where(eq(brands.id, numericId)),
   });
+
+  await revalidateStorefrontProductMeta();
 
   return NextResponse.json({ ok: true });
 }

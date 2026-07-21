@@ -28,6 +28,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install browser acceptance runtime
+        run: pnpm --filter storefront-new exec playwright install --with-deps chromium
+
       - name: Test
         run: |
           set -euo pipefail
@@ -53,7 +56,9 @@ jobs:
           run_step "Admin unit and jsdom tests" pnpm test:admin
           run_step "Admin integration tests" pnpm test:admin:integration
           run_step "Storefront API tests" pnpm test:storefront-api
-          run_step "Storefront tests (including Meta route and deploy verification coverage)" pnpm test:storefront
+          run_step "Storefront unit tests" pnpm test:storefront
+          run_step "Storefront integration tests" pnpm test:storefront-new:integration
+          run_step "Storefront browser acceptance tests" pnpm test:storefront:browser
           echo >> "$GITHUB_STEP_SUMMARY"
 
       - name: Analyze storefront bundle
@@ -180,6 +185,12 @@ jobs:
       SHA_TAG: sha-${{ github.sha }}
       RELEASE_CHANNEL: ${{ github.ref == 'refs/heads/main' && 'main' || '' }}
       NEXT_PUBLIC_FACEBOOK_PIXEL_ID: ${{ secrets.NEXT_PUBLIC_FACEBOOK_PIXEL_ID }}
+      NEXT_PUBLIC_GA_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}
+      NEXT_PUBLIC_TIKTOK_PIXEL_ID: ${{ secrets.NEXT_PUBLIC_TIKTOK_PIXEL_ID }}
+      NEXT_PUBLIC_SENTRY_DSN_STOREFRONT_NEW: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN_STOREFRONT_NEW }}
+      NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL || 'https://bricomaitre.com' }}
+      NEXT_PUBLIC_CLOUDFRONT_URL: ${{ vars.NEXT_PUBLIC_CLOUDFRONT_URL }}
+      NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS: ${{ vars.NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS }}
       STOREFRONT_BUILD_API_BASE_URL: ${{ vars.STOREFRONT_BUILD_API_BASE_URL || 'https://api.bricomaitre.com' }}
     steps:
       - uses: actions/checkout@v5
@@ -213,7 +224,9 @@ jobs:
 
           storefront_static_pages="$(python3 ops/scripts/extract-static-page-count.py build-metadata/storefront-web.log)"
           printf 'BRIC_STOREFRONT_STATIC_PAGES=%s\n' "$storefront_static_pages" >> release-parts/.bric-images-storefront.env
-          echo "- Static pages: ${storefront_static_pages}" >> "$GITHUB_STEP_SUMMARY"
+          printf 'BRIC_STOREFRONT_APP=storefront-new\n' >> release-parts/.bric-images-storefront.env
+          echo "- Release surface: storefront-new" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Prerendered routes: ${storefront_static_pages}" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -262,7 +275,7 @@ jobs:
           } > release-manifest/.bric-release.env
 
           echo "## Release manifest" >> "$GITHUB_STEP_SUMMARY"
-          echo "- ✅ Six signed image digests and storefront page count validated" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ✅ Six signed image digests, storefront-new identity, and prerender count validated" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -288,6 +301,8 @@ jobs:
       DEPLOY_KNOWN_HOSTS: ${{ secrets.BRIC_DEPLOY_KNOWN_HOSTS }}
       ECOTRACK_EMIR_BASE_URL: ${{ secrets.ECOTRACK_EMIR_BASE_URL }}
       ECOTRACK_EMIR_TOKEN: ${{ secrets.ECOTRACK_EMIR_TOKEN }}
+      GOOGLE_ANALYTICS_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}
+      GOOGLE_ANALYTICS_API_SECRET: ${{ secrets.GOOGLE_ANALYTICS_API_SECRET }}
       GHCR_USERNAME: ${{ github.actor }}
       GHCR_READ_TOKEN: ${{ github.token }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -380,6 +395,21 @@ jobs:
               tmp_file="${env_file}.tmp.$$"
               grep -v -E "^ECOTRACK_EMIR_(BASE_URL|TOKEN)=" "$env_file" > "$tmp_file" || true
               printf "ECOTRACK_EMIR_BASE_URL=%s\\nECOTRACK_EMIR_TOKEN=%s\\n" "$emir_base_url" "$emir_token" >> "$tmp_file"
+              mv "$tmp_file" "$env_file"
+            '
+
+          printf '%s\n%s\n' "$GOOGLE_ANALYTICS_MEASUREMENT_ID" "$GOOGLE_ANALYTICS_API_SECRET" | \
+            ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+              set -euo pipefail
+              IFS= read -r measurement_id
+              IFS= read -r api_secret
+              test -n "$measurement_id"
+              test -n "$api_secret"
+              env_file="/srv/bric/env/storefront-api.env"
+              umask 077
+              tmp_file="${env_file}.tmp.$$"
+              grep -v -E "^GOOGLE_ANALYTICS_(MEASUREMENT_ID|API_SECRET)=" "$env_file" > "$tmp_file" || true
+              printf "GOOGLE_ANALYTICS_MEASUREMENT_ID=%s\nGOOGLE_ANALYTICS_API_SECRET=%s\n" "$measurement_id" "$api_secret" >> "$tmp_file"
               mv "$tmp_file" "$env_file"
             '
 

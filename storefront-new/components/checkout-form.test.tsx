@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CheckoutForm } from './checkout-form';
 
 const mocks = vi.hoisted(() => ({
-  push: vi.fn(), create: vi.fn(), track: vi.fn(), identity: vi.fn(() => ({ journeyId: 'journey-1', sessionId: 'session-1' })), haptic: vi.fn(), iconStart: vi.fn(), iconStop: vi.fn(),
+  push: vi.fn(), create: vi.fn(), track: vi.fn(), identity: vi.fn(() => ({ visitId: 'visit-1', journeyId: 'journey-1', sessionId: 'session-1' })), haptic: vi.fn(), iconStart: vi.fn(), iconStop: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
@@ -80,7 +80,11 @@ describe('CheckoutForm', () => {
     render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} landingAttribution={{ landingPageId: 4, landingRevision: 2 }} labels={labels as never} />);
     await waitFor(() => expect(mocks.track).toHaveBeenCalledWith(expect.objectContaining({
       eventName: 'begin_checkout',
-      metadata: expect.objectContaining({ landingPageId: 4, landingRevision: 2 }),
+      metadata: expect.objectContaining({
+        landingPageId: 4,
+        landingRevision: 2,
+        items: [{ productId: 12, productSlug: 'desk-lamp', quantity: 2, price: 4500 }],
+      }),
     })));
   });
 

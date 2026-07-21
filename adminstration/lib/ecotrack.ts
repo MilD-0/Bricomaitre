@@ -15,6 +15,11 @@ import {
   orderStatusHistory,
 } from '../db/schema';
 import { recordExplicitActionLog, type ActionActor } from './action-history';
+import {
+  areEcotrackActionSnapshotsEqual,
+  buildEcotrackOrderActionSnapshot,
+  buildEcotrackShipmentActionSnapshot,
+} from './ecotrack-action-snapshots';
 import { getOrderProductLookup, toOrderRecord } from './order-records';
 import { coerceOrderStatus, parseNumericAmount, type DeliveryType, type OrderRecord, type OrderStatusHistoryRecord } from './orders';
 
@@ -38,25 +43,6 @@ export function getEcotrackProviderEnv(provider: EcotrackProvider, env: NodeJS.P
   };
 }
 
-function serializeActionValue(value: unknown): unknown {
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-  if (Array.isArray(value)) {
-    return value.map((entry) => serializeActionValue(entry));
-  }
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, serializeActionValue(entry)]),
-    );
-  }
-  return value;
-}
-
-function areActionSnapshotsEqual(left: unknown, right: unknown) {
-  return JSON.stringify(serializeActionValue(left)) === JSON.stringify(serializeActionValue(right));
-}
-
 function resolveEcotrackActor(actor?: ActionActor | null): ActionActor {
   if (actor?.email || actor?.name) {
     return actor;
@@ -68,57 +54,15 @@ function resolveEcotrackActor(actor?: ActionActor | null): ActionActor {
   };
 }
 
-function buildOrderActionSnapshot(row: typeof orders.$inferSelect) {
-  return {
-    id: row.id,
-    confirmed: row.confirmed,
-    noAnswerCount: row.noAnswerCount,
-    confirmedBy: row.confirmedBy,
-    confirmedByName: row.confirmedByName,
-    confirmedAt: row.confirmedAt,
-    ecotrackStatus: row.ecotrackStatus,
-    ecotrackStatusLastUpdate: row.ecotrackStatusLastUpdate,
-    ecotrackStatusData: row.ecotrackStatusData,
-    ecotrackReference: row.ecotrackReference,
-    ecotrackTrackingNumber: row.ecotrackTrackingNumber,
-    updatedAt: row.updatedAt,
-  };
-}
-
-function buildShipmentActionSnapshot(row: typeof ecotrackOrderStates.$inferSelect) {
-  return {
-    id: row.id,
-    orderId: row.orderId,
-    reference: row.reference,
-    trackingNumber: row.trackingNumber,
-    currentStatus: row.currentStatus,
-    driverPhone: row.driverPhone,
-    estimatedFee: row.estimatedFee,
-    deskPhone: row.deskPhone,
-    deskCommune: row.deskCommune,
-    deskMapLink: row.deskMapLink,
-    deskAddress: row.deskAddress,
-    rawStatusPayload: row.rawStatusPayload,
-    rawCreatePayload: row.rawCreatePayload,
-    rawLastTrackingPayload: row.rawLastTrackingPayload,
-    rawLastMajPayload: row.rawLastMajPayload,
-    lastStatusSyncedAt: row.lastStatusSyncedAt,
-    lastTrackingSyncedAt: row.lastTrackingSyncedAt,
-    lastMajSyncedAt: row.lastMajSyncedAt,
-    lastActionAt: row.lastActionAt,
-    deletedAt: row.deletedAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
-}
-
 async function recordEcotrackOrderAction(
   tx: Transaction,
-  beforeState: ReturnType<typeof buildOrderActionSnapshot>,
-  afterState: ReturnType<typeof buildOrderActionSnapshot>,
+  beforeState: ReturnType<typeof buildEcotrackOrderActionSnapshot>,
+  afterState: ReturnType<typeof buildEcotrackOrderActionSnapshot>,
   actor?: ActionActor | null,
 ) {
-  if (areActionSnapshotsEqual(beforeState, afterState)) {
+  const compactBeforeState = buildEcotrackOrderActionSnapshot(beforeState);
+  const compactAfterState = buildEcotrackOrderActionSnapshot(afterState);
+  if (areEcotrackActionSnapshotsEqual(compactBeforeState, compactAfterState)) {
     return;
   }
 
@@ -126,8 +70,8 @@ async function recordEcotrackOrderAction(
     entityType: 'orders',
     entityId: beforeState.id,
     operation: 'update',
-    beforeState,
-    afterState,
+    beforeState: compactBeforeState,
+    afterState: compactAfterState,
     actor: resolveEcotrackActor(actor),
     isReversible: false,
   });
@@ -136,23 +80,26 @@ async function recordEcotrackOrderAction(
 async function recordEcotrackShipmentAction(
   tx: Transaction,
   orderId: number,
-  beforeState: ReturnType<typeof buildShipmentActionSnapshot> | null,
-  afterState: ReturnType<typeof buildShipmentActionSnapshot> | null,
+  beforeState: ReturnType<typeof buildEcotrackShipmentActionSnapshot> | null,
+  afterState: ReturnType<typeof buildEcotrackShipmentActionSnapshot> | null,
   actor?: ActionActor | null,
   operation?: 'create' | 'update' | 'delete',
 ) {
-  if (operation === 'update' && beforeState && afterState && areActionSnapshotsEqual(beforeState, afterState)) {
+  const compactBeforeState = beforeState ? buildEcotrackShipmentActionSnapshot(beforeState) : null;
+  const compactAfterState = afterState ? buildEcotrackShipmentActionSnapshot(afterState) : null;
+  if (operation === 'update' && compactBeforeState && compactAfterState
+    && areEcotrackActionSnapshotsEqual(compactBeforeState, compactAfterState)) {
     return;
   }
 
-  const nextOperation = operation ?? (beforeState ? (afterState ? 'update' : 'delete') : 'create');
+  const nextOperation = operation ?? (compactBeforeState ? (compactAfterState ? 'update' : 'delete') : 'create');
 
   await recordExplicitActionLog(tx, {
     entityType: 'ecotrackShipments',
     entityId: orderId,
     operation: nextOperation,
-    beforeState,
-    afterState,
+    beforeState: compactBeforeState,
+    afterState: compactAfterState,
     actor: resolveEcotrackActor(actor),
   });
 }
@@ -1028,8 +975,8 @@ export async function persistEcotrackPostedOrder(
       .from(ecotrackOrderStates)
       .where(eq(ecotrackOrderStates.orderId, input.row.id))
       .limit(1);
-    const beforeOrderState = buildOrderActionSnapshot(input.row);
-    const beforeShipmentState = existingShipment ? buildShipmentActionSnapshot(existingShipment) : null;
+    const beforeOrderState = buildEcotrackOrderActionSnapshot(input.row);
+    const beforeShipmentState = existingShipment ? buildEcotrackShipmentActionSnapshot(existingShipment) : null;
 
     await tx
       .update(orders)

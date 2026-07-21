@@ -22,6 +22,7 @@ import {
 import { resolveOrderPromo } from './promos';
 import {
   createOrderMetaArtifacts,
+  readMetaOrderLocation,
   replaceOrderLineSnapshots,
   resolveOrderLineSnapshots,
   type MetaCommerceLine,
@@ -123,6 +124,9 @@ export async function createStorefrontOrder(
     promoCode: orderPromo?.code ?? null,
     now,
   });
+  const metaLocation = payload.meta
+    ? await readMetaOrderLocation(db, payload.state, payload.city).catch(() => null)
+    : null;
   const canonicalCartProducts = buildCanonicalCartProducts(payload.cartProducts, orderLines);
   let historyRows: typeof orderStatusHistory.$inferSelect[] = [];
   let metaResponse: Awaited<ReturnType<typeof createOrderMetaArtifacts>> | undefined;
@@ -171,6 +175,7 @@ export async function createStorefrontOrder(
         eventId: payload.meta.leadEventId,
         eventSourceUrl: payload.meta.eventSourceUrl,
         requestContext: options?.metaRequestContext ?? {},
+        location: metaLocation,
         now,
       });
     } else {

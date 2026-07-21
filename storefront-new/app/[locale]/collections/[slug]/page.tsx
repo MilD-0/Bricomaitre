@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
 
 import { PageShell } from "@/components/page-shell";
 import { RouteFoundation } from "@/components/route-foundation";
+import { CatalogPageSkeleton } from '@/components/storefront-skeletons';
 import { isLocale } from '@/i18n/config';
 
 type CollectionPageProps = {
@@ -20,7 +22,7 @@ export async function generateMetadata({ params }: CollectionPageProps): Promise
   };
 }
 
-export default async function CollectionPage({ params }: CollectionPageProps) {
+export async function CollectionPageContent({ params }: CollectionPageProps) {
   const { locale, slug } = await params;
   if (!isLocale(locale)) notFound();
   const t = await getTranslations({ locale, namespace: 'Collection' });
@@ -42,5 +44,13 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
         <p className="mt-3 text-sm leading-6 text-muted">{t("foundationBody")}</p>
       </RouteFoundation>
     </PageShell>
+  );
+}
+
+export default function CollectionPage(props: CollectionPageProps) {
+  return (
+    <Suspense fallback={<CatalogPageSkeleton />}>
+      <CollectionPageContent {...props} />
+    </Suspense>
   );
 }

@@ -18,9 +18,12 @@ import {
 } from 'recharts';
 import {
   AlertCircle,
+  Bot,
   Calendar,
   CalendarRange,
   DollarSign,
+  FileText,
+  Gauge,
   MousePointer,
   FileSpreadsheet,
   Layers,
@@ -33,6 +36,7 @@ import {
   TrendingDown,
   TrendingUp,
   Truck,
+  Users,
 } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -77,7 +81,7 @@ type StatsImportHistoryResponse = {
   };
 };
 
-export type StatsSection = 'overview' | 'website' | 'products' | 'geography' | 'time' | 'metaAds' | 'manualOrders' | 'imports';
+export type StatsSection = 'overview' | 'website' | 'landingPages' | 'aiAssistants' | 'customers' | 'products' | 'geography' | 'time' | 'metaAds' | 'manualOrders' | 'imports';
 type TrendMode = 'daily' | 'weekly' | 'monthly';
 type BackgroundJob = {
   id: string;
@@ -97,6 +101,10 @@ type BackgroundJob = {
 const TABLE_PAGE_SIZE = 10;
 
 const rangePresets = ['30d', '90d', 'year', 'all', 'custom'] as const;
+const assistantIntentKeys = new Set([
+  'product_search', 'product_comparison', 'compatibility', 'price',
+  'availability', 'how_to', 'recommendation', 'other',
+]);
 
 const revenueBreakdownConfig = {
   value: { label: 'Value', color: 'hsl(var(--chart-1))' },
@@ -155,6 +163,19 @@ const websiteFunnelConfig = {
   value: { label: 'Value', color: 'hsl(var(--chart-2))' },
 } satisfies ChartConfig;
 
+const websiteTrendConfig = {
+  sessions: { label: 'Sessions', color: 'hsl(var(--chart-1))' },
+  pageViews: { label: 'Page views', color: 'hsl(var(--chart-2))' },
+  purchases: { label: 'Purchases', color: 'hsl(var(--chart-3))' },
+  errors: { label: 'Errors', color: 'hsl(var(--chart-5))' },
+} satisfies ChartConfig;
+
+const aiTrendConfig = {
+  runs: { label: 'Runs', color: 'hsl(var(--chart-1))' },
+  completed: { label: 'Completed', color: 'hsl(var(--chart-2))' },
+  failed: { label: 'Failed', color: 'hsl(var(--chart-5))' },
+} satisfies ChartConfig;
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
 
@@ -197,6 +218,16 @@ function formatNumber(locale: string, value: number) {
 
 function formatPercent(locale: string, value: number) {
   return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value)}%`;
+}
+
+function formatUsd(locale: string, value: number | null) {
+  if (value == null) return '—';
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 4 }).format(value);
+}
+
+function formatMilliseconds(locale: string, value: number) {
+  if (value < 1_000) return `${formatNumber(locale, value)} ms`;
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value / 1_000)} s`;
 }
 
 function formatBytes(locale: string, value: number | null | undefined) {
@@ -436,12 +467,14 @@ export function StatsDashboard({ description: _description, initialData = null, 
   const needsDashboardStats = section !== 'imports' && section !== 'manualOrders';
 
   const statsQuery = useQuery({
-    queryKey: ['stats-dashboard', range, startDate, endDate],
+    queryKey: ['stats-dashboard', section, range, startDate, endDate],
     queryFn: () => request<StatsQueryResponse>(buildStatsUrl(range, startDate, endDate)),
     initialData: initialData && range === '90d' && startDate === '' && endDate === '' ? { data: initialData } : undefined,
     initialDataUpdatedAt: initialStatsUpdatedAt,
     placeholderData: keepPreviousData,
-    staleTime: 60_000,
+    staleTime: section === 'aiAssistants' ? 0 : 60_000,
+    refetchOnMount: section === 'aiAssistants' ? 'always' : true,
+    refetchInterval: section === 'aiAssistants' ? 15_000 : false,
     enabled: needsDashboardStats,
   });
   const importJobQuery = useQuery({
@@ -476,7 +509,7 @@ export function StatsDashboard({ description: _description, initialData = null, 
         }),
       }),
     onSuccess: async (response) => {
-      queryClient.setQueryData(['stats-dashboard', range, startDate, endDate], response);
+      queryClient.setQueryData(['stats-dashboard', section, range, startDate, endDate], response);
       await queryClient.invalidateQueries({ queryKey: ['stats-dashboard'] });
     },
     onError: (error) => {
@@ -809,8 +842,8 @@ export function StatsDashboard({ description: _description, initialData = null, 
         icon: Layers,
       },
       {
-        title: t('website.cards.addToCartRate'),
-        value: formatPercent(locale, stats.website.viewToCartRate),
+        title: t('website.cards.engagementRate'),
+        value: formatPercent(locale, stats.website.engagementRate),
         accent: 'bg-[hsl(var(--chart-3))]',
         icon: MousePointer,
       },
@@ -819,6 +852,18 @@ export function StatsDashboard({ description: _description, initialData = null, 
         value: formatPercent(locale, stats.website.sessionConversionRate),
         accent: 'bg-[hsl(var(--chart-4))]',
         icon: Target,
+      },
+      {
+        title: t('website.cards.returningJourneys'),
+        value: formatNumber(locale, stats.website.returningJourneys),
+        accent: 'bg-[hsl(var(--chart-2))]',
+        icon: Users,
+      },
+      {
+        title: t('website.cards.errorRate'),
+        value: formatPercent(locale, stats.website.errorRate),
+        accent: 'bg-[hsl(var(--chart-5))]',
+        icon: AlertCircle,
       },
     ];
   }, [locale, stats, t]);
@@ -1166,7 +1211,7 @@ export function StatsDashboard({ description: _description, initialData = null, 
 
       {section === 'website' ? (
         <div className="flex flex-col gap-6">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {websiteCards.map((item) => (
               <MetricCard
                 key={item.title}
@@ -1177,6 +1222,22 @@ export function StatsDashboard({ description: _description, initialData = null, 
               />
             ))}
           </div>
+
+          <SectionCard title={t('website.trendTitle')}>
+            <ChartContainer config={websiteTrendConfig} className="h-[360px]">
+              <LineChart data={ensuredStats.website.trend}>
+                <CartesianGrid vertical={false} strokeDasharray="4 6" />
+                <XAxis dataKey="bucket" tickFormatter={(value) => formatBucket(locale, String(value))} tickLine={false} axisLine={false} minTickGap={18} />
+                <YAxis hide />
+                <ChartTooltip content={<ChartTooltipContent formatter={(value) => formatNumber(locale, Number(value))} labelFormatter={(value) => formatBucket(locale, String(value))} />} />
+                <Line type="monotone" dataKey="sessions" stroke="var(--color-sessions)" strokeWidth={3} dot={false} />
+                <Line type="monotone" dataKey="pageViews" stroke="var(--color-pageViews)" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="purchases" stroke="var(--color-purchases)" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="errors" stroke="var(--color-errors)" strokeWidth={2} dot={false} />
+                <ChartLegend content={<ChartLegendContent />} />
+              </LineChart>
+            </ChartContainer>
+          </SectionCard>
 
           <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
             <SectionCard title={t('website.funnelTitle')}>
@@ -1257,44 +1318,28 @@ export function StatsDashboard({ description: _description, initialData = null, 
             </SectionCard>
           </div>
 
-          <SectionCard title={t('website.variants.title')}>
+          <SectionCard title={t('website.pageTypesTitle')}>
             <div className="overflow-hidden rounded-[1.5rem] border border-border/70">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>{t('website.variants.columns.variant')}</TableHead>
-                    <TableHead>{t('website.variants.columns.sessions')}</TableHead>
-                    <TableHead>{t('website.variants.columns.pageViews')}</TableHead>
-                    <TableHead>{t('website.variants.columns.purchases')}</TableHead>
-                    <TableHead>{t('website.variants.columns.sessionRate')}</TableHead>
-                    <TableHead>{t('website.variants.columns.cartRate')}</TableHead>
-                    <TableHead>{t('website.variants.columns.checkoutRate')}</TableHead>
+                    <TableHead>{t('website.experience.columns.dimension')}</TableHead>
+                    <TableHead>{t('website.experience.columns.sessions')}</TableHead>
+                    <TableHead>{t('website.experience.columns.pageViews')}</TableHead>
+                    <TableHead>{t('website.experience.columns.interactions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {ensuredStats.website.variants.length > 0 ? ensuredStats.website.variants.map((item) => (
-                    <TableRow key={item.variant}>
-                      <TableCell className="font-medium">
-                        {item.variant === 'legacy'
-                          ? t('website.variants.values.legacy')
-                          : item.variant === 'new'
-                            ? t('website.variants.values.new')
-                            : item.variant === 'control'
-                              ? t('website.variants.values.control')
-                              : item.variant === 'fast_checkout'
-                                ? t('website.variants.values.fastCheckout')
-                                : item.variant}
-                      </TableCell>
+                  {ensuredStats.website.pageTypes.length > 0 ? ensuredStats.website.pageTypes.map((item) => (
+                    <TableRow key={item.name}>
+                      <TableCell className="font-medium">{item.name}</TableCell>
                       <TableCell>{formatNumber(locale, item.sessions)}</TableCell>
                       <TableCell>{formatNumber(locale, item.pageViews)}</TableCell>
-                      <TableCell>{formatNumber(locale, item.purchases)}</TableCell>
-                      <TableCell>{formatPercent(locale, item.sessionConversionRate)}</TableCell>
-                      <TableCell>{formatPercent(locale, item.cartToPurchaseRate)}</TableCell>
-                      <TableCell>{formatPercent(locale, item.checkoutToPurchaseRate)}</TableCell>
+                      <TableCell>{formatNumber(locale, item.interactions)}</TableCell>
                     </TableRow>
                   )) : (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground">{t('website.empty')}</TableCell>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground">{t('website.empty')}</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -1303,28 +1348,16 @@ export function StatsDashboard({ description: _description, initialData = null, 
           </SectionCard>
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <SectionCard title={t('website.landing.title')}>
-              <div className="overflow-hidden rounded-[1.5rem] border border-border/70">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t('website.landing.columns.path')}</TableHead>
-                      <TableHead>{t('website.landing.columns.sessions')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {ensuredStats.website.topLandingPages.length > 0 ? ensuredStats.website.topLandingPages.map((item) => (
-                      <TableRow key={item.path}>
-                        <TableCell className="font-medium">{item.path}</TableCell>
-                        <TableCell>{formatNumber(locale, item.sessions)}</TableCell>
-                      </TableRow>
-                    )) : (
-                      <TableRow>
-                        <TableCell colSpan={2} className="text-center text-muted-foreground">{t('website.empty')}</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+            <SectionCard title={t('website.audienceTitle')}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t('website.devices')}</p>
+                  <div className="space-y-2">{ensuredStats.website.devices.map((item) => <StatBlock key={item.name} label={item.name} value={formatNumber(locale, item.sessions)} />)}</div>
+                </div>
+                <div>
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t('website.locales')}</p>
+                  <div className="space-y-2">{ensuredStats.website.locales.map((item) => <StatBlock key={item.name} label={item.name} value={formatNumber(locale, item.sessions)} />)}</div>
+                </div>
               </div>
             </SectionCard>
 
@@ -1364,6 +1397,136 @@ export function StatsDashboard({ description: _description, initialData = null, 
               </div>
             </SectionCard>
           </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <SectionCard title={t('website.vitalsTitle')}>
+              <p className="mb-4 text-sm text-muted-foreground">{t('website.recentDiagnosticsHint')}</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {ensuredStats.website.vitals.map((item) => (
+                  <div key={item.name} className="rounded-[1.25rem] border border-border/70 bg-muted/20 p-4">
+                    <div className="flex items-center justify-between gap-2"><span className="font-semibold">{item.name}</span><Gauge className="size-4 text-muted-foreground" /></div>
+                    <p className="mt-2 text-2xl font-semibold">{item.name === 'CLS' ? item.average.toFixed(3) : `${formatNumber(locale, item.average)} ms`}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{t('website.vitalMeta', { good: item.good, poor: item.poor, samples: item.samples })}</p>
+                  </div>
+                ))}
+                {ensuredStats.website.vitals.length === 0 ? <p className="text-sm text-muted-foreground">{t('website.empty')}</p> : null}
+              </div>
+            </SectionCard>
+
+            <SectionCard title={t('website.errorsTitle')}>
+              <p className="mb-4 text-sm text-muted-foreground">{t('website.recentDiagnosticsHint')}</p>
+              <div className="space-y-2">
+                {ensuredStats.website.errors.map((item) => <StatBlock key={item.name} label={item.name} value={formatNumber(locale, item.count)} />)}
+                {ensuredStats.website.errors.length === 0 ? <p className="text-sm text-muted-foreground">{t('website.empty')}</p> : null}
+              </div>
+            </SectionCard>
+          </div>
+
+          <SectionCard title={t('website.referrersTitle')}>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {ensuredStats.website.referrers.map((item) => <StatBlock key={item.name} label={item.name} value={formatNumber(locale, item.sessions)} />)}
+            </div>
+          </SectionCard>
+        </div>
+      ) : null}
+
+      {section === 'landingPages' ? (
+        <div className="flex flex-col gap-6">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <MetricCard accent="bg-primary" icon={FileText} title={t('landingPages.cards.published')} value={formatNumber(locale, ensuredStats.landingPages.summary.published)} />
+            <MetricCard accent="bg-[hsl(var(--chart-1))]" icon={Users} title={t('landingPages.cards.sessions')} value={formatNumber(locale, ensuredStats.landingPages.summary.sessions)} />
+            <MetricCard accent="bg-[hsl(var(--chart-2))]" icon={Target} title={t('landingPages.cards.purchases')} value={formatNumber(locale, ensuredStats.landingPages.summary.purchases)} />
+            <MetricCard accent="bg-[hsl(var(--chart-3))]" icon={TrendingUp} title={t('landingPages.cards.conversion')} value={formatPercent(locale, ensuredStats.landingPages.summary.conversionRate)} />
+            <MetricCard accent="bg-[hsl(var(--chart-4))]" icon={DollarSign} title={t('landingPages.cards.revenue')} value={formatCurrency(locale, ensuredStats.landingPages.summary.revenue)} />
+            <MetricCard accent="bg-[hsl(var(--chart-5))]" icon={Package} title={t('landingPages.cards.drafts')} value={formatNumber(locale, ensuredStats.landingPages.summary.drafts)} />
+          </div>
+
+          <SectionCard title={t('landingPages.performanceTitle')}>
+            <div className="overflow-x-auto rounded-[1.5rem] border border-border/70">
+              <Table>
+                <TableHeader><TableRow>
+                  <TableHead>{t('landingPages.columns.page')}</TableHead><TableHead>{t('landingPages.columns.status')}</TableHead><TableHead>{t('landingPages.columns.sessions')}</TableHead><TableHead>{t('landingPages.columns.views')}</TableHead><TableHead>{t('landingPages.columns.adds')}</TableHead><TableHead>{t('landingPages.columns.checkouts')}</TableHead><TableHead>{t('landingPages.columns.purchases')}</TableHead><TableHead>{t('landingPages.columns.revenue')}</TableHead><TableHead>{t('landingPages.columns.conversion')}</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {ensuredStats.landingPages.pages.map((item) => <TableRow key={item.id}>
+                    <TableCell className="font-medium"><div className="flex flex-col"><span>{item.slug}</span><span className="text-xs text-muted-foreground">{item.product} · {item.locale.toUpperCase()} · v{item.revision ?? '—'}</span></div></TableCell>
+                    <TableCell>{item.status}</TableCell><TableCell>{formatNumber(locale, item.sessions)}</TableCell><TableCell>{formatNumber(locale, item.productViews)}</TableCell><TableCell>{formatNumber(locale, item.addToCarts)}</TableCell><TableCell>{formatNumber(locale, item.checkoutStarts)}</TableCell><TableCell>{formatNumber(locale, item.purchases)}</TableCell><TableCell>{formatCurrency(locale, item.revenue)}</TableCell><TableCell>{formatPercent(locale, item.conversionRate)}</TableCell>
+                  </TableRow>)}
+                  {ensuredStats.landingPages.pages.length === 0 ? <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground">{t('landingPages.empty')}</TableCell></TableRow> : null}
+                </TableBody>
+              </Table>
+            </div>
+          </SectionCard>
+
+          <SectionCard title={t('landingPages.blocksTitle')}>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {ensuredStats.landingPages.blocks.map((item) => <div key={item.name} className="rounded-[1.25rem] border border-border/70 bg-muted/20 p-4"><p className="font-medium">{item.name}</p><p className="mt-2 text-2xl font-semibold">{formatNumber(locale, item.interactions)}</p><p className="mt-1 text-xs text-muted-foreground">{t('landingPages.blockMeta', { adds: item.addToCarts, checkouts: item.checkouts })}</p></div>)}
+              {ensuredStats.landingPages.blocks.length === 0 ? <p className="text-sm text-muted-foreground">{t('landingPages.empty')}</p> : null}
+            </div>
+          </SectionCard>
+        </div>
+      ) : null}
+
+      {section === 'aiAssistants' ? (
+        <div className="flex flex-col gap-6">
+          <SectionCard title={t('aiAssistants.admin.title')}>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <MetricCard accent="bg-primary" icon={Bot} title={t('aiAssistants.cards.runs')} value={formatNumber(locale, ensuredStats.aiAssistants.admin.runs)} />
+              <MetricCard accent="bg-emerald-500" icon={Target} title={t('aiAssistants.cards.successRate')} value={formatPercent(locale, ensuredStats.aiAssistants.admin.successRate)} />
+              <MetricCard accent="bg-violet-500" icon={Gauge} title={t('aiAssistants.cards.tokens')} value={formatNumber(locale, ensuredStats.aiAssistants.admin.totalTokens)} />
+              <MetricCard accent="bg-blue-500" icon={DollarSign} title={t('aiAssistants.cards.estimatedCost')} value={formatUsd(locale, ensuredStats.aiAssistants.admin.estimatedCostUsd)} />
+              <MetricCard accent="bg-amber-500" icon={Calendar} title={t('aiAssistants.cards.latency')} value={formatMilliseconds(locale, ensuredStats.aiAssistants.admin.averageDurationMs)} />
+              <MetricCard accent="bg-[hsl(var(--chart-2))]" icon={MousePointer} title={t('aiAssistants.cards.toolCalls')} value={formatNumber(locale, ensuredStats.aiAssistants.admin.toolCalls)} />
+              <MetricCard accent="bg-[hsl(var(--chart-3))]" icon={FileText} title={t('aiAssistants.cards.proposals')} value={formatNumber(locale, ensuredStats.aiAssistants.admin.proposals)} />
+              <MetricCard accent="bg-[hsl(var(--chart-4))]" icon={TrendingUp} title={t('aiAssistants.cards.applied')} value={formatNumber(locale, ensuredStats.aiAssistants.admin.appliedProposals)} />
+            </div>
+            <p className="mt-4 text-sm text-muted-foreground">{t('aiAssistants.costHint')}</p>
+            <div className="mt-5 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+              <ChartContainer config={aiTrendConfig} className="h-[300px]"><LineChart data={ensuredStats.aiAssistants.admin.trend}><CartesianGrid vertical={false} strokeDasharray="4 6" /><XAxis dataKey="bucket" tickFormatter={(value) => formatBucket(locale, String(value))} tickLine={false} axisLine={false} /><YAxis hide /><ChartTooltip content={<ChartTooltipContent />} /><Line dataKey="runs" stroke="var(--color-runs)" strokeWidth={3} dot={false} /><Line dataKey="completed" stroke="var(--color-completed)" strokeWidth={2} dot={false} /><Line dataKey="failed" stroke="var(--color-failed)" strokeWidth={2} dot={false} /></LineChart></ChartContainer>
+              <div className="space-y-2">{ensuredStats.aiAssistants.admin.topTasks.map((item) => <StatBlock key={item.name} label={`${item.name} · ${formatPercent(locale, item.successRate)}`} value={formatNumber(locale, item.runs)} />)}</div>
+            </div>
+          </SectionCard>
+
+          <SectionCard title={t('aiAssistants.storefront.title')}>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <MetricCard accent="bg-primary" icon={Bot} title={t('aiAssistants.cards.opens')} value={formatNumber(locale, ensuredStats.aiAssistants.storefront.opens)} />
+              <MetricCard accent="bg-blue-500" icon={MousePointer} title={t('aiAssistants.cards.messages')} value={formatNumber(locale, ensuredStats.aiAssistants.storefront.messages)} />
+              <MetricCard accent="bg-emerald-500" icon={Target} title={t('aiAssistants.cards.resultClicks')} value={formatNumber(locale, ensuredStats.aiAssistants.storefront.resultClicks)} />
+              <MetricCard accent="bg-violet-500" icon={TrendingUp} title={t('aiAssistants.cards.clickThrough')} value={formatPercent(locale, ensuredStats.aiAssistants.storefront.clickThroughRate)} />
+              <MetricCard accent="bg-[hsl(var(--chart-3))]" icon={Gauge} title={t('aiAssistants.cards.tokens')} value={formatNumber(locale, ensuredStats.aiAssistants.storefront.totalTokens)} />
+              <MetricCard accent="bg-[hsl(var(--chart-4))]" icon={DollarSign} title={t('aiAssistants.cards.estimatedCost')} value={formatUsd(locale, ensuredStats.aiAssistants.storefront.estimatedCostUsd)} />
+              <MetricCard accent="bg-amber-500" icon={Calendar} title={t('aiAssistants.cards.latency')} value={formatMilliseconds(locale, ensuredStats.aiAssistants.storefront.averageDurationMs)} />
+              <MetricCard accent="bg-red-500" icon={AlertCircle} title={t('aiAssistants.cards.errors')} value={formatNumber(locale, ensuredStats.aiAssistants.storefront.errors)} />
+            </div>
+            <div className="mt-5 grid gap-4 xl:grid-cols-2">
+              <SectionCard title={t('aiAssistants.storefront.intentsTitle')}>
+                <div className="space-y-2">{ensuredStats.aiAssistants.storefront.topIntents.map((item) => <StatBlock key={item.name} label={assistantIntentKeys.has(item.name) ? t(`aiAssistants.intents.${item.name}`) : item.name} value={formatNumber(locale, item.messages)} />)}{ensuredStats.aiAssistants.storefront.topIntents.length === 0 ? <p className="text-sm text-muted-foreground">{t('aiAssistants.empty')}</p> : null}</div>
+              </SectionCard>
+              <SectionCard title={t('aiAssistants.storefront.modelsTitle')}>
+                <div className="space-y-2">{ensuredStats.aiAssistants.storefront.models.map((item) => <StatBlock key={item.name} label={`${item.name} · ${formatNumber(locale, item.tokens)} ${t('aiAssistants.tokensShort')}`} value={formatNumber(locale, item.runs)} />)}{ensuredStats.aiAssistants.storefront.models.length === 0 ? <p className="text-sm text-muted-foreground">{t('aiAssistants.empty')}</p> : null}</div>
+              </SectionCard>
+            </div>
+          </SectionCard>
+        </div>
+      ) : null}
+
+      {section === 'customers' ? (
+        <div className="flex flex-col gap-6">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <MetricCard accent="bg-primary" icon={Users} title={t('customers.cards.customers')} value={formatNumber(locale, ensuredStats.customers.summary.customers)} />
+            <MetricCard accent="bg-[hsl(var(--chart-2))]" icon={TrendingUp} title={t('customers.cards.repeat')} value={formatNumber(locale, ensuredStats.customers.summary.repeatCustomers)} />
+            <MetricCard accent="bg-[hsl(var(--chart-3))]" icon={Target} title={t('customers.cards.repeatRate')} value={formatPercent(locale, ensuredStats.customers.summary.repeatRate)} />
+            <MetricCard accent="bg-[hsl(var(--chart-4))]" icon={Package} title={t('customers.cards.averageOrders')} value={new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(ensuredStats.customers.summary.averageOrders)} />
+            <MetricCard accent="bg-[hsl(var(--chart-1))]" icon={DollarSign} title={t('customers.cards.averageValue')} value={formatCurrency(locale, ensuredStats.customers.summary.averageOrderValue)} />
+            <MetricCard accent="bg-emerald-500" icon={Package} title={t('customers.cards.successfulOrders')} value={formatNumber(locale, ensuredStats.customers.summary.successfulOrders)} />
+          </div>
+          <SectionCard title={t('customers.rankingTitle')}>
+            <div className="overflow-x-auto rounded-[1.5rem] border border-border/70">
+              <Table><TableHeader><TableRow><TableHead>{t('customers.columns.customer')}</TableHead><TableHead>{t('customers.columns.phone')}</TableHead><TableHead>{t('customers.columns.orders')}</TableHead><TableHead>{t('customers.columns.confirmed')}</TableHead><TableHead>{t('customers.columns.totalValue')}</TableHead><TableHead>{t('customers.columns.averageValue')}</TableHead><TableHead>{t('customers.columns.products')}</TableHead><TableHead>{t('customers.columns.lastOrder')}</TableHead></TableRow></TableHeader>
+                <TableBody>{ensuredStats.customers.customers.map((item) => <TableRow key={item.phone}><TableCell className="font-medium"><div className="flex flex-col"><span>{item.name}</span><span className="text-xs text-muted-foreground">{item.city}</span></div></TableCell><TableCell className="font-mono text-xs">{item.phone}</TableCell><TableCell>{formatNumber(locale, item.orders)}</TableCell><TableCell>{formatNumber(locale, item.confirmedOrders)}</TableCell><TableCell>{formatCurrency(locale, item.totalValue)}</TableCell><TableCell>{formatCurrency(locale, item.averageOrderValue)}</TableCell><TableCell className="min-w-56">{item.products.map((product) => `${product.name} ×${product.count}`).join(', ') || '—'}</TableCell><TableCell>{formatDate(locale, item.lastOrderAt)}</TableCell></TableRow>)}{ensuredStats.customers.customers.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">{t('customers.empty')}</TableCell></TableRow> : null}</TableBody>
+              </Table>
+            </div>
+          </SectionCard>
         </div>
       ) : null}
 
@@ -1377,6 +1540,24 @@ export function StatsDashboard({ description: _description, initialData = null, 
               <MetricCard accent="bg-[hsl(var(--chart-3)/0.82)]" icon={MousePointer} title={t('overview.adPerformance.cpc')} value={formatCurrency(locale, ensuredStats.adCosts.cpc)} />
               <MetricCard accent="bg-[hsl(var(--chart-2))]" icon={TrendingUp} title={t('metaAds.conversionRate')} value={formatPercent(locale, ensuredStats.adCosts.conversionRate)} />
             </div>
+          </SectionCard>
+
+          <SectionCard title={t('metaAds.paidAttribution.title')}>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <MetricCard accent="bg-blue-500" icon={MousePointer} title={t('metaAds.paidAttribution.visits')} value={formatNumber(locale, ensuredStats.metaAds.paidAttribution.visits)} />
+              <MetricCard accent="bg-violet-500" icon={FileText} title={t('metaAds.paidAttribution.orders')} value={formatNumber(locale, ensuredStats.metaAds.paidAttribution.createdOrders)} />
+              <MetricCard accent="bg-emerald-500" icon={Target} title={t('metaAds.paidAttribution.purchases')} value={formatNumber(locale, ensuredStats.metaAds.paidAttribution.purchases)} />
+              <MetricCard accent="bg-amber-500" icon={AlertCircle} title={t('metaAds.paidAttribution.landedOnly')} value={formatNumber(locale, ensuredStats.metaAds.paidAttribution.landedOnly)} />
+              <MetricCard accent="bg-[hsl(var(--chart-2))]" icon={TrendingUp} title={t('metaAds.paidAttribution.conversion')} value={formatPercent(locale, ensuredStats.metaAds.paidAttribution.conversionRate)} />
+            </div>
+            {ensuredStats.metaAds.paidAttribution.topCampaigns.length > 0 ? (
+              <div className="mt-5 overflow-hidden rounded-[1.5rem] border border-border/70">
+                <Table>
+                  <TableHeader><TableRow><TableHead>{t('metaAds.paidAttribution.campaign')}</TableHead><TableHead>{t('metaAds.paidAttribution.visits')}</TableHead><TableHead>{t('metaAds.paidAttribution.orders')}</TableHead><TableHead>{t('metaAds.paidAttribution.purchases')}</TableHead></TableRow></TableHeader>
+                  <TableBody>{ensuredStats.metaAds.paidAttribution.topCampaigns.map((item) => <TableRow key={item.name}><TableCell className="font-medium">{item.name}</TableCell><TableCell>{formatNumber(locale, item.visits)}</TableCell><TableCell>{formatNumber(locale, item.orders)}</TableCell><TableCell>{formatNumber(locale, item.purchases)}</TableCell></TableRow>)}</TableBody>
+                </Table>
+              </div>
+            ) : null}
           </SectionCard>
 
           <SectionCard title={t('metaAds.managerTitle')}>

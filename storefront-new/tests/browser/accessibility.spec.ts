@@ -49,7 +49,7 @@ for (const locale of ['fr', 'ar'] as const) {
       let path: string;
       if (surface === 'thank-you') {
         const order = await createFixtureOrder(request);
-        path = `/${locale}/thank-you?orderId=${order.id}&token=${encodeURIComponent(order.publicToken)}`;
+        path = `/${locale}/thank-you?token=${encodeURIComponent(order.publicToken)}`;
       } else {
         path = surfacePaths[surface](locale);
       }

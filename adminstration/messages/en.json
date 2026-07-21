@@ -338,6 +338,9 @@
     "tabs": {
       "overview": "Overview",
       "website": "Website analytics",
+      "landingPages": "Landing pages",
+      "aiAssistants": "AI assistants",
+      "customers": "Customers",
       "products": "Products & categories",
       "geography": "Geography",
       "time": "Time analysis",
@@ -570,8 +573,22 @@
         "sessions": "Sessions",
         "pageViews": "Page views",
         "addToCartRate": "View to cart",
-        "purchaseRate": "Session purchase rate"
+        "purchaseRate": "Session purchase rate",
+        "engagementRate": "Engaged sessions",
+        "returningJourneys": "Returning journeys",
+        "errorRate": "Session error rate"
       },
+      "trendTitle": "Storefront traffic and outcomes",
+      "pageTypesTitle": "Page and interaction mix",
+      "audienceTitle": "Device and language mix",
+      "devices": "Devices",
+      "locales": "Languages",
+      "vitalsTitle": "Core Web Vitals",
+      "errorsTitle": "Storefront errors",
+      "referrersTitle": "Top referrers",
+      "recentDiagnosticsHint": "Detailed diagnostics use the recent raw telemetry window; comparable funnel history remains continuous across the storefront migration.",
+      "vitalMeta": "{good} good · {poor} poor · {samples} samples",
+      "experience": { "columns": { "dimension": "Page type", "sessions": "Sessions", "pageViews": "Page views", "interactions": "Interactions" } },
       "stats": {
         "searches": "Searches",
         "zeroResults": "Zero-result searches",
@@ -642,6 +659,29 @@
           "conversion": "Conv. %"
         }
       }
+    },
+    "landingPages": {
+      "performanceTitle": "Landing-page performance",
+      "blocksTitle": "Highest-engagement content blocks",
+      "empty": "No new-storefront landing-page activity for this range.",
+      "blockMeta": "{adds} adds to cart · {checkouts} checkouts",
+      "cards": { "published": "Published pages", "sessions": "Attributed sessions", "purchases": "Purchases", "conversion": "Session conversion", "revenue": "Attributed revenue", "drafts": "Draft pages" },
+      "columns": { "page": "Landing page", "status": "Status", "sessions": "Sessions", "views": "Product views", "adds": "Adds", "checkouts": "Checkouts", "purchases": "Purchases", "revenue": "Revenue", "conversion": "Conv. %" }
+    },
+    "aiAssistants": {
+      "admin": { "title": "Admin assistant" },
+      "storefront": { "title": "Store assistant", "intentsTitle": "What shoppers need", "modelsTitle": "Models and usage" },
+      "cards": { "runs": "Runs", "successRate": "Success rate", "tokens": "Tokens", "estimatedCost": "Estimated cost", "latency": "Average latency", "toolCalls": "Tool calls", "proposals": "Proposals", "applied": "Applied proposals", "opens": "Assistant opens", "messages": "Questions", "resultClicks": "Product clicks", "clickThrough": "Result click rate", "errors": "Errors" },
+      "costHint": "Estimated cost appears only when per-million-token rates are configured for the assistant surface.",
+      "empty": "No assistant usage for this range.",
+      "tokensShort": "tokens",
+      "intents": { "product_search": "Product search", "product_comparison": "Product comparison", "compatibility": "Compatibility", "price": "Price", "availability": "Availability", "how_to": "How to use", "recommendation": "Recommendation", "other": "Other" }
+    },
+    "customers": {
+      "rankingTitle": "Customers ranked by purchase activity",
+      "empty": "No customers ordered in this range.",
+      "cards": { "customers": "Customers", "repeat": "Repeat customers", "repeatRate": "Repeat rate", "averageOrders": "Average orders", "averageValue": "Average order value", "successfulOrders": "Successful orders" },
+      "columns": { "customer": "Customer", "phone": "Phone", "orders": "Orders", "confirmed": "Confirmed", "totalValue": "Order value", "averageValue": "Average value", "products": "Products bought", "lastOrder": "Last order" }
     },
     "geography": {
       "topWilayas": {
@@ -770,6 +810,7 @@
       "managerTitle": "Ad costs",
       "conversionRate": "Conversion rate",
       "unknownCampaign": "Unknown campaign",
+      "paidAttribution": { "title": "Meta paid-traffic attribution", "visits": "Paid visits", "orders": "Created orders", "purchases": "Purchases", "landedOnly": "Landing-only visits", "conversion": "Visit conversion", "campaign": "Campaign" },
       "health": {
         "title": "CAPI delivery health",
         "pending": "Pending / retrying",
@@ -969,10 +1010,20 @@
     "completed": "The requested proposal operation completed.",
     "error": "The AI assistant request failed.",
     "history": "Progress and history",
-    "historyHint": "Live jobs and reviewable proposals",
+    "historyHint": "Saved chats, live jobs, and reviewable proposals",
+    "newChat": "New chat",
+    "chats": "Your chats",
+    "untitledChat": "Untitled chat",
+    "noChats": "No saved chats yet.",
+    "loadingChats": "Loading chats…",
+    "loadingMessages": "Loading messages…",
+    "noChartData": "No non-zero values are available for a chart; the complete results are shown below.",
     "noHistory": "No AI jobs or proposals yet.",
     "approve": "Approve and apply",
     "reject": "Reject",
+    "applied": "Proposal applied.",
+    "rejected": "Proposal rejected.",
+    "proposalReviewError": "Unable to review the proposal.",
     "cancel": "Cancel",
     "vs": "vs",
     "metric": "Metric",

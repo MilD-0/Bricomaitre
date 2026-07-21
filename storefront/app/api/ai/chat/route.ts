@@ -1,4 +1,4 @@
-import { createOpenAiResponsesModel, getAiConfig } from '@bric/ai-core';
+import { createAiLanguageModel, getAiConfig } from '@bric/ai-core';
 import { generateText, stepCountIs, tool } from 'ai';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   try {
     const config = getAiConfig();
     const result = await generateText({
-      model: createOpenAiResponsesModel(config, 'storefront'),
+      model: createAiLanguageModel(config, 'storefront'),
       instructions: shopperAssistantInstructions(parsed.data.locale),
       prompt: parsed.data.messages.map((message) => `${message.role === 'user' ? 'Shopper' : 'Assistant'}: ${message.content}`).join('\n'),
       stopWhen: stepCountIs(4),

@@ -87,7 +87,7 @@ export async function proposeLandingPage(input: { productId: number; locale: 'fr
     task: 'landing_page_generation', type: 'landing_page', entityType: 'products', entityId: product.id,
     sourceUpdatedAt: product.updatedAt, actorId: input.actorId, reasoning: generation.reasoning,
     model: generation.model, promptVersion: LANDING_PAGE_PROMPT_VERSION, usage: generation.usage,
-    payload: { productId: product.id, locale: input.locale, slug: landingPageSlugFromProduct(product), document: generation.document, generation: { model: generation.model, promptVersion: LANDING_PAGE_PROMPT_VERSION, groundingNotes: generation.groundingNotes } },
+    payload: { productId: product.id, locale: input.locale, slug: landingPageSlugFromProduct(product), document: generation.document, generation: { model: generation.model, promptVersion: LANDING_PAGE_PROMPT_VERSION, groundingNotes: generation.groundingNotes, stages: generation.stages } },
   });
 }
 

@@ -78,7 +78,17 @@ export function ThankYouConfirmation({ locale, orderId, token, labels, support, 
     void trackCheckoutEvent({
       eventId: confirmation.purchaseEventId ?? undefined,
       eventName: 'purchase', locale, orderId: confirmation.order.id, quantity: itemCount, value: confirmation.order.totalAmount,
-      metadata: { cartMode: confirmation.cartMode, itemCount, verificationSource: 'server' },
+      metadata: {
+        cartMode: confirmation.cartMode,
+        itemCount,
+        verificationSource: 'server',
+        items: confirmation.order.orderProducts.flatMap((item) => item.productId ? [{
+          productId: item.productId,
+          productSlug: item.rawValue,
+          quantity: item.quantity,
+          price: item.unitPrice,
+        }] : []),
+      },
     }, 'thank_you');
   }, [confirmation, locale, status]);
 

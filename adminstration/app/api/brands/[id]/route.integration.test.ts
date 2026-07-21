@@ -12,6 +12,7 @@ const {
   readBrandMock,
   resolveBrandSlugMock,
   mutateEntityWithHistoryMock,
+  revalidateStorefrontProductMetaMock,
 } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
@@ -21,6 +22,7 @@ const {
   readBrandMock: vi.fn(),
   resolveBrandSlugMock: vi.fn(),
   mutateEntityWithHistoryMock: vi.fn(),
+  revalidateStorefrontProductMetaMock: vi.fn(),
 }));
 
 vi.mock('../../../../db/client', () => ({
@@ -45,6 +47,9 @@ vi.mock('../../../../lib/brands-categories-api', () => ({
 vi.mock('../../../../lib/action-history', () => ({
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
 }));
+vi.mock('../../../../lib/storefront-revalidate', () => ({
+  revalidateStorefrontProductMeta: revalidateStorefrontProductMetaMock,
+}));
 
 describe('app/api/brands/[id]/route', () => {
   beforeEach(() => {
@@ -56,6 +61,7 @@ describe('app/api/brands/[id]/route', () => {
     readBrandMock.mockReset();
     resolveBrandSlugMock.mockReset();
     mutateEntityWithHistoryMock.mockReset();
+    revalidateStorefrontProductMetaMock.mockReset().mockResolvedValue(undefined);
 
     requireAppAccessMock.mockResolvedValue(null);
     requireMutationAccessMock.mockResolvedValue(null);
@@ -106,6 +112,7 @@ describe('app/api/brands/[id]/route', () => {
     }), { params: Promise.resolve({ id: '7' }) });
 
     expect(response.status).toBe(200);
+    expect(revalidateStorefrontProductMetaMock).toHaveBeenCalledOnce();
     await expect(response.json()).resolves.toEqual({ ok: true });
   });
 

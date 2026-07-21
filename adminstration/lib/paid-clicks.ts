@@ -12,10 +12,12 @@ import {
   type SQL,
 } from 'drizzle-orm';
 import { z } from 'zod';
+import { deleteExpiredPaidClickVisitsBatch } from '@bric/storefront-core/maintenance';
 
 import { getDb } from '../db/client';
 import {
   analyticsEvents,
+  analyticsPaidClickDailyRollups,
   analyticsPaidClickVisits,
   metaEventOutbox,
   orders,
@@ -171,13 +173,15 @@ function resolveDateRange(input: PaidClickListQuery) {
   }
 
   const durationMs = input.range === '7d'
-    ? 7 * 24 * 60 * 60 * 1000
+    ? 6 * 24 * 60 * 60 * 1000
     : input.range === '30d'
-      ? 30 * 24 * 60 * 60 * 1000
+      ? 29 * 24 * 60 * 60 * 1000
       : 24 * 60 * 60 * 1000;
+  const start = new Date(now.getTime() - durationMs);
+  if (input.range !== '24h') start.setUTCHours(0, 0, 0, 0);
 
   return {
-    start: new Date(now.getTime() - durationMs),
+    start,
     end: now,
   };
 }
@@ -325,6 +329,10 @@ function buildListWhere(input: PaidClickListQuery) {
   const conditions: SQL[] = [
     gte(analyticsPaidClickVisits.firstSeenAt, start),
     lte(analyticsPaidClickVisits.firstSeenAt, end),
+    sql`not exists (
+      select 1 from ${analyticsPaidClickDailyRollups} rollup
+      where rollup.day = (${analyticsPaidClickVisits.firstSeenAt} at time zone 'UTC')::date
+    )`,
   ];
 
   const normalizedRequestedVariant = sql<string>`case
@@ -368,6 +376,43 @@ function buildListWhere(input: PaidClickListQuery) {
   }
 
   return and(...conditions);
+}
+
+async function getRolledUpSummary(input: PaidClickListQuery): Promise<PaidClickListSummary> {
+  const db = getDb();
+  const { start, end } = resolveDateRange(input);
+  const conditions: SQL[] = [
+    sql`${analyticsPaidClickDailyRollups.day} >= ${start}::date`,
+    sql`${analyticsPaidClickDailyRollups.day} <= ${end}::date`,
+  ];
+  if (input.variant !== 'all') conditions.push(eq(analyticsPaidClickDailyRollups.variant, input.variant));
+  if (input.paidSource !== 'all') conditions.push(eq(analyticsPaidClickDailyRollups.paidSource, input.paidSource));
+  if (input.hasOrder === 'yes') conditions.push(eq(analyticsPaidClickDailyRollups.hasOrder, 1));
+  if (input.hasOrder === 'no') conditions.push(eq(analyticsPaidClickDailyRollups.hasOrder, 0));
+  if (input.search.length > 0) conditions.push(ilike(analyticsPaidClickDailyRollups.landingPath, `%${input.search}%`));
+
+  const outcomeColumn = {
+    all: analyticsPaidClickDailyRollups.visits,
+    landed_only: analyticsPaidClickDailyRollups.landedOnly,
+    viewed_product: analyticsPaidClickDailyRollups.viewedProduct,
+    added_to_cart: analyticsPaidClickDailyRollups.addedToCart,
+    began_checkout: analyticsPaidClickDailyRollups.beganCheckout,
+    created_order: analyticsPaidClickDailyRollups.createdOrder,
+    purchased: analyticsPaidClickDailyRollups.purchased,
+    errored: analyticsPaidClickDailyRollups.errored,
+  }[input.outcome];
+  const [row] = await db.select({
+    visits: sql<number>`coalesce(sum(${outcomeColumn}), 0)::int`,
+    landedOnly: sql<number>`coalesce(sum(${analyticsPaidClickDailyRollups.landedOnly}), 0)::int`,
+    viewedProduct: sql<number>`coalesce(sum(${analyticsPaidClickDailyRollups.viewedProduct}), 0)::int`,
+    addedToCart: sql<number>`coalesce(sum(${analyticsPaidClickDailyRollups.addedToCart}), 0)::int`,
+    beganCheckout: sql<number>`coalesce(sum(${analyticsPaidClickDailyRollups.beganCheckout}), 0)::int`,
+    createdOrder: sql<number>`coalesce(sum(${analyticsPaidClickDailyRollups.createdOrder}), 0)::int`,
+    purchased: sql<number>`coalesce(sum(${analyticsPaidClickDailyRollups.purchased}), 0)::int`,
+    errored: sql<number>`coalesce(sum(${analyticsPaidClickDailyRollups.errored}), 0)::int`,
+  }).from(analyticsPaidClickDailyRollups).where(and(...conditions));
+
+  return row ?? { visits: 0, landedOnly: 0, viewedProduct: 0, addedToCart: 0, beganCheckout: 0, createdOrder: 0, purchased: 0, errored: 0 };
 }
 
 async function countVisits(baseInput: PaidClickListQuery, outcome?: PaidClickListQuery['outcome']) {
@@ -422,7 +467,7 @@ export async function listPaidClickVisits(rawInput: PaidClickListQuery) {
       })
     : null;
 
-  const [visits, landedOnly, viewedProduct, addedToCart, beganCheckout, createdOrder, purchased, errored] = await Promise.all([
+  const [visits, landedOnly, viewedProduct, addedToCart, beganCheckout, createdOrder, purchased, errored, rolledUp] = await Promise.all([
     countVisits(input),
     countVisits(input, 'landed_only'),
     countVisits(input, 'viewed_product'),
@@ -431,6 +476,7 @@ export async function listPaidClickVisits(rawInput: PaidClickListQuery) {
     countVisits(input, 'created_order'),
     countVisits(input, 'purchased'),
     countVisits(input, 'errored'),
+    getRolledUpSummary(input),
   ]);
 
   return {
@@ -451,14 +497,14 @@ export async function listPaidClickVisits(rawInput: PaidClickListQuery) {
     })),
     nextCursor,
     summary: {
-      visits,
-      landedOnly,
-      viewedProduct,
-      addedToCart,
-      beganCheckout,
-      createdOrder,
-      purchased,
-      errored,
+      visits: visits + rolledUp.visits,
+      landedOnly: landedOnly + rolledUp.landedOnly,
+      viewedProduct: viewedProduct + rolledUp.viewedProduct,
+      addedToCart: addedToCart + rolledUp.addedToCart,
+      beganCheckout: beganCheckout + rolledUp.beganCheckout,
+      createdOrder: createdOrder + rolledUp.createdOrder,
+      purchased: purchased + rolledUp.purchased,
+      errored: errored + rolledUp.errored,
     } satisfies PaidClickListSummary,
   };
 }
@@ -599,12 +645,9 @@ export async function getPaidClickVisitDetail(visitId: string) {
 
 export async function cleanupExpiredPaidClickVisits() {
   const db = getDb();
-  const deletedRows = await db
-    .delete(analyticsPaidClickVisits)
-    .where(lte(analyticsPaidClickVisits.expiresAt, new Date()))
-    .returning({ visitId: analyticsPaidClickVisits.visitId });
+  const deletedCount = await deleteExpiredPaidClickVisitsBatch(db);
 
   return {
-    deletedCount: deletedRows.length,
+    deletedCount,
   };
 }

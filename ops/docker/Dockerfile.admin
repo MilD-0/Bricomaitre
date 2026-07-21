@@ -18,6 +18,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY adminstration/package.json adminstration/package.json
 COPY storefront-api/package.json storefront-api/package.json
 COPY storefront/package.json storefront/package.json
+COPY packages/ai-core/package.json packages/ai-core/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/runtime/package.json packages/runtime/package.json
 COPY packages/storefront-core/package.json packages/storefront-core/package.json
@@ -27,6 +28,7 @@ RUN NODE_OPTIONS="${BRIC_BUILD_NODE_OPTIONS}" pnpm install --frozen-lockfile
 
 COPY tsconfig.base.json ./
 COPY adminstration ./adminstration
+COPY packages/ai-core ./packages/ai-core
 COPY packages/db ./packages/db
 COPY packages/runtime ./packages/runtime
 COPY packages/storefront-core ./packages/storefront-core

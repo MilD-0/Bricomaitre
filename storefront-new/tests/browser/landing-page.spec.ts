@@ -2,6 +2,9 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
 test('renders a fast, focused, accessible single-product campaign in French', async ({ page }) => {
+  // The first development-server visit compiles this on-demand ISR route; the
+  // production image is precompiled and remains covered by the performance gate.
+  test.setTimeout(60_000);
   const analytics: Array<Record<string, unknown>> = [];
   const hydrationErrors: string[] = [];
   page.on('console', (message) => {
@@ -31,7 +34,7 @@ test('renders a fast, focused, accessible single-product campaign in French', as
   await page.getByRole('combobox', { name: /Commune/ }).selectOption('Alger Centre');
   await page.getByRole('textbox', { name: /Adresse complète/ }).fill('12 rue des Outils');
   await page.getByRole('button', { name: 'Confirmer ma commande' }).click();
-  await expect(page).toHaveURL(/\/fr\/thank-you\?orderId=\d+&token=fixture-public-order-token-\d+-/, { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/fr\/thank-you\?token=fixture-public-order-token-\d+-/, { timeout: 20_000 });
   await expect.poll(() => analytics.some((event) => event.eventName === 'order_create_success' && JSON.stringify(event).includes('"landingPageId":4') && JSON.stringify(event).includes('"landingRevision":2'))).toBe(true);
   expect(hydrationErrors).toEqual([]);
 });

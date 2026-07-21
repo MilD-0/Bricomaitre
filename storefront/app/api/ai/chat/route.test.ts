@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   searchProducts: vi.fn(), getProduct: vi.fn(),
 }));
 
-vi.mock('@bric/ai-core', () => ({ createOpenAiResponsesModel: mocks.createModel, getAiConfig: mocks.getConfig }));
+vi.mock('@bric/ai-core', () => ({ createAiLanguageModel: mocks.createModel, getAiConfig: mocks.getConfig }));
 vi.mock('ai', () => ({ generateText: mocks.generateText, stepCountIs: vi.fn(() => 'stop'), tool: (definition: unknown) => definition }));
 vi.mock('@/lib/storefront-ai-rate-limit', () => ({ enforceStorefrontAiRateLimit: mocks.rateLimit, storefrontAiRateLimitHeaders: mocks.rateHeaders }));
 vi.mock('@/lib/storefront-api', () => ({ fetchLegacyProductsPage: mocks.searchProducts, fetchLegacyProductByToken: mocks.getProduct }));

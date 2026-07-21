@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
-import { readSampleRate, sanitizeSentryEvent } from './sentry';
+import { readSampleRate, sanitizeSentryEvent, shouldCaptureServerException } from './sentry';
 
 describe('storefront-new Sentry privacy boundary', () => {
+  it('does not generate exception event identifiers during production prerendering', () => {
+    expect(shouldCaptureServerException({
+      NEXT_PHASE: 'phase-production-build',
+      SENTRY_DSN_STOREFRONT_NEW: 'https://public@example.ingest.sentry.io/1',
+    })).toBe(false);
+    expect(shouldCaptureServerException({
+      SENTRY_DSN_STOREFRONT_NEW: 'https://public@example.ingest.sentry.io/1',
+    })).toBe(true);
+    expect(shouldCaptureServerException({})).toBe(false);
+  });
+
   it('keeps safe product correlation while redacting sensitive context and request bodies', () => {
     const sanitized = sanitizeSentryEvent({
       request: { data: { phone: '0550000000' } },
