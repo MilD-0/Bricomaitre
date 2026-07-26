@@ -38,6 +38,29 @@ describe('HomepageBannerCarousel', () => {
     expect(mocks.scrollNext).not.toHaveBeenCalled();
   });
 
+  it('keeps the mobile hero stable while retaining the swipeable carousel', () => {
+    vi.mocked(window.matchMedia).mockImplementation((query) => ({
+      matches: query === '(max-width: 620px)',
+    } as MediaQueryList));
+    const { container } = render(<HomepageBannerCarousel banners={banners} locale="fr" />);
+    container.querySelectorAll('.home-banner-picture > picture:last-child img').forEach((image) => fireEvent.load(image));
+
+    vi.advanceTimersByTime(15_000);
+
+    expect(container.querySelector('.home-banner-viewport')).toBeInTheDocument();
+    expect(mocks.scrollNext).not.toHaveBeenCalled();
+  });
+
+  it('retains autoplay when matchMedia is unavailable', () => {
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: undefined });
+    const { container } = render(<HomepageBannerCarousel banners={banners} locale="fr" />);
+    container.querySelectorAll('.home-banner-picture > picture:last-child img').forEach((image) => fireEvent.load(image));
+
+    vi.advanceTimersByTime(5_000);
+
+    expect(mocks.scrollNext).toHaveBeenCalledTimes(1);
+  });
+
   it('reveals an image that completed before the hydration effect attached', () => {
     const complete = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'complete');
     const naturalWidth = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'naturalWidth');

@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql, type SQLWrapper } from 'drizzle-orm';
 
 import type { getDb } from '../db/client';
+import { getAdminAiModelPricing } from './admin-ai-models';
 import {
   aiConversations,
   aiProposals,
@@ -392,10 +393,32 @@ function estimateCost(inputTokens: number, outputTokens: number, pricing: AiPric
   return pricing ? round((inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000, 6) : null;
 }
 
+type AiModelUsage = { name: string; runs: unknown; tokens: unknown; inputTokens?: unknown; outputTokens?: unknown };
+
+export function estimateAdminAiModelCost(models: AiModelUsage[], totalRuns: number, fallbackPricing = getAiUsagePricing('admin')) {
+  let estimatedCostUsd = 0;
+  let coveredRuns = 0;
+
+  for (const model of models) {
+    const configured = getAdminAiModelPricing(model.name);
+    const pricing = configured
+      ? { input: configured.inputPer1MUsd, output: configured.outputPer1MUsd }
+      : fallbackPricing;
+    if (!pricing) continue;
+    estimatedCostUsd += estimateCost(numberValue(model.inputTokens), numberValue(model.outputTokens), pricing) ?? 0;
+    coveredRuns += numberValue(model.runs);
+  }
+
+  return {
+    estimatedCostUsd: coveredRuns > 0 ? round(estimatedCostUsd, 6) : null,
+    costCoverageRate: totalRuns ? round((Math.min(coveredRuns, totalRuns) / totalRuns) * 100) : 0,
+  };
+}
+
 export function mapLiveAdminAiStats(input: {
   summary?: { runs?: unknown; completed?: unknown; failed?: unknown; inputTokens?: unknown; outputTokens?: unknown; totalTokens?: unknown; averageDurationMs?: unknown; activeUsers?: unknown };
   tasks: Array<{ name: string; runs: unknown; completed: unknown; tokens: unknown }>;
-  models: Array<{ name: string; runs: unknown; tokens: unknown }>;
+  models: AiModelUsage[];
   trend: Array<{ bucket: string; runs: unknown; completed: unknown; failed: unknown; tokens: unknown }>;
   conversations?: unknown;
   toolCalls?: unknown;
@@ -407,7 +430,7 @@ export function mapLiveAdminAiStats(input: {
   const completed = numberValue(row?.completed);
   const inputTokens = numberValue(row?.inputTokens);
   const outputTokens = numberValue(row?.outputTokens);
-  const pricing = getAiUsagePricing('admin');
+  const cost = estimateAdminAiModelCost(input.models, runs);
   return {
     runs,
     completed,
@@ -418,8 +441,8 @@ export function mapLiveAdminAiStats(input: {
     inputTokens,
     outputTokens,
     totalTokens: numberValue(row?.totalTokens),
-    estimatedCostUsd: estimateCost(inputTokens, outputTokens, pricing),
-    costCoverageRate: pricing && runs ? 100 : 0,
+    estimatedCostUsd: cost.estimatedCostUsd,
+    costCoverageRate: cost.costCoverageRate,
     averageDurationMs: round(numberValue(row?.averageDurationMs)),
     toolCalls: numberValue(input.toolCalls),
     proposals: numberValue(input.proposals),
@@ -449,7 +472,7 @@ export async function getLiveAdminAiStats(db: Database, filters: ExperienceStats
       activeUsers: sql<number>`count(distinct ${aiRuns.actorId})::int`,
     }).from(aiRuns).where(runWhere),
     db.select({ name: aiRuns.task, runs: sql<number>`count(*)::int`, completed: sql<number>`count(*) filter (where ${aiRuns.status} = 'completed')::int`, tokens: sql<number>`coalesce(sum(${aiRuns.totalTokens}), 0)::int` }).from(aiRuns).where(runWhere).groupBy(aiRuns.task).orderBy(sql`2 desc`).limit(10),
-    db.select({ name: aiRuns.model, runs: sql<number>`count(*)::int`, tokens: sql<number>`coalesce(sum(${aiRuns.totalTokens}), 0)::int` }).from(aiRuns).where(runWhere).groupBy(aiRuns.model).orderBy(sql`2 desc`).limit(10),
+    db.select({ name: aiRuns.model, runs: sql<number>`count(*)::int`, tokens: sql<number>`coalesce(sum(${aiRuns.totalTokens}), 0)::int`, inputTokens: sql<number>`coalesce(sum(${aiRuns.inputTokens}), 0)::int`, outputTokens: sql<number>`coalesce(sum(${aiRuns.outputTokens}), 0)::int` }).from(aiRuns).where(runWhere).groupBy(aiRuns.model).orderBy(sql`2 desc`).limit(10),
     db.select({ bucket: sql<string>`to_char(date_trunc('day', ${aiRuns.startedAt} at time zone ${ADMIN_REPORTING_TIMEZONE}), 'YYYY-MM-DD')`, runs: sql<number>`count(*)::int`, completed: sql<number>`count(*) filter (where ${aiRuns.status} = 'completed')::int`, failed: sql<number>`count(*) filter (where ${aiRuns.status} = 'failed')::int`, tokens: sql<number>`coalesce(sum(${aiRuns.totalTokens}), 0)::int` }).from(aiRuns).where(runWhere).groupBy(sql`1`).orderBy(sql`1`),
     db.select({ count: sql<number>`count(*)::int` }).from(aiConversations).where(and(eq(aiConversations.surface, 'admin'), reportingTimestampCondition(aiConversations.createdAt, filters))),
     db.select({ count: sql<number>`count(*)::int` }).from(aiToolCalls).innerJoin(aiRuns, eq(aiRuns.id, aiToolCalls.runId)).where(and(eq(aiRuns.surface, 'admin'), reportingTimestampCondition(aiToolCalls.startedAt, filters))),

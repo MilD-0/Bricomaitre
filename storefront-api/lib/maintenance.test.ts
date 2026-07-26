@@ -7,6 +7,7 @@ import {
   META_DELIVERED_RETENTION_DAYS,
   META_FAILED_RETENTION_DAYS,
   compactRetainedAnalyticsJourneysBatch,
+  deleteExpiredAnalyticsEventsBatch,
   deleteExpiredPaidClickVisitsBatch,
   rollUpNextExpiredPaidClickDay,
   rollUpNextExpiredAnalyticsDay,
@@ -106,5 +107,19 @@ describe('storefront data maintenance', () => {
       limit: 1,
     })).resolves.toBe(1);
     expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('casts both analytics retention cutoffs before PostgreSQL resolves the CASE type', async () => {
+    const execute = vi.fn().mockResolvedValue({ rows: [] });
+
+    await deleteExpiredAnalyticsEventsBatch({ execute } as never, {
+      now: new Date('2026-07-19T00:00:00Z'),
+      limit: 25,
+    });
+
+    const query = dialect.sqlToQuery(execute.mock.calls[0]![0]);
+    expect(query.sql).toMatch(/then \$\d+::timestamptz/);
+    expect(query.sql).toMatch(/else \$\d+::timestamptz/);
+    expect(query.params.filter((value) => value instanceof Date)).toHaveLength(2);
   });
 });

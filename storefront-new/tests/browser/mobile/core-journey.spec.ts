@@ -60,6 +60,14 @@ test('supports touch navigation, search, and homepage carousels', async ({ page,
     const bounds = element.getBoundingClientRect();
     return document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)?.closest('[role="dialog"]') === element;
   })).toBe(true);
+  const categoryGroups = menu.locator('.navigation-drawer-links > details:first-of-type > div > .navigation-drawer-category-group');
+  await expect(categoryGroups).toHaveCount(2);
+  const workshopGroup = categoryGroups.first();
+  await expect(workshopGroup.locator(':scope > summary')).toContainText('Équipement d’atelier');
+  await expect(workshopGroup.getByRole('link', { name: 'Éclairage' })).toBeHidden();
+  await workshopGroup.locator(':scope > summary').tap();
+  await expect(workshopGroup.locator('[data-category-self="5"]')).toHaveAttribute('href', '/fr/categories/workshop-equipment');
+  await expect(workshopGroup.getByRole('link', { name: 'Éclairage' })).toBeVisible();
 
   const search = menu.getByRole('combobox', { name: 'Rechercher des produits' });
   await search.tap();
@@ -81,6 +89,22 @@ test('supports touch navigation, search, and homepage carousels', async ({ page,
   await page.getByRole('button', { name: 'Filtrer les produits' }).tap();
   const filters = page.getByRole('dialog', { name: 'Filtrer les produits' });
   await expect(filters).toBeVisible();
+  const filterScroller = filters.locator('.mobile-sheet-body');
+  const filterScrollState = await filterScroller.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    overflowY: getComputedStyle(element).overflowY,
+    touchAction: getComputedStyle(element).touchAction,
+  }));
+  expect(filterScrollState.scrollHeight).toBeGreaterThan(filterScrollState.clientHeight);
+  expect(filterScrollState.overflowY).toBe('auto');
+  expect(filterScrollState.touchAction).toBe('pan-y');
+  const nestedOverflows = await filters.locator('.catalog-filter-options').evaluateAll((elements) => (
+    elements.map((element) => getComputedStyle(element).overflowY)
+  ));
+  expect(nestedOverflows).toEqual(['visible', 'visible']);
+  await filterScroller.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+  await expect.poll(() => filterScroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await filters.getByRole('radio', { name: 'Éclairage' }).tap();
   await filters.getByRole('button', { name: 'Appliquer les filtres' }).tap();
   await expect(page.getByRole('heading', { level: 1, name: 'Éclairage' })).toBeVisible({ timeout: 10_000 });
@@ -105,6 +129,7 @@ test('completes the essential product and checkout journey by touch', async ({ p
   await zoomTrigger.tap();
   const zoom = page.getByRole('dialog', { name: 'Agrandir l’image — Lampe de travail' });
   await expect(zoom).toBeVisible();
+  await expect(zoom.locator('.pswp__img').first()).toHaveCSS('object-fit', 'contain');
   await page.getByRole('button', { name: 'Fermer l’image agrandie' }).tap();
   await expect(zoom).toBeHidden();
 

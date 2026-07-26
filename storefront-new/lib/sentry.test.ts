@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { readSampleRate, sanitizeSentryEvent, shouldCaptureServerException } from './sentry';
+import { normalizeSentryDsn, readSampleRate, sanitizeSentryEvent } from './sentry-config';
+import { shouldCaptureServerException } from './sentry';
 
 describe('storefront-new Sentry privacy boundary', () => {
   it('does not generate exception event identifiers during production prerendering', () => {
@@ -32,5 +33,14 @@ describe('storefront-new Sentry privacy boundary', () => {
     expect(readSampleRate('0.25', 0.1)).toBe(0.25);
     expect(readSampleRate('2', 0.1)).toBe(0.1);
     expect(readSampleRate('invalid', 0.1)).toBe(0.1);
+  });
+
+  it('normalizes quoted deployment secrets and rejects malformed DSNs before SDK initialization', () => {
+    const dsn = 'https://public@example.ingest.sentry.io/123';
+    expect(normalizeSentryDsn(`"${dsn}"`)).toBe(dsn);
+    expect(normalizeSentryDsn(`'${dsn}'`)).toBe(dsn);
+    expect(normalizeSentryDsn('https://example.ingest.sentry.io/not-a-project')).toBeUndefined();
+    expect(normalizeSentryDsn('not-a-url')).toBeUndefined();
+    expect(shouldCaptureServerException({ SENTRY_DSN_STOREFRONT_NEW: '"not-a-url"' })).toBe(false);
   });
 });

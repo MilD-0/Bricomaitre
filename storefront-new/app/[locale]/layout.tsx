@@ -17,6 +17,7 @@ const ibmPlexSansArabic = IBM_Plex_Sans_Arabic({
   subsets: ['arabic'],
   weight: ['100', '200', '300', '400', '500', '600', '700'],
   display: 'swap',
+  preload: false,
   variable: '--font-arabic',
 });
 
@@ -40,7 +41,11 @@ export default async function LocaleLayout({
   setRequestLocale(locale);
 
   return (
-    <html lang={locale} dir={isRtl(locale) ? "rtl" : "ltr"} className={`${inter.variable} ${ibmPlexSansArabic.variable}`}>
+    <html
+      lang={locale}
+      dir={isRtl(locale) ? "rtl" : "ltr"}
+      className={`${inter.variable}${locale === 'ar' ? ` ${ibmPlexSansArabic.variable}` : ''}`}
+    >
       <body>
         <MarketingPixels />
         <Suspense fallback={null}>

@@ -8,6 +8,7 @@ import { useState } from 'react';
 import type { Locale } from '@/i18n/config';
 import { trackNavigationEvent } from '@/lib/analytics';
 import { prepareHaptics, triggerHaptic } from '@/lib/haptics';
+import { resetMobilePageZoom } from '@/lib/mobile-page-zoom';
 import type { ShoppingAssistantLabels } from '@/components/shopping-assistant-panel';
 
 const ShoppingAssistantPanel = dynamic(
@@ -22,6 +23,7 @@ export function ShoppingAssistantLauncher({ locale, labels }: { locale: Locale; 
   const isProductDetail = /\/products\/[^/]+\/?$/.test(pathname);
 
   function showAssistant() {
+    resetMobilePageZoom();
     setOpen(true);
     void triggerHaptic('surface');
     void trackNavigationEvent({

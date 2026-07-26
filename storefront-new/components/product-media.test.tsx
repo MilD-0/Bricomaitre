@@ -174,4 +174,5 @@ describe('ProductMedia', () => {
     view.unmount();
     expect(lightboxMock.destroy).toHaveBeenCalledOnce();
   });
+
 });

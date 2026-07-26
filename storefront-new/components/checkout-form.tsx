@@ -324,8 +324,8 @@ export function CheckoutForm({
               {errors.city ? <small>{errors.city}</small> : null}
             </label>
             <label className="checkout-field checkout-field-wide">
-              <span>{labels.address} {delivery === 'office' ? <em>{labels.optional}</em> : <b>*</b>}</span>
-              <input name="homeAddress" autoComplete="street-address" required={delivery === 'home'} value={homeAddress} aria-invalid={Boolean(errors.homeAddress)} aria-describedby={errors.homeAddress ? 'address-error' : undefined} onChange={(event) => setHomeAddress(event.target.value)} />
+              <span>{labels.address} <em>{labels.optional}</em></span>
+              <input name="homeAddress" autoComplete="street-address" value={homeAddress} aria-invalid={Boolean(errors.homeAddress)} aria-describedby={errors.homeAddress ? 'address-error' : undefined} onChange={(event) => setHomeAddress(event.target.value)} />
               {errors.homeAddress ? <small id="address-error">{errors.homeAddress}</small> : null}
             </label>
             <label className="checkout-field checkout-field-wide">

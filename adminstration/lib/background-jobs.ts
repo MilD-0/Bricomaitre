@@ -1,12 +1,23 @@
-import { and, asc, count, eq, inArray, isNull } from 'drizzle-orm';
-import { getLatestOwnedJob, requestJobCancellation, startOwnedJob, type JobSnapshot } from '@bric/runtime/jobs';
+import { createProductCategorizationClassifier, PRODUCT_CATEGORIZATION_PROMPT_VERSION, type ProductCategorizationClassifier } from '@bric/ai-core';
+import { and, asc, count, eq, gt, inArray, isNull } from 'drizzle-orm';
+import {
+  getJobSnapshot,
+  getLatestOwnedJob,
+  listRecentJobSnapshots,
+  requestJobCancellation,
+  requestJobCancellationById,
+  startOwnedJob,
+  type JobSnapshot,
+} from '@bric/runtime/jobs';
 import { storefrontAnalyticsEventSchema, ingestStorefrontAnalyticsEvent } from '@bric/storefront-core/analytics';
 import { getOrderProductLookup, toOrderRecord } from '@bric/storefront-core/order-records';
 
 import { getDb } from '../db/client';
 import {
   adminReportingSnapshotRuns,
+  aiProposals,
   brands,
+  categories,
   orderStatusHistory,
   orders,
   products,
@@ -30,7 +41,8 @@ import {
 } from './order-export';
 import type { OrderStatusHistoryRecord } from './orders';
 import { importAdCostsSpreadsheet, importStatsSpreadsheet, refreshAdminReportingSnapshots } from './stats';
-import { proposeProductContent } from './ai-product-content';
+import { proposeProductContent, reviewProductContentProposal } from './ai-product-content';
+import { proposeEntityEdit, reviewAdminProposal } from './ai-admin-capabilities';
 
 export const ADMIN_PRODUCT_EXPORT_QUEUE = 'admin-product-export';
 export const ADMIN_PRODUCT_CATALOG_FEED_QUEUE = 'admin-product-catalog-feed';
@@ -43,6 +55,7 @@ export const ADMIN_ECOTRACK_SYNC_QUEUE = 'admin-ecotrack-sync';
 export const ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE = 'admin-ecotrack-shipment-sync';
 export const STOREFRONT_ANALYTICS_QUEUE = 'storefront-analytics';
 export const ADMIN_AI_CONTENT_QUEUE = 'admin-ai-content';
+export const ADMIN_AI_CATEGORIZATION_QUEUE = 'admin-ai-categorization';
 
 type QueueJobMeta = {
   __jobMeta: {
@@ -53,9 +66,15 @@ type QueueJobMeta = {
   };
 };
 
+export type AiTaskContext = {
+  conversationId?: number;
+};
+
 export type ExportJobResponse = {
   job: {
     id: string;
+    queue: string;
+    kind: string;
     status: JobSnapshot['status'];
     fileName: string | null;
     progress: JobSnapshot['progress'];
@@ -65,15 +84,15 @@ export type ExportJobResponse = {
   } | null;
 };
 
-type ProductExportPayload = QueueJobMeta;
-type ProductCatalogFeedPayload = QueueJobMeta & {
+type ProductExportPayload = QueueJobMeta & AiTaskContext;
+type ProductCatalogFeedPayload = QueueJobMeta & AiTaskContext & {
   trigger: string;
 };
-type OrderExportPayload = QueueJobMeta & {
+type OrderExportPayload = QueueJobMeta & AiTaskContext & {
   mode: 'selected' | 'confirmed';
   orderIds: number[];
 };
-type OrderEcotrackPayload = QueueJobMeta & {
+type OrderEcotrackPayload = QueueJobMeta & AiTaskContext & {
   mode: 'selected' | 'confirmed';
   provider?: EcotrackProvider;
   orderIds: number[];
@@ -82,13 +101,13 @@ type OrderEcotrackPayload = QueueJobMeta & {
     name?: string | null;
   };
 };
-type StatsImportPayload = QueueJobMeta & {
+type StatsImportPayload = QueueJobMeta & AiTaskContext & {
   files: Array<{
     fileName: string;
     fileBufferBase64: string;
   }>;
 };
-type AdCostsImportPayload = QueueJobMeta & {
+type AdCostsImportPayload = QueueJobMeta & AiTaskContext & {
   fileName: string;
   fileBufferBase64: string;
   rate: number;
@@ -97,18 +116,18 @@ type AdCostsImportPayload = QueueJobMeta & {
     name?: string | null;
   };
 };
-type ReportingRefreshPayload = QueueJobMeta & {
+type ReportingRefreshPayload = QueueJobMeta & AiTaskContext & {
   trigger: string;
   sourceImportBatchId?: string | null;
 };
-type EcotrackSyncPayload = QueueJobMeta & {
+type EcotrackSyncPayload = QueueJobMeta & AiTaskContext & {
   trigger: string;
   actor?: {
     email?: string | null;
     name?: string | null;
   };
 };
-type EcotrackShipmentSyncPayload = QueueJobMeta & {
+type EcotrackShipmentSyncPayload = QueueJobMeta & AiTaskContext & {
   trigger: string;
   actor?: {
     email?: string | null;
@@ -118,10 +137,19 @@ type EcotrackShipmentSyncPayload = QueueJobMeta & {
 type AnalyticsPayload = {
   event: ReturnType<typeof storefrontAnalyticsEventSchema.parse>;
 };
-type AiContentPayload = QueueJobMeta & {
+export type AiContentPayload = QueueJobMeta & AiTaskContext & {
   productIds: number[] | null;
   fields: Array<'title' | 'titleAr' | 'description' | 'descriptionAr'>;
   onlyMissing: boolean;
+  autoApply: boolean;
+  context?: string;
+  actor: { email?: string | null; name?: string | null };
+};
+export type AiCategorizationPayload = QueueJobMeta & AiTaskContext & {
+  scope: 'all_active' | 'uncategorized';
+  confidenceThreshold: number;
+  batchSize: number;
+  autoApply: boolean;
   context?: string;
   actor: { email?: string | null; name?: string | null };
 };
@@ -137,21 +165,74 @@ export async function startAiContentJob(ownerKey: string, payload: Omit<AiConten
   return { kind: result.kind, job: toClientJob(result.job) };
 }
 
+type AiContentProduct = {
+  id: number;
+  title: string;
+  titleAr: string | null;
+  description: string | null;
+  descriptionAr: string | null;
+};
+
+export type AiContentJobDependencies = {
+  listProducts: (payload: AiContentPayload) => Promise<AiContentProduct[]>;
+  listPendingProductIds: () => Promise<Set<number>>;
+  propose: (input: {
+    productId: number;
+    fields: AiContentPayload['fields'];
+    context?: string;
+    actorId?: string | null;
+  }) => Promise<{ id: number }>;
+  applyProposal: (
+    proposalId: number,
+    actor: AiContentPayload['actor'],
+  ) => Promise<{ status: 'applied'; verified: true }>;
+};
+
+function createAiContentJobDependencies(): AiContentJobDependencies {
+  return {
+    listProducts: async (payload) => getDb().select({
+      id: products.id, title: products.title, titleAr: products.titleAr,
+      description: products.description, descriptionAr: products.descriptionAr,
+    }).from(products).where(and(
+      eq(products.active, true),
+      payload.productIds?.length ? inArray(products.id, payload.productIds) : undefined,
+    )).orderBy(asc(products.id)),
+    listPendingProductIds: async () => new Set((await getDb().select({ id: aiProposals.entityId })
+      .from(aiProposals)
+      .where(and(
+        eq(aiProposals.proposalType, 'product_content'),
+        eq(aiProposals.entityType, 'products'),
+        eq(aiProposals.status, 'proposed'),
+        gt(aiProposals.expiresAt, new Date()),
+      ))).flatMap((row) => row.id === null ? [] : [row.id])),
+    propose: async (input) => proposeProductContent({
+      productId: input.productId,
+      fields: input.fields,
+      adminContext: input.context,
+      actorId: input.actorId,
+    }),
+    applyProposal: async (proposalId, actor) => {
+      const result = await reviewProductContentProposal({
+        proposalId,
+        action: 'approve',
+        actor,
+      });
+      if (result.status !== 'applied' || result.verified !== true) {
+        throw new Error('Product content proposal application was not verified.');
+      }
+      return result;
+    },
+  };
+}
+
 export async function runAiContentJob(payload: AiContentPayload, helpers: {
   updateProgress: (progress: { phase: string; current: number; total: number }) => Promise<void>;
   updateSummary: (summary: Record<string, unknown>) => Promise<void>;
   throwIfCancelled: () => Promise<void>;
-}) {
-  const db = getDb();
-  const rows = await db.select({
-    id: products.id, title: products.title, titleAr: products.titleAr,
-    description: products.description, descriptionAr: products.descriptionAr,
-  }).from(products).where(and(
-    eq(products.active, true),
-    payload.productIds?.length ? inArray(products.id, payload.productIds) : undefined,
-  )).orderBy(asc(products.id));
-  let proposed = 0;
-  let skipped = 0;
+}, dependencies: AiContentJobDependencies = createAiContentJobDependencies()) {
+  const rows = await dependencies.listProducts(payload);
+  const pendingProductIds = await dependencies.listPendingProductIds();
+  const counters = { processed: 0, proposed: 0, applied: 0, skipped: 0, alreadyProposed: 0, failed: 0 };
   const failures: number[] = [];
   for (let index = 0; index < rows.length; index += 1) {
     await helpers.throwIfCancelled();
@@ -159,20 +240,264 @@ export async function runAiContentJob(payload: AiContentPayload, helpers: {
     const fields = payload.onlyMissing
       ? payload.fields.filter((field) => !product[field]?.trim())
       : payload.fields;
-    if (fields.length === 0) {
-      skipped += 1;
+    if (pendingProductIds.has(product.id)) {
+      counters.alreadyProposed += 1;
+    } else if (fields.length === 0) {
+      counters.skipped += 1;
     } else {
       try {
-        await proposeProductContent({ productId: product.id, fields, adminContext: payload.context, actorId: payload.actor.email });
-        proposed += 1;
+        const proposal = await dependencies.propose({
+          productId: product.id,
+          fields,
+          context: payload.context,
+          actorId: payload.actor.email,
+        });
+        pendingProductIds.add(product.id);
+        if (payload.autoApply) {
+          try {
+            await dependencies.applyProposal(proposal.id, payload.actor);
+            counters.applied += 1;
+          } catch {
+            counters.proposed += 1;
+          }
+        } else {
+          counters.proposed += 1;
+        }
       } catch {
+        counters.failed += 1;
         failures.push(product.id);
       }
     }
-    await helpers.updateProgress({ phase: 'generating-proposals', current: index + 1, total: rows.length });
+    counters.processed += 1;
+    await helpers.updateProgress({ phase: 'generating-proposals', current: counters.processed, total: rows.length });
+    await helpers.updateSummary({ ...counters, total: rows.length });
   }
-  const summary = { proposed, skipped, failed: failures.length, failedProductIds: failures.slice(0, 100) };
+  const accounted = counters.proposed + counters.applied + counters.skipped + counters.alreadyProposed + counters.failed;
+  const summary = {
+    ...counters,
+    total: rows.length,
+    accounted,
+    complete: counters.processed === rows.length && accounted === rows.length,
+    failedProductIds: failures.slice(0, 100),
+  };
   await helpers.updateSummary(summary);
+  if (!summary.complete) {
+    throw new Error(`Product content generation stopped after ${counters.processed} of ${rows.length} products.`);
+  }
+  return summary;
+}
+
+export async function startAiCategorizationJob(ownerKey: string, payload: Omit<AiCategorizationPayload, keyof QueueJobMeta>, requestId?: string) {
+  const result = await startOwnedJob<AiCategorizationPayload>({
+    queueName: ADMIN_AI_CATEGORIZATION_QUEUE,
+    kind: 'ai-product-categorization',
+    ownerKey,
+    requestId,
+    activeScope: 'global',
+    data: payload as AiCategorizationPayload,
+  });
+  return { kind: result.kind, job: toClientJob(result.job) };
+}
+
+type CategorizationProduct = {
+  id: number;
+  title: string;
+  description: string | null;
+  sku: string | null;
+  brand: string | null;
+  categoryId: number | null;
+  category: string | null;
+};
+type CategorizationCategory = {
+  id: number;
+  name: string;
+  nameAr: string | null;
+  parentId: number | null;
+  parentName: string | null;
+};
+
+export type AiCategorizationDependencies = {
+  classifier: ProductCategorizationClassifier;
+  listCategories: () => Promise<CategorizationCategory[]>;
+  countProducts: (scope: AiCategorizationPayload['scope']) => Promise<number>;
+  listProductsAfter: (scope: AiCategorizationPayload['scope'], lastId: number, limit: number) => Promise<CategorizationProduct[]>;
+  listPendingProductIds: () => Promise<Set<number>>;
+  proposeCategory: (input: {
+    productId: number;
+    categoryId: number;
+    reasoning: string;
+    model: string;
+    usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+    actorId?: string | null;
+  }) => Promise<{ id: number }>;
+  applyProposal: (proposalId: number, actor: AiCategorizationPayload['actor']) => Promise<unknown>;
+};
+
+function createAiCategorizationDependencies(): AiCategorizationDependencies {
+  const db = getDb();
+  return {
+    classifier: createProductCategorizationClassifier(),
+    async listCategories() {
+      const rows = await db.select({
+        id: categories.id,
+        name: categories.name,
+        nameAr: categories.nameAr,
+        parentId: categories.parentId,
+      }).from(categories).where(eq(categories.isActive, true)).orderBy(asc(categories.id));
+      const names = new Map(rows.map((row) => [row.id, row.name]));
+      return rows.map((row) => ({ ...row, parentName: row.parentId ? names.get(row.parentId) ?? null : null }));
+    },
+    async countProducts(scope) {
+      const [{ value }] = await db.select({ value: count() }).from(products).where(and(
+        eq(products.active, true),
+        scope === 'uncategorized' ? isNull(products.categoryId) : undefined,
+      ));
+      return value;
+    },
+    listProductsAfter: (scope, lastId, limit) => db.select({
+      id: products.id,
+      title: products.title,
+      description: products.description,
+      sku: products.sku,
+      brand: brands.name,
+      categoryId: products.categoryId,
+      category: categories.name,
+    }).from(products)
+      .leftJoin(brands, eq(products.brandId, brands.id))
+      .leftJoin(categories, eq(products.categoryId, categories.id))
+      .where(and(
+        eq(products.active, true),
+        scope === 'uncategorized' ? isNull(products.categoryId) : undefined,
+        gt(products.id, lastId),
+      ))
+      .orderBy(asc(products.id))
+      .limit(limit),
+    async listPendingProductIds() {
+      const rows = await db.select({ entityId: aiProposals.entityId, payload: aiProposals.payload })
+        .from(aiProposals)
+        .where(and(
+          eq(aiProposals.entityType, 'products'),
+          eq(aiProposals.proposalType, 'entity_edit'),
+          eq(aiProposals.status, 'proposed'),
+          gt(aiProposals.expiresAt, new Date()),
+        ));
+      return new Set(rows.flatMap((row) => {
+        const changes = (row.payload as { changes?: unknown })?.changes;
+        return changes && typeof changes === 'object' && 'categoryId' in changes ? [row.entityId] : [];
+      }));
+    },
+    proposeCategory: (input) => proposeEntityEdit({
+      entityType: 'products',
+      entityId: input.productId,
+      changes: { categoryId: input.categoryId },
+      actorId: input.actorId,
+      reasoning: input.reasoning,
+      model: input.model,
+      promptVersion: PRODUCT_CATEGORIZATION_PROMPT_VERSION,
+      usage: input.usage,
+    }),
+    applyProposal: (proposalId, actor) => reviewAdminProposal({
+      proposalId,
+      action: 'approve',
+      actorId: actor.email,
+      actorName: actor.name,
+    }),
+  };
+}
+
+export async function runAiCategorizationJob(
+  payload: AiCategorizationPayload,
+  helpers: {
+    updateProgress: (progress: { phase: string; current: number; total: number }) => Promise<void>;
+    updateSummary: (summary: Record<string, unknown>) => Promise<void>;
+    throwIfCancelled: () => Promise<void>;
+  },
+  dependencies: AiCategorizationDependencies = createAiCategorizationDependencies(),
+) {
+  const categories = await dependencies.listCategories();
+  if (categories.length === 0) throw new Error('No active categories are available for catalog categorization.');
+  const categoryIds = new Set(categories.map((category) => category.id));
+  const total = await dependencies.countProducts(payload.scope);
+  const pendingProductIds = await dependencies.listPendingProductIds();
+  const counters = { processed: 0, proposed: 0, applied: 0, unchanged: 0, ambiguous: 0, alreadyProposed: 0, failed: 0 };
+  const ambiguousProductIds: number[] = [];
+  const failedProductIds: number[] = [];
+  let lastId = 0;
+
+  while (counters.processed < total) {
+    await helpers.throwIfCancelled();
+    const page = await dependencies.listProductsAfter(payload.scope, lastId, payload.batchSize);
+    if (page.length === 0) break;
+    for (const product of page) {
+      await helpers.throwIfCancelled();
+      lastId = product.id;
+      if (pendingProductIds.has(product.id)) {
+        counters.alreadyProposed += 1;
+      } else {
+        try {
+          const result = await dependencies.classifier.classify({
+            product: {
+              id: product.id,
+              title: product.title,
+              description: product.description?.slice(0, 12_000) ?? null,
+              brand: product.brand,
+              sku: product.sku,
+              currentCategoryId: product.categoryId,
+              currentCategory: product.category,
+            },
+            categories,
+            adminContext: payload.context,
+          });
+          const decision = result.decision;
+          if (decision.ambiguous || decision.categoryId === null || !categoryIds.has(decision.categoryId) || decision.confidence < payload.confidenceThreshold) {
+            counters.ambiguous += 1;
+            if (ambiguousProductIds.length < 100) ambiguousProductIds.push(product.id);
+          } else if (decision.categoryId === product.categoryId) {
+            counters.unchanged += 1;
+          } else {
+            const proposal = await dependencies.proposeCategory({
+              productId: product.id,
+              categoryId: decision.categoryId,
+              reasoning: `${decision.reasoning} Confidence: ${(decision.confidence * 100).toFixed(1)}%.`,
+              model: result.model,
+              usage: result.usage,
+              actorId: payload.actor.email,
+            });
+            pendingProductIds.add(product.id);
+            if (payload.autoApply) {
+              try {
+                await dependencies.applyProposal(proposal.id, payload.actor);
+                counters.applied += 1;
+              } catch {
+                counters.proposed += 1;
+              }
+            } else {
+              counters.proposed += 1;
+            }
+          }
+        } catch {
+          counters.failed += 1;
+          if (failedProductIds.length < 100) failedProductIds.push(product.id);
+        }
+      }
+      counters.processed += 1;
+      await helpers.updateProgress({ phase: 'classifying-products', current: counters.processed, total });
+    }
+    await helpers.updateSummary({ ...counters, total, lastProductId: lastId });
+  }
+
+  const accounted = counters.proposed + counters.applied + counters.unchanged + counters.ambiguous + counters.alreadyProposed + counters.failed;
+  const summary = {
+    ...counters,
+    total,
+    accounted,
+    complete: counters.processed === total && accounted === total,
+    lastProductId: lastId,
+    ambiguousProductIds,
+    failedProductIds,
+  };
+  await helpers.updateSummary(summary);
+  if (!summary.complete) throw new Error(`Catalog categorization stopped after ${counters.processed} of ${total} products.`);
   return summary;
 }
 
@@ -191,6 +516,8 @@ function toClientJob(snapshot: JobSnapshot | null, fileName: string | null = nul
 
   return {
     id: snapshot.id,
+    queue: snapshot.queue,
+    kind: snapshot.kind,
     status: snapshot.status,
     fileName: summaryFileName ?? null,
     progress: snapshot.progress,
@@ -208,13 +535,25 @@ export async function cancelExportJob(queueName: string, ownerKey: string) {
   return toClientJob(await requestJobCancellation(queueName, ownerKey));
 }
 
-export async function startProductExportJob(ownerKey: string, requestId?: string) {
+export async function getBackgroundJob(queueName: string, jobId: string) {
+  return toClientJob(await getJobSnapshot(queueName, jobId));
+}
+
+export async function listRecentBackgroundJobs(queueNames: readonly string[], limit = 50) {
+  return (await listRecentJobSnapshots(queueNames, limit)).map((snapshot) => toClientJob(snapshot)!);
+}
+
+export async function cancelBackgroundJob(queueName: string, jobId: string) {
+  return toClientJob(await requestJobCancellationById(queueName, jobId));
+}
+
+export async function startProductExportJob(ownerKey: string, requestId?: string, taskContext: AiTaskContext = {}) {
   const result = await startOwnedJob<ProductExportPayload>({
     queueName: ADMIN_PRODUCT_EXPORT_QUEUE,
     kind: 'product-export',
     ownerKey,
     requestId,
-    data: {} as ProductExportPayload,
+    data: { ...taskContext } as ProductExportPayload,
     activeScope: 'global',
   });
 
@@ -233,7 +572,7 @@ function getProductCatalogFeedDebounceMs() {
   return Number.isFinite(configured) && configured >= 0 ? configured : 120_000;
 }
 
-export async function startProductCatalogFeedRefreshJob(trigger: string, requestId?: string) {
+export async function startProductCatalogFeedRefreshJob(trigger: string, requestId?: string, taskContext: AiTaskContext = {}) {
   const latest = await getLatestOwnedJob(ADMIN_PRODUCT_CATALOG_FEED_QUEUE, PRODUCT_CATALOG_FEED_OWNER_KEY);
   if (latest) {
     const isActive = latest.status === 'queued' || latest.status === 'running';
@@ -252,7 +591,7 @@ export async function startProductCatalogFeedRefreshJob(trigger: string, request
     kind: 'product-catalog-feed-refresh',
     ownerKey: PRODUCT_CATALOG_FEED_OWNER_KEY,
     requestId,
-    data: { trigger } as ProductCatalogFeedPayload,
+    data: { trigger, ...taskContext } as ProductCatalogFeedPayload,
     activeScope: 'global',
   });
 
@@ -262,13 +601,13 @@ export async function startProductCatalogFeedRefreshJob(trigger: string, request
   };
 }
 
-export async function startOrderExportJob(ownerKey: string, payload: { mode: 'selected' | 'confirmed'; orderIds: number[] }, requestId?: string) {
+export async function startOrderExportJob(ownerKey: string, payload: { mode: 'selected' | 'confirmed'; orderIds: number[] }, requestId?: string, taskContext: AiTaskContext = {}) {
   const result = await startOwnedJob<OrderExportPayload>({
     queueName: ADMIN_ORDER_EXPORT_QUEUE,
     kind: `order-export:${payload.mode}`,
     ownerKey,
     requestId,
-    data: payload as OrderExportPayload,
+    data: { ...payload, ...taskContext } as OrderExportPayload,
   });
 
   return {
@@ -281,13 +620,14 @@ export async function startOrderEcotrackJob(
   ownerKey: string,
   payload: { mode: 'selected' | 'confirmed'; provider?: EcotrackProvider; orderIds: number[]; actor: { email?: string | null; name?: string | null } },
   requestId?: string,
+  taskContext: AiTaskContext = {},
 ) {
   const result = await startOwnedJob<OrderEcotrackPayload>({
     queueName: ADMIN_ORDER_ECOTRACK_QUEUE,
     kind: `order-ecotrack:${payload.mode}`,
     ownerKey,
     requestId,
-    data: payload as OrderEcotrackPayload,
+    data: { ...payload, ...taskContext } as OrderEcotrackPayload,
     activeScope: 'global',
   });
 
@@ -329,7 +669,12 @@ export async function startAdCostsImportJob(ownerKey: string, payload: { fileNam
   });
 }
 
-export async function startAdminReportingRefreshJob(trigger: string, sourceImportBatchId?: string | null, requestId?: string) {
+export async function startAdminReportingRefreshJob(
+  trigger: string,
+  sourceImportBatchId?: string | null,
+  requestId?: string,
+  taskContext: AiTaskContext = {},
+) {
   const result = await startOwnedJob<ReportingRefreshPayload>({
     queueName: ADMIN_REPORTING_REFRESH_QUEUE,
     kind: 'admin-reporting-refresh',
@@ -339,6 +684,7 @@ export async function startAdminReportingRefreshJob(trigger: string, sourceImpor
     data: {
       trigger,
       sourceImportBatchId: sourceImportBatchId ?? null,
+      ...taskContext,
     } as ReportingRefreshPayload,
   });
 
@@ -364,13 +710,14 @@ export async function startEcotrackSyncJob(
   trigger: string,
   actor?: { email?: string | null; name?: string | null },
   requestId?: string,
+  taskContext: AiTaskContext = {},
 ) {
   return startOwnedJob<EcotrackSyncPayload>({
     queueName: ADMIN_ECOTRACK_SYNC_QUEUE,
     kind: 'ecotrack-sync',
     ownerKey,
     requestId,
-    data: { trigger, actor } as EcotrackSyncPayload,
+    data: { trigger, actor, ...taskContext } as EcotrackSyncPayload,
     activeScope: 'global',
   });
 }
@@ -380,13 +727,14 @@ export async function startEcotrackShipmentSyncJob(
   trigger: string,
   actor?: { email?: string | null; name?: string | null },
   requestId?: string,
+  taskContext: AiTaskContext = {},
 ) {
   return startOwnedJob<EcotrackShipmentSyncPayload>({
     queueName: ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE,
     kind: 'ecotrack-shipment-sync',
     ownerKey,
     requestId,
-    data: { trigger, actor } as EcotrackShipmentSyncPayload,
+    data: { trigger, actor, ...taskContext } as EcotrackShipmentSyncPayload,
     activeScope: 'global',
   });
 }

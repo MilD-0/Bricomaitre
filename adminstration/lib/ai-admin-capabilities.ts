@@ -9,15 +9,52 @@ import {
 } from '../db/schema';
 import { buildDefaultLandingPageDocument, landingPageSlugFromProduct } from './landing-pages';
 import { createLandingPageGenerator, generateLandingPageDraft, LANDING_PAGE_PROMPT_VERSION, type LandingPageGenerator } from './ai-landing-page';
+import { resolveBrandSlug, resolveCategorySlug } from './brands-categories-api';
+import { persistedProposalValuesMatch } from './ai-proposal-verification';
 import { slugify } from './slug';
 
-const EDIT_FIELDS = {
+export const AI_CATALOG_EDIT_FIELDS = {
   products: z.object({ title: z.string().trim().min(1).max(240).optional(), titleAr: z.string().trim().max(240).nullable().optional(), description: z.string().trim().max(20_000).nullable().optional(), descriptionAr: z.string().trim().max(20_000).nullable().optional(), active: z.boolean().optional(), inStock: z.boolean().optional(), brandId: z.number().int().positive().nullable().optional(), categoryId: z.number().int().positive().nullable().optional() }).strict(),
-  brands: z.object({ name: z.string().trim().min(1).max(120).optional(), isActive: z.boolean().optional(), featured: z.boolean().optional() }).strict(),
-  categories: z.object({ name: z.string().trim().min(1).max(120).optional(), nameAr: z.string().trim().max(120).nullable().optional(), isActive: z.boolean().optional(), featured: z.boolean().optional(), parentId: z.number().int().positive().nullable().optional() }).strict(),
+  brands: z.object({ name: z.string().trim().min(1).max(120).optional(), image: z.url().nullable().optional(), isActive: z.boolean().optional(), featured: z.boolean().optional() }).strict(),
+  categories: z.object({ name: z.string().trim().min(1).max(120).optional(), nameEn: z.string().trim().max(120).nullable().optional(), nameAr: z.string().trim().max(120).nullable().optional(), image: z.url().nullable().optional(), isActive: z.boolean().optional(), featured: z.boolean().optional(), parentId: z.number().int().positive().nullable().optional() }).strict(),
 };
-export type EditableEntity = keyof typeof EDIT_FIELDS;
+export const AI_TAXONOMY_CREATE_FIELDS = {
+  brands: z.object({ name: z.string().trim().min(1).max(120), image: z.url().nullable().optional(), featured: z.boolean().optional().default(false) }).strict(),
+  categories: z.object({ name: z.string().trim().min(1).max(120), nameEn: z.string().trim().max(120).nullable().optional(), nameAr: z.string().trim().max(120).nullable().optional(), image: z.url().nullable().optional(), featured: z.boolean().optional().default(false), parentId: z.number().int().positive().nullable().optional() }).strict(),
+};
+export type EditableEntity = keyof typeof AI_CATALOG_EDIT_FIELDS;
+export type CreatableTaxonomyEntity = keyof typeof AI_TAXONOMY_CREATE_FIELDS;
 export class AiAdminCapabilityError extends Error {}
+
+function requirePersistedProposalValues(
+  persisted: Record<string, unknown> | null | undefined,
+  expected: Record<string, unknown>,
+) {
+  if (!persistedProposalValuesMatch(persisted, expected)) {
+    throw new AiAdminCapabilityError('The approved change could not be verified in the database. Nothing was marked as applied.');
+  }
+}
+
+export function buildTaxonomyCreateValues(input: {
+  entityType: CreatableTaxonomyEntity;
+  values: unknown;
+  slug: string;
+  actorId?: string | null;
+  actorName?: string | null;
+}) {
+  const values = input.entityType === 'brands'
+    ? AI_TAXONOMY_CREATE_FIELDS.brands.parse(input.values)
+    : AI_TAXONOMY_CREATE_FIELDS.categories.parse(input.values);
+  return {
+    ...values,
+    slug: input.slug,
+    isActive: false as const,
+    createdBy: input.actorId ?? null,
+    createdByName: input.actorName ?? null,
+    updatedBy: input.actorId ?? null,
+    updatedByName: input.actorName ?? null,
+  };
+}
 
 async function createProposal(input: { task: string; type: string; entityType: string; entityId: number; sourceUpdatedAt?: Date | null; payload: unknown; reasoning: string; actorId?: string | null; model?: string; promptVersion?: string; usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } }) {
   const db = getDb();
@@ -114,17 +151,67 @@ export async function proposeBundle(input: { title: string; titleAr?: string; co
   return createProposal({ task: 'bundle_suggestion', type: 'bundle_listing', entityType: 'bundle_listings', entityId: 0, actorId: input.actorId, reasoning: `New bundle listing priced with at least ${(margin * 100).toFixed(1)}% gross margin and compared with component retail total.`, payload: { title: input.title, titleAr: input.titleAr ?? null, components: input.components.map((item) => ({ ...item, unitPurchasePriceSnapshot: byId.get(item.productId)!.purchasePrice })), totalPurchaseCost: cost.toFixed(2), componentRetailTotal: retail.toFixed(2), price: suggestedPrice.toFixed(2), minimumGrossMargin: margin, defaultMinimumGrossMargin: defaultMargin, belowDefaultMargin: margin < defaultMargin } });
 }
 
-export async function proposeEntityEdit(input: { entityType: EditableEntity; entityId: number; changes: unknown; actorId?: string | null }) {
-  const changes = EDIT_FIELDS[input.entityType].parse(input.changes);
+export async function proposeEntityEdit(input: {
+  entityType: EditableEntity;
+  entityId: number;
+  changes: unknown;
+  actorId?: string | null;
+  reasoning?: string;
+  model?: string;
+  promptVersion?: string;
+  usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+}) {
+  const changes = input.entityType === 'products'
+    ? AI_CATALOG_EDIT_FIELDS.products.parse(input.changes)
+    : input.entityType === 'brands'
+      ? AI_CATALOG_EDIT_FIELDS.brands.parse(input.changes)
+      : AI_CATALOG_EDIT_FIELDS.categories.parse(input.changes);
   if (!Object.keys(changes).length) throw new AiAdminCapabilityError('At least one supported field must change.');
   const db = getDb();
   const table = input.entityType === 'products' ? products : input.entityType === 'brands' ? brands : categories;
   const [entity] = await db.select().from(table as typeof products).where(eq((table as typeof products).id, input.entityId)).limit(1);
   if (!entity) throw new AiAdminCapabilityError('Entity not found.');
-  return createProposal({ task: 'catalog_entity_edit', type: 'entity_edit', entityType: input.entityType, entityId: input.entityId, sourceUpdatedAt: entity.updatedAt, actorId: input.actorId, reasoning: `Reviewable ${input.entityType} field edit requested through admin chat.`, payload: { before: Object.fromEntries(Object.keys(changes).map((key) => [key, (entity as Record<string, unknown>)[key]])), changes } });
+  if (input.entityType === 'categories' && AI_CATALOG_EDIT_FIELDS.categories.parse(changes).parentId === input.entityId) throw new AiAdminCapabilityError('A category cannot be its own parent.');
+  if (persistedProposalValuesMatch(entity as Record<string, unknown>, changes)) throw new AiAdminCapabilityError('The requested edit does not change the current entity.');
+  return createProposal({
+    task: input.entityType === 'products' && 'categoryId' in changes ? 'product_categorization' : 'catalog_entity_edit',
+    type: 'entity_edit',
+    entityType: input.entityType,
+    entityId: input.entityId,
+    sourceUpdatedAt: entity.updatedAt,
+    actorId: input.actorId,
+    reasoning: input.reasoning ?? `Reviewable ${input.entityType} field edit requested through admin chat.`,
+    model: input.model,
+    promptVersion: input.promptVersion,
+    usage: input.usage,
+    payload: { before: Object.fromEntries(Object.keys(changes).map((key) => [key, (entity as Record<string, unknown>)[key]])), changes },
+  });
 }
 
-export async function reviewAdminProposal(input: { proposalId: number; action: 'approve' | 'reject'; actorId?: string | null }) {
+export async function proposeTaxonomyCreate(input: { entityType: CreatableTaxonomyEntity; values: unknown; actorId?: string | null }) {
+  const values = input.entityType === 'brands'
+    ? AI_TAXONOMY_CREATE_FIELDS.brands.parse(input.values)
+    : AI_TAXONOMY_CREATE_FIELDS.categories.parse(input.values);
+  const db = getDb();
+  const parentId = input.entityType === 'categories'
+    ? AI_TAXONOMY_CREATE_FIELDS.categories.parse(values).parentId
+    : null;
+  if (parentId != null) {
+    const [parent] = await db.select({ id: categories.id }).from(categories).where(eq(categories.id, parentId)).limit(1);
+    if (!parent) throw new AiAdminCapabilityError('Parent category not found.');
+  }
+  return createProposal({
+    task: 'catalog_taxonomy_create',
+    type: 'entity_create',
+    entityType: input.entityType,
+    entityId: 0,
+    actorId: input.actorId,
+    reasoning: `Reviewable inactive ${input.entityType === 'brands' ? 'brand' : 'category'} creation requested through admin chat.`,
+    payload: { values },
+  });
+}
+
+export async function reviewAdminProposal(input: { proposalId: number; action: 'approve' | 'reject'; actorId?: string | null; actorName?: string | null }) {
   const db = getDb();
   return db.transaction(async (tx) => {
     const [proposal] = await tx.select().from(aiProposals).where(and(eq(aiProposals.id, input.proposalId), eq(aiProposals.status, 'proposed'))).limit(1);
@@ -136,24 +223,77 @@ export async function reviewAdminProposal(input: { proposalId: number; action: '
       const table = proposal.entityType === 'products' ? products : proposal.entityType === 'brands' ? brands : proposal.entityType === 'categories' ? categories : null;
       if (table) { const [current] = await tx.select({ updatedAt: table.updatedAt }).from(table).where(eq(table.id, proposal.entityId)).limit(1); if (!current || current.updatedAt.getTime() !== proposal.sourceUpdatedAt.getTime()) throw new AiAdminCapabilityError('Proposal is stale. Generate it again.'); }
     }
-    if (proposal.proposalType === 'product_discount') await tx.update(products).set({ ...payload.changes, updatedAt: new Date() }).where(eq(products.id, proposal.entityId));
-    else if (proposal.proposalType === 'entity_edit') {
-      if (proposal.entityType === 'products') await tx.update(products).set({ ...EDIT_FIELDS.products.parse(payload.changes), updatedAt: new Date() }).where(eq(products.id, proposal.entityId));
-      else if (proposal.entityType === 'brands') await tx.update(brands).set({ ...EDIT_FIELDS.brands.parse(payload.changes), updatedAt: new Date() }).where(eq(brands.id, proposal.entityId));
-      else if (proposal.entityType === 'categories') await tx.update(categories).set({ ...EDIT_FIELDS.categories.parse(payload.changes), updatedAt: new Date() }).where(eq(categories.id, proposal.entityId));
+    if (proposal.proposalType === 'product_discount') {
+      const changes = z.object({ price: z.string(), oldPrice: z.string().nullable() }).strict().parse(payload.changes);
+      const [persisted] = await tx.update(products).set({ ...changes, updatedAt: new Date() }).where(eq(products.id, proposal.entityId)).returning();
+      requirePersistedProposalValues(persisted, changes);
+    } else if (proposal.proposalType === 'entity_edit') {
+      if (proposal.entityType === 'products') {
+        const changes = AI_CATALOG_EDIT_FIELDS.products.parse(payload.changes);
+        const [persisted] = await tx.update(products).set({ ...changes, updatedAt: new Date() }).where(eq(products.id, proposal.entityId)).returning();
+        requirePersistedProposalValues(persisted, changes);
+      } else if (proposal.entityType === 'brands') {
+        const changes = AI_CATALOG_EDIT_FIELDS.brands.parse(payload.changes);
+        const slug = changes.name === undefined ? undefined : await resolveBrandSlug(changes.name, proposal.entityId);
+        const [persisted] = await tx.update(brands).set({ ...changes, slug, updatedBy: input.actorId ?? null, updatedByName: input.actorName ?? null, updatedAt: new Date() }).where(eq(brands.id, proposal.entityId)).returning();
+        requirePersistedProposalValues(persisted, { ...changes, ...(slug === undefined ? {} : { slug }) });
+      } else if (proposal.entityType === 'categories') {
+        const changes = AI_CATALOG_EDIT_FIELDS.categories.parse(payload.changes);
+        if (changes.parentId === proposal.entityId) throw new AiAdminCapabilityError('A category cannot be its own parent.');
+        const slug = changes.name === undefined ? undefined : await resolveCategorySlug(changes.name, proposal.entityId);
+        const [persisted] = await tx.update(categories).set({ ...changes, slug, updatedBy: input.actorId ?? null, updatedByName: input.actorName ?? null, updatedAt: new Date() }).where(eq(categories.id, proposal.entityId)).returning();
+        requirePersistedProposalValues(persisted, { ...changes, ...(slug === undefined ? {} : { slug }) });
+      }
+    } else if (proposal.proposalType === 'entity_create') {
+      if (proposal.entityType === 'brands') {
+        const values = AI_TAXONOMY_CREATE_FIELDS.brands.parse(payload.values);
+        const slug = await resolveBrandSlug(values.name);
+        const expected = buildTaxonomyCreateValues({ entityType: 'brands', values, slug, actorId: input.actorId, actorName: input.actorName });
+        const [persisted] = await tx.insert(brands).values(expected).returning();
+        requirePersistedProposalValues(persisted, expected);
+      } else if (proposal.entityType === 'categories') {
+        const values = AI_TAXONOMY_CREATE_FIELDS.categories.parse(payload.values);
+        if (values.parentId != null) {
+          const [parent] = await tx.select({ id: categories.id }).from(categories).where(eq(categories.id, values.parentId)).limit(1);
+          if (!parent) throw new AiAdminCapabilityError('Parent category not found.');
+        }
+        const slug = await resolveCategorySlug(values.name);
+        const expected = buildTaxonomyCreateValues({ entityType: 'categories', values, slug, actorId: input.actorId, actorName: input.actorName });
+        const [persisted] = await tx.insert(categories).values(expected).returning();
+        requirePersistedProposalValues(persisted, expected);
+      } else throw new AiAdminCapabilityError('Unsupported taxonomy entity type.');
     } else if (proposal.proposalType === 'featured_products') {
-      const [group] = await tx.insert(featuredProductGroups).values({ name: String(payload.name), active: false }).returning({ id: featuredProductGroups.id });
-      await tx.insert(featuredProductGroupProducts).values((payload.productIds as number[]).map((productId) => ({ groupId: group.id, productId })));
+      const expectedGroup = { name: String(payload.name), active: false };
+      const [group] = await tx.insert(featuredProductGroups).values(expectedGroup).returning();
+      requirePersistedProposalValues(group, expectedGroup);
+      const productIds = z.array(z.number().int().positive()).min(1).parse(payload.productIds);
+      const persistedProducts = await tx.insert(featuredProductGroupProducts).values(productIds.map((productId) => ({ groupId: group.id, productId }))).returning();
+      const featuredProductsVerified = persistedProducts.length === productIds.length
+        && productIds.every((productId) => persistedProducts.some((row) => row.groupId === group.id && row.productId === productId));
+      if (!featuredProductsVerified) throw new AiAdminCapabilityError('The approved featured products could not be verified.');
     } else if (proposal.proposalType === 'bundle_listing') {
       const suffix = `${Date.now()}-${proposal.id}`;
-      const [product] = await tx.insert(products).values({ title: String(payload.title), titleAr: payload.titleAr, slug: `${slugify(String(payload.title))}-${suffix}`, price: String(payload.price), purchasePrice: String(payload.totalPurchaseCost), active: false, inStock: true, inventoryQuantity: 0 }).returning({ id: products.id });
-      const [bundle] = await tx.insert(bundleListings).values({ productId: product.id, active: false, createdBy: input.actorId ?? null }).returning({ id: bundleListings.id });
-      await tx.insert(bundleComponents).values((payload.components as Array<any>).map((item) => ({ bundleId: bundle.id, productId: item.productId, quantity: item.quantity, unitPurchasePriceSnapshot: item.unitPurchasePriceSnapshot })));
+      const expectedProduct = { title: String(payload.title), titleAr: payload.titleAr, slug: `${slugify(String(payload.title))}-${suffix}`, price: String(payload.price), purchasePrice: String(payload.totalPurchaseCost), active: false, inStock: true, inventoryQuantity: 0 };
+      const [product] = await tx.insert(products).values(expectedProduct).returning();
+      requirePersistedProposalValues(product, expectedProduct);
+      const expectedBundle = { productId: product.id, active: false, createdBy: input.actorId ?? null };
+      const [bundle] = await tx.insert(bundleListings).values(expectedBundle).returning();
+      requirePersistedProposalValues(bundle, expectedBundle);
+      const components = z.array(z.object({ productId: z.number().int().positive(), quantity: z.number().int().positive(), unitPurchasePriceSnapshot: z.string().nullable() })).min(2).parse(payload.components);
+      const persistedComponents = await tx.insert(bundleComponents).values(components.map((item) => ({ bundleId: bundle.id, ...item }))).returning();
+      const componentsVerified = persistedComponents.length === components.length
+        && components.every((component) => persistedComponents.some((row) => persistedProposalValuesMatch(row, { bundleId: bundle.id, ...component })));
+      if (!componentsVerified) throw new AiAdminCapabilityError('The approved bundle components could not be verified.');
     } else if (proposal.proposalType === 'landing_page') {
-      const [page] = await tx.insert(landingPages).values({ productId: Number(payload.productId), locale: payload.locale, slug: String(payload.slug), createdBy: input.actorId ?? null, updatedBy: input.actorId ?? null }).returning({ id: landingPages.id });
-      await tx.insert(landingPageRevisions).values({ landingPageId: page.id, revision: 1, document: payload.document, source: 'ai', createdBy: input.actorId ?? null });
+      const expectedPage = { productId: Number(payload.productId), locale: payload.locale, slug: String(payload.slug), createdBy: input.actorId ?? null, updatedBy: input.actorId ?? null };
+      const [page] = await tx.insert(landingPages).values(expectedPage).returning();
+      requirePersistedProposalValues(page, expectedPage);
+      const expectedRevision = { landingPageId: page.id, revision: 1, document: payload.document, source: 'ai', createdBy: input.actorId ?? null };
+      const [revision] = await tx.insert(landingPageRevisions).values(expectedRevision).returning();
+      requirePersistedProposalValues(revision, expectedRevision);
     } else throw new AiAdminCapabilityError('Unsupported proposal type.');
-    await tx.update(aiProposals).set({ status: 'applied', reviewedBy: input.actorId ?? null, reviewedAt: new Date(), appliedAt: new Date(), updatedAt: new Date() }).where(eq(aiProposals.id, proposal.id));
-    return { id: proposal.id, status: 'applied' as const, proposalType: proposal.proposalType };
+    const [applied] = await tx.update(aiProposals).set({ status: 'applied', reviewedBy: input.actorId ?? null, reviewedAt: new Date(), appliedAt: new Date(), updatedAt: new Date() }).where(and(eq(aiProposals.id, proposal.id), eq(aiProposals.status, 'proposed'))).returning({ id: aiProposals.id, status: aiProposals.status });
+    if (!applied || applied.status !== 'applied') throw new AiAdminCapabilityError('The proposal result could not be recorded after verification.');
+    return { id: proposal.id, status: 'applied' as const, verified: true as const, proposalType: proposal.proposalType };
   });
 }

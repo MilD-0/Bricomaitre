@@ -21,7 +21,7 @@ const catalog = {
 };
 
 describe('checkout domain', () => {
-  it('requires an address for home delivery while keeping other details optional', () => {
+  it('keeps the address optional for home and office delivery while validating other fields', () => {
     const form = {
       phoneNumber1: ' 0550 12 34 56 ',
       lastName: '',
@@ -38,7 +38,7 @@ describe('checkout domain', () => {
     expect(checkoutFormSchema.safeParse({ ...form, phoneNumber1: '1234567890' }).error?.issues[0]?.message).toBe('phone_invalid');
     expect(checkoutFormSchema.parse({ ...form, phoneNumber1: '+213 550 12 34 56' }).phoneNumber1).toBe('0550123456');
     expect(checkoutFormSchema.safeParse({ ...form, email: 'not-an-email' }).success).toBe(false);
-    expect(checkoutFormSchema.safeParse({ ...form, homeAddress: '', delivery: 'home' }).success).toBe(false);
+    expect(checkoutFormSchema.parse({ ...form, homeAddress: '', delivery: 'home' }).homeAddress).toBeNull();
     expect(checkoutFormSchema.safeParse({ ...form, homeAddress: '', delivery: 'office' }).success).toBe(true);
   });
 

@@ -1,27 +1,50 @@
-import { createAiLanguageModel, getAiConfig, productContentFieldSchema, resolveAiModel, semanticAnalyticsComparisonSchema, semanticAnalyticsQuerySchema } from '@bric/ai-core';
+import { createAiLanguageModel, getAiConfig, productContentFieldSchema, semanticAnalyticsComparisonSchema, semanticAnalyticsQuerySchema } from '@bric/ai-core';
 import { stepCountIs, streamText, tool } from 'ai';
 import { and, desc, eq, ilike, or } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getDb, hasDb } from '../../../../db/client';
-import { aiConversations, aiMessages, aiRuns, aiToolCalls, products } from '../../../../db/schema';
+import { aiConversations, aiMessages, aiRuns, aiToolCalls, brands, categories, products } from '../../../../db/schema';
 import { proposeProductContent } from '../../../../lib/ai-product-content';
 import { ADMIN_AI_CHAT_INSTRUCTIONS } from '../../../../lib/ai-admin-chat';
-import { proposeBundle, proposeDiscount, proposeEntityEdit, proposeFeaturedProducts, proposeLandingPage } from '../../../../lib/ai-admin-capabilities';
+import {
+  ADMIN_BACKGROUND_JOB_TYPES,
+  STARTABLE_ADMIN_BACKGROUND_JOB_TYPES,
+  cancelAdminBackgroundJob,
+  getAdminBackgroundJob,
+  listAdminBackgroundJobs,
+  startAdminBackgroundJob,
+} from '../../../../lib/ai-background-jobs';
+import { AI_CATALOG_EDIT_FIELDS, AI_TAXONOMY_CREATE_FIELDS, proposeBundle, proposeDiscount, proposeEntityEdit, proposeFeaturedProducts, proposeLandingPage, proposeTaxonomyCreate } from '../../../../lib/ai-admin-capabilities';
 import { executeSemanticAnalytics, executeSemanticAnalyticsComparison } from '../../../../lib/ai-semantic-analytics';
-import { startAiContentJob } from '../../../../lib/background-jobs';
+import { ADMIN_AI_CATEGORIZATION_QUEUE, ADMIN_AI_CONTENT_QUEUE, getLatestExportJob, startAiCategorizationJob, startAiContentJob } from '../../../../lib/background-jobs';
 import { auth } from '../../../../lib/auth';
 import { canViewProfitStats, hasPermission, normalizePermissions } from '../../../../lib/permissions';
 import { requireAiUseAccess } from '../../../../lib/rbac';
 import { adminAiChatStreamEventSchema, type AdminAiChatStreamEvent } from '../../../../lib/admin-ai-chat-stream';
+import {
+  ADMIN_AI_DEFAULT_MODEL,
+  ADMIN_AI_DEFAULT_REASONING_EFFORT,
+  adminAiModelIdSchema,
+  adminAiReasoningEffortSchema,
+  resolveAdminAiModel,
+  supportsAdminAiReasoningEffort,
+} from '../../../../lib/admin-ai-models';
 
 const requestSchema = z.object({
   message: z.string().trim().min(1).max(4_000),
   conversationKey: z.uuid(),
-});
+  autoAcceptProposals: z.boolean().optional().default(false),
+  model: adminAiModelIdSchema.optional().default(ADMIN_AI_DEFAULT_MODEL),
+  reasoningEffort: adminAiReasoningEffortSchema.optional().default(ADMIN_AI_DEFAULT_REASONING_EFFORT),
+}).refine(
+  (input) => supportsAdminAiReasoningEffort(input.model, input.reasoningEffort),
+  { message: 'The selected reasoning effort is not supported by this model.', path: ['reasoningEffort'] },
+);
 
-export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-v1';
+export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-v2';
+export const ADMIN_AI_INLINE_PRODUCT_LIMIT = 20;
 
 function storedMessageText(content: unknown) {
   if (typeof content === 'string') return content;
@@ -52,7 +75,11 @@ export async function POST(request: NextRequest) {
     const permissions = normalizePermissions(session?.user?.permissions);
     const db = getDb();
     const config = getAiConfig();
-    const model = resolveAiModel(config, 'admin');
+    if (config.provider !== 'openrouter') {
+      return NextResponse.json({ error: 'The admin AI model selector requires OpenRouter.' }, { status: 503 });
+    }
+    const selectedModel = resolveAdminAiModel(parsed.data.model, parsed.data.reasoningEffort);
+    const model = selectedModel.telemetryModel;
     const now = new Date();
     const title = conversationTitle(parsed.data.message);
     const [existingConversation] = await db.select({ id: aiConversations.id, title: aiConversations.title })
@@ -101,9 +128,13 @@ export async function POST(request: NextRequest) {
       // AI telemetry must never prevent the assistant from answering.
     }
     const result = streamText({
-      model: createAiLanguageModel(config, 'admin'),
+      model: createAiLanguageModel(config, 'admin', {
+        model: selectedModel.model,
+        openRouterRequestBody: selectedModel.openRouterRequestBody,
+      }),
       instructions: ADMIN_AI_CHAT_INSTRUCTIONS,
       messages: [...previousMessages, { role: 'user', content: parsed.data.message }],
+      abortSignal: request.signal,
       stopWhen: stepCountIs(6),
       tools: {
         find_products: tool({
@@ -114,17 +145,33 @@ export async function POST(request: NextRequest) {
             .where(and(eq(products.active, true), or(ilike(products.title, `%${query}%`), ilike(products.sku, `%${query}%`))))
             .limit(limit),
         }),
+        find_brands: tool({
+          description: 'Resolve a brand name to its ID before proposing brand edits or assigning products.',
+          inputSchema: z.object({ query: z.string().trim().min(1).max(200), limit: z.number().int().min(1).max(20).default(10) }),
+          execute: async ({ query, limit }) => db.select({ id: brands.id, name: brands.name, slug: brands.slug, isActive: brands.isActive, featured: brands.featured })
+            .from(brands)
+            .where(ilike(brands.name, `%${query}%`))
+            .limit(limit),
+        }),
+        find_categories: tool({
+          description: 'Resolve a category name to its ID and parent before proposing category edits, hierarchy changes, or assigning products.',
+          inputSchema: z.object({ query: z.string().trim().min(1).max(200), limit: z.number().int().min(1).max(20).default(10) }),
+          execute: async ({ query, limit }) => db.select({ id: categories.id, name: categories.name, nameAr: categories.nameAr, slug: categories.slug, parentId: categories.parentId, isActive: categories.isActive, featured: categories.featured })
+            .from(categories)
+            .where(or(ilike(categories.name, `%${query}%`), ilike(categories.nameAr, `%${query}%`)))
+            .limit(limit),
+        }),
         ...(hasPermission(permissions, 'ai_catalog_propose') ? { generate_product_content: tool({
-          description: 'Create reviewable product-content proposals for explicit products or every active product missing requested fields. Does not apply changes.',
+          description: 'Create reviewable product-content proposals. Explicit scopes of at most 20 products may run inline; any larger explicit scope and every catalog-wide missing-content scope runs as one resumable background job. Use all_missing for requests such as adding Arabic titles to every active product missing one.',
           inputSchema: z.object({
             scope: z.enum(['explicit', 'all_missing']),
-            productIds: z.array(z.number().int().positive()).max(100).default([]),
+            productIds: z.array(z.number().int().positive()).max(500).default([]),
             fields: z.array(productContentFieldSchema).min(1),
             context: z.string().trim().max(2_000).optional(),
           }),
           execute: async ({ scope, productIds, fields, context }) => {
             if (scope === 'explicit' && productIds.length === 0) return { error: 'At least one resolved product is required.' };
-            if (scope === 'explicit' && productIds.length <= 5) {
+            if (scope === 'explicit' && productIds.length <= ADMIN_AI_INLINE_PRODUCT_LIMIT) {
               const proposals = [];
               for (const productId of productIds) {
                 proposals.push(await proposeProductContent({ productId, fields, adminContext: context, actorId: actor.email }));
@@ -135,11 +182,20 @@ export async function POST(request: NextRequest) {
               productIds: scope === 'all_missing' ? null : productIds,
               fields,
               onlyMissing: scope === 'all_missing',
+              autoApply: parsed.data.autoAcceptProposals
+                && hasPermission(permissions, 'ai_catalog_apply')
+                && hasPermission(permissions, 'products_write'),
+              conversationId: conversation.id,
               context,
               actor,
             });
             return started;
           },
+        }),
+        get_product_content_job_status: tool({
+          description: 'Retrieve the current user’s latest AI product-content job status, progress, error, and reconciled result summary. Use this whenever the user asks to check a bulk title or description task.',
+          inputSchema: z.object({}),
+          execute: () => getLatestExportJob(ADMIN_AI_CONTENT_QUEUE, actor.email ?? 'unknown-admin'),
         }) } : {}),
         ...(hasPermission(permissions, 'ai_analytics_query') ? { query_analytics: tool({
           description: 'Run one read-only semantic analytics query over catalog, sales, orders, funnel, product/category/brand performance, inventory, promotions, bundles, or content gaps. Dates use YYYY-MM-DD. Raw SQL is never accepted.',
@@ -150,6 +206,44 @@ export async function POST(request: NextRequest) {
           inputSchema: semanticAnalyticsComparisonSchema,
           execute: (input) => executeSemanticAnalyticsComparison(input, { canViewProfit: canViewProfitStats(session?.user?.role) }),
         }) } : {}),
+        ...(hasPermission(permissions, 'settings_manage') ? {
+          list_background_jobs: tool({
+            description: 'List recent background jobs across every registered admin queue, including actual status, progress, errors, and result summaries. Use this for database-wide job inspection.',
+            inputSchema: z.object({ limit: z.number().int().min(1).max(100).default(30) }),
+            execute: ({ limit }) => listAdminBackgroundJobs(limit),
+          }),
+          get_background_job: tool({
+            description: 'Retrieve one exact background job by registered type and job ID. Use this to verify progress or completion instead of inferring from database changes.',
+            inputSchema: z.object({
+              type: z.enum(ADMIN_BACKGROUND_JOB_TYPES),
+              jobId: z.string().uuid(),
+            }),
+            execute: ({ type, jobId }) => getAdminBackgroundJob(type, jobId),
+          }),
+          start_background_job: tool({
+            description: 'Start an allowlisted operational background job only after the user explicitly requests it. Supported jobs are product export, catalog-feed refresh, order export, reporting refresh, Ecotrack catalog sync, and Ecotrack shipment sync. Starting a job is not completion.',
+            inputSchema: z.object({
+              type: z.enum(STARTABLE_ADMIN_BACKGROUND_JOB_TYPES),
+              orderMode: z.enum(['selected', 'confirmed']).optional(),
+              orderIds: z.array(z.number().int().positive()).max(500).optional(),
+            }),
+            execute: ({ type, orderMode, orderIds }) => startAdminBackgroundJob({
+              type,
+              orderMode,
+              orderIds,
+              conversationId: conversation.id,
+              actor: { email: actorId, name: actor.name },
+            }),
+          }),
+          stop_background_job: tool({
+            description: 'Request cooperative cancellation of one exact queued/running job after the user explicitly asks to stop it. The tool refuses job types whose workers cannot safely honor cancellation.',
+            inputSchema: z.object({
+              type: z.enum(ADMIN_BACKGROUND_JOB_TYPES),
+              jobId: z.string().uuid(),
+            }),
+            execute: ({ type, jobId }) => cancelAdminBackgroundJob(type, jobId),
+          }),
+        } : {}),
         ...(hasPermission(permissions, 'ai_pricing_analyze') ? {
           suggest_discount: tool({
             description: 'Create a reviewable margin-safe product discount proposal.',
@@ -172,11 +266,55 @@ export async function POST(request: NextRequest) {
           inputSchema: z.object({ productId: z.number().int().positive(), locale: z.enum(['fr', 'ar']), campaignAngle: z.string().trim().max(2_000).optional() }),
           execute: (input) => proposeLandingPage({ ...input, actorId: actor.email }),
         }) } : {}),
-        ...(hasPermission(permissions, 'ai_catalog_propose') ? { propose_entity_edit: tool({
-          description: 'Propose restricted field edits to a product, brand, or category. Never directly applies them.',
-          inputSchema: z.object({ entityType: z.enum(['products', 'brands', 'categories']), entityId: z.number().int().positive(), changes: z.record(z.string(), z.unknown()) }),
-          execute: (input) => proposeEntityEdit({ ...input, actorId: actor.email }),
-        }) } : {}),
+        ...(hasPermission(permissions, 'ai_catalog_propose') ? {
+          categorize_catalog: tool({
+            description: 'Start one resumable background job that classifies every in-scope active product against the complete active category taxonomy and creates reviewable category-change proposals. Use this instead of find_products when the user asks to categorize all or many products. Queuing the job is not completion and does not apply changes.',
+            inputSchema: z.object({
+              scope: z.enum(['all_active', 'uncategorized']).default('all_active'),
+              confidenceThreshold: z.number().min(0.5).max(0.99).default(0.75),
+              batchSize: z.number().int().min(1).max(100).default(25),
+              context: z.string().trim().max(2_000).optional(),
+            }),
+            execute: (input) => startAiCategorizationJob(actor.email ?? 'unknown-admin', {
+              ...input,
+              autoApply: parsed.data.autoAcceptProposals
+                && hasPermission(permissions, 'ai_catalog_apply')
+                && hasPermission(permissions, 'products_write'),
+              conversationId: conversation.id,
+              actor,
+            }),
+          }),
+          get_catalog_categorization_status: tool({
+            description: 'Retrieve the current user\'s latest catalog-categorization job status, progress, error, and reconciled result summary. Use this whenever the user asks to check, poll, or report the outcome of a catalog categorization job. A queued or running job is not complete.',
+            inputSchema: z.object({}),
+            execute: () => getLatestExportJob(ADMIN_AI_CATEGORIZATION_QUEUE, actor.email ?? 'unknown-admin'),
+          }),
+          propose_product_edit: tool({
+            description: 'Create a reviewable product edit for content, activation, stock status, brand assignment, or category assignment. Price and inventory quantity are protected by dedicated workflows.',
+            inputSchema: z.object({ productId: z.number().int().positive(), changes: AI_CATALOG_EDIT_FIELDS.products }),
+            execute: ({ productId, changes }) => proposeEntityEdit({ entityType: 'products', entityId: productId, changes, actorId: actor.email }),
+          }),
+          propose_brand_edit: tool({
+            description: 'Create a reviewable brand edit. Supports name, image, active/draft status, and featured status. Resolve the brand with find_brands first.',
+            inputSchema: z.object({ brandId: z.number().int().positive(), changes: AI_CATALOG_EDIT_FIELDS.brands }),
+            execute: ({ brandId, changes }) => proposeEntityEdit({ entityType: 'brands', entityId: brandId, changes, actorId: actor.email }),
+          }),
+          propose_category_edit: tool({
+            description: 'Create a reviewable category edit. Supports localized names, image, active/draft status, featured status, and parent hierarchy. Resolve the category and any parent with find_categories first.',
+            inputSchema: z.object({ categoryId: z.number().int().positive(), changes: AI_CATALOG_EDIT_FIELDS.categories }),
+            execute: ({ categoryId, changes }) => proposeEntityEdit({ entityType: 'categories', entityId: categoryId, changes, actorId: actor.email }),
+          }),
+          propose_brand_create: tool({
+            description: 'Create a reviewable proposal for a new brand. Approval creates it as an inactive draft.',
+            inputSchema: AI_TAXONOMY_CREATE_FIELDS.brands,
+            execute: (values) => proposeTaxonomyCreate({ entityType: 'brands', values, actorId: actor.email }),
+          }),
+          propose_category_create: tool({
+            description: 'Create a reviewable proposal for a new category. Resolve an optional parent with find_categories first. Approval creates it as an inactive draft.',
+            inputSchema: AI_TAXONOMY_CREATE_FIELDS.categories,
+            execute: (values) => proposeTaxonomyCreate({ entityType: 'categories', values, actorId: actor.email }),
+          }),
+        } : {}),
       },
     });
 
@@ -233,9 +371,14 @@ export async function POST(request: NextRequest) {
             });
           } catch (error) {
             if (runId !== null) {
-              await db.update(aiRuns).set({ status: 'failed', errorCode: error instanceof Error ? error.name : 'UnknownError', completedAt: new Date() }).where(eq(aiRuns.id, runId)).catch(() => undefined);
+              const cancelled = request.signal.aborted || error instanceof Error && error.name === 'AbortError';
+              await db.update(aiRuns).set({
+                status: cancelled ? 'cancelled' : 'failed',
+                errorCode: cancelled ? 'request_aborted' : error instanceof Error ? error.name : 'UnknownError',
+                completedAt: new Date(),
+              }).where(eq(aiRuns.id, runId)).catch(() => undefined);
             }
-            write({ type: 'error', code: 'admin_ai_failed' });
+            if (!request.signal.aborted) write({ type: 'error', code: 'admin_ai_failed' });
           } finally {
             controller.close();
           }
@@ -245,9 +388,10 @@ export async function POST(request: NextRequest) {
     return new NextResponse(responseStream, { headers: { 'cache-control': 'no-cache, no-transform', 'content-type': 'application/x-ndjson; charset=utf-8', 'x-accel-buffering': 'no' } });
   } catch (error) {
     if (runId !== null) {
+      const cancelled = request.signal.aborted || error instanceof Error && error.name === 'AbortError';
       await getDb().update(aiRuns).set({
-        status: 'failed',
-        errorCode: error instanceof Error ? error.name : 'UnknownError',
+        status: cancelled ? 'cancelled' : 'failed',
+        errorCode: cancelled ? 'request_aborted' : error instanceof Error ? error.name : 'UnknownError',
         completedAt: new Date(),
       }).where(eq(aiRuns.id, runId)).catch(() => undefined);
     }

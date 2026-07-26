@@ -9,6 +9,7 @@
     "./config": "./src/config.ts",
     "./product-knowledge": "./src/product-knowledge.ts",
     "./product-content": "./src/product-content.ts",
+    "./product-categorization": "./src/product-categorization.ts",
     "./testing": "./src/testing.ts",
     "./pricing": "./src/pricing.ts",
     "./analytics": "./src/analytics.ts"

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertAiConfigured, createAiLanguageModel, getAiConfig, resolveAiModel } from './config';
+import { assertAiConfigured, createAiLanguageModel, getAiConfig, mergeOpenRouterRequestBody, resolveAiModel } from './config';
 
 describe('AI configuration', () => {
   it('is disabled and credential-free by default', () => {
@@ -70,5 +70,21 @@ describe('AI configuration', () => {
   it('rejects unsupported providers and invalid OpenRouter URLs', () => {
     expect(() => getAiConfig({ AI_PROVIDER: 'other' })).toThrow();
     expect(() => getAiConfig({ AI_PROVIDER: 'openrouter', OPENROUTER_HTTP_REFERER: 'not-a-url' })).toThrow();
+  });
+
+  it('adds OpenRouter-specific reasoning and routing fields without replacing the generated request', () => {
+    expect(JSON.parse(mergeOpenRouterRequestBody(
+      JSON.stringify({ model: 'deepseek/deepseek-v4-flash', messages: [], stream: true }),
+      {
+        reasoning: { effort: 'xhigh' },
+        provider: { only: ['baidu/fp8'], allow_fallbacks: false },
+      },
+    ))).toEqual({
+      model: 'deepseek/deepseek-v4-flash',
+      messages: [],
+      stream: true,
+      reasoning: { effort: 'xhigh' },
+      provider: { only: ['baidu/fp8'], allow_fallbacks: false },
+    });
   });
 });
