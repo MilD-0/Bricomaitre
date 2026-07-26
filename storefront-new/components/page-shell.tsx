@@ -12,21 +12,23 @@ import { NavigationCategories } from '@/components/navigation-categories';
 import { ShoppingAssistantLauncher } from '@/components/shopping-assistant-launcher';
 import { isLocale, type Locale } from '@/i18n/config';
 import { getStorefrontSettings } from '@/lib/storefront-api';
-import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
+import { defaultStorefrontSettingsResponse, type StorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 type PageShellProps = {
   children: React.ReactNode;
   locale?: Locale;
+  contactSettings?: StorefrontSettingsResponse;
 };
 
-export async function PageShell({ children, locale: localeProp }: PageShellProps) {
+export async function PageShell({ children, locale: localeProp, contactSettings: contactSettingsProp }: PageShellProps) {
   const localeValue = localeProp ?? await getLocale();
   const locale = isLocale(localeValue) ? localeValue : 'fr';
   const alternateLocale = locale === 'fr' ? 'ar' : 'fr';
   const t = await getTranslations({ locale, namespace: 'Navigation' });
   const assistant = await getTranslations({ locale, namespace: 'ShoppingAssistant' });
   const alternateLabel = alternateLocale === 'ar' ? 'العربية' : 'Français';
-  const contactSettings = await getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse);
+  const contactSettings = contactSettingsProp
+    ?? await getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse);
 
   return (
     <div className="site-shell">
@@ -35,7 +37,15 @@ export async function PageShell({ children, locale: localeProp }: PageShellProps
         <div className="site-header-inner">
           <div className="site-header-primary">
             <a href={`/${locale}`} className="brand" aria-label={t('brandHome')} data-navigation-target="home">
-              <Image src={logo} alt="Bricomaitre" width={168} height={62} priority sizes="(max-width: 600px) 112px, 144px" />
+              <Image
+                src={logo}
+                alt="Bricomaitre"
+                width={168}
+                height={62}
+                loading="eager"
+                fetchPriority="high"
+                sizes="(max-width: 600px) 112px, 144px"
+              />
             </a>
             <div className="site-header-search">
               <GlobalSearch
@@ -90,7 +100,15 @@ export async function PageShell({ children, locale: localeProp }: PageShellProps
         <div className="site-footer-main">
           <div className="site-footer-brand">
             <a href={`/${locale}`} aria-label={t('brandHome')}>
-              <Image src={logo} alt="Bricomaitre" width={168} height={62} sizes="128px" />
+              <Image
+                src={logo}
+                alt="Bricomaitre"
+                width={168}
+                height={62}
+                sizes="128px"
+                quality={60}
+                loading="lazy"
+              />
             </a>
             <p>{t('footerAbout')}</p>
           </div>

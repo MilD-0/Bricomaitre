@@ -1,5 +1,7 @@
+import 'dotenv/config';
+
 import * as Sentry from '@sentry/node';
-import { createQueueWorker } from '@bric/runtime/jobs';
+import { createQueueWorker, isFinalJobAttempt } from '@bric/runtime/jobs';
 import cron from 'node-cron';
 
 import { readSampleRate } from '../lib/sentry';
@@ -15,6 +17,7 @@ import {
   ADMIN_STATS_IMPORT_QUEUE,
   STOREFRONT_ANALYTICS_QUEUE,
   ADMIN_AI_CONTENT_QUEUE,
+  ADMIN_AI_CATEGORIZATION_QUEUE,
   runAdCostsImportJob,
   runAnalyticsJob,
   runEcotrackShipmentSyncJob,
@@ -27,7 +30,10 @@ import {
   runStatsImportJob,
   startAdminReportingRefreshJob,
   runAiContentJob,
+  runAiCategorizationJob,
+  getBackgroundJob,
 } from '../lib/background-jobs';
+import { publishAiTaskTerminalMessage, type AiTaskTerminalStatus } from '../lib/ai-task-followups';
 import { runDatabaseMaintenance } from '../lib/database-maintenance';
 
 const DEFAULT_REPORTING_REFRESH_CRON = '11 3 * * *';
@@ -51,6 +57,7 @@ Sentry.init({
 });
 
 const workers = [
+  createQueueWorker(ADMIN_AI_CATEGORIZATION_QUEUE, runAiCategorizationJob),
   createQueueWorker(ADMIN_AI_CONTENT_QUEUE, runAiContentJob),
   createQueueWorker(ADMIN_PRODUCT_EXPORT_QUEUE, runProductExportJob),
   createQueueWorker(ADMIN_PRODUCT_CATALOG_FEED_QUEUE, runProductCatalogFeedRefreshJob),
@@ -63,6 +70,63 @@ const workers = [
   createQueueWorker(ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE, runEcotrackShipmentSyncJob),
   createQueueWorker(STOREFRONT_ANALYTICS_QUEUE, runAnalyticsJob),
 ];
+
+type TaskLifecycleJob = {
+  id?: string;
+  name: string;
+  data: { conversationId?: number };
+  attemptsMade: number;
+  opts: { attempts?: number };
+};
+
+type TaskLifecycleWorker = {
+  name: string;
+  on: {
+    (event: 'completed', listener: (job: TaskLifecycleJob) => void): unknown;
+    (event: 'failed', listener: (job: TaskLifecycleJob | undefined, error: Error) => void): unknown;
+  };
+};
+
+async function publishTaskTerminalState(
+  worker: TaskLifecycleWorker,
+  job: TaskLifecycleJob,
+  status: AiTaskTerminalStatus,
+  errorMessage?: string,
+) {
+  if (!job.id || !job.data.conversationId) return;
+  const snapshot = await getBackgroundJob(worker.name, job.id);
+  await publishAiTaskTerminalMessage({
+    conversationId: job.data.conversationId,
+    jobId: job.id,
+    kind: job.name,
+    status,
+    progress: snapshot?.progress ?? null,
+    summary: snapshot?.resultSummary ?? null,
+    errorMessage: errorMessage ?? snapshot?.errorMessage ?? null,
+  });
+}
+
+for (const rawWorker of workers) {
+  const worker = rawWorker as unknown as TaskLifecycleWorker;
+  worker.on('completed', (job) => {
+    void (async () => {
+      const snapshot = job.id ? await getBackgroundJob(worker.name, job.id) : null;
+      const status = snapshot?.status === 'cancelled' ? 'cancelled' : 'completed';
+      await publishTaskTerminalState(worker, job, status);
+    })().catch((error) => {
+      Sentry.captureException(error);
+      console.error('[worker] failed to publish AI task completion', error);
+    });
+  });
+  worker.on('failed', (job, error) => {
+    if (!job || !isFinalJobAttempt(job)) return;
+    const status = error.message === 'Job cancelled.' ? 'cancelled' : 'failed';
+    void publishTaskTerminalState(worker, job, status, error.message).catch((publishError) => {
+      Sentry.captureException(publishError);
+      console.error('[worker] failed to publish AI task failure', publishError);
+    });
+  });
+}
 
 const reportingRefreshCron = (process.env.ADMIN_REPORTING_REFRESH_CRON ?? DEFAULT_REPORTING_REFRESH_CRON).trim();
 const reportingRefreshTimezone = (process.env.ADMIN_REPORTING_REFRESH_TIMEZONE ?? DEFAULT_REPORTING_REFRESH_TIMEZONE).trim();

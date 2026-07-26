@@ -283,6 +283,22 @@ const categories = [
   { id: 4, name: 'Outillage électrique', slug: 'power-tools', nameEn: 'Power tools', nameAr: 'أدوات كهربائية', image: null, parentId: null, properties: [], featured: true, createdAt: '2026-06-01T10:00:00.000Z', updatedAt: '2026-07-01T10:00:00.000Z' },
 ];
 
+for (let id = 20; id < 44; id += 1) {
+  categories.push({
+    id,
+    name: `Catégorie test ${id}`,
+    slug: `test-category-${id}`,
+    nameEn: `Test category ${id}`,
+    nameAr: `فئة اختبار ${id}`,
+    image: null,
+    parentId: 4,
+    properties: [],
+    featured: false,
+    createdAt: '2026-06-01T10:00:00.000Z',
+    updatedAt: '2026-07-01T10:00:00.000Z',
+  });
+}
+
 const ecotrackCatalog = {
   wilayas: [{ wilayaId: 16, name: 'Alger' }, { wilayaId: 31, name: 'Oran' }],
   communes: [

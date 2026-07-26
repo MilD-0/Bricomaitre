@@ -6,7 +6,7 @@ export async function GET() {
   try {
     const meta = await getStorefrontCatalogMeta();
     return NextResponse.json({
-      categories: meta.categories.map(({ id, name, nameAr, slug }) => ({ id, name, nameAr, slug })),
+      categories: meta.categories.map(({ id, name, nameAr, slug, parentId }) => ({ id, name, nameAr, slug, parentId })),
       brands: meta.brands.map(({ id, name, slug }) => ({ id, name, slug })),
     });
   } catch {

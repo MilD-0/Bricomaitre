@@ -35,21 +35,13 @@ export default function HomePage(props: HomePageProps) {
 export async function HomePageContent({ params }: HomePageProps) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
-  let data = emptyHomepage;
-  let contact = defaultStorefrontSettingsResponse;
-  try {
-    data = await getStorefrontHomepage();
-  } catch {
-    data = emptyHomepage;
-  }
-  try {
-    contact = await getStorefrontSettings();
-  } catch {
-    contact = defaultStorefrontSettingsResponse;
-  }
+  const [data, contact] = await Promise.all([
+    getStorefrontHomepage().catch(() => emptyHomepage),
+    getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse),
+  ]);
 
   return (
-    <PageShell locale={locale}>
+    <PageShell locale={locale} contactSettings={contact}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeStructuredData(buildHomepageStructuredData(locale)) }}

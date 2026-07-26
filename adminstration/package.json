@@ -5,6 +5,7 @@
   "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "next dev",
+    "dev:full": "tsx scripts/run-development.ts",
     "build": "next build",
     "build:db-tasks": "node ../ops/scripts/build-worker.mjs adminstration/scripts/run-db-migrations.ts adminstration/dist/run-db-migrations.cjs && node ../ops/scripts/build-worker.mjs adminstration/scripts/verify-db-migrations.ts adminstration/dist/verify-db-migrations.cjs",
     "build:worker": "node ../ops/scripts/build-worker.mjs adminstration/scripts/run-background-workers.ts adminstration/dist/run-background-workers.cjs",

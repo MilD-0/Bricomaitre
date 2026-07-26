@@ -606,10 +606,15 @@ function AiProductContentPanel({
     onError: (error: Error) => toast.error(error.message),
   });
   const reviewMutation = useMutation({
-    mutationFn: ({ proposalId, action }: { proposalId: number; action: 'approve' | 'reject' }) =>
-      request<{ proposal: { status: 'applied' | 'rejected'; product?: ProductRecord } }>(`/api/ai/proposals/${proposalId}`, {
+    mutationFn: async ({ proposalId, action }: { proposalId: number; action: 'approve' | 'reject' }) => {
+      const data = await request<{ proposal: { status: 'applied' | 'rejected'; verified?: boolean; product?: ProductRecord } }>(`/api/ai/proposals/${proposalId}`, {
         method: 'PATCH', body: JSON.stringify({ action }),
-      }),
+      });
+      if (data.proposal.status === 'applied' && data.proposal.verified !== true) {
+        throw new Error(t('products.ai.verificationError'));
+      }
+      return data;
+    },
     onSuccess: async (data) => {
       if (data.proposal.product) {
         const product = data.proposal.product;

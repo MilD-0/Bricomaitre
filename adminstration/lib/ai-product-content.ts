@@ -11,6 +11,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { aiProposals, aiRuns, brands, categories, products } from '../db/schema';
 import { mutateEntityWithHistory, type ActionActor } from './action-history';
+import { persistedProposalValuesMatch } from './ai-proposal-verification';
 
 export const PRODUCT_CONTENT_PROMPT_VERSION = 'product-content-v1';
 const CONTENT_FIELDS = ['title', 'titleAr', 'description', 'descriptionAr'] as const;
@@ -90,6 +91,9 @@ export async function proposeProductContent(input: {
       fields,
       adminContext: input.adminContext,
     });
+    if (persistedProposalValuesMatch(product, generated.changes)) {
+      throw new AiProposalConflictError('The generated content does not change the current product.');
+    }
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1_000);
     await db.update(aiRuns).set({
@@ -155,9 +159,17 @@ export async function reviewProductContentProposal(input: { proposalId: number; 
         throw new AiProposalConflictError('The proposal is stale or expired. Generate a new proposal.');
       }
       const [next] = await tx.update(products).set({ ...changes, updatedAt: new Date() }).where(eq(products.id, product.id)).returning();
-      await tx.update(aiProposals).set({ status: 'applied', reviewedBy: input.actor.email ?? null, reviewedAt: new Date(), appliedAt: new Date(), updatedAt: new Date() }).where(eq(aiProposals.id, proposal.id));
+      if (!persistedProposalValuesMatch(next, changes)) {
+        throw new AiProposalConflictError('The approved product changes could not be verified in the database. Nothing was marked as applied.');
+      }
+      const [applied] = await tx.update(aiProposals).set({ status: 'applied', reviewedBy: input.actor.email ?? null, reviewedAt: new Date(), appliedAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(aiProposals.id, proposal.id), eq(aiProposals.status, 'proposed')))
+        .returning({ id: aiProposals.id, status: aiProposals.status });
+      if (!applied || applied.status !== 'applied') {
+        throw new AiProposalConflictError('The proposal result could not be recorded after verification.');
+      }
       return [next];
     },
   });
-  return { id: initial.id, status: 'applied' as const, product: updated };
+  return { id: initial.id, status: 'applied' as const, verified: true as const, product: updated };
 }

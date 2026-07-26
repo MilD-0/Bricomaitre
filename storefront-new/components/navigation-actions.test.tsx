@@ -49,7 +49,13 @@ describe('NavigationActions', () => {
     analytics.mockClear();
     haptics.prepare.mockClear();
     haptics.trigger.mockClear();
-    navigationMeta.mockResolvedValue({ categories: [{ id: 3, name: 'Éclairage', nameAr: null, slug: 'eclairage' }], brands: [{ id: 8, name: 'Wadfow', slug: 'wadfow' }] });
+    navigationMeta.mockResolvedValue({
+      categories: [
+        { id: 5, name: 'Équipement d’atelier', nameAr: null, slug: 'equipement-atelier', parentId: null },
+        { id: 3, name: 'Éclairage', nameAr: null, slug: 'eclairage', parentId: 5 },
+      ],
+      brands: [{ id: 8, name: 'Wadfow', slug: 'wadfow' }],
+    });
     localStorage.clear();
     window.history.replaceState({}, '', '/fr/products?brand=2');
     localStorage.setItem(STOREFRONT_CART_KEY, JSON.stringify([{
@@ -110,7 +116,7 @@ describe('NavigationActions', () => {
     expect(analytics).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'view_cart', quantity: 3 }));
   });
 
-  it('opens an accessible drawer with every category and brand, then closes it with Escape', async () => {
+  it('opens an accessible drawer with categories grouped beneath their parent and every brand', async () => {
     render(
       <NavigationActions
         locale="fr"
@@ -127,14 +133,21 @@ describe('NavigationActions', () => {
     const drawer = screen.getByRole('dialog', { name: labels.menu });
     expect(drawer).toBeVisible();
     expect(drawer.parentElement?.parentElement).toBe(document.body);
-    expect(await screen.findByRole('link', { name: /Éclairage/ })).toHaveAttribute('href', '/fr/categories/eclairage');
+    await within(drawer).findByText('Équipement d’atelier', { selector: 'summary span' });
+    const categoryGroups = drawer.querySelectorAll('.navigation-drawer-category-group');
+    expect(categoryGroups).toHaveLength(1);
+    const categoryGroup = categoryGroups[0];
+    expect(within(categoryGroup).getByText('Équipement d’atelier', { selector: 'summary span' })).toBeVisible();
+    fireEvent.click(categoryGroup.querySelector('summary')!);
+    expect(within(categoryGroup).getByRole('link', { name: /Équipement d’atelier/ })).toHaveAttribute('href', '/fr/categories/equipement-atelier');
+    expect(within(categoryGroup).getByRole('link', { name: /Éclairage/ })).toHaveAttribute('href', '/fr/categories/eclairage');
     expect(within(drawer).getByRole('link', { name: 'Promos' })).toHaveAttribute('href', '/fr/products?discounted=1');
     expect(screen.getByRole('link', { name: /Wadfow/ })).toHaveAttribute('href', '/fr/brands/wadfow');
     const categorySummary = within(drawer).getByText(labels.categories).closest('summary');
     expect(categorySummary?.querySelector('svg')).toBeInTheDocument();
     expect(haptics.trigger).toHaveBeenCalledWith('surface');
     haptics.trigger.mockClear();
-    fireEvent.pointerDown(screen.getByRole('link', { name: /Éclairage/ }));
+    fireEvent.pointerDown(within(categoryGroup).getByRole('link', { name: /Éclairage/ }));
     expect(haptics.trigger).not.toHaveBeenCalled();
     const drawerLocaleToggle = within(drawer).getByRole('group', { name: labels.language });
     expect(drawerLocaleToggle).toHaveClass('navigation-drawer-locale-toggle');

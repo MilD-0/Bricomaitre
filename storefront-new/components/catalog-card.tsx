@@ -29,7 +29,7 @@ export function CatalogCard({
   brandName,
   categoryName,
   labels,
-  eagerImage = position <= 3,
+  eagerImage = position <= 2,
 }: {
   product: CatalogProduct;
   locale: Locale;

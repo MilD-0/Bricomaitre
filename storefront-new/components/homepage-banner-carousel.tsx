@@ -44,7 +44,11 @@ export function HomepageBannerCarousel({ banners, locale }: { banners: Banner[];
   const markLoaded = useCallback((index: number) => { loaded.current.add(index); if (index === 1) setCanAutoplay(true); }, []);
 
   useEffect(() => {
-    if (!api || !canAutoplay || banners.length < 2 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const reducedMotion = typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const compactViewport = typeof window.matchMedia === 'function'
+      && window.matchMedia('(max-width: 620px)').matches;
+    if (!api || !canAutoplay || banners.length < 2 || reducedMotion || compactViewport) return;
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') api.scrollNext(); }, 5000);
     return () => window.clearInterval(timer);
   }, [api, banners.length, canAutoplay]);

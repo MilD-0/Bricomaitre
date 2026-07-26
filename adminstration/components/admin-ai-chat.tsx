@@ -1,15 +1,28 @@
 'use client';
 
-import { Bot, Check, MessageSquarePlus, Send, Sparkles, X } from 'lucide-react';
+import { Bot, Check, ChevronLeft, ChevronRight, MessageSquarePlus, Send, Sparkles, X } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 import { consumeAdminAiChatResponse } from '../lib/admin-ai-chat-stream';
+import {
+  ADMIN_AI_DEFAULT_MODEL,
+  ADMIN_AI_DEFAULT_REASONING_EFFORT,
+  ADMIN_AI_MODEL_OPTIONS,
+  adminAiModelIdSchema,
+  adminAiReasoningEffortSchema,
+  getAdminAiModelOption,
+  getDefaultAdminAiReasoningEffort,
+  supportsAdminAiReasoningEffort,
+  type AdminAiModelId,
+  type AdminAiReasoningEffort,
+} from '../lib/admin-ai-models';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Markdown } from './ui/markdown';
 import { Spinner } from './ui/spinner';
+import { Switch } from './ui/switch';
 import { Textarea } from './ui/textarea';
 
 type AnalyticsResult = {
@@ -26,6 +39,22 @@ type AnalyticsResult = {
 type Proposal = { id: number; status: 'proposed' | 'applied' | 'rejected' };
 type ChatMessage = { id?: string; role: 'user' | 'assistant'; content: string; analytics?: AnalyticsResult[]; proposals?: Proposal[] };
 type ConversationSummary = { id: number; sessionKey: string; title: string | null; createdAt?: string; updatedAt?: string };
+type AiJob = {
+  id: string;
+  queue: string;
+  kind: string;
+  type?: string;
+  cancellable?: boolean;
+  status: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed';
+  progress: { phase: string; current: number; total: number; percentage: number };
+  errorMessage: string | null;
+  resultSummary: Record<string, unknown> | null;
+};
+const ADMIN_AI_VISIBLE_JOB_KINDS = new Set(['ai-product-categorization', 'ai-product-content']);
+
+export const ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY = 'bricomaitre:admin-ai:auto-accept';
+export const ADMIN_AI_MODEL_STORAGE_KEY = 'bricomaitre:admin-ai:model';
+export const ADMIN_AI_REASONING_EFFORT_STORAGE_KEY = 'bricomaitre:admin-ai:reasoning-effort';
 
 const analyticsChartMetricKeys = [
   'purchases', 'unitsSold', 'orders', 'views', 'inventoryQuantity', 'discountAmount',
@@ -153,14 +182,24 @@ function AnalyticsCard({ result }: { result: AnalyticsResult }) {
   );
 }
 
-function ChatSidebar({ conversations, selectedConversationId, loading, onNewChat, onSelectConversation }: {
+function ChatSidebar({ conversations, selectedConversationId, loading, jobs, cancellingJobId, onNewChat, onSelectConversation, onCancelJob }: {
   conversations: ConversationSummary[];
   selectedConversationId: number | null;
   loading: boolean;
+  jobs: AiJob[];
+  cancellingJobId: string | null;
   onNewChat: () => void;
   onSelectConversation: (conversation: ConversationSummary) => void;
+  onCancelJob: (job: AiJob) => void;
 }) {
   const t = useTranslations();
+  const [jobIndex, setJobIndex] = useState(0);
+  const selectedJob = jobs[jobIndex];
+
+  useEffect(() => {
+    setJobIndex((current) => Math.min(current, Math.max(0, jobs.length - 1)));
+  }, [jobs.length]);
+
   return (
     <aside className="flex min-h-0 flex-col border-t border-border/60 bg-secondary/20 lg:border-s lg:border-t-0" aria-label={t('aiChat.chats')}>
       <div className="flex items-center justify-between border-b border-border/60 px-4 py-4 sm:px-5">
@@ -186,6 +225,62 @@ function ChatSidebar({ conversations, selectedConversationId, loading, onNewChat
           </>
         )}
       </div>
+      {jobs.length > 0 ? (
+        <div className="border-t border-border/60 p-3 sm:p-4">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold text-foreground">{t('aiChat.backgroundJobs')}</p>
+            {jobs.length > 1 ? (
+              <div className="flex items-center gap-1">
+                <Button type="button" size="sm" variant="ghost" className="size-7 p-0" onClick={() => setJobIndex((current) => (current - 1 + jobs.length) % jobs.length)} aria-label={t('aiChat.previousJob')}><ChevronLeft className="size-3.5 rtl:rotate-180" /></Button>
+                <span className="min-w-8 text-center text-[0.68rem] tabular-nums text-muted-foreground">{jobIndex + 1}/{jobs.length}</span>
+                <Button type="button" size="sm" variant="ghost" className="size-7 p-0" onClick={() => setJobIndex((current) => (current + 1) % jobs.length)} aria-label={t('aiChat.nextJob')}><ChevronRight className="size-3.5 rtl:rotate-180" /></Button>
+              </div>
+            ) : null}
+          </div>
+          {selectedJob ? (() => {
+            const job = selectedJob;
+            const active = job.status === 'queued' || job.status === 'running';
+            const summary = job.resultSummary ?? {};
+            return (
+              <div className="relative pb-2">
+                {jobs.length > 2 ? <div className="absolute inset-x-4 bottom-0 top-4 rounded-xl border border-border/30 bg-card/35" aria-hidden="true" /> : null}
+                {jobs.length > 1 ? <div className="absolute inset-x-2 bottom-1 top-2 rounded-xl border border-border/45 bg-card/65" aria-hidden="true" /> : null}
+                <section key={`${job.queue}:${job.id}`} className="relative rounded-xl border border-border/60 bg-card p-3 shadow-[var(--shadow-vapor)]">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-medium">
+                        {job.kind === 'ai-product-categorization'
+                          ? t('aiChat.categorizationJob')
+                          : job.kind === 'ai-product-content'
+                            ? t('aiChat.contentJob')
+                            : queryLabel(job.kind)}
+                      </p>
+                      <p className="mt-0.5 text-[0.68rem] text-muted-foreground">{t(`aiChat.jobStatus.${job.status}`)}</p>
+                    </div>
+                    {active && job.cancellable !== false ? <Button type="button" size="sm" variant="outline" disabled={cancellingJobId !== null} onClick={() => onCancelJob(job)}>{cancellingJobId === job.id ? <Spinner className="size-3.5" /> : null}{t('aiChat.cancel')}</Button> : null}
+                  </div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-secondary">
+                    <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${Math.max(0, Math.min(job.progress.percentage, 100))}%` }} />
+                  </div>
+                  <p className="mt-1.5 text-[0.68rem] text-muted-foreground">{job.progress.current}/{job.progress.total || '—'} · {job.progress.phase.replaceAll('-', ' ')}</p>
+                  {job.kind === 'ai-product-categorization' && Object.keys(summary).length > 0 ? (
+                    <p className="mt-2 text-[0.68rem] leading-5 text-muted-foreground">
+                      {t('aiChat.categorizationSummary', {
+                        proposed: Number(summary.proposed ?? 0),
+                        applied: Number(summary.applied ?? 0),
+                        unchanged: Number(summary.unchanged ?? 0),
+                        ambiguous: Number(summary.ambiguous ?? 0),
+                        failed: Number(summary.failed ?? 0),
+                      })}
+                    </p>
+                  ) : null}
+                  {job.errorMessage ? <p className="mt-2 text-[0.68rem] text-destructive">{job.errorMessage}</p> : null}
+                </section>
+              </div>
+            );
+          })() : null}
+        </div>
+      ) : null}
     </aside>
   );
 }
@@ -199,13 +294,21 @@ export function AdminAiChat() {
   const [receivingText, setReceivingText] = useState(false);
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(false);
+  const [autoAcceptProposals, setAutoAcceptProposals] = useState(false);
+  const [model, setModel] = useState<AdminAiModelId>(ADMIN_AI_DEFAULT_MODEL);
+  const [reasoningEffort, setReasoningEffort] = useState<AdminAiReasoningEffort>(ADMIN_AI_DEFAULT_REASONING_EFFORT);
   const [reviewingProposalId, setReviewingProposalId] = useState<number | null>(null);
   const [proposalReviewError, setProposalReviewError] = useState<{ messageId: string; message: string } | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [jobs, setJobs] = useState<AiJob[]>([]);
+  const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
   const conversationKeyRef = useRef<string | null>(null);
   const activeConversationRef = useRef<ConversationSummary | null>(null);
   const conversationRequestRef = useRef(0);
+  const autoAcceptProposalsRef = useRef(false);
+  const responseAbortRef = useRef<AbortController | null>(null);
+  const terminalJobIdsRef = useRef(new Set<string>());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectConversation = useCallback(async (conversation: ConversationSummary) => {
     const requestId = ++conversationRequestRef.current;
@@ -238,12 +341,47 @@ export function AdminAiChat() {
       setLoadingConversations(false);
     }
   }, [selectConversation]);
+  const loadAiHistory = useCallback(async () => {
+    const response = await fetch('/api/ai/history', { cache: 'no-store' });
+    if (!response.ok) return;
+    const data = await response.json() as { jobs?: AiJob[] };
+    const nextJobs = Array.isArray(data.jobs)
+      ? data.jobs.filter((job) => ADMIN_AI_VISIBLE_JOB_KINDS.has(job.kind))
+      : [];
+    setJobs(nextJobs);
+    const terminalJobs = nextJobs.filter((job) => ['completed', 'cancelled', 'failed'].includes(job.status));
+    const hasNewTerminalJob = terminalJobs.some((job) => !terminalJobIdsRef.current.has(job.id));
+    terminalJobIdsRef.current = new Set(terminalJobs.map((job) => job.id));
+    const activeConversation = activeConversationRef.current;
+    if (hasNewTerminalJob && activeConversation) {
+      window.setTimeout(() => {
+        if (activeConversationRef.current?.id === activeConversation.id) void selectConversation(activeConversation);
+      }, 750);
+    }
+  }, [selectConversation]);
+
+  useEffect(() => {
+    const enabled = window.localStorage.getItem(ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY) === 'true';
+    autoAcceptProposalsRef.current = enabled;
+    setAutoAcceptProposals(enabled);
+    const storedModel = adminAiModelIdSchema.safeParse(window.localStorage.getItem(ADMIN_AI_MODEL_STORAGE_KEY));
+    const nextModel = storedModel.success ? storedModel.data : ADMIN_AI_DEFAULT_MODEL;
+    const storedEffort = adminAiReasoningEffortSchema.safeParse(window.localStorage.getItem(ADMIN_AI_REASONING_EFFORT_STORAGE_KEY));
+    const nextEffort = storedEffort.success && supportsAdminAiReasoningEffort(nextModel, storedEffort.data)
+      ? storedEffort.data
+      : getDefaultAdminAiReasoningEffort(nextModel);
+    setModel(nextModel);
+    setReasoningEffort(nextEffort);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
     if (activeConversationRef.current) void selectConversation(activeConversationRef.current);
     void loadConversations(activeConversationRef.current === null);
-  }, [open, loadConversations, selectConversation]);
+    void loadAiHistory();
+    const interval = window.setInterval(() => void loadAiHistory(), 2_500);
+    return () => window.clearInterval(interval);
+  }, [open, loadAiHistory, loadConversations, selectConversation]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -259,6 +397,61 @@ export function AdminAiChat() {
     setInput('');
   }
 
+  function updateAutoAcceptProposals(enabled: boolean) {
+    autoAcceptProposalsRef.current = enabled;
+    setAutoAcceptProposals(enabled);
+    window.localStorage.setItem(ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY, String(enabled));
+  }
+
+  function updateModel(nextModel: AdminAiModelId) {
+    const nextEffort = supportsAdminAiReasoningEffort(nextModel, reasoningEffort)
+      ? reasoningEffort
+      : getDefaultAdminAiReasoningEffort(nextModel);
+    setModel(nextModel);
+    setReasoningEffort(nextEffort);
+    window.localStorage.setItem(ADMIN_AI_MODEL_STORAGE_KEY, nextModel);
+    window.localStorage.setItem(ADMIN_AI_REASONING_EFFORT_STORAGE_KEY, nextEffort);
+  }
+
+  function updateReasoningEffort(nextEffort: AdminAiReasoningEffort) {
+    if (!supportsAdminAiReasoningEffort(model, nextEffort)) return;
+    setReasoningEffort(nextEffort);
+    window.localStorage.setItem(ADMIN_AI_REASONING_EFFORT_STORAGE_KEY, nextEffort);
+  }
+
+  async function submitProposalReview(messageId: string, proposalId: number, action: 'approve' | 'reject') {
+    setReviewingProposalId(proposalId);
+    setProposalReviewError(null);
+    try {
+      const response = await fetch(`/api/ai/proposals/${proposalId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      const data = await response.json() as { error?: string; proposal?: { status?: Proposal['status']; verified?: boolean } };
+      if (!response.ok || !data.proposal?.status) throw new Error(data.error ?? 'Proposal review failed.');
+      if (data.proposal.status === 'applied' && data.proposal.verified !== true) {
+        throw new Error(t('aiChat.proposalVerificationError'));
+      }
+      setMessages((items) => items.map((message) => message.id === messageId
+        ? { ...message, proposals: message.proposals?.map((proposal) => proposal.id === proposalId ? { ...proposal, status: data.proposal!.status! } : proposal) }
+        : message));
+      return true;
+    } catch (error) {
+      setProposalReviewError({ messageId, message: error instanceof Error ? error.message : t('aiChat.proposalReviewError') });
+      return false;
+    } finally {
+      setReviewingProposalId(null);
+    }
+  }
+
+  async function autoApproveNewProposals(messageId: string, proposals: Proposal[]) {
+    for (const proposal of proposals) {
+      const applied = await submitProposalReview(messageId, proposal.id, 'approve');
+      if (!applied) break;
+    }
+  }
+
   async function send() {
     const message = input.trim();
     if (!message || pending || loadingConversation) return;
@@ -268,9 +461,22 @@ export function AdminAiChat() {
     setPending(true);
     setReceivingText(false);
     const assistantId = crypto.randomUUID();
+    const abortController = new AbortController();
+    responseAbortRef.current = abortController;
     let receivedText = false;
     try {
-      const response = await fetch('/api/ai/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message, conversationKey: conversationKeyRef.current }) });
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          conversationKey: conversationKeyRef.current,
+          autoAcceptProposals: autoAcceptProposalsRef.current,
+          model,
+          reasoningEffort,
+        }),
+        signal: abortController.signal,
+      });
       await consumeAdminAiChatResponse(response, {
         onTextDelta(delta) {
           receivedText = true;
@@ -292,36 +498,47 @@ export function AdminAiChat() {
           conversationKeyRef.current = data.conversation.sessionKey;
           activeConversationRef.current = data.conversation;
           setSelectedConversationId(data.conversation.id);
+          if (autoAcceptProposalsRef.current && proposals.length > 0) {
+            void autoApproveNewProposals(assistantId, proposals);
+          }
         },
       });
       await loadConversations();
+      await loadAiHistory();
     } catch {
-      if (!receivedText) setMessages((items) => [...items, { id: assistantId, role: 'assistant', content: t('aiChat.error') }]);
+      if (!abortController.signal.aborted && !receivedText) {
+        setMessages((items) => [...items, { id: assistantId, role: 'assistant', content: t('aiChat.error') }]);
+      }
     } finally {
+      if (responseAbortRef.current === abortController) responseAbortRef.current = null;
       setPending(false);
       setReceivingText(false);
     }
   }
 
+  function cancelResponse() {
+    responseAbortRef.current?.abort();
+  }
+
   async function reviewProposal(messageId: string | undefined, proposalId: number, action: 'approve' | 'reject') {
     if (!messageId || reviewingProposalId !== null) return;
-    setReviewingProposalId(proposalId);
-    setProposalReviewError(null);
+    await submitProposalReview(messageId, proposalId, action);
+  }
+
+  async function cancelJob(job: AiJob) {
+    if (cancellingJobId !== null) return;
+    setCancellingJobId(job.id);
     try {
-      const response = await fetch(`/api/ai/proposals/${proposalId}`, {
-        method: 'PATCH',
+      await fetch('/api/ai/jobs/cancel', {
+        method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify(job.type
+          ? { type: job.type, jobId: job.id }
+          : { kind: job.kind === 'ai-product-categorization' ? 'categorization' : 'content' }),
       });
-      const data = await response.json() as { error?: string; proposal?: { status?: Proposal['status'] } };
-      if (!response.ok || !data.proposal?.status) throw new Error(data.error ?? 'Proposal review failed.');
-      setMessages((items) => items.map((message) => message.id === messageId
-        ? { ...message, proposals: message.proposals?.map((proposal) => proposal.id === proposalId ? { ...proposal, status: data.proposal!.status! } : proposal) }
-        : message));
-    } catch (error) {
-      setProposalReviewError({ messageId, message: error instanceof Error ? error.message : t('aiChat.proposalReviewError') });
+      await loadAiHistory();
     } finally {
-      setReviewingProposalId(null);
+      setCancellingJobId(null);
     }
   }
 
@@ -342,7 +559,45 @@ export function AdminAiChat() {
           <DialogHeader className="relative shrink-0 border-b border-border/60 bg-card/75 px-4 py-4 pe-16 backdrop-blur-xl sm:px-6 sm:py-5 sm:pe-20">
             <div className="flex items-start gap-3">
               <div className="grid size-11 shrink-0 place-items-center rounded-[1rem] bg-primary text-primary-foreground shadow-[var(--shadow-vapor)]"><Bot className="size-5" /></div>
-              <DialogTitle className="min-w-0 text-base sm:text-lg">{t('aiChat.title')}</DialogTitle>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-base sm:text-lg">{t('aiChat.title')}</DialogTitle>
+                <div className="mt-3 flex flex-wrap items-end gap-3">
+                  <label className="min-w-[13rem]">
+                    <span className="mb-1 block text-[0.68rem] font-medium text-muted-foreground">{t('aiChat.model')}</span>
+                    <select
+                      value={model}
+                      onChange={(event) => updateModel(adminAiModelIdSchema.parse(event.target.value))}
+                      aria-label={t('aiChat.model')}
+                      className="h-9 w-full rounded-lg border border-border/70 bg-background px-2.5 text-xs text-foreground shadow-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                    >
+                      {ADMIN_AI_MODEL_OPTIONS.map((option) => (
+                        <option key={option.id} value={option.id}>{option.label} · {option.cost}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="min-w-[8rem]">
+                    <span className="mb-1 block text-[0.68rem] font-medium text-muted-foreground">{t('aiChat.reasoningEffort')}</span>
+                    <select
+                      value={reasoningEffort}
+                      onChange={(event) => updateReasoningEffort(adminAiReasoningEffortSchema.parse(event.target.value))}
+                      aria-label={t('aiChat.reasoningEffort')}
+                      className="h-9 w-full rounded-lg border border-border/70 bg-background px-2.5 text-xs text-foreground shadow-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                    >
+                      {getAdminAiModelOption(model).reasoningEfforts.map((effort) => (
+                        <option key={effort} value={effort}>{t(`aiChat.reasoningLevels.${effort}`)}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex h-9 cursor-pointer items-center gap-2.5">
+                    <Switch
+                      checked={autoAcceptProposals}
+                      onCheckedChange={updateAutoAcceptProposals}
+                      aria-label={t('aiChat.autoAccept')}
+                    />
+                    <span className="text-xs font-medium text-foreground">{t('aiChat.autoAccept')}</span>
+                  </label>
+                </div>
+              </div>
             </div>
             <Button type="button" variant="ghost" className="absolute end-3 top-3 size-10 rounded-[0.9rem] p-0 sm:end-5 sm:top-5" onClick={() => setOpen(false)} aria-label={t('aiChat.close')}><X className="size-5" /></Button>
           </DialogHeader>
@@ -403,12 +658,14 @@ export function AdminAiChat() {
                     aria-label={t('aiChat.placeholder')}
                     className="min-h-12 max-h-32 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:bg-transparent focus-visible:ring-0"
                   />
-                  <Button type="button" className="size-10 shrink-0 rounded-[0.85rem] p-0" disabled={pending || loadingConversation || !input.trim()} onClick={() => void send()} aria-label={t('aiChat.send')}><Send className="size-4" /></Button>
+                  {pending
+                    ? <Button type="button" variant="destructive" className="size-10 shrink-0 rounded-[0.85rem] p-0" onClick={cancelResponse} aria-label={t('aiChat.stopResponse')}><X className="size-4" /></Button>
+                    : <Button type="button" className="size-10 shrink-0 rounded-[0.85rem] p-0" disabled={loadingConversation || !input.trim()} onClick={() => void send()} aria-label={t('aiChat.send')}><Send className="size-4" /></Button>}
                 </div>
               </div>
             </section>
 
-            <ChatSidebar conversations={conversations} selectedConversationId={selectedConversationId} loading={loadingConversations} onNewChat={newChat} onSelectConversation={(conversation) => void selectConversation(conversation)} />
+            <ChatSidebar conversations={conversations} selectedConversationId={selectedConversationId} loading={loadingConversations} jobs={jobs} cancellingJobId={cancellingJobId} onNewChat={newChat} onSelectConversation={(conversation) => void selectConversation(conversation)} onCancelJob={(job) => void cancelJob(job)} />
           </div>
         </DialogContent>
       </Dialog>

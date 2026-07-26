@@ -2,7 +2,13 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AdminAiChat, selectAnalyticsChartMetric } from './admin-ai-chat';
+import {
+  ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY,
+  ADMIN_AI_MODEL_STORAGE_KEY,
+  ADMIN_AI_REASONING_EFFORT_STORAGE_KEY,
+  AdminAiChat,
+  selectAnalyticsChartMetric,
+} from './admin-ai-chat';
 
 vi.mock('next-intl', () => ({
   useLocale: () => 'en',
@@ -12,6 +18,7 @@ vi.mock('next-intl', () => ({
 describe('AdminAiChat', () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn();
+    window.localStorage.clear();
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
       if (url.includes('/api/ai/history')) {
@@ -48,6 +55,7 @@ describe('AdminAiChat', () => {
     expect(within(dialog).queryByText('aiChat.reviewMode')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('aiChat.description')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('aiChat.sendHint')).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('switch', { name: 'aiChat.autoAccept' })).not.toBeChecked();
   });
 
   it('sends from the keyboard and renders the response as a conversation', async () => {
@@ -64,8 +72,36 @@ describe('AdminAiChat', () => {
     expect(JSON.parse(String(chatCall?.[1]?.body))).toEqual({
       message: 'Find missing Arabic titles',
       conversationKey: expect.any(String),
+      autoAcceptProposals: false,
+      model: 'deepseek-v4-flash',
+      reasoningEffort: 'high',
     });
     await waitFor(() => expect(composer).toHaveValue(''));
+  });
+
+  it('persists model and reasoning choices and sends them with the next request', async () => {
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+
+    const model = await screen.findByRole('combobox', { name: 'aiChat.model' });
+    const effort = screen.getByRole('combobox', { name: 'aiChat.reasoningEffort' });
+    await user.selectOptions(model, 'gpt-5.6-luna');
+    await user.selectOptions(effort, 'medium');
+
+    expect(window.localStorage.getItem(ADMIN_AI_MODEL_STORAGE_KEY)).toBe('gpt-5.6-luna');
+    expect(window.localStorage.getItem(ADMIN_AI_REASONING_EFFORT_STORAGE_KEY)).toBe('medium');
+    expect(within(model).getByRole('option', { name: 'DeepSeek V4 Flash · $' })).toBeInTheDocument();
+    expect(within(model).getByRole('option', { name: 'DeepSeek V4 Flash (Fast) · $$' })).toBeInTheDocument();
+    expect(within(model).getByRole('option', { name: 'GPT-5.6 Luna · $$$' })).toBeInTheDocument();
+
+    await user.type(screen.getByRole('textbox', { name: 'aiChat.placeholder' }), 'Summarize the catalog');
+    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+    const chatCall = vi.mocked(fetch).mock.calls.find(([url]) => String(url) === '/api/ai/chat');
+    expect(JSON.parse(String(chatCall?.[1]?.body))).toMatchObject({
+      model: 'gpt-5.6-luna',
+      reasoningEffort: 'medium',
+    });
   });
 
   it('renders proposal review controls and applies the selected review action', async () => {
@@ -77,7 +113,7 @@ describe('AdminAiChat', () => {
         toolResults: [{ type: 'tool-result', output: { id: 84, type: 'product_discount', status: 'proposed' } }],
         conversation: { id: 12, sessionKey: 'e7249553-56ac-49f5-9e9c-dd8d724a6fac', title: 'Discount proposal' },
       }), { status: 200 });
-      if (url === '/api/ai/proposals/84') return new Response(JSON.stringify({ proposal: { id: 84, status: 'applied' } }), { status: 200 });
+      if (url === '/api/ai/proposals/84') return new Response(JSON.stringify({ proposal: { id: 84, status: 'applied', verified: true } }), { status: 200 });
       return new Response('{}', { status: 200 });
     });
     const user = userEvent.setup();
@@ -93,6 +129,86 @@ describe('AdminAiChat', () => {
     expect(JSON.parse(String(reviewCall?.[1]?.body))).toEqual({ action: 'approve' });
     expect(await screen.findByText('aiChat.applied')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'aiChat.reject' })).not.toBeInTheDocument();
+  });
+
+  it('persists the auto-accept toggle and automatically applies new proposals', async () => {
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/ai/conversations') return new Response(JSON.stringify({ conversations: [] }), { status: 200 });
+      if (url === '/api/ai/chat') return new Response(JSON.stringify({
+        message: 'A category proposal is ready.',
+        toolResults: [{ type: 'tool-result', output: { id: 91, type: 'entity_create', status: 'proposed' } }],
+        conversation: { id: 12, sessionKey: 'e7249553-56ac-49f5-9e9c-dd8d724a6fac', title: 'Create category' },
+      }), { status: 200 });
+      if (url === '/api/ai/proposals/91') return new Response(JSON.stringify({ proposal: { id: 91, status: 'applied', verified: true } }), { status: 200 });
+      return new Response('{}', { status: 200 });
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    const toggle = await screen.findByRole('switch', { name: 'aiChat.autoAccept' });
+    await user.click(toggle);
+    expect(toggle).toBeChecked();
+    expect(window.localStorage.getItem(ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY)).toBe('true');
+
+    await user.type(screen.getByRole('textbox', { name: 'aiChat.placeholder' }), 'Create a category');
+    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+
+    expect(await screen.findByText('aiChat.applied')).toBeInTheDocument();
+    const reviewCall = vi.mocked(fetch).mock.calls.find(([url]) => String(url) === '/api/ai/proposals/91');
+    expect(JSON.parse(String(reviewCall?.[1]?.body))).toEqual({ action: 'approve' });
+  });
+
+  it('keeps a failed automatic approval available for manual review', async () => {
+    window.localStorage.setItem(ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY, 'true');
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/ai/conversations') return new Response(JSON.stringify({ conversations: [] }), { status: 200 });
+      if (url === '/api/ai/chat') return new Response(JSON.stringify({
+        message: 'A proposal is ready.',
+        toolResults: [{ type: 'tool-result', output: { id: 92, status: 'proposed' } }],
+        conversation: { id: 12, sessionKey: 'e7249553-56ac-49f5-9e9c-dd8d724a6fac', title: 'Protected proposal' },
+      }), { status: 200 });
+      if (url === '/api/ai/proposals/92') return new Response(JSON.stringify({ error: 'Additional permission required.' }), { status: 403 });
+      return new Response('{}', { status: 200 });
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    expect(await screen.findByRole('switch', { name: 'aiChat.autoAccept' })).toBeChecked();
+    await user.type(screen.getByRole('textbox', { name: 'aiChat.placeholder' }), 'Apply a protected proposal');
+    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+
+    expect(await screen.findByText('Additional permission required.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'aiChat.approve' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'aiChat.reject' })).toBeInTheDocument();
+  });
+
+  it('does not show completion when an approval response lacks persistence verification', async () => {
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/ai/conversations') return new Response(JSON.stringify({ conversations: [] }), { status: 200 });
+      if (url === '/api/ai/chat') return new Response(JSON.stringify({
+        message: 'A proposal is ready.',
+        toolResults: [{ type: 'tool-result', output: { id: 93, status: 'proposed' } }],
+        conversation: { id: 12, sessionKey: 'e7249553-56ac-49f5-9e9c-dd8d724a6fac', title: 'Verify proposal' },
+      }), { status: 200 });
+      if (url === '/api/ai/proposals/93') return new Response(JSON.stringify({ proposal: { id: 93, status: 'applied' } }), { status: 200 });
+      return new Response('{}', { status: 200 });
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await user.type(await screen.findByRole('textbox', { name: 'aiChat.placeholder' }), 'Verify this proposal');
+    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+    await user.click(await screen.findByRole('button', { name: 'aiChat.approve' }));
+
+    expect(await screen.findByText('aiChat.proposalVerificationError')).toBeInTheDocument();
+    expect(screen.queryByText('aiChat.applied')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'aiChat.approve' })).toBeInTheDocument();
   });
 
   it('renders streamed assistant text before tools and conversation metadata finish', async () => {
@@ -122,6 +238,33 @@ describe('AdminAiChat', () => {
       controller!.close();
     });
     expect(await screen.findByText('Fast partial response.')).toBeInTheDocument();
+  });
+
+  it('lets the user abort an in-flight assistant response without showing a failure', async () => {
+    let capturedSignal: AbortSignal | null = null;
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/ai/conversations') return new Response(JSON.stringify({ conversations: [] }), { status: 200 });
+      if (url === '/api/ai/history') return new Response(JSON.stringify({ jobs: [] }), { status: 200 });
+      if (url === '/api/ai/chat') {
+        capturedSignal = init?.signal as AbortSignal;
+        return new Promise<Response>((_resolve, reject) => {
+          capturedSignal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+        });
+      }
+      return new Response('{}', { status: 200 });
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await user.type(await screen.findByRole('textbox', { name: 'aiChat.placeholder' }), 'Keep thinking');
+    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+    await user.click(await screen.findByRole('button', { name: 'aiChat.stopResponse' }));
+
+    await waitFor(() => expect(capturedSignal?.aborted).toBe(true));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'aiChat.send' })).toBeInTheDocument());
+    expect(screen.queryByText('aiChat.error')).not.toBeInTheDocument();
   });
 
   it('renders assistant Markdown using the bulletin post formatting', async () => {
@@ -234,6 +377,124 @@ describe('AdminAiChat', () => {
     expect(await screen.findByText('aiChat.loadingChats')).toBeInTheDocument();
     resolveChats?.(new Response(JSON.stringify({ conversations: [] }), { status: 200 }));
     expect(await screen.findByText('aiChat.noChats')).toBeInTheDocument();
+  });
+
+  it('shows catalog categorization progress and sends queue-specific cancellation', async () => {
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/ai/conversations') return new Response(JSON.stringify({ conversations: [] }), { status: 200 });
+      if (url === '/api/ai/history') return new Response(JSON.stringify({
+        jobs: [{
+          id: 'categorize-1',
+          queue: 'admin-ai-categorization',
+          kind: 'ai-product-categorization',
+          status: 'running',
+          progress: { phase: 'classifying-products', current: 40, total: 100, percentage: 40 },
+          errorMessage: null,
+          resultSummary: { applied: 12, proposed: 8, unchanged: 10, ambiguous: 7, failed: 3 },
+        }],
+      }), { status: 200 });
+      if (url === '/api/ai/jobs/cancel') return new Response(JSON.stringify({ job: { id: 'categorize-1', status: 'cancelled' } }), { status: 200 });
+      return new Response('{}', { status: 200 });
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    expect(await screen.findByText('aiChat.categorizationJob')).toBeInTheDocument();
+    expect(screen.getByText('40/100 · classifying products')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'aiChat.cancel' }));
+
+    const cancelCall = vi.mocked(fetch).mock.calls.find(([url]) => String(url) === '/api/ai/jobs/cancel');
+    expect(JSON.parse(String(cancelCall?.[1]?.body))).toEqual({ kind: 'categorization' });
+  });
+
+  it('filters unrelated work and navigates AI jobs as a stacked card carousel', async () => {
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/ai/conversations') return new Response(JSON.stringify({ conversations: [] }), { status: 200 });
+      if (url === '/api/ai/history') return new Response(JSON.stringify({
+        jobs: [
+          {
+            id: 'categorize-1',
+            queue: 'admin-ai-categorization',
+            kind: 'ai-product-categorization',
+            status: 'running',
+            progress: { phase: 'classifying-products', current: 40, total: 100, percentage: 40 },
+            errorMessage: null,
+            resultSummary: null,
+          },
+          {
+            id: 'content-1',
+            queue: 'admin-ai-content',
+            kind: 'ai-product-content',
+            status: 'queued',
+            progress: { phase: 'queued', current: 0, total: 80, percentage: 0 },
+            errorMessage: null,
+            resultSummary: null,
+          },
+          {
+            id: 'ecotrack-1',
+            queue: 'admin-ecotrack-sync',
+            kind: 'admin-ecotrack-sync',
+            status: 'running',
+            progress: { phase: 'syncing', current: 5, total: 20, percentage: 25 },
+            errorMessage: null,
+            resultSummary: null,
+          },
+        ],
+      }), { status: 200 });
+      return new Response('{}', { status: 200 });
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    expect(await screen.findByText('aiChat.categorizationJob')).toBeInTheDocument();
+    expect(screen.queryByText('aiChat.contentJob')).not.toBeInTheDocument();
+    expect(screen.queryByText('admin ecotrack sync')).not.toBeInTheDocument();
+    expect(screen.getByText('1/2')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.nextJob' }));
+    expect(await screen.findByText('aiChat.contentJob')).toBeInTheDocument();
+    expect(screen.queryByText('aiChat.categorizationJob')).not.toBeInTheDocument();
+    expect(screen.getByText('2/2')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.previousJob' }));
+    expect(await screen.findByText('aiChat.categorizationJob')).toBeInTheDocument();
+  });
+
+  it('sends exact server job cancellation for system-wide tasks', async () => {
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/ai/conversations') return new Response(JSON.stringify({ conversations: [] }), { status: 200 });
+      if (url === '/api/ai/history') return new Response(JSON.stringify({
+        jobs: [{
+          id: '3c2e0103-ce88-4b4b-b185-f46ed298fe27',
+          queue: 'admin-ai-categorization',
+          kind: 'ai-product-categorization',
+          type: 'ai_categorization',
+          cancellable: true,
+          status: 'running',
+          progress: { phase: 'classifying-products', current: 8, total: 1618, percentage: 1 },
+          errorMessage: null,
+          resultSummary: null,
+        }],
+      }), { status: 200 });
+      if (url === '/api/ai/jobs/cancel') return new Response(JSON.stringify({ job: { status: 'running', cancelRequested: true } }), { status: 200 });
+      return new Response('{}', { status: 200 });
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await user.click(await screen.findByRole('button', { name: 'aiChat.cancel' }));
+
+    const cancelCall = vi.mocked(fetch).mock.calls.find(([url]) => String(url) === '/api/ai/jobs/cancel');
+    expect(JSON.parse(String(cancelCall?.[1]?.body))).toEqual({
+      type: 'ai_categorization',
+      jobId: '3c2e0103-ce88-4b4b-b185-f46ed298fe27',
+    });
   });
 });
 

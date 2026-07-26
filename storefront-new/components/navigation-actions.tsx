@@ -13,12 +13,13 @@ import { trackNavigationEvent } from '@/lib/analytics';
 import { getCartItemCount, getCartSubtotal, readCart, type CartItem } from '@/lib/cart';
 import { prepareHaptics, triggerHaptic } from '@/lib/haptics';
 import { fetchNavigationMeta, type navigationMetaSchema } from '@/lib/navigation-categories';
+import { buildNavigationTaxonomy, type NavigationTaxonomyNode } from '@/lib/navigation-taxonomy';
 import { getBrandPath, getCategoryPath } from '@/lib/taxonomy-routes';
 import type { z } from 'zod';
 import type { StorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 type NavigationMeta = z.infer<typeof navigationMetaSchema>;
-type NavigationCategory = { id: number; label: string; slug?: string | null };
+type NavigationCategory = { id: number; label: string; slug?: string | null; parentId?: number | null };
 type NavigationBrand = { id: number; label: string; slug?: string | null };
 
 type NavigationLabels = {
@@ -61,6 +62,10 @@ export function NavigationActions({
   const cartButtonRef = useRef<HTMLButtonElement>(null);
   const cartCount = getCartItemCount(cartItems);
   const cartSubtotal = getCartSubtotal(cartItems);
+  const categoryTree = buildNavigationTaxonomy(drawerCategories.map((category) => ({
+    ...category,
+    parentId: category.parentId ?? null,
+  })));
 
   useEffect(() => {
     void prepareHaptics();
@@ -75,6 +80,7 @@ export function NavigationActions({
         id: category.id,
         label: locale === 'ar' && category.nameAr ? category.nameAr : category.name,
         slug: category.slug,
+        parentId: category.parentId,
       })));
       setDrawerBrands(meta.brands.map((brand) => ({ id: brand.id, label: brand.name, slug: brand.slug })));
     }).catch(() => undefined);
@@ -229,10 +235,13 @@ export function NavigationActions({
               <details open>
                 <summary><span>{labels.categories}</span><ChevronDown aria-hidden="true" size={18} /></summary>
                 <div>
-                  {drawerCategories.map((category) => (
-                    <a key={category.id} href={getCategoryPath(locale, category)} onClick={() => { triggerNavigationHaptic(); setMenuOpen(false); }}>
-                      {category.label}<ChevronRight aria-hidden="true" size={18} />
-                    </a>
+                  {categoryTree.map((category) => (
+                    <MobileCategoryGroup
+                      key={category.id}
+                      category={category}
+                      locale={locale}
+                      onNavigate={() => { triggerNavigationHaptic(); setMenuOpen(false); }}
+                    />
                   ))}
                 </div>
               </details>
@@ -263,5 +272,43 @@ export function NavigationActions({
         />
       ) : null}
     </>
+  );
+}
+
+function MobileCategoryGroup({
+  category,
+  locale,
+  onNavigate,
+}: {
+  category: NavigationTaxonomyNode;
+  locale: Locale;
+  onNavigate: () => void;
+}) {
+  return (
+    <details className="navigation-drawer-category-group">
+      <summary>
+        <span>{category.label}</span>
+        <ChevronDown aria-hidden="true" size={18} />
+      </summary>
+      <div>
+        <a
+          className="navigation-drawer-category-self"
+          data-category-self={category.id}
+          href={getCategoryPath(locale, category)}
+          onClick={onNavigate}
+        >
+          {category.label}<ChevronRight aria-hidden="true" size={18} />
+        </a>
+        {category.children.map((child) => (
+          child.children.length > 0 ? (
+            <MobileCategoryGroup key={child.id} category={child} locale={locale} onNavigate={onNavigate} />
+          ) : (
+            <a key={child.id} href={getCategoryPath(locale, child)} onClick={onNavigate}>
+              {child.label}<ChevronRight aria-hidden="true" size={18} />
+            </a>
+          )
+        ))}
+      </div>
+    </details>
   );
 }

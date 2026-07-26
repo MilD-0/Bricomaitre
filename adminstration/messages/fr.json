@@ -1007,6 +1007,7 @@
     "thinking": "Traitement…",
     "completed": "L’opération de proposition est terminée.",
     "error": "La demande à l’assistant IA a échoué.",
+    "stopResponse": "Arrêter la réponse",
     "history": "Progression et historique",
     "historyHint": "Conversations enregistrées, tâches actives et propositions à valider",
     "newChat": "Nouvelle discussion",
@@ -1022,6 +1023,29 @@
     "applied": "Proposition appliquée.",
     "rejected": "Proposition refusée.",
     "proposalReviewError": "Impossible de valider la proposition.",
+    "proposalVerificationError": "Le serveur n’a pas confirmé l’application de cette proposition. Elle reste inachevée.",
+    "autoAccept": "Accepter automatiquement les propositions",
+    "model": "Modèle",
+    "reasoningEffort": "Effort de raisonnement",
+    "reasoningLevels": {
+      "low": "Faible",
+      "medium": "Moyen",
+      "high": "Élevé",
+      "xhigh": "Très élevé"
+    },
+    "backgroundJobs": "Travail en arrière-plan",
+    "previousJob": "Tâche précédente en arrière-plan",
+    "nextJob": "Tâche suivante en arrière-plan",
+    "categorizationJob": "Catégorisation du catalogue",
+    "contentJob": "Génération du contenu produit",
+    "jobStatus": {
+      "queued": "En attente",
+      "running": "En cours",
+      "completed": "Terminé",
+      "cancelled": "Annulé",
+      "failed": "Échec"
+    },
+    "categorizationSummary": "{applied} appliquées · {proposed} à valider · {unchanged} inchangées · {ambiguous} ambiguës · {failed} échouées",
     "cancel": "Annuler",
     "vs": "contre",
     "metric": "Indicateur",
@@ -1043,6 +1067,7 @@
       "reject": "Rejeter",
       "applied": "Proposition de contenu IA appliquée.",
       "rejected": "Proposition de contenu IA rejetée.",
+      "verificationError": "Le serveur n’a pas confirmé les modifications du produit. La proposition reste inachevée.",
       "empty": "Aucune proposition de contenu en attente."
     },
     "view": {

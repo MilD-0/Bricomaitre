@@ -1,57 +1,21 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { FooterContactLink } from './footer-contact-link';
 
-const animation = vi.hoisted(() => ({ start: vi.fn(), stop: vi.fn() }));
-
-vi.mock('@/components/ui/phone', async () => {
-  const React = await import('react');
-  const PhoneIcon = React.forwardRef((_props, ref) => {
-    React.useImperativeHandle(ref, () => ({ startAnimation: animation.start, stopAnimation: animation.stop }));
-    return <svg data-testid="animated-phone" />;
-  });
-  PhoneIcon.displayName = 'MockPhoneIcon';
-  return {
-    PhoneIcon,
-  };
-});
-
 describe('FooterContactLink', () => {
-  beforeEach(() => {
-    animation.start.mockClear();
-    animation.stop.mockClear();
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
-    vi.stubGlobal('IntersectionObserver', undefined);
-  });
+  afterEach(cleanup);
 
-  afterEach(() => {
-    cleanup();
-    vi.unstubAllGlobals();
-  });
-
-  it('loads the owned animated icon near the footer and responds to hover and focus', async () => {
+  it('renders an icon-specific, CSS-interactive contact target without a client animation runtime', () => {
     render(<FooterContactLink icon="phone" href="tel:+213795342826">0795 34 28 26</FooterContactLink>);
     const link = screen.getByRole('link', { name: '0795 34 28 26' });
 
-    await waitFor(() => expect(screen.getByTestId('animated-phone')).toBeVisible());
-    fireEvent.mouseEnter(link);
-    fireEvent.mouseLeave(link);
-    fireEvent.focus(link);
-
-    expect(animation.start).toHaveBeenCalledTimes(2);
-    expect(animation.stop).toHaveBeenCalledOnce();
+    expect(link).toHaveAttribute('data-contact-icon', 'phone');
+    expect(link.querySelector('svg')).toBeInTheDocument();
   });
 
-  it('does not start decorative motion when reduced motion is requested', async () => {
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }));
-    render(<FooterContactLink icon="phone" href="tel:+213795342826">0795 34 28 26</FooterContactLink>);
-    const link = screen.getByRole('link', { name: '0795 34 28 26' });
-
-    await waitFor(() => expect(screen.getByTestId('animated-phone')).toBeVisible());
-    fireEvent.mouseEnter(link);
-    fireEvent.focus(link);
-
-    expect(animation.start).not.toHaveBeenCalled();
+  it('keeps external contact link semantics', () => {
+    render(<FooterContactLink icon="external" href="https://example.com" external>Facebook</FooterContactLink>);
+    expect(screen.getByRole('link', { name: 'Facebook' })).toHaveAttribute('rel', 'noreferrer');
   });
 });
