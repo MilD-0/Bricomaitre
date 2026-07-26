@@ -378,6 +378,7 @@ describe('ProductsManager', () => {
         return HttpResponse.json({
           proposal: {
             status: 'applied',
+            verified: true,
             product: { ...products[0], titleAr: 'منتج موجود', descriptionAr: 'وصف عربي مقترح' },
           },
         });
@@ -398,6 +399,36 @@ describe('ProductsManager', () => {
       expect(within(dialog).getByRole('textbox', { name: 'Arabic description' })).toHaveValue('وصف عربي مقترح');
     });
     expect(await screen.findByText('AI content proposal applied.')).toBeInTheDocument();
+  });
+
+  it('keeps product content incomplete when the server omits persistence verification', async () => {
+    const proposal = {
+      id: 92,
+      status: 'proposed',
+      before: { titleAr: null },
+      changes: { titleAr: 'عنوان مقترح' },
+      reasoning: 'Generated Arabic title.',
+      expiresAt: '2026-08-01T00:00:00.000Z',
+    };
+    server.use(
+      http.get('/api/ai/products/:id/proposals', () => HttpResponse.json({ proposals: [proposal] })),
+      http.patch('/api/ai/proposals/:id', () => HttpResponse.json({
+        proposal: {
+          status: 'applied',
+          product: { ...products[0], titleAr: 'عنوان مقترح' },
+        },
+      })),
+    );
+
+    renderProductsManager();
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Existing product' }))[0]);
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByText('عنوان مقترح')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve and apply' }));
+
+    expect(await screen.findByText('The server did not verify the product changes. The proposal remains incomplete.')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Approve and apply' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('textbox', { name: 'Arabic name' })).not.toHaveValue('عنوان مقترح');
   });
 
   it('defaults to card view, persists table view, and restores it from local storage', async () => {

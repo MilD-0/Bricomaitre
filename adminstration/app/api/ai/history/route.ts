@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { getDb, hasDb } from '../../../../db/client';
 import { aiProposals, aiRuns } from '../../../../db/schema';
 import { auth } from '../../../../lib/auth';
-import { ADMIN_AI_CONTENT_QUEUE, getLatestExportJob } from '../../../../lib/background-jobs';
+import { ADMIN_AI_CATEGORIZATION_QUEUE, ADMIN_AI_CONTENT_QUEUE, getLatestExportJob } from '../../../../lib/background-jobs';
 import { requireAiUseAccess } from '../../../../lib/rbac';
 
 export async function GET() {
@@ -14,10 +14,13 @@ export async function GET() {
   const session = await auth();
   const owner = session?.user?.email ?? 'unknown-admin';
   const db = getDb();
-  const [proposals, runs, job] = await Promise.all([
+  const [proposals, runs, jobs] = await Promise.all([
     db.select({ id: aiProposals.id, type: aiProposals.proposalType, status: aiProposals.status, entityType: aiProposals.entityType, entityId: aiProposals.entityId, reasoning: aiProposals.reasoning, payload: aiProposals.payload, createdAt: aiProposals.createdAt }).from(aiProposals).where(eq(aiProposals.requestedBy, owner)).orderBy(desc(aiProposals.createdAt)).limit(30),
     db.select({ id: aiRuns.id, task: aiRuns.task, status: aiRuns.status, startedAt: aiRuns.startedAt, completedAt: aiRuns.completedAt, errorCode: aiRuns.errorCode }).from(aiRuns).where(and(eq(aiRuns.actorId, owner), eq(aiRuns.surface, 'admin'))).orderBy(desc(aiRuns.startedAt)).limit(30),
-    getLatestExportJob(ADMIN_AI_CONTENT_QUEUE, owner),
+    Promise.all([
+      getLatestExportJob(ADMIN_AI_CATEGORIZATION_QUEUE, owner),
+      getLatestExportJob(ADMIN_AI_CONTENT_QUEUE, owner),
+    ]).then((items) => items.filter(Boolean)),
   ]);
-  return NextResponse.json({ proposals, runs, jobs: job ? [job] : [] });
+  return NextResponse.json({ proposals, runs, jobs });
 }

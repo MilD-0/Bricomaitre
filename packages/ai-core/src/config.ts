@@ -23,6 +23,10 @@ export const aiConfigSchema = z.object({
 
 export type AiConfig = z.infer<typeof aiConfigSchema>;
 export type AiTask = 'admin' | 'storefront' | 'content';
+export type AiLanguageModelOptions = {
+  model?: string;
+  openRouterRequestBody?: Record<string, unknown>;
+};
 
 function isTruthy(value: string | undefined) {
   return value === '1' || value?.toLowerCase() === 'true';
@@ -70,9 +74,14 @@ export function resolveAiModel(config: AiConfig, task: AiTask) {
   return model;
 }
 
-export function createAiLanguageModel(config: AiConfig, task: AiTask) {
+export function mergeOpenRouterRequestBody(body: string, additions: Record<string, unknown>) {
+  const parsed = JSON.parse(body) as Record<string, unknown>;
+  return JSON.stringify({ ...parsed, ...additions });
+}
+
+export function createAiLanguageModel(config: AiConfig, task: AiTask, options: AiLanguageModelOptions = {}) {
   assertAiConfigured(config);
-  const model = resolveAiModel(config, task);
+  const model = options.model ?? resolveAiModel(config, task);
 
   if (config.provider === 'openrouter') {
     const headers: Record<string, string> = {};
@@ -83,6 +92,14 @@ export function createAiLanguageModel(config: AiConfig, task: AiTask) {
       apiKey: config.apiKey,
       baseURL: config.openRouterBaseUrl ?? 'https://openrouter.ai/api/v1',
       headers,
+      fetch: options.openRouterRequestBody
+        ? (input, init) => globalThis.fetch(input, {
+            ...init,
+            body: typeof init?.body === 'string'
+              ? mergeOpenRouterRequestBody(init.body, options.openRouterRequestBody!)
+              : init?.body,
+          })
+        : undefined,
     });
     return provider.chat(model);
   }

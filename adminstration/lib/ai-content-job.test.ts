@@ -1,0 +1,116 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  runAiContentJob,
+  type AiContentJobDependencies,
+  type AiContentPayload,
+} from './background-jobs';
+
+function payload(overrides: Partial<AiContentPayload> = {}): AiContentPayload {
+  return {
+    __jobMeta: {
+      id: 'content-job-1',
+      ownerKey: 'admin@example.com',
+      queueName: 'admin-ai-content',
+      activeScope: 'owner',
+    },
+    productIds: null,
+    fields: ['titleAr'],
+    onlyMissing: true,
+    autoApply: false,
+    actor: { email: 'admin@example.com', name: 'Admin' },
+    ...overrides,
+  };
+}
+
+function helpers() {
+  return {
+    updateProgress: vi.fn(async () => undefined),
+    updateSummary: vi.fn(async () => undefined),
+    throwIfCancelled: vi.fn(async () => undefined),
+  };
+}
+
+const products = [
+  { id: 1, title: 'Drill', titleAr: null, description: null, descriptionAr: null },
+  { id: 2, title: 'Saw', titleAr: 'منشار', description: null, descriptionAr: null },
+  { id: 3, title: 'Hammer', titleAr: null, description: null, descriptionAr: null },
+  { id: 4, title: 'Broken', titleAr: null, description: null, descriptionAr: null },
+];
+
+describe('AI product content background job', () => {
+  it('reconciles generated, skipped, pending, and failed products', async () => {
+    const dependencies: AiContentJobDependencies = {
+      listProducts: vi.fn(async () => products),
+      listPendingProductIds: vi.fn(async () => new Set([3])),
+      propose: vi.fn(async ({ productId }) => {
+        if (productId === 4) throw new Error('provider failed');
+        return { id: 100 + productId };
+      }),
+      applyProposal: vi.fn(),
+    };
+    const jobHelpers = helpers();
+
+    await expect(runAiContentJob(payload(), jobHelpers, dependencies)).resolves.toEqual({
+      processed: 4,
+      proposed: 1,
+      applied: 0,
+      skipped: 1,
+      alreadyProposed: 1,
+      failed: 1,
+      total: 4,
+      accounted: 4,
+      complete: true,
+      failedProductIds: [4],
+    });
+    expect(dependencies.propose).toHaveBeenCalledWith({
+      productId: 1,
+      fields: ['titleAr'],
+      context: undefined,
+      actorId: 'admin@example.com',
+    });
+    expect(jobHelpers.updateProgress).toHaveBeenLastCalledWith({
+      phase: 'generating-proposals',
+      current: 4,
+      total: 4,
+    });
+  });
+
+  it('auto-applies generated proposals through verified review', async () => {
+    const dependencies: AiContentJobDependencies = {
+      listProducts: vi.fn(async () => [products[0]]),
+      listPendingProductIds: vi.fn(async () => new Set()),
+      propose: vi.fn(async () => ({ id: 101 })),
+      applyProposal: vi.fn(async () => ({ status: 'applied', verified: true })),
+    };
+
+    await expect(runAiContentJob(payload({ autoApply: true }), helpers(), dependencies)).resolves.toMatchObject({
+      processed: 1,
+      proposed: 0,
+      applied: 1,
+      accounted: 1,
+      complete: true,
+    });
+    expect(dependencies.applyProposal).toHaveBeenCalledWith(
+      101,
+      { email: 'admin@example.com', name: 'Admin' },
+    );
+  });
+
+  it('leaves a proposal pending when verified auto-apply fails', async () => {
+    const dependencies: AiContentJobDependencies = {
+      listProducts: vi.fn(async () => [products[0]]),
+      listPendingProductIds: vi.fn(async () => new Set()),
+      propose: vi.fn(async () => ({ id: 101 })),
+      applyProposal: vi.fn(async () => {
+        throw new Error('verification failed');
+      }),
+    };
+
+    await expect(runAiContentJob(payload({ autoApply: true }), helpers(), dependencies)).resolves.toMatchObject({
+      proposed: 1,
+      applied: 0,
+      complete: true,
+    });
+  });
+});

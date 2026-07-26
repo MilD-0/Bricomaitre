@@ -78,6 +78,18 @@ describe('CatalogCard', () => {
     expect(html).toContain('loading="lazy"');
   });
 
+  it('preloads only the two cards in the first mobile row', () => {
+    const second = renderToStaticMarkup(
+      <CatalogCard product={product} locale="fr" position={2} labels={labels} />,
+    );
+    const third = renderToStaticMarkup(
+      <CatalogCard product={product} locale="fr" position={3} labels={labels} />,
+    );
+
+    expect(second).toContain('loading="eager"');
+    expect(third).toContain('loading="lazy"');
+  });
+
   it('renders a canonical legacy HTTPS image instead of replacing it with a placeholder', () => {
     const html = renderToStaticMarkup(
       <CatalogCard

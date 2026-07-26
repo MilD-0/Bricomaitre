@@ -52,6 +52,7 @@ test('provides responsive global navigation, forgiving suggestions, and a live c
   await page.getByRole('button', { name: 'Ouvrir le menu' }).click();
   const navigationDrawer = page.getByRole('dialog', { name: 'Ouvrir le menu' });
   await expect(navigationDrawer).toBeVisible();
+  await navigationDrawer.locator('.navigation-drawer-category-group').first().locator(':scope > summary').click();
   await expect(navigationDrawer.getByRole('link', { name: 'Éclairage', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: 'Ouvrir le menu' })).toHaveCount(0);
@@ -209,9 +210,9 @@ test('preserves Arabic RTL, small-phone cards, and no-JavaScript discovery', asy
   await page.getByRole('button', { name: 'تصفية المنتجات' }).click();
   const filterSheet = page.getByRole('dialog', { name: 'تصفية المنتجات' });
   await expect(filterSheet.getByRole('radio', { name: 'كل الأصناف' })).toBeVisible();
-  const filterSheetBody = filterSheet.locator('.mobile-sheet-body');
-  await expect(filterSheetBody).toHaveCSS('overflow-y', 'scroll');
-  await expect(filterSheetBody).toHaveCSS('touch-action', 'pan-y');
+  const filterSheetScroller = filterSheet.locator('.mobile-sheet-body');
+  await expect(filterSheetScroller).toHaveCSS('overflow-y', 'auto');
+  await expect(filterSheetScroller).toHaveCSS('touch-action', 'pan-y');
   await expect(page.getByRole('heading', { level: 2, name: 'مصباح العمل' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 2, name: 'مثقاب طرقي' })).toBeVisible();
   expect(await page.locator('.catalog-grid').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length)).toBe(2);

@@ -1,9 +1,11 @@
 import * as Sentry from '@sentry/nextjs';
 
-import { getSentryRelease, readSampleRate, sanitizeSentryEvent } from './lib/sentry';
+import { getSentryRelease, normalizeSentryDsn, readSampleRate, sanitizeSentryEvent } from './lib/sentry-config';
 
-const dsn = process.env.SENTRY_DSN_STOREFRONT_NEW?.trim()
-  || process.env.SENTRY_DSN_STOREFRONT?.trim();
+const dsn = normalizeSentryDsn(
+  process.env.SENTRY_DSN_STOREFRONT_NEW
+  || process.env.SENTRY_DSN_STOREFRONT,
+);
 
 Sentry.init({
   dsn: dsn || undefined,

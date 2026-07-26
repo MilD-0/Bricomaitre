@@ -137,23 +137,17 @@ describe('CheckoutForm', () => {
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem('bric:checkout:draft:v1')!).firstName).toBe('Updated'));
   });
 
-  it('marks address as required at home and optional at a delivery office', async () => {
+  it('keeps the address optional for home delivery', async () => {
     render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels as never} />);
     fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), { target: { value: '0550000000' } });
     fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), { target: { value: '16' } });
     fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), { target: { value: 'Alger Centre' } });
     const address = screen.getByRole('textbox', { name: /address/ });
 
-    expect(address).toBeRequired();
-    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
-    await waitFor(() => expect(address).toHaveAttribute('aria-invalid', 'true'));
-    expect(mocks.create).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole('button', { name: /officeDelivery/ }));
     expect(address).not.toBeRequired();
     fireEvent.click(screen.getByRole('button', { name: 'submit' }));
     await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
-    expect(mocks.create.mock.calls[0][0]).toMatchObject({ delivery: 1, homeAddress: null });
+    expect(mocks.create.mock.calls[0][0]).toMatchObject({ delivery: 0, homeAddress: null });
   });
 
   it('animates the shield from the full submit-button hover target', () => {

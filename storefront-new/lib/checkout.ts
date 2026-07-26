@@ -31,14 +31,6 @@ export const checkoutFormSchema = z.object({
   homeAddress: optionalText(300),
   email: optionalEmail,
   delivery: z.enum(['home', 'office']),
-}).superRefine((value, context) => {
-  if (value.delivery === 'home' && value.homeAddress === null) {
-    context.addIssue({
-      code: 'custom',
-      path: ['homeAddress'],
-      message: 'address_required',
-    });
-  }
 });
 
 export type CheckoutFormValues = z.input<typeof checkoutFormSchema>;

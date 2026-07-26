@@ -1009,6 +1009,7 @@
     "thinking": "Working…",
     "completed": "The requested proposal operation completed.",
     "error": "The AI assistant request failed.",
+    "stopResponse": "Stop response",
     "history": "Progress and history",
     "historyHint": "Saved chats, live jobs, and reviewable proposals",
     "newChat": "New chat",
@@ -1024,6 +1025,29 @@
     "applied": "Proposal applied.",
     "rejected": "Proposal rejected.",
     "proposalReviewError": "Unable to review the proposal.",
+    "proposalVerificationError": "The server did not verify that this proposal was applied. It remains incomplete.",
+    "autoAccept": "Automatically accept proposals",
+    "model": "Model",
+    "reasoningEffort": "Reasoning effort",
+    "reasoningLevels": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "xhigh": "Extra high"
+    },
+    "backgroundJobs": "Background work",
+    "previousJob": "Previous background job",
+    "nextJob": "Next background job",
+    "categorizationJob": "Catalog categorization",
+    "contentJob": "Product content generation",
+    "jobStatus": {
+      "queued": "Queued",
+      "running": "Running",
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "failed": "Failed"
+    },
+    "categorizationSummary": "{applied} applied · {proposed} awaiting review · {unchanged} unchanged · {ambiguous} ambiguous · {failed} failed",
     "cancel": "Cancel",
     "vs": "vs",
     "metric": "Metric",
@@ -1045,6 +1069,7 @@
       "reject": "Reject",
       "applied": "AI content proposal applied.",
       "rejected": "AI content proposal rejected.",
+      "verificationError": "The server did not verify the product changes. The proposal remains incomplete.",
       "empty": "No content proposals awaiting review."
     },
     "view": {

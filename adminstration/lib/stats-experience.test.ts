@@ -7,6 +7,7 @@ import {
   buildLandingPagePerformanceQuery,
   CUSTOMER_SUCCESSFUL_ORDER_STATUSES,
   getAiUsagePricing,
+  estimateAdminAiModelCost,
   mapLiveAdminAiStats,
 } from './stats-experience';
 
@@ -75,6 +76,17 @@ describe('experience stats AI pricing', () => {
       AI_ADMIN_OUTPUT_COST_PER_1M_USD: '2',
     })).toBeNull();
   });
+
+  it('uses the selected model and provider rate for admin assistant cost estimates', () => {
+    expect(estimateAdminAiModelCost([
+      { name: 'deepseek/deepseek-v4-flash', runs: 1, tokens: 1_000_000, inputTokens: 800_000, outputTokens: 200_000 },
+      { name: 'deepseek/deepseek-v4-flash@baidu/fp8', runs: 1, tokens: 1_000_000, inputTokens: 500_000, outputTokens: 500_000 },
+      { name: 'openai/gpt-5.6-luna', runs: 1, tokens: 1_000_000, inputTokens: 250_000, outputTokens: 750_000 },
+    ], 3, null)).toEqual({
+      estimatedCostUsd: 5.00545,
+      costCoverageRate: 100,
+    });
+  });
 });
 
 describe('live admin AI stats', () => {
@@ -82,12 +94,14 @@ describe('live admin AI stats', () => {
     const stats = mapLiveAdminAiStats({
       summary: { runs: 4, completed: 4, failed: 0, inputTokens: 800, outputTokens: 200, totalTokens: 1_000, averageDurationMs: 1_250, activeUsers: 1 },
       tasks: [{ name: 'admin_chat', runs: 4, completed: 4, tokens: 1_000 }],
-      models: [{ name: 'deepseek/deepseek-v4-flash', runs: 4, tokens: 1_000 }],
+      models: [{ name: 'deepseek/deepseek-v4-flash', runs: 4, tokens: 1_000, inputTokens: 800, outputTokens: 200 }],
       trend: [{ bucket: '2026-07-20', runs: 4, completed: 4, failed: 0, tokens: 1_000 }],
       conversations: 2,
       toolCalls: 3,
       proposals: 1,
       appliedProposals: 1,
+      estimatedCostUsd: 0.000108,
+      costCoverageRate: 100,
     });
 
     expect(stats).toEqual(expect.objectContaining({

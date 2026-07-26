@@ -8,6 +8,9 @@ test('renders the production homepage hierarchy with responsive banner media', a
   await expect(banner.locator('source[media="(max-width: 620px)"]').first()).toHaveAttribute('srcset', /portrait/);
   await expect(banner.locator('.home-banner-picture').first()).toHaveClass(/is-ready/);
   await expect(banner.locator('.home-banner-picture').nth(1)).toHaveClass(/is-ready/);
+  await expect(page.locator('.site-header .brand img')).toHaveAttribute('src', /^\/_next\/image\?/);
+  await expect(page.locator('link[rel="preload"][as="font"]')).toHaveCount(1);
+  expect(await page.locator('html').evaluate((element) => getComputedStyle(element).getPropertyValue('--font-arabic'))).toBe('');
   const bannerTrack = banner.locator('.home-banner-track');
   const initialBannerTransform = await bannerTrack.evaluate((element) => getComputedStyle(element).transform);
   await expect.poll(() => bannerTrack.evaluate((element) => getComputedStyle(element).transform), { timeout: 7_000, intervals: [1_000] }).not.toBe(initialBannerTransform);
@@ -52,6 +55,10 @@ test('keeps the Arabic homepage readable and within a small-phone viewport', asy
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
   await expect(page.getByRole('heading', { name: 'أفضل المنتجات' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'تسوق حسب الفئة' })).toBeVisible();
+  const bannerTrack = page.locator('.home-banner-track');
+  const initialBannerTransform = await bannerTrack.evaluate((element) => getComputedStyle(element).transform);
+  await page.waitForTimeout(5_500);
+  expect(await bannerTrack.evaluate((element) => getComputedStyle(element).transform)).toBe(initialBannerTransform);
   const categoryCard = page.locator('.home-category-carousel a').first();
   const categoryGeometry = await categoryCard.evaluate((element) => ({ width: element.getBoundingClientRect().width, imageHeight: element.querySelector('span')?.getBoundingClientRect().height ?? 0 }));
   expect(categoryGeometry.width).toBeLessThan(145);

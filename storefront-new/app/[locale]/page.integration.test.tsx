@@ -5,8 +5,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockHomepageResponse } from '@/lib/homepage-mock';
 import { generateMetadata, HomePageContent } from './page';
 
-const mocks = vi.hoisted(() => ({ homepage: vi.fn() }));
-vi.mock('@/lib/storefront-api', () => ({ getStorefrontHomepage: mocks.homepage }));
+const mocks = vi.hoisted(() => ({ homepage: vi.fn(), settings: vi.fn() }));
+vi.mock('@/lib/storefront-api', () => ({
+  getStorefrontHomepage: mocks.homepage,
+  getStorefrontSettings: mocks.settings,
+}));
 vi.mock('next/navigation', () => ({ notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND'); }) }));
 vi.mock('next/image', () => ({ default: (props: Record<string, unknown>) => React.createElement('img', { ...props, priority: undefined, fetchPriority: undefined }) }));
 vi.mock('@/components/page-shell', () => ({ PageShell: ({ children }: { children: React.ReactNode }) => React.createElement('main', null, children) }));
@@ -19,7 +22,15 @@ vi.mock('@/components/homepage-carousels', () => ({
 vi.mock('@/components/storefront-image', () => ({ StorefrontImage: (props: Record<string, unknown>) => React.createElement('img', props) }));
 
 describe('homepage', () => {
-  beforeEach(() => mocks.homepage.mockReset().mockResolvedValue(mockHomepageResponse));
+  beforeEach(() => {
+    mocks.homepage.mockReset().mockResolvedValue(mockHomepageResponse);
+    mocks.settings.mockReset().mockResolvedValue({
+      phoneDisplay: '0795 34 28 26',
+      phoneHref: 'tel:+213795342826',
+      phoneEnabled: true,
+      aiAssistantEnabled: false,
+    });
+  });
 
   it('renders the agreed merchandising hierarchy from the homepage response', async () => {
     const html = renderToStaticMarkup(await HomePageContent({ params: Promise.resolve({ locale: 'fr' }) }));
@@ -55,5 +66,29 @@ describe('homepage', () => {
     const html = renderToStaticMarkup(await HomePageContent({ params: Promise.resolve({ locale: 'fr' }) }));
     expect(html).toContain('application/ld+json');
     expect(html).toContain('https://schema.org');
+  });
+
+  it('loads homepage content and settings concurrently and passes the shared snapshot to the shell', async () => {
+    let releaseHomepage!: () => void;
+    let releaseSettings!: () => void;
+    mocks.homepage.mockReturnValue(new Promise((resolve) => {
+      releaseHomepage = () => resolve(mockHomepageResponse);
+    }));
+    mocks.settings.mockReturnValue(new Promise((resolve) => {
+      releaseSettings = () => resolve({
+        phoneDisplay: '0795 34 28 26',
+        phoneHref: 'tel:+213795342826',
+        phoneEnabled: true,
+        aiAssistantEnabled: false,
+      });
+    }));
+
+    const rendering = HomePageContent({ params: Promise.resolve({ locale: 'fr' }) });
+    await Promise.resolve();
+    expect(mocks.homepage).toHaveBeenCalledOnce();
+    expect(mocks.settings).toHaveBeenCalledOnce();
+    releaseHomepage();
+    releaseSettings();
+    await expect(rendering).resolves.toBeTruthy();
   });
 });

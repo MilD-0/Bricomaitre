@@ -82,6 +82,10 @@ function getActiveKey(queueName: string, scope: 'owner' | 'global', ownerKey: st
     : `bric:jobs:${queueName}:active:${ownerKey}`;
 }
 
+function getQueueIndexKey(queueName: string) {
+  return `bric:jobs:${queueName}:index`;
+}
+
 function serializeSnapshot(snapshot: JobSnapshot) {
   return JSON.stringify(snapshot);
 }
@@ -95,12 +99,60 @@ function parseSnapshot(value: string | null): JobSnapshot | null {
 }
 
 async function writeSnapshot(redis: IORedis, snapshot: JobSnapshot, ttlSeconds = JOB_TTL_SECONDS) {
-  await redis.set(getSnapshotKey(snapshot.queue, snapshot.id), serializeSnapshot(snapshot), 'EX', ttlSeconds);
-  await redis.set(getOwnerKey(snapshot.queue, snapshot.ownerKey), snapshot.id, 'EX', ttlSeconds);
+  const indexKey = getQueueIndexKey(snapshot.queue);
+  await redis
+    .multi()
+    .set(getSnapshotKey(snapshot.queue, snapshot.id), serializeSnapshot(snapshot), 'EX', ttlSeconds)
+    .set(getOwnerKey(snapshot.queue, snapshot.ownerKey), snapshot.id, 'EX', ttlSeconds)
+    .zadd(indexKey, Date.parse(snapshot.createdAt), snapshot.id)
+    .expire(indexKey, ttlSeconds)
+    .exec();
 }
 
 export async function getJobSnapshot(queueName: string, jobId: string) {
   return parseSnapshot(await getRedis().get(getSnapshotKey(queueName, jobId)));
+}
+
+export async function listRecentJobSnapshots(queueNames: readonly string[], limit = 50) {
+  const safeLimit = Math.max(1, Math.min(Math.trunc(limit), 100));
+  const redis = getRedis();
+  const snapshots = (await Promise.all(queueNames.map(async (queueName) => {
+    let jobIds = await redis.zrevrange(getQueueIndexKey(queueName), 0, safeLimit - 1);
+    if (jobIds.length === 0) {
+      const snapshotPrefix = `bric:jobs:${queueName}:`;
+      let cursor = '0';
+      let scanCount = 0;
+      const legacyIds = new Set<string>();
+      do {
+        const [nextCursor, keys] = await redis.scan(
+          cursor,
+          'MATCH',
+          `${snapshotPrefix}*`,
+          'COUNT',
+          100,
+        );
+        scanCount += 1;
+        cursor = nextCursor;
+        for (const key of keys) {
+          const suffix = key.slice(snapshotPrefix.length);
+          if (suffix && suffix !== 'index' && suffix !== 'active' && !suffix.startsWith('active:') && !suffix.startsWith('owner:')) {
+            legacyIds.add(suffix);
+          }
+        }
+      } while (cursor !== '0' && legacyIds.size < safeLimit && scanCount < 10);
+      jobIds = [...legacyIds].slice(0, safeLimit);
+    }
+    if (jobIds.length === 0) return [];
+    const values = await redis.mget(jobIds.map((jobId) => getSnapshotKey(queueName, jobId)));
+    return values.flatMap((value) => {
+      const snapshot = parseSnapshot(value);
+      return snapshot ? [snapshot] : [];
+    });
+  }))).flat();
+
+  return snapshots
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    .slice(0, safeLimit);
 }
 
 export async function getLatestOwnedJob(queueName: string, ownerKey: string) {
@@ -111,6 +163,21 @@ export async function getLatestOwnedJob(queueName: string, ownerKey: string) {
 
 export async function requestJobCancellation(queueName: string, ownerKey: string) {
   const snapshot = await getLatestOwnedJob(queueName, ownerKey);
+  if (!snapshot || snapshot.status !== 'queued' && snapshot.status !== 'running') {
+    return null;
+  }
+
+  const nextSnapshot: JobSnapshot = {
+    ...snapshot,
+    cancelRequested: true,
+    updatedAt: nowIso(),
+  };
+  await writeSnapshot(getRedis(), nextSnapshot);
+  return nextSnapshot;
+}
+
+export async function requestJobCancellationById(queueName: string, jobId: string) {
+  const snapshot = await getJobSnapshot(queueName, jobId);
   if (!snapshot || snapshot.status !== 'queued' && snapshot.status !== 'running') {
     return null;
   }
@@ -322,6 +389,10 @@ export async function throwIfJobCancelled(queueName: string, jobId: string) {
   }
 }
 
+export function isFinalJobAttempt(job: { attemptsMade: number; opts: { attempts?: number } }) {
+  return job.attemptsMade >= (job.opts.attempts ?? 1);
+}
+
 export function getQueue(queueName: string) {
   return new Queue(queueName, {
     connection: getBullRedisConnection(`queue:${queueName}`),
@@ -400,7 +471,7 @@ export function createQueueWorker<T>(
   });
 
   worker.on('failed', async (job, error) => {
-    if (!job?.id) {
+    if (!job?.id || !isFinalJobAttempt(job)) {
       return;
     }
 
@@ -447,7 +518,7 @@ export function createQueueWorker<T>(
   });
 
   worker.on('failed', async (job) => {
-    if (!job?.id) {
+    if (!job?.id || !isFinalJobAttempt(job)) {
       return;
     }
 

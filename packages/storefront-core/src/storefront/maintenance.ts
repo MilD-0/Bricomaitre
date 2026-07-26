@@ -403,14 +403,15 @@ export async function deleteExpiredAnalyticsEventsBatch(
   { now = new Date(), limit = STOREFRONT_MAINTENANCE_BATCH_SIZE } = {},
 ) {
   const cutoff = daysBefore(now, ANALYTICS_RAW_RETENTION_DAYS);
+  const errorCutoff = daysBefore(now, ANALYTICS_ERROR_RETENTION_DAYS);
   const result = await db.execute(sql`
     with expired as (
       select ${analyticsEvents.id}
       from ${analyticsEvents}
       where ${analyticsEvents.occurredAt} < case
           when ${analyticsEvents.eventName} in ('api_error', 'order_create_failed')
-            then ${daysBefore(now, ANALYTICS_ERROR_RETENTION_DAYS)}
-          else ${cutoff}
+            then ${errorCutoff}::timestamptz
+          else ${cutoff}::timestamptz
         end
         and exists (
           select 1 from ${analyticsDailyRollups} rollup

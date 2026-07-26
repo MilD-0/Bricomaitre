@@ -110,6 +110,8 @@ test('renders the French product journey with SEO and governed analytics', async
   await page.getByRole('link', { name: 'Agrandir l’image' }).click();
   const zoom = page.getByRole('dialog', { name: 'Agrandir l’image — Lampe de travail' });
   await expect(zoom).toBeVisible();
+  await expect(zoom.locator('.pswp__img').first()).toHaveCSS('object-fit', 'contain');
+  await expect(zoom.locator('.pswp__img').first()).toHaveCSS('object-position', '50% 50%');
   await expect(zoom.locator('.pswp__button')).toHaveCount(0);
   await expect(zoom.locator('.product-lightbox-control')).toHaveCount(4);
   await expect(zoom).toContainText('1/2');

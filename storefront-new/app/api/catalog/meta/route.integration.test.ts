@@ -12,12 +12,13 @@ describe('GET /api/catalog/meta', () => {
     getCatalogMeta.mockResolvedValue({
       brands: Array.from({ length: 22 }, (_, index) => ({ id: index + 40, name: `Brand ${index + 1}`, slug: `brand-${index + 1}` })),
       categories: [
-        { id: 1, name: 'Hidden', nameAr: null, featured: false },
+        { id: 1, name: 'Hidden', nameAr: null, parentId: null, featured: false },
         ...Array.from({ length: 6 }, (_, index) => ({
           id: index + 2,
           name: `Category ${index + 1}`,
           nameAr: `صنف ${index + 1}`,
           slug: `category-${index + 1}`,
+          parentId: index === 0 ? 1 : null,
           featured: index % 2 === 0,
         })),
       ],
@@ -27,8 +28,14 @@ describe('GET /api/catalog/meta', () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       categories: [
-        { id: 1, name: 'Hidden', nameAr: null, slug: undefined },
-        ...Array.from({ length: 6 }, (_, index) => ({ id: index + 2, name: `Category ${index + 1}`, nameAr: `صنف ${index + 1}`, slug: `category-${index + 1}` })),
+        { id: 1, name: 'Hidden', nameAr: null, slug: undefined, parentId: null },
+        ...Array.from({ length: 6 }, (_, index) => ({
+          id: index + 2,
+          name: `Category ${index + 1}`,
+          nameAr: `صنف ${index + 1}`,
+          slug: `category-${index + 1}`,
+          parentId: index === 0 ? 1 : null,
+        })),
       ],
       brands: Array.from({ length: 22 }, (_, index) => ({ id: index + 40, name: `Brand ${index + 1}`, slug: `brand-${index + 1}` })),
     });

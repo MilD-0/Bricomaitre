@@ -1,12 +1,33 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { auth } from '../../../../../lib/auth';
-import { ADMIN_AI_CONTENT_QUEUE, cancelExportJob } from '../../../../../lib/background-jobs';
-import { requireAiAccess } from '../../../../../lib/rbac';
+import { ADMIN_BACKGROUND_JOB_TYPES, cancelAdminBackgroundJob } from '../../../../../lib/ai-background-jobs';
+import { ADMIN_AI_CATEGORIZATION_QUEUE, ADMIN_AI_CONTENT_QUEUE, cancelExportJob } from '../../../../../lib/background-jobs';
+import { hasPermission, normalizePermissions } from '../../../../../lib/permissions';
+import { requireAiUseAccess } from '../../../../../lib/rbac';
 
-export async function POST() {
-  const denied = await requireAiAccess('ai_catalog_propose');
+const requestSchema = z.union([
+  z.object({ kind: z.enum(['content', 'categorization']).default('content') }).strict(),
+  z.object({ type: z.enum(ADMIN_BACKGROUND_JOB_TYPES), jobId: z.string().uuid() }).strict(),
+]);
+
+export async function POST(request: NextRequest) {
+  const denied = await requireAiUseAccess();
   if (denied) return denied;
+  const parsed = requestSchema.safeParse(await request.json().catch(() => ({})));
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid AI job cancellation request.' }, { status: 400 });
   const session = await auth();
-  return NextResponse.json({ job: await cancelExportJob(ADMIN_AI_CONTENT_QUEUE, session?.user?.email ?? 'unknown-admin') });
+  const permissions = normalizePermissions(session?.user?.permissions);
+  if ('type' in parsed.data) {
+    if (!hasPermission(permissions, 'settings_manage')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    return NextResponse.json(await cancelAdminBackgroundJob(parsed.data.type, parsed.data.jobId));
+  }
+  if (!hasPermission(permissions, 'ai_catalog_propose')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  const queue = parsed.data.kind === 'categorization' ? ADMIN_AI_CATEGORIZATION_QUEUE : ADMIN_AI_CONTENT_QUEUE;
+  return NextResponse.json({ job: await cancelExportJob(queue, session?.user?.email ?? 'unknown-admin') });
 }

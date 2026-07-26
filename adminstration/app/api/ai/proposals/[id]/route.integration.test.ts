@@ -30,8 +30,8 @@ describe('AI proposal review route', () => {
     mocks.mutationAccess.mockReset().mockResolvedValue(null);
     mocks.hasDb.mockReset().mockReturnValue(true);
     mocks.auth.mockReset().mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
-    mocks.review.mockReset().mockResolvedValue({ id: 4, status: 'applied', product: { id: 1 } });
-    mocks.reviewAdmin.mockReset().mockResolvedValue({ id: 4, status: 'applied', proposalType: 'featured_products' });
+    mocks.review.mockReset().mockResolvedValue({ id: 4, status: 'applied', verified: true, product: { id: 1 } });
+    mocks.reviewAdmin.mockReset().mockResolvedValue({ id: 4, status: 'applied', verified: true, proposalType: 'featured_products' });
     mocks.proposalRow.mockReset().mockResolvedValue([{ type: 'product_content', entityType: 'products' }]);
     mocks.revalidateTags.mockReset(); mocks.revalidateProducts.mockReset().mockResolvedValue(undefined);
     mocks.refreshFeed.mockReset().mockResolvedValue(undefined);
@@ -50,6 +50,17 @@ describe('AI proposal review route', () => {
     const response = await PATCH(request('approve'), { params: Promise.resolve({ id: '4' }) });
     expect(response.status).toBe(200);
     expect(mocks.aiAccess).toHaveBeenCalledWith('ai_pricing_apply');
+  });
+
+  it('uses brands and categories access for taxonomy creation', async () => {
+    mocks.proposalRow.mockResolvedValue([{ type: 'entity_create', entityType: 'categories' }]);
+    const response = await PATCH(request('approve'), { params: Promise.resolve({ id: '4' }) });
+    expect(response.status).toBe(200);
+    expect(mocks.mutationAccess).toHaveBeenCalledWith('brandsCategories');
+    expect(mocks.reviewAdmin).toHaveBeenCalledWith(expect.objectContaining({
+      actorId: 'admin@example.com',
+      actorName: 'Admin',
+    }));
   });
 
   it('requires AI apply and normal product-write access for approval', async () => {

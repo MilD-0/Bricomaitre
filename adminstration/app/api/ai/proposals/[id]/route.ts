@@ -37,7 +37,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     const result = proposal.type === 'product_content'
       ? await reviewProductContentProposal({ proposalId, action: parsed.data.action, actor: { email: session?.user?.email, name: session?.user?.name } })
-      : await reviewAdminProposal({ proposalId, action: parsed.data.action, actorId: session?.user?.email });
+      : await reviewAdminProposal({ proposalId, action: parsed.data.action, actorId: session?.user?.email, actorName: session?.user?.name });
     if (result.status === 'applied') {
       revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
       await revalidateStorefrontProducts();
