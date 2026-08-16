@@ -1,4 +1,4 @@
-import { cacheLife, cacheTag, revalidateTag } from 'next/cache';
+import { revalidateTag, unstable_cache } from 'next/cache';
 
 export const CACHE_TAGS = {
   assets: 'assets',
@@ -11,16 +11,16 @@ export const CACHE_TAGS = {
   landingPages: 'landing-pages',
 } as const;
 
-export function applyServerCache(profile: Parameters<typeof cacheLife>[0], ...tags: string[]) {
-  try {
-    cacheLife(profile);
-
-    if (tags.length > 0) {
-      cacheTag(...tags);
-    }
-  } catch {
-    // Vitest and non-Next execution contexts do not provide the cache runtime.
-  }
+export function createServerCache<TArgs extends unknown[], TResult>(options: {
+  keyParts: string[];
+  revalidate: number;
+  tags: string[];
+  load: (...args: TArgs) => Promise<TResult>;
+}) {
+  return unstable_cache(options.load, options.keyParts, {
+    revalidate: options.revalidate,
+    tags: options.tags,
+  });
 }
 
 export function revalidateServerTags(...tags: string[]) {

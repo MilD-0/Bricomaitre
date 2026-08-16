@@ -1,7 +1,7 @@
-import { type InferInsertModel, asc, eq } from 'drizzle-orm';
+import { type InferInsertModel, and, asc, eq } from 'drizzle-orm';
 
-import type { getDb } from '../../../db/src/client';
-import { orderStatusHistory, orders } from '../../../db/src/schema';
+import type { getDb } from '@bric/db/client';
+import { orderStatusHistory, orders, storefrontOrderIdempotency } from '@bric/db/schema';
 import { attachJourneyToOrder } from './analytics';
 import { readEcotrackDeliveryFee } from '../ecotrack-support';
 import {
@@ -51,10 +51,12 @@ function isBlank(value: string | null | undefined) {
 }
 
 function shouldStartAsDegradedCapture(payload: StorefrontOrderCreateRequest) {
-  return payload.cartProducts.length === 0
-    || payload.state == null
-    || isBlank(payload.city)
-    || (payload.delivery === 0 && isBlank(payload.homeAddress));
+  return (
+    payload.cartProducts.length === 0 ||
+    payload.state == null ||
+    isBlank(payload.city) ||
+    (payload.delivery === 0 && isBlank(payload.homeAddress))
+  );
 }
 
 async function measureStep<T>(
@@ -74,7 +76,9 @@ async function measureStep<T>(
   }
 }
 
-function toStorefrontHistoryEntries(rows: typeof orderStatusHistory.$inferSelect[]): OrderStatusHistoryRecord[] {
+function toStorefrontHistoryEntries(
+  rows: (typeof orderStatusHistory.$inferSelect)[],
+): OrderStatusHistoryRecord[] {
   return rows.map((entry) => {
     const status = coerceOrderStatus(entry.status);
 
@@ -89,16 +93,12 @@ function toStorefrontHistoryEntries(rows: typeof orderStatusHistory.$inferSelect
   });
 }
 
-function buildCanonicalCartProducts(
-  fallback: string[],
-  lines: MetaCommerceLine[],
-) {
+function buildCanonicalCartProducts(fallback: string[], lines: MetaCommerceLine[]) {
   if (lines.length === 0) {
     return fallback;
   }
 
-  return lines.flatMap((line) =>
-    Array.from({ length: line.quantity }, () => line.contentId));
+  return lines.flatMap((line) => Array.from({ length: line.quantity }, () => line.contentId));
 }
 
 export async function createStorefrontOrder(
@@ -107,6 +107,10 @@ export async function createStorefrontOrder(
   options?: {
     reportTiming?: TimingReporter;
     metaRequestContext?: MetaRequestContext;
+    idempotency?: {
+      keyHash: string;
+      fingerprint: string;
+    };
   },
 ) {
   const now = new Date();
@@ -128,45 +132,52 @@ export async function createStorefrontOrder(
     ? await readMetaOrderLocation(db, payload.state, payload.city).catch(() => null)
     : null;
   const canonicalCartProducts = buildCanonicalCartProducts(payload.cartProducts, orderLines);
-  let historyRows: typeof orderStatusHistory.$inferSelect[] = [];
+  let historyRows: (typeof orderStatusHistory.$inferSelect)[] = [];
   let metaResponse: Awaited<ReturnType<typeof createOrderMetaArtifacts>> | undefined;
   const created = await db.transaction(async (tx) => {
-    const [createdOrder] = await measureStep('insertOrder', reportTiming, () => tx.insert(orders).values({
-      firstName: payload.firstName,
-      lastName: payload.lastName,
-      email: payload.email,
-      phoneNumber1: payload.phoneNumber1,
-      phoneNumber2: payload.phoneNumber2,
-      publicToken,
-      cartProducts: canonicalCartProducts,
-      visitId: payload.visitId,
-      journeyId: payload.journeyId,
-      sessionId: payload.sessionId,
-      delivery: coerceDeliveryType(payload.delivery),
-      state: payload.state,
-      city: payload.city,
-      homeAddress: payload.homeAddress,
-      note: payload.note,
-      delPr: null,
-      price: orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null,
-      promoCode: orderPromo?.code ?? null,
-      promoProductId: orderPromo?.productId ?? null,
-      promoOriginalSubtotal: orderPromo ? orderPromo.originalSubtotal.toFixed(2) : null,
-      promoDiscountAmount: orderPromo ? orderPromo.discountAmount.toFixed(2) : null,
-      promoFinalSubtotal: orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null,
-      variant: degradedCapture ? DEGRADED_CAPTURE_VARIANT : null,
-      createdAt: now,
-      updatedAt: now,
-    }).returning());
-    const insertedHistory = await measureStep('insertStatusHistory', reportTiming, () => tx
-      .insert(orderStatusHistory)
-      .values({
-        orderId: createdOrder.id,
-        status: createdOrder.confirmed,
-        noAnswerCount: createdOrder.noAnswerCount,
-        changedAt: now,
-      })
-      .returning());
+    const [createdOrder] = await measureStep('insertOrder', reportTiming, () =>
+      tx
+        .insert(orders)
+        .values({
+          firstName: payload.firstName,
+          lastName: payload.lastName,
+          email: payload.email,
+          phoneNumber1: payload.phoneNumber1,
+          phoneNumber2: payload.phoneNumber2,
+          publicToken,
+          cartProducts: canonicalCartProducts,
+          visitId: payload.visitId,
+          journeyId: payload.journeyId,
+          sessionId: payload.sessionId,
+          delivery: coerceDeliveryType(payload.delivery),
+          state: payload.state,
+          city: payload.city,
+          homeAddress: payload.homeAddress,
+          note: payload.note,
+          delPr: null,
+          price: orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null,
+          promoCode: orderPromo?.code ?? null,
+          promoProductId: orderPromo?.productId ?? null,
+          promoOriginalSubtotal: orderPromo ? orderPromo.originalSubtotal.toFixed(2) : null,
+          promoDiscountAmount: orderPromo ? orderPromo.discountAmount.toFixed(2) : null,
+          promoFinalSubtotal: orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null,
+          variant: degradedCapture ? DEGRADED_CAPTURE_VARIANT : null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning(),
+    );
+    const insertedHistory = await measureStep('insertStatusHistory', reportTiming, () =>
+      tx
+        .insert(orderStatusHistory)
+        .values({
+          orderId: createdOrder.id,
+          status: createdOrder.confirmed,
+          noAnswerCount: createdOrder.noAnswerCount,
+          changedAt: now,
+        })
+        .returning(),
+    );
     historyRows = insertedHistory;
     if (payload.meta) {
       metaResponse = await createOrderMetaArtifacts(tx, {
@@ -189,6 +200,28 @@ export async function createStorefrontOrder(
         requestContext: options?.metaRequestContext ?? {},
         now,
       });
+    }
+    if (options?.idempotency) {
+      const completedAt = new Date();
+      const completedRows = await tx
+        .update(storefrontOrderIdempotency)
+        .set({
+          orderId: createdOrder.id,
+          metaResponse: metaResponse ?? null,
+          completedAt,
+          updatedAt: completedAt,
+          expiresAt: new Date(completedAt.getTime() + 24 * 60 * 60 * 1_000),
+        })
+        .where(
+          and(
+            eq(storefrontOrderIdempotency.keyHash, options.idempotency.keyHash),
+            eq(storefrontOrderIdempotency.fingerprint, options.idempotency.fingerprint),
+          ),
+        )
+        .returning({ keyHash: storefrontOrderIdempotency.keyHash });
+      if (completedRows.length !== 1) {
+        throw new Error('Unable to complete the durable order idempotency record.');
+      }
     }
     return createdOrder;
   });
@@ -217,56 +250,78 @@ export async function createStorefrontOrder(
   }
 
   if (payload.state != null) {
-    pendingTimings.push((async () => {
-      try {
-        const deliveryFee = await measureStep('readEcotrackDeliveryFee', reportTiming, () =>
-          readEcotrackDeliveryFee(db, payload.state, coerceDeliveryType(payload.delivery)));
-        const deliveryFeeValue = deliveryFee.toFixed(2);
-        await db
-          .update(orders)
-          .set({
-            delPr: deliveryFeeValue,
-            updatedAt: new Date(),
-          })
-          .where(eq(orders.id, currentOrder.id));
-        currentOrder = { ...currentOrder, delPr: deliveryFeeValue };
-      } catch {
-        await markDegradedCapture();
-      }
-    })());
+    pendingTimings.push(
+      (async () => {
+        try {
+          const deliveryFee = await measureStep('readEcotrackDeliveryFee', reportTiming, () =>
+            readEcotrackDeliveryFee(db, payload.state, coerceDeliveryType(payload.delivery)),
+          );
+          const deliveryFeeValue = deliveryFee.toFixed(2);
+          await db
+            .update(orders)
+            .set({
+              delPr: deliveryFeeValue,
+              updatedAt: new Date(),
+            })
+            .where(eq(orders.id, currentOrder.id));
+          currentOrder = { ...currentOrder, delPr: deliveryFeeValue };
+        } catch {
+          await markDegradedCapture();
+        }
+      })(),
+    );
   }
 
   if (payload.journeyId || payload.sessionId) {
     void measureStep('attachJourneyToOrder', reportTiming, () =>
-      attachJourneyToOrder(db, currentOrder.id, payload.journeyId ?? null, payload.sessionId ?? null))
-      .catch(() => {
-        void markDegradedCapture();
-      });
+      attachJourneyToOrder(
+        db,
+        currentOrder.id,
+        payload.journeyId ?? null,
+        payload.sessionId ?? null,
+      ),
+    ).catch(() => {
+      void markDegradedCapture();
+    });
   }
 
   let productLookup = new Map<string, ProductLookupEntry>();
 
-  pendingTimings.push((async () => {
-    try {
-      productLookup = await measureStep('loadProductLookup', reportTiming, () =>
-        getOrderProductLookup(db, [currentOrder]));
-    } catch {
-      await markDegradedCapture();
-    }
-  })());
+  pendingTimings.push(
+    (async () => {
+      try {
+        productLookup = await measureStep('loadProductLookup', reportTiming, () =>
+          getOrderProductLookup(db, [currentOrder]),
+        );
+      } catch {
+        await markDegradedCapture();
+      }
+    })(),
+  );
 
   await Promise.all(pendingTimings);
 
   const item = await measureStep('buildOrderDto', reportTiming, async () =>
-    toStorefrontOrderDto(currentOrder, toStorefrontHistoryEntries(historyRows), productLookup));
+    toStorefrontOrderDto(currentOrder, toStorefrontHistoryEntries(historyRows), productLookup),
+  );
   return { item, meta: metaResponse };
 }
 
-export async function readStorefrontOrder(
-  db: Database,
-  id: number,
-  token: string | null,
-) {
+export async function readCommittedStorefrontOrder(db: Database, id: number) {
+  const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+  if (!order) return null;
+
+  const historyRows = await db
+    .select()
+    .from(orderStatusHistory)
+    .where(eq(orderStatusHistory.orderId, id))
+    .orderBy(asc(orderStatusHistory.changedAt));
+  const productLookup = await getOrderProductLookup(db, [order]);
+
+  return toStorefrontOrderDto(order, toStorefrontHistoryEntries(historyRows), productLookup);
+}
+
+export async function readStorefrontOrder(db: Database, id: number, token: string | null) {
   const access = await requireStorefrontOrderAccess(db, id, token);
 
   if (access.kind !== 'ok') {
@@ -282,15 +337,16 @@ export async function readStorefrontOrder(
 
   return {
     kind: 'ok' as const,
-    item: toStorefrontOrderDto(access.order, toStorefrontHistoryEntries(historyRows), productLookup),
+    item: toStorefrontOrderDto(
+      access.order,
+      toStorefrontHistoryEntries(historyRows),
+      productLookup,
+    ),
     token: access.token,
   };
 }
 
-export async function readStorefrontOrderByToken(
-  db: Database,
-  token: string | null,
-) {
+export async function readStorefrontOrderByToken(db: Database, token: string | null) {
   const access = await requireStorefrontOrderAccessByToken(db, token);
 
   if (access.kind !== 'ok') {
@@ -306,7 +362,11 @@ export async function readStorefrontOrderByToken(
 
   return {
     kind: 'ok' as const,
-    item: toStorefrontOrderDto(access.order, toStorefrontHistoryEntries(historyRows), productLookup),
+    item: toStorefrontOrderDto(
+      access.order,
+      toStorefrontHistoryEntries(historyRows),
+      productLookup,
+    ),
     token: access.token,
   };
 }
@@ -323,7 +383,8 @@ export async function updateStorefrontOrder(
     return access;
   }
 
-  const shouldResolveDeliveryFee = changes.delivery !== undefined || changes.state !== undefined || changes.city !== undefined;
+  const shouldResolveDeliveryFee =
+    changes.delivery !== undefined || changes.state !== undefined || changes.city !== undefined;
   const update: Partial<InferInsertModel<typeof orders>> & { updatedAt: Date } = {
     updatedAt: new Date(),
   };
@@ -342,7 +403,8 @@ export async function updateStorefrontOrder(
 
   if (changes.cartProducts !== undefined || changes.promoCode !== undefined) {
     const nextCartProducts = changes.cartProducts ?? access.order.cartProducts ?? [];
-    const nextPromoCode = changes.promoCode !== undefined ? changes.promoCode : access.order.promoCode;
+    const nextPromoCode =
+      changes.promoCode !== undefined ? changes.promoCode : access.order.promoCode;
     const orderPromo = await resolveOrderPromo(db, {
       cartProducts: nextCartProducts,
       promoCode: nextPromoCode,
@@ -369,11 +431,7 @@ export async function updateStorefrontOrder(
 
   let updatedOrder!: typeof orders.$inferSelect;
   await db.transaction(async (tx) => {
-    const [row] = await tx
-      .update(orders)
-      .set(update)
-      .where(eq(orders.id, id))
-      .returning();
+    const [row] = await tx.update(orders).set(update).where(eq(orders.id, id)).returning();
     updatedOrder = row;
     if (changes.cartProducts !== undefined || changes.promoCode !== undefined) {
       await replaceOrderLineSnapshots(tx, id, nextOrderLines ?? []);
@@ -388,7 +446,11 @@ export async function updateStorefrontOrder(
 
   return {
     kind: 'ok' as const,
-    item: toStorefrontOrderDto(updatedOrder, toStorefrontHistoryEntries(historyRows), productLookup),
+    item: toStorefrontOrderDto(
+      updatedOrder,
+      toStorefrontHistoryEntries(historyRows),
+      productLookup,
+    ),
     token: access.token,
   };
 }

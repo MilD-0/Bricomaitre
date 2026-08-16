@@ -1,7 +1,7 @@
 import { and, eq, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 
-import type { getDb } from '../../../db/src/client';
-import { productPromoCodes, products } from '../../../db/src/schema';
+import type { getDb } from '@bric/db/client';
+import { productPromoCodes, products } from '@bric/db/schema';
 import { isMongoObjectId, parseNumericAmount, type OrderProductSummary } from '../orders-support';
 
 type Database = ReturnType<typeof getDb>;
@@ -58,12 +58,14 @@ export async function readActiveProductPromo(
     })
     .from(productPromoCodes)
     .innerJoin(products, eq(products.id, productPromoCodes.productId))
-    .where(and(
-      eq(productPromoCodes.productId, input.productId),
-      eq(productPromoCodes.normalizedCode, normalizedCode),
-      eq(products.active, true),
-      activePromoWindow(input.now ?? new Date()),
-    ))
+    .where(
+      and(
+        eq(productPromoCodes.productId, input.productId),
+        eq(productPromoCodes.normalizedCode, normalizedCode),
+        eq(products.active, true),
+        activePromoWindow(input.now ?? new Date()),
+      ),
+    )
     .limit(1);
 
   if (!row) {
@@ -100,23 +102,27 @@ export async function resolveOrderPromo(
     return null;
   }
 
-  const productIds = [...new Set(
-    input.cartProducts
-      .map((value) => value.trim())
-      .filter((value) => /^\d+$/.test(value))
-      .map((value) => Number.parseInt(value, 10))
-      .filter((value) => Number.isInteger(value) && value > 0),
-  )];
-  const mongoIds = [...new Set(
-    input.cartProducts
-      .map((value) => value.trim())
-      .filter((value) => isMongoObjectId(value)),
-  )];
-  const slugs = [...new Set(
-    input.cartProducts
-      .map((value) => value.trim())
-      .filter((value) => value.length > 0 && !/^\d+$/.test(value) && !isMongoObjectId(value)),
-  )];
+  const productIds = [
+    ...new Set(
+      input.cartProducts
+        .map((value) => value.trim())
+        .filter((value) => /^\d+$/.test(value))
+        .map((value) => Number.parseInt(value, 10))
+        .filter((value) => Number.isInteger(value) && value > 0),
+    ),
+  ];
+  const mongoIds = [
+    ...new Set(
+      input.cartProducts.map((value) => value.trim()).filter((value) => isMongoObjectId(value)),
+    ),
+  ];
+  const slugs = [
+    ...new Set(
+      input.cartProducts
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0 && !/^\d+$/.test(value) && !isMongoObjectId(value)),
+    ),
+  ];
 
   if (productIds.length === 0 && mongoIds.length === 0 && slugs.length === 0) {
     return null;
@@ -130,14 +136,16 @@ export async function resolveOrderPromo(
       originalPrice: sql<number>`${products.price}::double precision`,
     })
     .from(products)
-    .where(and(
-      eq(products.active, true),
-      or(
-        ...(productIds.length > 0 ? [inArray(products.id, productIds)] : []),
-        ...(mongoIds.length > 0 ? [inArray(products.mongoId, mongoIds)] : []),
-        ...(slugs.length > 0 ? [inArray(products.slug, slugs)] : []),
+    .where(
+      and(
+        eq(products.active, true),
+        or(
+          ...(productIds.length > 0 ? [inArray(products.id, productIds)] : []),
+          ...(mongoIds.length > 0 ? [inArray(products.mongoId, mongoIds)] : []),
+          ...(slugs.length > 0 ? [inArray(products.slug, slugs)] : []),
+        ),
       ),
-    ));
+    );
 
   if (productRows.length === 0) {
     return null;
@@ -154,16 +162,18 @@ export async function resolveOrderPromo(
     })
     .from(productPromoCodes)
     .innerJoin(products, eq(products.id, productPromoCodes.productId))
-    .where(and(
-      eq(productPromoCodes.normalizedCode, normalizedCode),
-      eq(products.active, true),
-      or(
-        ...(productIds.length > 0 ? [inArray(products.id, productIds)] : []),
-        ...(mongoIds.length > 0 ? [inArray(products.mongoId, mongoIds)] : []),
-        ...(slugs.length > 0 ? [inArray(products.slug, slugs)] : []),
+    .where(
+      and(
+        eq(productPromoCodes.normalizedCode, normalizedCode),
+        eq(products.active, true),
+        or(
+          ...(productIds.length > 0 ? [inArray(products.id, productIds)] : []),
+          ...(mongoIds.length > 0 ? [inArray(products.mongoId, mongoIds)] : []),
+          ...(slugs.length > 0 ? [inArray(products.slug, slugs)] : []),
+        ),
+        activePromoWindow(input.now ?? new Date()),
       ),
-      activePromoWindow(input.now ?? new Date()),
-    ));
+    );
 
   const discountableRows = rows
     .map((row) => ({
@@ -180,9 +190,11 @@ export async function resolveOrderPromo(
   const promo = discountableRows[0];
   const matchingQuantity = input.cartProducts.filter((value) => {
     const trimmed = value.trim();
-    return trimmed === String(promo.productId)
-      || (promo.mongoId !== null && trimmed === promo.mongoId)
-      || (promo.slug !== null && trimmed === promo.slug);
+    return (
+      trimmed === String(promo.productId) ||
+      (promo.mongoId !== null && trimmed === promo.mongoId) ||
+      (promo.slug !== null && trimmed === promo.slug)
+    );
   }).length;
 
   if (matchingQuantity <= 0) {
@@ -191,15 +203,20 @@ export async function resolveOrderPromo(
 
   const originalSubtotal = input.cartProducts.reduce((sum, value) => {
     const trimmed = value.trim();
-    if (trimmed === String(promo.productId)
-      || (promo.mongoId !== null && trimmed === promo.mongoId)
-      || (promo.slug !== null && trimmed === promo.slug)) {
+    if (
+      trimmed === String(promo.productId) ||
+      (promo.mongoId !== null && trimmed === promo.mongoId) ||
+      (promo.slug !== null && trimmed === promo.slug)
+    ) {
       return sum + promo.originalPrice;
     }
 
-    const otherRow = productRows.find((row) => trimmed === String(row.productId)
-      || (row.mongoId !== null && trimmed === row.mongoId)
-      || (row.slug !== null && trimmed === row.slug));
+    const otherRow = productRows.find(
+      (row) =>
+        trimmed === String(row.productId) ||
+        (row.mongoId !== null && trimmed === row.mongoId) ||
+        (row.slug !== null && trimmed === row.slug),
+    );
     return sum + parseNumericAmount(otherRow?.originalPrice);
   }, 0);
   const discountAmount = Math.max(0, (promo.originalPrice - promo.promoPrice) * matchingQuantity);

@@ -4,10 +4,10 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ARG BRIC_BUILD_NODE_OPTIONS=""
 ARG GOOGLE_CLIENT_ID
-ARG NEXTAUTH_URL
+ARG BETTER_AUTH_URL
 ARG STOREFRONT_API_BASE_URL
 ENV GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID}"
-ENV NEXTAUTH_URL="${NEXTAUTH_URL}"
+ENV BETTER_AUTH_URL="${BETTER_AUTH_URL}"
 ENV STOREFRONT_API_BASE_URL="${STOREFRONT_API_BASE_URL}"
 
 RUN corepack enable
@@ -15,19 +15,18 @@ RUN corepack enable
 WORKDIR /workspace
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY adminstration/package.json adminstration/package.json
-COPY storefront-api/package.json storefront-api/package.json
-COPY storefront/package.json storefront/package.json
+COPY apps/admin/package.json apps/admin/package.json
+COPY apps/storefront-api/package.json apps/storefront-api/package.json
+COPY apps/storefront/package.json apps/storefront/package.json
 COPY packages/ai-core/package.json packages/ai-core/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/runtime/package.json packages/runtime/package.json
 COPY packages/storefront-core/package.json packages/storefront-core/package.json
-COPY storefront/app/components/package.json storefront/app/components/package.json
 
 RUN NODE_OPTIONS="${BRIC_BUILD_NODE_OPTIONS}" pnpm install --frozen-lockfile
 
 COPY tsconfig.base.json ./
-COPY adminstration ./adminstration
+COPY apps/admin ./apps/admin
 COPY packages/ai-core ./packages/ai-core
 COPY packages/db ./packages/db
 COPY packages/runtime ./packages/runtime
@@ -38,12 +37,12 @@ COPY ops/ownership ./ops/ownership
 FROM base AS build
 
 RUN --mount=type=secret,id=google_client_secret \
-  --mount=type=secret,id=nextauth_secret \
+  --mount=type=secret,id=better_auth_secret \
   GOOGLE_CLIENT_SECRET="$(cat /run/secrets/google_client_secret)" \
-  NEXTAUTH_SECRET="$(cat /run/secrets/nextauth_secret)" \
-  pnpm --filter adminstration build \
-  && pnpm --filter adminstration build:worker \
-  && pnpm --filter adminstration build:db-tasks
+  BETTER_AUTH_SECRET="$(cat /run/secrets/better_auth_secret)" \
+  pnpm --filter @bric/admin build \
+  && pnpm --filter @bric/admin build:worker \
+  && pnpm --filter @bric/admin build:db-tasks
 
 FROM node:24-bookworm-slim AS web
 
@@ -70,17 +69,17 @@ COPY --chown=bric:bric ops/ownership/BRICOMAITRE_AUTHORIZED_RELEASE.txt ./BRICOM
 COPY --chown=bric:bric ops/ownership/LICENSE ./LICENSE
 COPY --chown=bric:bric ops/ownership/NOTICE ./NOTICE
 COPY --chown=bric:bric ops/ownership/SECURITY.md ./SECURITY.md
-COPY --from=build --chown=bric:bric /workspace/adminstration/.next/standalone ./
-COPY --from=build --chown=bric:bric /workspace/adminstration/.next/static ./adminstration/.next/static
-COPY --from=build --chown=bric:bric /workspace/adminstration/public ./adminstration/public
-RUN mkdir -p /app/adminstration/.next/cache \
-  && chown -R bric:bric /app/adminstration/.next/cache \
+COPY --from=build --chown=bric:bric /workspace/apps/admin/.next/standalone ./
+COPY --from=build --chown=bric:bric /workspace/apps/admin/.next/static ./apps/admin/.next/static
+COPY --from=build --chown=bric:bric /workspace/apps/admin/public ./apps/admin/public
+RUN mkdir -p /app/apps/admin/.next/cache \
+  && chown -R bric:bric /app/apps/admin/.next/cache \
   && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete
 
 EXPOSE 3000
 USER bric
 
-CMD ["node", "adminstration/server.js"]
+CMD ["node", "apps/admin/server.js"]
 
 FROM node:24-bookworm-slim AS worker
 
@@ -106,14 +105,15 @@ COPY --chown=bric:bric ops/ownership/LICENSE ./LICENSE
 COPY --chown=bric:bric ops/ownership/NOTICE ./NOTICE
 COPY --chown=bric:bric ops/ownership/SECURITY.md ./SECURITY.md
 COPY --from=base --chown=bric:bric /workspace/node_modules ./node_modules
-COPY --from=base --chown=bric:bric /workspace/adminstration/node_modules ./adminstration/node_modules
-COPY --from=build --chown=bric:bric /workspace/adminstration/dist/run-background-workers.cjs ./adminstration/dist/run-background-workers.cjs
-RUN node --check adminstration/dist/run-background-workers.cjs \
+COPY --from=base --chown=bric:bric /workspace/apps/admin/node_modules ./apps/admin/node_modules
+COPY --from=build --chown=bric:bric /workspace/apps/admin/dist/run-background-workers.cjs ./apps/admin/dist/run-background-workers.cjs
+RUN node --check apps/admin/dist/run-background-workers.cjs \
+  && ADMIN_WORKER_BOOTSTRAP_CHECK=1 node apps/admin/dist/run-background-workers.cjs \
   && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete
 
 USER bric
 
-CMD ["node", "adminstration/dist/run-background-workers.cjs"]
+CMD ["node", "apps/admin/dist/run-background-workers.cjs"]
 
 FROM node:24-bookworm-slim AS migrations
 
@@ -139,14 +139,14 @@ COPY --chown=bric:bric ops/ownership/LICENSE ./LICENSE
 COPY --chown=bric:bric ops/ownership/NOTICE ./NOTICE
 COPY --chown=bric:bric ops/ownership/SECURITY.md ./SECURITY.md
 COPY --from=base --chown=bric:bric /workspace/node_modules ./node_modules
-COPY --from=base --chown=bric:bric /workspace/adminstration/node_modules ./adminstration/node_modules
-COPY --from=build --chown=bric:bric /workspace/adminstration/dist/run-db-migrations.cjs ./adminstration/dist/run-db-migrations.cjs
-COPY --from=build --chown=bric:bric /workspace/adminstration/dist/verify-db-migrations.cjs ./adminstration/dist/verify-db-migrations.cjs
-COPY --from=build --chown=bric:bric /workspace/adminstration/drizzle ./drizzle
-RUN node --check adminstration/dist/run-db-migrations.cjs \
-  && node --check adminstration/dist/verify-db-migrations.cjs \
+COPY --from=base --chown=bric:bric /workspace/apps/admin/node_modules ./apps/admin/node_modules
+COPY --from=build --chown=bric:bric /workspace/apps/admin/dist/run-db-migrations.cjs ./apps/admin/dist/run-db-migrations.cjs
+COPY --from=build --chown=bric:bric /workspace/apps/admin/dist/verify-db-migrations.cjs ./apps/admin/dist/verify-db-migrations.cjs
+COPY --from=build --chown=bric:bric /workspace/apps/admin/drizzle ./drizzle
+RUN node --check apps/admin/dist/run-db-migrations.cjs \
+  && node --check apps/admin/dist/verify-db-migrations.cjs \
   && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete
 
 USER bric
 
-CMD ["sh", "-lc", "case \"${ADMIN_DB_TASK:-verify}\" in verify) node adminstration/dist/verify-db-migrations.cjs ;; migrate) node adminstration/dist/run-db-migrations.cjs ;; *) echo \"unsupported ADMIN_DB_TASK: ${ADMIN_DB_TASK}\" >&2; exit 1 ;; esac"]
+CMD ["sh", "-lc", "case \"${ADMIN_DB_TASK:-verify}\" in verify) node apps/admin/dist/verify-db-migrations.cjs ;; migrate) node apps/admin/dist/run-db-migrations.cjs ;; *) echo \"unsupported ADMIN_DB_TASK: ${ADMIN_DB_TASK}\" >&2; exit 1 ;; esac"]

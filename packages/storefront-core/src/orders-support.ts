@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-export const orderStatusValues = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
-export const deliveryTypeValues = [0, 1] as const;
+const orderStatusValues = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
+const deliveryTypeValues = [0, 1] as const;
 export const DEGRADED_CAPTURE_VARIANT = 'degraded_capture' as const;
 
 export const orderStatusSchema = z.union(
@@ -20,10 +20,12 @@ export const orderStatusSchema = z.union(
     z.ZodLiteral<11>,
   ],
 );
-export const deliveryTypeSchema = z.union(deliveryTypeValues.map((value) => z.literal(value)) as [z.ZodLiteral<0>, z.ZodLiteral<1>]);
-export const noAnswerCountSchema = z.number().int().min(0).max(99);
+export const deliveryTypeSchema = z.union(
+  deliveryTypeValues.map((value) => z.literal(value)) as [z.ZodLiteral<0>, z.ZodLiteral<1>],
+);
+const noAnswerCountSchema = z.number().int().min(0).max(99);
 
-export const ORDER_STATUS_LABEL_KEYS = {
+const ORDER_STATUS_LABEL_KEYS = {
   0: 'notContacted',
   1: 'noAnswer',
   2: 'confirmed',
@@ -38,7 +40,7 @@ export const ORDER_STATUS_LABEL_KEYS = {
   11: 'posted',
 } as const satisfies Record<(typeof orderStatusValues)[number], string>;
 
-export const DELIVERY_TYPE_LABEL_KEYS = {
+const DELIVERY_TYPE_LABEL_KEYS = {
   0: 'home',
   1: 'office',
 } as const satisfies Record<(typeof deliveryTypeValues)[number], string>;
@@ -54,27 +56,33 @@ const nullableTrimmedString = (max: number) =>
   });
 
 const optionalNullableTrimmedString = (max: number) =>
-  z.union([z.string(), z.null(), z.undefined()]).transform((value) => {
+  z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((value) => {
+      if (value == null) {
+        return null;
+      }
+
+      const trimmed = value.trim();
+      return trimmed.length === 0 ? null : trimmed.slice(0, max);
+    });
+
+const optionalNullableEmail = z
+  .union([z.string(), z.null()])
+  .optional()
+  .transform((value) => {
     if (value == null) {
       return null;
     }
 
-    const trimmed = value.trim();
-    return trimmed.length === 0 ? null : trimmed.slice(0, max);
+    const trimmed = value.trim().toLowerCase();
+    if (trimmed.length === 0) {
+      return null;
+    }
+
+    return z.email().safeParse(trimmed).success ? trimmed : null;
   });
-
-const optionalNullableEmail = z.union([z.string(), z.null(), z.undefined()]).transform((value) => {
-  if (value == null) {
-    return null;
-  }
-
-  const trimmed = value.trim().toLowerCase();
-  if (trimmed.length === 0) {
-    return null;
-  }
-
-  return z.email().safeParse(trimmed).success ? trimmed : null;
-});
 
 const nullableWilayaCode = z.union([z.number(), z.string(), z.null()]).transform((value) => {
   if (value === null) {
@@ -95,7 +103,7 @@ const nullableWilayaCode = z.union([z.number(), z.string(), z.null()]).transform
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 58 ? parsed : null;
 });
 
-export const orderPatchSchema = z
+const orderPatchSchema = z
   .object({
     phoneNumber1: z.string().trim().min(1).max(50).optional(),
     note: nullableTrimmedString(500).optional(),
@@ -148,16 +156,16 @@ export const storefrontOrderPatchSchema = z
     message: 'At least one field must be provided.',
   });
 
-export type OrderPatch = z.infer<typeof orderPatchSchema>;
-export type StorefrontOrderCreate = z.infer<typeof storefrontOrderCreateSchema>;
-export type StorefrontOrderPatch = z.infer<typeof storefrontOrderPatchSchema>;
+type OrderPatch = z.infer<typeof orderPatchSchema>;
+type StorefrontOrderCreate = z.infer<typeof storefrontOrderCreateSchema>;
+type StorefrontOrderPatch = z.infer<typeof storefrontOrderPatchSchema>;
 export type OrderStatus = z.infer<typeof orderStatusSchema>;
 export type DeliveryType = z.infer<typeof deliveryTypeSchema>;
 
-export const orderSortKeyValues = ['confirmed', 'createdAt', 'fullName'] as const;
-export const sortDirectionValues = ['asc', 'desc'] as const;
+const orderSortKeyValues = ['confirmed', 'createdAt', 'fullName'] as const;
+const sortDirectionValues = ['asc', 'desc'] as const;
 
-export const orderListQuerySchema = z.object({
+const orderListQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(25),
   search: z.string().trim().default(''),
@@ -228,8 +236,8 @@ export type OrderRecord = {
   statusHistory: OrderStatusHistoryRecord[];
 };
 
-export type OrderSortKey = z.infer<typeof orderListQuerySchema>['sortKey'];
-export type SortDirection = z.infer<typeof orderListQuerySchema>['sortDirection'];
+type OrderSortKey = z.infer<typeof orderListQuerySchema>['sortKey'];
+type SortDirection = z.infer<typeof orderListQuerySchema>['sortDirection'];
 
 export function parseNumericAmount(value: string | number | null | undefined) {
   if (typeof value === 'number') {
@@ -329,7 +337,17 @@ export function coerceNoAnswerCount(status: OrderStatus, count: unknown, legacyS
 }
 
 export function isConfirmedLifecycleStatus(status: OrderStatus) {
-  return status === 2 || status === 3 || status === 4 || status === 5 || status === 7 || status === 8 || status === 9 || status === 10 || status === 11;
+  return (
+    status === 2 ||
+    status === 3 ||
+    status === 4 ||
+    status === 5 ||
+    status === 7 ||
+    status === 8 ||
+    status === 9 ||
+    status === 10 ||
+    status === 11
+  );
 }
 
 export function getOrderStatusLabelKey(status: OrderStatus) {
@@ -365,7 +383,11 @@ export function getDeliveryTypeLabelKey(deliveryType: DeliveryType) {
   return DELIVERY_TYPE_LABEL_KEYS[deliveryType];
 }
 
-export function getOrderFullName(firstName: string | null | undefined, lastName: string | null | undefined, phoneNumber: string) {
+export function getOrderFullName(
+  firstName: string | null | undefined,
+  lastName: string | null | undefined,
+  phoneNumber: string,
+) {
   const fullName = [firstName, lastName]
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value))
@@ -391,7 +413,10 @@ export function isMongoObjectId(value: string) {
 
 export function buildOrderProductSummaries(
   cartProducts: string[],
-  resolveProduct?: (rawValue: string, productId: number | null) => Partial<Omit<OrderProductSummary, 'rawValue' | 'quantity' | 'lineTotal'>> | null | undefined,
+  resolveProduct?: (
+    rawValue: string,
+    productId: number | null,
+  ) => Partial<Omit<OrderProductSummary, 'rawValue' | 'quantity' | 'lineTotal'>> | null | undefined,
 ) {
   const summaries = new Map<string, OrderProductSummary>();
   const orderedKeys: string[] = [];

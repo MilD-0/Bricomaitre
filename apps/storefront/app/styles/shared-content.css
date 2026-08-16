@@ -1,0 +1,199 @@
+.product-progressive-fallback {
+  max-width: 42rem;
+  padding-block: clamp(2rem, 8vw, 5rem);
+}
+.product-progressive-fallback h1 {
+  margin: 0;
+  font-size: clamp(2rem, 6vw, 4rem);
+  font-weight: 750;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+.product-progressive-fallback > p:last-child {
+  margin: 1.25rem 0 0;
+  color: #566065;
+  line-height: 1.7;
+}
+.site-footer {
+  border-top: 1px solid #d7dce0;
+  padding-block: 2.4rem 1.4rem;
+  color: #626b73;
+  font-size: 0.78rem;
+}
+.site-footer-main {
+  display: grid;
+  grid-template-columns: minmax(15rem, 1.6fr) minmax(8rem, 0.7fr) minmax(14rem, 1fr);
+  gap: clamp(2rem, 6vw, 5rem);
+}
+.site-footer-brand {
+  max-width: 25rem;
+}
+.site-footer-brand img {
+  width: 8rem;
+  height: auto;
+  display: block;
+}
+.site-footer-brand p {
+  max-width: 34rem;
+  margin: 1rem 0 0;
+  color: #697276;
+  line-height: 1.65;
+}
+.site-footer h2 {
+  margin: 0 0 0.9rem;
+  color: #2b3134;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.site-footer nav {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 0.65rem;
+}
+.site-footer nav h2 {
+  margin-bottom: 0.25rem;
+}
+.site-footer nav a {
+  color: #596266;
+  transition:
+    color 150ms ease,
+    transform 150ms ease;
+}
+.site-footer nav a:hover {
+  color: var(--brand-teal-strong);
+  transform: translateX(2px);
+}
+[dir='rtl'] .site-footer nav a:hover {
+  transform: translateX(-2px);
+}
+.site-footer-contact ul {
+  display: grid;
+  gap: 0.72rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.site-footer-contact li {
+  min-width: 0;
+  line-height: 1.45;
+}
+.site-footer-contact-link {
+  min-width: 0;
+  width: fit-content;
+  display: grid;
+  grid-template-columns: 1.1rem minmax(0, auto) auto;
+  align-items: start;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+  color: #596266;
+  transition: color 150ms ease;
+}
+.site-footer-contact-link:hover {
+  color: var(--brand-teal-strong);
+}
+.site-footer-contact-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  display: grid;
+  place-items: center;
+  color: var(--brand-teal);
+}
+.site-footer-contact-icon > div {
+  display: grid;
+  place-items: center;
+}
+.site-footer-contact-icon svg {
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.site-footer-contact-link:hover .site-footer-contact-icon svg,
+.site-footer-contact-link:focus-visible .site-footer-contact-icon svg {
+  transform: translateY(-1px) scale(1.12) rotate(-5deg);
+}
+.site-footer-external-icon {
+  margin-block-start: 0.16rem;
+  transition: transform 150ms ease;
+}
+.site-footer-contact-link:hover .site-footer-external-icon,
+.site-footer-contact-link:focus-visible .site-footer-external-icon {
+  transform: translate(1px, -1px);
+}
+[dir='rtl'] .site-footer-contact-link:hover .site-footer-external-icon,
+[dir='rtl'] .site-footer-contact-link:focus-visible .site-footer-external-icon {
+  transform: translate(-1px, -1px);
+}
+.site-footer-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  border-top: 1px solid #e2e5e6;
+  margin-top: 2.2rem;
+  padding-top: 1rem;
+  color: #7a8286;
+  font-size: 0.7rem;
+}
+.site-footer-bottom p {
+  margin: 0;
+}
+.site-footer-bottom > div {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.site-footer-bottom a {
+  min-width: 2.4rem;
+  min-height: 1.8rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #61696d;
+  font-weight: 650;
+}
+.site-footer-bottom a[aria-current='page'] {
+  background: #e8f3f2;
+  color: var(--brand-teal-strong);
+}
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.75rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  color: #68717a;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.breadcrumbs::-webkit-scrollbar {
+  display: none;
+}
+.breadcrumbs a {
+  position: relative;
+  color: var(--brand-graphite);
+  font-weight: 650;
+  transition: color 150ms ease;
+}
+.breadcrumbs a::after {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: -0.18rem;
+  height: 1px;
+  background: currentColor;
+  content: '';
+  scale: 0 1;
+  transform-origin: left;
+  transition: scale 160ms ease;
+}
+[dir='rtl'] .breadcrumbs a::after {
+  transform-origin: right;
+}
+.breadcrumbs a:hover {
+  color: var(--brand-teal);
+}
+.breadcrumbs span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

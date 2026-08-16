@@ -3,6 +3,7 @@ node_modules/
 
 .next/
 **/.next/
+**/next-env.d.ts
 .next-debug-2/
 .next-stale/
 out/
@@ -12,6 +13,9 @@ dist/
 coverage/
 **/test-results/
 gh_build_logs/
+apps/admin/exports/
+legacy-mongo-exports/
+lighthouse-reports/
 .bric-*.env
 bric-local-build/
 *.build.log
@@ -37,6 +41,10 @@ yarn-debug.log*
 yarn-error.log*
 
 bricomaitre-postgres-*.sql.gz
+
+# Root-level operator exports and imported business spreadsheets.
+/*.xls
+/*.xlsx
 
 .vercel/
 .turbo/

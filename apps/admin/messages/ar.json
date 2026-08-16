@@ -1,0 +1,2254 @@
+{
+  "nav": {
+    "administration": "الإدارة",
+    "products": "المنتجات",
+    "orders": "الطلبات",
+    "ordersTable": "ادخال الطلبات",
+    "ecotrackShipments": "شحنات ECOTRACK",
+    "inventory": "المخزون",
+    "assets": "الأصول",
+    "landingPages": "صفحات الهبوط",
+    "brands": "العلامات",
+    "categories": "التصنيفات",
+    "brandsCategories": "العلامات/التصنيفات",
+    "stats": "الإحصائيات",
+    "bulletin": "النشرات",
+    "settings": "الإعدادات"
+  },
+  "roles": {
+    "viewer": "مشاهد",
+    "employee": "موظف",
+    "admin": "مدير",
+    "developer": "مطور"
+  },
+  "labels": {
+    "currentRole": "الدور الحالي: {role}",
+    "opsAccess": "عناصر التحكم التشغيلية متاحة.",
+    "roles": "الأدوار",
+    "roleManagedByCode": "يتم ضبط أدوار المدير والمطور من خلال الكود وبالاعتماد على البريد الإلكتروني.",
+    "actions": "الإجراءات",
+    "status": "الحالة",
+    "created": "تم الإنشاء",
+    "modified": "تم التعديل",
+    "parentCategory": "التصنيف الأب",
+    "noParentCategory": "بدون أب",
+    "pageNumber": "الصفحة {page}",
+    "pageOfTotal": "الصفحة {page} من {total}",
+    "goToPage": "انتقل إلى الصفحة {page}",
+    "goToPageInput": "انتقل إلى الصفحة",
+    "loading": "جارٍ التحميل",
+    "searchBrands": "ابحث في العلامات",
+    "searchCategories": "ابحث في التصنيفات",
+    "searchProducts": "ابحث في المنتجات",
+    "filterByBrand": "تصفية حسب العلامة",
+    "filterByCategory": "تصفية حسب التصنيف",
+    "filterByImageOrigin": "تصفية حسب روابط الصور",
+    "allBrands": "كل العلامات",
+    "allCategories": "كل التصنيفات",
+    "allImageLinks": "كل روابط الصور",
+    "externalImageLinks": "روابط الصور الخارجية",
+    "deleteDialogTitle": "تأكيد الحذف",
+    "deleteDialogDescription": "سيتم حذف {target} نهائيًا.",
+    "selectAll": "تحديد كل الصفوف",
+    "selectRow": "تحديد {name}",
+    "bulkSelectionCount": "{count} محدد",
+    "search": "بحث...",
+    "name": "الاسم",
+    "productName": "اسم المنتج",
+    "productNamePlaceholder": "اسم المنتج",
+    "productNameArPlaceholder": "اسم المنتج بالعربية",
+    "productSkuPlaceholder": "SKU",
+    "productBarcodePlaceholder": "الباركود",
+    "nameAr": "الاسم بالعربية",
+    "userProfile": "ملف المستخدم",
+    "tags": "وسوم (مفصولة بفاصلة)",
+    "image": "الصورة",
+    "images": "الصور",
+    "noImage": "لا توجد صورة",
+    "imageHint": "يتم الرفع إلى S3 ثم حفظ روابط CloudFront.",
+    "imageUrlPlaceholder": "رابط الصورة",
+    "sku": "SKU",
+    "barcode": "الباركود",
+    "price": "السعر",
+    "purchasePrice": "سعر الشراء",
+    "purchases": "المشتريات",
+    "confirmationRate": "معدل التأكيد",
+    "compareAtPrice": "السعر المقارن",
+    "inventoryQuantity": "كمية المخزون",
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "inStock": "متوفر",
+    "description": "الوصف",
+    "descriptionAr": "الوصف بالعربية",
+    "productDescriptionPlaceholder": "وصف المنتج",
+    "productDescriptionArPlaceholder": "وصف المنتج بالعربية",
+    "noBrand": "بدون علامة",
+    "noCategory": "بدون تصنيف",
+    "createProductTitle": "إنشاء منتج",
+    "editProductTitle": "تعديل المنتج",
+    "productDialogDescription": "حدد تفاصيل المنتج والسعر والمخزون والصور.",
+    "createBrandTitle": "إنشاء علامة",
+    "editBrandTitle": "تعديل العلامة",
+    "brandDialogDescription": "حدد اسم العلامة وصورتها.",
+    "brandNamePlaceholder": "اسم العلامة",
+    "createCategoryTitle": "إنشاء تصنيف",
+    "editCategoryTitle": "تعديل التصنيف",
+    "categoryDialogDescription": "حدد تفاصيل التصنيف والتصنيف الأب عند الحاجة.",
+    "categoryNamePlaceholder": "اسم التصنيف",
+    "categoryNameArPlaceholder": "اسم التصنيف بالعربية"
+  },
+  "actions": {
+    "create": "إنشاء",
+    "delete": "حذف",
+    "confirm": "تأكيد",
+    "toggle": "تبديل الحالة",
+    "edit": "تعديل",
+    "modify": "تعديل",
+    "cancel": "إلغاء",
+    "save": "حفظ",
+    "go": "انتقال",
+    "first": "الأولى",
+    "previous": "السابق",
+    "next": "التالي",
+    "last": "الأخيرة",
+    "activateSelected": "تفعيل المحدد",
+    "deactivateSelected": "تعطيل المحدد",
+    "deleteSelected": "حذف المحدد",
+    "update": "تحديث",
+    "createProduct": "منتج جديد",
+    "saveProduct": "حفظ المنتج",
+    "markInStock": "تعيين كمتوفر",
+    "markOutOfStock": "تعيين كغير متوفر",
+    "createBrand": "علامة جديدة",
+    "saveBrand": "حفظ العلامة",
+    "createCategory": "تصنيف جديد",
+    "saveCategory": "حفظ التصنيف"
+  },
+  "notifications": {
+    "brands": {
+      "activate": {
+        "loading": "جارٍ تفعيل العلامة {name}...",
+        "success": "تم تفعيل العلامة {name}.",
+        "error": "تعذر تفعيل العلامة {name}."
+      },
+      "deactivate": {
+        "loading": "جارٍ تعطيل العلامة {name}...",
+        "success": "تم تعطيل العلامة {name}.",
+        "error": "تعذر تعطيل العلامة {name}."
+      },
+      "save": {
+        "loading": "جارٍ حفظ العلامة {name}...",
+        "success": "تم حفظ العلامة {name}.",
+        "error": "تعذر حفظ العلامة {name}."
+      },
+      "create": {
+        "loading": "جارٍ إنشاء العلامة {name}...",
+        "success": "تم إنشاء العلامة {name}.",
+        "error": "تعذر إنشاء العلامة {name}."
+      },
+      "delete": {
+        "loading": "جارٍ حذف {target}...",
+        "success": "تم حذف {target}.",
+        "error": "تعذر حذف {target}."
+      },
+      "activateSelected": {
+        "loading": "جارٍ تفعيل {count} من العلامات المحددة...",
+        "success": "تم تفعيل {count} من العلامات المحددة.",
+        "error": "تعذر تفعيل {count} من العلامات المحددة."
+      },
+      "deactivateSelected": {
+        "loading": "جارٍ تعطيل {count} من العلامات المحددة...",
+        "success": "تم تعطيل {count} من العلامات المحددة.",
+        "error": "تعذر تعطيل {count} من العلامات المحددة."
+      }
+    },
+    "categories": {
+      "activate": {
+        "loading": "جارٍ تفعيل التصنيف {name}...",
+        "success": "تم تفعيل التصنيف {name}.",
+        "error": "تعذر تفعيل التصنيف {name}."
+      },
+      "deactivate": {
+        "loading": "جارٍ تعطيل التصنيف {name}...",
+        "success": "تم تعطيل التصنيف {name}.",
+        "error": "تعذر تعطيل التصنيف {name}."
+      },
+      "save": {
+        "loading": "جارٍ حفظ التصنيف {name}...",
+        "success": "تم حفظ التصنيف {name}.",
+        "error": "تعذر حفظ التصنيف {name}."
+      },
+      "create": {
+        "loading": "جارٍ إنشاء التصنيف {name}...",
+        "success": "تم إنشاء التصنيف {name}.",
+        "error": "تعذر إنشاء التصنيف {name}."
+      },
+      "delete": {
+        "loading": "جارٍ حذف {target}...",
+        "success": "تم حذف {target}.",
+        "error": "تعذر حذف {target}."
+      },
+      "activateSelected": {
+        "loading": "جارٍ تفعيل {count} من التصنيفات المحددة...",
+        "success": "تم تفعيل {count} من التصنيفات المحددة.",
+        "error": "تعذر تفعيل {count} من التصنيفات المحددة."
+      },
+      "deactivateSelected": {
+        "loading": "جارٍ تعطيل {count} من التصنيفات المحددة...",
+        "success": "تم تعطيل {count} من التصنيفات المحددة.",
+        "error": "تعذر تعطيل {count} من التصنيفات المحددة."
+      }
+    },
+    "products": {
+      "activate": {
+        "loading": "جارٍ تفعيل المنتج {name}...",
+        "success": "تم تفعيل المنتج {name}.",
+        "error": "تعذر تفعيل المنتج {name}."
+      },
+      "deactivate": {
+        "loading": "جارٍ تعطيل المنتج {name}...",
+        "success": "تم تعطيل المنتج {name}.",
+        "error": "تعذر تعطيل المنتج {name}."
+      },
+      "stock": {
+        "loading": "جارٍ تعيين المنتج {name} كمتوفر...",
+        "success": "تم تعيين المنتج {name} كمتوفر.",
+        "error": "تعذر تعيين المنتج {name} كمتوفر."
+      },
+      "unstock": {
+        "loading": "جارٍ تعيين المنتج {name} كغير متوفر...",
+        "success": "تم تعيين المنتج {name} كغير متوفر.",
+        "error": "تعذر تعيين المنتج {name} كغير متوفر."
+      },
+      "save": {
+        "loading": "جارٍ حفظ المنتج {name}...",
+        "success": "تم حفظ المنتج {name}.",
+        "error": "تعذر حفظ المنتج {name}."
+      },
+      "create": {
+        "loading": "جارٍ إنشاء المنتج {name}...",
+        "success": "تم إنشاء المنتج {name}.",
+        "error": "تعذر إنشاء المنتج {name}."
+      },
+      "delete": {
+        "loading": "جارٍ حذف {target}...",
+        "success": "تم حذف {target}.",
+        "error": "تعذر حذف {target}."
+      },
+      "activateSelected": {
+        "loading": "جارٍ تفعيل {count} من المنتجات المحددة...",
+        "success": "تم تفعيل {count} من المنتجات المحددة.",
+        "error": "تعذر تفعيل {count} من المنتجات المحددة."
+      },
+      "deactivateSelected": {
+        "loading": "جارٍ تعطيل {count} من المنتجات المحددة...",
+        "success": "تم تعطيل {count} من المنتجات المحددة.",
+        "error": "تعذر تعطيل {count} من المنتجات المحددة."
+      },
+      "stockSelected": {
+        "loading": "جارٍ تعيين {count} من المنتجات المحددة كمتوفرة...",
+        "success": "تم تعيين {count} من المنتجات المحددة كمتوفرة.",
+        "error": "تعذر تعيين {count} من المنتجات المحددة كمتوفرة."
+      },
+      "unstockSelected": {
+        "loading": "جارٍ تعيين {count} من المنتجات المحددة كغير متوفرة...",
+        "success": "تم تعيين {count} من المنتجات المحددة كغير متوفرة.",
+        "error": "تعذر تعيين {count} من المنتجات المحددة كغير متوفرة."
+      }
+    },
+    "orders": {
+      "bulkStatus": {
+        "loading": "جارٍ تحديث {count} من الطلبات...",
+        "success": "تم تحديث {count} من الطلبات.",
+        "error": "تعذر تحديث {count} من الطلبات."
+      },
+      "name": {
+        "loading": "جارٍ حفظ الاسم لـ {name}...",
+        "success": "تم حفظ الاسم لـ {name}.",
+        "error": "تعذر حفظ الاسم لـ {name}."
+      },
+      "phone": {
+        "loading": "جارٍ حفظ رقم الهاتف لـ {name}...",
+        "success": "تم حفظ رقم الهاتف لـ {name}.",
+        "error": "تعذر حفظ رقم الهاتف لـ {name}."
+      },
+      "note": {
+        "loading": "جارٍ حفظ الملاحظة لـ {name}...",
+        "success": "تم حفظ الملاحظة لـ {name}.",
+        "error": "تعذر حفظ الملاحظة لـ {name}."
+      },
+      "address": {
+        "loading": "جارٍ حفظ العنوان لـ {name}...",
+        "success": "تم حفظ العنوان لـ {name}.",
+        "error": "تعذر حفظ العنوان لـ {name}."
+      },
+      "products": {
+        "loading": "جارٍ حفظ المنتجات لـ {name}...",
+        "success": "تم حفظ المنتجات لـ {name}.",
+        "error": "تعذر حفظ المنتجات لـ {name}."
+      },
+      "status": {
+        "loading": "جارٍ تحديث الحالة لـ {name}...",
+        "success": "تم تحديث الحالة لـ {name}.",
+        "error": "تعذر تحديث الحالة لـ {name}."
+      },
+      "delete": {
+        "loading": "جارٍ حذف {target}...",
+        "success": "تم حذف {target}.",
+        "error": "تعذر حذف {target}."
+      }
+    }
+  },
+  "status": {
+    "active": "نشط",
+    "draft": "مسودة",
+    "archived": "مؤرشف"
+  },
+  "stats": {
+    "products": "المنتجات",
+    "orders": "الطلبات",
+    "assets": "الأصول"
+  },
+  "statsDashboard": {
+    "headline": "إحصائيات تشغيلية مبنية من جديد حول تقارير التوصيل المستوردة",
+    "snapshot": "نظرة عامة",
+    "snapshotHint": "القيمة المحصلة مرتبطة بالطلبات والمنتجات المطابقة داخل PostgreSQL.",
+    "refresh": "تحديث",
+    "errorTitle": "تعذر تحميل الإحصائيات",
+    "errorDescription": "لم يتمكن اللوح من تحميل آخر المؤشرات.",
+    "customStart": "تاريخ البداية المخصص",
+    "customEnd": "تاريخ النهاية المخصصة",
+    "ranges": {
+      "30d": "30 يوماً",
+      "90d": "90 يوماً",
+      "year": "هذه السنة",
+      "all": "كل الفترات",
+      "custom": "مخصص"
+    },
+    "loading": {
+      "refreshingTitle": "جارٍ تحديث التحليلات",
+      "refreshingBadge": "تحميل",
+      "refreshingDescription": "يتم الآن احتساب الأرقام المحدثة للفترة المحددة."
+    },
+    "snapshotMeta": {
+      "title": "اللقطة جاهزة",
+      "staleTitle": "اللقطة قديمة",
+      "description": "تم إنشاؤها في {generatedAt}. البيانات حتى {reportThroughDate}."
+    },
+    "hero": {
+      "averageOrder": "متوسط التحصيل لكل طلب",
+      "averageProfit": "متوسط الربح لكل طلب",
+      "adSpend": "الإنفاق الإعلاني في الفترة"
+    },
+    "tabs": {
+      "overview": "نظرة عامة",
+      "website": "تحليلات الموقع",
+      "landingPages": "صفحات الهبوط",
+      "aiAssistants": "مساعدو الذكاء الاصطناعي",
+      "customers": "العملاء",
+      "products": "المنتجات والفئات",
+      "geography": "الجغرافيا",
+      "time": "التحليل الزمني",
+      "metaAds": "إعلانات ميتا"
+    },
+    "upload": {
+      "title": "استيراد Excel",
+      "heading": "معالجة ملف شركة التوصيل",
+      "description": "ارفع ملف `.xlsx` أو `.xls`. يتم ربط الصفوف بالطلبات والمنتجات الموجودة في قاعدة البيانات ثم تخزينها داخل جداول تحليلية مبنية على PostgreSQL.",
+      "fieldLabel": "ملف الجدول",
+      "selected": "الملف المختار: {name}",
+      "hint": "الصيغ المدعومة: Excel `.xlsx` و `.xls`.",
+      "action": "استيراد التقرير",
+      "pending": "جارٍ الاستيراد..."
+    },
+    "overview": {
+      "cards": {
+        "totalOrders": "إجمالي الطلبات",
+        "totalOrdersHint": "صفوف مستوردة مرتبطة بمسار بيع مؤكد.",
+        "totalCollected": "المبلغ المحصل",
+        "totalCollectedHint": "القيمة المحصلة من الطلبات المستوردة المنفذة.",
+        "netRevenue": "صافي الإيراد",
+        "netRevenueHint": "الإيراد بعد خصم رسوم التوصيل والخدمة.",
+        "deliveryFees": "رسوم التوصيل",
+        "deliveryFeesHint": "رسوم شركة التوصيل من التقارير المستوردة.",
+        "productCost": "تكلفة المنتجات",
+        "productCostHint": "محسوبة من المنتجات المطابقة داخل PostgreSQL.",
+        "grossProfit": "الربح الإجمالي",
+        "grossProfitHint": "صافي الإيراد مطروحاً منه تكلفة المنتجات.",
+        "afterAds": "صافي الربح بعد الإعلانات",
+        "afterAdsHint": "الربح الإجمالي بعد الإنفاق الإعلاني.",
+        "averageOrder": "متوسط الطلب",
+        "averageOrderHint": "المبلغ المحصل مقسوماً على الطلبات المستوردة.",
+        "margin": "هامش الربح",
+        "marginHint": "نسبة الربح الإجمالي من صافي الإيراد."
+      },
+      "adPerformance": {
+        "eyebrow": "أداء الإعلانات",
+        "title": "كفاءة الإنفاق الإعلاني",
+        "totalSpend": "إجمالي الإنفاق",
+        "totalSpendHint": "ميزانية الإعلانات",
+        "roas": "ROAS",
+        "roasHint": "الإيراد لكل دينار إعلاني",
+        "cpa": "CPA",
+        "cpaHint": "تكلفة الطلب",
+        "cpc": "CPC",
+        "cpcHint": "تكلفة النقرة"
+      },
+      "costs": {
+        "eyebrow": "هيكل التكاليف",
+        "title": "التوزيع الكامل للتكاليف",
+        "productCost": "تكلفة المنتجات",
+        "deliveryFees": "رسوم التوصيل",
+        "otherFees": "رسوم الخدمة الأخرى",
+        "adSpend": "تكاليف الإعلانات",
+        "total": "إجمالي التكاليف"
+      },
+      "fees": {
+        "eyebrow": "مزيج الرسوم",
+        "title": "توزيع الرسوم",
+        "delivery": "توصيل",
+        "commission": "عمولة",
+        "weight": "وزن",
+        "extra": "إضافي",
+        "sms": "رسائل",
+        "storage": "تخزين",
+        "ads": "إعلانات"
+      },
+      "revenueBreakdown": {
+        "collected": "المحصّل",
+        "productCost": "تكلفة المنتجات",
+        "fees": "الرسوم",
+        "netRevenue": "صافي الإيراد",
+        "grossProfit": "الربح الإجمالي",
+        "ads": "تكلفة الإعلانات",
+        "netAfterAds": "صافي الربح بعد الإعلانات"
+      },
+      "revenueChart": {
+        "eyebrow": "تركيب الإيراد",
+        "title": "تركيب الإيرادات والتكاليف والأرباح"
+      },
+      "emptyFeesTitle": "لا توجد بيانات رسوم بعد",
+      "emptyFeesDescription": "استورد دفعة مطابقة واحدة على الأقل لرؤية تركيب الرسوم."
+    },
+    "products": {
+      "topUnits": {
+        "eyebrow": "سرعة المنتج",
+        "title": "أفضل المنتجات حسب الوحدات المباعة"
+      },
+      "export": {
+        "action": "تصدير كتالوج Meta",
+        "title": "تصدير {count} من المنتجات إلى كتالوج Meta",
+        "previewTitle": "معاينة تصدير كتالوج Meta",
+        "confirm": "تصدير XLSX",
+        "fullPreview": "معاينة بالحجم الكامل",
+        "compactPreview": "معاينة مضغوطة"
+      },
+      "categories": {
+        "eyebrow": "أداء الفئات",
+        "title": "الإيراد والربح حسب الفئة"
+      },
+      "brands": {
+        "eyebrow": "أداء العلامات",
+        "title": "الإيراد والربح حسب العلامة"
+      },
+      "table": {
+        "eyebrow": "عرض كامل للمنتجات",
+        "title": "أداء جميع المنتجات",
+        "columns": {
+          "product": "المنتج",
+          "sku": "SKU",
+          "category": "الفئة",
+          "units": "الوحدات",
+          "revenue": "الإيراد",
+          "cost": "التكلفة",
+          "profit": "الربح",
+          "margin": "الهامش",
+          "confirmation": "نسبة التأكيد",
+          "views": "المشاهدات",
+          "adds": "الإضافات",
+          "webPurchases": "مشتريات الويب",
+          "popularity": "الشعبية",
+          "webConversion": "تحويل الويب %"
+        },
+        "lowSample": "{count} طلب"
+      },
+      "emptyTitle": "لا توجد منتجات مرتبطة بعد",
+      "emptyDescription": "عند مطابقة الصفوف المستوردة مع الطلبات والمنتجات سيظهر الترتيب هنا.",
+      "emptyCategoriesTitle": "لا توجد بيانات فئات بعد",
+      "emptyCategoriesDescription": "يجب وجود منتجات مستوردة مطابقة لحساب أداء الفئات.",
+      "emptyBrandsTitle": "لا توجد بيانات علامات بعد",
+      "emptyBrandsDescription": "يجب وجود منتجات مستوردة مطابقة لحساب أداء العلامات."
+    },
+    "website": {
+      "title": "تحليلات الموقع",
+      "empty": "لا توجد بيانات موقع للفترة المحددة بعد.",
+      "funnelTitle": "مسار الرحلة",
+      "quickStatsTitle": "مؤشرات التحويل السريعة",
+      "searchInsightsTitle": "إشارات البحث والدفع",
+      "topProductsTitle": "أهم منتجات الموقع",
+      "cards": {
+        "sessions": "الجلسات",
+        "pageViews": "مشاهدات الصفحات",
+        "addToCartRate": "من العرض إلى السلة",
+        "purchaseRate": "معدل الشراء لكل جلسة",
+        "engagementRate": "الجلسات المتفاعلة",
+        "returningJourneys": "الزيارات المتكررة",
+        "errorRate": "معدل أخطاء الجلسات"
+      },
+      "trendTitle": "زيارات ونتائج المتجر",
+      "pageTypesTitle": "أنواع الصفحات والتفاعل",
+      "audienceTitle": "الأجهزة واللغات",
+      "devices": "الأجهزة",
+      "locales": "اللغات",
+      "vitalsTitle": "مؤشرات أداء الويب الأساسية",
+      "errorsTitle": "أخطاء المتجر",
+      "referrersTitle": "أهم مصادر الزيارة",
+      "recentDiagnosticsHint": "تعتمد التفاصيل التشخيصية على نافذة القياس الخام الحديثة، مع استمرار سجل مسار التحويل القابل للمقارنة أثناء الانتقال بين المتجرين.",
+      "vitalMeta": "{good} جيد · {poor} ضعيف · {samples} عينة",
+      "experience": {
+        "columns": {
+          "dimension": "نوع الصفحة",
+          "sessions": "الجلسات",
+          "pageViews": "المشاهدات",
+          "interactions": "التفاعلات"
+        }
+      },
+      "stats": {
+        "searches": "عمليات البحث",
+        "zeroResults": "بحث بدون نتائج",
+        "checkoutRate": "من الدفع إلى الشراء",
+        "cartRate": "من السلة إلى الشراء"
+      },
+      "landing": {
+        "title": "أهم صفحات الدخول",
+        "columns": {
+          "path": "صفحة الدخول",
+          "sessions": "الجلسات"
+        }
+      },
+      "search": {
+        "columns": {
+          "term": "مصطلح البحث",
+          "searches": "عمليات البحث",
+          "zeroResults": "بدون نتائج"
+        }
+      },
+      "funnel": {
+        "Sessions": "الجلسات",
+        "Product views": "مشاهدات المنتج",
+        "Adds to cart": "الإضافة إلى السلة",
+        "Checkout starts": "بدء الدفع",
+        "Purchases": "المشتريات"
+      },
+      "conversion": {
+        "title": "تشخيص التحويل",
+        "sessionsToPurchase": "من الجلسات إلى الشراء",
+        "viewToCart": "من عرض المنتج إلى السلة",
+        "cartToPurchase": "من السلة إلى الشراء",
+        "checkoutToPurchase": "من الدفع إلى الشراء",
+        "searchZeroResultRate": "معدل البحث بدون نتائج"
+      },
+      "diagnostics": {
+        "journeys": "الرحلات",
+        "productViews": "مشاهدات المنتج",
+        "checkoutStarts": "بدء الدفع",
+        "searches": "عمليات البحث",
+        "zeroResults": "بحث بدون نتائج",
+        "avgPagesPerSession": "متوسط الصفحات لكل جلسة"
+      },
+      "products": {
+        "columns": {
+          "product": "المنتج",
+          "views": "المشاهدات",
+          "adds": "الإضافات",
+          "purchases": "المشتريات",
+          "conversion": "التحويل %"
+        }
+      }
+    },
+    "landingPages": {
+      "performanceTitle": "أداء صفحات الهبوط",
+      "blocksTitle": "أكثر أقسام المحتوى تفاعلاً",
+      "empty": "لا يوجد نشاط لصفحات الهبوط في المتجر الجديد ضمن هذه الفترة.",
+      "blockMeta": "{adds} إضافة للسلة · {checkouts} بدء دفع",
+      "cards": {
+        "published": "الصفحات المنشورة",
+        "sessions": "الجلسات المنسوبة",
+        "purchases": "المشتريات",
+        "conversion": "تحويل الجلسات",
+        "revenue": "الإيراد المنسوب",
+        "drafts": "المسودات"
+      },
+      "columns": {
+        "page": "صفحة الهبوط",
+        "status": "الحالة",
+        "sessions": "الجلسات",
+        "views": "مشاهدات المنتج",
+        "adds": "الإضافات",
+        "checkouts": "الدفع",
+        "purchases": "المشتريات",
+        "revenue": "الإيراد",
+        "conversion": "التحويل %"
+      }
+    },
+    "aiAssistants": {
+      "admin": {
+        "title": "مساعد الإدارة"
+      },
+      "storefront": {
+        "title": "مساعد المتجر",
+        "intentsTitle": "ما الذي يحتاجه الزوار",
+        "modelsTitle": "النماذج والاستخدام",
+        "disabledTitle": "مساعد المتجر معطّل",
+        "disabledDescription": "عدم وجود نشاط متوقع ما دامت الميزة معطّلة في إعدادات المتجر."
+      },
+      "cards": {
+        "runs": "مرات التشغيل",
+        "successRate": "معدل النجاح",
+        "tokens": "الرموز",
+        "estimatedCost": "التكلفة التقديرية",
+        "latency": "متوسط الاستجابة",
+        "toolCalls": "استدعاءات الأدوات",
+        "proposals": "المقترحات",
+        "applied": "المقترحات المطبقة",
+        "opens": "مرات الفتح",
+        "messages": "الأسئلة",
+        "resultClicks": "نقرات المنتجات",
+        "clickThrough": "معدل نقر النتائج",
+        "errors": "الأخطاء"
+      },
+      "costHint": "تظهر التكلفة التقديرية فقط عند ضبط أسعار كل مليون رمز.",
+      "empty": "لا يوجد استخدام للمساعدين ضمن هذه الفترة.",
+      "tokensShort": "رمز",
+      "intents": {
+        "product_search": "البحث عن منتج",
+        "product_comparison": "مقارنة المنتجات",
+        "compatibility": "التوافق",
+        "price": "السعر",
+        "availability": "التوفر",
+        "how_to": "طريقة الاستخدام",
+        "recommendation": "اقتراح منتج",
+        "other": "أخرى"
+      }
+    },
+    "customers": {
+      "rankingTitle": "ترتيب العملاء حسب نشاط الشراء",
+      "empty": "لا توجد طلبات عملاء ضمن هذه الفترة.",
+      "cards": {
+        "customers": "العملاء",
+        "repeat": "العملاء المتكررون",
+        "repeatRate": "معدل التكرار",
+        "averageOrders": "متوسط الطلبات",
+        "averageValue": "متوسط قيمة الطلب",
+        "successfulOrders": "الطلبات الناجحة"
+      },
+      "columns": {
+        "customer": "العميل",
+        "phone": "الهاتف",
+        "orders": "الطلبات",
+        "confirmed": "المؤكدة",
+        "totalValue": "قيمة الطلبات",
+        "averageValue": "متوسط القيمة",
+        "products": "المنتجات المشتراة",
+        "lastOrder": "آخر طلب"
+      }
+    },
+    "geography": {
+      "topWilayas": {
+        "eyebrow": "الترتيب الجغرافي",
+        "title": "أفضل 10 ولايات حسب الطلبات والإيراد"
+      },
+      "profit": {
+        "eyebrow": "الربح الجغرافي",
+        "title": "الربح حسب الولاية"
+      },
+      "averageOrder": {
+        "eyebrow": "متوسط السلة",
+        "title": "متوسط قيمة الطلب حسب الولاية"
+      },
+      "table": {
+        "eyebrow": "الجدول الجغرافي الكامل",
+        "title": "جميع الولايات",
+        "columns": {
+          "wilaya": "الولاية",
+          "orders": "الطلبات",
+          "collected": "المحصّل",
+          "fees": "الرسوم",
+          "netRevenue": "صافي الإيراد",
+          "profit": "الربح",
+          "averageOrder": "متوسط الطلب"
+        }
+      }
+    },
+    "time": {
+      "granularity": {
+        "daily": "يومي",
+        "weekly": "أسبوعي",
+        "monthly": "شهري"
+      },
+      "orders": {
+        "eyebrow": "تدفق الطلبات",
+        "title": "الطلبات عبر الزمن"
+      },
+      "revenue": {
+        "eyebrow": "منحنى الإيراد",
+        "title": "الإيراد والربح والرسوم عبر الزمن"
+      },
+      "imports": {
+        "eyebrow": "تسلسل الاستيراد",
+        "title": "الإحصائيات حسب تاريخ الاستيراد",
+        "table": {
+          "date": "تاريخ الاستيراد",
+          "orders": "الطلبات",
+          "revenue": "الإيراد",
+          "fees": "الرسوم",
+          "profit": "الربح",
+          "margin": "الهامش"
+        }
+      }
+    },
+    "manualOrders": {
+      "sectionTitle": "الطلبات اليدوية",
+      "title": "إضافة طلب يدوي",
+      "description": "إنشاء طلب مباشرة داخل بيانات التقارير.",
+      "actions": {
+        "open": "إضافة طلب",
+        "cancel": "إلغاء",
+        "create": "إنشاء الطلب"
+      },
+      "fields": {
+        "tracking": "التتبع",
+        "customerName": "اسم العميل",
+        "wilaya": "الولاية",
+        "commune": "البلدية",
+        "deliveryType": "نوع التوصيل",
+        "amountCollected": "المبلغ المحصل",
+        "createdAt": "تاريخ الإنشاء",
+        "deliveredAt": "تاريخ التسليم",
+        "encaissedAt": "تاريخ التحصيل",
+        "productSearch": "البحث عن منتج"
+      },
+      "fees": {
+        "livraison": "رسوم التوصيل",
+        "poids": "رسوم الوزن",
+        "extra": "رسوم إضافية",
+        "sms": "رسوم الرسائل",
+        "stockage": "رسوم التخزين",
+        "commission": "رسوم العمولة"
+      },
+      "summary": {
+        "productCost": "تكلفة المنتجات",
+        "totalFees": "إجمالي الرسوم",
+        "profit": "الربح"
+      },
+      "history": {
+        "emptyTitle": "لا توجد طلبات يدوية بعد",
+        "emptyDescription": "أضف طلباً يدوياً ليظهر ضمن الإحصائيات.",
+        "show": "إظهار السجل",
+        "hide": "إخفاء السجل",
+        "columns": {
+          "tracking": "التتبع",
+          "details": "التفاصيل",
+          "finances": "الماليات",
+          "date": "التاريخ",
+          "actions": "الإجراءات"
+        },
+        "delete": "حذف",
+        "pagination": {
+          "page": "الصفحة {page} من {total}",
+          "previous": "السابق",
+          "next": "التالي"
+        }
+      },
+      "notifications": {
+        "create": {
+          "loading": "جارٍ إنشاء الطلب اليدوي...",
+          "success": "تم إنشاء الطلب اليدوي.",
+          "error": "فشل إنشاء الطلب اليدوي."
+        },
+        "delete": {
+          "loading": "جارٍ حذف الطلب اليدوي...",
+          "success": "تم حذف الطلب اليدوي {id}.",
+          "error": "فشل حذف الطلب اليدوي."
+        }
+      }
+    },
+    "metaAds": {
+      "performanceTitle": "كفاءة الإعلانات",
+      "eventsTitle": "أحداث Meta المتتبعة",
+      "payloadsTitle": "حمولات Meta الأخيرة",
+      "managerTitle": "تكاليف الإعلانات",
+      "conversionRate": "معدل التحويل",
+      "unknownCampaign": "حملة غير معروفة",
+      "paidAttribution": {
+        "title": "إسناد زيارات ميتا المدفوعة",
+        "visits": "الزيارات المدفوعة",
+        "orders": "الطلبات المنشأة",
+        "purchases": "المشتريات",
+        "landedOnly": "زيارات صفحة فقط",
+        "conversion": "تحويل الزيارة",
+        "campaign": "الحملة"
+      },
+      "health": {
+        "title": "حالة تسليم CAPI",
+        "pending": "قيد الانتظار / إعادة المحاولة",
+        "delivered": "تم التسليم",
+        "failed": "فشل / تم التجاوز",
+        "purchaseCoverage": "تغطية Purchase عند الإرسال",
+        "orderConfirmedCoverage": "تغطية orderconfirmed",
+        "worker": "آخر نبضة للعامل: {heartbeat} • أقدم حدث معلق: {oldest} • مشتريات مؤكدة انتهت بنتيجة سلبية: {negative}"
+      },
+      "events": {
+        "empty": "لم يتم تسجيل أي أحداث Meta ضمن هذه الفترة.",
+        "columns": {
+          "event": "الحدث",
+          "total": "المتتبعة",
+          "pixel": "تم إطلاق البكسل",
+          "capiSent": "تم إرسال CAPI",
+          "capiDelivered": "تم تسليم CAPI",
+          "capiFailed": "فشل CAPI",
+          "lastSeen": "آخر ظهور"
+        }
+      },
+      "payloads": {
+        "emptyTitle": "لا توجد حمولات Meta بعد",
+        "emptyDescription": "ستظهر هنا حمولات Meta Pixel وCAPI بعد تسجيل نشاط من المتجر.",
+        "meta": "{analyticsEvent} • {eventId} • {occurredAt}",
+        "pixel": "حمولة البكسل",
+        "capi": "حمولة CAPI",
+        "delivered": "تم التسليم",
+        "failed": "فشل",
+        "noStatus": "لا توجد حالة HTTP",
+        "status": "HTTP {status}"
+      },
+      "summary": {
+        "spend": "الإنفاق",
+        "impressions": "الظهور",
+        "clicks": "النقرات",
+        "conversions": "التحويلات"
+      },
+      "actions": {
+        "import": "استيراد",
+        "add": "إضافة إدخال",
+        "save": "حفظ الإدخال",
+        "delete": "حذف"
+      },
+      "fields": {
+        "rate": "اليورو إلى الدينار",
+        "importHint": "ارفع ملف الجدول المصدّر المستخدم لتكاليف الحملات.",
+        "platform": "المنصة",
+        "campaignName": "اسم الحملة",
+        "spend": "الإنفاق",
+        "impressions": "الظهور",
+        "clicks": "النقرات",
+        "conversions": "التحويلات"
+      },
+      "columns": {
+        "date": "التاريخ",
+        "spend": "الإنفاق",
+        "impressions": "الظهور",
+        "clicks": "النقرات",
+        "conversions": "التحويلات",
+        "cpc": "CPC",
+        "cpa": "CPA",
+        "actions": "الإجراءات"
+      },
+      "batches": {
+        "eyebrow": "الجداول المستوردة",
+        "description": "جداول إنفاق الإعلانات التي تمت إضافتها سابقا والصفوف التي تملكها حاليا.",
+        "meta": "{importedAt} • {currentRows}/{totalRows} صفوف حالية",
+        "range": "نطاق الإنفاق: {start} إلى {end}",
+        "noRows": "لا توجد صفوف حالية",
+        "delete": "حذف الدفعة",
+        "emptyTitle": "لم يتم استيراد جداول إنفاق إعلاني",
+        "emptyDescription": "ارفع تقرير حملة Meta لإنشاء دفعة استيراد قابلة للحذف."
+      },
+      "notifications": {
+        "addSuccess": "تم حفظ إدخال الإعلان.",
+        "importLoading": "جارٍ استيراد تكاليف الإعلانات...",
+        "importSuccess": "تم استيراد تكاليف الإعلانات.",
+        "deleteSuccess": "تم حذف إدخال الإعلان.",
+        "deleteCampaignSuccess": "تم حذف إدخالات الحملة.",
+        "deleteBatchSuccess": "تم حذف دفعة إنفاق الإعلانات."
+      }
+    },
+    "profitability": {
+      "cards": {
+        "profitable": "الطلبات الرابحة",
+        "profitableHint": "الطلبات المستوردة ذات الربح الإيجابي.",
+        "unprofitable": "الطلبات الخاسرة",
+        "unprofitableHint": "الطلبات المستوردة ذات الربح السلبي.",
+        "averageProfit": "متوسط الربح / الطلب",
+        "averageProfitHint": "الربح الإجمالي مقسوماً على الطلبات المستوردة.",
+        "margin": "هامش الربح",
+        "marginHint": "الربح كنسبة من صافي الإيراد."
+      },
+      "distribution": {
+        "eyebrow": "توزيع الربح",
+        "title": "توزيع الربحية"
+      },
+      "topProducts": {
+        "eyebrow": "ربحية المنتجات",
+        "title": "أفضل المنتجات حسب الربح"
+      },
+      "emptyTitle": "لا توجد بيانات ربحية بعد",
+      "emptyDescription": "استورد تقريراً مطابقاً واحداً على الأقل لرؤية الطلبات الرابحة والخاسرة."
+    },
+    "imports": {
+      "eyebrow": "السجل",
+      "title": "استيراد الجدول",
+      "show": "إظهار السجل",
+      "hide": "إخفاء السجل",
+      "meta": "{importedAt} • تم استيراد {matchedOrders} • غير مطابق {unmatchedCount} • تم تخطي {skippedRows} من {totalRows} صفاً",
+      "range": "فترة النشاط: {start} إلى {end}",
+      "delete": "حذف الدفعة",
+      "emptyTitle": "لا توجد دفعات مستوردة",
+      "emptyDescription": "ارفع تقريراً لبدء بناء مجموعة البيانات التحليلية.",
+      "progress": {
+        "uploadingTitle": "جار رفع الجدول",
+        "uploadingDescription": "يتم إرسال الملف إلى الخادم.",
+        "uploadingBadge": "رفع",
+        "processingTitle": "جار معالجة الجدول",
+        "processingDescription": "يتم تحليل الاستيراد وإعادة بناء بيانات الإحصاءات.",
+        "processingBadge": "معالجة"
+      }
+    },
+    "unmatched": {
+      "title": "المراجع غير المطابقة من آخر دفعة",
+      "dismiss": "إزالة التحذير",
+      "dialog": {
+        "title": "تفاصيل الطلب غير المطابق",
+        "description": "هذا السطر لم يطابق أي طلب موجود في قاعدة البيانات."
+      },
+      "fields": {
+        "reference": "المرجع",
+        "tracking": "التتبع",
+        "customer": "العميل",
+        "phone": "الهاتف",
+        "wilaya": "الولاية",
+        "commune": "البلدية",
+        "amount": "المبلغ",
+        "products": "المنتجات",
+        "note": "ملاحظة"
+      }
+    },
+    "leaders": {
+      "eyebrow": "المتصدّرون",
+      "title": "أفضل القادة حسب القطاعات",
+      "category": "الفئة الأولى",
+      "brand": "العلامة الأولى",
+      "meta": "الإيراد {revenue} • الربح {profit}"
+    },
+    "notifications": {
+      "upload": {
+        "loading": "جارٍ استيراد الملف وإعادة بناء الإحصائيات...",
+        "success": "تمت معالجة {created} طلبات وتخطي {duplicates} مكررات.",
+        "error": "اكتمل رفع الملف بدون نتيجة استيراد قابلة للاستخدام."
+      },
+      "delete": {
+        "loading": "جارٍ حذف الدفعة...",
+        "success": "تم حذف الدفعة {batchId}."
+      },
+      "unmatched": {
+        "loading": "جارٍ إزالة التحذير...",
+        "success": "تمت إزالة التحذير."
+      }
+    }
+  },
+  "pages": {
+    "dashboard": "نظرة عامة، عناصر مخصصة، وآخر التحديثات.",
+    "products": "إدارة المنتجات كاملة مع البحث والتصفية والترتيب.",
+    "orders": "إنشاء وإدارة دورة الطلبات.",
+    "inventory": "تتبع المخزون وربط المنتجات عبر الباركود أو يدويًا.",
+    "assets": "إدارة الصفحات والبطاقات والبنرات ومكتبة ملفات S3.",
+    "brands": "إدارة علامات المنتجات مع الصور.",
+    "categories": "إدارة تصنيفات المنتجات مع الصور.",
+    "brandsCategories": "إدارة العلامات والتصنيفات.",
+    "stats": "عرض الأداء للمنتجات والطلبات والمستخدمين والعمليات.",
+    "bulletin": "تواصل داخلي مع الوسوم والتصفية والصلاحيات.",
+    "settings": "إعداد المظهر واللغة والتخطيط والصلاحيات.",
+    "administration": "نظرة عامة على الإدارة وسجل الإجراءات."
+  },
+  "aiChat": {
+    "open": "مساعد الذكاء الاصطناعي",
+    "close": "إغلاق مساعد الذكاء الاصطناعي",
+    "title": "مساعد الإدارة بالذكاء الاصطناعي",
+    "description": "ابحث عن المنتجات وأنشئ مقترحات قابلة للمراجعة. لا يتم تطبيق المحتوى تلقائيًا.",
+    "reviewMode": "المراجعة مطلوبة",
+    "conversation": "المحادثة مع مساعد الذكاء الاصطناعي",
+    "emptyTitle": "ما الذي تريد تحسينه؟",
+    "capabilityCatalog": "محتوى الكتالوج",
+    "capabilityAnalytics": "التحليلات",
+    "capabilityPricing": "الأسعار والحزم",
+    "examples": "مثال: أنشئ العنوان العربي للمنتج 42، أو أعد وصف المنتجين 10 و11، أو عالج كل منتج بدون عنوان عربي.",
+    "placeholder": "اطلب إجراءً على محتوى المنتجات…",
+    "send": "إرسال",
+    "sendHint": "اضغط Enter للإرسال · Shift + Enter لسطر جديد. تبقى التغييرات قابلة للمراجعة قبل تطبيقها.",
+    "thinking": "جارٍ العمل…",
+    "completed": "اكتملت عملية إنشاء المقترحات المطلوبة.",
+    "error": "فشل طلب مساعد الذكاء الاصطناعي.",
+    "stopResponse": "إيقاف الرد",
+    "history": "التقدم والسجل",
+    "historyHint": "المحادثات المحفوظة والمهام المباشرة والمقترحات القابلة للمراجعة",
+    "newChat": "محادثة جديدة",
+    "chats": "محادثاتك",
+    "untitledChat": "محادثة بلا عنوان",
+    "noChats": "لا توجد محادثات محفوظة بعد.",
+    "loadingChats": "جارٍ تحميل المحادثات…",
+    "loadingMessages": "جارٍ تحميل الرسائل…",
+    "noChartData": "لا توجد قيم غير صفرية لعرضها في مخطط؛ تظهر النتائج الكاملة أدناه.",
+    "noHistory": "لا توجد مهام أو اقتراحات بعد.",
+    "approve": "الموافقة والتطبيق",
+    "reject": "رفض",
+    "applied": "تم تطبيق الاقتراح.",
+    "rejected": "تم رفض الاقتراح.",
+    "proposalReviewError": "تعذرت مراجعة الاقتراح.",
+    "proposalVerificationError": "لم يتحقق الخادم من تطبيق هذا الاقتراح. لا تزال المهمة غير مكتملة.",
+    "autoAccept": "قبول الاقتراحات تلقائيًا",
+    "model": "النموذج",
+    "reasoningEffort": "مستوى الاستدلال",
+    "reasoningLevels": {
+      "low": "منخفض",
+      "medium": "متوسط",
+      "high": "مرتفع",
+      "xhigh": "مرتفع جدًا"
+    },
+    "backgroundJobs": "المهام في الخلفية",
+    "previousJob": "المهمة السابقة في الخلفية",
+    "nextJob": "المهمة التالية في الخلفية",
+    "categorizationJob": "تصنيف الكتالوج",
+    "contentJob": "إنشاء محتوى المنتجات",
+    "jobStatus": {
+      "queued": "في قائمة الانتظار",
+      "running": "قيد التنفيذ",
+      "completed": "مكتمل",
+      "cancelled": "ملغى",
+      "failed": "فشل"
+    },
+    "categorizationSummary": "{applied} مطبّق · {proposed} بانتظار المراجعة · {unchanged} دون تغيير · {ambiguous} ملتبس · {failed} فشل",
+    "cancel": "إلغاء",
+    "vs": "مقابل",
+    "metric": "المؤشر",
+    "current": "الحالي",
+    "previous": "السابق",
+    "change": "التغيير",
+    "yes": "نعم",
+    "no": "لا"
+  },
+  "products": {
+    "ai": {
+      "title": "محتوى المنتج بالذكاء الاصطناعي",
+      "description": "أنشئ المحتوى المحلي الناقص، وراجع كل حقل، وطبّق التغييرات الموافق عليها فقط.",
+      "generateMissing": "إنشاء المحتوى الناقص",
+      "generated": "تم إنشاء مقترح محتوى بالذكاء الاصطناعي.",
+      "before": "الحالي",
+      "proposed": "المقترح",
+      "approve": "موافقة وتطبيق",
+      "reject": "رفض",
+      "applied": "تم تطبيق مقترح المحتوى.",
+      "rejected": "تم رفض مقترح المحتوى.",
+      "verificationError": "لم يتحقق الخادم من تغييرات المنتج. لا يزال الاقتراح غير مكتمل.",
+      "empty": "لا توجد مقترحات محتوى بانتظار المراجعة."
+    },
+    "view": {
+      "cards": "بطاقات",
+      "table": "جدول"
+    },
+    "copy": {
+      "action": "نسخ معرّفات المنتجات",
+      "success": "تم نسخ معرّفات {count} من المنتجات.",
+      "error": "تعذّر نسخ معرّفات {count} من المنتجات."
+    },
+    "promos": {
+      "title": "روابط العروض",
+      "description": "أنشئ روابط خصم مخفية بسعر ترويجي ثابت.",
+      "add": "إضافة عرض",
+      "empty": "لا توجد روابط عروض لهذا المنتج.",
+      "code": "كود العرض",
+      "price": "سعر العرض",
+      "startsAt": "يبدأ في",
+      "endsAt": "ينتهي في",
+      "active": "نشط",
+      "copy": "نسخ الرابط",
+      "remove": "حذف العرض",
+      "copySuccess": "تم نسخ رابط العرض.",
+      "copyError": "تعذر نسخ رابط العرض.",
+      "loadError": "تعذر تحميل روابط عروض المنتج."
+    },
+    "export": {
+      "action": "تصدير كتالوج Meta",
+      "title": "تصدير {count} من المنتجات إلى كتالوج Meta",
+      "previewTitle": "معاينة تصدير كتالوج Meta",
+      "confirm": "تصدير XLSX",
+      "fullPreview": "معاينة بالحجم الكامل",
+      "compactPreview": "معاينة مضغوطة"
+    },
+    "exportAll": {
+      "action": "تصدير كل المنتجات",
+      "runningAction": "التصدير جارٍ",
+      "cancel": "إلغاء التصدير",
+      "cancelPending": "جارٍ الإلغاء...",
+      "download": "تنزيل الملف",
+      "status": {
+        "running": "جارٍ التنفيذ",
+        "completed": "مكتمل",
+        "cancelled": "أُلغي",
+        "failed": "فشل"
+      },
+      "progress": {
+        "counting": "جارٍ عدّ المنتجات",
+        "loading": "جارٍ قراءة المنتجات",
+        "processing-images": "جارٍ تجهيز صور مربعة للكتالوج",
+        "packaging": "جارٍ إنشاء الملف"
+      },
+      "notifications": {
+        "start": {
+          "loading": "جارٍ بدء تصدير المنتجات...",
+          "success": "بدأ تصدير المنتجات.",
+          "error": "تعذر بدء تصدير المنتجات."
+        },
+        "cancel": {
+          "loading": "جارٍ إلغاء تصدير المنتجات...",
+          "success": "تم إرسال طلب إلغاء التصدير.",
+          "error": "تعذر إلغاء تصدير المنتجات."
+        },
+        "status": {
+          "completed": "ملف تصدير المنتجات جاهز للتنزيل.",
+          "cancelled": "تم إلغاء تصدير المنتجات.",
+          "failed": "فشل تصدير المنتجات."
+        }
+      }
+    }
+  },
+  "ordersManager": {
+    "view": {
+      "cards": "بطاقات",
+      "table": "جدول"
+    },
+    "searchPlaceholder": "ابحث باسم العميل أو رقم الهاتف",
+    "totalOrders": "إجمالي الطلبات: {count}",
+    "overview": {
+      "title": "حالة الطلبات اليومية",
+      "subtitle": "نشاط {date}",
+      "today": "اليوم",
+      "yesterday": "أمس",
+      "refreshing": "تحديث الملخص",
+      "unavailable": "ملخص حالة الطلبات غير متاح لأن قاعدة البيانات غير متصلة.",
+      "metrics": {
+        "newOrders": "طلبات جديدة",
+        "confirmationStatusChanges": "تغييرات حالة التأكيد",
+        "confirmedToday": "تم تأكيدها اليوم",
+        "noAnswerOrders": "طلبات بدون رد",
+        "adminCancelled": "ألغيت من الإدارة",
+        "carrierCancelled": "ألغيت من شركة التوصيل",
+        "shipmentUpdates": "تحديثات الشحن"
+      },
+      "projection": {
+        "title": "الربح المستقبلي المتوقع",
+        "basisLabel": "أساس التوقع",
+        "confirmedBasis": "الطلبات المؤكدة",
+        "postedBasis": "الطلبات المرسلة",
+        "grossProfit": "الربح الإجمالي المستقبلي",
+        "adSpend": "الإنفاق الإعلاني",
+        "returnRate": "معدل الإرجاع / الفشل",
+        "estimatedReturns": "المرتجعات المتوقعة",
+        "returnLoss": "خسارة المرتجعات المتوقعة"
+      }
+    },
+    "filters": {
+      "statusLabel": "تصفية حسب الحالة",
+      "allStatuses": "كل الحالات",
+      "noAnswerCountLabel": "تصفية حسب عدد عدم الرد",
+      "allNoAnswerCounts": "كل أعداد عدم الرد"
+    },
+    "columns": {
+      "date": "التاريخ",
+      "client": "العميل",
+      "products": "المنتجات",
+      "address": "العنوان",
+      "amount": "المبلغ",
+      "status": "الحالة",
+      "confirmedBy": "تم التأكيد بواسطة",
+      "notes": "ملاحظات"
+    },
+    "phone": {
+      "label": "رقم الهاتف",
+      "call": "الاتصال برقم الهاتف",
+      "save": "حفظ الهاتف",
+      "cancel": "إلغاء تعديل الهاتف"
+    },
+    "name": {
+      "label": "اسم العميل",
+      "save": "حفظ الاسم",
+      "cancel": "إلغاء تعديل الاسم"
+    },
+    "copy": {
+      "label": "نسخ رقم الهاتف",
+      "success": "تم نسخ رقم الهاتف.",
+      "error": "تعذر نسخ رقم الهاتف."
+    },
+    "tracking": {
+      "copy": "نسخ رابط التتبع",
+      "success": "تم نسخ رابط التتبع.",
+      "error": "تعذر نسخ رابط التتبع.",
+      "unavailable": "لا يتوفر رابط تتبع لهذا الطلب بعد."
+    },
+    "capture": {
+      "degraded": "التقاط غير مكتمل"
+    },
+    "address": {
+      "delivery": "نوع التوصيل",
+      "region": "المنطقة",
+      "city": "المدينة"
+    },
+    "amount": {
+      "subtotal": "المنتجات",
+      "deliveryFee": "التوصيل",
+      "promoDiscount": "عرض {code}",
+      "total": "الإجمالي"
+    },
+    "actions": {
+      "editProducts": "تعديل المنتجات",
+      "viewDetails": "عرض التفاصيل",
+      "deleteOrder": "حذف الطلب"
+    },
+    "bulk": {
+      "statusLabel": "حالة جماعية",
+      "applyStatus": "تطبيق الحالة"
+    },
+    "export": {
+      "selectedAction": "تصدير المحدد",
+      "confirmedAction": "تصدير المؤكد",
+      "selectedTitle": "تصدير {count} من الطلبات المحددة",
+      "confirmedTitle": "تصدير {count} من الطلبات المؤكدة",
+      "previewTitle": "معاينة التصدير",
+      "previewDescription": "سيتم تضمين {count} طلبات في الملف.",
+      "previewHint": "المعاينة المضغوطة تجعل الجدول مناسبًا داخل النافذة. يمكنك التبديل إلى المعاينة الكاملة عند الحاجة.",
+      "fullPreview": "معاينة بالحجم الكامل",
+      "compactPreview": "معاينة مضغوطة",
+      "confirm": "تصدير XLSX",
+      "confirmAndDispatch": "تصدير وتحديثها إلى تم الشحن",
+      "loading": "جار تجهيز معاينة التصدير...",
+      "ready": "معاينة التصدير جاهزة.",
+      "success": "تم تصدير الطلبات.",
+      "error": "تعذر تصدير الطلبات.",
+      "empty": "حدد طلبًا واحدًا على الأقل للتصدير.",
+      "emptyConfirmed": "لا توجد طلبات مؤكدة متاحة للتصدير.",
+      "progress": {
+        "exporting": "جار إنشاء الملف",
+        "updating-statuses": "جار تحديث حالات الطلبات"
+      }
+    },
+    "ecotrack": {
+      "selectedAction": "إرسال المحدد إلى Delivro",
+      "confirmedAction": "إرسال المؤكد إلى Delivro",
+      "selectedTitle": "إرسال {count} من الطلبات المحددة إلى Delivro",
+      "confirmedTitle": "إرسال {count} من الطلبات المؤكدة إلى Delivro",
+      "emirSelectedAction": "إرسال المحدد إلى Emir",
+      "emirConfirmedAction": "إرسال المؤكد إلى Emir",
+      "emirSelectedTitle": "إرسال {count} من الطلبات المحددة إلى Emir",
+      "emirConfirmedTitle": "إرسال {count} من الطلبات المؤكدة إلى Emir",
+      "previewTitle": "معاينة إرسال Ecotrack",
+      "previewEligible": "الطلبات المؤهلة",
+      "previewSkipped": "الطلبات المتخطاة",
+      "previewInvalid": "الطلبات غير الصالحة",
+      "emptyEligible": "لا توجد طلبات مؤهلة.",
+      "emptySkipped": "لا توجد طلبات متخطاة.",
+      "emptyInvalid": "لا توجد طلبات غير صالحة.",
+      "confirm": "إرسال إلى Ecotrack",
+      "loading": "جار تجهيز معاينة Ecotrack...",
+      "ready": "معاينة Ecotrack جاهزة.",
+      "success": "اكتمل إرسال Ecotrack.",
+      "cancelled": "تم إلغاء إرسال Ecotrack.",
+      "error": "تعذر إرسال الطلبات إلى Ecotrack.",
+      "empty": "حدد طلبًا واحدًا على الأقل للإرسال.",
+      "emptyConfirmed": "لا توجد طلبات مؤكدة متاحة للإرسال.",
+      "resultTitle": "نتائج الإرسال",
+      "summary": {
+        "totalRequested": "المطلوبة",
+        "eligible": "المؤهلة",
+        "created": "المنشأة",
+        "skipped": "المتخطاة",
+        "invalid": "غير الصالحة",
+        "failed": "الفاشلة"
+      },
+      "progress": {
+        "loading": "جار تحميل الطلبات",
+        "validating-token": "جار التحقق من رمز Ecotrack",
+        "classifying": "جار تصنيف الطلبات",
+        "creating": "جار إنشاء طلبات Ecotrack",
+        "persisting": "جار حفظ التحديثات محليًا",
+        "completed": "اكتمل"
+      },
+      "reasons": {
+        "already_posted": "تم إرسالها سابقًا",
+        "status_not_confirmed": "الطلب غير مؤكد",
+        "missing_phone": "رقم الهاتف مفقود",
+        "missing_wilaya": "الولاية مفقودة",
+        "missing_commune": "البلدية مفقودة",
+        "invalid_commune": "البلدية غير صالحة",
+        "missing_address": "العنوان مفقود",
+        "missing_name": "اسم العميل مفقود"
+      }
+    },
+    "delivery": {
+      "home": "المنزل",
+      "office": "المكتب"
+    },
+    "status": {
+      "notContacted": "لم يتم الاتصال",
+      "noAnswer": "بدون رد",
+      "noAnswerWithCount": "بدون رد {count}",
+      "confirmed": "مؤكد",
+      "posted": "مرسل",
+      "dispatched": "تم الشحن",
+      "completed": "مكتملة",
+      "manualCompleted": "مكتملة يدويًا",
+      "delayed": "مؤجلة",
+      "inDelivery": "قيد التوصيل",
+      "returned": "مرتجعة",
+      "failed": "فشلت",
+      "incrementNoAnswer": "بدون رد {count}",
+      "noAnswerCounter": "العداد: {count}",
+      "increaseNoAnswer": "زيادة بدون رد إلى {count}",
+      "decreaseNoAnswer": "تقليل بدون رد إلى {count}",
+      "cancelled": "ملغي"
+    },
+    "loading": {
+      "refreshing": "جارٍ تحديث الطلبات",
+      "inProgress": "قيد التنفيذ"
+    },
+    "history": {
+      "title": "سجل الحالة",
+      "button": "السجل",
+      "empty": "لا يوجد سجل للحالة بعد."
+    },
+    "details": {
+      "title": "تفاصيل الطلب"
+    },
+    "shoppingList": {
+      "title": "قائمة التجهيز",
+      "description": "تعرض الجهة اليسرى ما يجب جمعه، بينما تعرض الجهة اليمنى تفاصيل كل طلب وملاحظاته.",
+      "selectedAction": "قائمة المحدد",
+      "confirmedAction": "قائمة الطلبات المؤكدة",
+      "dispatchedAction": "قائمة الطلبات المرسلة",
+      "postedAction": "قائمة الطلبات المنشورة",
+      "postedAndConfirmedAction": "قائمة الطلبات المنشورة والمؤكدة",
+      "selectedTitle": "قائمة لـ {count} طلبات محددة",
+      "confirmedTitle": "قائمة الطلبات المؤكدة",
+      "dispatchedTitle": "قائمة الطلبات المرسلة",
+      "postedTitle": "قائمة الطلبات المنشورة",
+      "postedAndConfirmedTitle": "قائمة الطلبات المنشورة والمؤكدة",
+      "consolidatedTitle": "ما يجب جمعه",
+      "ordersTitle": "تفصيل حسب الطلب",
+      "generatedAt": "تم الإنشاء {date}",
+      "previousGeneration": "قائمة محفوظة سابقة",
+      "notes": "ملاحظات",
+      "unitPrice": "السعر",
+      "purchasePrice": "سعر الشراء",
+      "print": "نسخة للطباعة",
+      "reset": "إعادة تعيين القائمة",
+      "refresh": "تحديث القائمة",
+      "acceptAllInventoryChanges": "قبول كل تخفيضات المخزون",
+      "applySelectedInventoryChanges": "تطبيق التخفيضات المحددة",
+      "addProductTitle": "إضافة منتج",
+      "addProductPlaceholder": "ابحث في منتجات الكتالوج",
+      "addProductAction": "إضافة المنتج",
+      "addProductError": "تعذر إضافة المنتج إلى قائمة التجهيز.",
+      "toggleItem": "تبديل {title}",
+      "customItem": "أضيف يدويًا",
+      "increaseQuantity": "زيادة كمية {title}",
+      "decreaseQuantity": "تقليل كمية {title}",
+      "increaseInventoryDelta": "زيادة تخفيض المخزون لـ {title}",
+      "decreaseInventoryDelta": "تقليل تخفيض المخزون لـ {title}",
+      "inventoryAdjustLabel": "تخفيض المخزون",
+      "inventoryDecreasePreview": "سيتم تخفيض المخزون بمقدار {count}",
+      "inventoryShortage": "النقص {count}",
+      "inventoryApplied": "تم تطبيق تخفيض مخزون بمقدار {count}",
+      "inventoryApplyLoading": "جار تطبيق تغييرات المخزون على {count} منتجات...",
+      "inventoryApplySuccess": "تم تطبيق تغييرات المخزون على {count} منتجات.",
+      "inventoryApplyError": "تعذر تطبيق تغييرات المخزون على {count} منتجات.",
+      "noInventoryChanges": "لا توجد تغييرات مخزون جاهزة للتطبيق.",
+      "removeItem": "إزالة {title}",
+      "loading": "جارٍ إنشاء القائمة...",
+      "ready": "القائمة جاهزة.",
+      "saving": "جارٍ حفظ قائمة التجهيز...",
+      "saved": "تم حفظ قائمة التجهيز.",
+      "saveError": "تعذر حفظ تغييرات قائمة التجهيز.",
+      "lastSavedBy": "آخر حفظ بواسطة {name}",
+      "sharedDraftLoaded": "تم تحميل قائمة التجهيز المشتركة.",
+      "refreshing": "جارٍ تحديث قائمة التجهيز...",
+      "refreshReady": "تم تحديث قائمة التجهيز.",
+      "error": "تعذر إنشاء القائمة.",
+      "emptySelection": "حدد طلبًا واحدًا على الأقل.",
+      "emptyConfirmed": "لا توجد طلبات مؤكدة متاحة لقائمة التجهيز.",
+      "emptyDispatched": "لا توجد طلبات مرسلة متاحة لقائمة التجهيز.",
+      "emptyPosted": "لا توجد طلبات منشورة متاحة لقائمة التجهيز.",
+      "emptyPostedAndConfirmed": "لا توجد طلبات منشورة أو مؤكدة متاحة لقائمة التجهيز.",
+      "printError": "تعذر فتح نسخة الطباعة."
+    },
+    "products": {
+      "title": "تعديل المنتجات",
+      "searchTitle": "البحث عن المنتجات",
+      "searchPlaceholder": "ابحث بالمنتج أو SKU أو الباركود",
+      "searchHint": "ابحث في الكتالوج لإضافة منتجات إلى هذا الطلب.",
+      "searchLoading": "جارٍ البحث عن المنتجات...",
+      "searchEmpty": "لم يتم العثور على منتجات.",
+      "selectedTitle": "المنتجات المحددة",
+      "selectedDescription": "عدّل الكميات أو احذف المنتجات قبل الحفظ.",
+      "add": "إضافة",
+      "unitPrice": "سعر الوحدة",
+      "lineTotal": "إجمالي السطر",
+      "quantity": "الكمية: {count}",
+      "increaseQuantity": "زيادة كمية {title}",
+      "decreaseQuantity": "تقليل كمية {title}",
+      "removeProduct": "حذف {title}",
+      "empty": "لا توجد منتجات"
+    },
+    "notes": {
+      "save": "حفظ الملاحظة",
+      "empty": "لا توجد ملاحظة"
+    },
+    "placeholders": {
+      "region": "منطقة مؤقتة",
+      "city": "مدينة مؤقتة",
+      "street": "عنوان الشارع"
+    },
+    "empty": {
+      "title": "لا توجد طلبات",
+      "description": "جرّب بحثًا مختلفًا أو انتظر مزامنة طلبات جديدة."
+    },
+    "system": "النظام",
+    "unconfirmed": "غير مؤكد",
+    "unconfirmedDate": "لا يوجد وقت تأكيد"
+  },
+  "ordersEcotrackManager": {
+    "searchPlaceholder": "ابحث برقم التتبع او العميل او الهاتف او العنوان او البلدية او الولاية او المنتج او الحالة",
+    "filters": {
+      "statusLabel": "تصفية حسب حالة ECOTRACK",
+      "allStatuses": "كل الحالات",
+      "sortKeyLabel": "الترتيب حسب",
+      "sortDirectionLabel": "الاتجاه",
+      "staleOnly": "عرض البيانات القديمة فقط"
+    },
+    "sort": {
+      "createdAt": "تاريخ الانشاء",
+      "trackingNumber": "رقم التتبع",
+      "clientName": "اسم العميل",
+      "currentStatus": "الحالة الحالية",
+      "lastStatusSyncedAt": "اخر مزامنة للحالة",
+      "asc": "تصاعدي",
+      "desc": "تنازلي"
+    },
+    "columns": {
+      "trackingNumber": "رقم التتبع",
+      "client": "العميل والهاتف",
+      "address": "العنوان والبلدية والولاية ونوع التوصيل",
+      "products": "المنتجات",
+      "amount": "المبلغ",
+      "status": "حالة ECOTRACK"
+    },
+    "reference": "المرجع",
+    "missingValue": "قيمة مفقودة",
+    "staleBadge": "قديمة",
+    "driverPhone": "هاتف السائق",
+    "estimatedFee": "الرسوم المقدرة",
+    "deskPhone": "هاتف نقطة الاستلام",
+    "deskCommune": "بلدية نقطة الاستلام",
+    "deskAddress": "عنوان نقطة الاستلام",
+    "lastSync": "اخر مزامنة للحالة",
+    "lastTrackingSync": "اخر مزامنة للتتبع",
+    "lastMajSync": "اخر مزامنة للتحديثات",
+    "neverSynced": "لم تتم المزامنة",
+    "summaryTitle": "ملخص الشحنة",
+    "amounts": {
+      "subtotal": "المنتجات",
+      "deliveryFee": "التوصيل",
+      "total": "الاجمالي"
+    },
+    "history": {
+      "title": "سجل الطلب",
+      "majTitle": "التحديثات",
+      "timelineTitle": "سجل التتبع",
+      "empty": "لا يوجد سجل حاليا.",
+      "emptyMaj": "لا توجد تحديثات محفوظة.",
+      "emptyTimeline": "لا توجد احداث تتبع محفوظة."
+    },
+    "actions": {
+      "scanTrackingNumber": "مسح رقم التتبع",
+      "printSelected": "طباعة الملصقات المحددة",
+      "refreshSelected": "تحديث المحدد",
+      "clearSelection": "مسح التحديد",
+      "refreshVisible": "تحديث الظاهر",
+      "dispatchReady": "ارسال prete a expedier",
+      "dispatchSelected": "ارسال المحدد",
+      "showHistorySelected": "اظهار سجل المحدد",
+      "showHistoryVisible": "اظهار سجل الظاهر",
+      "label": "الملصق",
+      "refresh": "تحديث",
+      "dispatch": "ارسال",
+      "saveOnly": "حفظ فقط",
+      "saveAndDispatch": "حفظ وارسال",
+      "editAndRecreate": "تعديل واعادة الانشاء",
+      "maj": "اضافة تحديث",
+      "return": "طلب ارجاع",
+      "showHistory": "اظهار السجل",
+      "hideHistory": "اخفاء السجل"
+    },
+    "loading": {
+      "refreshing": "جار تحديث شحنات ECOTRACK",
+      "inProgress": "قيد التنفيذ"
+    },
+    "empty": {
+      "title": "لا توجد شحنات ECOTRACK",
+      "description": "تظهر الطلبات هنا بعد ارسالها الى ECOTRACK والحصول على رقم تتبع."
+    },
+    "dialogs": {
+      "editTitle": "تعديل شحنة ECOTRACK",
+      "editDescription": "قم بتحديث الطلب المحلي ثم ECOTRACK ما دامت الشحنة ما زالت prete_a_expedier.",
+      "editHint": "المجموع الفرعي يتبع المنتجات المحددة ما لم يتم استبداله يدويا. وسعر التوصيل يعاد حسابه عندما يتغير نوع التوصيل او الولاية.",
+      "recreateTitle": "تعديل واعادة انشاء شحنة ECOTRACK",
+      "recreateDescription": "حدّث {name} ثم احذف رابط التتبع المحلي الحالي من ECOTRACK وانشئ شحنة ECOTRACK جديدة مباشرة.",
+      "finalizeTitle": "مراجعة نهائية قبل ارسال ECOTRACK",
+      "finalizeDescription": "راجع وحدّث {name} للمرة الاخيرة، ثم احفظ التغييرات وارسِل الشحنة.",
+      "deleteTitle": "حذف شحنة ECOTRACK",
+      "deleteDescription": "حذف شحنة ECOTRACK الخاصة بـ {name}. سيبقى الطلب المحلي متاحا لاعادة الارسال لاحقا.",
+      "dispatchTitle": "ارسال شحنة ECOTRACK",
+      "dispatchDescription": "قم بارسال شحنة {name} واقفل تعديلات ما قبل الارسال.",
+      "majTitle": "اضافة تحديث ECOTRACK",
+      "majDescription": "ارسل تحديثا خاصا بـ {name}."
+    },
+    "fields": {
+      "firstName": "الاسم",
+      "lastName": "اللقب",
+      "phoneNumber1": "الهاتف الرئيسي",
+      "phoneNumber2": "الهاتف الثانوي",
+      "scanTrackingNumber": "مسح رقم التتبع",
+      "scanTrackingNumberPlaceholder": "امسح او الصق رقم تتبع ECOTRACK",
+      "delivery": "نوع التوصيل",
+      "state": "الولاية",
+      "statePlaceholder": "اختر ولاية",
+      "city": "البلدية",
+      "cityPlaceholder": "اختر بلدية",
+      "homeAddress": "العنوان",
+      "note": "ملاحظة",
+      "askCollection": "طلب جمع",
+      "askCollectionDescription": "يرسل ask_collection=1 عند الارسال اذا كان يلزم جمع الشحنة من جهتكم.",
+      "majContent": "محتوى التحديث",
+      "majHint": "الحد الاقصى 255 حرفا."
+    },
+    "confirmations": {
+      "return": "هل تريد طلب ارجاع لهذه الشحنة من ECOTRACK؟"
+    },
+    "notifications": {
+      "refresh": {
+        "loading": "جار تحديث شحنة ECOTRACK...",
+        "success": "تم تحديث شحنة ECOTRACK.",
+        "partial": "تم تحديث {successCount} شحنات وفشل {failedCount}.",
+        "allFailed": "فشل تحديث جميع شحنات ECOTRACK المحددة.",
+        "error": "فشل تحديث شحنة ECOTRACK."
+      },
+      "update": {
+        "loading": "جار حفظ شحنة ECOTRACK...",
+        "success": "تم حفظ شحنة ECOTRACK.",
+        "error": "فشل حفظ شحنة ECOTRACK."
+      },
+      "recreate": {
+        "loading": "جار اعادة انشاء شحنة ECOTRACK...",
+        "success": "تمت اعادة انشاء شحنة ECOTRACK.",
+        "error": "فشلت اعادة انشاء شحنة ECOTRACK."
+      },
+      "delete": {
+        "loading": "جار حذف شحنة ECOTRACK...",
+        "success": "تم حذف شحنة ECOTRACK.",
+        "error": "فشل حذف شحنة ECOTRACK."
+      },
+      "dispatch": {
+        "loading": "جار ارسال شحنة ECOTRACK...",
+        "success": "تم ارسال شحنة ECOTRACK.",
+        "partial": "تم ارسال {successCount} شحنات وفشل {failedCount}.",
+        "allFailed": "فشل ارسال جميع شحنات ECOTRACK المحددة.",
+        "error": "فشل ارسال شحنة ECOTRACK."
+      },
+      "maj": {
+        "loading": "جار ارسال تحديث ECOTRACK...",
+        "success": "تم ارسال تحديث ECOTRACK.",
+        "error": "فشل ارسال تحديث ECOTRACK."
+      },
+      "return": {
+        "loading": "جار طلب ارجاع ECOTRACK...",
+        "success": "تم طلب ارجاع ECOTRACK.",
+        "error": "فشل طلب ارجاع ECOTRACK."
+      },
+      "labels": {
+        "loading": "جار تحضير ملصقات ECOTRACK...",
+        "success": "ملصقات ECOTRACK جاهزة.",
+        "partial": "تم تحضير {successCount} ملصقات وفشل {failedCount}.",
+        "allFailed": "فشل تحضير جميع ملصقات ECOTRACK المحددة.",
+        "error": "فشل تحضير ملصقات ECOTRACK."
+      },
+      "scan": {
+        "loading": "جار البحث عن رقم تتبع ECOTRACK...",
+        "success": "رقم التتبع {trackingNumber} جاهز للمراجعة النهائية.",
+        "notFound": "لم يتم العثور على شحنة ECOTRACK لرقم التتبع {trackingNumber}.",
+        "notDispatchable": "رقم التتبع {trackingNumber} حالته الحالية {status}. فقط شحنات prete_a_expedier يمكن اكمالها بعد المسح.",
+        "error": "فشل البحث عن رقم تتبع ECOTRACK."
+      },
+      "finalize": {
+        "loading": "جار الحفظ ثم ارسال شحنة ECOTRACK...",
+        "success": "تم حفظ شحنة ECOTRACK وارسالها.",
+        "partialFailure": "تم حفظ التغييرات لكن فشل الارسال: {message}",
+        "error": "فشل حفظ شحنة ECOTRACK وارسالها."
+      }
+    },
+    "statuses": {
+      "prete_a_expedier": "جاهز للارسال",
+      "en_ramassage": "قيد الجمع",
+      "en_preparation_stock": "قيد تحضير المخزون",
+      "vers_hub": "نحو المركز",
+      "en_hub": "في المركز",
+      "vers_wilaya": "نحو الولاية",
+      "en_preparation": "قيد التحضير",
+      "en_livraison": "قيد التوصيل",
+      "suspendu": "معلق",
+      "livre_non_encaisse": "تم التسليم غير محصل",
+      "encaisse_non_paye": "محصل غير مدفوع",
+      "paiements_prets": "الدفعات جاهزة",
+      "paye_et_archive": "مدفوع ومؤرشف",
+      "retour_chez_livreur": "ارجاع عند السائق",
+      "retour_transit_entrepot": "ارجاع في طريقه للمخزن",
+      "retour_en_traitement": "ارجاع قيد المعالجة",
+      "retour_recu": "تم استلام الارجاع",
+      "retour_archive": "ارجاع مؤرشف",
+      "annule": "ملغى"
+    },
+    "historyStatuses": {
+      "order_information_received_by_carrier": "تم تسجيل الطلب واعتماده من البائع",
+      "picked": "تم استلام الطلب من طرف شركة التوصيل",
+      "accepted_by_carrier": "تم استلام الطلب في مركز الفرز",
+      "dispatched_to_driver": "تم توجيه الطلب إلى الموزع",
+      "attempt_delivery": "محاولة تسليم",
+      "return_asked": "تم بدء الإرجاع من مركز الفرز",
+      "return_in_transit": "المرتجع في الطريق",
+      "return_received": "تم استلام المرتجع من البائع",
+      "livred": "تم تسليم الطلب",
+      "encaissed": "تم تحصيل الطلب",
+      "payed": "تم الدفع"
+    }
+  },
+  "settings": {
+    "general": {
+      "currentRoleLabel": "الدور الحالي",
+      "signedInEmailLabel": "البريد الإلكتروني المسجل",
+      "missingEmail": "لا يوجد بريد إلكتروني",
+      "rolePolicyLabel": "سياسة تعيين الأدوار",
+      "rolePolicyBody": "يبدأ دخول التطبيق ببريد إلكتروني موجود في القائمة المسموح بها. بعد ذلك يعيّن المدير أو المطور دورًا افتراضيًا أو مخصصًا، وهذا الدور يحدد ما يمكن للمستخدم رؤيته وتنفيذه."
+    },
+    "permissions": {
+      "title": "إعدادات الصلاحيات والأدوار",
+      "description": "استخدم هذه المنطقة لمراجعة الوصول المميز الأساسي والأدوار المتاحة للموظفين المسموح لهم.",
+      "editableRolesTitle": "الأدوار القابلة للتعديل",
+      "editableRolesDescription": "يمكن تعيين هذه الأدوار من خلال تدفقات العمل داخل التطبيق.",
+      "codeManagedRolesTitle": "الأدوار المدارة بالكود",
+      "codeManagedRolesDescription": "يتم منح وصول المدير والمطور فقط من خلال قوائم البريد المحددة في الكود.",
+      "adminEmailsTitle": "قائمة بريد المديرين",
+      "adminEmailsDescription": "أي بريد في هذه القائمة يُمنح دور المدير.",
+      "developerEmailsTitle": "قائمة بريد المطورين",
+      "developerEmailsDescription": "أي بريد في هذه القائمة يُمنح دور المطور.",
+      "noAdminEmails": "لا توجد عناوين مديرين مضبوطة حتى الآن.",
+      "noDeveloperEmails": "لا توجد عناوين مطورين مضبوطة حتى الآن.",
+      "customRolesTitle": "الأدوار المخصصة",
+      "customRolesDescription": "يمكن للمديرين والمطورين إنشاء أدوار غير مميزة هنا وربطها بحزم الصلاحيات."
+    },
+    "accessManager": {
+      "title": "التحكم في وصول الموظفين",
+      "description": "فقط عناوين البريد الإلكتروني الموجودة في القائمة المسموح بها يمكنها دخول التطبيق. وكل بريد مسموح له يجب أن يحصل على دور افتراضي أو مخصص.",
+      "count": "{count} بريدًا مسموحًا",
+      "emailLabel": "بريد الموظف",
+      "emailPlaceholder": "employee@company.com",
+      "assignmentLabel": "الدور المعيّن",
+      "assignmentPlaceholder": "اختر تعيين الدور",
+      "assignmentHint": "اختر إما دورًا افتراضيًا أو تعريف دور مخصصًا.",
+      "builtInGroup": "الأدوار الافتراضية",
+      "customGroup": "الأدوار المخصصة",
+      "createAction": "السماح للبريد",
+      "updateAction": "تحديث الوصول",
+      "cancelEditAction": "إلغاء التعديل",
+      "columns": {
+        "email": "البريد",
+        "assignment": "التعيين"
+      },
+      "notifications": {
+        "save": {
+          "loading": "جارٍ حفظ صلاحية الوصول...",
+          "success": "تم حفظ صلاحية الوصول."
+        },
+        "delete": {
+          "loading": "جارٍ إزالة صلاحية الوصول...",
+          "success": "تمت إزالة صلاحية الوصول."
+        }
+      }
+    },
+    "ecotrack": {
+      "title": "مزامنة كتالوج ECOTRACK",
+      "description": "يعرض آخر حالة لجلب كتالوج ECOTRACK المخزن في قاعدة البيانات.",
+      "lastFetchLabel": "آخر جلب",
+      "statusLabel": "الحالة",
+      "statusSuccess": "نجح",
+      "statusFailed": "فشل",
+      "statusUnknown": "لم يتم التشغيل",
+      "neverSynced": "لم تتم المزامنة",
+      "errorLabel": "آخر خطأ"
+    },
+    "rolesManager": {
+      "title": "تعريفات الأدوار المخصصة",
+      "description": "أنشئ أدوارًا غير مميزة قابلة لإعادة الاستخدام وحدد الصلاحيات التي تمنحها.",
+      "existingCount": "{count} أدوار",
+      "nameLabel": "اسم الدور",
+      "namePlaceholder": "مثال: مسؤول الحملات",
+      "descriptionLabel": "الوصف",
+      "descriptionPlaceholder": "اشرح الغرض من هذا الدور",
+      "permissionsLabel": "الصلاحيات الممنوحة",
+      "createAction": "إنشاء الدور",
+      "updateAction": "تحديث الدور",
+      "cancelEditAction": "إلغاء التعديل",
+      "editAction": "تعديل الصلاحيات",
+      "noDescription": "لا يوجد وصف بعد.",
+      "notifications": {
+        "create": {
+          "loading": "جارٍ إنشاء الدور {name}...",
+          "success": "تم إنشاء الدور {name}.",
+          "error": "تعذر إنشاء الدور {name}."
+        },
+        "update": {
+          "loading": "جارٍ حفظ الدور {name}...",
+          "success": "تم تحديث الدور {name}.",
+          "error": "تعذر تحديث الدور {name}."
+        }
+      }
+    },
+    "permissionLabels": {
+      "products_write": "إدارة المنتجات",
+      "orders_write": "إدارة الطلبات",
+      "assets_write": "إدارة الأصول والرفع",
+      "brands_categories_write": "إدارة العلامات والتصنيفات",
+      "bulletin_moderate": "إدارة منشورات النشرات",
+      "ops_view": "عرض لوحات العمليات والسجلات",
+      "settings_manage": "إدارة إعدادات النظام",
+      "ai_use": "استخدام مساعد الإدارة بالذكاء الاصطناعي",
+      "ai_catalog_propose": "إنشاء اقتراحات للكتالوج بالذكاء الاصطناعي",
+      "ai_catalog_apply": "تطبيق تعديلات الذكاء الاصطناعي على الكتالوج",
+      "ai_analytics_query": "الاستعلام عن التحليلات بالذكاء الاصطناعي",
+      "ai_pricing_analyze": "تحليل الأسعار والتخفيضات بالذكاء الاصطناعي",
+      "ai_pricing_apply": "تطبيق تغييرات الأسعار والتخفيضات المقترحة",
+      "ai_landing_publish": "نشر صفحات الهبوط المنشأة بالذكاء الاصطناعي"
+    }
+  },
+  "storefrontSettings": {
+    "title": "إعدادات المتجر",
+    "description": "أدر هنا معلومات الاتصال الظاهرة للعملاء. ستضم هذه الصفحة المخفية أيضًا إعدادات تخطيط المتجر ومعلوماته مستقبلًا.",
+    "contactTitle": "معلومات الاتصال",
+    "contactDescription": "يستخدم المتجر هذا الرقم لمكالمات العملاء المباشرة.",
+    "phoneLabel": "رقم هاتف العملاء",
+    "phoneHint": "رقم هاتف محمول جزائري بالصيغة المحلية أو +213.",
+    "callsLabel": "تفعيل المكالمات",
+    "callsHint": "إظهار إجراءات الاتصال المباشر في المتجر.",
+    "assistantTitle": "مساعد التسوق بالذكاء الاصطناعي",
+    "assistantDescription": "تحكم في إتاحة مستشار المنتجات في واجهة المتجر الجديدة.",
+    "assistantLabel": "تفعيل مساعد التسوق بالذكاء الاصطناعي",
+    "assistantHint": "يعرض المستشار في صفحات التصفح والمنتجات، ويبقى مخفيًا في صفحات الدفع وتأكيد الطلب.",
+    "saveAction": "حفظ إعدادات المتجر",
+    "savingAction": "جارٍ الحفظ...",
+    "saving": "جارٍ حفظ إعدادات المتجر...",
+    "saved": "تم حفظ إعدادات المتجر.",
+    "saveError": "تعذر حفظ إعدادات المتجر."
+  },
+  "auth": {
+    "title": "الدخول إلى BricoAdmin",
+    "description": "استخدم حساب Google المعتمد للدخول إلى مساحة العمل ومتابعة الصلاحيات المرتبطة بدورك.",
+    "workspaceLabel": "دخول Google Workspace",
+    "accessManaged": "تتم مراجعة الوصول وتفعيله من قبل المسؤولين.",
+    "signInHint": "تابع باستخدام حساب Google المعتمد لدورك.",
+    "pendingTitle": "الحساب بانتظار الموافقة",
+    "signedInAs": "تم تسجيل الدخول باسم {user}",
+    "unknownUser": "مستخدم غير معروف",
+    "accessPending": "لم يتم منح بريدك الإلكتروني صلاحية الدخول بعد. يجب على المدير أو المطور إضافة بريدك إلى القائمة المسموح بها ثم تعيين دور لك قبل دخول التطبيق.",
+    "signOut": "تسجيل الخروج",
+    "signInWithGoogle": "تسجيل الدخول عبر Google"
+  },
+  "history": {
+    "title": "سجل الإجراءات",
+    "description": "يتم تسجيل كل تغيير متتبع في قاعدة البيانات هنا مع التصفية والفرز والترقيم وإعادة تنفيذ الإجراء.",
+    "itemsCount": "{count} عملية",
+    "empty": "لا توجد إجراءات متتبعة حتى الآن.",
+    "emptyFiltered": "لا توجد إجراءات تطابق عوامل التصفية الحالية.",
+    "loading": "جارٍ تحميل سجل الإجراءات...",
+    "searchPlaceholder": "ابحث حسب العنصر أو القسم أو المنفّذ أو نوع الإجراء",
+    "resetFilters": "إعادة ضبط الفلاتر",
+    "resultsSummary": "عرض {count} من أصل {total} عملية",
+    "systemActor": "النظام",
+    "actorLine": "{actor} غيّر {entityType} #{entityId}",
+    "changeLine": "{field}: {before} -> {after}",
+    "noValue": "فارغ",
+    "undo": "تراجع",
+    "undoPending": "جارٍ التراجع...",
+    "redo": "إعادة",
+    "redoPending": "جارٍ الإعادة...",
+    "viewDetails": "التفاصيل",
+    "resourceContext": "سجلات {entity}",
+    "boolean": {
+      "true": "نعم",
+      "false": "لا"
+    },
+    "filters": {
+      "actionLabel": "التصفية حسب الإجراء",
+      "areaLabel": "التصفية حسب القسم",
+      "stateLabel": "التصفية حسب الحالة",
+      "includeEcotrackSyncLabel": "إظهار تغييرات ECOTRACK sync",
+      "includeEcotrackSyncDescription": "مخفية افتراضيًا لإبقاء الجدول سهل القراءة.",
+      "allActions": "كل الإجراءات",
+      "allAreas": "كل الأقسام",
+      "allStates": "كل الحالات"
+    },
+    "columns": {
+      "action": "الإجراء",
+      "where": "أين",
+      "who": "المنفّذ",
+      "when": "متى",
+      "actions": "الإجراءات"
+    },
+    "operations": {
+      "create": "تم الإنشاء",
+      "update": "تم التحديث",
+      "delete": "تم الحذف"
+    },
+    "resources": {
+      "products": "المنتجات",
+      "orders": "الطلبات",
+      "assets": "الأصول",
+      "brandsCategories": "العلامات والتصنيفات",
+      "bulletin": "النشرات",
+      "stats": "الإحصاءات",
+      "settings": "الإعدادات",
+      "ecotrack": "إيكوتراك"
+    },
+    "state": {
+      "applied": "مطبّق",
+      "undone": "تم التراجع",
+      "nonReversible": "غير قابل للتراجع"
+    },
+    "details": {
+      "title": "نشاط {entity}",
+      "description": "راجع تفاصيل التغيير الدقيقة وحالة إعادة تطبيق هذا الإجراء.",
+      "changesTitle": "الحقول التي تغيّرت",
+      "changesDescription": "يتم عرض الحقول التي تغيّرت فعليًا فقط هنا.",
+      "changesCount": "{count} تغييرات",
+      "noChanges": "هذا الإجراء لا يحتوي على تغييرات على مستوى الحقول.",
+      "undoneAt": "تم التراجع في {value}",
+      "redoneAt": "تمت الإعادة في {value}",
+      "close": "إغلاق",
+      "columns": {
+        "field": "الحقل",
+        "before": "قبل",
+        "after": "بعد"
+      }
+    },
+    "notifications": {
+      "undo": {
+        "loading": "جارٍ التراجع عن {entity}...",
+        "success": "تم التراجع عن {entity}.",
+        "error": "تعذر التراجع عن {entity}."
+      },
+      "redo": {
+        "loading": "جارٍ إعادة تطبيق {entity}...",
+        "success": "تمت إعادة تطبيق {entity}.",
+        "error": "تعذر إعادة تطبيق {entity}."
+      }
+    }
+  },
+  "inventory": {
+    "searchPlaceholder": "ابحث بالمنتج أو SKU أو الباركود",
+    "searchHint": "يتم عرض المنتجات التي كميتها أكبر من صفر فقط بشكل افتراضي. ابحث أو امسح لإظهار العناصر المخفية وإعادة إدخالها.",
+    "scanAdd": "إدخال عبر المسح",
+    "refreshing": "جارٍ تحديث المخزون...",
+    "columns": {
+      "product": "المنتج",
+      "barcode": "الباركود",
+      "quantity": "كمية المخزون",
+      "inStock": "متوفر"
+    },
+    "productMeta": "SKU: {sku}",
+    "noSku": "لا يوجد SKU",
+    "addBarcode": "إضافة باركود",
+    "emptyTitle": "لا توجد عناصر مخزون للعرض",
+    "empty": "ابحث عن منتج أو امسح باركودًا لإضافة المخزون من جديد.",
+    "decreaseRow": "تقليل الكمية لـ {name}",
+    "increaseRow": "زيادة الكمية لـ {name}",
+    "toggleStock": "تبديل حالة التوفر لـ {name}",
+    "barcode": {
+      "addTitle": "إضافة باركود لـ {name}",
+      "editTitle": "تعديل الباركود لـ {name}",
+      "description": "احفظ الباركود حتى يمكن العثور على المنتج مباشرة من جدول المخزون.",
+      "placeholder": "أدخل الباركود"
+    },
+    "scan": {
+      "title": "مسح باركود أو طلب",
+      "description": "أدخل باركودًا مطابقًا أو رقم طلب لإضافة المنتجات مرة أخرى إلى المخزون.",
+      "placeholder": "باركود أو رقم طلب",
+      "action": "مسح",
+      "barcodeTitle": "إضافة وحدة واحدة من {name}",
+      "barcodeDescription": "أكد لإضافة وحدة واحدة للباركود الممسوح.",
+      "confirmAddOne": "إضافة وحدة واحدة",
+      "orderTitle": "الطلب #{id}",
+      "toggleOrderItem": "تبديل عنصر الطلب {name}",
+      "orderQuantity": "كمية الطلب: {count}",
+      "currentInventory": "المخزون الحالي: {count}",
+      "confirmOrderAdd": "إضافة المنتجات المحددة",
+      "orderApplyLoading": "جار إضافة {count} منتجات من الطلب إلى المخزون...",
+      "orderApplySuccess": "تمت إضافة {count} منتجات من الطلب إلى المخزون.",
+      "orderApplyError": "تعذر إضافة {count} منتجات من الطلب إلى المخزون.",
+      "notFound": "لم يتم العثور على باركود أو طلب مطابق.",
+      "error": "تعذر فحص الإدخال.",
+      "noSelection": "حدد منتجًا واحدًا على الأقل من الطلب الممسوح."
+    },
+    "notifications": {
+      "barcode": {
+        "create": {
+          "loading": "جارٍ إضافة باركود لـ {name}...",
+          "success": "تمت إضافة باركود لـ {name}.",
+          "error": "تعذرت إضافة باركود لـ {name}."
+        },
+        "save": {
+          "loading": "جارٍ تحديث باركود {name}...",
+          "success": "تم تحديث باركود {name}.",
+          "error": "تعذر تحديث باركود {name}."
+        }
+      },
+      "quantity": {
+        "increase": {
+          "loading": "جارٍ زيادة كمية {name}...",
+          "success": "تمت زيادة كمية {name}.",
+          "error": "تعذرت زيادة كمية {name}."
+        },
+        "decrease": {
+          "loading": "جارٍ تقليل كمية {name}...",
+          "success": "تم تقليل كمية {name}.",
+          "error": "تعذر تقليل كمية {name}."
+        },
+        "scan": {
+          "loading": "جارٍ إدخال {name} إلى المخزون بالمسح...",
+          "success": "تم إدخال {name} إلى المخزون بالمسح.",
+          "error": "تعذر إدخال {name} إلى المخزون بالمسح."
+        }
+      },
+      "stock": {
+        "enable": {
+          "loading": "جارٍ تعيين {name} كمتوفر...",
+          "success": "تم تعيين {name} كمتوفر.",
+          "error": "تعذر تعيين {name} كمتوفر."
+        },
+        "disable": {
+          "loading": "جارٍ تعيين {name} كغير متوفر...",
+          "success": "تم تعيين {name} كغير متوفر.",
+          "error": "تعذر تعيين {name} كغير متوفر."
+        }
+      }
+    }
+  },
+  "assetsManager": {
+    "bannersTitle": "البنرات",
+    "bannersDescription": "أنشئ بنرات بعنوان وصورة ومنتج مرتبط.",
+    "newBanner": "بنر جديد",
+    "createBannerTitle": "إنشاء بنر",
+    "editBannerTitle": "تعديل البنر",
+    "bannerDialogDescription": "حدّد عنوان البنر والمنتج المرتبط وصور الشاشات المختلفة.",
+    "bannerTitlePlaceholder": "عنوان البنر",
+    "bannerTitleArPlaceholder": "عنوان البنر بالعربية",
+    "titleLabel": "العنوان",
+    "titleColumn": "العنوان",
+    "bannerProductPlaceholder": "اختر المنتج المرتبط",
+    "linkedProductLabel": "المنتج المرتبط",
+    "linkedProductColumn": "المنتج المرتبط",
+    "orderColumn": "الترتيب",
+    "bannerImageLabel": "صورة البنر",
+    "bannerLandscapeImageLabel": "صورة الشاشة الأفقية",
+    "bannerLandscapeImageHint": "نسبة سطح المكتب: 20:7 — صدّرها بمقاس 2400 × 840 بكسل.",
+    "bannerPortraitImageLabel": "صورة الشاشة العمودية",
+    "bannerPortraitImageHint": "نسبة الهاتف: 19:23 — صدّرها بمقاس 1140 × 1380 بكسل.",
+    "uploadHint": "يتم الرفع إلى S3 ثم حفظ روابط CloudFront.",
+    "singleImagePlaceholder": "رابط صورة البنر",
+    "createBanner": "إنشاء البنر",
+    "updateBanner": "تحديث البنر",
+    "noLinkedProduct": "لا يوجد منتج مرتبط",
+    "groupsTitle": "مجموعات المنتجات المميزة",
+    "groupsDescription": "أنشئ مجموعات دوارات من منتجات أو علامات أو تصنيفات أو أي مزيج بينها.",
+    "newGroup": "مجموعة جديدة",
+    "createGroupTitle": "إنشاء مجموعة مميزة",
+    "editGroupTitle": "تعديل المجموعة المميزة",
+    "groupDialogDescription": "اختر المنتجات والعلامات والتصنيفات التي تنتمي إلى هذه المجموعة.",
+    "groupNamePlaceholder": "اسم المجموعة",
+    "groupNameLabel": "اسم المجموعة",
+    "groupNameArLabel": "اسم المجموعة بالعربية",
+    "groupNameArPlaceholder": "اسم المجموعة بالعربية",
+    "groupNameColumn": "اسم المجموعة",
+    "groupCtaLabel": "نص زر الدعوة",
+    "groupCtaPlaceholder": "Voir Plus",
+    "groupCtaArLabel": "نص زر الدعوة بالعربية",
+    "groupCtaArPlaceholder": "اكتشف المزيد",
+    "groupLinkLabel": "رابط زر الدعوة",
+    "groupLinkPlaceholder": "/products",
+    "groupShowAtTopLabel": "إظهار في أعلى صفحة المنتجات",
+    "groupShowAtTopDescription": "فعّل هذا إذا كان يجب تثبيت المجموعة أعلى قائمة المنتجات في المتجر.",
+    "groupShowAtTopColumn": "أعلى صفحة المنتجات",
+    "groupShowAtTopToggle": "تبديل الظهور أعلى الصفحة للمجموعة {name}",
+    "productsLabel": "المنتجات",
+    "brandsLabel": "العلامات",
+    "categoriesLabel": "التصنيفات",
+    "createGroup": "إنشاء المجموعة",
+    "updateGroup": "تحديث المجموعة",
+    "coverageColumn": "التغطية",
+    "groupCounts": "المنتجات: {products} · العلامات: {brands} · التصنيفات: {categories}",
+    "cardsTitle": "بطاقات المنتجات",
+    "cardsDescription": "اختر منتجًا واكتب محتوى البطاقة بالعربية والفرنسية ليظهر مع أول صورة للمنتج.",
+    "newCard": "بطاقة جديدة",
+    "createCardTitle": "إنشاء بطاقة منتج",
+    "editCardTitle": "تعديل بطاقة المنتج",
+    "cardDialogDescription": "اختر منتجًا واكتب محتوى البطاقة بالعربية والفرنسية.",
+    "cardProductPlaceholder": "اختر منتجًا",
+    "productNameLabel": "اسم المنتج",
+    "productNameColumn": "اسم المنتج",
+    "productsSearchPlaceholder": "ابحث عن المنتجات",
+    "brandsSearchPlaceholder": "ابحث عن العلامات",
+    "categoriesSearchPlaceholder": "ابحث عن التصنيفات",
+    "productsEmptySearch": "لا توجد منتجات تطابق هذا البحث.",
+    "brandsEmptySearch": "لا توجد علامات تطابق هذا البحث.",
+    "categoriesEmptySearch": "لا توجد تصنيفات تطابق هذا البحث.",
+    "add": "إضافة",
+    "choose": "اختيار",
+    "selected": "محدد",
+    "addSelection": "إضافة {name}",
+    "chooseSelection": "اختيار {name}",
+    "nothingSelected": "لا يوجد تحديد بعد",
+    "removeSelection": "إزالة {name}",
+    "dragHandleLabel": "اسحب {item}",
+    "moveUpLabel": "حرّك {item} للأعلى",
+    "moveDownLabel": "حرّك {item} للأسفل",
+    "clear": "مسح",
+    "noImage": "بدون صورة",
+    "cardImageLabel": "صورة البطاقة",
+    "cardImageMissing": "لا توجد صورة للمنتج المحدد بعد.",
+    "titleArLabel": "العنوان العربي",
+    "titleArPlaceholder": "عنوان عربي قصير",
+    "titleFrLabel": "العنوان الفرنسي",
+    "titleFrPlaceholder": "عنوان فرنسي قصير",
+    "descriptionArLabel": "الوصف العربي",
+    "descriptionArPlaceholder": "وصف عربي قصير (140 حرفًا كحد أقصى)",
+    "descriptionFrLabel": "الوصف الفرنسي",
+    "descriptionFrPlaceholder": "وصف فرنسي قصير (140 حرفًا كحد أقصى)",
+    "characteristicsArLabel": "الخصائص العربية",
+    "characteristicsArPlaceholder": "الخصائص بالعربية، سطر لكل خاصية",
+    "characteristicsFrLabel": "الخصائص الفرنسية",
+    "characteristicsFrPlaceholder": "الخصائص بالفرنسية، سطر لكل خاصية",
+    "createCard": "إنشاء البطاقة",
+    "updateCard": "تحديث البطاقة",
+    "cancel": "إلغاء",
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "edit": "تعديل",
+    "toggle": "تبديل",
+    "delete": "حذف",
+    "unknownProduct": "منتج غير معروف",
+    "bannerCreateLoading": "جارٍ إنشاء البنر {title}...",
+    "bannerCreateSuccess": "تم إنشاء البنر {title}.",
+    "bannerCreateError": "تعذر إنشاء البنر {title}.",
+    "bannerSaveLoading": "جارٍ حفظ البنر {title}...",
+    "bannerSaveSuccess": "تم حفظ البنر {title}.",
+    "bannerSaveError": "تعذر حفظ البنر {title}.",
+    "bannerActivateLoading": "جارٍ تفعيل البنر {title}...",
+    "bannerActivateSuccess": "تم تفعيل البنر {title}.",
+    "bannerActivateError": "تعذر تفعيل البنر {title}.",
+    "bannerDeactivateLoading": "جارٍ تعطيل البنر {title}...",
+    "bannerDeactivateSuccess": "تم تعطيل البنر {title}.",
+    "bannerDeactivateError": "تعذر تعطيل البنر {title}.",
+    "bannerDeleteLoading": "جارٍ حذف البنر {target}...",
+    "bannerDeleteSuccess": "تم حذف البنر {target}.",
+    "bannerDeleteError": "تعذر حذف البنر {target}.",
+    "bannerReorderLoading": "جارٍ حفظ ترتيب البنرات...",
+    "bannerReorderSuccess": "تم حفظ ترتيب البنرات.",
+    "bannerReorderError": "تعذر حفظ ترتيب البنرات.",
+    "groupCreateLoading": "جارٍ إنشاء المجموعة المميزة {name}...",
+    "groupCreateSuccess": "تم إنشاء المجموعة المميزة {name}.",
+    "groupCreateError": "تعذر إنشاء المجموعة المميزة {name}.",
+    "groupSaveLoading": "جارٍ حفظ المجموعة المميزة {name}...",
+    "groupSaveSuccess": "تم حفظ المجموعة المميزة {name}.",
+    "groupSaveError": "تعذر حفظ المجموعة المميزة {name}.",
+    "groupActivateLoading": "جارٍ تفعيل المجموعة المميزة {name}...",
+    "groupActivateSuccess": "تم تفعيل المجموعة المميزة {name}.",
+    "groupActivateError": "تعذر تفعيل المجموعة المميزة {name}.",
+    "groupDeactivateLoading": "جارٍ تعطيل المجموعة المميزة {name}...",
+    "groupDeactivateSuccess": "تم تعطيل المجموعة المميزة {name}.",
+    "groupDeactivateError": "تعذر تعطيل المجموعة المميزة {name}.",
+    "groupShowAtTopEnableLoading": "جارٍ تثبيت المجموعة المميزة {name} أعلى صفحة المنتجات...",
+    "groupShowAtTopEnableSuccess": "تم تثبيت المجموعة المميزة {name} أعلى صفحة المنتجات.",
+    "groupShowAtTopEnableError": "تعذر تثبيت المجموعة المميزة {name} أعلى صفحة المنتجات.",
+    "groupShowAtTopDisableLoading": "جارٍ إزالة المجموعة المميزة {name} من أعلى صفحة المنتجات...",
+    "groupShowAtTopDisableSuccess": "تمت إزالة المجموعة المميزة {name} من أعلى صفحة المنتجات.",
+    "groupShowAtTopDisableError": "تعذر إزالة المجموعة المميزة {name} من أعلى صفحة المنتجات.",
+    "groupDeleteLoading": "جارٍ حذف المجموعة المميزة {target}...",
+    "groupDeleteSuccess": "تم حذف المجموعة المميزة {target}.",
+    "groupDeleteError": "تعذر حذف المجموعة المميزة {target}.",
+    "groupReorderLoading": "جارٍ حفظ ترتيب المجموعات المميزة...",
+    "groupReorderSuccess": "تم حفظ ترتيب المجموعات المميزة.",
+    "groupReorderError": "تعذر حفظ ترتيب المجموعات المميزة.",
+    "cardCreateLoading": "جارٍ إنشاء بطاقة للمنتج {product}...",
+    "cardCreateSuccess": "تم إنشاء بطاقة للمنتج {product}.",
+    "cardCreateError": "تعذر إنشاء بطاقة للمنتج {product}.",
+    "cardSaveLoading": "جارٍ حفظ بطاقة المنتج {product}...",
+    "cardSaveSuccess": "تم حفظ بطاقة المنتج {product}.",
+    "cardSaveError": "تعذر حفظ بطاقة المنتج {product}.",
+    "cardActivateLoading": "جارٍ تفعيل بطاقة المنتج {product}...",
+    "cardActivateSuccess": "تم تفعيل بطاقة المنتج {product}.",
+    "cardActivateError": "تعذر تفعيل بطاقة المنتج {product}.",
+    "cardDeactivateLoading": "جارٍ تعطيل بطاقة المنتج {product}...",
+    "cardDeactivateSuccess": "تم تعطيل بطاقة المنتج {product}.",
+    "cardDeactivateError": "تعذر تعطيل بطاقة المنتج {product}.",
+    "cardDeleteLoading": "جارٍ حذف بطاقة المنتج {target}...",
+    "cardDeleteSuccess": "تم حذف بطاقة المنتج {target}.",
+    "cardDeleteError": "تعذر حذف بطاقة المنتج {target}.",
+    "cardReorderLoading": "جارٍ حفظ ترتيب بطاقات المنتجات...",
+    "cardReorderSuccess": "تم حفظ ترتيب بطاقات المنتجات.",
+    "cardReorderError": "تعذر حفظ ترتيب بطاقات المنتجات."
+  },
+  "bulletinBoard": {
+    "eyebrow": "إشارات الفريق",
+    "title": "لوحة النشرات",
+    "description": "شارك التحديثات الداخلية ونظّمها بالوسوم وأبقِ الإعلانات المهمة مثبتة في الأعلى.",
+    "stats": {
+      "totalPosts": "المنشورات",
+      "pinnedPosts": "المثبتة"
+    },
+    "composer": {
+      "createTitle": "إنشاء منشور",
+      "createDescription": "يمكن لكل مستخدم مسجل الدخول نشر التحديثات وحذف منشوراته الخاصة.",
+      "editTitle": "تعديل المنشور",
+      "editDescription": "حدّث الرسالة أو الوسوم أو حالة التثبيت قبل الحفظ.",
+      "titleLabel": "العنوان",
+      "titlePlaceholder": "عنوان المنشور",
+      "bodyLabel": "الرسالة",
+      "bodyPlaceholder": "محتوى المنشور",
+      "tagsLabel": "الوسوم",
+      "tagsPlaceholder": "الوسوم",
+      "tagsHint": "استخدم تسميات قصيرة مثل logistics أو urgent أو campaign أو qa.",
+      "pinLabel": "تثبيت هذا المنشور",
+      "attachmentsLabel": "المرفقات",
+      "attachmentsHint": "ارفع الصور والمستندات المدعومة حتى 20 ميجابايت لكل ملف (40 ميجابايت إجمالاً)."
+    },
+    "filters": {
+      "allTags": "كل الوسوم",
+      "sortLabel": "ترتيب المنشورات",
+      "sortUpdatedDesc": "الأحدث تحديثًا",
+      "sortUpdatedAsc": "الأقدم تحديثًا",
+      "sortCreatedDesc": "الأحدث إنشاءً"
+    },
+    "sections": {
+      "pinned": "المنشورات المثبتة",
+      "recent": "أحدث المنشورات",
+      "visibleCount": "{count} ظاهر"
+    },
+    "actions": {
+      "openComposer": "منشور جديد",
+      "closeComposer": "إغلاق المحرر",
+      "refresh": "تحديث",
+      "post": "نشر المنشور",
+      "update": "حفظ التغييرات",
+      "cancel": "إلغاء",
+      "edit": "تعديل",
+      "delete": "حذف",
+      "pin": "تثبيت",
+      "unpin": "إلغاء التثبيت",
+      "reply": "رد",
+      "sendReply": "إرسال الرد",
+      "deleteReply": "حذف الرد",
+      "addReaction": "التفاعلات"
+    },
+    "pagination": {
+      "page": "الصفحة {page} من {total}",
+      "previous": "السابق",
+      "next": "التالي"
+    },
+    "delete": {
+      "title": "حذف المنشور؟",
+      "description": "سيتم حذف \"{title}\" نهائيًا."
+    },
+    "post": {
+      "pinned": "مثبت",
+      "byYou": "أنت",
+      "updated": "آخر تحديث"
+    },
+    "reply": {
+      "title": "الردود ({count})",
+      "placeholder": "رد"
+    },
+    "reactions": {
+      "by": "بواسطة"
+    },
+    "feedback": {
+      "loading": "جار تحميل المنشورات...",
+      "refreshing": "جار التحديث",
+      "loadError": "تعذر تحميل منشورات اللوحة.",
+      "retryHint": "حاول تحديث اللوحة مرة أخرى."
+    },
+    "notifications": {
+      "validation": "أصلح أخطاء النموذج قبل المتابعة.",
+      "create": {
+        "loading": "جار نشر \"{title}\"...",
+        "success": "تم نشر \"{title}\".",
+        "error": "فشل نشر المنشور."
+      },
+      "update": {
+        "loading": "جار حفظ \"{title}\"...",
+        "success": "تم حفظ \"{title}\".",
+        "error": "فشل حفظ المنشور."
+      },
+      "delete": {
+        "loading": "جار حذف المنشور...",
+        "success": "تم حذف المنشور.",
+        "error": "فشل حذف المنشور."
+      },
+      "pin": {
+        "loading": "جار تثبيت المنشور...",
+        "success": "تم تثبيت المنشور.",
+        "error": "فشل تثبيت المنشور."
+      },
+      "unpin": {
+        "loading": "جار إلغاء تثبيت المنشور...",
+        "success": "تم إلغاء تثبيت المنشور.",
+        "error": "فشل إلغاء تثبيت المنشور."
+      },
+      "react": {
+        "loading": "جار تحديث {emoji} على \"{title}\"...",
+        "success": "تم تحديث {emoji} على \"{title}\".",
+        "error": "فشل تحديث التفاعل."
+      },
+      "reply": {
+        "loading": "جار إرسال رد على \"{title}\"...",
+        "success": "تم نشر الرد.",
+        "error": "فشل إرسال الرد."
+      },
+      "replyDelete": {
+        "loading": "جار حذف الرد...",
+        "success": "تم حذف الرد.",
+        "error": "فشل حذف الرد."
+      },
+      "replyReact": {
+        "loading": "جار تحديث {emoji} على الرد...",
+        "success": "تم تحديث {emoji} على الرد.",
+        "error": "فشل تحديث التفاعل على الرد."
+      }
+    },
+    "empty": {
+      "title": "لا توجد منشورات تطابق عوامل التصفية الحالية.",
+      "description": "غيّر فلتر الوسوم الحالي، أو انشر تحديثًا جديدًا."
+    }
+  }
+}

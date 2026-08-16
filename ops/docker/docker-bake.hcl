@@ -14,7 +14,7 @@ variable "GOOGLE_CLIENT_ID" {
   default = ""
 }
 
-variable "NEXTAUTH_URL" {
+variable "BETTER_AUTH_URL" {
   default = ""
 }
 
@@ -46,7 +46,7 @@ variable "NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS" {
   default = ""
 }
 
-variable "NEXT_PUBLIC_SENTRY_DSN_STOREFRONT_NEW" {
+variable "NEXT_PUBLIC_SENTRY_DSN_STOREFRONT" {
   default = ""
 }
 
@@ -102,12 +102,12 @@ target "_admin" {
   dockerfile = "ops/docker/Dockerfile.admin"
   args = {
     GOOGLE_CLIENT_ID        = GOOGLE_CLIENT_ID
-    NEXTAUTH_URL            = NEXTAUTH_URL
+    BETTER_AUTH_URL         = BETTER_AUTH_URL
     STOREFRONT_API_BASE_URL = STOREFRONT_BUILD_API_BASE_URL
   }
   secret = [
     "id=google_client_secret,env=GOOGLE_CLIENT_SECRET",
-    "id=nextauth_secret,env=NEXTAUTH_SECRET",
+    "id=better_auth_secret,env=BETTER_AUTH_SECRET",
   ]
 }
 
@@ -152,9 +152,9 @@ target "storefront-web" {
     NEXT_PUBLIC_GA_MEASUREMENT_ID                           = NEXT_PUBLIC_GA_MEASUREMENT_ID
     NEXT_PUBLIC_TIKTOK_PIXEL_ID                             = NEXT_PUBLIC_TIKTOK_PIXEL_ID
     NEXT_PUBLIC_RELEASE                                     = SHA_TAG
-    NEXT_PUBLIC_SENTRY_DSN_STOREFRONT_NEW                   = NEXT_PUBLIC_SENTRY_DSN_STOREFRONT_NEW
+    NEXT_PUBLIC_SENTRY_DSN_STOREFRONT                   = NEXT_PUBLIC_SENTRY_DSN_STOREFRONT
     NEXT_PUBLIC_SENTRY_ENVIRONMENT                          = "production"
-    NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE_STOREFRONT_NEW    = "0.1"
+    NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE_STOREFRONT    = "0.1"
     SENTRY_RELEASE                                           = SHA_TAG
   }
   tags       = release_tags("storefront-web")

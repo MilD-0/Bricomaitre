@@ -3,7 +3,12 @@ import { z } from 'zod';
 
 import { createAiLanguageModel, getAiConfig, type AiConfig } from './config';
 
-export const productContentFieldSchema = z.enum(['title', 'titleAr', 'description', 'descriptionAr']);
+export const productContentFieldSchema = z.enum([
+  'title',
+  'titleAr',
+  'description',
+  'descriptionAr',
+]);
 export type ProductContentField = z.infer<typeof productContentFieldSchema>;
 
 const productContentValueSchemas: Record<ProductContentField, z.ZodString> = {
@@ -13,12 +18,14 @@ const productContentValueSchemas: Record<ProductContentField, z.ZodString> = {
   descriptionAr: z.string().trim().min(1).max(5_000),
 };
 
-export const productContentChangesSchema = z.object({
-  title: productContentValueSchemas.title.optional(),
-  titleAr: productContentValueSchemas.titleAr.optional(),
-  description: productContentValueSchemas.description.optional(),
-  descriptionAr: productContentValueSchemas.descriptionAr.optional(),
-}).refine((changes) => Object.keys(changes).length > 0, 'At least one content change is required.');
+export const productContentChangesSchema = z
+  .object({
+    title: productContentValueSchemas.title.optional(),
+    titleAr: productContentValueSchemas.titleAr.optional(),
+    description: productContentValueSchemas.description.optional(),
+    descriptionAr: productContentValueSchemas.descriptionAr.optional(),
+  })
+  .refine((changes) => Object.keys(changes).length > 0, 'At least one content change is required.');
 
 export const productContentGenerationInputSchema = z.object({
   product: z.object({
@@ -64,7 +71,9 @@ export const PRODUCT_CONTENT_GENERATION_INSTRUCTIONS = [
   'When evidence is sparse, write concise generic copy supported by the title, category, brand, SKU, and administrator context, and explain any limitation only in reasoning.',
 ].join(' ');
 
-export function createProductContentGenerator(config: AiConfig = getAiConfig()): ProductContentGenerator {
+export function createProductContentGenerator(
+  config: AiConfig = getAiConfig(),
+): ProductContentGenerator {
   return {
     async generate(rawInput) {
       const input = productContentGenerationInputSchema.parse(rawInput);

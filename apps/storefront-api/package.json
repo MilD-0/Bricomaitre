@@ -1,0 +1,43 @@
+{
+  "name": "@bric/storefront-api",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "dev": "next dev --port 3001",
+    "build": "next build",
+    "build:worker": "node ../../ops/scripts/build-worker.mjs apps/storefront-api/scripts/run-meta-worker.ts apps/storefront-api/dist/run-meta-worker.cjs",
+    "start": "node ../../ops/scripts/start-next-standalone.mjs --app-dir . --nested-dir apps/storefront-api --default-port 3001",
+    "worker:meta": "tsx scripts/run-meta-worker.ts",
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run --project unit-node && vitest run --project route-contract-node",
+    "test:watch": "vitest --project unit-node",
+    "test:coverage": "vitest run --project unit-node --coverage",
+    "test:contract": "vitest run --project route-contract-node",
+    "test:integration": "pnpm test:contract"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1109.0",
+    "@bric/db": "workspace:*",
+    "@bric/runtime": "workspace:*",
+    "@bric/storefront-core": "workspace:*",
+    "@sentry/nextjs": "10.70.0",
+    "@sentry/node": "10.70.0",
+    "drizzle-orm": "^0.45.2",
+    "next": "16.3.0",
+    "pg": "^8.23.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitest/coverage-v8": "^4.1.10",
+    "tsx": "^4.23.12",
+    "typescript": "6.0.2",
+    "vitest": "^4.1.10"
+  }
+}

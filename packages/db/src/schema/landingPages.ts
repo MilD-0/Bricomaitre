@@ -14,13 +14,19 @@ import {
 import { products } from './products';
 
 export const landingPageLocaleEnum = pgEnum('landing_page_locale', ['fr', 'ar']);
-export const landingPageStatusEnum = pgEnum('landing_page_status', ['draft', 'published', 'archived']);
+export const landingPageStatusEnum = pgEnum('landing_page_status', [
+  'draft',
+  'published',
+  'archived',
+]);
 
 export const landingPages = pgTable(
   'landing_pages',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    productId: bigint('product_id', { mode: 'number' }).notNull().references(() => products.id, { onDelete: 'restrict' }),
+    productId: bigint('product_id', { mode: 'number' })
+      .notNull()
+      .references(() => products.id, { onDelete: 'restrict' }),
     locale: landingPageLocaleEnum('locale').notNull(),
     slug: text('slug').notNull(),
     status: landingPageStatusEnum('status').notNull().default('draft'),
@@ -43,7 +49,9 @@ export const landingPageRevisions = pgTable(
   'landing_page_revisions',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    landingPageId: bigint('landing_page_id', { mode: 'number' }).notNull().references(() => landingPages.id, { onDelete: 'cascade' }),
+    landingPageId: bigint('landing_page_id', { mode: 'number' })
+      .notNull()
+      .references(() => landingPages.id, { onDelete: 'cascade' }),
     revision: integer('revision').notNull(),
     schemaVersion: integer('schema_version').notNull().default(1),
     document: jsonb('document').notNull(),

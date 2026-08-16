@@ -1,0 +1,27 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": ["ops/scripts/read-buildx-digest.mjs"],
+  "ignoreUnresolved": ["next"],
+  "workspaces": {
+    "apps/admin": {
+      "entry": [
+        "app/**/*.{ts,tsx}",
+        "instrumentation*.ts",
+        "scripts/**/*.ts",
+        "tools/legacy-data/**/*.ts"
+      ]
+    },
+    "apps/storefront-api": {
+      "entry": ["app/**/*.{ts,tsx}", "instrumentation*.ts", "scripts/**/*.ts"]
+    },
+    "apps/storefront": {
+      "entry": [
+        "app/**/*.{ts,tsx}",
+        "instrumentation*.ts",
+        "test/fixture-storefront-api.mjs",
+        "tests/browser/**/*.ts"
+      ],
+      "ignoreDependencies": ["@fontsource-variable/inter", "@fontsource/ibm-plex-sans-arabic"]
+    }
+  }
+}

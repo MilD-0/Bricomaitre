@@ -9,35 +9,34 @@ RUN corepack enable
 WORKDIR /workspace
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY adminstration/package.json adminstration/package.json
-COPY storefront-api/package.json storefront-api/package.json
-COPY storefront/package.json storefront/package.json
+COPY apps/admin/package.json apps/admin/package.json
+COPY apps/storefront-api/package.json apps/storefront-api/package.json
+COPY apps/storefront/package.json apps/storefront/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/runtime/package.json packages/runtime/package.json
 COPY packages/storefront-core/package.json packages/storefront-core/package.json
-COPY storefront/app/components/package.json storefront/app/components/package.json
 
 RUN NODE_OPTIONS="${BRIC_BUILD_NODE_OPTIONS}" pnpm install --frozen-lockfile
 
 COPY tsconfig.base.json ./
-COPY storefront-api ./storefront-api
+COPY apps/storefront-api ./apps/storefront-api
 COPY packages/db ./packages/db
 COPY packages/runtime ./packages/runtime
 COPY packages/storefront-core ./packages/storefront-core
 COPY ops/scripts/build-worker.mjs ./ops/scripts/build-worker.mjs
 COPY ops/ownership ./ops/ownership
 
-RUN mkdir -p storefront-api/public
+RUN mkdir -p apps/storefront-api/public
 
 FROM base AS worker
 
 ENV NODE_ENV=production
 
-RUN pnpm --filter storefront-api build:worker
+RUN pnpm --filter @bric/storefront-api build:worker
 
 FROM base AS build
 
-RUN pnpm --filter storefront-api build
+RUN pnpm --filter @bric/storefront-api build
 
 FROM node:24-bookworm-slim AS web
 
@@ -64,17 +63,17 @@ COPY --chown=bric:bric ops/ownership/BRICOMAITRE_AUTHORIZED_RELEASE.txt ./BRICOM
 COPY --chown=bric:bric ops/ownership/LICENSE ./LICENSE
 COPY --chown=bric:bric ops/ownership/NOTICE ./NOTICE
 COPY --chown=bric:bric ops/ownership/SECURITY.md ./SECURITY.md
-COPY --from=build --chown=bric:bric /workspace/storefront-api/.next/standalone ./
-COPY --from=build --chown=bric:bric /workspace/storefront-api/.next/static ./storefront-api/.next/static
-COPY --from=build --chown=bric:bric /workspace/storefront-api/public ./storefront-api/public
-RUN mkdir -p /app/storefront-api/.next/cache \
-  && chown -R bric:bric /app/storefront-api/.next/cache \
+COPY --from=build --chown=bric:bric /workspace/apps/storefront-api/.next/standalone ./
+COPY --from=build --chown=bric:bric /workspace/apps/storefront-api/.next/static ./apps/storefront-api/.next/static
+COPY --from=build --chown=bric:bric /workspace/apps/storefront-api/public ./apps/storefront-api/public
+RUN mkdir -p /app/apps/storefront-api/.next/cache \
+  && chown -R bric:bric /app/apps/storefront-api/.next/cache \
   && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete
 
 EXPOSE 3001
 USER bric
 
-CMD ["node", "storefront-api/server.js"]
+CMD ["node", "apps/storefront-api/server.js"]
 
 FROM node:24-bookworm-slim AS meta-worker
 
@@ -100,11 +99,11 @@ COPY --chown=bric:bric ops/ownership/LICENSE ./LICENSE
 COPY --chown=bric:bric ops/ownership/NOTICE ./NOTICE
 COPY --chown=bric:bric ops/ownership/SECURITY.md ./SECURITY.md
 COPY --from=base --chown=bric:bric /workspace/node_modules ./node_modules
-COPY --from=base --chown=bric:bric /workspace/storefront-api/node_modules ./storefront-api/node_modules
-COPY --from=worker --chown=bric:bric /workspace/storefront-api/dist/run-meta-worker.cjs ./storefront-api/dist/run-meta-worker.cjs
-RUN node --check storefront-api/dist/run-meta-worker.cjs \
+COPY --from=base --chown=bric:bric /workspace/apps/storefront-api/node_modules ./apps/storefront-api/node_modules
+COPY --from=worker --chown=bric:bric /workspace/apps/storefront-api/dist/run-meta-worker.cjs ./apps/storefront-api/dist/run-meta-worker.cjs
+RUN node --check apps/storefront-api/dist/run-meta-worker.cjs \
   && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete
 
 USER bric
 
-CMD ["node", "storefront-api/dist/run-meta-worker.cjs"]
+CMD ["node", "apps/storefront-api/dist/run-meta-worker.cjs"]

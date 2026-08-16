@@ -4,6 +4,10 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./config": "./src/config.ts",
@@ -15,12 +19,12 @@
     "./analytics": "./src/analytics.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^4.0.15",
-    "ai": "^7.0.30",
-    "zod": "^4.3.6"
+    "@ai-sdk/openai": "^4.0.41",
+    "ai": "^7.0.64",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.2"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.10"
   }
 }

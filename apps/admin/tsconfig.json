@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@bric/db": ["../../packages/db/src/index.ts"],
+      "@bric/db/*": ["../../packages/db/src/*"],
+      "@bric/storefront-core": ["../../packages/storefront-core/src/index.ts"],
+      "@bric/storefront-core/*": ["../../packages/storefront-core/src/*"],
+      "drizzle-orm": ["./node_modules/drizzle-orm"],
+      "drizzle-orm/*": ["./node_modules/drizzle-orm/*"],
+      "pg": ["./node_modules/pg"],
+      "next": ["./node_modules/next"],
+      "next/*": ["./node_modules/next/*"],
+      "zod": ["./node_modules/zod"],
+      "@/*": ["./*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.d.ts",
+    ".next/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": ["node_modules", "**/*.test.ts", "**/*.test.tsx"]
+}

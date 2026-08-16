@@ -1,12 +1,4 @@
-import {
-  bigserial,
-  bigint,
-  index,
-  jsonb,
-  text,
-  timestamp,
-  uniqueIndex,
-} from 'drizzle-orm/pg-core';
+import { bigserial, bigint, index, jsonb, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 
 import { adminSchema } from './namespaces';
 
