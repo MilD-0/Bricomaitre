@@ -1,7 +1,7 @@
 import { inArray, or, sql } from 'drizzle-orm';
 
-import type { getDb } from '../../db/src/client';
-import { orders, products } from '../../db/src/schema';
+import type { getDb } from '@bric/db/client';
+import { orders, products } from '@bric/db/schema';
 import {
   DEGRADED_CAPTURE_VARIANT,
   buildOrderProductSummaries,
@@ -32,26 +32,32 @@ export async function getOrderProductLookup(
   db: Database,
   rows: Array<Pick<typeof orders.$inferSelect, 'cartProducts'>>,
 ) {
-  const productIds = [...new Set(
-    rows
-      .flatMap((row) => row.cartProducts ?? [])
-      .map((value) => value.trim())
-      .filter((value) => /^\d+$/.test(value))
-      .map((value) => Number.parseInt(value, 10))
-      .filter((value) => Number.isInteger(value) && value > 0),
-  )];
-  const mongoIds = [...new Set(
-    rows
-      .flatMap((row) => row.cartProducts ?? [])
-      .map((value) => value.trim())
-      .filter((value) => isMongoObjectId(value)),
-  )];
-  const slugs = [...new Set(
-    rows
-      .flatMap((row) => row.cartProducts ?? [])
-      .map((value) => value.trim())
-      .filter((value) => value.length > 0 && !/^\d+$/.test(value) && !isMongoObjectId(value)),
-  )];
+  const productIds = [
+    ...new Set(
+      rows
+        .flatMap((row) => row.cartProducts ?? [])
+        .map((value) => value.trim())
+        .filter((value) => /^\d+$/.test(value))
+        .map((value) => Number.parseInt(value, 10))
+        .filter((value) => Number.isInteger(value) && value > 0),
+    ),
+  ];
+  const mongoIds = [
+    ...new Set(
+      rows
+        .flatMap((row) => row.cartProducts ?? [])
+        .map((value) => value.trim())
+        .filter((value) => isMongoObjectId(value)),
+    ),
+  ];
+  const slugs = [
+    ...new Set(
+      rows
+        .flatMap((row) => row.cartProducts ?? [])
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0 && !/^\d+$/.test(value) && !isMongoObjectId(value)),
+    ),
+  ];
 
   if (productIds.length === 0 && mongoIds.length === 0 && slugs.length === 0) {
     return new Map<string, ProductLookupEntry>();
@@ -68,11 +74,13 @@ export async function getOrderProductLookup(
       images: products.images,
     })
     .from(products)
-    .where(or(
-      ...(productIds.length > 0 ? [inArray(products.id, productIds)] : []),
-      ...(mongoIds.length > 0 ? [inArray(products.mongoId, mongoIds)] : []),
-      ...(slugs.length > 0 ? [inArray(products.slug, slugs)] : []),
-    ));
+    .where(
+      or(
+        ...(productIds.length > 0 ? [inArray(products.id, productIds)] : []),
+        ...(mongoIds.length > 0 ? [inArray(products.mongoId, mongoIds)] : []),
+        ...(slugs.length > 0 ? [inArray(products.slug, slugs)] : []),
+      ),
+    );
 
   const lookup = new Map<string, ProductLookupEntry>();
 
@@ -109,32 +117,35 @@ export function toOrderRecord(
   const noAnswerCount = coerceNoAnswerCount(confirmed, row.noAnswerCount, row.confirmed);
   const deliveryFee = parseNumericAmount(row.delPr);
   const subtotalOverride = row.price === null ? null : parseNumericAmount(row.price);
-  const rawOrderProducts = buildOrderProductSummaries(row.cartProducts ?? [], (_rawValue, productId) => {
-    const rawValue = _rawValue.trim();
-    const lookupKey = isMongoObjectId(rawValue)
-      ? `mongo:${rawValue}`
-      : productId !== null
-        ? `id:${productId}`
-        : `slug:${rawValue}`;
+  const rawOrderProducts = buildOrderProductSummaries(
+    row.cartProducts ?? [],
+    (_rawValue, productId) => {
+      const rawValue = _rawValue.trim();
+      const lookupKey = isMongoObjectId(rawValue)
+        ? `mongo:${rawValue}`
+        : productId !== null
+          ? `id:${productId}`
+          : `slug:${rawValue}`;
 
-    const product = productLookup.get(lookupKey);
+      const product = productLookup.get(lookupKey);
 
-    if (!product) {
+      if (!product) {
+        return {
+          missing: true,
+        };
+      }
+
       return {
-        missing: true,
+        productId: product.id,
+        brandId: product.brandId,
+        ...(product.slug !== null ? { slug: product.slug } : {}),
+        title: product.title,
+        unitPrice: product.price,
+        thumbnailUrl: product.thumbnailUrl,
+        missing: false,
       };
-    }
-
-    return {
-      productId: product.id,
-      brandId: product.brandId,
-      ...(product.slug !== null ? { slug: product.slug } : {}),
-      title: product.title,
-      unitPrice: product.price,
-      thumbnailUrl: product.thumbnailUrl,
-      missing: false,
-    };
-  });
+    },
+  );
   const promoDiscountAmount = parseNumericAmount(row.promoDiscountAmount);
   const orderProducts = applyPromoToOrderProducts(rawOrderProducts, {
     productId: row.promoProductId,
@@ -170,9 +181,11 @@ export function toOrderRecord(
     totalAmount,
     promoCode: row.promoCode ?? null,
     promoProductId: row.promoProductId ?? null,
-    promoOriginalSubtotal: row.promoOriginalSubtotal === null ? null : parseNumericAmount(row.promoOriginalSubtotal),
+    promoOriginalSubtotal:
+      row.promoOriginalSubtotal === null ? null : parseNumericAmount(row.promoOriginalSubtotal),
     promoDiscountAmount,
-    promoFinalSubtotal: row.promoFinalSubtotal === null ? null : parseNumericAmount(row.promoFinalSubtotal),
+    promoFinalSubtotal:
+      row.promoFinalSubtotal === null ? null : parseNumericAmount(row.promoFinalSubtotal),
     note: row.note,
     confirmed,
     noAnswerCount,

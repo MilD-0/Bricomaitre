@@ -4,10 +4,20 @@ import { getRedis } from './redis';
 
 type IdempotencyRecord =
   | { status: 'processing'; fingerprint: string; createdAt: string }
-  | { status: 'completed'; fingerprint: string; createdAt: string; completedAt: string; response: { statusCode: number; body: unknown } };
+  | {
+      status: 'completed';
+      fingerprint: string;
+      createdAt: string;
+      completedAt: string;
+      response: { statusCode: number; body: unknown };
+    };
 
 export function buildIdempotencyFingerprint(value: unknown) {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
+export function buildIdempotencyKeyHash(value: string) {
+  return crypto.createHash('sha256').update(value).digest('hex');
 }
 
 function getIdempotencyKey(scope: string, key: string) {
@@ -16,7 +26,7 @@ function getIdempotencyKey(scope: string, key: string) {
 
 export async function readIdempotencyRecord(scope: string, key: string) {
   const raw = await getRedis().get(getIdempotencyKey(scope, key));
-  return raw ? JSON.parse(raw) as IdempotencyRecord : null;
+  return raw ? (JSON.parse(raw) as IdempotencyRecord) : null;
 }
 
 export async function readIdempotencyRecordWithTtl(scope: string, key: string) {
@@ -25,7 +35,7 @@ export async function readIdempotencyRecordWithTtl(scope: string, key: string) {
   const [raw, ttlSeconds] = await Promise.all([redis.get(storageKey), redis.ttl(storageKey)]);
 
   return {
-    record: raw ? JSON.parse(raw) as IdempotencyRecord : null,
+    record: raw ? (JSON.parse(raw) as IdempotencyRecord) : null,
     ttlSeconds: ttlSeconds > 0 ? ttlSeconds : null,
   };
 }

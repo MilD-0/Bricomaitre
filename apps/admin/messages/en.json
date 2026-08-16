@@ -1,0 +1,2254 @@
+{
+  "nav": {
+    "administration": "Administration",
+    "products": "Products",
+    "orders": "Orders",
+    "ordersTable": "Order capture",
+    "ecotrackShipments": "ECOTRACK shipments",
+    "inventory": "Inventory",
+    "assets": "Assets",
+    "landingPages": "Landing pages",
+    "brands": "Brands",
+    "categories": "Categories",
+    "brandsCategories": "Brands & Categories",
+    "stats": "Stats",
+    "bulletin": "Bulletin",
+    "settings": "Settings"
+  },
+  "roles": {
+    "viewer": "Viewer",
+    "employee": "Employee",
+    "admin": "Admin",
+    "developer": "Developer"
+  },
+  "labels": {
+    "currentRole": "Current role: {role}",
+    "opsAccess": "Ops controls and logs are available.",
+    "roles": "Roles",
+    "roleManagedByCode": "Admin and developer roles are code-managed by email.",
+    "actions": "Actions",
+    "status": "Status",
+    "created": "Created",
+    "modified": "Modified",
+    "parentCategory": "Parent category",
+    "noParentCategory": "No parent",
+    "pageNumber": "Page {page}",
+    "pageOfTotal": "Page {page} of {total}",
+    "goToPage": "Go to page {page}",
+    "goToPageInput": "Go to page",
+    "loading": "Loading",
+    "searchBrands": "Search brands",
+    "searchCategories": "Search categories",
+    "searchProducts": "Search products",
+    "filterByBrand": "Filter by brand",
+    "filterByCategory": "Filter by category",
+    "filterByImageOrigin": "Filter by image links",
+    "allBrands": "All brands",
+    "allCategories": "All categories",
+    "allImageLinks": "All image links",
+    "externalImageLinks": "External image links",
+    "deleteDialogTitle": "Confirm deletion",
+    "deleteDialogDescription": "This will permanently delete {target}.",
+    "selectAll": "Select all rows",
+    "selectRow": "Select {name}",
+    "bulkSelectionCount": "{count} selected",
+    "search": "Search...",
+    "name": "Name",
+    "productName": "Product name",
+    "productNamePlaceholder": "Product name",
+    "productNameArPlaceholder": "Arabic product name",
+    "productSkuPlaceholder": "SKU",
+    "productBarcodePlaceholder": "Barcode",
+    "nameAr": "Arabic name",
+    "userProfile": "User profile",
+    "tags": "Tags (comma separated)",
+    "image": "Image",
+    "images": "Images",
+    "noImage": "No image",
+    "imageHint": "Uploads to S3, then stores CloudFront URLs.",
+    "imageUrlPlaceholder": "Image URL",
+    "sku": "SKU",
+    "barcode": "Barcode",
+    "price": "Price",
+    "purchasePrice": "Purchase price",
+    "purchases": "Purchases",
+    "confirmationRate": "Confirmation rate",
+    "compareAtPrice": "Compare-at price",
+    "inventoryQuantity": "Inventory quantity",
+    "active": "Active",
+    "inactive": "Inactive",
+    "inStock": "In stock",
+    "description": "Description",
+    "descriptionAr": "Arabic description",
+    "productDescriptionPlaceholder": "Product description",
+    "productDescriptionArPlaceholder": "Arabic product description",
+    "noBrand": "No brand",
+    "noCategory": "No category",
+    "createProductTitle": "Create product",
+    "editProductTitle": "Edit product",
+    "productDialogDescription": "Set the product details, pricing, stock, and images.",
+    "createBrandTitle": "Create brand",
+    "editBrandTitle": "Edit brand",
+    "brandDialogDescription": "Set the brand name and image.",
+    "brandNamePlaceholder": "Brand name",
+    "createCategoryTitle": "Create category",
+    "editCategoryTitle": "Edit category",
+    "categoryDialogDescription": "Set the category details and optional parent.",
+    "categoryNamePlaceholder": "Category name",
+    "categoryNameArPlaceholder": "Arabic category name"
+  },
+  "actions": {
+    "create": "Create",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "toggle": "Toggle status",
+    "edit": "Edit",
+    "modify": "Modify",
+    "cancel": "Cancel",
+    "save": "Save",
+    "go": "Go",
+    "first": "First",
+    "previous": "Previous",
+    "next": "Next",
+    "last": "Last",
+    "activateSelected": "Activate selected",
+    "deactivateSelected": "Deactivate selected",
+    "deleteSelected": "Delete selected",
+    "update": "Update",
+    "createProduct": "New product",
+    "saveProduct": "Save product",
+    "markInStock": "Mark in stock",
+    "markOutOfStock": "Mark out of stock",
+    "createBrand": "New brand",
+    "saveBrand": "Save brand",
+    "createCategory": "New category",
+    "saveCategory": "Save category"
+  },
+  "notifications": {
+    "brands": {
+      "activate": {
+        "loading": "Activating brand {name}...",
+        "success": "Activated brand {name}.",
+        "error": "Failed to activate brand {name}."
+      },
+      "deactivate": {
+        "loading": "Deactivating brand {name}...",
+        "success": "Deactivated brand {name}.",
+        "error": "Failed to deactivate brand {name}."
+      },
+      "save": {
+        "loading": "Saving brand {name}...",
+        "success": "Saved brand {name}.",
+        "error": "Failed to save brand {name}."
+      },
+      "create": {
+        "loading": "Creating brand {name}...",
+        "success": "Created brand {name}.",
+        "error": "Failed to create brand {name}."
+      },
+      "delete": {
+        "loading": "Deleting {target}...",
+        "success": "Deleted {target}.",
+        "error": "Failed to delete {target}."
+      },
+      "activateSelected": {
+        "loading": "Activating {count} selected brands...",
+        "success": "Activated {count} selected brands.",
+        "error": "Failed to activate {count} selected brands."
+      },
+      "deactivateSelected": {
+        "loading": "Deactivating {count} selected brands...",
+        "success": "Deactivated {count} selected brands.",
+        "error": "Failed to deactivate {count} selected brands."
+      }
+    },
+    "categories": {
+      "activate": {
+        "loading": "Activating category {name}...",
+        "success": "Activated category {name}.",
+        "error": "Failed to activate category {name}."
+      },
+      "deactivate": {
+        "loading": "Deactivating category {name}...",
+        "success": "Deactivated category {name}.",
+        "error": "Failed to deactivate category {name}."
+      },
+      "save": {
+        "loading": "Saving category {name}...",
+        "success": "Saved category {name}.",
+        "error": "Failed to save category {name}."
+      },
+      "create": {
+        "loading": "Creating category {name}...",
+        "success": "Created category {name}.",
+        "error": "Failed to create category {name}."
+      },
+      "delete": {
+        "loading": "Deleting {target}...",
+        "success": "Deleted {target}.",
+        "error": "Failed to delete {target}."
+      },
+      "activateSelected": {
+        "loading": "Activating {count} selected categories...",
+        "success": "Activated {count} selected categories.",
+        "error": "Failed to activate {count} selected categories."
+      },
+      "deactivateSelected": {
+        "loading": "Deactivating {count} selected categories...",
+        "success": "Deactivated {count} selected categories.",
+        "error": "Failed to deactivate {count} selected categories."
+      }
+    },
+    "products": {
+      "activate": {
+        "loading": "Activating product {name}...",
+        "success": "Activated product {name}.",
+        "error": "Failed to activate product {name}."
+      },
+      "deactivate": {
+        "loading": "Deactivating product {name}...",
+        "success": "Deactivated product {name}.",
+        "error": "Failed to deactivate product {name}."
+      },
+      "stock": {
+        "loading": "Marking product {name} in stock...",
+        "success": "Marked product {name} in stock.",
+        "error": "Failed to mark product {name} in stock."
+      },
+      "unstock": {
+        "loading": "Marking product {name} out of stock...",
+        "success": "Marked product {name} out of stock.",
+        "error": "Failed to mark product {name} out of stock."
+      },
+      "save": {
+        "loading": "Saving product {name}...",
+        "success": "Saved product {name}.",
+        "error": "Failed to save product {name}."
+      },
+      "create": {
+        "loading": "Creating product {name}...",
+        "success": "Created product {name}.",
+        "error": "Failed to create product {name}."
+      },
+      "delete": {
+        "loading": "Deleting {target}...",
+        "success": "Deleted {target}.",
+        "error": "Failed to delete {target}."
+      },
+      "activateSelected": {
+        "loading": "Activating {count} selected products...",
+        "success": "Activated {count} selected products.",
+        "error": "Failed to activate {count} selected products."
+      },
+      "deactivateSelected": {
+        "loading": "Deactivating {count} selected products...",
+        "success": "Deactivated {count} selected products.",
+        "error": "Failed to deactivate {count} selected products."
+      },
+      "stockSelected": {
+        "loading": "Marking {count} selected products in stock...",
+        "success": "Marked {count} selected products in stock.",
+        "error": "Failed to mark {count} selected products in stock."
+      },
+      "unstockSelected": {
+        "loading": "Marking {count} selected products out of stock...",
+        "success": "Marked {count} selected products out of stock.",
+        "error": "Failed to mark {count} selected products out of stock."
+      }
+    },
+    "orders": {
+      "bulkStatus": {
+        "loading": "Updating {count} orders...",
+        "success": "Updated {count} orders.",
+        "error": "Failed to update {count} orders."
+      },
+      "name": {
+        "loading": "Saving name for {name}...",
+        "success": "Saved name for {name}.",
+        "error": "Failed to save name for {name}."
+      },
+      "phone": {
+        "loading": "Saving phone for {name}...",
+        "success": "Saved phone for {name}.",
+        "error": "Failed to save phone for {name}."
+      },
+      "note": {
+        "loading": "Saving note for {name}...",
+        "success": "Saved note for {name}.",
+        "error": "Failed to save note for {name}."
+      },
+      "address": {
+        "loading": "Saving address for {name}...",
+        "success": "Saved address for {name}.",
+        "error": "Failed to save address for {name}."
+      },
+      "products": {
+        "loading": "Saving products for {name}...",
+        "success": "Saved products for {name}.",
+        "error": "Failed to save products for {name}."
+      },
+      "status": {
+        "loading": "Updating status for {name}...",
+        "success": "Updated status for {name}.",
+        "error": "Failed to update status for {name}."
+      },
+      "delete": {
+        "loading": "Deleting {target}...",
+        "success": "Deleted {target}.",
+        "error": "Failed to delete {target}."
+      }
+    }
+  },
+  "status": {
+    "active": "Active",
+    "draft": "Draft",
+    "archived": "Archived"
+  },
+  "stats": {
+    "products": "Products",
+    "orders": "Orders",
+    "assets": "Assets"
+  },
+  "statsDashboard": {
+    "headline": "Operational stats rebuilt around imported delivery reports",
+    "snapshot": "Overview stats",
+    "snapshotHint": "Collected value linked back to matched orders and products in PostgreSQL.",
+    "refresh": "Refresh",
+    "errorTitle": "Stats are unavailable",
+    "errorDescription": "The dashboard could not load the latest metrics.",
+    "customStart": "Custom start date",
+    "customEnd": "Custom end date",
+    "ranges": {
+      "30d": "30 days",
+      "90d": "90 days",
+      "year": "This year",
+      "all": "All time",
+      "custom": "Custom"
+    },
+    "loading": {
+      "refreshingTitle": "Refreshing analytics",
+      "refreshingBadge": "Loading",
+      "refreshingDescription": "Updated figures are being calculated for the selected range."
+    },
+    "snapshotMeta": {
+      "title": "Snapshot ready",
+      "staleTitle": "Snapshot is stale",
+      "description": "Generated {generatedAt}. Data through {reportThroughDate}."
+    },
+    "hero": {
+      "averageOrder": "Average collected per order",
+      "averageProfit": "Average profit per order",
+      "adSpend": "Ad spend in selected range"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "website": "Website analytics",
+      "landingPages": "Landing pages",
+      "aiAssistants": "AI assistants",
+      "customers": "Customers",
+      "products": "Products & categories",
+      "geography": "Geography",
+      "time": "Time analysis",
+      "metaAds": "Meta Ads"
+    },
+    "upload": {
+      "title": "Excel import",
+      "heading": "Process a courier spreadsheet",
+      "description": "Upload an `.xlsx` or `.xls` report. Rows are matched against orders and products already in the database, then written into PostgreSQL-backed reporting tables.",
+      "fieldLabel": "Spreadsheet file",
+      "selected": "Selected: {name}",
+      "hint": "Supported formats: Excel `.xlsx` and `.xls`.",
+      "action": "Import report",
+      "pending": "Importing..."
+    },
+    "overview": {
+      "cards": {
+        "totalOrders": "Total orders",
+        "totalOrdersHint": "Imported rows linked to a confirmed commerce flow.",
+        "totalCollected": "Collected amount",
+        "totalCollectedHint": "Cash recovered from imported fulfilled orders.",
+        "netRevenue": "Net revenue",
+        "netRevenueHint": "Recovered revenue after delivery and service fees.",
+        "deliveryFees": "Delivery fees",
+        "deliveryFeesHint": "Courier shipping fees from imported reports.",
+        "productCost": "Product cost",
+        "productCostHint": "Computed from matched catalog products in PostgreSQL.",
+        "grossProfit": "Gross profit",
+        "grossProfitHint": "Net revenue minus matched product cost.",
+        "afterAds": "Net profit after ads",
+        "afterAdsHint": "Gross profit after media spend.",
+        "averageOrder": "Average order value",
+        "averageOrderHint": "Collected amount divided by imported orders.",
+        "margin": "Profit margin",
+        "marginHint": "Gross profit share of net revenue."
+      },
+      "adPerformance": {
+        "eyebrow": "Ad performance",
+        "title": "Advertising efficiency",
+        "totalSpend": "Total spend",
+        "totalSpendHint": "Ads budget",
+        "roas": "ROAS",
+        "roasHint": "Revenue returned per ad dinar",
+        "cpa": "CPA",
+        "cpaHint": "Cost per order",
+        "cpc": "CPC",
+        "cpcHint": "Cost per click"
+      },
+      "costs": {
+        "eyebrow": "Cost stack",
+        "title": "Complete cost breakdown",
+        "productCost": "Product cost",
+        "deliveryFees": "Delivery fees",
+        "otherFees": "Other service fees",
+        "adSpend": "Advertising costs",
+        "total": "Total costs"
+      },
+      "fees": {
+        "eyebrow": "Fee mix",
+        "title": "Fee distribution",
+        "delivery": "Delivery",
+        "commission": "Commission",
+        "weight": "Weight",
+        "extra": "Extra",
+        "sms": "SMS",
+        "storage": "Storage",
+        "ads": "Advertising"
+      },
+      "revenueBreakdown": {
+        "collected": "Collected",
+        "productCost": "Product cost",
+        "fees": "Fees",
+        "netRevenue": "Net revenue",
+        "grossProfit": "Gross profit",
+        "ads": "Ads cost",
+        "netAfterAds": "Net profit after ads"
+      },
+      "revenueChart": {
+        "eyebrow": "Revenue stack",
+        "title": "Revenue, cost, and profit composition"
+      },
+      "emptyFeesTitle": "No fee data yet",
+      "emptyFeesDescription": "Import at least one matched spreadsheet batch to see fee composition."
+    },
+    "products": {
+      "topUnits": {
+        "eyebrow": "Product velocity",
+        "title": "Top products by units sold"
+      },
+      "export": {
+        "action": "Export Meta catalog",
+        "title": "Export {count} products to Meta catalog",
+        "previewTitle": "Meta catalog export preview",
+        "confirm": "Export XLSX",
+        "fullPreview": "Full-size preview",
+        "compactPreview": "Compact preview"
+      },
+      "categories": {
+        "eyebrow": "Category performance",
+        "title": "Revenue and profit by category"
+      },
+      "brands": {
+        "eyebrow": "Brand performance",
+        "title": "Revenue and profit by brand"
+      },
+      "table": {
+        "eyebrow": "Full product view",
+        "title": "Performance of all products",
+        "columns": {
+          "product": "Product",
+          "sku": "SKU",
+          "category": "Category",
+          "units": "Units",
+          "revenue": "Revenue",
+          "cost": "Cost",
+          "profit": "Profit",
+          "margin": "Margin",
+          "confirmation": "Confirmation %",
+          "views": "Views",
+          "adds": "Adds",
+          "webPurchases": "Web purchases",
+          "popularity": "Popularity",
+          "webConversion": "Web conv. %"
+        },
+        "lowSample": "{count} orders"
+      },
+      "emptyTitle": "No linked products yet",
+      "emptyDescription": "Once imported rows match orders with products, the ranking appears here.",
+      "emptyCategoriesTitle": "No category data yet",
+      "emptyCategoriesDescription": "Matched imported products are required to calculate category performance.",
+      "emptyBrandsTitle": "No brand data yet",
+      "emptyBrandsDescription": "Matched imported products are required to calculate brand performance."
+    },
+    "website": {
+      "title": "Website analytics",
+      "empty": "No website analytics data for the selected range yet.",
+      "funnelTitle": "Journey funnel",
+      "quickStatsTitle": "Conversion quick stats",
+      "searchInsightsTitle": "Search and checkout signals",
+      "topProductsTitle": "Top website products",
+      "cards": {
+        "sessions": "Sessions",
+        "pageViews": "Page views",
+        "addToCartRate": "View to cart",
+        "purchaseRate": "Session purchase rate",
+        "engagementRate": "Engaged sessions",
+        "returningJourneys": "Returning journeys",
+        "errorRate": "Session error rate"
+      },
+      "trendTitle": "Storefront traffic and outcomes",
+      "pageTypesTitle": "Page and interaction mix",
+      "audienceTitle": "Device and language mix",
+      "devices": "Devices",
+      "locales": "Languages",
+      "vitalsTitle": "Core Web Vitals",
+      "errorsTitle": "Storefront errors",
+      "referrersTitle": "Top referrers",
+      "recentDiagnosticsHint": "Detailed diagnostics use the recent raw telemetry window; comparable funnel history remains continuous across the storefront migration.",
+      "vitalMeta": "{good} good · {poor} poor · {samples} samples",
+      "experience": {
+        "columns": {
+          "dimension": "Page type",
+          "sessions": "Sessions",
+          "pageViews": "Page views",
+          "interactions": "Interactions"
+        }
+      },
+      "stats": {
+        "searches": "Searches",
+        "zeroResults": "Zero-result searches",
+        "checkoutRate": "Checkout to purchase",
+        "cartRate": "Cart to purchase"
+      },
+      "landing": {
+        "title": "Top entry pages",
+        "columns": {
+          "path": "Entry page",
+          "sessions": "Sessions"
+        }
+      },
+      "search": {
+        "columns": {
+          "term": "Search term",
+          "searches": "Searches",
+          "zeroResults": "Zero results"
+        }
+      },
+      "funnel": {
+        "Sessions": "Sessions",
+        "Product views": "Product views",
+        "Adds to cart": "Adds to cart",
+        "Checkout starts": "Checkout starts",
+        "Purchases": "Purchases"
+      },
+      "conversion": {
+        "title": "Conversion diagnostics",
+        "sessionsToPurchase": "Sessions to purchase",
+        "viewToCart": "Product view to add-to-cart",
+        "cartToPurchase": "Cart to purchase",
+        "checkoutToPurchase": "Checkout to purchase",
+        "searchZeroResultRate": "Zero-result search rate"
+      },
+      "diagnostics": {
+        "journeys": "Journeys",
+        "productViews": "Product views",
+        "checkoutStarts": "Checkout starts",
+        "searches": "Searches",
+        "zeroResults": "Zero-result searches",
+        "avgPagesPerSession": "Avg. pages per session"
+      },
+      "products": {
+        "columns": {
+          "product": "Product",
+          "views": "Views",
+          "adds": "Adds",
+          "purchases": "Purchases",
+          "conversion": "Conv. %"
+        }
+      }
+    },
+    "landingPages": {
+      "performanceTitle": "Landing-page performance",
+      "blocksTitle": "Highest-engagement content blocks",
+      "empty": "No storefront landing-page activity for this range.",
+      "blockMeta": "{adds} adds to cart · {checkouts} checkouts",
+      "cards": {
+        "published": "Published pages",
+        "sessions": "Attributed sessions",
+        "purchases": "Purchases",
+        "conversion": "Session conversion",
+        "revenue": "Attributed revenue",
+        "drafts": "Draft pages"
+      },
+      "columns": {
+        "page": "Landing page",
+        "status": "Status",
+        "sessions": "Sessions",
+        "views": "Product views",
+        "adds": "Adds",
+        "checkouts": "Checkouts",
+        "purchases": "Purchases",
+        "revenue": "Revenue",
+        "conversion": "Conv. %"
+      }
+    },
+    "aiAssistants": {
+      "admin": {
+        "title": "Admin assistant"
+      },
+      "storefront": {
+        "title": "Store assistant",
+        "intentsTitle": "What shoppers need",
+        "modelsTitle": "Models and usage",
+        "disabledTitle": "Store assistant is disabled",
+        "disabledDescription": "Zero storefront assistant activity is expected while the feature is disabled in storefront settings."
+      },
+      "cards": {
+        "runs": "Runs",
+        "successRate": "Success rate",
+        "tokens": "Tokens",
+        "estimatedCost": "Estimated cost",
+        "latency": "Average latency",
+        "toolCalls": "Tool calls",
+        "proposals": "Proposals",
+        "applied": "Applied proposals",
+        "opens": "Assistant opens",
+        "messages": "Questions",
+        "resultClicks": "Product clicks",
+        "clickThrough": "Result click rate",
+        "errors": "Errors"
+      },
+      "costHint": "Estimated cost appears only when per-million-token rates are configured for the assistant surface.",
+      "empty": "No assistant usage for this range.",
+      "tokensShort": "tokens",
+      "intents": {
+        "product_search": "Product search",
+        "product_comparison": "Product comparison",
+        "compatibility": "Compatibility",
+        "price": "Price",
+        "availability": "Availability",
+        "how_to": "How to use",
+        "recommendation": "Recommendation",
+        "other": "Other"
+      }
+    },
+    "customers": {
+      "rankingTitle": "Customers ranked by purchase activity",
+      "empty": "No customers ordered in this range.",
+      "cards": {
+        "customers": "Customers",
+        "repeat": "Repeat customers",
+        "repeatRate": "Repeat rate",
+        "averageOrders": "Average orders",
+        "averageValue": "Average order value",
+        "successfulOrders": "Successful orders"
+      },
+      "columns": {
+        "customer": "Customer",
+        "phone": "Phone",
+        "orders": "Orders",
+        "confirmed": "Confirmed",
+        "totalValue": "Order value",
+        "averageValue": "Average value",
+        "products": "Products bought",
+        "lastOrder": "Last order"
+      }
+    },
+    "geography": {
+      "topWilayas": {
+        "eyebrow": "Regional ranking",
+        "title": "Top 10 wilayas by orders and revenue"
+      },
+      "profit": {
+        "eyebrow": "Regional profit",
+        "title": "Profit by wilaya"
+      },
+      "averageOrder": {
+        "eyebrow": "Average basket",
+        "title": "Average order value by wilaya"
+      },
+      "table": {
+        "eyebrow": "Full regional table",
+        "title": "All wilayas",
+        "columns": {
+          "wilaya": "Wilaya",
+          "orders": "Orders",
+          "collected": "Collected",
+          "fees": "Fees",
+          "netRevenue": "Net revenue",
+          "profit": "Profit",
+          "averageOrder": "Avg. order"
+        }
+      }
+    },
+    "time": {
+      "granularity": {
+        "daily": "Daily",
+        "weekly": "Weekly",
+        "monthly": "Monthly"
+      },
+      "orders": {
+        "eyebrow": "Order flow",
+        "title": "Orders over time"
+      },
+      "revenue": {
+        "eyebrow": "Revenue curve",
+        "title": "Revenue, profit, and fees over time"
+      },
+      "imports": {
+        "eyebrow": "Import chronology",
+        "title": "Stats by import date",
+        "table": {
+          "date": "Import date",
+          "orders": "Orders",
+          "revenue": "Revenue",
+          "fees": "Fees",
+          "profit": "Profit",
+          "margin": "Margin"
+        }
+      }
+    },
+    "manualOrders": {
+      "sectionTitle": "Manual orders",
+      "title": "Add manual order",
+      "description": "Create an order directly in the reporting dataset.",
+      "actions": {
+        "open": "Add order",
+        "cancel": "Cancel",
+        "create": "Create order"
+      },
+      "fields": {
+        "tracking": "Tracking",
+        "customerName": "Customer name",
+        "wilaya": "Wilaya",
+        "commune": "Commune",
+        "deliveryType": "Delivery type",
+        "amountCollected": "Amount collected",
+        "createdAt": "Created date",
+        "deliveredAt": "Delivered date",
+        "encaissedAt": "Collected date",
+        "productSearch": "Search product"
+      },
+      "fees": {
+        "livraison": "Delivery fee",
+        "poids": "Weight fee",
+        "extra": "Extra fee",
+        "sms": "SMS fee",
+        "stockage": "Storage fee",
+        "commission": "Commission fee"
+      },
+      "summary": {
+        "productCost": "Product cost",
+        "totalFees": "Total fees",
+        "profit": "Profit"
+      },
+      "history": {
+        "emptyTitle": "No manual orders yet",
+        "emptyDescription": "Add a manual order to include it in the stats.",
+        "show": "Show history",
+        "hide": "Hide history",
+        "columns": {
+          "tracking": "Tracking",
+          "details": "Details",
+          "finances": "Finances",
+          "date": "Date",
+          "actions": "Actions"
+        },
+        "delete": "Delete",
+        "pagination": {
+          "page": "Page {page} of {total}",
+          "previous": "Previous",
+          "next": "Next"
+        }
+      },
+      "notifications": {
+        "create": {
+          "loading": "Creating manual order...",
+          "success": "Manual order created.",
+          "error": "Failed to create manual order."
+        },
+        "delete": {
+          "loading": "Deleting manual order...",
+          "success": "Deleted manual order {id}.",
+          "error": "Failed to delete manual order."
+        }
+      }
+    },
+    "metaAds": {
+      "performanceTitle": "Advertising efficiency",
+      "eventsTitle": "Meta tracked events",
+      "payloadsTitle": "Recent Meta payloads",
+      "managerTitle": "Ad costs",
+      "conversionRate": "Conversion rate",
+      "unknownCampaign": "Unknown campaign",
+      "paidAttribution": {
+        "title": "Meta paid-traffic attribution",
+        "visits": "Paid visits",
+        "orders": "Created orders",
+        "purchases": "Purchases",
+        "landedOnly": "Landing-only visits",
+        "conversion": "Visit conversion",
+        "campaign": "Campaign"
+      },
+      "health": {
+        "title": "CAPI delivery health",
+        "pending": "Pending / retrying",
+        "delivered": "Delivered",
+        "failed": "Failed / skipped",
+        "purchaseCoverage": "Submission Purchase coverage",
+        "orderConfirmedCoverage": "orderconfirmed coverage",
+        "worker": "Worker heartbeat: {heartbeat} • Oldest pending: {oldest} • Confirmed purchases later in a negative outcome: {negative}"
+      },
+      "events": {
+        "empty": "No Meta tracking events were recorded for this range.",
+        "columns": {
+          "event": "Event",
+          "total": "Tracked",
+          "pixel": "Pixel fired",
+          "capiSent": "CAPI sent",
+          "capiDelivered": "CAPI delivered",
+          "capiFailed": "CAPI failed",
+          "lastSeen": "Last seen"
+        }
+      },
+      "payloads": {
+        "emptyTitle": "No Meta payloads yet",
+        "emptyDescription": "Meta pixel and CAPI payloads will appear here after storefront activity is tracked.",
+        "meta": "{analyticsEvent} • {eventId} • {occurredAt}",
+        "pixel": "Pixel payload",
+        "capi": "CAPI payload",
+        "delivered": "Delivered",
+        "failed": "Failed",
+        "noStatus": "No HTTP status",
+        "status": "HTTP {status}"
+      },
+      "summary": {
+        "spend": "Spend",
+        "impressions": "Impressions",
+        "clicks": "Clicks",
+        "conversions": "Conversions"
+      },
+      "actions": {
+        "import": "Import",
+        "add": "Add entry",
+        "save": "Save entry",
+        "delete": "Delete"
+      },
+      "fields": {
+        "rate": "EUR to DZD",
+        "importHint": "Upload the exported spreadsheet used for campaign costs.",
+        "platform": "Platform",
+        "campaignName": "Campaign name",
+        "spend": "Spend",
+        "impressions": "Impressions",
+        "clicks": "Clicks",
+        "conversions": "Conversions"
+      },
+      "columns": {
+        "date": "Date",
+        "spend": "Spend",
+        "impressions": "Impressions",
+        "clicks": "Clicks",
+        "conversions": "Conversions",
+        "cpc": "CPC",
+        "cpa": "CPA",
+        "actions": "Actions"
+      },
+      "batches": {
+        "eyebrow": "Imported spreadsheets",
+        "description": "Previously added ad spend spreadsheets and the rows they currently own.",
+        "meta": "{importedAt} • {currentRows}/{totalRows} current rows",
+        "range": "Spend range: {start} to {end}",
+        "noRows": "No current rows",
+        "delete": "Delete batch",
+        "emptyTitle": "No ad spend spreadsheets imported",
+        "emptyDescription": "Upload a Meta campaign report to create a deletable import batch."
+      },
+      "notifications": {
+        "addSuccess": "Ad cost entry saved.",
+        "importLoading": "Importing ad costs...",
+        "importSuccess": "Ad costs imported.",
+        "deleteSuccess": "Ad cost entry deleted.",
+        "deleteCampaignSuccess": "Campaign entries deleted.",
+        "deleteBatchSuccess": "Ad spend import batch deleted."
+      }
+    },
+    "profitability": {
+      "cards": {
+        "profitable": "Profitable orders",
+        "profitableHint": "Imported orders with positive profit.",
+        "unprofitable": "Unprofitable orders",
+        "unprofitableHint": "Imported orders with negative profit.",
+        "averageProfit": "Average profit / order",
+        "averageProfitHint": "Gross profit divided by imported orders.",
+        "margin": "Profit margin",
+        "marginHint": "Profit as a share of net revenue."
+      },
+      "distribution": {
+        "eyebrow": "Profit split",
+        "title": "Profitability distribution"
+      },
+      "topProducts": {
+        "eyebrow": "Product profitability",
+        "title": "Top products by profit"
+      },
+      "emptyTitle": "No profitability data yet",
+      "emptyDescription": "Import at least one matched report to see profitable versus loss-making orders."
+    },
+    "imports": {
+      "eyebrow": "History",
+      "title": "Import spreadsheet",
+      "show": "Show history",
+      "hide": "Hide history",
+      "meta": "{importedAt} • {matchedOrders} imported • {unmatchedCount} unmatched • {skippedRows} skipped from {totalRows} rows",
+      "range": "Activity range: {start} to {end}",
+      "delete": "Delete batch",
+      "emptyTitle": "No spreadsheet batches imported",
+      "emptyDescription": "Upload a report to start building the analytics dataset.",
+      "progress": {
+        "uploadingTitle": "Uploading spreadsheet",
+        "uploadingDescription": "The file is being sent to the server.",
+        "uploadingBadge": "Upload",
+        "processingTitle": "Processing spreadsheet",
+        "processingDescription": "The import is being parsed and the stats dataset is rebuilding.",
+        "processingBadge": "Processing"
+      }
+    },
+    "unmatched": {
+      "title": "Unmatched references from the latest batch",
+      "dismiss": "Remove warning",
+      "dialog": {
+        "title": "Unmatched order details",
+        "description": "This order row did not match any order in the database."
+      },
+      "fields": {
+        "reference": "Reference",
+        "tracking": "Tracking",
+        "customer": "Customer",
+        "phone": "Phone",
+        "wilaya": "Wilaya",
+        "commune": "Commune",
+        "amount": "Amount",
+        "products": "Products",
+        "note": "Note"
+      }
+    },
+    "leaders": {
+      "eyebrow": "Leaders",
+      "title": "Best segment leaders",
+      "category": "Top category",
+      "brand": "Top brand",
+      "meta": "Revenue {revenue} • Profit {profit}"
+    },
+    "notifications": {
+      "upload": {
+        "loading": "Importing spreadsheet and rebuilding stats...",
+        "success": "Processed {created} orders and skipped {duplicates} duplicates.",
+        "error": "The spreadsheet upload finished without a usable import result."
+      },
+      "delete": {
+        "loading": "Deleting batch...",
+        "success": "Deleted batch {batchId}."
+      },
+      "unmatched": {
+        "loading": "Removing warning...",
+        "success": "Warning removed."
+      }
+    }
+  },
+  "pages": {
+    "dashboard": "Overview, personalized widgets and latest updates.",
+    "products": "CRUD products with search/filter/sort behaviors.",
+    "orders": "Create and manage orders life cycle.",
+    "inventory": "Track inventory and attach products through barcode/manual actions.",
+    "assets": "Manage pages, cards, banners and asset library connected to S3.",
+    "brands": "Manage product brands with images.",
+    "categories": "Manage product categories with images.",
+    "brandsCategories": "Maintain brands and categories.",
+    "stats": "See performance for products, orders, users and operations.",
+    "bulletin": "Internal communications with tags, filters and permissions.",
+    "settings": "Theme, language, layout and permission management.",
+    "administration": "Administration overview and action history."
+  },
+  "aiChat": {
+    "open": "AI assistant",
+    "close": "Close AI assistant",
+    "title": "Admin AI assistant",
+    "description": "Analyze the catalog and create reviewable content, pricing, bundle, featured, and entity-edit proposals.",
+    "reviewMode": "Review required",
+    "conversation": "AI assistant conversation",
+    "emptyTitle": "What would you like to improve?",
+    "capabilityCatalog": "Catalog content",
+    "capabilityAnalytics": "Analytics",
+    "capabilityPricing": "Pricing & bundles",
+    "examples": "Try: fill missing Arabic titles, suggest a 10% discount, create a bundle, show low stock, or feature the best products.",
+    "placeholder": "Ask about catalog content, analytics, pricing, bundles, or edits…",
+    "send": "Send",
+    "sendHint": "Enter to send · Shift + Enter for a new line. Changes remain reviewable before they are applied.",
+    "thinking": "Working…",
+    "completed": "The requested proposal operation completed.",
+    "error": "The AI assistant request failed.",
+    "stopResponse": "Stop response",
+    "history": "Progress and history",
+    "historyHint": "Saved chats, live jobs, and reviewable proposals",
+    "newChat": "New chat",
+    "chats": "Your chats",
+    "untitledChat": "Untitled chat",
+    "noChats": "No saved chats yet.",
+    "loadingChats": "Loading chats…",
+    "loadingMessages": "Loading messages…",
+    "noChartData": "No non-zero values are available for a chart; the complete results are shown below.",
+    "noHistory": "No AI jobs or proposals yet.",
+    "approve": "Approve and apply",
+    "reject": "Reject",
+    "applied": "Proposal applied.",
+    "rejected": "Proposal rejected.",
+    "proposalReviewError": "Unable to review the proposal.",
+    "proposalVerificationError": "The server did not verify that this proposal was applied. It remains incomplete.",
+    "autoAccept": "Automatically accept proposals",
+    "model": "Model",
+    "reasoningEffort": "Reasoning effort",
+    "reasoningLevels": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "xhigh": "Extra high"
+    },
+    "backgroundJobs": "Background work",
+    "previousJob": "Previous background job",
+    "nextJob": "Next background job",
+    "categorizationJob": "Catalog categorization",
+    "contentJob": "Product content generation",
+    "jobStatus": {
+      "queued": "Queued",
+      "running": "Running",
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "failed": "Failed"
+    },
+    "categorizationSummary": "{applied} applied · {proposed} awaiting review · {unchanged} unchanged · {ambiguous} ambiguous · {failed} failed",
+    "cancel": "Cancel",
+    "vs": "vs",
+    "metric": "Metric",
+    "current": "Current",
+    "previous": "Previous",
+    "change": "Change",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "products": {
+    "ai": {
+      "title": "AI product content",
+      "description": "Generate missing localized content, review every field, and apply only approved changes.",
+      "generateMissing": "Generate missing content",
+      "generated": "AI content proposal created.",
+      "before": "Current",
+      "proposed": "Proposed",
+      "approve": "Approve and apply",
+      "reject": "Reject",
+      "applied": "AI content proposal applied.",
+      "rejected": "AI content proposal rejected.",
+      "verificationError": "The server did not verify the product changes. The proposal remains incomplete.",
+      "empty": "No content proposals awaiting review."
+    },
+    "view": {
+      "cards": "Cards",
+      "table": "Table"
+    },
+    "copy": {
+      "action": "Copy product IDs",
+      "success": "Copied {count} product IDs.",
+      "error": "Unable to copy {count} product IDs."
+    },
+    "promos": {
+      "title": "Promo URLs",
+      "description": "Create hidden product discount links with fixed promotional prices.",
+      "add": "Add promo",
+      "empty": "No promo URLs for this product.",
+      "code": "Promo code",
+      "price": "Promo price",
+      "startsAt": "Starts at",
+      "endsAt": "Ends at",
+      "active": "Active",
+      "copy": "Copy URL",
+      "remove": "Remove promo",
+      "copySuccess": "Promo URL copied.",
+      "copyError": "Unable to copy promo URL.",
+      "loadError": "Unable to load product promo URLs."
+    },
+    "export": {
+      "action": "Export Meta catalog",
+      "title": "Export {count} products to Meta catalog",
+      "previewTitle": "Meta catalog export preview",
+      "confirm": "Export XLSX",
+      "fullPreview": "Full-size preview",
+      "compactPreview": "Compact preview"
+    },
+    "exportAll": {
+      "action": "Export all products",
+      "runningAction": "Export running",
+      "cancel": "Cancel export",
+      "cancelPending": "Cancelling...",
+      "download": "Download export",
+      "status": {
+        "running": "Running",
+        "completed": "Completed",
+        "cancelled": "Cancelled",
+        "failed": "Failed"
+      },
+      "progress": {
+        "counting": "Counting products",
+        "loading": "Reading products",
+        "processing-images": "Preparing square catalog images",
+        "packaging": "Building spreadsheet"
+      },
+      "notifications": {
+        "start": {
+          "loading": "Starting products export...",
+          "success": "Products export started.",
+          "error": "Failed to start products export."
+        },
+        "cancel": {
+          "loading": "Cancelling products export...",
+          "success": "Products export cancellation requested.",
+          "error": "Failed to cancel products export."
+        },
+        "status": {
+          "completed": "Products export is ready to download.",
+          "cancelled": "Products export was cancelled.",
+          "failed": "Products export failed."
+        }
+      }
+    }
+  },
+  "ordersManager": {
+    "view": {
+      "cards": "Cards",
+      "table": "Table"
+    },
+    "searchPlaceholder": "Search by client name or phone number",
+    "totalOrders": "Total orders: {count}",
+    "overview": {
+      "title": "Daily order status",
+      "subtitle": "Activity for {date}",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "refreshing": "Refreshing overview",
+      "unavailable": "Order status overview is unavailable because the database is not connected.",
+      "metrics": {
+        "newOrders": "New orders",
+        "confirmationStatusChanges": "Confirmation status changes",
+        "confirmedToday": "Confirmed today",
+        "noAnswerOrders": "No-answer orders",
+        "adminCancelled": "Admin cancelled",
+        "carrierCancelled": "Carrier cancelled",
+        "shipmentUpdates": "Shipment updates"
+      },
+      "projection": {
+        "title": "Projected future profit",
+        "basisLabel": "Projection basis",
+        "confirmedBasis": "Confirmed orders",
+        "postedBasis": "Posted orders",
+        "grossProfit": "Future gross profit",
+        "adSpend": "Ad spend",
+        "returnRate": "Return / failed rate",
+        "estimatedReturns": "Estimated returned orders",
+        "returnLoss": "Estimated return loss"
+      }
+    },
+    "filters": {
+      "statusLabel": "Filter by status",
+      "allStatuses": "All statuses",
+      "noAnswerCountLabel": "Filter by no-answer count",
+      "allNoAnswerCounts": "All no-answer counts"
+    },
+    "columns": {
+      "date": "Date",
+      "client": "Client",
+      "products": "Products",
+      "address": "Address",
+      "amount": "Amount",
+      "status": "Status",
+      "confirmedBy": "Confirmed by",
+      "notes": "Notes"
+    },
+    "phone": {
+      "label": "Phone number",
+      "call": "Call phone number",
+      "save": "Save phone",
+      "cancel": "Cancel phone edits"
+    },
+    "name": {
+      "label": "Customer name",
+      "save": "Save name",
+      "cancel": "Cancel name edits"
+    },
+    "copy": {
+      "label": "Copy phone number",
+      "success": "Phone number copied.",
+      "error": "Unable to copy the phone number."
+    },
+    "tracking": {
+      "copy": "Copy tracking link",
+      "success": "Tracking link copied.",
+      "error": "Unable to copy the tracking link.",
+      "unavailable": "This order does not have a tracking link yet."
+    },
+    "capture": {
+      "degraded": "Incomplete capture"
+    },
+    "address": {
+      "delivery": "Delivery type",
+      "region": "Region",
+      "city": "City"
+    },
+    "amount": {
+      "subtotal": "Products",
+      "deliveryFee": "Delivery",
+      "promoDiscount": "Promo {code}",
+      "total": "Total"
+    },
+    "actions": {
+      "editProducts": "Edit products",
+      "viewDetails": "View details",
+      "deleteOrder": "Delete order"
+    },
+    "bulk": {
+      "statusLabel": "Bulk status",
+      "applyStatus": "Apply status"
+    },
+    "export": {
+      "selectedAction": "Export selected",
+      "confirmedAction": "Export confirmed",
+      "selectedTitle": "Export {count} selected orders",
+      "confirmedTitle": "Export {count} confirmed orders",
+      "previewTitle": "Export preview",
+      "previewDescription": "{count} orders will be included in the spreadsheet.",
+      "previewHint": "Compact preview fits the sheet into the modal. Switch to full preview when you need the original scale.",
+      "fullPreview": "Full-size preview",
+      "compactPreview": "Compact preview",
+      "confirm": "Export XLSX",
+      "confirmAndDispatch": "Export and mark as dispatched",
+      "loading": "Preparing export preview...",
+      "ready": "Export preview is ready.",
+      "success": "Orders exported.",
+      "error": "Failed to export orders.",
+      "empty": "Select at least one order to export.",
+      "emptyConfirmed": "No confirmed orders are available to export.",
+      "progress": {
+        "exporting": "Generating spreadsheet",
+        "updating-statuses": "Updating order statuses"
+      }
+    },
+    "ecotrack": {
+      "selectedAction": "Post selected to Delivro",
+      "confirmedAction": "Post confirmed to Delivro",
+      "selectedTitle": "Post {count} selected orders to Delivro",
+      "confirmedTitle": "Post {count} confirmed orders to Delivro",
+      "emirSelectedAction": "Post selected to Emir",
+      "emirConfirmedAction": "Post confirmed to Emir",
+      "emirSelectedTitle": "Post {count} selected orders to Emir",
+      "emirConfirmedTitle": "Post {count} confirmed orders to Emir",
+      "previewTitle": "Ecotrack posting preview",
+      "previewEligible": "Eligible orders",
+      "previewSkipped": "Skipped orders",
+      "previewInvalid": "Invalid orders",
+      "emptyEligible": "No eligible orders.",
+      "emptySkipped": "No skipped orders.",
+      "emptyInvalid": "No invalid orders.",
+      "confirm": "Post to Ecotrack",
+      "loading": "Preparing Ecotrack preview...",
+      "ready": "Ecotrack preview is ready.",
+      "success": "Ecotrack posting completed.",
+      "cancelled": "Ecotrack posting cancelled.",
+      "error": "Failed to post orders to Ecotrack.",
+      "empty": "Select at least one order to post.",
+      "emptyConfirmed": "No confirmed orders are available to post.",
+      "resultTitle": "Posting results",
+      "summary": {
+        "totalRequested": "Requested",
+        "eligible": "Eligible",
+        "created": "Created",
+        "skipped": "Skipped",
+        "invalid": "Invalid",
+        "failed": "Failed"
+      },
+      "progress": {
+        "loading": "Loading orders",
+        "validating-token": "Validating Ecotrack token",
+        "classifying": "Classifying orders",
+        "creating": "Creating Ecotrack orders",
+        "persisting": "Persisting local updates",
+        "completed": "Completed"
+      },
+      "reasons": {
+        "already_posted": "Already posted",
+        "status_not_confirmed": "Order is not confirmed",
+        "missing_phone": "Missing phone number",
+        "missing_wilaya": "Missing wilaya",
+        "missing_commune": "Missing commune",
+        "invalid_commune": "Invalid commune",
+        "missing_address": "Missing address",
+        "missing_name": "Missing customer name"
+      }
+    },
+    "delivery": {
+      "home": "Home",
+      "office": "Office"
+    },
+    "status": {
+      "notContacted": "Not contacted",
+      "noAnswer": "No answer",
+      "noAnswerWithCount": "No answer {count}",
+      "confirmed": "Confirmed",
+      "posted": "Posted",
+      "dispatched": "Dispatched",
+      "completed": "Completed",
+      "manualCompleted": "Manually completed",
+      "delayed": "Delayed",
+      "inDelivery": "In delivery",
+      "returned": "Returned",
+      "failed": "Failed",
+      "incrementNoAnswer": "No answer {count}",
+      "noAnswerCounter": "Counter: {count}",
+      "increaseNoAnswer": "Increase no answer to {count}",
+      "decreaseNoAnswer": "Decrease no answer to {count}",
+      "cancelled": "Cancelled"
+    },
+    "loading": {
+      "refreshing": "Refreshing orders",
+      "inProgress": "In progress"
+    },
+    "history": {
+      "title": "Status history",
+      "button": "History",
+      "empty": "No status history yet."
+    },
+    "details": {
+      "title": "Order details"
+    },
+    "shoppingList": {
+      "title": "Shopping list",
+      "description": "Use the consolidated list to gather products and the order list to confirm per-order notes.",
+      "selectedAction": "Shopping list",
+      "confirmedAction": "Shopping list for confirmed orders",
+      "dispatchedAction": "Dispatched shopping list",
+      "postedAction": "Shopping list for posted orders",
+      "postedAndConfirmedAction": "Shopping list for posted and confirmed orders",
+      "selectedTitle": "Shopping list for {count} selected orders",
+      "confirmedTitle": "Shopping list for confirmed orders",
+      "dispatchedTitle": "Shopping list for dispatched orders",
+      "postedTitle": "Shopping list for posted orders",
+      "postedAndConfirmedTitle": "Shopping list for posted and confirmed orders",
+      "consolidatedTitle": "What to gather",
+      "ordersTitle": "Order breakdown",
+      "generatedAt": "Generated {date}",
+      "previousGeneration": "Previous saved list",
+      "notes": "Notes",
+      "unitPrice": "Price",
+      "purchasePrice": "Purchase price",
+      "print": "Print view",
+      "reset": "Reset list",
+      "refresh": "Refresh list",
+      "acceptAllInventoryChanges": "Accept all inventory changes",
+      "applySelectedInventoryChanges": "Apply selected inventory changes",
+      "addProductTitle": "Add a product",
+      "addProductPlaceholder": "Search catalog products",
+      "addProductAction": "Add product",
+      "addProductError": "Failed to add the product to the shopping list.",
+      "toggleItem": "Toggle {title}",
+      "customItem": "Added manually",
+      "increaseQuantity": "Increase quantity for {title}",
+      "decreaseQuantity": "Decrease quantity for {title}",
+      "increaseInventoryDelta": "Increase inventory decrease for {title}",
+      "decreaseInventoryDelta": "Decrease inventory decrease for {title}",
+      "inventoryAdjustLabel": "Inventory decrease",
+      "inventoryDecreasePreview": "Will decrease inventory by {count}",
+      "inventoryShortage": "Short by {count}",
+      "inventoryApplied": "Applied inventory decrease: {count}",
+      "inventoryApplyLoading": "Applying inventory changes for {count} products...",
+      "inventoryApplySuccess": "Applied inventory changes for {count} products.",
+      "inventoryApplyError": "Failed to apply inventory changes for {count} products.",
+      "noInventoryChanges": "No inventory changes are ready to apply.",
+      "removeItem": "Remove {title}",
+      "loading": "Building shopping list...",
+      "ready": "Shopping list ready.",
+      "saving": "Saving shopping list...",
+      "saved": "Shopping list saved.",
+      "saveError": "Shopping list changes could not be saved.",
+      "lastSavedBy": "Last saved by {name}",
+      "sharedDraftLoaded": "Shared shopping list loaded.",
+      "refreshing": "Refreshing shopping list...",
+      "refreshReady": "Shopping list refreshed.",
+      "error": "Failed to build shopping list.",
+      "emptySelection": "Select at least one order first.",
+      "emptyConfirmed": "No confirmed orders are available for a shopping list.",
+      "emptyDispatched": "No dispatched orders are available for a shopping list.",
+      "emptyPosted": "No posted orders are available for a shopping list.",
+      "emptyPostedAndConfirmed": "No posted or confirmed orders are available for a shopping list.",
+      "printError": "Unable to open the print view."
+    },
+    "products": {
+      "title": "Edit products",
+      "searchTitle": "Find products",
+      "searchPlaceholder": "Search by product, SKU, or barcode",
+      "searchHint": "Search the catalog to add products to this order.",
+      "searchLoading": "Searching products...",
+      "searchEmpty": "No products found.",
+      "selectedTitle": "Selected products",
+      "selectedDescription": "Adjust quantities or remove products before saving.",
+      "add": "Add",
+      "unitPrice": "Unit price",
+      "lineTotal": "Line total",
+      "quantity": "Qty: {count}",
+      "increaseQuantity": "Increase quantity for {title}",
+      "decreaseQuantity": "Decrease quantity for {title}",
+      "removeProduct": "Remove {title}",
+      "empty": "No products"
+    },
+    "notes": {
+      "save": "Save note",
+      "empty": "No note"
+    },
+    "placeholders": {
+      "region": "Region placeholder",
+      "city": "City placeholder",
+      "street": "Street address"
+    },
+    "empty": {
+      "title": "No orders found",
+      "description": "Try a different search or wait for more orders to sync."
+    },
+    "system": "System",
+    "unconfirmed": "Not confirmed",
+    "unconfirmedDate": "No confirmation timestamp"
+  },
+  "ordersEcotrackManager": {
+    "searchPlaceholder": "Search by tracking, client, phone, address, commune, wilaya, product, or status",
+    "filters": {
+      "statusLabel": "Filter by ECOTRACK status",
+      "allStatuses": "All statuses",
+      "sortKeyLabel": "Sort by",
+      "sortDirectionLabel": "Direction",
+      "staleOnly": "Show stale only"
+    },
+    "sort": {
+      "createdAt": "Created date",
+      "trackingNumber": "Tracking number",
+      "clientName": "Client name",
+      "currentStatus": "Current status",
+      "lastStatusSyncedAt": "Last status sync",
+      "asc": "Ascending",
+      "desc": "Descending"
+    },
+    "columns": {
+      "trackingNumber": "Tracking number",
+      "client": "Client name and phone",
+      "address": "Address, commune, wilaya, delivery type",
+      "products": "Products",
+      "amount": "Montant",
+      "status": "ECOTRACK status"
+    },
+    "reference": "Reference",
+    "missingValue": "Missing value",
+    "staleBadge": "Stale",
+    "driverPhone": "Driver phone",
+    "estimatedFee": "Estimated fee",
+    "deskPhone": "Desk phone",
+    "deskCommune": "Desk commune",
+    "deskAddress": "Desk address",
+    "lastSync": "Last status sync",
+    "lastTrackingSync": "Last tracking sync",
+    "lastMajSync": "Last mise a jour sync",
+    "neverSynced": "Never synced",
+    "summaryTitle": "Shipment summary",
+    "amounts": {
+      "subtotal": "Products",
+      "deliveryFee": "Delivery",
+      "total": "Total"
+    },
+    "history": {
+      "title": "Order history",
+      "majTitle": "Mises a jour",
+      "timelineTitle": "Tracking timeline",
+      "empty": "No history available yet.",
+      "emptyMaj": "No mises a jour cached yet.",
+      "emptyTimeline": "No tracking events cached yet."
+    },
+    "actions": {
+      "scanTrackingNumber": "Scan tracking number",
+      "printSelected": "Print selected labels",
+      "refreshSelected": "Refresh selected",
+      "clearSelection": "Clear selection",
+      "refreshVisible": "Refresh visible",
+      "dispatchReady": "Dispatch prete a expedier",
+      "dispatchSelected": "Dispatch selected",
+      "showHistorySelected": "Show history for selected",
+      "showHistoryVisible": "Show history for visible",
+      "label": "Label",
+      "refresh": "Refresh",
+      "dispatch": "Dispatch",
+      "saveOnly": "Save only",
+      "saveAndDispatch": "Save and dispatch",
+      "editAndRecreate": "Edit and recreate",
+      "maj": "Add mise a jour",
+      "return": "Request return",
+      "showHistory": "Show history",
+      "hideHistory": "Hide history"
+    },
+    "loading": {
+      "refreshing": "Refreshing ECOTRACK shipments",
+      "inProgress": "In progress"
+    },
+    "empty": {
+      "title": "No ECOTRACK shipments found",
+      "description": "Orders appear here after they are posted to ECOTRACK and receive a tracking number."
+    },
+    "dialogs": {
+      "editTitle": "Edit ECOTRACK shipment",
+      "editDescription": "Update the local order and propagate the changes to ECOTRACK while the shipment is still prete_a_expedier.",
+      "editHint": "Subtotal follows selected products unless you overwrite it manually. Delivery fee resets when delivery type or wilaya changes.",
+      "recreateTitle": "Edit and recreate ECOTRACK shipment",
+      "recreateDescription": "Update {name}, clear the current local ECOTRACK tracking link, and create a brand-new ECOTRACK shipment immediately.",
+      "finalizeTitle": "Final review before ECOTRACK dispatch",
+      "finalizeDescription": "Review and update {name} one last time, then save the changes and dispatch the shipment.",
+      "deleteTitle": "Delete ECOTRACK shipment",
+      "deleteDescription": "Delete the ECOTRACK shipment for {name}. The local order will stay available for reposting later.",
+      "dispatchTitle": "Dispatch ECOTRACK shipment",
+      "dispatchDescription": "Dispatch the shipment for {name} and lock further pre-dispatch edits.",
+      "majTitle": "Add ECOTRACK mise a jour",
+      "majDescription": "Send a follow-up update for {name}."
+    },
+    "fields": {
+      "firstName": "First name",
+      "lastName": "Last name",
+      "phoneNumber1": "Primary phone",
+      "phoneNumber2": "Secondary phone",
+      "scanTrackingNumber": "Scan tracking number",
+      "scanTrackingNumberPlaceholder": "Scan or paste an ECOTRACK tracking number",
+      "delivery": "Delivery type",
+      "state": "Wilaya",
+      "statePlaceholder": "Select a wilaya",
+      "city": "Commune",
+      "cityPlaceholder": "Select a commune",
+      "homeAddress": "Address",
+      "note": "Remarque",
+      "askCollection": "Ask collection",
+      "askCollectionDescription": "Set ask_collection=1 when dispatching if pickup from your side is needed.",
+      "majContent": "Mise a jour content",
+      "majHint": "Maximum 255 characters."
+    },
+    "confirmations": {
+      "return": "Request a return for this ECOTRACK shipment?"
+    },
+    "notifications": {
+      "refresh": {
+        "loading": "Refreshing ECOTRACK shipment...",
+        "success": "ECOTRACK shipment refreshed.",
+        "partial": "{successCount} shipments refreshed, {failedCount} failed.",
+        "allFailed": "Failed to refresh all selected ECOTRACK shipments.",
+        "error": "Failed to refresh the ECOTRACK shipment."
+      },
+      "update": {
+        "loading": "Saving ECOTRACK shipment...",
+        "success": "ECOTRACK shipment saved.",
+        "error": "Failed to save the ECOTRACK shipment."
+      },
+      "recreate": {
+        "loading": "Recreating ECOTRACK shipment...",
+        "success": "ECOTRACK shipment recreated.",
+        "error": "Failed to recreate the ECOTRACK shipment."
+      },
+      "delete": {
+        "loading": "Deleting ECOTRACK shipment...",
+        "success": "ECOTRACK shipment deleted.",
+        "error": "Failed to delete the ECOTRACK shipment."
+      },
+      "dispatch": {
+        "loading": "Dispatching ECOTRACK shipment...",
+        "success": "ECOTRACK shipment dispatched.",
+        "partial": "{successCount} shipments dispatched, {failedCount} failed.",
+        "allFailed": "Failed to dispatch all selected ECOTRACK shipments.",
+        "error": "Failed to dispatch the ECOTRACK shipment."
+      },
+      "maj": {
+        "loading": "Sending ECOTRACK mise a jour...",
+        "success": "ECOTRACK mise a jour sent.",
+        "error": "Failed to send the ECOTRACK mise a jour."
+      },
+      "return": {
+        "loading": "Requesting ECOTRACK return...",
+        "success": "ECOTRACK return requested.",
+        "error": "Failed to request the ECOTRACK return."
+      },
+      "labels": {
+        "loading": "Preparing ECOTRACK labels...",
+        "success": "ECOTRACK labels ready.",
+        "partial": "{successCount} labels prepared, {failedCount} failed.",
+        "allFailed": "Failed to prepare all selected ECOTRACK labels.",
+        "error": "Failed to prepare the ECOTRACK labels."
+      },
+      "scan": {
+        "loading": "Looking up ECOTRACK tracking number...",
+        "success": "Tracking number {trackingNumber} ready for final review.",
+        "notFound": "No ECOTRACK shipment found for tracking number {trackingNumber}.",
+        "notDispatchable": "Tracking number {trackingNumber} is currently {status}. Only prete_a_expedier shipments can be finalized from scan.",
+        "error": "Failed to look up the ECOTRACK tracking number."
+      },
+      "finalize": {
+        "loading": "Saving and dispatching ECOTRACK shipment...",
+        "success": "ECOTRACK shipment saved and dispatched.",
+        "partialFailure": "Changes saved, dispatch failed: {message}",
+        "error": "Failed to save and dispatch the ECOTRACK shipment."
+      }
+    },
+    "statuses": {
+      "prete_a_expedier": "Prete a expedier",
+      "en_ramassage": "En ramassage",
+      "en_preparation_stock": "En preparation stock",
+      "vers_hub": "Vers hub",
+      "en_hub": "En hub",
+      "vers_wilaya": "Vers wilaya",
+      "en_preparation": "En preparation",
+      "en_livraison": "En livraison",
+      "suspendu": "Suspendu",
+      "livre_non_encaisse": "Livre non encaisse",
+      "encaisse_non_paye": "Encaisse non paye",
+      "paiements_prets": "Paiements prets",
+      "paye_et_archive": "Paye et archive",
+      "retour_chez_livreur": "Retour chez livreur",
+      "retour_transit_entrepot": "Retour transit entrepot",
+      "retour_en_traitement": "Retour en traitement",
+      "retour_recu": "Retour recu",
+      "retour_archive": "Retour archive",
+      "annule": "Annule"
+    },
+    "historyStatuses": {
+      "order_information_received_by_carrier": "Order recorded and validated by the seller",
+      "picked": "Order picked up by the delivery provider",
+      "accepted_by_carrier": "Order received by the sorting center",
+      "dispatched_to_driver": "Order dispatched to the driver",
+      "attempt_delivery": "Delivery attempt",
+      "return_asked": "Return initiated by the sorting center",
+      "return_in_transit": "Return in transit",
+      "return_received": "Return received by the seller",
+      "livred": "Order delivered",
+      "encaissed": "Order collected",
+      "payed": "Payment completed"
+    }
+  },
+  "inventory": {
+    "searchPlaceholder": "Search by product, SKU, or barcode",
+    "searchHint": "Only products with quantity above zero are listed by default. Search or scan to bring back hidden items.",
+    "scanAdd": "Scan in",
+    "refreshing": "Refreshing inventory...",
+    "columns": {
+      "product": "Product",
+      "barcode": "Barcode",
+      "quantity": "Inventory quantity",
+      "inStock": "In stock"
+    },
+    "productMeta": "SKU: {sku}",
+    "noSku": "No SKU",
+    "addBarcode": "Add barcode",
+    "emptyTitle": "No inventory items to show",
+    "empty": "Search for a product or scan a barcode to add stock back in.",
+    "decreaseRow": "Decrease quantity for {name}",
+    "increaseRow": "Increase quantity for {name}",
+    "toggleStock": "Toggle in-stock for {name}",
+    "barcode": {
+      "addTitle": "Add barcode for {name}",
+      "editTitle": "Edit barcode for {name}",
+      "description": "Save a barcode so the product can be found directly from the inventory table.",
+      "placeholder": "Enter barcode"
+    },
+    "scan": {
+      "title": "Scan barcode or order",
+      "description": "Enter an exact barcode or order ID to add products back into inventory.",
+      "placeholder": "Barcode or order ID",
+      "action": "Scan",
+      "barcodeTitle": "Add one unit of {name}",
+      "barcodeDescription": "Confirm to add one unit for the scanned barcode.",
+      "confirmAddOne": "Add 1 unit",
+      "orderTitle": "Order #{id}",
+      "toggleOrderItem": "Toggle order item {name}",
+      "orderQuantity": "Order quantity: {count}",
+      "currentInventory": "Current inventory: {count}",
+      "confirmOrderAdd": "Add selected products",
+      "orderApplyLoading": "Adding {count} scanned order products...",
+      "orderApplySuccess": "Added {count} scanned order products to inventory.",
+      "orderApplyError": "Failed to add {count} scanned order products to inventory.",
+      "notFound": "No matching barcode or order was found.",
+      "error": "Failed to scan the inventory input.",
+      "noSelection": "Select at least one product from the scanned order."
+    },
+    "notifications": {
+      "barcode": {
+        "create": {
+          "loading": "Adding barcode for {name}...",
+          "success": "Added barcode for {name}.",
+          "error": "Failed to add barcode for {name}."
+        },
+        "save": {
+          "loading": "Updating barcode for {name}...",
+          "success": "Updated barcode for {name}.",
+          "error": "Failed to update barcode for {name}."
+        }
+      },
+      "quantity": {
+        "increase": {
+          "loading": "Increasing quantity for {name}...",
+          "success": "Increased quantity for {name}.",
+          "error": "Failed to increase quantity for {name}."
+        },
+        "decrease": {
+          "loading": "Decreasing quantity for {name}...",
+          "success": "Decreased quantity for {name}.",
+          "error": "Failed to decrease quantity for {name}."
+        },
+        "scan": {
+          "loading": "Scanning {name} into inventory...",
+          "success": "Scanned {name} into inventory.",
+          "error": "Failed to scan {name} into inventory."
+        }
+      },
+      "stock": {
+        "enable": {
+          "loading": "Marking {name} as in stock...",
+          "success": "Marked {name} as in stock.",
+          "error": "Failed to mark {name} as in stock."
+        },
+        "disable": {
+          "loading": "Marking {name} as out of stock...",
+          "success": "Marked {name} as out of stock.",
+          "error": "Failed to mark {name} as out of stock."
+        }
+      }
+    }
+  },
+  "settings": {
+    "general": {
+      "currentRoleLabel": "Current role",
+      "signedInEmailLabel": "Signed-in email",
+      "missingEmail": "No email available",
+      "rolePolicyLabel": "Role assignment policy",
+      "rolePolicyBody": "App access starts with an allowlisted email. After that, admins and developers assign a built-in or custom role, and that role determines what the user can see and do."
+    },
+    "permissions": {
+      "title": "Permissions & roles config",
+      "description": "Use this area to review bootstrap privileged access and the roles available for allowed employees.",
+      "editableRolesTitle": "Editable roles",
+      "editableRolesDescription": "These roles can be assigned through application-managed flows.",
+      "codeManagedRolesTitle": "Code-managed roles",
+      "codeManagedRolesDescription": "Admin and developer access is granted only from the codebase email lists.",
+      "adminEmailsTitle": "Admin email allowlist",
+      "adminEmailsDescription": "Emails in this list are promoted to Admin.",
+      "developerEmailsTitle": "Developer email allowlist",
+      "developerEmailsDescription": "Emails in this list are promoted to Developer.",
+      "noAdminEmails": "No admin emails configured yet.",
+      "noDeveloperEmails": "No developer emails configured yet.",
+      "customRolesTitle": "Custom roles",
+      "customRolesDescription": "Admins and developers can create non-privileged roles and assign permission bundles here."
+    },
+    "accessManager": {
+      "title": "Employee access control",
+      "description": "Only allowlisted emails can enter the app. Each allowed email must be assigned a built-in or custom role.",
+      "count": "{count} allowed emails",
+      "emailLabel": "Employee email",
+      "emailPlaceholder": "employee@company.com",
+      "assignmentLabel": "Assigned role",
+      "assignmentPlaceholder": "Select a role assignment",
+      "assignmentHint": "Choose either a built-in role or a custom role definition.",
+      "builtInGroup": "Built-in roles",
+      "customGroup": "Custom roles",
+      "createAction": "Allow email",
+      "updateAction": "Update access",
+      "cancelEditAction": "Cancel edit",
+      "columns": {
+        "email": "Email",
+        "assignment": "Assignment"
+      },
+      "notifications": {
+        "save": {
+          "loading": "Saving access grant...",
+          "success": "Access grant saved."
+        },
+        "delete": {
+          "loading": "Removing access grant...",
+          "success": "Access grant removed."
+        }
+      }
+    },
+    "ecotrack": {
+      "title": "ECOTRACK catalog sync",
+      "description": "Shows the latest ECOTRACK catalog fetch state stored in the database.",
+      "lastFetchLabel": "Last fetched",
+      "statusLabel": "Status",
+      "statusSuccess": "Succeeded",
+      "statusFailed": "Failed",
+      "statusUnknown": "Never run",
+      "neverSynced": "Never synced",
+      "errorLabel": "Last error"
+    },
+    "rolesManager": {
+      "title": "Custom role definitions",
+      "description": "Create reusable non-privileged roles and assign the permissions they should grant.",
+      "existingCount": "{count} roles",
+      "nameLabel": "Role name",
+      "namePlaceholder": "e.g. Campaign Manager",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Describe what this role is for",
+      "permissionsLabel": "Assigned permissions",
+      "createAction": "Create role",
+      "updateAction": "Update role",
+      "cancelEditAction": "Cancel edit",
+      "editAction": "Edit permissions",
+      "noDescription": "No description provided yet.",
+      "notifications": {
+        "create": {
+          "loading": "Creating role {name}...",
+          "success": "Role {name} created.",
+          "error": "Failed to create role {name}."
+        },
+        "update": {
+          "loading": "Saving role {name}...",
+          "success": "Role {name} updated.",
+          "error": "Failed to update role {name}."
+        }
+      }
+    },
+    "permissionLabels": {
+      "products_write": "Manage products",
+      "orders_write": "Manage orders",
+      "assets_write": "Manage assets & uploads",
+      "brands_categories_write": "Manage brands & categories",
+      "bulletin_moderate": "Moderate bulletin posts",
+      "ops_view": "View ops dashboards & logs",
+      "settings_manage": "Manage settings configuration",
+      "ai_use": "Use the admin AI assistant",
+      "ai_catalog_propose": "Generate AI catalog proposals",
+      "ai_catalog_apply": "Apply AI catalog changes",
+      "ai_analytics_query": "Query analytics with AI",
+      "ai_pricing_analyze": "Analyze pricing and discounts with AI",
+      "ai_pricing_apply": "Apply AI pricing and discount changes",
+      "ai_landing_publish": "Publish AI-generated landing pages"
+    }
+  },
+  "storefrontSettings": {
+    "title": "Storefront settings",
+    "description": "Manage customer-facing contact information here. This hidden page will also house future storefront layout and information controls.",
+    "contactTitle": "Contact information",
+    "contactDescription": "The storefront uses this number for direct customer calls.",
+    "phoneLabel": "Customer phone number",
+    "phoneHint": "An Algerian mobile number in national or +213 format.",
+    "callsLabel": "Allow phone calls",
+    "callsHint": "Show direct tap-to-call actions on the storefront.",
+    "assistantTitle": "AI shopping assistant",
+    "assistantDescription": "Control whether the product advisor is available on the rebuilt storefront.",
+    "assistantLabel": "Enable the AI shopping assistant",
+    "assistantHint": "Show the assistant launcher on browsing and product pages. Checkout and thank-you pages remain assistant-free.",
+    "saveAction": "Save storefront settings",
+    "savingAction": "Saving...",
+    "saving": "Saving storefront settings...",
+    "saved": "Storefront settings saved.",
+    "saveError": "Storefront settings could not be saved."
+  },
+  "auth": {
+    "title": "BricoAdmin access",
+    "description": "Use your approved Google account to enter the operations workspace and continue with the permissions assigned to your role.",
+    "workspaceLabel": "Google Workspace Access",
+    "accessManaged": "Access is reviewed and enabled by administrators.",
+    "signInHint": "Continue with the Google account approved for your role.",
+    "pendingTitle": "Account pending approval",
+    "signedInAs": "Signed in as {user}",
+    "unknownUser": "Unknown user",
+    "accessPending": "Your email has not been granted access yet. An admin or developer must allowlist your address and assign a role before you can enter the app.",
+    "signOut": "Sign out",
+    "signInWithGoogle": "Sign in with Google"
+  },
+  "history": {
+    "title": "Action history",
+    "description": "Every tracked database change is recorded here with table controls for filtering, sorting, and replaying actions.",
+    "itemsCount": "{count} entries",
+    "empty": "No tracked actions yet.",
+    "emptyFiltered": "No actions match the current filters.",
+    "loading": "Loading action history...",
+    "searchPlaceholder": "Search by item, area, actor, or action type",
+    "resetFilters": "Reset filters",
+    "resultsSummary": "Showing {count} of {total} entries",
+    "systemActor": "System",
+    "actorLine": "{actor} changed {entityType} #{entityId}",
+    "changeLine": "{field}: {before} -> {after}",
+    "noValue": "Empty",
+    "undo": "Undo",
+    "undoPending": "Undoing...",
+    "redo": "Redo",
+    "redoPending": "Redoing...",
+    "viewDetails": "Details",
+    "resourceContext": "{entity} records",
+    "boolean": {
+      "true": "Yes",
+      "false": "No"
+    },
+    "filters": {
+      "actionLabel": "Filter by action",
+      "areaLabel": "Filter by area",
+      "stateLabel": "Filter by state",
+      "includeEcotrackSyncLabel": "Show ECOTRACK sync changes",
+      "includeEcotrackSyncDescription": "Hidden by default to keep the table manageable.",
+      "allActions": "All actions",
+      "allAreas": "All areas",
+      "allStates": "All states"
+    },
+    "columns": {
+      "action": "Action",
+      "where": "Where",
+      "who": "Who",
+      "when": "When",
+      "actions": "Actions"
+    },
+    "operations": {
+      "create": "Created",
+      "update": "Updated",
+      "delete": "Deleted"
+    },
+    "resources": {
+      "products": "Products",
+      "orders": "Orders",
+      "assets": "Assets",
+      "brandsCategories": "Brands & categories",
+      "bulletin": "Bulletin",
+      "stats": "Stats",
+      "settings": "Settings",
+      "ecotrack": "Ecotrack"
+    },
+    "state": {
+      "applied": "Applied",
+      "undone": "Undone",
+      "nonReversible": "Non-reversible"
+    },
+    "details": {
+      "title": "{entity} activity",
+      "description": "Inspect the exact change payload and replay status for this action.",
+      "changesTitle": "Changed fields",
+      "changesDescription": "Only fields that actually changed are listed here.",
+      "changesCount": "{count} changes",
+      "noChanges": "This action does not include field-level changes.",
+      "undoneAt": "Undone at {value}",
+      "redoneAt": "Redone at {value}",
+      "close": "Close",
+      "columns": {
+        "field": "Field",
+        "before": "Before",
+        "after": "After"
+      }
+    },
+    "notifications": {
+      "undo": {
+        "loading": "Undoing {entity}...",
+        "success": "{entity} was undone.",
+        "error": "Failed to undo {entity}."
+      },
+      "redo": {
+        "loading": "Reapplying {entity}...",
+        "success": "{entity} was reapplied.",
+        "error": "Failed to reapply {entity}."
+      }
+    }
+  },
+  "assetsManager": {
+    "bannersTitle": "Banners",
+    "bannersDescription": "Create homepage banners with a title, image, and linked product.",
+    "newBanner": "New banner",
+    "createBannerTitle": "Create banner",
+    "editBannerTitle": "Edit banner",
+    "bannerDialogDescription": "Set the banner title, linked product, and screen-specific images.",
+    "bannerTitlePlaceholder": "Banner title",
+    "bannerTitleArPlaceholder": "Arabic banner title",
+    "titleLabel": "Title",
+    "titleColumn": "Title",
+    "bannerProductPlaceholder": "Select linked product",
+    "linkedProductLabel": "Linked product",
+    "linkedProductColumn": "Linked product",
+    "orderColumn": "Order",
+    "bannerImageLabel": "Banner image",
+    "bannerLandscapeImageLabel": "Horizontal screen image",
+    "bannerLandscapeImageHint": "Desktop ratio: 20:7 — export at 2400 × 840 px.",
+    "bannerPortraitImageLabel": "Vertical screen image",
+    "bannerPortraitImageHint": "Mobile ratio: 19:23 — export at 1140 × 1380 px.",
+    "uploadHint": "Uploads to S3, then stores CloudFront URLs.",
+    "singleImagePlaceholder": "Banner image URL",
+    "createBanner": "Create banner",
+    "updateBanner": "Update banner",
+    "noLinkedProduct": "No linked product",
+    "groupsTitle": "Featured product groups",
+    "groupsDescription": "Build carousel groups from individual products, brands, categories, or any mix of them.",
+    "newGroup": "New group",
+    "createGroupTitle": "Create featured group",
+    "editGroupTitle": "Edit featured group",
+    "groupDialogDescription": "Choose the products, brands, and categories that belong to this featured group.",
+    "groupNamePlaceholder": "Group name",
+    "groupNameLabel": "Group name",
+    "groupNameArLabel": "Arabic group name",
+    "groupNameArPlaceholder": "Arabic group name",
+    "groupNameColumn": "Group name",
+    "groupCtaLabel": "CTA text",
+    "groupCtaPlaceholder": "Voir Plus",
+    "groupCtaArLabel": "Arabic CTA text",
+    "groupCtaArPlaceholder": "اكتشف المزيد",
+    "groupLinkLabel": "CTA link",
+    "groupLinkPlaceholder": "/products",
+    "groupShowAtTopLabel": "Show at top of products page",
+    "groupShowAtTopDescription": "Enable this when the storefront should pin the group above the standard products list.",
+    "groupShowAtTopColumn": "Top of products page",
+    "groupShowAtTopToggle": "Toggle top placement for {name}",
+    "productsLabel": "Products",
+    "brandsLabel": "Brands",
+    "categoriesLabel": "Categories",
+    "createGroup": "Create group",
+    "updateGroup": "Update group",
+    "coverageColumn": "Coverage",
+    "groupCounts": "Products: {products} · Brands: {brands} · Categories: {categories}",
+    "cardsTitle": "Product cards",
+    "cardsDescription": "Pick a product and author the Arabic and French card copy shown beside its first image.",
+    "newCard": "New card",
+    "createCardTitle": "Create product card",
+    "editCardTitle": "Edit product card",
+    "cardDialogDescription": "Pick a product and write the Arabic and French card copy.",
+    "cardProductPlaceholder": "Select product",
+    "productNameLabel": "Product name",
+    "productNameColumn": "Product name",
+    "productsSearchPlaceholder": "Search products",
+    "brandsSearchPlaceholder": "Search brands",
+    "categoriesSearchPlaceholder": "Search categories",
+    "productsEmptySearch": "No products match this search.",
+    "brandsEmptySearch": "No brands match this search.",
+    "categoriesEmptySearch": "No categories match this search.",
+    "add": "Add",
+    "choose": "Choose",
+    "selected": "Selected",
+    "addSelection": "Add {name}",
+    "chooseSelection": "Choose {name}",
+    "nothingSelected": "Nothing selected yet",
+    "removeSelection": "Remove {name}",
+    "dragHandleLabel": "Drag {item}",
+    "moveUpLabel": "Move {item} up",
+    "moveDownLabel": "Move {item} down",
+    "clear": "Clear",
+    "noImage": "No image",
+    "cardImageLabel": "Card image",
+    "cardImageMissing": "The selected product has no image yet.",
+    "titleArLabel": "Arabic title",
+    "titleArPlaceholder": "Short Arabic title",
+    "titleFrLabel": "French title",
+    "titleFrPlaceholder": "Short French title",
+    "descriptionArLabel": "Arabic description",
+    "descriptionArPlaceholder": "Short Arabic description (max 140 characters)",
+    "descriptionFrLabel": "French description",
+    "descriptionFrPlaceholder": "Short French description (max 140 characters)",
+    "characteristicsArLabel": "Arabic characteristics",
+    "characteristicsArPlaceholder": "Arabic characteristics, one per line",
+    "characteristicsFrLabel": "French characteristics",
+    "characteristicsFrPlaceholder": "French characteristics, one per line",
+    "createCard": "Create card",
+    "updateCard": "Update card",
+    "cancel": "Cancel",
+    "active": "Active",
+    "inactive": "Inactive",
+    "edit": "Edit",
+    "toggle": "Toggle",
+    "delete": "Delete",
+    "unknownProduct": "Unknown product",
+    "bannerCreateLoading": "Creating banner {title}...",
+    "bannerCreateSuccess": "Created banner {title}.",
+    "bannerCreateError": "Failed to create banner {title}.",
+    "bannerSaveLoading": "Saving banner {title}...",
+    "bannerSaveSuccess": "Saved banner {title}.",
+    "bannerSaveError": "Failed to save banner {title}.",
+    "bannerActivateLoading": "Activating banner {title}...",
+    "bannerActivateSuccess": "Activated banner {title}.",
+    "bannerActivateError": "Failed to activate banner {title}.",
+    "bannerDeactivateLoading": "Deactivating banner {title}...",
+    "bannerDeactivateSuccess": "Deactivated banner {title}.",
+    "bannerDeactivateError": "Failed to deactivate banner {title}.",
+    "bannerDeleteLoading": "Deleting banner {target}...",
+    "bannerDeleteSuccess": "Deleted banner {target}.",
+    "bannerDeleteError": "Failed to delete banner {target}.",
+    "bannerReorderLoading": "Saving banner order...",
+    "bannerReorderSuccess": "Saved banner order.",
+    "bannerReorderError": "Failed to save banner order.",
+    "groupCreateLoading": "Creating featured group {name}...",
+    "groupCreateSuccess": "Created featured group {name}.",
+    "groupCreateError": "Failed to create featured group {name}.",
+    "groupSaveLoading": "Saving featured group {name}...",
+    "groupSaveSuccess": "Saved featured group {name}.",
+    "groupSaveError": "Failed to save featured group {name}.",
+    "groupActivateLoading": "Activating featured group {name}...",
+    "groupActivateSuccess": "Activated featured group {name}.",
+    "groupActivateError": "Failed to activate featured group {name}.",
+    "groupDeactivateLoading": "Deactivating featured group {name}...",
+    "groupDeactivateSuccess": "Deactivated featured group {name}.",
+    "groupDeactivateError": "Failed to deactivate featured group {name}.",
+    "groupShowAtTopEnableLoading": "Pinning featured group {name} to the top of the products page...",
+    "groupShowAtTopEnableSuccess": "Pinned featured group {name} to the top of the products page.",
+    "groupShowAtTopEnableError": "Failed to pin featured group {name} to the top of the products page.",
+    "groupShowAtTopDisableLoading": "Removing featured group {name} from the top of the products page...",
+    "groupShowAtTopDisableSuccess": "Removed featured group {name} from the top of the products page.",
+    "groupShowAtTopDisableError": "Failed to remove featured group {name} from the top of the products page.",
+    "groupDeleteLoading": "Deleting featured group {target}...",
+    "groupDeleteSuccess": "Deleted featured group {target}.",
+    "groupDeleteError": "Failed to delete featured group {target}.",
+    "groupReorderLoading": "Saving featured group order...",
+    "groupReorderSuccess": "Saved featured group order.",
+    "groupReorderError": "Failed to save featured group order.",
+    "cardCreateLoading": "Creating card for {product}...",
+    "cardCreateSuccess": "Created card for {product}.",
+    "cardCreateError": "Failed to create card for {product}.",
+    "cardSaveLoading": "Saving card for {product}...",
+    "cardSaveSuccess": "Saved card for {product}.",
+    "cardSaveError": "Failed to save card for {product}.",
+    "cardActivateLoading": "Activating card for {product}...",
+    "cardActivateSuccess": "Activated card for {product}.",
+    "cardActivateError": "Failed to activate card for {product}.",
+    "cardDeactivateLoading": "Deactivating card for {product}...",
+    "cardDeactivateSuccess": "Deactivated card for {product}.",
+    "cardDeactivateError": "Failed to deactivate card for {product}.",
+    "cardDeleteLoading": "Deleting card for {target}...",
+    "cardDeleteSuccess": "Deleted card for {target}.",
+    "cardDeleteError": "Failed to delete card for {target}.",
+    "cardReorderLoading": "Saving product card order...",
+    "cardReorderSuccess": "Saved product card order.",
+    "cardReorderError": "Failed to save product card order."
+  },
+  "bulletinBoard": {
+    "eyebrow": "Team signal",
+    "title": "Bulletin board",
+    "description": "Share internal updates, organize them with tags, and keep important notices pinned at the top.",
+    "stats": {
+      "totalPosts": "Posts",
+      "pinnedPosts": "Pinned"
+    },
+    "composer": {
+      "createTitle": "Create a post",
+      "createDescription": "Every signed-in user can publish updates and remove their own posts.",
+      "editTitle": "Edit post",
+      "editDescription": "Update the message, tags, or pin state before saving.",
+      "titleLabel": "Title",
+      "titlePlaceholder": "Post title",
+      "bodyLabel": "Message",
+      "bodyPlaceholder": "Post content",
+      "tagsLabel": "Tags",
+      "tagsPlaceholder": "Tags",
+      "tagsHint": "Use short labels like logistics, urgent, campaign, or qa.",
+      "pinLabel": "Pin this post",
+      "attachmentsLabel": "Attachments",
+      "attachmentsHint": "Upload supported images and documents up to 20 MB each (40 MB combined)."
+    },
+    "filters": {
+      "allTags": "All tags",
+      "sortLabel": "Sort posts",
+      "sortUpdatedDesc": "Recently updated",
+      "sortUpdatedAsc": "Oldest updated",
+      "sortCreatedDesc": "Newest created"
+    },
+    "sections": {
+      "pinned": "Pinned posts",
+      "recent": "Latest posts",
+      "visibleCount": "{count} visible"
+    },
+    "actions": {
+      "openComposer": "New post",
+      "closeComposer": "Close composer",
+      "refresh": "Refresh",
+      "post": "Publish post",
+      "update": "Save changes",
+      "cancel": "Cancel",
+      "edit": "Edit",
+      "delete": "Delete",
+      "pin": "Pin",
+      "unpin": "Unpin",
+      "reply": "Reply",
+      "sendReply": "Send reply",
+      "deleteReply": "Delete reply",
+      "addReaction": "Reactions"
+    },
+    "pagination": {
+      "page": "Page {page} of {total}",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "delete": {
+      "title": "Delete post?",
+      "description": "\"{title}\" will be removed permanently."
+    },
+    "post": {
+      "pinned": "Pinned",
+      "byYou": "You",
+      "updated": "Updated"
+    },
+    "reply": {
+      "title": "Replies ({count})",
+      "placeholder": "Reply"
+    },
+    "reactions": {
+      "by": "by"
+    },
+    "feedback": {
+      "loading": "Loading posts...",
+      "refreshing": "Refreshing",
+      "loadError": "Failed to load bulletin posts.",
+      "retryHint": "Try refreshing the board again."
+    },
+    "notifications": {
+      "validation": "Fix the form errors before continuing.",
+      "create": {
+        "loading": "Publishing \"{title}\"...",
+        "success": "Published \"{title}\".",
+        "error": "Failed to publish the post."
+      },
+      "update": {
+        "loading": "Saving \"{title}\"...",
+        "success": "Saved \"{title}\".",
+        "error": "Failed to save the post."
+      },
+      "delete": {
+        "loading": "Deleting post...",
+        "success": "Deleted the post.",
+        "error": "Failed to delete the post."
+      },
+      "pin": {
+        "loading": "Pinning post...",
+        "success": "Pinned the post.",
+        "error": "Failed to pin the post."
+      },
+      "unpin": {
+        "loading": "Unpinning post...",
+        "success": "Unpinned the post.",
+        "error": "Failed to unpin the post."
+      },
+      "react": {
+        "loading": "Updating {emoji} on \"{title}\"...",
+        "success": "Updated {emoji} on \"{title}\".",
+        "error": "Failed to update the reaction."
+      },
+      "reply": {
+        "loading": "Sending reply to \"{title}\"...",
+        "success": "Reply posted.",
+        "error": "Failed to send the reply."
+      },
+      "replyDelete": {
+        "loading": "Deleting reply...",
+        "success": "Deleted the reply.",
+        "error": "Failed to delete the reply."
+      },
+      "replyReact": {
+        "loading": "Updating {emoji} on the reply...",
+        "success": "Updated {emoji} on the reply.",
+        "error": "Failed to update the reply reaction."
+      }
+    },
+    "empty": {
+      "title": "No posts match the current filters.",
+      "description": "Change the current tag filter, or publish a new update."
+    }
+  }
+}

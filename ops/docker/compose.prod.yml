@@ -1,19 +1,31 @@
 name: bricadmin
 
+x-logging: &default-logging
+  driver: local
+  options:
+    max-size: ${BRIC_LOG_MAX_SIZE:-20m}
+    max-file: ${BRIC_LOG_MAX_FILES:-5}
+
 x-storefront-api-blue: &storefront-api-blue
   restart: unless-stopped
+  logging: *default-logging
+  read_only: true
+  ulimits:
+    core:
+      soft: 0
+      hard: 0
   cap_drop:
     - ALL
   security_opt:
     - no-new-privileges:true
   tmpfs:
     - /tmp:size=64m,mode=1777
-  mem_limit: ${BRIC_STOREFRONT_API_MEM_LIMIT:-768m}
-  mem_reservation: ${BRIC_STOREFRONT_API_MEM_RESERVATION:-512m}
+  mem_limit: ${BRIC_STOREFRONT_API_MEM_LIMIT:-896m}
+  mem_reservation: ${BRIC_STOREFRONT_API_MEM_RESERVATION:-640m}
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront-api.env
   environment:
-    NODE_OPTIONS: ${BRIC_STOREFRONT_API_NODE_OPTIONS:---max-old-space-size=512}
+    NODE_OPTIONS: ${BRIC_STOREFRONT_API_NODE_OPTIONS:---max-old-space-size=640}
     PORT: 3001
   depends_on:
     postgres:
@@ -21,14 +33,23 @@ x-storefront-api-blue: &storefront-api-blue
     redis:
       condition: service_healthy
   healthcheck:
-    test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3001/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+    test:
+      [
+        'CMD-SHELL',
+        'node -e "fetch(''http://127.0.0.1:3001/api/health'').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"',
+      ]
     interval: 10s
     timeout: 5s
     retries: 12
 
 x-storefront-meta-worker: &storefront-meta-worker
   restart: unless-stopped
+  logging: *default-logging
   read_only: true
+  ulimits:
+    core:
+      soft: 0
+      hard: 0
   cap_drop:
     - ALL
   security_opt:
@@ -47,6 +68,12 @@ x-storefront-meta-worker: &storefront-meta-worker
 
 x-admin-blue: &admin-blue
   restart: unless-stopped
+  logging: *default-logging
+  read_only: true
+  ulimits:
+    core:
+      soft: 0
+      hard: 0
   cap_drop:
     - ALL
   security_opt:
@@ -64,14 +91,23 @@ x-admin-blue: &admin-blue
     storefront-api-blue:
       condition: service_healthy
   healthcheck:
-    test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+    test:
+      [
+        'CMD-SHELL',
+        'node -e "fetch(''http://127.0.0.1:3000/api/health'').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"',
+      ]
     interval: 10s
     timeout: 5s
     retries: 12
 
 x-admin-worker-blue: &admin-worker-blue
   restart: unless-stopped
+  logging: *default-logging
   read_only: true
+  ulimits:
+    core:
+      soft: 0
+      hard: 0
   cap_drop:
     - ALL
   security_opt:
@@ -88,10 +124,25 @@ x-admin-worker-blue: &admin-worker-blue
   depends_on:
     storefront-api-blue:
       condition: service_healthy
+  healthcheck:
+    test:
+      [
+        'CMD-SHELL',
+        'node -e "try { process.kill(1, 0); process.exit(0) } catch { process.exit(1) }"',
+      ]
+    interval: 5s
+    timeout: 3s
+    retries: 6
+    start_period: 5s
 
 x-admin-migrations-blue: &admin-migrations-blue
-  restart: "no"
+  restart: 'no'
+  logging: *default-logging
   read_only: true
+  ulimits:
+    core:
+      soft: 0
+      hard: 0
   cap_drop:
     - ALL
   security_opt:
@@ -112,24 +163,37 @@ x-admin-migrations-blue: &admin-migrations-blue
 
 x-storefront-blue: &storefront-blue
   restart: unless-stopped
+  logging: *default-logging
+  # Next's filesystem incremental cache writes generated ISR route artifacts
+  # beneath .next/server. Keep this root writable until that cache is moved to
+  # an external handler; the other application roots remain read-only.
+  read_only: false
+  ulimits:
+    core:
+      soft: 0
+      hard: 0
   cap_drop:
     - ALL
   security_opt:
     - no-new-privileges:true
   tmpfs:
     - /tmp:size=64m,mode=1777
-  mem_limit: ${BRIC_STOREFRONT_WEB_MEM_LIMIT:-1200m}
-  mem_reservation: ${BRIC_STOREFRONT_WEB_MEM_RESERVATION:-768m}
+  mem_limit: ${BRIC_STOREFRONT_WEB_MEM_LIMIT:-1600m}
+  mem_reservation: ${BRIC_STOREFRONT_WEB_MEM_RESERVATION:-1024m}
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront.env
   environment:
-    NODE_OPTIONS: ${BRIC_STOREFRONT_WEB_NODE_OPTIONS:---max-old-space-size=768}
+    NODE_OPTIONS: ${BRIC_STOREFRONT_WEB_NODE_OPTIONS:---max-old-space-size=1024}
     STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
   depends_on:
     storefront-api-blue:
       condition: service_healthy
   healthcheck:
-    test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3002/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+    test:
+      [
+        'CMD-SHELL',
+        'node -e "fetch(''http://127.0.0.1:3002/api/health'').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"',
+      ]
     interval: 10s
     timeout: 5s
     retries: 12
@@ -138,6 +202,7 @@ services:
   postgres:
     image: postgres:16-bookworm
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-bricadmin}
       POSTGRES_USER: ${POSTGRES_USER:-bricadmin}
@@ -145,7 +210,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bricadmin} -d ${POSTGRES_DB:-bricadmin}"]
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-bricadmin} -d ${POSTGRES_DB:-bricadmin}']
       interval: 10s
       timeout: 5s
       retries: 10
@@ -153,11 +218,12 @@ services:
   redis:
     image: redis:7-bookworm
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    logging: *default-logging
+    command: ['redis-server', '--appendonly', 'yes']
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 10
@@ -166,17 +232,17 @@ services:
     <<: *storefront-api-blue
     image: ${BRIC_IMAGE_STOREFRONT_API_BLUE:-bricadmin-storefront-api-blue}
     volumes:
-      - storefront-api-cache-blue:/app/storefront-api/.next/cache
+      - storefront-api-cache-blue:/app/apps/storefront-api/.next/cache
     ports:
-      - "127.0.0.1:3101:3001"
+      - '127.0.0.1:3101:3001'
 
   storefront-api-green:
     <<: *storefront-api-blue
     image: ${BRIC_IMAGE_STOREFRONT_API_GREEN:-bricadmin-storefront-api-green}
     volumes:
-      - storefront-api-cache-green:/app/storefront-api/.next/cache
+      - storefront-api-cache-green:/app/apps/storefront-api/.next/cache
     ports:
-      - "127.0.0.1:3102:3001"
+      - '127.0.0.1:3102:3001'
 
   storefront-meta-worker:
     <<: *storefront-meta-worker
@@ -186,13 +252,13 @@ services:
     <<: *admin-blue
     image: ${BRIC_IMAGE_ADMIN_WEB_BLUE:-bricadmin-adminstration-blue}
     volumes:
-      - admin-cache-blue:/app/adminstration/.next/cache
+      - admin-cache-blue:/app/apps/admin/.next/cache
 
   adminstration-green:
     <<: *admin-blue
     image: ${BRIC_IMAGE_ADMIN_WEB_GREEN:-bricadmin-adminstration-green}
     volumes:
-      - admin-cache-green:/app/adminstration/.next/cache
+      - admin-cache-green:/app/apps/admin/.next/cache
     environment:
       NODE_OPTIONS: ${BRIC_ADMIN_WEB_NODE_OPTIONS:---max-old-space-size=1024}
       STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
@@ -230,15 +296,15 @@ services:
     <<: *storefront-blue
     image: ${BRIC_IMAGE_STOREFRONT_WEB_BLUE:-bricadmin-storefront-blue}
     volumes:
-      - storefront-cache-blue:/app/storefront-new/.next/cache
+      - storefront-cache-blue:/app/apps/storefront/.next/cache
 
   storefront-green:
     <<: *storefront-blue
     image: ${BRIC_IMAGE_STOREFRONT_WEB_GREEN:-bricadmin-storefront-green}
     volumes:
-      - storefront-cache-green:/app/storefront-new/.next/cache
+      - storefront-cache-green:/app/apps/storefront/.next/cache
     environment:
-      NODE_OPTIONS: ${BRIC_STOREFRONT_WEB_NODE_OPTIONS:---max-old-space-size=768}
+      NODE_OPTIONS: ${BRIC_STOREFRONT_WEB_NODE_OPTIONS:---max-old-space-size=1024}
       STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
     depends_on:
       storefront-api-green:
@@ -247,13 +313,24 @@ services:
   nginx:
     image: nginx:1.27-bookworm
     restart: unless-stopped
+    logging: *default-logging
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=32m,mode=0755
+      - /var/run:size=8m,mode=0755
     ports:
-      - "80:80"
-      - "443:443"
+      - '80:80'
+      - '443:443'
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ${BRIC_CERTBOT_WEBROOT_DIR:-/srv/bric/runtime/certbot-webroot}:/var/www/certbot:ro
       - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ${BRIC_RUNTIME_DIR:-/srv/bric/runtime}/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ['CMD', 'nginx', '-t']
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   admin-cache-blue:

@@ -1,14 +1,7 @@
 import * as Sentry from '@sentry/node';
 import crypto from 'crypto';
 
-import {
-  Job,
-  Queue,
-  QueueEvents,
-  Worker,
-  type JobsOptions,
-  type Processor,
-} from 'bullmq';
+import { Job, Queue, QueueEvents, Worker, type JobsOptions, type Processor } from 'bullmq';
 import type IORedis from 'ioredis';
 
 import { getBullRedisConnection, getRedis } from './redis';
@@ -63,6 +56,12 @@ type QueueProcessorContext<T> = {
 
 const JOB_TTL_SECONDS = 60 * 60 * 24;
 const BULLMQ_SKIP_VERSION_CHECK = true;
+const RELEASE_OWNED_KEY_SCRIPT = `
+  if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+  end
+  return 0
+`;
 
 function nowIso() {
   return new Date().toISOString();
@@ -84,6 +83,10 @@ function getActiveKey(queueName: string, scope: 'owner' | 'global', ownerKey: st
 
 function getQueueIndexKey(queueName: string) {
   return `bric:jobs:${queueName}:index`;
+}
+
+async function releaseOwnedKey(redis: IORedis, key: string, expectedValue: string) {
+  return Number(await redis.eval(RELEASE_OWNED_KEY_SCRIPT, 1, key, expectedValue)) === 1;
 }
 
 function serializeSnapshot(snapshot: JobSnapshot) {
@@ -116,39 +119,49 @@ export async function getJobSnapshot(queueName: string, jobId: string) {
 export async function listRecentJobSnapshots(queueNames: readonly string[], limit = 50) {
   const safeLimit = Math.max(1, Math.min(Math.trunc(limit), 100));
   const redis = getRedis();
-  const snapshots = (await Promise.all(queueNames.map(async (queueName) => {
-    let jobIds = await redis.zrevrange(getQueueIndexKey(queueName), 0, safeLimit - 1);
-    if (jobIds.length === 0) {
-      const snapshotPrefix = `bric:jobs:${queueName}:`;
-      let cursor = '0';
-      let scanCount = 0;
-      const legacyIds = new Set<string>();
-      do {
-        const [nextCursor, keys] = await redis.scan(
-          cursor,
-          'MATCH',
-          `${snapshotPrefix}*`,
-          'COUNT',
-          100,
-        );
-        scanCount += 1;
-        cursor = nextCursor;
-        for (const key of keys) {
-          const suffix = key.slice(snapshotPrefix.length);
-          if (suffix && suffix !== 'index' && suffix !== 'active' && !suffix.startsWith('active:') && !suffix.startsWith('owner:')) {
-            legacyIds.add(suffix);
-          }
+  const snapshots = (
+    await Promise.all(
+      queueNames.map(async (queueName) => {
+        let jobIds = await redis.zrevrange(getQueueIndexKey(queueName), 0, safeLimit - 1);
+        if (jobIds.length === 0) {
+          const snapshotPrefix = `bric:jobs:${queueName}:`;
+          let cursor = '0';
+          let scanCount = 0;
+          const legacyIds = new Set<string>();
+          do {
+            const [nextCursor, keys] = await redis.scan(
+              cursor,
+              'MATCH',
+              `${snapshotPrefix}*`,
+              'COUNT',
+              100,
+            );
+            scanCount += 1;
+            cursor = nextCursor;
+            for (const key of keys) {
+              const suffix = key.slice(snapshotPrefix.length);
+              if (
+                suffix &&
+                suffix !== 'index' &&
+                suffix !== 'active' &&
+                !suffix.startsWith('active:') &&
+                !suffix.startsWith('owner:')
+              ) {
+                legacyIds.add(suffix);
+              }
+            }
+          } while (cursor !== '0' && legacyIds.size < safeLimit && scanCount < 10);
+          jobIds = [...legacyIds].slice(0, safeLimit);
         }
-      } while (cursor !== '0' && legacyIds.size < safeLimit && scanCount < 10);
-      jobIds = [...legacyIds].slice(0, safeLimit);
-    }
-    if (jobIds.length === 0) return [];
-    const values = await redis.mget(jobIds.map((jobId) => getSnapshotKey(queueName, jobId)));
-    return values.flatMap((value) => {
-      const snapshot = parseSnapshot(value);
-      return snapshot ? [snapshot] : [];
-    });
-  }))).flat();
+        if (jobIds.length === 0) return [];
+        const values = await redis.mget(jobIds.map((jobId) => getSnapshotKey(queueName, jobId)));
+        return values.flatMap((value) => {
+          const snapshot = parseSnapshot(value);
+          return snapshot ? [snapshot] : [];
+        });
+      }),
+    )
+  ).flat();
 
   return snapshots
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
@@ -163,7 +176,7 @@ export async function getLatestOwnedJob(queueName: string, ownerKey: string) {
 
 export async function requestJobCancellation(queueName: string, ownerKey: string) {
   const snapshot = await getLatestOwnedJob(queueName, ownerKey);
-  if (!snapshot || snapshot.status !== 'queued' && snapshot.status !== 'running') {
+  if (!snapshot || (snapshot.status !== 'queued' && snapshot.status !== 'running')) {
     return null;
   }
 
@@ -178,7 +191,7 @@ export async function requestJobCancellation(queueName: string, ownerKey: string
 
 export async function requestJobCancellationById(queueName: string, jobId: string) {
   const snapshot = await getJobSnapshot(queueName, jobId);
-  if (!snapshot || snapshot.status !== 'queued' && snapshot.status !== 'running') {
+  if (!snapshot || (snapshot.status !== 'queued' && snapshot.status !== 'running')) {
     return null;
   }
 
@@ -191,7 +204,10 @@ export async function requestJobCancellationById(queueName: string, jobId: strin
   return nextSnapshot;
 }
 
-export async function startOwnedJob<T>(options: StartJobOptions<T>): Promise<StartJobResult> {
+async function startOwnedJobInternal<T>(
+  options: StartJobOptions<T>,
+  recoverStaleLock: boolean,
+): Promise<StartJobResult> {
   const redis = getRedis();
   const existingOwned = await getLatestOwnedJob(options.queueName, options.ownerKey);
   if (existingOwned && (existingOwned.status === 'queued' || existingOwned.status === 'running')) {
@@ -204,7 +220,10 @@ export async function startOwnedJob<T>(options: StartJobOptions<T>): Promise<Sta
 
   if (activeJobId) {
     const activeSnapshot = await getJobSnapshot(options.queueName, activeJobId);
-    if (activeSnapshot && (activeSnapshot.status === 'queued' || activeSnapshot.status === 'running')) {
+    if (
+      activeSnapshot &&
+      (activeSnapshot.status === 'queued' || activeSnapshot.status === 'running')
+    ) {
       if (activeSnapshot.ownerKey === options.ownerKey) {
         return { kind: 'existing', job: activeSnapshot };
       }
@@ -213,7 +232,6 @@ export async function startOwnedJob<T>(options: StartJobOptions<T>): Promise<Sta
     }
   }
 
-  const queue = getQueue(options.queueName);
   const jobId = crypto.randomUUID();
   const createdAt = nowIso();
   const snapshot: JobSnapshot = {
@@ -237,41 +255,85 @@ export async function startOwnedJob<T>(options: StartJobOptions<T>): Promise<Sta
     cancelRequested: false,
   };
 
-  const claimed = await redis.set(activeKey, jobId, 'EX', options.ttlSeconds ?? JOB_TTL_SECONDS, 'NX');
+  const claimed = await redis.set(
+    activeKey,
+    jobId,
+    'EX',
+    options.ttlSeconds ?? JOB_TTL_SECONDS,
+    'NX',
+  );
   if (!claimed) {
     const currentId = await redis.get(activeKey);
     const currentSnapshot = currentId ? await getJobSnapshot(options.queueName, currentId) : null;
     if (currentSnapshot) {
       return { kind: 'busy', job: currentSnapshot };
     }
+
+    if (recoverStaleLock && currentId && (await releaseOwnedKey(redis, activeKey, currentId))) {
+      return startOwnedJobInternal(options, false);
+    }
+
+    throw new Error(`Unable to claim active job slot for queue "${options.queueName}".`);
   }
 
-  await writeSnapshot(redis, snapshot, options.ttlSeconds);
-  await queue.add(options.jobName ?? options.kind, {
-    ...options.data,
-    __jobMeta: {
-      id: jobId,
-      ownerKey: options.ownerKey,
-      queueName: options.queueName,
-      activeScope,
-      requestId: options.requestId ?? null,
-    },
-  }, {
-    jobId,
-    removeOnComplete: 100,
-    removeOnFail: 100,
-    attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 1000,
-    },
-    ...options.queueOptions,
-  });
+  try {
+    await writeSnapshot(redis, snapshot, options.ttlSeconds);
+    const queue = getQueue(options.queueName);
+    await queue.add(
+      options.jobName ?? options.kind,
+      {
+        ...options.data,
+        __jobMeta: {
+          id: jobId,
+          ownerKey: options.ownerKey,
+          queueName: options.queueName,
+          activeScope,
+          requestId: options.requestId ?? null,
+        },
+      },
+      {
+        jobId,
+        removeOnComplete: 100,
+        removeOnFail: 100,
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 1000,
+        },
+        ...options.queueOptions,
+      },
+    );
+  } catch (error) {
+    const failedAt = nowIso();
+    await Promise.allSettled([
+      releaseOwnedKey(redis, activeKey, jobId),
+      writeSnapshot(
+        redis,
+        {
+          ...snapshot,
+          status: 'failed',
+          completedAt: failedAt,
+          updatedAt: failedAt,
+          errorMessage: error instanceof Error ? error.message : 'Unable to enqueue job.',
+        },
+        options.ttlSeconds,
+      ),
+    ]);
+    throw error;
+  }
 
   return { kind: 'started', job: snapshot };
 }
 
-export async function updateJobProgress(queueName: string, jobId: string, progress: { phase: string; current: number; total: number }) {
+export function startOwnedJob<T>(options: StartJobOptions<T>): Promise<StartJobResult> {
+  return startOwnedJobInternal(options, true);
+}
+
+export async function updateJobProgress(
+  queueName: string,
+  jobId: string,
+  progress: { phase: string; current: number; total: number },
+) {
   const redis = getRedis();
   const snapshot = await getJobSnapshot(queueName, jobId);
   if (!snapshot) {
@@ -311,7 +373,11 @@ export async function markJobRunning(queueName: string, jobId: string) {
   return nextSnapshot;
 }
 
-export async function markJobCompleted(queueName: string, jobId: string, payload?: { downloadUrl?: string | null; resultSummary?: Record<string, unknown> | null }) {
+export async function markJobCompleted(
+  queueName: string,
+  jobId: string,
+  payload?: { downloadUrl?: string | null; resultSummary?: Record<string, unknown> | null },
+) {
   const redis = getRedis();
   const snapshot = await getJobSnapshot(queueName, jobId);
   if (!snapshot) {
@@ -350,7 +416,11 @@ export async function markJobFailed(queueName: string, jobId: string, errorMessa
   return nextSnapshot;
 }
 
-export async function updateJobSummary(queueName: string, jobId: string, resultSummary: Record<string, unknown>) {
+export async function updateJobSummary(
+  queueName: string,
+  jobId: string,
+  resultSummary: Record<string, unknown>,
+) {
   const redis = getRedis();
   const snapshot = await getJobSnapshot(queueName, jobId);
   if (!snapshot) {
@@ -409,7 +479,10 @@ export function getQueueEvents(queueName: string) {
 
 export function createQueueWorker<T>(
   queueName: string,
-  processor: (payload: T, context: QueueProcessorContext<T>) => Promise<Record<string, unknown> | void>,
+  processor: (
+    payload: T,
+    context: QueueProcessorContext<T>,
+  ) => Promise<Record<string, unknown> | void>,
 ) {
   const connection = getBullRedisConnection(`worker:${queueName}`);
 
@@ -446,7 +519,9 @@ export function createQueueWorker<T>(
         scope.setTag('queue', queueName);
         scope.setTag('job_id', job.id ?? 'unknown');
         scope.setTag('job_name', job.name);
-        const jobMeta = (job.data as { __jobMeta?: { ownerKey?: string; requestId?: string | null } }).__jobMeta;
+        const jobMeta = (
+          job.data as { __jobMeta?: { ownerKey?: string; requestId?: string | null } }
+        ).__jobMeta;
         if (jobMeta?.requestId) {
           scope.setTag('request_id', jobMeta.requestId);
         }
@@ -481,7 +556,8 @@ export function createQueueWorker<T>(
       scope.setTag('queue', queueName);
       scope.setTag('job_id', job.id);
       scope.setTag('job_name', job.name);
-      const jobMeta = (job.data as { __jobMeta?: { ownerKey?: string; requestId?: string | null } }).__jobMeta;
+      const jobMeta = (job.data as { __jobMeta?: { ownerKey?: string; requestId?: string | null } })
+        .__jobMeta;
       if (jobMeta?.requestId) {
         scope.setTag('request_id', jobMeta.requestId);
       }
@@ -511,7 +587,8 @@ export function createQueueWorker<T>(
 
     const activeKey = getActiveKey(
       queueName,
-      (job.data as { __jobMeta?: { activeScope?: 'owner' | 'global'; ownerKey?: string } }).__jobMeta?.activeScope ?? 'owner',
+      (job.data as { __jobMeta?: { activeScope?: 'owner' | 'global'; ownerKey?: string } })
+        .__jobMeta?.activeScope ?? 'owner',
       (job.data as { __jobMeta?: { ownerKey?: string } }).__jobMeta?.ownerKey ?? snapshot.ownerKey,
     );
     await getRedis().del(activeKey);
@@ -529,7 +606,8 @@ export function createQueueWorker<T>(
 
     const activeKey = getActiveKey(
       queueName,
-      (job.data as { __jobMeta?: { activeScope?: 'owner' | 'global'; ownerKey?: string } }).__jobMeta?.activeScope ?? 'owner',
+      (job.data as { __jobMeta?: { activeScope?: 'owner' | 'global'; ownerKey?: string } })
+        .__jobMeta?.activeScope ?? 'owner',
       (job.data as { __jobMeta?: { ownerKey?: string } }).__jobMeta?.ownerKey ?? snapshot.ownerKey,
     );
     await getRedis().del(activeKey);

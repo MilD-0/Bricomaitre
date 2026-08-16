@@ -1,4 +1,4 @@
-import type { getDb } from '../../../db/src/client';
+import type { getDb } from '@bric/db/client';
 import { readEcotrackCatalog } from '../ecotrack-support';
 import { toStorefrontEcotrackCatalogDto } from './dto';
 

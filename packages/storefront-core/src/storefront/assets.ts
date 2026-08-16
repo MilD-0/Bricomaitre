@@ -1,6 +1,6 @@
 import { asc, desc, eq } from 'drizzle-orm';
 
-import type { getDb } from '../../../db/src/client';
+import type { getDb } from '@bric/db/client';
 import {
   assetBanners,
   featuredProductGroupBrands,
@@ -8,7 +8,7 @@ import {
   featuredProductGroupProducts,
   featuredProductGroups,
   productCards,
-} from '../../../db/src/schema';
+} from '@bric/db/schema';
 import {
   toStorefrontBannerDto,
   toStorefrontFeaturedGroupDto,
@@ -34,9 +34,15 @@ function withSelections<T extends { id: number }>(
   const brandMap = new Map<number, number[]>();
   const categoryMap = new Map<number, number[]>();
 
-  selectedProducts.forEach((entry) => productMap.set(entry.groupId, [...(productMap.get(entry.groupId) ?? []), entry.productId]));
-  selectedBrands.forEach((entry) => brandMap.set(entry.groupId, [...(brandMap.get(entry.groupId) ?? []), entry.brandId]));
-  selectedCategories.forEach((entry) => categoryMap.set(entry.groupId, [...(categoryMap.get(entry.groupId) ?? []), entry.categoryId]));
+  selectedProducts.forEach((entry) =>
+    productMap.set(entry.groupId, [...(productMap.get(entry.groupId) ?? []), entry.productId]),
+  );
+  selectedBrands.forEach((entry) =>
+    brandMap.set(entry.groupId, [...(brandMap.get(entry.groupId) ?? []), entry.brandId]),
+  );
+  selectedCategories.forEach((entry) =>
+    categoryMap.set(entry.groupId, [...(categoryMap.get(entry.groupId) ?? []), entry.categoryId]),
+  );
 
   return items.map((item) => ({
     ...item,
@@ -70,7 +76,9 @@ export async function readStorefrontAssets(db: Database) {
 
   return {
     banners: banners.map(toStorefrontBannerDto),
-    featuredGroups: withSelections(groups, groupProducts, groupBrands, groupCategories).map(toStorefrontFeaturedGroupDto),
+    featuredGroups: withSelections(groups, groupProducts, groupBrands, groupCategories).map(
+      toStorefrontFeaturedGroupDto,
+    ),
     productCards: cards.map(toStorefrontProductCardDto),
   };
 }
@@ -78,16 +86,34 @@ export async function readStorefrontAssets(db: Database) {
 export async function readStorefrontHomepage(db: Database) {
   const [assets, topProducts, categories, brands] = await Promise.all([
     readStorefrontAssets(db),
-    readStorefrontProducts(db, { page: 1, limit: 8, search: '', brandId: null, categoryId: null, discounted: false, id: null, mongoId: null, slug: null, sortKey: 'recommended', sortDirection: 'desc' }),
+    readStorefrontProducts(db, {
+      page: 1,
+      limit: 8,
+      search: '',
+      brandId: null,
+      categoryId: null,
+      discounted: false,
+      id: null,
+      mongoId: null,
+      slug: null,
+      sortKey: 'recommended',
+      sortDirection: 'desc',
+    }),
     readStorefrontCategories(db),
     readStorefrontBrands(db),
   ]);
-  const cardProducts = await readStorefrontProductsByIds(db, assets.productCards.map((card) => card.productId));
+  const cardProducts = await readStorefrontProductsByIds(
+    db,
+    assets.productCards.map((card) => card.productId),
+  );
   const cardProductById = new Map(cardProducts.map((product) => [product.id, product]));
-  const featuredGroups = await Promise.all(assets.featuredGroups.map(async (group) => ({
-    ...group,
-    products: (await readStorefrontProductsForSelectionPage(db, group, { page: 1, limit: 12 })).items,
-  })));
+  const featuredGroups = await Promise.all(
+    assets.featuredGroups.map(async (group) => ({
+      ...group,
+      products: (await readStorefrontProductsForSelectionPage(db, group, { page: 1, limit: 12 }))
+        .items,
+    })),
+  );
 
   return {
     banners: assets.banners,

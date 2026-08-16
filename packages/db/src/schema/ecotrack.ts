@@ -67,7 +67,9 @@ export const ecotrackServiceFees = adminSchema.table(
 export const ecotrackWeightFees = adminSchema.table('ecotrack_weight_fees', {
   serviceType: text('service_type').primaryKey(),
   homeSurcharge: numeric('home_surcharge', { precision: 10, scale: 2 }).notNull().default('0'),
-  stopDeskSurcharge: numeric('stop_desk_surcharge', { precision: 10, scale: 2 }).notNull().default('0'),
+  stopDeskSurcharge: numeric('stop_desk_surcharge', { precision: 10, scale: 2 })
+    .notNull()
+    .default('0'),
   perAdditionalKg: numeric('per_additional_kg', { precision: 10, scale: 2 }).notNull().default('0'),
   startsAtKg: numeric('starts_at_kg', { precision: 10, scale: 2 }).notNull().default('0'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -132,8 +134,11 @@ export const ecotrackOrderStates = adminSchema.table(
     uniqueIndex('ecotrack_order_states_tracking_unique').on(t.trackingNumber),
     index('idx_ecotrack_order_states_provider').on(t.provider),
     index('idx_ecotrack_order_states_current_status').on(t.currentStatus),
-    index('idx_ecotrack_order_states_deleted_status_updated')
-      .on(t.deletedAt, t.currentStatus, t.updatedAt.desc()),
+    index('idx_ecotrack_order_states_deleted_status_updated').on(
+      t.deletedAt,
+      t.currentStatus,
+      t.updatedAt.desc(),
+    ),
   ],
 );
 
@@ -156,7 +161,10 @@ export const ecotrackOrderMajEntries = adminSchema.table(
   (t) => [
     uniqueIndex('ecotrack_order_maj_entries_unique').on(t.orderId, t.remarque, t.remoteCreatedAt),
     index('idx_ecotrack_order_maj_entries_order_created').on(t.orderId, t.remoteCreatedAt.desc()),
-    index('idx_ecotrack_order_maj_entries_tracking_created').on(t.trackingNumber, t.remoteCreatedAt.desc()),
+    index('idx_ecotrack_order_maj_entries_tracking_created').on(
+      t.trackingNumber,
+      t.remoteCreatedAt.desc(),
+    ),
   ],
 );
 
@@ -184,8 +192,16 @@ export const ecotrackOrderTrackingEvents = adminSchema.table(
       t.status,
       sql`coalesce(${t.scanLocation}, '')`,
     ),
-    index('idx_ecotrack_order_tracking_events_order_date_time').on(t.orderId, t.eventDate.desc(), t.eventTime.desc()),
-    index('idx_ecotrack_order_tracking_events_tracking_date_time').on(t.trackingNumber, t.eventDate.desc(), t.eventTime.desc()),
+    index('idx_ecotrack_order_tracking_events_order_date_time').on(
+      t.orderId,
+      t.eventDate.desc(),
+      t.eventTime.desc(),
+    ),
+    index('idx_ecotrack_order_tracking_events_tracking_date_time').on(
+      t.trackingNumber,
+      t.eventDate.desc(),
+      t.eventTime.desc(),
+    ),
     index('idx_ecotrack_order_tracking_events_status').on(t.status),
   ],
 );

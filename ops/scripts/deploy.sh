@@ -42,46 +42,6 @@ append_summary() {
   fi
 }
 
-reset_legacy_storefront_cache() {
-  local slot="${1:?target slot is required}"
-  local service="${2:?storefront service is required}"
-  local current_images_file="$current_link/$release_images_marker_name"
-  local container_id=""
-  local volume_name=""
-
-  if [[ -f "$current_images_file" ]] && grep -qx 'BRIC_STOREFRONT_APP=storefront-new' "$current_images_file"; then
-    return 0
-  fi
-
-  container_id="$(compose ps -a -q "$service" | head -n 1)"
-  if [[ -n "$container_id" ]]; then
-    volume_name="$(docker inspect --format '{{range .Mounts}}{{if and (eq .Type "volume") (or (eq .Destination "/app/storefront/.next/cache") (eq .Destination "/app/storefront-new/.next/cache"))}}{{.Name}}{{end}}{{end}}' "$container_id")"
-  fi
-
-  if [[ -z "$volume_name" ]]; then
-    volume_name="$(docker volume ls \
-      --filter 'label=com.docker.compose.project=bricadmin' \
-      --filter "label=com.docker.compose.volume=storefront-cache-${slot}" \
-      --quiet | head -n 1)"
-  fi
-
-  compose rm --stop --force "$service" >/dev/null 2>&1 || true
-
-  if [[ -n "$volume_name" ]]; then
-    case "$volume_name" in
-      *_storefront-cache-"$slot") ;;
-      *)
-        echo "refusing to remove unexpected storefront cache volume: $volume_name" >&2
-        return 1
-        ;;
-    esac
-    docker volume rm "$volume_name" >/dev/null
-  fi
-
-  printf 'cleared legacy storefront cache for candidate slot %s\n' "$slot"
-  append_summary "- Cleared the candidate ${slot} slot's legacy storefront cache before the storefront-new cutover"
-}
-
 capture_storefront_build_inputs() {
   local base_url="${1:?base url is required}"
   local deploy_token="${2:-}"
@@ -157,20 +117,19 @@ compose up -d --force-recreate "$meta_worker_service"
 assert_service_image "$meta_worker_service"
 
 actual_static_pages="$BRIC_STOREFRONT_STATIC_PAGES"
-printf 'storefront-new build generated %s prerendered routes; remaining catalog routes use ISR\n' "$actual_static_pages"
+printf 'storefront build generated %s prerendered routes; remaining catalog routes use ISR\n' "$actual_static_pages"
 append_summary "- Storefront release surface: ${BRIC_STOREFRONT_APP}"
 append_summary "- Prerendered routes: ${actual_static_pages} (remaining catalog routes use ISR)"
 
 if (( actual_static_pages < 1 )); then
-  echo "storefront-new build did not report any prerendered routes" >&2
-  append_summary "- ❌ Storefront-new prerender sanity check failed"
+  echo "storefront build did not report any prerendered routes" >&2
+  append_summary "- ❌ Storefront prerender sanity check failed"
   exit 1
 fi
 
-append_summary "- ✅ Storefront-new release identity, live catalog preflight, and prerender sanity check passed"
+append_summary "- ✅ Storefront release identity, live catalog preflight, and prerender sanity check passed"
 
 compose pull "$admin_service" "$storefront_service"
-reset_legacy_storefront_cache "$target_slot" "$storefront_service"
 compose up -d --force-recreate "$admin_service" "$storefront_service"
 assert_service_image "$admin_service"
 assert_service_image "$storefront_service"
@@ -186,6 +145,14 @@ else
   exit 1
 fi
 
+compose pull "$worker_service"
+compose up -d --force-recreate "$worker_service"
+assert_service_image "$worker_service"
+if ! bash "$script_dir/wait-for-health.sh" "$worker_service"; then
+  compose stop "$worker_service" || true
+  exit 1
+fi
+
 render_nginx_config "$target_slot"
 
 if compose ps -q nginx >/dev/null 2>&1 && [[ -n "$(compose ps -q nginx)" ]]; then
@@ -196,6 +163,7 @@ else
 fi
 
 if ! bash "$script_dir/smoke-check.sh"; then
+  compose stop "$worker_service" || true
   if [[ -n "$previous_slot" ]]; then
     render_nginx_config "$previous_slot"
     reload_nginx
@@ -208,11 +176,10 @@ if [[ -n "$previous_slot" ]]; then
   compose stop "$previous_worker_service" || true
 fi
 
-compose pull "$worker_service"
-compose up -d --force-recreate "$worker_service"
-assert_service_image "$worker_service"
-
 set_current_release "$release_dir"
 set_active_slot "$target_slot"
+if [[ -n "$previous_slot" ]]; then
+  stop_slot_app_services "$previous_slot"
+fi
 prune_old_releases
 printf 'deployed slot %s\n' "$target_slot"

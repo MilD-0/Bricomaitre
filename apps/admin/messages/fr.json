@@ -1,0 +1,2254 @@
+{
+  "nav": {
+    "administration": "Administration",
+    "products": "Produits",
+    "orders": "Commandes",
+    "ordersTable": "Saisie des commandes",
+    "ecotrackShipments": "Expeditions ECOTRACK",
+    "inventory": "Inventaire",
+    "assets": "Ressources",
+    "landingPages": "Landing pages",
+    "brands": "Marques",
+    "categories": "Catégories",
+    "brandsCategories": "Marques & Catégories",
+    "stats": "Statistiques",
+    "bulletin": "Bulletin",
+    "settings": "Paramètres"
+  },
+  "roles": {
+    "viewer": "Lecteur",
+    "employee": "Employé",
+    "admin": "Admin",
+    "developer": "Développeur"
+  },
+  "labels": {
+    "currentRole": "Rôle actuel : {role}",
+    "opsAccess": "Les contrôles d'opérations sont disponibles.",
+    "roles": "Rôles",
+    "roleManagedByCode": "Les rôles admin et développeur sont gérés dans le code via l'e-mail.",
+    "actions": "Actions",
+    "status": "Statut",
+    "created": "Créé",
+    "modified": "Modifié",
+    "parentCategory": "Catégorie parente",
+    "noParentCategory": "Aucune parente",
+    "pageNumber": "Page {page}",
+    "pageOfTotal": "Page {page} sur {total}",
+    "goToPage": "Aller à la page {page}",
+    "goToPageInput": "Aller à la page",
+    "loading": "Chargement",
+    "searchBrands": "Rechercher des marques",
+    "searchCategories": "Rechercher des catégories",
+    "searchProducts": "Rechercher des produits",
+    "filterByBrand": "Filtrer par marque",
+    "filterByCategory": "Filtrer par catégorie",
+    "filterByImageOrigin": "Filtrer par liens d'image",
+    "allBrands": "Toutes les marques",
+    "allCategories": "Toutes les catégories",
+    "allImageLinks": "Tous les liens d'image",
+    "externalImageLinks": "Liens d'image externes",
+    "deleteDialogTitle": "Confirmer la suppression",
+    "deleteDialogDescription": "Cette action supprimera définitivement {target}.",
+    "selectAll": "Sélectionner toutes les lignes",
+    "selectRow": "Sélectionner {name}",
+    "bulkSelectionCount": "{count} sélectionnés",
+    "search": "Rechercher...",
+    "name": "Nom",
+    "productName": "Nom du produit",
+    "productNamePlaceholder": "Nom du produit",
+    "productNameArPlaceholder": "Nom arabe du produit",
+    "productSkuPlaceholder": "SKU",
+    "productBarcodePlaceholder": "Code-barres",
+    "nameAr": "Nom arabe",
+    "userProfile": "Profil utilisateur",
+    "tags": "Étiquettes (séparées par virgule)",
+    "image": "Image",
+    "images": "Images",
+    "noImage": "Aucune image",
+    "imageHint": "Upload vers S3 puis stockage des URLs CloudFront.",
+    "imageUrlPlaceholder": "URL de l'image",
+    "sku": "SKU",
+    "barcode": "Code-barres",
+    "price": "Prix",
+    "purchasePrice": "Prix d'achat",
+    "purchases": "Achats",
+    "confirmationRate": "Taux de confirmation",
+    "compareAtPrice": "Prix comparé",
+    "inventoryQuantity": "Quantité en stock",
+    "active": "Actif",
+    "inactive": "Inactif",
+    "inStock": "En stock",
+    "description": "Description",
+    "descriptionAr": "Description arabe",
+    "productDescriptionPlaceholder": "Description du produit",
+    "productDescriptionArPlaceholder": "Description arabe du produit",
+    "noBrand": "Aucune marque",
+    "noCategory": "Aucune catégorie",
+    "createProductTitle": "Créer un produit",
+    "editProductTitle": "Modifier le produit",
+    "productDialogDescription": "Définissez les détails du produit, le prix, le stock et les images.",
+    "createBrandTitle": "Créer une marque",
+    "editBrandTitle": "Modifier la marque",
+    "brandDialogDescription": "Définissez le nom et l’image de la marque.",
+    "brandNamePlaceholder": "Nom de la marque",
+    "createCategoryTitle": "Créer une catégorie",
+    "editCategoryTitle": "Modifier la catégorie",
+    "categoryDialogDescription": "Définissez les détails de la catégorie et son parent éventuel.",
+    "categoryNamePlaceholder": "Nom de la catégorie",
+    "categoryNameArPlaceholder": "Nom arabe de la catégorie"
+  },
+  "actions": {
+    "create": "Créer",
+    "delete": "Supprimer",
+    "confirm": "Confirmer",
+    "toggle": "Basculer le statut",
+    "edit": "Modifier",
+    "modify": "Modifier",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "go": "Aller",
+    "first": "Première",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "last": "Dernière",
+    "activateSelected": "Activer la sélection",
+    "deactivateSelected": "Désactiver la sélection",
+    "deleteSelected": "Supprimer la sélection",
+    "update": "Mettre à jour",
+    "createProduct": "Nouveau produit",
+    "saveProduct": "Enregistrer le produit",
+    "markInStock": "Mettre en stock",
+    "markOutOfStock": "Mettre hors stock",
+    "createBrand": "Nouvelle marque",
+    "saveBrand": "Enregistrer la marque",
+    "createCategory": "Nouvelle catégorie",
+    "saveCategory": "Enregistrer la catégorie"
+  },
+  "notifications": {
+    "brands": {
+      "activate": {
+        "loading": "Activation de la marque {name}...",
+        "success": "Marque {name} activée.",
+        "error": "Impossible d’activer la marque {name}."
+      },
+      "deactivate": {
+        "loading": "Désactivation de la marque {name}...",
+        "success": "Marque {name} désactivée.",
+        "error": "Impossible de désactiver la marque {name}."
+      },
+      "save": {
+        "loading": "Enregistrement de la marque {name}...",
+        "success": "Marque {name} enregistrée.",
+        "error": "Impossible d’enregistrer la marque {name}."
+      },
+      "create": {
+        "loading": "Création de la marque {name}...",
+        "success": "Marque {name} créée.",
+        "error": "Impossible de créer la marque {name}."
+      },
+      "delete": {
+        "loading": "Suppression de {target}...",
+        "success": "{target} supprimé.",
+        "error": "Impossible de supprimer {target}."
+      },
+      "activateSelected": {
+        "loading": "Activation de {count} marques sélectionnées...",
+        "success": "{count} marques sélectionnées activées.",
+        "error": "Impossible d’activer les {count} marques sélectionnées."
+      },
+      "deactivateSelected": {
+        "loading": "Désactivation de {count} marques sélectionnées...",
+        "success": "{count} marques sélectionnées désactivées.",
+        "error": "Impossible de désactiver les {count} marques sélectionnées."
+      }
+    },
+    "categories": {
+      "activate": {
+        "loading": "Activation de la catégorie {name}...",
+        "success": "Catégorie {name} activée.",
+        "error": "Impossible d’activer la catégorie {name}."
+      },
+      "deactivate": {
+        "loading": "Désactivation de la catégorie {name}...",
+        "success": "Catégorie {name} désactivée.",
+        "error": "Impossible de désactiver la catégorie {name}."
+      },
+      "save": {
+        "loading": "Enregistrement de la catégorie {name}...",
+        "success": "Catégorie {name} enregistrée.",
+        "error": "Impossible d’enregistrer la catégorie {name}."
+      },
+      "create": {
+        "loading": "Création de la catégorie {name}...",
+        "success": "Catégorie {name} créée.",
+        "error": "Impossible de créer la catégorie {name}."
+      },
+      "delete": {
+        "loading": "Suppression de {target}...",
+        "success": "{target} supprimé.",
+        "error": "Impossible de supprimer {target}."
+      },
+      "activateSelected": {
+        "loading": "Activation de {count} catégories sélectionnées...",
+        "success": "{count} catégories sélectionnées activées.",
+        "error": "Impossible d’activer les {count} catégories sélectionnées."
+      },
+      "deactivateSelected": {
+        "loading": "Désactivation de {count} catégories sélectionnées...",
+        "success": "{count} catégories sélectionnées désactivées.",
+        "error": "Impossible de désactiver les {count} catégories sélectionnées."
+      }
+    },
+    "products": {
+      "activate": {
+        "loading": "Activation du produit {name}...",
+        "success": "Produit {name} activé.",
+        "error": "Impossible d’activer le produit {name}."
+      },
+      "deactivate": {
+        "loading": "Désactivation du produit {name}...",
+        "success": "Produit {name} désactivé.",
+        "error": "Impossible de désactiver le produit {name}."
+      },
+      "stock": {
+        "loading": "Passage du produit {name} en stock...",
+        "success": "Produit {name} marqué en stock.",
+        "error": "Impossible de marquer le produit {name} en stock."
+      },
+      "unstock": {
+        "loading": "Passage du produit {name} hors stock...",
+        "success": "Produit {name} marqué hors stock.",
+        "error": "Impossible de marquer le produit {name} hors stock."
+      },
+      "save": {
+        "loading": "Enregistrement du produit {name}...",
+        "success": "Produit {name} enregistré.",
+        "error": "Impossible d’enregistrer le produit {name}."
+      },
+      "create": {
+        "loading": "Création du produit {name}...",
+        "success": "Produit {name} créé.",
+        "error": "Impossible de créer le produit {name}."
+      },
+      "delete": {
+        "loading": "Suppression de {target}...",
+        "success": "{target} supprimé.",
+        "error": "Impossible de supprimer {target}."
+      },
+      "activateSelected": {
+        "loading": "Activation de {count} produits sélectionnés...",
+        "success": "{count} produits sélectionnés activés.",
+        "error": "Impossible d’activer {count} produits sélectionnés."
+      },
+      "deactivateSelected": {
+        "loading": "Désactivation de {count} produits sélectionnés...",
+        "success": "{count} produits sélectionnés désactivés.",
+        "error": "Impossible de désactiver {count} produits sélectionnés."
+      },
+      "stockSelected": {
+        "loading": "Passage en stock de {count} produits sélectionnés...",
+        "success": "{count} produits sélectionnés marqués en stock.",
+        "error": "Impossible de marquer {count} produits sélectionnés en stock."
+      },
+      "unstockSelected": {
+        "loading": "Passage hors stock de {count} produits sélectionnés...",
+        "success": "{count} produits sélectionnés marqués hors stock.",
+        "error": "Impossible de marquer {count} produits sélectionnés hors stock."
+      }
+    },
+    "orders": {
+      "bulkStatus": {
+        "loading": "Mise à jour de {count} commandes...",
+        "success": "{count} commandes mises à jour.",
+        "error": "Impossible de mettre à jour {count} commandes."
+      },
+      "name": {
+        "loading": "Enregistrement du nom pour {name}...",
+        "success": "Nom enregistré pour {name}.",
+        "error": "Impossible d’enregistrer le nom pour {name}."
+      },
+      "phone": {
+        "loading": "Enregistrement du téléphone pour {name}...",
+        "success": "Téléphone enregistré pour {name}.",
+        "error": "Impossible d’enregistrer le téléphone pour {name}."
+      },
+      "note": {
+        "loading": "Enregistrement de la note pour {name}...",
+        "success": "Note enregistrée pour {name}.",
+        "error": "Impossible d’enregistrer la note pour {name}."
+      },
+      "address": {
+        "loading": "Enregistrement de l’adresse pour {name}...",
+        "success": "Adresse enregistrée pour {name}.",
+        "error": "Impossible d’enregistrer l’adresse pour {name}."
+      },
+      "products": {
+        "loading": "Enregistrement des produits pour {name}...",
+        "success": "Produits enregistrés pour {name}.",
+        "error": "Impossible d’enregistrer les produits pour {name}."
+      },
+      "status": {
+        "loading": "Mise à jour du statut pour {name}...",
+        "success": "Statut mis à jour pour {name}.",
+        "error": "Impossible de mettre à jour le statut pour {name}."
+      },
+      "delete": {
+        "loading": "Suppression de {target}...",
+        "success": "{target} supprimé.",
+        "error": "Impossible de supprimer {target}."
+      }
+    }
+  },
+  "status": {
+    "active": "Actif",
+    "draft": "Brouillon",
+    "archived": "Archivé"
+  },
+  "stats": {
+    "products": "Produits",
+    "orders": "Commandes",
+    "assets": "Ressources"
+  },
+  "statsDashboard": {
+    "headline": "Statistiques opérationnelles reconstruites autour des rapports livreur importés",
+    "snapshot": "Vue d'ensemble",
+    "snapshotHint": "Valeur encaissée reliée aux commandes et produits appariés dans PostgreSQL.",
+    "refresh": "Rafraîchir",
+    "errorTitle": "Les statistiques sont indisponibles",
+    "errorDescription": "Le tableau de bord n'a pas pu charger les derniers indicateurs.",
+    "customStart": "Date de début personnalisée",
+    "customEnd": "Date de fin personnalisée",
+    "ranges": {
+      "30d": "30 jours",
+      "90d": "90 jours",
+      "year": "Cette année",
+      "all": "Depuis le début",
+      "custom": "Personnalisé"
+    },
+    "loading": {
+      "refreshingTitle": "Actualisation des analyses",
+      "refreshingBadge": "Chargement",
+      "refreshingDescription": "Les chiffres mis à jour sont en cours de calcul pour la période sélectionnée."
+    },
+    "snapshotMeta": {
+      "title": "Instantané prêt",
+      "staleTitle": "Instantané obsolète",
+      "description": "Généré le {generatedAt}. Données jusqu'au {reportThroughDate}."
+    },
+    "hero": {
+      "averageOrder": "Moyenne encaissée par commande",
+      "averageProfit": "Profit moyen par commande",
+      "adSpend": "Dépense pub sur la période"
+    },
+    "tabs": {
+      "overview": "Aperçu",
+      "website": "Analytique du site",
+      "landingPages": "Pages d’atterrissage",
+      "aiAssistants": "Assistants IA",
+      "customers": "Clients",
+      "products": "Produits & catégories",
+      "geography": "Géographie",
+      "time": "Analyse temporelle",
+      "metaAds": "Meta Ads"
+    },
+    "upload": {
+      "title": "Import Excel",
+      "heading": "Traiter une feuille du transporteur",
+      "description": "Importez un rapport `.xlsx` ou `.xls`. Les lignes sont reliées aux commandes et produits déjà présents en base, puis stockées dans des tables analytiques PostgreSQL.",
+      "fieldLabel": "Fichier tableur",
+      "selected": "Sélectionné : {name}",
+      "hint": "Formats pris en charge : Excel `.xlsx` et `.xls`.",
+      "action": "Importer le rapport",
+      "pending": "Import en cours..."
+    },
+    "overview": {
+      "cards": {
+        "totalOrders": "Total commandes",
+        "totalOrdersHint": "Lignes importées reliées à un flux de vente confirmé.",
+        "totalCollected": "Montant collecté",
+        "totalCollectedHint": "Montant récupéré sur les commandes livrées importées.",
+        "netRevenue": "Revenu net",
+        "netRevenueHint": "Revenu récupéré après frais de livraison et de service.",
+        "deliveryFees": "Frais livraison",
+        "deliveryFeesHint": "Frais transporteur issus des rapports importés.",
+        "productCost": "Coût produits",
+        "productCostHint": "Calculé à partir des produits appariés dans PostgreSQL.",
+        "grossProfit": "Bénéfice brut",
+        "grossProfitHint": "Revenu net moins coût des produits appariés.",
+        "afterAds": "Bénéfice net après pub",
+        "afterAdsHint": "Bénéfice brut après dépenses média.",
+        "averageOrder": "Panier moyen",
+        "averageOrderHint": "Montant collecté divisé par les commandes importées.",
+        "margin": "Marge bénéficiaire",
+        "marginHint": "Part du bénéfice brut dans le revenu net."
+      },
+      "adPerformance": {
+        "eyebrow": "Performance pub",
+        "title": "Efficacité publicitaire",
+        "totalSpend": "Dépense totale",
+        "totalSpendHint": "Budget ads",
+        "roas": "ROAS",
+        "roasHint": "Revenu généré par dinar publicitaire",
+        "cpa": "CPA",
+        "cpaHint": "Coût par commande",
+        "cpc": "CPC",
+        "cpcHint": "Coût par clic"
+      },
+      "costs": {
+        "eyebrow": "Structure des coûts",
+        "title": "Répartition complète des coûts",
+        "productCost": "Coût des produits",
+        "deliveryFees": "Frais de livraison",
+        "otherFees": "Autres frais de service",
+        "adSpend": "Coûts publicitaires",
+        "total": "Coûts totaux"
+      },
+      "fees": {
+        "eyebrow": "Mix des frais",
+        "title": "Répartition des frais",
+        "delivery": "Livraison",
+        "commission": "Commission",
+        "weight": "Poids",
+        "extra": "Extra",
+        "sms": "SMS",
+        "storage": "Stockage",
+        "ads": "Publicité"
+      },
+      "revenueBreakdown": {
+        "collected": "Collecté",
+        "productCost": "Coût produits",
+        "fees": "Frais",
+        "netRevenue": "Revenu net",
+        "grossProfit": "Bénéfice brut",
+        "ads": "Coût ads",
+        "netAfterAds": "Bénéfice net après pub"
+      },
+      "revenueChart": {
+        "eyebrow": "Empilement revenu",
+        "title": "Composition revenu, coûts et bénéfice"
+      },
+      "emptyFeesTitle": "Aucune donnée de frais",
+      "emptyFeesDescription": "Importez au moins un lot apparié pour voir la composition des frais."
+    },
+    "products": {
+      "topUnits": {
+        "eyebrow": "Vitesse produit",
+        "title": "Top produits par unités vendues"
+      },
+      "export": {
+        "action": "Exporter le catalogue Meta",
+        "title": "Exporter {count} produits vers le catalogue Meta",
+        "previewTitle": "Aperçu de l'export Meta",
+        "confirm": "Exporter en XLSX",
+        "fullPreview": "Aperçu taille réelle",
+        "compactPreview": "Aperçu compact"
+      },
+      "categories": {
+        "eyebrow": "Performance catégorie",
+        "title": "Revenu et profit par catégorie"
+      },
+      "brands": {
+        "eyebrow": "Performance marque",
+        "title": "Revenu et profit par marque"
+      },
+      "table": {
+        "eyebrow": "Vue produit complète",
+        "title": "Performance de tous les produits",
+        "columns": {
+          "product": "Produit",
+          "sku": "SKU",
+          "category": "Catégorie",
+          "units": "Unités",
+          "revenue": "Revenu",
+          "cost": "Coût",
+          "profit": "Profit",
+          "margin": "Marge",
+          "confirmation": "% confirmation",
+          "views": "Vues",
+          "adds": "Ajouts",
+          "webPurchases": "Achats web",
+          "popularity": "Popularité",
+          "webConversion": "Conv. web %"
+        },
+        "lowSample": "{count} cmd"
+      },
+      "emptyTitle": "Aucun produit relié pour l'instant",
+      "emptyDescription": "Une fois les lignes importées reliées aux commandes et produits, le classement apparaîtra ici.",
+      "emptyCategoriesTitle": "Aucune donnée catégorie",
+      "emptyCategoriesDescription": "Des produits importés appariés sont nécessaires pour calculer la performance catégorie.",
+      "emptyBrandsTitle": "Aucune donnée marque",
+      "emptyBrandsDescription": "Des produits importés appariés sont nécessaires pour calculer la performance marque."
+    },
+    "website": {
+      "title": "Analytique du site",
+      "empty": "Aucune donnée web pour la période sélectionnée.",
+      "funnelTitle": "Entonnoir du parcours",
+      "quickStatsTitle": "Conversion rapide",
+      "searchInsightsTitle": "Recherche et signaux checkout",
+      "topProductsTitle": "Top produits du site",
+      "cards": {
+        "sessions": "Sessions",
+        "pageViews": "Pages vues",
+        "addToCartRate": "Vue vers panier",
+        "purchaseRate": "Taux d'achat par session",
+        "engagementRate": "Sessions engagées",
+        "returningJourneys": "Parcours récurrents",
+        "errorRate": "Taux d’erreur par session"
+      },
+      "trendTitle": "Trafic et résultats du storefront",
+      "pageTypesTitle": "Pages et interactions",
+      "audienceTitle": "Appareils et langues",
+      "devices": "Appareils",
+      "locales": "Langues",
+      "vitalsTitle": "Core Web Vitals",
+      "errorsTitle": "Erreurs du storefront",
+      "referrersTitle": "Principales sources",
+      "recentDiagnosticsHint": "Les diagnostics détaillés utilisent la fenêtre récente de télémétrie brute ; l’historique comparable de l’entonnoir reste continu pendant la migration.",
+      "vitalMeta": "{good} bons · {poor} faibles · {samples} échantillons",
+      "experience": {
+        "columns": {
+          "dimension": "Type de page",
+          "sessions": "Sessions",
+          "pageViews": "Pages vues",
+          "interactions": "Interactions"
+        }
+      },
+      "stats": {
+        "searches": "Recherches",
+        "zeroResults": "Recherches sans résultat",
+        "checkoutRate": "Checkout vers achat",
+        "cartRate": "Panier vers achat"
+      },
+      "landing": {
+        "title": "Principales pages d'entrée",
+        "columns": {
+          "path": "Page d'entrée",
+          "sessions": "Sessions"
+        }
+      },
+      "search": {
+        "columns": {
+          "term": "Recherche",
+          "searches": "Recherches",
+          "zeroResults": "Sans résultat"
+        }
+      },
+      "funnel": {
+        "Sessions": "Sessions",
+        "Product views": "Vues produit",
+        "Adds to cart": "Ajouts au panier",
+        "Checkout starts": "Débuts checkout",
+        "Purchases": "Achats"
+      },
+      "conversion": {
+        "title": "Diagnostic de conversion",
+        "sessionsToPurchase": "Sessions vers achat",
+        "viewToCart": "Vue produit vers panier",
+        "cartToPurchase": "Panier vers achat",
+        "checkoutToPurchase": "Checkout vers achat",
+        "searchZeroResultRate": "Taux de recherche sans résultat"
+      },
+      "diagnostics": {
+        "journeys": "Parcours",
+        "productViews": "Vues produit",
+        "checkoutStarts": "Débuts checkout",
+        "searches": "Recherches",
+        "zeroResults": "Recherches sans résultat",
+        "avgPagesPerSession": "Pages moyennes par session"
+      },
+      "products": {
+        "columns": {
+          "product": "Produit",
+          "views": "Vues",
+          "adds": "Ajouts",
+          "purchases": "Achats",
+          "conversion": "Conv. %"
+        }
+      }
+    },
+    "landingPages": {
+      "performanceTitle": "Performance des pages d’atterrissage",
+      "blocksTitle": "Blocs de contenu les plus engageants",
+      "empty": "Aucune activité de page d’atterrissage sur le nouveau storefront pour cette période.",
+      "blockMeta": "{adds} ajouts · {checkouts} checkouts",
+      "cards": {
+        "published": "Pages publiées",
+        "sessions": "Sessions attribuées",
+        "purchases": "Achats",
+        "conversion": "Conversion session",
+        "revenue": "Revenu attribué",
+        "drafts": "Brouillons"
+      },
+      "columns": {
+        "page": "Page",
+        "status": "Statut",
+        "sessions": "Sessions",
+        "views": "Vues produit",
+        "adds": "Ajouts",
+        "checkouts": "Checkouts",
+        "purchases": "Achats",
+        "revenue": "Revenu",
+        "conversion": "Conv. %"
+      }
+    },
+    "aiAssistants": {
+      "admin": {
+        "title": "Assistant d’administration"
+      },
+      "storefront": {
+        "title": "Assistant boutique",
+        "intentsTitle": "Besoins des visiteurs",
+        "modelsTitle": "Modèles et usage",
+        "disabledTitle": "L’assistant de la boutique est désactivé",
+        "disabledDescription": "Une activité nulle est normale tant que la fonctionnalité reste désactivée dans les paramètres de la boutique."
+      },
+      "cards": {
+        "runs": "Exécutions",
+        "successRate": "Taux de succès",
+        "tokens": "Tokens",
+        "estimatedCost": "Coût estimé",
+        "latency": "Latence moyenne",
+        "toolCalls": "Appels d’outils",
+        "proposals": "Propositions",
+        "applied": "Propositions appliquées",
+        "opens": "Ouvertures",
+        "messages": "Questions",
+        "resultClicks": "Clics produit",
+        "clickThrough": "Taux de clic résultat",
+        "errors": "Erreurs"
+      },
+      "costHint": "Le coût estimé apparaît uniquement lorsque les tarifs par million de tokens sont configurés.",
+      "empty": "Aucun usage des assistants sur cette période.",
+      "tokensShort": "tokens",
+      "intents": {
+        "product_search": "Recherche de produit",
+        "product_comparison": "Comparaison",
+        "compatibility": "Compatibilité",
+        "price": "Prix",
+        "availability": "Disponibilité",
+        "how_to": "Mode d’emploi",
+        "recommendation": "Recommandation",
+        "other": "Autre"
+      }
+    },
+    "customers": {
+      "rankingTitle": "Clients classés par activité d’achat",
+      "empty": "Aucun client n’a commandé sur cette période.",
+      "cards": {
+        "customers": "Clients",
+        "repeat": "Clients récurrents",
+        "repeatRate": "Taux de réachat",
+        "averageOrders": "Commandes moyennes",
+        "averageValue": "Panier moyen",
+        "successfulOrders": "Commandes réussies"
+      },
+      "columns": {
+        "customer": "Client",
+        "phone": "Téléphone",
+        "orders": "Commandes",
+        "confirmed": "Confirmées",
+        "totalValue": "Valeur commandée",
+        "averageValue": "Valeur moyenne",
+        "products": "Produits achetés",
+        "lastOrder": "Dernière commande"
+      }
+    },
+    "geography": {
+      "topWilayas": {
+        "eyebrow": "Classement régional",
+        "title": "Top 10 wilayas par commandes et revenu"
+      },
+      "profit": {
+        "eyebrow": "Profit régional",
+        "title": "Profit par wilaya"
+      },
+      "averageOrder": {
+        "eyebrow": "Panier moyen",
+        "title": "Panier moyen par wilaya"
+      },
+      "table": {
+        "eyebrow": "Table régionale complète",
+        "title": "Toutes les wilayas",
+        "columns": {
+          "wilaya": "Wilaya",
+          "orders": "Commandes",
+          "collected": "Collecté",
+          "fees": "Frais",
+          "netRevenue": "Revenu net",
+          "profit": "Profit",
+          "averageOrder": "Panier moy."
+        }
+      }
+    },
+    "time": {
+      "granularity": {
+        "daily": "Journalier",
+        "weekly": "Hebdomadaire",
+        "monthly": "Mensuel"
+      },
+      "orders": {
+        "eyebrow": "Flux commandes",
+        "title": "Commandes au fil du temps"
+      },
+      "revenue": {
+        "eyebrow": "Courbe revenu",
+        "title": "Revenu, profit et frais au fil du temps"
+      },
+      "imports": {
+        "eyebrow": "Chronologie imports",
+        "title": "Statistiques par date d'import",
+        "table": {
+          "date": "Date d'import",
+          "orders": "Commandes",
+          "revenue": "Revenu",
+          "fees": "Frais",
+          "profit": "Profit",
+          "margin": "Marge"
+        }
+      }
+    },
+    "manualOrders": {
+      "sectionTitle": "Commandes manuelles",
+      "title": "Ajouter une commande manuelle",
+      "description": "Créer une commande directement dans le jeu analytique.",
+      "actions": {
+        "open": "Ajouter une commande",
+        "cancel": "Annuler",
+        "create": "Créer la commande"
+      },
+      "fields": {
+        "tracking": "Tracking",
+        "customerName": "Nom du client",
+        "wilaya": "Wilaya",
+        "commune": "Commune",
+        "deliveryType": "Type de livraison",
+        "amountCollected": "Montant encaissé",
+        "createdAt": "Date de création",
+        "deliveredAt": "Date de livraison",
+        "encaissedAt": "Date d'encaissement",
+        "productSearch": "Rechercher un produit"
+      },
+      "fees": {
+        "livraison": "Frais de livraison",
+        "poids": "Frais de poids",
+        "extra": "Frais extra",
+        "sms": "Frais SMS",
+        "stockage": "Frais de stockage",
+        "commission": "Frais de commission"
+      },
+      "summary": {
+        "productCost": "Coût produit",
+        "totalFees": "Total frais",
+        "profit": "Profit"
+      },
+      "history": {
+        "emptyTitle": "Aucune commande manuelle",
+        "emptyDescription": "Ajoutez une commande manuelle pour l'inclure dans les statistiques.",
+        "show": "Afficher l'historique",
+        "hide": "Masquer l'historique",
+        "columns": {
+          "tracking": "Tracking",
+          "details": "Détails",
+          "finances": "Finances",
+          "date": "Date",
+          "actions": "Actions"
+        },
+        "delete": "Supprimer",
+        "pagination": {
+          "page": "Page {page} sur {total}",
+          "previous": "Précédent",
+          "next": "Suivant"
+        }
+      },
+      "notifications": {
+        "create": {
+          "loading": "Création de la commande manuelle...",
+          "success": "Commande manuelle créée.",
+          "error": "Échec de création de la commande manuelle."
+        },
+        "delete": {
+          "loading": "Suppression de la commande manuelle...",
+          "success": "Commande manuelle {id} supprimée.",
+          "error": "Échec de suppression de la commande manuelle."
+        }
+      }
+    },
+    "metaAds": {
+      "performanceTitle": "Efficacité publicitaire",
+      "eventsTitle": "Événements Meta suivis",
+      "payloadsTitle": "Charges utiles Meta récentes",
+      "managerTitle": "Coûts publicitaires",
+      "conversionRate": "Taux de conversion",
+      "unknownCampaign": "Campagne inconnue",
+      "paidAttribution": {
+        "title": "Attribution du trafic Meta payant",
+        "visits": "Visites payantes",
+        "orders": "Commandes créées",
+        "purchases": "Achats",
+        "landedOnly": "Visites sans suite",
+        "conversion": "Conversion visite",
+        "campaign": "Campagne"
+      },
+      "health": {
+        "title": "Santé de livraison CAPI",
+        "pending": "En attente / nouvelle tentative",
+        "delivered": "Livrés",
+        "failed": "Échecs / ignorés",
+        "purchaseCoverage": "Couverture Purchase à la soumission",
+        "orderConfirmedCoverage": "Couverture orderconfirmed",
+        "worker": "Dernier signal du worker : {heartbeat} • Plus ancien en attente : {oldest} • Purchases confirmés ensuite négatifs : {negative}"
+      },
+      "events": {
+        "empty": "Aucun événement Meta n'a été enregistré pour cette période.",
+        "columns": {
+          "event": "Événement",
+          "total": "Suivis",
+          "pixel": "Pixel déclenché",
+          "capiSent": "CAPI envoyé",
+          "capiDelivered": "CAPI livré",
+          "capiFailed": "CAPI en échec",
+          "lastSeen": "Dernière activité"
+        }
+      },
+      "payloads": {
+        "emptyTitle": "Aucune charge utile Meta",
+        "emptyDescription": "Les charges utiles du pixel Meta et de la CAPI apparaîtront ici après l'activité storefront.",
+        "meta": "{analyticsEvent} • {eventId} • {occurredAt}",
+        "pixel": "Charge utile pixel",
+        "capi": "Charge utile CAPI",
+        "delivered": "Livré",
+        "failed": "Échec",
+        "noStatus": "Aucun statut HTTP",
+        "status": "HTTP {status}"
+      },
+      "summary": {
+        "spend": "Dépense",
+        "impressions": "Impressions",
+        "clicks": "Clics",
+        "conversions": "Conversions"
+      },
+      "actions": {
+        "import": "Importer",
+        "add": "Ajouter une entrée",
+        "save": "Enregistrer l'entrée",
+        "delete": "Supprimer"
+      },
+      "fields": {
+        "rate": "EUR vers DZD",
+        "importHint": "Téléversez la feuille exportée utilisée pour les coûts de campagne.",
+        "platform": "Plateforme",
+        "campaignName": "Nom de campagne",
+        "spend": "Dépense",
+        "impressions": "Impressions",
+        "clicks": "Clics",
+        "conversions": "Conversions"
+      },
+      "columns": {
+        "date": "Date",
+        "spend": "Dépense",
+        "impressions": "Impressions",
+        "clicks": "Clics",
+        "conversions": "Conversions",
+        "cpc": "CPC",
+        "cpa": "CPA",
+        "actions": "Actions"
+      },
+      "batches": {
+        "eyebrow": "Feuilles importées",
+        "description": "Feuilles de dépenses publicitaires déjà ajoutées et lignes qu'elles possèdent encore.",
+        "meta": "{importedAt} • {currentRows}/{totalRows} lignes actuelles",
+        "range": "Période de dépense : {start} à {end}",
+        "noRows": "Aucune ligne actuelle",
+        "delete": "Supprimer le lot",
+        "emptyTitle": "Aucune feuille de dépenses publicitaires importée",
+        "emptyDescription": "Importez un rapport de campagne Meta pour créer un lot supprimable."
+      },
+      "notifications": {
+        "addSuccess": "Entrée publicitaire enregistrée.",
+        "importLoading": "Import des coûts publicitaires...",
+        "importSuccess": "Coûts publicitaires importés.",
+        "deleteSuccess": "Entrée publicitaire supprimée.",
+        "deleteCampaignSuccess": "Entrées de campagne supprimées.",
+        "deleteBatchSuccess": "Lot de dépenses publicitaires supprimé."
+      }
+    },
+    "profitability": {
+      "cards": {
+        "profitable": "Commandes rentables",
+        "profitableHint": "Commandes importées avec profit positif.",
+        "unprofitable": "Commandes non rentables",
+        "unprofitableHint": "Commandes importées avec profit négatif.",
+        "averageProfit": "Profit moy. / commande",
+        "averageProfitHint": "Bénéfice brut divisé par les commandes importées.",
+        "margin": "Marge bénéficiaire",
+        "marginHint": "Profit en part du revenu net."
+      },
+      "distribution": {
+        "eyebrow": "Répartition profit",
+        "title": "Distribution de la rentabilité"
+      },
+      "topProducts": {
+        "eyebrow": "Rentabilité produit",
+        "title": "Top produits par profit"
+      },
+      "emptyTitle": "Aucune donnée de rentabilité",
+      "emptyDescription": "Importez au moins un rapport apparié pour voir les commandes rentables et déficitaires."
+    },
+    "imports": {
+      "eyebrow": "Historique",
+      "title": "Importer le tableur",
+      "show": "Afficher l'historique",
+      "hide": "Masquer l'historique",
+      "meta": "{importedAt} • {matchedOrders} importées • {unmatchedCount} non appariées • {skippedRows} ignorées sur {totalRows} lignes",
+      "range": "Période d'activité : {start} à {end}",
+      "delete": "Supprimer le lot",
+      "emptyTitle": "Aucun lot importé",
+      "emptyDescription": "Importez un rapport pour commencer à construire le jeu analytique.",
+      "progress": {
+        "uploadingTitle": "Téléversement du tableur",
+        "uploadingDescription": "Le fichier est en cours d'envoi au serveur.",
+        "uploadingBadge": "Envoi",
+        "processingTitle": "Traitement du tableur",
+        "processingDescription": "L'import est en cours d'analyse et les statistiques sont en reconstruction.",
+        "processingBadge": "Traitement"
+      }
+    },
+    "unmatched": {
+      "title": "Références non appariées du dernier lot",
+      "dismiss": "Retirer l'alerte",
+      "dialog": {
+        "title": "Détails de la commande non appariée",
+        "description": "Cette ligne de commande n'a correspondu à aucune commande en base."
+      },
+      "fields": {
+        "reference": "Référence",
+        "tracking": "Tracking",
+        "customer": "Client",
+        "phone": "Téléphone",
+        "wilaya": "Wilaya",
+        "commune": "Commune",
+        "amount": "Montant",
+        "products": "Produits",
+        "note": "Remarque"
+      }
+    },
+    "leaders": {
+      "eyebrow": "Leaders",
+      "title": "Leaders des segments",
+      "category": "Catégorie leader",
+      "brand": "Marque leader",
+      "meta": "Revenu {revenue} • Profit {profit}"
+    },
+    "notifications": {
+      "upload": {
+        "loading": "Import du tableur et reconstruction des stats...",
+        "success": "{created} commandes traitées et {duplicates} doublons ignorés.",
+        "error": "L'import du fichier s'est terminé sans résultat exploitable."
+      },
+      "delete": {
+        "loading": "Suppression du lot...",
+        "success": "Lot {batchId} supprimé."
+      },
+      "unmatched": {
+        "loading": "Suppression de l'alerte...",
+        "success": "Alerte supprimée."
+      }
+    }
+  },
+  "pages": {
+    "dashboard": "Vue d'ensemble, widgets personnalisés et nouveautés.",
+    "products": "CRUD produits avec recherche/filtre/tri.",
+    "orders": "Créer et gérer le cycle des commandes.",
+    "inventory": "Suivre l'inventaire et attacher des produits par code-barres/manuellement.",
+    "assets": "Gérer pages, cartes, bannières et bibliothèque S3.",
+    "brands": "Gérer les marques produits avec images.",
+    "categories": "Gérer les catégories produits avec images.",
+    "brandsCategories": "Maintenir marques et catégories.",
+    "stats": "Voir les performances produits, commandes, utilisateurs et opérations.",
+    "bulletin": "Communication interne avec tags, filtres et permissions.",
+    "settings": "Thème, langue, disposition et gestion des permissions.",
+    "administration": "Vue d’ensemble de l’administration et historique des actions."
+  },
+  "aiChat": {
+    "open": "Assistant IA",
+    "close": "Fermer l’assistant IA",
+    "title": "Assistant IA administrateur",
+    "description": "Recherchez des produits et créez des propositions à vérifier. Aucun contenu n’est appliqué automatiquement.",
+    "reviewMode": "Validation requise",
+    "conversation": "Conversation avec l’assistant IA",
+    "emptyTitle": "Que souhaitez-vous améliorer ?",
+    "capabilityCatalog": "Contenu catalogue",
+    "capabilityAnalytics": "Analyses",
+    "capabilityPricing": "Prix et bundles",
+    "examples": "Exemple : génère le titre arabe du produit 42, régénère les descriptions des produits 10 et 11, ou traite tous les produits sans titre arabe.",
+    "placeholder": "Demandez une action sur le contenu produit…",
+    "send": "Envoyer",
+    "sendHint": "Entrée pour envoyer · Maj + Entrée pour une nouvelle ligne. Les changements restent à valider avant application.",
+    "thinking": "Traitement…",
+    "completed": "L’opération de proposition est terminée.",
+    "error": "La demande à l’assistant IA a échoué.",
+    "stopResponse": "Arrêter la réponse",
+    "history": "Progression et historique",
+    "historyHint": "Conversations enregistrées, tâches actives et propositions à valider",
+    "newChat": "Nouvelle discussion",
+    "chats": "Vos discussions",
+    "untitledChat": "Discussion sans titre",
+    "noChats": "Aucune discussion enregistrée.",
+    "loadingChats": "Chargement des discussions…",
+    "loadingMessages": "Chargement des messages…",
+    "noChartData": "Aucune valeur non nulle n’est disponible pour le graphique ; les résultats complets figurent ci-dessous.",
+    "noHistory": "Aucune tâche ou proposition IA.",
+    "approve": "Approuver et appliquer",
+    "reject": "Refuser",
+    "applied": "Proposition appliquée.",
+    "rejected": "Proposition refusée.",
+    "proposalReviewError": "Impossible de valider la proposition.",
+    "proposalVerificationError": "Le serveur n’a pas confirmé l’application de cette proposition. Elle reste inachevée.",
+    "autoAccept": "Accepter automatiquement les propositions",
+    "model": "Modèle",
+    "reasoningEffort": "Effort de raisonnement",
+    "reasoningLevels": {
+      "low": "Faible",
+      "medium": "Moyen",
+      "high": "Élevé",
+      "xhigh": "Très élevé"
+    },
+    "backgroundJobs": "Travail en arrière-plan",
+    "previousJob": "Tâche précédente en arrière-plan",
+    "nextJob": "Tâche suivante en arrière-plan",
+    "categorizationJob": "Catégorisation du catalogue",
+    "contentJob": "Génération du contenu produit",
+    "jobStatus": {
+      "queued": "En attente",
+      "running": "En cours",
+      "completed": "Terminé",
+      "cancelled": "Annulé",
+      "failed": "Échec"
+    },
+    "categorizationSummary": "{applied} appliquées · {proposed} à valider · {unchanged} inchangées · {ambiguous} ambiguës · {failed} échouées",
+    "cancel": "Annuler",
+    "vs": "contre",
+    "metric": "Indicateur",
+    "current": "Actuel",
+    "previous": "Précédent",
+    "change": "Évolution",
+    "yes": "Oui",
+    "no": "Non"
+  },
+  "products": {
+    "ai": {
+      "title": "Contenu produit par IA",
+      "description": "Générez le contenu localisé manquant, vérifiez chaque champ et appliquez uniquement les modifications approuvées.",
+      "generateMissing": "Générer le contenu manquant",
+      "generated": "Proposition de contenu IA créée.",
+      "before": "Actuel",
+      "proposed": "Proposé",
+      "approve": "Approuver et appliquer",
+      "reject": "Rejeter",
+      "applied": "Proposition de contenu IA appliquée.",
+      "rejected": "Proposition de contenu IA rejetée.",
+      "verificationError": "Le serveur n’a pas confirmé les modifications du produit. La proposition reste inachevée.",
+      "empty": "Aucune proposition de contenu en attente."
+    },
+    "view": {
+      "cards": "Cartes",
+      "table": "Tableau"
+    },
+    "copy": {
+      "action": "Copier les ID produits",
+      "success": "{count} ID produit copiés.",
+      "error": "Impossible de copier {count} ID produit."
+    },
+    "promos": {
+      "title": "URLs promo",
+      "description": "Créez des liens de remise cachés avec un prix promotionnel fixe.",
+      "add": "Ajouter une promo",
+      "empty": "Aucune URL promo pour ce produit.",
+      "code": "Code promo",
+      "price": "Prix promo",
+      "startsAt": "Début",
+      "endsAt": "Fin",
+      "active": "Active",
+      "copy": "Copier l'URL",
+      "remove": "Supprimer la promo",
+      "copySuccess": "URL promo copiée.",
+      "copyError": "Impossible de copier l'URL promo.",
+      "loadError": "Impossible de charger les URLs promo du produit."
+    },
+    "export": {
+      "action": "Exporter le catalogue Meta",
+      "title": "Exporter {count} produits vers le catalogue Meta",
+      "previewTitle": "Aperçu de l'export Meta",
+      "confirm": "Exporter en XLSX",
+      "fullPreview": "Aperçu taille réelle",
+      "compactPreview": "Aperçu compact"
+    },
+    "exportAll": {
+      "action": "Exporter tous les produits",
+      "runningAction": "Export en cours",
+      "cancel": "Annuler l'export",
+      "cancelPending": "Annulation...",
+      "download": "Télécharger l'export",
+      "status": {
+        "running": "En cours",
+        "completed": "Terminé",
+        "cancelled": "Annulé",
+        "failed": "Échoué"
+      },
+      "progress": {
+        "counting": "Comptage des produits",
+        "loading": "Lecture des produits",
+        "processing-images": "Préparation des images carrées du catalogue",
+        "packaging": "Création du fichier"
+      },
+      "notifications": {
+        "start": {
+          "loading": "Démarrage de l'export des produits...",
+          "success": "Export des produits démarré.",
+          "error": "Échec du démarrage de l'export des produits."
+        },
+        "cancel": {
+          "loading": "Annulation de l'export des produits...",
+          "success": "Demande d'annulation de l'export envoyée.",
+          "error": "Échec de l'annulation de l'export des produits."
+        },
+        "status": {
+          "completed": "L'export des produits est prêt à être téléchargé.",
+          "cancelled": "L'export des produits a été annulé.",
+          "failed": "L'export des produits a échoué."
+        }
+      }
+    }
+  },
+  "ordersManager": {
+    "view": {
+      "cards": "Cartes",
+      "table": "Tableau"
+    },
+    "searchPlaceholder": "Rechercher par nom client ou numéro de téléphone",
+    "totalOrders": "Total commandes : {count}",
+    "overview": {
+      "title": "Statut quotidien des commandes",
+      "subtitle": "Activité du {date}",
+      "today": "Aujourd'hui",
+      "yesterday": "Hier",
+      "refreshing": "Actualisation de l'aperçu",
+      "unavailable": "L'aperçu du statut des commandes est indisponible car la base de données n'est pas connectée.",
+      "metrics": {
+        "newOrders": "Nouvelles commandes",
+        "confirmationStatusChanges": "Changements de statut de confirmation",
+        "confirmedToday": "Confirmées aujourd'hui",
+        "noAnswerOrders": "Commandes sans réponse",
+        "adminCancelled": "Annulées par admin",
+        "carrierCancelled": "Annulées par transporteur",
+        "shipmentUpdates": "Mises à jour livraison"
+      },
+      "projection": {
+        "title": "Profit futur projeté",
+        "basisLabel": "Base de projection",
+        "confirmedBasis": "Commandes confirmées",
+        "postedBasis": "Commandes envoyées",
+        "grossProfit": "Profit brut futur",
+        "adSpend": "Dépense pub",
+        "returnRate": "Taux retours / échecs",
+        "estimatedReturns": "Retours estimés",
+        "returnLoss": "Perte estimée liée aux retours"
+      }
+    },
+    "filters": {
+      "statusLabel": "Filtrer par statut",
+      "allStatuses": "Tous les statuts",
+      "noAnswerCountLabel": "Filtrer par nombre sans réponse",
+      "allNoAnswerCounts": "Tous les nombres sans réponse"
+    },
+    "columns": {
+      "date": "Date",
+      "client": "Client",
+      "products": "Produits",
+      "address": "Adresse",
+      "amount": "Montant",
+      "status": "Statut",
+      "confirmedBy": "Confirmé par",
+      "notes": "Notes"
+    },
+    "phone": {
+      "label": "Numéro de téléphone",
+      "call": "Appeler le numéro",
+      "save": "Enregistrer le téléphone",
+      "cancel": "Annuler la modification du téléphone"
+    },
+    "name": {
+      "label": "Nom du client",
+      "save": "Enregistrer le nom",
+      "cancel": "Annuler la modification du nom"
+    },
+    "copy": {
+      "label": "Copier le numéro",
+      "success": "Numéro copié.",
+      "error": "Impossible de copier le numéro."
+    },
+    "tracking": {
+      "copy": "Copier le lien de suivi",
+      "success": "Lien de suivi copié.",
+      "error": "Impossible de copier le lien de suivi.",
+      "unavailable": "Cette commande ne possède pas encore de lien de suivi."
+    },
+    "capture": {
+      "degraded": "Capture incomplète"
+    },
+    "address": {
+      "delivery": "Type de livraison",
+      "region": "Région",
+      "city": "Ville"
+    },
+    "amount": {
+      "subtotal": "Produits",
+      "deliveryFee": "Livraison",
+      "promoDiscount": "Promo {code}",
+      "total": "Total"
+    },
+    "actions": {
+      "editProducts": "Modifier les produits",
+      "viewDetails": "Voir les détails",
+      "deleteOrder": "Supprimer la commande"
+    },
+    "bulk": {
+      "statusLabel": "Statut en lot",
+      "applyStatus": "Appliquer le statut"
+    },
+    "export": {
+      "selectedAction": "Exporter la sélection",
+      "confirmedAction": "Exporter les confirmées",
+      "selectedTitle": "Exporter {count} commandes sélectionnées",
+      "confirmedTitle": "Exporter {count} commandes confirmées",
+      "previewTitle": "Aperçu de l'export",
+      "previewDescription": "{count} commandes seront incluses dans le fichier.",
+      "previewHint": "L'aperçu compact ajuste la feuille au modal. Passez en taille réelle si vous devez l'inspecter en détail.",
+      "fullPreview": "Aperçu taille réelle",
+      "compactPreview": "Aperçu compact",
+      "confirm": "Exporter en XLSX",
+      "confirmAndDispatch": "Exporter et marquer comme expédiées",
+      "loading": "Préparation de l'aperçu d'export...",
+      "ready": "L'aperçu d'export est prêt.",
+      "success": "Commandes exportées.",
+      "error": "Échec de l'export des commandes.",
+      "empty": "Sélectionnez au moins une commande à exporter.",
+      "emptyConfirmed": "Aucune commande confirmée à exporter.",
+      "progress": {
+        "exporting": "Génération du fichier",
+        "updating-statuses": "Mise à jour des statuts"
+      }
+    },
+    "ecotrack": {
+      "selectedAction": "Envoyer la sélection à Delivro",
+      "confirmedAction": "Envoyer les confirmées à Delivro",
+      "selectedTitle": "Envoyer {count} commandes sélectionnées à Delivro",
+      "confirmedTitle": "Envoyer {count} commandes confirmées à Delivro",
+      "emirSelectedAction": "Envoyer la sélection à Emir",
+      "emirConfirmedAction": "Envoyer les confirmées à Emir",
+      "emirSelectedTitle": "Envoyer {count} commandes sélectionnées à Emir",
+      "emirConfirmedTitle": "Envoyer {count} commandes confirmées à Emir",
+      "previewTitle": "Aperçu de l'envoi Ecotrack",
+      "previewEligible": "Commandes éligibles",
+      "previewSkipped": "Commandes ignorées",
+      "previewInvalid": "Commandes invalides",
+      "emptyEligible": "Aucune commande éligible.",
+      "emptySkipped": "Aucune commande ignorée.",
+      "emptyInvalid": "Aucune commande invalide.",
+      "confirm": "Envoyer à Ecotrack",
+      "loading": "Préparation de l'aperçu Ecotrack...",
+      "ready": "L'aperçu Ecotrack est prêt.",
+      "success": "Envoi Ecotrack terminé.",
+      "cancelled": "Envoi Ecotrack annulé.",
+      "error": "Échec de l'envoi des commandes à Ecotrack.",
+      "empty": "Sélectionnez au moins une commande à envoyer.",
+      "emptyConfirmed": "Aucune commande confirmée à envoyer.",
+      "resultTitle": "Résultats de l'envoi",
+      "summary": {
+        "totalRequested": "Demandées",
+        "eligible": "Éligibles",
+        "created": "Créées",
+        "skipped": "Ignorées",
+        "invalid": "Invalides",
+        "failed": "Échouées"
+      },
+      "progress": {
+        "loading": "Chargement des commandes",
+        "validating-token": "Validation du jeton Ecotrack",
+        "classifying": "Classification des commandes",
+        "creating": "Création des commandes Ecotrack",
+        "persisting": "Enregistrement local des mises à jour",
+        "completed": "Terminé"
+      },
+      "reasons": {
+        "already_posted": "Déjà envoyée",
+        "status_not_confirmed": "Commande non confirmée",
+        "missing_phone": "Numéro manquant",
+        "missing_wilaya": "Wilaya manquante",
+        "missing_commune": "Commune manquante",
+        "invalid_commune": "Commune invalide",
+        "missing_address": "Adresse manquante",
+        "missing_name": "Nom client manquant"
+      }
+    },
+    "delivery": {
+      "home": "Domicile",
+      "office": "Bureau"
+    },
+    "status": {
+      "notContacted": "Pas contacté",
+      "noAnswer": "Sans réponse",
+      "noAnswerWithCount": "Sans réponse {count}",
+      "confirmed": "Confirmée",
+      "posted": "Envoyée",
+      "dispatched": "Expédié",
+      "completed": "Complétée",
+      "manualCompleted": "Complétée manuellement",
+      "delayed": "Reportée",
+      "inDelivery": "En livraison",
+      "returned": "Retournée",
+      "failed": "Échouée",
+      "incrementNoAnswer": "Sans réponse {count}",
+      "noAnswerCounter": "Compteur : {count}",
+      "increaseNoAnswer": "Augmenter sans réponse à {count}",
+      "decreaseNoAnswer": "Réduire sans réponse à {count}",
+      "cancelled": "Annulée"
+    },
+    "loading": {
+      "refreshing": "Actualisation des commandes",
+      "inProgress": "En cours"
+    },
+    "history": {
+      "title": "Historique des statuts",
+      "button": "Historique",
+      "empty": "Aucun historique de statut."
+    },
+    "details": {
+      "title": "Détails de la commande"
+    },
+    "shoppingList": {
+      "title": "Liste de préparation",
+      "description": "La vue consolidée indique quoi rassembler et le panneau de droite garde le détail par commande.",
+      "selectedAction": "Liste sélectionnée",
+      "confirmedAction": "Liste des commandes confirmées",
+      "dispatchedAction": "Liste expédiée",
+      "postedAction": "Liste des commandes envoyées",
+      "postedAndConfirmedAction": "Liste des commandes envoyées et confirmées",
+      "selectedTitle": "Liste pour {count} commandes sélectionnées",
+      "confirmedTitle": "Liste pour les commandes confirmées",
+      "dispatchedTitle": "Liste pour les commandes expédiées",
+      "postedTitle": "Liste pour les commandes envoyées",
+      "postedAndConfirmedTitle": "Liste pour les commandes envoyées et confirmées",
+      "consolidatedTitle": "À préparer",
+      "ordersTitle": "Détail par commande",
+      "generatedAt": "Générée le {date}",
+      "previousGeneration": "Liste enregistrée précédente",
+      "notes": "Notes",
+      "unitPrice": "Prix",
+      "purchasePrice": "Prix d'achat",
+      "print": "Version impression",
+      "reset": "Réinitialiser la liste",
+      "refresh": "Actualiser la liste",
+      "acceptAllInventoryChanges": "Accepter toutes les baisses de stock",
+      "applySelectedInventoryChanges": "Appliquer les baisses sélectionnées",
+      "addProductTitle": "Ajouter un produit",
+      "addProductPlaceholder": "Rechercher dans le catalogue",
+      "addProductAction": "Ajouter le produit",
+      "addProductError": "Impossible d’ajouter le produit à la liste.",
+      "toggleItem": "Basculer {title}",
+      "customItem": "Ajouté manuellement",
+      "increaseQuantity": "Augmenter la quantité de {title}",
+      "decreaseQuantity": "Réduire la quantité de {title}",
+      "increaseInventoryDelta": "Augmenter la baisse de stock pour {title}",
+      "decreaseInventoryDelta": "Réduire la baisse de stock pour {title}",
+      "inventoryAdjustLabel": "Baisse du stock",
+      "inventoryDecreasePreview": "Le stock sera réduit de {count}",
+      "inventoryShortage": "Manque {count}",
+      "inventoryApplied": "Baisse de stock appliquée : {count}",
+      "inventoryApplyLoading": "Application des baisses de stock pour {count} produits...",
+      "inventoryApplySuccess": "Baisses de stock appliquées pour {count} produits.",
+      "inventoryApplyError": "Impossible d’appliquer les baisses de stock pour {count} produits.",
+      "noInventoryChanges": "Aucune baisse de stock prête à être appliquée.",
+      "removeItem": "Retirer {title}",
+      "loading": "Création de la liste...",
+      "ready": "Liste prête.",
+      "saving": "Enregistrement de la liste...",
+      "saved": "Liste enregistrée.",
+      "saveError": "Impossible d’enregistrer les changements de la liste.",
+      "lastSavedBy": "Dernier enregistrement par {name}",
+      "sharedDraftLoaded": "Liste partagée chargée.",
+      "refreshing": "Actualisation de la liste...",
+      "refreshReady": "Liste actualisée.",
+      "error": "Échec de création de la liste.",
+      "emptySelection": "Sélectionnez au moins une commande.",
+      "emptyConfirmed": "Aucune commande confirmée disponible pour la liste.",
+      "emptyDispatched": "Aucune commande expédiée disponible pour la liste.",
+      "emptyPosted": "Aucune commande envoyée disponible pour la liste.",
+      "emptyPostedAndConfirmed": "Aucune commande envoyée ou confirmée disponible pour la liste.",
+      "printError": "Impossible d’ouvrir la version impression."
+    },
+    "products": {
+      "title": "Modifier les produits",
+      "searchTitle": "Trouver des produits",
+      "searchPlaceholder": "Rechercher par produit, SKU ou code-barres",
+      "searchHint": "Recherchez dans le catalogue pour ajouter des produits à cette commande.",
+      "searchLoading": "Recherche des produits...",
+      "searchEmpty": "Aucun produit trouvé.",
+      "selectedTitle": "Produits sélectionnés",
+      "selectedDescription": "Ajustez les quantités ou retirez des produits avant d’enregistrer.",
+      "add": "Ajouter",
+      "unitPrice": "Prix unitaire",
+      "lineTotal": "Total ligne",
+      "quantity": "Qté : {count}",
+      "increaseQuantity": "Augmenter la quantité de {title}",
+      "decreaseQuantity": "Réduire la quantité de {title}",
+      "removeProduct": "Retirer {title}",
+      "empty": "Aucun produit"
+    },
+    "notes": {
+      "save": "Enregistrer la note",
+      "empty": "Aucune note"
+    },
+    "placeholders": {
+      "region": "Région à venir",
+      "city": "Ville à venir",
+      "street": "Adresse"
+    },
+    "empty": {
+      "title": "Aucune commande trouvée",
+      "description": "Essayez une autre recherche ou attendez la synchronisation de nouvelles commandes."
+    },
+    "system": "Système",
+    "unconfirmed": "Non confirmée",
+    "unconfirmedDate": "Aucun horodatage de confirmation"
+  },
+  "ordersEcotrackManager": {
+    "searchPlaceholder": "Rechercher par tracking, client, telephone, adresse, commune, wilaya, produit ou statut",
+    "filters": {
+      "statusLabel": "Filtrer par statut ECOTRACK",
+      "allStatuses": "Tous les statuts",
+      "sortKeyLabel": "Trier par",
+      "sortDirectionLabel": "Sens",
+      "staleOnly": "Afficher seulement les donnees perimees"
+    },
+    "sort": {
+      "createdAt": "Date de creation",
+      "trackingNumber": "Numero de tracking",
+      "clientName": "Nom du client",
+      "currentStatus": "Statut actuel",
+      "lastStatusSyncedAt": "Derniere synchro statut",
+      "asc": "Croissant",
+      "desc": "Decroissant"
+    },
+    "columns": {
+      "trackingNumber": "Numero de tracking",
+      "client": "Client et telephone",
+      "address": "Adresse, commune, wilaya, livraison",
+      "products": "Produits",
+      "amount": "Montant",
+      "status": "Statut ECOTRACK"
+    },
+    "reference": "Reference",
+    "missingValue": "Valeur manquante",
+    "staleBadge": "Perime",
+    "driverPhone": "Telephone livreur",
+    "estimatedFee": "Frais estimes",
+    "deskPhone": "Telephone point relais",
+    "deskCommune": "Commune point relais",
+    "deskAddress": "Adresse point relais",
+    "lastSync": "Derniere synchro statut",
+    "lastTrackingSync": "Derniere synchro tracking",
+    "lastMajSync": "Derniere synchro mise a jour",
+    "neverSynced": "Jamais synchronise",
+    "summaryTitle": "Resume de l'expedition",
+    "amounts": {
+      "subtotal": "Produits",
+      "deliveryFee": "Livraison",
+      "total": "Total"
+    },
+    "history": {
+      "title": "Historique de la commande",
+      "majTitle": "Mises a jour",
+      "timelineTitle": "Historique tracking",
+      "empty": "Aucun historique disponible.",
+      "emptyMaj": "Aucune mise a jour en cache.",
+      "emptyTimeline": "Aucun evenement tracking en cache."
+    },
+    "actions": {
+      "scanTrackingNumber": "Scanner un tracking",
+      "printSelected": "Imprimer les etiquettes selectionnees",
+      "refreshSelected": "Rafraichir la selection",
+      "clearSelection": "Vider la selection",
+      "refreshVisible": "Rafraichir la page",
+      "dispatchReady": "Expedier prete a expedier",
+      "dispatchSelected": "Expedier la selection",
+      "showHistorySelected": "Afficher l'historique de la selection",
+      "showHistoryVisible": "Afficher l'historique de la page",
+      "label": "Etiquette",
+      "refresh": "Rafraichir",
+      "dispatch": "Expedier",
+      "saveOnly": "Enregistrer seulement",
+      "saveAndDispatch": "Enregistrer et expedier",
+      "editAndRecreate": "Modifier et recreer",
+      "maj": "Ajouter une mise a jour",
+      "return": "Demander un retour",
+      "showHistory": "Afficher l'historique",
+      "hideHistory": "Masquer l'historique"
+    },
+    "loading": {
+      "refreshing": "Rafraichissement des expeditions ECOTRACK",
+      "inProgress": "En cours"
+    },
+    "empty": {
+      "title": "Aucune expedition ECOTRACK",
+      "description": "Les commandes apparaissent ici apres leur creation sur ECOTRACK et l'attribution d'un tracking."
+    },
+    "dialogs": {
+      "editTitle": "Modifier l'expedition ECOTRACK",
+      "editDescription": "Mettez a jour la commande locale puis ECOTRACK tant que l'expedition est encore prete_a_expedier.",
+      "editHint": "Le sous-total suit les produits selectionnes sauf si vous le remplacez manuellement. Le frais de livraison est recalcule quand le type de livraison ou la wilaya change.",
+      "recreateTitle": "Modifier et recreer l'expedition ECOTRACK",
+      "recreateDescription": "Mettez a jour {name}, supprimez le lien de suivi ECOTRACK local actuel, puis creez immediatement une nouvelle expedition ECOTRACK.",
+      "finalizeTitle": "Verification finale avant expedition ECOTRACK",
+      "finalizeDescription": "Verifiez et mettez a jour {name} une derniere fois, puis enregistrez les changements et expediez l'envoi.",
+      "deleteTitle": "Supprimer l'expedition ECOTRACK",
+      "deleteDescription": "Supprimer l'expedition ECOTRACK pour {name}. La commande locale restera disponible pour un repost plus tard.",
+      "dispatchTitle": "Expedier l'expedition ECOTRACK",
+      "dispatchDescription": "Expedier l'envoi pour {name} et verrouiller les modifications avant expedition.",
+      "majTitle": "Ajouter une mise a jour ECOTRACK",
+      "majDescription": "Envoyer une mise a jour pour {name}."
+    },
+    "fields": {
+      "firstName": "Prenom",
+      "lastName": "Nom",
+      "phoneNumber1": "Telephone principal",
+      "phoneNumber2": "Telephone secondaire",
+      "scanTrackingNumber": "Scanner un tracking",
+      "scanTrackingNumberPlaceholder": "Scannez ou collez un numero de tracking ECOTRACK",
+      "delivery": "Type de livraison",
+      "state": "Wilaya",
+      "statePlaceholder": "Selectionner une wilaya",
+      "city": "Commune",
+      "cityPlaceholder": "Selectionner une commune",
+      "homeAddress": "Adresse",
+      "note": "Remarque",
+      "askCollection": "Demander un ramassage",
+      "askCollectionDescription": "Envoie ask_collection=1 lors de l'expedition si un ramassage est necessaire.",
+      "majContent": "Contenu de la mise a jour",
+      "majHint": "255 caracteres maximum."
+    },
+    "confirmations": {
+      "return": "Demander un retour pour cette expedition ECOTRACK ?"
+    },
+    "notifications": {
+      "refresh": {
+        "loading": "Rafraichissement de l'expedition ECOTRACK...",
+        "success": "Expedition ECOTRACK rafraichie.",
+        "partial": "{successCount} expeditions rafraichies, {failedCount} en echec.",
+        "allFailed": "Echec du rafraichissement de toutes les expeditions ECOTRACK selectionnees.",
+        "error": "Echec du rafraichissement ECOTRACK."
+      },
+      "update": {
+        "loading": "Enregistrement de l'expedition ECOTRACK...",
+        "success": "Expedition ECOTRACK enregistree.",
+        "error": "Echec de l'enregistrement ECOTRACK."
+      },
+      "recreate": {
+        "loading": "Recreation de l'expedition ECOTRACK...",
+        "success": "Expedition ECOTRACK recreee.",
+        "error": "Echec de la recreation ECOTRACK."
+      },
+      "delete": {
+        "loading": "Suppression de l'expedition ECOTRACK...",
+        "success": "Expedition ECOTRACK supprimee.",
+        "error": "Echec de la suppression ECOTRACK."
+      },
+      "dispatch": {
+        "loading": "Expedition ECOTRACK en cours...",
+        "success": "Expedition ECOTRACK envoyee.",
+        "partial": "{successCount} expeditions envoyees, {failedCount} en echec.",
+        "allFailed": "Echec de l'expedition de toutes les expeditions ECOTRACK selectionnees.",
+        "error": "Echec de l'expedition ECOTRACK."
+      },
+      "maj": {
+        "loading": "Envoi de la mise a jour ECOTRACK...",
+        "success": "Mise a jour ECOTRACK envoyee.",
+        "error": "Echec de l'envoi de la mise a jour ECOTRACK."
+      },
+      "return": {
+        "loading": "Demande de retour ECOTRACK...",
+        "success": "Retour ECOTRACK demande.",
+        "error": "Echec de la demande de retour ECOTRACK."
+      },
+      "labels": {
+        "loading": "Preparation des etiquettes ECOTRACK...",
+        "success": "Etiquettes ECOTRACK pretes.",
+        "partial": "{successCount} etiquettes preparees, {failedCount} en echec.",
+        "allFailed": "Echec de la preparation de toutes les etiquettes ECOTRACK selectionnees.",
+        "error": "Echec de la preparation des etiquettes ECOTRACK."
+      },
+      "scan": {
+        "loading": "Recherche du numero de tracking ECOTRACK...",
+        "success": "Le tracking {trackingNumber} est pret pour la verification finale.",
+        "notFound": "Aucune expedition ECOTRACK trouvee pour le tracking {trackingNumber}.",
+        "notDispatchable": "Le tracking {trackingNumber} est actuellement {status}. Seules les expeditions prete_a_expedier peuvent etre finalisees apres scan.",
+        "error": "Echec de la recherche du tracking ECOTRACK."
+      },
+      "finalize": {
+        "loading": "Enregistrement puis expedition ECOTRACK...",
+        "success": "Expedition ECOTRACK enregistree puis expediee.",
+        "partialFailure": "Changements enregistres, expedition echouee : {message}",
+        "error": "Echec de l'enregistrement et de l'expedition ECOTRACK."
+      }
+    },
+    "statuses": {
+      "prete_a_expedier": "Prete a expedier",
+      "en_ramassage": "En ramassage",
+      "en_preparation_stock": "En preparation stock",
+      "vers_hub": "Vers hub",
+      "en_hub": "En hub",
+      "vers_wilaya": "Vers wilaya",
+      "en_preparation": "En preparation",
+      "en_livraison": "En livraison",
+      "suspendu": "Suspendu",
+      "livre_non_encaisse": "Livre non encaisse",
+      "encaisse_non_paye": "Encaisse non paye",
+      "paiements_prets": "Paiements prets",
+      "paye_et_archive": "Paye et archive",
+      "retour_chez_livreur": "Retour chez livreur",
+      "retour_transit_entrepot": "Retour transit entrepot",
+      "retour_en_traitement": "Retour en traitement",
+      "retour_recu": "Retour recu",
+      "retour_archive": "Retour archive",
+      "annule": "Annule"
+    },
+    "historyStatuses": {
+      "order_information_received_by_carrier": "Commande enregistrée et validée par le vendeur",
+      "picked": "Commande récupérée par le prestataire de livraison",
+      "accepted_by_carrier": "Commande réceptionnée par le centre de tri",
+      "dispatched_to_driver": "Commande dispatchée au livreur",
+      "attempt_delivery": "Tentative de livraison",
+      "return_asked": "Retour initié par le centre de tri",
+      "return_in_transit": "Retour en transit",
+      "return_received": "Retour réceptionné par le vendeur",
+      "livred": "Commande livrée",
+      "encaissed": "Commande encaissée",
+      "payed": "Paiement effectué"
+    }
+  },
+  "inventory": {
+    "searchPlaceholder": "Rechercher par produit, SKU ou code-barres",
+    "searchHint": "Seuls les produits avec une quantité supérieure à zéro sont affichés par défaut. Recherchez ou scannez pour faire réapparaître les articles masqués.",
+    "scanAdd": "Scanner l’entrée",
+    "refreshing": "Actualisation du stock...",
+    "columns": {
+      "product": "Produit",
+      "barcode": "Code-barres",
+      "quantity": "Quantité en stock",
+      "inStock": "En stock"
+    },
+    "productMeta": "SKU : {sku}",
+    "noSku": "Aucun SKU",
+    "addBarcode": "Ajouter un code-barres",
+    "emptyTitle": "Aucun article de stock à afficher",
+    "empty": "Recherchez un produit ou scannez un code-barres pour réajouter du stock.",
+    "decreaseRow": "Diminuer la quantité pour {name}",
+    "increaseRow": "Augmenter la quantité pour {name}",
+    "toggleStock": "Basculer le statut en stock pour {name}",
+    "barcode": {
+      "addTitle": "Ajouter un code-barres pour {name}",
+      "editTitle": "Modifier le code-barres de {name}",
+      "description": "Enregistrez un code-barres pour retrouver directement le produit depuis la table d’inventaire.",
+      "placeholder": "Saisir un code-barres"
+    },
+    "scan": {
+      "title": "Scanner un code-barres ou une commande",
+      "description": "Saisissez un code-barres exact ou un ID de commande pour réajouter des produits au stock.",
+      "placeholder": "Code-barres ou ID de commande",
+      "action": "Scanner",
+      "barcodeTitle": "Ajouter une unité de {name}",
+      "barcodeDescription": "Confirmez pour ajouter une unité du code-barres scanné.",
+      "confirmAddOne": "Ajouter 1 unité",
+      "orderTitle": "Commande n°{id}",
+      "toggleOrderItem": "Basculer l’article {name}",
+      "orderQuantity": "Quantité commandée : {count}",
+      "currentInventory": "Stock actuel : {count}",
+      "confirmOrderAdd": "Ajouter les produits sélectionnés",
+      "orderApplyLoading": "Ajout de {count} produits de commande au stock...",
+      "orderApplySuccess": "{count} produits de commande ont été ajoutés au stock.",
+      "orderApplyError": "Impossible d’ajouter {count} produits de commande au stock.",
+      "notFound": "Aucun code-barres ou ID de commande correspondant n’a été trouvé.",
+      "error": "Échec du scan d’inventaire.",
+      "noSelection": "Sélectionnez au moins un produit de la commande scannée."
+    },
+    "notifications": {
+      "barcode": {
+        "create": {
+          "loading": "Ajout du code-barres pour {name}...",
+          "success": "Code-barres ajouté pour {name}.",
+          "error": "Échec de l’ajout du code-barres pour {name}."
+        },
+        "save": {
+          "loading": "Mise à jour du code-barres pour {name}...",
+          "success": "Code-barres mis à jour pour {name}.",
+          "error": "Échec de la mise à jour du code-barres pour {name}."
+        }
+      },
+      "quantity": {
+        "increase": {
+          "loading": "Augmentation de la quantité pour {name}...",
+          "success": "Quantité augmentée pour {name}.",
+          "error": "Échec de l’augmentation de la quantité pour {name}."
+        },
+        "decrease": {
+          "loading": "Diminution de la quantité pour {name}...",
+          "success": "Quantité diminuée pour {name}.",
+          "error": "Échec de la diminution de la quantité pour {name}."
+        },
+        "scan": {
+          "loading": "Scan de {name} dans le stock...",
+          "success": "{name} a été ajouté au stock par scan.",
+          "error": "Échec du scan de {name} dans le stock."
+        }
+      },
+      "stock": {
+        "enable": {
+          "loading": "Marquage de {name} comme en stock...",
+          "success": "{name} est maintenant en stock.",
+          "error": "Échec du marquage de {name} comme en stock."
+        },
+        "disable": {
+          "loading": "Marquage de {name} comme hors stock...",
+          "success": "{name} est maintenant hors stock.",
+          "error": "Échec du marquage de {name} comme hors stock."
+        }
+      }
+    }
+  },
+  "settings": {
+    "general": {
+      "currentRoleLabel": "Rôle actuel",
+      "signedInEmailLabel": "E-mail connecté",
+      "missingEmail": "Aucun e-mail disponible",
+      "rolePolicyLabel": "Politique d’attribution des rôles",
+      "rolePolicyBody": "L’accès à l’application commence par une adresse e-mail autorisée. Ensuite, les admins et développeurs attribuent un rôle natif ou personnalisé, et ce rôle détermine ce que l’utilisateur peut voir et faire."
+    },
+    "permissions": {
+      "title": "Configuration des permissions et rôles",
+      "description": "Cette zone permet de vérifier l’accès privilégié de démarrage et les rôles disponibles pour les employés autorisés.",
+      "editableRolesTitle": "Rôles modifiables",
+      "editableRolesDescription": "Ces rôles peuvent être attribués via les flux applicatifs.",
+      "codeManagedRolesTitle": "Rôles gérés par le code",
+      "codeManagedRolesDescription": "Les accès admin et développeur sont accordés uniquement depuis les listes d’e-mails du codebase.",
+      "adminEmailsTitle": "Liste blanche des e-mails admin",
+      "adminEmailsDescription": "Les e-mails de cette liste sont promus Admin.",
+      "developerEmailsTitle": "Liste blanche des e-mails développeur",
+      "developerEmailsDescription": "Les e-mails de cette liste sont promus Développeur.",
+      "noAdminEmails": "Aucun e-mail admin configuré pour le moment.",
+      "noDeveloperEmails": "Aucun e-mail développeur configuré pour le moment.",
+      "customRolesTitle": "Rôles personnalisés",
+      "customRolesDescription": "Les admins et développeurs peuvent créer ici des rôles non privilégiés et leur attribuer des permissions."
+    },
+    "accessManager": {
+      "title": "Contrôle d’accès des employés",
+      "description": "Seules les adresses e-mail autorisées peuvent entrer dans l’application. Chaque adresse autorisée doit recevoir un rôle natif ou personnalisé.",
+      "count": "{count} e-mails autorisés",
+      "emailLabel": "E-mail de l’employé",
+      "emailPlaceholder": "employe@entreprise.com",
+      "assignmentLabel": "Rôle attribué",
+      "assignmentPlaceholder": "Sélectionnez une attribution de rôle",
+      "assignmentHint": "Choisissez soit un rôle natif, soit une définition de rôle personnalisée.",
+      "builtInGroup": "Rôles natifs",
+      "customGroup": "Rôles personnalisés",
+      "createAction": "Autoriser l’e-mail",
+      "updateAction": "Mettre à jour l’accès",
+      "cancelEditAction": "Annuler la modification",
+      "columns": {
+        "email": "E-mail",
+        "assignment": "Attribution"
+      },
+      "notifications": {
+        "save": {
+          "loading": "Enregistrement de l’accès...",
+          "success": "Accès enregistré."
+        },
+        "delete": {
+          "loading": "Suppression de l’accès...",
+          "success": "Accès supprimé."
+        }
+      }
+    },
+    "ecotrack": {
+      "title": "Synchronisation du catalogue ECOTRACK",
+      "description": "Affiche le dernier état de récupération du catalogue ECOTRACK enregistré en base de données.",
+      "lastFetchLabel": "Dernière récupération",
+      "statusLabel": "Statut",
+      "statusSuccess": "Réussie",
+      "statusFailed": "Échouée",
+      "statusUnknown": "Jamais exécutée",
+      "neverSynced": "Jamais synchronisé",
+      "errorLabel": "Dernière erreur"
+    },
+    "rolesManager": {
+      "title": "Définitions de rôles personnalisés",
+      "description": "Créez des rôles réutilisables non privilégiés et attribuez les permissions qu’ils doivent accorder.",
+      "existingCount": "{count} rôles",
+      "nameLabel": "Nom du rôle",
+      "namePlaceholder": "ex. Responsable campagnes",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Décrivez l’objectif de ce rôle",
+      "permissionsLabel": "Permissions attribuées",
+      "createAction": "Créer le rôle",
+      "updateAction": "Mettre à jour le rôle",
+      "cancelEditAction": "Annuler la modification",
+      "editAction": "Modifier les permissions",
+      "noDescription": "Aucune description fournie pour le moment.",
+      "notifications": {
+        "create": {
+          "loading": "Création du rôle {name}...",
+          "success": "Le rôle {name} a été créé.",
+          "error": "Échec de la création du rôle {name}."
+        },
+        "update": {
+          "loading": "Enregistrement du rôle {name}...",
+          "success": "Le rôle {name} a été mis à jour.",
+          "error": "Échec de la mise à jour du rôle {name}."
+        }
+      }
+    },
+    "permissionLabels": {
+      "products_write": "Gérer les produits",
+      "orders_write": "Gérer les commandes",
+      "assets_write": "Gérer les ressources et uploads",
+      "brands_categories_write": "Gérer les marques et catégories",
+      "bulletin_moderate": "Modérer les publications du bulletin",
+      "ops_view": "Voir les tableaux et journaux Ops",
+      "settings_manage": "Gérer la configuration des paramètres",
+      "ai_use": "Utiliser l’assistant IA d’administration",
+      "ai_catalog_propose": "Générer des propositions IA pour le catalogue",
+      "ai_catalog_apply": "Appliquer les modifications IA au catalogue",
+      "ai_analytics_query": "Interroger les analyses avec l’IA",
+      "ai_pricing_analyze": "Analyser les prix et remises avec l’IA",
+      "ai_pricing_apply": "Appliquer les prix et remises proposés par l’IA",
+      "ai_landing_publish": "Publier les pages de destination générées par l’IA"
+    }
+  },
+  "storefrontSettings": {
+    "title": "Paramètres de la boutique",
+    "description": "Gérez ici les informations de contact visibles par les clients. Cette page masquée accueillera aussi les futurs réglages de mise en page et d’information de la boutique.",
+    "contactTitle": "Coordonnées",
+    "contactDescription": "La boutique utilise ce numéro pour les appels directs des clients.",
+    "phoneLabel": "Numéro de téléphone client",
+    "phoneHint": "Un numéro mobile algérien au format national ou +213.",
+    "callsLabel": "Autoriser les appels",
+    "callsHint": "Afficher les actions d’appel direct dans la boutique.",
+    "assistantTitle": "Assistant d’achat IA",
+    "assistantDescription": "Contrôlez la disponibilité du conseiller produits sur la nouvelle boutique.",
+    "assistantLabel": "Activer l’assistant d’achat IA",
+    "assistantHint": "Affiche le conseiller sur les pages de navigation et de produits. Il reste absent du checkout et de la page de confirmation.",
+    "saveAction": "Enregistrer les paramètres",
+    "savingAction": "Enregistrement...",
+    "saving": "Enregistrement des paramètres de la boutique...",
+    "saved": "Paramètres de la boutique enregistrés.",
+    "saveError": "Impossible d’enregistrer les paramètres de la boutique."
+  },
+  "auth": {
+    "title": "Accès BricoAdmin",
+    "description": "Utilisez votre compte Google autorisé pour entrer dans l’espace d’exploitation et continuer avec les permissions attribuées à votre rôle.",
+    "workspaceLabel": "Accès Google Workspace",
+    "accessManaged": "L’accès est validé et activé par les administrateurs.",
+    "signInHint": "Continuez avec le compte Google approuvé pour votre rôle.",
+    "pendingTitle": "Compte en attente d’approbation",
+    "signedInAs": "Connecté en tant que {user}",
+    "unknownUser": "Utilisateur inconnu",
+    "accessPending": "Votre e-mail n’a pas encore été autorisé. Un admin ou un développeur doit ajouter votre adresse à la liste autorisée puis vous attribuer un rôle avant l’accès à l’application.",
+    "signOut": "Se déconnecter",
+    "signInWithGoogle": "Se connecter avec Google"
+  },
+  "history": {
+    "title": "Historique des actions",
+    "description": "Chaque changement suivi dans la base de données est enregistré ici avec filtres, tri, pagination et reprise d’action.",
+    "itemsCount": "{count} entrées",
+    "empty": "Aucune action suivie pour le moment.",
+    "emptyFiltered": "Aucune action ne correspond aux filtres actuels.",
+    "loading": "Chargement de l’historique des actions...",
+    "searchPlaceholder": "Rechercher par élément, zone, acteur ou type d’action",
+    "resetFilters": "Réinitialiser les filtres",
+    "resultsSummary": "{count} entrées affichées sur {total}",
+    "systemActor": "Système",
+    "actorLine": "{actor} a modifié {entityType} #{entityId}",
+    "changeLine": "{field} : {before} -> {after}",
+    "noValue": "Vide",
+    "undo": "Annuler",
+    "undoPending": "Annulation...",
+    "redo": "Rétablir",
+    "redoPending": "Rétablissement...",
+    "viewDetails": "Détails",
+    "resourceContext": "Enregistrements {entity}",
+    "boolean": {
+      "true": "Oui",
+      "false": "Non"
+    },
+    "filters": {
+      "actionLabel": "Filtrer par action",
+      "areaLabel": "Filtrer par zone",
+      "stateLabel": "Filtrer par état",
+      "includeEcotrackSyncLabel": "Afficher les changements ECOTRACK sync",
+      "includeEcotrackSyncDescription": "Masqués par défaut pour garder le tableau lisible.",
+      "allActions": "Toutes les actions",
+      "allAreas": "Toutes les zones",
+      "allStates": "Tous les états"
+    },
+    "columns": {
+      "action": "Action",
+      "where": "Zone",
+      "who": "Auteur",
+      "when": "Quand",
+      "actions": "Actions"
+    },
+    "operations": {
+      "create": "Créé",
+      "update": "Mis à jour",
+      "delete": "Supprimé"
+    },
+    "resources": {
+      "products": "Produits",
+      "orders": "Commandes",
+      "assets": "Assets",
+      "brandsCategories": "Marques et catégories",
+      "bulletin": "Bulletin",
+      "stats": "Statistiques",
+      "settings": "Paramètres",
+      "ecotrack": "Ecotrack"
+    },
+    "state": {
+      "applied": "Appliqué",
+      "undone": "Annulé",
+      "nonReversible": "Non réversible"
+    },
+    "details": {
+      "title": "Activité de {entity}",
+      "description": "Inspectez la charge exacte de la modification et l’état de reprise de cette action.",
+      "changesTitle": "Champs modifiés",
+      "changesDescription": "Seuls les champs réellement modifiés sont listés ici.",
+      "changesCount": "{count} changements",
+      "noChanges": "Cette action ne contient pas de modifications champ par champ.",
+      "undoneAt": "Annulé à {value}",
+      "redoneAt": "Rétabli à {value}",
+      "close": "Fermer",
+      "columns": {
+        "field": "Champ",
+        "before": "Avant",
+        "after": "Après"
+      }
+    },
+    "notifications": {
+      "undo": {
+        "loading": "Annulation de {entity}...",
+        "success": "{entity} a été annulé.",
+        "error": "Échec de l’annulation de {entity}."
+      },
+      "redo": {
+        "loading": "Rétablissement de {entity}...",
+        "success": "{entity} a été réappliqué.",
+        "error": "Échec du rétablissement de {entity}."
+      }
+    }
+  },
+  "assetsManager": {
+    "bannersTitle": "Bannières",
+    "bannersDescription": "Créez des bannières avec titre, image et produit lié.",
+    "newBanner": "Nouvelle bannière",
+    "createBannerTitle": "Créer une bannière",
+    "editBannerTitle": "Modifier la bannière",
+    "bannerDialogDescription": "Définissez le titre, le produit lié et les images selon l’orientation.",
+    "bannerTitlePlaceholder": "Titre de la bannière",
+    "bannerTitleArPlaceholder": "Titre arabe de la bannière",
+    "titleLabel": "Titre",
+    "titleColumn": "Titre",
+    "bannerProductPlaceholder": "Sélectionner le produit lié",
+    "linkedProductLabel": "Produit lié",
+    "linkedProductColumn": "Produit lié",
+    "orderColumn": "Ordre",
+    "bannerImageLabel": "Image de bannière",
+    "bannerLandscapeImageLabel": "Image écran horizontal",
+    "bannerLandscapeImageHint": "Format desktop : 20:7 — exportez en 2400 × 840 px.",
+    "bannerPortraitImageLabel": "Image écran vertical",
+    "bannerPortraitImageHint": "Format mobile : 19:23 — exportez en 1140 × 1380 px.",
+    "uploadHint": "Upload vers S3 puis stockage des URLs CloudFront.",
+    "singleImagePlaceholder": "URL de l'image de bannière",
+    "createBanner": "Créer la bannière",
+    "updateBanner": "Mettre à jour la bannière",
+    "noLinkedProduct": "Aucun produit lié",
+    "groupsTitle": "Groupes de produits vedettes",
+    "groupsDescription": "Construisez des carrousels à partir de produits, marques, catégories ou d’un mélange.",
+    "newGroup": "Nouveau groupe",
+    "createGroupTitle": "Créer un groupe vedette",
+    "editGroupTitle": "Modifier le groupe vedette",
+    "groupDialogDescription": "Choisissez les produits, marques et catégories qui composent ce groupe.",
+    "groupNamePlaceholder": "Nom du groupe",
+    "groupNameLabel": "Nom du groupe",
+    "groupNameArLabel": "Nom arabe du groupe",
+    "groupNameArPlaceholder": "Nom arabe du groupe",
+    "groupNameColumn": "Nom du groupe",
+    "groupCtaLabel": "Texte du CTA",
+    "groupCtaPlaceholder": "Voir Plus",
+    "groupCtaArLabel": "Texte du CTA arabe",
+    "groupCtaArPlaceholder": "اكتشف المزيد",
+    "groupLinkLabel": "Lien du CTA",
+    "groupLinkPlaceholder": "/products",
+    "groupShowAtTopLabel": "Afficher en haut de la page produits",
+    "groupShowAtTopDescription": "Activez ceci pour épingler le groupe en haut de la page produits côté vitrine.",
+    "groupShowAtTopColumn": "Haut de page produits",
+    "groupShowAtTopToggle": "Basculer la mise en avant haute pour {name}",
+    "productsLabel": "Produits",
+    "brandsLabel": "Marques",
+    "categoriesLabel": "Catégories",
+    "createGroup": "Créer le groupe",
+    "updateGroup": "Mettre à jour le groupe",
+    "coverageColumn": "Couverture",
+    "groupCounts": "Produits : {products} · Marques : {brands} · Catégories : {categories}",
+    "cardsTitle": "Cartes produit",
+    "cardsDescription": "Choisissez un produit et rédigez le contenu arabe et français affiché avec sa première image.",
+    "newCard": "Nouvelle carte",
+    "createCardTitle": "Créer une carte produit",
+    "editCardTitle": "Modifier la carte produit",
+    "cardDialogDescription": "Choisissez un produit et renseignez le contenu arabe et français de la carte.",
+    "cardProductPlaceholder": "Sélectionner un produit",
+    "productNameLabel": "Nom du produit",
+    "productNameColumn": "Nom du produit",
+    "productsSearchPlaceholder": "Rechercher des produits",
+    "brandsSearchPlaceholder": "Rechercher des marques",
+    "categoriesSearchPlaceholder": "Rechercher des catégories",
+    "productsEmptySearch": "Aucun produit ne correspond à cette recherche.",
+    "brandsEmptySearch": "Aucune marque ne correspond à cette recherche.",
+    "categoriesEmptySearch": "Aucune catégorie ne correspond à cette recherche.",
+    "add": "Ajouter",
+    "choose": "Choisir",
+    "selected": "Sélectionné",
+    "addSelection": "Ajouter {name}",
+    "chooseSelection": "Choisir {name}",
+    "nothingSelected": "Aucune sélection",
+    "removeSelection": "Retirer {name}",
+    "dragHandleLabel": "Déplacer {item}",
+    "moveUpLabel": "Monter {item}",
+    "moveDownLabel": "Descendre {item}",
+    "clear": "Effacer",
+    "noImage": "Sans image",
+    "cardImageLabel": "Image de la carte",
+    "cardImageMissing": "Le produit sélectionné n’a pas encore d’image.",
+    "titleArLabel": "Titre arabe",
+    "titleArPlaceholder": "Titre court en arabe",
+    "titleFrLabel": "Titre français",
+    "titleFrPlaceholder": "Titre court en français",
+    "descriptionArLabel": "Description arabe",
+    "descriptionArPlaceholder": "Description courte en arabe (140 caractères max)",
+    "descriptionFrLabel": "Description française",
+    "descriptionFrPlaceholder": "Description courte en français (140 caractères max)",
+    "characteristicsArLabel": "Caractéristiques arabes",
+    "characteristicsArPlaceholder": "Caractéristiques en arabe, une par ligne",
+    "characteristicsFrLabel": "Caractéristiques françaises",
+    "characteristicsFrPlaceholder": "Caractéristiques en français, une par ligne",
+    "createCard": "Créer la carte",
+    "updateCard": "Mettre à jour la carte",
+    "cancel": "Annuler",
+    "active": "Actif",
+    "inactive": "Inactif",
+    "edit": "Modifier",
+    "toggle": "Basculer",
+    "delete": "Supprimer",
+    "unknownProduct": "Produit inconnu",
+    "bannerCreateLoading": "Création de la bannière {title}...",
+    "bannerCreateSuccess": "Bannière {title} créée.",
+    "bannerCreateError": "Échec de création de la bannière {title}.",
+    "bannerSaveLoading": "Enregistrement de la bannière {title}...",
+    "bannerSaveSuccess": "Bannière {title} enregistrée.",
+    "bannerSaveError": "Échec d’enregistrement de la bannière {title}.",
+    "bannerActivateLoading": "Activation de la bannière {title}...",
+    "bannerActivateSuccess": "Bannière {title} activée.",
+    "bannerActivateError": "Échec d’activation de la bannière {title}.",
+    "bannerDeactivateLoading": "Désactivation de la bannière {title}...",
+    "bannerDeactivateSuccess": "Bannière {title} désactivée.",
+    "bannerDeactivateError": "Échec de désactivation de la bannière {title}.",
+    "bannerDeleteLoading": "Suppression de la bannière {target}...",
+    "bannerDeleteSuccess": "Bannière {target} supprimée.",
+    "bannerDeleteError": "Échec de suppression de la bannière {target}.",
+    "bannerReorderLoading": "Enregistrement de l’ordre des bannières...",
+    "bannerReorderSuccess": "Ordre des bannières enregistré.",
+    "bannerReorderError": "Échec d’enregistrement de l’ordre des bannières.",
+    "groupCreateLoading": "Création du groupe vedette {name}...",
+    "groupCreateSuccess": "Groupe vedette {name} créé.",
+    "groupCreateError": "Échec de création du groupe vedette {name}.",
+    "groupSaveLoading": "Enregistrement du groupe vedette {name}...",
+    "groupSaveSuccess": "Groupe vedette {name} enregistré.",
+    "groupSaveError": "Échec d’enregistrement du groupe vedette {name}.",
+    "groupActivateLoading": "Activation du groupe vedette {name}...",
+    "groupActivateSuccess": "Groupe vedette {name} activé.",
+    "groupActivateError": "Échec d’activation du groupe vedette {name}.",
+    "groupDeactivateLoading": "Désactivation du groupe vedette {name}...",
+    "groupDeactivateSuccess": "Groupe vedette {name} désactivé.",
+    "groupDeactivateError": "Échec de désactivation du groupe vedette {name}.",
+    "groupShowAtTopEnableLoading": "Épinglage du groupe vedette {name} en haut de la page produits...",
+    "groupShowAtTopEnableSuccess": "Groupe vedette {name} épinglé en haut de la page produits.",
+    "groupShowAtTopEnableError": "Échec de l’épinglage du groupe vedette {name} en haut de la page produits.",
+    "groupShowAtTopDisableLoading": "Retrait du groupe vedette {name} du haut de la page produits...",
+    "groupShowAtTopDisableSuccess": "Groupe vedette {name} retiré du haut de la page produits.",
+    "groupShowAtTopDisableError": "Échec du retrait du groupe vedette {name} du haut de la page produits.",
+    "groupDeleteLoading": "Suppression du groupe vedette {target}...",
+    "groupDeleteSuccess": "Groupe vedette {target} supprimé.",
+    "groupDeleteError": "Échec de suppression du groupe vedette {target}.",
+    "groupReorderLoading": "Enregistrement de l’ordre des groupes vedettes...",
+    "groupReorderSuccess": "Ordre des groupes vedettes enregistré.",
+    "groupReorderError": "Échec d’enregistrement de l’ordre des groupes vedettes.",
+    "cardCreateLoading": "Création de la carte pour {product}...",
+    "cardCreateSuccess": "Carte pour {product} créée.",
+    "cardCreateError": "Échec de création de la carte pour {product}.",
+    "cardSaveLoading": "Enregistrement de la carte pour {product}...",
+    "cardSaveSuccess": "Carte pour {product} enregistrée.",
+    "cardSaveError": "Échec d’enregistrement de la carte pour {product}.",
+    "cardActivateLoading": "Activation de la carte pour {product}...",
+    "cardActivateSuccess": "Carte pour {product} activée.",
+    "cardActivateError": "Échec d’activation de la carte pour {product}.",
+    "cardDeactivateLoading": "Désactivation de la carte pour {product}...",
+    "cardDeactivateSuccess": "Carte pour {product} désactivée.",
+    "cardDeactivateError": "Échec de désactivation de la carte pour {product}.",
+    "cardDeleteLoading": "Suppression de la carte pour {target}...",
+    "cardDeleteSuccess": "Carte pour {target} supprimée.",
+    "cardDeleteError": "Échec de suppression de la carte pour {target}.",
+    "cardReorderLoading": "Enregistrement de l’ordre des cartes produit...",
+    "cardReorderSuccess": "Ordre des cartes produit enregistré.",
+    "cardReorderError": "Échec d’enregistrement de l’ordre des cartes produit."
+  },
+  "bulletinBoard": {
+    "eyebrow": "Signal d’équipe",
+    "title": "Tableau du bulletin",
+    "description": "Partagez les mises à jour internes, organisez-les avec des tags et gardez les annonces importantes épinglées en haut.",
+    "stats": {
+      "totalPosts": "Publications",
+      "pinnedPosts": "Épinglées"
+    },
+    "composer": {
+      "createTitle": "Créer une publication",
+      "createDescription": "Chaque utilisateur connecté peut publier des mises à jour et supprimer ses propres publications.",
+      "editTitle": "Modifier la publication",
+      "editDescription": "Mettez à jour le message, les tags ou l’état épinglé avant d’enregistrer.",
+      "titleLabel": "Titre",
+      "titlePlaceholder": "Titre de la publication",
+      "bodyLabel": "Message",
+      "bodyPlaceholder": "Contenu de la publication",
+      "tagsLabel": "Tags",
+      "tagsPlaceholder": "Tags",
+      "tagsHint": "Utilisez des libellés courts comme logistique, urgent, campagne ou qa.",
+      "pinLabel": "Épingler cette publication",
+      "attachmentsLabel": "Pièces jointes",
+      "attachmentsHint": "Téléversez des images et documents pris en charge jusqu’à 20 Mo chacun (40 Mo au total)."
+    },
+    "filters": {
+      "allTags": "Tous les tags",
+      "sortLabel": "Trier les publications",
+      "sortUpdatedDesc": "Dernières mises à jour",
+      "sortUpdatedAsc": "Mises à jour les plus anciennes",
+      "sortCreatedDesc": "Plus récentes"
+    },
+    "sections": {
+      "pinned": "Publications épinglées",
+      "recent": "Dernières publications",
+      "visibleCount": "{count} visibles"
+    },
+    "actions": {
+      "openComposer": "Nouvelle publication",
+      "closeComposer": "Fermer l’éditeur",
+      "refresh": "Actualiser",
+      "post": "Publier",
+      "update": "Enregistrer",
+      "cancel": "Annuler",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "pin": "Épingler",
+      "unpin": "Désépingler",
+      "reply": "Répondre",
+      "sendReply": "Envoyer la réponse",
+      "deleteReply": "Supprimer la réponse",
+      "addReaction": "Réactions"
+    },
+    "pagination": {
+      "page": "Page {page} sur {total}",
+      "previous": "Précédent",
+      "next": "Suivant"
+    },
+    "delete": {
+      "title": "Supprimer la publication ?",
+      "description": "\"{title}\" sera supprimée définitivement."
+    },
+    "post": {
+      "pinned": "Épinglée",
+      "byYou": "Vous",
+      "updated": "Mis à jour"
+    },
+    "reply": {
+      "title": "Réponses ({count})",
+      "placeholder": "Réponse"
+    },
+    "reactions": {
+      "by": "par"
+    },
+    "feedback": {
+      "loading": "Chargement des publications...",
+      "refreshing": "Actualisation",
+      "loadError": "Impossible de charger les publications du tableau.",
+      "retryHint": "Essayez d’actualiser le tableau."
+    },
+    "notifications": {
+      "validation": "Corrigez les erreurs du formulaire avant de continuer.",
+      "create": {
+        "loading": "Publication de \"{title}\"...",
+        "success": "\"{title}\" a été publiée.",
+        "error": "Échec de la publication du post."
+      },
+      "update": {
+        "loading": "Enregistrement de \"{title}\"...",
+        "success": "\"{title}\" a été enregistré.",
+        "error": "Échec de l’enregistrement du post."
+      },
+      "delete": {
+        "loading": "Suppression du post...",
+        "success": "Le post a été supprimé.",
+        "error": "Échec de la suppression du post."
+      },
+      "pin": {
+        "loading": "Épinglage du post...",
+        "success": "Le post a été épinglé.",
+        "error": "Échec de l’épinglage du post."
+      },
+      "unpin": {
+        "loading": "Désépinglage du post...",
+        "success": "Le post a été désépinglé.",
+        "error": "Échec du désépinglage du post."
+      },
+      "react": {
+        "loading": "Mise à jour de {emoji} sur \"{title}\"...",
+        "success": "{emoji} a été mis à jour sur \"{title}\".",
+        "error": "Échec de la mise à jour de la réaction."
+      },
+      "reply": {
+        "loading": "Envoi d’une réponse à \"{title}\"...",
+        "success": "Réponse publiée.",
+        "error": "Échec de l’envoi de la réponse."
+      },
+      "replyDelete": {
+        "loading": "Suppression de la réponse...",
+        "success": "La réponse a été supprimée.",
+        "error": "Échec de la suppression de la réponse."
+      },
+      "replyReact": {
+        "loading": "Mise à jour de {emoji} sur la réponse...",
+        "success": "{emoji} a été mis à jour sur la réponse.",
+        "error": "Échec de la mise à jour de la réaction sur la réponse."
+      }
+    },
+    "empty": {
+      "title": "Aucune publication ne correspond aux filtres actuels.",
+      "description": "Modifiez le filtre de tags actuel, ou publiez une nouvelle mise à jour."
+    }
+  }
+}

@@ -1,8 +1,8 @@
 import { randomUUID } from 'crypto';
 import { eq } from 'drizzle-orm';
 
-import type { getDb } from '../../../db/src/client';
-import { orders } from '../../../db/src/schema';
+import type { getDb } from '@bric/db/client';
+import { orders } from '@bric/db/schema';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -17,11 +17,7 @@ export function readStorefrontOrderToken(options: {
   return options.headerToken?.trim() || options.queryToken?.trim() || null;
 }
 
-export async function requireStorefrontOrderAccess(
-  db: Database,
-  id: number,
-  token: string | null,
-) {
+export async function requireStorefrontOrderAccess(db: Database, id: number, token: string | null) {
   if (!token) {
     return {
       kind: 'missing_token' as const,
@@ -49,10 +45,7 @@ export async function requireStorefrontOrderAccess(
   };
 }
 
-export async function requireStorefrontOrderAccessByToken(
-  db: Database,
-  token: string | null,
-) {
+export async function requireStorefrontOrderAccessByToken(db: Database, token: string | null) {
   if (!token) {
     return {
       kind: 'missing_token' as const,

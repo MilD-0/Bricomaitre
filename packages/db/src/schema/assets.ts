@@ -23,13 +23,18 @@ export const assetBanners = pgTable(
     imageUrl: text('image_url').notNull(),
     imageUrlPortrait: text('image_url_portrait'),
     imageUrlLandscape: text('image_url_landscape'),
-    productId: bigint('product_id', { mode: 'number' }).references(() => products.id, { onDelete: 'set null' }),
+    productId: bigint('product_id', { mode: 'number' }).references(() => products.id, {
+      onDelete: 'set null',
+    }),
     sortOrder: integer('sort_order').notNull().default(0),
     active: boolean('active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('idx_asset_banners_product').on(t.productId), index('idx_asset_banners_sort_order').on(t.sortOrder)],
+  (t) => [
+    index('idx_asset_banners_product').on(t.productId),
+    index('idx_asset_banners_sort_order').on(t.sortOrder),
+  ],
 );
 
 export const featuredProductGroups = pgTable('featured_product_groups', {
@@ -49,8 +54,12 @@ export const featuredProductGroups = pgTable('featured_product_groups', {
 export const featuredProductGroupProducts = pgTable(
   'featured_product_group_products',
   {
-    groupId: bigint('group_id', { mode: 'number' }).notNull().references(() => featuredProductGroups.id, { onDelete: 'cascade' }),
-    productId: bigint('product_id', { mode: 'number' }).notNull().references(() => products.id, { onDelete: 'cascade' }),
+    groupId: bigint('group_id', { mode: 'number' })
+      .notNull()
+      .references(() => featuredProductGroups.id, { onDelete: 'cascade' }),
+    productId: bigint('product_id', { mode: 'number' })
+      .notNull()
+      .references(() => products.id, { onDelete: 'cascade' }),
   },
   (t) => [
     primaryKey({ columns: [t.groupId, t.productId] }),
@@ -61,8 +70,12 @@ export const featuredProductGroupProducts = pgTable(
 export const featuredProductGroupBrands = pgTable(
   'featured_product_group_brands',
   {
-    groupId: bigint('group_id', { mode: 'number' }).notNull().references(() => featuredProductGroups.id, { onDelete: 'cascade' }),
-    brandId: bigint('brand_id', { mode: 'number' }).notNull().references(() => brands.id, { onDelete: 'cascade' }),
+    groupId: bigint('group_id', { mode: 'number' })
+      .notNull()
+      .references(() => featuredProductGroups.id, { onDelete: 'cascade' }),
+    brandId: bigint('brand_id', { mode: 'number' })
+      .notNull()
+      .references(() => brands.id, { onDelete: 'cascade' }),
   },
   (t) => [
     primaryKey({ columns: [t.groupId, t.brandId] }),
@@ -73,8 +86,12 @@ export const featuredProductGroupBrands = pgTable(
 export const featuredProductGroupCategories = pgTable(
   'featured_product_group_categories',
   {
-    groupId: bigint('group_id', { mode: 'number' }).notNull().references(() => featuredProductGroups.id, { onDelete: 'cascade' }),
-    categoryId: bigint('category_id', { mode: 'number' }).notNull().references(() => categories.id, { onDelete: 'cascade' }),
+    groupId: bigint('group_id', { mode: 'number' })
+      .notNull()
+      .references(() => featuredProductGroups.id, { onDelete: 'cascade' }),
+    categoryId: bigint('category_id', { mode: 'number' })
+      .notNull()
+      .references(() => categories.id, { onDelete: 'cascade' }),
   },
   (t) => [
     primaryKey({ columns: [t.groupId, t.categoryId] }),
@@ -86,7 +103,9 @@ export const productCards = pgTable(
   'product_cards',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    productId: bigint('product_id', { mode: 'number' }).notNull().references(() => products.id, { onDelete: 'cascade' }),
+    productId: bigint('product_id', { mode: 'number' })
+      .notNull()
+      .references(() => products.id, { onDelete: 'cascade' }),
     titleAr: text('title_ar').notNull(),
     titleFr: text('title_fr').notNull(),
     descriptionAr: text('description_ar').notNull(),
@@ -98,5 +117,8 @@ export const productCards = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('idx_product_cards_product').on(t.productId), index('idx_product_cards_sort_order').on(t.sortOrder)],
+  (t) => [
+    index('idx_product_cards_product').on(t.productId),
+    index('idx_product_cards_sort_order').on(t.sortOrder),
+  ],
 );

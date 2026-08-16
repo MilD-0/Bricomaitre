@@ -13,29 +13,43 @@ export const productCategorizationInputSchema = z.object({
     currentCategoryId: z.number().int().positive().nullable(),
     currentCategory: z.string().nullable(),
   }),
-  categories: z.array(z.object({
-    id: z.number().int().positive(),
-    name: z.string().trim().min(1),
-    nameAr: z.string().nullable(),
-    parentId: z.number().int().positive().nullable(),
-    parentName: z.string().nullable(),
-  })).min(1),
+  categories: z
+    .array(
+      z.object({
+        id: z.number().int().positive(),
+        name: z.string().trim().min(1),
+        nameAr: z.string().nullable(),
+        parentId: z.number().int().positive().nullable(),
+        parentName: z.string().nullable(),
+      }),
+    )
+    .min(1),
   adminContext: z.string().trim().max(2_000).optional(),
 });
 
-export const productCategorizationDecisionSchema = z.object({
-  categoryId: z.number().int().positive().nullable(),
-  confidence: z.number().min(0).max(1),
-  ambiguous: z.boolean(),
-  reasoning: z.string().trim().min(1).max(2_000),
-}).superRefine((decision, context) => {
-  if (decision.ambiguous && decision.categoryId !== null) {
-    context.addIssue({ code: 'custom', message: 'Ambiguous decisions cannot select a category.', path: ['categoryId'] });
-  }
-  if (!decision.ambiguous && decision.categoryId === null) {
-    context.addIssue({ code: 'custom', message: 'Non-ambiguous decisions must select a category.', path: ['categoryId'] });
-  }
-});
+export const productCategorizationDecisionSchema = z
+  .object({
+    categoryId: z.number().int().positive().nullable(),
+    confidence: z.number().min(0).max(1),
+    ambiguous: z.boolean(),
+    reasoning: z.string().trim().min(1).max(2_000),
+  })
+  .superRefine((decision, context) => {
+    if (decision.ambiguous && decision.categoryId !== null) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Ambiguous decisions cannot select a category.',
+        path: ['categoryId'],
+      });
+    }
+    if (!decision.ambiguous && decision.categoryId === null) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Non-ambiguous decisions must select a category.',
+        path: ['categoryId'],
+      });
+    }
+  });
 
 export type ProductCategorizationInput = z.infer<typeof productCategorizationInputSchema>;
 export type ProductCategorizationDecision = z.infer<typeof productCategorizationDecisionSchema>;
@@ -50,7 +64,9 @@ export interface ProductCategorizationClassifier {
 
 export const PRODUCT_CATEGORIZATION_PROMPT_VERSION = 'product-categorization-v1';
 
-export function createProductCategorizationClassifier(config: AiConfig = getAiConfig()): ProductCategorizationClassifier {
+export function createProductCategorizationClassifier(
+  config: AiConfig = getAiConfig(),
+): ProductCategorizationClassifier {
   return {
     async classify(rawInput) {
       const input = productCategorizationInputSchema.parse(rawInput);
@@ -67,7 +83,10 @@ export function createProductCategorizationClassifier(config: AiConfig = getAiCo
           'This is a reviewable classification proposal, not an applied database change.',
         ].join(' '),
         prompt: JSON.stringify(input),
-        output: Output.object({ schema: productCategorizationDecisionSchema, name: 'product_category_decision' }),
+        output: Output.object({
+          schema: productCategorizationDecisionSchema,
+          name: 'product_category_decision',
+        }),
         maxRetries: config.maxRetries,
         timeout: config.requestTimeoutMs,
       });

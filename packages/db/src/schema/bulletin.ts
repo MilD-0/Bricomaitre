@@ -47,9 +47,7 @@ export const bulletinPostAttachments = adminSchema.table(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    index('bulletin_post_attachments_post_id_idx').on(t.postId),
-  ],
+  (t) => [index('bulletin_post_attachments_post_id_idx').on(t.postId)],
 );
 
 export const bulletinReplies = adminSchema.table(

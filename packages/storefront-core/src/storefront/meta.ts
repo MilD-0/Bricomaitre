@@ -1,14 +1,8 @@
-import { createHash } from "node:crypto";
+import { createHash } from 'node:crypto';
 
-import {
-  and,
-  eq,
-  inArray,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, eq, inArray, or, sql } from 'drizzle-orm';
 
-import type { getDb } from "../../../db/src/client";
+import type { getDb } from '@bric/db/client';
 import {
   ecotrackCommunes,
   ecotrackWilayas,
@@ -18,23 +12,23 @@ import {
   orderMetaAttribution,
   orders,
   products,
-} from "../../../db/src/schema";
-import { parseNumericAmount } from "../orders-support";
+} from '@bric/db/schema';
+import { parseNumericAmount } from '../orders-support';
 import {
   META_SEMANTICS_VERSION,
   type MetaBrowserEvent,
   type StorefrontOrderMetaResponse,
-} from "./meta-contracts";
-import { resolveOrderPromo } from "./promos";
+} from './meta-contracts';
+import { resolveOrderPromo } from './promos';
 
 type Database = ReturnType<typeof getDb>;
-type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 type Executor = Database | Transaction;
 
 export const META_ORDER_CONFIRMED_STATUSES = [2] as const;
 export const META_COMPLETED_STATUSES = [4, 10] as const;
-export const META_ORDER_CONFIRMED_EVENT_NAME = "orderconfirmed" as const;
-export const META_ORDER_COMPLETED_EVENT_NAME = "OrderCompleted" as const;
+export const META_ORDER_CONFIRMED_EVENT_NAME = 'orderconfirmed' as const;
+export const META_ORDER_COMPLETED_EVENT_NAME = 'OrderCompleted' as const;
 export const META_EVENT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const META_FUTURE_TOLERANCE_MS = 60 * 1000;
 const META_ATTRIBUTION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
@@ -91,8 +85,8 @@ function roundCurrency(value: number) {
 function normalizeText(value: string | null | undefined) {
   if (!value) return null;
   const normalized = value
-    .normalize("NFKD")
-    .replace(/\p{Diacritic}/gu, "")
+    .normalize('NFKD')
+    .replace(/\p{Diacritic}/gu, '')
     .trim()
     .toLowerCase();
   return normalized.length > 0 ? normalized : null;
@@ -101,19 +95,27 @@ function normalizeText(value: string | null | undefined) {
 export function resolveMetaOrderLocation(
   catalog: {
     wilayas: Array<{ wilayaId: number; name: string }>;
-    communes: Array<{ communeId: number; wilayaId: number; name: string; postalCode: string | null }>;
+    communes: Array<{
+      communeId: number;
+      wilayaId: number;
+      name: string;
+      postalCode: string | null;
+    }>;
   },
   state: number | null,
   city: string | null,
 ): MetaOrderLocation {
   if (state == null) return { stateName: null, postalCode: null };
-  const stateName = catalog.wilayas.find((wilaya) => wilaya.wilayaId === state)?.name ?? String(state);
-  const cityValue = city?.trim() ?? "";
+  const stateName =
+    catalog.wilayas.find((wilaya) => wilaya.wilayaId === state)?.name ?? String(state);
+  const cityValue = city?.trim() ?? '';
   const normalizedCity = normalizeText(cityValue);
-  const commune = catalog.communes.find((entry) => entry.wilayaId === state && (
-    String(entry.communeId) === cityValue
-    || (normalizedCity !== null && normalizeText(entry.name) === normalizedCity)
-  ));
+  const commune = catalog.communes.find(
+    (entry) =>
+      entry.wilayaId === state &&
+      (String(entry.communeId) === cityValue ||
+        (normalizedCity !== null && normalizeText(entry.name) === normalizedCity)),
+  );
   return { stateName, postalCode: commune?.postalCode?.trim() || null };
 }
 
@@ -124,38 +126,42 @@ export async function readMetaOrderLocation(
 ) {
   if (state == null) return { stateName: null, postalCode: null };
   const [wilayas, communes] = await Promise.all([
-    db.select({
-      wilayaId: ecotrackWilayas.wilayaId,
-      name: ecotrackWilayas.name,
-    }).from(ecotrackWilayas).where(eq(ecotrackWilayas.wilayaId, state)),
-    db.select({
-      communeId: ecotrackCommunes.communeId,
-      wilayaId: ecotrackCommunes.wilayaId,
-      name: ecotrackCommunes.name,
-      postalCode: ecotrackCommunes.postalCode,
-    }).from(ecotrackCommunes).where(eq(ecotrackCommunes.wilayaId, state)),
+    db
+      .select({
+        wilayaId: ecotrackWilayas.wilayaId,
+        name: ecotrackWilayas.name,
+      })
+      .from(ecotrackWilayas)
+      .where(eq(ecotrackWilayas.wilayaId, state)),
+    db
+      .select({
+        communeId: ecotrackCommunes.communeId,
+        wilayaId: ecotrackCommunes.wilayaId,
+        name: ecotrackCommunes.name,
+        postalCode: ecotrackCommunes.postalCode,
+      })
+      .from(ecotrackCommunes)
+      .where(eq(ecotrackCommunes.wilayaId, state)),
   ]);
   return resolveMetaOrderLocation({ wilayas, communes }, state, city);
 }
 
 export function normalizeAlgeriaPhone(value: string | null | undefined) {
   if (!value) return null;
-  let digits = value.replace(/\D/g, "");
-  if (digits.startsWith("00")) digits = digits.slice(2);
-  if (digits.startsWith("0")) digits = `213${digits.slice(1)}`;
-  if (!digits.startsWith("213") && digits.length === 9) digits = `213${digits}`;
+  let digits = value.replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.startsWith('0')) digits = `213${digits.slice(1)}`;
+  if (!digits.startsWith('213') && digits.length === 9) digits = `213${digits}`;
   return /^213\d{8,9}$/.test(digits) ? digits : null;
 }
 
 export function hashMetaValue(value: string | null | undefined) {
   const normalized = normalizeText(value);
-  return normalized
-    ? createHash("sha256").update(normalized).digest("hex")
-    : null;
+  return normalized ? createHash('sha256').update(normalized).digest('hex') : null;
 }
 
 function hashAlreadyNormalized(value: string | null) {
-  return value ? createHash("sha256").update(value).digest("hex") : null;
+  return value ? createHash('sha256').update(value).digest('hex') : null;
 }
 
 export function isValidFbc(value: string | null | undefined) {
@@ -190,7 +196,7 @@ export function buildMetaUserData(input: {
     ct: hashMetaValue(input.city),
     st: hashMetaValue(input.state),
     zp: hashMetaValue(input.postalCode),
-    country: hashMetaValue("dz"),
+    country: hashMetaValue('dz'),
     external_id: hashMetaValue(input.externalIdSource),
   };
 
@@ -206,7 +212,7 @@ export function buildMetaUserData(input: {
 
 export function getMetaMatchKeySummary(userData: Record<string, unknown>) {
   return Object.keys(userData)
-    .filter((key) => userData[key] !== null && userData[key] !== undefined && userData[key] !== "")
+    .filter((key) => userData[key] !== null && userData[key] !== undefined && userData[key] !== '')
     .sort();
 }
 
@@ -228,12 +234,12 @@ export function isMetaCompletedStatus(status: number) {
 
 export function normalizeMetaEventTime(value: Date, now = new Date()) {
   if (value.getTime() < now.getTime() - META_EVENT_MAX_AGE_MS) {
-    return { kind: "expired" as const, value };
+    return { kind: 'expired' as const, value };
   }
   if (value.getTime() > now.getTime() + META_FUTURE_TOLERANCE_MS) {
-    return { kind: "clamped" as const, value: now };
+    return { kind: 'clamped' as const, value: now };
   }
-  return { kind: "valid" as const, value };
+  return { kind: 'valid' as const, value };
 }
 
 function buildProductConditions(productIds: number[], mongoIds: string[], slugs: string[] = []) {
@@ -272,32 +278,35 @@ export async function resolveMetaCommerceLines(
     .where(and(eq(products.active, true), inArray(products.id, productIds)));
 
   const expandedCart = productIds.flatMap((productId) =>
-    Array.from({ length: quantities.get(productId) ?? 1 }, () => String(productId)));
+    Array.from({ length: quantities.get(productId) ?? 1 }, () => String(productId)),
+  );
   const promo = await resolveOrderPromo(db as Database, {
     cartProducts: expandedCart,
     promoCode: input.promoCode,
     now: input.now,
   });
 
-  return rows.map((row): MetaCommerceLine => {
-    const quantity = quantities.get(row.id) ?? 1;
-    const originalUnitPrice = parseNumericAmount(row.price);
-    const originalLineTotal = originalUnitPrice * quantity;
-    const discountAmount = promo?.productId === row.id ? promo.discountAmount : 0;
-    const lineTotal = roundCurrency(Math.max(0, originalLineTotal - discountAmount));
-    return {
-      productId: row.id,
-      contentId: String(row.id),
-      rawValue: String(row.id),
-      title: row.title,
-      originalUnitPrice,
-      effectiveUnitPrice: roundCurrency(lineTotal / quantity),
-      quantity,
-      discountAmount: roundCurrency(discountAmount),
-      lineTotal,
-      thumbnailUrl: row.images[0] ?? null,
-    };
-  }).sort((a, b) => a.productId - b.productId);
+  return rows
+    .map((row): MetaCommerceLine => {
+      const quantity = quantities.get(row.id) ?? 1;
+      const originalUnitPrice = parseNumericAmount(row.price);
+      const originalLineTotal = originalUnitPrice * quantity;
+      const discountAmount = promo?.productId === row.id ? promo.discountAmount : 0;
+      const lineTotal = roundCurrency(Math.max(0, originalLineTotal - discountAmount));
+      return {
+        productId: row.id,
+        contentId: String(row.id),
+        rawValue: String(row.id),
+        title: row.title,
+        originalUnitPrice,
+        effectiveUnitPrice: roundCurrency(lineTotal / quantity),
+        quantity,
+        discountAmount: roundCurrency(discountAmount),
+        lineTotal,
+        thumbnailUrl: row.images[0] ?? null,
+      };
+    })
+    .sort((a, b) => a.productId - b.productId);
 }
 
 export async function resolveOrderLineSnapshots(
@@ -308,17 +317,31 @@ export async function resolveOrderLineSnapshots(
     now?: Date;
   },
 ) {
-  const numericIds = [...new Set(input.cartProducts
-    .map((value) => value.trim())
-    .filter((value) => /^\d+$/.test(value))
-    .map((value) => Number.parseInt(value, 10))
-    .filter((value) => Number.isInteger(value) && value > 0))];
-  const mongoIds = [...new Set(input.cartProducts
-    .map((value) => value.trim())
-    .filter((value) => /^[a-f\d]{24}$/i.test(value)))];
-  const slugs = [...new Set(input.cartProducts
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0 && !/^\d+$/.test(value) && !/^[a-f\d]{24}$/i.test(value)))];
+  const numericIds = [
+    ...new Set(
+      input.cartProducts
+        .map((value) => value.trim())
+        .filter((value) => /^\d+$/.test(value))
+        .map((value) => Number.parseInt(value, 10))
+        .filter((value) => Number.isInteger(value) && value > 0),
+    ),
+  ];
+  const mongoIds = [
+    ...new Set(
+      input.cartProducts
+        .map((value) => value.trim())
+        .filter((value) => /^[a-f\d]{24}$/i.test(value)),
+    ),
+  ];
+  const slugs = [
+    ...new Set(
+      input.cartProducts
+        .map((value) => value.trim())
+        .filter(
+          (value) => value.length > 0 && !/^\d+$/.test(value) && !/^[a-f\d]{24}$/i.test(value),
+        ),
+    ),
+  ];
   if (numericIds.length === 0 && mongoIds.length === 0 && slugs.length === 0) return [];
 
   const condition = buildProductConditions(numericIds, mongoIds, slugs);
@@ -334,13 +357,16 @@ export async function resolveOrderLineSnapshots(
     })
     .from(products)
     .where(condition);
-  const rowByReference = new Map<string, typeof rows[number]>();
+  const rowByReference = new Map<string, (typeof rows)[number]>();
   for (const row of rows) {
     rowByReference.set(String(row.id), row);
     if (row.mongoId) rowByReference.set(row.mongoId, row);
     if (row.slug) rowByReference.set(row.slug, row);
   }
-  const quantities = new Map<number, { row: typeof rows[number]; quantity: number; rawValue: string }>();
+  const quantities = new Map<
+    number,
+    { row: (typeof rows)[number]; quantity: number; rawValue: string }
+  >();
   for (const raw of input.cartProducts) {
     const value = raw.trim();
     const row = rowByReference.get(value);
@@ -358,24 +384,26 @@ export async function resolveOrderLineSnapshots(
     now: input.now,
   });
 
-  return [...quantities.values()].map(({ row, quantity, rawValue }): MetaCommerceLine => {
-    const originalUnitPrice = parseNumericAmount(row.price);
-    const originalLineTotal = originalUnitPrice * quantity;
-    const discountAmount = promo?.productId === row.id ? promo.discountAmount : 0;
-    const lineTotal = roundCurrency(Math.max(0, originalLineTotal - discountAmount));
-    return {
-      productId: row.id,
-      contentId: String(row.id),
-      rawValue,
-      title: row.title,
-      originalUnitPrice,
-      effectiveUnitPrice: roundCurrency(lineTotal / quantity),
-      quantity,
-      discountAmount: roundCurrency(discountAmount),
-      lineTotal,
-      thumbnailUrl: row.images[0] ?? null,
-    };
-  }).sort((a, b) => a.productId - b.productId);
+  return [...quantities.values()]
+    .map(({ row, quantity, rawValue }): MetaCommerceLine => {
+      const originalUnitPrice = parseNumericAmount(row.price);
+      const originalLineTotal = originalUnitPrice * quantity;
+      const discountAmount = promo?.productId === row.id ? promo.discountAmount : 0;
+      const lineTotal = roundCurrency(Math.max(0, originalLineTotal - discountAmount));
+      return {
+        productId: row.id,
+        contentId: String(row.id),
+        rawValue,
+        title: row.title,
+        originalUnitPrice,
+        effectiveUnitPrice: roundCurrency(lineTotal / quantity),
+        quantity,
+        discountAmount: roundCurrency(discountAmount),
+        lineTotal,
+        thumbnailUrl: row.images[0] ?? null,
+      };
+    })
+    .sort((a, b) => a.productId - b.productId);
 }
 
 export async function replaceOrderLineSnapshots(
@@ -386,21 +414,23 @@ export async function replaceOrderLineSnapshots(
 ) {
   await db.delete(orderLineItems).where(eq(orderLineItems.orderId, orderId));
   if (lines.length === 0) return;
-  await db.insert(orderLineItems).values(lines.map((line) => ({
-    orderId,
-    productId: line.productId,
-    contentId: line.contentId,
-    rawValue: line.rawValue,
-    titleSnapshot: line.title,
-    originalUnitPrice: line.originalUnitPrice.toFixed(2),
-    effectiveUnitPrice: line.effectiveUnitPrice.toFixed(2),
-    quantity: line.quantity,
-    discountAmount: line.discountAmount.toFixed(2),
-    lineTotal: line.lineTotal.toFixed(2),
-    thumbnailUrl: line.thumbnailUrl,
-    createdAt: now,
-    updatedAt: now,
-  })));
+  await db.insert(orderLineItems).values(
+    lines.map((line) => ({
+      orderId,
+      productId: line.productId,
+      contentId: line.contentId,
+      rawValue: line.rawValue,
+      titleSnapshot: line.title,
+      originalUnitPrice: line.originalUnitPrice.toFixed(2),
+      effectiveUnitPrice: line.effectiveUnitPrice.toFixed(2),
+      quantity: line.quantity,
+      discountAmount: line.discountAmount.toFixed(2),
+      lineTotal: line.lineTotal.toFixed(2),
+      thumbnailUrl: line.thumbnailUrl,
+      createdAt: now,
+      updatedAt: now,
+    })),
+  );
 }
 
 export async function refreshOrderLineSnapshotsForMutableOrder(
@@ -430,8 +460,8 @@ export function buildMetaCommerceCustomData(lines: MetaCommerceLine[], orderId?:
       quantity: line.quantity,
       item_price: line.effectiveUnitPrice,
     })),
-    content_type: "product",
-    currency: "DZD",
+    content_type: 'product',
+    currency: 'DZD',
     value,
     num_items: lines.reduce((sum, line) => sum + line.quantity, 0),
     ...(orderId ? { order_id: String(orderId) } : {}),
@@ -453,24 +483,28 @@ async function insertMetaOutboxEvent(
     status?: string;
   },
 ) {
-  const [row] = await db.insert(metaEventOutbox).values({
-    eventName: input.eventName,
-    eventId: input.eventId,
-    source: input.source,
-    orderId: input.orderId ?? null,
-    orderStatusHistoryId: input.orderStatusHistoryId ?? null,
-    eventTime: input.eventTime,
-    eventSourceUrl: input.eventSourceUrl,
-    userData: input.userData,
-    customData: input.customData,
-    matchKeySummary: getMetaMatchKeySummary(input.userData),
-    status: input.status ?? "pending",
-    nextAttemptAt: new Date(),
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  }).onConflictDoNothing({
-    target: [metaEventOutbox.eventName, metaEventOutbox.eventId],
-  }).returning();
+  const [row] = await db
+    .insert(metaEventOutbox)
+    .values({
+      eventName: input.eventName,
+      eventId: input.eventId,
+      source: input.source,
+      orderId: input.orderId ?? null,
+      orderStatusHistoryId: input.orderStatusHistoryId ?? null,
+      eventTime: input.eventTime,
+      eventSourceUrl: input.eventSourceUrl,
+      userData: input.userData,
+      customData: input.customData,
+      matchKeySummary: getMetaMatchKeySummary(input.userData),
+      status: input.status ?? 'pending',
+      nextAttemptAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .onConflictDoNothing({
+      target: [metaEventOutbox.eventName, metaEventOutbox.eventId],
+    })
+    .returning();
   return row ?? null;
 }
 
@@ -482,12 +516,12 @@ export async function enqueueMetaBrowserEvent(
   const normalizedTime = normalizeMetaEventTime(
     event.occurredAt ? new Date(event.occurredAt) : new Date(),
   );
-  const usesCommerceLines = event.eventName !== "PageView" && event.eventName !== "Search";
+  const usesCommerceLines = event.eventName !== 'PageView' && event.eventName !== 'Search';
   const lines = usesCommerceLines
     ? await resolveMetaCommerceLines(db, {
-      items: event.items,
-      promoCode: event.promoCode,
-    })
+        items: event.items,
+        promoCode: event.promoCode,
+      })
     : [];
   const userData = buildMetaUserData({
     externalIdSource: context.externalIdSource ?? event.visitId ?? event.journeyId,
@@ -496,25 +530,26 @@ export async function enqueueMetaBrowserEvent(
     clientIpAddress: context.clientIpAddress,
     clientUserAgent: context.clientUserAgent,
   });
-  const customData = event.eventName === "Search"
-    ? { search_string: event.searchTerm }
-    : event.eventName === "PageView"
-      ? {}
-      : buildMetaCommerceCustomData(lines);
+  const customData =
+    event.eventName === 'Search'
+      ? { search_string: event.searchTerm }
+      : event.eventName === 'PageView'
+        ? {}
+        : buildMetaCommerceCustomData(lines);
   let outbox = await insertMetaOutboxEvent(db, {
     eventName: event.eventName,
     eventId: event.eventId,
-    source: "browser",
+    source: 'browser',
     eventTime: normalizedTime.value,
     eventSourceUrl: event.eventSourceUrl,
     userData,
     customData,
-    status: normalizedTime.kind === "expired" ? "skipped" : "pending",
+    status: normalizedTime.kind === 'expired' ? 'skipped' : 'pending',
   });
   return {
     outbox,
     deduped: outbox === null,
-    skipped: normalizedTime.kind === "expired",
+    skipped: normalizedTime.kind === 'expired',
   };
 }
 
@@ -531,17 +566,19 @@ export async function createOrderMetaArtifacts(
   },
 ): Promise<StorefrontOrderMetaResponse> {
   await replaceOrderLineSnapshots(tx, input.order.id, input.lines, input.now);
-  const externalIdSource = input.requestContext.externalIdSource
-    ?? input.order.visitId
-    ?? input.order.journeyId
-    ?? input.eventId;
+  const externalIdSource =
+    input.requestContext.externalIdSource ??
+    input.order.visitId ??
+    input.order.journeyId ??
+    input.eventId;
   const userData = buildMetaUserData({
     email: input.order.email,
     firstName: input.order.firstName,
     lastName: input.order.lastName,
     phone: input.order.phoneNumber1,
     city: input.order.city,
-    state: input.location?.stateName ?? (input.order.state == null ? null : String(input.order.state)),
+    state:
+      input.location?.stateName ?? (input.order.state == null ? null : String(input.order.state)),
     postalCode: input.location?.postalCode,
     externalIdSource,
     fbc: input.requestContext.fbc,
@@ -551,72 +588,73 @@ export async function createOrderMetaArtifacts(
   });
   const customData = buildMetaCommerceCustomData(input.lines, input.order.id);
   const outbox = await insertMetaOutboxEvent(tx, {
-    eventName: "Purchase",
+    eventName: 'Purchase',
     eventId: input.eventId,
-    source: "order_submission",
+    source: 'order_submission',
     orderId: input.order.id,
     eventTime: input.now,
     eventSourceUrl: input.eventSourceUrl,
     userData,
     customData,
   });
-  await tx.insert(orderMetaAttribution).values({
-    orderId: input.order.id,
-    semanticsVersion: META_SEMANTICS_VERSION,
-    leadEventId: input.eventId,
-    eventSourceUrl: input.eventSourceUrl,
-    fbc: isValidFbc(input.requestContext.fbc) ? input.requestContext.fbc!.trim() : null,
-    fbp: isValidFbp(input.requestContext.fbp) ? input.requestContext.fbp!.trim() : null,
-    externalIdSource,
-    clientIpAddress: input.requestContext.clientIpAddress ?? null,
-    clientUserAgent: input.requestContext.clientUserAgent ?? null,
-    leadOutboxId: null,
-    purchaseOutboxId: outbox?.id ?? null,
-    expiresAt: new Date(input.now.getTime() + META_ATTRIBUTION_TTL_MS),
-    createdAt: input.now,
-    updatedAt: input.now,
-  }).onConflictDoNothing({ target: orderMetaAttribution.orderId });
+  await tx
+    .insert(orderMetaAttribution)
+    .values({
+      orderId: input.order.id,
+      semanticsVersion: META_SEMANTICS_VERSION,
+      leadEventId: input.eventId,
+      eventSourceUrl: input.eventSourceUrl,
+      fbc: isValidFbc(input.requestContext.fbc) ? input.requestContext.fbc!.trim() : null,
+      fbp: isValidFbp(input.requestContext.fbp) ? input.requestContext.fbp!.trim() : null,
+      externalIdSource,
+      clientIpAddress: input.requestContext.clientIpAddress ?? null,
+      clientUserAgent: input.requestContext.clientUserAgent ?? null,
+      leadOutboxId: null,
+      purchaseOutboxId: outbox?.id ?? null,
+      expiresAt: new Date(input.now.getTime() + META_ATTRIBUTION_TTL_MS),
+      createdAt: input.now,
+      updatedAt: input.now,
+    })
+    .onConflictDoNothing({ target: orderMetaAttribution.orderId });
 
   return {
-    eventName: "Purchase",
+    eventName: 'Purchase',
     eventId: input.eventId,
     value: Number(customData.value),
-    currency: "DZD",
+    currency: 'DZD',
     contents: customData.contents,
   };
 }
 
 function getMetaCredentials() {
-  const pixelId = process.env.META_PIXEL_ID?.trim()
-    || process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID?.trim()
-    || "";
-  const token = process.env.META_CONVERSIONS_API_TOKEN?.trim()
-    || process.env.FACEBOOK_ACCESS_TOKEN?.trim()
-    || "";
-  const configuredVersion = process.env.META_GRAPH_API_VERSION?.trim() || "v25.0";
-  const graphVersion = /^v\d+\.\d+$/.test(configuredVersion)
-    ? configuredVersion
-    : "v25.0";
+  const pixelId =
+    process.env.META_PIXEL_ID?.trim() || process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID?.trim() || '';
+  const token =
+    process.env.META_CONVERSIONS_API_TOKEN?.trim() ||
+    process.env.FACEBOOK_ACCESS_TOKEN?.trim() ||
+    '';
+  const configuredVersion = process.env.META_GRAPH_API_VERSION?.trim() || 'v25.0';
+  const graphVersion = /^v\d+\.\d+$/.test(configuredVersion) ? configuredVersion : 'v25.0';
   return { pixelId, token, graphVersion };
 }
 
 type MetaSendResult =
   | {
-    ok: true;
-    status: number;
-    eventsReceived: number;
-    fbtraceId: string | null;
-  }
+      ok: true;
+      status: number;
+      eventsReceived: number;
+      fbtraceId: string | null;
+    }
   | {
-    ok: false;
-    retryable: boolean;
-    status: number | null;
-    retryAfterMs: number | null;
-    code: number | null;
-    subcode: number | null;
-    message: string;
-    fbtraceId: string | null;
-  };
+      ok: false;
+      retryable: boolean;
+      status: number | null;
+      retryAfterMs: number | null;
+      code: number | null;
+      subcode: number | null;
+      message: string;
+      fbtraceId: string | null;
+    };
 
 function parseRetryAfter(value: string | null) {
   if (!value) return null;
@@ -627,7 +665,10 @@ function parseRetryAfter(value: string | null) {
 }
 
 export async function sendMetaEvent(
-  event: Pick<MetaOutboxRow, "eventName" | "eventId" | "eventTime" | "eventSourceUrl" | "userData" | "customData">,
+  event: Pick<
+    MetaOutboxRow,
+    'eventName' | 'eventId' | 'eventTime' | 'eventSourceUrl' | 'userData' | 'customData'
+  >,
   options?: { testEventCode?: string | null },
 ): Promise<MetaSendResult> {
   const { pixelId, token, graphVersion } = getMetaCredentials();
@@ -639,20 +680,22 @@ export async function sendMetaEvent(
       retryAfterMs: null,
       code: null,
       subcode: null,
-      message: "Missing Meta pixel credentials.",
+      message: 'Missing Meta pixel credentials.',
       fbtraceId: null,
     };
   }
   const payload = {
-    data: [{
-      event_name: event.eventName,
-      event_time: Math.floor(event.eventTime.getTime() / 1000),
-      event_id: event.eventId,
-      action_source: "website",
-      event_source_url: event.eventSourceUrl,
-      user_data: event.userData,
-      custom_data: event.customData,
-    }],
+    data: [
+      {
+        event_name: event.eventName,
+        event_time: Math.floor(event.eventTime.getTime() / 1000),
+        event_id: event.eventId,
+        action_source: 'website',
+        event_source_url: event.eventSourceUrl,
+        user_data: event.userData,
+        custom_data: event.customData,
+      },
+    ],
     ...(options?.testEventCode ? { test_event_code: options.testEventCode } : {}),
   };
   const controller = new AbortController();
@@ -661,16 +704,16 @@ export async function sendMetaEvent(
     const response = await fetch(
       `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(pixelId)}/events`,
       {
-        method: "POST",
+        method: 'POST',
         headers: {
           authorization: `Bearer ${token}`,
-          "content-type": "application/json",
+          'content-type': 'application/json',
         },
         body: JSON.stringify(payload),
         signal: controller.signal,
       },
     );
-    const body = await response.json().catch(() => ({})) as {
+    const body = (await response.json().catch(() => ({}))) as {
       events_received?: unknown;
       fbtrace_id?: unknown;
       error?: {
@@ -680,12 +723,13 @@ export async function sendMetaEvent(
         fbtrace_id?: unknown;
       };
     };
-    const eventsReceived = typeof body.events_received === "number" ? body.events_received : 0;
-    const fbtraceId = typeof body.fbtrace_id === "string"
-      ? body.fbtrace_id
-      : typeof body.error?.fbtrace_id === "string"
-        ? body.error.fbtrace_id
-        : null;
+    const eventsReceived = typeof body.events_received === 'number' ? body.events_received : 0;
+    const fbtraceId =
+      typeof body.fbtrace_id === 'string'
+        ? body.fbtrace_id
+        : typeof body.error?.fbtrace_id === 'string'
+          ? body.error.fbtrace_id
+          : null;
     if (response.ok && eventsReceived >= 1) {
       return { ok: true, status: response.status, eventsReceived, fbtraceId };
     }
@@ -694,14 +738,15 @@ export async function sendMetaEvent(
       ok: false,
       retryable,
       status: response.status,
-      retryAfterMs: parseRetryAfter(response.headers.get("retry-after")),
-      code: typeof body.error?.code === "number" ? body.error.code : null,
-      subcode: typeof body.error?.error_subcode === "number" ? body.error.error_subcode : null,
-      message: typeof body.error?.message === "string"
-        ? body.error.message
-        : response.ok
-          ? "Meta returned events_received < 1."
-          : `Meta API returned HTTP ${response.status}.`,
+      retryAfterMs: parseRetryAfter(response.headers.get('retry-after')),
+      code: typeof body.error?.code === 'number' ? body.error.code : null,
+      subcode: typeof body.error?.error_subcode === 'number' ? body.error.error_subcode : null,
+      message:
+        typeof body.error?.message === 'string'
+          ? body.error.message
+          : response.ok
+            ? 'Meta returned events_received < 1.'
+            : `Meta API returned HTTP ${response.status}.`,
       fbtraceId,
     };
   } catch (error) {
@@ -770,47 +815,57 @@ export async function processMetaOutboxBatch(db: Database, limit = 50) {
     const now = new Date();
     if (row.eventTime.getTime() < now.getTime() - META_EVENT_MAX_AGE_MS) {
       skipped += 1;
-      await db.update(metaEventOutbox).set({
-        status: "skipped",
-        metaErrorMessage: "Event exceeded Meta's seven-day delivery window.",
-        processingLeaseExpiresAt: null,
-        updatedAt: now,
-      }).where(eq(metaEventOutbox.id, row.id));
+      await db
+        .update(metaEventOutbox)
+        .set({
+          status: 'skipped',
+          metaErrorMessage: "Event exceeded Meta's seven-day delivery window.",
+          processingLeaseExpiresAt: null,
+          updatedAt: now,
+        })
+        .where(eq(metaEventOutbox.id, row.id));
       continue;
     }
     const result = await sendMetaEvent(row);
     if (result.ok) {
       delivered += 1;
-      await db.update(metaEventOutbox).set({
-        status: "delivered",
-        deliveredAt: now,
-        processingLeaseExpiresAt: null,
-        lastHttpStatus: result.status,
-        fbtraceId: result.fbtraceId,
-        eventsReceived: result.eventsReceived,
-        userData: {},
-        updatedAt: now,
-      }).where(eq(metaEventOutbox.id, row.id));
+      await db
+        .update(metaEventOutbox)
+        .set({
+          status: 'delivered',
+          deliveredAt: now,
+          processingLeaseExpiresAt: null,
+          lastHttpStatus: result.status,
+          fbtraceId: result.fbtraceId,
+          eventsReceived: result.eventsReceived,
+          userData: {},
+          updatedAt: now,
+        })
+        .where(eq(metaEventOutbox.id, row.id));
       continue;
     }
-    const canRetry = result.retryable
-      && row.attemptCount < META_MAX_ATTEMPTS
-      && row.eventTime.getTime() + META_EVENT_MAX_AGE_MS > now.getTime();
+    const canRetry =
+      result.retryable &&
+      row.attemptCount < META_MAX_ATTEMPTS &&
+      row.eventTime.getTime() + META_EVENT_MAX_AGE_MS > now.getTime();
     if (canRetry) retryable += 1;
     else failed += 1;
-    await db.update(metaEventOutbox).set({
-      status: canRetry ? "retryable" : "failed",
-      nextAttemptAt: canRetry
-        ? new Date(now.getTime() + (result.retryAfterMs ?? retryDelayMs(row.attemptCount)))
-        : row.nextAttemptAt,
-      processingLeaseExpiresAt: null,
-      lastHttpStatus: result.status,
-      metaErrorCode: result.code,
-      metaErrorSubcode: result.subcode,
-      metaErrorMessage: result.message.slice(0, 2000),
-      fbtraceId: result.fbtraceId,
-      updatedAt: now,
-    }).where(eq(metaEventOutbox.id, row.id));
+    await db
+      .update(metaEventOutbox)
+      .set({
+        status: canRetry ? 'retryable' : 'failed',
+        nextAttemptAt: canRetry
+          ? new Date(now.getTime() + (result.retryAfterMs ?? retryDelayMs(row.attemptCount)))
+          : row.nextAttemptAt,
+        processingLeaseExpiresAt: null,
+        lastHttpStatus: result.status,
+        metaErrorCode: result.code,
+        metaErrorSubcode: result.subcode,
+        metaErrorMessage: result.message.slice(0, 2000),
+        fbtraceId: result.fbtraceId,
+        updatedAt: now,
+      })
+      .where(eq(metaEventOutbox.id, row.id));
   }
   return { claimed: rows.length, delivered, retryable, failed, skipped };
 }
@@ -860,28 +915,39 @@ export async function ensureOrderConfirmedEventForOrder(
   },
 ) {
   if (!isMetaOrderConfirmedStatus(input.status)) {
-    return { created: false, reason: "unqualified" as const };
+    return { created: false, reason: 'unqualified' as const };
   }
-  const [attribution] = await db.select().from(orderMetaAttribution)
-    .where(and(
-      eq(orderMetaAttribution.orderId, input.orderId),
-      eq(orderMetaAttribution.semanticsVersion, META_SEMANTICS_VERSION),
-    )).limit(1);
-  if (!attribution) return { created: false, reason: "legacy" as const };
+  const [attribution] = await db
+    .select()
+    .from(orderMetaAttribution)
+    .where(
+      and(
+        eq(orderMetaAttribution.orderId, input.orderId),
+        eq(orderMetaAttribution.semanticsVersion, META_SEMANTICS_VERSION),
+      ),
+    )
+    .limit(1);
+  if (!attribution) return { created: false, reason: 'legacy' as const };
   const [order] = await db.select().from(orders).where(eq(orders.id, input.orderId)).limit(1);
-  if (!order) return { created: false, reason: "missing_order" as const };
+  if (!order) return { created: false, reason: 'missing_order' as const };
 
   const eventId = getOrderConfirmedEventId(input.orderId);
-  const [existingConfirmation] = await db.select({
-    id: metaEventOutbox.id,
-  }).from(metaEventOutbox).where(and(
-    eq(metaEventOutbox.eventName, META_ORDER_CONFIRMED_EVENT_NAME),
-    eq(metaEventOutbox.eventId, eventId),
-  )).limit(1);
+  const [existingConfirmation] = await db
+    .select({
+      id: metaEventOutbox.id,
+    })
+    .from(metaEventOutbox)
+    .where(
+      and(
+        eq(metaEventOutbox.eventName, META_ORDER_CONFIRMED_EVENT_NAME),
+        eq(metaEventOutbox.eventId, eventId),
+      ),
+    )
+    .limit(1);
   if (existingConfirmation) {
     return {
       created: false,
-      reason: "deduped" as const,
+      reason: 'deduped' as const,
       outboxId: existingConfirmation.id,
       eventId,
     };
@@ -894,10 +960,14 @@ export async function ensureOrderConfirmedEventForOrder(
   await db.transaction(async (tx) => {
     await replaceOrderLineSnapshots(tx, order.id, currentLines);
   });
-  const lineRows = await db.select().from(orderLineItems)
+  const lineRows = await db
+    .select()
+    .from(orderLineItems)
     .where(eq(orderLineItems.orderId, input.orderId));
-  const lines = lineRows.map(lineRowToCommerceLine).filter((line) => Number.isInteger(line.productId));
-  if (lines.length === 0) return { created: false, reason: "missing_lines" as const };
+  const lines = lineRows
+    .map(lineRowToCommerceLine)
+    .filter((line) => Number.isInteger(line.productId));
+  if (lines.length === 0) return { created: false, reason: 'missing_lines' as const };
 
   const normalizedTime = normalizeMetaEventTime(input.changedAt);
   const userData = buildMetaUserData({
@@ -920,19 +990,19 @@ export async function ensureOrderConfirmedEventForOrder(
   const outbox = await insertMetaOutboxEvent(db, {
     eventName: META_ORDER_CONFIRMED_EVENT_NAME,
     eventId,
-    source: "order_confirmation",
+    source: 'order_confirmation',
     orderId: order.id,
     orderStatusHistoryId: input.statusHistoryId,
     eventTime: normalizedTime.value,
     eventSourceUrl: attribution.eventSourceUrl,
     userData,
     customData,
-    status: normalizedTime.kind === "expired" ? "skipped" : "pending",
+    status: normalizedTime.kind === 'expired' ? 'skipped' : 'pending',
   });
   if (!outbox) {
     return {
       created: false,
-      reason: "deduped" as const,
+      reason: 'deduped' as const,
       eventId,
     };
   }
@@ -949,34 +1019,47 @@ export async function ensureOrderCompletedEventForOrder(
   },
 ) {
   if (!isMetaCompletedStatus(input.status)) {
-    return { created: false, reason: "unqualified" as const };
+    return { created: false, reason: 'unqualified' as const };
   }
-  const [attribution] = await db.select().from(orderMetaAttribution)
-    .where(and(
-      eq(orderMetaAttribution.orderId, input.orderId),
-      eq(orderMetaAttribution.semanticsVersion, META_SEMANTICS_VERSION),
-    )).limit(1);
-  if (!attribution) return { created: false, reason: "legacy" as const };
+  const [attribution] = await db
+    .select()
+    .from(orderMetaAttribution)
+    .where(
+      and(
+        eq(orderMetaAttribution.orderId, input.orderId),
+        eq(orderMetaAttribution.semanticsVersion, META_SEMANTICS_VERSION),
+      ),
+    )
+    .limit(1);
+  if (!attribution) return { created: false, reason: 'legacy' as const };
   const [order] = await db.select().from(orders).where(eq(orders.id, input.orderId)).limit(1);
-  if (!order) return { created: false, reason: "missing_order" as const };
+  if (!order) return { created: false, reason: 'missing_order' as const };
 
   const eventId = getOrderCompletedEventId(input.orderId);
-  const [existingCompletion] = await db.select({
-    id: metaEventOutbox.id,
-  }).from(metaEventOutbox).where(and(
-    eq(metaEventOutbox.eventName, META_ORDER_COMPLETED_EVENT_NAME),
-    eq(metaEventOutbox.eventId, eventId),
-  )).limit(1);
+  const [existingCompletion] = await db
+    .select({
+      id: metaEventOutbox.id,
+    })
+    .from(metaEventOutbox)
+    .where(
+      and(
+        eq(metaEventOutbox.eventName, META_ORDER_COMPLETED_EVENT_NAME),
+        eq(metaEventOutbox.eventId, eventId),
+      ),
+    )
+    .limit(1);
   if (existingCompletion) {
     return {
       created: false,
-      reason: "deduped" as const,
+      reason: 'deduped' as const,
       outboxId: existingCompletion.id,
       eventId,
     };
   }
 
-  let lineRows = await db.select().from(orderLineItems)
+  let lineRows = await db
+    .select()
+    .from(orderLineItems)
     .where(eq(orderLineItems.orderId, input.orderId));
   if (lineRows.length === 0) {
     const currentLines = await resolveOrderLineSnapshots(db, {
@@ -986,11 +1069,15 @@ export async function ensureOrderCompletedEventForOrder(
     await db.transaction(async (tx) => {
       await replaceOrderLineSnapshots(tx, order.id, currentLines);
     });
-    lineRows = await db.select().from(orderLineItems)
+    lineRows = await db
+      .select()
+      .from(orderLineItems)
       .where(eq(orderLineItems.orderId, input.orderId));
   }
-  const lines = lineRows.map(lineRowToCommerceLine).filter((line) => Number.isInteger(line.productId));
-  if (lines.length === 0) return { created: false, reason: "missing_lines" as const };
+  const lines = lineRows
+    .map(lineRowToCommerceLine)
+    .filter((line) => Number.isInteger(line.productId));
+  if (lines.length === 0) return { created: false, reason: 'missing_lines' as const };
 
   const normalizedTime = normalizeMetaEventTime(input.changedAt);
   const userData = buildMetaUserData({
@@ -1013,19 +1100,19 @@ export async function ensureOrderCompletedEventForOrder(
   const outbox = await insertMetaOutboxEvent(db, {
     eventName: META_ORDER_COMPLETED_EVENT_NAME,
     eventId,
-    source: "order_completion",
+    source: 'order_completion',
     orderId: order.id,
     orderStatusHistoryId: input.statusHistoryId,
     eventTime: normalizedTime.value,
     eventSourceUrl: attribution.eventSourceUrl,
     userData,
     customData,
-    status: normalizedTime.kind === "expired" ? "skipped" : "pending",
+    status: normalizedTime.kind === 'expired' ? 'skipped' : 'pending',
   });
   if (!outbox) {
     return {
       created: false,
-      reason: "deduped" as const,
+      reason: 'deduped' as const,
       eventId,
     };
   }
@@ -1114,21 +1201,27 @@ export async function reconcileOrderCompletedEvents(db: Database, limit = 100) {
 
 export async function clearExpiredMetaAttribution(db: Database) {
   const now = new Date();
-  const result = await db.update(orderMetaAttribution).set({
-    fbc: null,
-    fbp: null,
-    externalIdSource: null,
-    clientIpAddress: null,
-    clientUserAgent: null,
-    updatedAt: now,
-  }).where(sql`${orderMetaAttribution.expiresAt} <= ${now}
+  const result = await db
+    .update(orderMetaAttribution)
+    .set({
+      fbc: null,
+      fbp: null,
+      externalIdSource: null,
+      clientIpAddress: null,
+      clientUserAgent: null,
+      updatedAt: now,
+    })
+    .where(
+      sql`${orderMetaAttribution.expiresAt} <= ${now}
     and (
       ${orderMetaAttribution.externalIdSource} is not null
       or ${orderMetaAttribution.fbc} is not null
       or ${orderMetaAttribution.fbp} is not null
       or ${orderMetaAttribution.clientIpAddress} is not null
       or ${orderMetaAttribution.clientUserAgent} is not null
-    )`).returning({ orderId: orderMetaAttribution.orderId });
+    )`,
+    )
+    .returning({ orderId: orderMetaAttribution.orderId });
   return { cleared: result.length };
 }
 
@@ -1140,28 +1233,31 @@ export async function updateMetaWorkerHeartbeat(
   } = {},
 ) {
   const now = new Date();
-  const workerKey = "storefront-meta-worker";
-  await db.insert(metaWorkerHeartbeat).values({
-    workerKey,
-    release: process.env.SENTRY_RELEASE?.trim() || null,
-    lastHeartbeatAt: now,
-    lastSuccessfulDrainAt: input.successfulDrain ? now : null,
-    lastReconciliationAt: input.reconciliationResult ? now : null,
-    lastReconciliationResult: input.reconciliationResult ?? {},
-    updatedAt: now,
-  }).onConflictDoUpdate({
-    target: metaWorkerHeartbeat.workerKey,
-    set: {
+  const workerKey = 'storefront-meta-worker';
+  await db
+    .insert(metaWorkerHeartbeat)
+    .values({
+      workerKey,
       release: process.env.SENTRY_RELEASE?.trim() || null,
       lastHeartbeatAt: now,
-      ...(input.successfulDrain ? { lastSuccessfulDrainAt: now } : {}),
-      ...(input.reconciliationResult
-        ? {
-          lastReconciliationAt: now,
-          lastReconciliationResult: input.reconciliationResult,
-        }
-        : {}),
+      lastSuccessfulDrainAt: input.successfulDrain ? now : null,
+      lastReconciliationAt: input.reconciliationResult ? now : null,
+      lastReconciliationResult: input.reconciliationResult ?? {},
       updatedAt: now,
-    },
-  });
+    })
+    .onConflictDoUpdate({
+      target: metaWorkerHeartbeat.workerKey,
+      set: {
+        release: process.env.SENTRY_RELEASE?.trim() || null,
+        lastHeartbeatAt: now,
+        ...(input.successfulDrain ? { lastSuccessfulDrainAt: now } : {}),
+        ...(input.reconciliationResult
+          ? {
+              lastReconciliationAt: now,
+              lastReconciliationResult: input.reconciliationResult,
+            }
+          : {}),
+        updatedAt: now,
+      },
+    });
 }

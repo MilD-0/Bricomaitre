@@ -7,9 +7,7 @@ function toBuffer(value: string) {
 }
 
 export function signInternalRequest(payload: string, secret: string, timestamp: string) {
-  return createHmac('sha256', secret)
-    .update(`${timestamp}.${payload}`)
-    .digest('hex');
+  return createHmac('sha256', secret).update(`${timestamp}.${payload}`).digest('hex');
 }
 
 export function verifyInternalRequestSignature(options: {

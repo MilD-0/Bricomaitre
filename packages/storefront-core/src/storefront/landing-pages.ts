@@ -3,8 +3,18 @@ import { z } from 'zod';
 import { storefrontProductDetailResponseItemSchema } from './contracts';
 
 export const landingPageLocaleSchema = z.enum(['fr', 'ar']);
-export const landingPageSlugSchema = z.string().trim().min(2).max(160).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
-export const landingPageBlockIdSchema = z.string().trim().min(1).max(80).regex(/^[a-z0-9-]+$/);
+export const landingPageSlugSchema = z
+  .string()
+  .trim()
+  .min(2)
+  .max(160)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+export const landingPageBlockIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(80)
+  .regex(/^[a-z0-9-]+$/);
 
 const localizedTextSchema = z.string().trim().min(1).max(1_000);
 const optionalTextSchema = z.string().trim().max(4_000).default('');
@@ -17,12 +27,23 @@ const baseBlockSchema = z.object({
 });
 
 const campaignIconSchema = z.enum([
-  'power', 'shield', 'delivery', 'tool', 'phone', 'payment', 'check', 'layers', 'target', 'sparkles',
+  'power',
+  'shield',
+  'delivery',
+  'tool',
+  'phone',
+  'payment',
+  'check',
+  'layers',
+  'target',
+  'sparkles',
 ]);
 
 export const landingPageHeroBlockSchema = baseBlockSchema.extend({
   type: z.literal('product-hero'),
-  variant: z.enum(['media-left', 'media-right', 'media-background', 'product-stage', 'editorial']).default('media-left'),
+  variant: z
+    .enum(['media-left', 'media-right', 'media-background', 'product-stage', 'editorial'])
+    .default('media-left'),
   heading: localizedTextSchema,
   subheading: optionalTextSchema,
   imageUrl: imageUrlSchema,
@@ -35,11 +56,16 @@ export const landingPageBenefitsBlockSchema = baseBlockSchema.extend({
   type: z.literal('benefit-grid'),
   variant: z.enum(['icons', 'numbered', 'compact']).default('icons'),
   heading: localizedTextSchema,
-  items: z.array(z.object({
-    title: localizedTextSchema,
-    description: z.string().trim().min(1).max(800),
-    icon: campaignIconSchema.default('tool'),
-  })).min(2).max(6),
+  items: z
+    .array(
+      z.object({
+        title: localizedTextSchema,
+        description: z.string().trim().min(1).max(800),
+        icon: campaignIconSchema.default('tool'),
+      }),
+    )
+    .min(2)
+    .max(6),
 });
 
 export const landingPageMediaFeatureBlockSchema = baseBlockSchema.extend({
@@ -56,20 +82,30 @@ export const landingPageSpecificationsBlockSchema = baseBlockSchema.extend({
   type: z.literal('specifications'),
   variant: z.enum(['table', 'cards']).default('table'),
   heading: localizedTextSchema,
-  items: z.array(z.object({
-    label: localizedTextSchema,
-    value: localizedTextSchema,
-  })).min(1).max(20),
+  items: z
+    .array(
+      z.object({
+        label: localizedTextSchema,
+        value: localizedTextSchema,
+      }),
+    )
+    .min(1)
+    .max(20),
 });
 
 export const landingPageFaqBlockSchema = baseBlockSchema.extend({
   type: z.literal('faq'),
   variant: z.literal('accordion').default('accordion'),
   heading: localizedTextSchema,
-  items: z.array(z.object({
-    question: localizedTextSchema,
-    answer: z.string().trim().min(1).max(2_000),
-  })).min(1).max(12),
+  items: z
+    .array(
+      z.object({
+        question: localizedTextSchema,
+        answer: z.string().trim().min(1).max(2_000),
+      }),
+    )
+    .min(1)
+    .max(12),
 });
 
 export const landingPageEditorialIntroBlockSchema = baseBlockSchema.extend({
@@ -85,11 +121,16 @@ export const landingPageImageGalleryBlockSchema = baseBlockSchema.extend({
   type: z.literal('image-gallery'),
   variant: z.enum(['spotlight', 'mosaic', 'filmstrip']).default('spotlight'),
   heading: localizedTextSchema,
-  images: z.array(z.object({
-    imageUrl: imageUrlSchema,
-    imageAlt: z.string().trim().max(300).default(''),
-    caption: z.string().trim().max(500).default(''),
-  })).min(2).max(8),
+  images: z
+    .array(
+      z.object({
+        imageUrl: imageUrlSchema,
+        imageAlt: z.string().trim().max(300).default(''),
+        caption: z.string().trim().max(500).default(''),
+      }),
+    )
+    .min(2)
+    .max(8),
 });
 
 export const landingPageUseCasesBlockSchema = baseBlockSchema.extend({
@@ -97,11 +138,16 @@ export const landingPageUseCasesBlockSchema = baseBlockSchema.extend({
   variant: z.enum(['cards', 'editorial', 'mosaic']).default('cards'),
   heading: localizedTextSchema,
   body: optionalTextSchema,
-  items: z.array(z.object({
-    title: localizedTextSchema,
-    description: z.string().trim().min(1).max(1_000),
-    icon: campaignIconSchema.default('target'),
-  })).min(2).max(6),
+  items: z
+    .array(
+      z.object({
+        title: localizedTextSchema,
+        description: z.string().trim().min(1).max(1_000),
+        icon: campaignIconSchema.default('target'),
+      }),
+    )
+    .min(2)
+    .max(6),
 });
 
 export const landingPageComparisonBlockSchema = baseBlockSchema.extend({
@@ -110,11 +156,16 @@ export const landingPageComparisonBlockSchema = baseBlockSchema.extend({
   heading: localizedTextSchema,
   productLabel: localizedTextSchema,
   alternativeLabel: localizedTextSchema,
-  items: z.array(z.object({
-    label: localizedTextSchema,
-    productValue: localizedTextSchema,
-    alternativeValue: localizedTextSchema,
-  })).min(2).max(8),
+  items: z
+    .array(
+      z.object({
+        label: localizedTextSchema,
+        productValue: localizedTextSchema,
+        alternativeValue: localizedTextSchema,
+      }),
+    )
+    .min(2)
+    .max(8),
   footnote: z.string().trim().max(1_000).default(''),
 });
 
@@ -123,21 +174,31 @@ export const landingPageProcessBlockSchema = baseBlockSchema.extend({
   variant: z.enum(['horizontal', 'vertical', 'timeline']).default('horizontal'),
   heading: localizedTextSchema,
   body: optionalTextSchema,
-  steps: z.array(z.object({
-    title: localizedTextSchema,
-    description: z.string().trim().min(1).max(1_000),
-  })).min(2).max(6),
+  steps: z
+    .array(
+      z.object({
+        title: localizedTextSchema,
+        description: z.string().trim().min(1).max(1_000),
+      }),
+    )
+    .min(2)
+    .max(6),
 });
 
 export const landingPageTrustBandBlockSchema = baseBlockSchema.extend({
   type: z.literal('trust-band'),
   variant: z.enum(['ribbon', 'cards', 'minimal']).default('ribbon'),
   heading: z.string().trim().max(1_000).default(''),
-  items: z.array(z.object({
-    title: localizedTextSchema,
-    description: z.string().trim().max(800).default(''),
-    icon: campaignIconSchema.default('shield'),
-  })).min(2).max(5),
+  items: z
+    .array(
+      z.object({
+        title: localizedTextSchema,
+        description: z.string().trim().max(800).default(''),
+        icon: campaignIconSchema.default('shield'),
+      }),
+    )
+    .min(2)
+    .max(5),
 });
 
 export const landingPageCommercePanelBlockSchema = baseBlockSchema.extend({
@@ -178,32 +239,45 @@ export const landingPageBlockSchema = z.discriminatedUnion('type', [
   landingPageFinalCtaBlockSchema,
 ]);
 
-export const landingPageDocumentSchema = z.object({
-  schemaVersion: z.union([z.literal(1), z.literal(2)]).default(2),
-  theme: z.object({
-    accent: z.enum(['orange', 'teal', 'graphite']).default('orange'),
-    density: z.enum(['compact', 'comfortable', 'spacious']).default('comfortable'),
-    shell: z.literal('campaign').default('campaign'),
-  }).default({ accent: 'orange', density: 'comfortable', shell: 'campaign' }),
-  seo: z.object({
-    title: z.string().trim().min(1).max(70),
-    description: z.string().trim().min(1).max(170),
-    indexable: z.boolean().default(false),
-  }),
-  blocks: z.array(landingPageBlockSchema).min(1).max(20),
-}).superRefine((document, context) => {
-  const ids = new Set<string>();
-  for (const [index, block] of document.blocks.entries()) {
-    if (ids.has(block.id)) context.addIssue({ code: 'custom', path: ['blocks', index, 'id'], message: 'Block IDs must be unique.' });
-    ids.add(block.id);
-  }
-  if (!document.blocks.some((block) => block.type === 'product-hero')) {
-    context.addIssue({ code: 'custom', path: ['blocks'], message: 'A product hero is required.' });
-  }
-  if (!document.blocks.some((block) => block.type === 'final-cta')) {
-    context.addIssue({ code: 'custom', path: ['blocks'], message: 'A final CTA is required.' });
-  }
-});
+export const landingPageDocumentSchema = z
+  .object({
+    schemaVersion: z.union([z.literal(1), z.literal(2)]).default(2),
+    theme: z
+      .object({
+        accent: z.enum(['orange', 'teal', 'graphite']).default('orange'),
+        density: z.enum(['compact', 'comfortable', 'spacious']).default('comfortable'),
+        shell: z.literal('campaign').default('campaign'),
+      })
+      .default({ accent: 'orange', density: 'comfortable', shell: 'campaign' }),
+    seo: z.object({
+      title: z.string().trim().min(1).max(70),
+      description: z.string().trim().min(1).max(170),
+      indexable: z.boolean().default(false),
+    }),
+    blocks: z.array(landingPageBlockSchema).min(1).max(20),
+  })
+  .superRefine((document, context) => {
+    const ids = new Set<string>();
+    for (const [index, block] of document.blocks.entries()) {
+      if (ids.has(block.id))
+        context.addIssue({
+          code: 'custom',
+          path: ['blocks', index, 'id'],
+          message: 'Block IDs must be unique.',
+        });
+      ids.add(block.id);
+    }
+    if (!document.blocks.some((block) => block.type === 'product-hero')) {
+      context.addIssue({
+        code: 'custom',
+        path: ['blocks'],
+        message: 'A product hero is required.',
+      });
+    }
+    if (!document.blocks.some((block) => block.type === 'final-cta')) {
+      context.addIssue({ code: 'custom', path: ['blocks'], message: 'A final CTA is required.' });
+    }
+  });
 
 export const landingPageCreateSchema = z.object({
   productId: z.number().int().positive(),
@@ -234,11 +308,13 @@ export const storefrontLandingPageResponseSchema = z.object({
 });
 
 export const storefrontLandingPageSitemapResponseSchema = z.object({
-  items: z.array(z.object({
-    slug: landingPageSlugSchema,
-    locale: landingPageLocaleSchema,
-    updatedAt: z.string().datetime(),
-  })),
+  items: z.array(
+    z.object({
+      slug: landingPageSlugSchema,
+      locale: landingPageLocaleSchema,
+      updatedAt: z.string().datetime(),
+    }),
+  ),
 });
 
 export type LandingPageBlock = z.infer<typeof landingPageBlockSchema>;

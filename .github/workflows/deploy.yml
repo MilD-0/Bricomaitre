@@ -1,7 +1,8 @@
-name: Deploy
+name: Verify and deploy
 
 on:
   workflow_dispatch:
+  pull_request:
   push:
     branches:
       - main
@@ -9,13 +10,160 @@ on:
 permissions:
   contents: read
 
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('bricomaitre-pr-{0}', github.event.pull_request.number) || 'bricomaitre-production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-      - uses: actions/setup-node@v5
+jobs:
+  static-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Validate operational configuration
+        run: bash ops/scripts/validate-operations.sh
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack install
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run static quality gates
+        run: |
+          pnpm format:check
+          pnpm lint
+          pnpm typecheck
+          pnpm dead-code:check
+
+  service-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_DB: bricomaitre_test
+          POSTGRES_USER: bricomaitre
+          POSTGRES_PASSWORD: bricomaitre
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bricomaitre -d bricomaitre_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-bookworm
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack install
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply migrations and test real service contracts
+        env:
+          DATABASE_URL: postgres://bricomaitre:bricomaitre@127.0.0.1:5432/bricomaitre_test
+          REDIS_URL: redis://127.0.0.1:6379/0
+        run: |
+          pnpm --filter @bric/admin db:migrate
+          pnpm test:services
+
+  test-suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - ops-packages
+          - admin
+          - storefront-api
+          - storefront
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack install
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run ${{ matrix.suite }} tests
+        env:
+          TEST_SUITE: ${{ matrix.suite }}
+        run: |
+          set -euo pipefail
+          case "$TEST_SUITE" in
+            ops-packages)
+              ops/scripts/run-ci-check.sh "Operational and shared-package tests" \
+                bash -lc 'pnpm test:ops && pnpm test:packages'
+              ;;
+            admin)
+              ops/scripts/run-ci-check.sh "Admin unit, component, and route-contract tests" \
+                bash -lc 'pnpm test:admin && pnpm test:admin:integration'
+              ;;
+            storefront-api)
+              ops/scripts/run-ci-check.sh "Storefront API unit and route-contract tests" \
+                pnpm test:storefront-api
+              ;;
+            storefront)
+              ops/scripts/run-ci-check.sh "Storefront unit, component, and application-contract tests" \
+                bash -lc 'pnpm test:storefront && pnpm test:storefront:integration'
+              ;;
+            *)
+              echo "unknown test suite: $TEST_SUITE" >&2
+              exit 64
+              ;;
+          esac
+
+  browser-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           package-manager-cache: false
@@ -29,37 +177,59 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install browser acceptance runtime
-        run: pnpm --filter storefront-new exec playwright install --with-deps chromium
+        run: pnpm --filter @bric/storefront exec playwright install --with-deps chromium
 
-      - name: Test
+      - name: Run browser acceptance and performance gates
         run: |
           set -euo pipefail
+          ops/scripts/run-ci-check.sh "Storefront browser acceptance tests" pnpm test:storefront:browser
+          ops/scripts/run-ci-check.sh "Storefront performance budgets" pnpm test:storefront:performance
 
-          run_step() {
-            local label="$1"
-            shift
+      - name: Upload browser diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: storefront-browser-diagnostics
+          path: |
+            apps/storefront/playwright-report
+            apps/storefront/test-results
+          if-no-files-found: ignore
+          retention-days: 14
 
-            echo "::group::$label"
-            if "$@"; then
-              echo "- ✅ $label" >> "$GITHUB_STEP_SUMMARY"
-              echo "::endgroup::"
-              return 0
-            fi
+  production-builds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
 
-            local status=$?
-            echo "- ❌ $label" >> "$GITHUB_STEP_SUMMARY"
-            echo "::endgroup::"
-            return "$status"
-          }
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          package-manager-cache: false
 
-          echo "## Verify phase" >> "$GITHUB_STEP_SUMMARY"
-          run_step "Admin unit and jsdom tests" pnpm test:admin
-          run_step "Admin integration tests" pnpm test:admin:integration
-          run_step "Storefront API tests" pnpm test:storefront-api
-          run_step "Storefront unit tests" pnpm test:storefront
-          run_step "Storefront integration tests" pnpm test:storefront-new:integration
-          run_step "Storefront browser acceptance tests" pnpm test:storefront:browser
-          echo >> "$GITHUB_STEP_SUMMARY"
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack install
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify production builds before publishing images
+        env:
+          BETTER_AUTH_SECRET: ci-build-verification-secret-1234567890
+          BETTER_AUTH_URL: http://127.0.0.1:3000
+          GOOGLE_CLIENT_ID: ci-build-client
+          GOOGLE_CLIENT_SECRET: ci-build-secret
+          STOREFRONT_API_BASE_URL: ${{ vars.STOREFRONT_BUILD_API_BASE_URL || 'https://api.bricomaitre.com' }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL || 'https://bricomaitre.com' }}
+          NEXT_PUBLIC_CLOUDFRONT_URL: ${{ vars.NEXT_PUBLIC_CLOUDFRONT_URL }}
+          NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS: ${{ vars.NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS }}
+        run: |
+          pnpm build:apps
+          echo "- ✅ Storefront API, admin, and storefront production builds completed" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Analyze storefront bundle
         if: github.event_name == 'workflow_dispatch'
@@ -68,8 +238,10 @@ jobs:
           echo "- ✅ Storefront bundle analysis build completed" >> "$GITHUB_STEP_SUMMARY"
 
   build-api-images:
-    needs: verify
+    needs: [static-quality, service-contracts, test-suite, browser-tests, production-builds]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write
@@ -79,18 +251,20 @@ jobs:
       SHA_TAG: sha-${{ github.sha }}
       RELEASE_CHANNEL: ${{ github.ref == 'refs/heads/main' && 'main' || '' }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           package-manager-cache: false
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-      - uses: sigstore/cosign-installer@v3
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
       - name: Build, push, and sign storefront API images
         run: |
@@ -109,7 +283,7 @@ jobs:
             BRIC_IMAGE_STOREFRONT_API:storefront-api-web:storefront-api-web \
             BRIC_IMAGE_STOREFRONT_META_WORKER:storefront-api-meta-worker:storefront-api-meta-worker
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: bric-images-api
           path: release-parts/.bric-images-api.env
@@ -118,8 +292,10 @@ jobs:
           retention-days: 14
 
   build-admin-images:
-    needs: verify
+    needs: [static-quality, service-contracts, test-suite, browser-tests, production-builds]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write
@@ -130,22 +306,24 @@ jobs:
       RELEASE_CHANNEL: ${{ github.ref == 'refs/heads/main' && 'main' || '' }}
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-      NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
-      NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+      BETTER_AUTH_URL: ${{ secrets.BETTER_AUTH_URL }}
+      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
       STOREFRONT_BUILD_API_BASE_URL: ${{ vars.STOREFRONT_BUILD_API_BASE_URL || 'https://api.bricomaitre.com' }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           package-manager-cache: false
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-      - uses: sigstore/cosign-installer@v3
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
       - name: Build, push, and sign admin images
         run: |
@@ -165,7 +343,7 @@ jobs:
             BRIC_IMAGE_ADMIN_WORKER:admin-worker:admin-worker \
             BRIC_IMAGE_ADMIN_MIGRATIONS:admin-migrations:admin-migrations
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: bric-images-admin
           path: release-parts/.bric-images-admin.env
@@ -174,8 +352,10 @@ jobs:
           retention-days: 14
 
   build-storefront-image:
-    needs: verify
+    needs: [static-quality, service-contracts, test-suite, browser-tests, production-builds]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write
@@ -187,24 +367,26 @@ jobs:
       NEXT_PUBLIC_FACEBOOK_PIXEL_ID: ${{ secrets.NEXT_PUBLIC_FACEBOOK_PIXEL_ID }}
       NEXT_PUBLIC_GA_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}
       NEXT_PUBLIC_TIKTOK_PIXEL_ID: ${{ secrets.NEXT_PUBLIC_TIKTOK_PIXEL_ID }}
-      NEXT_PUBLIC_SENTRY_DSN_STOREFRONT_NEW: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN_STOREFRONT_NEW }}
+      NEXT_PUBLIC_SENTRY_DSN_STOREFRONT: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN_STOREFRONT }}
       NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL || 'https://bricomaitre.com' }}
       NEXT_PUBLIC_CLOUDFRONT_URL: ${{ vars.NEXT_PUBLIC_CLOUDFRONT_URL }}
       NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS: ${{ vars.NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS }}
       STOREFRONT_BUILD_API_BASE_URL: ${{ vars.STOREFRONT_BUILD_API_BASE_URL || 'https://api.bricomaitre.com' }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           package-manager-cache: false
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-      - uses: sigstore/cosign-installer@v3
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
       - name: Build, push, and sign storefront image
         run: |
@@ -224,11 +406,11 @@ jobs:
 
           storefront_static_pages="$(python3 ops/scripts/extract-static-page-count.py build-metadata/storefront-web.log)"
           printf 'BRIC_STOREFRONT_STATIC_PAGES=%s\n' "$storefront_static_pages" >> release-parts/.bric-images-storefront.env
-          printf 'BRIC_STOREFRONT_APP=storefront-new\n' >> release-parts/.bric-images-storefront.env
-          echo "- Release surface: storefront-new" >> "$GITHUB_STEP_SUMMARY"
+          printf 'BRIC_STOREFRONT_APP=storefront\n' >> release-parts/.bric-images-storefront.env
+          echo "- Release surface: storefront" >> "$GITHUB_STEP_SUMMARY"
           echo "- Prerendered routes: ${storefront_static_pages}" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: bric-images-storefront
           path: release-parts/.bric-images-storefront.env
@@ -242,15 +424,18 @@ jobs:
       - build-admin-images
       - build-storefront-image
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           package-manager-cache: false
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           pattern: bric-images-*
           path: release-parts
@@ -275,9 +460,9 @@ jobs:
           } > release-manifest/.bric-release.env
 
           echo "## Release manifest" >> "$GITHUB_STEP_SUMMARY"
-          echo "- ✅ Six signed image digests, storefront-new identity, and prerender count validated" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ✅ Six signed image digests, storefront identity, and prerender count validated" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: bric-release-manifest
           path: |
@@ -290,6 +475,10 @@ jobs:
   deploy:
     needs: assemble-release-manifest
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://bricomaitre.com
     permissions:
       contents: read
       packages: read
@@ -305,15 +494,12 @@ jobs:
       GOOGLE_ANALYTICS_API_SECRET: ${{ secrets.GOOGLE_ANALYTICS_API_SECRET }}
       GHCR_USERNAME: ${{ github.actor }}
       GHCR_READ_TOKEN: ${{ github.token }}
-      AWS_REGION: ${{ secrets.AWS_REGION }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
-      CLOUDFRONT_INVALIDATION_PATHS: ${{ secrets.CLOUDFRONT_INVALIDATION_PATHS }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: bric-release-manifest
           path: release-manifest
@@ -333,7 +519,7 @@ jobs:
           printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/bric_deploy_key
           chmod 600 ~/.ssh/bric_deploy_key
 
-      - name: Stage ops-only release on VPS
+      - name: Stage release, cut over, and run production smoke checks
         run: |
           set -euo pipefail
           set -a
@@ -418,18 +604,3 @@ jobs:
 
           echo "## Deploy phase" >> "$GITHUB_STEP_SUMMARY"
           echo "- ✅ Deployed release ${BRIC_RELEASE_ID}" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Configure AWS credentials
-        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_REGION != '' && env.CLOUDFRONT_DISTRIBUTION_ID != '' && env.CLOUDFRONT_INVALIDATION_PATHS != ''
-        uses: aws-actions/configure-aws-credentials@v5.1.1
-        with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Invalidate CloudFront media paths
-        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_REGION != '' && env.CLOUDFRONT_DISTRIBUTION_ID != '' && env.CLOUDFRONT_INVALIDATION_PATHS != ''
-        run: |
-          aws cloudfront create-invalidation \
-            --distribution-id "${{ env.CLOUDFRONT_DISTRIBUTION_ID }}" \
-            --paths ${{ env.CLOUDFRONT_INVALIDATION_PATHS }}

@@ -13,6 +13,8 @@ image_state_file="${BRIC_IMAGE_STATE_FILE:-$runtime_dir/images.env}"
 deploy_lock_file="${BRIC_DEPLOY_LOCK_FILE:-$runtime_dir/deploy.lock}"
 nginx_conf_dir="${BRIC_NGINX_CONF_DIR:-$runtime_dir/nginx}"
 nginx_conf_file="${BRIC_NGINX_CONF_FILE:-$nginx_conf_dir/default.conf}"
+nginx_template_file="${BRIC_NGINX_TEMPLATE_FILE:-$repo_root/ops/nginx/templates/default.conf.template}"
+certbot_webroot_dir="${BRIC_CERTBOT_WEBROOT_DIR:-$runtime_dir/certbot-webroot}"
 default_slot="${BRIC_DEFAULT_ACTIVE_SLOT:-blue}"
 releases_dir="${BRIC_RELEASES_DIR:-/srv/bric/releases}"
 current_link="${BRIC_CURRENT_LINK:-/srv/bric/current}"
@@ -132,7 +134,7 @@ assert_service_image() {
 }
 
 ensure_runtime_dirs() {
-  mkdir -p "$runtime_dir" "$nginx_conf_dir" "$releases_dir"
+  mkdir -p "$runtime_dir" "$nginx_conf_dir" "$certbot_webroot_dir" "$releases_dir"
 }
 
 validate_current_release_link() {
@@ -211,6 +213,16 @@ service_name() {
   printf '%s-%s\n' "$base_name" "$slot"
 }
 
+stop_slot_app_services() {
+  local slot="${1:?slot is required}"
+  require_slot "$slot"
+
+  compose stop \
+    "$(service_name storefront "$slot")" \
+    "$(service_name adminstration "$slot")" \
+    "$(service_name storefront-api "$slot")" || true
+}
+
 slot_api_host_port() {
   local slot="${1:?slot is required}"
   require_slot "$slot"
@@ -237,138 +249,13 @@ slot_stack_present() {
 
 render_nginx_config() {
   local slot="${1:?slot is required}"
-  local storefront_server_names
   require_slot "$slot"
   ensure_runtime_dirs
 
-  if [[ "${BRIC_STOREFRONT_DOMAIN:-www.example.com}" = "${BRIC_STOREFRONT_APEX_DOMAIN:-example.com}" ]]; then
-    storefront_server_names="${BRIC_STOREFRONT_DOMAIN:-www.example.com}"
-  else
-    storefront_server_names="${BRIC_STOREFRONT_DOMAIN:-www.example.com} ${BRIC_STOREFRONT_APEX_DOMAIN:-example.com}"
-  fi
-
-  cat >"$nginx_conf_file" <<EOF
-map \$http_upgrade \$connection_upgrade {
-  default upgrade;
-  '' close;
-}
-
-resolver 127.0.0.11 ipv6=off valid=30s;
-
-server {
-  listen 80;
-  server_name ${BRIC_API_DOMAIN:-api.example.com};
-
-  location / {
-    return 301 https://\$host\$request_uri;
-  }
-}
-
-server {
-  listen 80;
-  server_name ${BRIC_ADMIN_DOMAIN:-admin.example.com};
-
-  location / {
-    return 301 https://\$host\$request_uri;
-  }
-}
-
-server {
-  listen 80;
-  server_name ${storefront_server_names};
-
-  location / {
-    return 301 https://\$host\$request_uri;
-  }
-}
-
-server {
-  listen 443 ssl;
-  http2 on;
-  server_name ${BRIC_API_DOMAIN:-api.example.com};
-
-  ssl_certificate /etc/letsencrypt/live/${BRIC_API_CERT_NAME:-api.example.com}/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/${BRIC_API_CERT_NAME:-api.example.com}/privkey.pem;
-
-  client_max_body_size 10m;
-
-  location / {
-    proxy_next_upstream error timeout http_502 http_503 http_504;
-    proxy_pass http://storefront-api-${slot}:3001;
-    proxy_http_version 1.1;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection \$connection_upgrade;
-  }
-}
-
-server {
-  listen 443 ssl;
-  http2 on;
-  server_name ${BRIC_ADMIN_DOMAIN:-admin.example.com};
-
-  ssl_certificate /etc/letsencrypt/live/${BRIC_ADMIN_CERT_NAME:-admin.example.com}/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/${BRIC_ADMIN_CERT_NAME:-admin.example.com}/privkey.pem;
-
-  client_max_body_size 50m;
-
-  location / {
-    proxy_next_upstream error timeout http_502 http_503 http_504;
-    proxy_pass http://adminstration-${slot}:3000;
-    proxy_http_version 1.1;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection \$connection_upgrade;
-  }
-}
-
-server {
-  listen 443 ssl;
-  http2 on;
-  server_name ${storefront_server_names};
-
-  ssl_certificate /etc/letsencrypt/live/${BRIC_STOREFRONT_CERT_NAME:-www.example.com}/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/${BRIC_STOREFRONT_CERT_NAME:-www.example.com}/privkey.pem;
-
-  client_max_body_size 20m;
-
-  location = /api/capi {
-    proxy_pass http://storefront-api-${slot}:3001;
-    proxy_http_version 1.1;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
-  }
-
-  location = /api/meta/events {
-    proxy_pass http://storefront-api-${slot}:3001;
-    proxy_http_version 1.1;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
-  }
-
-  location / {
-    proxy_next_upstream error timeout http_502 http_503 http_504;
-    proxy_pass http://storefront-${slot}:3002;
-    proxy_http_version 1.1;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection \$connection_upgrade;
-  }
-}
-EOF
+  python3 "$script_dir/render-nginx-config.py" \
+    "$nginx_template_file" \
+    "$nginx_conf_file" \
+    "$slot"
 }
 
 ensure_nginx() {
@@ -388,6 +275,7 @@ verify_release_dir() {
     "$release_dir/ops/scripts/deploy.sh"
     "$release_dir/ops/docker/compose.prod.yml"
     "$release_dir/ops/nginx/nginx.conf"
+    "$release_dir/ops/nginx/templates/default.conf.template"
     "$release_dir/ops/ownership/AI_AGENT_BOUNDARY.md"
     "$release_dir/ops/ownership/BRICOMAITRE_AUTHORIZED_RELEASE.txt"
     "$release_dir/ops/ownership/AI_POLICY.md"
@@ -492,8 +380,8 @@ require_release_image_manifest() {
     return 1
   fi
 
-  if [[ "$BRIC_STOREFRONT_APP" != "storefront-new" ]]; then
-    echo "BRIC_STOREFRONT_APP must identify storefront-new" >&2
+  if [[ "$BRIC_STOREFRONT_APP" != "storefront" ]]; then
+    echo "BRIC_STOREFRONT_APP must identify storefront" >&2
     return 1
   fi
 }

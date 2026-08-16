@@ -11,8 +11,20 @@ import {
 } from 'drizzle-orm/pg-core';
 
 export const aiSurfaceEnum = pgEnum('ai_surface', ['admin', 'storefront']);
-export const aiRunStatusEnum = pgEnum('ai_run_status', ['running', 'completed', 'failed', 'cancelled']);
-export const aiProposalStatusEnum = pgEnum('ai_proposal_status', ['proposed', 'approved', 'rejected', 'applied', 'expired', 'failed']);
+export const aiRunStatusEnum = pgEnum('ai_run_status', [
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+]);
+export const aiProposalStatusEnum = pgEnum('ai_proposal_status', [
+  'proposed',
+  'approved',
+  'rejected',
+  'applied',
+  'expired',
+  'failed',
+]);
 
 export const aiConversations = pgTable(
   'ai_conversations',
@@ -37,7 +49,9 @@ export const aiMessages = pgTable(
   'ai_messages',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    conversationId: bigint('conversation_id', { mode: 'number' }).notNull().references(() => aiConversations.id, { onDelete: 'cascade' }),
+    conversationId: bigint('conversation_id', { mode: 'number' })
+      .notNull()
+      .references(() => aiConversations.id, { onDelete: 'cascade' }),
     role: text('role').notNull(),
     content: jsonb('content').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -49,7 +63,10 @@ export const aiRuns = pgTable(
   'ai_runs',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    conversationId: bigint('conversation_id', { mode: 'number' }).references(() => aiConversations.id, { onDelete: 'set null' }),
+    conversationId: bigint('conversation_id', { mode: 'number' }).references(
+      () => aiConversations.id,
+      { onDelete: 'set null' },
+    ),
     surface: aiSurfaceEnum('surface').notNull(),
     task: text('task').notNull(),
     status: aiRunStatusEnum('status').notNull().default('running'),
@@ -74,7 +91,9 @@ export const aiToolCalls = pgTable(
   'ai_tool_calls',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    runId: bigint('run_id', { mode: 'number' }).notNull().references(() => aiRuns.id, { onDelete: 'cascade' }),
+    runId: bigint('run_id', { mode: 'number' })
+      .notNull()
+      .references(() => aiRuns.id, { onDelete: 'cascade' }),
     toolName: text('tool_name').notNull(),
     status: text('status').notNull(),
     input: jsonb('input'),
@@ -83,14 +102,19 @@ export const aiToolCalls = pgTable(
     startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp('completed_at', { withTimezone: true }),
   },
-  (t) => [index('idx_ai_tool_calls_run').on(t.runId), index('idx_ai_tool_calls_tool_started').on(t.toolName, t.startedAt)],
+  (t) => [
+    index('idx_ai_tool_calls_run').on(t.runId),
+    index('idx_ai_tool_calls_tool_started').on(t.toolName, t.startedAt),
+  ],
 );
 
 export const aiProposals = pgTable(
   'ai_proposals',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    runId: bigint('run_id', { mode: 'number' }).notNull().references(() => aiRuns.id, { onDelete: 'restrict' }),
+    runId: bigint('run_id', { mode: 'number' })
+      .notNull()
+      .references(() => aiRuns.id, { onDelete: 'restrict' }),
     proposalType: text('proposal_type').notNull(),
     status: aiProposalStatusEnum('status').notNull().default('proposed'),
     entityType: text('entity_type').notNull(),
