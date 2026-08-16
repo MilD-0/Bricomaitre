@@ -18,7 +18,10 @@ export function parseEcotrackNumericValue(value: string | number | null | undefi
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function parseEcotrackRemoteDateTime(date: string | null | undefined, time?: string | null | undefined) {
+export function parseEcotrackRemoteDateTime(
+  date: string | null | undefined,
+  time?: string | null | undefined,
+) {
   const normalizedDate = String(date ?? '').trim();
   if (!normalizedDate) {
     return null;
@@ -29,13 +32,17 @@ export function parseEcotrackRemoteDateTime(date: string | null | undefined, tim
   const isoCandidate = normalizedTime
     ? `${normalizedDate}T${normalizedTime}Z`
     : normalizedDate.includes('T')
-      ? hasExplicitOffset ? normalizedDate : `${normalizedDate}Z`
+      ? hasExplicitOffset
+        ? normalizedDate
+        : `${normalizedDate}Z`
       : `${normalizedDate}T00:00:00Z`;
   const parsed = new Date(isoCandidate);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-export function readEcotrackActivityTimestamp(entry: EcotrackMajEntry | { date?: string | null; time?: string | null }) {
+export function readEcotrackActivityTimestamp(
+  entry: EcotrackMajEntry | { date?: string | null; time?: string | null },
+) {
   if ('created_at' in entry) {
     return parseEcotrackRemoteDateTime(entry.created_at);
   }

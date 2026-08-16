@@ -37,9 +37,10 @@ export function getAiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig {
   return aiConfigSchema.parse({
     enabled: isTruthy(env.AI_ENABLED),
     provider,
-    apiKey: provider === 'openrouter'
-      ? env.OPENROUTER_API_KEY || undefined
-      : env.OPENAI_API_KEY || undefined,
+    apiKey:
+      provider === 'openrouter'
+        ? env.OPENROUTER_API_KEY || undefined
+        : env.OPENAI_API_KEY || undefined,
     adminModel: env.AI_ADMIN_MODEL || undefined,
     storefrontModel: env.AI_STOREFRONT_MODEL || undefined,
     contentModel: env.AI_CONTENT_MODEL || undefined,
@@ -56,16 +57,19 @@ export function assertAiConfigured(config: AiConfig) {
     throw new Error('AI is disabled');
   }
   if (!config.apiKey) {
-    throw new Error(`${config.provider === 'openrouter' ? 'OPENROUTER_API_KEY' : 'OPENAI_API_KEY'} is not configured`);
+    throw new Error(
+      `${config.provider === 'openrouter' ? 'OPENROUTER_API_KEY' : 'OPENAI_API_KEY'} is not configured`,
+    );
   }
 }
 
 export function resolveAiModel(config: AiConfig, task: AiTask) {
-  const model = task === 'storefront'
-    ? config.storefrontModel
-    : task === 'content'
-      ? config.contentModel
-      : config.adminModel;
+  const model =
+    task === 'storefront'
+      ? config.storefrontModel
+      : task === 'content'
+        ? config.contentModel
+        : config.adminModel;
 
   if (!model) {
     throw new Error(`AI_${task.toUpperCase()}_MODEL is not configured`);
@@ -79,7 +83,11 @@ export function mergeOpenRouterRequestBody(body: string, additions: Record<strin
   return JSON.stringify({ ...parsed, ...additions });
 }
 
-export function createAiLanguageModel(config: AiConfig, task: AiTask, options: AiLanguageModelOptions = {}) {
+export function createAiLanguageModel(
+  config: AiConfig,
+  task: AiTask,
+  options: AiLanguageModelOptions = {},
+) {
   assertAiConfigured(config);
   const model = options.model ?? resolveAiModel(config, task);
 
@@ -93,12 +101,14 @@ export function createAiLanguageModel(config: AiConfig, task: AiTask, options: A
       baseURL: config.openRouterBaseUrl ?? 'https://openrouter.ai/api/v1',
       headers,
       fetch: options.openRouterRequestBody
-        ? (input, init) => globalThis.fetch(input, {
-            ...init,
-            body: typeof init?.body === 'string'
-              ? mergeOpenRouterRequestBody(init.body, options.openRouterRequestBody!)
-              : init?.body,
-          })
+        ? (input, init) =>
+            globalThis.fetch(input, {
+              ...init,
+              body:
+                typeof init?.body === 'string'
+                  ? mergeOpenRouterRequestBody(init.body, options.openRouterRequestBody!)
+                  : init?.body,
+            })
         : undefined,
     });
     return provider.chat(model);
@@ -106,6 +116,3 @@ export function createAiLanguageModel(config: AiConfig, task: AiTask, options: A
 
   return createOpenAI({ apiKey: config.apiKey }).responses(model);
 }
-
-/** @deprecated Use createAiLanguageModel. */
-export const createOpenAiResponsesModel = createAiLanguageModel;

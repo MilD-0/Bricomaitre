@@ -1,7 +1,7 @@
-import { and, eq, gte, lte, sql } from "drizzle-orm";
-import { z } from "zod";
+import { and, eq, gte, lte, sql } from 'drizzle-orm';
+import { z } from 'zod';
 
-import type { getDb } from "../../../db/src/client";
+import type { getDb } from '@bric/db/client';
 import {
   analyticsEvents,
   analyticsJourneys,
@@ -10,37 +10,46 @@ import {
   categories,
   orders,
   products,
-} from "../../../db/src/schema";
+} from '@bric/db/schema';
 
 type Database = ReturnType<typeof getDb>;
 
 const nullableTrimmedString = (max: number) =>
-  z.union([z.string(), z.null(), z.undefined()]).transform((value) => {
-    if (value == null) {
+  z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((value) => {
+      if (value == null) {
+        return null;
+      }
+
+      const trimmed = value.trim();
+      return trimmed.length === 0 ? null : trimmed.slice(0, max);
+    });
+
+const nullablePositiveInt = z
+  .union([z.number(), z.string(), z.null()])
+  .optional()
+  .transform((value) => {
+    if (value == null || value === '') {
       return null;
     }
 
-    const trimmed = value.trim();
-    return trimmed.length === 0 ? null : trimmed.slice(0, max);
+    const parsed = typeof value === 'number' ? value : Number.parseInt(String(value), 10);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
   });
 
-const nullablePositiveInt = z.union([z.number(), z.string(), z.null(), z.undefined()]).transform((value) => {
-  if (value == null || value === "") {
-    return null;
-  }
+const nullablePositiveNumber = z
+  .union([z.number(), z.string(), z.null()])
+  .optional()
+  .transform((value) => {
+    if (value == null || value === '') {
+      return null;
+    }
 
-  const parsed = typeof value === "number" ? value : Number.parseInt(String(value), 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-});
-
-const nullablePositiveNumber = z.union([z.number(), z.string(), z.null(), z.undefined()]).transform((value) => {
-  if (value == null || value === "") {
-    return null;
-  }
-
-  const parsed = typeof value === "number" ? value : Number.parseFloat(String(value));
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-});
+    const parsed = typeof value === 'number' ? value : Number.parseFloat(String(value));
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  });
 
 const analyticsItemSchema = z.object({
   productId: nullablePositiveInt,
@@ -53,39 +62,47 @@ const analyticsItemSchema = z.object({
   price: nullablePositiveNumber,
 });
 
+const analyticsOccurredAtSchema = z
+  .string()
+  .datetime({ offset: true })
+  .transform((value) => {
+    const now = new Date();
+    return Date.parse(value) > now.getTime() ? now.toISOString() : value;
+  });
+
 export const storefrontAnalyticsEventNameSchema = z.enum([
-  "session_start",
-  "page_view",
-  "select_item",
-  "view_item_list",
-  "view_item",
-  "view_item_media",
-  "search",
-  "filter_apply",
-  "sort_change",
-  "add_to_cart",
-  "remove_from_cart",
-  "view_cart",
-  "begin_checkout",
-  "checkout_submit",
-  "purchase",
-  "api_error",
-  "buy_now_click",
-  "cart_checkout_click",
-  "checkout_view",
-  "checkout_submit_attempt",
-  "order_create_success",
-  "order_create_failed",
-  "order_verification_failed_after_create",
-  "web_vital",
-  "navigation_click",
-  "navigation_menu_open",
-  "locale_change",
-  "ai_assistant_open",
-  "ai_assistant_message",
-  "ai_assistant_result_click",
-  "ai_assistant_error",
-  "ai_assistant_run",
+  'session_start',
+  'page_view',
+  'select_item',
+  'view_item_list',
+  'view_item',
+  'view_item_media',
+  'search',
+  'filter_apply',
+  'sort_change',
+  'add_to_cart',
+  'remove_from_cart',
+  'view_cart',
+  'begin_checkout',
+  'checkout_submit',
+  'purchase',
+  'api_error',
+  'buy_now_click',
+  'cart_checkout_click',
+  'checkout_view',
+  'checkout_submit_attempt',
+  'order_create_success',
+  'order_create_failed',
+  'order_verification_failed_after_create',
+  'web_vital',
+  'navigation_click',
+  'navigation_menu_open',
+  'locale_change',
+  'ai_assistant_open',
+  'ai_assistant_message',
+  'ai_assistant_result_click',
+  'ai_assistant_error',
+  'ai_assistant_run',
 ]);
 
 export const storefrontAnalyticsEventSchema = z.object({
@@ -96,7 +113,7 @@ export const storefrontAnalyticsEventSchema = z.object({
   sessionId: z.string().trim().min(1).max(120),
   eventName: storefrontAnalyticsEventNameSchema,
   gaEventName: nullableTrimmedString(120),
-  occurredAt: z.string().datetime({ offset: true }).optional(),
+  occurredAt: analyticsOccurredAtSchema.optional(),
   pagePath: nullableTrimmedString(2048),
   pageType: nullableTrimmedString(80),
   locale: nullableTrimmedString(12),
@@ -116,7 +133,7 @@ export const storefrontAnalyticsEventSchema = z.object({
   searchTerm: nullableTrimmedString(250),
   quantity: nullablePositiveInt,
   value: nullablePositiveNumber,
-  currency: z.string().trim().min(1).max(12).default("DZD"),
+  currency: z.string().trim().min(1).max(12).default('DZD'),
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
 
@@ -124,31 +141,33 @@ export type StorefrontAnalyticsEvent = z.infer<typeof storefrontAnalyticsEventSc
 
 function getMetadataString(metadata: Record<string, unknown>, key: string) {
   const value = metadata[key];
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
 function getMetadataBoolean(metadata: Record<string, unknown>, key: string) {
   const value = metadata[key];
-  return typeof value === "boolean" ? value : null;
+  return typeof value === 'boolean' ? value : null;
 }
 
 function compactMetaTracking(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
 
   const tracking = value as Record<string, unknown>;
-  const pixel = tracking.pixel && typeof tracking.pixel === "object" && !Array.isArray(tracking.pixel)
-    ? tracking.pixel as Record<string, unknown>
-    : {};
-  const capi = tracking.capi && typeof tracking.capi === "object" && !Array.isArray(tracking.capi)
-    ? tracking.capi as Record<string, unknown>
-    : {};
+  const pixel =
+    tracking.pixel && typeof tracking.pixel === 'object' && !Array.isArray(tracking.pixel)
+      ? (tracking.pixel as Record<string, unknown>)
+      : {};
+  const capi =
+    tracking.capi && typeof tracking.capi === 'object' && !Array.isArray(tracking.capi)
+      ? (tracking.capi as Record<string, unknown>)
+      : {};
 
   return {
-    ...(typeof tracking.eventName === "string" ? { eventName: tracking.eventName } : {}),
-    ...(typeof tracking.eventId === "string" ? { eventId: tracking.eventId } : {}),
-    ...(typeof tracking.eventTime === "number" || typeof tracking.eventTime === "string"
+    ...(typeof tracking.eventName === 'string' ? { eventName: tracking.eventName } : {}),
+    ...(typeof tracking.eventId === 'string' ? { eventId: tracking.eventId } : {}),
+    ...(typeof tracking.eventTime === 'number' || typeof tracking.eventTime === 'string'
       ? { eventTime: tracking.eventTime }
       : {}),
     pixel: {
@@ -157,8 +176,8 @@ function compactMetaTracking(value: unknown) {
     capi: {
       queued: capi.queued === true,
       attempted: capi.attempted === true,
-      ...(typeof capi.status === "number" ? { status: capi.status } : {}),
-      ...(typeof capi.ok === "boolean" ? { ok: capi.ok } : {}),
+      ...(typeof capi.status === 'number' ? { status: capi.status } : {}),
+      ...(typeof capi.ok === 'boolean' ? { ok: capi.ok } : {}),
     },
   };
 }
@@ -172,6 +191,10 @@ export function buildStoredAnalyticsMetadata(event: StorefrontAnalyticsEvent) {
     paidClickSeenAt: _paidClickSeenAt,
     paidClickCookie: _paidClickCookie,
     title: _title,
+    storefrontVariant: _storefrontVariant,
+    requestedVariant: _requestedVariant,
+    experimentMode: _experimentMode,
+    experimentSource: _experimentSource,
     metaTracking,
     ...metadata
   } = event.metadata;
@@ -190,15 +213,14 @@ function getPageUrl(pagePath: string | null | undefined) {
   }
 
   try {
-    return new URL(pagePath, "https://bricomaitre.com");
+    return new URL(pagePath, 'https://bricomaitre.com');
   } catch {
     return null;
   }
 }
 
 function getEventPageUrl(event: StorefrontAnalyticsEvent) {
-  return getPageUrl(getMetadataString(event.metadata, "landingUrl"))
-    ?? getPageUrl(event.pagePath);
+  return getPageUrl(getMetadataString(event.metadata, 'landingUrl')) ?? getPageUrl(event.pagePath);
 }
 
 function getLandingQuery(url: URL | null) {
@@ -220,34 +242,36 @@ function isMetaPaidMedium(value: string | null) {
   }
 
   const normalized = value.trim().toLowerCase();
-  return ["cpc", "ppc", "paid", "paid_social", "social_paid", "cpv", "cpm"].some((item) => normalized.includes(item));
+  return ['cpc', 'ppc', 'paid', 'paid_social', 'social_paid', 'cpv', 'cpm'].some((item) =>
+    normalized.includes(item),
+  );
 }
 
 function classifyPaidSource(event: StorefrontAnalyticsEvent) {
   const metadata = event.metadata;
   const pageUrl = getEventPageUrl(event);
-  const fbclid = pageUrl?.searchParams.get("fbclid")?.trim();
+  const fbclid = pageUrl?.searchParams.get('fbclid')?.trim();
   if (fbclid) {
-    return "fbclid" as const;
+    return 'fbclid' as const;
   }
 
   if (
-    event.utmSource
-    && ["fb", "facebook", "meta"].includes(event.utmSource.toLowerCase())
-    && isMetaPaidMedium(event.utmMedium)
+    event.utmSource &&
+    ['fb', 'facebook', 'meta'].includes(event.utmSource.toLowerCase()) &&
+    isMetaPaidMedium(event.utmMedium)
   ) {
-    return "meta_utm" as const;
+    return 'meta_utm' as const;
   }
 
-  if (getMetadataBoolean(metadata, "paidClickCookie")) {
-    return "unknown" as const;
+  if (getMetadataBoolean(metadata, 'paidClickCookie')) {
+    return 'unknown' as const;
   }
 
   return null;
 }
 
 async function upsertPaidClickVisit(
-  tx: Parameters<Parameters<Database["transaction"]>[0]>[0],
+  tx: Parameters<Parameters<Database['transaction']>[0]>[0],
   event: StorefrontAnalyticsEvent,
   occurredAt: Date,
 ) {
@@ -259,12 +283,13 @@ async function upsertPaidClickVisit(
   const metadata = event.metadata;
   const now = new Date();
   const paidSource = classifyPaidSource(event);
-  const shouldCreate = (event.eventName === "session_start" || event.eventName === "page_view") && paidSource;
+  const shouldCreate =
+    (event.eventName === 'session_start' || event.eventName === 'page_view') && paidSource;
 
   if (shouldCreate) {
     const pageUrl = getEventPageUrl(event);
-    const fbclidRaw = pageUrl?.searchParams.get("fbclid")?.trim() || null;
-    const purchaseCount = event.eventName === "purchase" ? 1 : 0;
+    const fbclidRaw = pageUrl?.searchParams.get('fbclid')?.trim() || null;
+    const purchaseCount = event.eventName === 'purchase' ? 1 : 0;
 
     await tx
       .insert(analyticsPaidClickVisits)
@@ -272,18 +297,15 @@ async function upsertPaidClickVisit(
         visitId,
         firstSeenAt: occurredAt,
         lastSeenAt: occurredAt,
-        landingUrl: getMetadataString(metadata, "landingUrl") ?? pageUrl?.toString() ?? event.pagePath ?? "/",
-        landingPath: pageUrl ? `${pageUrl.pathname}${pageUrl.search}` : event.pagePath ?? "/",
+        landingUrl:
+          getMetadataString(metadata, 'landingUrl') ?? pageUrl?.toString() ?? event.pagePath ?? '/',
+        landingPath: pageUrl ? `${pageUrl.pathname}${pageUrl.search}` : (event.pagePath ?? '/'),
         landingQuery: getLandingQuery(pageUrl),
-        landingHost: getMetadataString(metadata, "landingHost") ?? pageUrl?.host ?? null,
+        landingHost: getMetadataString(metadata, 'landingHost') ?? pageUrl?.host ?? null,
         referrer: event.referrer,
-        userAgent: getMetadataString(metadata, "userAgent"),
-        storefrontVariant: getMetadataString(metadata, "storefrontVariant"),
-        requestedVariant: getMetadataString(metadata, "requestedVariant"),
-        experimentMode: getMetadataString(metadata, "experimentMode"),
-        experimentSource: getMetadataString(metadata, "experimentSource"),
+        userAgent: getMetadataString(metadata, 'userAgent'),
         fbclidRaw,
-        fbc: getMetadataString(metadata, "fbc"),
+        fbc: getMetadataString(metadata, 'fbc'),
         utmSource: event.utmSource,
         utmMedium: event.utmMedium,
         utmCampaign: event.utmCampaign,
@@ -307,24 +329,21 @@ async function upsertPaidClickVisit(
         set: {
           lastSeenAt: occurredAt,
           referrer: event.referrer ?? sql`${analyticsPaidClickVisits.referrer}`,
-          storefrontVariant: getMetadataString(metadata, "storefrontVariant") ?? sql`${analyticsPaidClickVisits.storefrontVariant}`,
-          requestedVariant: getMetadataString(metadata, "requestedVariant") ?? sql`${analyticsPaidClickVisits.requestedVariant}`,
-          experimentMode: getMetadataString(metadata, "experimentMode") ?? sql`${analyticsPaidClickVisits.experimentMode}`,
-          experimentSource: getMetadataString(metadata, "experimentSource") ?? sql`${analyticsPaidClickVisits.experimentSource}`,
           fbclidRaw: fbclidRaw ?? sql`${analyticsPaidClickVisits.fbclidRaw}`,
-          fbc: getMetadataString(metadata, "fbc") ?? sql`${analyticsPaidClickVisits.fbc}`,
+          fbc: getMetadataString(metadata, 'fbc') ?? sql`${analyticsPaidClickVisits.fbc}`,
           utmSource: sql`coalesce(${analyticsPaidClickVisits.utmSource}, ${event.utmSource})`,
           utmMedium: sql`coalesce(${analyticsPaidClickVisits.utmMedium}, ${event.utmMedium})`,
           utmCampaign: sql`coalesce(${analyticsPaidClickVisits.utmCampaign}, ${event.utmCampaign})`,
           utmTerm: sql`coalesce(${analyticsPaidClickVisits.utmTerm}, ${event.utmTerm})`,
           utmContent: sql`coalesce(${analyticsPaidClickVisits.utmContent}, ${event.utmContent})`,
-          paidSource: paidSource === "unknown"
-            ? sql`case
+          paidSource:
+            paidSource === 'unknown'
+              ? sql`case
                 when ${analyticsPaidClickVisits.paidSource} in ('fbclid', 'meta_utm')
                   then ${analyticsPaidClickVisits.paidSource}
                 else 'unknown'
               end`
-            : paidSource,
+              : paidSource,
           journeyId: sql`coalesce(${analyticsPaidClickVisits.journeyId}, ${event.journeyId})`,
           sessionId: sql`coalesce(${analyticsPaidClickVisits.sessionId}, ${event.sessionId})`,
           orderId: sql`coalesce(${analyticsPaidClickVisits.orderId}, ${event.orderId})`,
@@ -339,7 +358,7 @@ async function upsertPaidClickVisit(
     return;
   }
 
-  const purchaseCount = event.eventName === "purchase" ? 1 : 0;
+  const purchaseCount = event.eventName === 'purchase' ? 1 : 0;
   await tx
     .update(analyticsPaidClickVisits)
     .set({
@@ -413,18 +432,23 @@ function extractItems(event: StorefrontAnalyticsEvent) {
 }
 
 async function updateCatalogMetrics(
-  tx: Parameters<Parameters<Database["transaction"]>[0]>[0],
+  tx: Parameters<Parameters<Database['transaction']>[0]>[0],
   event: StorefrontAnalyticsEvent,
 ) {
   const items = extractItems(event);
   const metricBump = {
-    view: event.eventName === "view_item" ? 1 : 0,
-    cart: event.eventName === "add_to_cart" ? 1 : 0,
-    checkout: event.eventName === "begin_checkout" ? 1 : 0,
-    purchase: event.eventName === "purchase" ? 1 : 0,
+    view: event.eventName === 'view_item' ? 1 : 0,
+    cart: event.eventName === 'add_to_cart' ? 1 : 0,
+    checkout: event.eventName === 'begin_checkout' ? 1 : 0,
+    purchase: event.eventName === 'purchase' ? 1 : 0,
   };
 
-  if (metricBump.view === 0 && metricBump.cart === 0 && metricBump.checkout === 0 && metricBump.purchase === 0) {
+  if (
+    metricBump.view === 0 &&
+    metricBump.cart === 0 &&
+    metricBump.checkout === 0 &&
+    metricBump.purchase === 0
+  ) {
     return;
   }
 
@@ -443,9 +467,18 @@ async function updateCatalogMetrics(
           addToCartCount: sql`${products.addToCartCount} + ${productCart}`,
           checkoutCount: sql`${products.checkoutCount} + ${productCheckout}`,
           purchaseCount: sql`${products.purchaseCount} + ${productPurchase}`,
-          popularityScore: computePopularitySql(products, productView, productCart, productCheckout, productPurchase),
+          popularityScore: computePopularitySql(
+            products,
+            productView,
+            productCart,
+            productCheckout,
+            productPurchase,
+          ),
           conversionRate: computeConversionSql(products, productView, productPurchase),
-          lastViewedAt: metricBump.view > 0 ? sql`greatest(coalesce(${products.lastViewedAt}, to_timestamp(0)), ${event.occurredAt ? new Date(event.occurredAt) : new Date()})` : undefined,
+          lastViewedAt:
+            metricBump.view > 0
+              ? sql`greatest(coalesce(${products.lastViewedAt}, to_timestamp(0)), ${event.occurredAt ? new Date(event.occurredAt) : new Date()})`
+              : undefined,
         })
         .where(eq(products.id, item.productId));
     }
@@ -458,9 +491,18 @@ async function updateCatalogMetrics(
           addToCartCount: sql`${categories.addToCartCount} + ${productCart}`,
           checkoutCount: sql`${categories.checkoutCount} + ${productCheckout}`,
           purchaseCount: sql`${categories.purchaseCount} + ${productPurchase}`,
-          popularityScore: computePopularitySql(categories, productView, productCart, productCheckout, productPurchase),
+          popularityScore: computePopularitySql(
+            categories,
+            productView,
+            productCart,
+            productCheckout,
+            productPurchase,
+          ),
           conversionRate: computeConversionSql(categories, productView, productPurchase),
-          lastViewedAt: metricBump.view > 0 ? sql`greatest(coalesce(${categories.lastViewedAt}, to_timestamp(0)), ${event.occurredAt ? new Date(event.occurredAt) : new Date()})` : undefined,
+          lastViewedAt:
+            metricBump.view > 0
+              ? sql`greatest(coalesce(${categories.lastViewedAt}, to_timestamp(0)), ${event.occurredAt ? new Date(event.occurredAt) : new Date()})`
+              : undefined,
         })
         .where(eq(categories.id, item.categoryId));
     }
@@ -473,9 +515,18 @@ async function updateCatalogMetrics(
           addToCartCount: sql`${brands.addToCartCount} + ${productCart}`,
           checkoutCount: sql`${brands.checkoutCount} + ${productCheckout}`,
           purchaseCount: sql`${brands.purchaseCount} + ${productPurchase}`,
-          popularityScore: computePopularitySql(brands, productView, productCart, productCheckout, productPurchase),
+          popularityScore: computePopularitySql(
+            brands,
+            productView,
+            productCart,
+            productCheckout,
+            productPurchase,
+          ),
           conversionRate: computeConversionSql(brands, productView, productPurchase),
-          lastViewedAt: metricBump.view > 0 ? sql`greatest(coalesce(${brands.lastViewedAt}, to_timestamp(0)), ${event.occurredAt ? new Date(event.occurredAt) : new Date()})` : undefined,
+          lastViewedAt:
+            metricBump.view > 0
+              ? sql`greatest(coalesce(${brands.lastViewedAt}, to_timestamp(0)), ${event.occurredAt ? new Date(event.occurredAt) : new Date()})`
+              : undefined,
         })
         .where(eq(brands.id, item.brandId));
     }
@@ -563,7 +614,7 @@ export async function ingestStorefrontAnalyticsEvent(
 
     await upsertPaidClickVisit(tx, event, occurredAt);
 
-    if (event.eventName === "purchase") {
+    if (event.eventName === 'purchase') {
       await tx
         .update(analyticsJourneys)
         .set({
@@ -580,13 +631,16 @@ export async function ingestStorefrontAnalyticsEvent(
   });
 }
 
-export function buildAnalyticsDateWhere(
-  filters: { startDate?: string | null; endDate?: string | null },
-) {
+export function buildAnalyticsDateWhere(filters: {
+  startDate?: string | null;
+  endDate?: string | null;
+}) {
   const conditions = [];
 
   if (filters.startDate) {
-    conditions.push(gte(analyticsEvents.occurredAt, new Date(`${filters.startDate}T00:00:00.000Z`)));
+    conditions.push(
+      gte(analyticsEvents.occurredAt, new Date(`${filters.startDate}T00:00:00.000Z`)),
+    );
   }
 
   if (filters.endDate) {

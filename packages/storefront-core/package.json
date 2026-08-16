@@ -4,6 +4,10 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./analytics": "./src/storefront/analytics.ts",
@@ -11,8 +15,9 @@
     "./catalog": "./src/storefront/catalog.ts",
     "./contracts": "./src/storefront/contracts.ts",
     "./dto": "./src/storefront/dto.ts",
+    "./ecotrack-client": "./src/ecotrack-client.ts",
     "./ecotrack-catalog": "./src/storefront/ecotrack-catalog.ts",
-    "./legacy-adapter": "./src/storefront/legacy-adapter.ts",
+    "./ecotrack-tracking": "./src/ecotrack-tracking.ts",
     "./landing-pages": "./src/storefront/landing-pages.ts",
     "./landing-page-records": "./src/storefront/landing-page-records.ts",
     "./meta": "./src/storefront/meta.ts",
@@ -20,8 +25,9 @@
     "./meta-contracts": "./src/storefront/meta-contracts.ts",
     "./marketing-contracts": "./src/storefront/marketing-contracts.ts",
     "./marketing": "./src/storefront/marketing.ts",
-    "./project-routing": "./src/storefront/project-routing.ts",
     "./order-access": "./src/storefront/order-access.ts",
+    "./order-idempotency": "./src/storefront/order-idempotency.ts",
+    "./order-domain": "./src/orders-support.ts",
     "./order-records": "./src/order-records.ts",
     "./orders": "./src/storefront/orders.ts",
     "./promos": "./src/storefront/promos.ts",
@@ -32,7 +38,10 @@
   "dependencies": {
     "@bric/db": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "next": "16.2.2",
-    "zod": "^4.3.6"
+    "next": "16.3.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
   }
 }

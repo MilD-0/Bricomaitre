@@ -10,7 +10,8 @@ export function normalizeAlgerianPhoneNumber(value: string) {
   return digits;
 }
 
-export const algerianPhoneNumberSchema = z.string()
+export const algerianPhoneNumberSchema = z
+  .string()
   .trim()
   .min(1)
   .transform(normalizeAlgerianPhoneNumber)

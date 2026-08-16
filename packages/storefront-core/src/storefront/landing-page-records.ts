@@ -1,5 +1,5 @@
 import type { getDb } from '@bric/db/client';
-import { landingPageRevisions, landingPages } from '@bric/db/schema';
+import { landingPageRevisions, landingPages, products } from '@bric/db/schema';
 import { and, eq } from 'drizzle-orm';
 
 import { readStorefrontProductByToken } from './catalog';
@@ -12,6 +12,10 @@ import {
 } from './landing-pages';
 
 type Database = ReturnType<typeof getDb>;
+
+export function buildIndexableLandingPageProductJoin() {
+  return and(eq(products.id, landingPages.productId), eq(products.active, true));
+}
 
 export async function readPublishedStorefrontLandingPage(
   db: Database,
@@ -29,11 +33,13 @@ export async function readPublishedStorefrontLandingPage(
       publishedAt: landingPages.publishedAt,
     })
     .from(landingPages)
-    .where(and(
-      eq(landingPages.slug, slug),
-      eq(landingPages.locale, locale),
-      eq(landingPages.status, 'published'),
-    ))
+    .where(
+      and(
+        eq(landingPages.slug, slug),
+        eq(landingPages.locale, locale),
+        eq(landingPages.status, 'published'),
+      ),
+    )
     .limit(1);
 
   if (!page?.revision) return null;
@@ -42,10 +48,12 @@ export async function readPublishedStorefrontLandingPage(
     db
       .select({ document: landingPageRevisions.document })
       .from(landingPageRevisions)
-      .where(and(
-        eq(landingPageRevisions.landingPageId, page.id),
-        eq(landingPageRevisions.revision, page.revision),
-      ))
+      .where(
+        and(
+          eq(landingPageRevisions.landingPageId, page.id),
+          eq(landingPageRevisions.revision, page.revision),
+        ),
+      )
       .limit(1)
       .then((rows) => rows[0] ?? null),
     readStorefrontProductByToken(db, String(page.productId)),
@@ -65,17 +73,27 @@ export async function readPublishedStorefrontLandingPage(
 }
 
 export async function readIndexableStorefrontLandingPages(db: Database) {
-  const rows = await db.select({
-    slug: landingPages.slug,
-    locale: landingPages.locale,
-    updatedAt: landingPages.updatedAt,
-    document: landingPageRevisions.document,
-  }).from(landingPages).innerJoin(landingPageRevisions, and(
-    eq(landingPageRevisions.landingPageId, landingPages.id),
-    eq(landingPageRevisions.revision, landingPages.publishedRevision),
-  )).where(eq(landingPages.status, 'published'));
+  const rows = await db
+    .select({
+      slug: landingPages.slug,
+      locale: landingPages.locale,
+      updatedAt: landingPages.updatedAt,
+      document: landingPageRevisions.document,
+    })
+    .from(landingPages)
+    .innerJoin(
+      landingPageRevisions,
+      and(
+        eq(landingPageRevisions.landingPageId, landingPages.id),
+        eq(landingPageRevisions.revision, landingPages.publishedRevision),
+      ),
+    )
+    .innerJoin(products, buildIndexableLandingPageProductJoin())
+    .where(eq(landingPages.status, 'published'));
   return rows.flatMap((row) => {
     const parsed = landingPageDocumentSchema.safeParse(row.document);
-    return parsed.success && parsed.data.seo.indexable ? [{ slug: row.slug, locale: row.locale, updatedAt: row.updatedAt.toISOString() }] : [];
+    return parsed.success && parsed.data.seo.indexable
+      ? [{ slug: row.slug, locale: row.locale, updatedAt: row.updatedAt.toISOString() }]
+      : [];
   });
 }

@@ -4,17 +4,28 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
   "exports": {
     ".": "./src/index.ts",
+    "./client-ip": "./src/client-ip.ts",
+    "./diagnostics": "./src/diagnostics.ts",
+    "./health": "./src/health.ts",
     "./internal-signing": "./src/internal-signing.ts",
     "./redis": "./src/redis.ts",
     "./jobs": "./src/jobs.ts",
+    "./next-action": "./src/next-action.ts",
     "./rate-limit": "./src/rate-limit.ts",
     "./idempotency": "./src/idempotency.ts"
   },
   "dependencies": {
-    "@sentry/node": "10.47.0",
-    "bullmq": "^5.58.0",
-    "ioredis": "^5.7.0"
+    "@sentry/node": "10.70.0",
+    "bullmq": "^6.1.0",
+    "ioredis": "^6.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
   }
 }

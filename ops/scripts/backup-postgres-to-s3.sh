@@ -20,6 +20,8 @@ if ! command -v aws >/dev/null 2>&1; then
   exit 1
 fi
 
+"$(dirname "$0")/validate-s3-backup-privacy.sh"
+
 backup_output="$("$(dirname "$0")/backup-postgres.sh")"
 echo "$backup_output"
 
@@ -30,6 +32,9 @@ if [[ ! -f "$backup_file" ]]; then
   exit 1
 fi
 
-aws s3 cp "$backup_file" "$backup_s3_uri/$(basename "$backup_file")" --region "$AWS_REGION"
+aws s3 cp "$backup_file" "$backup_s3_uri/$(basename "$backup_file")" \
+  --region "$AWS_REGION" \
+  --only-show-errors
 
 echo "postgres backup uploaded to $backup_s3_uri/$(basename "$backup_file")"
+"$(dirname "$0")/prune-postgres-backups.sh"

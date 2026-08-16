@@ -177,9 +177,10 @@ function parseRateLimit(headers: Headers, path: string): EcotrackExtendedRateLim
   };
 
   const minuteLimit = readNumber('x-ratelimit-limit') ?? readNumber('x-ratelimit-limit-minute');
-  const minuteRemaining = readNumber('x-ratelimit-remaining')
-    ?? readNumber('x-ratelimit-remaining-minute')
-    ?? readNumber('x-ratelimit-limit-remaining');
+  const minuteRemaining =
+    readNumber('x-ratelimit-remaining') ??
+    readNumber('x-ratelimit-remaining-minute') ??
+    readNumber('x-ratelimit-limit-remaining');
   const minuteReset = readNumber('x-ratelimit-reset') ?? readNumber('x-ratelimit-reset-minute');
 
   return {
@@ -229,15 +230,13 @@ function readEcotrackErrors(payload: unknown) {
   }
 
   if (Array.isArray(value)) {
-    return value
-      .map((entry) => typeof entry === 'string' ? entry.trim() : '')
-      .filter(Boolean);
+    return value.map((entry) => (typeof entry === 'string' ? entry.trim() : '')).filter(Boolean);
   }
 
   if (typeof value === 'object') {
     return Object.values(value)
-      .flatMap((entry) => Array.isArray(entry) ? entry : [entry])
-      .map((entry) => typeof entry === 'string' ? entry.trim() : '')
+      .flatMap((entry) => (Array.isArray(entry) ? entry : [entry]))
+      .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
       .filter(Boolean);
   }
 
@@ -265,10 +264,14 @@ function buildEcotrackResultMessage(payload: unknown, fallback: string) {
   return fallback;
 }
 
-function assertEcotrackMutationSuccess(result: EcotrackRequestResult, fallbackMessage: string): EcotrackMutationResult {
+function assertEcotrackMutationSuccess(
+  result: EcotrackRequestResult,
+  fallbackMessage: string,
+): EcotrackMutationResult {
   const success = readEcotrackSuccess(result.payload);
-  const message = readEcotrackMessage(result.payload)
-    ?? (success ? null : buildEcotrackResultMessage(result.payload, fallbackMessage));
+  const message =
+    readEcotrackMessage(result.payload) ??
+    (success ? null : buildEcotrackResultMessage(result.payload, fallbackMessage));
 
   if (!success) {
     throw new Error(message ?? fallbackMessage);
@@ -293,7 +296,9 @@ export class EcotrackRateLimitError extends Error {
   }
 }
 
-export async function requestEcotrack(options: EcotrackRequestOptions): Promise<EcotrackRequestResult> {
+export async function requestEcotrack(
+  options: EcotrackRequestOptions,
+): Promise<EcotrackRequestResult> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const env = options.env ?? process.env;
   const { baseUrl, token } = getEcotrackConfig(env);
@@ -327,7 +332,11 @@ export async function requestEcotrack(options: EcotrackRequestOptions): Promise<
     const rateLimit = parseRateLimit(response.headers, options.path);
 
     if (response.status === 429) {
-      throw new EcotrackRateLimitError(`ECOTRACK rate limit exceeded for ${options.path}.`, rateLimit, 429);
+      throw new EcotrackRateLimitError(
+        `ECOTRACK rate limit exceeded for ${options.path}.`,
+        rateLimit,
+        429,
+      );
     }
 
     let payload: unknown = text;
@@ -338,7 +347,9 @@ export async function requestEcotrack(options: EcotrackRequestOptions): Promise<
     }
 
     if (!response.ok) {
-      throw new Error(`ECOTRACK request failed for ${options.path}: ${response.status} ${text.slice(0, 200)}`);
+      throw new Error(
+        `ECOTRACK request failed for ${options.path}: ${response.status} ${text.slice(0, 200)}`,
+      );
     }
 
     if (rateLimit.dayRemaining !== null && rateLimit.dayRemaining <= 0) {
@@ -359,7 +370,9 @@ export async function requestEcotrack(options: EcotrackRequestOptions): Promise<
   return runWithLimiter(runRequest, minIntervalMs);
 }
 
-export async function requestEcotrackBinary(options: EcotrackRequestOptions): Promise<EcotrackBinaryResult> {
+export async function requestEcotrackBinary(
+  options: EcotrackRequestOptions,
+): Promise<EcotrackBinaryResult> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const env = options.env ?? process.env;
   const { baseUrl, token } = getEcotrackConfig(env);
@@ -383,12 +396,18 @@ export async function requestEcotrackBinary(options: EcotrackRequestOptions): Pr
     const rateLimit = parseRateLimit(response.headers, options.path);
 
     if (response.status === 429) {
-      throw new EcotrackRateLimitError(`ECOTRACK rate limit exceeded for ${options.path}.`, rateLimit, 429);
+      throw new EcotrackRateLimitError(
+        `ECOTRACK rate limit exceeded for ${options.path}.`,
+        rateLimit,
+        429,
+      );
     }
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`ECOTRACK request failed for ${options.path}: ${response.status} ${text.slice(0, 200)}`);
+      throw new Error(
+        `ECOTRACK request failed for ${options.path}: ${response.status} ${text.slice(0, 200)}`,
+      );
     }
 
     return {
@@ -408,10 +427,12 @@ export async function requestEcotrackBinary(options: EcotrackRequestOptions): Pr
   return runWithLimiter(runRequest, minIntervalMs);
 }
 
-export async function validateEcotrackToken(options: {
-  fetchImpl?: typeof fetch;
-  env?: NodeJS.ProcessEnv;
-} = {}): Promise<EcotrackTokenValidationResult> {
+export async function validateEcotrackToken(
+  options: {
+    fetchImpl?: typeof fetch;
+    env?: NodeJS.ProcessEnv;
+  } = {},
+): Promise<EcotrackTokenValidationResult> {
   const result = await requestEcotrack({
     path: '/validate/token',
     method: 'GET',
@@ -576,9 +597,10 @@ export async function getEcotrackTrackingsInfo(
     env: options.env,
   });
 
-  const payload = typeof result.payload === 'object' && result.payload !== null
-    ? result.payload as Record<string, unknown>
-    : {};
+  const payload =
+    typeof result.payload === 'object' && result.payload !== null
+      ? (result.payload as Record<string, unknown>)
+      : {};
   const normalized = new Map<string, EcotrackTrackingInfo>();
   for (const tracking of trackings) {
     const raw = payload[tracking];
@@ -611,12 +633,14 @@ export async function getEcotrackOrdersStatus(
     env: options.env,
   });
 
-  const payload = typeof result.payload === 'object' && result.payload !== null
-    ? result.payload as Record<string, unknown>
-    : {};
-  const rawData = typeof payload.data === 'object' && payload.data !== null
-    ? payload.data as Record<string, unknown>
-    : {};
+  const payload =
+    typeof result.payload === 'object' && result.payload !== null
+      ? (result.payload as Record<string, unknown>)
+      : {};
+  const rawData =
+    typeof payload.data === 'object' && payload.data !== null
+      ? (payload.data as Record<string, unknown>)
+      : {};
   const normalized = new Map<string, EcotrackStatusItem>();
   for (const tracking of trackings) {
     const raw = rawData[tracking];

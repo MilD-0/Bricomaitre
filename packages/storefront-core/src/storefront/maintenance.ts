@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 
-import type { getDb } from '../../../db/src/client';
+import type { getDb } from '@bric/db/client';
 import {
   analyticsEvents,
   analyticsDailyRollups,
@@ -8,9 +8,11 @@ import {
   analyticsJourneys,
   analyticsPaidClickDailyRollups,
   analyticsPaidClickVisits,
+  marketingEventOutbox,
   metaEventDailyRollups,
   metaEventOutbox,
-} from '../../../db/src/schema';
+  storefrontOrderIdempotency,
+} from '@bric/db/schema';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -18,6 +20,8 @@ export const ANALYTICS_RAW_RETENTION_DAYS = 7;
 export const ANALYTICS_ERROR_RETENTION_DAYS = 30;
 export const META_DELIVERED_RETENTION_DAYS = 7;
 export const META_FAILED_RETENTION_DAYS = 30;
+export const MARKETING_ACCEPTED_RETENTION_DAYS = 7;
+export const MARKETING_FAILED_RETENTION_DAYS = 30;
 export const STOREFRONT_MAINTENANCE_BATCH_SIZE = 5_000;
 
 function daysBefore(now: Date, days: number) {
@@ -28,10 +32,28 @@ function deletedCount(result: { rows?: unknown[] }) {
   return result.rows?.length ?? 0;
 }
 
-export async function rollUpNextExpiredAnalyticsDay(
+export async function deleteExpiredOrderIdempotencyBatch(
   db: Database,
-  { now = new Date() } = {},
+  { now = new Date(), limit = STOREFRONT_MAINTENANCE_BATCH_SIZE } = {},
 ) {
+  const result = await db.execute(sql`
+    with expired as (
+      select ${storefrontOrderIdempotency.keyHash}
+      from ${storefrontOrderIdempotency}
+      where ${storefrontOrderIdempotency.expiresAt} < ${now}
+      order by ${storefrontOrderIdempotency.expiresAt} asc
+      limit ${Math.max(1, limit)}
+      for update skip locked
+    )
+    delete from ${storefrontOrderIdempotency} records
+    using expired
+    where records.key_hash = expired.key_hash
+    returning records.key_hash
+  `);
+  return deletedCount(result);
+}
+
+export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Date() } = {}) {
   const cutoff = daysBefore(now, ANALYTICS_RAW_RETENTION_DAYS);
   const dayResult = await db.execute(sql`
     select (${analyticsEvents.occurredAt} at time zone 'UTC')::date::text as day
@@ -149,10 +171,7 @@ export async function rollUpNextExpiredAnalyticsDay(
   return day;
 }
 
-export async function rollUpNextExpiredPaidClickDay(
-  db: Database,
-  { now = new Date() } = {},
-) {
+export async function rollUpNextExpiredPaidClickDay(db: Database, { now = new Date() } = {}) {
   const cutoff = daysBefore(now, ANALYTICS_RAW_RETENTION_DAYS);
   const dayResult = await db.execute(sql`
     select (${analyticsPaidClickVisits.firstSeenAt} at time zone 'UTC')::date::text as day
@@ -184,11 +203,7 @@ export async function rollUpNextExpiredPaidClickDay(
       viewed_product, added_to_cart, began_checkout, created_order, purchased, errored, updated_at
     )
     select ${day}::date,
-      case
-        when coalesce(nullif(visits.requested_variant, ''), 'new') = 'legacy' then 'legacy'
-        when coalesce(nullif(visits.requested_variant, ''), 'new') in ('control', 'fast_checkout', 'new') then 'new'
-        else coalesce(nullif(visits.requested_variant, ''), 'new')
-      end,
+      'storefront',
       visits.paid_source,
       case when visits.order_id is null then 0 else 1 end,
       visits.landing_path,
@@ -241,10 +256,7 @@ export async function deleteExpiredPaidClickVisitsBatch(
   return deletedCount(result);
 }
 
-export async function rollUpNextExpiredMetaOutboxDay(
-  db: Database,
-  { now = new Date() } = {},
-) {
+export async function rollUpNextExpiredMetaOutboxDay(db: Database, { now = new Date() } = {}) {
   const cutoff = daysBefore(now, META_DELIVERED_RETENTION_DAYS);
   const dayResult = await db.execute(sql`
     select (${metaEventOutbox.eventTime} at time zone 'UTC')::date::text as day
@@ -325,6 +337,41 @@ export async function deleteTerminalMetaOutboxBatch(
       for update skip locked
     )
     delete from ${metaEventOutbox} outbox
+    using terminal
+    where outbox.id = terminal.id
+    returning outbox.id
+  `);
+  return deletedCount(result);
+}
+
+export async function deleteTerminalMarketingOutboxBatch(
+  db: Database,
+  { now = new Date(), limit = STOREFRONT_MAINTENANCE_BATCH_SIZE } = {},
+) {
+  const acceptedCutoff = daysBefore(now, MARKETING_ACCEPTED_RETENTION_DAYS);
+  const failedCutoff = daysBefore(now, MARKETING_FAILED_RETENTION_DAYS);
+  const result = await db.execute(sql`
+    with terminal as (
+      select ${marketingEventOutbox.id}
+      from ${marketingEventOutbox}
+      where (
+        (
+          ${marketingEventOutbox.status} = 'accepted'
+          and coalesce(
+            ${marketingEventOutbox.deliveredAt},
+            ${marketingEventOutbox.updatedAt},
+            ${marketingEventOutbox.createdAt}
+          ) < ${acceptedCutoff}
+        ) or (
+          ${marketingEventOutbox.status} in ('rejected', 'exhausted', 'dropped')
+          and ${marketingEventOutbox.updatedAt} < ${failedCutoff}
+        )
+      )
+      order by ${marketingEventOutbox.id} asc
+      limit ${Math.max(1, limit)}
+      for update skip locked
+    )
+    delete from ${marketingEventOutbox} outbox
     using terminal
     where outbox.id = terminal.id
     returning outbox.id
@@ -505,11 +552,13 @@ export async function runStorefrontDataMaintenanceBatch(
   db: Database,
   options: { now?: Date; limit?: number } = {},
 ) {
+  const orderIdempotency = await deleteExpiredOrderIdempotencyBatch(db, options);
   const paidClickRolledUpDay = await rollUpNextExpiredPaidClickDay(db, options);
   const paidClicks = await deleteExpiredPaidClickVisitsBatch(db, options);
   const metaRolledUpDay = await rollUpNextExpiredMetaOutboxDay(db, options);
   const metaErrorsCompacted = await compactRetainedMetaErrorsBatch(db, options);
   const metaOutbox = await deleteTerminalMetaOutboxBatch(db, options);
+  const marketingOutbox = await deleteTerminalMarketingOutboxBatch(db, options);
   const rolledUpDay = await rollUpNextExpiredAnalyticsDay(db, options);
   const analyticsErrorsCompacted = await compactRetainedAnalyticsErrorsBatch(db, options);
   const analyticsEventsDeleted = await deleteExpiredAnalyticsEventsBatch(db, options);
@@ -517,11 +566,13 @@ export async function runStorefrontDataMaintenanceBatch(
   const analyticsJourneysDeleted = await deleteInactiveAnalyticsJourneysBatch(db, options);
 
   return {
+    orderIdempotency,
     paidClicks,
     paidClickRolledUpDay,
     metaRolledUpDay,
     metaErrorsCompacted,
     metaOutbox,
+    marketingOutbox,
     rolledUpDay,
     analyticsErrorsCompacted,
     analyticsEvents: analyticsEventsDeleted,

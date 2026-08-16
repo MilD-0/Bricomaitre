@@ -1,4 +1,11 @@
-import { assetBanners, brands, categories, featuredProductGroups, productCards, products } from '../../../db/src/schema';
+import {
+  assetBanners,
+  brands,
+  categories,
+  featuredProductGroups,
+  productCards,
+  products,
+} from '@bric/db/schema';
 import type { EcotrackCatalogRecord } from '../ecotrack-support';
 import { toStorefrontOrderRecord } from '../order-records';
 import type { OrderStatusHistoryRecord } from '../orders-support';
@@ -80,13 +87,15 @@ export function toStorefrontProductDetailDto(row: StorefrontProductDetailDtoRow)
     media: row.images.flatMap((url, position) => {
       const normalizedUrl = url.trim();
       return normalizedUrl
-        ? [{
-          url: normalizedUrl,
-          position,
-          width: null,
-          height: null,
-          blurDataUrl: null,
-        }]
+        ? [
+            {
+              url: normalizedUrl,
+              position,
+              width: null,
+              height: null,
+              blurDataUrl: null,
+            },
+          ]
         : [];
     }),
     brand: row.brand,
@@ -96,7 +105,12 @@ export function toStorefrontProductDetailDto(row: StorefrontProductDetailDtoRow)
   };
 }
 
-export function toStorefrontBrandDto(row: Pick<typeof brands.$inferSelect, 'id' | 'name' | 'slug' | 'image' | 'featured' | 'createdAt' | 'updatedAt'>) {
+export function toStorefrontBrandDto(
+  row: Pick<
+    typeof brands.$inferSelect,
+    'id' | 'name' | 'slug' | 'image' | 'featured' | 'createdAt' | 'updatedAt'
+  >,
+) {
   return {
     ...row,
     createdAt: row.createdAt.toISOString(),
@@ -105,7 +119,20 @@ export function toStorefrontBrandDto(row: Pick<typeof brands.$inferSelect, 'id' 
 }
 
 export function toStorefrontCategoryDto(
-  row: Pick<typeof categories.$inferSelect, 'id' | 'name' | 'slug' | 'nameEn' | 'nameAr' | 'image' | 'parentId' | 'properties' | 'featured' | 'createdAt' | 'updatedAt'>,
+  row: Pick<
+    typeof categories.$inferSelect,
+    | 'id'
+    | 'name'
+    | 'slug'
+    | 'nameEn'
+    | 'nameAr'
+    | 'image'
+    | 'parentId'
+    | 'properties'
+    | 'featured'
+    | 'createdAt'
+    | 'updatedAt'
+  >,
 ) {
   return {
     ...row,

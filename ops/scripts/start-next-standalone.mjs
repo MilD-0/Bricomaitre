@@ -5,7 +5,7 @@ import process from 'node:process';
 
 function readOption(argv, name) {
   const index = argv.indexOf(name);
-  return index === -1 ? null : argv[index + 1] ?? null;
+  return index === -1 ? null : (argv[index + 1] ?? null);
 }
 
 function ensureSymlink(targetPath, linkPath) {
@@ -42,11 +42,15 @@ const appPublicPath = path.join(appDir, 'public');
 const standalonePublicPath = path.join(standaloneAppDir, 'public');
 
 if (!existsSync(standaloneServerPath)) {
-  throw new Error(`Standalone server not found at ${standaloneServerPath}. Run the app build first.`);
+  throw new Error(
+    `Standalone server not found at ${standaloneServerPath}. Run the app build first.`,
+  );
 }
 
 if (!existsSync(buildStaticPath)) {
-  throw new Error(`Static asset directory not found at ${buildStaticPath}. Run the app build first.`);
+  throw new Error(
+    `Static asset directory not found at ${buildStaticPath}. Run the app build first.`,
+  );
 }
 
 ensureSymlink(buildStaticPath, standaloneStaticPath);

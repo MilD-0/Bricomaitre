@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertAiConfigured, createAiLanguageModel, getAiConfig, mergeOpenRouterRequestBody, resolveAiModel } from './config';
+import {
+  assertAiConfigured,
+  createAiLanguageModel,
+  getAiConfig,
+  mergeOpenRouterRequestBody,
+  resolveAiModel,
+} from './config';
 
 describe('AI configuration', () => {
   it('is disabled and credential-free by default', () => {
@@ -61,25 +67,39 @@ describe('AI configuration', () => {
 
   it('fails closed when AI or the requested model is not configured', () => {
     expect(() => assertAiConfigured(getAiConfig({}))).toThrow('AI is disabled');
-    expect(() => resolveAiModel(getAiConfig({ AI_ENABLED: 'true', OPENAI_API_KEY: 'secret' }), 'admin'))
-      .toThrow('AI_ADMIN_MODEL is not configured');
-    expect(() => assertAiConfigured(getAiConfig({ AI_ENABLED: 'true', AI_PROVIDER: 'openrouter', OPENAI_API_KEY: 'wrong-provider-key' })))
-      .toThrow('OPENROUTER_API_KEY is not configured');
+    expect(() =>
+      resolveAiModel(getAiConfig({ AI_ENABLED: 'true', OPENAI_API_KEY: 'secret' }), 'admin'),
+    ).toThrow('AI_ADMIN_MODEL is not configured');
+    expect(() =>
+      assertAiConfigured(
+        getAiConfig({
+          AI_ENABLED: 'true',
+          AI_PROVIDER: 'openrouter',
+          OPENAI_API_KEY: 'wrong-provider-key',
+        }),
+      ),
+    ).toThrow('OPENROUTER_API_KEY is not configured');
   });
 
   it('rejects unsupported providers and invalid OpenRouter URLs', () => {
     expect(() => getAiConfig({ AI_PROVIDER: 'other' })).toThrow();
-    expect(() => getAiConfig({ AI_PROVIDER: 'openrouter', OPENROUTER_HTTP_REFERER: 'not-a-url' })).toThrow();
+    expect(() =>
+      getAiConfig({ AI_PROVIDER: 'openrouter', OPENROUTER_HTTP_REFERER: 'not-a-url' }),
+    ).toThrow();
   });
 
   it('adds OpenRouter-specific reasoning and routing fields without replacing the generated request', () => {
-    expect(JSON.parse(mergeOpenRouterRequestBody(
-      JSON.stringify({ model: 'deepseek/deepseek-v4-flash', messages: [], stream: true }),
-      {
-        reasoning: { effort: 'xhigh' },
-        provider: { only: ['baidu/fp8'], allow_fallbacks: false },
-      },
-    ))).toEqual({
+    expect(
+      JSON.parse(
+        mergeOpenRouterRequestBody(
+          JSON.stringify({ model: 'deepseek/deepseek-v4-flash', messages: [], stream: true }),
+          {
+            reasoning: { effort: 'xhigh' },
+            provider: { only: ['baidu/fp8'], allow_fallbacks: false },
+          },
+        ),
+      ),
+    ).toEqual({
       model: 'deepseek/deepseek-v4-flash',
       messages: [],
       stream: true,

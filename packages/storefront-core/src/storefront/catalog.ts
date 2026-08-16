@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, gt, ilike, inArray, notInArray, or, sql } from 'drizzle-orm';
 
-import type { getDb } from '../../../db/src/client';
+import type { getDb } from '@bric/db/client';
 import {
   brands,
   categories,
@@ -9,7 +9,7 @@ import {
   featuredProductGroupProducts,
   featuredProductGroups,
   products,
-} from '../../../db/src/schema';
+} from '@bric/db/schema';
 import type { StorefrontProductListQuery } from './contracts';
 import {
   toStorefrontBrandDto,
@@ -31,8 +31,10 @@ export type StorefrontProductBuildFeedItem = {
 export type StorefrontProductTokenMatch = 'slug' | 'mongoId' | 'id';
 
 const ARABIC_DIACRITICS = /[\u0610-\u061a\u064b-\u065f\u0670\u06d6-\u06ed\u0640]/gu;
-const SEARCH_DOCUMENT_TRANSLATE_FROM = 'àáâäãåæçèéêëìíîïñòóôöõœùúûüýÿأإآٱؤئىيىةکگ٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹';
-const SEARCH_DOCUMENT_TRANSLATE_TO = 'aaaaaaaceeeeiiiinoooooouuuuyyااااوييييهكك01234567890123456789';
+const SEARCH_DOCUMENT_TRANSLATE_FROM =
+  'àáâäãåæçèéêëìíîïñòóôöõœùúûüýÿأإآٱؤئىيىةکگ٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹';
+const SEARCH_DOCUMENT_TRANSLATE_TO =
+  'aaaaaaaceeeeiiiinoooooouuuuyyااااوييييهكك01234567890123456789';
 
 export function normalizeCatalogSearch(value: string) {
   return value
@@ -68,7 +70,9 @@ export function buildCatalogSearchCondition(value: string) {
   if (!normalized) return undefined;
 
   const document = buildCatalogSearchDocument();
-  const exactTokens = normalized.split(' ').map((token) => sql<boolean>`position(${token} in ${document}) > 0`);
+  const exactTokens = normalized
+    .split(' ')
+    .map((token) => sql<boolean>`position(${token} in ${document}) > 0`);
   const threshold = getCatalogSearchSimilarityThreshold(normalized);
 
   return or(
@@ -77,7 +81,9 @@ export function buildCatalogSearchCondition(value: string) {
     ilike(products.sku, `%${value}%`),
     ilike(products.barcode, `%${value}%`),
     and(...exactTokens),
-    threshold === null ? undefined : sql<boolean>`word_similarity(${normalized}, ${document}) >= ${threshold}`,
+    threshold === null
+      ? undefined
+      : sql<boolean>`word_similarity(${normalized}, ${document}) >= ${threshold}`,
   );
 }
 
@@ -113,9 +119,8 @@ export function buildCatalogSearchRelevance(value: string) {
 
 export function normalizeStorefrontProductToken(value: string) {
   const token = value.trim();
-  const numericId = /^[1-9]\d*$/.test(token) && Number.isSafeInteger(Number(token))
-    ? Number(token)
-    : null;
+  const numericId =
+    /^[1-9]\d*$/.test(token) && Number.isSafeInteger(Number(token)) ? Number(token) : null;
 
   return { token, numericId };
 }
@@ -189,7 +194,10 @@ export async function readStorefrontProductByToken(db: Database, value: string) 
     })
     .from(products)
     .leftJoin(brands, and(eq(products.brandId, brands.id), eq(brands.isActive, true)))
-    .leftJoin(categories, and(eq(products.categoryId, categories.id), eq(categories.isActive, true)))
+    .leftJoin(
+      categories,
+      and(eq(products.categoryId, categories.id), eq(categories.isActive, true)),
+    )
     .where(and(eq(products.active, true), or(...tokenConditions)))
     .orderBy(
       asc(sql<number>`case
@@ -216,10 +224,7 @@ export async function readStorefrontProductByToken(db: Database, value: string) 
   };
 }
 
-export async function readStorefrontProducts(
-  db: Database,
-  query: StorefrontProductListQuery,
-) {
+export async function readStorefrontProducts(db: Database, query: StorefrontProductListQuery) {
   const direction = query.sortDirection === 'asc' ? asc : desc;
   const standardSortKey = query.sortKey === 'recommended' ? 'updatedAt' : query.sortKey;
   const standardOrderBy = {
@@ -231,9 +236,10 @@ export async function readStorefrontProducts(
     inStock: direction(products.inStock),
     purchasePrice: direction(products.purchasePrice),
   }[standardSortKey];
-  const orderBy = query.sortKey === 'recommended'
-    ? buildRecommendedProductOrderBy(query.search)
-    : [standardOrderBy, direction(products.id)];
+  const orderBy =
+    query.sortKey === 'recommended'
+      ? buildRecommendedProductOrderBy(query.search)
+      : [standardOrderBy, direction(products.id)];
   const whereClause = buildStorefrontProductWhereClause(query);
 
   const rows = await db
@@ -261,7 +267,10 @@ export async function readStorefrontProducts(
     })
     .from(products)
     .leftJoin(brands, and(eq(products.brandId, brands.id), eq(brands.isActive, true)))
-    .leftJoin(categories, and(eq(products.categoryId, categories.id), eq(categories.isActive, true)))
+    .leftJoin(
+      categories,
+      and(eq(products.categoryId, categories.id), eq(categories.isActive, true)),
+    )
     .where(whereClause)
     .orderBy(...orderBy)
     .limit(query.limit)
@@ -276,16 +285,32 @@ export async function readStorefrontProductsByIds(db: Database, ids: number[]) {
 
   const rows = await db
     .select({
-      id: products.id, slug: products.slug, mongoId: products.mongoId, title: products.title,
-      titleAr: products.titleAr, description: products.description, descriptionAr: products.descriptionAr,
-      sku: products.sku, barcode: products.barcode, price: products.price, oldPrice: products.oldPrice,
-      active: products.active, inStock: products.inStock, availabilityStatus: products.availabilityStatus,
-      inventoryQuantity: products.inventoryQuantity, brandId: products.brandId, categoryId: products.categoryId,
-      images: products.images, createdAt: products.createdAt, updatedAt: products.updatedAt,
+      id: products.id,
+      slug: products.slug,
+      mongoId: products.mongoId,
+      title: products.title,
+      titleAr: products.titleAr,
+      description: products.description,
+      descriptionAr: products.descriptionAr,
+      sku: products.sku,
+      barcode: products.barcode,
+      price: products.price,
+      oldPrice: products.oldPrice,
+      active: products.active,
+      inStock: products.inStock,
+      availabilityStatus: products.availabilityStatus,
+      inventoryQuantity: products.inventoryQuantity,
+      brandId: products.brandId,
+      categoryId: products.categoryId,
+      images: products.images,
+      createdAt: products.createdAt,
+      updatedAt: products.updatedAt,
     })
     .from(products)
     .where(and(eq(products.active, true), inArray(products.id, uniqueIds)));
-  const byId = new Map(rows.map((row) => [row.id, toStorefrontProductDto(row satisfies StorefrontProductDtoRow)]));
+  const byId = new Map(
+    rows.map((row) => [row.id, toStorefrontProductDto(row satisfies StorefrontProductDtoRow)]),
+  );
   return uniqueIds.flatMap((id) => byId.get(id) ?? []);
 }
 
@@ -307,7 +332,9 @@ export async function readStorefrontProductsForSelectionPage(
   const uniqueDirect = [...new Map(direct.map((product) => [product.id, product])).values()];
   const dynamicConditions = [
     selection.brandIds.length > 0 ? inArray(products.brandId, selection.brandIds) : undefined,
-    selection.categoryIds.length > 0 ? inArray(products.categoryId, selection.categoryIds) : undefined,
+    selection.categoryIds.length > 0
+      ? inArray(products.categoryId, selection.categoryIds)
+      : undefined,
   ].filter((condition): condition is NonNullable<typeof condition> => Boolean(condition));
   const start = Math.max(0, page - 1) * limit;
   if (dynamicConditions.length === 0) {
@@ -317,27 +344,48 @@ export async function readStorefrontProductsForSelectionPage(
   const dynamicWhere = and(
     eq(products.active, true),
     or(...dynamicConditions),
-    uniqueDirect.length > 0 ? notInArray(products.id, uniqueDirect.map((product) => product.id)) : undefined,
+    uniqueDirect.length > 0
+      ? notInArray(
+          products.id,
+          uniqueDirect.map((product) => product.id),
+        )
+      : undefined,
   );
   const dynamicOffset = Math.max(0, start - uniqueDirect.length);
   const dynamicLimit = Math.max(0, limit - Math.max(0, uniqueDirect.length - start));
 
   const [countRows, rows] = await Promise.all([
     db.select({ count: count() }).from(products).where(dynamicWhere),
-    dynamicLimit > 0 ? db
-    .select({
-      id: products.id, slug: products.slug, mongoId: products.mongoId, title: products.title,
-      titleAr: products.titleAr, description: products.description, descriptionAr: products.descriptionAr,
-      sku: products.sku, barcode: products.barcode, price: products.price, oldPrice: products.oldPrice,
-      active: products.active, inStock: products.inStock, availabilityStatus: products.availabilityStatus,
-      inventoryQuantity: products.inventoryQuantity, brandId: products.brandId, categoryId: products.categoryId,
-      images: products.images, createdAt: products.createdAt, updatedAt: products.updatedAt,
-    })
-    .from(products)
-    .where(dynamicWhere)
-    .orderBy(...buildRecommendedProductOrderBy())
-    .limit(dynamicLimit)
-    .offset(dynamicOffset) : Promise.resolve([]),
+    dynamicLimit > 0
+      ? db
+          .select({
+            id: products.id,
+            slug: products.slug,
+            mongoId: products.mongoId,
+            title: products.title,
+            titleAr: products.titleAr,
+            description: products.description,
+            descriptionAr: products.descriptionAr,
+            sku: products.sku,
+            barcode: products.barcode,
+            price: products.price,
+            oldPrice: products.oldPrice,
+            active: products.active,
+            inStock: products.inStock,
+            availabilityStatus: products.availabilityStatus,
+            inventoryQuantity: products.inventoryQuantity,
+            brandId: products.brandId,
+            categoryId: products.categoryId,
+            images: products.images,
+            createdAt: products.createdAt,
+            updatedAt: products.updatedAt,
+          })
+          .from(products)
+          .where(dynamicWhere)
+          .orderBy(...buildRecommendedProductOrderBy())
+          .limit(dynamicLimit)
+          .offset(dynamicOffset)
+      : Promise.resolve([]),
   ]);
 
   return {
@@ -349,13 +397,19 @@ export async function readStorefrontProductsForSelectionPage(
   };
 }
 
-export function mergeStorefrontProductSelections<T extends { id: number }>(direct: T[], dynamic: T[], limit: number) {
+export function mergeStorefrontProductSelections<T extends { id: number }>(
+  direct: T[],
+  dynamic: T[],
+  limit: number,
+) {
   const seen = new Set<number>();
-  return [...direct, ...dynamic].filter((product) => {
-    if (seen.has(product.id)) return false;
-    seen.add(product.id);
-    return true;
-  }).slice(0, Math.max(0, limit));
+  return [...direct, ...dynamic]
+    .filter((product) => {
+      if (seen.has(product.id)) return false;
+      seen.add(product.id);
+      return true;
+    })
+    .slice(0, Math.max(0, limit));
 }
 
 export function buildRecommendedProductOrderBy(search = '') {
@@ -413,19 +467,21 @@ function buildStorefrontProductWhereClause(query: StorefrontProductListQuery) {
     query.search ? buildCatalogSearchCondition(query.search) : undefined,
     query.brandId === null ? undefined : eq(products.brandId, query.brandId),
     query.categoryId === null ? undefined : eq(products.categoryId, query.categoryId),
-    query.discounted ? and(sql`${products.oldPrice} is not null`, gt(products.oldPrice, products.price)) : undefined,
+    query.discounted
+      ? and(sql`${products.oldPrice} is not null`, gt(products.oldPrice, products.price))
+      : undefined,
   );
 }
 
-export async function countStorefrontProducts(
-  db: Database,
-  query: StorefrontProductListQuery,
-) {
+export async function countStorefrontProducts(db: Database, query: StorefrontProductListQuery) {
   const rows = await db
     .select({ count: count() })
     .from(products)
     .leftJoin(brands, and(eq(products.brandId, brands.id), eq(brands.isActive, true)))
-    .leftJoin(categories, and(eq(products.categoryId, categories.id), eq(categories.isActive, true)))
+    .leftJoin(
+      categories,
+      and(eq(products.categoryId, categories.id), eq(categories.isActive, true)),
+    )
     .where(buildStorefrontProductWhereClause(query));
 
   return Number(rows[0]?.count ?? 0);
@@ -442,11 +498,14 @@ export async function readStorefrontProductBuildFeed(db: Database) {
     .where(eq(products.active, true))
     .orderBy(desc(products.updatedAt), desc(products.id));
 
-  return rows.map((row) => ({
-    id: row.id,
-    slug: row.slug,
-    updatedAt: row.updatedAt.toISOString(),
-  }) satisfies StorefrontProductBuildFeedItem);
+  return rows.map(
+    (row) =>
+      ({
+        id: row.id,
+        slug: row.slug,
+        updatedAt: row.updatedAt.toISOString(),
+      }) satisfies StorefrontProductBuildFeedItem,
+  );
 }
 
 export async function readStorefrontBrands(db: Database) {

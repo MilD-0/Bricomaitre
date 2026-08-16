@@ -1,13 +1,13 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
-import type { getDb } from "../../../db/src/client";
+import type { getDb } from '@bric/db/client';
 import {
   marketingEventOutbox,
   orderLineItems,
   orderMarketingAttribution,
   orders,
-} from "../../../db/src/schema";
-import { parseNumericAmount } from "../orders-support";
+} from '@bric/db/schema';
+import { parseNumericAmount } from '../orders-support';
 import {
   getOrderCompletedEventId,
   getOrderConfirmedEventId,
@@ -15,17 +15,26 @@ import {
   normalizeAlgeriaPhone,
   type MetaCommerceLine,
   type MetaRequestContext,
-} from "./meta";
-import {
-  MARKETING_SEMANTICS_VERSION,
-  type StorefrontOrderMarketing,
-} from "./marketing-contracts";
+} from './meta';
+import { MARKETING_SEMANTICS_VERSION, type StorefrontOrderMarketing } from './marketing-contracts';
 
 type Database = ReturnType<typeof getDb>;
-type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 type Executor = Database | Transaction;
-type Destination = "google" | "tiktok";
+type Destination = 'google' | 'tiktok';
 type OutboxRow = typeof marketingEventOutbox.$inferSelect;
+
+type MarketingEnvironment = Partial<
+  Record<
+    | 'GOOGLE_ANALYTICS_MEASUREMENT_ID'
+    | 'NEXT_PUBLIC_GA_MEASUREMENT_ID'
+    | 'GOOGLE_ANALYTICS_API_SECRET'
+    | 'TIKTOK_PIXEL_ID'
+    | 'NEXT_PUBLIC_TIKTOK_PIXEL_ID'
+    | 'TIKTOK_EVENTS_API_ACCESS_TOKEN',
+    string | undefined
+  >
+>;
 
 const ATTRIBUTION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 const PROCESSING_LEASE_MS = 2 * 60 * 1000;
@@ -33,6 +42,27 @@ const MAX_ATTEMPTS = 8;
 const GOOGLE_MAX_AGE_MS = 72 * 60 * 60 * 1000;
 const TIKTOK_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const RETRY_DELAYS_MS = [60_000, 300_000, 900_000, 3_600_000, 21_600_000, 43_200_000] as const;
+
+function configured(value: string | undefined) {
+  return Boolean(value?.trim());
+}
+
+export function isMarketingDestinationConfigured(
+  destination: Destination,
+  env: MarketingEnvironment = process.env as MarketingEnvironment,
+) {
+  if (destination === 'google') {
+    return (
+      configured(env.GOOGLE_ANALYTICS_MEASUREMENT_ID ?? env.NEXT_PUBLIC_GA_MEASUREMENT_ID) &&
+      configured(env.GOOGLE_ANALYTICS_API_SECRET)
+    );
+  }
+
+  return (
+    configured(env.TIKTOK_PIXEL_ID ?? env.NEXT_PUBLIC_TIKTOK_PIXEL_ID) &&
+    configured(env.TIKTOK_EVENTS_API_ACCESS_TOKEN)
+  );
+}
 
 function normalizeIdentifier(value: string | null | undefined) {
   const normalized = value?.trim();
@@ -71,7 +101,7 @@ function tiktokContents(lines: MetaCommerceLine[]) {
   return lines.map((line) => ({
     content_id: line.contentId,
     content_name: line.title.slice(0, 100),
-    content_type: "product",
+    content_type: 'product',
     price: line.effectiveUnitPrice,
     quantity: line.quantity,
   }));
@@ -89,18 +119,22 @@ export function buildGoogleMeasurementPayload(input: {
   return {
     client_id: input.clientId,
     timestamp_micros: input.eventTime.getTime() * 1000,
-    events: [{
-      name: input.eventName,
-      params: {
-        event_id: input.eventId,
-        transaction_id: String(input.orderId),
-        currency: "DZD",
-        value: commerceValue(input.lines),
-        items: googleItems(input.lines),
-        ...(input.sessionId && /^\d+$/.test(input.sessionId) ? { session_id: input.sessionId } : {}),
-        engagement_time_msec: 1,
+    events: [
+      {
+        name: input.eventName,
+        params: {
+          event_id: input.eventId,
+          transaction_id: String(input.orderId),
+          currency: 'DZD',
+          value: commerceValue(input.lines),
+          items: googleItems(input.lines),
+          ...(input.sessionId && /^\d+$/.test(input.sessionId)
+            ? { session_id: input.sessionId }
+            : {}),
+          engagement_time_msec: 1,
+        },
       },
-    }],
+    ],
   };
 }
 
@@ -131,70 +165,90 @@ export function buildTikTokEventsPayload(input: {
     ...(externalIdHash ? { external_id: [externalIdHash] } : {}),
   };
   return {
-    event_source: "web",
-    data: [{
-      event: input.eventName,
-      event_time: Math.floor(input.eventTime.getTime() / 1000),
-      event_id: input.eventId,
-      context: {
-        user,
-        page: { url: input.eventSourceUrl },
-        ...(input.clientIpAddress?.trim() ? { ip: input.clientIpAddress.trim() } : {}),
-        ...(input.clientUserAgent?.trim() ? { user_agent: input.clientUserAgent.trim() } : {}),
+    event_source: 'web',
+    data: [
+      {
+        event: input.eventName,
+        event_time: Math.floor(input.eventTime.getTime() / 1000),
+        event_id: input.eventId,
+        context: {
+          user,
+          page: { url: input.eventSourceUrl },
+          ...(input.clientIpAddress?.trim() ? { ip: input.clientIpAddress.trim() } : {}),
+          ...(input.clientUserAgent?.trim() ? { user_agent: input.clientUserAgent.trim() } : {}),
+        },
+        properties: {
+          order_id: String(input.orderId),
+          currency: 'DZD',
+          value: commerceValue(input.lines),
+          content_type: 'product',
+          contents: tiktokContents(input.lines),
+        },
       },
-      properties: {
-        order_id: String(input.orderId),
-        currency: "DZD",
-        value: commerceValue(input.lines),
-        content_type: "product",
-        contents: tiktokContents(input.lines),
-      },
-    }],
+    ],
   };
 }
 
-async function insertDestinationEvent(db: Executor, input: {
-  destination: Destination;
-  eventName: string;
-  eventId: string;
-  source: string;
-  orderId: number;
-  orderStatusHistoryId?: number | null;
-  eventTime: Date;
-  payload: Record<string, unknown>;
-}) {
-  const [row] = await db.insert(marketingEventOutbox).values({
-    ...input,
-    orderStatusHistoryId: input.orderStatusHistoryId ?? null,
-    status: "queued",
-    nextAttemptAt: new Date(),
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  }).onConflictDoUpdate({
-    target: [marketingEventOutbox.destination, marketingEventOutbox.eventName, marketingEventOutbox.eventId],
-    set: {
-      duplicateCount: sql`${marketingEventOutbox.duplicateCount} + 1`,
+async function insertDestinationEvent(
+  db: Executor,
+  input: {
+    destination: Destination;
+    eventName: string;
+    eventId: string;
+    source: string;
+    orderId: number;
+    orderStatusHistoryId?: number | null;
+    eventTime: Date;
+    payload: Record<string, unknown>;
+  },
+) {
+  const [row] = await db
+    .insert(marketingEventOutbox)
+    .values({
+      ...input,
+      orderStatusHistoryId: input.orderStatusHistoryId ?? null,
+      status: 'queued',
+      nextAttemptAt: new Date(),
+      createdAt: new Date(),
       updatedAt: new Date(),
-    },
-  }).returning({ id: marketingEventOutbox.id, duplicateCount: marketingEventOutbox.duplicateCount });
+    })
+    .onConflictDoUpdate({
+      target: [
+        marketingEventOutbox.destination,
+        marketingEventOutbox.eventName,
+        marketingEventOutbox.eventId,
+      ],
+      set: {
+        duplicateCount: sql`${marketingEventOutbox.duplicateCount} + 1`,
+        updatedAt: new Date(),
+      },
+    })
+    .returning({
+      id: marketingEventOutbox.id,
+      duplicateCount: marketingEventOutbox.duplicateCount,
+    });
   return row ? { ...row, duplicated: row.duplicateCount > 0 } : null;
 }
 
-async function enqueueOrderDestinations(db: Executor, input: {
-  order: typeof orders.$inferSelect;
-  lines: MetaCommerceLine[];
-  marketing: StorefrontOrderMarketing;
-  requestContext: MetaRequestContext;
-  eventId: string;
-  eventTime: Date;
-  source: string;
-  googleEventName: string;
-  tiktokEventName: string;
-  orderStatusHistoryId?: number | null;
-}) {
-  const clientId = normalizeIdentifier(input.marketing.google?.clientId)
-    ?? normalizeIdentifier(input.order.journeyId)
-    ?? `order.${input.order.id}`;
+async function enqueueOrderDestinations(
+  db: Executor,
+  input: {
+    order: typeof orders.$inferSelect;
+    lines: MetaCommerceLine[];
+    marketing: StorefrontOrderMarketing;
+    requestContext: MetaRequestContext;
+    eventId: string;
+    eventTime: Date;
+    source: string;
+    googleEventName: string;
+    tiktokEventName: string;
+    orderStatusHistoryId?: number | null;
+  },
+) {
+  const clientId =
+    normalizeIdentifier(input.marketing.google?.clientId) ??
+    normalizeIdentifier(input.order.journeyId) ??
+    `order.${input.order.id}`;
   const googlePayload = buildGoogleMeasurementPayload({
     eventName: input.googleEventName,
     eventId: input.eventId,
@@ -219,66 +273,78 @@ async function enqueueOrderDestinations(db: Executor, input: {
     externalId: input.order.visitId ?? input.order.journeyId ?? input.eventId,
     lines: input.lines,
   });
-  const google = await insertDestinationEvent(db, {
-      destination: "google",
-      eventName: input.googleEventName,
-      eventId: input.eventId,
-      source: input.source,
-      orderId: input.order.id,
-      orderStatusHistoryId: input.orderStatusHistoryId,
-      eventTime: input.eventTime,
-      payload: googlePayload,
-    });
-  const tiktok = await insertDestinationEvent(db, {
-      destination: "tiktok",
-      eventName: input.tiktokEventName,
-      eventId: input.eventId,
-      source: input.source,
-      orderId: input.order.id,
-      orderStatusHistoryId: input.orderStatusHistoryId,
-      eventTime: input.eventTime,
-      payload: tiktokPayload,
-    });
+  const google = isMarketingDestinationConfigured('google')
+    ? await insertDestinationEvent(db, {
+        destination: 'google',
+        eventName: input.googleEventName,
+        eventId: input.eventId,
+        source: input.source,
+        orderId: input.order.id,
+        orderStatusHistoryId: input.orderStatusHistoryId,
+        eventTime: input.eventTime,
+        payload: googlePayload,
+      })
+    : null;
+  const tiktok = isMarketingDestinationConfigured('tiktok')
+    ? await insertDestinationEvent(db, {
+        destination: 'tiktok',
+        eventName: input.tiktokEventName,
+        eventId: input.eventId,
+        source: input.source,
+        orderId: input.order.id,
+        orderStatusHistoryId: input.orderStatusHistoryId,
+        eventTime: input.eventTime,
+        payload: tiktokPayload,
+      })
+    : null;
   return { google, tiktok };
 }
 
-export async function createOrderMarketingArtifacts(tx: Transaction, input: {
-  order: typeof orders.$inferSelect;
-  lines: MetaCommerceLine[];
-  marketing: StorefrontOrderMarketing;
-  requestContext: MetaRequestContext;
-  now: Date;
-}) {
+export async function createOrderMarketingArtifacts(
+  tx: Transaction,
+  input: {
+    order: typeof orders.$inferSelect;
+    lines: MetaCommerceLine[];
+    marketing: StorefrontOrderMarketing;
+    requestContext: MetaRequestContext;
+    now: Date;
+  },
+) {
   const queued = await enqueueOrderDestinations(tx, {
     ...input,
     eventId: input.marketing.eventId,
     eventTime: input.now,
-    source: "order_submission",
-    googleEventName: "purchase",
-    tiktokEventName: "CompletePayment",
+    source: 'order_submission',
+    googleEventName: 'purchase',
+    tiktokEventName: 'CompletePayment',
   });
-  await tx.insert(orderMarketingAttribution).values({
-    orderId: input.order.id,
-    semanticsVersion: MARKETING_SEMANTICS_VERSION,
-    eventId: input.marketing.eventId,
-    eventSourceUrl: input.marketing.eventSourceUrl,
-    googleClientId: normalizeIdentifier(input.marketing.google?.clientId),
-    googleSessionId: normalizeIdentifier(input.marketing.google?.sessionId),
-    gclid: normalizeIdentifier(input.marketing.google?.gclid),
-    gbraid: normalizeIdentifier(input.marketing.google?.gbraid),
-    wbraid: normalizeIdentifier(input.marketing.google?.wbraid),
-    tiktokClickId: normalizeIdentifier(input.marketing.tiktok?.clickId),
-    tiktokCookieId: normalizeIdentifier(input.marketing.tiktok?.cookieId),
-    clientIpAddress: input.requestContext.clientIpAddress ?? null,
-    clientUserAgent: input.requestContext.clientUserAgent ?? null,
-    expiresAt: new Date(input.now.getTime() + ATTRIBUTION_TTL_MS),
-    createdAt: input.now,
-    updatedAt: input.now,
-  }).onConflictDoNothing({ target: orderMarketingAttribution.orderId });
+  await tx
+    .insert(orderMarketingAttribution)
+    .values({
+      orderId: input.order.id,
+      semanticsVersion: MARKETING_SEMANTICS_VERSION,
+      eventId: input.marketing.eventId,
+      eventSourceUrl: input.marketing.eventSourceUrl,
+      googleClientId: normalizeIdentifier(input.marketing.google?.clientId),
+      googleSessionId: normalizeIdentifier(input.marketing.google?.sessionId),
+      gclid: normalizeIdentifier(input.marketing.google?.gclid),
+      gbraid: normalizeIdentifier(input.marketing.google?.gbraid),
+      wbraid: normalizeIdentifier(input.marketing.google?.wbraid),
+      tiktokClickId: normalizeIdentifier(input.marketing.tiktok?.clickId),
+      tiktokCookieId: normalizeIdentifier(input.marketing.tiktok?.cookieId),
+      clientIpAddress: input.requestContext.clientIpAddress ?? null,
+      clientUserAgent: input.requestContext.clientUserAgent ?? null,
+      expiresAt: new Date(input.now.getTime() + ATTRIBUTION_TTL_MS),
+      createdAt: input.now,
+      updatedAt: input.now,
+    })
+    .onConflictDoNothing({ target: orderMarketingAttribution.orderId });
   return queued;
 }
 
-function attributionToMarketing(row: typeof orderMarketingAttribution.$inferSelect): StorefrontOrderMarketing {
+function attributionToMarketing(
+  row: typeof orderMarketingAttribution.$inferSelect,
+): StorefrontOrderMarketing {
   return {
     semanticsVersion: MARKETING_SEMANTICS_VERSION,
     eventId: row.eventId,
@@ -294,28 +360,41 @@ function attributionToMarketing(row: typeof orderMarketingAttribution.$inferSele
   };
 }
 
-export async function ensureMarketingOrderStatusEvents(db: Database, input: {
-  orderId: number;
-  statusHistoryId: number;
-  status: number;
-  changedAt: Date;
-}) {
-  const kind = input.status === 2 ? "confirmed" : [4, 10].includes(input.status) ? "completed" : null;
-  if (!kind) return { created: false, reason: "unqualified" as const };
-  const [attribution] = await db.select().from(orderMarketingAttribution)
-    .where(and(
-      eq(orderMarketingAttribution.orderId, input.orderId),
-      eq(orderMarketingAttribution.semanticsVersion, MARKETING_SEMANTICS_VERSION),
-    )).limit(1);
-  if (!attribution) return { created: false, reason: "legacy" as const };
+export async function ensureMarketingOrderStatusEvents(
+  db: Database,
+  input: {
+    orderId: number;
+    statusHistoryId: number;
+    status: number;
+    changedAt: Date;
+  },
+) {
+  const kind =
+    input.status === 2 ? 'confirmed' : [4, 10].includes(input.status) ? 'completed' : null;
+  if (!kind) return { created: false, reason: 'unqualified' as const };
+  const [attribution] = await db
+    .select()
+    .from(orderMarketingAttribution)
+    .where(
+      and(
+        eq(orderMarketingAttribution.orderId, input.orderId),
+        eq(orderMarketingAttribution.semanticsVersion, MARKETING_SEMANTICS_VERSION),
+      ),
+    )
+    .limit(1);
+  if (!attribution) return { created: false, reason: 'legacy' as const };
   const [order] = await db.select().from(orders).where(eq(orders.id, input.orderId)).limit(1);
-  if (!order) return { created: false, reason: "missing_order" as const };
-  const rows = await db.select().from(orderLineItems).where(eq(orderLineItems.orderId, input.orderId));
+  if (!order) return { created: false, reason: 'missing_order' as const };
+  const rows = await db
+    .select()
+    .from(orderLineItems)
+    .where(eq(orderLineItems.orderId, input.orderId));
   const lines = rows.map(lineRowToCommerceLine).filter((line) => Number.isFinite(line.productId));
-  if (lines.length === 0) return { created: false, reason: "missing_lines" as const };
-  const eventId = kind === "confirmed"
-    ? getOrderConfirmedEventId(input.orderId)
-    : getOrderCompletedEventId(input.orderId);
+  if (lines.length === 0) return { created: false, reason: 'missing_lines' as const };
+  const eventId =
+    kind === 'confirmed'
+      ? getOrderConfirmedEventId(input.orderId)
+      : getOrderCompletedEventId(input.orderId);
   const queued = await enqueueOrderDestinations(db, {
     order,
     lines,
@@ -326,15 +405,14 @@ export async function ensureMarketingOrderStatusEvents(db: Database, input: {
     },
     eventId,
     eventTime: input.changedAt,
-    source: kind === "confirmed" ? "order_confirmation" : "order_completion",
-    googleEventName: kind === "confirmed" ? "order_confirmed" : "order_completed",
-    tiktokEventName: kind === "confirmed" ? "OrderConfirmed" : "OrderCompleted",
+    source: kind === 'confirmed' ? 'order_confirmation' : 'order_completion',
+    googleEventName: kind === 'confirmed' ? 'order_confirmed' : 'order_completed',
+    tiktokEventName: kind === 'confirmed' ? 'OrderConfirmed' : 'OrderCompleted',
     orderStatusHistoryId: input.statusHistoryId,
   });
   return {
     created: Boolean(
-      (queued.google && !queued.google.duplicated)
-      || (queued.tiktok && !queued.tiktok.duplicated),
+      (queued.google && !queued.google.duplicated) || (queued.tiktok && !queued.tiktok.duplicated),
     ),
     eventId,
   };
@@ -342,7 +420,14 @@ export async function ensureMarketingOrderStatusEvents(db: Database, input: {
 
 type SendResult =
   | { ok: true; status: number; requestId: string | null; summary: Record<string, unknown> }
-  | { ok: false; retryable: boolean; status: number | null; retryAfterMs: number | null; code: string | null; message: string };
+  | {
+      ok: false;
+      retryable: boolean;
+      status: number | null;
+      retryAfterMs: number | null;
+      code: string | null;
+      message: string;
+    };
 
 function retryAfter(value: string | null) {
   if (!value) return null;
@@ -357,43 +442,81 @@ export async function sendMarketingDestinationEvent(row: OutboxRow): Promise<Sen
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
     let url: string;
-    let headers: Record<string, string> = { "content-type": "application/json" };
+    let headers: Record<string, string> = { 'content-type': 'application/json' };
     let body = row.payload;
-    if (row.destination === "google") {
-      const measurementId = process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID?.trim()
-        || process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim();
+    if (row.destination === 'google') {
+      const measurementId =
+        process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID?.trim() ||
+        process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim();
       const apiSecret = process.env.GOOGLE_ANALYTICS_API_SECRET?.trim();
-      if (!measurementId || !apiSecret) throw new Error("Missing Google Analytics Measurement Protocol credentials.");
+      if (!measurementId || !apiSecret)
+        return {
+          ok: false,
+          retryable: false,
+          status: null,
+          retryAfterMs: null,
+          code: 'destination_unconfigured',
+          message: 'Google Analytics Measurement Protocol credentials are not configured.',
+        };
       url = `https://www.google-analytics.com/mp/collect?measurement_id=${encodeURIComponent(measurementId)}&api_secret=${encodeURIComponent(apiSecret)}`;
-    } else if (row.destination === "tiktok") {
-      const pixelId = process.env.TIKTOK_PIXEL_ID?.trim() || process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID?.trim();
+    } else if (row.destination === 'tiktok') {
+      const pixelId =
+        process.env.TIKTOK_PIXEL_ID?.trim() || process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID?.trim();
       const accessToken = process.env.TIKTOK_EVENTS_API_ACCESS_TOKEN?.trim();
-      if (!pixelId || !accessToken) throw new Error("Missing TikTok Events API credentials.");
-      url = "https://business-api.tiktok.com/open_api/v1.3/event/track/";
-      headers = { ...headers, "Access-Token": accessToken };
-      body = { ...row.payload as Record<string, unknown>, event_source_id: pixelId };
+      if (!pixelId || !accessToken)
+        return {
+          ok: false,
+          retryable: false,
+          status: null,
+          retryAfterMs: null,
+          code: 'destination_unconfigured',
+          message: 'TikTok Events API credentials are not configured.',
+        };
+      url = 'https://business-api.tiktok.com/open_api/v1.3/event/track/';
+      headers = { ...headers, 'Access-Token': accessToken };
+      body = { ...(row.payload as Record<string, unknown>), event_source_id: pixelId };
     } else {
-      return { ok: false, retryable: false, status: null, retryAfterMs: null, code: "unknown_destination", message: `Unknown destination ${row.destination}.` };
+      return {
+        ok: false,
+        retryable: false,
+        status: null,
+        retryAfterMs: null,
+        code: 'unknown_destination',
+        message: `Unknown destination ${row.destination}.`,
+      };
     }
-    const response = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), signal: controller.signal });
-    const responseBody = await response.json().catch(() => ({})) as Record<string, unknown>;
-    const tiktokCode = row.destination === "tiktok" && typeof responseBody.code === "number" ? responseBody.code : 0;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const responseBody = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    const tiktokCode =
+      row.destination === 'tiktok' && typeof responseBody.code === 'number' ? responseBody.code : 0;
     if (response.ok && tiktokCode === 0) {
       return {
         ok: true,
         status: response.status,
-        requestId: response.headers.get("x-request-id")
-          ?? (typeof responseBody.request_id === "string" ? responseBody.request_id : null),
-        summary: row.destination === "tiktok" ? { code: tiktokCode } : {},
+        requestId:
+          response.headers.get('x-request-id') ??
+          (typeof responseBody.request_id === 'string' ? responseBody.request_id : null),
+        summary: row.destination === 'tiktok' ? { code: tiktokCode } : {},
       };
     }
     return {
       ok: false,
       retryable: response.status === 408 || response.status === 429 || response.status >= 500,
       status: response.status,
-      retryAfterMs: retryAfter(response.headers.get("retry-after")),
-      code: typeof responseBody.code === "string" || typeof responseBody.code === "number" ? String(responseBody.code) : null,
-      message: typeof responseBody.message === "string" ? responseBody.message : `${row.destination} returned HTTP ${response.status}.`,
+      retryAfterMs: retryAfter(response.headers.get('retry-after')),
+      code:
+        typeof responseBody.code === 'string' || typeof responseBody.code === 'number'
+          ? String(responseBody.code)
+          : null,
+      message:
+        typeof responseBody.message === 'string'
+          ? responseBody.message
+          : `${row.destination} returned HTTP ${response.status}.`,
     };
   } catch (error) {
     return {
@@ -426,56 +549,77 @@ async function claimEvents(db: Database, limit: number) {
     where id in (select id from candidates) returning id
   `);
   const ids = (result.rows as Array<{ id: number | string }>).map((row) => Number(row.id));
-  return ids.length ? db.select().from(marketingEventOutbox).where(inArray(marketingEventOutbox.id, ids)) : [];
+  return ids.length
+    ? db.select().from(marketingEventOutbox).where(inArray(marketingEventOutbox.id, ids))
+    : [];
 }
 
 export async function processMarketingOutboxBatch(db: Database, limit = 50) {
   const rows = await claimEvents(db, Math.max(1, Math.min(limit, 50)));
-  const result = { claimed: rows.length, accepted: 0, rejected: 0, retrying: 0, exhausted: 0, dropped: 0 };
+  const result = {
+    claimed: rows.length,
+    accepted: 0,
+    rejected: 0,
+    retrying: 0,
+    exhausted: 0,
+    dropped: 0,
+  };
   for (const row of rows) {
-    const maxAge = row.destination === "google" ? GOOGLE_MAX_AGE_MS : TIKTOK_MAX_AGE_MS;
+    const maxAge = row.destination === 'google' ? GOOGLE_MAX_AGE_MS : TIKTOK_MAX_AGE_MS;
     if (row.eventTime.getTime() < Date.now() - maxAge) {
       result.dropped += 1;
-      await db.update(marketingEventOutbox).set({
-        status: "dropped",
-        processingLeaseExpiresAt: null,
-        errorCode: "delivery_window_expired",
-        errorMessage: "Event exceeded the destination delivery window.",
-        payload: { redacted: true, eventName: row.eventName },
-        updatedAt: new Date(),
-      }).where(eq(marketingEventOutbox.id, row.id));
+      await db
+        .update(marketingEventOutbox)
+        .set({
+          status: 'dropped',
+          processingLeaseExpiresAt: null,
+          errorCode: 'delivery_window_expired',
+          errorMessage: 'Event exceeded the destination delivery window.',
+          payload: { redacted: true, eventName: row.eventName },
+          updatedAt: new Date(),
+        })
+        .where(eq(marketingEventOutbox.id, row.id));
       continue;
     }
     const sent = await sendMarketingDestinationEvent(row);
     const now = new Date();
     if (sent.ok) {
       result.accepted += 1;
-      await db.update(marketingEventOutbox).set({
-        status: "accepted",
-        deliveredAt: now,
-        processingLeaseExpiresAt: null,
-        lastHttpStatus: sent.status,
-        providerRequestId: sent.requestId,
-        responseSummary: sent.summary,
-        payload: { redacted: true, eventName: row.eventName },
-        updatedAt: now,
-      }).where(eq(marketingEventOutbox.id, row.id));
+      await db
+        .update(marketingEventOutbox)
+        .set({
+          status: 'accepted',
+          deliveredAt: now,
+          processingLeaseExpiresAt: null,
+          lastHttpStatus: sent.status,
+          providerRequestId: sent.requestId,
+          responseSummary: sent.summary,
+          payload: { redacted: true, eventName: row.eventName },
+          updatedAt: now,
+        })
+        .where(eq(marketingEventOutbox.id, row.id));
       continue;
     }
     const canRetry = sent.retryable && row.attemptCount < MAX_ATTEMPTS;
     if (canRetry) result.retrying += 1;
     else if (sent.retryable) result.exhausted += 1;
     else result.rejected += 1;
-    const delay = RETRY_DELAYS_MS[Math.min(Math.max(row.attemptCount - 1, 0), RETRY_DELAYS_MS.length - 1)];
-    await db.update(marketingEventOutbox).set({
-      status: canRetry ? "retrying" : sent.retryable ? "exhausted" : "rejected",
-      nextAttemptAt: canRetry ? new Date(now.getTime() + (sent.retryAfterMs ?? delay)) : row.nextAttemptAt,
-      processingLeaseExpiresAt: null,
-      lastHttpStatus: sent.status,
-      errorCode: sent.code,
-      errorMessage: sent.message.slice(0, 2000),
-      updatedAt: now,
-    }).where(eq(marketingEventOutbox.id, row.id));
+    const delay =
+      RETRY_DELAYS_MS[Math.min(Math.max(row.attemptCount - 1, 0), RETRY_DELAYS_MS.length - 1)];
+    await db
+      .update(marketingEventOutbox)
+      .set({
+        status: canRetry ? 'retrying' : sent.retryable ? 'exhausted' : 'rejected',
+        nextAttemptAt: canRetry
+          ? new Date(now.getTime() + (sent.retryAfterMs ?? delay))
+          : row.nextAttemptAt,
+        processingLeaseExpiresAt: null,
+        lastHttpStatus: sent.status,
+        errorCode: sent.code,
+        errorMessage: sent.message.slice(0, 2000),
+        updatedAt: now,
+      })
+      .where(eq(marketingEventOutbox.id, row.id));
   }
   return result;
 }
@@ -496,7 +640,12 @@ export async function reconcileMarketingOrderEvents(db: Database, limit = 100) {
     limit ${Math.max(1, Math.min(limit, 500))}
   `);
   let created = 0;
-  for (const row of result.rows as Array<{ history_id: number | string; order_id: number | string; status: number; changed_at: Date | string }>) {
+  for (const row of result.rows as Array<{
+    history_id: number | string;
+    order_id: number | string;
+    status: number;
+    changed_at: Date | string;
+  }>) {
     const outcome = await ensureMarketingOrderStatusEvents(db, {
       orderId: Number(row.order_id),
       statusHistoryId: Number(row.history_id),
@@ -510,18 +659,22 @@ export async function reconcileMarketingOrderEvents(db: Database, limit = 100) {
 
 export async function clearExpiredMarketingAttribution(db: Database) {
   const now = new Date();
-  const cleared = await db.update(orderMarketingAttribution).set({
-    googleClientId: null,
-    googleSessionId: null,
-    gclid: null,
-    gbraid: null,
-    wbraid: null,
-    tiktokClickId: null,
-    tiktokCookieId: null,
-    clientIpAddress: null,
-    clientUserAgent: null,
-    updatedAt: now,
-  }).where(sql`
+  const cleared = await db
+    .update(orderMarketingAttribution)
+    .set({
+      googleClientId: null,
+      googleSessionId: null,
+      gclid: null,
+      gbraid: null,
+      wbraid: null,
+      tiktokClickId: null,
+      tiktokCookieId: null,
+      clientIpAddress: null,
+      clientUserAgent: null,
+      updatedAt: now,
+    })
+    .where(
+      sql`
     ${orderMarketingAttribution.expiresAt} <= ${now}
     and (
       ${orderMarketingAttribution.googleClientId} is not null
@@ -534,6 +687,8 @@ export async function clearExpiredMarketingAttribution(db: Database) {
       or ${orderMarketingAttribution.clientIpAddress} is not null
       or ${orderMarketingAttribution.clientUserAgent} is not null
     )
-  `).returning({ orderId: orderMarketingAttribution.orderId });
+  `,
+    )
+    .returning({ orderId: orderMarketingAttribution.orderId });
   return { marketingAttributionCleared: cleared.length };
 }

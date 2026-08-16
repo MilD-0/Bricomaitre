@@ -13,6 +13,9 @@ const runtimeGlobal = globalThis as typeof globalThis & {
   __bricRedisClients?: Map<string, IORedis>;
 };
 
+const REQUEST_REDIS_COMMAND_TIMEOUT_MS = 5_000;
+const REQUEST_REDIS_CONNECT_TIMEOUT_MS = 5_000;
+
 function getGlobalClients() {
   if (!runtimeGlobal.__bricRedisClients) {
     runtimeGlobal.__bricRedisClients = new Map<string, IORedis>();
@@ -35,7 +38,9 @@ function readNumber(value: string | undefined, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-export function getRedisConnectionOptions(env: NodeJS.ProcessEnv = process.env): RedisConnectionOptions {
+export function getRedisConnectionOptions(
+  env: NodeJS.ProcessEnv = process.env,
+): RedisConnectionOptions {
   const url = env.REDIS_URL?.trim();
 
   if (url) {
@@ -47,6 +52,7 @@ export function getRedisConnectionOptions(env: NodeJS.ProcessEnv = process.env):
       password: parsed.password || undefined,
       db: parsed.pathname && parsed.pathname !== '/' ? Number(parsed.pathname.slice(1)) : undefined,
       tls: parsed.protocol === 'rediss:' ? {} : undefined,
+      protocol: 2,
       maxRetriesPerRequest: null,
       enableReadyCheck: true,
       lazyConnect: true,
@@ -65,9 +71,21 @@ export function getRedisConnectionOptions(env: NodeJS.ProcessEnv = process.env):
     password: env.REDIS_PASSWORD?.trim() || undefined,
     db: env.REDIS_DB ? readNumber(env.REDIS_DB, 0) : undefined,
     tls: readBoolean(env.REDIS_TLS_ENABLED) ? {} : undefined,
+    protocol: 2,
     maxRetriesPerRequest: null,
     enableReadyCheck: true,
     lazyConnect: true,
+  };
+}
+
+export function getRequestRedisConnectionOptions(
+  env: NodeJS.ProcessEnv = process.env,
+): RedisConnectionOptions {
+  return {
+    ...getRedisConnectionOptions(env),
+    commandTimeout: REQUEST_REDIS_COMMAND_TIMEOUT_MS,
+    connectTimeout: REQUEST_REDIS_CONNECT_TIMEOUT_MS,
+    maxRetriesPerRequest: 1,
   };
 }
 
@@ -102,7 +120,11 @@ function buildClient(cacheKey: string, overrides: RedisOptions = {}) {
 }
 
 export function getRedis() {
-  return buildClient('default');
+  return buildClient('default', {
+    commandTimeout: REQUEST_REDIS_COMMAND_TIMEOUT_MS,
+    connectTimeout: REQUEST_REDIS_CONNECT_TIMEOUT_MS,
+    maxRetriesPerRequest: 1,
+  });
 }
 
 export function getBullRedisConnection(name: string) {

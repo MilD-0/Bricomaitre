@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { createFixedProductRelationGenerator } from './testing';
-import { MIN_AI_PRODUCT_RELATION_CONFIDENCE, UnsupportedProductRelationError, productRelationProposalSchema } from './product-knowledge';
+import {
+  MIN_AI_PRODUCT_RELATION_CONFIDENCE,
+  UnsupportedProductRelationError,
+  productRelationProposalSchema,
+} from './product-knowledge';
 
 describe('product relation AI contracts', () => {
   it('keeps fixed test generators deterministic and provider-free', async () => {
@@ -20,19 +24,23 @@ describe('product relation AI contracts', () => {
       model: 'test-model',
     };
 
-    await expect(createFixedProductRelationGenerator(result).generate({} as never)).resolves.toEqual(result);
+    await expect(
+      createFixedProductRelationGenerator(result).generate({} as never),
+    ).resolves.toEqual(result);
   });
 
   it('rejects AI proposals without evidence', () => {
-    expect(productRelationProposalSchema.safeParse({
-      sourceProductId: 1,
-      targetProductId: 2,
-      relationType: 'compatible_with',
-      source: 'ai',
-      confidence: 0.5,
-      reviewStatus: 'proposed',
-      evidenceSummary: null,
-    }).success).toBe(false);
+    expect(
+      productRelationProposalSchema.safeParse({
+        sourceProductId: 1,
+        targetProductId: 2,
+        relationType: 'compatible_with',
+        source: 'ai',
+        confidence: 0.5,
+        reviewStatus: 'proposed',
+        evidenceSummary: null,
+      }).success,
+    ).toBe(false);
   });
 
   it('defines low-confidence generated relationships as unsupported', () => {

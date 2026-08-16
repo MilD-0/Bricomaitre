@@ -8,6 +8,23 @@ admin_domain="${BRIC_ADMIN_DOMAIN:-admin.example.com}"
 api_domain="${BRIC_API_DOMAIN:-api.example.com}"
 storefront_domain="${BRIC_STOREFRONT_DOMAIN:-www.example.com}"
 
+if [[ "$proxy_url" =~ ^(https?)://([^/:]+)(:([0-9]+))?/?$ ]]; then
+  proxy_scheme="${BASH_REMATCH[1]}"
+  proxy_host="${BASH_REMATCH[2]}"
+  proxy_port="${BASH_REMATCH[4]:-}"
+else
+  echo "BRIC_PROXY_URL must be an HTTP(S) origin without a path" >&2
+  exit 1
+fi
+
+if [[ -z "$proxy_port" ]]; then
+  if [[ "$proxy_scheme" == "https" ]]; then
+    proxy_port=443
+  else
+    proxy_port=80
+  fi
+fi
+
 request() {
   local domain="${1:?domain is required}"
   local path="${2:?path is required}"
@@ -17,17 +34,19 @@ request() {
     --silent \
     --show-error \
     --insecure \
+    --noproxy "*" \
     --max-time "${BRIC_SMOKE_TIMEOUT_SECONDS:-20}" \
+    --connect-to "$domain:$proxy_port:$proxy_host:$proxy_port" \
     --header "Host: $domain" \
-    "${proxy_url%/}${path}"
+    "$proxy_scheme://$domain:$proxy_port$path"
 }
 
 request "$admin_domain" "/api/health" >/dev/null
 request "$api_domain" "/api/health" >/dev/null
 
 storefront_health="$(request "$storefront_domain" "/api/health")"
-if [[ ! "$storefront_health" =~ \"app\"[[:space:]]*:[[:space:]]*\"storefront-new\" ]]; then
-  echo "storefront health did not identify storefront-new" >&2
+if [[ ! "$storefront_health" =~ \"app\"[[:space:]]*:[[:space:]]*\"storefront\" ]]; then
+  echo "storefront health did not identify storefront" >&2
   exit 1
 fi
 

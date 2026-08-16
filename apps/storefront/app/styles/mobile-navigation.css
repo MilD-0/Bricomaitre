@@ -1,0 +1,224 @@
+.navigation-drawer-search {
+  margin-bottom: 0.75rem;
+}
+.navigation-drawer-search .global-search-panel {
+  position: static;
+  max-height: min(48dvh, 25rem);
+  margin-top: 0.5rem;
+  overflow-y: auto;
+}
+.navigation-drawer-links > a,
+.navigation-drawer-links details a {
+  min-height: 3.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #edf0f1;
+  color: #2a3033;
+  font-size: 0.9rem;
+  font-weight: 610;
+}
+.navigation-drawer-links svg {
+  flex: 0 0 auto;
+  color: #8b9295;
+}
+[dir='rtl'] .navigation-drawer-links svg {
+  transform: scaleX(-1);
+}
+.navigation-drawer-links details {
+  margin-top: 0.85rem;
+}
+.navigation-drawer-links summary {
+  min-height: 2.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #747d81;
+  font-size: 0.69rem;
+  font-weight: 760;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
+}
+[dir='rtl'] .navigation-drawer-links summary {
+  letter-spacing: 0;
+}
+.navigation-drawer-links summary::-webkit-details-marker {
+  display: none;
+}
+.navigation-drawer-links summary svg {
+  color: var(--brand-teal);
+  transition: transform 160ms ease;
+}
+.navigation-drawer-links details[open] > summary svg {
+  transform: rotate(180deg);
+}
+[dir='rtl'] .navigation-drawer-links details[open] > summary svg {
+  transform: scaleX(-1) rotate(180deg);
+}
+.navigation-drawer-links details > div {
+  border-top: 1px solid #e3e6e7;
+}
+.navigation-drawer-category-group {
+  margin: 0 !important;
+  border-bottom: 1px solid #edf0f1;
+}
+.navigation-drawer-category-group > summary {
+  min-height: 3.15rem;
+  color: #2a3033;
+  font-size: 0.88rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.navigation-drawer-category-group > div {
+  border-top-color: #edf0f1 !important;
+  padding-inline-start: 0.65rem;
+}
+.navigation-drawer-category-group .navigation-drawer-category-group {
+  margin-inline-start: 0.35rem !important;
+  border-bottom: 0;
+}
+.navigation-drawer-category-self {
+  color: var(--brand-teal-strong) !important;
+  font-weight: 680 !important;
+}
+.navigation-drawer-footer-content {
+  display: grid;
+  gap: 0.55rem;
+}
+.support-contact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+.support-contact-copy {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+.support-contact-copy strong {
+  color: #293033;
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+.support-contact-copy span {
+  color: #687276;
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+.support-contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+.support-contact-action {
+  min-height: 2.45rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 1px solid #cfd6d7;
+  border-radius: 0.85rem;
+  corner-shape: squircle;
+  background: #fff;
+  padding: 0.4rem 0.65rem;
+  color: #374044;
+  font-size: 0.72rem;
+  font-weight: 720;
+  line-height: 1;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 130ms ease;
+}
+.support-contact-action > div {
+  display: grid;
+  place-items: center;
+  color: var(--brand-teal-strong);
+}
+.support-contact-action b {
+  font-size: 0.73rem;
+  font-weight: 780;
+}
+.support-contact-action:hover {
+  border-color: var(--brand-teal);
+  background: #f0f8f7;
+  box-shadow: 0 7px 14px rgba(1, 115, 122, 0.11);
+  transform: translateY(-1px);
+}
+.support-contact-action:active {
+  transform: translateY(1px) scale(0.985);
+}
+.support-contact-drawer {
+  align-items: stretch;
+  border: 1px solid #d8e7e4;
+  border-radius: 1rem;
+  corner-shape: squircle;
+  background: #f7fbfa;
+  padding: 0.65rem 0.75rem;
+}
+.support-contact-drawer .support-contact-copy {
+  justify-content: center;
+}
+.support-contact-drawer .support-contact-actions {
+  justify-content: flex-end;
+}
+.support-contact-drawer .support-contact-action {
+  min-height: 2.25rem;
+}
+.navigation-drawer-cart-summary {
+  min-height: 3.5rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  border: 0;
+  border-radius: 1rem;
+  corner-shape: squircle;
+  background: #eef5f4;
+  padding: 0.65rem 0.8rem;
+  color: var(--brand-teal-strong);
+  text-align: start;
+  cursor: pointer;
+}
+.navigation-drawer-cart-summary > span {
+  display: grid;
+  gap: 0.08rem;
+}
+.navigation-drawer-cart-summary strong {
+  color: #293033;
+  font-size: 0.82rem;
+  font-weight: 720;
+}
+.navigation-drawer-cart-summary small {
+  color: #717a7e;
+  font-size: 0.64rem;
+}
+.navigation-drawer-cart-summary > span:last-child {
+  display: block;
+  color: #293033;
+  font-size: 0.75rem;
+  font-weight: 730;
+  white-space: nowrap;
+}
+.navigation-drawer-checkout {
+  min-height: 3.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  corner-shape: squircle;
+  background: var(--commerce-orange);
+  color: #202529;
+  font-size: 0.82rem;
+  font-weight: 740;
+  box-shadow: 0 9px 20px rgba(188, 70, 10, 0.2);
+}
+.navigation-drawer-locale-toggle {
+  display: none;
+}
