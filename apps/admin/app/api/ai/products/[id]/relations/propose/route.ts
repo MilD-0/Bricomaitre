@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { hasDb } from '@bric/db/client';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import {
   AiProductNotFoundError,
   proposeProductRelation,
@@ -24,11 +25,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const { id } = await params;
-  const sourceProductId = Number(id);
+  const sourceProductId = parsePositiveIntegerId(id);
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (
-    !Number.isSafeInteger(sourceProductId) ||
-    sourceProductId <= 0 ||
+    sourceProductId === null ||
     !parsed.success ||
     parsed.data.targetProductId === sourceProductId
   ) {

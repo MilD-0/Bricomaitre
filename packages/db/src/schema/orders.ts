@@ -69,6 +69,9 @@ export const orders = pgTable(
     index('idx_orders_visit').on(t.visitId),
     index('idx_orders_journey').on(t.journeyId),
     index('idx_orders_session').on(t.sessionId),
+    index('idx_orders_promo_product')
+      .on(t.promoProductId)
+      .where(sql`${t.promoProductId} is not null`),
     index('idx_orders_archived_at').on(t.archivedAt),
     index('idx_orders_cart_products_gin').using('gin', t.cartProducts),
     uniqueIndex('orders_public_token_unique').on(t.publicToken),

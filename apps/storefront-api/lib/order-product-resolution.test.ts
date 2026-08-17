@@ -10,6 +10,7 @@ const product = {
   slug: 'arrache-poulie-41326-06',
   title: 'ARRACHE POULIE 41326-06',
   price: '5600.00',
+  purchasePrice: '4200.00',
   images: ['https://cdn.example.test/product.webp'],
 };
 
@@ -37,6 +38,7 @@ describe('order product resolution', () => {
         rawValue: 'arrache-poulie-41326-06',
         title: 'ARRACHE POULIE 41326-06',
         effectiveUnitPrice: 5600,
+        unitPurchasePrice: 4200,
         quantity: 2,
         lineTotal: 11200,
         thumbnailUrl: 'https://cdn.example.test/product.webp',

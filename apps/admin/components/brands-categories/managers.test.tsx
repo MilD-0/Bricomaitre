@@ -5,7 +5,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { delay, http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./image-upload-field', () => ({
+vi.mock('../image-upload-field', () => ({
   ImageUploadField: ({
     label,
     value,
@@ -26,17 +26,14 @@ vi.mock('./image-upload-field', () => ({
   ),
 }));
 
-import messages from '../messages/en.json';
-import { toast } from '../lib/toast';
-import { server } from '../test/mocks/server';
-import {
-  BrandsCategoriesManager,
-  BrandsManager,
-  CategoriesManager,
-} from './brands-categories-manager';
-import { Toaster } from './ui/toaster';
+import messages from '../../messages/en.json';
+import { toast } from '../../lib/toast';
+import { server } from '../../test/mocks/server';
+import { BrandsManager } from './brands-manager';
+import { CategoriesManager } from './categories-manager';
+import { Toaster } from '../ui/toaster';
 
-describe('BrandsCategoriesManager', () => {
+describe('brand and category managers', () => {
   const patchCalls: Array<{ url: string; body: unknown }> = [];
   const postCalls: Array<{ url: string; body: unknown }> = [];
   const deleteCalls: string[] = [];
@@ -162,7 +159,7 @@ describe('BrandsCategoriesManager', () => {
     window.localStorage.clear();
   });
 
-  function renderManager(ui: React.ReactNode = <BrandsCategoriesManager />) {
+  function renderManager(ui: React.ReactNode) {
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -403,7 +400,7 @@ describe('BrandsCategoriesManager', () => {
       }),
     );
 
-    renderManager();
+    renderManager(<BrandsManager />);
 
     await screen.findByText('Acme');
 

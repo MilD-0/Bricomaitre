@@ -1,4 +1,5 @@
 import { landingPageDocumentSchema } from '@bric/storefront-core/landing-pages';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -16,9 +17,9 @@ const requestSchema = z.discriminatedUnion('action', [
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await requireMutationAccess('assets');
   if (denied) return denied;
-  const id = Number((await params).id);
+  const id = parsePositiveIntegerId((await params).id);
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
-  if (!Number.isInteger(id) || id <= 0 || !parsed.success)
+  if (id === null || !parsed.success)
     return NextResponse.json({ error: 'Invalid landing-page update.' }, { status: 400 });
   const session = await auth();
   try {

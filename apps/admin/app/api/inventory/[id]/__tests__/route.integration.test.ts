@@ -92,6 +92,23 @@ describe('app/api/inventory/[id]/route', () => {
     });
   });
 
+  it('returns 400 before querying for a malformed product id', async () => {
+    hasDbMock.mockReturnValue(true);
+
+    const res = await PATCH(
+      new NextRequest('http://localhost/api/inventory/nope', {
+        method: 'PATCH',
+        body: JSON.stringify({ delta: 1 }),
+        headers: { 'content-type': 'application/json' },
+      }),
+      { params: Promise.resolve({ id: 'nope' }) },
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'Invalid product id' });
+    expect(getDbMock).not.toHaveBeenCalled();
+  });
+
   it('returns 404 when the product does not exist', async () => {
     hasDbMock.mockReturnValue(true);
     getDbMock.mockReturnValue({

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=blue-green.sh
 source "$(dirname "$0")/blue-green.sh"
 
 slot="${1:-$(get_active_slot)}"

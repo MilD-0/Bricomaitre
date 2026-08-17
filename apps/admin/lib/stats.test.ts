@@ -1,21 +1,24 @@
-import * as XLSX from 'xlsx';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
 
 import {
-  buildCartProductLookup,
   buildAnalyticsWhere,
-  buildAdCostEntriesFromSpreadsheetRow,
-  collectCartProductReferenceBuckets,
-  getCartProductLookupKey,
-  isNumericOrderReference,
-  manualOrderListQuerySchema,
+  buildLiveOrderSummaryQuery,
+  buildLiveOrderTrendQuery,
+  buildWebsiteProductMetricsQuery,
+  isFinancialDataLagging,
+  mergeCanonicalWebsitePurchases,
+  mergeLiveOrderTrend,
   normalizeStatsDashboardData,
-  normalizePhoneDigits,
-  parseSpreadsheet,
-  resolveOrderByPhoneAndDate,
   statsQuerySchema,
 } from './stats';
+import { CUSTOMER_SUCCESSFUL_ORDER_STATUSES } from './stats-experience';
+import {
+  buildCartProductLookup,
+  collectCartProductReferenceBuckets,
+  getCartProductLookupKey,
+} from './order-product-references';
+import { manualOrderListQuerySchema } from './manual-orders';
 
 describe('normalizeStatsDashboardData', () => {
   it('upgrades legacy snapshots with safe defaults for newer stats sections', () => {
@@ -40,6 +43,11 @@ describe('normalizeStatsDashboardData', () => {
     expect(normalized.aiAssistants.admin.runs).toBe(0);
     expect(normalized.customers.customers).toEqual([]);
     expect(normalized.metaAds.paidAttribution.topCampaigns).toEqual([]);
+    expect(normalized.metaAds.commerce).toMatchObject({
+      summary: { spend: 0, bricOrders: 0, paidOrders: 0 },
+      rows: [],
+      sync: null,
+    });
   });
 });
 
@@ -68,103 +76,158 @@ describe('website analytics history scope', () => {
     expect(query.sql).not.toContain('storefrontProject');
     expect(query.params).toEqual(['2026-06-01', '2026-06-30']);
   });
-});
 
-describe('parseSpreadsheet', () => {
-  it('detects headers after introductory rows and maps values', () => {
-    const workbook = XLSX.utils.book_new();
-    const sheet = XLSX.utils.aoa_to_sheet([
-      ['Ecotrack export'],
-      ['Generated automatically'],
-      [
-        'Référence',
-        'Tracking',
-        'Montant',
-        'Frais de livraison',
-        'Net recouvrement',
-        'Wilaya',
-        'Commune',
-        'Destinataire',
-      ],
-      ['42', 'TRK-42', 1500, 200, 1300, 'Alger', 'Bab Ezzouar', 'Ada'],
-    ]);
-
-    XLSX.utils.book_append_sheet(workbook, sheet, 'Sheet1');
-
-    const rows = parseSpreadsheet(
-      XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer,
+  it('combines canonical order lines with a non-duplicating legacy cart fallback', () => {
+    const query = new PgDialect().sqlToQuery(
+      buildWebsiteProductMetricsQuery({
+        range: 'custom',
+        startDate: '2026-08-16',
+        endDate: '2026-08-17',
+      }),
     );
 
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
-      reference: '42',
-      tracking: 'TRK-42',
-      montant: 1500,
-      fraisLivraison: 200,
-      netRecouvret: 1300,
-      wilaya: 'Alger',
-      commune: 'Bab Ezzouar',
-      destinataire: 'Ada',
+    expect(query.sql).toContain('order_product_purchases as');
+    expect(query.sql).toContain('from "order_line_items"');
+    expect(query.sql).toContain('legacy_order_products as');
+    expect(query.sql).toContain('unnest("orders"."cart_products")');
+    expect(query.sql).toContain('"products"."slug" = trim(product_ref)');
+    expect(query.sql).toContain('not exists');
+    expect(query.sql).toContain('count(distinct order_id)');
+    expect(query.sql).toContain('full join order_product_purchases');
+    expect(query.params).toEqual(expect.arrayContaining(['Africa/Algiers']));
+  });
+});
+
+describe('live order reporting', () => {
+  const filters = {
+    range: 'custom' as const,
+    startDate: '2026-08-16',
+    endDate: '2026-08-17',
+  };
+  const dialect = new PgDialect();
+
+  it('counts canonical orders in the reporting timezone and current success states', () => {
+    const query = dialect.sqlToQuery(buildLiveOrderSummaryQuery(filters));
+
+    expect(query.sql).toContain('from "orders"');
+    expect(query.sql).toContain('at time zone');
+    expect(query.sql).toContain('count(*) filter');
+    expect(query.params).toEqual(
+      expect.arrayContaining([
+        'Africa/Algiers',
+        '2026-08-16',
+        '2026-08-17',
+        ...CUSTOMER_SUCCESSFUL_ORDER_STATUSES,
+      ]),
+    );
+  });
+
+  it('builds daily, weekly, and monthly operational order trends from one filtered scan', () => {
+    const query = dialect.sqlToQuery(buildLiveOrderTrendQuery(filters));
+
+    expect(query.sql).toContain('with filtered_orders as');
+    expect(query.sql).toContain("select 'daily' as grain");
+    expect(query.sql).toContain("select 'weekly' as grain");
+    expect(query.sql).toContain("select 'monthly' as grain");
+    expect(query.sql.match(/from filtered_orders/g)).toHaveLength(3);
+  });
+
+  it('replaces imported order counts without discarding financial trend values', () => {
+    expect(
+      mergeLiveOrderTrend(
+        [
+          { bucket: '2026-08-15', orders: 4, revenue: 900, profit: 200, fees: 100 },
+          { bucket: '2026-08-16', orders: 0, revenue: 1200, profit: 350, fees: 150 },
+        ],
+        [
+          { bucket: '2026-08-16', orders: 52 },
+          { bucket: '2026-08-17', orders: 14 },
+        ],
+      ),
+    ).toEqual([
+      { bucket: '2026-08-15', orders: 0, revenue: 900, profit: 200, fees: 100 },
+      { bucket: '2026-08-16', orders: 52, revenue: 1200, profit: 350, fees: 150 },
+      { bucket: '2026-08-17', orders: 14, revenue: 0, profit: 0, fees: 0 },
+    ]);
+  });
+
+  it('uses canonical submissions throughout the website funnel summary', () => {
+    const website = normalizeStatsDashboardData(
+      {
+        website: {
+          sessions: 100,
+          addToCarts: 30,
+          checkoutStarts: 20,
+          purchases: 0,
+          funnel: [
+            { name: 'Sessions', value: 100 },
+            { name: 'Purchases', value: 0 },
+          ],
+        },
+      },
+      filters,
+    ).website;
+
+    expect(mergeCanonicalWebsitePurchases(website, 10)).toMatchObject({
+      purchases: 10,
+      sessionConversionRate: 10,
+      cartToPurchaseRate: 33.33,
+      checkoutToPurchaseRate: 50,
+      funnel: [
+        { name: 'Sessions', value: 100 },
+        { name: 'Purchases', value: 10 },
+      ],
     });
   });
-});
 
-describe('buildAdCostEntriesFromSpreadsheetRow', () => {
-  it('maps Meta campaign reports with website checkout conversions', () => {
-    const entries = buildAdCostEntriesFromSpreadsheetRow(
+  it('uses canonical daily order counts in the website outcome trend', () => {
+    const website = normalizeStatsDashboardData(
       {
-        'Reporting starts': '2026-05-20',
-        'Reporting ends': '2026-05-20',
-        'Campaign name': 'sales campaign fo all - Copy',
-        Reach: 120837,
-        Impressions: 204540,
-        'Link clicks': 8430,
-        'Clicks (all)': 9597,
-        'Amount spent (EUR)': 128.7,
-        'Website checkouts initiated': 4,
+        website: {
+          sessions: 100,
+          purchases: 3,
+          trend: [
+            {
+              bucket: '2026-08-16',
+              sessions: 40,
+              pageViews: 120,
+              purchases: 1,
+              errors: 2,
+            },
+          ],
+        },
       },
-      230,
-    );
+      filters,
+    ).website;
 
-    expect(entries).toEqual([
+    expect(
+      mergeCanonicalWebsitePurchases(website, 12, [
+        { bucket: '2026-08-16', orders: 8 },
+        { bucket: '2026-08-17', orders: 4 },
+      ]).trend,
+    ).toEqual([
       {
-        date: '2026-05-20',
-        platform: 'facebook',
-        campaignName: 'sales campaign fo all - Copy',
-        campaignId: null,
-        spend: 29601,
-        impressions: 204540,
-        clicks: 9597,
-        conversions: 4,
-        reach: 120837,
-        notes: 'Imported at rate 230',
+        bucket: '2026-08-16',
+        sessions: 40,
+        pageViews: 120,
+        purchases: 8,
+        errors: 2,
+      },
+      {
+        bucket: '2026-08-17',
+        sessions: 0,
+        pageViews: 0,
+        purchases: 4,
+        errors: 0,
       },
     ]);
   });
 
-  it('splits multi-day campaign totals across report days', () => {
-    const entries = buildAdCostEntriesFromSpreadsheetRow(
-      {
-        'Reporting starts': '2026-05-19',
-        'Reporting ends': '2026-05-20',
-        Campaign: 'Two-day campaign',
-        'Amount spent': 10,
-        Clicks: 5,
-        Conversions: 3,
-      },
-      100,
-    );
-
-    expect(entries).toMatchObject([
-      { date: '2026-05-19', spend: 500, clicks: 3, conversions: 2 },
-      { date: '2026-05-20', spend: 500, clicks: 3, conversions: 2 },
-    ]);
-  });
-
-  it('skips rows that do not include a date and spend', () => {
-    expect(buildAdCostEntriesFromSpreadsheetRow({ 'Campaign name': 'Missing facts' }, 230)).toEqual(
-      [],
-    );
+  it('allows ordinary settlement lag but flags materially stale financial coverage', () => {
+    expect(isFinancialDataLagging('2026-08-14', '2026-08-17')).toBe(false);
+    expect(isFinancialDataLagging('2026-08-13', '2026-08-17')).toBe(true);
+    expect(isFinancialDataLagging(null, '2026-08-17')).toBe(true);
+    expect(isFinancialDataLagging('2026-06-30', '')).toBe(false);
   });
 });
 
@@ -178,47 +241,12 @@ describe('manualOrderListQuerySchema', () => {
 });
 
 describe('cart product reference matching', () => {
-  it('only treats all-digit references as numeric order ids', () => {
-    expect(isNumericOrderReference('42')).toBe(true);
-    expect(isNumericOrderReference(' 7 ')).toBe(true);
-    expect(isNumericOrderReference('f00000000000000000000007')).toBe(false);
-    expect(isNumericOrderReference('ECU8XL26032495945')).toBe(false);
-  });
-
   it('classifies numeric and mongo cart product references the same way as orders', () => {
     expect(getCartProductLookupKey('12')).toBe('id:12');
     expect(getCartProductLookupKey('f00000000000000000000005')).toBe(
       'mongo:f00000000000000000000005',
     );
     expect(getCartProductLookupKey('Desk Lamp')).toBeNull();
-  });
-
-  it('normalizes phone strings to digits only', () => {
-    expect(normalizePhoneDigits('0660 91 76 96/')).toBe('0660917696');
-  });
-
-  it('resolves repeated-phone matches using nearest created date', () => {
-    const result = resolveOrderByPhoneAndDate(
-      [
-        { id: 1, createdAt: new Date('2026-03-01T10:00:00.000Z') },
-        { id: 2, createdAt: new Date('2026-03-24T10:00:00.000Z') },
-      ],
-      new Date('2026-03-24T05:40:51.312Z'),
-    );
-
-    expect(result).toMatchObject({ id: 2 });
-  });
-
-  it('keeps ambiguous repeated-phone matches unmatched when the date tie is exact', () => {
-    const result = resolveOrderByPhoneAndDate(
-      [
-        { id: 1, createdAt: new Date('2026-03-23T00:00:00.000Z') },
-        { id: 2, createdAt: new Date('2026-03-25T00:00:00.000Z') },
-      ],
-      new Date('2026-03-24T00:00:00.000Z'),
-    );
-
-    expect(result).toBeNull();
   });
 
   it('collects unique numeric ids and mongo ids from cart products', () => {

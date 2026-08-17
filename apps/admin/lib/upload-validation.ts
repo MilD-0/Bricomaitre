@@ -200,6 +200,9 @@ async function validateAndBufferUploads({
   maxTotalBytes: number;
   kind: string;
 }): Promise<UploadValidationResult> {
+  if (files.length === 0) {
+    return { ok: false, error: `No ${kind} uploaded`, status: 400 };
+  }
   if (files.length > maxFiles) {
     return { ok: false, error: `Upload at most ${maxFiles} ${kind} at a time`, status: 400 };
   }

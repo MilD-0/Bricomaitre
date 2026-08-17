@@ -27,7 +27,7 @@ function request(
   body: Record<string, unknown>,
   cookie = '_fbc=fb.1.1700000000.click; _fbp=fb.1.1700000000.1',
 ) {
-  return new NextRequest('https://bricomaitre.com/api/meta/events', {
+  return new NextRequest('https://api.bricomaitre.com/storefront/meta/events', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

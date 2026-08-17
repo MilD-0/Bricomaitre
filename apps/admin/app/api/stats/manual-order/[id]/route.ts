@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { auth } from '../../../../../lib/auth';
-import { deleteManualOrder } from '../../../../../lib/stats';
+import { deleteManualOrder } from '../../../../../lib/manual-orders';
 import { requireOpsAccess } from '../../../../../lib/rbac';
 import { triggerAdminReportingRefresh } from '../../../../../lib/reporting-refresh-trigger';
 
@@ -14,7 +15,11 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
 
-  const { id } = await params;
+  const id = parsePositiveIntegerId((await params).id);
+  if (id === null) {
+    return NextResponse.json({ error: 'Invalid manual order id' }, { status: 400 });
+  }
+
   const session = await auth();
   const deleted = await deleteManualOrder(id, {
     email: session?.user?.email,

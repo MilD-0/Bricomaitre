@@ -20,6 +20,8 @@ describe('experience stats SQL', () => {
 
     expect(query.sql).toContain('left join "analytics_events" on');
     expect(query.sql).toContain('"analytics_events"."occurred_at"');
+    expect(query.sql).toContain('distinct on (landing_page_id, purchase_key)');
+    expect(query.sql).toContain('coalesce(max(landing_purchase_totals.revenue), 0)');
     expect(query.sql).not.toContain('"analytics_events" event');
   });
 

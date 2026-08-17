@@ -66,7 +66,7 @@ async function ThankYouPageContent({ params, searchParams }: ThankYouPageProps) 
                 cartMode: 'cart',
                 stateName: null,
                 createdAt: initialOrder.updatedAt,
-                purchaseEventId: null,
+                purchaseEventId: initialOrder.purchaseEventId,
               }
             : null
         }

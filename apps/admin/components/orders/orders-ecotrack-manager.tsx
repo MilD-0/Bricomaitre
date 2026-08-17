@@ -12,7 +12,6 @@ import {
   Search,
   Send,
   Trash2,
-  Truck,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useLocale, useTranslations } from 'next-intl';
@@ -20,18 +19,15 @@ import { Fragment, useDeferredValue, useEffect, useMemo, useState, useTransition
 
 import { requestJson } from '../../lib/admin-api';
 import type {
-  EcotrackBulkActionFailure,
   EcotrackCatalogResponse,
   EcotrackDispatchBatchResponse,
   EcotrackLabelsResponse,
   EcotrackRefreshBatchResponse,
   EcotrackShipmentDetail,
-  EcotrackShipmentDetailResponse,
   EcotrackShipmentListItem,
   EcotrackShipmentsResponse,
   EcotrackShipmentSortDirection,
   EcotrackShipmentSortKey,
-  EcotrackStatusSummary,
 } from '../../lib/ecotrack-admin-contracts';
 import {
   formatOrderPhoneForDisplay,
@@ -66,11 +62,23 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from '../ui/field';
 import { Input } from '../ui/input';
 import { PendingInline, sectionTransitionProps, SurfacePendingOverlay } from '../ui/motion';
 import { NativeSelect, NativeSelectOption } from '../ui/native-select';
-import { Skeleton } from '../ui/skeleton';
 import { Switch } from '../ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Textarea } from '../ui/textarea';
 import { TablePaginationControls } from '../table-pagination-controls';
+import {
+  buildEcotrackFailureSummary as buildFailureSummary,
+  formatEcotrackAmountInput as formatAmountInput,
+  formatEcotrackDateTime as formatDateTime,
+  formatEcotrackMoney as formatMoney,
+  getEcotrackDeliveryLabelKey as getDeliveryLabelKey,
+} from './orders-ecotrack-presentation';
+import {
+  EcotrackShipmentHistoryPanel as ShipmentHistoryPanel,
+  EcotrackStatusBadge as StatusBadge,
+  OrdersEcotrackMobileSkeleton,
+  OrdersEcotrackTableSkeleton,
+} from './orders-ecotrack-status';
 
 type SortKey = EcotrackShipmentSortKey;
 type SortDirection = EcotrackShipmentSortDirection;
@@ -162,340 +170,8 @@ function decodeBase64Pdf(base64: string) {
   return new Blob([bytes], { type: 'application/pdf' });
 }
 
-function buildFailureSummary(failures: EcotrackBulkActionFailure[], limit = 2) {
-  return failures
-    .slice(0, limit)
-    .map((failure) => failure.message)
-    .join(' ');
-}
-
 function criticalEcotrackToast(message: string, toastId?: string | null) {
   toast.criticalError(message, toastId ? { id: toastId } : undefined);
-}
-
-function formatDateTime(locale: string, value: string | null) {
-  if (!value) {
-    return null;
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat(locale, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date);
-}
-
-function formatMoney(locale: string, value: number | null | undefined) {
-  if (value == null) {
-    return '0.00';
-  }
-
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: 'DZD',
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-function formatAmountInput(value: number | null | undefined) {
-  if (value == null || Number.isNaN(value)) {
-    return '';
-  }
-
-  return Number(value).toFixed(2);
-}
-
-function getDeliveryLabelKey(value: 0 | 1) {
-  return value === 1 ? 'ordersManager.delivery.office' : 'ordersManager.delivery.home';
-}
-
-function getTrackingHistoryStatusLabel(status: string, t: ReturnType<typeof useTranslations>) {
-  const normalized = status.trim().toLowerCase();
-  const knownStatuses = new Set([
-    'order_information_received_by_carrier',
-    'picked',
-    'accepted_by_carrier',
-    'dispatched_to_driver',
-    'attempt_delivery',
-    'return_asked',
-    'return_in_transit',
-    'return_received',
-    'livred',
-    'encaissed',
-    'payed',
-  ]);
-
-  if (!knownStatuses.has(normalized)) {
-    return status;
-  }
-
-  return t(`ordersEcotrackManager.historyStatuses.${normalized}`);
-}
-
-function StatusBadge({
-  locale,
-  status,
-  t,
-}: {
-  locale: string;
-  status: EcotrackStatusSummary;
-  t: ReturnType<typeof useTranslations>;
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="outline">
-          {t(`ordersEcotrackManager.statuses.${status.currentStatus}`)}
-        </Badge>
-        {status.isStatusStale || status.isTrackingStale || status.isMajStale ? (
-          <Badge variant="outline">{t('ordersEcotrackManager.staleBadge')}</Badge>
-        ) : null}
-      </div>
-      {status.driverPhone ? (
-        <p className="text-sm text-muted-foreground">
-          {t('ordersEcotrackManager.driverPhone')}: {formatOrderPhoneForDisplay(status.driverPhone)}
-        </p>
-      ) : null}
-      {status.estimatedFee !== null ? (
-        <p className="text-sm text-muted-foreground">
-          {t('ordersEcotrackManager.estimatedFee')}: {formatMoney(locale, status.estimatedFee)}
-        </p>
-      ) : null}
-      <p className="text-xs text-muted-foreground">
-        {t('ordersEcotrackManager.lastSync')}:{' '}
-        {formatDateTime(locale, status.lastStatusSyncedAt) ??
-          t('ordersEcotrackManager.neverSynced')}
-      </p>
-    </div>
-  );
-}
-
-function ShipmentHistoryPanel({
-  locale,
-  orderId,
-  enabled,
-}: {
-  locale: string;
-  orderId: number;
-  enabled: boolean;
-}) {
-  const t = useTranslations();
-  const detailQuery = useQuery({
-    queryKey: ['ecotrack-shipment-detail', orderId],
-    queryFn: () =>
-      requestJson<EcotrackShipmentDetailResponse>(`/api/orders/ecotrack/shipments/${orderId}`),
-    enabled,
-    staleTime: 30_000,
-  });
-
-  if (!enabled) {
-    return null;
-  }
-
-  if (detailQuery.isPending) {
-    return (
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="flex flex-col gap-2">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-16 w-full" />
-        </Card>
-        <Card className="flex flex-col gap-2">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-16 w-full" />
-        </Card>
-      </div>
-    );
-  }
-
-  if (detailQuery.isError || !detailQuery.data?.item) {
-    return (
-      <Empty className="rounded-[1rem] border border-dashed border-border/70 bg-muted/10">
-        <EmptyHeader>
-          <EmptyTitle>{t('ordersEcotrackManager.history.title')}</EmptyTitle>
-          <EmptyDescription>
-            {detailQuery.error instanceof Error
-              ? detailQuery.error.message
-              : t('ordersEcotrackManager.history.empty')}
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    );
-  }
-
-  const item = detailQuery.data.item;
-
-  return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-      <Card className="flex flex-col gap-3 border border-border/70 bg-background/90 shadow-none">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold">{t('ordersEcotrackManager.summaryTitle')}</h3>
-          <Badge variant="outline">
-            {t(`ordersEcotrackManager.statuses.${item.status.currentStatus}`)}
-          </Badge>
-        </div>
-        <div className="grid gap-2 text-sm text-muted-foreground">
-          <p>
-            {t('ordersEcotrackManager.lastSync')}:{' '}
-            {formatDateTime(locale, item.status.lastStatusSyncedAt) ??
-              t('ordersEcotrackManager.neverSynced')}
-          </p>
-          <p>
-            {t('ordersEcotrackManager.lastTrackingSync')}:{' '}
-            {formatDateTime(locale, item.status.lastTrackingSyncedAt) ??
-              t('ordersEcotrackManager.neverSynced')}
-          </p>
-          <p>
-            {t('ordersEcotrackManager.lastMajSync')}:{' '}
-            {formatDateTime(locale, item.status.lastMajSyncedAt) ??
-              t('ordersEcotrackManager.neverSynced')}
-          </p>
-          {item.status.driverPhone ? (
-            <p>
-              {t('ordersEcotrackManager.driverPhone')}:{' '}
-              {formatOrderPhoneForDisplay(item.status.driverPhone)}
-            </p>
-          ) : null}
-          {item.status.deskPhone ? (
-            <p>
-              {t('ordersEcotrackManager.deskPhone')}:{' '}
-              {formatOrderPhoneForDisplay(item.status.deskPhone)}
-            </p>
-          ) : null}
-          {item.status.deskCommune ? (
-            <p>
-              {t('ordersEcotrackManager.deskCommune')}: {item.status.deskCommune}
-            </p>
-          ) : null}
-          {item.status.deskAddress ? (
-            <p>
-              {t('ordersEcotrackManager.deskAddress')}: {item.status.deskAddress}
-            </p>
-          ) : null}
-          {item.status.estimatedFee !== null ? (
-            <p>
-              {t('ordersEcotrackManager.estimatedFee')}:{' '}
-              {formatMoney(locale, item.status.estimatedFee)}
-            </p>
-          ) : null}
-        </div>
-      </Card>
-
-      <div className="grid gap-4">
-        <Card className="border border-border/70 bg-background/90 shadow-none">
-          <div className="mb-3 flex items-center gap-2">
-            <History />
-            <h3 className="text-sm font-semibold">{t('ordersEcotrackManager.history.majTitle')}</h3>
-          </div>
-          <div className="flex flex-col gap-3">
-            {item.majEntries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {t('ordersEcotrackManager.history.emptyMaj')}
-              </p>
-            ) : null}
-            {item.majEntries.map((entry) => (
-              <div
-                key={entry.id}
-                className="rounded-[1rem] border border-border/70 bg-muted/10 p-3 text-sm"
-              >
-                <p className="font-medium">{entry.remarque}</p>
-                <p className="mt-1 text-muted-foreground">
-                  {formatDateTime(locale, entry.remoteCreatedAt) ?? entry.remoteCreatedAt}
-                </p>
-                {entry.station || entry.livreur ? (
-                  <p className="mt-1 text-muted-foreground">
-                    {[entry.station, entry.livreur].filter(Boolean).join(' • ')}
-                  </p>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        <Card className="border border-border/70 bg-background/90 shadow-none">
-          <div className="mb-3 flex items-center gap-2">
-            <Truck />
-            <h3 className="text-sm font-semibold">
-              {t('ordersEcotrackManager.history.timelineTitle')}
-            </h3>
-          </div>
-          <div className="flex flex-col gap-3">
-            {item.trackingEvents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {t('ordersEcotrackManager.history.emptyTimeline')}
-              </p>
-            ) : null}
-            {item.trackingEvents.map((entry) => (
-              <div
-                key={entry.id}
-                className="rounded-[1rem] border border-border/70 bg-muted/10 p-3 text-sm"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline">{getTrackingHistoryStatusLabel(entry.status, t)}</Badge>
-                  <span className="text-muted-foreground">
-                    {entry.eventDate} {entry.eventTime}
-                  </span>
-                </div>
-                {entry.scanLocation ? (
-                  <p className="mt-2 text-muted-foreground">{entry.scanLocation}</p>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-function OrdersEcotrackTableSkeleton() {
-  return (
-    <div className="hidden overflow-x-auto lg:block">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {Array.from({ length: 8 }).map((_, index) => (
-              <TableHead key={index}>
-                <Skeleton className="h-4 w-24" />
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {Array.from({ length: 5 }).map((_, rowIndex) => (
-            <TableRow key={rowIndex}>
-              {Array.from({ length: 8 }).map((__, cellIndex) => (
-                <TableCell key={cellIndex}>
-                  <Skeleton className="h-16 w-full" />
-                </TableCell>
-              ))}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-function OrdersEcotrackMobileSkeleton() {
-  return (
-    <div className="grid gap-4 p-4 lg:hidden">
-      {Array.from({ length: 4 }).map((_, index) => (
-        <Card
-          key={index}
-          className="flex flex-col gap-3 border border-border/70 bg-background/90 shadow-none"
-        >
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-2/3" />
-          <Skeleton className="h-20 w-full" />
-        </Card>
-      ))}
-    </div>
-  );
 }
 
 export function OrdersEcotrackManager({

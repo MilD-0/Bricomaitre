@@ -24,7 +24,6 @@ vi.mock('./background-jobs', () => ({
   ADMIN_PRODUCT_EXPORT_QUEUE: 'admin-product-export',
   ADMIN_REPORTING_REFRESH_QUEUE: 'admin-reporting-refresh',
   ADMIN_STATS_IMPORT_QUEUE: 'admin-stats-import',
-  STOREFRONT_ANALYTICS_QUEUE: 'storefront-analytics',
   cancelBackgroundJob: mocks.cancel,
   getBackgroundJob: mocks.get,
   listRecentBackgroundJobs: mocks.list,
@@ -71,7 +70,6 @@ describe('admin AI background job control', () => {
         'admin-product-export',
         'admin-order-export',
         'admin-reporting-refresh',
-        'storefront-analytics',
       ]),
       25,
     );

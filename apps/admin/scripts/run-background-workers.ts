@@ -2,6 +2,7 @@ import 'dotenv/config';
 
 import * as Sentry from '@sentry/node';
 import { createQueueWorker, isFinalJobAttempt } from '@bric/runtime/jobs';
+import { writeWorkerHeartbeat } from '@bric/runtime/worker-heartbeat';
 import cron from 'node-cron';
 
 import { readSampleRate } from '../lib/sentry';
@@ -15,11 +16,9 @@ import {
   ADMIN_PRODUCT_EXPORT_QUEUE,
   ADMIN_REPORTING_REFRESH_QUEUE,
   ADMIN_STATS_IMPORT_QUEUE,
-  STOREFRONT_ANALYTICS_QUEUE,
   ADMIN_AI_CONTENT_QUEUE,
   ADMIN_AI_CATEGORIZATION_QUEUE,
   runAdCostsImportJob,
-  runAnalyticsJob,
   runEcotrackShipmentSyncJob,
   runEcotrackSyncJob,
   runOrderEcotrackJob,
@@ -36,11 +35,14 @@ import {
 import { publishAiTaskTerminalMessage, type AiTaskTerminalStatus } from '../lib/ai-task-followups';
 import { runDatabaseMaintenance } from '../lib/database-maintenance';
 import { startEcotrackScheduler, stopEcotrackScheduler } from '../lib/ecotrack-scheduler';
+import { startMetaAdsScheduler, stopMetaAdsScheduler } from '../lib/meta-ads-scheduler';
 
 const DEFAULT_REPORTING_REFRESH_CRON = '11 3 * * *';
 const DEFAULT_REPORTING_REFRESH_TIMEZONE = 'Africa/Algiers';
 const DEFAULT_DATABASE_MAINTENANCE_CRON = '43 * * * *';
 const DEFAULT_DATABASE_MAINTENANCE_TIMEZONE = 'Africa/Algiers';
+const WORKER_HEARTBEAT_PATH = '/tmp/bric-admin-worker-heartbeat';
+const WORKER_HEARTBEAT_INTERVAL_MS = 15_000;
 
 if (process.env.ADMIN_WORKER_BOOTSTRAP_CHECK === '1') {
   console.log('[worker] bootstrap check passed');
@@ -63,6 +65,7 @@ Sentry.init({
 });
 
 startEcotrackScheduler();
+startMetaAdsScheduler();
 
 const workers = [
   createQueueWorker(ADMIN_AI_CATEGORIZATION_QUEUE, runAiCategorizationJob),
@@ -76,8 +79,30 @@ const workers = [
   createQueueWorker(ADMIN_REPORTING_REFRESH_QUEUE, runAdminReportingRefreshJob),
   createQueueWorker(ADMIN_ECOTRACK_SYNC_QUEUE, runEcotrackSyncJob),
   createQueueWorker(ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE, runEcotrackShipmentSyncJob),
-  createQueueWorker(STOREFRONT_ANALYTICS_QUEUE, runAnalyticsJob),
 ];
+
+let stopping = false;
+let heartbeatRunning = false;
+
+async function refreshWorkerHeartbeat() {
+  if (stopping || heartbeatRunning) return;
+
+  heartbeatRunning = true;
+  try {
+    await Promise.all(workers.map((worker) => worker.waitUntilReady()));
+    await writeWorkerHeartbeat(WORKER_HEARTBEAT_PATH);
+  } catch (error) {
+    Sentry.captureException(error, { tags: { operation: 'worker-heartbeat' } });
+  } finally {
+    heartbeatRunning = false;
+  }
+}
+
+const heartbeatTimer = setInterval(() => {
+  void refreshWorkerHeartbeat();
+}, WORKER_HEARTBEAT_INTERVAL_MS);
+heartbeatTimer.unref();
+void refreshWorkerHeartbeat();
 
 type TaskLifecycleJob = {
   id?: string;
@@ -228,24 +253,28 @@ for (const worker of workers) {
   });
 }
 
-async function shutdown(signal: string) {
+async function shutdown(signal: string, exitCode = 0) {
+  if (stopping) return;
+  stopping = true;
   console.log(`[worker] shutting down on ${signal}`);
+  clearInterval(heartbeatTimer);
   reportingRefreshTask.stop();
   databaseMaintenanceTask.stop();
   stopEcotrackScheduler();
+  stopMetaAdsScheduler();
   await Promise.all(workers.map((worker) => worker.close()));
   await Sentry.close(2000);
-  process.exit(0);
+  process.exit(exitCode);
 }
 
 process.on('uncaughtException', (error) => {
   Sentry.captureException(error);
-  void Sentry.flush(2000);
+  void shutdown('uncaughtException', 1);
 });
 
 process.on('unhandledRejection', (reason) => {
   Sentry.captureException(reason);
-  void Sentry.flush(2000);
+  void shutdown('unhandledRejection', 1);
 });
 
 process.on('SIGINT', () => {

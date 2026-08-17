@@ -67,4 +67,14 @@ describe('app/api/bulletin/replies/[replyId]/route', () => {
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ ok: true });
   });
+
+  it('returns 400 before querying for a malformed reply id', async () => {
+    const res = await DELETE(
+      new NextRequest('http://localhost/api/bulletin/replies/nope', { method: 'DELETE' }),
+      { params: Promise.resolve({ replyId: 'nope' }) },
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'Invalid bulletin reply id' });
+  });
 });

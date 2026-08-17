@@ -9,7 +9,7 @@ import {
   ManualOrderConflictError,
   manualOrderInputSchema,
   manualOrderListQuerySchema,
-} from '../../../../lib/stats';
+} from '../../../../lib/manual-orders';
 import { requireOpsAccess } from '../../../../lib/rbac';
 import { triggerAdminReportingRefresh } from '../../../../lib/reporting-refresh-trigger';
 

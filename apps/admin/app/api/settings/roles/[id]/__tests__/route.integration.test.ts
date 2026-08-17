@@ -76,6 +76,23 @@ describe('app/api/settings/roles/[id]/route', () => {
     await expect(res.json()).resolves.toEqual({ error: 'Role not found' });
   });
 
+  it('returns 400 before querying for a malformed role id', async () => {
+    hasDbMock.mockReturnValue(true);
+
+    const res = await PUT(
+      new NextRequest('http://localhost/api/settings/roles/nope', {
+        method: 'PUT',
+        body: JSON.stringify({ name: 'Support', permissions: ['orders_write'] }),
+        headers: { 'content-type': 'application/json' },
+      }),
+      { params: Promise.resolve({ id: 'nope' }) },
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'Invalid role id' });
+    expect(getDbMock).not.toHaveBeenCalled();
+  });
+
   it('updates an existing role and replaces permissions', async () => {
     hasDbMock.mockReturnValue(true);
     const db = {

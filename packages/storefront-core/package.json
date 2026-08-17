@@ -11,6 +11,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./analytics": "./src/storefront/analytics.ts",
+    "./acquisition": "./src/storefront/acquisition.ts",
     "./assets": "./src/storefront/assets.ts",
     "./catalog": "./src/storefront/catalog.ts",
     "./contracts": "./src/storefront/contracts.ts",
@@ -38,7 +39,7 @@
   "dependencies": {
     "@bric/db": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "next": "16.3.0",
+    "next": "16.3.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

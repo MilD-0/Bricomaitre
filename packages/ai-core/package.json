@@ -19,12 +19,12 @@
     "./analytics": "./src/analytics.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^4.0.41",
-    "ai": "^7.0.64",
+    "@ai-sdk/openai": "^4.0.42",
+    "ai": "^7.0.66",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "typescript": "^6.0.2",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   }
 }

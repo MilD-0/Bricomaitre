@@ -80,6 +80,32 @@ describe('app/storefront/orders/[id]/route', () => {
     await expect(res.json()).resolves.toEqual({ error: 'Order token is required' });
   });
 
+  it.each([
+    ['GET', (request: NextRequest) => GET(request, { params: Promise.resolve({ id: 'nope' }) })],
+    [
+      'PATCH',
+      (request: NextRequest) => PATCH(request, { params: Promise.resolve({ id: 'nope' }) }),
+    ],
+  ])('returns 400 before data access for a malformed order id in %s', async (method, callRoute) => {
+    const request = new NextRequest('http://localhost/storefront/orders/nope?token=public-token', {
+      method,
+      ...(method === 'PATCH'
+        ? {
+            body: JSON.stringify({ city: 'Oran' }),
+            headers: { 'content-type': 'application/json' },
+          }
+        : {}),
+    });
+
+    const res = await callRoute(request);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'Invalid order id.' });
+    expect(getDbMock).not.toHaveBeenCalled();
+    expect(readStorefrontOrderMock).not.toHaveBeenCalled();
+    expect(updateStorefrontOrderMock).not.toHaveBeenCalled();
+  });
+
   it('returns the storefront order for a valid token', async () => {
     getDbMock.mockReturnValue({ tag: 'db' });
     readStorefrontOrderMock.mockResolvedValue({

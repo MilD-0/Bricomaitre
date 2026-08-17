@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { hasDb } from '@bric/db/client';
 import { fetchSingleEcotrackLabel } from '../../../../../../../lib/admin-ecotrack-orders-data';
 import { auth } from '../../../../../../../lib/auth';
-import { parsePositiveIntegerId } from '../../../../../../../lib/http-input';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { requireMutationAccess } from '../../../../../../../lib/rbac';
 import {
   captureAdminException,

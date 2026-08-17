@@ -5,7 +5,10 @@ const state = vi.hoisted(() => ({ pathname: '/fr/products/desk-lamp' }));
 const resetMobilePageZoom = vi.hoisted(() => vi.fn());
 vi.mock('next/navigation', () => ({ usePathname: () => state.pathname }));
 vi.mock('next/dynamic', () => ({ default: () => () => <div role="dialog">Assistant</div> }));
-vi.mock('@/lib/analytics', () => ({ trackNavigationEvent: vi.fn() }));
+vi.mock('@/lib/analytics', () => ({
+  getAnalyticsIdentity: () => ({ journeyId: 'journey-1', sessionId: 'session-1' }),
+  trackNavigationEvent: vi.fn(),
+}));
 vi.mock('@/lib/haptics', () => ({ prepareHaptics: vi.fn(), triggerHaptic: vi.fn() }));
 vi.mock('@/lib/mobile-page-zoom', () => ({ resetMobilePageZoom }));
 

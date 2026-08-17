@@ -67,7 +67,7 @@ await build({
   outfile,
   platform: 'node',
   sourcemap: false,
-  target: 'node20',
+  target: 'node24',
 });
 
 if (format === 'cjs') {

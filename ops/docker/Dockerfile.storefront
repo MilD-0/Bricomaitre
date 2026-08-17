@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim AS base
+FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS base
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -9,22 +9,19 @@ RUN corepack enable
 WORKDIR /workspace
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/admin/package.json apps/admin/package.json
-COPY apps/storefront-api/package.json apps/storefront-api/package.json
 COPY apps/storefront/package.json apps/storefront/package.json
 COPY packages/ai-core/package.json packages/ai-core/package.json
-COPY packages/db/package.json packages/db/package.json
 COPY packages/runtime/package.json packages/runtime/package.json
 COPY packages/storefront-core/package.json packages/storefront-core/package.json
 
-RUN NODE_OPTIONS="${BRIC_BUILD_NODE_OPTIONS}" pnpm install --frozen-lockfile
+RUN NODE_OPTIONS="${BRIC_BUILD_NODE_OPTIONS}" pnpm install --filter @bric/storefront... --frozen-lockfile
 
 COPY tsconfig.base.json ./
 COPY apps/storefront ./apps/storefront
 COPY packages/ai-core ./packages/ai-core
-COPY packages/db ./packages/db
 COPY packages/runtime ./packages/runtime
 COPY packages/storefront-core ./packages/storefront-core
+COPY ops/scripts/hydrate-next-standalone.sh ./ops/scripts/hydrate-next-standalone.sh
 COPY ops/ownership ./ops/ownership
 
 ARG STOREFRONT_API_BASE_URL
@@ -52,12 +49,15 @@ ENV NEXT_PUBLIC_SENTRY_ENVIRONMENT="${NEXT_PUBLIC_SENTRY_ENVIRONMENT}"
 ENV NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE_STOREFRONT="${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE_STOREFRONT}"
 ENV SENTRY_RELEASE="${SENTRY_RELEASE}"
 
-RUN pnpm --filter @bric/storefront build
+RUN pnpm --filter @bric/storefront build \
+  && bash ops/scripts/hydrate-next-standalone.sh apps/storefront
 
-FROM node:24-bookworm-slim AS runner
+FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS runner
 
 WORKDIR /app
 ARG SENTRY_RELEASE
+ARG BRIC_IMAGE_REVISION="unknown"
+ARG BRIC_IMAGE_CREATED="unknown"
 ENV NODE_ENV=production
 ENV PORT=3002
 ENV HOSTNAME=0.0.0.0
@@ -67,6 +67,8 @@ ENV BRIC_STOREFRONT_APP="storefront"
 LABEL org.opencontainers.image.title="Bricomaitre storefront web" \
   org.opencontainers.image.vendor="Bricomaitre" \
   org.opencontainers.image.source="https://github.com/MilD-0/Bricomaitre2" \
+  org.opencontainers.image.revision="${BRIC_IMAGE_REVISION}" \
+  org.opencontainers.image.created="${BRIC_IMAGE_CREATED}" \
   org.opencontainers.image.licenses="AGPL-3.0-only" \
   org.opencontainers.image.description="Bricomaitre production image." \
   com.bricomaitre.repository="MilD-0/Bricomaitre2" \
@@ -89,7 +91,9 @@ COPY --from=base --chown=bric:bric /workspace/apps/storefront/.next/static ./app
 COPY --from=base --chown=bric:bric /workspace/apps/storefront/public ./apps/storefront/public
 RUN mkdir -p /app/apps/storefront/.next/cache \
   && chown -R bric:bric /app/apps/storefront/.next/cache \
-  && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete
+  && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete \
+  && cd /app/apps/storefront \
+  && node -e "require('next/dist/server/next-server')"
 
 EXPOSE 3002
 USER bric

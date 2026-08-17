@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
+# shellcheck source=load-infra-env.sh
 source "$script_dir/load-infra-env.sh"
 
 env_dir="${BRIC_ENV_DIR:-/srv/bric/env}"
@@ -66,6 +67,7 @@ else
     exit 1
   fi
 
+  # shellcheck source=blue-green.sh
   source "$script_dir/blue-green.sh"
   require_slot "$slot"
 

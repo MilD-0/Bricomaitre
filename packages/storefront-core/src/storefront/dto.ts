@@ -187,6 +187,7 @@ export function toStorefrontOrderDto(
   row: Parameters<typeof toStorefrontOrderRecord>[0],
   history: OrderStatusHistoryRecord[],
   productLookup: Parameters<typeof toStorefrontOrderRecord>[2],
+  purchaseEventId: string | null = null,
 ) {
-  return toStorefrontOrderRecord(row, history, productLookup);
+  return toStorefrontOrderRecord(row, history, productLookup, purchaseEventId);
 }

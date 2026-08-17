@@ -12,6 +12,7 @@ import {
 } from '@bric/db/schema';
 import { loadAssetsData } from '../../../lib/admin-assets-data';
 import {
+  assetMutationRequestSchema,
   assetBannerSchema,
   featuredProductGroupSchema,
   productCardSchema,
@@ -91,16 +92,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
 
-  const body = (await req.json().catch(() => null)) as { kind?: string; data?: unknown } | null;
-  if (!body) {
+  const body = assetMutationRequestSchema.safeParse(await req.json().catch(() => null));
+  if (!body.success) {
     return NextResponse.json({ error: 'Invalid JSON request body' }, { status: 400 });
   }
   const db = getDb();
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
-  if (body.kind === 'banner') {
-    const parsed = assetBannerSchema.safeParse(body.data);
+  if (body.data.kind === 'banner') {
+    const parsed = assetBannerSchema.safeParse(body.data.data);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
@@ -121,8 +122,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  if (body.kind === 'featuredGroup') {
-    const parsed = featuredProductGroupSchema.safeParse(body.data);
+  if (body.data.kind === 'featuredGroup') {
+    const parsed = featuredProductGroupSchema.safeParse(body.data.data);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
@@ -166,8 +167,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  if (body.kind === 'productCard') {
-    const parsed = productCardSchema.safeParse(body.data);
+  if (body.data.kind === 'productCard') {
+    const parsed = productCardSchema.safeParse(body.data.data);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }

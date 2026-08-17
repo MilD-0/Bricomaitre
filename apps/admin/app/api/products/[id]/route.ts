@@ -6,6 +6,7 @@ import { landingPages, productPromoCodes, products } from '@bric/db/schema';
 import { mutateEntityWithHistory } from '../../../../lib/action-history';
 import { auth } from '../../../../lib/auth';
 import { startProductCatalogFeedRefreshJob } from '../../../../lib/background-jobs';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { productPatchSchema, productPayloadSchema } from '../../../../lib/products';
 import { toProductMutationValues, toProductPromoRows } from '../../../../lib/product-mutations';
 import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
@@ -42,7 +43,10 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   }
 
   const { id } = await params;
-  const numericId = Number(id);
+  const numericId = parsePositiveIntegerId(id);
+  if (numericId === null) {
+    return NextResponse.json({ error: 'Invalid product id' }, { status: 400 });
+  }
   const db = getDb();
   const row = await db.query.products.findFirst({ where: eq(products.id, numericId) });
 
@@ -70,7 +74,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const { id } = await params;
-  const numericId = Number(id);
+  const numericId = parsePositiveIntegerId(id);
+  if (numericId === null) {
+    return NextResponse.json({ error: 'Invalid product id' }, { status: 400 });
+  }
   const parsed = productPayloadSchema.safeParse(await req.json().catch(() => null));
 
   if (!parsed.success) {
@@ -141,7 +148,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const { id } = await params;
-  const numericId = Number(id);
+  const numericId = parsePositiveIntegerId(id);
+  if (numericId === null) {
+    return NextResponse.json({ error: 'Invalid product id' }, { status: 400 });
+  }
   const parsed = productPatchSchema.safeParse(await req.json().catch(() => null));
 
   if (!parsed.success) {
@@ -197,7 +207,10 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const { id } = await params;
-  const numericId = Number(id);
+  const numericId = parsePositiveIntegerId(id);
+  if (numericId === null) {
+    return NextResponse.json({ error: 'Invalid product id' }, { status: 400 });
+  }
   const db = getDb();
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };

@@ -1,11 +1,9 @@
-import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm';
-import * as XLSX from 'xlsx';
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
 import {
   adCosts,
-  adSpendImportBatches,
   adminReportingSnapshotRuns,
   adminReportingSnapshots,
   analyticsDailyRollups,
@@ -13,10 +11,10 @@ import {
   analyticsEvents,
   brands,
   categories,
-  importBatches,
   metaEventOutbox,
   metaEventDailyRollups,
   metaWorkerHeartbeat,
+  orderLineItems,
   orderMetaAttribution,
   orderStatusHistory,
   type UnmatchedImportRow,
@@ -25,15 +23,20 @@ import {
   processedOrders,
   products,
 } from '@bric/db/schema';
-import type { ActionActor } from './action-history';
-import { mutateEntityWithHistory } from './action-history';
+import { coerceOrderStatus, isConfirmedLifecycleStatus } from './orders';
 import {
-  coerceOrderStatus,
-  isConfirmedLifecycleStatus,
-  isMongoObjectId,
-  parseOrderProductId,
-} from './orders';
+  emptyMetaCommerceReport,
+  getMetaCommerceReport,
+  type MetaCommerceReport,
+} from './meta-commerce-analytics';
 import {
+  buildCartProductLookup,
+  collectCartProductReferenceBuckets,
+  getCartProductLookupKey,
+} from './order-product-references';
+import {
+  ADMIN_REPORTING_TIMEZONE,
+  CUSTOMER_SUCCESSFUL_ORDER_STATUSES,
   emptyExperienceStats,
   getExperienceStats,
   getLiveAdminAiStats,
@@ -44,15 +47,9 @@ import {
   type MetaPaidAttributionStats,
   type WebsiteExperienceStats,
 } from './stats-experience';
-
-export {
-  createManualOrder,
-  deleteManualOrder,
-  listManualOrders,
-  ManualOrderConflictError,
-  manualOrderInputSchema,
-  manualOrderListQuerySchema,
-} from './manual-orders';
+import { buildAdCostWhere } from './stats-ad-costs';
+import { listImportHistory, type ImportHistoryItem } from './stats-order-import';
+import { numberOrZero, round, toDateInput } from './stats-values';
 
 const statsRangeSchema = z.enum(['all', '30d', '90d', 'year', 'custom']);
 const optionalDateSchema = z
@@ -86,105 +83,6 @@ export const statsQuerySchema = z
   });
 
 export type StatsFilters = z.infer<typeof statsQuerySchema>;
-
-const PHONE_MATCH_MAX_AGE_MS = 21 * 24 * 60 * 60 * 1000;
-
-export function isNumericOrderReference(value: string) {
-  return /^\d+$/.test(value.trim());
-}
-
-export function normalizePhoneDigits(value: string) {
-  return value.replace(/\D+/g, '');
-}
-
-export function resolveOrderByPhoneAndDate<
-  T extends { createdAt: Date | null; id?: number | string },
->(candidates: T[], phoneDate: Date | null) {
-  if (candidates.length === 0) {
-    return null;
-  }
-
-  if (candidates.length === 1) {
-    return candidates[0] ?? null;
-  }
-
-  if (!(phoneDate instanceof Date) || Number.isNaN(phoneDate.getTime())) {
-    return null;
-  }
-
-  const ranked = candidates
-    .filter(
-      (candidate) =>
-        candidate.createdAt instanceof Date && !Number.isNaN(candidate.createdAt.getTime()),
-    )
-    .map((candidate) => ({
-      candidate,
-      delta: Math.abs(candidate.createdAt!.getTime() - phoneDate.getTime()),
-    }))
-    .sort((left, right) => left.delta - right.delta);
-
-  const best = ranked[0];
-  const next = ranked[1];
-
-  if (!best || best.delta > PHONE_MATCH_MAX_AGE_MS) {
-    return null;
-  }
-
-  if (next && next.delta === best.delta) {
-    return null;
-  }
-
-  return best.candidate;
-}
-
-type SpreadsheetRow = {
-  encaisseLe: Date | null;
-  montant: number;
-  fraisLivraison: number;
-  fraisPoids: number;
-  fraisExtra: number;
-  fraisSMS: number;
-  fraisStockage: number;
-  commissionRecouvrement: number;
-  totalFraisService: number;
-  netRecouvret: number;
-  type: string;
-  typePrestation: string;
-  creeLe: Date | null;
-  tracking: string;
-  reference: string;
-  destinataire: string;
-  telephone: string;
-  commune: string;
-  wilaya: string;
-  produits: string;
-  remarque: string;
-  poidsLivreLe: string;
-  encaisse: number;
-};
-
-type ImportHistoryItem = {
-  id: number;
-  batchId: string;
-  fileName: string;
-  importedAt: string;
-  totalRows: number;
-  matchedOrders: number;
-  skippedRows?: number;
-  unmatchedCount: number;
-  unmatchedReferences: string[];
-  unmatchedDetails: UnmatchedImportRow[];
-  dateRangeStart: string | null;
-  dateRangeEnd: string | null;
-};
-
-export type ImportHistoryPage = {
-  items: ImportHistoryItem[];
-  page: number;
-  pageSize: number;
-  totalItems: number;
-  totalPages: number;
-};
 
 type UnmatchedOrderDetail = UnmatchedImportRow & {
   batchId: string;
@@ -270,73 +168,6 @@ type ProfitabilityPoint = {
   fill: string;
 };
 
-type CartProductReferenceBuckets = {
-  productIds: number[];
-  mongoIds: string[];
-};
-
-type CartProductLookupRow = {
-  id: number;
-  mongoId: string | null;
-};
-
-export function getCartProductLookupKey(rawValue: string) {
-  const trimmed = rawValue.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
-  if (isMongoObjectId(trimmed)) {
-    return `mongo:${trimmed}`;
-  }
-
-  const productId = parseOrderProductId(trimmed);
-  return productId === null ? null : `id:${productId}`;
-}
-
-export function collectCartProductReferenceBuckets(
-  rows: Array<{ cartProducts: string[] | null }>,
-): CartProductReferenceBuckets {
-  const productIds = new Set<number>();
-  const mongoIds = new Set<string>();
-
-  for (const row of rows) {
-    for (const rawValue of row.cartProducts ?? []) {
-      const trimmed = rawValue.trim();
-
-      if (isMongoObjectId(trimmed)) {
-        mongoIds.add(trimmed);
-        continue;
-      }
-
-      const productId = parseOrderProductId(trimmed);
-      if (productId !== null) {
-        productIds.add(productId);
-      }
-    }
-  }
-
-  return {
-    productIds: [...productIds],
-    mongoIds: [...mongoIds],
-  };
-}
-
-export function buildCartProductLookup<T extends CartProductLookupRow>(rows: T[]) {
-  const lookup = new Map<string, T>();
-
-  for (const row of rows) {
-    lookup.set(`id:${row.id}`, row);
-
-    if (row.mongoId) {
-      lookup.set(`mongo:${row.mongoId}`, row);
-    }
-  }
-
-  return lookup;
-}
-
 export type StatsDashboardData = {
   filters: Required<StatsFilters>;
   snapshot?: {
@@ -346,6 +177,7 @@ export type StatsDashboardData = {
     trigger: string;
     sourceImportBatchId: string | null;
     reportThroughDate: string | null;
+    financialDataIsLagging: boolean;
   };
   summary: {
     totalOrders: number;
@@ -395,6 +227,7 @@ export type StatsDashboardData = {
     events: MetaTrackedEventSummary[];
     recentPayloads: MetaTrackedEventLog[];
     paidAttribution: MetaPaidAttributionStats;
+    commerce: MetaCommerceReport;
     health?: {
       pending: number;
       retryable: number;
@@ -444,66 +277,12 @@ export type StatsDashboardData = {
   customers: CustomerStats;
 };
 
-export type StatsImportResult = {
-  batchId: string;
-  newOrders: number;
-  duplicateOrders: number;
-  unmatchedReferences: string[];
-  stats: StatsDashboardData;
-};
-
-export const adCostEntrySchema = z.object({
-  date: z
-    .string()
-    .trim()
-    .regex(/^\d{4}-\d{2}-\d{2}$/),
-  platform: z.string().trim().min(1).default('facebook'),
-  campaignName: z.string().trim().optional().nullable(),
-  campaignId: z.string().trim().optional().nullable(),
-  spend: z.number().nonnegative(),
-  impressions: z.number().int().nonnegative().optional(),
-  clicks: z.number().int().nonnegative().optional(),
-  conversions: z.number().int().nonnegative().optional(),
-  reach: z.number().int().nonnegative().optional(),
-  notes: z.string().trim().optional().nullable(),
-  importBatchId: z.string().uuid().optional().nullable(),
-});
-
-export type AdCostEntryInput = z.infer<typeof adCostEntrySchema>;
-
-const COLUMN_MAP: Record<keyof SpreadsheetRow, string[]> = {
-  encaisseLe: ['Encaissé le', 'Encaisse le', 'encaisse_le'],
-  montant: ['montant', 'Montant'],
-  fraisLivraison: ['Frais de livraison', 'frais_livraison'],
-  fraisPoids: ['Frais poids', 'frais_poids'],
-  fraisExtra: ['Frais en extra', 'frais_extra'],
-  fraisSMS: ['Frais SMS', 'frais_sms'],
-  fraisStockage: ['Frais Stockage', 'frais_stockage'],
-  commissionRecouvrement: ['Commission recouvrement', 'commission'],
-  totalFraisService: ['Total frais de service', 'total_frais'],
-  netRecouvret: ['Net recouvert', 'Net recouvret', 'net_recouvrement', 'Net recouvrement'],
-  type: ['Type'],
-  typePrestation: ['Type de préstation', 'Type de prestation'],
-  creeLe: ['Crée le', 'cree_le', 'created_at'],
-  tracking: ['Tracking', 'tracking', 'Numéro de suivi'],
-  reference: ['Réference', 'Référence', 'Reference', 'reference', 'ref'],
-  destinataire: ['déstinataire', 'destinataire', 'Destinataire', 'client'],
-  telephone: ['Téléphone', 'telephone', 'phone'],
-  commune: ['Commune', 'commune'],
-  wilaya: ['Wilaya', 'wilaya'],
-  produits: ['Produits', 'produits', 'products'],
-  remarque: ['Remarque', 'remarque', 'note'],
-  poidsLivreLe: ['Livré le', 'Poids Livré le', 'poids_livre_le'],
-  encaisse: ['Encaissé', 'encaisse', 'amount'],
-};
-
 const statsDateExpression = sql`coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt})`;
 const analyticsResultsCountExpression = sql<number>`case
   when coalesce(${analyticsEvents.metadata}->>'resultsCount', '') ~ '^-?[0-9]+$'
     then (${analyticsEvents.metadata}->>'resultsCount')::int
   else -1
 end`;
-const LEGACY_AD_SPEND_IMPORT_BATCH_ID = '00000000-0000-4000-8000-000000000001';
 const ADMIN_REPORTING_STALE_AFTER_MS = 26 * 60 * 60 * 1000;
 const ADMIN_REPORTING_STANDARD_INPUTS = [
   { range: '30d' },
@@ -519,7 +298,6 @@ type WebsiteSummaryRow = {
   productViews: number;
   addToCarts: number;
   checkoutStarts: number;
-  purchases: number;
   searches: number;
   zeroResultSearches: number;
 };
@@ -616,7 +394,6 @@ async function getWebsiteAnalyticsData(
         productViews: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'view_item')::int`,
         addToCarts: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'add_to_cart')::int`,
         checkoutStarts: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'begin_checkout')::int`,
-        purchases: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'purchase')::int`,
         searches: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'search')::int`,
         zeroResultSearches: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'search' and ${analyticsResultsCountExpression} = 0)::int`,
       })
@@ -624,63 +401,22 @@ async function getWebsiteAnalyticsData(
       .where(unrolledAnalyticsWhere),
     db
       .select({
-        term: sql<string>`coalesce(nullif(${analyticsEvents.searchTerm}, ''), 'Unknown')`,
+        term: sql<string>`trim(${analyticsEvents.searchTerm})`,
         searches: sql<number>`count(*)::int`,
         zeroResults: sql<number>`count(*) filter (where ${analyticsResultsCountExpression} = 0)::int`,
       })
       .from(analyticsEvents)
-      .where(and(unrolledAnalyticsWhere, eq(analyticsEvents.eventName, 'search')))
+      .where(
+        and(
+          unrolledAnalyticsWhere,
+          eq(analyticsEvents.eventName, 'search'),
+          sql`coalesce(trim(${analyticsEvents.searchTerm}), '') <> ''`,
+        ),
+      )
       .groupBy(sql`1`)
       .orderBy(sql`2 desc`)
       .limit(8),
-    db.execute(sql`
-      with raw_product_metrics as (
-        select ${analyticsEvents.productId} as product_id,
-          count(*) filter (where ${analyticsEvents.eventName} = 'view_item')::int as view_count,
-          count(*) filter (where ${analyticsEvents.eventName} = 'add_to_cart')::int as add_to_cart_count,
-          count(*) filter (where ${analyticsEvents.eventName} = 'begin_checkout')::int as checkout_count,
-          count(*) filter (where ${analyticsEvents.eventName} = 'purchase')::int as purchase_count
-        from ${analyticsEvents}
-        where ${unrolledAnalyticsWhere ?? sql`true`}
-          and ${analyticsEvents.productId} is not null
-        group by ${analyticsEvents.productId}
-      ), rollup_product_metrics as (
-        select case when ${analyticsDailyRollups.dimensionKey} ~ '^[0-9]+$'
-            then ${analyticsDailyRollups.dimensionKey}::bigint end as product_id,
-          coalesce(sum(${analyticsDailyRollups.productViews}), 0)::int as view_count,
-          coalesce(sum(${analyticsDailyRollups.addToCarts}), 0)::int as add_to_cart_count,
-          coalesce(sum(${analyticsDailyRollups.checkoutStarts}), 0)::int as checkout_count,
-          coalesce(sum(${analyticsDailyRollups.purchases}), 0)::int as purchase_count
-        from ${analyticsDailyRollups}
-        where ${rollupWhere ?? sql`true`}
-          and ${analyticsDailyRollups.dimension} = 'product'
-        group by ${analyticsDailyRollups.dimensionKey}
-      ), merged_product_metrics as (
-        select product_id,
-          sum(view_count)::int as view_count,
-          sum(add_to_cart_count)::int as add_to_cart_count,
-          sum(checkout_count)::int as checkout_count,
-          sum(purchase_count)::int as purchase_count
-        from (
-          select * from raw_product_metrics
-          union all
-          select * from rollup_product_metrics
-        ) source
-        where product_id is not null
-        group by product_id
-      )
-      select product.id, product.title, product.sku,
-        category.name as category_name, brand.name as brand_name,
-        metrics.view_count, metrics.add_to_cart_count, metrics.checkout_count,
-        metrics.purchase_count as website_purchase_count,
-        (metrics.view_count + metrics.add_to_cart_count * 4 + metrics.checkout_count * 7 + metrics.purchase_count * 10)::double precision as popularity_score,
-        coalesce(metrics.purchase_count::double precision / nullif(metrics.view_count, 0), 0) as website_conversion_rate
-      from merged_product_metrics metrics
-      join ${products} product on product.id = metrics.product_id
-      left join ${categories} category on category.id = product.category_id
-      left join ${brands} brand on brand.id = product.brand_id
-      order by popularity_score desc, metrics.view_count desc
-    `),
+    db.execute(buildWebsiteProductMetricsQuery(filters)),
     db
       .select({
         sessions: sql<number>`coalesce(sum(${analyticsDailyRollups.sessions}), 0)::int`,
@@ -689,7 +425,6 @@ async function getWebsiteAnalyticsData(
         productViews: sql<number>`coalesce(sum(${analyticsDailyRollups.productViews}), 0)::int`,
         addToCarts: sql<number>`coalesce(sum(${analyticsDailyRollups.addToCarts}), 0)::int`,
         checkoutStarts: sql<number>`coalesce(sum(${analyticsDailyRollups.checkoutStarts}), 0)::int`,
-        purchases: sql<number>`coalesce(sum(${analyticsDailyRollups.purchases}), 0)::int`,
         searches: sql<number>`coalesce(sum(${analyticsDailyRollups.searches}), 0)::int`,
         zeroResultSearches: sql<number>`coalesce(sum(${analyticsDailyRollups.zeroResultSearches}), 0)::int`,
       })
@@ -702,7 +437,13 @@ async function getWebsiteAnalyticsData(
         zeroResults: sql<number>`sum(${analyticsDailyRollups.zeroResultSearches})::int`,
       })
       .from(analyticsDailyRollups)
-      .where(and(rollupWhere, eq(analyticsDailyRollups.dimension, 'search')))
+      .where(
+        and(
+          rollupWhere,
+          eq(analyticsDailyRollups.dimension, 'search'),
+          sql`coalesce(trim(${analyticsDailyRollups.dimensionKey}), '') not in ('', 'Unknown')`,
+        ),
+      )
       .groupBy(analyticsDailyRollups.dimensionKey),
     db.execute(sql`
       select metric, dimension_key, count(distinct member_id)::int as members
@@ -733,7 +474,6 @@ async function getWebsiteAnalyticsData(
     'productViews',
     'addToCarts',
     'checkoutStarts',
-    'purchases',
     'searches',
     'zeroResultSearches',
   ] as const;
@@ -993,78 +733,6 @@ async function getMetaAdsTrackingData(
   };
 }
 
-function findColumnValue(row: Record<string, unknown>, possibleNames: string[]) {
-  return possibleNames.find((name) => row[name] !== undefined)
-    ? row[possibleNames.find((name) => row[name] !== undefined)!]
-    : undefined;
-}
-
-function parseNumber(value: unknown) {
-  if (typeof value === 'number') {
-    return value;
-  }
-
-  if (typeof value === 'string') {
-    if (value.includes('/')) {
-      return Math.max(
-        ...value.split('/').map((part) => {
-          const cleaned = part.replace(/[^\d.-]/g, '');
-          return Number.parseFloat(cleaned || '0');
-        }),
-      );
-    }
-
-    return Number.parseFloat(value.replace(/[^\d.-]/g, '') || '0');
-  }
-
-  return 0;
-}
-
-function parseDate(value: unknown) {
-  if (!value) {
-    return null;
-  }
-
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value;
-  }
-
-  if (typeof value === 'number') {
-    const parsed = new Date((value - 25569) * 86400 * 1000);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  const parsed = new Date(String(value));
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function normalizeText(value: unknown) {
-  return typeof value === 'string' ? value.trim() : String(value ?? '').trim();
-}
-
-function toDateInput(value: Date) {
-  return value.toISOString().slice(0, 10);
-}
-
-function round(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
-function numberOrZero(value: unknown) {
-  const parsed = typeof value === 'number' ? value : Number(value ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function valueFor(row: Record<string, unknown>, names: string[]) {
-  for (const name of names) {
-    if (row[name] !== undefined && row[name] !== null && row[name] !== '') {
-      return row[name];
-    }
-  }
-
-  return undefined;
-}
-
 function buildResolvedFilters(input: StatsFilters): Required<StatsFilters> {
   const today = new Date();
   const endDate = toDateInput(today);
@@ -1110,7 +778,7 @@ function buildResolvedFilters(input: StatsFilters): Required<StatsFilters> {
 }
 
 function getSnapshotKey(filters: Required<StatsFilters>) {
-  return `storefront-history-v3:${filters.range}:${filters.startDate || '*'}:${filters.endDate || '*'}`;
+  return `storefront-history-v4:${filters.range}:${filters.startDate || '*'}:${filters.endDate || '*'}`;
 }
 
 function getReportThroughDate(data: StatsDashboardData) {
@@ -1120,6 +788,17 @@ function getReportThroughDate(data: StatsDashboardData) {
   ].filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value));
 
   return candidates.length > 0 ? candidates.sort().at(-1)! : null;
+}
+
+const FINANCIAL_COVERAGE_LAG_GRACE_DAYS = 3;
+
+export function isFinancialDataLagging(reportThroughDate: string | null, selectedEndDate: string) {
+  if (!selectedEndDate) return false;
+  if (!reportThroughDate) return true;
+
+  const reportTime = Date.parse(`${reportThroughDate}T00:00:00Z`);
+  const endTime = Date.parse(`${selectedEndDate}T00:00:00Z`);
+  return endTime - reportTime > FINANCIAL_COVERAGE_LAG_GRACE_DAYS * 24 * 60 * 60 * 1_000;
 }
 
 function withSnapshotMeta(
@@ -1144,6 +823,7 @@ function withSnapshotMeta(
       trigger: row.trigger,
       sourceImportBatchId: row.sourceImportBatchId,
       reportThroughDate: row.reportThroughDate,
+      financialDataIsLagging: isFinancialDataLagging(row.reportThroughDate, filters.endDate),
     },
   };
 }
@@ -1182,20 +862,6 @@ function buildStatsWhere(filters: Required<StatsFilters>) {
   return and(...conditions);
 }
 
-function buildAdCostWhere(filters: StatsFilters | Required<StatsFilters>) {
-  const conditions = [];
-
-  if (filters.startDate) {
-    conditions.push(sql`${adCosts.date} >= ${filters.startDate}`);
-  }
-
-  if (filters.endDate) {
-    conditions.push(sql`${adCosts.date} <= ${filters.endDate}`);
-  }
-
-  return conditions.length > 0 ? and(...conditions) : undefined;
-}
-
 export function buildAnalyticsWhere(filters: StatsFilters | Required<StatsFilters>) {
   const conditions = [];
 
@@ -1212,6 +878,125 @@ export function buildAnalyticsWhere(filters: StatsFilters | Required<StatsFilter
   return conditions.length > 0 ? and(...conditions) : undefined;
 }
 
+function buildLiveOrderWhere(filters: Required<StatsFilters>) {
+  const localOrderDate = sql`(${orders.createdAt} at time zone ${ADMIN_REPORTING_TIMEZONE})::date`;
+  const conditions = [];
+
+  if (filters.startDate) {
+    conditions.push(sql`${localOrderDate} >= ${filters.startDate}::date`);
+  }
+
+  if (filters.endDate) {
+    conditions.push(sql`${localOrderDate} <= ${filters.endDate}::date`);
+  }
+
+  return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
+export function buildLiveOrderSummaryQuery(filters: Required<StatsFilters>) {
+  const where = buildLiveOrderWhere(filters);
+  return sql`
+    select count(*)::int as total_orders,
+      count(*) filter (
+        where ${inArray(orders.confirmed, [...CUSTOMER_SUCCESSFUL_ORDER_STATUSES])}
+      )::int as successful_orders
+    from ${orders}
+    where ${where ?? sql`true`}
+  `;
+}
+
+export function buildLiveOrderTrendQuery(filters: Required<StatsFilters>) {
+  const where = buildLiveOrderWhere(filters);
+  return sql`
+    with filtered_orders as (
+      select ${orders.createdAt} at time zone ${ADMIN_REPORTING_TIMEZONE} as local_created_at
+      from ${orders}
+      where ${where ?? sql`true`}
+    )
+    select 'daily' as grain,
+      to_char(date_trunc('day', local_created_at), 'YYYY-MM-DD') as bucket,
+      count(*)::int as orders
+    from filtered_orders group by 1, 2
+    union all
+    select 'weekly' as grain,
+      to_char(date_trunc('week', local_created_at), 'YYYY-MM-DD') as bucket,
+      count(*)::int as orders
+    from filtered_orders group by 1, 2
+    union all
+    select 'monthly' as grain,
+      to_char(date_trunc('month', local_created_at), 'YYYY-MM') as bucket,
+      count(*)::int as orders
+    from filtered_orders group by 1, 2
+    order by 1, 2
+  `;
+}
+
+export function mergeLiveOrderTrend(
+  financial: TrendPoint[],
+  live: Array<{ bucket: string; orders: number }>,
+) {
+  const merged = new Map(financial.map((point) => [point.bucket, { ...point, orders: 0 }]));
+
+  for (const point of live) {
+    merged.set(point.bucket, {
+      ...(merged.get(point.bucket) ?? {
+        bucket: point.bucket,
+        revenue: 0,
+        profit: 0,
+        fees: 0,
+      }),
+      orders: point.orders,
+    });
+  }
+
+  return [...merged.values()].sort((left, right) => left.bucket.localeCompare(right.bucket));
+}
+
+export function mergeCanonicalWebsitePurchases(
+  website: StatsDashboardData['website'],
+  purchases: number,
+  dailyOrders?: Array<{ bucket: string; orders: number }>,
+): StatsDashboardData['website'] {
+  const funnel = [
+    ...website.funnel.filter((item) => item.name !== 'Purchases'),
+    ...(purchases > 0 ? [{ name: 'Purchases', value: purchases }] : []),
+  ];
+
+  const trend = dailyOrders
+    ? (() => {
+        const merged = new Map(
+          website.trend.map((point) => [point.bucket, { ...point, purchases: 0 }]),
+        );
+
+        for (const point of dailyOrders) {
+          merged.set(point.bucket, {
+            ...(merged.get(point.bucket) ?? {
+              bucket: point.bucket,
+              sessions: 0,
+              pageViews: 0,
+              errors: 0,
+            }),
+            purchases: point.orders,
+          });
+        }
+
+        return [...merged.values()].sort((left, right) => left.bucket.localeCompare(right.bucket));
+      })()
+    : website.trend;
+
+  return {
+    ...website,
+    purchases,
+    trend,
+    sessionConversionRate: website.sessions ? round((purchases / website.sessions) * 100) : 0,
+    cartToPurchaseRate: website.addToCarts ? round((purchases / website.addToCarts) * 100) : 0,
+    checkoutToPurchaseRate: website.checkoutStarts
+      ? round((purchases / website.checkoutStarts) * 100)
+      : 0,
+    funnel,
+  };
+}
+
 function buildAnalyticsRollupWhere(filters: StatsFilters | Required<StatsFilters>) {
   const conditions = [];
   if (filters.startDate) {
@@ -1221,6 +1006,114 @@ function buildAnalyticsRollupWhere(filters: StatsFilters | Required<StatsFilters
     conditions.push(sql`${analyticsDailyRollups.day} <= ${filters.endDate}::date`);
   }
   return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
+export function buildWebsiteProductMetricsQuery(filters: Required<StatsFilters>) {
+  const analyticsWhere = buildAnalyticsWhere(filters);
+  const rollupWhere = buildAnalyticsRollupWhere(filters);
+  const orderWhere = buildLiveOrderWhere(filters);
+  const unrolledAnalyticsWhere = and(
+    analyticsWhere,
+    sql`not exists (
+      select 1 from ${analyticsDailyRollups} rollup
+      where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+        and rollup.dimension = 'overall'
+        and rollup.dimension_key = ''
+    )`,
+  );
+
+  return sql`
+    with raw_product_engagement as (
+      select ${analyticsEvents.productId} as product_id,
+        count(*) filter (where ${analyticsEvents.eventName} = 'view_item')::int as view_count,
+        count(*) filter (where ${analyticsEvents.eventName} = 'add_to_cart')::int as add_to_cart_count,
+        count(*) filter (where ${analyticsEvents.eventName} = 'begin_checkout')::int as checkout_count
+      from ${analyticsEvents}
+      where ${unrolledAnalyticsWhere ?? sql`true`}
+        and ${analyticsEvents.productId} is not null
+      group by ${analyticsEvents.productId}
+    ), rollup_product_engagement as (
+      select case when ${analyticsDailyRollups.dimensionKey} ~ '^[0-9]+$'
+          then ${analyticsDailyRollups.dimensionKey}::bigint end as product_id,
+        coalesce(sum(${analyticsDailyRollups.productViews}), 0)::int as view_count,
+        coalesce(sum(${analyticsDailyRollups.addToCarts}), 0)::int as add_to_cart_count,
+        coalesce(sum(${analyticsDailyRollups.checkoutStarts}), 0)::int as checkout_count
+      from ${analyticsDailyRollups}
+      where ${rollupWhere ?? sql`true`}
+        and ${analyticsDailyRollups.dimension} = 'product'
+      group by ${analyticsDailyRollups.dimensionKey}
+    ), merged_product_engagement as (
+      select product_id,
+        sum(view_count)::int as view_count,
+        sum(add_to_cart_count)::int as add_to_cart_count,
+        sum(checkout_count)::int as checkout_count
+      from (
+        select * from raw_product_engagement
+        union all
+        select * from rollup_product_engagement
+      ) source
+      where product_id is not null
+      group by product_id
+    ), normalized_order_products as (
+      select ${orderLineItems.orderId} as order_id, ${orderLineItems.productId} as product_id
+      from ${orderLineItems}
+      inner join ${orders} on ${orders.id} = ${orderLineItems.orderId}
+      where ${orderWhere ?? sql`true`}
+        and ${orderLineItems.productId} is not null
+    ), legacy_order_products as (
+      select ${orders.id} as order_id, matched.product_id
+      from ${orders}
+      cross join lateral unnest(${orders.cartProducts}) product_ref
+      inner join lateral (
+        select ${products.id} as product_id
+        from ${products}
+        where (${products.id} = case
+            when trim(product_ref) ~ '^[0-9]+$' then trim(product_ref)::bigint
+            else null
+          end)
+          or ${products.mongoId} = trim(product_ref)
+          or ${products.slug} = trim(product_ref)
+        order by case
+          when trim(product_ref) ~ '^[0-9]+$' and ${products.id} = trim(product_ref)::bigint then 0
+          when ${products.mongoId} = trim(product_ref) then 1
+          else 2
+        end
+        limit 1
+      ) matched on true
+      where ${orderWhere ?? sql`true`}
+        and not exists (
+          select 1 from ${orderLineItems}
+          where ${orderLineItems.orderId} = ${orders.id}
+        )
+    ), order_product_purchases as (
+      select product_id, count(distinct order_id)::int as purchase_count
+      from (
+        select order_id, product_id from normalized_order_products
+        union all
+        select order_id, product_id from legacy_order_products
+      ) order_products
+      group by product_id
+    ), combined_product_metrics as (
+      select coalesce(engagement.product_id, purchases.product_id) as product_id,
+        coalesce(engagement.view_count, 0)::int as view_count,
+        coalesce(engagement.add_to_cart_count, 0)::int as add_to_cart_count,
+        coalesce(engagement.checkout_count, 0)::int as checkout_count,
+        coalesce(purchases.purchase_count, 0)::int as purchase_count
+      from merged_product_engagement engagement
+      full join order_product_purchases purchases on purchases.product_id = engagement.product_id
+    )
+    select product.id, product.title, product.sku,
+      category.name as category_name, brand.name as brand_name,
+      metrics.view_count, metrics.add_to_cart_count, metrics.checkout_count,
+      metrics.purchase_count as website_purchase_count,
+      (metrics.view_count + metrics.add_to_cart_count * 4 + metrics.checkout_count * 7 + metrics.purchase_count * 10)::double precision as popularity_score,
+      coalesce(metrics.purchase_count::double precision / nullif(metrics.view_count, 0), 0) as website_conversion_rate
+    from combined_product_metrics metrics
+    join ${products} product on product.id = metrics.product_id
+    left join ${categories} category on category.id = product.category_id
+    left join ${brands} brand on brand.id = product.brand_id
+    order by popularity_score desc, metrics.view_count desc
+  `;
 }
 
 function emptyDashboard(filters: Required<StatsFilters>): StatsDashboardData {
@@ -1275,6 +1168,7 @@ function emptyDashboard(filters: Required<StatsFilters>): StatsDashboardData {
       events: [],
       recentPayloads: [],
       paidAttribution: experience.metaPaidAttribution,
+      commerce: emptyMetaCommerceReport(),
     },
     wilayas: [],
     wilayaDetails: [],
@@ -1340,6 +1234,16 @@ export function normalizeStatsDashboardData(
         ...fallback.metaAds.paidAttribution,
         ...(metaAds.paidAttribution ?? {}),
       },
+      commerce: {
+        ...fallback.metaAds.commerce,
+        ...(metaAds.commerce ?? {}),
+        summary: {
+          ...fallback.metaAds.commerce.summary,
+          ...(metaAds.commerce?.summary ?? {}),
+        },
+        rows: metaAds.commerce?.rows ?? fallback.metaAds.commerce.rows,
+        sync: metaAds.commerce?.sync ?? fallback.metaAds.commerce.sync,
+      },
     },
     website: { ...fallback.website, ...website },
     landingPages: {
@@ -1371,132 +1275,6 @@ export function normalizeStatsDashboardData(
   };
 }
 
-export function parseSpreadsheet(buffer: Buffer) {
-  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-
-  if (!sheet) {
-    return [];
-  }
-
-  const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1');
-  let headerRow = range.s.r;
-
-  for (let rowIndex = range.s.r; rowIndex <= Math.min(range.s.r + 6, range.e.r); rowIndex += 1) {
-    const values = Array.from({ length: Math.min(6, range.e.c - range.s.c + 1) }).map(
-      (_, columnOffset) => {
-        const cell = sheet[XLSX.utils.encode_cell({ r: rowIndex, c: range.s.c + columnOffset })];
-        return String(cell?.v ?? '').toLowerCase();
-      },
-    );
-
-    if (
-      values.some(
-        (value) =>
-          value.includes('référence') || value.includes('tracking') || value.includes('montant'),
-      )
-    ) {
-      headerRow = rowIndex;
-      break;
-    }
-  }
-
-  range.s.r = headerRow;
-  sheet['!ref'] = XLSX.utils.encode_range(range);
-
-  const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
-
-  return rawRows.map((row) => ({
-    encaisseLe: parseDate(findColumnValue(row, COLUMN_MAP.encaisseLe)),
-    montant: parseNumber(findColumnValue(row, COLUMN_MAP.montant)),
-    fraisLivraison: parseNumber(findColumnValue(row, COLUMN_MAP.fraisLivraison)),
-    fraisPoids: parseNumber(findColumnValue(row, COLUMN_MAP.fraisPoids)),
-    fraisExtra: parseNumber(findColumnValue(row, COLUMN_MAP.fraisExtra)),
-    fraisSMS: parseNumber(findColumnValue(row, COLUMN_MAP.fraisSMS)),
-    fraisStockage: parseNumber(findColumnValue(row, COLUMN_MAP.fraisStockage)),
-    commissionRecouvrement: parseNumber(findColumnValue(row, COLUMN_MAP.commissionRecouvrement)),
-    totalFraisService: parseNumber(findColumnValue(row, COLUMN_MAP.totalFraisService)),
-    netRecouvret: parseNumber(findColumnValue(row, COLUMN_MAP.netRecouvret)),
-    type: normalizeText(findColumnValue(row, COLUMN_MAP.type)),
-    typePrestation: normalizeText(findColumnValue(row, COLUMN_MAP.typePrestation)),
-    creeLe: parseDate(findColumnValue(row, COLUMN_MAP.creeLe)),
-    tracking: normalizeText(findColumnValue(row, COLUMN_MAP.tracking)),
-    reference: normalizeText(findColumnValue(row, COLUMN_MAP.reference)),
-    destinataire: normalizeText(findColumnValue(row, COLUMN_MAP.destinataire)),
-    telephone: normalizeText(findColumnValue(row, COLUMN_MAP.telephone)),
-    commune: normalizeText(findColumnValue(row, COLUMN_MAP.commune)),
-    wilaya: normalizeText(findColumnValue(row, COLUMN_MAP.wilaya)),
-    produits: normalizeText(findColumnValue(row, COLUMN_MAP.produits)),
-    remarque: normalizeText(findColumnValue(row, COLUMN_MAP.remarque)),
-    poidsLivreLe: normalizeText(findColumnValue(row, COLUMN_MAP.poidsLivreLe)),
-    encaisse: parseNumber(findColumnValue(row, COLUMN_MAP.encaisse)),
-  }));
-}
-
-const DEFAULT_IMPORT_HISTORY_LIMIT = 8;
-export const IMPORT_HISTORY_PAGE_SIZE = 10;
-
-function mapImportHistoryRow(row: typeof importBatches.$inferSelect): ImportHistoryItem {
-  const unmatchedCount = row.unmatchedReferences.length;
-
-  return {
-    id: row.id,
-    batchId: row.batchId,
-    fileName: row.fileName,
-    importedAt: row.importedAt.toISOString(),
-    totalRows: row.totalRows,
-    matchedOrders: row.matchedOrders,
-    skippedRows: Math.max(0, row.totalRows - row.matchedOrders - unmatchedCount),
-    unmatchedCount,
-    unmatchedReferences: row.unmatchedReferences,
-    unmatchedDetails: row.unmatchedDetails,
-    dateRangeStart: row.dateRangeStart,
-    dateRangeEnd: row.dateRangeEnd,
-  };
-}
-
-async function listImportHistory(limit = DEFAULT_IMPORT_HISTORY_LIMIT) {
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(importBatches)
-    .orderBy(desc(importBatches.importedAt))
-    .limit(limit);
-
-  return rows.map(mapImportHistoryRow);
-}
-
-export async function listImportHistoryPage({
-  page,
-  pageSize,
-}: {
-  page: number;
-  pageSize: number;
-}): Promise<ImportHistoryPage> {
-  const db = getDb();
-  const requestedPage = Math.max(1, page);
-  const normalizedPageSize = Math.min(50, Math.max(1, pageSize));
-  const [{ totalItems = 0 } = { totalItems: 0 }] = await db
-    .select({ totalItems: count() })
-    .from(importBatches);
-  const totalPages = Math.max(1, Math.ceil(totalItems / normalizedPageSize));
-  const normalizedPage = Math.min(requestedPage, totalPages);
-  const rows = await db
-    .select()
-    .from(importBatches)
-    .orderBy(desc(importBatches.importedAt))
-    .limit(normalizedPageSize)
-    .offset((normalizedPage - 1) * normalizedPageSize);
-
-  return {
-    items: rows.map(mapImportHistoryRow),
-    page: normalizedPage,
-    pageSize: normalizedPageSize,
-    totalItems,
-    totalPages,
-  };
-}
-
 async function computeStatsDashboard(input: StatsFilters) {
   const db = getDb();
   const filters = buildResolvedFilters(statsQuerySchema.parse(input));
@@ -1515,7 +1293,7 @@ async function computeStatsDashboard(input: StatsFilters) {
 
   const [
     summaryRows,
-    totalConfirmedOrderRows,
+    liveOrderSummary,
     dailyTrendRows,
     monthlyTrendRows,
     weeklyTrendRows,
@@ -1547,12 +1325,7 @@ async function computeStatsDashboard(input: StatsFilters) {
       })
       .from(processedOrders)
       .where(where),
-    db
-      .select({
-        totalConfirmedOrders: sql<number>`count(*)::int`,
-      })
-      .from(orders)
-      .where(inArray(orders.confirmed, [2, 3, 4, 5, 10])),
+    getLiveOrderSummary(db, filters),
     db
       .select({
         bucket: sql<string>`to_char(date_trunc('day', ${statsDateExpression}), 'YYYY-MM-DD')`,
@@ -1672,7 +1445,8 @@ async function computeStatsDashboard(input: StatsFilters) {
   const adSummary = adSpendRows[0];
   const websiteSummary = websiteSummaryRows[0];
   const adSpend = round(numberOrZero(adSummary?.spend));
-  const totalConfirmedOrders = totalConfirmedOrderRows[0]?.totalConfirmedOrders ?? 0;
+  const totalOrders = liveOrderSummary.totalOrders;
+  const totalConfirmedOrders = liveOrderSummary.successfulOrders;
   const websiteProductMetricsById = new Map<string, Omit<WebsiteMetricRow, 'id'>>(
     websiteMetricRows.map((row: WebsiteMetricRow) => [
       String(row.id),
@@ -1686,60 +1460,56 @@ async function computeStatsDashboard(input: StatsFilters) {
       },
     ]),
   );
-  const website = {
-    sessions: websiteSummary?.sessions ?? 0,
-    journeys: websiteSummary?.journeys ?? 0,
-    pageViews: websiteSummary?.pageViews ?? 0,
-    productViews: websiteSummary?.productViews ?? 0,
-    addToCarts: websiteSummary?.addToCarts ?? 0,
-    checkoutStarts: websiteSummary?.checkoutStarts ?? 0,
-    purchases: websiteSummary?.purchases ?? 0,
-    searches: websiteSummary?.searches ?? 0,
-    zeroResultSearches: websiteSummary?.zeroResultSearches ?? 0,
-    sessionConversionRate: websiteSummary?.sessions
-      ? round(((websiteSummary?.purchases ?? 0) / websiteSummary.sessions) * 100)
-      : 0,
-    viewToCartRate: websiteSummary?.productViews
-      ? round(((websiteSummary?.addToCarts ?? 0) / websiteSummary.productViews) * 100)
-      : 0,
-    cartToPurchaseRate: websiteSummary?.addToCarts
-      ? round(((websiteSummary?.purchases ?? 0) / websiteSummary.addToCarts) * 100)
-      : 0,
-    checkoutToPurchaseRate: websiteSummary?.checkoutStarts
-      ? round(((websiteSummary?.purchases ?? 0) / websiteSummary.checkoutStarts) * 100)
-      : 0,
-    topSearches: websiteSearchRows.map((row) => ({
-      term: row.term,
-      searches: row.searches,
-      zeroResults: row.zeroResults,
-    })),
-    funnel: [
-      { name: 'Sessions', value: websiteSummary?.sessions ?? 0 },
-      { name: 'Product views', value: websiteSummary?.productViews ?? 0 },
-      { name: 'Adds to cart', value: websiteSummary?.addToCarts ?? 0 },
-      { name: 'Checkout starts', value: websiteSummary?.checkoutStarts ?? 0 },
-      { name: 'Purchases', value: websiteSummary?.purchases ?? 0 },
-    ].filter((item) => item.value > 0),
-    topProducts: websiteTopProductRows.map((row) => ({
-      id: String(row.id),
-      title: row.title,
-      unitsSold: 0,
-      revenue: 0,
-      cost: 0,
-      profit: 0,
-      margin: 0,
-      sku: row.sku,
-      categoryName: row.categoryName,
-      brandName: row.brandName,
-      viewCount: row.viewCount,
-      addToCartCount: row.addToCartCount,
-      checkoutCount: row.checkoutCount,
-      websitePurchaseCount: row.websitePurchaseCount,
-      popularityScore: round(numberOrZero(row.popularityScore)),
-      websiteConversionRate: round(numberOrZero(row.websiteConversionRate) * 100),
-    })),
-    ...experience.website,
-  };
+  const website = mergeCanonicalWebsitePurchases(
+    {
+      sessions: websiteSummary?.sessions ?? 0,
+      journeys: websiteSummary?.journeys ?? 0,
+      pageViews: websiteSummary?.pageViews ?? 0,
+      productViews: websiteSummary?.productViews ?? 0,
+      addToCarts: websiteSummary?.addToCarts ?? 0,
+      checkoutStarts: websiteSummary?.checkoutStarts ?? 0,
+      purchases: 0,
+      searches: websiteSummary?.searches ?? 0,
+      zeroResultSearches: websiteSummary?.zeroResultSearches ?? 0,
+      sessionConversionRate: 0,
+      viewToCartRate: websiteSummary?.productViews
+        ? round(((websiteSummary?.addToCarts ?? 0) / websiteSummary.productViews) * 100)
+        : 0,
+      cartToPurchaseRate: 0,
+      checkoutToPurchaseRate: 0,
+      topSearches: websiteSearchRows.map((row) => ({
+        term: row.term,
+        searches: row.searches,
+        zeroResults: row.zeroResults,
+      })),
+      funnel: [
+        { name: 'Sessions', value: websiteSummary?.sessions ?? 0 },
+        { name: 'Product views', value: websiteSummary?.productViews ?? 0 },
+        { name: 'Adds to cart', value: websiteSummary?.addToCarts ?? 0 },
+        { name: 'Checkout starts', value: websiteSummary?.checkoutStarts ?? 0 },
+      ].filter((item) => item.value > 0),
+      topProducts: websiteTopProductRows.map((row) => ({
+        id: String(row.id),
+        title: row.title,
+        unitsSold: 0,
+        revenue: 0,
+        cost: 0,
+        profit: 0,
+        margin: 0,
+        sku: row.sku,
+        categoryName: row.categoryName,
+        brandName: row.brandName,
+        viewCount: row.viewCount,
+        addToCartCount: row.addToCartCount,
+        checkoutCount: row.checkoutCount,
+        websitePurchaseCount: row.websitePurchaseCount,
+        popularityScore: round(numberOrZero(row.popularityScore)),
+        websiteConversionRate: round(numberOrZero(row.websiteConversionRate) * 100),
+      })),
+      ...experience.website,
+    },
+    totalOrders,
+  );
   const metaAds = {
     events: metaEventRows.map((row) => ({
       name: row.name,
@@ -1763,10 +1533,13 @@ async function computeStatsDashboard(input: StatsFilters) {
     })),
     health: metaHealth,
     paidAttribution: experience.metaPaidAttribution,
+    commerce: emptyMetaCommerceReport(),
   };
 
   if (!summaryRow || summaryRow.totalOrders === 0) {
     const data = emptyDashboard(filters);
+    data.summary.totalOrders = totalOrders;
+    data.summary.totalConfirmedOrders = totalConfirmedOrders;
     data.importHistory = importHistory;
     data.latestUnmatchedReferences = importHistory[0]?.unmatchedReferences.slice(0, 8) ?? [];
     data.latestUnmatchedDetails = (importHistory[0]?.unmatchedDetails ?? [])
@@ -1939,7 +1712,7 @@ async function computeStatsDashboard(input: StatsFilters) {
 
   const totalGrossProfit = round(numberOrZero(summaryRow.totalGrossProfit));
   const totalNetRevenue = round(numberOrZero(summaryRow.totalNetRevenue));
-  const totalOrders = summaryRow.totalOrders;
+  const matchedOrders = summaryRow.totalOrders;
   const netProfitAfterAds = round(totalGrossProfit - adSpend);
 
   return {
@@ -1954,14 +1727,16 @@ async function computeStatsDashboard(input: StatsFilters) {
       adSpend,
       netProfitAfterAds,
       averageOrderValue:
-        totalOrders > 0 ? round(numberOrZero(summaryRow.totalAmountCollected) / totalOrders) : 0,
-      averageProfitPerOrder: totalOrders > 0 ? round(totalGrossProfit / totalOrders) : 0,
+        matchedOrders > 0
+          ? round(numberOrZero(summaryRow.totalAmountCollected) / matchedOrders)
+          : 0,
+      averageProfitPerOrder: matchedOrders > 0 ? round(totalGrossProfit / matchedOrders) : 0,
       profitMargin: totalNetRevenue > 0 ? round((totalGrossProfit / totalNetRevenue) * 100) : 0,
       profitMarginAfterAds:
         totalNetRevenue > 0 ? round((netProfitAfterAds / totalNetRevenue) * 100) : 0,
       fulfillmentRate:
-        totalConfirmedOrders > 0 ? round((totalOrders / totalConfirmedOrders) * 100) : 0,
-      matchedOrders: totalOrders,
+        totalConfirmedOrders > 0 ? round((matchedOrders / totalConfirmedOrders) * 100) : 0,
+      matchedOrders,
       totalConfirmedOrders,
       profitableOrders: summaryRow.profitableOrders,
       unprofitableOrders: summaryRow.unprofitableOrders,
@@ -2005,7 +1780,8 @@ async function computeStatsDashboard(input: StatsFilters) {
       stockage: round(numberOrZero(summaryRow.feeStockage)),
       commission: round(numberOrZero(summaryRow.feeCommission)),
       total: round(numberOrZero(summaryRow.totalFees)),
-      avgPerOrder: totalOrders > 0 ? round(numberOrZero(summaryRow.totalFees) / totalOrders) : 0,
+      avgPerOrder:
+        matchedOrders > 0 ? round(numberOrZero(summaryRow.totalFees) / matchedOrders) : 0,
     },
     adCosts: {
       totalSpend: adSpend,
@@ -2083,7 +1859,7 @@ async function computeStatsDashboard(input: StatsFilters) {
 export async function getStatsDashboard(input: StatsFilters) {
   const snapshot = await readLatestStatsSnapshot(input);
   if (snapshot) {
-    return withLiveAiStats(snapshot, input);
+    return withLiveOperationalAnalytics(snapshot, input);
   }
 
   const data = await computeStatsDashboard(input);
@@ -2092,7 +1868,10 @@ export async function getStatsDashboard(input: StatsFilters) {
     trigger: 'bootstrap-request',
     data,
   });
-  return readLatestStatsSnapshot(input).then((latest) => latest ?? data);
+  return withLiveOperationalAnalytics(
+    readLatestStatsSnapshot(input).then((latest) => latest ?? data),
+    input,
+  );
 }
 
 export async function refreshStatsDashboard(input: StatsFilters, trigger = 'manual-refresh') {
@@ -2103,21 +1882,106 @@ export async function refreshStatsDashboard(input: StatsFilters, trigger = 'manu
     data,
   });
 
-  return readLatestStatsSnapshot(input).then((latest) => latest ?? data);
+  return withLiveOperationalAnalytics(
+    readLatestStatsSnapshot(input).then((latest) => latest ?? data),
+    input,
+  );
 }
 
-async function withLiveAiStats(
+async function getLiveOrderSummary(db: ReturnType<typeof getDb>, filters: Required<StatsFilters>) {
+  const result = await db.execute(buildLiveOrderSummaryQuery(filters));
+  const row = (result.rows[0] ?? {}) as Record<string, unknown>;
+  return {
+    totalOrders: numberOrZero(row.total_orders),
+    successfulOrders: numberOrZero(row.successful_orders),
+  };
+}
+
+async function getLiveOrderAnalytics(
+  db: ReturnType<typeof getDb>,
+  filters: Required<StatsFilters>,
+) {
+  const [summary, trendResult] = await Promise.all([
+    getLiveOrderSummary(db, filters),
+    db.execute(buildLiveOrderTrendQuery(filters)),
+  ]);
+  const trends: Record<
+    'daily' | 'weekly' | 'monthly',
+    Array<{ bucket: string; orders: number }>
+  > = {
+    daily: [],
+    weekly: [],
+    monthly: [],
+  };
+
+  for (const row of trendResult.rows as Array<Record<string, unknown>>) {
+    const grain = row.grain;
+    const bucket = typeof row.bucket === 'string' ? row.bucket : '';
+    if ((grain === 'daily' || grain === 'weekly' || grain === 'monthly') && bucket) {
+      trends[grain].push({ bucket, orders: numberOrZero(row.orders) });
+    }
+  }
+
+  return {
+    ...summary,
+    trends,
+  };
+}
+
+async function withLiveOperationalAnalytics(
   data: StatsDashboardData | Promise<StatsDashboardData>,
   input: StatsFilters,
 ) {
   const resolved = await data;
   const filters = buildResolvedFilters(statsQuerySchema.parse(input));
   const db = getDb();
-  const [admin, storefront] = await Promise.all([
+  const [admin, storefront, commerce, liveOrders] = await Promise.all([
     getLiveAdminAiStats(db, filters).catch(() => resolved.aiAssistants.admin),
     getLiveStorefrontAiStats(db, filters).catch(() => resolved.aiAssistants.storefront),
+    getMetaCommerceReport(db, filters, false).catch(() => resolved.metaAds.commerce),
+    getLiveOrderAnalytics(db, filters).catch(() => null),
   ]);
-  return { ...resolved, aiAssistants: { admin, storefront } };
+  const summary = liveOrders
+    ? {
+        ...resolved.summary,
+        totalOrders: liveOrders.totalOrders,
+        totalConfirmedOrders: liveOrders.successfulOrders,
+        fulfillmentRate: liveOrders.successfulOrders
+          ? round((resolved.summary.matchedOrders / liveOrders.successfulOrders) * 100)
+          : 0,
+      }
+    : resolved.summary;
+  const trends = liveOrders
+    ? {
+        ...resolved.trends,
+        daily: mergeLiveOrderTrend(resolved.trends.daily, liveOrders.trends.daily),
+        weekly: mergeLiveOrderTrend(resolved.trends.weekly, liveOrders.trends.weekly),
+        monthly: mergeLiveOrderTrend(resolved.trends.monthly, liveOrders.trends.monthly),
+      }
+    : resolved.trends;
+  const adCosts = liveOrders
+    ? {
+        ...resolved.adCosts,
+        cpa: liveOrders.totalOrders
+          ? round(resolved.adCosts.totalSpend / liveOrders.totalOrders)
+          : 0,
+      }
+    : resolved.adCosts;
+  return {
+    ...resolved,
+    summary,
+    trends,
+    adCosts,
+    website: liveOrders
+      ? mergeCanonicalWebsitePurchases(
+          resolved.website,
+          liveOrders.totalOrders,
+          liveOrders.trends.daily,
+        )
+      : resolved.website,
+    aiAssistants: { admin, storefront },
+    metaAds: { ...resolved.metaAds, commerce },
+  };
 }
 
 async function writeAdminReportingSnapshot({
@@ -2243,658 +2107,4 @@ export async function refreshAdminReportingSnapshots({
       .where(eq(adminReportingSnapshotRuns.runId, runId));
     throw error;
   }
-}
-
-export async function importStatsSpreadsheet(
-  buffer: Buffer,
-  fileName: string,
-): Promise<StatsImportResult> {
-  const db = getDb();
-  const rows = parseSpreadsheet(buffer).filter((row) => row.reference || row.tracking);
-  const batchId = crypto.randomUUID();
-
-  const references = [...new Set(rows.map((row) => row.reference).filter(Boolean))];
-  const trackings = [...new Set(rows.map((row) => row.tracking).filter(Boolean))];
-  const numericReferences = references
-    .filter(isNumericOrderReference)
-    .map((value) => Number.parseInt(value, 10))
-    .filter((value) => Number.isFinite(value));
-
-  const [candidateOrders, existingRows] = await Promise.all([
-    numericReferences.length > 0
-      ? db.select().from(orders).where(inArray(orders.id, numericReferences))
-      : Promise.resolve([]),
-    trackings.length > 0
-      ? db
-          .select({ tracking: processedOrders.tracking })
-          .from(processedOrders)
-          .where(inArray(processedOrders.tracking, trackings))
-      : Promise.resolve([]),
-  ]);
-
-  const cartProductReferences = collectCartProductReferenceBuckets(candidateOrders);
-
-  const productRows =
-    cartProductReferences.productIds.length === 0 && cartProductReferences.mongoIds.length === 0
-      ? []
-      : await db
-          .select({
-            id: products.id,
-            mongoId: products.mongoId,
-            title: products.title,
-            sku: products.sku,
-            price: sql<number>`coalesce(${products.price}, 0)::double precision`,
-            cost: sql<number>`coalesce(${products.purchasePrice}, 0)::double precision`,
-            brandId: products.brandId,
-            brandName: brands.name,
-            categoryId: products.categoryId,
-            categoryName: categories.name,
-          })
-          .from(products)
-          .leftJoin(brands, eq(products.brandId, brands.id))
-          .leftJoin(categories, eq(products.categoryId, categories.id))
-          .where(
-            or(
-              ...(cartProductReferences.productIds.length > 0
-                ? [inArray(products.id, cartProductReferences.productIds)]
-                : []),
-              ...(cartProductReferences.mongoIds.length > 0
-                ? [inArray(products.mongoId, cartProductReferences.mongoIds)]
-                : []),
-            ),
-          );
-
-  const orderById = new Map(candidateOrders.map((order) => [String(order.id), order]));
-  const productLookup = buildCartProductLookup(productRows);
-  const existingTrackings = new Set(existingRows.map((row) => row.tracking));
-
-  let duplicateOrders = 0;
-  const unmatchedReferences: string[] = [];
-  const unmatchedDetails: UnmatchedImportRow[] = [];
-  const processedOrderValues: Array<typeof processedOrders.$inferInsert> = [];
-  const processedProductValuesByTracking = new Map<
-    string,
-    Array<typeof processedOrderProducts.$inferInsert>
-  >();
-
-  for (const row of rows) {
-    if (!row.tracking || existingTrackings.has(row.tracking)) {
-      duplicateOrders += 1;
-      continue;
-    }
-
-    const matchedOrder = isNumericOrderReference(row.reference)
-      ? orderById.get(row.reference.trim())
-      : null;
-
-    if (!matchedOrder) {
-      unmatchedReferences.push(row.reference || row.tracking);
-      unmatchedDetails.push({
-        reference: row.reference,
-        tracking: row.tracking,
-        customerName: row.destinataire,
-        phone: row.telephone,
-        wilaya: row.wilaya,
-        commune: row.commune,
-        amountCollected: amountCollectedFromRow(row),
-        products: row.produits,
-        note: row.remarque,
-      });
-      continue;
-    }
-
-    const matchedProducts = matchedOrder.cartProducts
-      .map((value) => getCartProductLookupKey(value))
-      .filter((value): value is string => Boolean(value))
-      .map((lookupKey) => productLookup.get(lookupKey))
-      .filter((value): value is NonNullable<typeof value> => Boolean(value));
-
-    const productCost = matchedProducts.reduce(
-      (sum, product) => sum + numberOrZero(product.cost),
-      0,
-    );
-    const totalFees =
-      row.totalFraisService > 0
-        ? row.totalFraisService
-        : row.fraisLivraison +
-          row.fraisPoids +
-          row.fraisExtra +
-          row.fraisSMS +
-          row.fraisStockage +
-          row.commissionRecouvrement;
-    const amountCollected = row.encaisse > 0 ? row.encaisse : row.montant;
-    const netRevenue = row.netRecouvret > 0 ? row.netRecouvret : amountCollected - totalFees;
-    const profit = netRevenue - productCost;
-
-    processedOrderValues.push({
-      orderId: String(matchedOrder.id),
-      tracking: row.tracking,
-      customerName:
-        row.destinataire ||
-        [matchedOrder.firstName, matchedOrder.lastName].filter(Boolean).join(' '),
-      wilaya: row.wilaya || String(matchedOrder.state || ''),
-      commune: row.commune || matchedOrder.city || '',
-      deliveryType: row.typePrestation || row.type || String(matchedOrder.delivery || ''),
-      amountCollected: amountCollected.toFixed(2),
-      totalFees: totalFees.toFixed(2),
-      netRevenue: netRevenue.toFixed(2),
-      productCost: productCost.toFixed(2),
-      profit: profit.toFixed(2),
-      feeLivraison: row.fraisLivraison.toFixed(2),
-      feePoids: row.fraisPoids.toFixed(2),
-      feeExtra: row.fraisExtra.toFixed(2),
-      feeSms: row.fraisSMS.toFixed(2),
-      feeStockage: row.fraisStockage.toFixed(2),
-      feeCommission: row.commissionRecouvrement.toFixed(2),
-      deliveredAt: row.encaisseLe,
-      orderCreatedAt: matchedOrder.createdAt,
-      encaissedAt: row.encaisseLe ?? row.creeLe,
-      importBatchId: batchId,
-    });
-
-    processedProductValuesByTracking.set(
-      row.tracking,
-      matchedProducts.map((product) => ({
-        processedOrderId: 0,
-        productId: String(product.id),
-        title: product.title,
-        price: numberOrZero(product.price).toFixed(2),
-        cost: numberOrZero(product.cost).toFixed(2),
-        sku: product.sku,
-        categoryId: product.categoryId ? String(product.categoryId) : null,
-        categoryName: product.categoryName,
-        brandId: product.brandId ? String(product.brandId) : null,
-        brandName: product.brandName,
-      })),
-    );
-
-    existingTrackings.add(row.tracking);
-  }
-
-  const importedAt = new Date();
-  const importedRangeValues = processedOrderValues
-    .map((row) => row.encaissedAt ?? row.orderCreatedAt)
-    .filter((value): value is Date => value instanceof Date);
-  const dateRangeStart =
-    importedRangeValues.length > 0
-      ? toDateInput(new Date(Math.min(...importedRangeValues.map((value) => value.getTime()))))
-      : null;
-  const dateRangeEnd =
-    importedRangeValues.length > 0
-      ? toDateInput(new Date(Math.max(...importedRangeValues.map((value) => value.getTime()))))
-      : null;
-
-  await db.transaction(async (tx) => {
-    await tx.insert(importBatches).values({
-      batchId,
-      fileName,
-      importedAt,
-      totalRows: rows.length,
-      matchedOrders: processedOrderValues.length,
-      unmatchedReferences,
-      unmatchedDetails,
-      dateRangeStart,
-      dateRangeEnd,
-    });
-
-    if (processedOrderValues.length === 0) {
-      return;
-    }
-
-    const insertedOrders = await tx
-      .insert(processedOrders)
-      .values(processedOrderValues)
-      .returning({ id: processedOrders.id, tracking: processedOrders.tracking });
-
-    const childRows = insertedOrders.flatMap((insertedOrder) =>
-      (processedProductValuesByTracking.get(insertedOrder.tracking) ?? []).map((row) => ({
-        ...row,
-        processedOrderId: insertedOrder.id,
-      })),
-    );
-
-    if (childRows.length > 0) {
-      await tx.insert(processedOrderProducts).values(childRows);
-    }
-  });
-
-  const stats = await computeStatsDashboard({ range: '90d' });
-
-  return {
-    batchId,
-    newOrders: processedOrderValues.length,
-    duplicateOrders,
-    unmatchedReferences,
-    stats,
-  };
-}
-
-export async function deleteImportBatch(batchId: string) {
-  const db = getDb();
-
-  const deletedRows = await db.transaction(async (tx) => {
-    const deletedOrders = await tx
-      .delete(processedOrders)
-      .where(eq(processedOrders.importBatchId, batchId))
-      .returning({ id: processedOrders.id });
-
-    const deletedBatch = await tx
-      .delete(importBatches)
-      .where(eq(importBatches.batchId, batchId))
-      .returning({ id: importBatches.id });
-
-    return {
-      deletedOrders: deletedOrders.length,
-      deletedBatch: deletedBatch[0] ?? null,
-    };
-  });
-
-  return deletedRows;
-}
-
-export async function dismissUnmatchedReference(batchId: string, reference: string) {
-  const db = getDb();
-  const batch = await db
-    .select()
-    .from(importBatches)
-    .where(eq(importBatches.batchId, batchId))
-    .limit(1);
-  const row = batch[0];
-
-  if (!row) {
-    return null;
-  }
-
-  const nextReferences = row.unmatchedReferences.filter((item) => item !== reference);
-  const nextDetails = row.unmatchedDetails.filter(
-    (item) => item.reference !== reference && item.tracking !== reference,
-  );
-
-  await db
-    .update(importBatches)
-    .set({
-      unmatchedReferences: nextReferences,
-      unmatchedDetails: nextDetails,
-      updatedAt: new Date(),
-    })
-    .where(eq(importBatches.batchId, batchId));
-
-  return {
-    batchId,
-    reference,
-    removed:
-      row.unmatchedReferences.length !== nextReferences.length ||
-      row.unmatchedDetails.length !== nextDetails.length,
-  };
-}
-
-function amountCollectedFromRow(row: SpreadsheetRow) {
-  return row.encaisse > 0 ? row.encaisse : row.montant;
-}
-
-export async function listAdCosts(filters: StatsFilters | Required<StatsFilters>) {
-  const db = getDb();
-  const adWhere = buildAdCostWhere(filters);
-  const rows = await db
-    .select()
-    .from(adCosts)
-    .where(adWhere)
-    .orderBy(desc(adCosts.date))
-    .limit(500);
-  return rows.map((row) => ({
-    id: String(row.id),
-    date: row.date,
-    platform: row.platform,
-    campaignName: row.campaignName,
-    campaignId: row.campaignId,
-    spend: numberOrZero(row.spend),
-    impressions: row.impressions ?? 0,
-    clicks: row.clicks ?? 0,
-    conversions: row.conversions ?? 0,
-    reach: row.reach ?? 0,
-    notes: row.notes,
-    importBatchId: row.importBatchId,
-  }));
-}
-
-export async function listAdSpendImportBatches() {
-  const db = getDb();
-  await ensureLegacyAdSpendImportBatch();
-  const rows = await db
-    .select({
-      batchId: adSpendImportBatches.batchId,
-      fileName: adSpendImportBatches.fileName,
-      rate: adSpendImportBatches.rate,
-      totalRows: adSpendImportBatches.totalRows,
-      importedRows: adSpendImportBatches.importedRows,
-      updatedRows: adSpendImportBatches.updatedRows,
-      importedAt: adSpendImportBatches.importedAt,
-      currentRows: sql<number>`coalesce(count(${adCosts.id})::int, 0)`,
-      currentSpend: sql<number>`coalesce(sum(${adCosts.spend})::double precision, 0)`,
-      dateRangeStart: sql<string | null>`min(${adCosts.date})`,
-      dateRangeEnd: sql<string | null>`max(${adCosts.date})`,
-    })
-    .from(adSpendImportBatches)
-    .leftJoin(adCosts, eq(adCosts.importBatchId, adSpendImportBatches.batchId))
-    .groupBy(
-      adSpendImportBatches.id,
-      adSpendImportBatches.batchId,
-      adSpendImportBatches.fileName,
-      adSpendImportBatches.rate,
-      adSpendImportBatches.totalRows,
-      adSpendImportBatches.importedRows,
-      adSpendImportBatches.updatedRows,
-      adSpendImportBatches.importedAt,
-    )
-    .orderBy(desc(adSpendImportBatches.importedAt), desc(adSpendImportBatches.id))
-    .limit(100);
-
-  return rows.map((row) => ({
-    batchId: row.batchId,
-    fileName: row.fileName,
-    rate: numberOrZero(row.rate),
-    totalRows: row.totalRows,
-    importedRows: row.importedRows,
-    updatedRows: row.updatedRows,
-    importedAt: row.importedAt.toISOString(),
-    currentRows: row.currentRows,
-    currentSpend: numberOrZero(row.currentSpend),
-    dateRangeStart: row.dateRangeStart,
-    dateRangeEnd: row.dateRangeEnd,
-  }));
-}
-
-async function ensureLegacyAdSpendImportBatch() {
-  const db = getDb();
-  const legacyImportWhere = and(
-    sql`${adCosts.importBatchId} is null`,
-    sql`${adCosts.notes} like 'Imported at rate %'`,
-  );
-  const [{ rows = 0 } = { rows: 0 }] = await db
-    .select({ rows: count() })
-    .from(adCosts)
-    .where(legacyImportWhere);
-
-  if (rows === 0) {
-    return;
-  }
-
-  const now = new Date();
-  await db
-    .insert(adSpendImportBatches)
-    .values({
-      batchId: LEGACY_AD_SPEND_IMPORT_BATCH_ID,
-      fileName: 'Legacy ad spend rows',
-      rate: '1.0000',
-      totalRows: rows,
-      importedRows: rows,
-      updatedRows: 0,
-      importedAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: adSpendImportBatches.batchId,
-      set: {
-        totalRows: rows,
-        importedRows: rows,
-        updatedAt: now,
-      },
-    });
-
-  await db
-    .update(adCosts)
-    .set({
-      importBatchId: LEGACY_AD_SPEND_IMPORT_BATCH_ID,
-      updatedAt: now,
-    })
-    .where(legacyImportWhere);
-}
-
-export async function upsertAdCostEntry(input: AdCostEntryInput, actor?: ActionActor) {
-  const db = getDb();
-  const value = adCostEntrySchema.parse(input);
-  const campaignName = value.campaignName?.trim() || null;
-  const now = new Date();
-  const existing = await db
-    .select({ id: adCosts.id })
-    .from(adCosts)
-    .where(
-      and(
-        eq(adCosts.date, value.date),
-        eq(adCosts.platform, value.platform),
-        campaignName
-          ? eq(adCosts.campaignName, campaignName)
-          : sql`${adCosts.campaignName} is null`,
-      ),
-    )
-    .limit(1);
-
-  if (existing[0]) {
-    const [updated] = await mutateEntityWithHistory(db, {
-      entityType: 'statsAdCosts',
-      entityId: existing[0].id,
-      operation: 'update',
-      actor,
-      execute: (tx) =>
-        tx
-          .update(adCosts)
-          .set({
-            campaignId: value.campaignId ?? null,
-            spend: value.spend.toFixed(2),
-            impressions: value.impressions,
-            clicks: value.clicks,
-            conversions: value.conversions,
-            reach: value.reach,
-            notes: value.notes ?? null,
-            importBatchId: value.importBatchId ?? null,
-            updatedAt: now,
-          })
-          .where(eq(adCosts.id, existing[0].id))
-          .returning({ id: adCosts.id }),
-    });
-
-    return {
-      ...updated,
-      created: false,
-    };
-  }
-
-  const [created] = await mutateEntityWithHistory<Array<{ id: number }>>(db, {
-    entityType: 'statsAdCosts',
-    operation: 'create',
-    actor,
-    resolveEntityId: (result) => result[0]?.id,
-    execute: (tx) =>
-      tx
-        .insert(adCosts)
-        .values({
-          date: value.date,
-          platform: value.platform,
-          campaignName,
-          campaignId: value.campaignId ?? null,
-          spend: value.spend.toFixed(2),
-          impressions: value.impressions,
-          clicks: value.clicks,
-          conversions: value.conversions,
-          reach: value.reach,
-          notes: value.notes ?? null,
-          importBatchId: value.importBatchId ?? null,
-          updatedAt: now,
-        })
-        .returning({ id: adCosts.id }),
-  });
-
-  return {
-    ...created,
-    created: true,
-  };
-}
-
-export async function deleteAdCostEntry(id: string, actor?: ActionActor) {
-  const db = getDb();
-  const numericId = Number.parseInt(id, 10);
-  if (!Number.isFinite(numericId)) {
-    return null;
-  }
-
-  const existing = await db
-    .select({ id: adCosts.id })
-    .from(adCosts)
-    .where(eq(adCosts.id, numericId))
-    .limit(1);
-  if (!existing[0]) {
-    return null;
-  }
-
-  const deleted = await mutateEntityWithHistory(db, {
-    entityType: 'statsAdCosts',
-    entityId: numericId,
-    operation: 'delete',
-    actor,
-    execute: (tx) =>
-      tx.delete(adCosts).where(eq(adCosts.id, numericId)).returning({ id: adCosts.id }),
-  });
-  return deleted[0] ?? null;
-}
-
-export async function deleteAdSpendImportBatch(batchId: string) {
-  const db = getDb();
-  const batch = batchId.trim();
-  if (!batch) {
-    return null;
-  }
-
-  const existing = await db
-    .select({
-      batchId: adSpendImportBatches.batchId,
-      fileName: adSpendImportBatches.fileName,
-    })
-    .from(adSpendImportBatches)
-    .where(eq(adSpendImportBatches.batchId, batch))
-    .limit(1);
-
-  if (!existing[0]) {
-    return null;
-  }
-
-  const rows = await db.transaction(async (tx) => {
-    const deletedRows = await tx
-      .delete(adCosts)
-      .where(eq(adCosts.importBatchId, batch))
-      .returning({ id: adCosts.id });
-    await tx.delete(adSpendImportBatches).where(eq(adSpendImportBatches.batchId, batch));
-    return deletedRows.length;
-  });
-
-  return {
-    ...existing[0],
-    deletedRows: rows,
-  };
-}
-
-export function buildAdCostEntriesFromSpreadsheetRow(row: Record<string, unknown>, rate: number) {
-  const startDate = parseDate(valueFor(row, ['Reporting starts', 'Start Date', 'Date', 'date']));
-  const endDate =
-    parseDate(valueFor(row, ['Reporting ends', 'End Date', 'Date', 'date'])) ?? startDate;
-  const spendRaw = valueFor(row, ['Amount spent (EUR)', 'Amount spent', 'spend']);
-
-  if (!startDate || !endDate || spendRaw == null) {
-    return [];
-  }
-
-  const spend = numberOrZero(spendRaw) * rate;
-  const days = Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000) + 1);
-  const dailySpend = spend / days;
-
-  const entries: AdCostEntryInput[] = [];
-  for (let index = 0; index < days; index += 1) {
-    const date = new Date(startDate);
-    date.setDate(startDate.getDate() + index);
-    entries.push({
-      date: toDateInput(date),
-      platform: normalizeText(valueFor(row, ['platform', 'Platform'])) || 'facebook',
-      campaignName:
-        normalizeText(valueFor(row, ['Campaign name', 'Campaign Name', 'Campaign'])) || null,
-      campaignId: normalizeText(valueFor(row, ['Campaign ID', 'campaign_id'])) || null,
-      spend: round(dailySpend),
-      impressions:
-        Math.round(numberOrZero(valueFor(row, ['Impressions', 'impressions'])) / days) || undefined,
-      clicks:
-        Math.round(
-          numberOrZero(valueFor(row, ['Clicks (all)', 'Link clicks', 'Clicks', 'clicks'])) / days,
-        ) || undefined,
-      conversions:
-        Math.round(
-          numberOrZero(
-            valueFor(row, [
-              'Results',
-              'results',
-              'Conversions',
-              'Website checkouts initiated',
-              'Website purchases',
-            ]),
-          ) / days,
-        ) || undefined,
-      reach: Math.round(numberOrZero(valueFor(row, ['Reach', 'reach'])) / days) || undefined,
-      notes: `Imported at rate ${rate}`,
-    });
-  }
-
-  return entries;
-}
-
-export async function importAdCostsSpreadsheet(
-  buffer: Buffer,
-  rate: number,
-  fileName: string,
-  actor?: ActionActor,
-) {
-  const db = getDb();
-  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = sheet ? XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet) : [];
-  const batchId = crypto.randomUUID();
-  const now = new Date();
-
-  await db.insert(adSpendImportBatches).values({
-    batchId,
-    fileName,
-    rate: rate.toFixed(4),
-    totalRows: rows.length,
-    uploadedByEmail: actor?.email ?? null,
-    uploadedByName: actor?.name ?? null,
-    updatedAt: now,
-  });
-
-  let imported = 0;
-  let updated = 0;
-  let skipped = 0;
-
-  for (const row of rows) {
-    const entries = buildAdCostEntriesFromSpreadsheetRow(row, rate);
-    if (entries.length === 0) {
-      skipped += 1;
-      continue;
-    }
-
-    for (const costEntry of entries) {
-      const entry = await upsertAdCostEntry({ ...costEntry, importBatchId: batchId }, actor);
-      if (entry.created) {
-        imported += 1;
-      } else {
-        updated += 1;
-      }
-    }
-  }
-
-  await db
-    .update(adSpendImportBatches)
-    .set({
-      importedRows: imported,
-      updatedRows: updated,
-      updatedAt: new Date(),
-    })
-    .where(eq(adSpendImportBatches.batchId, batchId));
-
-  return { batchId, fileName, imported, updated, skipped, total: rows.length };
 }

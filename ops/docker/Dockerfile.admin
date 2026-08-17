@@ -1,13 +1,12 @@
-FROM node:24-bookworm-slim AS base
+FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS base
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ARG BRIC_BUILD_NODE_OPTIONS=""
 ARG GOOGLE_CLIENT_ID
-ARG BETTER_AUTH_URL
+ARG APPLICATION_ORIGIN
 ARG STOREFRONT_API_BASE_URL
 ENV GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID}"
-ENV BETTER_AUTH_URL="${BETTER_AUTH_URL}"
 ENV STOREFRONT_API_BASE_URL="${STOREFRONT_API_BASE_URL}"
 
 RUN corepack enable
@@ -16,14 +15,12 @@ WORKDIR /workspace
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/admin/package.json apps/admin/package.json
-COPY apps/storefront-api/package.json apps/storefront-api/package.json
-COPY apps/storefront/package.json apps/storefront/package.json
 COPY packages/ai-core/package.json packages/ai-core/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/runtime/package.json packages/runtime/package.json
 COPY packages/storefront-core/package.json packages/storefront-core/package.json
 
-RUN NODE_OPTIONS="${BRIC_BUILD_NODE_OPTIONS}" pnpm install --frozen-lockfile
+RUN NODE_OPTIONS="${BRIC_BUILD_NODE_OPTIONS}" pnpm install --filter @bric/admin... --frozen-lockfile
 
 COPY tsconfig.base.json ./
 COPY apps/admin ./apps/admin
@@ -32,6 +29,7 @@ COPY packages/db ./packages/db
 COPY packages/runtime ./packages/runtime
 COPY packages/storefront-core ./packages/storefront-core
 COPY ops/scripts/build-worker.mjs ./ops/scripts/build-worker.mjs
+COPY ops/scripts/hydrate-next-standalone.sh ./ops/scripts/hydrate-next-standalone.sh
 COPY ops/ownership ./ops/ownership
 
 FROM base AS build
@@ -40,13 +38,19 @@ RUN --mount=type=secret,id=google_client_secret \
   --mount=type=secret,id=better_auth_secret \
   GOOGLE_CLIENT_SECRET="$(cat /run/secrets/google_client_secret)" \
   BETTER_AUTH_SECRET="$(cat /run/secrets/better_auth_secret)" \
+  BETTER_AUTH_URL="${APPLICATION_ORIGIN}" \
   pnpm --filter @bric/admin build \
+  && bash ops/scripts/hydrate-next-standalone.sh apps/admin \
   && pnpm --filter @bric/admin build:worker \
-  && pnpm --filter @bric/admin build:db-tasks
+  && pnpm --filter @bric/admin build:db-tasks \
+  && mkdir -p /runtime/node_modules \
+  && cp -LR /workspace/apps/admin/node_modules/node-cron /runtime/node_modules/node-cron
 
-FROM node:24-bookworm-slim AS web
+FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS web
 
 WORKDIR /app
+ARG BRIC_IMAGE_REVISION="unknown"
+ARG BRIC_IMAGE_CREATED="unknown"
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
@@ -54,6 +58,8 @@ ENV HOSTNAME=0.0.0.0
 LABEL org.opencontainers.image.title="Bricomaitre admin web" \
   org.opencontainers.image.vendor="Bricomaitre" \
   org.opencontainers.image.source="https://github.com/MilD-0/Bricomaitre2" \
+  org.opencontainers.image.revision="${BRIC_IMAGE_REVISION}" \
+  org.opencontainers.image.created="${BRIC_IMAGE_CREATED}" \
   org.opencontainers.image.licenses="AGPL-3.0-only" \
   org.opencontainers.image.description="Bricomaitre production image." \
   com.bricomaitre.repository="MilD-0/Bricomaitre2" \
@@ -74,21 +80,27 @@ COPY --from=build --chown=bric:bric /workspace/apps/admin/.next/static ./apps/ad
 COPY --from=build --chown=bric:bric /workspace/apps/admin/public ./apps/admin/public
 RUN mkdir -p /app/apps/admin/.next/cache \
   && chown -R bric:bric /app/apps/admin/.next/cache \
-  && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete
+  && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete \
+  && cd /app/apps/admin \
+  && node -e "require('next/dist/server/next-server')"
 
 EXPOSE 3000
 USER bric
 
 CMD ["node", "apps/admin/server.js"]
 
-FROM node:24-bookworm-slim AS worker
+FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS worker
 
 WORKDIR /app
+ARG BRIC_IMAGE_REVISION="unknown"
+ARG BRIC_IMAGE_CREATED="unknown"
 ENV NODE_ENV=production
 
 LABEL org.opencontainers.image.title="Bricomaitre admin worker" \
   org.opencontainers.image.vendor="Bricomaitre" \
   org.opencontainers.image.source="https://github.com/MilD-0/Bricomaitre2" \
+  org.opencontainers.image.revision="${BRIC_IMAGE_REVISION}" \
+  org.opencontainers.image.created="${BRIC_IMAGE_CREATED}" \
   org.opencontainers.image.licenses="AGPL-3.0-only" \
   org.opencontainers.image.description="Bricomaitre production image." \
   com.bricomaitre.repository="MilD-0/Bricomaitre2" \
@@ -104,25 +116,29 @@ COPY --chown=bric:bric ops/ownership/BRICOMAITRE_AUTHORIZED_RELEASE.txt ./BRICOM
 COPY --chown=bric:bric ops/ownership/LICENSE ./LICENSE
 COPY --chown=bric:bric ops/ownership/NOTICE ./NOTICE
 COPY --chown=bric:bric ops/ownership/SECURITY.md ./SECURITY.md
-COPY --from=base --chown=bric:bric /workspace/node_modules ./node_modules
-COPY --from=base --chown=bric:bric /workspace/apps/admin/node_modules ./apps/admin/node_modules
+COPY --from=build --chown=bric:bric /runtime/node_modules ./node_modules
 COPY --from=build --chown=bric:bric /workspace/apps/admin/dist/run-background-workers.cjs ./apps/admin/dist/run-background-workers.cjs
 RUN node --check apps/admin/dist/run-background-workers.cjs \
   && ADMIN_WORKER_BOOTSTRAP_CHECK=1 node apps/admin/dist/run-background-workers.cjs \
+  && touch /BRIC_WORKER_HEARTBEAT_V1 \
   && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete
 
 USER bric
 
 CMD ["node", "apps/admin/dist/run-background-workers.cjs"]
 
-FROM node:24-bookworm-slim AS migrations
+FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS migrations
 
 WORKDIR /app
+ARG BRIC_IMAGE_REVISION="unknown"
+ARG BRIC_IMAGE_CREATED="unknown"
 ENV NODE_ENV=production
 
 LABEL org.opencontainers.image.title="Bricomaitre admin migrations" \
   org.opencontainers.image.vendor="Bricomaitre" \
   org.opencontainers.image.source="https://github.com/MilD-0/Bricomaitre2" \
+  org.opencontainers.image.revision="${BRIC_IMAGE_REVISION}" \
+  org.opencontainers.image.created="${BRIC_IMAGE_CREATED}" \
   org.opencontainers.image.licenses="AGPL-3.0-only" \
   org.opencontainers.image.description="Bricomaitre production image." \
   com.bricomaitre.repository="MilD-0/Bricomaitre2" \
@@ -138,8 +154,6 @@ COPY --chown=bric:bric ops/ownership/BRICOMAITRE_AUTHORIZED_RELEASE.txt ./BRICOM
 COPY --chown=bric:bric ops/ownership/LICENSE ./LICENSE
 COPY --chown=bric:bric ops/ownership/NOTICE ./NOTICE
 COPY --chown=bric:bric ops/ownership/SECURITY.md ./SECURITY.md
-COPY --from=base --chown=bric:bric /workspace/node_modules ./node_modules
-COPY --from=base --chown=bric:bric /workspace/apps/admin/node_modules ./apps/admin/node_modules
 COPY --from=build --chown=bric:bric /workspace/apps/admin/dist/run-db-migrations.cjs ./apps/admin/dist/run-db-migrations.cjs
 COPY --from=build --chown=bric:bric /workspace/apps/admin/dist/verify-db-migrations.cjs ./apps/admin/dist/verify-db-migrations.cjs
 COPY --from=build --chown=bric:bric /workspace/apps/admin/drizzle ./drizzle

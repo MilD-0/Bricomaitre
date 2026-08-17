@@ -10,7 +10,7 @@ import {
   toActionHistoryItem,
 } from '../../../../../lib/action-history';
 import { auth } from '../../../../../lib/auth';
-import { parsePositiveIntegerId } from '../../../../../lib/http-input';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { requireMutationAccess } from '../../../../../lib/rbac';
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {

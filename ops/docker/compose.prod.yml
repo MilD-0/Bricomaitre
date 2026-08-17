@@ -6,8 +6,14 @@ x-logging: &default-logging
     max-size: ${BRIC_LOG_MAX_SIZE:-20m}
     max-file: ${BRIC_LOG_MAX_FILES:-5}
 
+x-release-environment: &release-environment
+  SENTRY_RELEASE: ${BRIC_RELEASE_COMMIT:-unknown}
+
 x-storefront-api-blue: &storefront-api-blue
   restart: unless-stopped
+  init: true
+  pids_limit: ${BRIC_STOREFRONT_API_PIDS_LIMIT:-256}
+  stop_grace_period: 30s
   logging: *default-logging
   read_only: true
   ulimits:
@@ -25,6 +31,7 @@ x-storefront-api-blue: &storefront-api-blue
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront-api.env
   environment:
+    <<: *release-environment
     NODE_OPTIONS: ${BRIC_STOREFRONT_API_NODE_OPTIONS:---max-old-space-size=640}
     PORT: 3001
   depends_on:
@@ -44,6 +51,9 @@ x-storefront-api-blue: &storefront-api-blue
 
 x-storefront-meta-worker: &storefront-meta-worker
   restart: unless-stopped
+  init: true
+  pids_limit: ${BRIC_STOREFRONT_META_WORKER_PIDS_LIMIT:-128}
+  stop_grace_period: 30s
   logging: *default-logging
   read_only: true
   ulimits:
@@ -61,13 +71,27 @@ x-storefront-meta-worker: &storefront-meta-worker
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront-api.env
   environment:
+    <<: *release-environment
     NODE_OPTIONS: ${BRIC_STOREFRONT_META_WORKER_NODE_OPTIONS:---max-old-space-size=384}
   depends_on:
     postgres:
       condition: service_healthy
+  healthcheck:
+    test:
+      [
+        'CMD-SHELL',
+        'node -e "const fs=require(''node:fs''); if (!fs.existsSync(''/BRIC_WORKER_HEARTBEAT_V1'')) process.exit(0); const age=Date.now()-Number(fs.readFileSync(''/tmp/bric-storefront-meta-worker-heartbeat'',''utf8'').trim()); process.exit(age >= 0 && age <= 45000 ? 0 : 1)"',
+      ]
+    interval: 10s
+    timeout: 3s
+    retries: 6
+    start_period: 15s
 
 x-admin-blue: &admin-blue
   restart: unless-stopped
+  init: true
+  pids_limit: ${BRIC_ADMIN_WEB_PIDS_LIMIT:-256}
+  stop_grace_period: 30s
   logging: *default-logging
   read_only: true
   ulimits:
@@ -85,6 +109,7 @@ x-admin-blue: &admin-blue
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/admin.env
   environment:
+    <<: *release-environment
     NODE_OPTIONS: ${BRIC_ADMIN_WEB_NODE_OPTIONS:---max-old-space-size=1024}
     STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
   depends_on:
@@ -102,6 +127,9 @@ x-admin-blue: &admin-blue
 
 x-admin-worker-blue: &admin-worker-blue
   restart: unless-stopped
+  init: true
+  pids_limit: ${BRIC_ADMIN_WORKER_PIDS_LIMIT:-256}
+  stop_grace_period: 30s
   logging: *default-logging
   read_only: true
   ulimits:
@@ -119,6 +147,7 @@ x-admin-worker-blue: &admin-worker-blue
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/admin.env
   environment:
+    <<: *release-environment
     NODE_OPTIONS: ${BRIC_ADMIN_WORKER_NODE_OPTIONS:---max-old-space-size=512}
     STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
   depends_on:
@@ -128,15 +157,18 @@ x-admin-worker-blue: &admin-worker-blue
     test:
       [
         'CMD-SHELL',
-        'node -e "try { process.kill(1, 0); process.exit(0) } catch { process.exit(1) }"',
+        'node -e "const fs=require(''node:fs''); if (!fs.existsSync(''/BRIC_WORKER_HEARTBEAT_V1'')) process.exit(0); const age=Date.now()-Number(fs.readFileSync(''/tmp/bric-admin-worker-heartbeat'',''utf8'').trim()); process.exit(age >= 0 && age <= 45000 ? 0 : 1)"',
       ]
-    interval: 5s
+    interval: 10s
     timeout: 3s
     retries: 6
-    start_period: 5s
+    start_period: 15s
 
 x-admin-migrations-blue: &admin-migrations-blue
   restart: 'no'
+  init: true
+  pids_limit: ${BRIC_ADMIN_MIGRATIONS_PIDS_LIMIT:-128}
+  stop_grace_period: 30s
   logging: *default-logging
   read_only: true
   ulimits:
@@ -154,6 +186,7 @@ x-admin-migrations-blue: &admin-migrations-blue
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/admin.env
   environment:
+    <<: *release-environment
     NODE_OPTIONS: ${BRIC_ADMIN_MIGRATIONS_NODE_OPTIONS:---max-old-space-size=512}
     STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
     ADMIN_DB_TASK: ${ADMIN_DB_TASK:-verify}
@@ -163,6 +196,9 @@ x-admin-migrations-blue: &admin-migrations-blue
 
 x-storefront-blue: &storefront-blue
   restart: unless-stopped
+  init: true
+  pids_limit: ${BRIC_STOREFRONT_WEB_PIDS_LIMIT:-256}
+  stop_grace_period: 30s
   logging: *default-logging
   # Next's filesystem incremental cache writes generated ISR route artifacts
   # beneath .next/server. Keep this root writable until that cache is moved to
@@ -183,6 +219,7 @@ x-storefront-blue: &storefront-blue
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront.env
   environment:
+    <<: *release-environment
     NODE_OPTIONS: ${BRIC_STOREFRONT_WEB_NODE_OPTIONS:---max-old-space-size=1024}
     STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
   depends_on:
@@ -200,9 +237,14 @@ x-storefront-blue: &storefront-blue
 
 services:
   postgres:
-    image: postgres:16-bookworm
+    image: postgres:16-bookworm@sha256:60f4761b9035e0b8d5218f701a8c3382f641bf12b1604822574cf5be3baeb537
     restart: unless-stopped
+    init: true
+    pids_limit: ${BRIC_POSTGRES_PIDS_LIMIT:-256}
+    stop_grace_period: 60s
     logging: *default-logging
+    mem_limit: ${BRIC_POSTGRES_MEM_LIMIT:-2048m}
+    mem_reservation: ${BRIC_POSTGRES_MEM_RESERVATION:-1024m}
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-bricadmin}
       POSTGRES_USER: ${POSTGRES_USER:-bricadmin}
@@ -216,9 +258,14 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-bookworm
+    image: redis:7-bookworm@sha256:e9b2e45ecd47fbb69b877cf8d045d5cccaaaed52524b6e098b4abe8212994f73
     restart: unless-stopped
+    init: true
+    pids_limit: ${BRIC_REDIS_PIDS_LIMIT:-128}
+    stop_grace_period: 30s
     logging: *default-logging
+    mem_limit: ${BRIC_REDIS_MEM_LIMIT:-768m}
+    mem_reservation: ${BRIC_REDIS_MEM_RESERVATION:-256m}
     command: ['redis-server', '--appendonly', 'yes']
     volumes:
       - redis-data:/data
@@ -248,18 +295,19 @@ services:
     <<: *storefront-meta-worker
     image: ${BRIC_IMAGE_STOREFRONT_META_WORKER:-bricadmin-storefront-meta-worker}
 
-  adminstration-blue:
+  admin-blue:
     <<: *admin-blue
-    image: ${BRIC_IMAGE_ADMIN_WEB_BLUE:-bricadmin-adminstration-blue}
+    image: ${BRIC_IMAGE_ADMIN_WEB_BLUE:-bricadmin-admin-blue}
     volumes:
       - admin-cache-blue:/app/apps/admin/.next/cache
 
-  adminstration-green:
+  admin-green:
     <<: *admin-blue
-    image: ${BRIC_IMAGE_ADMIN_WEB_GREEN:-bricadmin-adminstration-green}
+    image: ${BRIC_IMAGE_ADMIN_WEB_GREEN:-bricadmin-admin-green}
     volumes:
       - admin-cache-green:/app/apps/admin/.next/cache
     environment:
+      <<: *release-environment
       NODE_OPTIONS: ${BRIC_ADMIN_WEB_NODE_OPTIONS:---max-old-space-size=1024}
       STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
     depends_on:
@@ -278,6 +326,7 @@ services:
     <<: *admin-worker-blue
     image: ${BRIC_IMAGE_ADMIN_WORKER_GREEN:-bricadmin-admin-worker-green}
     environment:
+      <<: *release-environment
       NODE_OPTIONS: ${BRIC_ADMIN_WORKER_NODE_OPTIONS:---max-old-space-size=512}
       STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
     depends_on:
@@ -288,6 +337,7 @@ services:
     <<: *admin-migrations-blue
     image: ${BRIC_IMAGE_ADMIN_MIGRATIONS_GREEN:-bricadmin-admin-migrations-green}
     environment:
+      <<: *release-environment
       NODE_OPTIONS: ${BRIC_ADMIN_MIGRATIONS_NODE_OPTIONS:---max-old-space-size=512}
       STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
       ADMIN_DB_TASK: ${ADMIN_DB_TASK:-verify}
@@ -304,6 +354,7 @@ services:
     volumes:
       - storefront-cache-green:/app/apps/storefront/.next/cache
     environment:
+      <<: *release-environment
       NODE_OPTIONS: ${BRIC_STOREFRONT_WEB_NODE_OPTIONS:---max-old-space-size=1024}
       STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
     depends_on:
@@ -311,23 +362,37 @@ services:
         condition: service_healthy
 
   nginx:
-    image: nginx:1.27-bookworm
+    image: nginx:1.27-bookworm@sha256:6784fb0834aa7dbbe12e3d7471e69c290df3e6ba810dc38b34ae33d3c1c05f7d
     restart: unless-stopped
+    init: true
+    pids_limit: ${BRIC_NGINX_PIDS_LIMIT:-128}
+    stop_grace_period: 30s
     logging: *default-logging
+    mem_limit: ${BRIC_NGINX_MEM_LIMIT:-256m}
+    mem_reservation: ${BRIC_NGINX_MEM_RESERVATION:-64m}
     read_only: true
+    security_opt:
+      - no-new-privileges:true
     tmpfs:
       - /var/cache/nginx:size=32m,mode=0755
       - /var/run:size=8m,mode=0755
     ports:
       - '80:80'
       - '443:443'
+    command: ['nginx', '-c', '/etc/nginx-main/nginx.conf', '-g', 'daemon off;']
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - ${BRIC_CERTBOT_WEBROOT_DIR:-/srv/bric/runtime/certbot-webroot}:/var/www/certbot:ro
-      - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ${BRIC_RUNTIME_DIR:-/srv/bric/runtime}/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # Keep the mount source stable across immutable release directories. The
+      # deploy transaction updates this directory atomically, so routine
+      # releases reload Nginx instead of recreating the proxy container.
+      - ${BRIC_RUNTIME_DIR:-/srv/bric/runtime}/nginx-main:/etc/nginx-main:ro
+      # The renderer atomically replaces default.conf. Mounting the directory
+      # keeps that replacement visible inside Nginx; a file bind would retain
+      # the old inode and silently defeat a blue/green reload.
+      - ${BRIC_RUNTIME_DIR:-/srv/bric/runtime}/nginx:/etc/nginx/conf.d:ro
     healthcheck:
-      test: ['CMD', 'nginx', '-t']
+      test: ['CMD', 'nginx', '-t', '-c', '/etc/nginx-main/nginx.conf']
       interval: 30s
       timeout: 5s
       retries: 3

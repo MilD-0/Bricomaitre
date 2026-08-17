@@ -129,6 +129,33 @@ describe('app/api/products/[id]/route', () => {
     await expect(res.json()).resolves.toEqual({ error: 'Not found' });
   });
 
+  it.each([
+    ['GET', (request: NextRequest) => GET(request, { params: Promise.resolve({ id: 'nope' }) })],
+    ['PUT', (request: NextRequest) => PUT(request, { params: Promise.resolve({ id: 'nope' }) })],
+    [
+      'PATCH',
+      (request: NextRequest) => PATCH(request, { params: Promise.resolve({ id: 'nope' }) }),
+    ],
+    [
+      'DELETE',
+      (request: NextRequest) => DELETE(request, { params: Promise.resolve({ id: 'nope' }) }),
+    ],
+  ])('returns 400 for a malformed product id in %s', async (method, callRoute) => {
+    hasDbMock.mockReturnValue(true);
+    const request = new NextRequest('http://localhost/api/products/nope', {
+      method,
+      ...(method === 'PUT' || method === 'PATCH'
+        ? { body: JSON.stringify({}), headers: { 'content-type': 'application/json' } }
+        : {}),
+    });
+
+    const res = await callRoute(request);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'Invalid product id' });
+    expect(getDbMock).not.toHaveBeenCalled();
+  });
+
   it('returns 403 for PUT when caller lacks RBAC access', async () => {
     requireMutationAccessMock.mockResolvedValue(
       NextResponse.json({ error: 'Forbidden' }, { status: 403 }),

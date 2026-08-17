@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { AdminSession } from '../../../../lib/auth';
+import { parsePositiveIntegerIds } from '@bric/runtime/http-input';
 
 import { auth } from '../../../../lib/auth';
 import {
@@ -84,16 +85,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => null);
     const mode =
       body?.mode === 'confirmed' ? 'confirmed' : body?.mode === 'selected' ? 'selected' : null;
-    const rawOrderIds: unknown[] = Array.isArray(body?.orderIds) ? body.orderIds : [];
-    const orderIds: number[] = [
-      ...new Set(
-        rawOrderIds
-          .map((value: unknown) => Number(value))
-          .filter((value): value is number => Number.isInteger(value) && value > 0),
-      ),
-    ];
+    const orderIds = Array.isArray(body?.orderIds) ? parsePositiveIntegerIds(body.orderIds) : null;
 
-    if (!mode || orderIds.length === 0) {
+    if (!mode || !orderIds) {
       return NextResponse.json(
         { error: 'mode and orderIds are required.' },
         { status: 400, headers: withRequestIdHeaders(requestId) },

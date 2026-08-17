@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { aiProposals } from '@bric/db/schema';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { eq } from 'drizzle-orm';
 import {
   AiAdminCapabilityError,
@@ -23,8 +24,8 @@ const requestSchema = z.object({ action: z.enum(['approve', 'reject']) });
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
-  const proposalId = Number((await params).id);
-  if (!parsed.success || !Number.isSafeInteger(proposalId) || proposalId <= 0)
+  const proposalId = parsePositiveIntegerId((await params).id);
+  if (!parsed.success || proposalId === null)
     return NextResponse.json({ error: 'Invalid proposal review request.' }, { status: 400 });
   const denied = await requireAiAccess(
     parsed.data.action === 'approve' ? 'ai_catalog_apply' : 'ai_catalog_propose',

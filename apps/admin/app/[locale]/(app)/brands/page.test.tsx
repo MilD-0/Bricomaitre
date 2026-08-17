@@ -10,7 +10,7 @@ vi.mock('next-intl/server', () => ({
   getTranslations: getTranslationsMock,
 }));
 
-vi.mock('../../../../components/brands-categories-manager', () => ({
+vi.mock('../../../../components/brands-categories/brands-manager', () => ({
   BrandsManager: () => <div>BrandsManager</div>,
 }));
 

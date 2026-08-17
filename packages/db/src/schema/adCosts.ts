@@ -8,6 +8,7 @@ import {
   unique,
   index,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { adminSchema } from './namespaces';
 
 export const adSpendImportBatches = adminSchema.table('ad_spend_import_batches', {
@@ -48,5 +49,8 @@ export const adCosts = adminSchema.table(
   (t) => [
     unique('uq_ad_costs_date_platform_campaign').on(t.date, t.platform, t.campaignName),
     index('idx_ad_costs_date').on(t.date),
+    index('idx_ad_costs_import_batch')
+      .on(t.importBatchId)
+      .where(sql`${t.importBatchId} is not null`),
   ],
 );

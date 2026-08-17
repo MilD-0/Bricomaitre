@@ -107,6 +107,22 @@ describe('app/api/assets/route', () => {
     expect(getDbMock).not.toHaveBeenCalled();
   });
 
+  it('returns 400 for structurally invalid request envelopes', async () => {
+    hasDbMock.mockReturnValue(true);
+
+    const req = new NextRequest('http://localhost/api/assets', {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'banner' }),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'Invalid JSON request body' });
+    expect(getDbMock).not.toHaveBeenCalled();
+  });
+
   it('creates a banner via action history with assets RBAC', async () => {
     hasDbMock.mockReturnValue(true);
     const db = { marker: 'db' };

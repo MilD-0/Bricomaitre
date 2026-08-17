@@ -6,13 +6,17 @@ import {
   analyticsEvents,
   analyticsJourneys,
   analyticsPaidClickVisits,
+  analyticsSessions,
   brands,
   categories,
   orders,
   products,
 } from '@bric/db/schema';
+import { classifyAcquisition } from './acquisition';
 
 type Database = ReturnType<typeof getDb>;
+
+export const ANALYTICS_CLIENT_TIMESTAMP_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const nullableTrimmedString = (max: number) =>
   z
@@ -62,13 +66,17 @@ const analyticsItemSchema = z.object({
   price: nullablePositiveNumber,
 });
 
+export function normalizeAnalyticsOccurredAt(value: string, now = new Date()) {
+  const occurredAt = Date.parse(value);
+  const tooOld = occurredAt < now.getTime() - ANALYTICS_CLIENT_TIMESTAMP_MAX_AGE_MS;
+  const inFuture = occurredAt > now.getTime();
+  return tooOld || inFuture ? now.toISOString() : value;
+}
+
 const analyticsOccurredAtSchema = z
   .string()
   .datetime({ offset: true })
-  .transform((value) => {
-    const now = new Date();
-    return Date.parse(value) > now.getTime() ? now.toISOString() : value;
-  });
+  .transform((value) => normalizeAnalyticsOccurredAt(value));
 
 export const storefrontAnalyticsEventNameSchema = z.enum([
   'session_start',
@@ -147,6 +155,98 @@ function getMetadataString(metadata: Record<string, unknown>, key: string) {
 function getMetadataBoolean(metadata: Record<string, unknown>, key: string) {
   const value = metadata[key];
   return typeof value === 'boolean' ? value : null;
+}
+
+function getSessionStartedAt(event: StorefrontAnalyticsEvent, occurredAt: Date) {
+  const value = getMetadataString(event.metadata, 'sessionStartedAt');
+  const parsed = value ? Date.parse(value) : Number.NaN;
+  if (
+    !Number.isFinite(parsed) ||
+    parsed > occurredAt.getTime() ||
+    parsed < occurredAt.getTime() - ANALYTICS_CLIENT_TIMESTAMP_MAX_AGE_MS
+  ) {
+    return occurredAt;
+  }
+  return new Date(parsed);
+}
+
+function getReferrerDomain(value: string | null) {
+  if (!value) return null;
+  try {
+    return new URL(value).hostname.toLowerCase().replace(/^www\./, '') || null;
+  } catch {
+    return null;
+  }
+}
+
+function classifyEventAcquisition(event: StorefrontAnalyticsEvent) {
+  return classifyAcquisition({
+    utmSource: event.utmSource,
+    utmMedium: event.utmMedium,
+    referrer: event.referrer,
+    hasMetaClickId: getMetadataBoolean(event.metadata, 'hasMetaClickId') === true,
+    hasGoogleClickId: getMetadataBoolean(event.metadata, 'hasGoogleClickId') === true,
+    hasTikTokClickId: getMetadataBoolean(event.metadata, 'hasTikTokClickId') === true,
+  });
+}
+
+async function upsertAnalyticsSession(
+  tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+  event: StorefrontAnalyticsEvent,
+  occurredAt: Date,
+) {
+  const startedAt = getSessionStartedAt(event, occurredAt);
+  const classification = classifyEventAcquisition(event);
+  const earlierEntry = sql`${analyticsSessions.startedAt} > ${startedAt}`;
+  const now = new Date();
+  await tx
+    .insert(analyticsSessions)
+    .values({
+      id: event.sessionId,
+      journeyId: event.journeyId,
+      visitId: event.visitId,
+      startedAt,
+      lastSeenAt: occurredAt,
+      entryPath: event.pagePath ?? '/',
+      referrerDomain: getReferrerDomain(event.referrer),
+      utmSource: event.utmSource,
+      utmMedium: event.utmMedium,
+      utmCampaign: event.utmCampaign,
+      utmTerm: event.utmTerm,
+      utmContent: event.utmContent,
+      channel: classification.channel,
+      evidence: classification.evidence,
+      hasMetaClickId: getMetadataBoolean(event.metadata, 'hasMetaClickId') === true,
+      hasGoogleClickId: getMetadataBoolean(event.metadata, 'hasGoogleClickId') === true,
+      hasTikTokClickId: getMetadataBoolean(event.metadata, 'hasTikTokClickId') === true,
+      locale: event.locale,
+      viewportClass: getMetadataString(event.metadata, 'viewportClass'),
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: analyticsSessions.id,
+      set: {
+        startedAt: sql`least(${analyticsSessions.startedAt}, ${startedAt})`,
+        lastSeenAt: sql`greatest(${analyticsSessions.lastSeenAt}, ${occurredAt})`,
+        visitId: sql`case when ${earlierEntry} then ${event.visitId} else ${analyticsSessions.visitId} end`,
+        entryPath: sql`case when ${earlierEntry} then ${event.pagePath ?? '/'} else ${analyticsSessions.entryPath} end`,
+        referrerDomain: sql`case when ${earlierEntry} then ${getReferrerDomain(event.referrer)} else ${analyticsSessions.referrerDomain} end`,
+        utmSource: sql`case when ${earlierEntry} then ${event.utmSource} else ${analyticsSessions.utmSource} end`,
+        utmMedium: sql`case when ${earlierEntry} then ${event.utmMedium} else ${analyticsSessions.utmMedium} end`,
+        utmCampaign: sql`case when ${earlierEntry} then ${event.utmCampaign} else ${analyticsSessions.utmCampaign} end`,
+        utmTerm: sql`case when ${earlierEntry} then ${event.utmTerm} else ${analyticsSessions.utmTerm} end`,
+        utmContent: sql`case when ${earlierEntry} then ${event.utmContent} else ${analyticsSessions.utmContent} end`,
+        channel: sql`case when ${earlierEntry} then ${classification.channel} else ${analyticsSessions.channel} end`,
+        evidence: sql`case when ${earlierEntry} then ${classification.evidence} else ${analyticsSessions.evidence} end`,
+        hasMetaClickId: sql`case when ${earlierEntry} then ${getMetadataBoolean(event.metadata, 'hasMetaClickId') === true} else ${analyticsSessions.hasMetaClickId} end`,
+        hasGoogleClickId: sql`case when ${earlierEntry} then ${getMetadataBoolean(event.metadata, 'hasGoogleClickId') === true} else ${analyticsSessions.hasGoogleClickId} end`,
+        hasTikTokClickId: sql`case when ${earlierEntry} then ${getMetadataBoolean(event.metadata, 'hasTikTokClickId') === true} else ${analyticsSessions.hasTikTokClickId} end`,
+        locale: sql`case when ${earlierEntry} then ${event.locale} else coalesce(${analyticsSessions.locale}, ${event.locale}) end`,
+        viewportClass: sql`case when ${earlierEntry} then ${getMetadataString(event.metadata, 'viewportClass')} else coalesce(${analyticsSessions.viewportClass}, ${getMetadataString(event.metadata, 'viewportClass')}) end`,
+        updatedAt: now,
+      },
+    });
 }
 
 function compactMetaTracking(value: unknown) {
@@ -236,37 +336,11 @@ function getLandingQuery(url: URL | null) {
   return query;
 }
 
-function isMetaPaidMedium(value: string | null) {
-  if (!value) {
-    return false;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  return ['cpc', 'ppc', 'paid', 'paid_social', 'social_paid', 'cpv', 'cpm'].some((item) =>
-    normalized.includes(item),
-  );
-}
-
 function classifyPaidSource(event: StorefrontAnalyticsEvent) {
-  const metadata = event.metadata;
-  const pageUrl = getEventPageUrl(event);
-  const fbclid = pageUrl?.searchParams.get('fbclid')?.trim();
-  if (fbclid) {
-    return 'fbclid' as const;
-  }
-
-  if (
-    event.utmSource &&
-    ['fb', 'facebook', 'meta'].includes(event.utmSource.toLowerCase()) &&
-    isMetaPaidMedium(event.utmMedium)
-  ) {
-    return 'meta_utm' as const;
-  }
-
-  if (getMetadataBoolean(metadata, 'paidClickCookie')) {
-    return 'unknown' as const;
-  }
-
+  const classification = classifyEventAcquisition(event);
+  if (classification.channel === 'meta_paid') return 'meta_utm' as const;
+  if (classification.channel === 'google_paid') return 'google_click' as const;
+  if (classification.evidence === 'tiktok_click_id') return 'tiktok_click' as const;
   return null;
 }
 
@@ -299,7 +373,7 @@ async function upsertPaidClickVisit(
         lastSeenAt: occurredAt,
         landingUrl:
           getMetadataString(metadata, 'landingUrl') ?? pageUrl?.toString() ?? event.pagePath ?? '/',
-        landingPath: pageUrl ? `${pageUrl.pathname}${pageUrl.search}` : (event.pagePath ?? '/'),
+        landingPath: pageUrl?.pathname || '/',
         landingQuery: getLandingQuery(pageUrl),
         landingHost: getMetadataString(metadata, 'landingHost') ?? pageUrl?.host ?? null,
         referrer: event.referrer,
@@ -327,7 +401,7 @@ async function upsertPaidClickVisit(
       .onConflictDoUpdate({
         target: analyticsPaidClickVisits.visitId,
         set: {
-          lastSeenAt: occurredAt,
+          lastSeenAt: sql`greatest(${analyticsPaidClickVisits.lastSeenAt}, ${occurredAt})`,
           referrer: event.referrer ?? sql`${analyticsPaidClickVisits.referrer}`,
           fbclidRaw: fbclidRaw ?? sql`${analyticsPaidClickVisits.fbclidRaw}`,
           fbc: getMetadataString(metadata, 'fbc') ?? sql`${analyticsPaidClickVisits.fbc}`,
@@ -336,14 +410,7 @@ async function upsertPaidClickVisit(
           utmCampaign: sql`coalesce(${analyticsPaidClickVisits.utmCampaign}, ${event.utmCampaign})`,
           utmTerm: sql`coalesce(${analyticsPaidClickVisits.utmTerm}, ${event.utmTerm})`,
           utmContent: sql`coalesce(${analyticsPaidClickVisits.utmContent}, ${event.utmContent})`,
-          paidSource:
-            paidSource === 'unknown'
-              ? sql`case
-                when ${analyticsPaidClickVisits.paidSource} in ('fbclid', 'meta_utm')
-                  then ${analyticsPaidClickVisits.paidSource}
-                else 'unknown'
-              end`
-              : paidSource,
+          paidSource,
           journeyId: sql`coalesce(${analyticsPaidClickVisits.journeyId}, ${event.journeyId})`,
           sessionId: sql`coalesce(${analyticsPaidClickVisits.sessionId}, ${event.sessionId})`,
           orderId: sql`coalesce(${analyticsPaidClickVisits.orderId}, ${event.orderId})`,
@@ -560,10 +627,10 @@ export async function ingestStorefrontAnalyticsEvent(
       .onConflictDoUpdate({
         target: analyticsJourneys.id,
         set: {
-          lastSeenAt: occurredAt,
+          lastSeenAt: sql`greatest(${analyticsJourneys.lastSeenAt}, ${occurredAt})`,
           lastPath: event.pagePath ?? sql`${analyticsJourneys.lastPath}`,
           locale: event.locale ?? sql`${analyticsJourneys.locale}`,
-          referrer: event.referrer ?? sql`${analyticsJourneys.referrer}`,
+          referrer: sql`coalesce(${analyticsJourneys.referrer}, ${event.referrer})`,
           utmSource: sql`coalesce(${analyticsJourneys.utmSource}, ${event.utmSource})`,
           utmMedium: sql`coalesce(${analyticsJourneys.utmMedium}, ${event.utmMedium})`,
           utmCampaign: sql`coalesce(${analyticsJourneys.utmCampaign}, ${event.utmCampaign})`,
@@ -612,6 +679,7 @@ export async function ingestStorefrontAnalyticsEvent(
       return { ok: true as const, deduped: true };
     }
 
+    await upsertAnalyticsSession(tx, event, occurredAt);
     await upsertPaidClickVisit(tx, event, occurredAt);
 
     if (event.eventName === 'purchase') {

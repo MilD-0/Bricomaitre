@@ -21,7 +21,6 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { region, bucket, cloudfrontDomain } = ensureS3UploadConfig();
     const requestLengthError = validateBulletinRequestLength(req);
     if (requestLengthError) {
       return NextResponse.json(
@@ -54,6 +53,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const { region, bucket, cloudfrontDomain } = ensureS3UploadConfig();
     const client = getS3UploadClient(region);
     const uploadedFiles: Array<{
       fileName: string;

@@ -1,5 +1,6 @@
 export * from './order-records';
 export * from './storefront/analytics';
+export * from './storefront/acquisition';
 export * from './storefront/assets';
 export * from './storefront/landing-pages';
 export * from './storefront/landing-page-records';

@@ -66,18 +66,6 @@ vi.mock('./manual-order-form', () => ({
     mode === 'inline' || open ? <div>manual-order-form</div> : null,
 }));
 
-vi.mock('./ad-costs-manager', () => ({
-  AdCostsManager: ({
-    range,
-    startDate,
-    endDate,
-  }: {
-    range: string;
-    startDate?: string;
-    endDate?: string;
-  }) => <div>{`ad-costs-manager:${range}:${startDate ?? ''}:${endDate ?? ''}`}</div>,
-}));
-
 vi.mock('next-intl', () => ({
   useLocale: () => 'en',
   useTranslations: () => (key: string, values?: Record<string, string | number>) => {
@@ -201,6 +189,75 @@ const baseResponse = {
         conversionRate: 10,
         topCampaigns: [{ name: 'Meta tools', visits: 80, orders: 12, purchases: 8 }],
       },
+      commerce: {
+        summary: {
+          accountCurrency: 'EUR',
+          spend: 1200,
+          impressions: 20000,
+          metaClicks: 900,
+          metaLandingPageViews: 700,
+          metaPurchases: 14,
+          metaPurchaseValue: 2200,
+          bricOrders: 18,
+          confirmedOrders: 12,
+          dispatchedOrders: 10,
+          completedOrders: 8,
+          cancelledOrders: 2,
+          negativeOutcomeOrders: 1,
+          paidOrders: 7,
+          returnedOrders: 1,
+          submittedValueDzd: 144000,
+          costCompleteOrders: 18,
+          settledOrders: 7,
+          amountCollectedDzd: 110000,
+          netRevenueDzd: 95000,
+          metaSyncedAt: '2026-03-30T12:00:00.000Z',
+        },
+        rows: [
+          {
+            day: '2026-03-30',
+            accountCurrency: 'EUR',
+            campaignId: 'campaign-1',
+            campaignName: 'Tool launch',
+            adsetId: 'adset-1',
+            adsetName: 'Prospecting',
+            adId: 'ad-1',
+            adName: 'Cordless drill video',
+            spend: 1200,
+            impressions: 20000,
+            metaClicks: 900,
+            metaLandingPageViews: 700,
+            metaPurchases: 14,
+            metaPurchaseValue: 2200,
+            bricOrders: 18,
+            confirmedOrders: 12,
+            dispatchedOrders: 10,
+            completedOrders: 8,
+            cancelledOrders: 2,
+            negativeOutcomeOrders: 1,
+            paidOrders: 7,
+            returnedOrders: 1,
+            submittedValueDzd: 144000,
+            costCompleteOrders: 18,
+            estimatedProductCostDzd: null,
+            estimatedDeliveryFeesDzd: 9000,
+            settledOrders: 7,
+            amountCollectedDzd: 110000,
+            netRevenueDzd: 95000,
+            realizedProfitDzd: null,
+            metaSyncedAt: '2026-03-30T12:00:00.000Z',
+          },
+        ],
+        sync: {
+          status: 'succeeded',
+          sinceDay: '2026-03-01',
+          untilDay: '2026-03-30',
+          rowsUpserted: 30,
+          errorCode: null,
+          startedAt: '2026-03-30T11:59:00.000Z',
+          completedAt: '2026-03-30T12:00:00.000Z',
+        },
+      },
     },
     website: {
       sessions: 1200,
@@ -247,8 +304,16 @@ const baseResponse = {
       vitals: [
         { name: 'LCP', samples: 100, average: 2200, good: 75, needsImprovement: 20, poor: 5 },
       ],
-      errors: [{ name: 'upstream_timeout', count: 5, lastSeenAt: '2026-03-30T11:45:00.000Z' }],
-      referrers: [{ name: 'Direct', sessions: 500 }],
+      acquisitionSources: [
+        {
+          name: 'direct_dark_social',
+          sessions: 500,
+          orders: 20,
+          successfulOrders: 14,
+          conversionRate: 4,
+        },
+      ],
+      acquisitionCoverageStartsAt: '2026-03-01T00:00:00.000Z',
       trend: [{ bucket: '2026-03-30', sessions: 120, pageViews: 480, purchases: 7, errors: 1 }],
     },
     landingPages: {
@@ -329,6 +394,14 @@ const baseResponse = {
         resultClicks: 10,
         errors: 2,
         clickThroughRate: 40,
+        influencedOrders: 8,
+        confirmedOrders: 5,
+        completedOrders: 3,
+        paidOrders: 2,
+        recommendedProductOrders: 4,
+        submittedValueDzd: 80000,
+        confirmationRate: 62.5,
+        usageCoverageStartsAt: '2026-03-01T00:00:00.000Z',
         topIntents: [{ name: 'product_search', messages: 12 }],
       },
     },
@@ -609,12 +682,12 @@ describe('StatsDashboard', () => {
     renderDashboard('products');
 
     expect((await screen.findAllByText('Stats')).length).toBeGreaterThan(0);
-    expect(await screen.findByText('Product 1')).toBeInTheDocument();
+    expect((await screen.findAllByText('Product 1')).length).toBeGreaterThan(0);
     expect(screen.queryByText('Product 11')).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'labels.goToPage:2' }));
 
-    expect(await screen.findByText('Product 11')).toBeInTheDocument();
+    expect((await screen.findAllByText('Product 11')).length).toBeGreaterThan(0);
   });
 
   it('renders the meta ads stats page', async () => {
@@ -627,24 +700,160 @@ describe('StatsDashboard', () => {
     renderDashboard('metaAds');
 
     expect((await screen.findAllByText('Stats')).length).toBeGreaterThan(0);
-    expect(screen.getByText('metaAds.performanceTitle')).toBeInTheDocument();
-    expect(screen.getByText('ad-costs-manager:90d::')).toBeInTheDocument();
+    const attributionHeading = screen.getByText('metaAds.attribution.title');
+    const providerHeading = screen.getByText('metaAds.integrated.title');
+    expect(
+      attributionHeading.compareDocumentPosition(providerHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByText('metaAds.attribution.description')).toBeInTheDocument();
+    expect(screen.getByText('metaAds.integrated.title')).toBeInTheDocument();
+    expect(screen.getByText('metaAds.integrated.description')).toBeInTheDocument();
+    expect(screen.getByText('Cordless drill video')).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
 
     const totalSpendCard = screen
-      .getByText('overview.adPerformance.totalSpend')
+      .getByText('metaAds.integrated.cards.spend')
       .closest('div[class*="min-w-0"]')?.parentElement?.parentElement;
     expect(totalSpendCard?.firstElementChild).toHaveClass('bg-primary');
   });
 
+  it('keeps first-party Meta evidence useful when direct Insights is not configured', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const withoutDirectInsights = {
+      ...baseResponse.data,
+      metaAds: {
+        ...baseResponse.data.metaAds,
+        commerce: {
+          ...baseResponse.data.metaAds.commerce,
+          summary: {
+            ...baseResponse.data.metaAds.commerce.summary,
+            accountCurrency: null,
+            spend: 0,
+            metaClicks: 0,
+          },
+          rows: [],
+          sync: null,
+        },
+      },
+    };
+
+    renderDashboard('metaAds', withoutDirectInsights);
+
+    expect(await screen.findByText('metaAds.attribution.title')).toBeInTheDocument();
+    expect(screen.getByText('metaAds.integrated.emptyTitle')).toBeInTheDocument();
+    expect(screen.queryByText('metaAds.integrated.cards.spend')).not.toBeInTheDocument();
+    expect(screen.queryByText('website.channels.direct_dark_social')).not.toBeInTheDocument();
+  });
+
+  it('presents website analytics as a mobile-safe decision dashboard', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const user = userEvent.setup();
+
+    const { container } = renderDashboard('website', baseResponse.data);
+
+    expect(await screen.findByText('website.audienceTitle')).toBeInTheDocument();
+    expect(screen.getByText('website.cards.orders')).toBeInTheDocument();
+    expect(screen.getByText('website.cards.orderRate')).toBeInTheDocument();
+    expect(screen.queryByText('website.commerce.description')).not.toBeInTheDocument();
+    expect(screen.queryByText('website.acquisitionDescription')).not.toBeInTheDocument();
+    expect(screen.queryByText('website.errorsTitle')).not.toBeInTheDocument();
+    expect(screen.getByText('website.pageTypes.catalog')).toBeInTheDocument();
+    expect(screen.getByText('website.devicesMap.mobile')).toBeInTheDocument();
+    expect(screen.queryByText('website.cards.purchaseRate')).not.toBeInTheDocument();
+
+    const sectionCards = container.querySelectorAll('[data-slot="stats-section-card"]');
+    expect(sectionCards.length).toBeGreaterThan(0);
+    sectionCards.forEach((card) => {
+      expect(card).toHaveClass('min-w-0', 'max-w-full');
+    });
+
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+
+    const ordersTrend = screen.getByRole('button', {
+      name: 'website.trendMetrics.orders',
+    });
+    expect(ordersTrend).toHaveAttribute('aria-pressed', 'false');
+    await user.click(ordersTrend);
+    expect(ordersTrend).toHaveAttribute('aria-pressed', 'true');
+
+    const productTitle = screen.getByRole('heading', { name: 'Cordless Drill' });
+    expect(productTitle).toHaveClass('break-words');
+    expect(productTitle.closest('article')).toHaveClass('min-w-0');
+  });
+
+  it('shows source rates for the evidence window when a wider range predates coverage', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const partialCoverage = {
+      ...baseResponse.data,
+      website: {
+        ...baseResponse.data.website,
+        acquisitionCoverageStartsAt: '2026-03-15T00:00:00.000Z',
+      },
+    };
+
+    renderDashboard('website', partialCoverage);
+
+    expect(await screen.findByText(/^website\.acquisitionCoverage:/)).toBeInTheDocument();
+    expect(screen.queryByText('website.acquisitionRateUnavailable')).not.toBeInTheDocument();
+  });
+
+  it.each(['landingPages', 'customers', 'products', 'geography', 'time'] as const)(
+    'uses mobile record cards instead of wide tables on the %s analytics page',
+    async (section) => {
+      vi.stubGlobal('fetch', vi.fn());
+      const data =
+        section === 'geography'
+          ? {
+              ...baseResponse.data,
+              wilayaDetails: baseResponse.data.wilayaDetails.map((item) => ({
+                ...item,
+                orders: 15,
+              })),
+            }
+          : baseResponse.data;
+      const { container } = renderDashboard(section, data);
+
+      expect(await screen.findAllByText('Stats')).not.toHaveLength(0);
+      const mobileCards = container.querySelectorAll('[data-slot="stats-mobile-breakdown"]');
+      expect(mobileCards.length).toBeGreaterThan(0);
+      mobileCards.forEach((card) => expect(card.parentElement).toHaveClass('md:hidden'));
+      screen.getAllByRole('table').forEach((table) => {
+        expect(table.parentElement).toHaveClass('overflow-x-auto', 'md:block');
+      });
+    },
+  );
+
+  it('distinguishes live order counts from lagging courier financial coverage', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => baseResponse }));
+    const laggingData = {
+      ...baseResponse.data,
+      snapshot: {
+        generatedAt: '2026-08-17T02:11:00.000Z',
+        staleAt: '2026-08-18T02:11:00.000Z',
+        isStale: false,
+        trigger: 'daily-schedule',
+        sourceImportBatchId: null,
+        reportThroughDate: '2026-06-30',
+        financialDataIsLagging: true,
+      },
+    };
+
+    renderDashboard('overview', laggingData);
+
+    expect(await screen.findByText('snapshotMeta.financialLagTitle')).toBeInTheDocument();
+    expect(screen.getByText(/^snapshotMeta\.financialLagDescription:/)).toBeInTheDocument();
+  });
+
   it.each([
     ['landingPages', 'landingPages.performanceTitle', 'drill-offer'],
-    ['aiAssistants', 'aiAssistants.admin.title', 'aiAssistants.storefront.title'],
+    ['aiAssistants', 'aiAssistants.storefront.impactTitle', 'aiAssistants.admin.title'],
     ['customers', 'customers.rankingTitle', '0555000000'],
   ] as const)('renders the %s stats page', async (section, heading, detail) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => baseResponse }));
     renderDashboard(section);
     expect(await screen.findByText(heading)).toBeInTheDocument();
-    expect(await screen.findByText(detail)).toBeInTheDocument();
+    expect((await screen.findAllByText(detail)).length).toBeGreaterThan(0);
   });
 
   it('always refreshes the AI assistant section instead of retaining stale zero metrics', async () => {
@@ -662,6 +871,43 @@ describe('StatsDashboard', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/stats?range=90d', undefined));
     expect(await screen.findByText('83.3%')).toBeInTheDocument();
+  });
+
+  it('prioritizes shopper impact over admin assistant operations', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    renderDashboard('aiAssistants', baseResponse.data);
+
+    const impactHeading = await screen.findByText('aiAssistants.storefront.impactTitle');
+    const adminHeading = screen.getByText('aiAssistants.admin.title');
+    expect(
+      impactHeading.compareDocumentPosition(adminHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByText('aiAssistants.cards.submittedValue')).toBeInTheDocument();
+    expect(screen.queryByText('aiAssistants.cards.influenceShare')).not.toBeInTheDocument();
+    expect(screen.getByText('aiAssistants.admin.modelsTitle')).toBeInTheDocument();
+    expect(screen.queryByText('aiAssistants.storefront.modelsTitle')).not.toBeInTheDocument();
+  });
+
+  it('keeps partial assistant coverage out of the presentation copy', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const partialCoverage = {
+      ...baseResponse.data,
+      aiAssistants: {
+        ...baseResponse.data.aiAssistants,
+        storefront: {
+          ...baseResponse.data.aiAssistants.storefront,
+          usageCoverageStartsAt: '2026-03-15T00:00:00.000Z',
+        },
+      },
+    };
+
+    renderDashboard('aiAssistants', partialCoverage);
+
+    expect(await screen.findByText('aiAssistants.storefront.impactTitle')).toBeInTheDocument();
+    expect(screen.queryByText('aiAssistants.storefront.coverage')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('aiAssistants.storefront.coverageRateUnavailable'),
+    ).not.toBeInTheDocument();
   });
 
   it('explains zero storefront assistant metrics when the feature is disabled', async () => {

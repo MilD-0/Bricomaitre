@@ -1,8 +1,11 @@
 import '@testing-library/jest-dom/vitest';
+import { configure } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, vi } from 'vitest';
 
 import { server } from '../mocks/server';
 import './node';
+
+configure({ asyncUtilTimeout: 5_000 });
 
 function createMemoryStorage(): Storage {
   const store = new Map<string, string>();

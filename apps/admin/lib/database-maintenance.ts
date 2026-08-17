@@ -1,4 +1,5 @@
 import {
+  PAID_CLICK_ROLLUP_NORMALIZATION_BATCH_DAYS,
   runStorefrontDataMaintenanceBatch,
   STOREFRONT_MAINTENANCE_BATCH_SIZE,
 } from '@bric/storefront-core/maintenance';
@@ -119,12 +120,16 @@ export async function runDatabaseMaintenance({
     actionLogs: 0,
     reportingSnapshots: 0,
     reportingRuns: 0,
+    orderAcquisitionBackfilled: 0,
+    orderAiInfluenceBackfilled: 0,
+    paidClickNormalizedDays: 0,
     paidClicks: 0,
     paidClickDaysRolledUp: 0,
     metaOutbox: 0,
     marketingOutbox: 0,
     metaErrorsCompacted: 0,
     analyticsEvents: 0,
+    analyticsSessions: 0,
     analyticsErrorsCompacted: 0,
     analyticsJourneysCompacted: 0,
     analyticsJourneys: 0,
@@ -142,6 +147,9 @@ export async function runDatabaseMaintenance({
     totals.actionLogs += actionLogCount;
     totals.reportingSnapshots += reportingSnapshotCount;
     totals.reportingRuns += reportingRunCount;
+    totals.orderAcquisitionBackfilled += storefront.orderAcquisitionBackfilled;
+    totals.orderAiInfluenceBackfilled += storefront.orderAiInfluenceBackfilled;
+    totals.paidClickNormalizedDays += storefront.paidClickNormalizedDays.length;
     totals.paidClicks += storefront.paidClicks;
     totals.paidClickDaysRolledUp += storefront.paidClickRolledUpDay ? 1 : 0;
     totals.metaOutbox += storefront.metaOutbox;
@@ -150,6 +158,7 @@ export async function runDatabaseMaintenance({
     totals.metaDaysRolledUp += storefront.metaRolledUpDay ? 1 : 0;
     totals.orderIdempotency += storefront.orderIdempotency;
     totals.analyticsEvents += storefront.analyticsEvents;
+    totals.analyticsSessions += storefront.analyticsSessions;
     totals.analyticsErrorsCompacted += storefront.analyticsErrorsCompacted;
     totals.analyticsJourneysCompacted += storefront.analyticsJourneysCompacted;
     totals.analyticsJourneys += storefront.analyticsJourneys;
@@ -159,11 +168,15 @@ export async function runDatabaseMaintenance({
       actionLogCount < limit &&
       reportingSnapshotCount < limit &&
       reportingRunCount < limit &&
+      storefront.orderAcquisitionBackfilled < limit &&
+      storefront.orderAiInfluenceBackfilled < limit &&
+      storefront.paidClickNormalizedDays.length < PAID_CLICK_ROLLUP_NORMALIZATION_BATCH_DAYS &&
       storefront.paidClicks < limit &&
       storefront.metaErrorsCompacted < limit &&
       storefront.metaOutbox < limit &&
       storefront.marketingOutbox < limit &&
       storefront.analyticsEvents < limit &&
+      storefront.analyticsSessions < limit &&
       storefront.analyticsErrorsCompacted < limit &&
       storefront.analyticsJourneysCompacted < limit &&
       storefront.analyticsJourneys < limit &&

@@ -40,12 +40,16 @@ describe('production Nginx renderer', () => {
       expect(rendered).toContain('ssl_reject_handshake on;');
       expect(rendered).toContain('location ^~ /.well-known/acme-challenge/');
       expect(rendered).toContain('proxy_pass http://storefront-api-green:3001;');
+      expect(rendered).toContain('proxy_pass http://admin-green:3000;');
       expect(rendered).toContain('proxy_pass http://storefront-green:3002;');
       expect(rendered.match(/client_max_body_size 1m;/g)).toHaveLength(2);
       expect(rendered).toContain('client_max_body_size 50m;');
       expect(rendered.match(/if \(\$http_next_action != ''\)/g)).toHaveLength(2);
-      expect(rendered.match(/proxy_set_header X-Request-ID \$request_id;/g)).toHaveLength(5);
+      expect(rendered.match(/proxy_set_header X-Request-ID \$request_id;/g)).toHaveLength(3);
+      expect(rendered.match(/proxy_hide_header X-Request-ID;/g)).toHaveLength(3);
       expect(rendered.match(/add_header X-Request-ID \$request_id always;/g)).toHaveLength(3);
+      expect(rendered).not.toContain('location = /api/capi');
+      expect(rendered).not.toContain('location = /api/meta/events');
     } finally {
       rmSync(outputDirectory, { recursive: true, force: true });
     }

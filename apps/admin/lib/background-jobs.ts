@@ -13,10 +13,6 @@ import {
   startOwnedJob,
   type JobSnapshot,
 } from '@bric/runtime/jobs';
-import {
-  storefrontAnalyticsEventSchema,
-  ingestStorefrontAnalyticsEvent,
-} from '@bric/storefront-core/analytics';
 import { getOrderProductLookup, toOrderRecord } from '@bric/storefront-core/order-records';
 
 import { getDb } from '@bric/db/client';
@@ -53,11 +49,9 @@ import {
   type EcotrackCatalogExportData,
 } from './order-export';
 import type { OrderStatusHistoryRecord } from './orders';
-import {
-  importAdCostsSpreadsheet,
-  importStatsSpreadsheet,
-  refreshAdminReportingSnapshots,
-} from './stats';
+import { importAdCostsSpreadsheet } from './stats-ad-costs';
+import { importStatsSpreadsheet } from './stats-order-import';
+import { refreshAdminReportingSnapshots } from './stats';
 import { proposeProductContent, reviewProductContentProposal } from './ai-product-content';
 import { proposeEntityEdit, reviewAdminProposal } from './ai-admin-capabilities';
 
@@ -70,7 +64,6 @@ export const ADMIN_AD_COST_IMPORT_QUEUE = 'admin-ad-cost-import';
 export const ADMIN_REPORTING_REFRESH_QUEUE = 'admin-reporting-refresh';
 export const ADMIN_ECOTRACK_SYNC_QUEUE = 'admin-ecotrack-sync';
 export const ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE = 'admin-ecotrack-shipment-sync';
-export const STOREFRONT_ANALYTICS_QUEUE = 'storefront-analytics';
 export const ADMIN_AI_CONTENT_QUEUE = 'admin-ai-content';
 export const ADMIN_AI_CATEGORIZATION_QUEUE = 'admin-ai-categorization';
 
@@ -159,9 +152,6 @@ type EcotrackShipmentSyncPayload = QueueJobMeta &
       name?: string | null;
     };
   };
-type AnalyticsPayload = {
-  event: ReturnType<typeof storefrontAnalyticsEventSchema.parse>;
-};
 export type AiContentPayload = QueueJobMeta &
   AiTaskContext & {
     productIds: number[] | null;
@@ -1402,8 +1392,4 @@ export async function runEcotrackShipmentSyncJob(
   };
   await helpers.updateSummary(summary);
   return summary;
-}
-
-export async function runAnalyticsJob(payload: AnalyticsPayload) {
-  return ingestStorefrontAnalyticsEvent(getDb(), payload.event);
 }

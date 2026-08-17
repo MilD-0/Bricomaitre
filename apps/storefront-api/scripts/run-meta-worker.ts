@@ -1,6 +1,12 @@
 import * as Sentry from '@sentry/node';
+import { createLightweightQueueWorker } from '@bric/runtime/jobs';
+import { writeWorkerHeartbeat } from '@bric/runtime/worker-heartbeat';
 
 import { getDb } from '@bric/db/client';
+import {
+  ingestStorefrontAnalyticsEvent,
+  type StorefrontAnalyticsEvent,
+} from '@bric/storefront-core/analytics';
 import {
   clearExpiredMetaAttribution,
   processMetaOutboxBatch,
@@ -17,6 +23,7 @@ import {
 const POLL_INTERVAL_MS = 1_000;
 const HEARTBEAT_INTERVAL_MS = 15_000;
 const RECONCILIATION_INTERVAL_MS = 60_000;
+const WORKER_HEARTBEAT_PATH = '/tmp/bric-storefront-meta-worker-heartbeat';
 
 Sentry.init({
   dsn: process.env.SENTRY_DSN_STOREFRONT_API?.trim() || undefined,
@@ -34,8 +41,15 @@ let stopping = false;
 let lastHeartbeatAt = 0;
 let lastReconciliationAt = 0;
 
+const analyticsWorker = createLightweightQueueWorker<{ event: StorefrontAnalyticsEvent }>(
+  'storefront-analytics',
+  ({ event }) => ingestStorefrontAnalyticsEvent(getDb(), event),
+  { concurrency: 8 },
+);
+
 async function run() {
   const db = getDb();
+  await analyticsWorker.waitUntilReady();
   console.log('[storefront-meta-worker] started');
 
   while (!stopping) {
@@ -64,6 +78,7 @@ async function run() {
           successfulDrain: true,
           reconciliationResult,
         });
+        await writeWorkerHeartbeat(WORKER_HEARTBEAT_PATH, cycleStartedAt);
         lastHeartbeatAt = cycleStartedAt;
       }
       if (drain.claimed >= 50 || marketingDrain.claimed >= 50) continue;
@@ -82,6 +97,7 @@ async function shutdown(signal: string) {
   if (stopping) return;
   stopping = true;
   console.log(`[storefront-meta-worker] stopping on ${signal}`);
+  await analyticsWorker.close();
   await Sentry.close(2_000);
 }
 

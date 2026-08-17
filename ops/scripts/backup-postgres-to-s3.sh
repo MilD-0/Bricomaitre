@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=load-infra-env.sh
 source "$(dirname "$0")/load-infra-env.sh"
 
 backup_s3_uri="${BACKUP_S3_URI:-}"

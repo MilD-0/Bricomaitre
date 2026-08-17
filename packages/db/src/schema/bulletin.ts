@@ -8,6 +8,7 @@ import {
   timestamp,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 import { users } from './auth';
 import { adminSchema } from './namespaces';
@@ -87,6 +88,9 @@ export const bulletinPostReactions = adminSchema.table(
   },
   (t) => [
     index('bulletin_post_reactions_post_id_idx').on(t.postId),
+    index('bulletin_post_reactions_user_id_idx')
+      .on(t.userId)
+      .where(sql`${t.userId} is not null`),
     uniqueIndex('bulletin_post_reactions_unique').on(t.postId, t.userEmail, t.emoji),
   ],
 );
@@ -107,6 +111,9 @@ export const bulletinReplyReactions = adminSchema.table(
   },
   (t) => [
     index('bulletin_reply_reactions_reply_id_idx').on(t.replyId),
+    index('bulletin_reply_reactions_user_id_idx')
+      .on(t.userId)
+      .where(sql`${t.userId} is not null`),
     uniqueIndex('bulletin_reply_reactions_unique').on(t.replyId, t.userEmail, t.emoji),
   ],
 );

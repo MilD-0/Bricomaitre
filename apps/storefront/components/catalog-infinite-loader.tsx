@@ -108,13 +108,13 @@ export function CatalogInfiniteLoader({
   };
 }) {
   const [items, setItems] = useState<CatalogProduct[]>([]);
-  const [page, setPage] = useState(query.page);
   const [hasNextPage, setHasNextPage] = useState(initialHasNextPage);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const restoringRef = useRef(true);
   const loadingRef = useRef(false);
+  const itemsRef = useRef<CatalogProduct[]>([]);
   const pageRef = useRef(query.page);
   const hasNextPageRef = useRef(initialHasNextPage);
 
@@ -123,6 +123,7 @@ export function CatalogInfiniteLoader({
     history.scrollRestoration = 'manual';
     const stored = readStoredState();
     if (!stored || stored.page < query.page || stored.totalCount !== totalCount) {
+      itemsRef.current = [];
       pageRef.current = query.page;
       hasNextPageRef.current = initialHasNextPage;
       restoringRef.current = false;
@@ -131,13 +132,11 @@ export function CatalogInfiniteLoader({
       };
     }
 
+    itemsRef.current = uniqueCatalogProducts(stored.items, initialProductIds);
     pageRef.current = stored.page;
     hasNextPageRef.current = stored.hasNextPage;
-    /* eslint-disable react-hooks/set-state-in-effect -- Scroll restoration must hydrate the saved list before restoring its position. */
-    setItems(uniqueCatalogProducts(stored.items, initialProductIds));
-    setPage(stored.page);
+    setItems(itemsRef.current);
     setHasNextPage(stored.hasNextPage);
-    /* eslint-enable react-hooks/set-state-in-effect */
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         window.scrollTo({ top: stored.scrollY, behavior: 'auto' });
@@ -155,9 +154,9 @@ export function CatalogInfiniteLoader({
     function persist() {
       if (restoringRef.current) return;
       writeStoredState({
-        items: items.slice(0, MAX_PERSISTED_ITEMS),
-        page,
-        hasNextPage,
+        items: itemsRef.current.slice(0, MAX_PERSISTED_ITEMS),
+        page: pageRef.current,
+        hasNextPage: hasNextPageRef.current,
         totalCount,
         scrollY: window.scrollY,
       });
@@ -174,7 +173,7 @@ export function CatalogInfiniteLoader({
       window.removeEventListener('scroll', handleScroll);
       window.removeEventListener('pagehide', persist);
     };
-  }, [hasNextPage, items, page, totalCount]);
+  }, [totalCount]);
 
   const loadNextPage = useCallback(async () => {
     if (loadingRef.current || !hasNextPageRef.current) return;
@@ -204,10 +203,10 @@ export function CatalogInfiniteLoader({
         ...items.map((item) => item.id),
       ]);
       const appendedItems = [...items, ...nextItems];
-      setItems(appendedItems);
+      itemsRef.current = appendedItems;
       pageRef.current = nextPage;
       hasNextPageRef.current = payload.hasNextPage;
-      setPage(nextPage);
+      setItems(appendedItems);
       setHasNextPage(payload.hasNextPage);
       writeStoredState({
         items: appendedItems.slice(0, MAX_PERSISTED_ITEMS),

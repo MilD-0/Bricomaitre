@@ -10,7 +10,6 @@ import {
   ADMIN_PRODUCT_EXPORT_QUEUE,
   ADMIN_REPORTING_REFRESH_QUEUE,
   ADMIN_STATS_IMPORT_QUEUE,
-  STOREFRONT_ANALYTICS_QUEUE,
   cancelBackgroundJob,
   getBackgroundJob,
   listRecentBackgroundJobs,
@@ -34,7 +33,6 @@ export const ADMIN_BACKGROUND_JOB_TYPES = [
   'reporting_refresh',
   'ecotrack_catalog_sync',
   'ecotrack_shipment_sync',
-  'storefront_analytics',
 ] as const;
 
 export type AdminBackgroundJobType = (typeof ADMIN_BACKGROUND_JOB_TYPES)[number];
@@ -71,7 +69,6 @@ const queueByType: Record<AdminBackgroundJobType, string> = {
   reporting_refresh: ADMIN_REPORTING_REFRESH_QUEUE,
   ecotrack_catalog_sync: ADMIN_ECOTRACK_SYNC_QUEUE,
   ecotrack_shipment_sync: ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE,
-  storefront_analytics: STOREFRONT_ANALYTICS_QUEUE,
 };
 
 const allAdminQueues = [...new Set(Object.values(queueByType))];

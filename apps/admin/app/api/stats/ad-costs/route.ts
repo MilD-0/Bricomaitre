@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { auth } from '../../../../lib/auth';
 import {
   adCostEntrySchema,
@@ -8,9 +9,9 @@ import {
   deleteAdSpendImportBatch,
   listAdCosts,
   listAdSpendImportBatches,
-  statsQuerySchema,
   upsertAdCostEntry,
-} from '../../../../lib/stats';
+} from '../../../../lib/stats-ad-costs';
+import { statsQuerySchema } from '../../../../lib/stats';
 import { requireOpsAccess } from '../../../../lib/rbac';
 import { triggerAdminReportingRefresh } from '../../../../lib/reporting-refresh-trigger';
 
@@ -81,9 +82,10 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ data: deleted });
   }
 
-  const id = request.nextUrl.searchParams.get('id')?.trim();
-  if (!id) {
-    return NextResponse.json({ error: 'id is required' }, { status: 400 });
+  const rawId = request.nextUrl.searchParams.get('id');
+  const id = parsePositiveIntegerId(rawId ?? '');
+  if (id === null) {
+    return NextResponse.json({ error: 'Invalid ad cost entry id' }, { status: 400 });
   }
 
   const session = await auth();

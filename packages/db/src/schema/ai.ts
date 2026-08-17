@@ -9,6 +9,7 @@ import {
   text,
   timestamp,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 export const aiSurfaceEnum = pgEnum('ai_surface', ['admin', 'storefront']);
 export const aiRunStatusEnum = pgEnum('ai_run_status', [
@@ -131,6 +132,7 @@ export const aiProposals = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    index('idx_ai_proposals_run').on(t.runId),
     index('idx_ai_proposals_entity_status').on(t.entityType, t.entityId, t.status),
     index('idx_ai_proposals_requested_created').on(t.requestedBy, t.createdAt),
     index('idx_ai_proposals_expires').on(t.expiresAt),

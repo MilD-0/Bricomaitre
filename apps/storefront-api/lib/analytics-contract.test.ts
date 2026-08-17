@@ -6,7 +6,7 @@ const baseEvent = {
   eventId: 'event-1',
   journeyId: 'journey-1',
   sessionId: 'session-1',
-  occurredAt: '2026-07-13T10:00:00.000Z',
+  occurredAt: '2026-08-13T10:00:00.000Z',
   locale: 'fr',
 };
 

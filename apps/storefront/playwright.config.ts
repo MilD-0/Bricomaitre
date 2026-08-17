@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const useProductionServer = process.env.BRIC_PLAYWRIGHT_SERVER === 'production';
+
 export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
@@ -51,10 +53,10 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
-      command: 'pnpm dev',
+      command: useProductionServer ? 'pnpm build && pnpm start' : 'pnpm dev',
       url: 'http://127.0.0.1:3003/api/health',
       reuseExistingServer: false,
-      timeout: 60_000,
+      timeout: useProductionServer ? 180_000 : 60_000,
       env: {
         STOREFRONT_API_BASE_URL: 'http://127.0.0.1:4311',
         NEXT_PUBLIC_SITE_URL: 'http://127.0.0.1:3003',

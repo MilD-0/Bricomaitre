@@ -149,10 +149,12 @@ export function NavigationActions({
   function openMenu() {
     void triggerHaptic('surface');
     setMenuOpen(true);
-    void trackNavigationEvent({
-      eventName: 'navigation_menu_open',
-      locale,
-      metadata: { surface: 'header', target: 'mobile_drawer' },
+    scheduleAfterNextPaint(() => {
+      void trackNavigationEvent({
+        eventName: 'navigation_menu_open',
+        locale,
+        metadata: { surface: 'header', target: 'mobile_drawer' },
+      });
     });
   }
 
@@ -408,6 +410,15 @@ export function NavigationActions({
       ) : null}
     </>
   );
+}
+
+function scheduleAfterNextPaint(callback: () => void) {
+  if (typeof window.requestAnimationFrame !== 'function') {
+    window.setTimeout(callback, 0);
+    return;
+  }
+
+  window.requestAnimationFrame(() => window.setTimeout(callback, 0));
 }
 
 function MobileCategoryGroup({
