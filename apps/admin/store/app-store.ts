@@ -24,6 +24,6 @@ export const useAppStore = create<AppState>()(
       roleLabel: null,
       setAccess: ({ permissions, role, roleLabel = null }) => set({ permissions, role, roleLabel }),
     }),
-    { name: 'adminstration-store-v1' },
+    { name: 'admin-store-v1' },
   ),
 );

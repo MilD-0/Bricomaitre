@@ -7,13 +7,9 @@ import { mutateEntityWithHistory } from '../../../../lib/action-history';
 import { auth } from '../../../../lib/auth';
 import { readCategory, resolveCategorySlug } from '../../../../lib/brands-categories-api';
 import { categoryUpdateSchema } from '../../../../lib/brands-categories';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
 import { revalidateStorefrontProductMeta } from '../../../../lib/storefront-revalidate';
-
-function parseCategoryId(id: string) {
-  const numericId = Number(id);
-  return Number.isInteger(numericId) && numericId > 0 ? numericId : null;
-}
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await requireAppAccess();
@@ -26,7 +22,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   }
 
   const { id } = await params;
-  const numericId = parseCategoryId(id);
+  const numericId = parsePositiveIntegerId(id);
   if (!numericId) {
     return NextResponse.json({ error: 'Invalid category id' }, { status: 400 });
   }
@@ -50,7 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const { id } = await params;
-  const numericId = parseCategoryId(id);
+  const numericId = parsePositiveIntegerId(id);
   if (!numericId) {
     return NextResponse.json({ error: 'Invalid category id' }, { status: 400 });
   }
@@ -121,7 +117,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const { id } = await params;
-  const numericId = parseCategoryId(id);
+  const numericId = parsePositiveIntegerId(id);
   if (!numericId) {
     return NextResponse.json({ error: 'Invalid category id' }, { status: 400 });
   }

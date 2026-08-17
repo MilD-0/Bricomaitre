@@ -368,7 +368,7 @@ describe('ProductsManager', () => {
     await screen.findAllByRole('button', { name: 'Existing product' });
     await userEvent.click(screen.getByRole('button', { name: 'New product' }));
 
-    const dialog = screen.getByRole('dialog');
+    const dialog = await screen.findByRole('dialog');
     await userEvent.type(
       within(dialog).getByRole('textbox', { name: 'Product name' }),
       'Nova drill',
@@ -541,7 +541,7 @@ describe('ProductsManager', () => {
     expect(await screen.findByAltText('Existing product')).toBeInTheDocument();
     await userEvent.click(within(productRow).getByRole('button', { name: 'Modify' }));
 
-    const dialog = screen.getByRole('dialog');
+    const dialog = await screen.findByRole('dialog');
     const titleInput = within(dialog).getByRole('textbox', { name: 'Product name' });
     await userEvent.clear(titleInput);
     await userEvent.type(titleInput, 'Updated product');

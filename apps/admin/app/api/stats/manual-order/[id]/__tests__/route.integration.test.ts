@@ -33,7 +33,7 @@ vi.mock('../../../../../../lib/reporting-refresh-trigger', () => ({
   triggerAdminReportingRefresh: triggerAdminReportingRefreshMock,
 }));
 
-vi.mock('../../../../../../lib/stats', () => ({
+vi.mock('../../../../../../lib/manual-orders', () => ({
   deleteManualOrder: deleteManualOrderMock,
 }));
 
@@ -64,6 +64,19 @@ describe('app/api/stats/manual-order/[id]/route', () => {
     expect(response.status).toBe(404);
   });
 
+  it('rejects a malformed order id before querying', async () => {
+    const response = await DELETE(
+      new NextRequest('http://localhost/api/stats/manual-order/1junk', { method: 'DELETE' }),
+      {
+        params: Promise.resolve({ id: '1junk' }),
+      },
+    );
+
+    expect(response.status).toBe(400);
+    expect(deleteManualOrderMock).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid manual order id' });
+  });
+
   it('deletes the manual order', async () => {
     deleteManualOrderMock.mockResolvedValue({ id: 1 });
 
@@ -75,7 +88,7 @@ describe('app/api/stats/manual-order/[id]/route', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(deleteManualOrderMock).toHaveBeenCalledWith('1', {
+    expect(deleteManualOrderMock).toHaveBeenCalledWith(1, {
       email: 'ops@example.com',
       name: 'Ops',
     });

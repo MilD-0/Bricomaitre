@@ -6,6 +6,7 @@ export * from './orders';
 export * from './orderIdempotency';
 export * from './analytics';
 export * from './meta';
+export * from './metaAds';
 export * from './adCosts';
 export * from './importBatches';
 export * from './assets';

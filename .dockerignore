@@ -18,6 +18,24 @@ coverage
 out
 build
 
+# Verification and repository-only inputs are intentionally outside production
+# build contexts. Application manifests remain included because they define the
+# dependency graph installed by the Dockerfiles.
+.github
+docs
+archive
+**/tests
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+**/playwright-report
+**/test-results
+**/vitest.config.*
+**/playwright.config.*
+**/README.md
+**/AGENTS.md
+
 .env
 .env.*
 **/.env

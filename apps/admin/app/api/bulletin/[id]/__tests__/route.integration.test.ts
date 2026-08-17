@@ -33,6 +33,42 @@ describe('app/api/bulletin/[id]/route', () => {
     hasDbMock.mockReturnValue(true);
   });
 
+  it.each([
+    [
+      'PATCH',
+      (request: NextRequest) => PATCH(request, { params: Promise.resolve({ id: 'nope' }) }),
+    ],
+    [
+      'DELETE',
+      (request: NextRequest) => DELETE(request, { params: Promise.resolve({ id: 'nope' }) }),
+    ],
+  ])('returns 400 before querying for a malformed post id in %s', async (method, callRoute) => {
+    authMock.mockResolvedValue({
+      user: {
+        id: 'user-1',
+        email: 'user@example.com',
+        name: 'User',
+        isAllowed: true,
+        permissions: [],
+      },
+    });
+    const request = new NextRequest('http://localhost/api/bulletin/nope', {
+      method,
+      ...(method === 'PATCH'
+        ? {
+            body: JSON.stringify({ title: 'Valid title' }),
+            headers: { 'content-type': 'application/json' },
+          }
+        : {}),
+    });
+
+    const res = await callRoute(request);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'Invalid bulletin post id' });
+    expect(getDbMock).not.toHaveBeenCalled();
+  });
+
   it('forbids deleting another user post without bulletin moderation access', async () => {
     authMock.mockResolvedValue({
       user: {

@@ -333,7 +333,9 @@
     "snapshotMeta": {
       "title": "اللقطة جاهزة",
       "staleTitle": "اللقطة قديمة",
-      "description": "تم إنشاؤها في {generatedAt}. البيانات حتى {reportThroughDate}."
+      "description": "تم إنشاؤها في {generatedAt}. البيانات حتى {reportThroughDate}.",
+      "financialLagTitle": "البيانات المالية لشركة التوصيل متأخرة",
+      "financialLagDescription": "أعداد الطلبات المباشرة محدثة. تنتهي بيانات التوصيل والأرباح المستوردة في {reportThroughDate}."
     },
     "hero": {
       "averageOrder": "متوسط التحصيل لكل طلب",
@@ -363,8 +365,8 @@
     },
     "overview": {
       "cards": {
-        "totalOrders": "إجمالي الطلبات",
-        "totalOrdersHint": "صفوف مستوردة مرتبطة بمسار بيع مؤكد.",
+        "totalOrders": "الطلبات المقدمة",
+        "totalOrdersHint": "الطلبات المقدمة عبر مسار التجارة الأساسي.",
         "totalCollected": "المبلغ المحصل",
         "totalCollectedHint": "القيمة المحصلة من الطلبات المستوردة المنفذة.",
         "netRevenue": "صافي الإيراد",
@@ -466,7 +468,7 @@
           "confirmation": "نسبة التأكيد",
           "views": "المشاهدات",
           "adds": "الإضافات",
-          "webPurchases": "مشتريات الويب",
+          "webPurchases": "طلبات الموقع",
           "popularity": "الشعبية",
           "webConversion": "تحويل الويب %"
         },
@@ -482,87 +484,111 @@
     "website": {
       "title": "تحليلات الموقع",
       "empty": "لا توجد بيانات موقع للفترة المحددة بعد.",
-      "funnelTitle": "مسار الرحلة",
-      "quickStatsTitle": "مؤشرات التحويل السريعة",
-      "searchInsightsTitle": "إشارات البحث والدفع",
+      "searchInsightsTitle": "البحث في المتجر",
       "topProductsTitle": "أهم منتجات الموقع",
       "cards": {
         "sessions": "الجلسات",
+        "orders": "الطلبات المقدمة",
+        "orderRate": "معدل الطلب لكل جلسة",
         "pageViews": "مشاهدات الصفحات",
-        "addToCartRate": "من العرض إلى السلة",
-        "purchaseRate": "معدل الشراء لكل جلسة",
+        "purchaseRate": "معدل الطلب لكل جلسة",
         "engagementRate": "الجلسات المتفاعلة",
         "returningJourneys": "الزيارات المتكررة",
         "errorRate": "معدل أخطاء الجلسات"
       },
+      "kpiDetails": {
+        "pageViews": "{views} مشاهدة صفحة خلال هذه الفترة",
+        "checkouts": "{checkouts} عملية بدء دفع",
+        "sessionOrderRate": "الطلبات المقدمة مقسومة على الجلسات المقاسة",
+        "returning": "جلسات بعدة مشاهدات صفحات · {journeys} زيارة متكررة"
+      },
       "trendTitle": "زيارات ونتائج المتجر",
+      "trendMetrics": {
+        "sessions": "الجلسات",
+        "pageViews": "مشاهدات الصفحات",
+        "orders": "الطلبات",
+        "errors": "الأخطاء"
+      },
+      "secondary": {
+        "averagePages": "الصفحات لكل جلسة",
+        "returningJourneys": "الزيارات المتكررة",
+        "errorRate": "معدل أخطاء الجلسات"
+      },
       "pageTypesTitle": "أنواع الصفحات والتفاعل",
+      "pageTypeContext": "تمثل الأشرطة حصة كل نوع صفحة من الجلسات المقاسة، ويعرض الرقم الأصغر حجم التفاعلات.",
       "audienceTitle": "الأجهزة واللغات",
       "devices": "الأجهزة",
-      "locales": "اللغات",
+      "locales": "لغة الصفحة المرصودة",
       "vitalsTitle": "مؤشرات أداء الويب الأساسية",
-      "errorsTitle": "أخطاء المتجر",
-      "referrersTitle": "أهم مصادر الزيارة",
-      "recentDiagnosticsHint": "تعتمد التفاصيل التشخيصية على نافذة القياس الخام الحديثة، مع استمرار سجل مسار التحويل القابل للمقارنة أثناء الانتقال بين المتجرين.",
-      "vitalMeta": "{good} جيد · {poor} ضعيف · {samples} عينة",
-      "experience": {
-        "columns": {
-          "dimension": "نوع الصفحة",
-          "sessions": "الجلسات",
-          "pageViews": "المشاهدات",
-          "interactions": "التفاعلات"
-        }
+      "acquisitionTitle": "مصادر الاكتساب ونتائج الطلبات",
+      "acquisitionEmpty": "لم تُسجّل جلسات أو طلبات منسوبة ضمن هذه الفترة.",
+      "acquisitionCoverage": "تبدأ التغطية المعيارية للمصادر في {date}؛ ولا تتم إعادة بناء الزيارات الأقدم بعد حدود الأدلة المحتفظ بها.",
+      "acquisitionRateUnavailable": "تم حجب معدلات الطلب حسب المصدر لأن الفترة المحددة تبدأ قبل تغطية جلسات المصدر الأساسية.",
+      "channels": {
+        "meta_paid": "Meta مدفوع",
+        "meta_organic": "Meta عضوي",
+        "meta_unclassified": "Meta · غير مصنف",
+        "google_paid": "Google مدفوع",
+        "google_organic": "Google عضوي",
+        "direct_dark_social": "مباشر / مشاركة غير موسومة",
+        "shared_link": "رابط تمت مشاركته صراحة",
+        "external_ai": "إحالة من ذكاء اصطناعي خارجي",
+        "other_referral": "إحالة أخرى",
+        "other_campaign": "حملة أخرى",
+        "unknown": "غير معروف"
       },
+      "metrics": {
+        "sessions": "الجلسات",
+        "orders": "الطلبات",
+        "successful": "الناجحة",
+        "orderRate": "معدل الطلب"
+      },
+      "devicesMap": {
+        "small_phone": "هاتف صغير",
+        "mobile": "هاتف",
+        "tablet": "جهاز لوحي",
+        "desktop": "حاسوب",
+        "unknown": "غير معروف"
+      },
+      "pageTypes": {
+        "product_detail": "تفاصيل المنتج",
+        "catalog": "الكتالوج",
+        "global_navigation": "التنقل العام",
+        "checkout": "الدفع",
+        "homepage": "الصفحة الرئيسية",
+        "thank_you": "تأكيد الطلب",
+        "landing": "صفحة هبوط",
+        "unknown": "غير معروف"
+      },
+      "vitalMeta": "{good} جيد · {poor} ضعيف · {samples} عينة",
       "stats": {
         "searches": "عمليات البحث",
-        "zeroResults": "بحث بدون نتائج",
-        "checkoutRate": "من الدفع إلى الشراء",
-        "cartRate": "من السلة إلى الشراء"
-      },
-      "landing": {
-        "title": "أهم صفحات الدخول",
-        "columns": {
-          "path": "صفحة الدخول",
-          "sessions": "الجلسات"
-        }
+        "zeroResults": "بحث بدون نتائج"
       },
       "search": {
-        "columns": {
-          "term": "مصطلح البحث",
-          "searches": "عمليات البحث",
-          "zeroResults": "بدون نتائج"
-        }
+        "zeroCount": "{count} بدون نتائج"
       },
-      "funnel": {
-        "Sessions": "الجلسات",
-        "Product views": "مشاهدات المنتج",
-        "Adds to cart": "الإضافة إلى السلة",
-        "Checkout starts": "بدء الدفع",
-        "Purchases": "المشتريات"
+      "searchZeroRate": "لم تُرجع {rate} من عمليات البحث أي نتائج.",
+      "commerce": {
+        "productViews": "مشاهدات المنتج",
+        "adds": "الإضافات إلى السلة",
+        "checkouts": "بدء الدفع",
+        "orders": "الطلبات المقدمة",
+        "sessionContext": "عبر {sessions} جلسة مقاسة",
+        "viewToCart": "أدت {rate} من مشاهدات المنتج إلى إضافة",
+        "cartToCheckout": "أدت {rate} من الإضافات إلى الدفع",
+        "checkoutToOrder": "أدت {rate} من عمليات الدفع إلى طلب",
+        "cartToOrderLabel": "معدل السلة إلى الطلب",
+        "sessionToOrderLabel": "معدل الطلب لكل جلسة"
       },
       "conversion": {
-        "title": "تشخيص التحويل",
-        "sessionsToPurchase": "من الجلسات إلى الشراء",
-        "viewToCart": "من عرض المنتج إلى السلة",
-        "cartToPurchase": "من السلة إلى الشراء",
-        "checkoutToPurchase": "من الدفع إلى الشراء",
-        "searchZeroResultRate": "معدل البحث بدون نتائج"
-      },
-      "diagnostics": {
-        "journeys": "الرحلات",
-        "productViews": "مشاهدات المنتج",
-        "checkoutStarts": "بدء الدفع",
-        "searches": "عمليات البحث",
-        "zeroResults": "بحث بدون نتائج",
-        "avgPagesPerSession": "متوسط الصفحات لكل جلسة"
+        "title": "إجراءات التجارة"
       },
       "products": {
         "columns": {
-          "product": "المنتج",
           "views": "المشاهدات",
           "adds": "الإضافات",
-          "purchases": "المشتريات",
-          "conversion": "التحويل %"
+          "orders": "الطلبات"
         }
       }
     },
@@ -574,7 +600,7 @@
       "cards": {
         "published": "الصفحات المنشورة",
         "sessions": "الجلسات المنسوبة",
-        "purchases": "المشتريات",
+        "purchases": "الطلبات المقدمة",
         "conversion": "تحويل الجلسات",
         "revenue": "الإيراد المنسوب",
         "drafts": "المسودات"
@@ -586,19 +612,29 @@
         "views": "مشاهدات المنتج",
         "adds": "الإضافات",
         "checkouts": "الدفع",
-        "purchases": "المشتريات",
+        "purchases": "الطلبات",
         "revenue": "الإيراد",
         "conversion": "التحويل %"
       }
     },
     "aiAssistants": {
       "admin": {
-        "title": "مساعد الإدارة"
+        "title": "إنتاجية مساعد الإدارة",
+        "modelsTitle": "توزيع النماذج",
+        "tasksTitle": "توزيع المهام"
       },
       "storefront": {
         "title": "مساعد المتجر",
+        "impactTitle": "الأثر التجاري لمساعد المتجر",
+        "journeyTitle": "مسار التفاعل مع مساعد المتجر",
+        "opensDetail": "تم فتح لوحة المساعد",
+        "messagesDetail": "أنتجت {rate} من الفتحات سؤالاً",
+        "clicksDetail": "أنتجت {rate} من الأسئلة نقرة على منتج",
+        "ordersDetail": "ارتبطت {rate} من الفتحات بطلب",
+        "operationsTitle": "الصحة التشغيلية لمساعد المتجر",
+        "operationsDescription": "جودة تنفيذ النموذج ومؤشرات التكلفة لتشخيص تجربة الزائر.",
         "intentsTitle": "ما الذي يحتاجه الزوار",
-        "modelsTitle": "النماذج والاستخدام",
+        "operationalSummary": "{runs} تشغيل · {success} ناجح · {tokens} رمز · متوسط استجابة {latency} · {errors} خطأ",
         "disabledTitle": "مساعد المتجر معطّل",
         "disabledDescription": "عدم وجود نشاط متوقع ما دامت الميزة معطّلة في إعدادات المتجر."
       },
@@ -615,8 +651,18 @@
         "messages": "الأسئلة",
         "resultClicks": "نقرات المنتجات",
         "clickThrough": "معدل نقر النتائج",
-        "errors": "الأخطاء"
+        "errors": "الأخطاء",
+        "influencedOrders": "طلبات تأثرت بالمساعد",
+        "confirmedOrders": "طلبات المساعد المؤكدة",
+        "paidOrders": "طلبات المساعد المدفوعة",
+        "recommendedProductOrders": "منتجات موصى بها تم طلبها",
+        "submittedValue": "القيمة المقدمة المتأثرة",
+        "confirmationRate": "معدل تأكيد الطلبات المتأثرة",
+        "paidRate": "معدل تحصيل الطلبات المتأثرة",
+        "completedOrders": "طلبات المساعد المكتملة"
       },
+      "completed": "مكتمل",
+      "failed": "فشل",
       "costHint": "تظهر التكلفة التقديرية فقط عند ضبط أسعار كل مليون رمز.",
       "empty": "لا يوجد استخدام للمساعدين ضمن هذه الفترة.",
       "tokensShort": "رمز",
@@ -776,27 +822,67 @@
     "metaAds": {
       "performanceTitle": "كفاءة الإعلانات",
       "eventsTitle": "أحداث Meta المتتبعة",
+      "diagnosticsTitle": "تشخيص تسليم التتبع",
+      "diagnosticsDescription": "أدلة تسليم على مستوى الحدث للتحقيق التشغيلي. وُضعت هذه التفاصيل عمداً بعد نتائج الاكتساب والطلبات.",
       "payloadsTitle": "حمولات Meta الأخيرة",
       "managerTitle": "تكاليف الإعلانات",
       "conversionRate": "معدل التحويل",
       "unknownCampaign": "حملة غير معروفة",
+      "attribution": {
+        "title": "اكتساب Meta ونتائج الطلبات",
+        "description": "جلسات الطرف الأول الأساسية المصنفة من حملات Meta ومعرّفات النقر والإحالات والأدلة العضوية، والمرتبطة بنتائج طلبات المتجر.",
+        "sessions": "جلسات Meta",
+        "orders": "الطلبات المنسوبة",
+        "successful": "الطلبات الناجحة",
+        "successRate": "معدل نجاح الطلبات",
+        "empty": "لم تُسجّل أدلة اكتساب أساسية من Meta ضمن هذه الفترة."
+      },
+      "integrated": {
+        "title": "من إنفاق Meta إلى الطلبات المنجزة",
+        "description": "بيانات عرض اختيارية من مزوّد الإعلانات مرتبطة بطلبات Bricomaitre ونتائج ECOTRACK عند إعداد مزامنة Meta Insights.",
+        "emptyTitle": "Meta Insights المباشر لا يرسل بيانات",
+        "empty": "لم تنتج مزامنة Meta Ads Insights المباشرة بيانات على مستوى الإعلان لهذه الفترة. يظل الإسناد المباشر وتشخيص CAPI متاحين أدناه.",
+        "sync": "آخر مزامنة: {date} • {status} • {rows} صف إعلان-يوم",
+        "cards": {
+          "spend": "إنفاق Meta",
+          "metaClicks": "نقرات Meta",
+          "orders": "الطلبات المباشرة",
+          "confirmed": "الطلبات المؤكدة",
+          "paid": "المدفوعة في ECOTRACK",
+          "submittedValue": "القيمة المقدمة"
+        },
+        "columns": {
+          "day": "اليوم",
+          "ad": "الإعلان / الحملة",
+          "spend": "إنفاق Meta",
+          "orders": "الطلبات",
+          "confirmed": "المؤكدة",
+          "paid": "المدفوعة",
+          "value": "القيمة المقدمة"
+        }
+      },
       "paidAttribution": {
-        "title": "إسناد زيارات ميتا المدفوعة",
+        "title": "تتبّع مصدر النقرات المدفوعة",
+        "description": "زيارات محفوظة بمعرّفات نقر Meta والطلبات أو إشارات Purchase المرتبطة بها لاحقاً. هذه رؤية تشخيصية وليست أداءً إعلانياً مبلغاً من المزوّد.",
         "visits": "الزيارات المدفوعة",
         "orders": "الطلبات المنشأة",
-        "purchases": "المشتريات",
+        "purchases": "إشارات Purchase المتتبعة",
         "landedOnly": "زيارات صفحة فقط",
-        "conversion": "تحويل الزيارة",
+        "conversion": "معدل الزيارة إلى Purchase",
         "campaign": "الحملة"
       },
       "health": {
         "title": "حالة تسليم CAPI",
+        "description": "التغطية التشغيلية وحالة قائمة انتظار تسليم أحداث Meta من الخادم.",
         "pending": "قيد الانتظار / إعادة المحاولة",
         "delivered": "تم التسليم",
         "failed": "فشل / تم التجاوز",
         "purchaseCoverage": "تغطية Purchase عند الإرسال",
         "orderConfirmedCoverage": "تغطية orderconfirmed",
-        "worker": "آخر نبضة للعامل: {heartbeat} • أقدم حدث معلق: {oldest} • مشتريات مؤكدة انتهت بنتيجة سلبية: {negative}"
+        "worker": "آخر نبضة للعامل: {heartbeat} • أقدم حدث معلق: {oldest} • مشتريات مؤكدة انتهت بنتيجة سلبية: {negative}",
+        "workerHeartbeat": "آخر نبضة للعامل: {heartbeat}",
+        "oldestPending": "أقدم حدث معلق: {oldest}",
+        "deliveredCount": "تم تسليم {count} حدث"
       },
       "events": {
         "empty": "لم يتم تسجيل أي أحداث Meta ضمن هذه الفترة.",
@@ -808,7 +894,8 @@
           "capiDelivered": "تم تسليم CAPI",
           "capiFailed": "فشل CAPI",
           "lastSeen": "آخر ظهور"
-        }
+        },
+        "lastSeenValue": "آخر ظهور {date}"
       },
       "payloads": {
         "emptyTitle": "لا توجد حمولات Meta بعد",

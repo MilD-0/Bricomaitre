@@ -18,18 +18,17 @@
     "test:integration": "pnpm test:contract"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1109.0",
+    "@aws-sdk/client-s3": "^3.1111.0",
     "@bric/db": "workspace:*",
     "@bric/runtime": "workspace:*",
     "@bric/storefront-core": "workspace:*",
     "@sentry/nextjs": "10.70.0",
     "@sentry/node": "10.70.0",
     "drizzle-orm": "^0.45.2",
-    "next": "16.3.0",
+    "next": "16.3.1",
     "pg": "^8.23.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "zod": "^4.4.3"
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
@@ -37,7 +36,7 @@
     "@types/react-dom": "19.2.4",
     "@vitest/coverage-v8": "^4.1.10",
     "tsx": "^4.23.12",
-    "typescript": "6.0.2",
+    "typescript": "6.0.3",
     "vitest": "^4.1.10"
   }
 }

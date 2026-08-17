@@ -15,6 +15,7 @@ export const drizzleSchemaFiles = [
   '../../packages/db/src/schema/importBatches.ts',
   '../../packages/db/src/schema/migrationIdMap.ts',
   '../../packages/db/src/schema/meta.ts',
+  '../../packages/db/src/schema/metaAds.ts',
   '../../packages/db/src/schema/namespaces.ts',
   '../../packages/db/src/schema/orders.ts',
   '../../packages/db/src/schema/orderIdempotency.ts',

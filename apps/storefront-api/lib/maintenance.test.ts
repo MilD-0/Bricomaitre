@@ -8,10 +8,14 @@ import {
   META_FAILED_RETENTION_DAYS,
   MARKETING_ACCEPTED_RETENTION_DAYS,
   MARKETING_FAILED_RETENTION_DAYS,
+  PAID_CLICK_ROLLUP_NORMALIZATION_BATCH_DAYS,
+  backfillOrderAcquisitionAttributionBatch,
+  backfillOrderAiInfluenceBatch,
   compactRetainedAnalyticsJourneysBatch,
   deleteExpiredAnalyticsEventsBatch,
   deleteExpiredPaidClickVisitsBatch,
   deleteTerminalMarketingOutboxBatch,
+  normalizeNextPaidClickRollupDays,
   rollUpNextExpiredPaidClickDay,
   rollUpNextExpiredAnalyticsDay,
   runStorefrontDataMaintenanceBatch,
@@ -29,12 +33,17 @@ describe('storefront data maintenance', () => {
 
     expect(deleted).toBe(2);
     expect(execute).toHaveBeenCalledTimes(1);
+    const statement = dialect.sqlToQuery(execute.mock.calls[0]![0]).sql;
+    expect(statement).toContain('from "order_acquisition_attribution" attribution');
   });
 
   it('preserves cleanup sequencing and reports every table result', async () => {
     const execute = vi
       .fn()
       .mockResolvedValueOnce({ rows: [{ key_hash: 'expired-key' }] })
+      .mockResolvedValueOnce({ rows: [{ order_id: 41 }, { order_id: 42 }] })
+      .mockResolvedValueOnce({ rows: [{ order_id: 51 }] })
+      .mockResolvedValueOnce({ rows: [{ day: '2026-07-01' }] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ visit_id: 'a' }] })
       .mockResolvedValueOnce({ rows: [] })
@@ -44,6 +53,7 @@ describe('storefront data maintenance', () => {
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ id: 4 }] })
       .mockResolvedValueOnce({ rows: [{ id: 5 }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'session-a' }] })
       .mockResolvedValueOnce({ rows: [{ id: 'journey-a' }] })
       .mockResolvedValueOnce({ rows: [] });
     const result = await runStorefrontDataMaintenanceBatch({ execute } as never, {
@@ -53,6 +63,9 @@ describe('storefront data maintenance', () => {
 
     expect(result).toEqual({
       orderIdempotency: 1,
+      orderAcquisitionBackfilled: 2,
+      orderAiInfluenceBackfilled: 1,
+      paidClickNormalizedDays: ['2026-07-01'],
       paidClicks: 1,
       paidClickRolledUpDay: null,
       metaRolledUpDay: null,
@@ -62,9 +75,60 @@ describe('storefront data maintenance', () => {
       rolledUpDay: null,
       analyticsErrorsCompacted: 1,
       analyticsEvents: 1,
+      analyticsSessions: 1,
       analyticsJourneysCompacted: 1,
       analyticsJourneys: 0,
     });
+  });
+
+  it('reconstructs recent assistant influence from retained behavior and ordered products', async () => {
+    const execute = vi.fn().mockResolvedValue({ rows: [{ order_id: 51 }] });
+
+    await expect(backfillOrderAiInfluenceBatch({ execute } as never, { limit: 20 })).resolves.toBe(
+      1,
+    );
+
+    const statement = dialect.sqlToQuery(execute.mock.calls[0]![0]).sql;
+    expect(statement).toContain("events.event_name = 'ai_assistant_message'");
+    expect(statement).toContain('lines.product_id = any(assistant.clicked_product_ids)');
+    expect(statement).toContain("interval '24 hours'");
+    expect(statement).toContain("'recommended_product_ordered'");
+    expect(statement).not.toMatch(/message_text|prompt|content/);
+  });
+
+  it('backfills only stable, privacy-safe order attribution before raw deletion', async () => {
+    const execute = vi.fn().mockResolvedValue({ rows: [{ order_id: 41 }] });
+
+    await expect(
+      backfillOrderAcquisitionAttributionBatch({ execute } as never, { limit: 50 }),
+    ).resolves.toBe(1);
+
+    const statement = dialect.sqlToQuery(execute.mock.calls[0]![0]).sql;
+    expect(statement).toContain("'legacy_visit_backfill'");
+    expect(statement).toContain('inner join "orders" on "orders"."visit_id" = visits.visit_id');
+    expect(statement).toContain("'meta_unclassified'");
+    expect(statement).toContain("utm_source in ('fb', 'facebook', 'ig', 'instagram'");
+    expect(statement).toContain("utm_content ~ '^[0-9]{6,30}$'");
+    expect(statement).not.toMatch(/fbclid_raw|client_ip|user_agent/);
+  });
+
+  it('atomically compacts a bounded set of query-bearing paid-click rollup days', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      rows: [{ day: '2026-07-01' }, { day: '2026-07-02' }, { day: '2026-07-01' }],
+    });
+
+    await expect(normalizeNextPaidClickRollupDays({ execute } as never)).resolves.toEqual([
+      '2026-07-01',
+      '2026-07-02',
+    ]);
+    const statement = dialect.sqlToQuery(execute.mock.calls[0]![0]).sql;
+    expect(statement).toContain('delete from "analytics_paid_click_daily_rollups" rollups');
+    expect(statement).toContain("split_part(landing_path, '?', 1)");
+    expect(statement).toContain('limit $1');
+    expect(dialect.sqlToQuery(execute.mock.calls[0]![0]).params).toContain(
+      PAID_CLICK_ROLLUP_NORMALIZATION_BATCH_DAYS,
+    );
+    expect(statement).toContain('on conflict');
   });
 
   it('writes every analytics dimension before making a day deletion-eligible', async () => {
@@ -81,13 +145,16 @@ describe('storefront data maintenance', () => {
     });
 
     expect(day).toBe('2026-04-01');
-    expect(transactionExecute).toHaveBeenCalledTimes(4);
+    expect(transactionExecute).toHaveBeenCalledTimes(8);
     const rollupSql = [
       ...execute.mock.calls.map(([query]) => dialect.sqlToQuery(query).sql),
       ...transactionExecute.mock.calls.map(([query]) => dialect.sqlToQuery(query).sql),
     ].join('\n');
     expect(rollupSql).not.toContain('storefrontProject');
     expect(rollupSql).toContain("'product'");
+    expect(rollupSql).toContain('"analytics_acquisition_daily_rollups"');
+    expect(rollupSql).toContain('"analytics_ai_daily_rollups"');
+    expect(rollupSql).toContain("'ai_journey'");
   });
 
   it('persists paid-click outcome counters before making an expired day deletable', async () => {
@@ -102,9 +169,9 @@ describe('storefront data maintenance', () => {
       }),
     ).resolves.toBe('2026-07-01');
     expect(execute).toHaveBeenCalledTimes(2);
-    expect(
-      execute.mock.calls.map(([query]) => dialect.sqlToQuery(query).sql).join('\n'),
-    ).not.toContain('storefrontProject');
+    const sql = execute.mock.calls.map(([query]) => dialect.sqlToQuery(query).sql).join('\n');
+    expect(sql).not.toContain('storefrontProject');
+    expect(sql).toContain("split_part(visits.landing_path, '?', 1)");
   });
 
   it('keeps raw detail for seven days and compact failures for thirty', () => {

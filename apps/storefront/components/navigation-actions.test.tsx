@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { STOREFRONT_CART_KEY } from '@/lib/cart';
@@ -156,6 +156,9 @@ describe('NavigationActions', () => {
     fireEvent.click(screen.getByRole('button', { name: labels.menu }));
     const drawer = screen.getByRole('dialog', { name: labels.menu });
     expect(drawer).toBeVisible();
+    expect(analytics).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventName: 'navigation_menu_open' }),
+    );
     expect(drawer.parentElement?.parentElement).toBe(document.body);
     await within(drawer).findByText('Équipement d’atelier', { selector: 'summary span' });
     const categoryGroups = drawer.querySelectorAll('.navigation-drawer-category-group');
@@ -198,8 +201,10 @@ describe('NavigationActions', () => {
       'href',
       'tel:+213795342826',
     );
-    expect(analytics).toHaveBeenCalledWith(
-      expect.objectContaining({ eventName: 'navigation_menu_open' }),
+    await waitFor(() =>
+      expect(analytics).toHaveBeenCalledWith(
+        expect.objectContaining({ eventName: 'navigation_menu_open' }),
+      ),
     );
 
     fireEvent.keyDown(window, { key: 'Escape' });

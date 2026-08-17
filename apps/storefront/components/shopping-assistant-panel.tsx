@@ -12,6 +12,10 @@ import { MobileSheet } from '@/components/mobile-sheet';
 import { StorefrontImage } from '@/components/storefront-image';
 import type { Locale } from '@/i18n/config';
 import { getAnalyticsIdentity, trackNavigationEvent } from '@/lib/analytics';
+import {
+  recordAssistantEngagement,
+  recordAssistantRecommendationClick,
+} from '@/lib/assistant-attribution';
 import { triggerHaptic } from '@/lib/haptics';
 import { formatProductPrice } from '@/lib/product-presentation';
 import { classifyShoppingAssistantIntent } from '@/lib/shopping-assistant';
@@ -114,6 +118,7 @@ function ProductResult({
       href={`/${locale}/products/${encodeURIComponent(product.token)}`}
       onClick={() => {
         void triggerHaptic('navigation');
+        recordAssistantRecommendationClick(getAnalyticsIdentity(), product.id);
         void trackNavigationEvent({
           eventName: 'ai_assistant_result_click',
           locale,
@@ -208,6 +213,7 @@ export function ShoppingAssistantPanel({
     setPending(true);
     setReceivingText(false);
     void triggerHaptic('primary');
+    recordAssistantEngagement(getAnalyticsIdentity());
     void trackNavigationEvent({
       eventName: 'ai_assistant_message',
       locale,

@@ -151,6 +151,53 @@ describe('CatalogInfiniteLoader', () => {
     );
   });
 
+  it('does not let a queued scroll save overwrite a newly appended page', async () => {
+    intersectOnObserve = true;
+    let resolveResponse: (response: Response) => void;
+    let queuedScrollFrame: FrameRequestCallback | null = null;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      queuedScrollFrame ??= callback;
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    vi.mocked(fetch).mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveResponse = resolve;
+        }),
+    );
+
+    render(
+      <CatalogInfiniteLoader
+        locale="fr"
+        query={query}
+        initialCount={24}
+        initialProductIds={Array.from({ length: 24 }, (_, index) => index + 1)}
+        initialHasNextPage
+        totalCount={25}
+        brandNames={{}}
+        categoryNames={{}}
+        labels={labels}
+      />,
+    );
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    window.dispatchEvent(new Event('scroll'));
+    expect(queuedScrollFrame).not.toBeNull();
+    resolveResponse!(
+      new Response(JSON.stringify({ items: [product(25)], page: 2, hasNextPage: false }), {
+        status: 200,
+      }),
+    );
+    await expect(screen.findByRole('heading', { name: 'Tool 25' })).resolves.toBeInTheDocument();
+
+    queuedScrollFrame!(0);
+
+    expect(
+      JSON.parse(window.sessionStorage.getItem('bric:catalog-position:v2:/fr/products') ?? 'null'),
+    ).toMatchObject({ page: 2, hasNextPage: false });
+  });
+
   it('deduplicates repeated observer notifications while a page is in flight', async () => {
     intersectOnObserve = true;
     intersectionCount = 2;

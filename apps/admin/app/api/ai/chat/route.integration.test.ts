@@ -98,7 +98,6 @@ vi.mock('../../../../lib/ai-background-jobs', () => ({
     'reporting_refresh',
     'ecotrack_catalog_sync',
     'ecotrack_shipment_sync',
-    'storefront_analytics',
   ],
   STARTABLE_ADMIN_BACKGROUND_JOB_TYPES: [
     'product_export',

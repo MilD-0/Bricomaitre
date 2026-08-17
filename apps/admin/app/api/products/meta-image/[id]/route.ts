@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { products } from '@bric/db/schema';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { isSafeRemoteHttpsUrl } from '../../../../../lib/remote-url-safety';
 import {
   captureAdminException,
@@ -12,11 +13,6 @@ import {
 } from '../../../../../lib/sentry';
 
 const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
-
-function parseProductId(id: string) {
-  const numericId = Number(id);
-  return Number.isInteger(numericId) && numericId > 0 ? numericId : null;
-}
 
 function isSuccessfulResponse(response: Response) {
   return response.ok && response.body !== null;
@@ -59,7 +55,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const { id } = await params;
-  const productId = parseProductId(id);
+  const productId = parsePositiveIntegerId(id);
   if (!productId) {
     return NextResponse.json(
       { error: 'Invalid product id' },

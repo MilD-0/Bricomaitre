@@ -8,11 +8,19 @@ import {
   aiProposals,
   aiRuns,
   aiToolCalls,
+  analyticsAcquisitionDailyRollups,
+  analyticsAiDailyRollups,
   analyticsDailyRollups,
+  analyticsDistinctDailyMembers,
   analyticsEvents,
   analyticsPaidClickDailyRollups,
   analyticsPaidClickVisits,
+  analyticsSessions,
+  ecotrackOrderStates,
   landingPages,
+  orderAcquisitionAttribution,
+  orderAiInfluence,
+  orderLineItems,
   orders,
   products,
   storefrontSettings,
@@ -44,8 +52,14 @@ export type WebsiteExperienceStats = {
     needsImprovement: number;
     poor: number;
   }>;
-  errors: Array<{ name: string; count: number; lastSeenAt: string | null }>;
-  referrers: Array<{ name: string; sessions: number }>;
+  acquisitionSources: Array<{
+    name: string;
+    sessions: number;
+    orders: number;
+    successfulOrders: number;
+    conversionRate: number;
+  }>;
+  acquisitionCoverageStartsAt: string | null;
   trend: Array<{
     bucket: string;
     sessions: number;
@@ -116,6 +130,14 @@ export type AiAssistantStats = {
     resultClicks: number;
     errors: number;
     clickThroughRate: number;
+    influencedOrders: number;
+    confirmedOrders: number;
+    completedOrders: number;
+    paidOrders: number;
+    recommendedProductOrders: number;
+    submittedValueDzd: number;
+    confirmationRate: number;
+    usageCoverageStartsAt: string | null;
     topIntents: Array<{ name: string; messages: number }>;
   };
 };
@@ -185,7 +207,7 @@ function dateCondition(column: SQLWrapper, filters: ExperienceStatsFilters) {
   return conditions.length ? and(...conditions) : undefined;
 }
 
-const ADMIN_REPORTING_TIMEZONE = 'Africa/Algiers';
+export const ADMIN_REPORTING_TIMEZONE = 'Africa/Algiers';
 
 function reportingTimestampCondition(column: SQLWrapper, filters: ExperienceStatsFilters) {
   const conditions = [];
@@ -207,6 +229,26 @@ export function buildLandingPagePerformanceQuery(filters: ExperienceStatsFilters
   );
 
   return sql`
+    with unique_landing_purchases as (
+      select distinct on (landing_page_id, purchase_key)
+        landing_page_id, purchase_value
+      from (
+        select case when ${analyticsEvents.metadata}->>'landingPageId' ~ '^[0-9]+$'
+            then (${analyticsEvents.metadata}->>'landingPageId')::bigint end as landing_page_id,
+          coalesce(${analyticsEvents.orderId}::text, ${analyticsEvents.eventId}) as purchase_key,
+          coalesce(${analyticsEvents.value}, 0)::double precision as purchase_value,
+          ${analyticsEvents.occurredAt} as occurred_at
+        from ${analyticsEvents}
+        where ${storefrontAnalyticsWhere ?? sql`true`}
+          and ${analyticsEvents.eventName} = 'purchase'
+      ) purchases
+      where landing_page_id is not null
+      order by landing_page_id, purchase_key, occurred_at asc
+    ), landing_purchase_totals as (
+      select landing_page_id, coalesce(sum(purchase_value), 0)::double precision as revenue
+      from unique_landing_purchases
+      group by landing_page_id
+    )
     select ${landingPages.id} as id, ${landingPages.slug} as slug,
       ${landingPages.locale} as locale, ${landingPages.status} as status,
       ${products.title} as product, ${landingPages.publishedRevision} as revision,
@@ -214,14 +256,16 @@ export function buildLandingPagePerformanceQuery(filters: ExperienceStatsFilters
       count(*) filter (where ${analyticsEvents.eventName} = 'view_item')::int as product_views,
       count(*) filter (where ${analyticsEvents.eventName} = 'add_to_cart')::int as add_to_carts,
       count(*) filter (where ${analyticsEvents.eventName} in ('begin_checkout', 'checkout_submit_attempt'))::int as checkout_starts,
-      count(*) filter (where ${analyticsEvents.eventName} = 'purchase')::int as purchases,
-      coalesce(sum(${analyticsEvents.value}) filter (where ${analyticsEvents.eventName} = 'purchase'), 0)::double precision as revenue
+      count(distinct coalesce(${analyticsEvents.orderId}::text, ${analyticsEvents.eventId}))
+        filter (where ${analyticsEvents.eventName} = 'purchase')::int as purchases,
+      coalesce(max(landing_purchase_totals.revenue), 0)::double precision as revenue
     from ${landingPages}
     join ${products} on ${products.id} = ${landingPages.productId}
     left join ${analyticsEvents} on
       case when ${analyticsEvents.metadata}->>'landingPageId' ~ '^[0-9]+$'
         then (${analyticsEvents.metadata}->>'landingPageId')::bigint end = ${landingPages.id}
       and ${storefrontAnalyticsWhere ?? sql`true`}
+    left join landing_purchase_totals on landing_purchase_totals.landing_page_id = ${landingPages.id}
     group by ${landingPages.id}, ${landingPages.slug}, ${landingPages.locale},
       ${landingPages.status}, ${products.title}, ${landingPages.publishedRevision}
     order by purchases desc, sessions desc, ${landingPages.updatedAt} desc
@@ -340,8 +384,8 @@ export function emptyExperienceStats(): ExperienceStats {
       locales: [],
       devices: [],
       vitals: [],
-      errors: [],
-      referrers: [],
+      acquisitionSources: [],
+      acquisitionCoverageStartsAt: null,
       trend: [],
     },
     landingPages: {
@@ -370,6 +414,14 @@ export function emptyExperienceStats(): ExperienceStats {
         resultClicks: 0,
         errors: 0,
         clickThroughRate: 0,
+        influencedOrders: 0,
+        confirmedOrders: 0,
+        completedOrders: 0,
+        paidOrders: 0,
+        recommendedProductOrders: 0,
+        submittedValueDzd: 0,
+        confirmationRate: 0,
+        usageCoverageStartsAt: null,
         topIntents: [],
       },
     },
@@ -630,120 +682,208 @@ export async function getLiveStorefrontAiStats(
     reportingTimestampCondition(analyticsEvents.occurredAt, filters),
     sql`${analyticsEvents.metadata}->>'storefrontProject' = ${STOREFRONT_ANALYTICS_PROJECT}`,
   );
-  const runWhere = and(eventWhere, eq(analyticsEvents.eventName, 'ai_assistant_run'));
-  const [summaryRows, taskRows, modelRows, trendRows, eventRows, intentRows, settingsRows] =
-    await Promise.all([
-      db
-        .select({
-          runs: sql<number>`count(*)::int`,
-          completed: sql<number>`count(*) filter (where ${analyticsEvents.metadata}->>'status' = 'completed')::int`,
-          failed: sql<number>`count(*) filter (where ${analyticsEvents.metadata}->>'status' = 'failed')::int`,
-          inputTokens: sql<number>`coalesce(sum(case when ${analyticsEvents.metadata}->>'inputTokens' ~ '^[0-9]+$' then (${analyticsEvents.metadata}->>'inputTokens')::int else 0 end), 0)::int`,
-          outputTokens: sql<number>`coalesce(sum(case when ${analyticsEvents.metadata}->>'outputTokens' ~ '^[0-9]+$' then (${analyticsEvents.metadata}->>'outputTokens')::int else 0 end), 0)::int`,
-          totalTokens: sql<number>`coalesce(sum(case when ${analyticsEvents.metadata}->>'totalTokens' ~ '^[0-9]+$' then (${analyticsEvents.metadata}->>'totalTokens')::int else 0 end), 0)::int`,
-          averageDurationMs: sql<number>`coalesce(avg(case when ${analyticsEvents.metadata}->>'durationMs' ~ '^[0-9]+$' then (${analyticsEvents.metadata}->>'durationMs')::int end), 0)::double precision`,
-          activeUsers: sql<number>`count(distinct ${analyticsEvents.journeyId})::int`,
-          toolCalls: sql<number>`coalesce(sum(case when ${analyticsEvents.metadata}->>'toolCalls' ~ '^[0-9]+$' then (${analyticsEvents.metadata}->>'toolCalls')::int else 0 end), 0)::int`,
-        })
-        .from(analyticsEvents)
-        .where(runWhere),
-      db
-        .select({
-          name: sql<string>`coalesce(nullif(${analyticsEvents.metadata}->>'intent', ''), 'other')`,
-          runs: sql<number>`count(*)::int`,
-          completed: sql<number>`count(*) filter (where ${analyticsEvents.metadata}->>'status' = 'completed')::int`,
-          tokens: sql<number>`coalesce(sum(case when ${analyticsEvents.metadata}->>'totalTokens' ~ '^[0-9]+$' then (${analyticsEvents.metadata}->>'totalTokens')::int else 0 end), 0)::int`,
-        })
-        .from(analyticsEvents)
-        .where(runWhere)
-        .groupBy(sql`1`)
-        .orderBy(sql`2 desc`)
-        .limit(10),
-      db
-        .select({
-          name: sql<string>`coalesce(nullif(${analyticsEvents.metadata}->>'model', ''), 'unknown')`,
-          runs: sql<number>`count(*)::int`,
-          tokens: sql<number>`coalesce(sum(case when ${analyticsEvents.metadata}->>'totalTokens' ~ '^[0-9]+$' then (${analyticsEvents.metadata}->>'totalTokens')::int else 0 end), 0)::int`,
-        })
-        .from(analyticsEvents)
-        .where(runWhere)
-        .groupBy(sql`1`)
-        .orderBy(sql`2 desc`)
-        .limit(10),
-      db
-        .select({
-          bucket: sql<string>`to_char(date_trunc('day', ${analyticsEvents.occurredAt} at time zone ${ADMIN_REPORTING_TIMEZONE}), 'YYYY-MM-DD')`,
-          runs: sql<number>`count(*)::int`,
-          completed: sql<number>`count(*) filter (where ${analyticsEvents.metadata}->>'status' = 'completed')::int`,
-          failed: sql<number>`count(*) filter (where ${analyticsEvents.metadata}->>'status' = 'failed')::int`,
-          tokens: sql<number>`coalesce(sum(case when ${analyticsEvents.metadata}->>'totalTokens' ~ '^[0-9]+$' then (${analyticsEvents.metadata}->>'totalTokens')::int else 0 end), 0)::int`,
-        })
-        .from(analyticsEvents)
-        .where(runWhere)
-        .groupBy(sql`1`)
-        .orderBy(sql`1`),
-      db
-        .select({
-          opens: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'ai_assistant_open')::int`,
-          messages: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'ai_assistant_message')::int`,
-          resultClicks: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'ai_assistant_result_click')::int`,
-          errors: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'ai_assistant_error')::int`,
-        })
-        .from(analyticsEvents)
-        .where(
-          and(
-            eventWhere,
-            inArray(analyticsEvents.eventName, [
-              'ai_assistant_open',
-              'ai_assistant_message',
-              'ai_assistant_result_click',
-              'ai_assistant_error',
-            ]),
-          ),
-        ),
-      db
-        .select({
-          name: sql<string>`coalesce(nullif(${analyticsEvents.metadata}->>'intent', ''), 'other')`,
-          messages: sql<number>`count(*)::int`,
-        })
-        .from(analyticsEvents)
-        .where(and(eventWhere, eq(analyticsEvents.eventName, 'ai_assistant_message')))
-        .groupBy(sql`1`)
-        .orderBy(sql`2 desc`)
-        .limit(10),
-      db
-        .select({ enabled: storefrontSettings.aiAssistantEnabled })
-        .from(storefrontSettings)
-        .limit(1),
-    ]);
-  const row = summaryRows[0];
-  const runs = numberValue(row?.runs);
-  const completed = numberValue(row?.completed);
-  const inputTokens = numberValue(row?.inputTokens);
-  const outputTokens = numberValue(row?.outputTokens);
+  const rollupWhere = dateCondition(analyticsAiDailyRollups.day, filters);
+  const unrolledEventWhere = and(
+    eventWhere,
+    sql`not exists (
+      select 1 from ${analyticsAiDailyRollups} rollup
+      where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+        and rollup.dimension = 'overall' and rollup.dimension_key = ''
+    )`,
+  );
+  const [
+    summaryResult,
+    activeUsersResult,
+    taskResult,
+    modelResult,
+    trendResult,
+    settingsRows,
+    coverageResult,
+    outcomeResult,
+  ] = await Promise.all([
+    db.execute(sql`
+      with totals as (
+        select
+          count(*) filter (where event_name = 'ai_assistant_open')::bigint as opens,
+          count(*) filter (where event_name = 'ai_assistant_message')::bigint as messages,
+          count(*) filter (where event_name = 'ai_assistant_result_click')::bigint as result_clicks,
+          count(*) filter (where event_name = 'ai_assistant_error')::bigint as errors,
+          count(*) filter (where event_name = 'ai_assistant_run')::bigint as runs,
+          count(*) filter (where event_name = 'ai_assistant_run' and metadata->>'status' = 'completed')::bigint as completed,
+          count(*) filter (where event_name = 'ai_assistant_run' and metadata->>'status' = 'failed')::bigint as failed,
+          coalesce(sum(case when event_name = 'ai_assistant_run' and metadata->>'inputTokens' ~ '^[0-9]+$' then (metadata->>'inputTokens')::bigint else 0 end), 0)::bigint as input_tokens,
+          coalesce(sum(case when event_name = 'ai_assistant_run' and metadata->>'outputTokens' ~ '^[0-9]+$' then (metadata->>'outputTokens')::bigint else 0 end), 0)::bigint as output_tokens,
+          coalesce(sum(case when event_name = 'ai_assistant_run' and metadata->>'totalTokens' ~ '^[0-9]+$' then (metadata->>'totalTokens')::bigint else 0 end), 0)::bigint as total_tokens,
+          coalesce(sum(case when event_name = 'ai_assistant_run' and metadata->>'durationMs' ~ '^[0-9]+$' then (metadata->>'durationMs')::bigint else 0 end), 0)::bigint as duration_ms_total,
+          count(*) filter (where event_name = 'ai_assistant_run' and metadata->>'durationMs' ~ '^[0-9]+$')::bigint as duration_samples,
+          coalesce(sum(case when event_name = 'ai_assistant_run' and metadata->>'toolCalls' ~ '^[0-9]+$' then (metadata->>'toolCalls')::bigint else 0 end), 0)::bigint as tool_calls
+        from ${analyticsEvents}
+        where ${unrolledEventWhere ?? sql`true`}
+          and event_name in ('ai_assistant_open', 'ai_assistant_message', 'ai_assistant_result_click', 'ai_assistant_error', 'ai_assistant_run')
+        union all
+        select sum(opens), sum(messages), sum(result_clicks), sum(errors), sum(runs),
+          sum(completed), sum(failed), sum(input_tokens), sum(output_tokens), sum(total_tokens),
+          sum(duration_ms_total), sum(duration_samples), sum(tool_calls)
+        from ${analyticsAiDailyRollups}
+        where ${rollupWhere ?? sql`true`} and dimension = 'overall' and dimension_key = ''
+      )
+      select coalesce(sum(opens), 0)::bigint as opens,
+        coalesce(sum(messages), 0)::bigint as messages,
+        coalesce(sum(result_clicks), 0)::bigint as result_clicks,
+        coalesce(sum(errors), 0)::bigint as errors,
+        coalesce(sum(runs), 0)::bigint as runs,
+        coalesce(sum(completed), 0)::bigint as completed,
+        coalesce(sum(failed), 0)::bigint as failed,
+        coalesce(sum(input_tokens), 0)::bigint as input_tokens,
+        coalesce(sum(output_tokens), 0)::bigint as output_tokens,
+        coalesce(sum(total_tokens), 0)::bigint as total_tokens,
+        coalesce(sum(duration_ms_total), 0)::bigint as duration_ms_total,
+        coalesce(sum(duration_samples), 0)::bigint as duration_samples,
+        coalesce(sum(tool_calls), 0)::bigint as tool_calls
+      from totals
+    `),
+    db.execute(sql`
+      select count(distinct member_id)::int as active_users from (
+        select journey_id as member_id from ${analyticsEvents}
+        where ${unrolledEventWhere ?? sql`true`}
+          and event_name in ('ai_assistant_open', 'ai_assistant_message', 'ai_assistant_result_click', 'ai_assistant_error', 'ai_assistant_run')
+        union
+        select member_id from ${analyticsDistinctDailyMembers}
+        where ${dateCondition(analyticsDistinctDailyMembers.day, filters) ?? sql`true`}
+          and metric = 'ai_journey' and dimension_key = ''
+      ) members
+    `),
+    db.execute(sql`
+      with tasks as (
+        select coalesce(nullif(metadata->>'intent', ''), 'other') as name,
+          count(*) filter (where event_name = 'ai_assistant_message')::bigint as messages,
+          count(*) filter (where event_name = 'ai_assistant_run')::bigint as runs,
+          count(*) filter (where event_name = 'ai_assistant_run' and metadata->>'status' = 'completed')::bigint as completed,
+          coalesce(sum(case when metadata->>'totalTokens' ~ '^[0-9]+$' then (metadata->>'totalTokens')::bigint else 0 end), 0)::bigint as tokens
+        from ${analyticsEvents}
+        where ${unrolledEventWhere ?? sql`true`}
+          and event_name in ('ai_assistant_message', 'ai_assistant_run')
+        group by 1
+        union all
+        select dimension_key, sum(messages), sum(runs), sum(completed), sum(total_tokens)
+        from ${analyticsAiDailyRollups}
+        where ${rollupWhere ?? sql`true`} and dimension = 'intent'
+        group by dimension_key
+      )
+      select name, sum(messages)::bigint as messages, sum(runs)::bigint as runs,
+        sum(completed)::bigint as completed, sum(tokens)::bigint as tokens
+      from tasks group by name order by sum(messages) desc, sum(runs) desc limit 10
+    `),
+    db.execute(sql`
+      with models as (
+        select coalesce(nullif(metadata->>'model', ''), 'unknown') as name,
+          count(*)::bigint as runs,
+          coalesce(sum(case when metadata->>'totalTokens' ~ '^[0-9]+$' then (metadata->>'totalTokens')::bigint else 0 end), 0)::bigint as tokens
+        from ${analyticsEvents}
+        where ${unrolledEventWhere ?? sql`true`} and event_name = 'ai_assistant_run'
+        group by 1
+        union all
+        select dimension_key, sum(runs), sum(total_tokens)
+        from ${analyticsAiDailyRollups}
+        where ${rollupWhere ?? sql`true`} and dimension = 'model'
+        group by dimension_key
+      )
+      select name, sum(runs)::bigint as runs, sum(tokens)::bigint as tokens
+      from models group by name order by sum(runs) desc limit 10
+    `),
+    db.execute(sql`
+      with trend as (
+        select to_char(date_trunc('day', occurred_at at time zone ${ADMIN_REPORTING_TIMEZONE}), 'YYYY-MM-DD') as bucket,
+          count(*) filter (where event_name = 'ai_assistant_run')::bigint as runs,
+          count(*) filter (where event_name = 'ai_assistant_run' and metadata->>'status' = 'completed')::bigint as completed,
+          count(*) filter (where event_name = 'ai_assistant_run' and metadata->>'status' = 'failed')::bigint as failed,
+          coalesce(sum(case when metadata->>'totalTokens' ~ '^[0-9]+$' then (metadata->>'totalTokens')::bigint else 0 end), 0)::bigint as tokens
+        from ${analyticsEvents}
+        where ${unrolledEventWhere ?? sql`true`} and event_name = 'ai_assistant_run'
+        group by 1
+        union all
+        select day::text, runs, completed, failed, total_tokens
+        from ${analyticsAiDailyRollups}
+        where ${rollupWhere ?? sql`true`} and dimension = 'overall' and dimension_key = ''
+      )
+      select bucket, sum(runs)::bigint as runs, sum(completed)::bigint as completed,
+        sum(failed)::bigint as failed, sum(tokens)::bigint as tokens
+      from trend group by bucket order by bucket
+    `),
+    db.select({ enabled: storefrontSettings.aiAssistantEnabled }).from(storefrontSettings).limit(1),
+    db.execute(sql`
+      select min(value) as coverage_starts_at from (
+        select min(${analyticsEvents.occurredAt}) as value
+        from ${analyticsEvents}
+        where ${analyticsEvents.metadata}->>'storefrontProject' = ${STOREFRONT_ANALYTICS_PROJECT}
+          and ${analyticsEvents.eventName} in ('ai_assistant_open', 'ai_assistant_message', 'ai_assistant_result_click', 'ai_assistant_error', 'ai_assistant_run')
+        union all
+        select min(${analyticsAiDailyRollups.day}::timestamp at time zone 'UTC')
+        from ${analyticsAiDailyRollups}
+        where ${analyticsAiDailyRollups.dimension} = 'overall'
+          and ${analyticsAiDailyRollups.dimensionKey} = ''
+      ) coverage
+    `),
+    db.execute(sql`
+      with line_values as (
+        select ${orderLineItems.orderId} as order_id,
+          coalesce(sum(${orderLineItems.lineTotal}), 0)::double precision as submitted_value
+        from ${orderLineItems}
+        group by ${orderLineItems.orderId}
+      )
+      select count(*) filter (where ${orderAiInfluence.level} <> 'none')::int as influenced_orders,
+        count(*) filter (where ${orderAiInfluence.level} <> 'none' and ${inArray(orders.confirmed, [...CUSTOMER_SUCCESSFUL_ORDER_STATUSES])})::int as confirmed_orders,
+        count(*) filter (where ${orderAiInfluence.level} <> 'none' and ${orders.confirmed} in (4, 10))::int as completed_orders,
+        count(*) filter (where ${orderAiInfluence.level} <> 'none' and ${ecotrackOrderStates.currentStatus} = 'paye_et_archive')::int as paid_orders,
+        count(*) filter (where ${orderAiInfluence.recommendedProductOrdered})::int as recommended_product_orders,
+        coalesce(sum(coalesce(line_values.submitted_value, ${orders.price}::double precision, 0))
+          filter (where ${orderAiInfluence.level} <> 'none'), 0)::double precision as submitted_value_dzd
+      from ${orderAiInfluence}
+      inner join ${orders} on ${orders.id} = ${orderAiInfluence.orderId}
+      left join line_values on line_values.order_id = ${orders.id}
+      left join ${ecotrackOrderStates} on ${ecotrackOrderStates.orderId} = ${orders.id}
+        and ${ecotrackOrderStates.deletedAt} is null
+      where ${reportingTimestampCondition(orders.createdAt, filters) ?? sql`true`}
+    `),
+  ]);
+  const row = asRows(summaryResult)[0] ?? {};
+  const runs = numberValue(row.runs);
+  const completed = numberValue(row.completed);
+  const inputTokens = numberValue(row.input_tokens);
+  const outputTokens = numberValue(row.output_tokens);
+  const durationSamples = numberValue(row.duration_samples);
+  const taskRows = asRows(taskResult);
+  const modelRows = asRows(modelResult);
+  const trendRows = asRows(trendResult);
+  const activeUsers = numberValue(asRows(activeUsersResult)[0]?.active_users);
+  const outcomes = asRows(outcomeResult)[0] ?? {};
+  const coverageStartsAt = asRows(coverageResult)[0]?.coverage_starts_at;
+  const influencedOrders = numberValue(outcomes.influenced_orders);
+  const confirmedOrders = numberValue(outcomes.confirmed_orders);
   const pricing = getAiUsagePricing('storefront');
-  const events = eventRows[0];
-  const messages = numberValue(events?.messages);
-  const resultClicks = numberValue(events?.resultClicks);
+  const messages = numberValue(row.messages);
+  const resultClicks = numberValue(row.result_clicks);
   return {
     enabled: settingsRows[0]?.enabled ?? true,
     runs,
     completed,
-    failed: numberValue(row?.failed),
+    failed: numberValue(row.failed),
     successRate: runs ? round((completed / runs) * 100) : 0,
-    conversations: numberValue(row?.activeUsers),
-    activeUsers: numberValue(row?.activeUsers),
+    conversations: activeUsers,
+    activeUsers,
     inputTokens,
     outputTokens,
-    totalTokens: numberValue(row?.totalTokens),
+    totalTokens: numberValue(row.total_tokens),
     estimatedCostUsd: estimateCost(inputTokens, outputTokens, pricing),
     costCoverageRate: pricing && runs ? 100 : 0,
-    averageDurationMs: round(numberValue(row?.averageDurationMs)),
-    toolCalls: numberValue(row?.toolCalls),
+    averageDurationMs: durationSamples
+      ? round(numberValue(row.duration_ms_total) / durationSamples)
+      : 0,
+    toolCalls: numberValue(row.tool_calls),
     proposals: 0,
     appliedProposals: 0,
     topTasks: taskRows.map((task) => ({
-      name: task.name,
+      name: String(task.name ?? 'other'),
       runs: numberValue(task.runs),
       successRate: numberValue(task.runs)
         ? round((numberValue(task.completed) / numberValue(task.runs)) * 100)
@@ -751,24 +891,32 @@ export async function getLiveStorefrontAiStats(
       tokens: numberValue(task.tokens),
     })),
     models: modelRows.map((model) => ({
-      name: model.name,
+      name: String(model.name ?? 'unknown'),
       runs: numberValue(model.runs),
       tokens: numberValue(model.tokens),
     })),
     trend: trendRows.map((point) => ({
-      bucket: point.bucket,
+      bucket: String(point.bucket),
       runs: numberValue(point.runs),
       completed: numberValue(point.completed),
       failed: numberValue(point.failed),
       tokens: numberValue(point.tokens),
     })),
-    opens: numberValue(events?.opens),
+    opens: numberValue(row.opens),
     messages,
     resultClicks,
-    errors: numberValue(events?.errors),
+    errors: numberValue(row.errors),
     clickThroughRate: messages ? round((resultClicks / messages) * 100) : 0,
-    topIntents: intentRows.map((intent) => ({
-      name: intent.name,
+    influencedOrders,
+    confirmedOrders,
+    completedOrders: numberValue(outcomes.completed_orders),
+    paidOrders: numberValue(outcomes.paid_orders),
+    recommendedProductOrders: numberValue(outcomes.recommended_product_orders),
+    submittedValueDzd: round(numberValue(outcomes.submitted_value_dzd)),
+    confirmationRate: influencedOrders ? round((confirmedOrders / influencedOrders) * 100) : 0,
+    usageCoverageStartsAt: isoValue(coverageStartsAt),
+    topIntents: taskRows.map((intent) => ({
+      name: String(intent.name ?? 'other'),
       messages: numberValue(intent.messages),
     })),
   };
@@ -789,6 +937,17 @@ export async function getExperienceStats(
     sql`${analyticsEvents.metadata}->>'storefrontProject' = ${STOREFRONT_ANALYTICS_PROJECT}`,
   );
   const websiteRollupWhere = dateCondition(analyticsDailyRollups.day, filters);
+  const acquisitionSessionWhere = dateCondition(analyticsSessions.startedAt, filters);
+  const acquisitionRollupWhere = dateCondition(analyticsAcquisitionDailyRollups.day, filters);
+  const unrolledAcquisitionSessionWhere = and(
+    acquisitionSessionWhere,
+    sql`not exists (
+      select 1 from ${analyticsAcquisitionDailyRollups} rollup
+      where rollup.day = (${analyticsSessions.startedAt} at time zone 'UTC')::date
+        and rollup.channel = ${analyticsSessions.channel}
+        and rollup.evidence = ${analyticsSessions.evidence}
+    )`,
+  );
   const unrolledWebsiteAnalyticsWhere = and(
     websiteAnalyticsWhere,
     sql`not exists (
@@ -807,20 +966,15 @@ export async function getExperienceStats(
     where rollup.day = (${analyticsPaidClickVisits.firstSeenAt} at time zone 'UTC')::date
   )`,
   );
-  const errorNames = [
-    'api_error',
-    'order_create_failed',
-    'order_verification_failed_after_create',
-    'ai_assistant_error',
-  ];
-
   const [
     pageTypeRows,
     localeRows,
     deviceRows,
     vitalRows,
-    errorRows,
-    referrerRows,
+    acquisitionSessionRows,
+    acquisitionRollupRows,
+    acquisitionOrderRows,
+    acquisitionCoverageResult,
     websiteTrendRows,
     websiteTrendRollupRows,
     engagementResult,
@@ -852,7 +1006,7 @@ export async function getExperienceStats(
         name: sql<string>`coalesce(nullif(${analyticsEvents.locale}, ''), 'unknown')`,
         sessions: sql<number>`count(distinct ${analyticsEvents.sessionId})::int`,
         pageViews: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'page_view')::int`,
-        purchases: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'purchase')::int`,
+        purchases: sql<number>`count(distinct coalesce(${analyticsEvents.orderId}::text, ${analyticsEvents.eventId})) filter (where ${analyticsEvents.eventName} = 'purchase')::int`,
       })
       .from(analyticsEvents)
       .where(websiteAnalyticsWhere)
@@ -883,31 +1037,44 @@ export async function getExperienceStats(
       .orderBy(sql`1`),
     db
       .select({
-        name: sql<string>`coalesce(nullif(${analyticsEvents.metadata}->>'failureCode', ''), nullif(${analyticsEvents.metadata}->>'code', ''), nullif(${analyticsEvents.metadata}->>'target', ''), ${analyticsEvents.eventName})`,
-        count: sql<number>`count(*)::int`,
-        lastSeenAt: sql<Date | null>`max(${analyticsEvents.occurredAt})`,
+        name: analyticsSessions.channel,
+        sessions: sql<number>`count(*)::int`,
       })
-      .from(analyticsEvents)
-      .where(and(websiteAnalyticsWhere, inArray(analyticsEvents.eventName, errorNames)))
-      .groupBy(sql`1`)
-      .orderBy(sql`2 desc`)
-      .limit(10),
+      .from(analyticsSessions)
+      .where(unrolledAcquisitionSessionWhere)
+      .groupBy(analyticsSessions.channel),
     db
       .select({
-        name: sql<string>`coalesce(nullif(${analyticsEvents.referrer}, ''), 'Direct')`,
-        sessions: sql<number>`count(distinct ${analyticsEvents.sessionId})::int`,
+        name: analyticsAcquisitionDailyRollups.channel,
+        sessions: sql<number>`coalesce(sum(${analyticsAcquisitionDailyRollups.sessions}), 0)::int`,
       })
-      .from(analyticsEvents)
-      .where(and(websiteAnalyticsWhere, eq(analyticsEvents.eventName, 'page_view')))
-      .groupBy(sql`1`)
-      .orderBy(sql`2 desc`)
-      .limit(10),
+      .from(analyticsAcquisitionDailyRollups)
+      .where(acquisitionRollupWhere)
+      .groupBy(analyticsAcquisitionDailyRollups.channel),
+    db
+      .select({
+        name: orderAcquisitionAttribution.channel,
+        orders: sql<number>`count(*)::int`,
+        successfulOrders: sql<number>`count(*) filter (where ${inArray(orders.confirmed, [...CUSTOMER_SUCCESSFUL_ORDER_STATUSES])})::int`,
+      })
+      .from(orderAcquisitionAttribution)
+      .innerJoin(orders, eq(orders.id, orderAcquisitionAttribution.orderId))
+      .where(reportingTimestampCondition(orders.createdAt, filters))
+      .groupBy(orderAcquisitionAttribution.channel),
+    db.execute(sql`
+      select min(value) as coverage_starts_at from (
+        select min(${analyticsSessions.startedAt}) as value from ${analyticsSessions}
+        union all
+        select min(${analyticsAcquisitionDailyRollups.day}::timestamp at time zone 'UTC')
+        from ${analyticsAcquisitionDailyRollups}
+      ) coverage
+    `),
     db
       .select({
         bucket: sql<string>`to_char(date_trunc('day', ${analyticsEvents.occurredAt}), 'YYYY-MM-DD')`,
         sessions: sql<number>`count(distinct ${analyticsEvents.sessionId})::int`,
         pageViews: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'page_view')::int`,
-        purchases: sql<number>`count(*) filter (where ${analyticsEvents.eventName} = 'purchase')::int`,
+        purchases: sql<number>`count(distinct coalesce(${analyticsEvents.orderId}::text, ${analyticsEvents.eventId})) filter (where ${analyticsEvents.eventName} = 'purchase')::int`,
         errors: sql<number>`count(*) filter (where ${analyticsEvents.eventName} in ('api_error', 'order_create_failed', 'order_verification_failed_after_create'))::int`,
       })
       .from(analyticsEvents)
@@ -939,6 +1106,7 @@ export async function getExperienceStats(
       select count(*)::int as sessions,
         count(*) filter (where page_views > 1)::int as engaged_sessions,
         coalesce(sum(errors), 0)::int as errors,
+        count(*) filter (where errors > 0)::int as error_sessions,
         (select count(*)::int from journeys where sessions > 1) as returning_journeys
       from sessions
     `),
@@ -1000,6 +1168,7 @@ export async function getExperienceStats(
   const totalSessions = numberValue(engagement.sessions);
   const engagedSessions = numberValue(engagement.engaged_sessions);
   const errorEvents = numberValue(engagement.errors);
+  const errorSessions = numberValue(engagement.error_sessions);
   const websiteTrend = new Map<
     string,
     { bucket: string; sessions: number; pageViews: number; purchases: number; errors: number }
@@ -1083,6 +1252,38 @@ export async function getExperienceStats(
     numberValue(paid.created_orders) + numberValue(paidRollup.createdOrders);
   const paidPurchases = numberValue(paid.purchases) + numberValue(paidRollup.purchases);
   const paidLandedOnly = numberValue(paid.landed_only) + numberValue(paidRollup.landedOnly);
+  const acquisitionSources = new Map<
+    string,
+    { name: string; sessions: number; orders: number; successfulOrders: number }
+  >();
+  for (const row of [...acquisitionSessionRows, ...acquisitionRollupRows] as Array<{
+    name: string;
+    sessions: unknown;
+  }>) {
+    const current = acquisitionSources.get(row.name) ?? {
+      name: row.name,
+      sessions: 0,
+      orders: 0,
+      successfulOrders: 0,
+    };
+    current.sessions += numberValue(row.sessions);
+    acquisitionSources.set(row.name, current);
+  }
+  for (const row of acquisitionOrderRows as Array<{
+    name: string;
+    orders: unknown;
+    successfulOrders: unknown;
+  }>) {
+    const current = acquisitionSources.get(row.name) ?? {
+      name: row.name,
+      sessions: 0,
+      orders: 0,
+      successfulOrders: 0,
+    };
+    current.orders += numberValue(row.orders);
+    current.successfulOrders += numberValue(row.successfulOrders);
+    acquisitionSources.set(row.name, current);
+  }
 
   return {
     website: {
@@ -1090,7 +1291,7 @@ export async function getExperienceStats(
       engagementRate: totalSessions ? round((engagedSessions / totalSessions) * 100) : 0,
       returningJourneys: numberValue(engagement.returning_journeys),
       errorEvents,
-      errorRate: totalSessions ? round((errorEvents / totalSessions) * 100) : 0,
+      errorRate: totalSessions ? round((errorSessions / totalSessions) * 100) : 0,
       pageTypes: (
         pageTypeRows as Array<{
           name: string;
@@ -1141,17 +1342,16 @@ export async function getExperienceStats(
         needsImprovement: numberValue(row.needsImprovement),
         poor: numberValue(row.poor),
       })),
-      errors: (errorRows as Array<{ name: string; count: unknown; lastSeenAt: unknown }>).map(
-        (row) => ({
-          name: row.name,
-          count: numberValue(row.count),
-          lastSeenAt: isoValue(row.lastSeenAt),
-        }),
+      acquisitionSources: [...acquisitionSources.values()]
+        .map((row) => ({
+          ...row,
+          conversionRate: row.sessions ? round((row.orders / row.sessions) * 100) : 0,
+        }))
+        .sort((left, right) => right.sessions - left.sessions || right.orders - left.orders)
+        .slice(0, 10),
+      acquisitionCoverageStartsAt: isoValue(
+        asRows(acquisitionCoverageResult)[0]?.coverage_starts_at,
       ),
-      referrers: (referrerRows as Array<{ name: string; sessions: unknown }>).map((row) => ({
-        name: row.name,
-        sessions: numberValue(row.sessions),
-      })),
       trend: Array.from(websiteTrend.values()).sort((left, right) =>
         left.bucket.localeCompare(right.bucket),
       ),

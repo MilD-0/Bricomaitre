@@ -6,6 +6,7 @@ import { bulletinReplies } from '@bric/db/schema';
 import { canDeleteBulletinReply } from '../../../../../lib/bulletin';
 import { getBulletinViewer, requireBulletinSession } from '../../../../../lib/bulletin-server';
 import { mutateEntityWithHistory } from '../../../../../lib/action-history';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ replyId: string }> }) {
   const { session, response } = await requireBulletinSession();
@@ -18,7 +19,10 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ rep
   }
 
   const { replyId } = await params;
-  const numericReplyId = Number(replyId);
+  const numericReplyId = parsePositiveIntegerId(replyId);
+  if (numericReplyId === null) {
+    return NextResponse.json({ error: 'Invalid bulletin reply id' }, { status: 400 });
+  }
   const db = getDb();
   const reply = await db.query.bulletinReplies.findFirst({
     where: eq(bulletinReplies.id, numericReplyId),

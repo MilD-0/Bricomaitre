@@ -70,6 +70,58 @@ describe('app/api/assets/[kind]/[id]/route', () => {
     await expect(res.json()).resolves.toEqual({ error: 'Invalid toggle payload' });
   });
 
+  it.each(['banner', 'product-card'])(
+    'rejects featured-group fields on %s toggles before entering the mutation path',
+    async (kind) => {
+      hasDbMock.mockReturnValue(true);
+      getDbMock.mockReturnValue({ marker: 'db' });
+
+      const req = new NextRequest(`http://localhost/api/assets/${kind}/7`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: true, showAtTopOfProductsPage: true }),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const res = await PATCH(req, { params: Promise.resolve({ kind, id: '7' }) });
+
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toEqual({ error: 'Invalid toggle payload' });
+      expect(mutateEntityWithHistoryMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    [
+      'PATCH',
+      (request: NextRequest) =>
+        PATCH(request, { params: Promise.resolve({ kind: 'banner', id: 'nope' }) }),
+    ],
+    [
+      'PUT',
+      (request: NextRequest) =>
+        PUT(request, { params: Promise.resolve({ kind: 'banner', id: 'nope' }) }),
+    ],
+    [
+      'DELETE',
+      (request: NextRequest) =>
+        DELETE(request, { params: Promise.resolve({ kind: 'banner', id: 'nope' }) }),
+    ],
+  ])('returns 400 for a malformed asset id in %s', async (method, callRoute) => {
+    hasDbMock.mockReturnValue(true);
+    const request = new NextRequest('http://localhost/api/assets/banner/nope', {
+      method,
+      ...(method === 'PATCH' || method === 'PUT'
+        ? { body: JSON.stringify({}), headers: { 'content-type': 'application/json' } }
+        : {}),
+    });
+
+    const res = await callRoute(request);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'Invalid asset id' });
+    expect(getDbMock).not.toHaveBeenCalled();
+  });
+
   it('returns 400 for malformed JSON update payloads', async () => {
     hasDbMock.mockReturnValue(true);
 

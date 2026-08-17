@@ -170,12 +170,35 @@ export const assetReorderSchema = z.object({
     .min(1),
 });
 
+export const assetMutationRequestSchema = z.strictObject({
+  kind: z.string(),
+  data: z.unknown(),
+});
+
+export const assetReplacementRequestSchema = z.strictObject({
+  data: z.unknown(),
+});
+
+export const assetActiveToggleSchema = z.strictObject({
+  active: z.boolean(),
+});
+
+export const featuredProductGroupToggleSchema = z
+  .strictObject({
+    active: z.boolean().optional(),
+    showAtTopOfProductsPage: z.boolean().optional(),
+  })
+  .refine(
+    (value) =>
+      typeof value.active === 'boolean' || typeof value.showAtTopOfProductsPage === 'boolean',
+  );
+
 export type AssetBannerInput = z.input<typeof assetBannerSchema>;
-type AssetBannerPayload = z.output<typeof assetBannerSchema>;
+export type AssetBannerPayload = z.output<typeof assetBannerSchema>;
 export type FeaturedProductGroupInput = z.input<typeof featuredProductGroupSchema>;
-type FeaturedProductGroupPayload = z.output<typeof featuredProductGroupSchema>;
+export type FeaturedProductGroupPayload = z.output<typeof featuredProductGroupSchema>;
 export type ProductCardInput = z.input<typeof productCardSchema>;
-type ProductCardPayload = z.output<typeof productCardSchema>;
+export type ProductCardPayload = z.output<typeof productCardSchema>;
 
 export type AssetMetaProduct = {
   id: number;

@@ -55,6 +55,7 @@ const labels = Object.fromEntries(
 const order: StorefrontOrderResponseItem = {
   id: 42,
   publicToken: 'public-order-token-1234567890',
+  purchaseEventId: 'purchase-42',
   createdAt: '2026-07-14T10:00:00.000Z',
   updatedAt: '2026-07-14T10:00:00.000Z',
   firstName: null,
@@ -133,6 +134,7 @@ describe('ThankYouConfirmation', () => {
     await waitFor(() =>
       expect(mocks.track).toHaveBeenCalledWith(
         expect.objectContaining({
+          eventId: 'purchase-42',
           eventName: 'purchase',
           orderId: 42,
           metadata: expect.objectContaining({
@@ -145,6 +147,9 @@ describe('ThankYouConfirmation', () => {
     expect(mocks.track.mock.calls.flatMap((call) => JSON.stringify(call))).not.toContain(
       '0550000000',
     );
+    expect(
+      JSON.parse(window.localStorage.getItem(CHECKOUT_CONFIRMATION_KEY)!).purchaseEventId,
+    ).toBe('purchase-42');
   });
 
   it('shows a layout-matched skeleton while order verification is pending', async () => {

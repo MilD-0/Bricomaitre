@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const storageKey = 'adminstration-store-v1';
+const storageKey = 'admin-store-v1';
 
 describe('useAppStore', () => {
   beforeEach(() => {

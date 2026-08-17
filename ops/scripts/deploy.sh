@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
+# shellcheck source=blue-green.sh
 source "$script_dir/blue-green.sh"
 
 release_dir_input="${1:-$repo_root}"
@@ -28,11 +29,68 @@ fi
 
 api_service="$(service_name storefront-api "$target_slot")"
 meta_worker_service="storefront-meta-worker"
-admin_service="$(service_name adminstration "$target_slot")"
+admin_service="$(service_name admin "$target_slot")"
 worker_service="$(service_name admin-worker "$target_slot")"
 storefront_service="$(service_name storefront "$target_slot")"
 api_host_port="$(slot_api_host_port "$target_slot")"
 release_images_file="$release_dir/$release_images_marker_name"
+original_current_release="$(release_link_target "$current_link")"
+original_previous_release="$(release_link_target "$previous_link")"
+deployment_committed=false
+routing_changed=false
+
+nginx_main_fallback="$release_dir/ops/nginx/nginx.conf"
+if [[ -n "$original_current_release" ]]; then
+  nginx_main_fallback="$original_current_release/ops/nginx/nginx.conf"
+fi
+
+cleanup_failed_deployment() {
+  local status=$?
+  local routing_restored=true
+  trap - EXIT
+
+  if [[ "$deployment_committed" != true ]]; then
+    set +e
+    echo "deployment failed; restoring the previously verified runtime state" >&2
+
+    rollback_nginx_main_config_transaction
+    if [[ "$routing_changed" == true && -n "$previous_slot" ]]; then
+      if ! render_release_nginx_config "$original_current_release" "$previous_slot" \
+        || ! reload_nginx; then
+        routing_restored=false
+        echo "failed to restore previous Nginx routing; preserving the candidate services" >&2
+      fi
+    fi
+
+    if [[ "$routing_restored" == true ]]; then
+      remove_slot_release_services "$target_slot"
+      rollback_image_state_transaction
+    else
+      # The running Nginx generation may still route to the candidate. Keep
+      # both its containers and digest pins intact instead of causing an outage.
+      commit_image_state_transaction
+    fi
+
+    if [[ "$routing_restored" == true && -f "$image_state_file" ]] \
+      && grep -q '^BRIC_IMAGE_STOREFRONT_META_WORKER=' "$image_state_file"; then
+      compose up -d --force-recreate "$meta_worker_service"
+      assert_service_image "$meta_worker_service"
+      bash "$script_dir/wait-for-health.sh" "$meta_worker_service"
+    elif [[ "$routing_restored" == true ]]; then
+      compose stop "$meta_worker_service"
+    fi
+
+    if [[ "$routing_restored" == true ]]; then
+      restore_release_link "$current_link" "$original_current_release"
+      restore_release_link "$previous_link" "$original_previous_release"
+      set_active_slot "$current_slot"
+    fi
+  fi
+
+  exit "$status"
+}
+
+trap cleanup_failed_deployment EXIT
 
 append_summary() {
   local line="${1:?summary line is required}"
@@ -80,11 +138,14 @@ print(f'CATEGORY_COUNT={counts["categoryCount"]}')
 PY
 }
 
+begin_image_state_transaction
+begin_nginx_main_config_transaction "$nginx_main_fallback"
 apply_release_images "$target_slot" "$release_images_file"
 
 compose up -d postgres redis
 
 set -a
+# shellcheck disable=SC1091
 source "${BRIC_ENV_DIR:-/srv/bric/env}/storefront-api.env"
 set +a
 
@@ -112,9 +173,6 @@ append_summary "## Storefront build"
 append_summary "- Upstream counts: ${PRODUCT_COUNT} products, ${BRAND_COUNT} brands, ${CATEGORY_COUNT} categories"
 
 "$script_dir/run-admin-migrations.sh" "$target_slot"
-compose pull "$meta_worker_service"
-compose up -d --force-recreate "$meta_worker_service"
-assert_service_image "$meta_worker_service"
 
 actual_static_pages="$BRIC_STOREFRONT_STATIC_PAGES"
 printf 'storefront build generated %s prerendered routes; remaining catalog routes use ISR\n' "$actual_static_pages"
@@ -149,11 +207,12 @@ compose pull "$worker_service"
 compose up -d --force-recreate "$worker_service"
 assert_service_image "$worker_service"
 if ! bash "$script_dir/wait-for-health.sh" "$worker_service"; then
-  compose stop "$worker_service" || true
   exit 1
 fi
 
+routing_changed=true
 render_nginx_config "$target_slot"
+stage_nginx_main_config
 
 if compose ps -q nginx >/dev/null 2>&1 && [[ -n "$(compose ps -q nginx)" ]]; then
   ensure_nginx
@@ -163,23 +222,30 @@ else
 fi
 
 if ! bash "$script_dir/smoke-check.sh"; then
-  compose stop "$worker_service" || true
-  if [[ -n "$previous_slot" ]]; then
-    render_nginx_config "$previous_slot"
-    reload_nginx
-  fi
   exit 1
 fi
+
+compose pull "$meta_worker_service"
+compose up -d --force-recreate "$meta_worker_service"
+assert_service_image "$meta_worker_service"
+bash "$script_dir/wait-for-health.sh" "$meta_worker_service"
 
 if [[ -n "$previous_slot" ]]; then
   previous_worker_service="$(service_name admin-worker "$previous_slot")"
   compose stop "$previous_worker_service" || true
 fi
 
+if [[ -n "$original_current_release" && "$original_current_release" != "$release_dir" ]]; then
+  set_previous_release "$original_current_release"
+fi
 set_current_release "$release_dir"
 set_active_slot "$target_slot"
+commit_image_state_transaction
+commit_nginx_main_config_transaction
+deployment_committed=true
 if [[ -n "$previous_slot" ]]; then
   stop_slot_app_services "$previous_slot"
 fi
+remove_obsolete_compose_containers || echo 'warning: obsolete Compose containers require manual cleanup' >&2
 prune_old_releases
 printf 'deployed slot %s\n' "$target_slot"

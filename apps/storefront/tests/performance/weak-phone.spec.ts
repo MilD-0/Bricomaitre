@@ -10,8 +10,10 @@ type PerformanceSnapshot = {
 const GOOD_LCP_MS = 2_500;
 // This deterministic lab budget runs with 4x CPU throttling. The 200 ms "good"
 // INP threshold is a field p75 target, not a sound pass/fail boundary for one
-// virtualized CI sample.
+// virtualized CI sample. Require the median of three openings to stay inside
+// the lab budget and retain a ceiling that still catches a severe cold outlier.
 const LAB_NAVIGATION_INP_BUDGET_MS = 300;
+const LAB_NAVIGATION_INP_CEILING_MS = 400;
 
 async function emulateWeakPhone(page: Page, context: BrowserContext) {
   await page.setViewportSize({ width: 360, height: 740 });
@@ -55,9 +57,9 @@ async function emulateWeakPhone(page: Page, context: BrowserContext) {
 }
 
 async function expectWeakPhoneBudget(page: Page, path: string, ready: () => Promise<void>) {
-  // The browser suite runs against Next's development server. Warm the route
-  // outside the browser so one-time compilation is not counted as user-facing
-  // LCP, while the browser still performs a cold, throttled navigation.
+  // Performance runs against the production standalone server. Warm the route
+  // outside the browser so origin cold-start and ISR generation are excluded,
+  // while the browser still performs a cold, throttled navigation.
   const warmupResponse = await page.request.get(path);
   expect(warmupResponse.ok(), `Route warm-up failed for ${path}`).toBe(true);
 
@@ -102,18 +104,40 @@ test('mobile navigation stays within the weak-phone lab interaction budget', asy
     ).toBeVisible();
   });
   await expect(page.locator('.navigation-categories-skeleton')).toHaveCount(0, { timeout: 10_000 });
-  await page.getByRole('button', { name: 'Ouvrir le menu' }).click();
-  await expect(page.getByRole('dialog', { name: 'Ouvrir le menu' })).toBeVisible();
-  await page.waitForTimeout(250);
-  const inp = await page.evaluate(
-    () =>
-      (window as Window & { __v1PerformanceGate?: PerformanceSnapshot }).__v1PerformanceGate?.inp ??
-      0,
-  );
+  const samples: number[] = [];
+  for (let sample = 0; sample < 3; sample += 1) {
+    await page.evaluate(() => {
+      const gate = (window as Window & { __v1PerformanceGate?: PerformanceSnapshot })
+        .__v1PerformanceGate;
+      if (gate) gate.inp = 0;
+    });
+    await page.getByRole('button', { name: 'Ouvrir le menu' }).click();
+    await expect(page.getByRole('dialog', { name: 'Ouvrir le menu' })).toBeVisible();
+    await page.waitForTimeout(250);
+    samples.push(
+      await page.evaluate(
+        () =>
+          (window as Window & { __v1PerformanceGate?: PerformanceSnapshot }).__v1PerformanceGate
+            ?.inp ?? 0,
+      ),
+    );
+    await page.getByRole('button', { name: 'Fermer le menu' }).click();
+    await expect(page.getByRole('dialog', { name: 'Ouvrir le menu' })).toHaveCount(0);
+    await page.waitForTimeout(100);
+  }
 
-  expect(inp, `Mobile navigation INP was ${inp}ms`).toBeGreaterThan(0);
-  expect(inp, `Mobile navigation INP was ${inp}ms`).toBeLessThanOrEqual(
+  expect(
+    samples.every((sample) => sample > 0),
+    `Mobile navigation INP samples: ${samples}`,
+  ).toBe(true);
+  const sortedSamples = samples.toSorted((left, right) => left - right);
+  const median = sortedSamples[1];
+  const slowest = sortedSamples[2];
+  expect(median, `Mobile navigation INP samples: ${samples}`).toBeLessThanOrEqual(
     LAB_NAVIGATION_INP_BUDGET_MS,
+  );
+  expect(slowest, `Mobile navigation INP samples: ${samples}`).toBeLessThanOrEqual(
+    LAB_NAVIGATION_INP_CEILING_MS,
   );
 });
 

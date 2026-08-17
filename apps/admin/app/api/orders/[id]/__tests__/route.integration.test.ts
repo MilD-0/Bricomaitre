@@ -108,6 +108,36 @@ describe('app/api/orders/[id]/route', () => {
     await expect(response.json()).resolves.toEqual({ error: 'Forbidden' });
   });
 
+  it.each([
+    ['GET', (request: NextRequest) => GET(request, { params: Promise.resolve({ id: 'nope' }) })],
+    ['POST', (request: NextRequest) => POST(request, { params: Promise.resolve({ id: 'nope' }) })],
+    [
+      'PATCH',
+      (request: NextRequest) => PATCH(request, { params: Promise.resolve({ id: 'nope' }) }),
+    ],
+    [
+      'DELETE',
+      (request: NextRequest) => DELETE(request, { params: Promise.resolve({ id: 'nope' }) }),
+    ],
+  ])('returns 400 for a malformed order id in %s', async (method, callRoute) => {
+    hasDbMock.mockReturnValue(true);
+    const request = new NextRequest('http://localhost/api/orders/nope', {
+      method,
+      ...(method === 'PATCH'
+        ? {
+            body: JSON.stringify({ note: 'valid' }),
+            headers: { 'content-type': 'application/json' },
+          }
+        : {}),
+    });
+
+    const response = await callRoute(request);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid order id' });
+    expect(getDbMock).not.toHaveBeenCalled();
+  });
+
   it('issues an opaque tracking token for an imported order that does not have one', async () => {
     hasDbMock.mockReturnValue(true);
     let issuedToken = '';

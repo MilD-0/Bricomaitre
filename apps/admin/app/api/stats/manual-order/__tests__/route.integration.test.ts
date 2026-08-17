@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET, POST } from '../route';
-import { ManualOrderConflictError } from '../../../../../lib/stats';
+import { ManualOrderConflictError } from '../../../../../lib/manual-orders';
 
 const {
   hasDbMock,
@@ -36,9 +36,9 @@ vi.mock('../../../../../lib/reporting-refresh-trigger', () => ({
   triggerAdminReportingRefresh: triggerAdminReportingRefreshMock,
 }));
 
-vi.mock('../../../../../lib/stats', async () => {
-  const actual = await vi.importActual<typeof import('../../../../../lib/stats')>(
-    '../../../../../lib/stats',
+vi.mock('../../../../../lib/manual-orders', async () => {
+  const actual = await vi.importActual<typeof import('../../../../../lib/manual-orders')>(
+    '../../../../../lib/manual-orders',
   );
 
   return {

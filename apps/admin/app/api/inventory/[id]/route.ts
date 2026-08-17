@@ -6,6 +6,7 @@ import { getDb, hasDb } from '@bric/db/client';
 import { products } from '@bric/db/schema';
 import { mutateEntityWithHistory } from '../../../../lib/action-history';
 import { auth } from '../../../../lib/auth';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import {
   applyInventoryQuantityChange,
   buildInventoryRowSelection,
@@ -45,7 +46,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const { id } = await params;
-  const numericId = Number(id);
+  const numericId = parsePositiveIntegerId(id);
+  if (numericId === null) {
+    return NextResponse.json({ error: 'Invalid product id' }, { status: 400 });
+  }
   const db = getDb();
   const current = await readInventoryProductById(db, numericId);
 

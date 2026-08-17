@@ -1,14 +1,14 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { enforceRequestRateLimitMock, hasDbMock, startOwnedJobMock } = vi.hoisted(() => ({
+const { enforceRequestRateLimitMock, hasDbMock, enqueueLightweightJobMock } = vi.hoisted(() => ({
   enforceRequestRateLimitMock: vi.fn(),
   hasDbMock: vi.fn(),
-  startOwnedJobMock: vi.fn(),
+  enqueueLightweightJobMock: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: hasDbMock }));
-vi.mock('@bric/runtime/jobs', () => ({ startOwnedJob: startOwnedJobMock }));
+vi.mock('@bric/runtime/jobs', () => ({ enqueueLightweightJob: enqueueLightweightJobMock }));
 vi.mock('../../../lib/request-security', () => ({
   buildRateLimitHeaders: () => ({}),
   enforceRequestRateLimit: enforceRequestRateLimitMock,
@@ -16,10 +16,10 @@ vi.mock('../../../lib/request-security', () => ({
 
 import { POST } from './route';
 
-function request(body: string) {
+function request(body: string, headers: Record<string, string> = {}) {
   return new NextRequest('https://api.bricomaitre.com/storefront/analytics', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
     body,
   });
 }
@@ -27,7 +27,7 @@ function request(body: string) {
 describe('POST /storefront/analytics', () => {
   beforeEach(() => {
     hasDbMock.mockReset().mockReturnValue(true);
-    startOwnedJobMock.mockReset().mockResolvedValue({ kind: 'created' });
+    enqueueLightweightJobMock.mockReset().mockResolvedValue({ kind: 'created' });
     enforceRequestRateLimitMock.mockReset().mockResolvedValue({
       ok: true,
       limit: 120,
@@ -46,14 +46,14 @@ describe('POST /storefront/analytics', () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({ error: 'Invalid JSON request body.' });
-    expect(startOwnedJobMock).not.toHaveBeenCalled();
+    expect(enqueueLightweightJobMock).not.toHaveBeenCalled();
   });
 
   it('returns a controlled 400 for a contract-invalid event', async () => {
     const response = await POST(request(JSON.stringify({ eventName: 'page_view' })));
 
     expect(response.status).toBe(400);
-    expect(startOwnedJobMock).not.toHaveBeenCalled();
+    expect(enqueueLightweightJobMock).not.toHaveBeenCalled();
   });
 
   it('queues a governed event with future client time clamped at the API boundary', async () => {
@@ -75,15 +75,84 @@ describe('POST /storefront/analytics', () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true, queued: true, deduped: false });
-    expect(startOwnedJobMock).toHaveBeenCalledWith(
+    expect(enqueueLightweightJobMock).toHaveBeenCalledWith(
       expect.objectContaining({
         queueName: 'storefront-analytics',
-        kind: 'analytics-event',
-        ownerKey: 'event-1',
+        jobName: 'analytics-event',
+        dedupeKey: 'event-1',
         data: {
           event: expect.objectContaining({ occurredAt: '2026-08-16T10:00:00.000Z' }),
         },
       }),
     );
+  });
+
+  it('clamps arbitrarily old client time before it can poison permanent rollups', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-16T10:00:00.000Z'));
+
+    const response = await POST(
+      request(
+        JSON.stringify({
+          eventVersion: 1,
+          eventId: 'event-old',
+          journeyId: 'journey-old',
+          sessionId: 'session-old',
+          eventName: 'page_view',
+          occurredAt: '2019-12-20T00:00:00.000Z',
+        }),
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(enqueueLightweightJobMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          event: expect.objectContaining({ occurredAt: '2026-08-16T10:00:00.000Z' }),
+        },
+      }),
+    );
+  });
+
+  it('reports an event that is already awaiting ingestion as deduplicated', async () => {
+    enqueueLightweightJobMock.mockResolvedValue({ kind: 'existing' });
+
+    const response = await POST(
+      request(
+        JSON.stringify({
+          eventVersion: 1,
+          eventId: 'event-existing',
+          journeyId: 'journey-existing',
+          sessionId: 'session-existing',
+          eventName: 'page_view',
+        }),
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true, queued: true, deduped: true });
+  });
+
+  it('accepts but does not persist recognizable browser automation', async () => {
+    const response = await POST(
+      request(
+        JSON.stringify({
+          eventVersion: 1,
+          eventId: 'event-synthetic',
+          journeyId: 'journey-synthetic',
+          sessionId: 'session-synthetic',
+          eventName: 'page_view',
+        }),
+        { 'user-agent': 'Mozilla/5.0 HeadlessChrome Playwright' },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      queued: false,
+      filtered: 'automation',
+    });
+    expect(enqueueLightweightJobMock).not.toHaveBeenCalled();
   });
 });

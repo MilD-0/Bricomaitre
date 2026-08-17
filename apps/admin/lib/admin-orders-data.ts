@@ -23,7 +23,7 @@ import {
   buildCartProductLookup,
   collectCartProductReferenceBuckets,
   getCartProductLookupKey,
-} from './stats';
+} from './order-product-references';
 import type {
   DailyOrderStatusOverview,
   DailyOrderStatusReport,

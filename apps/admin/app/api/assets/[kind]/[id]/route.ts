@@ -11,12 +11,16 @@ import {
   productCards,
 } from '@bric/db/schema';
 import {
+  assetActiveToggleSchema,
   assetBannerSchema,
+  assetReplacementRequestSchema,
+  featuredProductGroupToggleSchema,
   featuredProductGroupSchema,
   productCardSchema,
 } from '../../../../../lib/assets';
 import { mutateEntityWithHistory } from '../../../../../lib/action-history';
 import { auth } from '../../../../../lib/auth';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { requireMutationAccess } from '../../../../../lib/rbac';
 import { revalidateStorefrontAssets } from '../../../../../lib/storefront-revalidate';
 
@@ -71,28 +75,13 @@ export async function PATCH(
   }
 
   const { kind, id } = await params;
-  const numericId = Number(id);
-  const payload = (await req.json().catch(() => null)) as {
-    active?: boolean;
-    showAtTopOfProductsPage?: boolean;
-  } | null;
-  if (!payload) {
+  const numericId = parsePositiveIntegerId(id);
+  if (numericId === null) {
+    return NextResponse.json({ error: 'Invalid asset id' }, { status: 400 });
+  }
+  const payload = await req.json().catch(() => null);
+  if (payload === null) {
     return NextResponse.json({ error: 'Invalid JSON request body' }, { status: 400 });
-  }
-  const updateValues: { active?: boolean; showAtTopOfProductsPage?: boolean; updatedAt: Date } = {
-    updatedAt: new Date(),
-  };
-
-  if (typeof payload.active === 'boolean') {
-    updateValues.active = payload.active;
-  }
-
-  if (typeof payload.showAtTopOfProductsPage === 'boolean') {
-    updateValues.showAtTopOfProductsPage = payload.showAtTopOfProductsPage;
-  }
-
-  if (!('active' in updateValues) && !('showAtTopOfProductsPage' in updateValues)) {
-    return NextResponse.json({ error: 'Invalid toggle payload' }, { status: 400 });
   }
 
   const db = getDb();
@@ -100,7 +89,8 @@ export async function PATCH(
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
   if (kind === 'banner') {
-    if (typeof updateValues.active !== 'boolean') {
+    const parsed = assetActiveToggleSchema.safeParse(payload);
+    if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid toggle payload' }, { status: 400 });
     }
 
@@ -110,13 +100,21 @@ export async function PATCH(
       operation: 'update',
       actor,
       execute: (tx) =>
-        tx.update(assetBanners).set(updateValues).where(eq(assetBanners.id, numericId)),
+        tx
+          .update(assetBanners)
+          .set({ ...parsed.data, updatedAt: new Date() })
+          .where(eq(assetBanners.id, numericId)),
     });
     await revalidateStorefrontAssets();
     return NextResponse.json({ ok: true });
   }
 
   if (kind === 'featured-group') {
+    const parsed = featuredProductGroupToggleSchema.safeParse(payload);
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid toggle payload' }, { status: 400 });
+    }
+
     await mutateEntityWithHistory(db, {
       entityType: 'featuredProductGroups',
       entityId: numericId,
@@ -125,7 +123,7 @@ export async function PATCH(
       execute: (tx) =>
         tx
           .update(featuredProductGroups)
-          .set(updateValues)
+          .set({ ...parsed.data, updatedAt: new Date() })
           .where(eq(featuredProductGroups.id, numericId)),
     });
     await revalidateStorefrontAssets();
@@ -133,7 +131,8 @@ export async function PATCH(
   }
 
   if (kind === 'product-card') {
-    if (typeof updateValues.active !== 'boolean') {
+    const parsed = assetActiveToggleSchema.safeParse(payload);
+    if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid toggle payload' }, { status: 400 });
     }
 
@@ -143,7 +142,10 @@ export async function PATCH(
       operation: 'update',
       actor,
       execute: (tx) =>
-        tx.update(productCards).set(updateValues).where(eq(productCards.id, numericId)),
+        tx
+          .update(productCards)
+          .set({ ...parsed.data, updatedAt: new Date() })
+          .where(eq(productCards.id, numericId)),
     });
     await revalidateStorefrontAssets();
     return NextResponse.json({ ok: true });
@@ -166,9 +168,12 @@ export async function PUT(
   }
 
   const { kind, id } = await params;
-  const numericId = Number(id);
-  const body = (await req.json().catch(() => null)) as { data?: unknown } | null;
-  if (!body) {
+  const numericId = parsePositiveIntegerId(id);
+  if (numericId === null) {
+    return NextResponse.json({ error: 'Invalid asset id' }, { status: 400 });
+  }
+  const body = assetReplacementRequestSchema.safeParse(await req.json().catch(() => null));
+  if (!body.success) {
     return NextResponse.json({ error: 'Invalid JSON request body' }, { status: 400 });
   }
   const db = getDb();
@@ -176,7 +181,7 @@ export async function PUT(
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
   if (kind === 'banner') {
-    const parsed = assetBannerSchema.safeParse(body.data);
+    const parsed = assetBannerSchema.safeParse(body.data.data);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
@@ -197,7 +202,7 @@ export async function PUT(
   }
 
   if (kind === 'featured-group') {
-    const parsed = featuredProductGroupSchema.safeParse(body.data);
+    const parsed = featuredProductGroupSchema.safeParse(body.data.data);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
@@ -231,7 +236,7 @@ export async function PUT(
   }
 
   if (kind === 'product-card') {
-    const parsed = productCardSchema.safeParse(body.data);
+    const parsed = productCardSchema.safeParse(body.data.data);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
@@ -268,7 +273,10 @@ export async function DELETE(
   }
 
   const { kind, id } = await params;
-  const numericId = Number(id);
+  const numericId = parsePositiveIntegerId(id);
+  if (numericId === null) {
+    return NextResponse.json({ error: 'Invalid asset id' }, { status: 400 });
+  }
   const db = getDb();
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };

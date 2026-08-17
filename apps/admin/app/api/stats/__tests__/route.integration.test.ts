@@ -55,8 +55,18 @@ vi.mock('../../../../lib/stats', async () => {
   return {
     ...actual,
     getStatsDashboard: getStatsDashboardMock,
-    listImportHistoryPage: listImportHistoryMock,
     refreshStatsDashboard: refreshStatsDashboardMock,
+  };
+});
+
+vi.mock('../../../../lib/stats-order-import', async () => {
+  const actual = await vi.importActual<typeof import('../../../../lib/stats-order-import')>(
+    '../../../../lib/stats-order-import',
+  );
+
+  return {
+    ...actual,
+    listImportHistoryPage: listImportHistoryMock,
     deleteImportBatch: deleteImportBatchMock,
     dismissUnmatchedReference: dismissUnmatchedReferenceMock,
   };

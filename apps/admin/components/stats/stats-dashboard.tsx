@@ -11,20 +11,13 @@ import {
   ComposedChart,
   Line,
   LineChart,
-  Pie,
-  PieChart,
   XAxis,
   YAxis,
 } from 'recharts';
 import {
   AlertCircle,
-  Bot,
-  Calendar,
-  CalendarRange,
   DollarSign,
   FileText,
-  Gauge,
-  MousePointer,
   FileSpreadsheet,
   Layers,
   Package,
@@ -32,9 +25,7 @@ import {
   Tag,
   Target,
   Trash2,
-  TrendingDown,
   TrendingUp,
-  Truck,
   Users,
 } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
@@ -51,7 +42,6 @@ import {
 } from '../../lib/upload-limits';
 import { cn } from '../../lib/utils';
 import type { BulletinAttachment } from '../../lib/bulletin';
-import { AdCostsManager } from './ad-costs-manager';
 import { ManualOrderForm } from './manual-order-form';
 import { ManualOrderHistory } from './manual-order-history';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
@@ -63,7 +53,6 @@ import {
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
-  type ChartConfig,
 } from '../ui/chart';
 import {
   Dialog,
@@ -76,9 +65,33 @@ import {
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '../ui/empty';
 import { FileUploadField } from '../file-upload-field';
 import { Input } from '../ui/input';
-import { Skeleton } from '../ui/skeleton';
 import { TablePaginationControls } from '../table-pagination-controls';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import {
+  formatBucket,
+  formatCurrency,
+  formatDate,
+  formatDateTime,
+  formatNumber,
+  formatPercent,
+  geographyAverageConfig,
+  geographyComposedConfig,
+  geographyProfitConfig,
+  importTrendConfig,
+  MetricCard,
+  MobileBreakdownCard,
+  MobileBreakdownMetric,
+  SectionCard,
+  segmentConfig,
+  StatsPageSkeleton,
+  timeOrdersConfig,
+  timeRevenueConfig,
+  topProductsConfig,
+} from './stats-dashboard-primitives';
+import { StatsAiSection } from './stats-ai-section';
+import { StatsMetaSection } from './stats-meta-section';
+import { StatsOverviewSection } from './stats-overview-section';
+import { StatsWebsiteSection } from './stats-website-section';
 
 type StatsDashboardProps = {
   description: string;
@@ -132,87 +145,6 @@ type BackgroundJob = {
 const TABLE_PAGE_SIZE = 10;
 
 const rangePresets = ['30d', '90d', 'year', 'all', 'custom'] as const;
-const assistantIntentKeys = new Set([
-  'product_search',
-  'product_comparison',
-  'compatibility',
-  'price',
-  'availability',
-  'how_to',
-  'recommendation',
-  'other',
-]);
-
-const revenueBreakdownConfig = {
-  value: { label: 'Value', color: 'hsl(var(--chart-1))' },
-} satisfies ChartConfig;
-
-const feeBreakdownConfig = {
-  livraison: { label: 'Delivery', color: 'hsl(var(--chart-1))' },
-  commission: { label: 'Commission', color: 'hsl(var(--chart-2))' },
-  poids: { label: 'Weight', color: 'hsl(var(--chart-3))' },
-  extra: { label: 'Extra', color: 'hsl(var(--chart-4))' },
-  sms: { label: 'SMS', color: 'hsl(var(--chart-5))' },
-  stockage: { label: 'Storage', color: 'hsl(var(--chart-1))' },
-  publicite: { label: 'Ads', color: 'hsl(var(--chart-2))' },
-} satisfies ChartConfig;
-
-const topProductsConfig = {
-  units: { label: 'Units sold', color: 'hsl(var(--chart-1))' },
-} satisfies ChartConfig;
-
-const segmentConfig = {
-  revenue: { label: 'Revenue', color: 'hsl(var(--chart-1))' },
-  profit: { label: 'Profit', color: 'hsl(var(--chart-2))' },
-} satisfies ChartConfig;
-
-const geographyComposedConfig = {
-  orders: { label: 'Orders', color: 'hsl(var(--chart-4))' },
-  revenue: { label: 'Revenue', color: 'hsl(var(--chart-2))' },
-} satisfies ChartConfig;
-
-const geographyProfitConfig = {
-  profit: { label: 'Profit', color: 'hsl(var(--chart-2))' },
-} satisfies ChartConfig;
-
-const geographyAverageConfig = {
-  avgOrder: { label: 'Average order', color: 'hsl(var(--chart-3))' },
-} satisfies ChartConfig;
-
-const timeOrdersConfig = {
-  orders: { label: 'Orders', color: 'hsl(var(--chart-1))' },
-} satisfies ChartConfig;
-
-const timeRevenueConfig = {
-  revenue: { label: 'Revenue', color: 'hsl(var(--chart-1))' },
-  profit: { label: 'Profit', color: 'hsl(var(--chart-2))' },
-  fees: { label: 'Fees', color: 'hsl(var(--chart-4))' },
-} satisfies ChartConfig;
-
-const importTrendConfig = {
-  revenue: { label: 'Revenue', color: 'hsl(var(--chart-1))' },
-  profit: { label: 'Profit', color: 'hsl(var(--chart-2))' },
-  fees: { label: 'Fees', color: 'hsl(var(--chart-4))' },
-  orders: { label: 'Orders', color: 'hsl(var(--chart-5))' },
-} satisfies ChartConfig;
-
-const websiteFunnelConfig = {
-  value: { label: 'Value', color: 'hsl(var(--chart-2))' },
-} satisfies ChartConfig;
-
-const websiteTrendConfig = {
-  sessions: { label: 'Sessions', color: 'hsl(var(--chart-1))' },
-  pageViews: { label: 'Page views', color: 'hsl(var(--chart-2))' },
-  purchases: { label: 'Purchases', color: 'hsl(var(--chart-3))' },
-  errors: { label: 'Errors', color: 'hsl(var(--chart-5))' },
-} satisfies ChartConfig;
-
-const aiTrendConfig = {
-  runs: { label: 'Runs', color: 'hsl(var(--chart-1))' },
-  completed: { label: 'Completed', color: 'hsl(var(--chart-2))' },
-  failed: { label: 'Failed', color: 'hsl(var(--chart-5))' },
-} satisfies ChartConfig;
-
 function buildStatsUrl(range: string, startDate: string, endDate: string) {
   const params = new URLSearchParams();
   params.set('range', range);
@@ -228,243 +160,6 @@ function buildStatsUrl(range: string, startDate: string, endDate: string) {
   }
 
   return `/api/stats?${params.toString()}`;
-}
-
-function formatCurrency(locale: string, value: number) {
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: 'DZD',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function formatNumber(locale: string, value: number) {
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value);
-}
-
-function formatPercent(locale: string, value: number) {
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value)}%`;
-}
-
-function formatUsd(locale: string, value: number | null) {
-  if (value == null) return '—';
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 4,
-  }).format(value);
-}
-
-function formatMilliseconds(locale: string, value: number) {
-  if (value < 1_000) return `${formatNumber(locale, value)} ms`;
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value / 1_000)} s`;
-}
-
-function formatDate(locale: string, value: string | null) {
-  if (!value) {
-    return '—';
-  }
-
-  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(value));
-}
-
-function formatDateTime(locale: string, value: string | null) {
-  if (!value) {
-    return '—';
-  }
-
-  return new Intl.DateTimeFormat(locale, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
-}
-
-function formatBucket(locale: string, value: string) {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(
-      new Date(`${value}T00:00:00Z`),
-    );
-  }
-
-  if (/^\d{4}-\d{2}$/.test(value)) {
-    return new Intl.DateTimeFormat(locale, { month: 'short', year: '2-digit' }).format(
-      new Date(`${value}-01T00:00:00Z`),
-    );
-  }
-
-  return value;
-}
-
-function MetricCard({
-  accent,
-  icon: Icon,
-  title,
-  value,
-}: {
-  accent: string;
-  icon: typeof Package;
-  title: string;
-  value: string;
-}) {
-  return (
-    <Card className="group relative overflow-hidden rounded-[1.6rem] border-border/60 bg-linear-to-br from-card via-card to-muted/30 p-0 transition-transform duration-300 hover:-translate-y-0.5">
-      <div className={cn('absolute inset-x-0 top-0 h-1.5', accent)} />
-      <div className="flex items-start gap-3 p-5">
-        <div className="rounded-2xl bg-background/80 p-3 shadow-sm">
-          <Icon className="size-5 text-foreground" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            {title}
-          </p>
-          <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{value}</p>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function StatBlock({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[1.35rem] border border-border/70 bg-muted/20 p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-2 text-xl font-semibold text-foreground">{value}</p>
-    </div>
-  );
-}
-
-function CostRow({
-  bold,
-  highlight,
-  label,
-  total,
-  value,
-}: {
-  bold?: boolean;
-  highlight?: boolean;
-  label: string;
-  total: number;
-  value: number;
-}) {
-  const percentage = total > 0 ? (value / total) * 100 : 0;
-
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)_96px_76px] items-center gap-3 py-2">
-      <div className="min-w-0">
-        <p
-          className={cn(
-            'text-sm text-foreground',
-            bold && 'font-semibold',
-            highlight && 'text-rose-600',
-          )}
-        >
-          {label}
-        </p>
-        <div className="mt-2 h-2 rounded-full bg-muted">
-          <div
-            className={cn(
-              'h-2 rounded-full bg-[hsl(var(--chart-1))]',
-              bold && 'bg-foreground',
-              highlight && 'bg-rose-500',
-            )}
-            style={{ width: `${Math.min(percentage, 100)}%` }}
-          />
-        </div>
-      </div>
-      <p
-        className={cn(
-          'text-right text-sm tabular-nums text-foreground',
-          bold && 'font-semibold',
-          highlight && 'text-rose-600',
-        )}
-      >
-        {value.toLocaleString()}
-      </p>
-      <p className="text-right text-xs tabular-nums text-muted-foreground">
-        {percentage.toFixed(1)}%
-      </p>
-    </div>
-  );
-}
-
-function SectionCard({
-  action,
-  children,
-  title,
-}: {
-  action?: React.ReactNode;
-  children: React.ReactNode;
-  title: string;
-}) {
-  return (
-    <Card className="rounded-[2rem] border-border/60 bg-card p-5 sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">{title}</h2>
-        </div>
-        {action}
-      </div>
-      <div className="mt-5">{children}</div>
-    </Card>
-  );
-}
-
-function StatsPageSkeleton() {
-  return (
-    <div className="flex flex-col gap-6">
-      <Card className="rounded-[2rem] border-border/60 bg-card p-5 sm:p-6">
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex flex-col gap-2">
-              <Skeleton className="h-4 w-28" />
-              <Skeleton className="h-9 w-52" />
-            </div>
-            <Skeleton className="h-9 w-28" />
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div className="h-full w-2/5 animate-pulse rounded-full bg-primary/60" />
-          </div>
-          <div className="grid gap-2 sm:grid-cols-5">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <Skeleton key={index} className="h-9 rounded-xl" />
-            ))}
-          </div>
-        </div>
-      </Card>
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-32 rounded-[1.75rem]" />
-        ))}
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card className="rounded-[2rem] border-border/60 p-5 sm:p-6">
-          <div className="flex flex-col gap-4">
-            <Skeleton className="h-6 w-48" />
-            <Skeleton className="h-[320px] rounded-[1.5rem]" />
-          </div>
-        </Card>
-        <Card className="rounded-[2rem] border-border/60 p-5 sm:p-6">
-          <div className="flex flex-col gap-4">
-            <Skeleton className="h-6 w-40" />
-            <Skeleton className="h-[320px] rounded-[1.5rem]" />
-          </div>
-        </Card>
-      </div>
-
-      <Card className="rounded-[2rem] border-border/60 p-5 sm:p-6">
-        <div className="flex flex-col gap-4">
-          <Skeleton className="h-6 w-56" />
-          <Skeleton className="h-16 rounded-[1.4rem]" />
-          <Skeleton className="h-16 rounded-[1.4rem]" />
-          <Skeleton className="h-16 rounded-[1.4rem]" />
-        </div>
-      </Card>
-    </div>
-  );
 }
 
 export function StatsDashboard({ initialData = null, section, title }: StatsDashboardProps) {
@@ -700,148 +395,6 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
     () => (stats?.wilayaDetails ?? []).filter((wilaya) => wilaya.orders >= 10),
     [stats],
   );
-  const revenueBreakdown = useMemo(
-    () =>
-      stats
-        ? [
-            {
-              name: t('overview.revenueBreakdown.collected'),
-              value: stats.summary.totalAmountCollected,
-            },
-            {
-              name: t('overview.revenueBreakdown.productCost'),
-              value: stats.summary.totalProductCost,
-            },
-            { name: t('overview.revenueBreakdown.fees'), value: stats.summary.totalFees },
-            {
-              name: t('overview.revenueBreakdown.netRevenue'),
-              value: stats.summary.totalNetRevenue,
-            },
-            {
-              name: t('overview.revenueBreakdown.grossProfit'),
-              value: stats.summary.totalGrossProfit,
-            },
-            { name: t('overview.revenueBreakdown.ads'), value: stats.adCosts.totalSpend },
-            {
-              name: t('overview.revenueBreakdown.netAfterAds'),
-              value: stats.summary.netProfitAfterAds,
-            },
-          ]
-        : [],
-    [stats, t],
-  );
-  const feeData = useMemo(
-    () =>
-      stats
-        ? [
-            {
-              key: 'livraison',
-              name: t('overview.fees.delivery'),
-              value: stats.feeBreakdown.livraison,
-              fill: 'var(--color-livraison)',
-            },
-            {
-              key: 'commission',
-              name: t('overview.fees.commission'),
-              value: stats.feeBreakdown.commission,
-              fill: 'var(--color-commission)',
-            },
-            {
-              key: 'poids',
-              name: t('overview.fees.weight'),
-              value: stats.feeBreakdown.poids,
-              fill: 'var(--color-poids)',
-            },
-            {
-              key: 'extra',
-              name: t('overview.fees.extra'),
-              value: stats.feeBreakdown.extra,
-              fill: 'var(--color-extra)',
-            },
-            {
-              key: 'sms',
-              name: t('overview.fees.sms'),
-              value: stats.feeBreakdown.sms,
-              fill: 'var(--color-sms)',
-            },
-            {
-              key: 'stockage',
-              name: t('overview.fees.storage'),
-              value: stats.feeBreakdown.stockage,
-              fill: 'var(--color-stockage)',
-            },
-            {
-              key: 'publicite',
-              name: t('overview.fees.ads'),
-              value: stats.adCosts.totalSpend,
-              fill: 'var(--color-publicite)',
-            },
-          ].filter((item) => item.value > 0)
-        : [],
-    [stats, t],
-  );
-  const overviewCards = useMemo(() => {
-    if (!stats) {
-      return [];
-    }
-
-    return [
-      {
-        title: t('overview.cards.totalOrders'),
-        value: formatNumber(locale, stats.summary.totalOrders),
-        accent: 'bg-primary',
-        icon: Package,
-      },
-      {
-        title: t('overview.cards.totalCollected'),
-        value: formatCurrency(locale, stats.summary.totalAmountCollected),
-        accent: 'bg-[hsl(var(--chart-2))]',
-        icon: DollarSign,
-      },
-      {
-        title: t('overview.cards.netRevenue'),
-        value: formatCurrency(locale, stats.summary.totalNetRevenue),
-        accent: 'bg-[hsl(var(--chart-3))]',
-        icon: TrendingUp,
-      },
-      {
-        title: t('overview.cards.deliveryFees'),
-        value: formatCurrency(locale, stats.feeBreakdown.livraison),
-        accent: 'bg-[hsl(var(--chart-4))]',
-        icon: Truck,
-      },
-      {
-        title: t('overview.cards.productCost'),
-        value: formatCurrency(locale, stats.summary.totalProductCost),
-        accent: 'bg-[hsl(var(--chart-5))]',
-        icon: Package,
-      },
-      {
-        title: t('overview.cards.grossProfit'),
-        value: formatCurrency(locale, stats.summary.totalGrossProfit),
-        accent: 'bg-[hsl(var(--chart-2)/0.82)]',
-        icon: stats.summary.totalGrossProfit >= 0 ? TrendingUp : TrendingDown,
-      },
-      {
-        title: t('overview.cards.afterAds'),
-        value: formatCurrency(locale, stats.summary.netProfitAfterAds),
-        accent: 'bg-[hsl(var(--chart-5)/0.86)]',
-        icon: stats.summary.netProfitAfterAds >= 0 ? TrendingUp : TrendingDown,
-      },
-      {
-        title: t('overview.cards.averageOrder'),
-        value: formatCurrency(locale, stats.summary.averageOrderValue),
-        accent: 'bg-[hsl(var(--chart-3)/0.78)]',
-        icon: CalendarRange,
-      },
-      {
-        title: t('overview.cards.margin'),
-        value: formatPercent(locale, stats.summary.profitMargin),
-        accent: 'bg-[hsl(var(--chart-4)/0.78)]',
-        icon: TrendingUp,
-      },
-    ];
-  }, [locale, stats, t]);
   const trendData = stats ? stats.trends[trendMode] : [];
   const importTrendData = useMemo(
     () =>
@@ -922,137 +475,6 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
       })),
     [stats],
   );
-  const websiteCards = useMemo(() => {
-    if (!stats) {
-      return [];
-    }
-
-    return [
-      {
-        title: t('website.cards.sessions'),
-        value: formatNumber(locale, stats.website.sessions),
-        accent: 'bg-[hsl(var(--chart-1))]',
-        icon: Calendar,
-      },
-      {
-        title: t('website.cards.pageViews'),
-        value: formatNumber(locale, stats.website.pageViews),
-        accent: 'bg-[hsl(var(--chart-2))]',
-        icon: Layers,
-      },
-      {
-        title: t('website.cards.engagementRate'),
-        value: formatPercent(locale, stats.website.engagementRate),
-        accent: 'bg-[hsl(var(--chart-3))]',
-        icon: MousePointer,
-      },
-      {
-        title: t('website.cards.purchaseRate'),
-        value: formatPercent(locale, stats.website.sessionConversionRate),
-        accent: 'bg-[hsl(var(--chart-4))]',
-        icon: Target,
-      },
-      {
-        title: t('website.cards.returningJourneys'),
-        value: formatNumber(locale, stats.website.returningJourneys),
-        accent: 'bg-[hsl(var(--chart-2))]',
-        icon: Users,
-      },
-      {
-        title: t('website.cards.errorRate'),
-        value: formatPercent(locale, stats.website.errorRate),
-        accent: 'bg-[hsl(var(--chart-5))]',
-        icon: AlertCircle,
-      },
-    ];
-  }, [locale, stats, t]);
-  const websiteFunnelData = useMemo(
-    () =>
-      (stats?.website.funnel ?? []).map((item) => ({
-        name: t(`website.funnel.${item.name}`),
-        value: item.value,
-      })),
-    [stats, t],
-  );
-  const websiteConversionRows = useMemo(() => {
-    if (!stats) {
-      return [];
-    }
-
-    return [
-      {
-        label: t('website.conversion.sessionsToPurchase'),
-        numerator: stats.website.purchases,
-        denominator: stats.website.sessions,
-        value: stats.website.sessionConversionRate,
-      },
-      {
-        label: t('website.conversion.viewToCart'),
-        numerator: stats.website.addToCarts,
-        denominator: stats.website.productViews,
-        value: stats.website.viewToCartRate,
-      },
-      {
-        label: t('website.conversion.cartToPurchase'),
-        numerator: stats.website.purchases,
-        denominator: stats.website.addToCarts,
-        value: stats.website.cartToPurchaseRate,
-      },
-      {
-        label: t('website.conversion.checkoutToPurchase'),
-        numerator: stats.website.purchases,
-        denominator: stats.website.checkoutStarts,
-        value: stats.website.checkoutToPurchaseRate,
-      },
-      {
-        label: t('website.conversion.searchZeroResultRate'),
-        numerator: stats.website.zeroResultSearches,
-        denominator: stats.website.searches,
-        value:
-          stats.website.searches > 0
-            ? (stats.website.zeroResultSearches / stats.website.searches) * 100
-            : 0,
-      },
-    ];
-  }, [stats, t]);
-  const websiteDiagnostics = useMemo(() => {
-    if (!stats) {
-      return [];
-    }
-
-    return [
-      {
-        label: t('website.diagnostics.journeys'),
-        value: formatNumber(locale, stats.website.journeys),
-      },
-      {
-        label: t('website.diagnostics.productViews'),
-        value: formatNumber(locale, stats.website.productViews),
-      },
-      {
-        label: t('website.diagnostics.checkoutStarts'),
-        value: formatNumber(locale, stats.website.checkoutStarts),
-      },
-      {
-        label: t('website.diagnostics.searches'),
-        value: formatNumber(locale, stats.website.searches),
-      },
-      {
-        label: t('website.diagnostics.zeroResults'),
-        value: formatNumber(locale, stats.website.zeroResultSearches),
-      },
-      {
-        label: t('website.diagnostics.avgPagesPerSession'),
-        value:
-          stats.website.sessions > 0
-            ? new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(
-                stats.website.pageViews / stats.website.sessions,
-              )
-            : '0',
-      },
-    ];
-  }, [locale, stats, t]);
-
   const isRefreshing =
     (needsDashboardStats && (statsQuery.isFetching || refreshStatsMutation.isPending)) ||
     (section === 'imports' && importHistoryQuery.isFetching);
@@ -1101,31 +523,9 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
     );
   }
   const ensuredStats = stats as StatsDashboardData;
-  const metaHealth = stats?.metaAds?.health ?? {
-    pending: 0,
-    retryable: 0,
-    delivered: 0,
-    failed: 0,
-    skipped: 0,
-    oldestPendingAt: null,
-    eligibleOrders: 0,
-    confirmedOrders: 0,
-    orderConfirmedOrders: 0,
-    purchaseOrders: 0,
-    negativeOutcomePurchases: 0,
-    workerLastHeartbeatAt: null,
-  };
-  const purchaseCoverage =
-    metaHealth.eligibleOrders > 0
-      ? (metaHealth.purchaseOrders / metaHealth.eligibleOrders) * 100
-      : 0;
-  const orderConfirmedCoverage =
-    metaHealth.confirmedOrders > 0
-      ? (metaHealth.orderConfirmedOrders / metaHealth.confirmedOrders) * 100
-      : 0;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-w-0 flex-col gap-6">
       <div
         className={cn(
           'grid gap-4',
@@ -1200,16 +600,30 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
             ) : null}
 
             {stats?.snapshot ? (
-              <Alert variant={stats.snapshot.isStale ? 'destructive' : 'default'}>
+              <Alert
+                variant={
+                  stats.snapshot.isStale || stats.snapshot.financialDataIsLagging
+                    ? 'destructive'
+                    : 'default'
+                }
+              >
                 <AlertCircle />
                 <AlertTitle>
-                  {stats.snapshot.isStale ? t('snapshotMeta.staleTitle') : t('snapshotMeta.title')}
+                  {stats.snapshot.isStale
+                    ? t('snapshotMeta.staleTitle')
+                    : stats.snapshot.financialDataIsLagging
+                      ? t('snapshotMeta.financialLagTitle')
+                      : t('snapshotMeta.title')}
                 </AlertTitle>
                 <AlertDescription>
-                  {t('snapshotMeta.description', {
-                    generatedAt: formatDateTime(locale, stats.snapshot.generatedAt),
-                    reportThroughDate: formatDate(locale, stats.snapshot.reportThroughDate),
-                  })}
+                  {stats.snapshot.financialDataIsLagging
+                    ? t('snapshotMeta.financialLagDescription', {
+                        reportThroughDate: formatDate(locale, stats.snapshot.reportThroughDate),
+                      })
+                    : t('snapshotMeta.description', {
+                        generatedAt: formatDateTime(locale, stats.snapshot.generatedAt),
+                        reportThroughDate: formatDate(locale, stats.snapshot.reportThroughDate),
+                      })}
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -1269,539 +683,12 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
         ) : null}
       </div>
 
-      {section === 'overview' ? (
-        <div className="flex flex-col gap-6">
-          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-            {overviewCards.map((item) => (
-              <MetricCard
-                key={item.title}
-                accent={item.accent}
-                icon={item.icon}
-                title={item.title}
-                value={item.value}
-              />
-            ))}
-          </div>
+      {section === 'overview' ? <StatsOverviewSection stats={ensuredStats} /> : null}
 
-          <div className="grid gap-4 xl:grid-cols-2">
-            <SectionCard title={t('overview.costs.title')}>
-              <div className="space-y-1">
-                <CostRow
-                  label={t('overview.costs.productCost')}
-                  value={ensuredStats.summary.totalProductCost}
-                  total={
-                    ensuredStats.summary.totalProductCost +
-                    ensuredStats.summary.totalFees +
-                    ensuredStats.adCosts.totalSpend
-                  }
-                />
-                <CostRow
-                  label={t('overview.costs.deliveryFees')}
-                  value={ensuredStats.feeBreakdown.livraison}
-                  total={
-                    ensuredStats.summary.totalProductCost +
-                    ensuredStats.summary.totalFees +
-                    ensuredStats.adCosts.totalSpend
-                  }
-                />
-                <CostRow
-                  label={t('overview.costs.otherFees')}
-                  value={ensuredStats.feeBreakdown.total - ensuredStats.feeBreakdown.livraison}
-                  total={
-                    ensuredStats.summary.totalProductCost +
-                    ensuredStats.summary.totalFees +
-                    ensuredStats.adCosts.totalSpend
-                  }
-                />
-                {ensuredStats.adCosts.totalSpend > 0 ? (
-                  <CostRow
-                    label={t('overview.costs.adSpend')}
-                    value={ensuredStats.adCosts.totalSpend}
-                    total={
-                      ensuredStats.summary.totalProductCost +
-                      ensuredStats.summary.totalFees +
-                      ensuredStats.adCosts.totalSpend
-                    }
-                    highlight
-                  />
-                ) : null}
-                <div className="border-t border-border/70 pt-2">
-                  <CostRow
-                    label={t('overview.costs.total')}
-                    value={
-                      ensuredStats.summary.totalProductCost +
-                      ensuredStats.summary.totalFees +
-                      ensuredStats.adCosts.totalSpend
-                    }
-                    total={
-                      ensuredStats.summary.totalProductCost +
-                      ensuredStats.summary.totalFees +
-                      ensuredStats.adCosts.totalSpend
-                    }
-                    bold
-                  />
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard title={t('overview.fees.title')}>
-              {feeData.length > 0 ? (
-                <ChartContainer config={feeBreakdownConfig} className="h-[320px] sm:h-[360px]">
-                  <PieChart>
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent
-                          formatter={(value) => formatCurrency(locale, Number(value))}
-                        />
-                      }
-                    />
-                    <Pie
-                      data={feeData}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={70}
-                      outerRadius={112}
-                      paddingAngle={3}
-                      animationDuration={900}
-                    >
-                      {feeData.map((item) => (
-                        <Cell key={item.name} fill={item.fill} />
-                      ))}
-                    </Pie>
-                    <ChartLegend content={<ChartLegendContent />} />
-                  </PieChart>
-                </ChartContainer>
-              ) : (
-                <Empty className="border-none">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <Truck />
-                    </EmptyMedia>
-                    <EmptyTitle>{t('overview.emptyFeesTitle')}</EmptyTitle>
-                    <EmptyDescription>{t('overview.emptyFeesDescription')}</EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              )}
-            </SectionCard>
-          </div>
-
-          <SectionCard title={t('overview.revenueChart.title')}>
-            <ChartContainer config={revenueBreakdownConfig} className="h-[360px]">
-              <BarChart data={revenueBreakdown}>
-                <CartesianGrid vertical={false} strokeDasharray="4 6" />
-                <XAxis
-                  dataKey="name"
-                  tickLine={false}
-                  axisLine={false}
-                  minTickGap={12}
-                  interval={0}
-                  angle={-18}
-                  textAnchor="end"
-                  height={64}
-                />
-                <YAxis hide />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value) => formatCurrency(locale, Number(value))}
-                    />
-                  }
-                />
-                <Bar dataKey="value" radius={14} animationDuration={900}>
-                  {revenueBreakdown.map((item, index) => (
-                    <Cell key={item.name} fill={`hsl(var(--chart-${(index % 5) + 1}))`} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ChartContainer>
-          </SectionCard>
-
-          <SectionCard title={t('website.title')}>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {websiteCards.map((item) => (
-                <MetricCard
-                  key={item.title}
-                  accent={item.accent}
-                  icon={item.icon}
-                  title={item.title}
-                  value={item.value}
-                />
-              ))}
-            </div>
-          </SectionCard>
-        </div>
-      ) : null}
-
-      {section === 'website' ? (
-        <div className="flex flex-col gap-6">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {websiteCards.map((item) => (
-              <MetricCard
-                key={item.title}
-                accent={item.accent}
-                icon={item.icon}
-                title={item.title}
-                value={item.value}
-              />
-            ))}
-          </div>
-
-          <SectionCard title={t('website.trendTitle')}>
-            <ChartContainer config={websiteTrendConfig} className="h-[360px]">
-              <LineChart data={ensuredStats.website.trend}>
-                <CartesianGrid vertical={false} strokeDasharray="4 6" />
-                <XAxis
-                  dataKey="bucket"
-                  tickFormatter={(value) => formatBucket(locale, String(value))}
-                  tickLine={false}
-                  axisLine={false}
-                  minTickGap={18}
-                />
-                <YAxis hide />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value) => formatNumber(locale, Number(value))}
-                      labelFormatter={(value) => formatBucket(locale, String(value))}
-                    />
-                  }
-                />
-                <Line
-                  type="monotone"
-                  dataKey="sessions"
-                  stroke="var(--color-sessions)"
-                  strokeWidth={3}
-                  dot={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="pageViews"
-                  stroke="var(--color-pageViews)"
-                  strokeWidth={2}
-                  dot={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="purchases"
-                  stroke="var(--color-purchases)"
-                  strokeWidth={2}
-                  dot={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="errors"
-                  stroke="var(--color-errors)"
-                  strokeWidth={2}
-                  dot={false}
-                />
-                <ChartLegend content={<ChartLegendContent />} />
-              </LineChart>
-            </ChartContainer>
-          </SectionCard>
-
-          <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-            <SectionCard title={t('website.funnelTitle')}>
-              {websiteFunnelData.length > 0 ? (
-                <ChartContainer config={websiteFunnelConfig} className="h-[320px]">
-                  <BarChart data={websiteFunnelData}>
-                    <CartesianGrid vertical={false} strokeDasharray="4 6" />
-                    <XAxis
-                      dataKey="name"
-                      tickLine={false}
-                      axisLine={false}
-                      interval={0}
-                      angle={-14}
-                      textAnchor="end"
-                      height={58}
-                    />
-                    <YAxis hide />
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent
-                          formatter={(value) => formatNumber(locale, Number(value))}
-                        />
-                      }
-                    />
-                    <Bar
-                      dataKey="value"
-                      fill="var(--color-value)"
-                      radius={12}
-                      animationDuration={900}
-                    />
-                  </BarChart>
-                </ChartContainer>
-              ) : (
-                <p className="text-sm text-muted-foreground">{t('website.empty')}</p>
-              )}
-            </SectionCard>
-
-            <SectionCard title={t('website.quickStatsTitle')}>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {websiteDiagnostics.map((item) => (
-                  <StatBlock key={item.label} label={item.label} value={item.value} />
-                ))}
-              </div>
-            </SectionCard>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            <SectionCard title={t('website.conversion.title')}>
-              <div className="space-y-1">
-                {websiteConversionRows.map((item) => (
-                  <CostRow
-                    key={item.label}
-                    label={`${item.label} (${formatNumber(locale, item.numerator)}/${formatNumber(locale, item.denominator)})`}
-                    value={item.numerator}
-                    total={item.denominator || 1}
-                  />
-                ))}
-              </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {websiteConversionRows.map((item) => (
-                  <StatBlock
-                    key={`${item.label}-rate`}
-                    label={item.label}
-                    value={formatPercent(locale, item.value)}
-                  />
-                ))}
-              </div>
-            </SectionCard>
-
-            <SectionCard title={t('website.searchInsightsTitle')}>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <StatBlock
-                  label={t('website.stats.searches')}
-                  value={formatNumber(locale, ensuredStats.website.searches)}
-                />
-                <StatBlock
-                  label={t('website.stats.zeroResults')}
-                  value={formatNumber(locale, ensuredStats.website.zeroResultSearches)}
-                />
-                <StatBlock
-                  label={t('website.stats.checkoutRate')}
-                  value={formatPercent(locale, ensuredStats.website.checkoutToPurchaseRate)}
-                />
-                <StatBlock
-                  label={t('website.stats.cartRate')}
-                  value={formatPercent(locale, ensuredStats.website.cartToPurchaseRate)}
-                />
-              </div>
-              <div className="mt-5 overflow-hidden rounded-[1.5rem] border border-border/70">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t('website.search.columns.term')}</TableHead>
-                      <TableHead>{t('website.search.columns.searches')}</TableHead>
-                      <TableHead>{t('website.search.columns.zeroResults')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {ensuredStats.website.topSearches.length > 0 ? (
-                      ensuredStats.website.topSearches.map((item) => (
-                        <TableRow key={item.term}>
-                          <TableCell className="font-medium">{item.term}</TableCell>
-                          <TableCell>{formatNumber(locale, item.searches)}</TableCell>
-                          <TableCell>{formatNumber(locale, item.zeroResults)}</TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={3} className="text-center text-muted-foreground">
-                          {t('website.empty')}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </SectionCard>
-          </div>
-
-          <SectionCard title={t('website.pageTypesTitle')}>
-            <div className="overflow-hidden rounded-[1.5rem] border border-border/70">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t('website.experience.columns.dimension')}</TableHead>
-                    <TableHead>{t('website.experience.columns.sessions')}</TableHead>
-                    <TableHead>{t('website.experience.columns.pageViews')}</TableHead>
-                    <TableHead>{t('website.experience.columns.interactions')}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {ensuredStats.website.pageTypes.length > 0 ? (
-                    ensuredStats.website.pageTypes.map((item) => (
-                      <TableRow key={item.name}>
-                        <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell>{formatNumber(locale, item.sessions)}</TableCell>
-                        <TableCell>{formatNumber(locale, item.pageViews)}</TableCell>
-                        <TableCell>{formatNumber(locale, item.interactions)}</TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground">
-                        {t('website.empty')}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </SectionCard>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            <SectionCard title={t('website.audienceTitle')}>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    {t('website.devices')}
-                  </p>
-                  <div className="space-y-2">
-                    {ensuredStats.website.devices.map((item) => (
-                      <StatBlock
-                        key={item.name}
-                        label={item.name}
-                        value={formatNumber(locale, item.sessions)}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    {t('website.locales')}
-                  </p>
-                  <div className="space-y-2">
-                    {ensuredStats.website.locales.map((item) => (
-                      <StatBlock
-                        key={item.name}
-                        label={item.name}
-                        value={formatNumber(locale, item.sessions)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard title={t('website.topProductsTitle')}>
-              <div className="overflow-hidden rounded-[1.5rem] border border-border/70">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t('website.products.columns.product')}</TableHead>
-                      <TableHead>{t('website.products.columns.views')}</TableHead>
-                      <TableHead>{t('website.products.columns.adds')}</TableHead>
-                      <TableHead>{t('website.products.columns.purchases')}</TableHead>
-                      <TableHead>{t('website.products.columns.conversion')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {ensuredStats.website.topProducts.length > 0 ? (
-                      ensuredStats.website.topProducts.map((product) => (
-                        <TableRow key={product.id}>
-                          <TableCell className="font-medium">
-                            <div className="flex flex-col">
-                              <span>{product.title}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {product.sku || product.categoryName || '—'}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell>{formatNumber(locale, product.viewCount ?? 0)}</TableCell>
-                          <TableCell>{formatNumber(locale, product.addToCartCount ?? 0)}</TableCell>
-                          <TableCell>
-                            {formatNumber(locale, product.websitePurchaseCount ?? 0)}
-                          </TableCell>
-                          <TableCell>
-                            {formatPercent(locale, product.websiteConversionRate ?? 0)}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground">
-                          {t('website.empty')}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </SectionCard>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            <SectionCard title={t('website.vitalsTitle')}>
-              <p className="mb-4 text-sm text-muted-foreground">
-                {t('website.recentDiagnosticsHint')}
-              </p>
-              <div className="grid gap-3 sm:grid-cols-3">
-                {ensuredStats.website.vitals.map((item) => (
-                  <div
-                    key={item.name}
-                    className="rounded-[1.25rem] border border-border/70 bg-muted/20 p-4"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold">{item.name}</span>
-                      <Gauge className="size-4 text-muted-foreground" />
-                    </div>
-                    <p className="mt-2 text-2xl font-semibold">
-                      {item.name === 'CLS'
-                        ? item.average.toFixed(3)
-                        : `${formatNumber(locale, item.average)} ms`}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {t('website.vitalMeta', {
-                        good: item.good,
-                        poor: item.poor,
-                        samples: item.samples,
-                      })}
-                    </p>
-                  </div>
-                ))}
-                {ensuredStats.website.vitals.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">{t('website.empty')}</p>
-                ) : null}
-              </div>
-            </SectionCard>
-
-            <SectionCard title={t('website.errorsTitle')}>
-              <p className="mb-4 text-sm text-muted-foreground">
-                {t('website.recentDiagnosticsHint')}
-              </p>
-              <div className="space-y-2">
-                {ensuredStats.website.errors.map((item) => (
-                  <StatBlock
-                    key={item.name}
-                    label={item.name}
-                    value={formatNumber(locale, item.count)}
-                  />
-                ))}
-                {ensuredStats.website.errors.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">{t('website.empty')}</p>
-                ) : null}
-              </div>
-            </SectionCard>
-          </div>
-
-          <SectionCard title={t('website.referrersTitle')}>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {ensuredStats.website.referrers.map((item) => (
-                <StatBlock
-                  key={item.name}
-                  label={item.name}
-                  value={formatNumber(locale, item.sessions)}
-                />
-              ))}
-            </div>
-          </SectionCard>
-        </div>
-      ) : null}
-
+      {section === 'website' ? <StatsWebsiteSection stats={ensuredStats} /> : null}
       {section === 'landingPages' ? (
         <div className="flex flex-col gap-6">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
             <MetricCard
               accent="bg-primary"
               icon={FileText}
@@ -1841,7 +728,49 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
           </div>
 
           <SectionCard title={t('landingPages.performanceTitle')}>
-            <div className="overflow-x-auto rounded-[1.5rem] border border-border/70">
+            <div className="space-y-2 md:hidden">
+              {ensuredStats.landingPages.pages.map((item) => (
+                <MobileBreakdownCard
+                  key={item.id}
+                  title={item.slug}
+                  subtitle={`${item.product} · ${item.locale.toUpperCase()} · v${item.revision ?? '—'} · ${item.status}`}
+                >
+                  <dl className="mt-3 grid grid-cols-3 gap-3">
+                    <MobileBreakdownMetric
+                      label={t('landingPages.columns.sessions')}
+                      value={formatNumber(locale, item.sessions)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('landingPages.columns.views')}
+                      value={formatNumber(locale, item.productViews)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('landingPages.columns.adds')}
+                      value={formatNumber(locale, item.addToCarts)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('landingPages.columns.checkouts')}
+                      value={formatNumber(locale, item.checkoutStarts)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('landingPages.columns.purchases')}
+                      value={formatNumber(locale, item.purchases)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('landingPages.columns.conversion')}
+                      value={formatPercent(locale, item.conversionRate)}
+                    />
+                  </dl>
+                  <p className="mt-3 break-words text-sm font-semibold text-foreground">
+                    {formatCurrency(locale, item.revenue)}
+                  </p>
+                </MobileBreakdownCard>
+              ))}
+              {ensuredStats.landingPages.pages.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t('landingPages.empty')}</p>
+              ) : null}
+            </div>
+            <div className="hidden max-w-full overflow-x-auto overscroll-x-contain rounded-[1.5rem] border border-border/70 md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1916,201 +845,10 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
         </div>
       ) : null}
 
-      {section === 'aiAssistants' ? (
-        <div className="flex flex-col gap-6">
-          <SectionCard title={t('aiAssistants.admin.title')}>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <MetricCard
-                accent="bg-primary"
-                icon={Bot}
-                title={t('aiAssistants.cards.runs')}
-                value={formatNumber(locale, ensuredStats.aiAssistants.admin.runs)}
-              />
-              <MetricCard
-                accent="bg-emerald-500"
-                icon={Target}
-                title={t('aiAssistants.cards.successRate')}
-                value={formatPercent(locale, ensuredStats.aiAssistants.admin.successRate)}
-              />
-              <MetricCard
-                accent="bg-violet-500"
-                icon={Gauge}
-                title={t('aiAssistants.cards.tokens')}
-                value={formatNumber(locale, ensuredStats.aiAssistants.admin.totalTokens)}
-              />
-              <MetricCard
-                accent="bg-blue-500"
-                icon={DollarSign}
-                title={t('aiAssistants.cards.estimatedCost')}
-                value={formatUsd(locale, ensuredStats.aiAssistants.admin.estimatedCostUsd)}
-              />
-              <MetricCard
-                accent="bg-amber-500"
-                icon={Calendar}
-                title={t('aiAssistants.cards.latency')}
-                value={formatMilliseconds(
-                  locale,
-                  ensuredStats.aiAssistants.admin.averageDurationMs,
-                )}
-              />
-              <MetricCard
-                accent="bg-[hsl(var(--chart-2))]"
-                icon={MousePointer}
-                title={t('aiAssistants.cards.toolCalls')}
-                value={formatNumber(locale, ensuredStats.aiAssistants.admin.toolCalls)}
-              />
-              <MetricCard
-                accent="bg-[hsl(var(--chart-3))]"
-                icon={FileText}
-                title={t('aiAssistants.cards.proposals')}
-                value={formatNumber(locale, ensuredStats.aiAssistants.admin.proposals)}
-              />
-              <MetricCard
-                accent="bg-[hsl(var(--chart-4))]"
-                icon={TrendingUp}
-                title={t('aiAssistants.cards.applied')}
-                value={formatNumber(locale, ensuredStats.aiAssistants.admin.appliedProposals)}
-              />
-            </div>
-            <p className="mt-4 text-sm text-muted-foreground">{t('aiAssistants.costHint')}</p>
-            <div className="mt-5 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-              <ChartContainer config={aiTrendConfig} className="h-[300px]">
-                <LineChart data={ensuredStats.aiAssistants.admin.trend}>
-                  <CartesianGrid vertical={false} strokeDasharray="4 6" />
-                  <XAxis
-                    dataKey="bucket"
-                    tickFormatter={(value) => formatBucket(locale, String(value))}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis hide />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Line dataKey="runs" stroke="var(--color-runs)" strokeWidth={3} dot={false} />
-                  <Line
-                    dataKey="completed"
-                    stroke="var(--color-completed)"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line dataKey="failed" stroke="var(--color-failed)" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ChartContainer>
-              <div className="space-y-2">
-                {ensuredStats.aiAssistants.admin.topTasks.map((item) => (
-                  <StatBlock
-                    key={item.name}
-                    label={`${item.name} · ${formatPercent(locale, item.successRate)}`}
-                    value={formatNumber(locale, item.runs)}
-                  />
-                ))}
-              </div>
-            </div>
-          </SectionCard>
-
-          <SectionCard title={t('aiAssistants.storefront.title')}>
-            {!ensuredStats.aiAssistants.storefront.enabled ? (
-              <Alert className="mb-5">
-                <AlertCircle />
-                <AlertTitle>{t('aiAssistants.storefront.disabledTitle')}</AlertTitle>
-                <AlertDescription>
-                  {t('aiAssistants.storefront.disabledDescription')}
-                </AlertDescription>
-              </Alert>
-            ) : null}
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <MetricCard
-                accent="bg-primary"
-                icon={Bot}
-                title={t('aiAssistants.cards.opens')}
-                value={formatNumber(locale, ensuredStats.aiAssistants.storefront.opens)}
-              />
-              <MetricCard
-                accent="bg-blue-500"
-                icon={MousePointer}
-                title={t('aiAssistants.cards.messages')}
-                value={formatNumber(locale, ensuredStats.aiAssistants.storefront.messages)}
-              />
-              <MetricCard
-                accent="bg-emerald-500"
-                icon={Target}
-                title={t('aiAssistants.cards.resultClicks')}
-                value={formatNumber(locale, ensuredStats.aiAssistants.storefront.resultClicks)}
-              />
-              <MetricCard
-                accent="bg-violet-500"
-                icon={TrendingUp}
-                title={t('aiAssistants.cards.clickThrough')}
-                value={formatPercent(locale, ensuredStats.aiAssistants.storefront.clickThroughRate)}
-              />
-              <MetricCard
-                accent="bg-[hsl(var(--chart-3))]"
-                icon={Gauge}
-                title={t('aiAssistants.cards.tokens')}
-                value={formatNumber(locale, ensuredStats.aiAssistants.storefront.totalTokens)}
-              />
-              <MetricCard
-                accent="bg-[hsl(var(--chart-4))]"
-                icon={DollarSign}
-                title={t('aiAssistants.cards.estimatedCost')}
-                value={formatUsd(locale, ensuredStats.aiAssistants.storefront.estimatedCostUsd)}
-              />
-              <MetricCard
-                accent="bg-amber-500"
-                icon={Calendar}
-                title={t('aiAssistants.cards.latency')}
-                value={formatMilliseconds(
-                  locale,
-                  ensuredStats.aiAssistants.storefront.averageDurationMs,
-                )}
-              />
-              <MetricCard
-                accent="bg-red-500"
-                icon={AlertCircle}
-                title={t('aiAssistants.cards.errors')}
-                value={formatNumber(locale, ensuredStats.aiAssistants.storefront.errors)}
-              />
-            </div>
-            <div className="mt-5 grid gap-4 xl:grid-cols-2">
-              <SectionCard title={t('aiAssistants.storefront.intentsTitle')}>
-                <div className="space-y-2">
-                  {ensuredStats.aiAssistants.storefront.topIntents.map((item) => (
-                    <StatBlock
-                      key={item.name}
-                      label={
-                        assistantIntentKeys.has(item.name)
-                          ? t(`aiAssistants.intents.${item.name}`)
-                          : item.name
-                      }
-                      value={formatNumber(locale, item.messages)}
-                    />
-                  ))}
-                  {ensuredStats.aiAssistants.storefront.topIntents.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">{t('aiAssistants.empty')}</p>
-                  ) : null}
-                </div>
-              </SectionCard>
-              <SectionCard title={t('aiAssistants.storefront.modelsTitle')}>
-                <div className="space-y-2">
-                  {ensuredStats.aiAssistants.storefront.models.map((item) => (
-                    <StatBlock
-                      key={item.name}
-                      label={`${item.name} · ${formatNumber(locale, item.tokens)} ${t('aiAssistants.tokensShort')}`}
-                      value={formatNumber(locale, item.runs)}
-                    />
-                  ))}
-                  {ensuredStats.aiAssistants.storefront.models.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">{t('aiAssistants.empty')}</p>
-                  ) : null}
-                </div>
-              </SectionCard>
-            </div>
-          </SectionCard>
-        </div>
-      ) : null}
-
+      {section === 'aiAssistants' ? <StatsAiSection stats={ensuredStats} /> : null}
       {section === 'customers' ? (
         <div className="flex flex-col gap-6">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
             <MetricCard
               accent="bg-primary"
               icon={Users}
@@ -2151,7 +889,47 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
             />
           </div>
           <SectionCard title={t('customers.rankingTitle')}>
-            <div className="overflow-x-auto rounded-[1.5rem] border border-border/70">
+            <div className="space-y-2 md:hidden">
+              {ensuredStats.customers.customers.map((item) => (
+                <MobileBreakdownCard
+                  key={item.phone}
+                  title={item.name}
+                  subtitle={`${item.city} · ${item.phone}`}
+                >
+                  <dl className="mt-3 grid grid-cols-2 gap-3">
+                    <MobileBreakdownMetric
+                      label={t('customers.columns.orders')}
+                      value={formatNumber(locale, item.orders)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('customers.columns.confirmed')}
+                      value={formatNumber(locale, item.confirmedOrders)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('customers.columns.totalValue')}
+                      value={formatCurrency(locale, item.totalValue)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('customers.columns.averageValue')}
+                      value={formatCurrency(locale, item.averageOrderValue)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('customers.columns.lastOrder')}
+                      value={formatDate(locale, item.lastOrderAt)}
+                    />
+                  </dl>
+                  <p className="mt-3 break-words text-xs leading-5 text-muted-foreground">
+                    {item.products
+                      .map((product) => `${product.name} ×${product.count}`)
+                      .join(', ') || '—'}
+                  </p>
+                </MobileBreakdownCard>
+              ))}
+              {ensuredStats.customers.customers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t('customers.empty')}</p>
+              ) : null}
+            </div>
+            <div className="hidden max-w-full overflow-x-auto overscroll-x-contain rounded-[1.5rem] border border-border/70 md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -2201,239 +979,7 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
         </div>
       ) : null}
 
-      {section === 'metaAds' ? (
-        <div className="flex flex-col gap-6">
-          <SectionCard title={t('metaAds.performanceTitle')}>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <MetricCard
-                accent="bg-primary"
-                icon={DollarSign}
-                title={t('overview.adPerformance.totalSpend')}
-                value={formatCurrency(locale, ensuredStats.adCosts.totalSpend)}
-              />
-              <MetricCard
-                accent="bg-[hsl(var(--chart-3))]"
-                icon={TrendingUp}
-                title={t('overview.adPerformance.roas')}
-                value={`${ensuredStats.adCosts.roas.toFixed(2)}x`}
-              />
-              <MetricCard
-                accent="bg-[hsl(var(--chart-4))]"
-                icon={Target}
-                title={t('overview.adPerformance.cpa')}
-                value={formatCurrency(locale, ensuredStats.adCosts.cpa)}
-              />
-              <MetricCard
-                accent="bg-[hsl(var(--chart-3)/0.82)]"
-                icon={MousePointer}
-                title={t('overview.adPerformance.cpc')}
-                value={formatCurrency(locale, ensuredStats.adCosts.cpc)}
-              />
-              <MetricCard
-                accent="bg-[hsl(var(--chart-2))]"
-                icon={TrendingUp}
-                title={t('metaAds.conversionRate')}
-                value={formatPercent(locale, ensuredStats.adCosts.conversionRate)}
-              />
-            </div>
-          </SectionCard>
-
-          <SectionCard title={t('metaAds.paidAttribution.title')}>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <MetricCard
-                accent="bg-blue-500"
-                icon={MousePointer}
-                title={t('metaAds.paidAttribution.visits')}
-                value={formatNumber(locale, ensuredStats.metaAds.paidAttribution.visits)}
-              />
-              <MetricCard
-                accent="bg-violet-500"
-                icon={FileText}
-                title={t('metaAds.paidAttribution.orders')}
-                value={formatNumber(locale, ensuredStats.metaAds.paidAttribution.createdOrders)}
-              />
-              <MetricCard
-                accent="bg-emerald-500"
-                icon={Target}
-                title={t('metaAds.paidAttribution.purchases')}
-                value={formatNumber(locale, ensuredStats.metaAds.paidAttribution.purchases)}
-              />
-              <MetricCard
-                accent="bg-amber-500"
-                icon={AlertCircle}
-                title={t('metaAds.paidAttribution.landedOnly')}
-                value={formatNumber(locale, ensuredStats.metaAds.paidAttribution.landedOnly)}
-              />
-              <MetricCard
-                accent="bg-[hsl(var(--chart-2))]"
-                icon={TrendingUp}
-                title={t('metaAds.paidAttribution.conversion')}
-                value={formatPercent(locale, ensuredStats.metaAds.paidAttribution.conversionRate)}
-              />
-            </div>
-            {ensuredStats.metaAds.paidAttribution.topCampaigns.length > 0 ? (
-              <div className="mt-5 overflow-hidden rounded-[1.5rem] border border-border/70">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t('metaAds.paidAttribution.campaign')}</TableHead>
-                      <TableHead>{t('metaAds.paidAttribution.visits')}</TableHead>
-                      <TableHead>{t('metaAds.paidAttribution.orders')}</TableHead>
-                      <TableHead>{t('metaAds.paidAttribution.purchases')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {ensuredStats.metaAds.paidAttribution.topCampaigns.map((item) => (
-                      <TableRow key={item.name}>
-                        <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell>{formatNumber(locale, item.visits)}</TableCell>
-                        <TableCell>{formatNumber(locale, item.orders)}</TableCell>
-                        <TableCell>{formatNumber(locale, item.purchases)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : null}
-          </SectionCard>
-
-          <SectionCard title={t('metaAds.managerTitle')}>
-            <AdCostsManager range={range} startDate={startDate} endDate={endDate} />
-          </SectionCard>
-
-          <SectionCard title={t('metaAds.health.title')}>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <MetricCard
-                accent="bg-amber-500"
-                icon={RefreshCcw}
-                title={t('metaAds.health.pending')}
-                value={formatNumber(locale, metaHealth.pending + metaHealth.retryable)}
-              />
-              <MetricCard
-                accent="bg-emerald-500"
-                icon={Target}
-                title={t('metaAds.health.delivered')}
-                value={formatNumber(locale, metaHealth.delivered)}
-              />
-              <MetricCard
-                accent="bg-red-500"
-                icon={AlertCircle}
-                title={t('metaAds.health.failed')}
-                value={formatNumber(locale, metaHealth.failed + metaHealth.skipped)}
-              />
-              <MetricCard
-                accent="bg-blue-500"
-                icon={MousePointer}
-                title={t('metaAds.health.purchaseCoverage')}
-                value={formatPercent(locale, purchaseCoverage)}
-              />
-              <MetricCard
-                accent="bg-violet-500"
-                icon={TrendingUp}
-                title={t('metaAds.health.orderConfirmedCoverage')}
-                value={formatPercent(locale, orderConfirmedCoverage)}
-              />
-            </div>
-            <div className="mt-3 text-xs text-muted-foreground">
-              {t('metaAds.health.worker', {
-                heartbeat: formatDateTime(locale, metaHealth.workerLastHeartbeatAt),
-                oldest: formatDateTime(locale, metaHealth.oldestPendingAt),
-                negative: metaHealth.negativeOutcomePurchases,
-              })}
-            </div>
-          </SectionCard>
-
-          <SectionCard title={t('metaAds.eventsTitle')}>
-            {ensuredStats.metaAds.events.length > 0 ? (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t('metaAds.events.columns.event')}</TableHead>
-                      <TableHead>{t('metaAds.events.columns.total')}</TableHead>
-                      <TableHead>{t('metaAds.events.columns.pixel')}</TableHead>
-                      <TableHead>{t('metaAds.events.columns.capiSent')}</TableHead>
-                      <TableHead>{t('metaAds.events.columns.capiDelivered')}</TableHead>
-                      <TableHead>{t('metaAds.events.columns.capiFailed')}</TableHead>
-                      <TableHead>{t('metaAds.events.columns.lastSeen')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {ensuredStats.metaAds.events.map((event) => (
-                      <TableRow key={event.name}>
-                        <TableCell className="font-medium">{event.name}</TableCell>
-                        <TableCell>{formatNumber(locale, event.total)}</TableCell>
-                        <TableCell>{formatNumber(locale, event.pixelFired)}</TableCell>
-                        <TableCell>{formatNumber(locale, event.capiSent)}</TableCell>
-                        <TableCell>{formatNumber(locale, event.capiDelivered)}</TableCell>
-                        <TableCell>{formatNumber(locale, event.capiFailed)}</TableCell>
-                        <TableCell>{formatDateTime(locale, event.lastOccurredAt)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <div className="text-sm text-muted-foreground">{t('metaAds.events.empty')}</div>
-            )}
-          </SectionCard>
-
-          <SectionCard title={t('metaAds.payloadsTitle')}>
-            {ensuredStats.metaAds.recentPayloads.length > 0 ? (
-              <div className="grid gap-3">
-                {ensuredStats.metaAds.recentPayloads.map((event) => (
-                  <Card key={`${event.metaEventName}-${event.eventId}`} className="rounded-xl p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <div className="font-semibold">{event.metaEventName}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {t('metaAds.payloads.meta', {
-                            analyticsEvent: event.analyticsEventName,
-                            eventId: event.eventId,
-                            occurredAt: formatDateTime(locale, event.occurredAt),
-                          })}
-                        </div>
-                      </div>
-                      <div
-                        className={cn(
-                          'rounded-full px-2 py-1 text-xs font-medium',
-                          event.capiOk
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-amber-100 text-amber-800',
-                        )}
-                      >
-                        {event.capiOk
-                          ? t('metaAds.payloads.delivered')
-                          : typeof event.capiPayload.status === 'string'
-                            ? event.capiPayload.status
-                            : t('metaAds.payloads.failed')}
-                        {' · '}
-                        {event.capiStatus == null
-                          ? t('metaAds.payloads.noStatus')
-                          : t('metaAds.payloads.status', { status: event.capiStatus })}
-                      </div>
-                    </div>
-                    <pre className="mt-3 max-h-56 overflow-auto rounded-lg bg-muted p-3 text-xs">
-                      {JSON.stringify(event.capiPayload, null, 2)}
-                    </pre>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <Empty className="border-none">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <Target />
-                  </EmptyMedia>
-                  <EmptyTitle>{t('metaAds.payloads.emptyTitle')}</EmptyTitle>
-                  <EmptyDescription>{t('metaAds.payloads.emptyDescription')}</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            )}
-          </SectionCard>
-        </div>
-      ) : null}
-
+      {section === 'metaAds' ? <StatsMetaSection stats={ensuredStats} /> : null}
       {section === 'products' ? (
         <div className="flex flex-col gap-6">
           <SectionCard title={t('products.topUnits.title')}>
@@ -2580,7 +1126,63 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
           </div>
 
           <SectionCard title={t('products.table.title')}>
-            <div className="overflow-hidden rounded-[1.5rem] border border-border/70">
+            <div className="space-y-2 md:hidden">
+              {productsPageItems.map((product) => (
+                <MobileBreakdownCard
+                  key={product.id}
+                  title={product.title}
+                  subtitle={`${product.sku || '—'} · ${product.categoryName || '—'}`}
+                >
+                  <dl className="mt-3 grid grid-cols-3 gap-3">
+                    <MobileBreakdownMetric
+                      label={t('products.table.columns.units')}
+                      value={formatNumber(locale, product.unitsSold)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('products.table.columns.revenue')}
+                      value={formatCurrency(locale, product.revenue)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('products.table.columns.profit')}
+                      value={formatCurrency(locale, product.profit)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('products.table.columns.margin')}
+                      value={formatPercent(locale, product.margin)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('products.table.columns.confirmation')}
+                      value={
+                        product.totalOrderCount &&
+                        product.totalOrderCount > 10 &&
+                        product.confirmationRate != null
+                          ? formatPercent(locale, product.confirmationRate)
+                          : t('products.table.lowSample', {
+                              count: String(product.totalOrderCount ?? 0),
+                            })
+                      }
+                    />
+                    <MobileBreakdownMetric
+                      label={t('products.table.columns.views')}
+                      value={formatNumber(locale, product.viewCount ?? 0)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('products.table.columns.adds')}
+                      value={formatNumber(locale, product.addToCartCount ?? 0)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('products.table.columns.webPurchases')}
+                      value={formatNumber(locale, product.websitePurchaseCount ?? 0)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('products.table.columns.webConversion')}
+                      value={formatPercent(locale, product.websiteConversionRate ?? 0)}
+                    />
+                  </dl>
+                </MobileBreakdownCard>
+              ))}
+            </div>
+            <div className="hidden max-w-full overflow-x-auto overscroll-x-contain rounded-[1.5rem] border border-border/70 md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -2760,7 +1362,39 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
           </div>
 
           <SectionCard title={t('geography.table.title')}>
-            <div className="overflow-hidden rounded-[1.5rem] border border-border/70">
+            <div className="space-y-2 md:hidden">
+              {wilayasPageItems.map((item) => (
+                <MobileBreakdownCard key={item.name} title={item.name}>
+                  <dl className="mt-3 grid grid-cols-2 gap-3">
+                    <MobileBreakdownMetric
+                      label={t('geography.table.columns.orders')}
+                      value={formatNumber(locale, item.orders)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('geography.table.columns.collected')}
+                      value={formatCurrency(locale, item.collected ?? 0)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('geography.table.columns.fees')}
+                      value={formatCurrency(locale, item.fees ?? 0)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('geography.table.columns.netRevenue')}
+                      value={formatCurrency(locale, item.revenue)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('geography.table.columns.profit')}
+                      value={formatCurrency(locale, item.profit)}
+                    />
+                    <MobileBreakdownMetric
+                      label={t('geography.table.columns.averageOrder')}
+                      value={formatCurrency(locale, item.avgOrder ?? 0)}
+                    />
+                  </dl>
+                </MobileBreakdownCard>
+              ))}
+            </div>
+            <div className="hidden max-w-full overflow-x-auto overscroll-x-contain rounded-[1.5rem] border border-border/70 md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -2963,7 +1597,35 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
                 </ComposedChart>
               </ChartContainer>
 
-              <div className="mt-5 overflow-hidden rounded-[1.5rem] border border-border/70">
+              <div className="mt-5 space-y-2 md:hidden">
+                {importsTrendPageItems.map((item) => (
+                  <MobileBreakdownCard key={item.bucket} title={formatDate(locale, item.bucket)}>
+                    <dl className="mt-3 grid grid-cols-2 gap-3">
+                      <MobileBreakdownMetric
+                        label={t('time.imports.table.orders')}
+                        value={formatNumber(locale, item.orders)}
+                      />
+                      <MobileBreakdownMetric
+                        label={t('time.imports.table.revenue')}
+                        value={formatCurrency(locale, item.revenue)}
+                      />
+                      <MobileBreakdownMetric
+                        label={t('time.imports.table.fees')}
+                        value={formatCurrency(locale, item.fees)}
+                      />
+                      <MobileBreakdownMetric
+                        label={t('time.imports.table.profit')}
+                        value={formatCurrency(locale, item.profit)}
+                      />
+                      <MobileBreakdownMetric
+                        label={t('time.imports.table.margin')}
+                        value={formatPercent(locale, item.margin)}
+                      />
+                    </dl>
+                  </MobileBreakdownCard>
+                ))}
+              </div>
+              <div className="mt-5 hidden max-w-full overflow-x-auto overscroll-x-contain rounded-[1.5rem] border border-border/70 md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>

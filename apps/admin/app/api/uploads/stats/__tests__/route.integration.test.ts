@@ -82,6 +82,19 @@ describe('app/api/uploads/stats/route', () => {
     await expect(response.json()).resolves.toEqual({ error: 'No files uploaded' });
   });
 
+  it('returns 400 when multipart parsing fails', async () => {
+    const request = new NextRequest('http://localhost/api/uploads/stats', { method: 'POST' });
+    Object.defineProperty(request, 'formData', {
+      value: vi.fn().mockRejectedValue(new Error('malformed body')),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid multipart request body' });
+    expect(startStatsImportJobMock).not.toHaveBeenCalled();
+  });
+
   it('queues the spreadsheet import and returns uploader metadata', async () => {
     const formData = new FormData();
     formData.append(

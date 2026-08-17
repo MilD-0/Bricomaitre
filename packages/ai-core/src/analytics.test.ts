@@ -13,6 +13,17 @@ describe('semantic analytics query contract', () => {
     ).toMatchObject({ limit: 10, confirmedOnly: false });
   });
 
+  it('accepts integrated Meta commerce analysis with a bounded date range', () => {
+    expect(
+      semanticAnalyticsQuerySchema.parse({
+        query: 'meta_commerce_performance',
+        startDate: '2026-08-01',
+        endDate: '2026-08-17',
+        limit: 20,
+      }),
+    ).toMatchObject({ query: 'meta_commerce_performance', limit: 20 });
+  });
+
   it('rejects unknown query names and raw SQL-shaped fields', () => {
     expect(
       semanticAnalyticsQuerySchema.safeParse({ query: 'raw_sql', sql: 'select * from users' })

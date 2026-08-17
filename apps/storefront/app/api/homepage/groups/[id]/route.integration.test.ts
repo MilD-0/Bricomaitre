@@ -31,4 +31,17 @@ describe('GET /api/homepage/groups/[id]', () => {
     );
     expect(invalid.status).toBe(400);
   });
+
+  it.each(['page=nope', 'page=0', 'limit=25'])(
+    'rejects an invalid page query: %s',
+    async (query) => {
+      const invalid = await GET(
+        new NextRequest(`http://localhost/api/homepage/groups/4?${query}`),
+        context('4'),
+      );
+      expect(invalid.status).toBe(400);
+      await expect(invalid.json()).resolves.toEqual({ error: 'Invalid product page query.' });
+      expect(fetchGroup).not.toHaveBeenCalled();
+    },
+  );
 });

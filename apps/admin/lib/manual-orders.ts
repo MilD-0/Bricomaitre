@@ -223,13 +223,8 @@ export async function listManualOrders(input?: z.input<typeof manualOrderListQue
   };
 }
 
-export async function deleteManualOrder(id: string, actor?: ActionActor) {
+export async function deleteManualOrder(numericId: number, actor?: ActionActor) {
   const db = getDb();
-  const numericId = Number.parseInt(id, 10);
-  if (!Number.isSafeInteger(numericId) || numericId <= 0) {
-    return null;
-  }
-
   const current = await db
     .select({ id: processedOrders.id })
     .from(processedOrders)

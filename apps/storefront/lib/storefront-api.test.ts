@@ -56,6 +56,7 @@ const validProductResponse = {
 const validOrder = {
   id: 42,
   publicToken: 'public-order-token-1234567890',
+  purchaseEventId: 'purchase-42',
   createdAt: '2026-07-14T10:00:00.000Z',
   updatedAt: '2026-07-14T10:00:00.000Z',
   firstName: null,

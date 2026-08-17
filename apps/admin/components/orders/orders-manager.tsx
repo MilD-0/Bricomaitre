@@ -1,7 +1,5 @@
 'use client';
 
-/* eslint-disable @next/next/no-img-element -- Operational order thumbnails can come from legacy arbitrary origins and are not page-critical media. */
-
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Copy,
@@ -16,17 +14,9 @@ import {
   X,
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import dynamic from 'next/dynamic';
 import { useLocale, useTranslations } from 'next-intl';
-import {
-  type Dispatch,
-  type SetStateAction,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useTransition,
-} from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
 import { requestJson as request } from '../../lib/admin-api';
 import {
@@ -44,12 +34,10 @@ import {
 } from '../../lib/order-export';
 import {
   buildOrderProductSummaries,
-  getDeliveryTypeLabelKey,
   getOrderFullName,
   getOrderStatusLabelKey,
   parseNumericAmount,
   type OrderPatch,
-  type OrderProductSummary,
   type OrderRecord,
   type OrderSortKey,
   type OrderSortRule,
@@ -63,9 +51,15 @@ import type {
 } from '../../lib/order-admin-contracts';
 import {
   buildOrderPhoneTelHref,
+  formatOrderRegionLabel,
   formatOrderPhoneForDisplay,
+  formatOrderStateValue,
+  normalizeOrderCommuneValue,
   normalizeOrderPhoneForStorage,
+  parseOrderStateDraftValue,
   resolveEcotrackDeliveryFee,
+  resolveOrderCommuneForState,
+  splitOrderFullNameDraft,
 } from '../../lib/order-presentation';
 import { buildOrderTrackingUrl } from '../../lib/order-tracking-link';
 import {
@@ -73,30 +67,27 @@ import {
   type ShoppingListSourceMode,
 } from '../../lib/shopping-list-drafts';
 import { DailyOrderStatusOverviewPanel } from './daily-order-status-overview';
+import { OrderProductsPreview } from './order-products-preview';
 import {
   areCartProductsEqual,
   buildEditableProducts,
-  OrderProductsEditor,
   summarizeEditableProducts,
   type EditableOrderProduct,
   type ProductSearchItem,
 } from './order-products-editor';
-import {
-  EcotrackPostingDialog,
-  type EcotrackPostingPreviewState,
-  type EcotrackPostingSummary,
-  type EcotrackPreviewResponse,
+import type {
+  EcotrackPostingPreviewState,
+  EcotrackPostingSummary,
+  EcotrackPreviewResponse,
 } from './orders-ecotrack-posting-dialog';
+import type { ExportPreviewState, ExportProgressState } from './orders-export-dialog';
+import type { ProductsDialogState } from './orders-manager-dialogs';
 import {
-  ExportOrdersDialog,
-  type ExportPreviewState,
-  type ExportProgressState,
-} from './orders-export-dialog';
-import {
-  ShoppingListDialog,
-  type ShoppingListSaveStatus,
-  type ShoppingListState,
-} from './orders-shopping-list-dialog';
+  NoAnswerCounter,
+  OrdersMobileSkeleton,
+  OrdersTableSkeleton,
+} from './orders-manager-primitives';
+import type { ShoppingListSaveStatus, ShoppingListState } from './orders-shopping-list-dialog';
 import {
   buildInventoryPreview,
   buildMergedShoppingListState,
@@ -113,25 +104,38 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Checkbox } from '../ui/checkbox';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../ui/dialog';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '../ui/empty';
 import { Input } from '../ui/input';
 import { PendingInline, sectionTransitionProps, SurfacePendingOverlay } from '../ui/motion';
 import { NativeSelect, NativeSelectOption } from '../ui/native-select';
-import { Skeleton } from '../ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { TablePaginationControls } from '../table-pagination-controls';
 import { MultiSortHeader } from '../multi-sort-header';
 import { SearchField } from '../search-field';
 import { SplitActionButton } from '../split-action-button';
 import { ViewModeToggle, type ViewMode } from '../view-mode-toggle';
+
+const DeleteOrderDialog = dynamic(() =>
+  import('./orders-manager-dialogs').then((module) => module.DeleteOrderDialog),
+);
+const OrderDetailsDialog = dynamic(() =>
+  import('./orders-manager-dialogs').then((module) => module.OrderDetailsDialog),
+);
+const OrderHistoryDialog = dynamic(() =>
+  import('./orders-manager-dialogs').then((module) => module.OrderHistoryDialog),
+);
+const OrderProductsDialog = dynamic(() =>
+  import('./orders-manager-dialogs').then((module) => module.OrderProductsDialog),
+);
+const ShoppingListDialog = dynamic(() =>
+  import('./orders-shopping-list-dialog').then((module) => module.ShoppingListDialog),
+);
+const ExportOrdersDialog = dynamic(() =>
+  import('./orders-export-dialog').then((module) => module.ExportOrdersDialog),
+);
+const EcotrackPostingDialog = dynamic(() =>
+  import('./orders-ecotrack-posting-dialog').then((module) => module.EcotrackPostingDialog),
+);
 
 type MutationMessages = { loading: string; success: string; error: string };
 type PartialOrderPatch = Partial<OrderPatch>;
@@ -144,11 +148,6 @@ type PatchMutationVariables = {
 type DeleteMutationVariables = { id: number; messages: MutationMessages };
 
 type DeleteState = { id: number; label: string } | null;
-type ProductsDialogState = {
-  order: OrderRecord;
-  items: EditableOrderProduct[];
-  search: string;
-} | null;
 type AddressDraft = { delivery: 0 | 1; state: string; city: string; homeAddress: string };
 type OrderExportJob = {
   id: string;
@@ -165,22 +164,6 @@ type OrderExportJob = {
   resultSummary: Record<string, unknown> | null;
 };
 type OrderExportJobResponse = { job: OrderExportJob | null };
-const DEFAULT_STOREFRONT_BASE_URL = 'https://bricomaitre.com';
-
-function normalizeBaseUrl(value: string) {
-  return value.trim().replace(/\/+$/, '');
-}
-
-function getStorefrontBaseUrl() {
-  const configured = process.env.NEXT_PUBLIC_STOREFRONT_BASE_URL?.trim();
-  return normalizeBaseUrl(configured || DEFAULT_STOREFRONT_BASE_URL);
-}
-
-function buildStorefrontProductHref(product: OrderProductSummary) {
-  const token = product.slug ?? product.productId;
-  return token ? `${getStorefrontBaseUrl()}/products/${encodeURIComponent(String(token))}` : null;
-}
-type OrderDetailResponse = { ok: true; item: OrderRecord };
 type InventoryApplyResponse = {
   ok: true;
   items: Array<{ productId: number; previousQuantity: number; nextQuantity: number }>;
@@ -266,10 +249,6 @@ function optimisticOrder(
   };
 }
 
-function getOrderProductHoverKey(orderId: number, product: OrderProductSummary) {
-  return `${orderId}:${product.productId ?? product.rawValue}`;
-}
-
 function formatOrderStatusLabel(
   t: ReturnType<typeof useTranslations>,
   status: OrderRecord['confirmed'],
@@ -277,131 +256,6 @@ function formatOrderStatusLabel(
   const key = getOrderStatusLabelKey(status);
 
   return t(`ordersManager.status.${key}`);
-}
-
-function splitFullNameDraft(value: string) {
-  const normalized = value.trim().replace(/\s+/g, ' ');
-  if (!normalized) {
-    return { firstName: null, lastName: null };
-  }
-
-  const [firstName, ...rest] = normalized.split(' ');
-  return {
-    firstName,
-    lastName: rest.length > 0 ? rest.join(' ') : null,
-  };
-}
-
-function OrdersTableSkeleton() {
-  return (
-    <div className="hidden overflow-x-auto lg:block">
-      <Table>
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            {Array.from({ length: 10 }).map((_, index) => (
-              <TableHead key={index}>
-                <Skeleton className="h-4 w-full max-w-24" />
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {Array.from({ length: 5 }).map((_, rowIndex) => (
-            <TableRow key={rowIndex}>
-              {Array.from({ length: 10 }).map((__, cellIndex) => (
-                <TableCell key={cellIndex}>
-                  <Skeleton className="h-9 w-full" />
-                </TableCell>
-              ))}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-function OrdersMobileSkeleton() {
-  return (
-    <div className="grid gap-3 px-4 pb-4 lg:hidden">
-      {Array.from({ length: 3 }).map((_, index) => (
-        <Card key={index} className="rounded-[1.5rem] border border-border/70 p-4">
-          <Skeleton className="h-5 w-40" />
-          <Skeleton className="mt-2 h-4 w-28" />
-          <Skeleton className="mt-4 h-20 w-full" />
-          <Skeleton className="mt-3 h-20 w-full" />
-          <div className="mt-3 flex gap-2">
-            <Skeleton className="h-9 flex-1" />
-            <Skeleton className="h-9 flex-1" />
-            <Skeleton className="h-9 flex-1" />
-          </div>
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-function NoAnswerCounter({
-  count,
-  disabled,
-  onDecrease,
-  onIncrease,
-  compact = false,
-}: {
-  count: number;
-  disabled: boolean;
-  onDecrease: () => void;
-  onIncrease: () => void;
-  compact?: boolean;
-}) {
-  const t = useTranslations();
-
-  return (
-    <div
-      className={`mt-2 flex items-center ${compact ? 'gap-2' : 'justify-between gap-3 rounded-xl border border-border/70 p-2'}`}
-    >
-      <span className="text-sm text-muted-foreground">
-        {t('ordersManager.status.noAnswerCounter', { count })}
-      </span>
-      <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={disabled || count <= 1}
-          onClick={onDecrease}
-          aria-label={t('ordersManager.status.decreaseNoAnswer', { count: Math.max(count - 1, 1) })}
-        >
-          -
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={disabled}
-          onClick={onIncrease}
-          aria-label={t('ordersManager.status.increaseNoAnswer', { count: count + 1 })}
-        >
-          +
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function formatOrderProductLabel(
-  product: OrderProductSummary,
-  formatMoney: (value: number) => string,
-) {
-  if (product.missing) {
-    return product.quantity > 1 ? `${product.title} x${product.quantity}` : product.title;
-  }
-
-  if (product.quantity > 1) {
-    return `${product.title} x${product.quantity} · ${formatMoney(product.lineTotal)}`;
-  }
-
-  return `${product.title} · ${formatMoney(product.unitPrice)}`;
 }
 
 function getCachedOrders(queryClient: ReturnType<typeof useQueryClient>) {
@@ -413,465 +267,6 @@ function getCachedOrders(queryClient: ReturnType<typeof useQueryClient>) {
   }
 
   return [...orders.values()];
-}
-
-function OrderProductsPreview({
-  orderId,
-  products,
-  emptyLabel,
-  hoveredProductKey,
-  onHoverChange,
-  formatMoney,
-  limit,
-}: {
-  orderId: number;
-  products: OrderProductSummary[];
-  emptyLabel: string;
-  hoveredProductKey: string | null;
-  onHoverChange: Dispatch<SetStateAction<string | null>>;
-  formatMoney: (value: number) => string;
-  limit?: number;
-}) {
-  if (products.length === 0) {
-    return <span className="text-sm text-muted-foreground">{emptyLabel}</span>;
-  }
-
-  const visibleProducts = limit ? products.slice(0, limit) : products;
-
-  return (
-    <>
-      {visibleProducts.map((product) => {
-        const hoverKey = getOrderProductHoverKey(orderId, product);
-        const previewVisible = hoveredProductKey === hoverKey && Boolean(product.thumbnailUrl);
-        const storefrontHref = buildStorefrontProductHref(product);
-        const productLabel = formatOrderProductLabel(product, formatMoney);
-
-        return (
-          <div
-            key={hoverKey}
-            className="relative inline-flex"
-            onMouseEnter={() => onHoverChange(hoverKey)}
-            onMouseLeave={() => onHoverChange((current) => (current === hoverKey ? null : current))}
-          >
-            {storefrontHref ? (
-              <a
-                href={storefrontHref}
-                target="_blank"
-                rel="noreferrer"
-                className="max-w-full truncate rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <Badge
-                  variant="outline"
-                  className="max-w-full truncate hover:bg-primary/10 hover:text-primary"
-                >
-                  {productLabel}
-                </Badge>
-              </a>
-            ) : (
-              <Badge variant="outline" className="max-w-full truncate">
-                {productLabel}
-              </Badge>
-            )}
-            {previewVisible ? (
-              <div className="pointer-events-none absolute left-0 top-full z-10 mt-2 w-40 overflow-hidden rounded-2xl border border-border/70 bg-background shadow-lg">
-                <img
-                  src={product.thumbnailUrl ?? ''}
-                  alt={`${product.title} thumbnail`}
-                  className="aspect-square w-full object-cover"
-                />
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
-      {limit && products.length > limit ? (
-        <Badge variant="outline">+{products.length - limit}</Badge>
-      ) : null}
-    </>
-  );
-}
-
-function DeleteDialog({
-  open,
-  onOpenChange,
-  title,
-  description,
-  pending,
-  onConfirm,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  title: string;
-  description: string;
-  pending: boolean;
-  onConfirm: () => void;
-}) {
-  const t = useTranslations();
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            {t('actions.cancel')}
-          </Button>
-          <Button type="button" variant="destructive" disabled={pending} onClick={onConfirm}>
-            {t('actions.delete')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function formatStateValue(state: number | null) {
-  return state === null ? '' : String(state);
-}
-
-function parseStateDraftValue(value: string) {
-  const trimmed = value.trim();
-
-  if (trimmed.length === 0) {
-    return null;
-  }
-
-  const parsed = Number.parseInt(trimmed, 10);
-  return Number.isInteger(parsed) ? parsed : null;
-}
-
-function normalizeCommuneValue(
-  state: number | null,
-  city: string | null,
-  catalog?: EcotrackCatalogResponse,
-) {
-  const rawCity = (city ?? '').trim();
-
-  if (!catalog || !rawCity || state === null) {
-    return rawCity;
-  }
-
-  const byId = catalog.communes.find(
-    (entry) => String(entry.communeId) === rawCity && entry.wilayaId === state,
-  );
-  if (byId) {
-    return String(byId.communeId);
-  }
-
-  const byName = catalog.communes.find(
-    (entry) => entry.wilayaId === state && entry.name.toLowerCase() === rawCity.toLowerCase(),
-  );
-  return byName ? String(byName.communeId) : rawCity;
-}
-
-function formatRegionLabel(
-  catalog: EcotrackCatalogResponse | undefined,
-  state: number | string | null,
-  city: string | null,
-  placeholder: string,
-) {
-  const rawState = typeof state === 'number' ? String(state) : (state ?? '').trim();
-  const rawCity = (city ?? '').trim();
-  const wilayaId = Number.parseInt(rawState, 10);
-  const wilayaName =
-    catalog && Number.isInteger(wilayaId)
-      ? catalog.wilayas.find((entry) => entry.wilayaId === wilayaId)?.name
-      : undefined;
-  const communeName =
-    catalog && Number.isInteger(wilayaId) && rawCity
-      ? (
-          catalog.communes.find(
-            (entry) => entry.wilayaId === wilayaId && String(entry.communeId) === rawCity,
-          ) ??
-          catalog.communes.find(
-            (entry) =>
-              entry.wilayaId === wilayaId && entry.name.toLowerCase() === rawCity.toLowerCase(),
-          )
-        )?.name
-      : undefined;
-
-  return (
-    [wilayaName ?? rawState, communeName ?? rawCity].filter(Boolean).join(' / ') || placeholder
-  );
-}
-
-function resolveCommuneForState(
-  catalog: EcotrackCatalogResponse | undefined,
-  stateValue: string,
-  cityValue: string,
-) {
-  const wilayaId = Number.parseInt(stateValue, 10);
-  if (!catalog || !Number.isInteger(wilayaId)) {
-    return cityValue;
-  }
-
-  const communeOptions = catalog.communes.filter((entry) => entry.wilayaId === wilayaId);
-  if (communeOptions.length === 0) {
-    return '';
-  }
-
-  const rawCity = cityValue.trim();
-  const currentCommune =
-    communeOptions.find((entry) => String(entry.communeId) === rawCity) ??
-    communeOptions.find((entry) => entry.name.toLowerCase() === rawCity.toLowerCase());
-
-  return currentCommune ? String(currentCommune.communeId) : String(communeOptions[0].communeId);
-}
-
-function DetailsDialog({
-  order,
-  onOpenChange,
-  hoveredProductKey,
-  onHoverChange,
-  formatMoney,
-  catalog,
-}: {
-  order: OrderRecord | null;
-  onOpenChange: (open: boolean) => void;
-  hoveredProductKey: string | null;
-  onHoverChange: Dispatch<SetStateAction<string | null>>;
-  formatMoney: (value: number) => string;
-  catalog?: EcotrackCatalogResponse;
-}) {
-  const t = useTranslations();
-  const detailQuery = useQuery({
-    queryKey: ['order-detail', order?.id],
-    enabled: Boolean(order),
-    queryFn: () => request<OrderDetailResponse>(`/api/orders/${order?.id}`),
-    initialData: order ? { ok: true, item: order } : undefined,
-    initialDataUpdatedAt: 0,
-    staleTime: 60_000,
-  });
-  const detail = detailQuery.data?.item ?? order;
-
-  return (
-    <Dialog open={Boolean(order)} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{t('ordersManager.details.title')}</DialogTitle>
-          <DialogDescription>{detail?.fullName}</DialogDescription>
-        </DialogHeader>
-
-        {detail ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl border border-border/70 p-4">
-              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                {t('ordersManager.columns.client')}
-              </p>
-              <p className="mt-2 font-medium">{detail.fullName}</p>
-              {buildOrderPhoneTelHref(detail.phoneNumber1) ? (
-                <p className="text-sm text-muted-foreground">
-                  <a
-                    className="underline-offset-4 hover:underline"
-                    href={buildOrderPhoneTelHref(detail.phoneNumber1) ?? undefined}
-                  >
-                    {formatOrderPhoneForDisplay(detail.phoneNumber1)}
-                  </a>
-                </p>
-              ) : null}
-              {buildOrderPhoneTelHref(detail.phoneNumber2) ? (
-                <p className="text-sm text-muted-foreground">
-                  <a
-                    className="underline-offset-4 hover:underline"
-                    href={buildOrderPhoneTelHref(detail.phoneNumber2) ?? undefined}
-                  >
-                    {formatOrderPhoneForDisplay(detail.phoneNumber2)}
-                  </a>
-                </p>
-              ) : null}
-            </div>
-            <div className="rounded-2xl border border-border/70 p-4">
-              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                {t('ordersManager.columns.date')}
-              </p>
-              <p className="mt-2 text-sm">{detail.createdAt}</p>
-              <p className="text-sm text-muted-foreground">
-                {formatOrderStatusLabel(t, detail.confirmed)}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-border/70 p-4 md:col-span-2">
-              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                {t('ordersManager.columns.products')}
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <OrderProductsPreview
-                  orderId={detail.id}
-                  products={detail.orderProducts}
-                  emptyLabel={t('ordersManager.products.empty')}
-                  hoveredProductKey={hoveredProductKey}
-                  onHoverChange={onHoverChange}
-                  formatMoney={formatMoney}
-                />
-              </div>
-            </div>
-            <div className="rounded-2xl border border-border/70 p-4">
-              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                {t('ordersManager.columns.address')}
-              </p>
-              <p className="mt-2 text-sm">
-                {t(`ordersManager.delivery.${getDeliveryTypeLabelKey(detail.delivery)}`)}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {formatRegionLabel(
-                  catalog,
-                  detail.state,
-                  detail.city,
-                  t('ordersManager.placeholders.region'),
-                )}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {detail.homeAddress || t('ordersManager.placeholders.street')}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-border/70 p-4">
-              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                {t('ordersManager.columns.notes')}
-              </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {detail.note || t('ordersManager.notes.empty')}
-              </p>
-            </div>
-          </div>
-        ) : null}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ProductsDialog({
-  state,
-  pending,
-  onOpenChange,
-  onSearchChange,
-  onAddProduct,
-  onIncreaseQuantity,
-  onDecreaseQuantity,
-  onRemoveProduct,
-  onSave,
-}: {
-  state: ProductsDialogState;
-  pending: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSearchChange: (value: string) => void;
-  onAddProduct: (product: ProductSearchItem) => void;
-  onIncreaseQuantity: (rawValue: string) => void;
-  onDecreaseQuantity: (rawValue: string) => void;
-  onRemoveProduct: (rawValue: string) => void;
-  onSave: () => void;
-}) {
-  const t = useTranslations();
-  const locale = useLocale();
-  const selectedProducts = state ? summarizeEditableProducts(state.items) : [];
-  const productSubtotal = selectedProducts.reduce((sum, product) => sum + product.lineTotal, 0);
-  const totalAmount = productSubtotal + (state?.order.deliveryFee ?? 0);
-  const hasChanges = state
-    ? !areCartProductsEqual(
-        state.items.map((item) => item.rawValue),
-        state.order.cartProducts,
-      )
-    : false;
-  const formatMoney = (value: number) =>
-    new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: 'DZD',
-      maximumFractionDigits: 2,
-    }).format(value);
-
-  return (
-    <Dialog open={Boolean(state)} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{t('ordersManager.products.title')}</DialogTitle>
-          <DialogDescription>{state?.order.fullName}</DialogDescription>
-        </DialogHeader>
-        {state ? (
-          <OrderProductsEditor
-            customerName={state.order.fullName}
-            items={state.items}
-            search={state.search}
-            onSearchChange={onSearchChange}
-            onAddProduct={onAddProduct}
-            onIncreaseQuantity={onIncreaseQuantity}
-            onDecreaseQuantity={onDecreaseQuantity}
-            onRemoveProduct={onRemoveProduct}
-            footer={
-              <div className="rounded-2xl bg-muted/40 p-3 text-sm">
-                <p>
-                  {t('ordersManager.amount.subtotal')}: {formatMoney(productSubtotal)}
-                </p>
-                <p>
-                  {t('ordersManager.amount.deliveryFee')}:{' '}
-                  {formatMoney(state.order.deliveryFee ?? 0)}
-                </p>
-                <p className="font-semibold">
-                  {t('ordersManager.amount.total')}: {formatMoney(totalAmount)}
-                </p>
-              </div>
-            }
-          />
-        ) : null}
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            {t('actions.cancel')}
-          </Button>
-          <Button type="button" disabled={pending || !hasChanges} onClick={onSave}>
-            {t('actions.save')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function HistoryDialog({
-  order,
-  onOpenChange,
-}: {
-  order: OrderRecord | null;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const t = useTranslations();
-  const historyQuery = useQuery({
-    queryKey: ['order-history', order?.id],
-    enabled: Boolean(order),
-    queryFn: () => request<OrderDetailResponse>(`/api/orders/${order?.id}`),
-    initialData: order ? { ok: true, item: order } : undefined,
-    initialDataUpdatedAt: 0,
-    staleTime: 60_000,
-  });
-  const detail = historyQuery.data?.item ?? order;
-
-  return (
-    <Dialog open={Boolean(order)} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{t('ordersManager.history.title')}</DialogTitle>
-          <DialogDescription>{detail?.fullName}</DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-3">
-          {detail?.statusHistory.length ? (
-            detail.statusHistory.map((item) => (
-              <div key={item.id} className="rounded-2xl border border-border/70 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <Badge>{formatOrderStatusLabel(t, item.status)}</Badge>
-                  <p className="text-xs text-muted-foreground">{item.changedAt}</p>
-                </div>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {item.changedByName ?? item.changedBy ?? t('ordersManager.system')}
-                </p>
-              </div>
-            ))
-          ) : (
-            <p className="text-sm text-muted-foreground">{t('ordersManager.history.empty')}</p>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 export function OrdersManager({
@@ -1398,8 +793,8 @@ export function OrdersManager({
   const getAddressDraft = (order: OrderRecord): AddressDraft =>
     addressDrafts[order.id] ?? {
       delivery: order.delivery,
-      state: formatStateValue(order.state),
-      city: normalizeCommuneValue(order.state, order.city, ecotrackCatalogQuery.data),
+      state: formatOrderStateValue(order.state),
+      city: normalizeOrderCommuneValue(order.state, order.city, ecotrackCatalogQuery.data),
       homeAddress: order.homeAddress ?? '',
     };
 
@@ -1410,7 +805,7 @@ export function OrdersManager({
       return;
     }
 
-    const nextName = splitFullNameDraft(normalizedValue);
+    const nextName = splitOrderFullNameDraft(normalizedValue);
     await patchMutation.mutateAsync({
       id: order.id,
       values: {
@@ -1475,7 +870,7 @@ export function OrdersManager({
     const draft = getAddressDraft(order);
     if (
       draft.delivery === order.delivery &&
-      draft.state === formatStateValue(order.state) &&
+      draft.state === formatOrderStateValue(order.state) &&
       draft.city === (order.city ?? '') &&
       draft.homeAddress === (order.homeAddress ?? '')
     ) {
@@ -1486,7 +881,7 @@ export function OrdersManager({
       id: order.id,
       values: {
         delivery: draft.delivery,
-        state: parseStateDraftValue(draft.state),
+        state: parseOrderStateDraftValue(draft.state),
         city: draft.city.trim() || null,
         homeAddress: draft.homeAddress.trim() || null,
       },
@@ -2375,7 +1770,7 @@ export function OrdersManager({
       id: order.id,
       values: {
         delivery,
-        state: parseStateDraftValue(draft.state),
+        state: parseOrderStateDraftValue(draft.state),
         city: draft.city.trim() || null,
         homeAddress: draft.homeAddress.trim() || null,
       },
@@ -2399,7 +1794,11 @@ export function OrdersManager({
     const nextDraft = {
       ...getAddressDraft(order),
       state,
-      city: resolveCommuneForState(ecotrackCatalogQuery.data, state, getAddressDraft(order).city),
+      city: resolveOrderCommuneForState(
+        ecotrackCatalogQuery.data,
+        state,
+        getAddressDraft(order).city,
+      ),
     };
 
     setAddressDrafts((current) => ({
@@ -2411,7 +1810,7 @@ export function OrdersManager({
       id: order.id,
       values: {
         delivery: nextDraft.delivery,
-        state: parseStateDraftValue(nextDraft.state),
+        state: parseOrderStateDraftValue(nextDraft.state),
         city: nextDraft.city.trim() || null,
         homeAddress: nextDraft.homeAddress.trim() || null,
       },
@@ -2446,7 +1845,7 @@ export function OrdersManager({
       id: order.id,
       values: {
         delivery: nextDraft.delivery,
-        state: parseStateDraftValue(nextDraft.state),
+        state: parseOrderStateDraftValue(nextDraft.state),
         city: nextDraft.city.trim() || null,
         homeAddress: nextDraft.homeAddress.trim() || null,
       },
@@ -3132,7 +2531,7 @@ export function OrdersManager({
                                 </Button>
                               </div>
                               <p className="mt-2 text-xs text-muted-foreground">
-                                {formatRegionLabel(
+                                {formatOrderRegionLabel(
                                   ecotrackCatalogQuery.data,
                                   addressDraft.state || order.state,
                                   selectedCommune?.name ?? order.city ?? addressDraft.city,
@@ -3652,7 +3051,7 @@ export function OrdersManager({
                               t('ordersManager.placeholders.street')}
                           </p>
                           <p className="mt-1 text-sm text-muted-foreground">
-                            {formatRegionLabel(
+                            {formatOrderRegionLabel(
                               ecotrackCatalogQuery.data,
                               addressDraft.state,
                               selectedCommune?.name ?? order.city ?? addressDraft.city,
@@ -3873,100 +3272,113 @@ export function OrdersManager({
         />
       </div>
 
-      <DetailsDialog
-        order={detailsOrder}
-        onOpenChange={(open) => !open && setDetailsOrder(null)}
-        hoveredProductKey={hoveredProductKey}
-        onHoverChange={setHoveredProductKey}
-        formatMoney={formatMoney}
-        catalog={ecotrackCatalogQuery.data}
-      />
-      <HistoryDialog order={historyOrder} onOpenChange={(open) => !open && setHistoryOrder(null)} />
-      <ProductsDialog
-        state={productsDialog}
-        pending={patchMutation.isPending}
-        onOpenChange={(open) => !open && setProductsDialog(null)}
-        onSearchChange={(value) =>
-          setProductsDialog((current) => (current ? { ...current, search: value } : current))
-        }
-        onAddProduct={addProductToDialog}
-        onIncreaseQuantity={increaseProductQuantity}
-        onDecreaseQuantity={decreaseProductQuantity}
-        onRemoveProduct={removeProduct}
-        onSave={() => void saveProducts()}
-      />
-      <DeleteDialog
-        open={Boolean(deleteState)}
-        onOpenChange={(open) => !open && setDeleteState(null)}
-        title={t('labels.deleteDialogTitle')}
-        description={t('labels.deleteDialogDescription', { target: deleteState?.label ?? '' })}
-        pending={deleteMutation.isPending}
-        onConfirm={() => {
-          if (!deleteState) {
-            return;
+      {detailsOrder ? (
+        <OrderDetailsDialog
+          order={detailsOrder}
+          onOpenChange={(open) => !open && setDetailsOrder(null)}
+          hoveredProductKey={hoveredProductKey}
+          onHoverChange={setHoveredProductKey}
+          formatMoney={formatMoney}
+          catalog={ecotrackCatalogQuery.data}
+        />
+      ) : null}
+      {historyOrder ? (
+        <OrderHistoryDialog
+          order={historyOrder}
+          onOpenChange={(open) => !open && setHistoryOrder(null)}
+        />
+      ) : null}
+      {productsDialog ? (
+        <OrderProductsDialog
+          state={productsDialog}
+          pending={patchMutation.isPending}
+          onOpenChange={(open) => !open && setProductsDialog(null)}
+          onSearchChange={(value) =>
+            setProductsDialog((current) => (current ? { ...current, search: value } : current))
           }
-
-          deleteMutation.mutate({
-            id: deleteState.id,
-            messages: buildMessages(
-              t,
-              'notifications.orders.delete.loading',
-              'notifications.orders.delete.success',
-              'notifications.orders.delete.error',
-              { target: deleteState.label },
-            ),
-          });
-        }}
-      />
-      <ShoppingListDialog
-        open={shoppingListOpen}
-        state={shoppingListState}
-        pending={addShoppingListProductMutation.isPending}
-        inventoryPending={applyShoppingListInventoryMutation.isPending}
-        saveStatus={shoppingListSaveStatus}
-        onOpenChange={handleShoppingListOpenChange}
-        onPrint={openShoppingListPrintView}
-        onSearchChange={(value) =>
-          updateShoppingListState((current) => ({ ...current, search: value }))
-        }
-        onAddProduct={(product) => void addProductToShoppingList(product)}
-        onReset={resetShoppingListDraft}
-        onRefresh={refreshShoppingListDraft}
-        onToggleItem={toggleShoppingListItem}
-        onIncreaseQuantity={increaseShoppingListItemQuantity}
-        onDecreaseQuantity={decreaseShoppingListItemQuantity}
-        onIncreaseInventoryDecrease={increaseShoppingListInventoryDecrease}
-        onDecreaseInventoryDecrease={decreaseShoppingListInventoryDecrease}
-        onRemoveItem={removeShoppingListItem}
-        onApplyAllInventoryChanges={() => void applyShoppingListInventoryChanges('all')}
-        onApplySelectedInventoryChanges={() => void applyShoppingListInventoryChanges('selected')}
-      />
-      <ExportOrdersDialog
-        state={exportPreviewState}
-        progress={exportProgressState}
-        errorMessage={exportPreviewError}
-        onOpenChange={(open) => {
-          if (!open && !exportProgressState) {
-            setExportPreviewState(null);
-            setExportPreviewError(null);
+          onAddProduct={addProductToDialog}
+          onIncreaseQuantity={increaseProductQuantity}
+          onDecreaseQuantity={decreaseProductQuantity}
+          onRemoveProduct={removeProduct}
+          onSave={() => void saveProducts()}
+        />
+      ) : null}
+      {deleteState ? (
+        <DeleteOrderDialog
+          open
+          onOpenChange={(open) => !open && setDeleteState(null)}
+          title={t('labels.deleteDialogTitle')}
+          description={t('labels.deleteDialogDescription', { target: deleteState.label })}
+          pending={deleteMutation.isPending}
+          onConfirm={() => {
+            deleteMutation.mutate({
+              id: deleteState.id,
+              messages: buildMessages(
+                t,
+                'notifications.orders.delete.loading',
+                'notifications.orders.delete.success',
+                'notifications.orders.delete.error',
+                { target: deleteState.label },
+              ),
+            });
+          }}
+        />
+      ) : null}
+      {shoppingListOpen ? (
+        <ShoppingListDialog
+          open
+          state={shoppingListState}
+          pending={addShoppingListProductMutation.isPending}
+          inventoryPending={applyShoppingListInventoryMutation.isPending}
+          saveStatus={shoppingListSaveStatus}
+          onOpenChange={handleShoppingListOpenChange}
+          onPrint={openShoppingListPrintView}
+          onSearchChange={(value) =>
+            updateShoppingListState((current) => ({ ...current, search: value }))
           }
-        }}
-        onConfirm={() => void confirmExport()}
-        onCancelJob={() => void cancelOrderExportMutation.mutateAsync()}
-      />
-      <EcotrackPostingDialog
-        state={ecotrackPreviewState}
-        progress={ecotrackProgressState}
-        postingSummary={ecotrackPostingSummary}
-        onOpenChange={(open) => {
-          if (!open && !ecotrackProgressState) {
-            setEcotrackPreviewState(null);
-            setActiveEcotrackJobId(null);
-          }
-        }}
-        onConfirm={() => void confirmEcotrackPosting()}
-        onCancelJob={() => void cancelOrderEcotrackMutation.mutateAsync()}
-      />
+          onAddProduct={(product) => void addProductToShoppingList(product)}
+          onReset={resetShoppingListDraft}
+          onRefresh={refreshShoppingListDraft}
+          onToggleItem={toggleShoppingListItem}
+          onIncreaseQuantity={increaseShoppingListItemQuantity}
+          onDecreaseQuantity={decreaseShoppingListItemQuantity}
+          onIncreaseInventoryDecrease={increaseShoppingListInventoryDecrease}
+          onDecreaseInventoryDecrease={decreaseShoppingListInventoryDecrease}
+          onRemoveItem={removeShoppingListItem}
+          onApplyAllInventoryChanges={() => void applyShoppingListInventoryChanges('all')}
+          onApplySelectedInventoryChanges={() => void applyShoppingListInventoryChanges('selected')}
+        />
+      ) : null}
+      {exportPreviewState ? (
+        <ExportOrdersDialog
+          state={exportPreviewState}
+          progress={exportProgressState}
+          errorMessage={exportPreviewError}
+          onOpenChange={(open) => {
+            if (!open && !exportProgressState) {
+              setExportPreviewState(null);
+              setExportPreviewError(null);
+            }
+          }}
+          onConfirm={() => void confirmExport()}
+          onCancelJob={() => void cancelOrderExportMutation.mutateAsync()}
+        />
+      ) : null}
+      {ecotrackPreviewState ? (
+        <EcotrackPostingDialog
+          state={ecotrackPreviewState}
+          progress={ecotrackProgressState}
+          postingSummary={ecotrackPostingSummary}
+          onOpenChange={(open) => {
+            if (!open && !ecotrackProgressState) {
+              setEcotrackPreviewState(null);
+              setActiveEcotrackJobId(null);
+            }
+          }}
+          onConfirm={() => void confirmEcotrackPosting()}
+          onCancelJob={() => void cancelOrderEcotrackMutation.mutateAsync()}
+        />
+      ) : null}
     </motion.section>
   );
 }

@@ -15,6 +15,7 @@ import { orderStatusHistory, orders, products } from '@bric/db/schema';
 import { mutateEntityWithHistory } from '../../../../lib/action-history';
 import { auth } from '../../../../lib/auth';
 import { readEcotrackCatalog, resolveEcotrackDeliveryFee } from '../../../../lib/ecotrack';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import {
   DEGRADED_CAPTURE_VARIANT,
   coerceDeliveryType,
@@ -93,7 +94,11 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   }
 
   const { id } = await params;
-  const item = await loadOrderDetail(Number(id));
+  const numericId = parsePositiveIntegerId(id);
+  if (numericId === null) {
+    return NextResponse.json({ error: 'Invalid order id' }, { status: 400 });
+  }
+  const item = await loadOrderDetail(numericId);
 
   if (!item) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -109,9 +114,9 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
 
-  const numericId = Number((await params).id);
-  if (!Number.isInteger(numericId) || numericId <= 0) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const numericId = parsePositiveIntegerId((await params).id);
+  if (numericId === null) {
+    return NextResponse.json({ error: 'Invalid order id' }, { status: 400 });
   }
 
   const db = getDb();
@@ -156,7 +161,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const { id } = await params;
-  const numericId = Number(id);
+  const numericId = parsePositiveIntegerId(id);
+  if (numericId === null) {
+    return NextResponse.json({ error: 'Invalid order id' }, { status: 400 });
+  }
   const db = getDb();
   const existing = await db.query.orders.findFirst({ where: eq(orders.id, numericId) });
 
@@ -398,7 +406,10 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const { id } = await params;
-  const numericId = Number(id);
+  const numericId = parsePositiveIntegerId(id);
+  if (numericId === null) {
+    return NextResponse.json({ error: 'Invalid order id' }, { status: 400 });
+  }
   const db = getDb();
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };

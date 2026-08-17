@@ -13,16 +13,18 @@
     "./client-ip": "./src/client-ip.ts",
     "./diagnostics": "./src/diagnostics.ts",
     "./health": "./src/health.ts",
+    "./http-input": "./src/http-input.ts",
     "./internal-signing": "./src/internal-signing.ts",
     "./redis": "./src/redis.ts",
     "./jobs": "./src/jobs.ts",
     "./next-action": "./src/next-action.ts",
     "./rate-limit": "./src/rate-limit.ts",
-    "./idempotency": "./src/idempotency.ts"
+    "./idempotency": "./src/idempotency.ts",
+    "./worker-heartbeat": "./src/worker-heartbeat.ts"
   },
   "dependencies": {
     "@sentry/node": "10.70.0",
-    "bullmq": "^6.1.0",
+    "bullmq": "^6.1.2",
     "ioredis": "^6.0.0"
   },
   "devDependencies": {

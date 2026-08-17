@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
 import { auth } from './auth';
-import { parsePositiveIntegerId } from './http-input';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { requireMutationAccess } from './rbac';
 import { captureAdminException, getRequestId, withRequestIdHeaders } from './sentry';
 

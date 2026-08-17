@@ -4,6 +4,7 @@ import {
   buildMetaClickCookie,
   captureMarketingAttribution,
   captureStorefrontAttribution,
+  getStorefrontAnalyticsContext,
   getMarketingOrderContext,
   parseGoogleClientId,
   parseGoogleSessionId,
@@ -12,6 +13,7 @@ import {
 describe('marketing attribution boundary', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    window.sessionStorage.clear();
     for (const name of ['_fbc', 'bric_visit_id']) document.cookie = `${name}=; Max-Age=0; Path=/`;
     window.history.replaceState(
       {},
@@ -51,6 +53,50 @@ describe('marketing attribution boundary', () => {
     expect(document.cookie).toContain(`_fbc=${encodeURIComponent('fb.1.1720000010.second-click')}`);
   });
 
+  it('starts a new source-less campaign visit for platform click identifiers', () => {
+    window.history.replaceState({}, '', '/fr/?fbclid=first-click&utm_source=facebook');
+    const first = captureStorefrontAttribution(1_720_000_000_000);
+
+    window.history.replaceState({}, '', '/fr/products?gclid=google-click');
+    const second = captureStorefrontAttribution(1_720_000_010_000);
+
+    expect(second).toMatchObject({
+      landingUrl: expect.stringContaining('/fr/products?gclid=google-click'),
+      utmSource: null,
+      capturedAt: 1_720_000_010_000,
+    });
+    expect(second.visitId).not.toBe(first.visitId);
+  });
+
+  it('uses a real 30-minute inactivity session and preserves its immutable entry', () => {
+    const first = getStorefrontAnalyticsContext(1_720_000_000_000);
+    window.history.replaceState({}, '', '/fr/products');
+    const active = getStorefrontAnalyticsContext(1_720_001_700_000);
+    const expired = getStorefrontAnalyticsContext(1_720_003_600_001);
+
+    expect(active.sessionId).toBe(first.sessionId);
+    expect(active.entry.landingPath).toBe('/fr/checkout');
+    expect(expired.sessionId).not.toBe(first.sessionId);
+    expect(expired.entry.landingPath).toBe('/fr/products');
+  });
+
+  it('starts a new session for a new campaign and retains a seven-day last non-direct touch', () => {
+    const first = getStorefrontAnalyticsContext(1_720_000_000_000);
+    window.history.replaceState({}, '', '/fr/products?utm_source=google&utm_medium=organic');
+    const google = getStorefrontAnalyticsContext(1_720_000_010_000);
+    window.history.replaceState({}, '', '/fr/products');
+    const direct = getStorefrontAnalyticsContext(1_720_002_000_001);
+
+    expect(google.sessionId).not.toBe(first.sessionId);
+    expect(google.classification.channel).toBe('google_organic');
+    expect(direct.sessionId).not.toBe(google.sessionId);
+    expect(direct.classification.channel).toBe('direct_dark_social');
+    expect(direct.lastNonDirectTouch).toMatchObject({
+      sessionId: google.sessionId,
+      utmSource: 'google',
+    });
+  });
+
   it('normalizes GA identifiers without exposing customer fields', () => {
     expect(parseGoogleClientId('GA1.1.12345.67890')).toBe('12345.67890');
     expect(parseGoogleSessionId('GS2.1.s1712345678$o1')).toBe('1712345678');
@@ -63,9 +109,23 @@ describe('marketing attribution boundary', () => {
     const context = getMarketingOrderContext('purchase-1');
     expect(context).toMatchObject({
       eventId: 'purchase-1',
+      sessionEntry: {
+        landingPath: '/fr/checkout',
+        utmSource: 'facebook',
+      },
+      lastNonDirectTouch: {
+        landingPath: '/fr/checkout',
+        utmSource: 'facebook',
+      },
+      acquisition: {
+        landingPath: '/fr/checkout',
+        utmSource: 'facebook',
+        utmMedium: 'paid_social',
+      },
       google: { clientId: '12345.67890', gclid: 'g-1' },
       tiktok: { clickId: 'tt-1', cookieId: 'ttp-cookie' },
     });
+    expect(JSON.stringify(context.acquisition)).not.toContain('meta-click');
     expect(JSON.stringify(context)).not.toMatch(/phone|email|address/i);
   });
 });

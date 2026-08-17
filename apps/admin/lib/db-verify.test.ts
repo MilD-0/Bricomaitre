@@ -76,7 +76,7 @@ describe('lib/db-verify', () => {
 
     await expect(verifyDbMigrations({ execute }, { cwd: process.cwd() })).resolves.toEqual({
       appliedCount: 1,
-      localCount: 1,
+      localCount: 1 + entries.filter((entry) => entry.when > bootstrapEntry.when).length,
       latestAppliedTag: bootstrapEntry.tag,
     });
   });
