@@ -73,14 +73,17 @@ describe('app/api/uploads/bulletin/route', () => {
     await expect(res.json()).resolves.toEqual({ error: 'Unauthorized' });
   });
 
-  it('fails with 500 when required env vars are missing', async () => {
+  it('fails with 500 when required env vars are missing for a valid upload', async () => {
     ensureS3UploadConfigMock.mockImplementation(() => {
       throw new Error(
         'Missing required env vars: AWS_REGION, AWS_S3_BUCKET, AWS_CLOUDFRONT_DOMAIN',
       );
     });
 
+    const formData = new FormData();
+    formData.append('files', new File(['%PDF-1.7'], 'brief.pdf', { type: 'application/pdf' }));
     const req = new NextRequest('http://localhost/api/uploads/bulletin', { method: 'POST' });
+    Object.defineProperty(req, 'formData', { value: vi.fn().mockResolvedValue(formData) });
     const res = await POST(req);
 
     expect(res.status).toBe(500);
@@ -96,6 +99,35 @@ describe('app/api/uploads/bulletin/route', () => {
 
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toEqual({ error: 'No files uploaded' });
+    expect(ensureS3UploadConfigMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for malformed multipart data before accessing storage configuration', async () => {
+    const req = new NextRequest('http://localhost/api/uploads/bulletin', { method: 'POST' });
+    Object.defineProperty(req, 'formData', {
+      value: vi.fn().mockRejectedValue(new Error('malformed body')),
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'Invalid multipart request body' });
+    expect(ensureS3UploadConfigMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects declared oversized requests before parsing or accessing storage', async () => {
+    const req = new NextRequest('http://localhost/api/uploads/bulletin', {
+      method: 'POST',
+      headers: { 'content-length': String(50 * 1024 * 1024) },
+    });
+    const formData = vi.fn();
+    Object.defineProperty(req, 'formData', { value: formData });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(413);
+    expect(formData).not.toHaveBeenCalled();
+    expect(ensureS3UploadConfigMock).not.toHaveBeenCalled();
   });
 
   it('uploads a file and returns bulletin attachment metadata', async () => {

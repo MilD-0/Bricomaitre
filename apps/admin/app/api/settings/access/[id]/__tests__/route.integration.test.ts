@@ -39,6 +39,38 @@ describe('app/api/settings/access/[id]/route', () => {
     mutateEntityWithHistoryMock.mockResolvedValue(undefined);
   });
 
+  it.each([
+    ['PUT', (request: NextRequest) => PUT(request, { params: Promise.resolve({ id: 'nope' }) })],
+    [
+      'DELETE',
+      (request: NextRequest) => DELETE(request, { params: Promise.resolve({ id: 'nope' }) }),
+    ],
+  ])(
+    'returns 400 before querying for a malformed access grant id in %s',
+    async (method, callRoute) => {
+      hasDbMock.mockReturnValue(true);
+      const request = new NextRequest('http://localhost/api/settings/access/nope', {
+        method,
+        ...(method === 'PUT'
+          ? {
+              body: JSON.stringify({
+                email: 'employee@example.com',
+                role: 'viewer',
+                roleDefinitionId: null,
+              }),
+              headers: { 'content-type': 'application/json' },
+            }
+          : {}),
+      });
+
+      const res = await callRoute(request);
+
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toEqual({ error: 'Invalid access grant id' });
+      expect(getDbMock).not.toHaveBeenCalled();
+    },
+  );
+
   it('updates an existing access grant', async () => {
     hasDbMock.mockReturnValue(true);
     const db = {

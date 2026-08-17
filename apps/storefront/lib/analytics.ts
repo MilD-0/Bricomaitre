@@ -5,7 +5,10 @@ import { z } from 'zod';
 import { STOREFRONT_ANALYTICS_PROJECT } from '@bric/storefront-core/contracts';
 
 import { buildMetaServerEvent, deliverClientMarketingEvent } from '@/lib/marketing-destinations';
-import { captureStorefrontAttribution } from '@/lib/marketing-attribution';
+import {
+  captureStorefrontAttribution,
+  getStorefrontAnalyticsContext,
+} from '@/lib/marketing-attribution';
 
 const productEventNameSchema = z.enum([
   'view_item',
@@ -191,25 +194,10 @@ export type NavigationAnalyticsEventInput = z.input<typeof navigationEventInputS
 export type CheckoutAnalyticsEventInput = z.input<typeof checkoutEventInputSchema>;
 export type PageAnalyticsEventInput = z.input<typeof pageEventInputSchema>;
 
-const JOURNEY_KEY = 'bric:analytics:journey:v1';
-const SESSION_KEY = 'bric:analytics:session:v1';
-
 function createId() {
   return (
     globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
   );
-}
-
-function getOrCreateId(storage: Storage, key: string) {
-  try {
-    const current = storage.getItem(key);
-    if (current) return current;
-    const next = createId();
-    storage.setItem(key, next);
-    return next;
-  } catch {
-    return createId();
-  }
 }
 
 export function sanitizeAnalyticsReferrer(value: string, currentOrigin: string) {
@@ -246,6 +234,7 @@ function buildAnalyticsPayload(
     | 'thank_you',
 ) {
   const attribution = captureStorefrontAttribution();
+  const analytics = getStorefrontAnalyticsContext();
   const connection = navigator as Navigator & {
     connection?: { effectiveType?: string; saveData?: boolean };
   };
@@ -254,19 +243,19 @@ function buildAnalyticsPayload(
     eventVersion: 1 as const,
     eventId: 'eventId' in parsed && parsed.eventId ? parsed.eventId : createId(),
     visitId: attribution.visitId,
-    journeyId: getOrCreateId(window.localStorage, JOURNEY_KEY),
-    sessionId: getOrCreateId(window.sessionStorage, SESSION_KEY),
+    journeyId: analytics.journeyId,
+    sessionId: analytics.sessionId,
     eventName: parsed.eventName,
     occurredAt: new Date().toISOString(),
     pagePath: window.location.pathname,
     pageType,
     locale: parsed.locale,
-    referrer: sanitizeAnalyticsReferrer(document.referrer, window.location.origin),
-    utmSource: attribution.utmSource,
-    utmMedium: attribution.utmMedium,
-    utmCampaign: attribution.utmCampaign,
-    utmTerm: attribution.utmTerm,
-    utmContent: attribution.utmContent,
+    referrer: analytics.entry.referrer,
+    utmSource: analytics.entry.utmSource,
+    utmMedium: analytics.entry.utmMedium,
+    utmCampaign: analytics.entry.utmCampaign,
+    utmTerm: analytics.entry.utmTerm,
+    utmContent: analytics.entry.utmContent,
     productId: 'productId' in parsed ? parsed.productId : null,
     productSlug: 'productSlug' in parsed ? parsed.productSlug : null,
     categoryId: 'categoryId' in parsed ? parsed.categoryId : null,
@@ -288,7 +277,13 @@ function buildAnalyticsPayload(
       landingUrl: attribution.landingUrl,
       landingHost: attribution.landingHost,
       fbc: attribution.fbc,
-      paidClickCookie: Boolean(attribution.fbc),
+      paidClickCookie: analytics.entry.hasMetaClickId,
+      sessionStartedAt: new Date(analytics.sessionStartedAt).toISOString(),
+      acquisitionChannel: analytics.classification.channel,
+      acquisitionEvidence: analytics.classification.evidence,
+      hasMetaClickId: analytics.entry.hasMetaClickId,
+      hasGoogleClickId: analytics.entry.hasGoogleClickId,
+      hasTikTokClickId: analytics.entry.hasTikTokClickId,
       ...('metadata' in parsed ? parsed.metadata : {}),
     },
   };
@@ -318,10 +313,11 @@ export type StorefrontAnalyticsPayload = ReturnType<typeof buildAnalyticsPayload
 
 export function getAnalyticsIdentity() {
   if (typeof window === 'undefined') return { visitId: null, journeyId: null, sessionId: null };
+  const analytics = getStorefrontAnalyticsContext();
   return {
     visitId: captureStorefrontAttribution().visitId,
-    journeyId: getOrCreateId(window.localStorage, JOURNEY_KEY),
-    sessionId: getOrCreateId(window.sessionStorage, SESSION_KEY),
+    journeyId: analytics.journeyId,
+    sessionId: analytics.sessionId,
   };
 }
 

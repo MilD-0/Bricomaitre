@@ -41,9 +41,9 @@ vi.mock('../../../../../lib/reporting-refresh-trigger', () => ({
   triggerAdminReportingRefresh: triggerAdminReportingRefreshMock,
 }));
 
-vi.mock('../../../../../lib/stats', async () => {
-  const actual = await vi.importActual<typeof import('../../../../../lib/stats')>(
-    '../../../../../lib/stats',
+vi.mock('../../../../../lib/stats-ad-costs', async () => {
+  const actual = await vi.importActual<typeof import('../../../../../lib/stats-ad-costs')>(
+    '../../../../../lib/stats-ad-costs',
   );
 
   return {
@@ -145,11 +145,21 @@ describe('app/api/stats/ad-costs/route', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(deleteAdCostEntryMock).toHaveBeenCalledWith('3', {
+    expect(deleteAdCostEntryMock).toHaveBeenCalledWith(3, {
       email: 'ops@example.com',
       name: 'Ops',
     });
     await expect(response.json()).resolves.toEqual({ data: { id: 3 } });
+  });
+
+  it('rejects a malformed ad-cost id before querying', async () => {
+    const response = await DELETE(
+      new NextRequest('http://localhost/api/stats/ad-costs?id=3junk', { method: 'DELETE' }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(deleteAdCostEntryMock).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid ad cost entry id' });
   });
 
   it('deletes an ad spend import batch', async () => {

@@ -171,7 +171,7 @@ describe('AssetsManager', () => {
     await screen.findByText('Existing banner');
 
     await userEvent.click(screen.getByRole('button', { name: 'New banner' }));
-    const bannerDialog = screen.getByRole('dialog');
+    const bannerDialog = await screen.findByRole('dialog');
     await userEvent.type(
       within(bannerDialog).getByRole('textbox', { name: 'Title' }),
       'Hero banner',
@@ -254,7 +254,7 @@ describe('AssetsManager', () => {
 
     const cardsSection = screen.getByText('Product cards').closest('section') as HTMLElement;
     await userEvent.click(within(cardsSection).getByRole('button', { name: 'Edit' }));
-    const cardDialog = screen.getByRole('dialog');
+    const cardDialog = await screen.findByRole('dialog');
     expect(
       within(cardDialog).getAllByRole('button', { name: 'Remove Roller' })[0],
     ).toBeInTheDocument();
@@ -294,7 +294,7 @@ describe('AssetsManager', () => {
 
     const cardsSection = screen.getByText('Product cards').closest('section') as HTMLElement;
     await userEvent.click(within(cardsSection).getByRole('button', { name: 'Edit' }));
-    const cardDialog = screen.getByRole('dialog');
+    const cardDialog = await screen.findByRole('dialog');
     const frenchCharacteristics = within(cardDialog).getByRole('textbox', {
       name: 'French characteristics',
     });
@@ -315,7 +315,7 @@ describe('AssetsManager', () => {
 
     const cardsSection = screen.getByText('Product cards').closest('section') as HTMLElement;
     await userEvent.click(within(cardsSection).getByRole('button', { name: 'Edit' }));
-    const cardDialog = screen.getByRole('dialog');
+    const cardDialog = await screen.findByRole('dialog');
     const frenchCharacteristics = within(cardDialog).getByRole('textbox', {
       name: 'French characteristics',
     });
@@ -340,7 +340,7 @@ describe('AssetsManager', () => {
     await screen.findByText('Existing banner');
 
     await userEvent.click(screen.getByRole('button', { name: 'New group' }));
-    const groupDialog = screen.getByRole('dialog');
+    const groupDialog = await screen.findByRole('dialog');
     await userEvent.type(
       within(groupDialog).getByRole('textbox', { name: 'Group name' }),
       'Empty group',
@@ -366,7 +366,7 @@ describe('AssetsManager', () => {
     await screen.findByText('Existing banner');
 
     await userEvent.click(screen.getByRole('button', { name: 'New group' }));
-    const groupDialog = screen.getByRole('dialog');
+    const groupDialog = await screen.findByRole('dialog');
     await userEvent.type(
       within(groupDialog).getByRole('textbox', { name: 'Group name' }),
       'Homepage picks',

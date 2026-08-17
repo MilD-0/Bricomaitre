@@ -5,6 +5,7 @@ import { getDb, hasDb } from '@bric/db/client';
 import { roleDefinitionPermissions, roleDefinitions } from '@bric/db/schema';
 import { mutateEntityWithHistory } from '../../../../../lib/action-history';
 import { auth } from '../../../../../lib/auth';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { roleDefinitionFormSchema } from '../../../../../lib/permissions';
 import { requireOpsAccess } from '../../../../../lib/rbac';
 
@@ -32,7 +33,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const { id } = await params;
-  const roleId = Number(id);
+  const roleId = parsePositiveIntegerId(id);
+  if (roleId === null) {
+    return NextResponse.json({ error: 'Invalid role id' }, { status: 400 });
+  }
   const data = parsed.data;
   const description = data.description?.trim() ? data.description.trim() : null;
   const slug = slugifyRoleName(data.name);

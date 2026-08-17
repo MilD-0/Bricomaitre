@@ -69,4 +69,18 @@ describe('app/api/bulletin/replies/[replyId]/reactions/route', () => {
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ ok: true, reacted: true });
   });
+
+  it('returns 400 before querying for a malformed reply id', async () => {
+    const res = await POST(
+      new NextRequest('http://localhost/api/bulletin/replies/nope/reactions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ emoji: '🔥' }),
+      }),
+      { params: Promise.resolve({ replyId: 'nope' }) },
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'Invalid bulletin reply id' });
+  });
 });

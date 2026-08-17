@@ -1,6 +1,7 @@
 import {
   bigint,
   bigserial,
+  boolean,
   date,
   index,
   integer,
@@ -11,6 +12,7 @@ import {
   timestamp,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 import { brands } from './brands';
 import { categories } from './categories';
@@ -41,6 +43,9 @@ export const analyticsJourneys = pgTable(
   (t) => [
     index('idx_analytics_journeys_first_seen').on(t.firstSeenAt.desc()),
     index('idx_analytics_journeys_last_seen').on(t.lastSeenAt.desc()),
+    index('idx_analytics_journeys_first_order')
+      .on(t.firstOrderId)
+      .where(sql`${t.firstOrderId} is not null`),
   ],
 );
 
@@ -96,7 +101,47 @@ export const analyticsEvents = pgTable(
     index('idx_analytics_events_journey').on(t.journeyId, t.occurredAt.desc()),
     index('idx_analytics_events_session').on(t.sessionId, t.occurredAt.desc()),
     index('idx_analytics_events_product').on(t.productId, t.occurredAt.desc()),
+    index('idx_analytics_events_category')
+      .on(t.categoryId)
+      .where(sql`${t.categoryId} is not null`),
+    index('idx_analytics_events_brand')
+      .on(t.brandId)
+      .where(sql`${t.brandId} is not null`),
     index('idx_analytics_events_order').on(t.orderId, t.occurredAt.desc()),
+  ],
+);
+
+export const analyticsSessions = pgTable(
+  'analytics_sessions',
+  {
+    id: text('id').primaryKey(),
+    journeyId: text('journey_id')
+      .notNull()
+      .references(() => analyticsJourneys.id, { onDelete: 'cascade' }),
+    visitId: text('visit_id'),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),
+    entryPath: text('entry_path').notNull(),
+    referrerDomain: text('referrer_domain'),
+    utmSource: text('utm_source'),
+    utmMedium: text('utm_medium'),
+    utmCampaign: text('utm_campaign'),
+    utmTerm: text('utm_term'),
+    utmContent: text('utm_content'),
+    channel: text('channel').notNull(),
+    evidence: text('evidence').notNull(),
+    hasMetaClickId: boolean('has_meta_click_id').notNull().default(false),
+    hasGoogleClickId: boolean('has_google_click_id').notNull().default(false),
+    hasTikTokClickId: boolean('has_tiktok_click_id').notNull().default(false),
+    locale: text('locale'),
+    viewportClass: text('viewport_class'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_analytics_sessions_started').on(t.startedAt.desc()),
+    index('idx_analytics_sessions_journey_started').on(t.journeyId, t.startedAt.desc()),
+    index('idx_analytics_sessions_channel_started').on(t.channel, t.startedAt.desc()),
   ],
 );
 
@@ -179,6 +224,60 @@ export const analyticsDailyRollups = pgTable(
       t.dimensionKey,
     ),
     index('idx_analytics_daily_rollups_dimension_day').on(t.dimension, t.day),
+  ],
+);
+
+export const analyticsAcquisitionDailyRollups = pgTable(
+  'analytics_acquisition_daily_rollups',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    day: date('day').notNull(),
+    channel: text('channel').notNull(),
+    evidence: text('evidence').notNull(),
+    sessions: integer('sessions').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('analytics_acquisition_rollups_day_channel_evidence_unique').on(
+      t.day,
+      t.channel,
+      t.evidence,
+    ),
+    index('idx_analytics_acquisition_rollups_channel_day').on(t.channel, t.day),
+  ],
+);
+
+export const analyticsAiDailyRollups = pgTable(
+  'analytics_ai_daily_rollups',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    day: date('day').notNull(),
+    dimension: text('dimension').notNull(),
+    dimensionKey: text('dimension_key').notNull().default(''),
+    opens: integer('opens').notNull().default(0),
+    messages: integer('messages').notNull().default(0),
+    resultClicks: integer('result_clicks').notNull().default(0),
+    errors: integer('errors').notNull().default(0),
+    runs: integer('runs').notNull().default(0),
+    completed: integer('completed').notNull().default(0),
+    failed: integer('failed').notNull().default(0),
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    totalTokens: integer('total_tokens').notNull().default(0),
+    durationMsTotal: bigint('duration_ms_total', { mode: 'number' }).notNull().default(0),
+    durationSamples: integer('duration_samples').notNull().default(0),
+    toolCalls: integer('tool_calls').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('analytics_ai_rollups_day_dimension_key_unique').on(
+      t.day,
+      t.dimension,
+      t.dimensionKey,
+    ),
+    index('idx_analytics_ai_rollups_dimension_day').on(t.dimension, t.day),
   ],
 );
 

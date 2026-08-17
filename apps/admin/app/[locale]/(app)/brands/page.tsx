@@ -1,6 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 
-import { BrandsManager } from '../../../../components/brands-categories-manager';
+import { BrandsManager } from '../../../../components/brands-categories/brands-manager';
 import { requireBrandsCategoriesPageAccess } from '../../../../lib/page-access';
 
 export default async function BrandsPage({ params }: { params: Promise<{ locale: string }> }) {

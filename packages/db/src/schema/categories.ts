@@ -9,6 +9,7 @@ import {
   timestamp,
   index,
   uniqueIndex,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 export const categories = pgTable(
@@ -22,11 +23,9 @@ export const categories = pgTable(
     nameAr: text('name_ar'),
     image: text('image'),
     isActive: boolean('is_active').notNull().default(true),
-    parentId: bigint('parent_id', { mode: 'number' }).references(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (): any => categories.id,
-      { onDelete: 'set null' },
-    ),
+    parentId: bigint('parent_id', { mode: 'number' }).references((): AnyPgColumn => categories.id, {
+      onDelete: 'set null',
+    }),
     properties: jsonb('properties').notNull().default([]),
     featured: boolean('featured').notNull().default(false),
     createdBy: text('created_by'),

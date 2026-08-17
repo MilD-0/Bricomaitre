@@ -75,6 +75,15 @@ describe('app/api/products/meta-export/route', () => {
     });
   });
 
+  it('returns 400 when any requested id is malformed', async () => {
+    const response = await GET(
+      new NextRequest('http://localhost/api/products/meta-export?ids=1,1e2'),
+    );
+
+    expect(response.status).toBe(400);
+    expect(getDbMock).not.toHaveBeenCalled();
+  });
+
   it('returns 503 when the database is unavailable', async () => {
     hasDbMock.mockReturnValue(false);
 

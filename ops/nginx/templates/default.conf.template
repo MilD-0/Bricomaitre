@@ -54,6 +54,9 @@ server {
   }
 
   location / {
+    # Replace the application correlation header at the proxy boundary so the
+    # public response has one edge-owned request identifier.
+    proxy_hide_header X-Request-ID;
     proxy_next_upstream error timeout http_502 http_503 http_504;
     proxy_pass http://storefront-api-${BRIC_ACTIVE_SLOT}:3001;
     proxy_http_version 1.1;
@@ -79,8 +82,11 @@ server {
   add_header X-Request-ID $request_id always;
 
   location / {
+    # Keep response-header ownership explicit at the proxying context. This
+    # avoids duplicate IDs when the application echoes the incoming value.
+    proxy_hide_header X-Request-ID;
     proxy_next_upstream error timeout http_502 http_503 http_504;
-    proxy_pass http://adminstration-${BRIC_ACTIVE_SLOT}:3000;
+    proxy_pass http://admin-${BRIC_ACTIVE_SLOT}:3000;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
@@ -109,27 +115,8 @@ server {
     return 400;
   }
 
-  location = /api/capi {
-    proxy_pass http://storefront-api-${BRIC_ACTIVE_SLOT}:3001;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Request-ID $request_id;
-  }
-
-  location = /api/meta/events {
-    proxy_pass http://storefront-api-${BRIC_ACTIVE_SLOT}:3001;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Request-ID $request_id;
-  }
-
   location / {
+    proxy_hide_header X-Request-ID;
     proxy_next_upstream error timeout http_502 http_503 http_504;
     proxy_pass http://storefront-${BRIC_ACTIVE_SLOT}:3002;
     proxy_http_version 1.1;

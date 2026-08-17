@@ -4,6 +4,7 @@ import { getDb, hasDb } from '@bric/db/client';
 import { storefrontOrderPatchRequestSchema } from '@bric/storefront-core/contracts';
 import { readStorefrontOrderToken } from '@bric/storefront-core/order-access';
 import { readStorefrontOrder, updateStorefrontOrder } from '@bric/storefront-core/orders';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
 import { buildRateLimitHeaders, enforceRequestRateLimit } from '../../../../lib/request-security';
 import {
@@ -41,9 +42,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     );
   }
 
+  const { id } = await params;
+  const orderId = parsePositiveIntegerId(id);
+  if (orderId === null) {
+    return NextResponse.json(
+      { error: 'Invalid order id.' },
+      { status: 400, headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)) },
+    );
+  }
+
   try {
-    const { id } = await params;
-    const result = await readStorefrontOrder(getDb(), Number(id), token);
+    const result = await readStorefrontOrder(getDb(), orderId, token);
 
     if (result.kind === 'missing_token') {
       return NextResponse.json(
@@ -66,7 +75,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       },
     );
   } catch (error) {
-    const { id } = await params;
     captureStorefrontApiException(error, {
       requestId,
       operation: 'storefront-order-read',
@@ -109,6 +117,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     );
   }
 
+  const { id } = await params;
+  const orderId = parsePositiveIntegerId(id);
+  if (orderId === null) {
+    return NextResponse.json(
+      { error: 'Invalid order id.' },
+      { status: 400, headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)) },
+    );
+  }
+
   let payload: unknown;
   try {
     payload = await req.json();
@@ -128,8 +145,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   try {
-    const { id } = await params;
-    const result = await updateStorefrontOrder(getDb(), Number(id), token, parsed.data);
+    const result = await updateStorefrontOrder(getDb(), orderId, token, parsed.data);
 
     if (result.kind === 'missing_token') {
       return NextResponse.json(
@@ -155,7 +171,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       },
     );
   } catch (error) {
-    const { id } = await params;
     captureStorefrontApiException(error, {
       requestId,
       operation: 'storefront-order-update',

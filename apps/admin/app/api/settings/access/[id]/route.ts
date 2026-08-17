@@ -5,6 +5,7 @@ import { getDb, hasDb } from '@bric/db/client';
 import { userAccessGrants } from '@bric/db/schema';
 import { mutateEntityWithHistory } from '../../../../../lib/action-history';
 import { auth } from '../../../../../lib/auth';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { userAccessGrantFormSchema } from '../../../../../lib/permissions';
 import { isConfiguredPrivilegedEmail } from '../../../../../lib/role-config';
 import { requireOpsAccess } from '../../../../../lib/rbac';
@@ -33,7 +34,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const { id } = await params;
-  const grantId = Number(id);
+  const grantId = parsePositiveIntegerId(id);
+  if (grantId === null) {
+    return NextResponse.json({ error: 'Invalid access grant id' }, { status: 400 });
+  }
   const email = normalizeEmail(parsed.data.email);
 
   if (isReservedPrivilegedEmail(email)) {
@@ -85,7 +89,10 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   }
 
   const { id } = await params;
-  const grantId = Number(id);
+  const grantId = parsePositiveIntegerId(id);
+  if (grantId === null) {
+    return NextResponse.json({ error: 'Invalid access grant id' }, { status: 400 });
+  }
   const db = getDb();
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };

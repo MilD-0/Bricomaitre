@@ -8,7 +8,7 @@ import {
   updatePostedEcotrackOrder,
 } from '../../../../../../lib/admin-ecotrack-orders-data';
 import { auth } from '../../../../../../lib/auth';
-import { parsePositiveIntegerId } from '../../../../../../lib/http-input';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { requireMutationAccess } from '../../../../../../lib/rbac';
 import {
   captureAdminException,

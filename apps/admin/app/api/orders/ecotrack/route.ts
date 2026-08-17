@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { AdminSession } from '../../../../lib/auth';
 import { getJobSnapshot } from '@bric/runtime/jobs';
+import { parsePositiveIntegerIds } from '@bric/runtime/http-input';
 
 import { hasDb } from '@bric/db/client';
 import { auth } from '../../../../lib/auth';
@@ -20,7 +21,7 @@ function getRequesterKey(session: AdminSession | null) {
 function parseRequestBody(body: unknown): {
   mode: 'selected' | 'confirmed' | null;
   provider: 'delivro' | 'emir';
-  orderIds: number[];
+  orderIds: number[] | null;
 } {
   let mode: 'selected' | 'confirmed' | null = null;
   let provider: 'delivro' | 'emir' = 'delivro';
@@ -36,13 +37,7 @@ function parseRequestBody(body: unknown): {
     body && typeof body === 'object' && Array.isArray((body as Record<string, unknown>).orderIds)
       ? ((body as Record<string, unknown>).orderIds as unknown[])
       : [];
-  const orderIds = [
-    ...new Set(
-      rawOrderIds
-        .map((value) => Number(value))
-        .filter((value): value is number => Number.isInteger(value) && value > 0),
-    ),
-  ];
+  const orderIds = parsePositiveIntegerIds(rawOrderIds);
 
   return { mode, provider, orderIds };
 }
@@ -126,7 +121,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => null);
     const { mode, provider, orderIds } = parseRequestBody(body);
-    if (!mode || orderIds.length === 0) {
+    if (!mode || !orderIds) {
       return NextResponse.json(
         { error: 'mode and orderIds are required.' },
         { status: 400, headers: withRequestIdHeaders(requestId) },

@@ -6,6 +6,7 @@ import { bulletinReplies, bulletinReplyReactions } from '@bric/db/schema';
 import { bulletinReactionSchema } from '../../../../../../lib/bulletin';
 import { requireBulletinSession } from '../../../../../../lib/bulletin-server';
 import { mutateEntityWithHistory } from '../../../../../../lib/action-history';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ replyId: string }> }) {
   const { session, response } = await requireBulletinSession();
@@ -18,7 +19,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rep
   }
 
   const { replyId } = await params;
-  const numericReplyId = Number(replyId);
+  const numericReplyId = parsePositiveIntegerId(replyId);
+  if (numericReplyId === null) {
+    return NextResponse.json({ error: 'Invalid bulletin reply id' }, { status: 400 });
+  }
   const parsed = bulletinReactionSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

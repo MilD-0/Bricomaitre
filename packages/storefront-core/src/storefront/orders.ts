@@ -1,7 +1,13 @@
 import { type InferInsertModel, and, asc, eq } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
-import { orderStatusHistory, orders, storefrontOrderIdempotency } from '@bric/db/schema';
+import {
+  orderMarketingAttribution,
+  orderMetaAttribution,
+  orderStatusHistory,
+  orders,
+  storefrontOrderIdempotency,
+} from '@bric/db/schema';
 import { attachJourneyToOrder } from './analytics';
 import { readEcotrackDeliveryFee } from '../ecotrack-support';
 import {
@@ -91,6 +97,28 @@ function toStorefrontHistoryEntries(
       changedByName: null,
     };
   });
+}
+
+function fallbackPurchaseEventId(orderId: number) {
+  return `storefront-purchase-${orderId}`;
+}
+
+async function readPurchaseEventId(db: Database, orderId: number) {
+  const [attribution] = await db
+    .select({
+      marketingEventId: orderMarketingAttribution.eventId,
+      metaLeadEventId: orderMetaAttribution.leadEventId,
+    })
+    .from(orders)
+    .leftJoin(orderMarketingAttribution, eq(orderMarketingAttribution.orderId, orders.id))
+    .leftJoin(orderMetaAttribution, eq(orderMetaAttribution.orderId, orders.id))
+    .where(eq(orders.id, orderId))
+    .limit(1);
+  return (
+    attribution?.marketingEventId ??
+    attribution?.metaLeadEventId ??
+    fallbackPurchaseEventId(orderId)
+  );
 }
 
 function buildCanonicalCartProducts(fallback: string[], lines: MetaCommerceLine[]) {
@@ -302,7 +330,14 @@ export async function createStorefrontOrder(
   await Promise.all(pendingTimings);
 
   const item = await measureStep('buildOrderDto', reportTiming, async () =>
-    toStorefrontOrderDto(currentOrder, toStorefrontHistoryEntries(historyRows), productLookup),
+    toStorefrontOrderDto(
+      currentOrder,
+      toStorefrontHistoryEntries(historyRows),
+      productLookup,
+      payload.marketing?.eventId ??
+        payload.meta?.leadEventId ??
+        fallbackPurchaseEventId(currentOrder.id),
+    ),
   );
   return { item, meta: metaResponse };
 }
@@ -311,14 +346,22 @@ export async function readCommittedStorefrontOrder(db: Database, id: number) {
   const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
   if (!order) return null;
 
-  const historyRows = await db
-    .select()
-    .from(orderStatusHistory)
-    .where(eq(orderStatusHistory.orderId, id))
-    .orderBy(asc(orderStatusHistory.changedAt));
-  const productLookup = await getOrderProductLookup(db, [order]);
+  const [historyRows, productLookup, purchaseEventId] = await Promise.all([
+    db
+      .select()
+      .from(orderStatusHistory)
+      .where(eq(orderStatusHistory.orderId, id))
+      .orderBy(asc(orderStatusHistory.changedAt)),
+    getOrderProductLookup(db, [order]),
+    readPurchaseEventId(db, id),
+  ]);
 
-  return toStorefrontOrderDto(order, toStorefrontHistoryEntries(historyRows), productLookup);
+  return toStorefrontOrderDto(
+    order,
+    toStorefrontHistoryEntries(historyRows),
+    productLookup,
+    purchaseEventId,
+  );
 }
 
 export async function readStorefrontOrder(db: Database, id: number, token: string | null) {
@@ -328,12 +371,15 @@ export async function readStorefrontOrder(db: Database, id: number, token: strin
     return access;
   }
 
-  const historyRows = await db
-    .select()
-    .from(orderStatusHistory)
-    .where(eq(orderStatusHistory.orderId, id))
-    .orderBy(asc(orderStatusHistory.changedAt));
-  const productLookup = await getOrderProductLookup(db, [access.order]);
+  const [historyRows, productLookup, purchaseEventId] = await Promise.all([
+    db
+      .select()
+      .from(orderStatusHistory)
+      .where(eq(orderStatusHistory.orderId, id))
+      .orderBy(asc(orderStatusHistory.changedAt)),
+    getOrderProductLookup(db, [access.order]),
+    readPurchaseEventId(db, id),
+  ]);
 
   return {
     kind: 'ok' as const,
@@ -341,6 +387,7 @@ export async function readStorefrontOrder(db: Database, id: number, token: strin
       access.order,
       toStorefrontHistoryEntries(historyRows),
       productLookup,
+      purchaseEventId,
     ),
     token: access.token,
   };
@@ -353,12 +400,15 @@ export async function readStorefrontOrderByToken(db: Database, token: string | n
     return access;
   }
 
-  const historyRows = await db
-    .select()
-    .from(orderStatusHistory)
-    .where(eq(orderStatusHistory.orderId, access.order.id))
-    .orderBy(asc(orderStatusHistory.changedAt));
-  const productLookup = await getOrderProductLookup(db, [access.order]);
+  const [historyRows, productLookup, purchaseEventId] = await Promise.all([
+    db
+      .select()
+      .from(orderStatusHistory)
+      .where(eq(orderStatusHistory.orderId, access.order.id))
+      .orderBy(asc(orderStatusHistory.changedAt)),
+    getOrderProductLookup(db, [access.order]),
+    readPurchaseEventId(db, access.order.id),
+  ]);
 
   return {
     kind: 'ok' as const,
@@ -366,6 +416,7 @@ export async function readStorefrontOrderByToken(db: Database, token: string | n
       access.order,
       toStorefrontHistoryEntries(historyRows),
       productLookup,
+      purchaseEventId,
     ),
     token: access.token,
   };
@@ -437,12 +488,15 @@ export async function updateStorefrontOrder(
       await replaceOrderLineSnapshots(tx, id, nextOrderLines ?? []);
     }
   });
-  const historyRows = await db
-    .select()
-    .from(orderStatusHistory)
-    .where(eq(orderStatusHistory.orderId, id))
-    .orderBy(asc(orderStatusHistory.changedAt));
-  const productLookup = await getOrderProductLookup(db, [updatedOrder]);
+  const [historyRows, productLookup, purchaseEventId] = await Promise.all([
+    db
+      .select()
+      .from(orderStatusHistory)
+      .where(eq(orderStatusHistory.orderId, id))
+      .orderBy(asc(orderStatusHistory.changedAt)),
+    getOrderProductLookup(db, [updatedOrder]),
+    readPurchaseEventId(db, id),
+  ]);
 
   return {
     kind: 'ok' as const,
@@ -450,6 +504,7 @@ export async function updateStorefrontOrder(
       updatedOrder,
       toStorefrontHistoryEntries(historyRows),
       productLookup,
+      purchaseEventId,
     ),
     token: access.token,
   };

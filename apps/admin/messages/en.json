@@ -333,7 +333,9 @@
     "snapshotMeta": {
       "title": "Snapshot ready",
       "staleTitle": "Snapshot is stale",
-      "description": "Generated {generatedAt}. Data through {reportThroughDate}."
+      "description": "Generated {generatedAt}. Data through {reportThroughDate}.",
+      "financialLagTitle": "Courier financial data is behind",
+      "financialLagDescription": "Live order counts are current. Imported fulfillment and profit data ends {reportThroughDate}."
     },
     "hero": {
       "averageOrder": "Average collected per order",
@@ -363,8 +365,8 @@
     },
     "overview": {
       "cards": {
-        "totalOrders": "Total orders",
-        "totalOrdersHint": "Imported rows linked to a confirmed commerce flow.",
+        "totalOrders": "Submitted orders",
+        "totalOrdersHint": "Orders submitted through the canonical commerce flow.",
         "totalCollected": "Collected amount",
         "totalCollectedHint": "Cash recovered from imported fulfilled orders.",
         "netRevenue": "Net revenue",
@@ -466,7 +468,7 @@
           "confirmation": "Confirmation %",
           "views": "Views",
           "adds": "Adds",
-          "webPurchases": "Web purchases",
+          "webPurchases": "Website orders",
           "popularity": "Popularity",
           "webConversion": "Web conv. %"
         },
@@ -482,87 +484,111 @@
     "website": {
       "title": "Website analytics",
       "empty": "No website analytics data for the selected range yet.",
-      "funnelTitle": "Journey funnel",
-      "quickStatsTitle": "Conversion quick stats",
-      "searchInsightsTitle": "Search and checkout signals",
+      "searchInsightsTitle": "Storefront search",
       "topProductsTitle": "Top website products",
       "cards": {
         "sessions": "Sessions",
+        "orders": "Submitted orders",
+        "orderRate": "Session order rate",
         "pageViews": "Page views",
-        "addToCartRate": "View to cart",
-        "purchaseRate": "Session purchase rate",
+        "purchaseRate": "Session order rate",
         "engagementRate": "Engaged sessions",
         "returningJourneys": "Returning journeys",
         "errorRate": "Session error rate"
       },
+      "kpiDetails": {
+        "pageViews": "{views} page views in this period",
+        "checkouts": "{checkouts} checkout starts",
+        "sessionOrderRate": "Submitted orders divided by measured sessions",
+        "returning": "Sessions with multiple page views · {journeys} returning journeys"
+      },
       "trendTitle": "Storefront traffic and outcomes",
+      "trendMetrics": {
+        "sessions": "Sessions",
+        "pageViews": "Page views",
+        "orders": "Orders",
+        "errors": "Errors"
+      },
+      "secondary": {
+        "averagePages": "Pages per session",
+        "returningJourneys": "Returning journeys",
+        "errorRate": "Session error rate"
+      },
       "pageTypesTitle": "Page and interaction mix",
+      "pageTypeContext": "Bars show each page type's share of measured sessions; the smaller figure is interaction volume.",
       "audienceTitle": "Device and language mix",
       "devices": "Devices",
-      "locales": "Languages",
+      "locales": "Observed page language",
       "vitalsTitle": "Core Web Vitals",
-      "errorsTitle": "Storefront errors",
-      "referrersTitle": "Top referrers",
-      "recentDiagnosticsHint": "Detailed diagnostics use the recent raw telemetry window; comparable funnel history remains continuous across the storefront migration.",
-      "vitalMeta": "{good} good · {poor} poor · {samples} samples",
-      "experience": {
-        "columns": {
-          "dimension": "Page type",
-          "sessions": "Sessions",
-          "pageViews": "Page views",
-          "interactions": "Interactions"
-        }
+      "acquisitionTitle": "Acquisition sources and order outcomes",
+      "acquisitionEmpty": "No attributed sessions or orders were recorded for this range.",
+      "acquisitionCoverage": "Canonical source coverage begins {date}; earlier traffic was not reconstructed beyond retained evidence.",
+      "acquisitionRateUnavailable": "Source order rates are withheld because the selected range starts before canonical source-session coverage.",
+      "channels": {
+        "meta_paid": "Meta paid",
+        "meta_organic": "Meta organic",
+        "meta_unclassified": "Meta · unclassified",
+        "google_paid": "Google paid",
+        "google_organic": "Google organic",
+        "direct_dark_social": "Direct / dark social",
+        "shared_link": "Explicitly shared link",
+        "external_ai": "External AI referral",
+        "other_referral": "Other referral",
+        "other_campaign": "Other campaign",
+        "unknown": "Unknown"
       },
+      "metrics": {
+        "sessions": "Sessions",
+        "orders": "Orders",
+        "successful": "Successful",
+        "orderRate": "Order rate"
+      },
+      "devicesMap": {
+        "small_phone": "Small phone",
+        "mobile": "Mobile",
+        "tablet": "Tablet",
+        "desktop": "Desktop",
+        "unknown": "Unknown"
+      },
+      "pageTypes": {
+        "product_detail": "Product detail",
+        "catalog": "Catalog",
+        "global_navigation": "Global navigation",
+        "checkout": "Checkout",
+        "homepage": "Homepage",
+        "thank_you": "Order confirmation",
+        "landing": "Landing page",
+        "unknown": "Unknown"
+      },
+      "vitalMeta": "{good} good · {poor} poor · {samples} samples",
       "stats": {
         "searches": "Searches",
-        "zeroResults": "Zero-result searches",
-        "checkoutRate": "Checkout to purchase",
-        "cartRate": "Cart to purchase"
-      },
-      "landing": {
-        "title": "Top entry pages",
-        "columns": {
-          "path": "Entry page",
-          "sessions": "Sessions"
-        }
+        "zeroResults": "Zero-result searches"
       },
       "search": {
-        "columns": {
-          "term": "Search term",
-          "searches": "Searches",
-          "zeroResults": "Zero results"
-        }
+        "zeroCount": "{count} without results"
       },
-      "funnel": {
-        "Sessions": "Sessions",
-        "Product views": "Product views",
-        "Adds to cart": "Adds to cart",
-        "Checkout starts": "Checkout starts",
-        "Purchases": "Purchases"
+      "searchZeroRate": "{rate} of searches returned no results.",
+      "commerce": {
+        "productViews": "Product views",
+        "adds": "Adds to cart",
+        "checkouts": "Checkout starts",
+        "orders": "Submitted orders",
+        "sessionContext": "Across {sessions} measured sessions",
+        "viewToCart": "{rate} of product views led to an add",
+        "cartToCheckout": "{rate} of adds led to checkout",
+        "checkoutToOrder": "{rate} of checkouts led to an order",
+        "cartToOrderLabel": "Cart-to-order rate",
+        "sessionToOrderLabel": "Session order rate"
       },
       "conversion": {
-        "title": "Conversion diagnostics",
-        "sessionsToPurchase": "Sessions to purchase",
-        "viewToCart": "Product view to add-to-cart",
-        "cartToPurchase": "Cart to purchase",
-        "checkoutToPurchase": "Checkout to purchase",
-        "searchZeroResultRate": "Zero-result search rate"
-      },
-      "diagnostics": {
-        "journeys": "Journeys",
-        "productViews": "Product views",
-        "checkoutStarts": "Checkout starts",
-        "searches": "Searches",
-        "zeroResults": "Zero-result searches",
-        "avgPagesPerSession": "Avg. pages per session"
+        "title": "Commerce actions"
       },
       "products": {
         "columns": {
-          "product": "Product",
           "views": "Views",
           "adds": "Adds",
-          "purchases": "Purchases",
-          "conversion": "Conv. %"
+          "orders": "Orders"
         }
       }
     },
@@ -574,7 +600,7 @@
       "cards": {
         "published": "Published pages",
         "sessions": "Attributed sessions",
-        "purchases": "Purchases",
+        "purchases": "Submitted orders",
         "conversion": "Session conversion",
         "revenue": "Attributed revenue",
         "drafts": "Draft pages"
@@ -586,19 +612,29 @@
         "views": "Product views",
         "adds": "Adds",
         "checkouts": "Checkouts",
-        "purchases": "Purchases",
+        "purchases": "Orders",
         "revenue": "Revenue",
         "conversion": "Conv. %"
       }
     },
     "aiAssistants": {
       "admin": {
-        "title": "Admin assistant"
+        "title": "Admin assistant productivity",
+        "modelsTitle": "Model distribution",
+        "tasksTitle": "Task distribution"
       },
       "storefront": {
         "title": "Store assistant",
+        "impactTitle": "Store assistant business impact",
+        "journeyTitle": "Shopper assistant path",
+        "opensDetail": "Assistant panel opened",
+        "messagesDetail": "{rate} of opens produced a question",
+        "clicksDetail": "{rate} of questions produced a product click",
+        "ordersDetail": "{rate} of opens were linked to an order",
+        "operationsTitle": "Store assistant operating health",
+        "operationsDescription": "Model execution quality and cost signals for diagnosing the shopper experience.",
         "intentsTitle": "What shoppers need",
-        "modelsTitle": "Models and usage",
+        "operationalSummary": "{runs} runs · {success} successful · {tokens} tokens · {latency} average latency · {errors} errors",
         "disabledTitle": "Store assistant is disabled",
         "disabledDescription": "Zero storefront assistant activity is expected while the feature is disabled in storefront settings."
       },
@@ -615,8 +651,18 @@
         "messages": "Questions",
         "resultClicks": "Product clicks",
         "clickThrough": "Result click rate",
-        "errors": "Errors"
+        "errors": "Errors",
+        "influencedOrders": "AI-influenced orders",
+        "confirmedOrders": "Confirmed AI orders",
+        "paidOrders": "Paid AI orders",
+        "recommendedProductOrders": "Recommended products ordered",
+        "submittedValue": "Influenced submitted value",
+        "confirmationRate": "Influenced confirmation rate",
+        "paidRate": "Influenced paid rate",
+        "completedOrders": "Completed AI orders"
       },
+      "completed": "Completed",
+      "failed": "Failed",
       "costHint": "Estimated cost appears only when per-million-token rates are configured for the assistant surface.",
       "empty": "No assistant usage for this range.",
       "tokensShort": "tokens",
@@ -776,27 +822,67 @@
     "metaAds": {
       "performanceTitle": "Advertising efficiency",
       "eventsTitle": "Meta tracked events",
+      "diagnosticsTitle": "Tracking delivery diagnostics",
+      "diagnosticsDescription": "Event-level delivery evidence for investigation. This operational detail is intentionally below acquisition and order outcomes.",
       "payloadsTitle": "Recent Meta payloads",
       "managerTitle": "Ad costs",
       "conversionRate": "Conversion rate",
       "unknownCampaign": "Unknown campaign",
+      "attribution": {
+        "title": "Meta acquisition and order outcomes",
+        "description": "Canonical first-party sessions classified from Meta campaign, click-ID, referrer, and organic evidence, joined to storefront order outcomes.",
+        "sessions": "Meta sessions",
+        "orders": "Attributed orders",
+        "successful": "Successful orders",
+        "successRate": "Order success rate",
+        "empty": "No canonical Meta acquisition evidence was recorded for this range."
+      },
+      "integrated": {
+        "title": "Meta spend to fulfilled orders",
+        "description": "Optional provider-side delivery data joined to Bricomaitre orders and ECOTRACK outcomes when a Meta Insights sync is configured.",
+        "emptyTitle": "Direct Meta Insights is not reporting",
+        "empty": "Direct Meta Ads Insights has not produced ad-level data for this range. First-party attribution and CAPI diagnostics remain available below.",
+        "sync": "Latest sync: {date} • {status} • {rows} ad-day rows",
+        "cards": {
+          "spend": "Meta spend",
+          "metaClicks": "Meta clicks",
+          "orders": "First-party orders",
+          "confirmed": "Confirmed orders",
+          "paid": "ECOTRACK paid",
+          "submittedValue": "Submitted value"
+        },
+        "columns": {
+          "day": "Day",
+          "ad": "Ad / campaign",
+          "spend": "Meta spend",
+          "orders": "Orders",
+          "confirmed": "Confirmed",
+          "paid": "Paid",
+          "value": "Submitted value"
+        }
+      },
       "paidAttribution": {
-        "title": "Meta paid-traffic attribution",
+        "title": "Paid-click lineage",
+        "description": "Durable Meta click-ID visits and the order or tracked Purchase signals later linked to them. This is a diagnostic lineage view, not provider-reported advertising performance.",
         "visits": "Paid visits",
         "orders": "Created orders",
-        "purchases": "Purchases",
+        "purchases": "Tracked Purchase signals",
         "landedOnly": "Landing-only visits",
-        "conversion": "Visit conversion",
+        "conversion": "Visit-to-Purchase rate",
         "campaign": "Campaign"
       },
       "health": {
         "title": "CAPI delivery health",
+        "description": "Operational coverage and queue state for server-side Meta event delivery.",
         "pending": "Pending / retrying",
         "delivered": "Delivered",
         "failed": "Failed / skipped",
         "purchaseCoverage": "Submission Purchase coverage",
         "orderConfirmedCoverage": "orderconfirmed coverage",
-        "worker": "Worker heartbeat: {heartbeat} • Oldest pending: {oldest} • Confirmed purchases later in a negative outcome: {negative}"
+        "worker": "Worker heartbeat: {heartbeat} • Oldest pending: {oldest} • Confirmed purchases later in a negative outcome: {negative}",
+        "workerHeartbeat": "Worker heartbeat: {heartbeat}",
+        "oldestPending": "Oldest pending: {oldest}",
+        "deliveredCount": "{count} events delivered"
       },
       "events": {
         "empty": "No Meta tracking events were recorded for this range.",
@@ -808,7 +894,8 @@
           "capiDelivered": "CAPI delivered",
           "capiFailed": "CAPI failed",
           "lastSeen": "Last seen"
-        }
+        },
+        "lastSeenValue": "Last seen {date}"
       },
       "payloads": {
         "emptyTitle": "No Meta payloads yet",

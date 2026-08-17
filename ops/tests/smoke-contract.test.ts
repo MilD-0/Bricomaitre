@@ -8,21 +8,40 @@ const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const smokeScript = resolve(workspaceRoot, 'ops/scripts/smoke-check.sh');
 const servers: ReturnType<typeof createServer>[] = [];
 
-async function runSmoke(storefrontApp = 'storefront') {
+async function runSmoke({
+  storefrontApp = 'storefront',
+  duplicateRequestIdHost,
+  transientDuplicateRequestIdHost,
+}: {
+  storefrontApp?: string;
+  duplicateRequestIdHost?: string;
+  transientDuplicateRequestIdHost?: string;
+} = {}) {
   const requestedHosts: string[] = [];
+  const healthRequestsByHost = new Map<string, number>();
   const server = createServer((request, response) => {
     const host = request.headers.host;
     const path = request.url ?? '/';
     if (host) requestedHosts.push(host);
 
+    const healthRequestCount =
+      path === '/api/health' && host ? (healthRequestsByHost.get(host) ?? 0) + 1 : 0;
+    if (host && healthRequestCount > 0) {
+      healthRequestsByHost.set(host, healthRequestCount);
+    }
+
+    const hasDuplicateRequestId =
+      host === duplicateRequestIdHost ||
+      (host === transientDuplicateRequestIdHost && healthRequestCount <= 2);
+
     response.statusCode = 200;
+    response.setHeader(
+      'x-request-id',
+      hasDuplicateRequestId ? ['request-one', 'request-two'] : 'request-one',
+    );
     if (path === '/api/health') {
       const app =
-        host === 'admin.test'
-          ? 'adminstration'
-          : host === 'api.test'
-            ? 'storefront-api'
-            : storefrontApp;
+        host === 'admin.test' ? 'admin' : host === 'api.test' ? 'storefront-api' : storefrontApp;
       response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify({ status: 'ok', app }));
       return;
@@ -68,6 +87,8 @@ async function runSmoke(storefrontApp = 'storefront') {
         BRIC_ADMIN_DOMAIN: 'admin.test',
         BRIC_API_DOMAIN: 'api.test',
         BRIC_STOREFRONT_DOMAIN: 'store.test',
+        BRIC_SMOKE_REQUEST_ID_ATTEMPTS: '3',
+        BRIC_SMOKE_RETRY_DELAY_SECONDS: '0',
       },
     });
     let stdout = '';
@@ -107,9 +128,26 @@ describe('production storefront smoke contract', () => {
   });
 
   it('rejects a healthy app with the wrong storefront identity', async () => {
-    const result = await runSmoke('unexpected-app');
+    const result = await runSmoke({ storefrontApp: 'unexpected-app' });
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('storefront health did not identify storefront');
+  });
+
+  it('rejects duplicate edge request identifiers', async () => {
+    const result = await runSmoke({ duplicateRequestIdHost: 'api.test' });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      'api.test /api/health returned 2 x-request-id headers after 3 attempts',
+    );
+  });
+
+  it('tolerates the retiring Nginx worker generation immediately after reload', async () => {
+    const result = await runSmoke({ transientDuplicateRequestIdHost: 'admin.test' });
+
+    expect(result).toMatchObject({ status: 0 });
+    expect(result.stdout).toContain('smoke checks passed');
+    expect(result.requestedHosts.filter((host) => host === 'admin.test').length).toBeGreaterThan(2);
   });
 });

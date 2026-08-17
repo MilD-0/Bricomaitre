@@ -1,246 +1,58 @@
-name: Verify and deploy
+name: Release production
 
 on:
-  workflow_dispatch:
-  pull_request:
-  push:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
     branches:
       - main
 
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('bricomaitre-pr-{0}', github.event.pull_request.number) || 'bricomaitre-production' }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
-  static-quality:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+  release-context:
+    name: Select verified commit
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.release.outputs.sha }}
+      created: ${{ steps.release.outputs.created }}
+      current: ${{ steps.release.outputs.current }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: false
-
-      - name: Validate operational configuration
-        run: bash ops/scripts/validate-operations.sh
-
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Enable Corepack
-        run: |
-          corepack enable
-          corepack install
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run static quality gates
-        run: |
-          pnpm format:check
-          pnpm lint
-          pnpm typecheck
-          pnpm dead-code:check
-
-  service-contracts:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    services:
-      postgres:
-        image: postgres:16-bookworm
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: true
+      - name: Record immutable release identity
+        id: release
         env:
-          POSTGRES_DB: bricomaitre_test
-          POSTGRES_USER: bricomaitre
-          POSTGRES_PASSWORD: bricomaitre
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U bricomaitre -d bricomaitre_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-      redis:
-        image: redis:7-bookworm
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Enable Corepack
-        run: |
-          corepack enable
-          corepack install
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Apply migrations and test real service contracts
-        env:
-          DATABASE_URL: postgres://bricomaitre:bricomaitre@127.0.0.1:5432/bricomaitre_test
-          REDIS_URL: redis://127.0.0.1:6379/0
-        run: |
-          pnpm --filter @bric/admin db:migrate
-          pnpm test:services
-
-  test-suite:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        suite:
-          - ops-packages
-          - admin
-          - storefront-api
-          - storefront
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Enable Corepack
-        run: |
-          corepack enable
-          corepack install
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run ${{ matrix.suite }} tests
-        env:
-          TEST_SUITE: ${{ matrix.suite }}
+          VERIFIED_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          case "$TEST_SUITE" in
-            ops-packages)
-              ops/scripts/run-ci-check.sh "Operational and shared-package tests" \
-                bash -lc 'pnpm test:ops && pnpm test:packages'
-              ;;
-            admin)
-              ops/scripts/run-ci-check.sh "Admin unit, component, and route-contract tests" \
-                bash -lc 'pnpm test:admin && pnpm test:admin:integration'
-              ;;
-            storefront-api)
-              ops/scripts/run-ci-check.sh "Storefront API unit and route-contract tests" \
-                pnpm test:storefront-api
-              ;;
-            storefront)
-              ops/scripts/run-ci-check.sh "Storefront unit, component, and application-contract tests" \
-                bash -lc 'pnpm test:storefront && pnpm test:storefront:integration'
-              ;;
-            *)
-              echo "unknown test suite: $TEST_SUITE" >&2
-              exit 64
-              ;;
-          esac
-
-  browser-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Enable Corepack
-        run: |
-          corepack enable
-          corepack install
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install browser acceptance runtime
-        run: pnpm --filter @bric/storefront exec playwright install --with-deps chromium
-
-      - name: Run browser acceptance and performance gates
-        run: |
-          set -euo pipefail
-          ops/scripts/run-ci-check.sh "Storefront browser acceptance tests" pnpm test:storefront:browser
-          ops/scripts/run-ci-check.sh "Storefront performance budgets" pnpm test:storefront:performance
-
-      - name: Upload browser diagnostics
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: storefront-browser-diagnostics
-          path: |
-            apps/storefront/playwright-report
-            apps/storefront/test-results
-          if-no-files-found: ignore
-          retention-days: 14
-
-  production-builds:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Enable Corepack
-        run: |
-          corepack enable
-          corepack install
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Verify production builds before publishing images
-        env:
-          BETTER_AUTH_SECRET: ci-build-verification-secret-1234567890
-          BETTER_AUTH_URL: http://127.0.0.1:3000
-          GOOGLE_CLIENT_ID: ci-build-client
-          GOOGLE_CLIENT_SECRET: ci-build-secret
-          STOREFRONT_API_BASE_URL: ${{ vars.STOREFRONT_BUILD_API_BASE_URL || 'https://api.bricomaitre.com' }}
-          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL || 'https://bricomaitre.com' }}
-          NEXT_PUBLIC_CLOUDFRONT_URL: ${{ vars.NEXT_PUBLIC_CLOUDFRONT_URL }}
-          NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS: ${{ vars.NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS }}
-        run: |
-          pnpm build:apps
-          echo "- ✅ Storefront API, admin, and storefront production builds completed" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Analyze storefront bundle
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          ANALYZE=true pnpm build:storefront
-          echo "- ✅ Storefront bundle analysis build completed" >> "$GITHUB_STEP_SUMMARY"
+          test "$(git rev-parse HEAD)" = "$VERIFIED_SHA"
+          echo "sha=$VERIFIED_SHA" >> "$GITHUB_OUTPUT"
+          echo "created=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
+          current_main="$(bash ops/scripts/current-main-sha.sh)"
+          if [[ "$current_main" == "$VERIFIED_SHA" ]]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "Verified commit ${VERIFIED_SHA} was superseded by ${current_main}; image builds were skipped." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   build-api-images:
-    needs: [static-quality, service-contracts, test-suite, browser-tests, production-builds]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    name: Build images / storefront API
+    needs: release-context
+    if: needs.release-context.outputs.current == 'true'
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -248,24 +60,22 @@ jobs:
       packages: write
     env:
       IMAGE_NAMESPACE: ghcr.io/mild-0/bricomaitre2
-      SHA_TAG: sha-${{ github.sha }}
-      RELEASE_CHANNEL: ${{ github.ref == 'refs/heads/main' && 'main' || '' }}
+      SHA_TAG: sha-${{ needs.release-context.outputs.sha }}
+      RELEASE_CHANNEL: main
+      IMAGE_REVISION: ${{ needs.release-context.outputs.sha }}
+      IMAGE_CREATED: ${{ needs.release-context.outputs.created }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.release-context.outputs.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 24
-          package-manager-cache: false
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
-
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Build, push, and sign storefront API images
         run: |
           set -euo pipefail
@@ -275,14 +85,12 @@ jobs:
             --push --provenance=true --sbom=true --progress plain \
             --metadata-file build-metadata/api.json \
             api 2>&1 | tee build-metadata/api.log
-
           echo "## Storefront API images" >> "$GITHUB_STEP_SUMMARY"
           bash ops/scripts/sign-bake-images.sh \
             build-metadata/api.json \
             release-parts/.bric-images-api.env \
             BRIC_IMAGE_STOREFRONT_API:storefront-api-web:storefront-api-web \
             BRIC_IMAGE_STOREFRONT_META_WORKER:storefront-api-meta-worker:storefront-api-meta-worker
-
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: bric-images-api
@@ -292,9 +100,10 @@ jobs:
           retention-days: 14
 
   build-admin-images:
-    needs: [static-quality, service-contracts, test-suite, browser-tests, production-builds]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    name: Build images / admin
+    needs: release-context
+    if: needs.release-context.outputs.current == 'true'
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -302,29 +111,27 @@ jobs:
       packages: write
     env:
       IMAGE_NAMESPACE: ghcr.io/mild-0/bricomaitre2
-      SHA_TAG: sha-${{ github.sha }}
-      RELEASE_CHANNEL: ${{ github.ref == 'refs/heads/main' && 'main' || '' }}
+      SHA_TAG: sha-${{ needs.release-context.outputs.sha }}
+      RELEASE_CHANNEL: main
+      IMAGE_REVISION: ${{ needs.release-context.outputs.sha }}
+      IMAGE_CREATED: ${{ needs.release-context.outputs.created }}
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       BETTER_AUTH_URL: ${{ secrets.BETTER_AUTH_URL }}
       BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
       STOREFRONT_BUILD_API_BASE_URL: ${{ vars.STOREFRONT_BUILD_API_BASE_URL || 'https://api.bricomaitre.com' }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.release-context.outputs.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 24
-          package-manager-cache: false
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
-
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Build, push, and sign admin images
         run: |
           set -euo pipefail
@@ -334,7 +141,6 @@ jobs:
             --push --provenance=true --sbom=true --progress plain \
             --metadata-file build-metadata/admin.json \
             admin 2>&1 | tee build-metadata/admin.log
-
           echo "## Admin images" >> "$GITHUB_STEP_SUMMARY"
           bash ops/scripts/sign-bake-images.sh \
             build-metadata/admin.json \
@@ -342,7 +148,6 @@ jobs:
             BRIC_IMAGE_ADMIN_WEB:admin-web:admin-web \
             BRIC_IMAGE_ADMIN_WORKER:admin-worker:admin-worker \
             BRIC_IMAGE_ADMIN_MIGRATIONS:admin-migrations:admin-migrations
-
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: bric-images-admin
@@ -352,9 +157,10 @@ jobs:
           retention-days: 14
 
   build-storefront-image:
-    needs: [static-quality, service-contracts, test-suite, browser-tests, production-builds]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    name: Build images / storefront
+    needs: release-context
+    if: needs.release-context.outputs.current == 'true'
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -362,8 +168,10 @@ jobs:
       packages: write
     env:
       IMAGE_NAMESPACE: ghcr.io/mild-0/bricomaitre2
-      SHA_TAG: sha-${{ github.sha }}
-      RELEASE_CHANNEL: ${{ github.ref == 'refs/heads/main' && 'main' || '' }}
+      SHA_TAG: sha-${{ needs.release-context.outputs.sha }}
+      RELEASE_CHANNEL: main
+      IMAGE_REVISION: ${{ needs.release-context.outputs.sha }}
+      IMAGE_CREATED: ${{ needs.release-context.outputs.created }}
       NEXT_PUBLIC_FACEBOOK_PIXEL_ID: ${{ secrets.NEXT_PUBLIC_FACEBOOK_PIXEL_ID }}
       NEXT_PUBLIC_GA_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}
       NEXT_PUBLIC_TIKTOK_PIXEL_ID: ${{ secrets.NEXT_PUBLIC_TIKTOK_PIXEL_ID }}
@@ -373,21 +181,17 @@ jobs:
       NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS: ${{ vars.NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS }}
       STOREFRONT_BUILD_API_BASE_URL: ${{ vars.STOREFRONT_BUILD_API_BASE_URL || 'https://api.bricomaitre.com' }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.release-context.outputs.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 24
-          package-manager-cache: false
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
-
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Build, push, and sign storefront image
         run: |
           set -euo pipefail
@@ -397,19 +201,16 @@ jobs:
             --push --provenance=true --sbom=true --progress plain \
             --metadata-file build-metadata/storefront.json \
             storefront 2>&1 | tee build-metadata/storefront-web.log
-
           echo "## Storefront image" >> "$GITHUB_STEP_SUMMARY"
           bash ops/scripts/sign-bake-images.sh \
             build-metadata/storefront.json \
             release-parts/.bric-images-storefront.env \
             BRIC_IMAGE_STOREFRONT_WEB:storefront-web:storefront-web
-
           storefront_static_pages="$(python3 ops/scripts/extract-static-page-count.py build-metadata/storefront-web.log)"
           printf 'BRIC_STOREFRONT_STATIC_PAGES=%s\n' "$storefront_static_pages" >> release-parts/.bric-images-storefront.env
           printf 'BRIC_STOREFRONT_APP=storefront\n' >> release-parts/.bric-images-storefront.env
           echo "- Release surface: storefront" >> "$GITHUB_STEP_SUMMARY"
           echo "- Prerendered routes: ${storefront_static_pages}" >> "$GITHUB_STEP_SUMMARY"
-
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: bric-images-storefront
@@ -419,29 +220,34 @@ jobs:
           retention-days: 14
 
   assemble-release-manifest:
+    name: Assemble release manifest
     needs:
+      - release-context
       - build-api-images
       - build-admin-images
       - build-storefront-image
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.release-context.outputs.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           package-manager-cache: false
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: bric-images-*
           path: release-parts
           merge-multiple: true
-
       - name: Assemble and validate release manifest
+        env:
+          RELEASE_SHA: ${{ needs.release-context.outputs.sha }}
+          VERIFICATION_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           set -euo pipefail
           mkdir -p release-manifest
@@ -450,18 +256,16 @@ jobs:
             release-parts/.bric-images-api.env \
             release-parts/.bric-images-admin.env \
             release-parts/.bric-images-storefront.env
-
           {
-            echo "BRIC_RELEASE_ID=${GITHUB_SHA::12}-${GITHUB_RUN_ID}"
-            echo "BRIC_RELEASE_COMMIT=${GITHUB_SHA}"
+            echo "BRIC_RELEASE_ID=${RELEASE_SHA::12}-${GITHUB_RUN_ID}"
+            echo "BRIC_RELEASE_COMMIT=${RELEASE_SHA}"
             echo "BRIC_RELEASE_CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "BRIC_WORKFLOW_RUN_ID=${GITHUB_RUN_ID}"
+            echo "BRIC_VERIFICATION_RUN_ID=${VERIFICATION_RUN_ID}"
             echo "BRIC_REGISTRY=ghcr.io"
           } > release-manifest/.bric-release.env
-
           echo "## Release manifest" >> "$GITHUB_STEP_SUMMARY"
-          echo "- ✅ Six signed image digests, storefront identity, and prerender count validated" >> "$GITHUB_STEP_SUMMARY"
-
+          echo "- ✅ Six signed image digests and storefront build evidence validated" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: bric-release-manifest
@@ -473,9 +277,15 @@ jobs:
           retention-days: 14
 
   deploy:
-    needs: assemble-release-manifest
-    runs-on: ubuntu-latest
+    name: Deploy verified release
+    needs:
+      - release-context
+      - assemble-release-manifest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
+    concurrency:
+      group: bricomaitre-production
+      cancel-in-progress: false
     environment:
       name: production
       url: https://bricomaitre.com
@@ -483,6 +293,7 @@ jobs:
       contents: read
       packages: read
     env:
+      RELEASE_SHA: ${{ needs.release-context.outputs.sha }}
       DEPLOY_HOST: ${{ secrets.BRIC_DEPLOY_SSH_HOST }}
       DEPLOY_PORT: ${{ secrets.BRIC_DEPLOY_SSH_PORT || '2345' }}
       DEPLOY_USER: ${{ secrets.BRIC_DEPLOY_SSH_USER }}
@@ -490,21 +301,37 @@ jobs:
       DEPLOY_KNOWN_HOSTS: ${{ secrets.BRIC_DEPLOY_KNOWN_HOSTS }}
       ECOTRACK_EMIR_BASE_URL: ${{ secrets.ECOTRACK_EMIR_BASE_URL }}
       ECOTRACK_EMIR_TOKEN: ${{ secrets.ECOTRACK_EMIR_TOKEN }}
+      ADMIN_META_ADS_SYNC_ENABLED: ${{ vars.ADMIN_META_ADS_SYNC_ENABLED || 'false' }}
+      META_AD_ACCOUNT_ID: ${{ secrets.META_AD_ACCOUNT_ID }}
+      META_ADS_ACCESS_TOKEN: ${{ secrets.META_ADS_ACCESS_TOKEN }}
+      META_ADS_GRAPH_API_VERSION: ${{ vars.META_ADS_GRAPH_API_VERSION || 'v25.0' }}
       GOOGLE_ANALYTICS_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}
       GOOGLE_ANALYTICS_API_SECRET: ${{ secrets.GOOGLE_ANALYTICS_API_SECRET }}
       GHCR_USERNAME: ${{ github.actor }}
       GHCR_READ_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: false
-
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+          ref: ${{ needs.release-context.outputs.sha }}
+          persist-credentials: true
+      - name: Reject a superseded release
+        id: freshness
+        run: |
+          set -euo pipefail
+          current_main="$(bash ops/scripts/current-main-sha.sh)"
+          if [[ "$current_main" == "$RELEASE_SHA" ]]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "Release ${RELEASE_SHA} was superseded by ${current_main}; production was not changed." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - if: steps.freshness.outputs.current == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: bric-release-manifest
           path: release-manifest
-
       - name: Prepare SSH
+        if: steps.freshness.outputs.current == 'true'
         run: |
           set -euo pipefail
           test -n "$DEPLOY_HOST"
@@ -513,22 +340,23 @@ jobs:
           test -n "$DEPLOY_KNOWN_HOSTS"
           test -n "$GHCR_USERNAME"
           test -n "$GHCR_READ_TOKEN"
-
           install -m 700 -d ~/.ssh
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
           printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/bric_deploy_key
           chmod 600 ~/.ssh/bric_deploy_key
-
       - name: Stage release, cut over, and run production smoke checks
+        if: steps.freshness.outputs.current == 'true'
         run: |
           set -euo pipefail
           set -a
           # shellcheck disable=SC1091
           source release-manifest/.bric-release.env
           set +a
+          test "$BRIC_RELEASE_COMMIT" = "$RELEASE_SHA"
 
           release_path="/srv/bric/releases/${BRIC_RELEASE_ID}"
           bundle_dir="$(mktemp -d)"
+          trap 'rm -rf "$bundle_dir"' EXIT
 
           mkdir -p \
             "$bundle_dir/.cursor/rules" \
@@ -536,14 +364,15 @@ jobs:
             "$bundle_dir/.well-known" \
             "$bundle_dir/ops/scripts" \
             "$bundle_dir/ops/docker" \
+            "$bundle_dir/ops/host" \
             "$bundle_dir/ops/nginx" \
             "$bundle_dir/ops/env" \
             "$bundle_dir/ops/ownership"
-
           cp release-manifest/.bric-release.env "$bundle_dir/.bric-release.env"
           cp release-manifest/.bric-images.env "$bundle_dir/.bric-images.env"
           rsync -a ops/scripts/ "$bundle_dir/ops/scripts/"
           cp ops/docker/compose.prod.yml "$bundle_dir/ops/docker/compose.prod.yml"
+          rsync -a ops/host/ "$bundle_dir/ops/host/"
           rsync -a ops/nginx/ "$bundle_dir/ops/nginx/"
           rsync -a ops/env/ "$bundle_dir/ops/env/"
           rsync -a ops/ownership/ "$bundle_dir/ops/ownership/"
@@ -561,11 +390,9 @@ jobs:
 
           ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
             "mkdir -p '$release_path'"
-
           rsync -az --delete \
             -e "ssh -i ~/.ssh/bric_deploy_key -p $DEPLOY_PORT" \
             "$bundle_dir/" "$DEPLOY_USER@$DEPLOY_HOST:$release_path/"
-
           printf '%s\n' "$GHCR_READ_TOKEN" | ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
             "docker login ghcr.io -u '$GHCR_USERNAME' --password-stdin >/dev/null"
 
@@ -580,10 +407,36 @@ jobs:
               umask 077
               tmp_file="${env_file}.tmp.$$"
               grep -v -E "^ECOTRACK_EMIR_(BASE_URL|TOKEN)=" "$env_file" > "$tmp_file" || true
-              printf "ECOTRACK_EMIR_BASE_URL=%s\\nECOTRACK_EMIR_TOKEN=%s\\n" "$emir_base_url" "$emir_token" >> "$tmp_file"
+              printf "ECOTRACK_EMIR_BASE_URL=%s\nECOTRACK_EMIR_TOKEN=%s\n" "$emir_base_url" "$emir_token" >> "$tmp_file"
               mv "$tmp_file" "$env_file"
             '
-
+          printf '%s\n%s\n%s\n%s\n' \
+            "$ADMIN_META_ADS_SYNC_ENABLED" \
+            "$META_AD_ACCOUNT_ID" \
+            "$META_ADS_ACCESS_TOKEN" \
+            "$META_ADS_GRAPH_API_VERSION" | \
+            ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+              set -euo pipefail
+              IFS= read -r sync_enabled
+              IFS= read -r account_id
+              IFS= read -r access_token
+              IFS= read -r graph_version
+              case "$sync_enabled" in
+                true)
+                  test -n "$account_id"
+                  test -n "$access_token"
+                  ;;
+                false) ;;
+                *) echo "ADMIN_META_ADS_SYNC_ENABLED must be true or false" >&2; exit 64 ;;
+              esac
+              env_file="/srv/bric/env/admin.env"
+              umask 077
+              tmp_file="${env_file}.tmp.$$"
+              grep -v -E "^(ADMIN_META_ADS_SYNC_ENABLED|META_AD_ACCOUNT_ID|META_ADS_ACCESS_TOKEN|META_ADS_GRAPH_API_VERSION)=" "$env_file" > "$tmp_file" || true
+              printf "ADMIN_META_ADS_SYNC_ENABLED=%s\nMETA_AD_ACCOUNT_ID=%s\nMETA_ADS_ACCESS_TOKEN=%s\nMETA_ADS_GRAPH_API_VERSION=%s\n" \
+                "$sync_enabled" "$account_id" "$access_token" "$graph_version" >> "$tmp_file"
+              mv "$tmp_file" "$env_file"
+            '
           printf '%s\n%s\n' "$GOOGLE_ANALYTICS_MEASUREMENT_ID" "$GOOGLE_ANALYTICS_API_SECRET" | \
             ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
               set -euo pipefail
@@ -600,7 +453,6 @@ jobs:
             '
 
           ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-            "bash '$release_path/ops/scripts/deploy.sh' '$release_path' '${GITHUB_SHA}'"
-
+            "bash '$release_path/ops/scripts/deploy.sh' '$release_path' '$RELEASE_SHA'"
           echo "## Deploy phase" >> "$GITHUB_STEP_SUMMARY"
-          echo "- ✅ Deployed release ${BRIC_RELEASE_ID}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ✅ Deployed verified release ${BRIC_RELEASE_ID}" >> "$GITHUB_STEP_SUMMARY"

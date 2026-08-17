@@ -4,7 +4,7 @@ import {
   semanticAnalyticsQuerySchema,
   type SemanticAnalyticsQuery,
 } from '@bric/ai-core';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
 import {
@@ -19,8 +19,14 @@ import {
   processedOrders,
   products,
 } from '@bric/db/schema';
+import { CONFIRMED_LIFECYCLE_ORDER_STATUSES } from '@bric/storefront-core/order-domain';
+import { getMetaCommercePerformance } from './meta-commerce-analytics';
 
 type AnalyticsAccess = { canViewProfit: boolean };
+
+export function confirmedLifecycleOrderCondition() {
+  return inArray(orders.confirmed, [...CONFIRMED_LIFECYCLE_ORDER_STATUSES]);
+}
 
 function dateConditions(
   column: typeof orders.createdAt | typeof analyticsEvents.occurredAt,
@@ -35,7 +41,12 @@ function dateConditions(
 function response(
   query: SemanticAnalyticsQuery,
   data: unknown,
-  input: { source: string; definitions: Record<string, string>; caveats?: string[] },
+  input: {
+    source: string;
+    definitions: Record<string, string>;
+    caveats?: string[];
+    currency?: string;
+  },
 ) {
   return {
     query: query.query,
@@ -48,7 +59,7 @@ function response(
       confirmedOnly: query.confirmedOnly,
     },
     source: input.source,
-    currency: 'DZD',
+    currency: input.currency ?? 'DZD',
     generatedAt: new Date().toISOString(),
     definition: SEMANTIC_ANALYTICS_CATALOG[query.query],
     metricDefinitions: input.definitions,
@@ -123,14 +134,14 @@ export async function executeSemanticAnalytics(raw: unknown, access: AnalyticsAc
   if (query.query === 'order_summary') {
     const conditions = [
       ...dateConditions(orders.createdAt, query),
-      query.confirmedOnly ? sql`${orders.confirmed} = 1` : undefined,
+      query.confirmedOnly ? confirmedLifecycleOrderCondition() : undefined,
       sql`${orders.archivedAt} is null`,
     ];
     const [data] = await db
       .select({
         orders: sql<number>`count(*)::int`,
-        confirmedOrders: sql<number>`count(*) filter (where ${orders.confirmed} = 1)::int`,
-        confirmationRate: sql<number>`coalesce(count(*) filter (where ${orders.confirmed} = 1)::double precision / nullif(count(*), 0), 0)`,
+        confirmedOrders: sql<number>`count(*) filter (where ${confirmedLifecycleOrderCondition()})::int`,
+        confirmationRate: sql<number>`coalesce(count(*) filter (where ${confirmedLifecycleOrderCondition()})::double precision / nullif(count(*), 0), 0)`,
         grossOrderValue: sql<number>`coalesce(sum(${orders.price}), 0)::double precision`,
         averageOrderValue: sql<number>`coalesce(avg(${orders.price}), 0)::double precision`,
         discountedOrders: sql<number>`count(*) filter (where ${orders.promoDiscountAmount} > 0)::int`,
@@ -177,7 +188,8 @@ export async function executeSemanticAnalytics(raw: unknown, access: AnalyticsAc
           count(*) filter (where ${analyticsEvents.eventName} = 'view_item')::int as product_views,
           count(*) filter (where ${analyticsEvents.eventName} = 'add_to_cart')::int as add_to_carts,
           count(*) filter (where ${analyticsEvents.eventName} = 'begin_checkout')::int as checkout_starts,
-          count(*) filter (where ${analyticsEvents.eventName} = 'purchase')::int as purchases
+          count(distinct coalesce(${analyticsEvents.orderId}::text, ${analyticsEvents.eventId}))
+            filter (where ${analyticsEvents.eventName} = 'purchase')::int as purchases
         from ${analyticsEvents} where ${unrolled}
       ), rolled_counts as (
         select
@@ -221,6 +233,41 @@ export async function executeSemanticAnalytics(raw: unknown, access: AnalyticsAc
         sessionPurchaseRate: 'Purchase events ÷ sessions with page views.',
       },
       caveats: ['Event counts are not unique users and may include repeated actions.'],
+    });
+  }
+
+  if (query.query === 'meta_commerce_performance') {
+    const data = await getMetaCommercePerformance(
+      db,
+      {
+        startDate: query.startDate,
+        endDate: query.endDate,
+        limit: query.limit,
+      },
+      access.canViewProfit,
+    );
+    return response(query, data, {
+      source:
+        'meta_ads_daily_insights + order_acquisition_attribution + orders + order_line_items + admin.ecotrack_order_states + admin.processed_orders',
+      currency: 'mixed',
+      definitions: {
+        spend: 'Meta ad-account currency, identified by accountCurrency on each row.',
+        metaPurchases:
+          'Meta-attributed website purchases under the stored account attribution setting.',
+        bricOrders:
+          'First-party orders matched through the durable campaign, ad-set, and ad snapshot.',
+        paidOrders: 'Orders whose current ECOTRACK state is paye_et_archive.',
+        submittedValueDzd: 'First-party submitted product value in DZD.',
+        realizedProfitDzd: access.canViewProfit
+          ? 'Profit from the imported settlement record, in DZD.'
+          : 'Restricted for this user.',
+      },
+      caveats: [
+        'Spend and Bricomaitre revenue may use different currencies; no cross-currency ROAS is inferred.',
+        'Orders are assigned to the business day of the captured campaign touch, not the fulfillment day.',
+        'Live acquisition coverage uses order_acquisition_v2: immutable session entry plus seven-day last-non-direct attribution with explicit evidence. Recent older paid cohorts are reconstructed only where retained visit evidence exists.',
+        'Settlement fields remain incomplete until the ECOTRACK settlement/import feed is current.',
+      ],
     });
   }
 
@@ -336,7 +383,7 @@ export async function executeSemanticAnalytics(raw: unknown, access: AnalyticsAc
   if (query.query === 'promotion_performance') {
     const conditions = [
       ...dateConditions(orders.createdAt, query),
-      query.confirmedOnly ? sql`${orders.confirmed} = 1` : undefined,
+      query.confirmedOnly ? confirmedLifecycleOrderCondition() : undefined,
       sql`${orders.archivedAt} is null`,
       sql`${orders.promoCode} is not null`,
     ];
@@ -344,7 +391,7 @@ export async function executeSemanticAnalytics(raw: unknown, access: AnalyticsAc
       .select({
         promoCode: orders.promoCode,
         orders: sql<number>`count(*)::int`,
-        confirmedOrders: sql<number>`count(*) filter (where ${orders.confirmed} = 1)::int`,
+        confirmedOrders: sql<number>`count(*) filter (where ${confirmedLifecycleOrderCondition()})::int`,
         originalSubtotal: sql<number>`coalesce(sum(${orders.promoOriginalSubtotal}), 0)::double precision`,
         discountAmount: sql<number>`coalesce(sum(${orders.promoDiscountAmount}), 0)::double precision`,
         finalSubtotal: sql<number>`coalesce(sum(${orders.promoFinalSubtotal}), 0)::double precision`,

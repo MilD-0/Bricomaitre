@@ -456,6 +456,34 @@
       "when": 1786808351810,
       "tag": "0064_worthless_lethal_legion",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1786914249840,
+      "tag": "0065_purple_bullseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1786936649329,
+      "tag": "0066_luxuriant_red_wolf",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1786937320907,
+      "tag": "0067_bored_shape",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1786943926265,
+      "tag": "0068_deep_lifeguard",
+      "breakpoints": true
     }
   ]
 }

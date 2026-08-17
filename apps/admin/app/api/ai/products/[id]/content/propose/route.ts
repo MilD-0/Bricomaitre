@@ -3,6 +3,7 @@ import { productContentFieldSchema } from '@bric/ai-core';
 import { z } from 'zod';
 
 import { hasDb } from '@bric/db/client';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import {
   AiContentNotFoundError,
   AiProposalConflictError,
@@ -21,9 +22,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
-  const productId = Number((await params).id);
+  const productId = parsePositiveIntegerId((await params).id);
   const parsed = requestSchema.safeParse(await request.json().catch(() => ({})));
-  if (!Number.isSafeInteger(productId) || productId <= 0 || !parsed.success) {
+  if (productId === null || !parsed.success) {
     return NextResponse.json({ error: 'Invalid product content request.' }, { status: 400 });
   }
 

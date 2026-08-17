@@ -8,7 +8,6 @@ import { Card } from './card';
 import { Field, FieldLabel } from './field';
 import { Input } from './input';
 import { NativeSelect, NativeSelectOption } from './native-select';
-import { Label } from './label';
 import { Switch } from './switch';
 import { Textarea } from './textarea';
 
@@ -56,12 +55,6 @@ describe('theme primitives', () => {
     render(<Switch aria-label="Enabled toggle" checked={false} />);
 
     expect(screen.getByRole('switch', { name: 'Enabled toggle' })).toHaveClass('bg-secondary');
-  });
-
-  it('uses semantic label tokens', () => {
-    render(<Label htmlFor="field">Field</Label>);
-
-    expect(screen.getByText('Field')).toHaveClass('text-sm', 'font-medium');
   });
 
   it('uses semantic native select tokens', () => {

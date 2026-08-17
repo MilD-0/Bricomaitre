@@ -4,6 +4,7 @@ import { getDb, hasDb } from '@bric/db/client';
 import { storefrontHomepageFeaturedGroupProductsQuerySchema } from '@bric/storefront-core/contracts';
 import { readStorefrontHomepageFeaturedGroupProducts } from '@bric/storefront-core/assets';
 import { CACHE_TAGS, createServerCache } from '@bric/storefront-core/server-cache';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
 const emptyPage = { items: [], total: 0 };
 const loadGroup = createServerCache({
@@ -16,8 +17,8 @@ const loadGroup = createServerCache({
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const groupId = Number(id);
-  if (!Number.isInteger(groupId) || groupId < 1) {
+  const groupId = parsePositiveIntegerId(id);
+  if (groupId === null) {
     return NextResponse.json({ error: 'Invalid featured group id.' }, { status: 400 });
   }
 

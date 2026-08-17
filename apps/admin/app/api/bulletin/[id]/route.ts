@@ -16,6 +16,7 @@ import {
   syncBulletinPostTags,
 } from '../../../../lib/bulletin-server';
 import { mutateEntityWithHistory } from '../../../../lib/action-history';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
 async function loadPost(id: number) {
   return getDb().query.bulletinPosts.findFirst({
@@ -34,7 +35,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const { id } = await params;
-  const numericId = Number(id);
+  const numericId = parsePositiveIntegerId(id);
+  if (numericId === null) {
+    return NextResponse.json({ error: 'Invalid bulletin post id' }, { status: 400 });
+  }
   const post = await loadPost(numericId);
 
   if (!post) {
@@ -118,7 +122,10 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const { id } = await params;
-  const numericId = Number(id);
+  const numericId = parsePositiveIntegerId(id);
+  if (numericId === null) {
+    return NextResponse.json({ error: 'Invalid bulletin post id' }, { status: 400 });
+  }
   const post = await loadPost(numericId);
 
   if (!post) {

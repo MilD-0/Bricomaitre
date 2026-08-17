@@ -62,7 +62,7 @@ export function ChartContainer({
       <div
         data-chart={chartId}
         className={cn(
-          'h-[260px] w-full rounded-[1.75rem] border border-border/60 bg-linear-to-br from-background via-background to-muted/30 p-3 shadow-sm sm:h-[320px]',
+          'h-[260px] w-full min-w-0 max-w-full overflow-hidden rounded-[1.5rem] border border-border/60 bg-linear-to-br from-background via-background to-muted/30 p-2 shadow-sm sm:h-[320px] sm:rounded-[1.75rem] sm:p-3',
           className,
         )}
       >

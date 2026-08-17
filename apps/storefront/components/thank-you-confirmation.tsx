@@ -103,7 +103,7 @@ export function ThankYouConfirmation({
         cartMode: baseline?.cartMode ?? ('cart' as const),
         stateName: baseline?.stateName ?? null,
         createdAt: new Date().toISOString(),
-        purchaseEventId: baseline?.purchaseEventId ?? null,
+        purchaseEventId: baseline?.purchaseEventId ?? order.purchaseEventId,
       };
       writeCheckoutConfirmation(window.localStorage, next);
       setConfirmation(next);

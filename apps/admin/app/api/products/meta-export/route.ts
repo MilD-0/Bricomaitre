@@ -3,6 +3,7 @@ import { inArray } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { brands, products } from '@bric/db/schema';
+import { parsePositiveIntegerIds } from '@bric/runtime/http-input';
 import {
   buildMetaCatalogExportFileName,
   buildMetaCatalogExportRows,
@@ -13,12 +14,7 @@ import { requireMutationAccess } from '../../../../lib/rbac';
 
 function parseRequestedIds(searchParams: URLSearchParams) {
   const raw = searchParams.getAll('ids');
-  const ids = raw
-    .flatMap((value) => value.split(','))
-    .map((value) => Number(value.trim()))
-    .filter((value) => Number.isInteger(value) && value > 0);
-
-  return [...new Set(ids)];
+  return parsePositiveIntegerIds(raw.flatMap((value) => value.split(',').map((id) => id.trim())));
 }
 
 export async function GET(request: NextRequest) {
@@ -32,7 +28,7 @@ export async function GET(request: NextRequest) {
   }
 
   const ids = parseRequestedIds(request.nextUrl.searchParams);
-  if (ids.length === 0) {
+  if (!ids) {
     return NextResponse.json({ error: 'At least one product id is required.' }, { status: 400 });
   }
 

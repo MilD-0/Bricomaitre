@@ -367,6 +367,7 @@ export const storefrontOrderStatusHistorySchema = z.object({
 export const storefrontOrderResponseItemSchema = z.object({
   id: z.number().int().positive(),
   publicToken: z.string().nullable(),
+  purchaseEventId: z.string().min(1).max(120).nullable().default(null),
   variant: z.string().nullable().optional(),
   isDegradedCapture: z.boolean().optional(),
   createdAt: isoTimestampSchema,

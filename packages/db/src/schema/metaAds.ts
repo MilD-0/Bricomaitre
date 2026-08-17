@@ -1,0 +1,93 @@
+import {
+  bigint,
+  bigserial,
+  date,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
+
+export const metaAdsDailyInsights = pgTable(
+  'meta_ads_daily_insights',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    day: date('day').notNull(),
+    accountId: text('account_id').notNull(),
+    accountCurrency: text('account_currency').notNull(),
+    accountTimezone: text('account_timezone').notNull(),
+    campaignId: text('campaign_id').notNull(),
+    campaignName: text('campaign_name'),
+    adsetId: text('adset_id').notNull(),
+    adsetName: text('adset_name'),
+    adId: text('ad_id').notNull(),
+    adName: text('ad_name'),
+    objective: text('objective'),
+    attributionSetting: text('attribution_setting').notNull(),
+    actionReportTime: text('action_report_time').notNull(),
+    attributionWindows: jsonb('attribution_windows').notNull().default([]),
+    spend: numeric('spend', { precision: 16, scale: 4 }).notNull().default('0'),
+    impressions: bigint('impressions', { mode: 'number' }).notNull().default(0),
+    reach: bigint('reach', { mode: 'number' }).notNull().default(0),
+    clicks: bigint('clicks', { mode: 'number' }).notNull().default(0),
+    inlineLinkClicks: bigint('inline_link_clicks', { mode: 'number' }).notNull().default(0),
+    landingPageViews: numeric('landing_page_views', { precision: 14, scale: 4 })
+      .notNull()
+      .default('0'),
+    addToCarts: numeric('add_to_carts', { precision: 14, scale: 4 }).notNull().default('0'),
+    initiateCheckouts: numeric('initiate_checkouts', { precision: 14, scale: 4 })
+      .notNull()
+      .default('0'),
+    leads: numeric('leads', { precision: 14, scale: 4 }).notNull().default('0'),
+    purchases: numeric('purchases', { precision: 14, scale: 4 }).notNull().default('0'),
+    purchaseValue: numeric('purchase_value', { precision: 16, scale: 2 }).notNull().default('0'),
+    syncedAt: timestamp('synced_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('meta_ads_daily_insights_grain_unique').on(
+      t.accountId,
+      t.day,
+      t.adId,
+      t.actionReportTime,
+      t.attributionSetting,
+    ),
+    index('idx_meta_ads_insights_campaign_day').on(t.campaignId, t.day.desc()),
+    index('idx_meta_ads_insights_adset_day').on(t.adsetId, t.day.desc()),
+    index('idx_meta_ads_insights_ad_day').on(t.adId, t.day.desc()),
+  ],
+);
+
+export const metaAdsSyncRuns = pgTable(
+  'meta_ads_sync_runs',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    trigger: text('trigger').notNull(),
+    status: text('status').notNull(),
+    apiVersion: text('api_version').notNull(),
+    accountId: text('account_id').notNull(),
+    accountCurrency: text('account_currency'),
+    accountTimezone: text('account_timezone'),
+    sinceDay: date('since_day').notNull(),
+    untilDay: date('until_day').notNull(),
+    pagesFetched: integer('pages_fetched').notNull().default(0),
+    rowsFetched: integer('rows_fetched').notNull().default(0),
+    rowsUpserted: integer('rows_upserted').notNull().default(0),
+    usage: jsonb('usage').notNull().default({}),
+    errorCode: text('error_code'),
+    errorMessage: text('error_message'),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_meta_ads_sync_runs_started').on(t.startedAt.desc()),
+    index('idx_meta_ads_sync_runs_status_started').on(t.status, t.startedAt.desc()),
+  ],
+);

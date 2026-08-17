@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { startOwnedJob } from '@bric/runtime/jobs';
+import { enqueueLightweightJob } from '@bric/runtime/jobs';
 import { hasDb } from '@bric/db/client';
 import { storefrontAnalyticsEventSchema } from '@bric/storefront-core/analytics';
 
@@ -10,6 +10,11 @@ import {
   getRequestId,
   withRequestIdHeaders,
 } from '../../../lib/sentry';
+
+export function isAutomatedAnalyticsRequest(req: Pick<NextRequest, 'headers'>) {
+  const userAgent = req.headers.get('user-agent')?.toLowerCase() ?? '';
+  return /(?:bot|crawler|headlesschrome|lighthouse|playwright|spider|synthetic)/.test(userAgent);
+}
 
 export async function POST(req: NextRequest) {
   const requestId = getRequestId(req);
@@ -54,12 +59,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (isAutomatedAnalyticsRequest(req)) {
+    return NextResponse.json(
+      { ok: true, queued: false, filtered: 'automation' },
+      { headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)) },
+    );
+  }
+
   try {
-    const queued = await startOwnedJob({
+    const queued = await enqueueLightweightJob({
       queueName: 'storefront-analytics',
-      kind: 'analytics-event',
-      ownerKey: parsed.data.eventId,
-      requestId,
+      jobName: 'analytics-event',
+      dedupeKey: parsed.data.eventId,
       data: { event: parsed.data },
     });
 

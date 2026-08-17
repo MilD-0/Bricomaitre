@@ -201,12 +201,14 @@ export function toStorefrontOrderRecord(
   row: typeof orders.$inferSelect,
   history: OrderStatusHistoryRecord[] = [],
   productLookup: Map<string, ProductLookupEntry> = new Map(),
+  purchaseEventId: string | null = null,
 ) {
   const record = toOrderRecord(row, history, productLookup);
 
   return {
     id: record.id,
     publicToken: record.publicToken ?? null,
+    purchaseEventId,
     variant: record.variant ?? null,
     isDegradedCapture: Boolean(record.isDegradedCapture),
     createdAt: record.createdAt,

@@ -7,3 +7,4 @@ export * from './jobs';
 export * from './next-action';
 export * from './rate-limit';
 export * from './redis';
+export * from './worker-heartbeat';

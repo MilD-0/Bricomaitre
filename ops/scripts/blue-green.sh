@@ -4,6 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd "$script_dir/../.." && pwd -P)"
 
+# shellcheck source=load-infra-env.sh
 source "$script_dir/load-infra-env.sh"
 
 compose_file="${COMPOSE_FILE:-$repo_root/ops/docker/compose.prod.yml}"
@@ -14,10 +15,14 @@ deploy_lock_file="${BRIC_DEPLOY_LOCK_FILE:-$runtime_dir/deploy.lock}"
 nginx_conf_dir="${BRIC_NGINX_CONF_DIR:-$runtime_dir/nginx}"
 nginx_conf_file="${BRIC_NGINX_CONF_FILE:-$nginx_conf_dir/default.conf}"
 nginx_template_file="${BRIC_NGINX_TEMPLATE_FILE:-$repo_root/ops/nginx/templates/default.conf.template}"
+nginx_main_conf_dir="${BRIC_NGINX_MAIN_CONF_DIR:-$runtime_dir/nginx-main}"
+nginx_main_conf_file="${BRIC_NGINX_MAIN_CONF_FILE:-$nginx_main_conf_dir/nginx.conf}"
+nginx_main_source_file="${BRIC_NGINX_MAIN_SOURCE_FILE:-$repo_root/ops/nginx/nginx.conf}"
 certbot_webroot_dir="${BRIC_CERTBOT_WEBROOT_DIR:-$runtime_dir/certbot-webroot}"
 default_slot="${BRIC_DEFAULT_ACTIVE_SLOT:-blue}"
 releases_dir="${BRIC_RELEASES_DIR:-/srv/bric/releases}"
 current_link="${BRIC_CURRENT_LINK:-/srv/bric/current}"
+previous_link="${BRIC_PREVIOUS_LINK:-/srv/bric/previous}"
 release_marker_name="${BRIC_RELEASE_MARKER_NAME:-.bric-release.env}"
 release_images_marker_name="${BRIC_RELEASE_IMAGES_MARKER_NAME:-.bric-images.env}"
 release_keep_count="${BRIC_RELEASE_KEEP_COUNT:-5}"
@@ -82,13 +87,13 @@ expected_service_image() {
       slot="${service#storefront-api-}"
       key="BRIC_IMAGE_STOREFRONT_API_${slot^^}"
       ;;
-    adminstration-*)
-      slot="${service#adminstration-}"
-      key="BRIC_IMAGE_ADMIN_WEB_${slot^^}"
-      ;;
     admin-worker-*)
       slot="${service#admin-worker-}"
       key="BRIC_IMAGE_ADMIN_WORKER_${slot^^}"
+      ;;
+    admin-*)
+      slot="${service#admin-}"
+      key="BRIC_IMAGE_ADMIN_WEB_${slot^^}"
       ;;
     storefront-meta-worker)
       key="BRIC_IMAGE_STOREFRONT_META_WORKER"
@@ -134,7 +139,12 @@ assert_service_image() {
 }
 
 ensure_runtime_dirs() {
-  mkdir -p "$runtime_dir" "$nginx_conf_dir" "$certbot_webroot_dir" "$releases_dir"
+  mkdir -p \
+    "$runtime_dir" \
+    "$nginx_conf_dir" \
+    "$nginx_main_conf_dir" \
+    "$certbot_webroot_dir" \
+    "$releases_dir"
 }
 
 validate_current_release_link() {
@@ -219,8 +229,40 @@ stop_slot_app_services() {
 
   compose stop \
     "$(service_name storefront "$slot")" \
-    "$(service_name adminstration "$slot")" \
+    "$(service_name admin "$slot")" \
     "$(service_name storefront-api "$slot")" || true
+}
+
+remove_slot_release_services() {
+  local slot="${1:?slot is required}"
+  require_slot "$slot"
+
+  compose rm -sf \
+    "$(service_name storefront "$slot")" \
+    "$(service_name admin "$slot")" \
+    "$(service_name storefront-api "$slot")" \
+    "$(service_name admin-worker "$slot")" \
+    "$(service_name admin-migrations "$slot")" || true
+}
+
+remove_obsolete_compose_containers() {
+  local known_services
+  local container_id
+  local service
+
+  known_services="$(compose config --services)"
+  while IFS=' ' read -r container_id service; do
+    if [[ -z "$container_id" || -z "$service" ]]; then
+      continue
+    fi
+    if ! grep -Fxq "$service" <<<"$known_services"; then
+      docker rm -f "$container_id"
+    fi
+  done < <(
+    docker ps -a \
+      --filter 'label=com.docker.compose.project=bricadmin' \
+      --format '{{.ID}} {{.Label "com.docker.compose.service"}}'
+  )
 }
 
 slot_api_host_port() {
@@ -258,12 +300,107 @@ render_nginx_config() {
     "$slot"
 }
 
+render_release_nginx_config() {
+  local release_dir="${1:?release directory is required}"
+  local slot="${2:?slot is required}"
+  local release_template="$release_dir/ops/nginx/templates/default.conf.template"
+  local release_renderer="$release_dir/ops/scripts/render-nginx-config.py"
+
+  require_slot "$slot"
+  ensure_runtime_dirs
+
+  case "$release_dir" in
+    "$releases_dir"/*) ;;
+    *)
+      echo "Nginx rollback release must be under ${releases_dir}: ${release_dir}" >&2
+      return 1
+      ;;
+  esac
+
+  if [[ ! -f "$release_template" ]]; then
+    echo "Nginx rollback template is missing: ${release_template}" >&2
+    return 1
+  fi
+  if [[ ! -f "$release_renderer" ]]; then
+    echo "Nginx rollback renderer is missing: ${release_renderer}" >&2
+    return 1
+  fi
+
+  # Service identities can change between releases. Render the template that
+  # belongs to the release whose containers will actually receive traffic,
+  # using the renderer version that understands that template's variables.
+  python3 "$release_renderer" \
+    "$release_template" \
+    "$nginx_conf_file" \
+    "$slot"
+}
+
+nginx_main_config_snapshot=""
+
+begin_nginx_main_config_transaction() {
+  local fallback_source="${1:-}"
+
+  if [[ -n "$nginx_main_config_snapshot" ]]; then
+    echo "an Nginx main-config transaction is already active" >&2
+    return 1
+  fi
+
+  ensure_runtime_dirs
+  nginx_main_config_snapshot="$(mktemp "${runtime_dir}/nginx-main.conf.rollback.XXXXXX")"
+
+  if [[ -f "$nginx_main_conf_file" ]]; then
+    cp -p "$nginx_main_conf_file" "$nginx_main_config_snapshot"
+  elif [[ -n "$fallback_source" && -f "$fallback_source" ]]; then
+    cp -p "$fallback_source" "$nginx_main_config_snapshot"
+  else
+    echo "cannot start Nginx main-config transaction without an existing or fallback config" >&2
+    rm -f "$nginx_main_config_snapshot"
+    nginx_main_config_snapshot=""
+    return 1
+  fi
+}
+
+stage_nginx_main_config() {
+  local staged_file
+
+  if [[ -z "$nginx_main_config_snapshot" ]]; then
+    echo "stage_nginx_main_config requires an active transaction" >&2
+    return 1
+  fi
+  if [[ ! -f "$nginx_main_source_file" ]]; then
+    echo "missing Nginx main config: ${nginx_main_source_file}" >&2
+    return 1
+  fi
+
+  staged_file="$(mktemp "${nginx_main_conf_dir}/nginx.conf.tmp.XXXXXX")"
+  cp "$nginx_main_source_file" "$staged_file"
+  chmod 0644 "$staged_file"
+  mv "$staged_file" "$nginx_main_conf_file"
+}
+
+rollback_nginx_main_config_transaction() {
+  if [[ -z "$nginx_main_config_snapshot" ]]; then
+    return 0
+  fi
+
+  mv "$nginx_main_config_snapshot" "$nginx_main_conf_file"
+  nginx_main_config_snapshot=""
+}
+
+commit_nginx_main_config_transaction() {
+  if [[ -n "$nginx_main_config_snapshot" ]]; then
+    rm -f "$nginx_main_config_snapshot"
+  fi
+  nginx_main_config_snapshot=""
+}
+
 ensure_nginx() {
   compose up -d nginx
 }
 
 reload_nginx() {
-  compose exec -T nginx nginx -s reload
+  compose exec -T nginx nginx -t -c /etc/nginx-main/nginx.conf
+  compose exec -T nginx nginx -s reload -c /etc/nginx-main/nginx.conf
 }
 
 verify_release_dir() {
@@ -458,17 +595,102 @@ apply_release_images() {
   mv "$state_tmp" "$image_state_file"
 }
 
+image_state_snapshot=""
+image_state_had_file=false
+
+begin_image_state_transaction() {
+  if [[ -n "$image_state_snapshot" ]]; then
+    echo "an image-state transaction is already active" >&2
+    return 1
+  fi
+
+  ensure_runtime_dirs
+  image_state_snapshot="$(mktemp "${runtime_dir}/images.env.rollback.XXXXXX")"
+  if [[ -f "$image_state_file" ]]; then
+    cp -p "$image_state_file" "$image_state_snapshot"
+    image_state_had_file=true
+  else
+    : >"$image_state_snapshot"
+    image_state_had_file=false
+  fi
+}
+
+rollback_image_state_transaction() {
+  if [[ -z "$image_state_snapshot" ]]; then
+    return 0
+  fi
+
+  if [[ "$image_state_had_file" == true ]]; then
+    mv "$image_state_snapshot" "$image_state_file"
+  else
+    rm -f "$image_state_file" "$image_state_snapshot"
+  fi
+  image_state_snapshot=""
+  image_state_had_file=false
+}
+
+commit_image_state_transaction() {
+  if [[ -n "$image_state_snapshot" ]]; then
+    rm -f "$image_state_snapshot"
+  fi
+  image_state_snapshot=""
+  image_state_had_file=false
+}
+
+release_link_target() {
+  local link="${1:?release link is required}"
+
+  if [[ -L "$link" || -e "$link" ]]; then
+    readlink -f "$link"
+  fi
+}
+
+set_release_link() {
+  local link="${1:?release link is required}"
+  local release_dir="${2:?release directory is required}"
+  local resolved_release
+
+  resolved_release="$(cd "$release_dir" && pwd -P)"
+  case "$resolved_release" in
+    "$releases_dir"/*) ;;
+    *)
+      echo "release link target must be inside ${releases_dir}: ${resolved_release}" >&2
+      return 1
+      ;;
+  esac
+
+  mkdir -p "$(dirname "$link")"
+  ln -sfn "$resolved_release" "$link"
+}
+
+restore_release_link() {
+  local link="${1:?release link is required}"
+  local target="${2:-}"
+
+  if [[ -n "$target" ]]; then
+    set_release_link "$link" "$target"
+  else
+    rm -f "$link"
+  fi
+}
+
 set_current_release() {
   local release_dir="${1:?release dir is required}"
 
-  mkdir -p "$(dirname "$current_link")"
-  ln -sfn "$release_dir" "$current_link"
+  set_release_link "$current_link" "$release_dir"
+}
+
+set_previous_release() {
+  local release_dir="${1:?release dir is required}"
+
+  set_release_link "$previous_link" "$release_dir"
 }
 
 prune_old_releases() {
   local keep="${1:-$release_keep_count}"
   local release_paths=()
   local current_target=""
+  local previous_target=""
   local path
 
   if [[ ! -d "$releases_dir" ]]; then
@@ -477,6 +699,9 @@ prune_old_releases() {
 
   if [[ -L "$current_link" || -e "$current_link" ]]; then
     current_target="$(readlink -f "$current_link")"
+  fi
+  if [[ -L "$previous_link" || -e "$previous_link" ]]; then
+    previous_target="$(readlink -f "$previous_link")"
   fi
 
   while IFS= read -r path; do
@@ -489,6 +714,9 @@ prune_old_releases() {
 
   for path in "${release_paths[@]:0:${#release_paths[@]}-keep}"; do
     if [[ -n "$current_target" && "$path" == "$current_target" ]]; then
+      continue
+    fi
+    if [[ -n "$previous_target" && "$path" == "$previous_target" ]]; then
       continue
     fi
     rm -rf "$path"

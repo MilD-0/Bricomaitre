@@ -5,6 +5,7 @@ export const semanticAnalyticsQueryNameSchema = z.enum([
   'sales_summary',
   'order_summary',
   'funnel_summary',
+  'meta_commerce_performance',
   'product_performance',
   'category_performance',
   'brand_performance',
@@ -45,7 +46,13 @@ export const semanticAnalyticsQuerySchema = z
           message: 'Analytics date ranges are limited to 366 days.',
         });
     }
-    const dateAware = ['sales_summary', 'order_summary', 'funnel_summary', 'promotion_performance'];
+    const dateAware = [
+      'sales_summary',
+      'order_summary',
+      'funnel_summary',
+      'meta_commerce_performance',
+      'promotion_performance',
+    ];
     if ((value.startDate || value.endDate) && !dateAware.includes(value.query)) {
       ctx.addIssue({
         code: 'custom',
@@ -144,6 +151,8 @@ export const SEMANTIC_ANALYTICS_CATALOG = {
     'Storefront order volume, confirmation rate, order value, and discounts over a date range.',
   funnel_summary:
     'Storefront sessions, views, carts, checkouts, purchases, and step conversion rates.',
+  meta_commerce_performance:
+    'Meta ad delivery and spend joined to first-party orders, product economics, ECOTRACK outcomes, and imported settlements.',
   product_performance: 'Current all-time product commerce counters and conversion signals.',
   category_performance: 'Current category-level product counters and conversion signals.',
   brand_performance: 'Current brand-level product counters and conversion signals.',

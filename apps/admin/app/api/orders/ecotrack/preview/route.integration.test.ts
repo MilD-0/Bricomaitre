@@ -91,4 +91,16 @@ describe('app/api/orders/ecotrack/preview/route', () => {
       invalid: [],
     });
   });
+
+  it('rejects malformed order identifiers instead of building a partial preview', async () => {
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders/ecotrack/preview', {
+        method: 'POST',
+        body: JSON.stringify({ mode: 'selected', orderIds: [11, '1e2'] }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(buildEcotrackPostingPreviewMock).not.toHaveBeenCalled();
+  });
 });

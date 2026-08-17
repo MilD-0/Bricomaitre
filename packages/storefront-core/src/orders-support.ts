@@ -3,6 +3,7 @@ import { z } from 'zod';
 const orderStatusValues = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 const deliveryTypeValues = [0, 1] as const;
 export const DEGRADED_CAPTURE_VARIANT = 'degraded_capture' as const;
+export const CONFIRMED_LIFECYCLE_ORDER_STATUSES = [2, 3, 4, 5, 7, 8, 9, 10, 11] as const;
 
 export const orderStatusSchema = z.union(
   orderStatusValues.map((value) => z.literal(value)) as [
@@ -337,16 +338,8 @@ export function coerceNoAnswerCount(status: OrderStatus, count: unknown, legacyS
 }
 
 export function isConfirmedLifecycleStatus(status: OrderStatus) {
-  return (
-    status === 2 ||
-    status === 3 ||
-    status === 4 ||
-    status === 5 ||
-    status === 7 ||
-    status === 8 ||
-    status === 9 ||
-    status === 10 ||
-    status === 11
+  return CONFIRMED_LIFECYCLE_ORDER_STATUSES.includes(
+    status as (typeof CONFIRMED_LIFECYCLE_ORDER_STATUSES)[number],
   );
 }
 

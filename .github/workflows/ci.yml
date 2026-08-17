@@ -1,0 +1,208 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-quality:
+    name: Static quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up the production Buildx driver
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - name: Validate operational configuration
+        run: bash ops/scripts/validate-operations.sh
+      - uses: ./.github/actions/setup-workspace
+      - name: Run static quality gates
+        run: |
+          pnpm format:check
+          pnpm lint
+          pnpm typecheck
+          pnpm dead-code:check
+
+  service-contracts:
+    name: PostgreSQL and Redis contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-bookworm@sha256:60f4761b9035e0b8d5218f701a8c3382f641bf12b1604822574cf5be3baeb537
+        env:
+          POSTGRES_DB: bricomaitre_test
+          POSTGRES_USER: bricomaitre
+          POSTGRES_PASSWORD: bricomaitre
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bricomaitre -d bricomaitre_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-bookworm@sha256:e9b2e45ecd47fbb69b877cf8d045d5cccaaaed52524b6e098b4abe8212994f73
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - name: Apply migrations and test real service contracts
+        env:
+          DATABASE_URL: postgres://bricomaitre:bricomaitre@127.0.0.1:5432/bricomaitre_test
+          REDIS_URL: redis://127.0.0.1:6379/0
+        run: |
+          pnpm --filter @bric/admin db:migrate
+          pnpm test:services
+
+  tests:
+    name: Tests / ${{ matrix.suite }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - ops-packages
+          - admin
+          - storefront-api
+          - storefront
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - name: Run ${{ matrix.suite }} tests
+        env:
+          TEST_SUITE: ${{ matrix.suite }}
+        run: |
+          set -euo pipefail
+          case "$TEST_SUITE" in
+            ops-packages)
+              ops/scripts/run-ci-check.sh "Operational and shared-package tests" \
+                bash -lc 'pnpm test:ops && pnpm test:packages'
+              ;;
+            admin)
+              ops/scripts/run-ci-check.sh "Admin unit, component, and route-contract tests" \
+                bash -lc 'pnpm test:admin && pnpm test:admin:integration'
+              ;;
+            storefront-api)
+              ops/scripts/run-ci-check.sh "Storefront API unit and route-contract tests" \
+                pnpm test:storefront-api
+              ;;
+            storefront)
+              ops/scripts/run-ci-check.sh "Storefront unit, component, and application-contract tests" \
+                bash -lc 'pnpm test:storefront && pnpm test:storefront:integration'
+              ;;
+            *)
+              echo "unknown test suite: $TEST_SUITE" >&2
+              exit 64
+              ;;
+          esac
+
+  browser-acceptance:
+    name: Browser acceptance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - name: Install Chromium
+        run: pnpm --filter @bric/storefront exec playwright install --with-deps chromium
+      - name: Run browser acceptance tests
+        run: ops/scripts/run-ci-check.sh "Storefront browser acceptance tests" pnpm test:storefront:browser
+      - name: Upload browser diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: storefront-browser-diagnostics
+          path: |
+            apps/storefront/playwright-report
+            apps/storefront/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
+  browser-performance:
+    name: Browser performance budgets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - name: Install Chromium
+        run: pnpm --filter @bric/storefront exec playwright install --with-deps chromium
+      - name: Run performance budgets
+        run: ops/scripts/run-ci-check.sh "Storefront performance budgets" pnpm test:storefront:performance
+      - name: Upload performance diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: storefront-performance-diagnostics
+          path: |
+            apps/storefront/playwright-report
+            apps/storefront/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
+  production-builds:
+    name: Production builds
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - name: Build production applications
+        env:
+          BETTER_AUTH_SECRET: ci-build-verification-secret-1234567890
+          BETTER_AUTH_URL: http://127.0.0.1:3000
+          GOOGLE_CLIENT_ID: ci-build-client
+          GOOGLE_CLIENT_SECRET: ci-build-secret
+          STOREFRONT_API_BASE_URL: ${{ vars.STOREFRONT_BUILD_API_BASE_URL || 'https://api.bricomaitre.com' }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL || 'https://bricomaitre.com' }}
+          NEXT_PUBLIC_CLOUDFRONT_URL: ${{ vars.NEXT_PUBLIC_CLOUDFRONT_URL }}
+          NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS: ${{ vars.NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS }}
+        run: pnpm build:apps
+
+  required:
+    name: CI / Required
+    if: ${{ always() }}
+    needs:
+      - static-quality
+      - service-contracts
+      - tests
+      - browser-acceptance
+      - browser-performance
+      - production-builds
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Fail when an upstream gate failed or was cancelled
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1

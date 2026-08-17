@@ -144,6 +144,18 @@ describe('app/api/orders/ecotrack/route', () => {
     expect(response.status).toBe(201);
   });
 
+  it('rejects malformed order identifiers instead of partially starting a job', async () => {
+    const response = await POST(
+      new Request('http://localhost/api/orders/ecotrack', {
+        method: 'POST',
+        body: JSON.stringify({ mode: 'selected', orderIds: [11, '1e2'] }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(startOrderEcotrackJobMock).not.toHaveBeenCalled();
+  });
+
   it('returns busy queue behavior', async () => {
     startOrderEcotrackJobMock.mockResolvedValue({
       kind: 'busy',

@@ -1,8 +1,10 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignore": ["ops/scripts/read-buildx-digest.mjs"],
   "ignoreUnresolved": ["next"],
   "workspaces": {
+    "ops": {
+      "entry": ["scripts/*.mjs"]
+    },
     "apps/admin": {
       "entry": [
         "app/**/*.{ts,tsx}",

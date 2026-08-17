@@ -20,6 +20,7 @@ export default defineConfig({
           include: ['lib/**/*.test.ts', 'next-config.test.ts'],
           exclude: [
             'lib/analytics.test.ts',
+            'lib/assistant-attribution.test.ts',
             'lib/haptics.test.ts',
             'lib/instrumentation-client.test.ts',
             'lib/marketing-attribution.test.ts',
@@ -40,6 +41,7 @@ export default defineConfig({
           setupFiles: ['./test/setup/component.ts'],
           include: [
             'lib/analytics.test.ts',
+            'lib/assistant-attribution.test.ts',
             'lib/haptics.test.ts',
             'lib/instrumentation-client.test.ts',
             'lib/marketing-attribution.test.ts',

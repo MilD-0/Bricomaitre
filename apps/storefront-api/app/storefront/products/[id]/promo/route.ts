@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { readActiveProductPromo } from '@bric/storefront-core/promos';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!hasDb()) {
@@ -9,10 +10,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const { id } = await params;
-  const productId = Number(id);
+  const productId = parsePositiveIntegerId(id);
 
-  if (!Number.isInteger(productId) || productId <= 0) {
-    return NextResponse.json({ ok: false, promo: null });
+  if (productId === null) {
+    return NextResponse.json({ error: 'Invalid product id.' }, { status: 400 });
   }
 
   const promo = await readActiveProductPromo(getDb(), {

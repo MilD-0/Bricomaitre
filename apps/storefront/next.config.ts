@@ -41,6 +41,12 @@ const nextConfig: NextConfig = {
   images: {
     formats: ['image/avif', 'image/webp'],
     qualities: [60, 75],
+    // Next otherwise claims half of the available filesystem for optimized
+    // images. Each blue/green slot has its own persistent cache, so bound each
+    // copy and let Next evict least-recently-used variants.
+    maximumDiskCacheSize: 512_000_000,
+    maximumResponseBody: 10_000_000,
+    maximumRedirects: 0,
     remotePatterns: getStorefrontRemoteImagePatterns(),
   },
   async headers() {

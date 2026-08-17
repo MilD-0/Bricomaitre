@@ -21,6 +21,7 @@
     "test:storefront": "pnpm --filter @bric/storefront test",
     "test:storefront:integration": "pnpm --filter @bric/storefront test:integration",
     "test:storefront:browser": "pnpm --filter @bric/storefront test:browser",
+    "test:storefront:performance": "pnpm --filter @bric/storefront test:performance",
     "test:packages": "pnpm --filter @bric/ai-core test && pnpm --filter @bric/runtime test && pnpm --filter @bric/storefront-core test",
     "test:ci": "pnpm test:ops && pnpm test:packages && pnpm test:admin && pnpm test:admin:integration && pnpm test:storefront-api && pnpm test:storefront && pnpm test:storefront:integration && pnpm test:storefront:browser && pnpm test:storefront:performance",
     "lint": "pnpm --filter './apps/*' --parallel lint",
@@ -42,10 +43,10 @@
   },
   "devDependencies": {
     "@types/node": "24.13.3",
-    "eslint": "^9.39.4",
-    "eslint-config-next": "16.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.3.1",
     "knip": "6.32.2",
     "prettier": "3.9.6",
-    "typescript": "6.0.2"
+    "typescript": "6.0.3"
   }
 }

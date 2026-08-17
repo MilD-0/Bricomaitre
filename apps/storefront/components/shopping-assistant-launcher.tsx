@@ -6,7 +6,8 @@ import { MessageCircle, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 
 import type { Locale } from '@/i18n/config';
-import { trackNavigationEvent } from '@/lib/analytics';
+import { getAnalyticsIdentity, trackNavigationEvent } from '@/lib/analytics';
+import { recordAssistantOpen } from '@/lib/assistant-attribution';
 import { prepareHaptics, triggerHaptic } from '@/lib/haptics';
 import { resetMobilePageZoom } from '@/lib/mobile-page-zoom';
 import type { ShoppingAssistantLabels } from '@/components/shopping-assistant-panel';
@@ -33,6 +34,7 @@ export function ShoppingAssistantLauncher({
     resetMobilePageZoom();
     setOpen(true);
     void triggerHaptic('surface');
+    recordAssistantOpen(getAnalyticsIdentity());
     void trackNavigationEvent({
       eventName: 'ai_assistant_open',
       locale,

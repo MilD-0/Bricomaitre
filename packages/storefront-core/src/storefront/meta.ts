@@ -50,6 +50,7 @@ export type MetaCommerceLine = {
   title: string;
   originalUnitPrice: number;
   effectiveUnitPrice: number;
+  unitPurchasePrice: number | null;
   quantity: number;
   discountAmount: number;
   lineTotal: number;
@@ -272,6 +273,7 @@ export async function resolveMetaCommerceLines(
       id: products.id,
       title: products.title,
       price: products.price,
+      purchasePrice: products.purchasePrice,
       images: products.images,
     })
     .from(products)
@@ -300,6 +302,8 @@ export async function resolveMetaCommerceLines(
         title: row.title,
         originalUnitPrice,
         effectiveUnitPrice: roundCurrency(lineTotal / quantity),
+        unitPurchasePrice:
+          row.purchasePrice == null ? null : roundCurrency(parseNumericAmount(row.purchasePrice)),
         quantity,
         discountAmount: roundCurrency(discountAmount),
         lineTotal,
@@ -353,6 +357,7 @@ export async function resolveOrderLineSnapshots(
       slug: products.slug,
       title: products.title,
       price: products.price,
+      purchasePrice: products.purchasePrice,
       images: products.images,
     })
     .from(products)
@@ -397,6 +402,8 @@ export async function resolveOrderLineSnapshots(
         title: row.title,
         originalUnitPrice,
         effectiveUnitPrice: roundCurrency(lineTotal / quantity),
+        unitPurchasePrice:
+          row.purchasePrice == null ? null : roundCurrency(parseNumericAmount(row.purchasePrice)),
         quantity,
         discountAmount: roundCurrency(discountAmount),
         lineTotal,
@@ -423,6 +430,10 @@ export async function replaceOrderLineSnapshots(
       titleSnapshot: line.title,
       originalUnitPrice: line.originalUnitPrice.toFixed(2),
       effectiveUnitPrice: line.effectiveUnitPrice.toFixed(2),
+      unitPurchasePriceSnapshot:
+        line.unitPurchasePrice == null ? null : line.unitPurchasePrice.toFixed(2),
+      purchaseCostSource:
+        line.unitPurchasePrice == null ? 'missing_at_snapshot' : 'product_catalog_snapshot',
       quantity: line.quantity,
       discountAmount: line.discountAmount.toFixed(2),
       lineTotal: line.lineTotal.toFixed(2),
@@ -878,6 +889,10 @@ function lineRowToCommerceLine(row: typeof orderLineItems.$inferSelect): MetaCom
     title: row.titleSnapshot,
     originalUnitPrice: parseNumericAmount(row.originalUnitPrice),
     effectiveUnitPrice: parseNumericAmount(row.effectiveUnitPrice),
+    unitPurchasePrice:
+      row.unitPurchasePriceSnapshot == null
+        ? null
+        : parseNumericAmount(row.unitPurchasePriceSnapshot),
     quantity: row.quantity,
     discountAmount: parseNumericAmount(row.discountAmount),
     lineTotal: parseNumericAmount(row.lineTotal),

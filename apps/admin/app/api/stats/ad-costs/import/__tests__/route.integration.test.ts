@@ -66,6 +66,36 @@ describe('app/api/stats/ad-costs/import/route', () => {
     expect(response.status).toBe(400);
   });
 
+  it('returns 400 when multipart parsing fails', async () => {
+    const request = new NextRequest('http://localhost/api/stats/ad-costs/import', {
+      method: 'POST',
+    });
+    Object.defineProperty(request, 'formData', {
+      value: vi.fn().mockRejectedValue(new Error('malformed body')),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: 'Invalid multipart request body' });
+    expect(startAdCostsImportJobMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects declared oversized requests before parsing multipart data', async () => {
+    const request = new NextRequest('http://localhost/api/stats/ad-costs/import', {
+      method: 'POST',
+      headers: { 'content-length': String(30 * 1024 * 1024) },
+    });
+    const formData = vi.fn();
+    Object.defineProperty(request, 'formData', { value: formData });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(413);
+    expect(formData).not.toHaveBeenCalled();
+    expect(startAdCostsImportJobMock).not.toHaveBeenCalled();
+  });
+
   it('returns the latest queued ad-cost import job', async () => {
     getLatestExportJobMock.mockResolvedValue({ id: 'job-8', status: 'running' });
 

@@ -4,6 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd "$script_dir/../.." && pwd -P)"
 
+# shellcheck source=load-infra-env.sh
 source "$script_dir/load-infra-env.sh"
 
 service_name="${1:?compose service name is required}"
@@ -31,4 +32,8 @@ for ((i=1; i<=attempts; i++)); do
 done
 
 echo "$service_name did not become healthy" >&2
+docker inspect \
+  --format 'state={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} error={{json .State.Error}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+  "$container_id" >&2 || true
+docker logs --tail 100 "$container_id" >&2 || true
 exit 1
