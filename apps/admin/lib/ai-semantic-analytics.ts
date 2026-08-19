@@ -12,8 +12,6 @@ import {
   analyticsDistinctDailyMembers,
   analyticsEvents,
   brands,
-  bundleComponents,
-  bundleListings,
   categories,
   orders,
   processedOrders,
@@ -135,7 +133,6 @@ export async function executeSemanticAnalytics(raw: unknown, access: AnalyticsAc
     const conditions = [
       ...dateConditions(orders.createdAt, query),
       query.confirmedOnly ? confirmedLifecycleOrderCondition() : undefined,
-      sql`${orders.archivedAt} is null`,
     ];
     const [data] = await db
       .select({
@@ -384,7 +381,6 @@ export async function executeSemanticAnalytics(raw: unknown, access: AnalyticsAc
     const conditions = [
       ...dateConditions(orders.createdAt, query),
       query.confirmedOnly ? confirmedLifecycleOrderCondition() : undefined,
-      sql`${orders.archivedAt} is null`,
       sql`${orders.promoCode} is not null`,
     ];
     const data = await db
@@ -405,35 +401,6 @@ export async function executeSemanticAnalytics(raw: unknown, access: AnalyticsAc
       source: 'orders',
       definitions: { discountAmount: 'Sum of discount recorded on orders using the promo code.' },
       caveats: ['This reports order usage, not causal lift versus orders without a promotion.'],
-    });
-  }
-
-  if (query.query === 'bundle_performance') {
-    const data = await db
-      .select({
-        id: bundleListings.id,
-        productId: products.id,
-        title: products.title,
-        active: bundleListings.active,
-        price: products.price,
-        purchaseCost: access.canViewProfit ? products.purchasePrice : sql<null>`null`,
-        componentCount: sql<number>`count(${bundleComponents.id})::int`,
-        unitsSold: products.unitsSold,
-        views: products.viewCount,
-        purchases: products.purchaseCount,
-        conversionRate: products.conversionRate,
-      })
-      .from(bundleListings)
-      .innerJoin(products, eq(bundleListings.productId, products.id))
-      .leftJoin(bundleComponents, eq(bundleComponents.bundleId, bundleListings.id))
-      .where(query.productId ? eq(products.id, query.productId) : undefined)
-      .groupBy(bundleListings.id, products.id)
-      .orderBy(desc(products.unitsSold), desc(products.popularityScore))
-      .limit(query.limit);
-    return response(query, data, {
-      source: 'bundle_listings + bundle_components + products',
-      definitions: { componentCount: 'Number of distinct component product rows in the bundle.' },
-      caveats: ['Performance is based on the bundle product listing counters.'],
     });
   }
 

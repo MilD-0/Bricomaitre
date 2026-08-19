@@ -9,6 +9,7 @@ import {
   index,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { brands } from './brands';
 import { categories } from './categories';
 
@@ -53,6 +54,7 @@ export const products = pgTable(
     }),
 
     images: text('images').array().notNull().default([]),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -61,8 +63,13 @@ export const products = pgTable(
     index('idx_products_brand').on(t.brandId),
     index('idx_products_mongo_id').on(t.mongoId),
     uniqueIndex('products_slug_unique').on(t.slug),
-    index('idx_products_sku').on(t.sku),
-    index('idx_products_barcode').on(t.barcode),
+    uniqueIndex('products_sku_nonempty_unique')
+      .on(sql`lower(btrim(${t.sku}))`)
+      .where(sql`nullif(btrim(${t.sku}), '') is not null`),
+    uniqueIndex('products_barcode_nonempty_unique')
+      .on(sql`lower(btrim(${t.barcode}))`)
+      .where(sql`nullif(btrim(${t.barcode}), '') is not null`),
+    index('idx_products_archived_at').on(t.archivedAt),
     index('idx_products_updated_at').on(t.updatedAt.desc()),
     index('idx_products_brand_updated_at').on(t.brandId, t.updatedAt.desc()),
     index('idx_products_category_updated_at').on(t.categoryId, t.updatedAt.desc()),

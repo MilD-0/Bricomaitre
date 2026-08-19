@@ -12,14 +12,8 @@ export const permissionKeySchema = z.enum([
   'brands_categories_write',
   'bulletin_moderate',
   'ops_view',
+  'analytics_manage',
   'settings_manage',
-  'ai_use',
-  'ai_catalog_propose',
-  'ai_catalog_apply',
-  'ai_analytics_query',
-  'ai_pricing_analyze',
-  'ai_pricing_apply',
-  'ai_landing_publish',
 ]);
 
 export type PermissionKey = z.infer<typeof permissionKeySchema>;
@@ -31,14 +25,8 @@ export const permissionCatalog: readonly PermissionKey[] = [
   'brands_categories_write',
   'bulletin_moderate',
   'ops_view',
+  'analytics_manage',
   'settings_manage',
-  'ai_use',
-  'ai_catalog_propose',
-  'ai_catalog_apply',
-  'ai_analytics_query',
-  'ai_pricing_analyze',
-  'ai_pricing_apply',
-  'ai_landing_publish',
 ] as const;
 
 export const roleDefinitionFormSchema = z.object({
@@ -137,7 +125,10 @@ export const canEdit = (access: Role | readonly PermissionKey[]) =>
   editorPermissionKeys.some((permission) => hasPermission(access, permission));
 
 export const canViewOps = (access: Role | readonly PermissionKey[]) =>
-  hasPermission(access, 'ops_view') || hasPermission(access, 'settings_manage');
+  hasPermission(access, 'ops_view');
+
+export const canManageAnalytics = (access: Role | readonly PermissionKey[]) =>
+  hasPermission(access, 'analytics_manage');
 
 export const canManageSettings = (access: Role | readonly PermissionKey[]) =>
   hasPermission(access, 'settings_manage');
@@ -147,7 +138,5 @@ export function canExportAllProducts(role: unknown) {
   return normalizedRole === 'admin' || normalizedRole === 'developer';
 }
 
-export function canViewProfitStats(role: unknown) {
-  const normalizedRole = normalizeRole(role);
-  return normalizedRole === 'admin' || normalizedRole === 'developer';
-}
+export const canViewProfitStats = (access: Role | readonly PermissionKey[]) =>
+  hasPermission(access, 'analytics_manage');

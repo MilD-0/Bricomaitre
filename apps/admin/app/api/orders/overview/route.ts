@@ -25,12 +25,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Invalid projection basis' }, { status: 400 });
   }
 
+  const reportDaysParam = new URL(request.url).searchParams.get('reportDays');
+  if (reportDaysParam !== null && !/^[1-7]$/.test(reportDaysParam)) {
+    return NextResponse.json({ error: 'Invalid report days' }, { status: 400 });
+  }
+
   const profitProjectionBasis = projectionBasisParam ?? 'confirmed';
 
   return NextResponse.json({
     overview: await loadDailyOrderStatusOverview({
-      includeProfitProjection: canViewProfitStats(session.user.role),
+      includeProfitProjection: canViewProfitStats(normalizePermissions(session.user.permissions)),
       profitProjectionBasis,
+      ...(reportDaysParam === null ? {} : { reportDays: Number(reportDaysParam) }),
     }),
   });
 }

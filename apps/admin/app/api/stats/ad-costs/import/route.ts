@@ -6,7 +6,7 @@ import {
   getLatestExportJob,
   startAdCostsImportJob,
 } from '../../../../../lib/background-jobs';
-import { requireOpsAccess } from '../../../../../lib/rbac';
+import { requireAnalyticsAccess } from '../../../../../lib/rbac';
 import {
   captureAdminException,
   getRequestId,
@@ -23,7 +23,7 @@ function getRequesterKey(email: string | null | undefined) {
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
-  const denied = await requireOpsAccess();
+  const denied = await requireAnalyticsAccess();
   if (denied) return denied;
 
   const session = await auth();
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: NextRequest) {
   const requestId = getRequestId(request);
-  const denied = await requireOpsAccess();
+  const denied = await requireAnalyticsAccess();
   if (denied) return denied;
 
   const requestLengthError = validateSpreadsheetRequestLength(request);

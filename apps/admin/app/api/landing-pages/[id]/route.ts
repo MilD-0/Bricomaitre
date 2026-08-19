@@ -4,15 +4,52 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { auth } from '../../../../lib/auth';
-import { saveLandingPageRevision, setLandingPagePublication } from '../../../../lib/landing-pages';
+import {
+  getLandingPageDetail,
+  LandingPageConflictError,
+  LandingPageNotFoundError,
+  saveLandingPage,
+  setLandingPageActive,
+} from '../../../../lib/landing-pages';
 import { requireMutationAccess } from '../../../../lib/rbac';
 import { revalidateStorefrontLandingPages } from '../../../../lib/storefront-revalidate';
 
 const requestSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('save'), document: landingPageDocumentSchema }),
-  z.object({ action: z.literal('publish') }),
-  z.object({ action: z.literal('unpublish') }),
+  z.strictObject({
+    action: z.literal('save-active'),
+    document: landingPageDocumentSchema,
+    active: z.boolean(),
+    expectedRevision: z.number().int().positive(),
+  }),
+  z.strictObject({
+    action: z.literal('set-active'),
+    active: z.boolean(),
+    expectedRevision: z.number().int().positive(),
+  }),
 ]);
+
+function errorResponse(error: unknown) {
+  if (error instanceof LandingPageConflictError)
+    return NextResponse.json({ error: error.message, code: 'stale_revision' }, { status: 409 });
+  if (error instanceof LandingPageNotFoundError)
+    return NextResponse.json({ error: error.message }, { status: 404 });
+  return NextResponse.json(
+    { error: error instanceof Error ? error.message : 'Unable to update landing page.' },
+    { status: 500 },
+  );
+}
+
+export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireMutationAccess('assets');
+  if (denied) return denied;
+  const id = parsePositiveIntegerId((await params).id);
+  if (id === null) return NextResponse.json({ error: 'Invalid landing-page id.' }, { status: 400 });
+  try {
+    return NextResponse.json(await getLandingPageDetail(id));
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await requireMutationAccess('assets');
@@ -23,25 +60,28 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ error: 'Invalid landing-page update.' }, { status: 400 });
   const session = await auth();
   try {
-    if (parsed.data.action === 'save')
-      return NextResponse.json(
-        await saveLandingPageRevision({
-          id,
-          document: parsed.data.document,
-          actorId: session?.user?.email,
-        }),
-      );
-    const result = await setLandingPagePublication({
-      id,
-      publish: parsed.data.action === 'publish',
-      actorId: session?.user?.email,
-    });
-    await revalidateStorefrontLandingPages();
-    return NextResponse.json(result);
+    if (parsed.data.action === 'save-active') {
+      const result = await saveLandingPage({
+        id,
+        document: parsed.data.document,
+        active: parsed.data.active,
+        expectedRevision: parsed.data.expectedRevision,
+        actorId: session?.user?.email,
+      });
+      await revalidateStorefrontLandingPages();
+      return NextResponse.json(result);
+    }
+    if (parsed.data.action === 'set-active') {
+      const result = await setLandingPageActive({
+        id,
+        active: parsed.data.active,
+        expectedRevision: parsed.data.expectedRevision,
+        actorId: session?.user?.email,
+      });
+      await revalidateStorefrontLandingPages();
+      return NextResponse.json(result);
+    }
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unable to update landing page.' },
-      { status: 404 },
-    );
+    return errorResponse(error);
   }
 }

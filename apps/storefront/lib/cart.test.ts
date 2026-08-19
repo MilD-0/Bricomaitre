@@ -6,6 +6,7 @@ import {
   getCartSubtotal,
   readCart,
   removeCartItem,
+  reconcileCartWithCatalog,
   STOREFRONT_CART_KEY,
   updateCartItemQuantity,
   writeCart,
@@ -43,5 +44,77 @@ describe('storefront cart boundary', () => {
     const setItem = vi.fn();
     writeCart({ setItem }, [item]);
     expect(setItem).toHaveBeenCalledWith(STOREFRONT_CART_KEY, JSON.stringify([item]));
+  });
+
+  it('revalidates price and availability and removes unavailable products', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: 12,
+              slug: 'new-desk-lamp',
+              title: 'Updated lamp',
+              price: '1750.00',
+              inStock: true,
+              availabilityStatus: 'in_stock',
+              images: ['https://cdn.example.com/lamp.jpg'],
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    const result = await reconcileCartWithCatalog(
+      [item, { ...item, productId: 13, token: 'gone' }],
+      fetcher,
+    );
+    expect(result).toEqual({
+      items: [
+        expect.objectContaining({
+          productId: 12,
+          token: 'new-desk-lamp',
+          title: 'Updated lamp',
+          unitPrice: 1750,
+        }),
+      ],
+      removedProductIds: [13],
+      priceChangedProductIds: [12],
+      changed: true,
+      requiresReview: true,
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/cart/validate',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('does not force a second checkout confirmation for non-commercial snapshot cleanup', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: 12,
+              slug: 'canonical-desk-lamp',
+              title: 'Desk Lamp revised',
+              price: '1500.00',
+              inStock: true,
+              availabilityStatus: 'in_stock',
+              images: ['https://cdn.example.com/lamp.jpg'],
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await expect(reconcileCartWithCatalog([item], fetcher)).resolves.toMatchObject({
+      changed: true,
+      requiresReview: false,
+      removedProductIds: [],
+      priceChangedProductIds: [],
+      items: [expect.objectContaining({ token: 'canonical-desk-lamp', unitPrice: 1500 })],
+    });
   });
 });

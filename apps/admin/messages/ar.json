@@ -2,6 +2,7 @@
   "nav": {
     "administration": "الإدارة",
     "products": "المنتجات",
+    "aiProposals": "اقتراحات الذكاء الاصطناعي",
     "orders": "الطلبات",
     "ordersTable": "ادخال الطلبات",
     "ecotrackShipments": "شحنات ECOTRACK",
@@ -14,6 +15,256 @@
     "stats": "الإحصائيات",
     "bulletin": "النشرات",
     "settings": "الإعدادات"
+  },
+  "productArchive": {
+    "title": "المنتجات المؤرشفة",
+    "description": "المنتجات التي أزيلت من المتجر المباشر.",
+    "empty": "لا توجد منتجات مؤرشفة.",
+    "restore": "استرجاع",
+    "restoring": "جارٍ الاسترجاع…",
+    "restored": "تمت إعادة المنتج إلى الكتالوج.",
+    "restoreError": "تعذر استرجاع المنتج."
+  },
+  "aiProposalInbox": {
+    "title": "مراجعة اقتراحات الذكاء الاصطناعي",
+    "description": "راجع تغييرات الكتالوج مع مقارنة قبل وبعد، والأدلة، ونسبة الثقة، والنموذج المصدر، واعتماد انتقائي.",
+    "empty": "لا توجد اقتراحات ذكاء اصطناعي بانتظار المراجعة.",
+    "expired": "انتهت صلاحية {count} من الاقتراحات ولا يمكن اعتمادها.",
+    "expiredBadge": "منتهي الصلاحية",
+    "confidence": "ثقة {value}%",
+    "evidence": "أدلة المصدر",
+    "noEvidence": "لم تُرفق أدلة مصدر ظاهرة. لا تعتمد التغيير إلا إذا أمكن التحقق منه من الكتالوج نفسه.",
+    "approve": "اعتماد",
+    "reject": "رفض",
+    "approveSelected": "اعتماد المحدد ({count})",
+    "rejectSelected": "رفض المحدد ({count})",
+    "approving": "جارٍ اعتماد {count} اقتراحات…",
+    "rejecting": "جارٍ رفض {count} اقتراحات…",
+    "approved": "تم اعتماد {count} اقتراحات.",
+    "rejected": "تم رفض {count} اقتراحات.",
+    "deleteExpired": "حذف المنتهية",
+    "deleteExpiredTitle": "حذف الاقتراحات المنتهية؟",
+    "deleteExpiredDescription": "حذف اقتراحات الصفحة المنتهية وعددها {count} نهائيًا. لن تتأثر الاقتراحات النشطة أو التي تمت مراجعتها.",
+    "deletingExpired": "جارٍ حذف {count} اقتراحات منتهية…",
+    "deletedExpired": "تم حذف {count} اقتراحات منتهية.",
+    "deleteExpiredError": "تعذر حذف الاقتراح المنتهي.",
+    "reviewError": "تعذرت مراجعة الاقتراح.",
+    "search": "البحث بالنوع أو الكيان أو المهمة أو النموذج أو مقدم الطلب",
+    "proposalType": "نوع الاقتراح",
+    "entityType": "نوع الكيان",
+    "model": "النموذج",
+    "sort": "الترتيب",
+    "expiry": "الصلاحية",
+    "evidenceFilter": "الأدلة",
+    "pageSize": "حجم الصفحة",
+    "allProposalTypes": "كل أنواع الاقتراحات",
+    "allEntityTypes": "كل أنواع الكيانات",
+    "allModels": "كل النماذج",
+    "sortNewest": "الأحدث أولاً",
+    "sortOldest": "الأقدم أولاً",
+    "sortConfidence": "الأعلى ثقة",
+    "sortExpiry": "الأقرب انتهاءً",
+    "sortType": "نوع الاقتراح",
+    "allExpiry": "كل حالات الصلاحية",
+    "activeOnly": "النشطة فقط",
+    "expiredOnly": "المنتهية فقط",
+    "allEvidence": "كل حالات الأدلة",
+    "withEvidence": "مع أدلة",
+    "withoutEvidence": "بدون أدلة",
+    "perPage": "{count} في الصفحة",
+    "applyFilters": "تطبيق",
+    "resetFilters": "إعادة ضبط",
+    "resultCount": "{count} اقتراحات",
+    "pagination": "صفحات الاقتراحات",
+    "previousPage": "السابق",
+    "nextPage": "التالي",
+    "pageOf": "الصفحة {page} من {total}"
+  },
+  "salesDesk": {
+    "newOrder": "طلب هاتفي",
+    "queues": "قوائم العمل",
+    "newOrderTitle": "إنشاء طلب بمساعدة الهاتف",
+    "newOrderDescription": "ينشئ نفس الطلب الموحّد ولقطات الأسعار وإجمالي التوصيل ورمز التتبع وسجل التدقيق الخاص بواجهة المتجر.",
+    "customerName": "اسم العميل",
+    "phone": "الهاتف",
+    "delivery": "التوصيل",
+    "home": "إلى المنزل",
+    "office": "إلى المكتب",
+    "wilaya": "الولاية",
+    "commune": "البلدية",
+    "selectWilaya": "اختر الولاية",
+    "selectCommune": "اختر البلدية",
+    "address": "عنوان المنزل",
+    "products": "المنتجات",
+    "searchProducts": "البحث بالعنوان أو SKU أو الباركود",
+    "searching": "جارٍ البحث…",
+    "removeProduct": "إزالة المنتج",
+    "note": "ملاحظة الموظف",
+    "create": "إنشاء الطلب",
+    "created": "تم إنشاء الطلب رقم {id}.",
+    "createError": "تعذر إنشاء الطلب الهاتفي.",
+    "duplicateWarning": "طلبات محتملة مكررة من هذا الهاتف خلال آخر 24 ساعة:",
+    "openCreated": "فتح الطلب المنشأ",
+    "close": "إغلاق",
+    "queuesTitle": "قوائم عمل المبيعات الهاتفية",
+    "queuesDescription": "قوائم مشتقة من حالة الطلب ومحاولات الاتصال واكتمال العنوان واستثناءات شركة الشحن.",
+    "emptyQueue": "لا توجد طلبات في هذه القائمة.",
+    "queue": {
+      "new": "جديدة",
+      "firstCall": "الاتصال الأول",
+      "retryCall": "إعادة الاتصال",
+      "addressCorrection": "تصحيح العنوان",
+      "readyForPosting": "جاهزة للإرسال",
+      "carrierException": "استثناء شركة الشحن"
+    },
+    "customer": {
+      "returningCustomer": "عميل متكرر · طلب مكتمل واحد",
+      "returningCustomerCount": "عميل متكرر · {count} طلبات مكتملة",
+      "title": "سجل رقم الهاتف",
+      "loading": "جارٍ تحميل سجل العميل…",
+      "firstOrder": "لا يوجد طلب سابق بهذا الرقم.",
+      "noAddress": "بدون عنوان",
+      "merge": "دمج الطلب المكرر",
+      "mergePrompt": "أرشفة الطلب المكرر رقم {source} ودمجه في الطلب الأساسي رقم {target}؟ سيُحفظ سجلا التدقيق.",
+      "mergeReason": "سبب الدمج (مطلوب)",
+      "cancel": "إلغاء",
+      "confirmMerge": "دمج وأرشفة",
+      "merged": "تم دمج الطلب رقم {source} في {target}.",
+      "mergeError": "تعذر دمج الطلبين.",
+      "note": "ملاحظة العميل أو الموظف",
+      "refusalReason": "سبب رفض اختياري",
+      "refusal": "الرفض",
+      "addNote": "إضافة إلى سجل الهاتف",
+      "noteSaved": "تم حفظ ملاحظة العميل.",
+      "noteError": "تعذر حفظ ملاحظة العميل."
+    },
+    "archive": {
+      "filter": "تصفية أرشيف الطلبات",
+      "live": "الطلبات النشطة",
+      "archived": "الطلبات المؤرشفة",
+      "archive": "أرشفة الطلب",
+      "restore": "استعادة الطلب",
+      "purge": "حذف نهائي",
+      "confirmTitle": "أرشفة هذا الطلب؟",
+      "confirmDescription": "حذف هذا الطلب؟",
+      "purgeTitle": "حذف هذا الطلب نهائيًا؟",
+      "purgeDescription": "سيُحذف {target} وسجله المرتبط نهائيًا. هذا الإجراء مقيّد ولا يمكن التراجع عنه.",
+      "restored": "تمت استعادة الطلب.",
+      "purged": "تم حذف الطلب نهائيًا."
+    },
+    "correction": {
+      "title": "تصحيح حالة تاريخية",
+      "description": "استخدم هذا فقط لتصحيح خطأ مسجل. سيُضاف حدث تصحيح دون محو أوقات التأكيد الأصلية.",
+      "reason": "لماذا يتم تصحيح الحالة التاريخية؟",
+      "apply": "تسجيل التصحيح",
+      "saved": "تم تسجيل تصحيح الحالة.",
+      "error": "تعذر تسجيل تصحيح الحالة."
+    }
+  },
+  "profile": {
+    "legacyUi": "الواجهة القديمة",
+    "legacyUiDescription": "استخدم الواجهات الأصلية للمنتجات والطلبات والمحتوى المرئي وصفحات الهبوط."
+  },
+  "adminWorkspace": {
+    "common": {
+      "search": "بحث",
+      "all": "الكل",
+      "filters": "التصفية",
+      "selected": "تم تحديد {count}",
+      "noResults": "لا توجد سجلات مطابقة",
+      "unsaved": "تغييرات غير محفوظة",
+      "upToDate": "لا توجد تغييرات غير محفوظة"
+    },
+    "products": {
+      "resultCount": "{count} منتجًا",
+      "searchPlaceholder": "ابحث بالمنتج أو SKU أو الباركود",
+      "allStates": "كل حالات الكتالوج",
+      "active": "نشط",
+      "inactive": "غير نشط",
+      "outOfStock": "غير متوفر",
+      "catalog": "الكتالوج",
+      "product": "المنتج",
+      "performance": "الأداء",
+      "availability": "التوفر",
+      "organization": "التنظيم",
+      "content": "المحتوى والوسائط",
+      "pricing": "التسعير",
+      "selectionActive": "تعيين كنشط",
+      "selectionStock": "تعيين كمتوفر",
+      "selectionMore": "إجراءات إضافية",
+      "orders": "الطلبات",
+      "confirmation": "التأكيد",
+      "noSku": "بدون SKU",
+      "noDescription": "لا يوجد وصف بعد",
+      "identity": "الهوية",
+      "identityHint": "الأسماء الظاهرة للعميل والمراجع التشغيلية.",
+      "commercial": "التفاصيل التجارية",
+      "commercialHint": "الأسعار والتنظيم والمخزون وحالة النشر.",
+      "contentHint": "تحرير المحتوى الفرنسي والعربي ضمن مسار واحد.",
+      "archive": "أرشفة",
+      "archiveSelected": "أرشفة المحدد",
+      "archiveConfirm": "أرشفة هذا المنتج؟",
+      "archiveDialogTitle": "أرشفة المنتجات",
+      "archiveDialogDescription": "سيتم إخفاء هذا المنتج من المتجر.",
+      "openEditor": "تعديل {name}",
+      "quickChangeSaved": "تم حفظ حالة المنتج.",
+      "bulkChangeSaved": "تم تحديث {count} منتجًا."
+    },
+    "orders": {
+      "resultCount": "{count} طلبًا",
+      "operations": "عمليات الطلبات",
+      "postConfirmed": "إرسال المؤكدة",
+      "postedShoppingList": "قائمة المرسلة",
+      "payloadDetails": "تفاصيل البيانات",
+      "searchPlaceholder": "ابحث بالعميل أو الهاتف أو المدينة أو المنتج",
+      "queue": "قائمة الطلبات",
+      "weekOverview": "توقعات سبعة أيام",
+      "days": "أيام التوقعات",
+      "previousDay": "يوم التوقع السابق",
+      "nextDay": "يوم التوقع التالي",
+      "viewDay": "عرض توقعات {date}",
+      "projectedProfit": "الربح المتوقع",
+      "grossShort": "الإجمالي",
+      "expectedShort": "{count} متوقع",
+      "ordersSummary": "الطلبات",
+      "newShort": "جديدة",
+      "confirmedShort": "مؤكدة",
+      "noAnswerShort": "بدون رد",
+      "confirmationShort": "تأكيد",
+      "shipmentShort": "شحن",
+      "adminShort": "الإدارة",
+      "carrierShort": "الناقل",
+      "updates": "التحديثات",
+      "cancelled": "الملغاة",
+      "newOrders": "طلبات جديدة",
+      "confirmed": "مؤكدة",
+      "confirmedToday": "تم تأكيدها اليوم",
+      "noAnswer": "بدون رد",
+      "customer": "العميل",
+      "location": "الموقع",
+      "amount": "المبلغ",
+      "products": "المنتجات",
+      "status": "الحالة",
+      "activity": "النشاط",
+      "contact": "التواصل",
+      "delivery": "التوصيل",
+      "notes": "الملاحظات",
+      "selectionPost": "إرسال إلى Delivro",
+      "selectionList": "قائمة التجهيز",
+      "selectionMore": "إجراءات إضافية",
+      "noLocation": "الموقع غير متوفر",
+      "noNotes": "لا توجد ملاحظات",
+      "openTracking": "فتح تتبع طلب {name}",
+      "tracking": "التتبع",
+      "customerDetails": "بيانات العميل",
+      "secondaryPhone": "الهاتف الثانوي",
+      "statusAndOwnership": "الحالة والتأكيد",
+      "noAnswerAttempts": "محاولات عدم الرد",
+      "fulfillment": "التوصيل",
+      "orderContents": "محتوى الطلب",
+      "selectOrder": "اختر طلبًا لعرضه وتعديله",
+      "saveChanges": "حفظ التغييرات"
+    }
   },
   "roles": {
     "viewer": "مشاهد",
@@ -293,9 +544,15 @@
         "error": "تعذر تحديث الحالة لـ {name}."
       },
       "delete": {
+        "confirm": "حذف هذا الطلب؟",
         "loading": "جارٍ حذف {target}...",
         "success": "تم حذف {target}.",
         "error": "تعذر حذف {target}."
+      },
+      "archive": {
+        "loading": "جارٍ أرشفة {target}...",
+        "success": "تمت أرشفة {target}.",
+        "error": "تعذرت أرشفة {target}."
       }
     }
   },
@@ -319,6 +576,8 @@
     "customStart": "تاريخ البداية المخصص",
     "customEnd": "تاريخ النهاية المخصصة",
     "ranges": {
+      "7d": "7 أيام",
+      "14d": "14 يوماً",
       "30d": "30 يوماً",
       "90d": "90 يوماً",
       "year": "هذه السنة",
@@ -351,7 +610,115 @@
       "products": "المنتجات والفئات",
       "geography": "الجغرافيا",
       "time": "التحليل الزمني",
+      "profitTracker": "متابعة الأرباح",
       "metaAds": "إعلانات ميتا"
+    },
+    "profitTracker": {
+      "title": "متابعة الأرباح",
+      "description": "تحليلات سريعة للربح اليومي باستخدام تحويل اليورو وتعديل المرتجعات وصيغة الربح المعدل ÷ تكلفة الإعلان المطابقة للحاسبة.",
+      "eyebrow": "مطابقة الحاسبة",
+      "latestMeta": "أحدث بيانات ميتا",
+      "rangeLabel": "النطاق الزمني",
+      "applyRange": "تطبيق النطاق",
+      "export": "تصدير CSV",
+      "empty": "لا توجد بيانات لهذه الفترة.",
+      "cards": {
+        "profitX": "مضاعف الربح",
+        "adjusted": "الربح المعدل",
+        "net": "صافي الربح",
+        "trueProfit": "الربح الحقيقي",
+        "spend": "إنفاق ميتا",
+        "confirmed": "الطلبات المؤكدة"
+      },
+      "charts": {
+        "daily": "صافي الربح وتكلفة الإعلان يومياً",
+        "cumulative": "الربح التراكمي",
+        "creative": "إجهاد الإعلانات: CPM وCTR",
+        "roas": "العائد الإعلاني — مضاعف الربح",
+        "funnel": "كفاءة مسار التحويل"
+      },
+      "metrics": {
+        "net": "صافي الربح",
+        "netBefore": "الصافي قبل المرتجعات",
+        "trend": "اتجاه 7 أيام",
+        "adCost": "تكلفة الإعلان",
+        "cumulativeNet": "صافي الربح التراكمي",
+        "cumulativeBefore": "التراكمي قبل المرتجعات",
+        "cumulativeTrue": "الربح الحقيقي التراكمي",
+        "profitAfter": "مضاعف الربح بعد المرتجعات",
+        "profitBefore": "مضاعف الربح قبل المرتجعات",
+        "breakEven": "نقطة التعادل",
+        "cpm": "CPM",
+        "ctr": "CTR",
+        "confirmation": "معدل التأكيد",
+        "clickToPage": "معدل النقر إلى الصفحة",
+        "costConfirmed": "التكلفة لكل طلب مؤكد"
+      },
+      "settings": {
+        "title": "إعدادات الحاسبة",
+        "fx": "سعر EUR ← DZD",
+        "returns": "معدل المرتجعات الافتراضي (%)",
+        "restFrom": "تطبيق راحة الجمعة منذ",
+        "save": "حفظ الإعدادات",
+        "fxHint": "يُثبّت سعر الصرف لكل يوم ولا يؤدي تغييره إلى تعديل الحسابات السابقة. يوم الجمعة الذي لا يحتوي على ربح أو طلبات مؤكدة يرحّل إنفاق ميتا فقط إلى يوم العمل التالي."
+      },
+      "day": {
+        "title": "البيانات الاقتصادية اليومية",
+        "date": "التاريخ",
+        "gross": "الربح الإجمالي (DZD)",
+        "returns": "معدل المرتجعات (%)",
+        "confirmed": "الطلبات المؤكدة",
+        "note": "ملاحظة",
+        "save": "حفظ اليوم",
+        "fetchMeta": "جلب من ميتا"
+      },
+      "weekly": {
+        "title": "الأداء الأسبوعي ابتداءً من الجمعة",
+        "week": "بداية الأسبوع",
+        "days": "الأيام"
+      },
+      "history": {
+        "title": "السجل اليومي",
+        "roll": "ترحيل الجمعة",
+        "rest": "يوم راحة",
+        "actions": "الإجراءات",
+        "edit": "تعديل {date}",
+        "delete": "حذف {date}",
+        "confirmDelete": "حذف البيانات المحفوظة ليوم {date}؟"
+      },
+      "adsets": {
+        "title": "أداء المجموعات الإعلانية",
+        "name": "المجموعة الإعلانية",
+        "purchases": "المشتريات",
+        "costPerPurchase": "التكلفة / شراء",
+        "value": "قيمة المشتريات",
+        "estimatedNet": "صافي الربح التقديري"
+      },
+      "costs": {
+        "title": "تكاليف التشغيل",
+        "name": "اسم التكلفة",
+        "amount": "المبلغ (DZD)",
+        "period": "الدورية",
+        "monthly": "شهري",
+        "once": "مرة واحدة",
+        "start": "تاريخ البدء",
+        "end": "تاريخ الانتهاء (اختياري)",
+        "save": "إضافة تكلفة تشغيل",
+        "update": "تحديث تكلفة التشغيل",
+        "edit": "تعديل",
+        "cancel": "إلغاء التعديل",
+        "delete": "حذف {name}",
+        "confirmDelete": "حذف تكلفة التشغيل {name}؟",
+        "deleteAction": "حذف"
+      },
+      "notifications": {
+        "settingsSaved": "تم حفظ إعدادات الحاسبة.",
+        "daySaved": "تم حفظ البيانات اليومية.",
+        "dayDeleted": "تم حذف البيانات اليومية.",
+        "metaFetched": "تم تحديث بيانات ميتا لليوم المحدد.",
+        "costSaved": "تم حفظ تكلفة التشغيل.",
+        "costDeleted": "تم حذف تكلفة التشغيل."
+      }
     },
     "upload": {
       "title": "استيراد Excel",
@@ -598,12 +965,12 @@
       "empty": "لا يوجد نشاط لصفحات الهبوط في المتجر الجديد ضمن هذه الفترة.",
       "blockMeta": "{adds} إضافة للسلة · {checkouts} بدء دفع",
       "cards": {
-        "published": "الصفحات المنشورة",
+        "published": "الصفحات النشطة",
         "sessions": "الجلسات المنسوبة",
         "purchases": "الطلبات المقدمة",
         "conversion": "تحويل الجلسات",
         "revenue": "الإيراد المنسوب",
-        "drafts": "المسودات"
+        "drafts": "الصفحات غير النشطة"
       },
       "columns": {
         "page": "صفحة الهبوط",
@@ -754,13 +1121,12 @@
       }
     },
     "manualOrders": {
-      "sectionTitle": "الطلبات اليدوية",
-      "title": "إضافة طلب يدوي",
-      "description": "إنشاء طلب مباشرة داخل بيانات التقارير.",
+      "sectionTitle": "الإدخالات اليدوية",
+      "title": "إضافة إدخال يدوي للتقارير",
       "actions": {
-        "open": "إضافة طلب",
+        "open": "إضافة إدخال",
         "cancel": "إلغاء",
-        "create": "إنشاء الطلب"
+        "create": "إنشاء الإدخال"
       },
       "fields": {
         "tracking": "التتبع",
@@ -788,8 +1154,8 @@
         "profit": "الربح"
       },
       "history": {
-        "emptyTitle": "لا توجد طلبات يدوية بعد",
-        "emptyDescription": "أضف طلباً يدوياً ليظهر ضمن الإحصائيات.",
+        "emptyTitle": "لا توجد إدخالات يدوية بعد",
+        "emptyDescription": "أضف طلبًا تاريخيًا مفقودًا ليظهر في التقارير.",
         "show": "إظهار السجل",
         "hide": "إخفاء السجل",
         "columns": {
@@ -808,14 +1174,14 @@
       },
       "notifications": {
         "create": {
-          "loading": "جارٍ إنشاء الطلب اليدوي...",
-          "success": "تم إنشاء الطلب اليدوي.",
-          "error": "فشل إنشاء الطلب اليدوي."
+          "loading": "جارٍ إنشاء الإدخال اليدوي...",
+          "success": "تم إنشاء الإدخال اليدوي.",
+          "error": "فشل إنشاء الإدخال اليدوي."
         },
         "delete": {
-          "loading": "جارٍ حذف الطلب اليدوي...",
-          "success": "تم حذف الطلب اليدوي {id}.",
-          "error": "فشل حذف الطلب اليدوي."
+          "loading": "جارٍ حذف الإدخال اليدوي...",
+          "success": "تم حذف الإدخال اليدوي {id}.",
+          "error": "فشل حذف الإدخال اليدوي."
         }
       }
     },
@@ -1066,7 +1432,7 @@
     "emptyTitle": "ما الذي تريد تحسينه؟",
     "capabilityCatalog": "محتوى الكتالوج",
     "capabilityAnalytics": "التحليلات",
-    "capabilityPricing": "الأسعار والحزم",
+    "capabilityPricing": "الأسعار",
     "examples": "مثال: أنشئ العنوان العربي للمنتج 42، أو أعد وصف المنتجين 10 و11، أو عالج كل منتج بدون عنوان عربي.",
     "placeholder": "اطلب إجراءً على محتوى المنتجات…",
     "send": "إرسال",
@@ -1761,6 +2127,8 @@
       "createAction": "السماح للبريد",
       "updateAction": "تحديث الوصول",
       "cancelEditAction": "إلغاء التعديل",
+      "empty": "لا توجد صلاحيات وصول للموظفين بعد.",
+      "deleteConfirmation": "إزالة وصول هذا الموظف؟ لن يتمكن بعد ذلك من دخول تطبيق الإدارة.",
       "columns": {
         "email": "البريد",
         "assignment": "التعيين"
@@ -1801,6 +2169,8 @@
       "cancelEditAction": "إلغاء التعديل",
       "editAction": "تعديل الصلاحيات",
       "noDescription": "لا يوجد وصف بعد.",
+      "empty": "لا توجد أدوار مخصصة بعد.",
+      "permissionCount": "{count} صلاحيات",
       "notifications": {
         "create": {
           "loading": "جارٍ إنشاء الدور {name}...",
@@ -1821,26 +2191,38 @@
       "brands_categories_write": "إدارة العلامات والتصنيفات",
       "bulletin_moderate": "إدارة منشورات النشرات",
       "ops_view": "عرض لوحات العمليات والسجلات",
-      "settings_manage": "إدارة إعدادات النظام",
-      "ai_use": "استخدام مساعد الإدارة بالذكاء الاصطناعي",
-      "ai_catalog_propose": "إنشاء اقتراحات للكتالوج بالذكاء الاصطناعي",
-      "ai_catalog_apply": "تطبيق تعديلات الذكاء الاصطناعي على الكتالوج",
-      "ai_analytics_query": "الاستعلام عن التحليلات بالذكاء الاصطناعي",
-      "ai_pricing_analyze": "تحليل الأسعار والتخفيضات بالذكاء الاصطناعي",
-      "ai_pricing_apply": "تطبيق تغييرات الأسعار والتخفيضات المقترحة",
-      "ai_landing_publish": "نشر صفحات الهبوط المنشأة بالذكاء الاصطناعي"
+      "analytics_manage": "عرض التحليلات وإدارتها",
+      "settings_manage": "إدارة إعدادات النظام"
+    },
+    "permissionGroups": {
+      "commerce": "التجارة",
+      "operations": "العمليات"
     }
   },
   "storefrontSettings": {
     "title": "إعدادات المتجر",
     "description": "أدر هنا معلومات الاتصال الظاهرة للعملاء. ستضم هذه الصفحة المخفية أيضًا إعدادات تخطيط المتجر ومعلوماته مستقبلًا.",
     "contactTitle": "معلومات الاتصال",
+    "emailLabel": "بريد التواصل مع العملاء",
+    "addressLabel": "عنوان المتجر",
+    "mapUrl": "رابط الخريطة",
+    "facebookUrl": "رابط فيسبوك",
     "contactDescription": "يستخدم المتجر هذا الرقم لمكالمات العملاء المباشرة.",
     "phoneLabel": "رقم هاتف العملاء",
     "phoneHint": "رقم هاتف محمول جزائري بالصيغة المحلية أو +213.",
     "callsLabel": "تفعيل المكالمات",
     "callsHint": "إظهار إجراءات الاتصال المباشر في المتجر.",
     "assistantTitle": "مساعد التسوق بالذكاء الاصطناعي",
+    "assistantRuntimeTitle": "تشغيل المساعد",
+    "modelLabel": "النموذج الرئيسي",
+    "fallbackModelLabel": "النموذج الاحتياطي (اختياري)",
+    "noModels": "لا توجد نماذج متجر مضبوطة",
+    "noFallbackModel": "بدون نموذج احتياطي",
+    "announcementTitle": "شريط الإعلان",
+    "announcementMessageFr": "الرسالة بالفرنسية",
+    "announcementMessageAr": "الرسالة بالعربية",
+    "active": "نشط",
+    "saveAnnouncement": "حفظ الإعلان",
     "assistantDescription": "تحكم في إتاحة مستشار المنتجات في واجهة المتجر الجديدة.",
     "assistantLabel": "تفعيل مساعد التسوق بالذكاء الاصطناعي",
     "assistantHint": "يعرض المستشار في صفحات التصفح والمنتجات، ويبقى مخفيًا في صفحات الدفع وتأكيد الطلب.",
@@ -1874,6 +2256,8 @@
     "resetFilters": "إعادة ضبط الفلاتر",
     "resultsSummary": "عرض {count} من أصل {total} عملية",
     "systemActor": "النظام",
+    "today": "اليوم",
+    "yesterday": "أمس",
     "actorLine": "{actor} غيّر {entityType} #{entityId}",
     "changeLine": "{field}: {before} -> {after}",
     "noValue": "فارغ",
@@ -1888,11 +2272,13 @@
       "false": "لا"
     },
     "filters": {
+      "title": "الفلاتر",
       "actionLabel": "التصفية حسب الإجراء",
       "areaLabel": "التصفية حسب القسم",
       "stateLabel": "التصفية حسب الحالة",
       "includeEcotrackSyncLabel": "إظهار تغييرات ECOTRACK sync",
       "includeEcotrackSyncDescription": "مخفية افتراضيًا لإبقاء الجدول سهل القراءة.",
+      "includeAutomation": "المزامنة التلقائية",
       "allActions": "كل الإجراءات",
       "allAreas": "كل الأقسام",
       "allStates": "كل الحالات"
@@ -1908,6 +2294,35 @@
       "create": "تم الإنشاء",
       "update": "تم التحديث",
       "delete": "تم الحذف"
+    },
+    "sort": {
+      "newest": "الأحدث أولاً",
+      "oldest": "الأقدم أولاً"
+    },
+    "summaries": {
+      "created": "تم إنشاء السجل",
+      "updated": "تم تحديث السجل",
+      "deleted": "تم حذف السجل",
+      "fields": "تم تحديث {fields}",
+      "fieldsAndMore": "تم تحديث {fields} و{count} أخرى"
+    },
+    "summaryGroups": {
+      "confirmation": "التأكيد",
+      "shipment": "الشحن"
+    },
+    "fields": {
+      "active": "حالة التفعيل",
+      "inStock": "توفر المخزون",
+      "price": "السعر",
+      "purchasePrice": "سعر الشراء",
+      "title": "العنوان",
+      "city": "المدينة",
+      "variant": "الخيار",
+      "homeAddress": "العنوان",
+      "delivery": "التوصيل",
+      "delPr": "سعر التوصيل",
+      "note": "الملاحظة",
+      "cartProducts": "محتويات الطلب"
     },
     "resources": {
       "products": "المنتجات",
@@ -1931,6 +2346,11 @@
       "changesDescription": "يتم عرض الحقول التي تغيّرت فعليًا فقط هنا.",
       "changesCount": "{count} تغييرات",
       "noChanges": "هذا الإجراء لا يحتوي على تغييرات على مستوى الحقول.",
+      "selectPrompt": "اختر إجراءً لمراجعة تغييراته الدقيقة.",
+      "loadingTitle": "جارٍ تحميل الإجراء",
+      "reference": "السجل",
+      "arraySummary": "{count} عناصر",
+      "objectSummary": "{count} حقول",
       "undoneAt": "تم التراجع في {value}",
       "redoneAt": "تمت الإعادة في {value}",
       "close": "إغلاق",
@@ -1938,6 +2358,24 @@
         "field": "الحقل",
         "before": "قبل",
         "after": "بعد"
+      }
+    },
+    "recovery": {
+      "title": "الاسترجاع",
+      "undoDescription": "استرجاع السجل إلى حالته الدقيقة قبل هذا الإجراء.",
+      "redoDescription": "إعادة تطبيق هذا الإجراء بعد التراجع عنه.",
+      "blocked": {
+        "non_reversible": "تم حفظ هذا الإجراء للتدقيق ولا يمكن التراجع عنه.",
+        "newer_action": "يجب التراجع عن إجراء أحدث أولاً.",
+        "redo_order": "يجب إعادة تطبيق إجراء أقدم تم التراجع عنه أولاً.",
+        "history_out_of_sync": "الاسترجاع غير متاح لأن سجل هذا العنصر غير متسق.",
+        "permission_required": "يمكنك مراجعة هذا الإجراء، لكن دورك لا يسمح بتعديل هذا القسم."
+      },
+      "confirm": {
+        "undoTitle": "التراجع عن هذا التغيير؟",
+        "undoDescription": "سيؤدي هذا إلى استرجاع {entity} إلى حالته الدقيقة قبل هذا الإجراء.",
+        "redoTitle": "إعادة تطبيق هذا التغيير؟",
+        "redoDescription": "سيؤدي هذا إلى استرجاع {entity} إلى حالته الدقيقة بعد هذا الإجراء."
       }
     },
     "notifications": {

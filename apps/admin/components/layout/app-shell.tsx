@@ -2,6 +2,7 @@
 
 import {
   BarChart3,
+  Bot,
   Boxes,
   ChevronLeft,
   ChevronRight,
@@ -14,17 +15,23 @@ import {
   PanelsTopLeft,
   Radio,
   ShieldCheck,
+  TrendingUp,
   X,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useLocale, useTranslations } from 'next-intl';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from 'react';
 
 import { cn } from '../../lib/utils';
+import { serializeLegacyUiPreference } from '../../lib/admin-ui-preference';
 import { authClient } from '../../lib/auth-client';
-import { navigationItems, type NavigationItem, type NavigationKey } from '../../lib/navigation';
+import {
+  navigationItemsForUi,
+  type NavigationItem,
+  type NavigationKey,
+} from '../../lib/navigation';
 import { canAccessNavigationItem } from '../../lib/navigation-access';
 import { isBuiltInRole, type PermissionKey, type Role } from '../../lib/permissions';
 import { localeLabels, locales } from '../../lib/i18n';
@@ -36,6 +43,7 @@ import { Dialog, DialogContent } from '../ui/dialog';
 import { PageTransition, PendingInline } from '../ui/motion';
 import { Separator } from '../ui/separator';
 import { Spinner } from '../ui/spinner';
+import { Switch } from '../ui/switch';
 import { ThemeToggle } from '../theme-toggle';
 import { AdminAiChat } from '../admin-ai-chat';
 
@@ -69,13 +77,34 @@ function getUserInitials(name: string | null, email: string | null) {
 const navIcons: Record<NavigationKey, React.ComponentType<{ className?: string }>> = {
   administration: ShieldCheck,
   products: Package2,
+  aiProposals: Bot,
   orders: ClipboardList,
   inventory: Boxes,
   assets: FolderKanban,
   brandsCategories: PanelsTopLeft,
+  analytics2: TrendingUp,
   stats: BarChart3,
   bulletin: Radio,
 };
+
+const desktopMediaQuery = '(min-width: 1024px)';
+const mobileDockKeys: NavigationKey[] = ['products', 'orders', 'inventory'];
+
+function useDesktopLayout() {
+  return useSyncExternalStore(
+    (onChange) => {
+      if (typeof window.matchMedia !== 'function') return () => {};
+      const query = window.matchMedia(desktopMediaQuery);
+      query.addEventListener('change', onChange);
+      return () => query.removeEventListener('change', onChange);
+    },
+    () =>
+      typeof window.matchMedia === 'function'
+        ? window.matchMedia(desktopMediaQuery).matches
+        : false,
+    () => false,
+  );
+}
 
 export function AppShell({
   children,
@@ -86,6 +115,7 @@ export function AppShell({
   initialUserEmail = null,
   initialUserImage = null,
   initialUserName = null,
+  initialLegacyUi = true,
 }: {
   children: React.ReactNode;
   initialPermissions: PermissionKey[];
@@ -95,6 +125,7 @@ export function AppShell({
   initialUserEmail?: string | null;
   initialUserImage?: string | null;
   initialUserName?: string | null;
+  initialLegacyUi?: boolean;
 }) {
   const t = useTranslations();
   const permissions = useAppStore((s) => s.permissions);
@@ -103,13 +134,18 @@ export function AppShell({
   const setAccess = useAppStore((s) => s.setAccess);
   const locale = useLocale();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
+  const isDesktop = useDesktopLayout();
   const [isNavigating, startNavigationTransition] = useTransition();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [currentHash, setCurrentHash] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
+  const [legacyUi, setLegacyUi] = useState(initialLegacyUi);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const sidebarTriggerRef = useRef<HTMLButtonElement>(null);
+  const sidebarCloseRef = useRef<HTMLButtonElement>(null);
   const displayName = initialUserName?.trim() || initialUserEmail?.trim() || t('auth.unknownUser');
   const displayEmail = initialUserEmail?.trim() || t('settings.general.missingEmail');
   const avatarAlt = initialUserName?.trim() || initialUserEmail?.trim() || t('labels.userProfile');
@@ -145,16 +181,96 @@ export function AppShell({
 
   const items = useMemo(
     () =>
-      navigationItems.filter((item) =>
-        canAccessNavigationItem({
-          isAllowed: initialIsAllowed,
-          key: item.key,
-          permissions,
-          role,
-        }),
-      ),
-    [initialIsAllowed, permissions, role],
+      navigationItemsForUi(legacyUi)
+        .filter((item) =>
+          canAccessNavigationItem({
+            isAllowed: initialIsAllowed,
+            key: item.key,
+            permissions,
+            role,
+          }),
+        )
+        .map((item) => ({
+          ...item,
+          subItems: item.subItems?.filter(
+            (subItem) =>
+              !subItem.requiredPermissions ||
+              subItem.requiredPermissions.every((permission) => permissions.includes(permission)),
+          ),
+        })),
+    [initialIsAllowed, legacyUi, permissions, role],
   );
+  const analyticsQuery = useMemo(() => {
+    if (!pathname.startsWith(`/${locale}/stats`) && pathname !== `/${locale}/stats`) return '';
+    const params = new URLSearchParams();
+    const range = searchParams.get('range');
+    if (range) params.set('range', range);
+    if (range === 'custom') {
+      const startDate = searchParams.get('startDate');
+      const endDate = searchParams.get('endDate');
+      if (startDate) params.set('startDate', startDate);
+      if (endDate) params.set('endDate', endDate);
+    }
+    const value = params.toString();
+    return value ? `?${value}` : '';
+  }, [locale, pathname, searchParams]);
+  const activeNavigation = useMemo(() => {
+    const item = items.find((candidate) => {
+      const baseHref = `/${locale}${candidate.href}`;
+      return pathname === baseHref || pathname.startsWith(`${baseHref}/`);
+    });
+    const subItem = item?.subItems
+      ? [...item.subItems]
+          .sort(
+            (left, right) =>
+              (right.href.split('#')[0]?.length ?? 0) - (left.href.split('#')[0]?.length ?? 0),
+          )
+          .find((candidate) => {
+            const [candidatePath, candidateHash] = candidate.href.split('#');
+            const baseHref = `/${locale}${candidatePath}`;
+            const pathMatches = pathname === baseHref || pathname.startsWith(`${baseHref}/`);
+            return pathMatches && (!candidateHash || currentHash === `#${candidateHash}`);
+          })
+      : undefined;
+
+    return {
+      item,
+      title: subItem
+        ? t(subItem.translationKey)
+        : item
+          ? t(`nav.${item.key}`)
+          : t('nav.administration'),
+      parent: subItem && item ? t(`nav.${item.key}`) : null,
+    };
+  }, [currentHash, items, locale, pathname, t]);
+  const mobileDockItems = useMemo(
+    () => mobileDockKeys.map((key) => items.find((item) => item.key === key)).filter(Boolean),
+    [items],
+  ) as NavigationItem[];
+
+  useEffect(() => {
+    if (isDesktop || !sidebarOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const previousActiveElement =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const sidebarTrigger = sidebarTriggerRef.current;
+    document.body.style.overflow = 'hidden';
+    const animationFrame = window.requestAnimationFrame(() => sidebarCloseRef.current?.focus());
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setSidebarOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      document.removeEventListener('keydown', closeOnEscape);
+      document.body.style.overflow = previousOverflow;
+      (previousActiveElement ?? sidebarTrigger)?.focus();
+    };
+  }, [isDesktop, sidebarOpen]);
 
   const navigate = (href: string) => {
     setPendingHref(href);
@@ -165,6 +281,14 @@ export function AppShell({
 
   const switchLocale = (nextLocale: string) => {
     navigate(pathname.replace(`/${locale}`, `/${nextLocale}`));
+  };
+
+  const updateLegacyUi = (checked: boolean) => {
+    setLegacyUi(checked);
+    document.cookie = serializeLegacyUiPreference(checked, window.location.protocol === 'https:');
+    startNavigationTransition(() => {
+      router.refresh();
+    });
   };
 
   return (
@@ -183,11 +307,17 @@ export function AppShell({
         ) : null}
       </AnimatePresence>
 
-      <div className="flex w-full gap-4 p-3 sm:p-4">
+      <div className="flex w-full gap-2 p-2 sm:gap-4 sm:p-4">
         <motion.aside
+          aria-label={t('adminWorkspace.products.selectionMore')}
+          aria-modal={!isDesktop && sidebarOpen ? true : undefined}
+          role={!isDesktop && sidebarOpen ? 'dialog' : undefined}
+          inert={!isDesktop && !sidebarOpen ? true : undefined}
           className={cn(
-            'fixed inset-y-3 left-3 z-40 flex w-[min(20rem,calc(100vw-1.5rem))] flex-col rounded-[1.75rem] bg-[var(--glass-surface)] p-3 text-card-foreground shadow-[var(--shadow-vapor-strong)] backdrop-blur-xl transition-transform duration-300 lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] lg:translate-x-0',
-            sidebarOpen ? 'translate-x-0' : '-translate-x-[110%] lg:translate-x-0',
+            'fixed inset-0 z-40 flex w-full flex-col bg-background p-0 text-card-foreground shadow-[var(--shadow-vapor-strong)] transition-transform duration-300 lg:sticky lg:inset-auto lg:top-4 lg:h-[calc(100vh-2rem)] lg:w-80 lg:rounded-[1.75rem] lg:bg-[var(--glass-surface)] lg:p-3 lg:backdrop-blur-xl',
+            sidebarOpen
+              ? 'translate-x-0'
+              : '-translate-x-[110%] rtl:translate-x-[110%] lg:translate-x-0',
             sidebarCollapsed ? 'lg:w-24' : 'lg:w-80',
           )}
           animate={{ opacity: sidebarOpen ? 1 : 0.98 }}
@@ -195,7 +325,7 @@ export function AppShell({
         >
           <motion.div
             layout
-            className="flex items-center justify-between gap-2 rounded-2xl bg-card/80 px-3 py-3 shadow-[var(--shadow-vapor)] backdrop-blur-xl"
+            className="flex items-center justify-between gap-2 border-b border-border/60 bg-background px-4 py-3 lg:rounded-2xl lg:border-b-0 lg:bg-card/80 lg:px-3 lg:shadow-[var(--shadow-vapor)] lg:backdrop-blur-xl"
           >
             <div className={cn('min-w-0 flex-1', sidebarCollapsed && 'lg:hidden')}>
               <h1 className="truncate text-[1.85rem] leading-none font-semibold tracking-[-0.05em] antialiased">
@@ -208,6 +338,7 @@ export function AppShell({
             <div className="flex items-center gap-2">
               <ThemeToggle />
               <Button
+                ref={sidebarCloseRef}
                 type="button"
                 variant="outline"
                 size="sm"
@@ -230,7 +361,7 @@ export function AppShell({
             </div>
           </motion.div>
 
-          <div className="mt-4 flex-1 overflow-y-auto rounded-[1.25rem] bg-card/60 p-2 shadow-[var(--shadow-vapor)]">
+          <div className="min-h-0 flex-1 overflow-y-auto p-3 lg:mt-4 lg:rounded-[1.25rem] lg:bg-card/60 lg:p-2 lg:shadow-[var(--shadow-vapor)]">
             <div className="flex flex-col gap-2">
               {items.map((item) => (
                 <SidebarNavItem
@@ -241,6 +372,7 @@ export function AppShell({
                   currentHash={currentHash}
                   collapsed={sidebarCollapsed}
                   pendingHref={pendingHref}
+                  analyticsQuery={analyticsQuery}
                   t={t}
                   onNavigate={navigate}
                 />
@@ -248,7 +380,7 @@ export function AppShell({
             </div>
           </div>
 
-          <div className="mt-4 flex flex-col gap-3 rounded-2xl bg-card/75 p-3 shadow-[var(--shadow-vapor)]">
+          <div className="flex flex-col gap-3 border-t border-border/60 bg-background p-3 lg:mt-4 lg:rounded-2xl lg:border-t-0 lg:bg-card/75 lg:shadow-[var(--shadow-vapor)]">
             <button
               type="button"
               className={cn(
@@ -301,10 +433,14 @@ export function AppShell({
           </div>
         </motion.aside>
 
-        <main className="min-w-0 flex-1 space-y-4">
-          <div className="sticky top-3 z-20 flex items-center justify-between gap-3 rounded-[1.5rem] bg-[var(--glass-surface)] px-4 py-3 shadow-[var(--shadow-vapor)] backdrop-blur-xl lg:hidden">
+        <main className="min-w-0 flex-1 space-y-3 pb-20 sm:space-y-4 lg:pb-0">
+          <div
+            data-mobile-workflow-header
+            className="sticky top-2 z-20 flex items-center justify-between gap-3 rounded-[1rem] border border-border/50 bg-[var(--glass-surface)] px-2.5 py-2 shadow-[var(--shadow-vapor)] backdrop-blur-xl sm:px-4 sm:py-3 lg:hidden"
+          >
             <div className="flex min-w-0 items-center gap-3">
               <Button
+                ref={sidebarTriggerRef}
                 type="button"
                 variant="outline"
                 size="sm"
@@ -314,20 +450,86 @@ export function AppShell({
                 <Menu />
               </Button>
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{t('nav.administration')}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {t('pages.administration')}
-                </p>
+                <p className="truncate text-sm font-semibold">{activeNavigation.title}</p>
+                {activeNavigation.parent ? (
+                  <p className="truncate text-xs text-muted-foreground">
+                    {activeNavigation.parent}
+                  </p>
+                ) : null}
               </div>
             </div>
             <div className="flex items-center gap-2">
               <PendingInline active={isNavigating} label={t('labels.loading')} />
-              <ThemeToggle />
+              <button
+                type="button"
+                className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                aria-label={`${t('labels.userProfile')} · ${displayName}`}
+                onClick={() => setProfileOpen(true)}
+              >
+                <Avatar className="size-9">
+                  {initialUserImage ? (
+                    <AvatarImage
+                      src={initialUserImage}
+                      alt={avatarAlt}
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : null}
+                  <AvatarFallback className="text-xs">
+                    {getUserInitials(initialUserName, initialUserEmail)}
+                  </AvatarFallback>
+                </Avatar>
+              </button>
             </div>
           </div>
           <PageTransition routeKey={`${pathname}${currentHash}`}>{children}</PageTransition>
         </main>
       </div>
+
+      {mobileDockItems.length > 0 ? (
+        <nav
+          data-mobile-navigation-dock
+          aria-label={t('adminWorkspace.products.selectionMore')}
+          className="fixed inset-x-2 bottom-2 z-30 grid grid-flow-col auto-cols-fr rounded-[1rem] border border-border/55 bg-[var(--glass-surface)] p-1.5 shadow-[var(--shadow-vapor-strong)] backdrop-blur-xl lg:hidden"
+        >
+          {mobileDockItems.map((item) => {
+            const href = `/${locale}${item.href}`;
+            const active = activeNavigation.item?.key === item.key;
+            const Icon = navIcons[item.key];
+            return (
+              <Link
+                key={item.key}
+                href={href}
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigate(href);
+                }}
+                className={cn(
+                  'flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-[0.7rem] px-1 py-1.5 text-[0.68rem] font-medium text-muted-foreground',
+                  active && 'bg-primary text-primary-foreground',
+                )}
+              >
+                <Icon className="size-4" aria-hidden="true" />
+                <span className="max-w-full truncate">{t(`nav.${item.key}`)}</span>
+              </Link>
+            );
+          })}
+          <button
+            type="button"
+            className={cn(
+              'flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-[0.7rem] px-1 py-1.5 text-[0.68rem] font-medium text-muted-foreground',
+              activeNavigation.item &&
+                !mobileDockKeys.includes(activeNavigation.item.key) &&
+                'bg-primary text-primary-foreground',
+            )}
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Menu className="size-4" aria-hidden="true" />
+            <span className="max-w-full truncate">
+              {t('adminWorkspace.products.selectionMore')}
+            </span>
+          </button>
+        </nav>
+      ) : null}
 
       <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
         <DialogContent
@@ -355,12 +557,25 @@ export function AppShell({
               <span>{t('auth.signOut')}</span>
             </Button>
           </div>
+          <Separator />
+          <div className="flex items-center justify-between gap-4 rounded-xl bg-secondary/45 px-3 py-2.5">
+            <label htmlFor="legacy-ui-preference" className="min-w-0">
+              <span className="block text-sm font-medium">{t('profile.legacyUi')}</span>
+              <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
+                {t('profile.legacyUiDescription')}
+              </span>
+            </label>
+            <Switch
+              id="legacy-ui-preference"
+              checked={legacyUi}
+              disabled={isNavigating}
+              aria-label={t('profile.legacyUi')}
+              onCheckedChange={updateLegacyUi}
+            />
+          </div>
         </DialogContent>
       </Dialog>
-      {permissions.includes('ai_use') &&
-      permissions.some((permission) => permission.startsWith('ai_') && permission !== 'ai_use') ? (
-        <AdminAiChat />
-      ) : null}
+      {initialIsAllowed ? <AdminAiChat /> : null}
     </div>
   );
 }
@@ -372,6 +587,7 @@ function SidebarNavItem({
   currentHash,
   collapsed,
   pendingHref,
+  analyticsQuery,
   t,
   onNavigate,
 }: {
@@ -381,16 +597,16 @@ function SidebarNavItem({
   currentHash: string;
   collapsed: boolean;
   pendingHref: string | null;
+  analyticsQuery: string;
   t: ReturnType<typeof useTranslations>;
   onNavigate: (href: string) => void;
 }) {
   const [open, setOpen] = useState(
-    Boolean(item.subItems?.length) ||
-      pathname === `/${locale}${item.href}` ||
-      pathname.startsWith(`/${locale}${item.href}/`),
+    pathname === `/${locale}${item.href}` || pathname.startsWith(`/${locale}${item.href}/`),
   );
-  const href = `/${locale}${item.href}`;
-  const active = pathname === href || pathname.startsWith(`${href}/`);
+  const baseHref = `/${locale}${item.href}`;
+  const href = item.key === 'stats' ? `${baseHref}${analyticsQuery}` : baseHref;
+  const active = pathname === baseHref || pathname.startsWith(`${baseHref}/`);
   const Icon = navIcons[item.key];
   const hasSubItems = Boolean(item.subItems?.length);
   const isPending = pendingHref === href;
@@ -466,7 +682,8 @@ function SidebarNavItem({
           >
             <div className="flex flex-col gap-1 rounded-[0.75rem] bg-muted/35 p-2">
               {item.subItems?.map((subItem) => {
-                const subHref = `/${locale}${subItem.href}`;
+                const baseSubHref = `/${locale}${subItem.href}`;
+                const subHref = `${baseSubHref}${analyticsQuery}`;
                 const subHash = `#${subItem.href.split('#')[1] ?? ''}`;
                 return (
                   <Link
@@ -491,7 +708,7 @@ function SidebarNavItem({
                     className={cn(
                       'rounded-xl px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-card/80 hover:text-accent-foreground',
                       pendingHref === subHref && 'opacity-70',
-                      pathname === subHref ||
+                      pathname === baseSubHref ||
                         (pathname === `/${locale}${item.href}` && currentHash === subHash)
                         ? 'bg-card text-foreground shadow-[var(--shadow-vapor)]'
                         : '',

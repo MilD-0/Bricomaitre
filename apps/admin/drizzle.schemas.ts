@@ -1,7 +1,7 @@
 export const drizzleSchemaFiles = [
   '../../packages/db/src/schema/actionLogs.ts',
   '../../packages/db/src/schema/ai.ts',
-  '../../packages/db/src/schema/bundles.ts',
+  '../../packages/db/src/schema/aiPricingPolicies.ts',
   '../../packages/db/src/schema/landingPages.ts',
   '../../packages/db/src/schema/adCosts.ts',
   '../../packages/db/src/schema/adminReporting.ts',
@@ -20,11 +20,14 @@ export const drizzleSchemaFiles = [
   '../../packages/db/src/schema/orders.ts',
   '../../packages/db/src/schema/orderIdempotency.ts',
   '../../packages/db/src/schema/processedOrders.ts',
+  '../../packages/db/src/schema/profitTracker.ts',
   '../../packages/db/src/schema/products.ts',
+  '../../packages/db/src/schema/productLifecycle.ts',
   '../../packages/db/src/schema/productPromoCodes.ts',
   '../../packages/db/src/schema/productKnowledge.ts',
   '../../packages/db/src/schema/roleDefinitions.ts',
   '../../packages/db/src/schema/shoppingLists.ts',
   '../../packages/db/src/schema/storefrontSettings.ts',
+  '../../packages/db/src/schema/storefrontContent.ts',
   '../../packages/db/src/schema/userAccessGrants.ts',
 ] as const;

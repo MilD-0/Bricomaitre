@@ -1,6 +1,9 @@
+import type { PermissionKey } from './permissions';
+
 export const navigationKeys = [
   'administration',
   'products',
+  'aiProposals',
   'orders',
   'inventory',
   'assets',
@@ -15,6 +18,7 @@ type NavigationSubItem = {
   key: string;
   href: string;
   translationKey: string;
+  requiredPermissions?: PermissionKey[];
 };
 
 export type NavigationItem = {
@@ -31,6 +35,10 @@ export const navigationItems: NavigationItem[] = [
   {
     key: 'products',
     href: '/products',
+  },
+  {
+    key: 'aiProposals',
+    href: '/ai-proposals',
   },
   {
     key: 'orders',
@@ -55,10 +63,10 @@ export const navigationItems: NavigationItem[] = [
       { key: 'banners', href: '/assets#banners', translationKey: 'assetsManager.bannersTitle' },
       {
         key: 'productGroups',
-        href: '/assets#product-groups',
+        href: '/assets#featured-groups',
         translationKey: 'assetsManager.groupsTitle',
       },
-      { key: 'cards', href: '/assets#cards', translationKey: 'assetsManager.cardsTitle' },
+      { key: 'cards', href: '/assets#product-cards', translationKey: 'assetsManager.cardsTitle' },
       { key: 'landingPages', href: '/landing-pages', translationKey: 'nav.landingPages' },
     ],
   },
@@ -98,6 +106,11 @@ export const navigationItems: NavigationItem[] = [
         translationKey: 'statsDashboard.tabs.geography',
       },
       { key: 'time', href: '/stats/time', translationKey: 'statsDashboard.tabs.time' },
+      {
+        key: 'profitTracker',
+        href: '/stats/costs',
+        translationKey: 'statsDashboard.tabs.costs',
+      },
       { key: 'metaAds', href: '/stats/meta-ads', translationKey: 'statsDashboard.tabs.metaAds' },
       {
         key: 'manualOrders',
@@ -116,3 +129,25 @@ export const navigationItems: NavigationItem[] = [
     href: '/bulletin',
   },
 ];
+
+const modernAssetSubItems: NavigationSubItem[] = [
+  { key: 'banners', href: '/assets', translationKey: 'assetsManager.bannersTitle' },
+  {
+    key: 'productGroups',
+    href: '/assets/featured-groups',
+    translationKey: 'assetsManager.groupsTitle',
+  },
+  { key: 'cards', href: '/assets/product-cards', translationKey: 'assetsManager.cardsTitle' },
+  {
+    key: 'landingPages',
+    href: '/assets/landing-pages',
+    translationKey: 'nav.landingPages',
+  },
+];
+
+export function navigationItemsForUi(legacyUi: boolean): NavigationItem[] {
+  if (legacyUi) return navigationItems;
+  return navigationItems.map((item) =>
+    item.key === 'assets' ? { ...item, subItems: modernAssetSubItems } : item,
+  );
+}

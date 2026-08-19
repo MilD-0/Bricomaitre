@@ -10,7 +10,7 @@ import {
   roleDefinitionFormSchema,
   type PermissionKey,
 } from '../../../../lib/permissions';
-import { requireOpsAccess } from '../../../../lib/rbac';
+import { requireSettingsAccess } from '../../../../lib/rbac';
 
 function slugifyRoleName(name: string) {
   return name
@@ -36,7 +36,7 @@ async function loadRoles() {
 }
 
 export async function GET() {
-  const denied = await requireOpsAccess();
+  const denied = await requireSettingsAccess();
   if (denied) {
     return denied;
   }
@@ -52,7 +52,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const denied = await requireOpsAccess();
+  const denied = await requireSettingsAccess();
   if (denied) {
     return denied;
   }

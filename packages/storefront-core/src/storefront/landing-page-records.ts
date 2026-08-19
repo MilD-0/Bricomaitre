@@ -73,27 +73,6 @@ export async function readPublishedStorefrontLandingPage(
 }
 
 export async function readIndexableStorefrontLandingPages(db: Database) {
-  const rows = await db
-    .select({
-      slug: landingPages.slug,
-      locale: landingPages.locale,
-      updatedAt: landingPages.updatedAt,
-      document: landingPageRevisions.document,
-    })
-    .from(landingPages)
-    .innerJoin(
-      landingPageRevisions,
-      and(
-        eq(landingPageRevisions.landingPageId, landingPages.id),
-        eq(landingPageRevisions.revision, landingPages.publishedRevision),
-      ),
-    )
-    .innerJoin(products, buildIndexableLandingPageProductJoin())
-    .where(eq(landingPages.status, 'published'));
-  return rows.flatMap((row) => {
-    const parsed = landingPageDocumentSchema.safeParse(row.document);
-    return parsed.success && parsed.data.seo.indexable
-      ? [{ slug: row.slug, locale: row.locale, updatedAt: row.updatedAt.toISOString() }]
-      : [];
-  });
+  void db;
+  return [];
 }

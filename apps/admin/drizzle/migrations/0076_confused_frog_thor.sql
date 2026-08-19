@@ -1,0 +1,1 @@
+ALTER TYPE "admin"."admin_role_permission" ADD VALUE 'analytics_manage' BEFORE 'settings_manage';

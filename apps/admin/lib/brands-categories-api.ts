@@ -1,7 +1,7 @@
-import { and, asc, count, desc, eq, ilike, inArray, ne } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, inArray, isNull, ne } from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
-import { brands, categories } from '@bric/db/schema';
+import { brands, categories, products } from '@bric/db/schema';
 import {
   type BrandRow,
   type BrandsListResponse,
@@ -17,7 +17,7 @@ type BrandRecord = typeof brands.$inferSelect;
 type CategoryRecord = typeof categories.$inferSelect;
 type ParentOption = CategoriesListResponse['parentOptions'][number];
 
-function toBrandRow(row: BrandRecord): BrandRow {
+function toBrandRow(row: BrandRecord, productCount = 0): BrandRow {
   return {
     id: String(row.id),
     name: row.name,
@@ -25,6 +25,7 @@ function toBrandRow(row: BrandRecord): BrandRow {
     image: row.image ?? null,
     isActive: row.isActive,
     status: row.isActive ? 'active' : 'draft',
+    productCount,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     createdBy: row.createdBy ?? null,
@@ -34,7 +35,11 @@ function toBrandRow(row: BrandRecord): BrandRow {
   };
 }
 
-function toCategoryRow(row: CategoryRecord, parentName: string | null): CategoryRow {
+function toCategoryRow(
+  row: CategoryRecord,
+  parentName: string | null,
+  productCount = 0,
+): CategoryRow {
   return {
     id: String(row.id),
     name: row.name,
@@ -45,6 +50,7 @@ function toCategoryRow(row: CategoryRecord, parentName: string | null): Category
     status: row.isActive ? 'active' : 'draft',
     parentId: row.parentId ? String(row.parentId) : null,
     parentName,
+    productCount,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     createdBy: row.createdBy ?? null,
@@ -100,10 +106,20 @@ export async function readBrandsPage(
     .orderBy(desc(brands.updatedAt))
     .limit(query.limit)
     .offset((query.page - 1) * query.limit);
+  const ids = rows.map((row) => row.id);
+  const productCounts =
+    ids.length === 0
+      ? []
+      : await getDb()
+          .select({ id: products.brandId, value: count() })
+          .from(products)
+          .where(and(inArray(products.brandId, ids), isNull(products.archivedAt)))
+          .groupBy(products.brandId);
+  const countsById = new Map(productCounts.map((row) => [row.id, Number(row.value)]));
   const totalPages = Math.max(1, Math.ceil(totalItems / query.limit));
 
   return {
-    items: rows.map(toBrandRow),
+    items: rows.map((row) => toBrandRow(row, countsById.get(row.id) ?? 0)),
     pagination: {
       page: query.page,
       limit: query.limit,
@@ -151,6 +167,16 @@ export async function readCategoriesPage(
           .from(categories)
           .where(inArray(categories.id, parentIds));
   const parentNames = new Map(parentRows.map((row) => [row.id, row.name]));
+  const ids = rows.map((row) => row.id);
+  const productCounts =
+    ids.length === 0
+      ? []
+      : await getDb()
+          .select({ id: products.categoryId, value: count() })
+          .from(products)
+          .where(and(inArray(products.categoryId, ids), isNull(products.archivedAt)))
+          .groupBy(products.categoryId);
+  const countsById = new Map(productCounts.map((row) => [row.id, Number(row.value)]));
   const parentOptions: ParentOption[] = includeParentOptions
     ? await getDb()
         .select({ id: categories.id, name: categories.name })
@@ -161,7 +187,11 @@ export async function readCategoriesPage(
 
   return {
     items: rows.map((row) =>
-      toCategoryRow(row, row.parentId ? (parentNames.get(row.parentId) ?? null) : null),
+      toCategoryRow(
+        row,
+        row.parentId ? (parentNames.get(row.parentId) ?? null) : null,
+        countsById.get(row.id) ?? 0,
+      ),
     ),
     parentOptions,
     pagination: {

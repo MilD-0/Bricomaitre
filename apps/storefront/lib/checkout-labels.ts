@@ -30,6 +30,7 @@ export type CheckoutLabels = {
   submitError: string;
   retry: string;
   savedAttempt: string;
+  cartUpdated: string;
   trustPhone: string;
   trustPayment: string;
   trustDelivery: string;
@@ -70,6 +71,7 @@ export function buildCheckoutLabels(
     submitError: translate('submitError'),
     retry: translate('retry'),
     savedAttempt: translate('savedAttempt'),
+    cartUpdated: translate('cartUpdated'),
     trustPhone: translate('trustPhone'),
     trustPayment: translate('trustPayment'),
     trustDelivery: translate('trustDelivery'),

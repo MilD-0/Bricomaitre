@@ -8,7 +8,7 @@ import { auth } from '../../../../../lib/auth';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { userAccessGrantFormSchema } from '../../../../../lib/permissions';
 import { isConfiguredPrivilegedEmail } from '../../../../../lib/role-config';
-import { requireOpsAccess } from '../../../../../lib/rbac';
+import { requireSettingsAccess } from '../../../../../lib/rbac';
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -19,7 +19,7 @@ function isReservedPrivilegedEmail(email: string) {
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireOpsAccess();
+  const denied = await requireSettingsAccess();
   if (denied) {
     return denied;
   }
@@ -79,7 +79,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireOpsAccess();
+  const denied = await requireSettingsAccess();
   if (denied) {
     return denied;
   }

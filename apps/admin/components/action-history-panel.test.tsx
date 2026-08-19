@@ -2,10 +2,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ActionHistoryPanel } from './action-history-panel';
 import { server } from '../test/mocks/server';
+import { ActionHistoryPanel } from './action-history-panel';
 
 const { toastMock } = vi.hoisted(() => ({
   toastMock: {
@@ -17,427 +17,219 @@ const { toastMock } = vi.hoisted(() => ({
 
 vi.mock('next-intl', () => ({
   useLocale: () => 'en',
-  useTranslations: () => (key: string, values?: Record<string, string | number>) => {
-    if (key === 'history.itemsCount') {
-      return `${values?.count ?? 0} entries`;
-    }
-
-    if (key === 'history.resultsSummary') {
-      return `Showing ${values?.count ?? 0} of ${values?.total ?? 0} entries`;
-    }
-
-    if (key === 'history.details.title') {
-      return `${values?.entity ?? ''} activity`;
-    }
-
-    if (key === 'history.details.changesCount') {
-      return `${values?.count ?? 0} changes`;
-    }
-
-    if (key === 'history.resourceContext') {
-      return `${values?.entity ?? ''} records`;
-    }
-
-    if (key === 'history.notifications.undo.loading') {
-      return `undo:${values?.entity ?? ''}:loading`;
-    }
-
-    if (key === 'history.notifications.undo.success') {
-      return `undo:${values?.entity ?? ''}:success`;
-    }
-
-    if (key === 'history.notifications.redo.loading') {
-      return `redo:${values?.entity ?? ''}:loading`;
-    }
-
-    if (key === 'history.notifications.redo.success') {
-      return `redo:${values?.entity ?? ''}:success`;
-    }
-
-    if (key === 'history.changeLine') {
-      return `${values?.field}: ${values?.before} -> ${values?.after}`;
-    }
-
-    return key;
+  useTranslations: () => {
+    const translate = (key: string, values?: Record<string, string | number>) => {
+      if (key === 'history.itemsCount') return `${values?.count ?? 0} entries`;
+      if (key === 'history.details.changesCount') return `${values?.count ?? 0} changes`;
+      if (key === 'history.summaries.fields') return `Updated ${values?.fields}`;
+      if (key === 'history.summaries.fieldsAndMore')
+        return `Updated ${values?.fields} and ${values?.count} more`;
+      if (key === 'labels.goToPage') return `go to ${values?.page}`;
+      if (key.startsWith('history.notifications.')) return `${key}:${values?.entity ?? ''}`;
+      return key;
+    };
+    translate.has = (key: string) =>
+      [
+        'history.summaryGroups.confirmation',
+        'history.summaryGroups.shipment',
+        'history.fields.note',
+      ].includes(key);
+    return translate;
   },
 }));
 
-vi.mock('../lib/toast', () => ({
-  toast: toastMock,
-}));
+vi.mock('../lib/toast', () => ({ toast: toastMock }));
 
-function renderPanel() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+const firstItem = {
+  id: 12,
+  resource: 'orders',
+  entityType: 'orders',
+  entityId: 16372,
+  entityLabel: 'Bahi Youcef',
+  operation: 'update' as const,
+  createdBy: 'owner@example.com',
+  createdByName: 'Owner',
+  isReversible: true,
+  isUndone: false,
+  changeCount: 4,
+  changePreview: [{ key: 'confirmation', kind: 'group' as const, field: 'Confirmation' }],
+  semanticChangeCount: 1,
+  createdAt: '2026-08-19T10:00:00.000Z',
+};
 
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <ActionHistoryPanel />
-    </QueryClientProvider>,
-  );
-}
-
-function buildHistoryResponse(requestUrl: string, items: Array<Record<string, unknown>>) {
-  const url = new URL(requestUrl);
-  const page = Number(url.searchParams.get('page') ?? '1');
-  const limit = Number(url.searchParams.get('limit') ?? '10');
-  const search = (url.searchParams.get('search') ?? '').toLowerCase();
-  const operation = url.searchParams.get('operation') ?? 'all';
-  const resource = url.searchParams.get('resource') ?? 'all';
-  const state = url.searchParams.get('state') ?? 'all';
-  const sortRules = url.searchParams
-    .getAll('sort')
-    .map((value) => {
-      const [key, direction] = value.split(':');
-      return key && (direction === 'asc' || direction === 'desc') ? { key, direction } : null;
-    })
-    .filter(
-      (
-        value,
-      ): value is {
-        key: 'operation' | 'resource' | 'createdBy' | 'createdAt' | 'isUndone';
-        direction: 'asc' | 'desc';
-      } => value !== null,
-    );
-  const effectiveSortRules =
-    sortRules.length > 0 ? sortRules : [{ key: 'createdAt' as const, direction: 'desc' as const }];
-
-  const filtered = items
-    .filter((item) => {
-      if (search.length === 0) {
-        return true;
-      }
-
-      return [
-        item.entityLabel,
-        item.entityType,
-        item.resource,
-        item.operation,
-        item.createdBy,
-        item.createdByName,
-      ].some((value) =>
-        String(value ?? '')
-          .toLowerCase()
-          .includes(search),
-      );
-    })
-    .filter((item) => operation === 'all' || item.operation === operation)
-    .filter((item) => resource === 'all' || item.resource === resource)
-    .filter(
-      (item) =>
-        state === 'all' || (state === 'undone' ? item.isUndone === true : item.isUndone === false),
-    );
-
-  const sorted = [...filtered].sort((left, right) => {
-    for (const rule of effectiveSortRules) {
-      const factor = rule.direction === 'asc' ? 1 : -1;
-
-      if (rule.key === 'operation') {
-        const delta = String(left.operation).localeCompare(String(right.operation));
-        if (delta !== 0) {
-          return delta * factor;
-        }
-        continue;
-      }
-
-      if (rule.key === 'resource') {
-        const delta = String(left.resource).localeCompare(String(right.resource));
-        if (delta !== 0) {
-          return delta * factor;
-        }
-        continue;
-      }
-
-      if (rule.key === 'createdBy') {
-        const leftActor = String(left.createdByName ?? left.createdBy ?? '');
-        const rightActor = String(right.createdByName ?? right.createdBy ?? '');
-        const delta = leftActor.localeCompare(rightActor);
-        if (delta !== 0) {
-          return delta * factor;
-        }
-        continue;
-      }
-
-      if (rule.key === 'isUndone') {
-        const delta = Number(left.isUndone) - Number(right.isUndone);
-        if (delta !== 0) {
-          return delta * factor;
-        }
-        continue;
-      }
-
-      const delta =
-        new Date(String(left.createdAt)).getTime() - new Date(String(right.createdAt)).getTime();
-      if (delta !== 0) {
-        return delta * factor;
-      }
-    }
-
-    return Number(right.id) - Number(left.id);
-  });
-
-  const start = (page - 1) * limit;
-
+function listResponse(items = [firstItem], page = 1, totalPages = 1) {
   return {
-    items: sorted.slice(start, start + limit),
+    items,
     pagination: {
       page,
-      limit,
-      totalItems: sorted.length,
-      totalPages: Math.max(1, Math.ceil(sorted.length / limit)),
-      hasNextPage: start + limit < sorted.length,
+      limit: 20,
+      totalItems: items.length + (totalPages - 1) * 20,
+      totalPages,
+      hasNextPage: page < totalPages,
       hasPreviousPage: page > 1,
     },
   };
 }
 
-describe('ActionHistoryPanel', () => {
-  afterEach(() => {
-    cleanup();
-  });
-
-  it('renders a sortable, filterable, paginated history table with details', async () => {
-    const items = Array.from({ length: 11 }, (_, index) => ({
-      id: index + 1,
-      resource: index === 9 ? 'stats' : index === 10 ? 'orders' : 'products',
-      entityType: index === 9 ? 'statsAdCosts' : index === 10 ? 'orders' : 'products',
-      entityId: index + 101,
-      entityLabel:
-        index === 9
-          ? 'Reverted dashboard'
-          : index === 10
-            ? 'Paged order'
-            : `History item ${index + 1}`,
-      operation: index === 9 ? 'update' : index === 10 ? 'delete' : 'create',
-      createdBy: index === 9 ? 'nadia@example.com' : `user${index + 1}@example.com`,
-      createdByName: index === 9 ? 'Nadia' : `User ${index + 1}`,
-      isReversible: true,
-      isUndone: index === 9,
-      changes: index === 9 ? [{ field: 'Spend', before: 200, after: 150 }] : [],
-      createdAt: `2026-03-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
-      undoneAt: index === 9 ? '2026-03-10T01:00:00.000Z' : null,
+function detailResponse(
+  item = firstItem,
+  recovery: { nextAction: 'undo' | 'redo' | null; blockedReason: string | null } = {
+    nextAction: 'undo',
+    blockedReason: null,
+  },
+) {
+  return {
+    item: {
+      ...item,
+      changes: [
+        { key: 'confirmed', field: 'Confirmed', before: 0, after: 2 },
+        { key: 'note', field: 'Note', before: null, after: 'Call first' },
+      ],
+      undoneAt: null,
       redoneAt: null,
-    }));
+    },
+    recovery,
+  };
+}
 
-    server.use(
-      http.get('/api/action-history', ({ request }) =>
-        HttpResponse.json(buildHistoryResponse(request.url, items)),
-      ),
-    );
-
-    renderPanel();
-
-    expect(await screen.findByText('Paged order')).toBeInTheDocument();
-    expect(screen.queryByText('History item 1')).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'actions.next' }));
-
-    expect(await screen.findByText('History item 1')).toBeInTheDocument();
-    expect(screen.queryByText('History item 11')).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'actions.first' }));
-    expect(await screen.findByText('Paged order')).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: /^history\.columns\.actions/ }));
-    await userEvent.click(screen.getByRole('button', { name: /^history\.columns\.actions/ }));
-
-    await waitFor(() => {
-      const rows = screen.getAllByRole('row');
-      expect(within(rows[1]!).getByText('Reverted dashboard')).toBeInTheDocument();
-    });
-
-    await userEvent.type(screen.getByPlaceholderText('history.searchPlaceholder'), 'Nadia');
-    expect(await screen.findByText('Reverted dashboard')).toBeInTheDocument();
-    expect(screen.queryByText('Paged order')).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'history.viewDetails' }));
-
-    expect(await screen.findByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('Reverted dashboard activity')).toBeInTheDocument();
-    expect(screen.getByText('Spend')).toBeInTheDocument();
-    expect(screen.getByText('150')).toBeInTheDocument();
+function renderPanel() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+  return render(
+    <QueryClientProvider client={client}>
+      <ActionHistoryPanel />
+    </QueryClientProvider>,
+  );
+}
 
-  it('serializes hierarchical sort rules from header clicks', async () => {
-    const items = [
-      {
-        id: 1,
-        resource: 'products',
-        entityType: 'products',
-        entityId: 101,
-        entityLabel: 'Bravo',
-        operation: 'update',
-        createdBy: 'b@example.com',
-        createdByName: 'Beta',
-        isReversible: true,
-        isUndone: false,
-        changes: [],
-        createdAt: '2026-03-02T00:00:00.000Z',
-        undoneAt: null,
-        redoneAt: null,
-      },
-      {
-        id: 2,
-        resource: 'products',
-        entityType: 'products',
-        entityId: 102,
-        entityLabel: 'First entity',
-        operation: 'update',
-        createdBy: 'a@example.com',
-        createdByName: 'Alpha',
-        isReversible: true,
-        isUndone: true,
-        changes: [],
-        createdAt: '2026-03-01T00:00:00.000Z',
-        undoneAt: null,
-        redoneAt: null,
-      },
-    ];
-
-    server.use(
-      http.get('/api/action-history', ({ request }) =>
-        HttpResponse.json(buildHistoryResponse(request.url, items)),
-      ),
-    );
-
-    renderPanel();
-
-    expect((await screen.findAllByText('First entity')).length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: /^history\.columns\.actions/ })).toHaveClass(
-      'cursor-pointer',
-    );
-    await userEvent.click(screen.getByRole('button', { name: /^history\.columns\.actions/ }));
-    await userEvent.click(screen.getByRole('button', { name: /^history\.columns\.who/ }));
-
-    await waitFor(() => {
-      const rows = screen.getAllByRole('row').slice(1);
-      expect(within(rows[0]).getByText('Bravo')).toBeInTheDocument();
+describe('ActionHistoryPanel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn(() => ({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
     });
   });
+  afterEach(cleanup);
 
-  it('allows undo and redo transitions with toast feedback', async () => {
-    type HistoryItem = {
-      id: number;
-      resource: string;
-      entityType: string;
-      entityId: number;
-      entityLabel: string;
-      operation: 'create' | 'update' | 'delete';
-      createdBy: string | null;
-      createdByName: string | null;
-      isReversible: boolean;
-      isUndone: boolean;
-      changes: Array<{ field: string; before: unknown; after: unknown }>;
-      createdAt: string;
-      undoneAt: string | null;
-      redoneAt: string | null;
-    };
-
-    const items: HistoryItem[] = [
-      {
-        id: 1,
-        resource: 'products',
-        entityType: 'products',
-        entityId: 9,
-        entityLabel: 'Widget',
-        operation: 'update',
-        createdBy: 'admin@example.com',
-        createdByName: 'Admin',
-        isReversible: true,
-        isUndone: false,
-        changes: [{ field: 'In Stock', before: false, after: true }],
-        createdAt: '2026-03-21T00:00:00.000Z',
-        undoneAt: null,
-        redoneAt: null,
-      },
-    ];
-
+  it('renders a concise day-grouped activity list and persistent inspector', async () => {
     server.use(
-      http.get('/api/action-history', ({ request }) =>
-        HttpResponse.json(buildHistoryResponse(request.url, items)),
-      ),
-      http.post('/api/action-history/:id/undo', ({ params }) => {
-        items[0] = {
-          ...items[0],
-          id: Number(params.id),
-          isUndone: true,
-          undoneAt: '2026-03-21T00:01:00.000Z',
-        };
-        return HttpResponse.json({ ok: true });
+      http.get('/api/action-history', () => HttpResponse.json(listResponse())),
+      http.get('/api/action-history/12', () => HttpResponse.json(detailResponse())),
+    );
+    renderPanel();
+
+    expect(await screen.findByRole('button', { name: /Bahi Youcef/ })).toBeInTheDocument();
+    expect(screen.getByText('Updated history.summaryGroups.confirmation')).toBeInTheDocument();
+    expect(await screen.findByText('Confirmed')).toBeInTheDocument();
+    expect(screen.getByText('Call first')).toBeInTheDocument();
+    expect(screen.queryByText('history.state.applied')).not.toBeInTheDocument();
+  });
+
+  it('keeps automatic syncs behind the compact filter control', async () => {
+    const requests: string[] = [];
+    server.use(
+      http.get('/api/action-history', ({ request }) => {
+        requests.push(request.url);
+        return HttpResponse.json(listResponse());
       }),
-      http.post('/api/action-history/:id/redo', ({ params }) => {
-        items[0] = {
-          ...items[0],
-          id: Number(params.id),
-          isUndone: false,
-          redoneAt: '2026-03-21T00:02:00.000Z',
-        };
-        return HttpResponse.json({ ok: true });
-      }),
+      http.get('/api/action-history/12', () => HttpResponse.json(detailResponse())),
+    );
+    const view = renderPanel();
+    await screen.findByText('Bahi Youcef');
+    expect(view.container.querySelector('[data-mobile-history-controls]')).toHaveClass(
+      'grid-cols-[minmax(0,1fr)_auto_auto]',
+    );
+    expect(view.container.querySelector('[data-mobile-history-list]')).toHaveClass(
+      'min-h-0',
+      'xl:min-h-[38rem]',
+    );
+    await userEvent.click(screen.getByRole('button', { name: /history.filters.title/ }));
+    await userEvent.click(
+      screen.getByRole('switch', { name: 'history.filters.includeEcotrackSyncLabel' }),
     );
 
-    renderPanel();
-
-    expect(await screen.findByText('Widget')).toBeInTheDocument();
-    const undoButton = screen.getByRole('button', { name: 'history.undo' });
-    const redoButton = screen.getByRole('button', { name: 'history.redo' });
-
-    expect(undoButton).toBeEnabled();
-    expect(redoButton).toBeDisabled();
-
-    await userEvent.click(undoButton);
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'history.undo' })).toBeDisabled();
-      expect(screen.getByRole('button', { name: 'history.redo' })).toBeEnabled();
-    });
-
-    expect(toastMock.loading).toHaveBeenCalledWith('undo:Widget:loading');
-    expect(toastMock.success).toHaveBeenCalledWith('undo:Widget:success', { id: 'toast-id' });
-
-    await userEvent.click(screen.getByRole('button', { name: 'history.redo' }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'history.undo' })).toBeEnabled();
-      expect(screen.getByRole('button', { name: 'history.redo' })).toBeDisabled();
-    });
-
-    expect(toastMock.loading).toHaveBeenCalledWith('redo:Widget:loading');
-    expect(toastMock.success).toHaveBeenCalledWith('redo:Widget:success', { id: 'toast-id' });
+    await waitFor(() =>
+      expect(requests.some((url) => url.includes('includeEcotrackSync=true'))).toBe(true),
+    );
   });
 
-  it('disables undo and redo for non-reversible entries', async () => {
-    const items = [
-      {
-        id: 2,
-        resource: 'ecotrack',
-        entityType: 'ecotrackShipments',
-        entityId: 22,
-        entityLabel: 'TRK-22',
-        operation: 'update',
-        createdBy: null,
-        createdByName: 'ECOTRACK sync',
-        isReversible: false,
-        isUndone: false,
-        changes: [{ field: 'Current Status', before: 'prete_a_expedier', after: 'vers_hub' }],
-        createdAt: '2026-03-22T00:00:00.000Z',
-        undoneAt: null,
-        redoneAt: null,
-      },
-    ];
-
+  it('confirms and executes only the recovery action supplied by the inspector contract', async () => {
+    const undo = vi.fn(() => HttpResponse.json({ ok: true }));
     server.use(
-      http.get('/api/action-history', ({ request }) =>
-        HttpResponse.json(buildHistoryResponse(request.url, items)),
+      http.get('/api/action-history', () => HttpResponse.json(listResponse())),
+      http.get('/api/action-history/12', () => HttpResponse.json(detailResponse())),
+      http.post('/api/action-history/12/undo', undo),
+    );
+    renderPanel();
+    await screen.findByText('Confirmed');
+    await userEvent.click(screen.getByRole('button', { name: 'history.undo' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('history.recovery.confirm.undoTitle')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'history.undo' }));
+
+    await waitFor(() => expect(undo).toHaveBeenCalledOnce());
+    expect(toastMock.success).toHaveBeenCalled();
+  });
+
+  it('explains unavailable recovery without rendering misleading actions', async () => {
+    server.use(
+      http.get('/api/action-history', () => HttpResponse.json(listResponse())),
+      http.get('/api/action-history/12', () =>
+        HttpResponse.json(
+          detailResponse(firstItem, { nextAction: null, blockedReason: 'newer_action' }),
+        ),
       ),
     );
-
     renderPanel();
 
-    expect(await screen.findByText('TRK-22')).toBeInTheDocument();
-    expect(screen.getByText('history.state.nonReversible')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'history.undo' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'history.redo' })).toBeDisabled();
+    expect(await screen.findByText('history.recovery.blocked.newer_action')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'history.undo' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'history.redo' })).not.toBeInTheDocument();
+  });
+
+  it('uses a focus-restoring detail sheet below the wide workspace breakpoint', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn(() => ({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    });
+    server.use(
+      http.get('/api/action-history', () => HttpResponse.json(listResponse())),
+      http.get('/api/action-history/12', () => HttpResponse.json(detailResponse())),
+    );
+    renderPanel();
+
+    const row = await screen.findByRole('button', { name: /Bahi Youcef/ });
+    await userEvent.click(row);
+    const sheet = await screen.findByRole('dialog');
+    expect(within(sheet).getByText('Bahi Youcef')).toBeInTheDocument();
+    await userEvent.click(within(sheet).getByRole('button', { name: 'actions.close' }));
+    await waitFor(() => expect(row).toHaveFocus());
+  });
+
+  it('uses strong numbered pagination and requests the selected page', async () => {
+    const pages: string[] = [];
+    server.use(
+      http.get('/api/action-history', ({ request }) => {
+        const page = new URL(request.url).searchParams.get('page') ?? '1';
+        pages.push(page);
+        return HttpResponse.json(listResponse([firstItem], Number(page), 3));
+      }),
+      http.get('/api/action-history/12', () => HttpResponse.json(detailResponse())),
+    );
+    renderPanel();
+    await screen.findByText('Bahi Youcef');
+    await userEvent.click(screen.getByRole('button', { name: 'go to 2' }));
+    await waitFor(() => expect(pages).toContain('2'));
   });
 });

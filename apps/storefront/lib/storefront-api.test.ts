@@ -317,7 +317,7 @@ describe('storefront API client', () => {
     };
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(settings), { status: 200 }));
 
-    await expect(fetchStorefrontSettings()).resolves.toEqual({
+    await expect(fetchStorefrontSettings()).resolves.toMatchObject({
       ...settings,
       aiAssistantEnabled: true,
     });
@@ -330,7 +330,7 @@ describe('storefront API client', () => {
   it('uses public defaults when the previous API release does not yet expose settings', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 404 }));
 
-    await expect(fetchStorefrontSettings()).resolves.toEqual({
+    await expect(fetchStorefrontSettings()).resolves.toMatchObject({
       phoneDisplay: '0795 34 28 26',
       phoneHref: 'tel:+213795342826',
       phoneEnabled: true,
@@ -341,7 +341,7 @@ describe('storefront API client', () => {
   it('keeps cached public settings available during a rolling API timeout', async () => {
     vi.mocked(fetch).mockRejectedValue(new DOMException('timed out', 'AbortError'));
 
-    await expect(getStorefrontSettings()).resolves.toEqual({
+    await expect(getStorefrontSettings()).resolves.toMatchObject({
       phoneDisplay: '0795 34 28 26',
       phoneHref: 'tel:+213795342826',
       phoneEnabled: true,

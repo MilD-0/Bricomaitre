@@ -60,6 +60,7 @@ export const metaAdsDailyInsights = pgTable(
     index('idx_meta_ads_insights_campaign_day').on(t.campaignId, t.day.desc()),
     index('idx_meta_ads_insights_adset_day').on(t.adsetId, t.day.desc()),
     index('idx_meta_ads_insights_ad_day').on(t.adId, t.day.desc()),
+    index('idx_meta_ads_insights_day_adset').on(t.day.desc(), t.adsetId),
   ],
 );
 

@@ -1,6 +1,4 @@
-import { StorefrontSettingsForm } from '../../../../components/settings/storefront-settings-form';
-import { requireStorefrontSettingsPageAccess } from '../../../../lib/page-access';
-import { loadStorefrontSettings } from '../../../../lib/storefront-settings';
+import { permanentRedirect } from 'next/navigation';
 
 export default async function StorefrontSettingsPage({
   params,
@@ -8,8 +6,5 @@ export default async function StorefrontSettingsPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  await requireStorefrontSettingsPageAccess(locale);
-  const settings = await loadStorefrontSettings();
-
-  return <StorefrontSettingsForm initialSettings={settings} />;
+  permanentRedirect(`/${locale}/administration/storefront`);
 }

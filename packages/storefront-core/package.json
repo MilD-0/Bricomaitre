@@ -27,6 +27,8 @@
     "./marketing-contracts": "./src/storefront/marketing-contracts.ts",
     "./marketing": "./src/storefront/marketing.ts",
     "./order-access": "./src/storefront/order-access.ts",
+    "./order-commercial": "./src/order-commercial.ts",
+    "./order-write": "./src/order-write.ts",
     "./order-idempotency": "./src/storefront/order-idempotency.ts",
     "./order-domain": "./src/orders-support.ts",
     "./order-records": "./src/order-records.ts",

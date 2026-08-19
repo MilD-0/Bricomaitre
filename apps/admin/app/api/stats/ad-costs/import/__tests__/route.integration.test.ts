@@ -24,7 +24,7 @@ const { requireOpsAccessMock, authMock, getLatestExportJobMock, startAdCostsImpo
   }));
 
 vi.mock('../../../../../../lib/rbac', () => ({
-  requireOpsAccess: requireOpsAccessMock,
+  requireAnalyticsAccess: requireOpsAccessMock,
 }));
 
 vi.mock('../../../../../../lib/auth', () => ({

@@ -8,6 +8,7 @@ import { MobileSheet } from '@/components/mobile-sheet';
 import {
   SupportContactActions,
   type SupportContactLabels,
+  type StorefrontSupportContact,
 } from '@/components/support-contact-actions';
 import type { Locale } from '@/i18n/config';
 import { trackNavigationEvent } from '@/lib/analytics';
@@ -18,7 +19,6 @@ import { buildNavigationTaxonomy, type NavigationTaxonomyNode } from '@/lib/navi
 import { formatProductPrice } from '@/lib/product-presentation';
 import { getBrandPath, getCategoryPath } from '@/lib/taxonomy-routes';
 import type { z } from 'zod';
-import type { StorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 type NavigationMeta = z.infer<typeof navigationMetaSchema>;
 type NavigationCategory = {
@@ -56,7 +56,7 @@ export function NavigationActions({
   alternateLabel: string;
   categories: NavigationCategory[];
   labels: NavigationLabels;
-  contact: StorefrontSettingsResponse;
+  contact: StorefrontSupportContact;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);

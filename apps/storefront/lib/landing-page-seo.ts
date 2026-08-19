@@ -41,7 +41,7 @@ export function buildLandingPageMetadata(
     title: page.document.seo.title,
     description: page.document.seo.description,
     alternates,
-    robots: { index: page.document.seo.indexable, follow: page.document.seo.indexable },
+    robots: { index: false, follow: false },
     openGraph: {
       type: 'website',
       siteName: SITE_NAME,

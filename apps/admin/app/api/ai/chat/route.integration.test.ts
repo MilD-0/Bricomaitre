@@ -74,7 +74,7 @@ vi.mock('../../../../lib/auth', () => ({
   }),
 }));
 
-vi.mock('../../../../lib/rbac', () => ({ requireAiUseAccess: async () => null }));
+vi.mock('../../../../lib/rbac', () => ({ requireAppAccess: async () => null }));
 vi.mock('../../../../lib/background-jobs', () => ({
   ADMIN_AI_CATEGORIZATION_QUEUE: 'admin-ai-categorization',
   ADMIN_AI_CONTENT_QUEUE: 'admin-ai-content',
@@ -358,8 +358,8 @@ describe('POST /api/ai/chat telemetry', () => {
     });
   });
 
-  it('exposes taxonomy lookup and reviewable mutation tools to catalog proposers', async () => {
-    mocks.permissions = ['ai_catalog_propose'];
+  it('derives product and taxonomy AI tools from their domain permissions', async () => {
+    mocks.permissions = ['products_write', 'brands_categories_write'];
     mocks.streamText.mockImplementation((options) => {
       mocks.streamOptions = options as typeof mocks.streamOptions;
       return streamedResult({ text: 'Ready' });
@@ -406,8 +406,47 @@ describe('POST /api/ai/chat telemetry', () => {
     );
   });
 
-  it('passes batch auto-apply only when the requester has both apply and product-write permissions', async () => {
-    mocks.permissions = ['ai_catalog_propose', 'ai_catalog_apply', 'products_write'];
+  it.each([
+    {
+      permissions: [] as string[],
+      present: ['find_products', 'find_brands', 'find_categories'],
+      absent: ['generate_product_content', 'query_analytics', 'suggest_featured_products'],
+    },
+    {
+      permissions: ['products_write'],
+      present: ['generate_product_content', 'categorize_catalog', 'suggest_discount'],
+      absent: ['query_analytics', 'suggest_featured_products', 'propose_brand_edit'],
+    },
+    {
+      permissions: ['brands_categories_write'],
+      present: ['propose_brand_edit', 'propose_category_create'],
+      absent: ['generate_product_content', 'query_analytics', 'suggest_landing_page'],
+    },
+    {
+      permissions: ['assets_write'],
+      present: ['suggest_featured_products', 'suggest_landing_page'],
+      absent: ['generate_product_content', 'query_analytics', 'propose_brand_edit'],
+    },
+    {
+      permissions: ['analytics_manage'],
+      present: ['query_analytics', 'compare_analytics_periods'],
+      absent: ['generate_product_content', 'suggest_featured_products', 'propose_brand_edit'],
+    },
+  ])('exposes only tools owned by $permissions', async ({ permissions, present, absent }) => {
+    mocks.permissions = permissions;
+    mocks.streamText.mockImplementation((options) => {
+      mocks.streamOptions = options as typeof mocks.streamOptions;
+      return streamedResult({ text: 'Ready' });
+    });
+
+    await events(await POST(request()));
+    const tools = mocks.streamOptions?.tools ?? {};
+    for (const name of present) expect(tools).toHaveProperty(name);
+    for (const name of absent) expect(tools).not.toHaveProperty(name);
+  });
+
+  it('passes batch auto-apply when the requester can manage products', async () => {
+    mocks.permissions = ['products_write'];
     mocks.streamText.mockImplementation((options) => {
       mocks.streamOptions = options as typeof mocks.streamOptions;
       return streamedResult({ text: 'Queued' });
@@ -438,7 +477,7 @@ describe('POST /api/ai/chat telemetry', () => {
   });
 
   it('runs at most 20 explicit content proposals inline and queues larger scopes', async () => {
-    mocks.permissions = ['ai_catalog_propose'];
+    mocks.permissions = ['products_write'];
     mocks.streamText.mockImplementation((options) => {
       mocks.streamOptions = options as typeof mocks.streamOptions;
       return streamedResult({ text: 'Ready' });
@@ -471,7 +510,7 @@ describe('POST /api/ai/chat telemetry', () => {
   });
 
   it('queues catalog-wide missing Arabic titles with authorized verified auto-apply enabled', async () => {
-    mocks.permissions = ['ai_catalog_propose', 'ai_catalog_apply', 'products_write'];
+    mocks.permissions = ['products_write'];
     mocks.streamText.mockImplementation((options) => {
       mocks.streamOptions = options as typeof mocks.streamOptions;
       return streamedResult({ text: 'Queued' });
@@ -557,7 +596,7 @@ describe('POST /api/ai/chat telemetry', () => {
   });
 
   it('does not expose database-wide job controls without settings management access', async () => {
-    mocks.permissions = ['ai_catalog_propose'];
+    mocks.permissions = ['products_write'];
     mocks.streamText.mockImplementation((options) => {
       mocks.streamOptions = options as typeof mocks.streamOptions;
       return streamedResult({ text: 'Catalog only' });

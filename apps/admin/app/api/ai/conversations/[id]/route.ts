@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { getDb, hasDb } from '@bric/db/client';
 import { aiConversations, aiMessages } from '@bric/db/schema';
 import { auth } from '../../../../../lib/auth';
-import { requireAiUseAccess } from '../../../../../lib/rbac';
+import { requireAppAccess } from '../../../../../lib/rbac';
 
 const paramsSchema = z.object({ id: z.coerce.number().int().positive() });
 
@@ -22,7 +22,7 @@ function messageText(content: unknown) {
 }
 
 export async function GET(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const denied = await requireAiUseAccess();
+  const denied = await requireAppAccess();
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { and, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
 import {
@@ -319,6 +319,8 @@ export async function resolveOrderLineSnapshots(
     cartProducts: string[];
     promoCode?: string | null;
     now?: Date;
+    resolvedPromo?: Awaited<ReturnType<typeof resolveOrderPromo>>;
+    orderableOnly?: boolean;
   },
 ) {
   const numericIds = [
@@ -361,7 +363,16 @@ export async function resolveOrderLineSnapshots(
       images: products.images,
     })
     .from(products)
-    .where(condition);
+    .where(
+      input.orderableOnly
+        ? and(
+            condition,
+            eq(products.active, true),
+            eq(products.inStock, true),
+            isNull(products.archivedAt),
+          )
+        : condition,
+    );
   const rowByReference = new Map<string, (typeof rows)[number]>();
   for (const row of rows) {
     rowByReference.set(String(row.id), row);
@@ -383,11 +394,14 @@ export async function resolveOrderLineSnapshots(
       rawValue: current?.rawValue ?? value,
     });
   }
-  const promo = await resolveOrderPromo(db as Database, {
-    cartProducts: input.cartProducts,
-    promoCode: input.promoCode,
-    now: input.now,
-  });
+  const promo =
+    input.resolvedPromo === undefined
+      ? await resolveOrderPromo(db as Database, {
+          cartProducts: input.cartProducts,
+          promoCode: input.promoCode,
+          now: input.now,
+        })
+      : input.resolvedPromo;
 
   return [...quantities.values()]
     .map(({ row, quantity, rawValue }): MetaCommerceLine => {
@@ -574,9 +588,12 @@ export async function createOrderMetaArtifacts(
     requestContext: MetaRequestContext;
     location?: MetaOrderLocation | null;
     now: Date;
+    linesAlreadyPersisted?: boolean;
   },
 ): Promise<StorefrontOrderMetaResponse> {
-  await replaceOrderLineSnapshots(tx, input.order.id, input.lines, input.now);
+  if (!input.linesAlreadyPersisted) {
+    await replaceOrderLineSnapshots(tx, input.order.id, input.lines, input.now);
+  }
   const externalIdSource =
     input.requestContext.externalIdSource ??
     input.order.visitId ??

@@ -13,14 +13,51 @@ export async function loadStorefrontSettings(): Promise<StorefrontSettingsInput>
     .select({
       contactPhone: storefrontSettings.contactPhone,
       phoneEnabled: storefrontSettings.phoneEnabled,
+      contactEmail: storefrontSettings.contactEmail,
+      address: storefrontSettings.address,
+      mapUrl: storefrontSettings.mapUrl,
+      facebookUrl: storefrontSettings.facebookUrl,
       aiAssistantEnabled: storefrontSettings.aiAssistantEnabled,
+      aiModel: storefrontSettings.aiModel,
+      aiFallbackModel: storefrontSettings.aiFallbackModel,
     })
     .from(storefrontSettings)
     .limit(1);
 
-  return {
-    ...storefrontSettingsInputSchema.parse(stored ?? DEFAULT_STOREFRONT_SETTINGS),
+  return storefrontSettingsInputSchema.parse({
+    ...DEFAULT_STOREFRONT_SETTINGS,
+    ...stored,
+    contactEmail: stored?.contactEmail ?? DEFAULT_STOREFRONT_SETTINGS.contactEmail,
+    address: stored?.address ?? DEFAULT_STOREFRONT_SETTINGS.address,
+    mapUrl: stored?.mapUrl ?? DEFAULT_STOREFRONT_SETTINGS.mapUrl,
+    facebookUrl: stored?.facebookUrl ?? DEFAULT_STOREFRONT_SETTINGS.facebookUrl,
     phoneEnabled: true,
+  });
+}
+
+export function getStorefrontAiModelOptions(env: NodeJS.ProcessEnv = process.env) {
+  const configured = [
+    ...(env.AI_STOREFRONT_MODEL_OPTIONS ?? '').split(','),
+    env.AI_STOREFRONT_MODEL ?? '',
+    env.AI_STOREFRONT_FALLBACK_MODEL ?? '',
+  ]
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return [...new Set(configured)];
+}
+
+export function normalizeStorefrontAiModels(
+  settings: StorefrontSettingsInput,
+  modelOptions: string[],
+): StorefrontSettingsInput {
+  if (modelOptions.length === 0) return settings;
+  return {
+    ...settings,
+    aiModel: modelOptions.includes(settings.aiModel) ? settings.aiModel : modelOptions[0]!,
+    aiFallbackModel:
+      settings.aiFallbackModel && modelOptions.includes(settings.aiFallbackModel)
+        ? settings.aiFallbackModel
+        : null,
   };
 }
 
@@ -38,7 +75,13 @@ export async function saveStorefrontSettings(input: StorefrontSettingsInput) {
     .returning({
       contactPhone: storefrontSettings.contactPhone,
       phoneEnabled: storefrontSettings.phoneEnabled,
+      contactEmail: storefrontSettings.contactEmail,
+      address: storefrontSettings.address,
+      mapUrl: storefrontSettings.mapUrl,
+      facebookUrl: storefrontSettings.facebookUrl,
       aiAssistantEnabled: storefrontSettings.aiAssistantEnabled,
+      aiModel: storefrontSettings.aiModel,
+      aiFallbackModel: storefrontSettings.aiFallbackModel,
     });
 
   return storefrontSettingsInputSchema.parse(stored);

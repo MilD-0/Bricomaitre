@@ -5,6 +5,8 @@ import { parseSortRuleStrings, type SortRule } from './multi-sort';
 
 export {
   buildOrderProductSummaries,
+  assertOrderStatusTransition,
+  canTransitionOrderStatus,
   coerceDeliveryType,
   coerceNoAnswerCount,
   coerceOrderStatus,
@@ -14,6 +16,7 @@ export {
   getOrderStatusLabelKey,
   isConfirmedLifecycleStatus,
   isMongoObjectId,
+  InvalidOrderStatusTransitionError,
   parseNumericAmount,
   parseOrderProductId,
 } from '@bric/storefront-core/order-domain';

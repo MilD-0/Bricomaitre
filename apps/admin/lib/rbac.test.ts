@@ -12,11 +12,13 @@ vi.mock('./auth', () => ({
 import { normalizePermissions, normalizeRole } from './permissions';
 import {
   canMutateResource,
+  requireAnyMutationAccess,
+  requireAnalyticsAccess,
   requireAdministrationAccess,
-  requireAiAccess,
-  requireAiUseAccess,
+  requireAppAccess,
   requireMutationAccess,
   requireOpsAccess,
+  requireSettingsAccess,
 } from './rbac';
 
 describe('rbac helpers', () => {
@@ -73,33 +75,52 @@ describe('rbac helpers', () => {
     await expect(requireOpsAccess()).resolves.toBeNull();
   });
 
-  it('allows admins through requireAdministrationAccess', async () => {
-    authMock.mockResolvedValue({ user: { isAllowed: true, role: 'admin', permissions: [] } });
+  it('keeps analytics and administration settings access independent from ops', async () => {
+    authMock.mockResolvedValue({
+      user: { isAllowed: true, role: 'employee', permissions: ['analytics_manage'] },
+    });
+    await expect(requireAnalyticsAccess()).resolves.toBeNull();
+    expect((await requireOpsAccess())?.status).toBe(403);
+    expect((await requireSettingsAccess())?.status).toBe(403);
+
+    authMock.mockResolvedValue({
+      user: { isAllowed: true, role: 'employee', permissions: ['settings_manage'] },
+    });
+    await expect(requireSettingsAccess()).resolves.toBeNull();
+    expect((await requireAnalyticsAccess())?.status).toBe(403);
+  });
+
+  it('requires analytics_manage for stats mutations', () => {
+    expect(canMutateResource(['analytics_manage'], 'stats')).toBe(true);
+    expect(canMutateResource(['ops_view'], 'stats')).toBe(false);
+  });
+
+  it('allows settings managers through requireAdministrationAccess', async () => {
+    authMock.mockResolvedValue({
+      user: { isAllowed: true, role: 'operations-manager', permissions: ['settings_manage'] },
+    });
 
     await expect(requireAdministrationAccess()).resolves.toBeNull();
   });
 
-  it('requires both base AI and task-specific permissions', async () => {
+  it('makes the AI assistant available to every allowed user', async () => {
     authMock.mockResolvedValue({
-      user: { isAllowed: true, role: 'employee', permissions: ['ai_catalog_propose'] },
+      user: { isAllowed: true, role: 'viewer', permissions: [] },
     });
-    expect((await requireAiAccess('ai_catalog_propose'))?.status).toBe(403);
-
-    authMock.mockResolvedValue({
-      user: { isAllowed: true, role: 'employee', permissions: ['ai_use', 'ai_catalog_propose'] },
-    });
-    await expect(requireAiAccess('ai_catalog_propose')).resolves.toBeNull();
+    await expect(requireAppAccess()).resolves.toBeNull();
   });
 
-  it('allows analytics-only users to open the AI chat while withholding task tools', async () => {
+  it('allows access when any requested mutation domain is granted', async () => {
     authMock.mockResolvedValue({
-      user: { isAllowed: true, role: 'employee', permissions: ['ai_use', 'ai_analytics_query'] },
+      user: { isAllowed: true, role: 'employee', permissions: ['brands_categories_write'] },
     });
-    await expect(requireAiUseAccess()).resolves.toBeNull();
-    expect((await requireAiAccess('ai_catalog_propose'))?.status).toBe(403);
+    await expect(
+      requireAnyMutationAccess(['products', 'assets', 'brandsCategories']),
+    ).resolves.toBeNull();
+    expect((await requireAnyMutationAccess(['products', 'assets']))?.status).toBe(403);
   });
 
-  it('rejects non-admin and non-developer users through requireAdministrationAccess', async () => {
+  it('rejects users without settings permission through requireAdministrationAccess', async () => {
     authMock.mockResolvedValue({
       user: { isAllowed: true, role: 'employee', permissions: ['ops_view'] },
     });

@@ -6,6 +6,10 @@ import { mutateEntityWithHistory } from '../../../lib/action-history';
 import { auth } from '../../../lib/auth';
 import { readCategoriesPage, resolveCategorySlug } from '../../../lib/brands-categories-api';
 import { categoryFormSchema, paginationQuerySchema } from '../../../lib/brands-categories';
+import {
+  assertCategoryParentAllowed,
+  CategoryHierarchyError,
+} from '../../../lib/category-hierarchy';
 import { requireMutationAccess } from '../../../lib/rbac';
 import { captureAdminException, getRequestId, withRequestIdHeaders } from '../../../lib/sentry';
 import { revalidateStorefrontProductMeta } from '../../../lib/storefront-revalidate';
@@ -86,8 +90,11 @@ export async function POST(req: NextRequest) {
       entityType: 'categories',
       operation: 'create',
       actor,
-      execute: (tx) =>
-        tx
+      execute: async (tx) => {
+        await assertCategoryParentAllowed(tx, null, data.parentId ?? null, {
+          lockHierarchy: true,
+        });
+        return tx
           .insert(categories)
           .values({
             name: data.name,
@@ -101,7 +108,8 @@ export async function POST(req: NextRequest) {
             updatedBy: actor.email ?? null,
             updatedByName: actor.name ?? null,
           })
-          .returning({ id: categories.id }),
+          .returning({ id: categories.id });
+      },
       resolveEntityId: (rows) => rows[0]?.id,
     });
   } catch (error) {
@@ -114,7 +122,10 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to create category' },
-      { status: 500, headers: withRequestIdHeaders(requestId) },
+      {
+        status: error instanceof CategoryHierarchyError ? 409 : 500,
+        headers: withRequestIdHeaders(requestId),
+      },
     );
   }
 

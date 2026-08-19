@@ -1,7 +1,8 @@
-import { and, asc, count, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { getDb } from '@bric/db/client';
+import { updateCanonicalOrder } from '@bric/storefront-core/order-write';
 import {
   ecotrackCommunes,
   ecotrackOrderStates,
@@ -771,8 +772,8 @@ export async function loadEcotrackOrderInputs(
   const orderRows = await db.query.orders.findMany({
     where:
       mode === 'confirmed'
-        ? and(eq(orders.confirmed, 2), isNull(orders.archivedAt), inArray(orders.id, orderIds))
-        : and(isNull(orders.archivedAt), inArray(orders.id, orderIds)),
+        ? and(eq(orders.confirmed, 2), inArray(orders.id, orderIds))
+        : inArray(orders.id, orderIds),
     orderBy: [asc(orders.id)],
   });
 
@@ -1062,11 +1063,15 @@ export async function persistEcotrackPostedOrder(
       ? buildEcotrackShipmentActionSnapshot(existingShipment)
       : null;
 
-    await tx
-      .update(orders)
-      .set({
-        confirmed: existingShipment ? input.row.confirmed : ORDER_STATUS_POSTED,
+    await updateCanonicalOrder(tx, {
+      orderId: input.row.id,
+      status: {
+        value: existingShipment ? coerceOrderStatus(input.row.confirmed) : ORDER_STATUS_POSTED,
         noAnswerCount: 0,
+      },
+      actor,
+      now,
+      values: {
         ecotrackReference: String(input.row.id),
         ecotrackTrackingNumber: createResult.tracking,
         ecotrackStatus: 'prete_a_expedier',
@@ -1080,20 +1085,8 @@ export async function persistEcotrackPostedOrder(
         confirmedBy: actor.email ?? input.row.confirmedBy ?? null,
         confirmedByName: actor.name ?? input.row.confirmedByName ?? null,
         confirmedAt: input.row.confirmedAt ?? now,
-        updatedAt: now,
-      })
-      .where(eq(orders.id, input.row.id));
-
-    if (!existingShipment) {
-      await tx.insert(orderStatusHistory).values({
-        orderId: input.row.id,
-        status: ORDER_STATUS_POSTED,
-        noAnswerCount: 0,
-        changedBy: actor.email ?? null,
-        changedByName: actor.name ?? null,
-        changedAt: now,
-      });
-    }
+      },
+    });
 
     await tx
       .insert(ecotrackOrderStates)

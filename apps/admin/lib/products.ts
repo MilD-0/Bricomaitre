@@ -3,6 +3,12 @@ import { z } from 'zod';
 import { parseSortRuleStrings, type SortRule } from './multi-sort';
 
 const nullableText = z.string().trim().optional().nullable();
+const nullableIdentifier = z
+  .string()
+  .trim()
+  .optional()
+  .nullable()
+  .transform((value) => value || null);
 const nullableNumber = z.coerce.number().min(0).optional().nullable();
 const nullableDateText = z.union([z.string(), z.null(), z.undefined()]).transform((value) => {
   if (value == null) {
@@ -41,8 +47,8 @@ export const productPayloadSchema = z
     titleAr: nullableText,
     description: nullableText,
     descriptionAr: nullableText,
-    sku: nullableText,
-    barcode: nullableText,
+    sku: nullableIdentifier,
+    barcode: nullableIdentifier,
 
     price: z.coerce.number().min(0),
     oldPrice: nullableNumber,
@@ -125,6 +131,7 @@ const productSortKeyValues = [
 ] as const;
 const sortDirectionValues = ['asc', 'desc'] as const;
 export const imageOriginFilterValues = ['all', 'external'] as const;
+const productStateFilterValues = ['all', 'active', 'inactive', 'out'] as const;
 
 const optionalNumericFilter = z
   .union([z.coerce.number().int().positive(), z.literal(''), z.null()])
@@ -145,6 +152,7 @@ export const productListQuerySchema = z
     brandId: optionalNumericFilter,
     categoryId: optionalNumericFilter,
     imageOrigin: z.enum(imageOriginFilterValues).default('all'),
+    state: z.enum(productStateFilterValues).default('all'),
     sort: z.array(z.string().trim()).optional().default([]),
     sortKey: z.enum(productSortKeyValues).default('updatedAt'),
     sortDirection: z.enum(sortDirectionValues).default('desc'),
@@ -183,3 +191,4 @@ export type ProductRecord = Omit<ProductPayload, 'promoCodes'> & {
 
 export type ProductSortKey = z.infer<typeof productListQuerySchema>['sortKey'];
 export type ProductSortRule = SortRule<ProductSortKey>;
+export type ProductStateFilter = (typeof productStateFilterValues)[number];

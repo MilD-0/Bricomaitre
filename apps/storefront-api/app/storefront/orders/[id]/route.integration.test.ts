@@ -2,16 +2,12 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET, PATCH } from './route';
-import { storefrontOrderPatchRequestSchema } from '@bric/storefront-core/contracts';
 
-const { hasDbMock, getDbMock, readStorefrontOrderMock, updateStorefrontOrderMock } = vi.hoisted(
-  () => ({
-    hasDbMock: vi.fn(),
-    getDbMock: vi.fn(),
-    readStorefrontOrderMock: vi.fn(),
-    updateStorefrontOrderMock: vi.fn(),
-  }),
-);
+const { hasDbMock, getDbMock, readStorefrontOrderMock } = vi.hoisted(() => ({
+  hasDbMock: vi.fn(),
+  getDbMock: vi.fn(),
+  readStorefrontOrderMock: vi.fn(),
+}));
 const { buildRateLimitHeadersMock, enforceRequestRateLimitMock } = vi.hoisted(() => ({
   buildRateLimitHeadersMock: vi.fn(),
   enforceRequestRateLimitMock: vi.fn(),
@@ -24,7 +20,6 @@ vi.mock('@bric/db/client', () => ({
 
 vi.mock('@bric/storefront-core/orders', () => ({
   readStorefrontOrder: readStorefrontOrderMock,
-  updateStorefrontOrder: updateStorefrontOrderMock,
 }));
 
 vi.mock('../../../../lib/request-security', () => ({
@@ -37,7 +32,6 @@ describe('app/storefront/orders/[id]/route', () => {
     hasDbMock.mockReset();
     getDbMock.mockReset();
     readStorefrontOrderMock.mockReset();
-    updateStorefrontOrderMock.mockReset();
     buildRateLimitHeadersMock.mockReset();
     enforceRequestRateLimitMock.mockReset();
     hasDbMock.mockReturnValue(true);
@@ -80,30 +74,14 @@ describe('app/storefront/orders/[id]/route', () => {
     await expect(res.json()).resolves.toEqual({ error: 'Order token is required' });
   });
 
-  it.each([
-    ['GET', (request: NextRequest) => GET(request, { params: Promise.resolve({ id: 'nope' }) })],
-    [
-      'PATCH',
-      (request: NextRequest) => PATCH(request, { params: Promise.resolve({ id: 'nope' }) }),
-    ],
-  ])('returns 400 before data access for a malformed order id in %s', async (method, callRoute) => {
-    const request = new NextRequest('http://localhost/storefront/orders/nope?token=public-token', {
-      method,
-      ...(method === 'PATCH'
-        ? {
-            body: JSON.stringify({ city: 'Oran' }),
-            headers: { 'content-type': 'application/json' },
-          }
-        : {}),
-    });
-
-    const res = await callRoute(request);
+  it('returns 400 before data access for a malformed order id', async () => {
+    const request = new NextRequest('http://localhost/storefront/orders/nope?token=public-token');
+    const res = await GET(request, { params: Promise.resolve({ id: 'nope' }) });
 
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toEqual({ error: 'Invalid order id.' });
     expect(getDbMock).not.toHaveBeenCalled();
     expect(readStorefrontOrderMock).not.toHaveBeenCalled();
-    expect(updateStorefrontOrderMock).not.toHaveBeenCalled();
   });
 
   it('returns the storefront order for a valid token', async () => {
@@ -125,59 +103,14 @@ describe('app/storefront/orders/[id]/route', () => {
     await expect(res.json()).resolves.toEqual({ item: { id: 11 } });
   });
 
-  it('returns validation errors for invalid storefront PATCH payloads', async () => {
-    vi.spyOn(storefrontOrderPatchRequestSchema, 'safeParse').mockReturnValue({
-      success: false,
-      error: { flatten: () => ({ fieldErrors: { cartProducts: ['Required'] } }) },
-    } as never);
+  it('rejects public order edits and directs customers to assisted support', async () => {
+    const res = await PATCH();
 
-    const res = await PATCH(
-      new NextRequest('http://localhost/storefront/orders/11', {
-        method: 'PATCH',
-        body: JSON.stringify({}),
-        headers: { 'content-type': 'application/json' },
-      }),
-      {
-        params: Promise.resolve({ id: '11' }),
-      },
-    );
-
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(405);
+    expect(res.headers.get('allow')).toBe('GET');
     await expect(res.json()).resolves.toEqual({
-      error: { fieldErrors: { cartProducts: ['Required'] } },
+      error:
+        'Customer order editing is not available. Please contact Bricomaitre to correct an order.',
     });
-  });
-
-  it('patches a storefront order with a valid token', async () => {
-    getDbMock.mockReturnValue({ tag: 'db' });
-    vi.spyOn(storefrontOrderPatchRequestSchema, 'safeParse').mockReturnValue({
-      success: true,
-      data: {
-        city: 'Oran',
-        delivery: 1,
-      },
-    } as never);
-    updateStorefrontOrderMock.mockResolvedValue({
-      kind: 'ok',
-      item: { id: 11 },
-      token: 'public-token',
-    });
-
-    const res = await PATCH(
-      new NextRequest('http://localhost/storefront/orders/11?token=public-token', {
-        method: 'PATCH',
-        body: JSON.stringify({ city: 'Oran', delivery: 1 }),
-        headers: { 'content-type': 'application/json' },
-      }),
-      {
-        params: Promise.resolve({ id: '11' }),
-      },
-    );
-
-    expect(updateStorefrontOrderMock).toHaveBeenCalledWith({ tag: 'db' }, 11, 'public-token', {
-      city: 'Oran',
-      delivery: 1,
-    });
-    await expect(res.json()).resolves.toEqual({ ok: true, item: { id: 11 } });
   });
 });

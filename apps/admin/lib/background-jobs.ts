@@ -14,6 +14,10 @@ import {
   type JobSnapshot,
 } from '@bric/runtime/jobs';
 import { getOrderProductLookup, toOrderRecord } from '@bric/storefront-core/order-records';
+import {
+  CanonicalOrderNotFoundError,
+  updateCanonicalOrder,
+} from '@bric/storefront-core/order-write';
 
 import { getDb } from '@bric/db/client';
 import {
@@ -1085,8 +1089,8 @@ async function loadOrdersForExport(mode: 'selected' | 'confirmed', orderIds: num
   const orderRows = await db.query.orders.findMany({
     where:
       mode === 'confirmed'
-        ? and(eq(orders.confirmed, 2), isNull(orders.archivedAt), inArray(orders.id, orderIds))
-        : and(isNull(orders.archivedAt), inArray(orders.id, orderIds)),
+        ? and(eq(orders.confirmed, 2), inArray(orders.id, orderIds))
+        : inArray(orders.id, orderIds),
     orderBy: [asc(orders.id)],
   });
   const historyRows = await db.query.orderStatusHistory.findMany({
@@ -1123,26 +1127,18 @@ async function markOrdersAsDispatched(orderIds: number[]) {
   const now = new Date();
 
   for (const orderId of orderIds) {
-    const [updatedOrder] = await db
-      .update(orders)
-      .set({
-        confirmed: 3,
-        noAnswerCount: 0,
-        updatedAt: now,
-      })
-      .where(eq(orders.id, orderId))
-      .returning();
-
-    if (!updatedOrder) {
-      continue;
+    try {
+      await db.transaction((tx) =>
+        updateCanonicalOrder(tx, {
+          orderId,
+          status: { value: 3, noAnswerCount: 0 },
+          now,
+        }),
+      );
+    } catch (error) {
+      if (error instanceof CanonicalOrderNotFoundError) continue;
+      throw error;
     }
-
-    await db.insert(orderStatusHistory).values({
-      orderId,
-      status: 3,
-      noAnswerCount: 0,
-      changedAt: now,
-    });
   }
 }
 

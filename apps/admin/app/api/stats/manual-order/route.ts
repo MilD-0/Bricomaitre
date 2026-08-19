@@ -10,11 +10,11 @@ import {
   manualOrderInputSchema,
   manualOrderListQuerySchema,
 } from '../../../../lib/manual-orders';
-import { requireOpsAccess } from '../../../../lib/rbac';
+import { requireAnalyticsAccess } from '../../../../lib/rbac';
 import { triggerAdminReportingRefresh } from '../../../../lib/reporting-refresh-trigger';
 
 export async function GET(request: NextRequest) {
-  const denied = await requireOpsAccess();
+  const denied = await requireAnalyticsAccess();
   if (denied) return denied;
 
   if (!hasDb()) {
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireOpsAccess();
+  const denied = await requireAnalyticsAccess();
   if (denied) return denied;
 
   if (!hasDb()) {

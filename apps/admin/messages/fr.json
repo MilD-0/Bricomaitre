@@ -2,6 +2,7 @@
   "nav": {
     "administration": "Administration",
     "products": "Produits",
+    "aiProposals": "Propositions IA",
     "orders": "Commandes",
     "ordersTable": "Saisie des commandes",
     "ecotrackShipments": "Expeditions ECOTRACK",
@@ -14,6 +15,256 @@
     "stats": "Statistiques",
     "bulletin": "Bulletin",
     "settings": "Paramètres"
+  },
+  "productArchive": {
+    "title": "Produits archivés",
+    "description": "Produits retirés de la boutique active.",
+    "empty": "Aucun produit archivé.",
+    "restore": "Restaurer",
+    "restoring": "Restauration…",
+    "restored": "Produit restauré dans le catalogue.",
+    "restoreError": "Le produit n’a pas pu être restauré."
+  },
+  "aiProposalInbox": {
+    "title": "Révision des propositions IA",
+    "description": "Examinez les changements catalogue avec leur diff, leurs preuves, leur confiance, le modèle source et une approbation sélective.",
+    "empty": "Aucune proposition IA en attente de révision.",
+    "expired": "{count, plural, one {# proposition a expiré et ne peut pas être approuvée.} other {# propositions ont expiré et ne peuvent pas être approuvées.}}",
+    "expiredBadge": "Expirée",
+    "confidence": "Confiance {value}%",
+    "evidence": "Preuves sources",
+    "noEvidence": "Aucune preuve source visible n’est jointe. N’approuvez que si le changement peut être vérifié depuis le catalogue.",
+    "approve": "Approuver",
+    "reject": "Rejeter",
+    "approveSelected": "Approuver la sélection ({count})",
+    "rejectSelected": "Rejeter la sélection ({count})",
+    "approving": "Approbation de {count} propositions…",
+    "rejecting": "Rejet de {count} propositions…",
+    "approved": "{count} propositions approuvées.",
+    "rejected": "{count} propositions rejetées.",
+    "deleteExpired": "Supprimer les expirées",
+    "deleteExpiredTitle": "Supprimer les propositions expirées ?",
+    "deleteExpiredDescription": "Supprimer définitivement les {count} propositions expirées affichées sur cette page. Les propositions actives et déjà révisées ne sont pas affectées.",
+    "deletingExpired": "Suppression de {count} propositions expirées…",
+    "deletedExpired": "{count} propositions expirées supprimées.",
+    "deleteExpiredError": "La proposition expirée n’a pas pu être supprimée.",
+    "reviewError": "La proposition n’a pas pu être révisée.",
+    "search": "Rechercher un type, une entité, une tâche, un modèle ou un demandeur",
+    "proposalType": "Type de proposition",
+    "entityType": "Type d’entité",
+    "model": "Modèle",
+    "sort": "Tri",
+    "expiry": "Expiration",
+    "evidenceFilter": "Preuves",
+    "pageSize": "Taille de page",
+    "allProposalTypes": "Tous les types de proposition",
+    "allEntityTypes": "Tous les types d’entité",
+    "allModels": "Tous les modèles",
+    "sortNewest": "Plus récentes",
+    "sortOldest": "Plus anciennes",
+    "sortConfidence": "Confiance la plus élevée",
+    "sortExpiry": "Expiration la plus proche",
+    "sortType": "Type de proposition",
+    "allExpiry": "Toute expiration",
+    "activeOnly": "Actives uniquement",
+    "expiredOnly": "Expirées uniquement",
+    "allEvidence": "Toutes les preuves",
+    "withEvidence": "Avec preuves",
+    "withoutEvidence": "Sans preuves",
+    "perPage": "{count} par page",
+    "applyFilters": "Appliquer",
+    "resetFilters": "Réinitialiser",
+    "resultCount": "{count, plural, one {# proposition} other {# propositions}}",
+    "pagination": "Pages des propositions",
+    "previousPage": "Précédente",
+    "nextPage": "Suivante",
+    "pageOf": "Page {page} sur {total}"
+  },
+  "salesDesk": {
+    "newOrder": "Commande téléphone",
+    "queues": "Files de travail",
+    "newOrderTitle": "Créer une commande assistée par téléphone",
+    "newOrderDescription": "Crée la même commande canonique, les snapshots, le total de livraison, le jeton de suivi et l’audit que le checkout boutique.",
+    "customerName": "Nom du client",
+    "phone": "Téléphone",
+    "delivery": "Livraison",
+    "home": "À domicile",
+    "office": "Stop desk",
+    "wilaya": "Wilaya",
+    "commune": "Commune",
+    "selectWilaya": "Choisir la wilaya",
+    "selectCommune": "Choisir la commune",
+    "address": "Adresse de livraison",
+    "products": "Produits",
+    "searchProducts": "Rechercher par titre, SKU ou code-barres",
+    "searching": "Recherche…",
+    "removeProduct": "Retirer le produit",
+    "note": "Note opérateur",
+    "create": "Créer la commande",
+    "created": "Commande n°{id} créée.",
+    "createError": "La commande téléphone n’a pas pu être créée.",
+    "duplicateWarning": "Soumissions potentiellement dupliquées pour ce téléphone durant les dernières 24 heures :",
+    "openCreated": "Ouvrir la commande créée",
+    "close": "Fermer",
+    "queuesTitle": "Files du service commercial",
+    "queuesDescription": "Files calculées à partir du statut, des appels, de l’adresse et des exceptions transporteur.",
+    "emptyQueue": "Aucune commande dans cette file.",
+    "queue": {
+      "new": "Nouvelles",
+      "firstCall": "Premier appel",
+      "retryCall": "Rappel",
+      "addressCorrection": "Correction d’adresse",
+      "readyForPosting": "Prêtes à envoyer",
+      "carrierException": "Exception transporteur"
+    },
+    "customer": {
+      "returningCustomer": "Client fidèle · 1 commande livrée",
+      "returningCustomerCount": "Client fidèle · {count} commandes livrées",
+      "title": "Historique du téléphone",
+      "loading": "Chargement de l’historique client…",
+      "firstOrder": "Aucune commande précédente avec ce numéro.",
+      "noAddress": "Sans adresse",
+      "merge": "Fusionner le doublon",
+      "mergePrompt": "Archiver la commande doublon n°{source} dans la commande canonique n°{target} ? Les deux audits sont conservés.",
+      "mergeReason": "Motif de fusion (obligatoire)",
+      "cancel": "Annuler",
+      "confirmMerge": "Fusionner et archiver",
+      "merged": "Commande n°{source} fusionnée dans la n°{target}.",
+      "mergeError": "Les commandes n’ont pas pu être fusionnées.",
+      "note": "Note client ou opérateur",
+      "refusalReason": "Motif de refus facultatif",
+      "refusal": "Refus",
+      "addNote": "Ajouter à l’historique du téléphone",
+      "noteSaved": "Note client enregistrée.",
+      "noteError": "La note client n’a pas pu être enregistrée."
+    },
+    "archive": {
+      "filter": "Filtre d’archive des commandes",
+      "live": "Commandes actives",
+      "archived": "Commandes archivées",
+      "archive": "Archiver la commande",
+      "restore": "Restaurer la commande",
+      "purge": "Supprimer définitivement",
+      "confirmTitle": "Archiver cette commande ?",
+      "confirmDescription": "Supprimer cette commande ?",
+      "purgeTitle": "Supprimer définitivement cette commande ?",
+      "purgeDescription": "{target} et son historique dépendant seront définitivement supprimés. Cette action restreinte est irréversible.",
+      "restored": "Commande restaurée.",
+      "purged": "Commande définitivement supprimée."
+    },
+    "correction": {
+      "title": "Correction de statut historique",
+      "description": "Utilisez ceci uniquement pour corriger une erreur enregistrée. Un événement de correction est ajouté sans effacer les horodatages de confirmation initiaux.",
+      "reason": "Pourquoi corriger le statut historique ?",
+      "apply": "Enregistrer la correction",
+      "saved": "Correction de statut enregistrée.",
+      "error": "La correction de statut n’a pas pu être enregistrée."
+    }
+  },
+  "profile": {
+    "legacyUi": "Interface classique",
+    "legacyUiDescription": "Utiliser les interfaces d’origine pour les Produits, Commandes, Ressources et Pages d’atterrissage."
+  },
+  "adminWorkspace": {
+    "common": {
+      "search": "Rechercher",
+      "all": "Tous",
+      "filters": "Filtres",
+      "selected": "{count} sélectionnés",
+      "noResults": "Aucun résultat correspondant",
+      "unsaved": "Modifications non enregistrées",
+      "upToDate": "Aucune modification non enregistrée"
+    },
+    "products": {
+      "resultCount": "{count} produits",
+      "searchPlaceholder": "Rechercher un produit, SKU ou code-barres",
+      "allStates": "Tous les états du catalogue",
+      "active": "Actif",
+      "inactive": "Inactif",
+      "outOfStock": "Hors stock",
+      "catalog": "Catalogue",
+      "product": "Produit",
+      "performance": "Performance",
+      "availability": "Disponibilité",
+      "organization": "Organisation",
+      "content": "Contenu et médias",
+      "pricing": "Tarification",
+      "selectionActive": "Marquer actif",
+      "selectionStock": "Mettre en stock",
+      "selectionMore": "Plus d’actions",
+      "orders": "Commandes",
+      "confirmation": "Confirmation",
+      "noSku": "Sans SKU",
+      "noDescription": "Pas encore de description",
+      "identity": "Identité",
+      "identityHint": "Noms visibles par les clients et références opérationnelles.",
+      "commercial": "Détails commerciaux",
+      "commercialHint": "Prix, organisation, stock et état de publication.",
+      "contentHint": "Le contenu français et arabe partage le même flux d’édition.",
+      "archive": "Archiver",
+      "archiveSelected": "Archiver la sélection",
+      "archiveConfirm": "Archiver ce produit ?",
+      "archiveDialogTitle": "Archiver les produits",
+      "archiveDialogDescription": "Ce produit sera masqué dans la boutique.",
+      "openEditor": "Modifier {name}",
+      "quickChangeSaved": "État du produit enregistré.",
+      "bulkChangeSaved": "{count} produits mis à jour."
+    },
+    "orders": {
+      "resultCount": "{count} commandes",
+      "operations": "Opérations des commandes",
+      "postConfirmed": "Envoyer confirmées",
+      "postedShoppingList": "Liste des envoyées",
+      "payloadDetails": "Détails des données",
+      "searchPlaceholder": "Rechercher client, téléphone, ville ou produit",
+      "queue": "File des commandes",
+      "weekOverview": "Aperçu sur sept jours",
+      "days": "Jours de projection",
+      "previousDay": "Jour de projection précédent",
+      "nextDay": "Jour de projection suivant",
+      "viewDay": "Voir la projection du {date}",
+      "projectedProfit": "Bénéfice projeté",
+      "grossShort": "Brut",
+      "expectedShort": "{count} prévus",
+      "ordersSummary": "Commandes",
+      "newShort": "nouvelles",
+      "confirmedShort": "confirmées",
+      "noAnswerShort": "sans réponse",
+      "confirmationShort": "confirmation",
+      "shipmentShort": "livraison",
+      "adminShort": "admin",
+      "carrierShort": "transporteur",
+      "updates": "Mises à jour",
+      "cancelled": "Annulées",
+      "newOrders": "Nouvelles commandes",
+      "confirmed": "Confirmées",
+      "confirmedToday": "Confirmées aujourd’hui",
+      "noAnswer": "Sans réponse",
+      "customer": "Client",
+      "location": "Localisation",
+      "amount": "Montant",
+      "products": "Produits",
+      "status": "Statut",
+      "activity": "Activité",
+      "contact": "Contact",
+      "delivery": "Livraison",
+      "notes": "Notes",
+      "selectionPost": "Envoyer à Delivro",
+      "selectionList": "Liste de préparation",
+      "selectionMore": "Plus d’actions",
+      "noLocation": "Localisation indisponible",
+      "noNotes": "Aucune note",
+      "openTracking": "Ouvrir le suivi de {name}",
+      "tracking": "Suivi",
+      "customerDetails": "Coordonnées du client",
+      "secondaryPhone": "Téléphone secondaire",
+      "statusAndOwnership": "Statut et confirmation",
+      "noAnswerAttempts": "Tentatives sans réponse",
+      "fulfillment": "Livraison",
+      "orderContents": "Contenu de la commande",
+      "selectOrder": "Sélectionnez une commande à consulter et modifier",
+      "saveChanges": "Enregistrer"
+    }
   },
   "roles": {
     "viewer": "Lecteur",
@@ -293,9 +544,15 @@
         "error": "Impossible de mettre à jour le statut pour {name}."
       },
       "delete": {
+        "confirm": "Supprimer cette commande ?",
         "loading": "Suppression de {target}...",
         "success": "{target} supprimé.",
         "error": "Impossible de supprimer {target}."
+      },
+      "archive": {
+        "loading": "Archivage de {target}...",
+        "success": "{target} archivé.",
+        "error": "Impossible d’archiver {target}."
       }
     }
   },
@@ -319,6 +576,8 @@
     "customStart": "Date de début personnalisée",
     "customEnd": "Date de fin personnalisée",
     "ranges": {
+      "7d": "7 jours",
+      "14d": "14 jours",
       "30d": "30 jours",
       "90d": "90 jours",
       "year": "Cette année",
@@ -351,7 +610,115 @@
       "products": "Produits & catégories",
       "geography": "Géographie",
       "time": "Analyse temporelle",
+      "profitTracker": "Suivi des profits",
       "metaAds": "Meta Ads"
+    },
+    "profitTracker": {
+      "title": "Suivi des profits",
+      "description": "Analyse rapide du profit quotidien avec la conversion EUR, l'ajustement des retours et la formule profit ajusté ÷ coût publicitaire du calculateur.",
+      "eyebrow": "Parité avec le calculateur",
+      "latestMeta": "Dernières données Meta",
+      "rangeLabel": "Période",
+      "applyRange": "Appliquer",
+      "export": "Exporter en CSV",
+      "empty": "Aucune donnée disponible pour cette période.",
+      "cards": {
+        "profitX": "Profit ×",
+        "adjusted": "Profit ajusté",
+        "net": "Profit net",
+        "trueProfit": "Profit réel",
+        "spend": "Dépenses Meta",
+        "confirmed": "Commandes confirmées"
+      },
+      "charts": {
+        "daily": "Profit net et coût publicitaire par jour",
+        "cumulative": "Profit cumulé",
+        "creative": "Fatigue créative : CPM et CTR",
+        "roas": "ROAS — profit ×",
+        "funnel": "Efficacité du tunnel"
+      },
+      "metrics": {
+        "net": "Profit net",
+        "netBefore": "Profit net avant retours",
+        "trend": "Tendance sur 7 jours",
+        "adCost": "Coût publicitaire",
+        "cumulativeNet": "Profit net cumulé",
+        "cumulativeBefore": "Cumul avant retours",
+        "cumulativeTrue": "Profit réel cumulé",
+        "profitAfter": "Profit × après retours",
+        "profitBefore": "Profit × avant retours",
+        "breakEven": "Seuil de rentabilité",
+        "cpm": "CPM",
+        "ctr": "CTR",
+        "confirmation": "Taux de confirmation",
+        "clickToPage": "Taux clic-vers-page",
+        "costConfirmed": "Coût par commande confirmée"
+      },
+      "settings": {
+        "title": "Paramètres du calculateur",
+        "fx": "Taux EUR → DZD",
+        "returns": "Taux de retour par défaut (%)",
+        "restFrom": "Règle de repos du vendredi depuis",
+        "save": "Enregistrer les paramètres",
+        "fxHint": "Le taux de change est figé pour chaque jour. Le modifier ne recalcule jamais l'historique. Un vendredi sans profit ni commande confirmée reporte uniquement ses dépenses Meta au prochain jour actif."
+      },
+      "day": {
+        "title": "Économie quotidienne",
+        "date": "Date",
+        "gross": "Profit brut (DZD)",
+        "returns": "Taux de retour (%)",
+        "confirmed": "Commandes confirmées",
+        "note": "Note",
+        "save": "Enregistrer le jour",
+        "fetchMeta": "Récupérer depuis Meta"
+      },
+      "weekly": {
+        "title": "Performance hebdomadaire à partir du vendredi",
+        "week": "Semaine commençant le",
+        "days": "Jours"
+      },
+      "history": {
+        "title": "Historique quotidien",
+        "roll": "Report du vendredi",
+        "rest": "Jour de repos",
+        "actions": "Actions",
+        "edit": "Modifier le {date}",
+        "delete": "Supprimer le {date}",
+        "confirmDelete": "Supprimer les données enregistrées du {date} ?"
+      },
+      "adsets": {
+        "title": "Performance des ensembles de publicités",
+        "name": "Ensemble de publicités",
+        "purchases": "Achats",
+        "costPerPurchase": "Coût / achat",
+        "value": "Valeur des achats",
+        "estimatedNet": "Profit net estimé"
+      },
+      "costs": {
+        "title": "Coûts d'exploitation",
+        "name": "Nom du coût",
+        "amount": "Montant (DZD)",
+        "period": "Période",
+        "monthly": "Mensuel",
+        "once": "Ponctuel",
+        "start": "Date de début",
+        "end": "Date de fin (facultative)",
+        "save": "Ajouter le coût",
+        "update": "Mettre à jour le coût",
+        "edit": "Modifier",
+        "cancel": "Annuler la modification",
+        "delete": "Supprimer {name}",
+        "confirmDelete": "Supprimer le coût d'exploitation {name} ?",
+        "deleteAction": "Supprimer"
+      },
+      "notifications": {
+        "settingsSaved": "Paramètres du calculateur enregistrés.",
+        "daySaved": "Économie quotidienne enregistrée.",
+        "dayDeleted": "Données quotidiennes supprimées.",
+        "metaFetched": "Données Meta actualisées pour le jour sélectionné.",
+        "costSaved": "Coût d'exploitation enregistré.",
+        "costDeleted": "Coût d'exploitation supprimé."
+      }
     },
     "upload": {
       "title": "Import Excel",
@@ -598,12 +965,12 @@
       "empty": "Aucune activité de page d’atterrissage sur le nouveau storefront pour cette période.",
       "blockMeta": "{adds} ajouts · {checkouts} checkouts",
       "cards": {
-        "published": "Pages publiées",
+        "published": "Pages actives",
         "sessions": "Sessions attribuées",
         "purchases": "Commandes soumises",
         "conversion": "Conversion session",
         "revenue": "Revenu attribué",
-        "drafts": "Brouillons"
+        "drafts": "Pages inactives"
       },
       "columns": {
         "page": "Page",
@@ -754,13 +1121,12 @@
       }
     },
     "manualOrders": {
-      "sectionTitle": "Commandes manuelles",
-      "title": "Ajouter une commande manuelle",
-      "description": "Créer une commande directement dans le jeu analytique.",
+      "sectionTitle": "Saisies manuelles",
+      "title": "Ajouter une saisie de reporting",
       "actions": {
-        "open": "Ajouter une commande",
+        "open": "Ajouter une saisie",
         "cancel": "Annuler",
-        "create": "Créer la commande"
+        "create": "Créer la saisie"
       },
       "fields": {
         "tracking": "Tracking",
@@ -788,8 +1154,8 @@
         "profit": "Profit"
       },
       "history": {
-        "emptyTitle": "Aucune commande manuelle",
-        "emptyDescription": "Ajoutez une commande manuelle pour l'inclure dans les statistiques.",
+        "emptyTitle": "Aucune saisie manuelle",
+        "emptyDescription": "Ajoutez une ancienne commande manquante pour l’inclure dans le reporting.",
         "show": "Afficher l'historique",
         "hide": "Masquer l'historique",
         "columns": {
@@ -808,14 +1174,14 @@
       },
       "notifications": {
         "create": {
-          "loading": "Création de la commande manuelle...",
-          "success": "Commande manuelle créée.",
-          "error": "Échec de création de la commande manuelle."
+          "loading": "Création de la saisie manuelle...",
+          "success": "Saisie manuelle créée.",
+          "error": "Échec de création de la saisie manuelle."
         },
         "delete": {
-          "loading": "Suppression de la commande manuelle...",
-          "success": "Commande manuelle {id} supprimée.",
-          "error": "Échec de suppression de la commande manuelle."
+          "loading": "Suppression de la saisie manuelle...",
+          "success": "Saisie manuelle {id} supprimée.",
+          "error": "Échec de suppression de la saisie manuelle."
         }
       }
     },
@@ -1066,7 +1432,7 @@
     "emptyTitle": "Que souhaitez-vous améliorer ?",
     "capabilityCatalog": "Contenu catalogue",
     "capabilityAnalytics": "Analyses",
-    "capabilityPricing": "Prix et bundles",
+    "capabilityPricing": "Prix",
     "examples": "Exemple : génère le titre arabe du produit 42, régénère les descriptions des produits 10 et 11, ou traite tous les produits sans titre arabe.",
     "placeholder": "Demandez une action sur le contenu produit…",
     "send": "Envoyer",
@@ -1850,6 +2216,8 @@
       "createAction": "Autoriser l’e-mail",
       "updateAction": "Mettre à jour l’accès",
       "cancelEditAction": "Annuler la modification",
+      "empty": "Aucun accès employé pour le moment.",
+      "deleteConfirmation": "Supprimer l’accès de cet employé ? Il ne pourra plus accéder à l’administration.",
       "columns": {
         "email": "E-mail",
         "assignment": "Attribution"
@@ -1890,6 +2258,8 @@
       "cancelEditAction": "Annuler la modification",
       "editAction": "Modifier les permissions",
       "noDescription": "Aucune description fournie pour le moment.",
+      "empty": "Aucun rôle personnalisé pour le moment.",
+      "permissionCount": "{count} permissions",
       "notifications": {
         "create": {
           "loading": "Création du rôle {name}...",
@@ -1910,26 +2280,38 @@
       "brands_categories_write": "Gérer les marques et catégories",
       "bulletin_moderate": "Modérer les publications du bulletin",
       "ops_view": "Voir les tableaux et journaux Ops",
-      "settings_manage": "Gérer la configuration des paramètres",
-      "ai_use": "Utiliser l’assistant IA d’administration",
-      "ai_catalog_propose": "Générer des propositions IA pour le catalogue",
-      "ai_catalog_apply": "Appliquer les modifications IA au catalogue",
-      "ai_analytics_query": "Interroger les analyses avec l’IA",
-      "ai_pricing_analyze": "Analyser les prix et remises avec l’IA",
-      "ai_pricing_apply": "Appliquer les prix et remises proposés par l’IA",
-      "ai_landing_publish": "Publier les pages de destination générées par l’IA"
+      "analytics_manage": "Voir et gérer les analyses",
+      "settings_manage": "Gérer la configuration des paramètres"
+    },
+    "permissionGroups": {
+      "commerce": "Commerce",
+      "operations": "Opérations"
     }
   },
   "storefrontSettings": {
     "title": "Paramètres de la boutique",
     "description": "Gérez ici les informations de contact visibles par les clients. Cette page masquée accueillera aussi les futurs réglages de mise en page et d’information de la boutique.",
     "contactTitle": "Coordonnées",
+    "emailLabel": "E-mail de contact client",
+    "addressLabel": "Adresse du magasin",
+    "mapUrl": "Lien de la carte",
+    "facebookUrl": "Lien Facebook",
     "contactDescription": "La boutique utilise ce numéro pour les appels directs des clients.",
     "phoneLabel": "Numéro de téléphone client",
     "phoneHint": "Un numéro mobile algérien au format national ou +213.",
     "callsLabel": "Autoriser les appels",
     "callsHint": "Afficher les actions d’appel direct dans la boutique.",
     "assistantTitle": "Assistant d’achat IA",
+    "assistantRuntimeTitle": "Moteur de l’assistant",
+    "modelLabel": "Modèle principal",
+    "fallbackModelLabel": "Modèle de secours (facultatif)",
+    "noModels": "Aucun modèle boutique n’est configuré",
+    "noFallbackModel": "Aucun modèle de secours",
+    "announcementTitle": "Barre d’annonce",
+    "announcementMessageFr": "Message français",
+    "announcementMessageAr": "Message arabe",
+    "active": "Actif",
+    "saveAnnouncement": "Enregistrer l’annonce",
     "assistantDescription": "Contrôlez la disponibilité du conseiller produits sur la nouvelle boutique.",
     "assistantLabel": "Activer l’assistant d’achat IA",
     "assistantHint": "Affiche le conseiller sur les pages de navigation et de produits. Il reste absent du checkout et de la page de confirmation.",
@@ -1963,6 +2345,8 @@
     "resetFilters": "Réinitialiser les filtres",
     "resultsSummary": "{count} entrées affichées sur {total}",
     "systemActor": "Système",
+    "today": "Aujourd’hui",
+    "yesterday": "Hier",
     "actorLine": "{actor} a modifié {entityType} #{entityId}",
     "changeLine": "{field} : {before} -> {after}",
     "noValue": "Vide",
@@ -1977,11 +2361,13 @@
       "false": "Non"
     },
     "filters": {
+      "title": "Filtres",
       "actionLabel": "Filtrer par action",
       "areaLabel": "Filtrer par zone",
       "stateLabel": "Filtrer par état",
       "includeEcotrackSyncLabel": "Afficher les changements ECOTRACK sync",
       "includeEcotrackSyncDescription": "Masqués par défaut pour garder le tableau lisible.",
+      "includeAutomation": "Synchronisations automatiques",
       "allActions": "Toutes les actions",
       "allAreas": "Toutes les zones",
       "allStates": "Tous les états"
@@ -1997,6 +2383,35 @@
       "create": "Créé",
       "update": "Mis à jour",
       "delete": "Supprimé"
+    },
+    "sort": {
+      "newest": "Plus récents d’abord",
+      "oldest": "Plus anciens d’abord"
+    },
+    "summaries": {
+      "created": "Enregistrement créé",
+      "updated": "Enregistrement mis à jour",
+      "deleted": "Enregistrement supprimé",
+      "fields": "Modification : {fields}",
+      "fieldsAndMore": "Modification : {fields} et {count} autre(s)"
+    },
+    "summaryGroups": {
+      "confirmation": "confirmation",
+      "shipment": "expédition"
+    },
+    "fields": {
+      "active": "état actif",
+      "inStock": "disponibilité",
+      "price": "prix",
+      "purchasePrice": "prix d’achat",
+      "title": "titre",
+      "city": "ville",
+      "variant": "variante",
+      "homeAddress": "adresse",
+      "delivery": "livraison",
+      "delPr": "prix de livraison",
+      "note": "note",
+      "cartProducts": "contenu de la commande"
     },
     "resources": {
       "products": "Produits",
@@ -2020,6 +2435,11 @@
       "changesDescription": "Seuls les champs réellement modifiés sont listés ici.",
       "changesCount": "{count} changements",
       "noChanges": "Cette action ne contient pas de modifications champ par champ.",
+      "selectPrompt": "Sélectionnez une action pour examiner ses changements exacts.",
+      "loadingTitle": "Chargement de l’action",
+      "reference": "Enregistrement",
+      "arraySummary": "{count} éléments",
+      "objectSummary": "{count} champs",
       "undoneAt": "Annulé à {value}",
       "redoneAt": "Rétabli à {value}",
       "close": "Fermer",
@@ -2027,6 +2447,24 @@
         "field": "Champ",
         "before": "Avant",
         "after": "Après"
+      }
+    },
+    "recovery": {
+      "title": "Récupération",
+      "undoDescription": "Restaure l’enregistrement dans son état antérieur à cette action.",
+      "redoDescription": "Réapplique cette action après son annulation.",
+      "blocked": {
+        "non_reversible": "Cette action est conservée pour l’audit et ne peut pas être annulée.",
+        "newer_action": "Une action plus récente doit d’abord être annulée.",
+        "redo_order": "Une action annulée antérieure doit d’abord être réappliquée.",
+        "history_out_of_sync": "La récupération est indisponible car l’historique de cet enregistrement est incohérent.",
+        "permission_required": "Vous pouvez consulter cette action, mais votre rôle ne peut pas modifier cette zone."
+      },
+      "confirm": {
+        "undoTitle": "Annuler cette modification ?",
+        "undoDescription": "Cela restaure {entity} dans son état exact avant cette action.",
+        "redoTitle": "Réappliquer cette modification ?",
+        "redoDescription": "Cela restaure {entity} dans son état exact après cette action."
       }
     },
     "notifications": {

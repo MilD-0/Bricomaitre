@@ -1,13 +1,18 @@
 'use client';
 
 import { SlidersHorizontal } from 'lucide-react';
-import { useRef, useState, type FormEvent } from 'react';
+import { useId, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 
 import { MobileSheet } from '@/components/mobile-sheet';
 import type { Locale } from '@/i18n/config';
 import { prepareHaptics, triggerHaptic } from '@/lib/haptics';
 
-type FilterOption = { id: number; label: string };
+type FilterOption = {
+  id: number;
+  label: string;
+  parentId?: number | null;
+  productCount?: number;
+};
 
 type CatalogFilterLabels = {
   title: string;
@@ -16,6 +21,12 @@ type CatalogFilterLabels = {
   allCategories: string;
   brand: string;
   allBrands: string;
+  discounted?: string;
+  stock?: string;
+  inStock?: string;
+  price?: string;
+  minPrice?: string;
+  maxPrice?: string;
   apply: string;
   reset: string;
 };
@@ -27,6 +38,9 @@ export function CatalogFilters({
   selectedCategory,
   selectedBrand,
   discounted,
+  stock = 'all',
+  minPrice = null,
+  maxPrice = null,
   search,
   sort,
   labels,
@@ -37,15 +51,41 @@ export function CatalogFilters({
   selectedCategory: number | null;
   selectedBrand: number | null;
   discounted: boolean;
+  stock?: 'all' | 'in' | 'out';
+  minPrice?: number | null;
+  maxPrice?: number | null;
   search: string;
   sort: string;
   labels: CatalogFilterLabels;
 }) {
+  const fallbackLabels =
+    locale === 'ar'
+      ? {
+          discounted: 'العروض فقط',
+          stock: 'التوفر',
+          inStock: 'المنتجات المتوفرة فقط',
+          price: 'السعر',
+          minPrice: 'الأدنى',
+          maxPrice: 'الأقصى',
+        }
+      : {
+          discounted: 'Promotions uniquement',
+          stock: 'Disponibilité',
+          inStock: 'Produits en stock uniquement',
+          price: 'Prix',
+          minPrice: 'Minimum',
+          maxPrice: 'Maximum',
+        };
+  const filterLabels = { ...fallbackLabels, ...labels };
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const formId = `catalog-mobile-filters-${locale}`;
   const activeCount =
-    Number(selectedCategory !== null) + Number(selectedBrand !== null) + Number(discounted);
+    Number(selectedCategory !== null) +
+    Number(selectedBrand !== null) +
+    Number(discounted) +
+    Number(stock !== 'all') +
+    Number(minPrice !== null || maxPrice !== null);
   const action = `/${locale}/products`;
 
   function close() {
@@ -58,6 +98,11 @@ export function CatalogFilters({
       'input[type="radio"]:checked',
     )) {
       if (!input.value) input.disabled = true;
+    }
+    for (const input of event.currentTarget.querySelectorAll<HTMLInputElement>(
+      'input[type="range"][data-boundary]',
+    )) {
+      if (input.value === input.dataset.boundary) input.disabled = true;
     }
     void triggerHaptic('primary');
   }
@@ -83,6 +128,23 @@ export function CatalogFilters({
         selected={selectedBrand}
         surface={surface}
       />
+      <fieldset>
+        <legend>{filterLabels.stock}</legend>
+        <label className="catalog-filter-checkbox">
+          <input type="checkbox" name="stock" value="in" defaultChecked={stock === 'in'} />
+          <span>{filterLabels.inStock}</span>
+        </label>
+      </fieldset>
+      <fieldset>
+        <legend>{filterLabels.price}</legend>
+        <PriceRangeFields
+          locale={locale}
+          minPrice={minPrice}
+          maxPrice={maxPrice}
+          minLabel={filterLabels.minPrice}
+          maxLabel={filterLabels.maxPrice}
+        />
+      </fieldset>
     </>
   );
 
@@ -151,6 +213,76 @@ export function CatalogFilters({
   );
 }
 
+const PRICE_CEILING = 500_000;
+const PRICE_STEP = 500;
+
+function PriceRangeFields({
+  locale,
+  minPrice,
+  maxPrice,
+  minLabel,
+  maxLabel,
+}: {
+  locale: Locale;
+  minPrice: number | null;
+  maxPrice: number | null;
+  minLabel: string;
+  maxLabel: string;
+}) {
+  const id = useId();
+  const [minimum, setMinimum] = useState(Math.min(minPrice ?? 0, PRICE_CEILING - PRICE_STEP));
+  const [maximum, setMaximum] = useState(
+    Math.min(PRICE_CEILING, Math.max(maxPrice ?? PRICE_CEILING, (minPrice ?? 0) + PRICE_STEP)),
+  );
+  const formatter = new Intl.NumberFormat(locale === 'ar' ? 'ar-DZ' : 'fr-DZ', {
+    maximumFractionDigits: 0,
+  });
+  const start = (minimum / PRICE_CEILING) * 100;
+  const end = (maximum / PRICE_CEILING) * 100;
+
+  return (
+    <div
+      className="catalog-price-slider"
+      style={{ '--price-start': `${start}%`, '--price-end': `${end}%` } as CSSProperties}
+    >
+      <div className="catalog-price-slider-track">
+        <input
+          id={`${id}-min`}
+          aria-label={minLabel}
+          name="minPrice"
+          type="range"
+          min="0"
+          max={PRICE_CEILING}
+          step={PRICE_STEP}
+          value={minimum}
+          data-boundary="0"
+          onChange={(event) =>
+            setMinimum(Math.min(Number(event.target.value), maximum - PRICE_STEP))
+          }
+        />
+        <input
+          id={`${id}-max`}
+          aria-label={maxLabel}
+          name="maxPrice"
+          type="range"
+          min="0"
+          max={PRICE_CEILING}
+          step={PRICE_STEP}
+          value={maximum}
+          data-boundary={PRICE_CEILING}
+          onChange={(event) =>
+            setMaximum(Math.max(Number(event.target.value), minimum + PRICE_STEP))
+          }
+        />
+      </div>
+      <div className="catalog-price-values" aria-hidden="true">
+        <output>{formatter.format(minimum)} DA</output>
+        <output>{formatter.format(maximum)} DA</output>
+      </div>
+    </div>
+  );
+}
+
 function FilterGroup({
   title,
   name,
@@ -181,7 +313,7 @@ function FilterGroup({
           <span>{allLabel}</span>
         </label>
         {options.map((option) => (
-          <label key={option.id}>
+          <label key={option.id} data-child={option.parentId != null ? 'true' : undefined}>
             <input
               type="radio"
               name={name}
@@ -189,7 +321,10 @@ function FilterGroup({
               defaultChecked={selected === option.id}
               data-surface={surface}
             />
-            <span>{option.label}</span>
+            <span>
+              {option.label}
+              {option.productCount !== undefined ? <small>{option.productCount}</small> : null}
+            </span>
           </label>
         ))}
       </div>

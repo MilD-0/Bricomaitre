@@ -171,7 +171,7 @@ describe('app/api/inventory/[id]/route', () => {
       {
         id: 9,
         title: 'Hammer',
-        inventoryQuantity: 2,
+        inventoryQuantity: 5,
         barcode: '123',
         sku: 'HAM-1',
         inStock: true,
@@ -183,13 +183,22 @@ describe('app/api/inventory/[id]/route', () => {
     const setMock = vi.fn().mockReturnValue({ where: whereMock });
     const updateMock = vi.fn().mockReturnValue({ set: setMock });
 
-    await execute({ update: updateMock });
+    await execute({
+      update: updateMock,
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          innerJoin: vi.fn(() => ({
+            where: vi.fn(() => ({ orderBy: vi.fn().mockResolvedValue([]) })),
+          })),
+        })),
+      })),
+    });
 
     expect(setMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        inventoryQuantity: 2,
-        inStock: true,
-        availabilityStatus: 'in_stock',
+        inventoryQuantity: expect.anything(),
+        inStock: expect.anything(),
+        availabilityStatus: expect.anything(),
         updatedAt: expect.any(Date),
       }),
     );

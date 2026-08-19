@@ -34,6 +34,12 @@ describe('app/storefront/settings/route', () => {
       phoneHref: 'tel:+213795342826',
       phoneEnabled: true,
       aiAssistantEnabled: true,
+      contactEmail: 'bricomaitre@gmail.com',
+      address: 'BT N20, Cité 08 Mai 45, Bab Ezzouar 16024, Alger',
+      mapUrl: 'https://maps.app.goo.gl/MpAM58nHS2G5JBah8',
+      facebookUrl: 'https://www.facebook.com/profile.php?id=61562272954715',
+      aiModel: 'gpt-5-mini',
+      aiFallbackModel: null,
     });
   });
 
@@ -54,6 +60,12 @@ describe('app/storefront/settings/route', () => {
       phoneHref: 'tel:+213555123456',
       phoneEnabled: true,
       aiAssistantEnabled: false,
+      contactEmail: 'bricomaitre@gmail.com',
+      address: 'BT N20, Cité 08 Mai 45, Bab Ezzouar 16024, Alger',
+      mapUrl: 'https://maps.app.goo.gl/MpAM58nHS2G5JBah8',
+      facebookUrl: 'https://www.facebook.com/profile.php?id=61562272954715',
+      aiModel: 'gpt-5-mini',
+      aiFallbackModel: null,
     });
   });
 

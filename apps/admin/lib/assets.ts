@@ -193,6 +193,15 @@ export const featuredProductGroupToggleSchema = z
       typeof value.active === 'boolean' || typeof value.showAtTopOfProductsPage === 'boolean',
   );
 
+export const assetProductOptionQuerySchema = z
+  .object({
+    search: z.string().trim().max(120).default(''),
+    ids: z.array(z.number().int().positive()).max(100).default([]),
+    page: z.number().int().positive().default(1),
+    limit: z.number().int().min(1).max(50).default(20),
+  })
+  .strict();
+
 export type AssetBannerInput = z.input<typeof assetBannerSchema>;
 export type AssetBannerPayload = z.output<typeof assetBannerSchema>;
 export type FeaturedProductGroupInput = z.input<typeof featuredProductGroupSchema>;
@@ -217,6 +226,15 @@ export type AssetMetaBrand = {
 export type AssetMetaCategory = {
   id: number;
   name: string;
+};
+
+export type AssetProductOption = {
+  id: number;
+  title: string;
+  slug: string;
+  sku: string | null;
+  imageUrl: string | null;
+  active: boolean;
 };
 
 export type AssetBannerRecord = AssetBannerPayload & {

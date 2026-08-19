@@ -5,14 +5,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   signOutMock,
   pushMock,
+  refreshMock,
   usePathnameMock,
+  useSearchParamsMock,
   useTranslationsMock,
   addEventListenerMock,
   removeEventListenerMock,
 } = vi.hoisted(() => ({
   signOutMock: vi.fn(),
   pushMock: vi.fn(),
+  refreshMock: vi.fn(),
   usePathnameMock: vi.fn(),
+  useSearchParamsMock: vi.fn(),
   useTranslationsMock: vi.fn(),
   addEventListenerMock: vi.fn(),
   removeEventListenerMock: vi.fn(),
@@ -41,7 +45,8 @@ vi.mock('next/link', () => ({
 
 vi.mock('next/navigation', () => ({
   usePathname: usePathnameMock,
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => ({ push: pushMock, refresh: refreshMock }),
+  useSearchParams: useSearchParamsMock,
 }));
 
 vi.mock('../../lib/auth-client', () => ({
@@ -50,6 +55,10 @@ vi.mock('../../lib/auth-client', () => ({
 
 vi.mock('../theme-toggle', () => ({
   ThemeToggle: () => <button type="button">theme-toggle</button>,
+}));
+
+vi.mock('../admin-ai-chat', () => ({
+  AdminAiChat: () => <div>Admin AI assistant</div>,
 }));
 
 import { AppShell } from './app-shell';
@@ -64,11 +73,13 @@ describe('AppShell', () => {
     vi.clearAllMocks();
     useAppStore.setState({ permissions: [], role: 'viewer', roleLabel: null });
     usePathnameMock.mockReturnValue('/en/administration');
+    useSearchParamsMock.mockReturnValue(new URLSearchParams());
     Object.defineProperty(window, 'location', {
       configurable: true,
       value: {
         hash: '',
         pathname: '/en/administration',
+        protocol: 'https:',
       },
     });
     window.addEventListener = addEventListenerMock;
@@ -87,6 +98,9 @@ describe('AppShell', () => {
         return 'Admin and developer roles are code-managed by email.';
       if (key === 'labels.userProfile') return 'User profile';
       if (key === 'auth.signOut') return 'Sign out';
+      if (key === 'profile.legacyUi') return 'Legacy UI';
+      if (key === 'profile.legacyUiDescription')
+        return 'Use the original Products, Orders, Assets, and Landing Pages interfaces.';
       if (key === 'labels.opsAccess') return 'Ops controls and logs are available.';
       if (key === 'assetsManager.bannersTitle') return 'Banners';
       if (key === 'assetsManager.groupsTitle') return 'Featured product groups';
@@ -107,6 +121,22 @@ describe('AppShell', () => {
     });
   });
 
+  it('preserves the active analytics range across stats navigation', () => {
+    usePathnameMock.mockReturnValue('/en/stats/time');
+    useSearchParamsMock.mockReturnValue(
+      new URLSearchParams('range=custom&startDate=2026-08-01&endDate=2026-08-15'),
+    );
+    render(
+      <AppShell initialPermissions={['analytics_manage']} initialRole="employee">
+        <div>child</div>
+      </AppShell>,
+    );
+    expect(screen.getByRole('link', { name: 'Meta ads' })).toHaveAttribute(
+      'href',
+      '/en/stats/meta-ads?range=custom&startDate=2026-08-01&endDate=2026-08-15',
+    );
+  });
+
   it('syncs the persisted store role from the authenticated role', async () => {
     render(
       <AppShell
@@ -116,6 +146,7 @@ describe('AppShell', () => {
           'assets_write',
           'brands_categories_write',
           'ops_view',
+          'analytics_manage',
           'settings_manage',
         ]}
         initialRole="admin"
@@ -135,6 +166,7 @@ describe('AppShell', () => {
         'assets_write',
         'brands_categories_write',
         'ops_view',
+        'analytics_manage',
         'settings_manage',
       ]);
     });
@@ -142,11 +174,12 @@ describe('AppShell', () => {
     expect(screen.getByRole('heading', { name: 'BricAdmin' })).toBeInTheDocument();
     expect(screen.queryByText('Brico Admin')).not.toBeInTheDocument();
     expect(screen.queryByText('Administration')).not.toBeInTheDocument();
-    expect(screen.getByText('pages.administration')).toBeInTheDocument();
+    expect(screen.queryByText('pages.administration')).not.toBeInTheDocument();
+    expect(screen.getAllByText('nav.administration').length).toBeGreaterThan(0);
 
     expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
     expect(screen.getByText('ada@example.com')).toBeInTheDocument();
-    expect(screen.getByAltText('Ada Lovelace')).toHaveAttribute(
+    expect(screen.getAllByAltText('Ada Lovelace')[0]).toHaveAttribute(
       'src',
       'https://example.com/avatar.png',
     );
@@ -161,6 +194,7 @@ describe('AppShell', () => {
     expect(
       screen.getByRole('link', { name: 'nav.administration' }).querySelector('span'),
     ).toHaveClass('whitespace-normal');
+    await userEvent.click(screen.getByRole('button', { name: 'Show nav.assets submenu' }));
     expect(screen.getByRole('link', { name: 'Banners' })).toHaveAttribute(
       'href',
       '/en/assets#banners',
@@ -169,11 +203,15 @@ describe('AppShell', () => {
       'href',
       '/en/landing-pages',
     );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Show nav.brandsCategories submenu' }),
+    );
     expect(screen.getByRole('link', { name: 'nav.brands' })).toHaveAttribute('href', '/en/brands');
     expect(screen.getByRole('link', { name: 'nav.categories' })).toHaveAttribute(
       'href',
       '/en/categories',
     );
+    await userEvent.click(screen.getByRole('button', { name: 'Show nav.stats submenu' }));
     expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute('href', '/en/stats');
     expect(screen.getByRole('link', { name: 'Products' })).toHaveAttribute(
       'href',
@@ -201,6 +239,10 @@ describe('AppShell', () => {
       '/en/stats/import-history',
     );
     expect(screen.queryByRole('link', { name: 'nav.dashboard' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'nav.aiProposals' })).toHaveAttribute(
+      'href',
+      '/en/ai-proposals',
+    );
 
     await userEvent.click(screen.getByRole('button', { name: 'User profile' }));
 
@@ -210,6 +252,93 @@ describe('AppShell', () => {
     expect(screen.queryByText('Roles')).not.toBeInTheDocument();
     expect(screen.queryByText('Ops controls and logs are available.')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    const legacyUiSwitch = within(dialog).getByRole('switch', { name: 'Legacy UI' });
+    expect(legacyUiSwitch).toBeChecked();
+
+    await userEvent.click(legacyUiSwitch);
+
+    expect(legacyUiSwitch).not.toBeChecked();
+    expect(document.cookie).toContain('bric-admin-legacy-ui=0');
+    expect(refreshMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('link', { name: 'Featured product groups' })).toHaveAttribute(
+      'href',
+      '/en/assets/featured-groups',
+    );
+    expect(screen.getByRole('link', { name: 'Cards' })).toHaveAttribute(
+      'href',
+      '/en/assets/product-cards',
+    );
+    expect(screen.getByRole('link', { name: 'Landing pages' })).toHaveAttribute(
+      'href',
+      '/en/assets/landing-pages',
+    );
+  });
+
+  it('derives AI proposal review from catalog permissions', async () => {
+    render(
+      <AppShell
+        initialPermissions={['products_write']}
+        initialRole="employee"
+        initialUserEmail="catalog@example.com"
+      >
+        <div>child</div>
+      </AppShell>,
+    );
+
+    expect(await screen.findByRole('link', { name: 'nav.aiProposals' })).toHaveAttribute(
+      'href',
+      '/en/ai-proposals',
+    );
+    expect(screen.getByText('Admin AI assistant')).toBeInTheDocument();
+  });
+
+  it('shows the AI assistant to an allowed viewer without operation permissions', () => {
+    render(
+      <AppShell initialPermissions={[]} initialRole="viewer" initialUserEmail="viewer@example.com">
+        <div>child</div>
+      </AppShell>,
+    );
+
+    expect(screen.getByText('Admin AI assistant')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'nav.aiProposals' })).not.toBeInTheDocument();
+  });
+
+  it('presents the current workflow and a deliberate phone navigation path', async () => {
+    usePathnameMock.mockReturnValue('/en/orders/ecotrack');
+    render(
+      <AppShell
+        initialPermissions={['products_write', 'orders_write']}
+        initialRole="employee"
+        initialUserEmail="mobile@example.com"
+      >
+        <div>child</div>
+      </AppShell>,
+    );
+
+    const mobileHeader = document.querySelector('[data-mobile-workflow-header]');
+    const mobileDock = document.querySelector('[data-mobile-navigation-dock]');
+    expect(mobileHeader).not.toBeNull();
+    expect(mobileDock).not.toBeNull();
+    expect(within(mobileHeader as HTMLElement).getByText('nav.ecotrackShipments')).toBeVisible();
+    expect(within(mobileHeader as HTMLElement).getByText('nav.orders')).toBeVisible();
+    expect(
+      within(mobileDock as HTMLElement).getByRole('link', { name: 'nav.products' }),
+    ).toHaveAttribute('href', '/en/products');
+    expect(
+      within(mobileDock as HTMLElement).getByRole('link', { name: 'nav.orders' }),
+    ).toHaveAttribute('href', '/en/orders');
+
+    await userEvent.click(
+      within(mobileDock as HTMLElement).getByRole('button', {
+        name: 'adminWorkspace.products.selectionMore',
+      }),
+    );
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(document.body.style.overflow).toBe('hidden');
+
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(document.body.style.overflow).toBe('');
   });
 
   it('does not render the old role selector UI', async () => {
@@ -258,7 +387,10 @@ describe('AppShell', () => {
     expect(screen.getByText('Jordan Admin')).toBeInTheDocument();
     expect(screen.queryByText('Campaign Manager')).not.toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'theme-toggle' }).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('link', { name: 'nav.administration' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'nav.administration' })).toHaveAttribute(
+      'href',
+      '/en/administration',
+    );
     expect(screen.queryByRole('link', { name: 'nav.dashboard' })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'User profile' }));

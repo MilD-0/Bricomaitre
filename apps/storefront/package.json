@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev --port 3003",
     "build": "next build --webpack",
-    "start": "node ../../ops/scripts/start-next-standalone.mjs --app-dir . --nested-dir apps/storefront --default-port 3003",
+    "start": "bash ../../ops/scripts/hydrate-next-standalone.sh apps/storefront && node ../../ops/scripts/start-next-standalone.mjs --app-dir . --nested-dir apps/storefront --default-port 3003",
     "lint": "eslint .",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run --project unit-node && vitest run --project browser-unit-jsdom && vitest run --project component-jsdom",

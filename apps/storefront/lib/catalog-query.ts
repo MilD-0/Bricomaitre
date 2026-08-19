@@ -49,6 +49,15 @@ const discountedSchema = z
       .transform((value) => value === '1' || value === 'true' || value === true),
   )
   .catch(false);
+const stockSchema = z.preprocess(firstValue, z.enum(['all', 'in'])).catch('all');
+const priceSchema = z
+  .preprocess(
+    firstValue,
+    z
+      .union([z.coerce.number().nonnegative(), z.literal(''), z.null(), z.undefined()])
+      .transform((value) => (value === '' || value == null ? null : value)),
+  )
+  .catch(null);
 const pageSchema = z.preprocess(firstValue, z.coerce.number().int().positive().max(1_000)).catch(1);
 const batchSizeSchema = z.coerce
   .number()
@@ -62,14 +71,18 @@ const catalogPageQuerySchema = z.object({
   category: filterIdSchema.default(null),
   brand: filterIdSchema.default(null),
   discounted: discountedSchema.default(false),
+  stock: stockSchema.default('all'),
+  minPrice: priceSchema.default(null),
+  maxPrice: priceSchema.default(null),
   sort: sortSchema.default('recommended'),
   page: pageSchema.default(1),
 });
 
 export type CatalogPageQuery = z.infer<typeof catalogPageQuerySchema>;
+export type CatalogPageQueryInput = z.input<typeof catalogPageQuerySchema>;
 export type CatalogSearchParams = Record<string, string | string[] | undefined>;
 
-export function parseCatalogPageQuery(value: CatalogSearchParams = {}) {
+export function parseCatalogPageQuery(value: unknown = {}) {
   return catalogPageQuerySchema.parse(value);
 }
 
@@ -87,6 +100,9 @@ export function toStorefrontCatalogQuery(query: CatalogPageQuery) {
     categoryId: query.category,
     brandId: query.brand,
     discounted: query.discounted,
+    stock: query.stock,
+    minPrice: query.minPrice,
+    maxPrice: query.maxPrice,
     id: null,
     mongoId: null,
     slug: null,
@@ -100,6 +116,9 @@ export function buildCatalogPath(locale: Locale, query: CatalogPageQuery, page =
   if (query.category !== null) params.set('category', String(query.category));
   if (query.brand !== null) params.set('brand', String(query.brand));
   if (query.discounted) params.set('discounted', '1');
+  if (query.stock !== 'all') params.set('stock', query.stock);
+  if (query.minPrice !== null) params.set('minPrice', String(query.minPrice));
+  if (query.maxPrice !== null) params.set('maxPrice', String(query.maxPrice));
   if (query.sort !== 'recommended') params.set('sort', query.sort);
   if (page > 1) params.set('page', String(page));
   const serialized = params.toString();
@@ -127,6 +146,9 @@ export function isFilteredCatalog(query: CatalogPageQuery) {
     query.category ||
     query.brand ||
     query.discounted ||
+    query.stock !== 'all' ||
+    query.minPrice !== null ||
+    query.maxPrice !== null ||
     query.sort !== 'recommended' ||
     query.page > 1,
   );

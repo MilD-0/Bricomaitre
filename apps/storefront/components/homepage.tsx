@@ -1,7 +1,4 @@
-import type {
-  StorefrontHomepageResponse,
-  StorefrontSettingsResponse,
-} from '@bric/storefront-core/contracts';
+import type { StorefrontHomepageResponse } from '@bric/storefront-core/contracts';
 import { HomepageBannerCarousel } from '@/components/homepage-banner-carousel';
 import { HomepageAddToCart } from '@/components/homepage-add-to-cart';
 import {
@@ -86,13 +83,7 @@ function localizeHomepageLink(link: string, locale: Locale) {
   return path === `/${locale}` || path.startsWith(`/${locale}/`) ? path : `/${locale}${path}`;
 }
 
-function TrustSignals({
-  locale,
-  contact,
-}: {
-  locale: Locale;
-  contact: StorefrontSettingsResponse;
-}) {
+function TrustSignals({ locale, contact }: { locale: Locale; contact: { phoneDisplay: string } }) {
   const text = copy[locale];
   return (
     <section className="home-trust-band" aria-label="Services">
@@ -235,7 +226,7 @@ export function Homepage({
 }: {
   data: StorefrontHomepageResponse;
   locale: Locale;
-  contact: StorefrontSettingsResponse;
+  contact: { phoneDisplay: string };
 }) {
   const text = copy[locale];
   const hasMerchandising = Object.values(data).some((items) => items.length > 0);

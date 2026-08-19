@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   CatalogCard,
@@ -10,7 +10,11 @@ import {
 import { CatalogCardSkeleton } from '@/components/storefront-skeletons';
 import type { Locale } from '@/i18n/config';
 import { trackCatalogEvent } from '@/lib/analytics';
-import { buildCatalogApiPath, type CatalogPageQuery } from '@/lib/catalog-query';
+import {
+  buildCatalogApiPath,
+  parseCatalogPageQuery,
+  type CatalogPageQueryInput,
+} from '@/lib/catalog-query';
 
 type StoredCatalogState = {
   items: CatalogProduct[];
@@ -91,7 +95,7 @@ export function CatalogInfiniteLoader({
   labels,
 }: {
   locale: Locale;
-  query: CatalogPageQuery;
+  query: CatalogPageQueryInput;
   initialCount: number;
   initialProductIds: number[];
   initialHasNextPage: boolean;
@@ -107,6 +111,7 @@ export function CatalogInfiniteLoader({
     end: string;
   };
 }) {
+  const normalizedQuery = useMemo(() => parseCatalogPageQuery(query), [query]);
   const [items, setItems] = useState<CatalogProduct[]>([]);
   const [hasNextPage, setHasNextPage] = useState(initialHasNextPage);
   const [loading, setLoading] = useState(false);
@@ -115,16 +120,16 @@ export function CatalogInfiniteLoader({
   const restoringRef = useRef(true);
   const loadingRef = useRef(false);
   const itemsRef = useRef<CatalogProduct[]>([]);
-  const pageRef = useRef(query.page);
+  const pageRef = useRef(normalizedQuery.page);
   const hasNextPageRef = useRef(initialHasNextPage);
 
   useEffect(() => {
     const previousRestoration = history.scrollRestoration;
     history.scrollRestoration = 'manual';
     const stored = readStoredState();
-    if (!stored || stored.page < query.page || stored.totalCount !== totalCount) {
+    if (!stored || stored.page < normalizedQuery.page || stored.totalCount !== totalCount) {
       itemsRef.current = [];
-      pageRef.current = query.page;
+      pageRef.current = normalizedQuery.page;
       hasNextPageRef.current = initialHasNextPage;
       restoringRef.current = false;
       return () => {
@@ -147,7 +152,7 @@ export function CatalogInfiniteLoader({
     return () => {
       history.scrollRestoration = previousRestoration;
     };
-  }, [initialHasNextPage, initialProductIds, query.page, totalCount]);
+  }, [initialHasNextPage, initialProductIds, normalizedQuery.page, totalCount]);
 
   useEffect(() => {
     let frame = 0;
@@ -182,7 +187,7 @@ export function CatalogInfiniteLoader({
     setError(false);
     const nextPage = pageRef.current + 1;
     try {
-      const response = await fetch(buildCatalogApiPath(query, nextPage, pageSize), {
+      const response = await fetch(buildCatalogApiPath(normalizedQuery, nextPage, pageSize), {
         headers: { accept: 'application/json' },
       });
       if (!response.ok) throw new Error('catalog page unavailable');
@@ -221,7 +226,7 @@ export function CatalogInfiniteLoader({
         metadata: {
           resultsCount: nextItems.length,
           page: nextPage,
-          sort: query.sort,
+          sort: normalizedQuery.sort,
           listContext,
           visibleProductIds: nextItems.map((item) => item.id).slice(0, 24),
         },
@@ -232,7 +237,7 @@ export function CatalogInfiniteLoader({
       loadingRef.current = false;
       setLoading(false);
     }
-  }, [initialProductIds, items, listContext, locale, pageSize, query, totalCount]);
+  }, [initialProductIds, items, listContext, locale, normalizedQuery, pageSize, totalCount]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;

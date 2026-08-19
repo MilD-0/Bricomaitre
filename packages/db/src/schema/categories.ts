@@ -9,8 +9,10 @@ import {
   timestamp,
   index,
   uniqueIndex,
+  check,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 export const categories = pgTable(
   'categories',
@@ -50,5 +52,9 @@ export const categories = pgTable(
     uniqueIndex('categories_slug_unique').on(t.slug),
     index('idx_categories_popularity').on(t.popularityScore),
     index('idx_categories_last_viewed_at').on(t.lastViewedAt.desc()),
+    check(
+      'categories_not_self_parent_check',
+      sql`${t.parentId} is null or ${t.parentId} <> ${t.id}`,
+    ),
   ],
 );

@@ -1,6 +1,5 @@
 'use client';
 
-import type { StorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 import { useRef } from 'react';
 
 import { PhoneIcon, type PhoneIconHandle } from '@/components/ui/phone';
@@ -16,6 +15,13 @@ export type SupportContactLabels = {
   call: string;
 };
 
+export type StorefrontSupportContact = {
+  phoneDisplay: string;
+  phoneHref: string;
+  phoneEnabled: boolean;
+  aiAssistantEnabled: boolean;
+};
+
 export function SupportContactActions({
   locale,
   contact,
@@ -24,7 +30,7 @@ export function SupportContactActions({
   variant = 'inline',
 }: {
   locale: Locale;
-  contact: StorefrontSettingsResponse;
+  contact: StorefrontSupportContact;
   labels: SupportContactLabels;
   surface: SupportSurface;
   variant?: 'drawer' | 'inline' | 'recovery' | 'panel';

@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   loadDailyOrderStatusOverviewMock,
@@ -8,6 +8,7 @@ const {
   getDbMock,
   hasDbMock,
   requireOrdersPageAccessMock,
+  cookiesMock,
 } = vi.hoisted(() => ({
   loadDailyOrderStatusOverviewMock: vi.fn(),
   loadOrdersPageDataMock: vi.fn(),
@@ -15,10 +16,19 @@ const {
   getDbMock: vi.fn(),
   hasDbMock: vi.fn(),
   requireOrdersPageAccessMock: vi.fn(),
+  cookiesMock: vi.fn(),
 }));
 
 vi.mock('../../../../components/orders/orders-manager', () => ({
   OrdersManager: () => <div>OrdersManager</div>,
+}));
+
+vi.mock('../../../../components/orders/orders-workspace', () => ({
+  OrdersWorkspace: () => <div>OrdersWorkspace</div>,
+}));
+
+vi.mock('next/headers', () => ({
+  cookies: cookiesMock,
 }));
 
 vi.mock('../../../../lib/admin-orders-data', () => ({
@@ -42,6 +52,8 @@ vi.mock('../../../../lib/page-access', () => ({
 import OrdersPage from './page';
 
 describe('OrdersPage', () => {
+  afterEach(() => cleanup());
+
   beforeEach(() => {
     vi.clearAllMocks();
     requireOrdersPageAccessMock.mockResolvedValue({
@@ -75,9 +87,10 @@ describe('OrdersPage', () => {
       weightFees: [],
       lastSync: null,
     });
+    cookiesMock.mockResolvedValue({ get: vi.fn().mockReturnValue(undefined) });
   });
 
-  it('renders the dedicated orders manager page', async () => {
+  it('defaults to the legacy orders manager', async () => {
     const ui = await OrdersPage({ params: Promise.resolve({ locale: 'en' }) });
     render(ui);
 
@@ -90,6 +103,20 @@ describe('OrdersPage', () => {
     expect(loadDailyOrderStatusOverviewMock).toHaveBeenCalledWith({
       includeProfitProjection: false,
       profitProjectionBasis: 'confirmed',
+    });
+  });
+
+  it('renders the integrated orders workspace with its seven-day overview', async () => {
+    cookiesMock.mockResolvedValue({ get: vi.fn().mockReturnValue({ value: '0' }) });
+
+    render(await OrdersPage({ params: Promise.resolve({ locale: 'en' }) }));
+
+    expect(screen.getByText('OrdersWorkspace')).toBeInTheDocument();
+    expect(screen.queryByText('OrdersManager')).not.toBeInTheDocument();
+    expect(loadDailyOrderStatusOverviewMock).toHaveBeenCalledWith({
+      includeProfitProjection: false,
+      profitProjectionBasis: 'confirmed',
+      reportDays: 7,
     });
   });
 });

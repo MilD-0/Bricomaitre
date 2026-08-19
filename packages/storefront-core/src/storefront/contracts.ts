@@ -46,6 +46,10 @@ const optionalBooleanFilter = z
   ])
   .optional()
   .transform((value) => value === '1' || value === 'true' || value === true);
+const optionalPriceFilter = z
+  .union([z.literal(''), z.null(), z.coerce.number().nonnegative()])
+  .optional()
+  .transform((value) => (value === '' || value == null ? null : value));
 
 export const storefrontProductListQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -56,6 +60,9 @@ export const storefrontProductListQuerySchema = z.object({
   sortKey: z.enum(productSortKeyValues).default('updatedAt'),
   sortDirection: z.enum(sortDirectionValues).default('desc'),
   discounted: optionalBooleanFilter.default(false),
+  stock: z.enum(['all', 'in', 'out']).default('all'),
+  minPrice: optionalPriceFilter,
+  maxPrice: optionalPriceFilter,
   id: optionalNumericFilter,
   mongoId: z
     .string()
@@ -132,6 +139,14 @@ export const storefrontProductResponseItemSchema = z.object({
 export const storefrontProductsResponseSchema = z.object({
   items: z.array(storefrontProductResponseItemSchema),
   total: z.number().int().nonnegative(),
+});
+
+export const storefrontCartValidationRequestSchema = z.object({
+  productIds: z.array(z.number().int().positive()).min(1).max(50),
+});
+
+export const storefrontCartValidationResponseSchema = z.object({
+  items: z.array(storefrontProductResponseItemSchema),
 });
 
 export const storefrontProductTokenSchema = z.string().trim().min(1).max(200);
@@ -217,6 +232,7 @@ export const storefrontCategoryResponseItemSchema = z.object({
   parentId: z.number().int().nullable(),
   properties: z.array(z.unknown()),
   featured: z.boolean(),
+  productCount: z.number().int().nonnegative().default(0),
   createdAt: isoTimestampSchema,
   updatedAt: isoTimestampSchema,
 });
@@ -282,6 +298,20 @@ export const storefrontSettingsResponseSchema = z.object({
   phoneHref: z.string().startsWith('tel:+'),
   phoneEnabled: z.boolean(),
   aiAssistantEnabled: z.boolean().default(true),
+  contactEmail: z.string().email().nullable().default(null),
+  address: z.string().nullable().default(null),
+  mapUrl: z.string().url().nullable().default(null),
+  facebookUrl: z.string().url().nullable().default(null),
+  aiModel: z.string().default('gpt-5-mini'),
+  aiFallbackModel: z.string().nullable().default(null),
+});
+
+export const storefrontAnnouncementSchema = z.object({
+  message: z.string(),
+});
+
+export const storefrontContentResponseSchema = z.object({
+  announcement: storefrontAnnouncementSchema.nullable(),
 });
 
 export const defaultStorefrontSettingsResponse = storefrontSettingsResponseSchema.parse(
@@ -289,6 +319,12 @@ export const defaultStorefrontSettingsResponse = storefrontSettingsResponseSchem
     contactPhone: '0795342826',
     phoneEnabled: true,
     aiAssistantEnabled: true,
+    contactEmail: 'bricomaitre@gmail.com',
+    address: 'BT N20, Cité 08 Mai 45, Bab Ezzouar 16024, Alger',
+    mapUrl: 'https://maps.app.goo.gl/MpAM58nHS2G5JBah8',
+    facebookUrl: 'https://www.facebook.com/profile.php?id=61562272954715',
+    aiModel: 'gpt-5-mini',
+    aiFallbackModel: null,
   }),
 );
 
@@ -441,11 +477,16 @@ export const storefrontProductPromoResponseSchema = z.object({
 });
 
 export type StorefrontProductListQuery = z.infer<typeof storefrontProductListQuerySchema>;
+export type StorefrontProductListQueryInput = z.input<typeof storefrontProductListQuerySchema>;
 export type StorefrontProductsResponse = z.infer<typeof storefrontProductsResponseSchema>;
+export type StorefrontCartValidationResponse = z.infer<
+  typeof storefrontCartValidationResponseSchema
+>;
 export type StorefrontBrandsResponse = z.infer<typeof storefrontBrandsResponseSchema>;
 export type StorefrontCategoriesResponse = z.infer<typeof storefrontCategoriesResponseSchema>;
 export type StorefrontAssetsResponse = z.infer<typeof storefrontAssetsResponseSchema>;
 export type StorefrontSettingsResponse = z.infer<typeof storefrontSettingsResponseSchema>;
+export type StorefrontContentResponse = z.infer<typeof storefrontContentResponseSchema>;
 export type StorefrontHomepageResponse = z.infer<typeof storefrontHomepageResponseSchema>;
 export type StorefrontHomepageFeaturedGroupProductsQuery = z.infer<
   typeof storefrontHomepageFeaturedGroupProductsQuerySchema

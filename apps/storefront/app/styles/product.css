@@ -494,6 +494,23 @@ button.button {
 .product-action-announcement:empty {
   display: none;
 }
+.product-share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.product-share-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 0;
+  background: transparent;
+  padding: 0.35rem 0;
+  color: var(--brand-teal-strong);
+  font-size: 0.72rem;
+  font-weight: 720;
+  cursor: pointer;
+}
 .product-actions > .support-contact {
   margin-top: 1rem;
   border-top: 1px solid #dde2e3;

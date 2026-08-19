@@ -8,6 +8,8 @@ const {
   ensureOrderConfirmedEventForOrderMock,
   ensureOrderCompletedEventForOrderMock,
   ensureMarketingOrderStatusEventsMock,
+  resolveOrderLineSnapshotsMock,
+  replaceOrderLineSnapshotsMock,
   hasDbMock,
   getDbMock,
   requireMutationAccessMock,
@@ -18,6 +20,8 @@ const {
   ensureOrderConfirmedEventForOrderMock: vi.fn(),
   ensureOrderCompletedEventForOrderMock: vi.fn(),
   ensureMarketingOrderStatusEventsMock: vi.fn(),
+  resolveOrderLineSnapshotsMock: vi.fn(),
+  replaceOrderLineSnapshotsMock: vi.fn(),
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
   requireMutationAccessMock: vi.fn(),
@@ -31,6 +35,8 @@ vi.mock('@bric/storefront-core/meta', () => ({
   ensureOrderCompletedEventForOrder: ensureOrderCompletedEventForOrderMock,
   isMetaOrderConfirmedStatus: (status: number) => status === 2,
   isMetaCompletedStatus: (status: number) => status === 4 || status === 10,
+  resolveOrderLineSnapshots: resolveOrderLineSnapshotsMock,
+  replaceOrderLineSnapshots: replaceOrderLineSnapshotsMock,
 }));
 
 vi.mock('@bric/storefront-core/marketing', () => ({
@@ -65,6 +71,16 @@ vi.mock('../../../../../lib/ecotrack', () => ({
   }),
 }));
 
+function lockedOrderSelect(order: unknown) {
+  return {
+    from: () => ({
+      where: () => ({
+        for: () => Promise.resolve([order]),
+      }),
+    }),
+  };
+}
+
 describe('app/api/orders/[id]/route', () => {
   beforeEach(() => {
     hasDbMock.mockReset();
@@ -81,6 +97,23 @@ describe('app/api/orders/[id]/route', () => {
     ensureOrderCompletedEventForOrderMock.mockResolvedValue({ created: true });
     ensureMarketingOrderStatusEventsMock.mockReset();
     ensureMarketingOrderStatusEventsMock.mockResolvedValue({ created: true });
+    resolveOrderLineSnapshotsMock.mockReset();
+    replaceOrderLineSnapshotsMock.mockReset().mockResolvedValue(undefined);
+    resolveOrderLineSnapshotsMock.mockResolvedValue([
+      {
+        productId: 8,
+        contentId: '8',
+        rawValue: '8',
+        title: 'Keyboard',
+        originalUnitPrice: 800,
+        effectiveUnitPrice: 800,
+        discountAmount: 0,
+        quantity: 1,
+        lineTotal: 800,
+        purchaseUnitCost: null,
+        thumbnailUrl: 'https://cdn.example.com/keyboard.jpg',
+      },
+    ]);
     readEcotrackCatalogMock.mockResolvedValue({
       wilayas: [],
       communes: [],
@@ -148,8 +181,12 @@ describe('app/api/orders/[id]/route', () => {
       return { where };
     });
     const db = {
-      query: { orders: { findFirst: vi.fn().mockResolvedValue({ id: 7, publicToken: null }) } },
-      update: vi.fn().mockReturnValue({ set }),
+      transaction: vi.fn((callback) =>
+        callback({
+          select: () => lockedOrderSelect({ id: 7, publicToken: null }),
+          update: vi.fn().mockReturnValue({ set }),
+        }),
+      ),
     };
     getDbMock.mockReturnValue(db);
 
@@ -225,6 +262,9 @@ describe('app/api/orders/[id]/route', () => {
                 images: ['https://cdn.example.com/keyboard.jpg'],
               },
             ]),
+          })
+          .mockReturnValueOnce({
+            where: vi.fn().mockResolvedValue([]),
           }),
       }),
     };
@@ -344,6 +384,9 @@ describe('app/api/orders/[id]/route', () => {
                 images: ['https://cdn.example.com/keyboard.jpg'],
               },
             ]),
+          })
+          .mockReturnValueOnce({
+            where: vi.fn().mockResolvedValue([]),
           }),
       }),
     };
@@ -363,6 +406,7 @@ describe('app/api/orders/[id]/route', () => {
       ];
 
       return params.execute({
+        select: () => lockedOrderSelect(existingOrder),
         update: () => ({
           set: () => ({
             where: () => ({
@@ -509,12 +553,16 @@ describe('app/api/orders/[id]/route', () => {
                 images: ['https://cdn.example.com/keyboard.jpg'],
               },
             ]),
+          })
+          .mockReturnValueOnce({
+            where: vi.fn().mockResolvedValue([]),
           }),
       }),
     };
     getDbMock.mockReturnValue(db);
     mutateEntityWithHistoryMock.mockImplementation(async (_db, params) =>
       params.execute({
+        select: () => lockedOrderSelect(existingOrder),
         update: () => ({
           set: (values: Record<string, unknown>) => ({
             where: () => ({
@@ -607,12 +655,14 @@ describe('app/api/orders/[id]/route', () => {
               ]),
             }),
           })
+          .mockReturnValueOnce({ where: vi.fn().mockResolvedValue([]) })
           .mockReturnValueOnce({ where: vi.fn().mockResolvedValue([]) }),
       }),
     };
     getDbMock.mockReturnValue(db);
     mutateEntityWithHistoryMock.mockImplementation(async (_db, params) =>
       params.execute({
+        select: () => lockedOrderSelect(existingOrder),
         update: () => ({
           set: (values: Record<string, unknown>) => ({
             where: () => ({
@@ -692,6 +742,9 @@ describe('app/api/orders/[id]/route', () => {
           })
           .mockReturnValueOnce({
             where: vi.fn().mockResolvedValue([]),
+          })
+          .mockReturnValueOnce({
+            where: vi.fn().mockResolvedValue([]),
           }),
       }),
     };
@@ -707,6 +760,7 @@ describe('app/api/orders/[id]/route', () => {
       ];
 
       return params.execute({
+        select: () => lockedOrderSelect(existingOrder),
         update: () => ({
           set: (values: Record<string, unknown>) => {
             expect(values.firstName).toBe('Grace');
@@ -807,6 +861,9 @@ describe('app/api/orders/[id]/route', () => {
                 images: ['https://cdn.example.com/keyboard.jpg'],
               },
             ]),
+          })
+          .mockReturnValueOnce({
+            where: vi.fn().mockResolvedValue([]),
           }),
       }),
     };
@@ -826,6 +883,7 @@ describe('app/api/orders/[id]/route', () => {
       ];
 
       return params.execute({
+        select: () => lockedOrderSelect(existingOrder),
         update: () => ({
           set: (values: Record<string, unknown>) => {
             expect(values.variant).toBeNull();
@@ -918,6 +976,9 @@ describe('app/api/orders/[id]/route', () => {
           })
           .mockReturnValueOnce({
             where: vi.fn().mockResolvedValue([]),
+          })
+          .mockReturnValueOnce({
+            where: vi.fn().mockResolvedValue([]),
           }),
       }),
     };
@@ -926,6 +987,7 @@ describe('app/api/orders/[id]/route', () => {
     let capturedUpdate: Record<string, unknown> | null = null;
     mutateEntityWithHistoryMock.mockImplementation(async (_db, params) => {
       const rows = await params.execute({
+        select: () => lockedOrderSelect(existingOrder),
         update: () => ({
           set: (value: Record<string, unknown>) => {
             capturedUpdate = value;

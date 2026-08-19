@@ -8,12 +8,12 @@ import { ArrowUpRightIcon, type ArrowUpRightIconHandle } from '@/components/ui/a
 import {
   SupportContactActions,
   type SupportContactLabels,
+  type StorefrontSupportContact,
 } from '@/components/support-contact-actions';
 import type { Locale } from '@/i18n/config';
 import { addCartItem, readCart, writeCart, type CartItem } from '@/lib/cart';
 import { trackProductEvent } from '@/lib/analytics';
 import { prepareHaptics, triggerHaptic } from '@/lib/haptics';
-import type { StorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 import { LANDING_ORDER_QUANTITY_EVENT, type LandingOrderQuantityDetail } from '@/lib/landing-order';
 
 type ProductActionsProps = {
@@ -42,7 +42,7 @@ type ProductActionsProps = {
     added: string;
     unavailable: string;
   };
-  support?: { contact: StorefrontSettingsResponse; labels: SupportContactLabels };
+  support?: { contact: StorefrontSupportContact; labels: SupportContactLabels };
 };
 
 export function ProductActions({

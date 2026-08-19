@@ -2,6 +2,7 @@
   "nav": {
     "administration": "Administration",
     "products": "Products",
+    "aiProposals": "AI proposals",
     "orders": "Orders",
     "ordersTable": "Order capture",
     "ecotrackShipments": "ECOTRACK shipments",
@@ -14,6 +15,256 @@
     "stats": "Stats",
     "bulletin": "Bulletin",
     "settings": "Settings"
+  },
+  "productArchive": {
+    "title": "Archived products",
+    "description": "Products removed from the live storefront.",
+    "empty": "No products are archived.",
+    "restore": "Restore",
+    "restoring": "Restoring…",
+    "restored": "Product restored to the catalog.",
+    "restoreError": "The product could not be restored."
+  },
+  "aiProposalInbox": {
+    "title": "AI proposal review",
+    "description": "Review catalog changes with their before/after diff, evidence, confidence, source model, and selective approval controls.",
+    "empty": "No AI proposals are awaiting review.",
+    "expired": "{count, plural, one {# proposal has expired and cannot be approved.} other {# proposals have expired and cannot be approved.}}",
+    "expiredBadge": "Expired",
+    "confidence": "{value}% confidence",
+    "evidence": "Source evidence",
+    "noEvidence": "No visible source evidence was attached. Approve only when the proposed change can be verified from the catalog itself.",
+    "approve": "Approve",
+    "reject": "Reject",
+    "approveSelected": "Approve selected ({count})",
+    "rejectSelected": "Reject selected ({count})",
+    "approving": "Approving {count} proposals…",
+    "rejecting": "Rejecting {count} proposals…",
+    "approved": "Approved {count} proposals.",
+    "rejected": "Rejected {count} proposals.",
+    "deleteExpired": "Delete expired",
+    "deleteExpiredTitle": "Delete expired proposals?",
+    "deleteExpiredDescription": "Permanently delete the {count} expired proposals shown on this page. Active and previously reviewed proposals are not affected.",
+    "deletingExpired": "Deleting {count} expired proposals…",
+    "deletedExpired": "Deleted {count} expired proposals.",
+    "deleteExpiredError": "The expired proposal could not be deleted.",
+    "reviewError": "The proposal could not be reviewed.",
+    "search": "Search type, entity, task, model, or requester",
+    "proposalType": "Proposal type",
+    "entityType": "Entity type",
+    "model": "Model",
+    "sort": "Sort",
+    "expiry": "Expiry",
+    "evidenceFilter": "Evidence",
+    "pageSize": "Page size",
+    "allProposalTypes": "All proposal types",
+    "allEntityTypes": "All entity types",
+    "allModels": "All models",
+    "sortNewest": "Newest first",
+    "sortOldest": "Oldest first",
+    "sortConfidence": "Highest confidence",
+    "sortExpiry": "Expiring first",
+    "sortType": "Proposal type",
+    "allExpiry": "Any expiry",
+    "activeOnly": "Active only",
+    "expiredOnly": "Expired only",
+    "allEvidence": "Any evidence",
+    "withEvidence": "With evidence",
+    "withoutEvidence": "Without evidence",
+    "perPage": "{count} per page",
+    "applyFilters": "Apply filters",
+    "resetFilters": "Reset",
+    "resultCount": "{count, plural, one {# proposal} other {# proposals}}",
+    "pagination": "Proposal pages",
+    "previousPage": "Previous",
+    "nextPage": "Next",
+    "pageOf": "Page {page} of {total}"
+  },
+  "salesDesk": {
+    "newOrder": "Phone order",
+    "queues": "Work queues",
+    "newOrderTitle": "Create a phone-assisted order",
+    "newOrderDescription": "Creates the same canonical order, snapshots, delivery total, tracking token, and audit trail as storefront checkout.",
+    "customerName": "Customer name",
+    "phone": "Telephone",
+    "delivery": "Delivery",
+    "home": "Home",
+    "office": "Stop desk",
+    "wilaya": "Wilaya",
+    "commune": "Commune",
+    "selectWilaya": "Select wilaya",
+    "selectCommune": "Select commune",
+    "address": "Home address",
+    "products": "Products",
+    "searchProducts": "Search title, SKU, or barcode",
+    "searching": "Searching…",
+    "removeProduct": "Remove product",
+    "note": "Operator note",
+    "create": "Create order",
+    "created": "Order #{id} created.",
+    "createError": "The phone order could not be created.",
+    "duplicateWarning": "Possible duplicate submissions from this telephone in the last 24 hours:",
+    "openCreated": "Open created order",
+    "close": "Close",
+    "queuesTitle": "Phone-sales work queues",
+    "queuesDescription": "Operational queues derived from order status, call attempts, address completeness, and carrier exceptions.",
+    "emptyQueue": "No orders in this queue.",
+    "queue": {
+      "new": "New",
+      "firstCall": "First call",
+      "retryCall": "Retry call",
+      "addressCorrection": "Address correction",
+      "readyForPosting": "Ready for posting",
+      "carrierException": "Carrier exception"
+    },
+    "customer": {
+      "returningCustomer": "Returning customer · 1 completed order",
+      "returningCustomerCount": "Returning customer · {count} completed orders",
+      "title": "Telephone history",
+      "loading": "Loading customer history…",
+      "firstOrder": "No earlier order uses this telephone number.",
+      "noAddress": "No address",
+      "merge": "Merge duplicate",
+      "mergePrompt": "Archive duplicate order #{source} into canonical order #{target}? Both audit trails are preserved.",
+      "mergeReason": "Reason for merging (required)",
+      "cancel": "Cancel",
+      "confirmMerge": "Merge and archive",
+      "merged": "Order #{source} merged into #{target}.",
+      "mergeError": "The orders could not be merged.",
+      "note": "Customer or operator note",
+      "refusalReason": "Optional refusal reason",
+      "refusal": "Refusal",
+      "addNote": "Add to telephone history",
+      "noteSaved": "Customer note saved.",
+      "noteError": "The customer note could not be saved."
+    },
+    "archive": {
+      "filter": "Order archive filter",
+      "live": "Active orders",
+      "archived": "Archived orders",
+      "archive": "Archive order",
+      "restore": "Restore order",
+      "purge": "Permanently purge",
+      "confirmTitle": "Archive this order?",
+      "confirmDescription": "Delete this order?",
+      "purgeTitle": "Permanently purge this order?",
+      "purgeDescription": "{target} and its dependent history will be permanently deleted. This action is restricted and cannot be reversed.",
+      "restored": "Order restored.",
+      "purged": "Order permanently purged."
+    },
+    "correction": {
+      "title": "Historical status correction",
+      "description": "Use this only to correct a recorded mistake. It appends a correction event instead of erasing the original confirmation timestamps.",
+      "reason": "Why is the historical status being corrected?",
+      "apply": "Record correction",
+      "saved": "Status correction recorded.",
+      "error": "The status correction could not be recorded."
+    }
+  },
+  "profile": {
+    "legacyUi": "Legacy UI",
+    "legacyUiDescription": "Use the original Products, Orders, Assets, and Landing Pages interfaces."
+  },
+  "adminWorkspace": {
+    "common": {
+      "search": "Search",
+      "all": "All",
+      "filters": "Filters",
+      "selected": "{count} selected",
+      "noResults": "No matching records",
+      "unsaved": "Unsaved changes",
+      "upToDate": "No unsaved changes"
+    },
+    "products": {
+      "resultCount": "{count} products",
+      "searchPlaceholder": "Search product, SKU, or barcode",
+      "allStates": "All catalog states",
+      "active": "Active",
+      "inactive": "Inactive",
+      "outOfStock": "Out of stock",
+      "catalog": "Catalog",
+      "product": "Product",
+      "performance": "Performance",
+      "availability": "Availability",
+      "organization": "Organization",
+      "content": "Content and media",
+      "pricing": "Pricing",
+      "selectionActive": "Mark active",
+      "selectionStock": "Mark in stock",
+      "selectionMore": "More actions",
+      "orders": "Orders",
+      "confirmation": "Confirmation",
+      "noSku": "No SKU",
+      "noDescription": "No description yet",
+      "identity": "Identity",
+      "identityHint": "Customer-facing names and operational references.",
+      "commercial": "Commercial details",
+      "commercialHint": "Pricing, organization, inventory, and publishing state.",
+      "contentHint": "French and Arabic content share one editing flow.",
+      "archive": "Archive",
+      "archiveSelected": "Archive selected",
+      "archiveConfirm": "Archive this product?",
+      "archiveDialogTitle": "Archive products",
+      "archiveDialogDescription": "This product will be hidden from the storefront.",
+      "openEditor": "Edit {name}",
+      "quickChangeSaved": "Product state saved.",
+      "bulkChangeSaved": "Updated {count} products."
+    },
+    "orders": {
+      "resultCount": "{count} orders",
+      "operations": "Order operations",
+      "postConfirmed": "Post confirmed",
+      "postedShoppingList": "Posted shopping list",
+      "payloadDetails": "Payload details",
+      "searchPlaceholder": "Search customer, phone, city, or product",
+      "queue": "Order queue",
+      "weekOverview": "Seven-day outlook",
+      "days": "Projection days",
+      "previousDay": "Previous projection day",
+      "nextDay": "Next projection day",
+      "viewDay": "View projection for {date}",
+      "projectedProfit": "Projected profit",
+      "grossShort": "Gross",
+      "expectedShort": "{count} expected",
+      "ordersSummary": "Orders",
+      "newShort": "new",
+      "confirmedShort": "confirmed",
+      "noAnswerShort": "no answer",
+      "confirmationShort": "confirmation",
+      "shipmentShort": "shipment",
+      "adminShort": "admin",
+      "carrierShort": "carrier",
+      "updates": "Updates",
+      "cancelled": "Cancelled",
+      "newOrders": "New orders",
+      "confirmed": "Confirmed",
+      "confirmedToday": "Confirmed today",
+      "noAnswer": "No answer",
+      "customer": "Customer",
+      "location": "Location",
+      "amount": "Amount",
+      "products": "Products",
+      "status": "Status",
+      "activity": "Activity",
+      "contact": "Contact",
+      "delivery": "Delivery",
+      "notes": "Notes",
+      "selectionPost": "Post to Delivro",
+      "selectionList": "Shopping list",
+      "selectionMore": "More actions",
+      "noLocation": "Location unavailable",
+      "noNotes": "No notes",
+      "openTracking": "Open tracking for {name}",
+      "tracking": "Tracking",
+      "customerDetails": "Customer details",
+      "secondaryPhone": "Secondary phone",
+      "statusAndOwnership": "Status and confirmation",
+      "noAnswerAttempts": "No-answer attempts",
+      "fulfillment": "Fulfillment",
+      "orderContents": "Order contents",
+      "selectOrder": "Select an order to inspect and edit",
+      "saveChanges": "Save changes"
+    }
   },
   "roles": {
     "viewer": "Viewer",
@@ -293,9 +544,15 @@
         "error": "Failed to update status for {name}."
       },
       "delete": {
+        "confirm": "Delete this order?",
         "loading": "Deleting {target}...",
         "success": "Deleted {target}.",
         "error": "Failed to delete {target}."
+      },
+      "archive": {
+        "loading": "Archiving {target}...",
+        "success": "Archived {target}.",
+        "error": "Failed to archive {target}."
       }
     }
   },
@@ -319,6 +576,8 @@
     "customStart": "Custom start date",
     "customEnd": "Custom end date",
     "ranges": {
+      "7d": "7 days",
+      "14d": "14 days",
       "30d": "30 days",
       "90d": "90 days",
       "year": "This year",
@@ -351,7 +610,115 @@
       "products": "Products & categories",
       "geography": "Geography",
       "time": "Time analysis",
+      "profitTracker": "Profit tracker",
       "metaAds": "Meta Ads"
+    },
+    "profitTracker": {
+      "title": "Profit tracker",
+      "description": "Fast daily profit analytics using the calculator's exact EUR conversion, return adjustment, and adjusted-profit ÷ ad-cost formula.",
+      "eyebrow": "Calculator parity",
+      "latestMeta": "Latest Meta data",
+      "rangeLabel": "Date range",
+      "applyRange": "Apply range",
+      "export": "Export CSV",
+      "empty": "No data is available for this period.",
+      "cards": {
+        "profitX": "Profit ×",
+        "adjusted": "Adjusted profit",
+        "net": "Net profit",
+        "trueProfit": "True profit",
+        "spend": "Meta spend",
+        "confirmed": "Confirmed orders"
+      },
+      "charts": {
+        "daily": "Daily net profit and ad cost",
+        "cumulative": "Cumulative profit",
+        "creative": "Creative fatigue: CPM and CTR",
+        "roas": "ROAS — profit ×",
+        "funnel": "Funnel efficiency"
+      },
+      "metrics": {
+        "net": "Net profit",
+        "netBefore": "Net before returns",
+        "trend": "7-day trend",
+        "adCost": "Ad cost",
+        "cumulativeNet": "Cumulative net profit",
+        "cumulativeBefore": "Cumulative before returns",
+        "cumulativeTrue": "Cumulative true profit",
+        "profitAfter": "Profit × after returns",
+        "profitBefore": "Profit × before returns",
+        "breakEven": "Break-even",
+        "cpm": "CPM",
+        "ctr": "CTR",
+        "confirmation": "Confirmation rate",
+        "clickToPage": "Click-to-page rate",
+        "costConfirmed": "Cost per confirmed order"
+      },
+      "settings": {
+        "title": "Calculator settings",
+        "fx": "EUR → DZD rate",
+        "returns": "Default return rate (%)",
+        "restFrom": "Friday rest rule from",
+        "save": "Save settings",
+        "fxHint": "The FX rate is snapshotted per day. Changing this value never rewrites past calculations. A Friday with no profit or confirmed orders carries only its Meta spend into the next active day."
+      },
+      "day": {
+        "title": "Daily economics",
+        "date": "Date",
+        "gross": "Gross profit (DZD)",
+        "returns": "Return rate (%)",
+        "confirmed": "Confirmed orders",
+        "note": "Note",
+        "save": "Save day",
+        "fetchMeta": "Fetch from Meta"
+      },
+      "weekly": {
+        "title": "Friday-based weekly performance",
+        "week": "Week starting",
+        "days": "Days"
+      },
+      "history": {
+        "title": "Daily history",
+        "roll": "Friday carry",
+        "rest": "Rest day",
+        "actions": "Actions",
+        "edit": "Edit {date}",
+        "delete": "Delete {date}",
+        "confirmDelete": "Delete the saved data for {date}?"
+      },
+      "adsets": {
+        "title": "Ad-set performance",
+        "name": "Ad set",
+        "purchases": "Purchases",
+        "costPerPurchase": "Cost / purchase",
+        "value": "Purchase value",
+        "estimatedNet": "Estimated net profit"
+      },
+      "costs": {
+        "title": "Operating costs",
+        "name": "Cost name",
+        "amount": "Amount (DZD)",
+        "period": "Period",
+        "monthly": "Monthly",
+        "once": "One-time",
+        "start": "Start date",
+        "end": "End date (optional)",
+        "save": "Add operating cost",
+        "update": "Update operating cost",
+        "edit": "Edit",
+        "cancel": "Cancel edit",
+        "delete": "Delete {name}",
+        "confirmDelete": "Delete the operating cost {name}?",
+        "deleteAction": "Delete"
+      },
+      "notifications": {
+        "settingsSaved": "Calculator settings saved.",
+        "daySaved": "Daily economics saved.",
+        "dayDeleted": "Daily data deleted.",
+        "metaFetched": "Meta data refreshed for the selected day.",
+        "costSaved": "Operating cost saved.",
+        "costDeleted": "Operating cost deleted."
+      }
     },
     "upload": {
       "title": "Excel import",
@@ -598,12 +965,12 @@
       "empty": "No storefront landing-page activity for this range.",
       "blockMeta": "{adds} adds to cart · {checkouts} checkouts",
       "cards": {
-        "published": "Published pages",
+        "published": "Active pages",
         "sessions": "Attributed sessions",
         "purchases": "Submitted orders",
         "conversion": "Session conversion",
         "revenue": "Attributed revenue",
-        "drafts": "Draft pages"
+        "drafts": "Inactive pages"
       },
       "columns": {
         "page": "Landing page",
@@ -754,13 +1121,12 @@
       }
     },
     "manualOrders": {
-      "sectionTitle": "Manual orders",
-      "title": "Add manual order",
-      "description": "Create an order directly in the reporting dataset.",
+      "sectionTitle": "Manual entries",
+      "title": "Add manual reporting entry",
       "actions": {
-        "open": "Add order",
+        "open": "Add entry",
         "cancel": "Cancel",
-        "create": "Create order"
+        "create": "Create entry"
       },
       "fields": {
         "tracking": "Tracking",
@@ -788,8 +1154,8 @@
         "profit": "Profit"
       },
       "history": {
-        "emptyTitle": "No manual orders yet",
-        "emptyDescription": "Add a manual order to include it in the stats.",
+        "emptyTitle": "No manual entries yet",
+        "emptyDescription": "Add a missing historical order to include it in reporting.",
         "show": "Show history",
         "hide": "Hide history",
         "columns": {
@@ -808,14 +1174,14 @@
       },
       "notifications": {
         "create": {
-          "loading": "Creating manual order...",
-          "success": "Manual order created.",
-          "error": "Failed to create manual order."
+          "loading": "Creating manual entry...",
+          "success": "Manual entry created.",
+          "error": "Failed to create manual entry."
         },
         "delete": {
-          "loading": "Deleting manual order...",
-          "success": "Deleted manual order {id}.",
-          "error": "Failed to delete manual order."
+          "loading": "Deleting manual entry...",
+          "success": "Deleted manual entry {id}.",
+          "error": "Failed to delete manual entry."
         }
       }
     },
@@ -1060,15 +1426,15 @@
     "open": "AI assistant",
     "close": "Close AI assistant",
     "title": "Admin AI assistant",
-    "description": "Analyze the catalog and create reviewable content, pricing, bundle, featured, and entity-edit proposals.",
+    "description": "Analyze the catalog and create reviewable content, pricing, featured, and entity-edit proposals.",
     "reviewMode": "Review required",
     "conversation": "AI assistant conversation",
     "emptyTitle": "What would you like to improve?",
     "capabilityCatalog": "Catalog content",
     "capabilityAnalytics": "Analytics",
-    "capabilityPricing": "Pricing & bundles",
-    "examples": "Try: fill missing Arabic titles, suggest a 10% discount, create a bundle, show low stock, or feature the best products.",
-    "placeholder": "Ask about catalog content, analytics, pricing, bundles, or edits…",
+    "capabilityPricing": "Pricing",
+    "examples": "Try: fill missing Arabic titles, suggest a 10% discount, show low stock, or feature the best products.",
+    "placeholder": "Ask about catalog content, analytics, pricing, or edits…",
     "send": "Send",
     "sendHint": "Enter to send · Shift + Enter for a new line. Changes remain reviewable before they are applied.",
     "thinking": "Working…",
@@ -1850,6 +2216,8 @@
       "createAction": "Allow email",
       "updateAction": "Update access",
       "cancelEditAction": "Cancel edit",
+      "empty": "No employee access grants yet.",
+      "deleteConfirmation": "Remove this employee's access? They will no longer be able to enter the administration app.",
       "columns": {
         "email": "Email",
         "assignment": "Assignment"
@@ -1890,6 +2258,8 @@
       "cancelEditAction": "Cancel edit",
       "editAction": "Edit permissions",
       "noDescription": "No description provided yet.",
+      "empty": "No custom roles yet.",
+      "permissionCount": "{count} permissions",
       "notifications": {
         "create": {
           "loading": "Creating role {name}...",
@@ -1910,26 +2280,38 @@
       "brands_categories_write": "Manage brands & categories",
       "bulletin_moderate": "Moderate bulletin posts",
       "ops_view": "View ops dashboards & logs",
-      "settings_manage": "Manage settings configuration",
-      "ai_use": "Use the admin AI assistant",
-      "ai_catalog_propose": "Generate AI catalog proposals",
-      "ai_catalog_apply": "Apply AI catalog changes",
-      "ai_analytics_query": "Query analytics with AI",
-      "ai_pricing_analyze": "Analyze pricing and discounts with AI",
-      "ai_pricing_apply": "Apply AI pricing and discount changes",
-      "ai_landing_publish": "Publish AI-generated landing pages"
+      "analytics_manage": "View and manage analytics",
+      "settings_manage": "Manage settings configuration"
+    },
+    "permissionGroups": {
+      "commerce": "Commerce",
+      "operations": "Operations"
     }
   },
   "storefrontSettings": {
     "title": "Storefront settings",
     "description": "Manage customer-facing contact information here. This hidden page will also house future storefront layout and information controls.",
     "contactTitle": "Contact information",
+    "emailLabel": "Customer contact email",
+    "addressLabel": "Store address",
+    "mapUrl": "Map link",
+    "facebookUrl": "Facebook link",
     "contactDescription": "The storefront uses this number for direct customer calls.",
     "phoneLabel": "Customer phone number",
     "phoneHint": "An Algerian mobile number in national or +213 format.",
     "callsLabel": "Allow phone calls",
     "callsHint": "Show direct tap-to-call actions on the storefront.",
     "assistantTitle": "AI shopping assistant",
+    "assistantRuntimeTitle": "Assistant runtime",
+    "modelLabel": "Primary model",
+    "fallbackModelLabel": "Fallback model (optional)",
+    "noModels": "No storefront models are configured",
+    "noFallbackModel": "No fallback model",
+    "announcementTitle": "Announcement bar",
+    "announcementMessageFr": "French message",
+    "announcementMessageAr": "Arabic message",
+    "active": "Active",
+    "saveAnnouncement": "Save announcement",
     "assistantDescription": "Control whether the product advisor is available on the rebuilt storefront.",
     "assistantLabel": "Enable the AI shopping assistant",
     "assistantHint": "Show the assistant launcher on browsing and product pages. Checkout and thank-you pages remain assistant-free.",
@@ -1963,6 +2345,8 @@
     "resetFilters": "Reset filters",
     "resultsSummary": "Showing {count} of {total} entries",
     "systemActor": "System",
+    "today": "Today",
+    "yesterday": "Yesterday",
     "actorLine": "{actor} changed {entityType} #{entityId}",
     "changeLine": "{field}: {before} -> {after}",
     "noValue": "Empty",
@@ -1977,11 +2361,13 @@
       "false": "No"
     },
     "filters": {
+      "title": "Filters",
       "actionLabel": "Filter by action",
       "areaLabel": "Filter by area",
       "stateLabel": "Filter by state",
       "includeEcotrackSyncLabel": "Show ECOTRACK sync changes",
       "includeEcotrackSyncDescription": "Hidden by default to keep the table manageable.",
+      "includeAutomation": "Automatic syncs",
       "allActions": "All actions",
       "allAreas": "All areas",
       "allStates": "All states"
@@ -1997,6 +2383,35 @@
       "create": "Created",
       "update": "Updated",
       "delete": "Deleted"
+    },
+    "sort": {
+      "newest": "Newest first",
+      "oldest": "Oldest first"
+    },
+    "summaries": {
+      "created": "Record created",
+      "updated": "Record updated",
+      "deleted": "Record deleted",
+      "fields": "Updated {fields}",
+      "fieldsAndMore": "Updated {fields} and {count} more"
+    },
+    "summaryGroups": {
+      "confirmation": "confirmation",
+      "shipment": "shipment"
+    },
+    "fields": {
+      "active": "active state",
+      "inStock": "stock availability",
+      "price": "price",
+      "purchasePrice": "purchase price",
+      "title": "title",
+      "city": "city",
+      "variant": "variant",
+      "homeAddress": "address",
+      "delivery": "delivery",
+      "delPr": "delivery price",
+      "note": "note",
+      "cartProducts": "order contents"
     },
     "resources": {
       "products": "Products",
@@ -2020,6 +2435,11 @@
       "changesDescription": "Only fields that actually changed are listed here.",
       "changesCount": "{count} changes",
       "noChanges": "This action does not include field-level changes.",
+      "selectPrompt": "Select an action to inspect its exact changes.",
+      "loadingTitle": "Loading action",
+      "reference": "Record",
+      "arraySummary": "{count} items",
+      "objectSummary": "{count} fields",
       "undoneAt": "Undone at {value}",
       "redoneAt": "Redone at {value}",
       "close": "Close",
@@ -2027,6 +2447,24 @@
         "field": "Field",
         "before": "Before",
         "after": "After"
+      }
+    },
+    "recovery": {
+      "title": "Recovery",
+      "undoDescription": "Restore the record to its state before this action.",
+      "redoDescription": "Reapply this action after it was undone.",
+      "blocked": {
+        "non_reversible": "This action is recorded for audit purposes and cannot be reversed.",
+        "newer_action": "A newer action must be undone first.",
+        "redo_order": "An earlier undone action must be reapplied first.",
+        "history_out_of_sync": "Recovery is unavailable because this record’s history is inconsistent.",
+        "permission_required": "You can inspect this action, but your role cannot change this area."
+      },
+      "confirm": {
+        "undoTitle": "Undo this change?",
+        "undoDescription": "This restores {entity} to its exact state before this action.",
+        "redoTitle": "Reapply this change?",
+        "redoDescription": "This restores {entity} to its exact state after this action."
       }
     },
     "notifications": {

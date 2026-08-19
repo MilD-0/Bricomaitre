@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { storefrontSettingsInputSchema } from '@bric/storefront-core/settings';
 
-import { loadStorefrontSettings, saveStorefrontSettings } from '../../../lib/storefront-settings';
+import {
+  getStorefrontAiModelOptions,
+  loadStorefrontSettings,
+  saveStorefrontSettings,
+} from '../../../lib/storefront-settings';
 import { requireMutationAccess } from '../../../lib/rbac';
 import { revalidateStorefrontSettings } from '../../../lib/storefront-revalidate';
 
@@ -20,6 +24,17 @@ export async function PUT(request: NextRequest) {
   const parsed = storefrontSettingsInputSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+  const modelOptions = getStorefrontAiModelOptions();
+  if (
+    modelOptions.length === 0 ||
+    !modelOptions.includes(parsed.data.aiModel) ||
+    (parsed.data.aiFallbackModel && !modelOptions.includes(parsed.data.aiFallbackModel))
+  ) {
+    return NextResponse.json(
+      { error: 'Select a storefront model configured by the environment.' },
+      { status: 400 },
+    );
   }
 
   try {

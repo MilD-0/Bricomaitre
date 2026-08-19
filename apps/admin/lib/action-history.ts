@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import type { getDb } from '@bric/db/client';
 import { parseSortRuleStrings } from './multi-sort';
+import { normalizePermissions } from './permissions';
 import {
   actionLogs,
   adCosts,
@@ -93,9 +94,28 @@ export class ActionHistoryConflictError extends Error {
   }
 }
 export type ActionHistoryChange = {
+  key: string;
   field: string;
   before: unknown;
   after: unknown;
+};
+
+export type ActionHistoryRecoveryReason =
+  | 'non_reversible'
+  | 'newer_action'
+  | 'redo_order'
+  | 'history_out_of_sync'
+  | 'permission_required';
+
+export type ActionHistoryRecovery = {
+  nextAction: 'undo' | 'redo' | null;
+  blockedReason: ActionHistoryRecoveryReason | null;
+};
+
+export type ActionHistoryPreview = {
+  key: string;
+  kind: 'field' | 'group';
+  field: string;
 };
 
 export const actionHistoryQuerySchema = z
@@ -394,11 +414,12 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
       const allowedKeys = new Set(Object.keys(getTableColumns(roleDefinitions)));
       await tx.insert(roleDefinitions).values(cleanSnapshot(roleSnapshot, allowedKeys) as never);
 
-      if (Array.isArray(permissions) && permissions.length > 0) {
+      const normalizedPermissions = normalizePermissions(permissions);
+      if (normalizedPermissions.length > 0) {
         await tx.insert(roleDefinitionPermissions).values(
-          permissions.map((permission) => ({
+          normalizedPermissions.map((permission) => ({
             roleId: Number(roleSnapshot.id),
-            permission: String(permission) as never,
+            permission,
           })),
         );
       }
@@ -415,11 +436,12 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
         .delete(roleDefinitionPermissions)
         .where(eq(roleDefinitionPermissions.roleId, entityId));
 
-      if (Array.isArray(permissions) && permissions.length > 0) {
+      const normalizedPermissions = normalizePermissions(permissions);
+      if (normalizedPermissions.length > 0) {
         await tx.insert(roleDefinitionPermissions).values(
-          permissions.map((permission) => ({
+          normalizedPermissions.map((permission) => ({
             roleId: entityId,
-            permission: String(permission) as never,
+            permission,
           })),
         );
       }
@@ -564,10 +586,6 @@ function humanizeFieldName(field: string) {
 export function getActionHistoryChanges(
   entry: Pick<ActionLogEntry, 'operation' | 'beforeState' | 'afterState'>,
 ): ActionHistoryChange[] {
-  if (entry.operation !== 'update') {
-    return [];
-  }
-
   const beforeState = isRecord(entry.beforeState) ? entry.beforeState : {};
   const afterState = isRecord(entry.afterState) ? entry.afterState : {};
   const ignoredKeys = new Set(['id', 'createdAt', 'updatedAt']);
@@ -576,10 +594,108 @@ export function getActionHistoryChanges(
     .filter((key) => !ignoredKeys.has(key))
     .filter((key) => !areValuesEqual(beforeState[key], afterState[key]))
     .map((key) => ({
+      key,
       field: humanizeFieldName(key),
       before: beforeState[key] ?? null,
       after: afterState[key] ?? null,
     }));
+}
+
+const confirmationFieldKeys = new Set([
+  'confirmed',
+  'confirmedAt',
+  'confirmedBy',
+  'confirmedByName',
+  'noAnswerCount',
+]);
+const shipmentFieldKeys = new Set([
+  'ecotrackReference',
+  'ecotrackStatus',
+  'ecotrackStatusLastUpdate',
+  'ecotrackTrackingNumber',
+]);
+
+function buildActionHistoryPreview(changes: ActionHistoryChange[]): {
+  items: ActionHistoryPreview[];
+  total: number;
+} {
+  const items: ActionHistoryPreview[] = [];
+  if (changes.some((change) => confirmationFieldKeys.has(change.key))) {
+    items.push({ key: 'confirmation', kind: 'group', field: 'Confirmation' });
+  }
+  if (changes.some((change) => shipmentFieldKeys.has(change.key))) {
+    items.push({ key: 'shipment', kind: 'group', field: 'Shipment' });
+  }
+  for (const change of changes) {
+    if (confirmationFieldKeys.has(change.key) || shipmentFieldKeys.has(change.key)) continue;
+    items.push({ key: change.key, kind: 'field', field: change.field });
+  }
+
+  return { items: items.slice(0, 2), total: items.length };
+}
+
+export function getActionHistoryPreview(
+  entry: Pick<ActionLogEntry, 'operation' | 'beforeState' | 'afterState'>,
+): { items: ActionHistoryPreview[]; total: number } {
+  return entry.operation === 'update'
+    ? buildActionHistoryPreview(getActionHistoryChanges(entry))
+    : { items: [], total: 0 };
+}
+
+export function resolveActionHistoryRecovery(
+  entry: Pick<ActionLogEntry, 'id' | 'isReversible' | 'isUndone'>,
+  entityHistory: Array<Pick<ActionLogEntry, 'id' | 'isUndone'>>,
+): ActionHistoryRecovery {
+  if (!entry.isReversible) {
+    return { nextAction: null, blockedReason: 'non_reversible' };
+  }
+
+  const entryIndex = entityHistory.findIndex((historyEntry) => historyEntry.id === entry.id);
+  if (entryIndex === -1) {
+    return { nextAction: null, blockedReason: 'history_out_of_sync' };
+  }
+
+  const firstUndoneIndex = entityHistory.findIndex((historyEntry) => historyEntry.isUndone);
+  if (
+    firstUndoneIndex >= 0 &&
+    entityHistory.slice(firstUndoneIndex).some((historyEntry) => !historyEntry.isUndone)
+  ) {
+    return { nextAction: null, blockedReason: 'history_out_of_sync' };
+  }
+
+  const latestAppliedEntry =
+    firstUndoneIndex === -1 ? entityHistory.at(-1) : entityHistory[firstUndoneIndex - 1];
+  const nextRedoEntry = firstUndoneIndex === -1 ? null : entityHistory[firstUndoneIndex];
+
+  if (!entry.isUndone) {
+    return latestAppliedEntry?.id === entry.id
+      ? { nextAction: 'undo', blockedReason: null }
+      : { nextAction: null, blockedReason: 'newer_action' };
+  }
+
+  return nextRedoEntry?.id === entry.id
+    ? { nextAction: 'redo', blockedReason: null }
+    : { nextAction: null, blockedReason: 'redo_order' };
+}
+
+export async function loadActionHistoryDetail(db: Database, actionLogId: number) {
+  const [entry] = await db
+    .select()
+    .from(actionLogs)
+    .where(eq(actionLogs.id, actionLogId))
+    .limit(1);
+  if (!entry) return null;
+
+  const entityHistory = await db
+    .select({ id: actionLogs.id, isUndone: actionLogs.isUndone })
+    .from(actionLogs)
+    .where(and(eq(actionLogs.entityType, entry.entityType), eq(actionLogs.entityId, entry.entityId)))
+    .orderBy(asc(actionLogs.createdAt), asc(actionLogs.id));
+
+  return {
+    item: toActionHistoryItem(entry),
+    recovery: resolveActionHistoryRecovery(entry, entityHistory),
+  };
 }
 
 async function fetchEntity(tx: Database | Transaction, entityType: string, entityId: number) {
@@ -902,25 +1018,15 @@ export async function applyHistoryAction(
       throw new ActionHistoryConflictError('Action log history is unavailable');
     }
 
-    const firstUndoneIndex = entityHistory.findIndex((historyEntry) => historyEntry.isUndone);
-
-    if (
-      firstUndoneIndex >= 0 &&
-      entityHistory.slice(firstUndoneIndex).some((historyEntry) => !historyEntry.isUndone)
-    ) {
-      throw new ActionHistoryConflictError('Action history is out of sync');
-    }
-
-    const latestAppliedEntry =
-      firstUndoneIndex === -1 ? entityHistory.at(-1) : entityHistory[firstUndoneIndex - 1];
-    const nextRedoEntry = firstUndoneIndex === -1 ? null : entityHistory[firstUndoneIndex];
-
-    if (params.direction === 'undo' && latestAppliedEntry?.id !== entry.id) {
-      throw new ActionHistoryConflictError('Only the latest applied action can be undone');
-    }
-
-    if (params.direction === 'redo' && nextRedoEntry?.id !== entry.id) {
-      throw new ActionHistoryConflictError('Only the next undone action can be redone');
+    const recovery = resolveActionHistoryRecovery(entry, entityHistory);
+    if (recovery.nextAction !== params.direction) {
+      const message =
+        recovery.blockedReason === 'history_out_of_sync'
+          ? 'Action history is out of sync'
+          : params.direction === 'undo'
+            ? 'Only the latest applied action can be undone'
+            : 'Only the next undone action can be redone';
+      throw new ActionHistoryConflictError(message);
     }
 
     const beforeState = reviveSnapshot(
@@ -996,5 +1102,29 @@ export function toActionHistoryItem(entry: ActionLogEntry) {
     createdAt: entry.createdAt.toISOString(),
     undoneAt: entry.undoneAt?.toISOString() ?? null,
     redoneAt: entry.redoneAt?.toISOString() ?? null,
+  };
+}
+
+export function toActionHistoryListItem(entry: ActionLogEntry) {
+  const changes = getActionHistoryChanges(entry);
+  const preview =
+    entry.operation === 'update'
+      ? buildActionHistoryPreview(changes)
+      : { items: [], total: 0 };
+  return {
+    id: entry.id,
+    resource: entry.resource,
+    entityType: entry.entityType,
+    entityId: entry.entityId,
+    entityLabel: entry.entityLabel,
+    operation: entry.operation,
+    createdBy: entry.createdBy,
+    createdByName: entry.createdByName,
+    isReversible: entry.isReversible,
+    isUndone: entry.isUndone,
+    changeCount: changes.length,
+    changePreview: preview.items,
+    semanticChangeCount: preview.total,
+    createdAt: entry.createdAt.toISOString(),
   };
 }

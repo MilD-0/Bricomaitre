@@ -4,12 +4,12 @@ import { getDb, hasDb } from '@bric/db/client';
 import {
   actionHistoryQuerySchema,
   listActionHistory,
-  toActionHistoryItem,
+  toActionHistoryListItem,
 } from '../../../lib/action-history';
-import { requireOpsAccess } from '../../../lib/rbac';
+import { requireSettingsAccess } from '../../../lib/rbac';
 
 export async function GET(req: NextRequest) {
-  const denied = await requireOpsAccess();
+  const denied = await requireSettingsAccess();
 
   if (denied) {
     return denied;
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
   const result = await listActionHistory(getDb(), query);
 
   return NextResponse.json({
-    items: result.items.map(toActionHistoryItem),
+    items: result.items.map(toActionHistoryListItem),
     pagination: result.pagination,
   });
 }

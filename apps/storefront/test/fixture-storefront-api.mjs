@@ -636,6 +636,23 @@ const server = createServer((request, response) => {
     });
     return;
   }
+  if (request.method === 'POST' && url.pathname === '/storefront/products/validate') {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      try {
+        const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        const ids = new Set(Array.isArray(payload.productIds) ? payload.productIds : []);
+        send(
+          response,
+          json({ items: catalogProducts.filter((item) => item.active && ids.has(item.id)) }),
+        );
+      } catch {
+        send(response, json({ error: 'Invalid cart validation' }, 400));
+      }
+    });
+    return;
+  }
   let result;
   if (request.method === 'POST' && url.pathname === '/storefront/analytics') {
     request.resume();
@@ -669,6 +686,10 @@ const server = createServer((request, response) => {
     const search = url.searchParams.get('search') ?? '';
     const brandId = Number(url.searchParams.get('brandId')) || null;
     const categoryId = Number(url.searchParams.get('categoryId')) || null;
+    const stock = url.searchParams.get('stock') ?? 'all';
+    const discounted = url.searchParams.get('discounted') === '1';
+    const minPrice = Number(url.searchParams.get('minPrice')) || null;
+    const maxPrice = Number(url.searchParams.get('maxPrice')) || null;
     const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
     const limit = Math.max(1, Number(url.searchParams.get('limit')) || 50);
     const sortKey = url.searchParams.get('sortKey') ?? 'updatedAt';
@@ -677,7 +698,11 @@ const server = createServer((request, response) => {
       (item) =>
         matchesSearch(item, search) &&
         (!brandId || item.brandId === brandId) &&
-        (!categoryId || item.categoryId === categoryId),
+        (!categoryId || item.categoryId === categoryId) &&
+        (stock === 'all' || (stock === 'in' ? item.inStock : !item.inStock)) &&
+        (!discounted || (item.oldPrice !== null && Number(item.oldPrice) > Number(item.price))) &&
+        (!minPrice || Number(item.price) >= minPrice) &&
+        (!maxPrice || Number(item.price) <= maxPrice),
     );
     filtered.sort((left, right) => {
       const leftValue = sortKey === 'price' ? Number(left.price) : (left[sortKey] ?? '');

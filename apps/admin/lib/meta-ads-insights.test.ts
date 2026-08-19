@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const { syncProfitTrackerMetaRowsMock } = vi.hoisted(() => ({
+  syncProfitTrackerMetaRowsMock: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock('./profit-tracker', () => ({
+  syncProfitTrackerMetaRows: syncProfitTrackerMetaRowsMock,
+}));
+
 import {
   fetchMetaAdsInsightRows,
   mapMetaAdsInsightRow,
@@ -217,6 +225,12 @@ describe('Meta Ads Insights ingestion', () => {
 
     expect(transaction).toHaveBeenCalledOnce();
     expect(deleteWhere).toHaveBeenCalledOnce();
+    expect(syncProfitTrackerMetaRowsMock).toHaveBeenCalledWith([], db, {
+      since: '2026-08-16',
+      until: '2026-08-17',
+      accountCurrency: 'EUR',
+      syncedAt: new Date('2026-08-17T00:00:00.000Z'),
+    });
     expect(updateWhere).toHaveBeenCalledOnce();
   });
 });

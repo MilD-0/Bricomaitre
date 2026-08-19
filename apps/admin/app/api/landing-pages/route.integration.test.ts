@@ -5,12 +5,14 @@ const mocks = vi.hoisted(() => ({
   access: vi.fn(),
   auth: vi.fn(),
   list: vi.fn(),
+  summaries: vi.fn(),
   create: vi.fn(),
 }));
 vi.mock('../../../lib/rbac', () => ({ requireMutationAccess: mocks.access }));
 vi.mock('../../../lib/auth', () => ({ auth: mocks.auth }));
 vi.mock('../../../lib/landing-pages', () => ({
   listLandingPages: mocks.list,
+  listLandingPageSummaries: mocks.summaries,
   createLandingPage: mocks.create,
 }));
 
@@ -21,7 +23,16 @@ describe('admin landing pages route', () => {
     mocks.access.mockReset().mockResolvedValue(null);
     mocks.auth.mockReset().mockResolvedValue({ user: { email: 'admin@example.com' } });
     mocks.list.mockReset().mockResolvedValue([]);
+    mocks.summaries.mockReset().mockResolvedValue([{ id: 3, active: false, currentRevision: 2 }]);
     mocks.create.mockReset().mockResolvedValue({ id: 3 });
+  });
+  it('returns concise records for the preview index without loading documents', async () => {
+    const response = await GET(new NextRequest('http://localhost/api/landing-pages?view=index'));
+    await expect(response.json()).resolves.toEqual({
+      items: [{ id: 3, active: false, currentRevision: 2 }],
+    });
+    expect(mocks.summaries).toHaveBeenCalledOnce();
+    expect(mocks.list).not.toHaveBeenCalled();
   });
   it('uses assets permission for listing and creation', async () => {
     expect((await GET()).status).toBe(200);
