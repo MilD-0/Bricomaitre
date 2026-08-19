@@ -1,5 +1,5 @@
 import { getDb } from '@bric/db/client';
-import { products } from '@bric/db/schema';
+import { productSlugHistory, products } from '@bric/db/schema';
 import { normalizePromoCode, productPayloadSchema, type ProductPromoCodePayload } from './products';
 import { resolveUniqueSlug } from './slug';
 
@@ -12,6 +12,9 @@ async function resolveProductSlug(
       products?: {
         findFirst?: (input: unknown) => Promise<{ id: number } | undefined>;
       };
+      productSlugHistory?: {
+        findFirst?: (input: unknown) => Promise<{ productId: number } | undefined>;
+      };
     };
   };
 
@@ -20,25 +23,44 @@ async function resolveProductSlug(
   }
 
   return resolveUniqueSlug(data.slug ?? data.title, async (slug) => {
-    const existing = await db.query?.products?.findFirst?.({
-      columns: { id: true },
-      where: (
-        productsTable: typeof products,
-        helpers: {
-          and: typeof import('drizzle-orm').and;
-          eq: typeof import('drizzle-orm').eq;
-          ne: typeof import('drizzle-orm').ne;
-        },
-      ) =>
-        currentId == null
-          ? helpers.eq(productsTable.slug, slug)
-          : helpers.and(
-              helpers.eq(productsTable.slug, slug),
-              helpers.ne(productsTable.id, currentId),
-            ),
-    });
+    const [existing, historical] = await Promise.all([
+      db.query?.products?.findFirst?.({
+        columns: { id: true },
+        where: (
+          productsTable: typeof products,
+          helpers: {
+            and: typeof import('drizzle-orm').and;
+            eq: typeof import('drizzle-orm').eq;
+            ne: typeof import('drizzle-orm').ne;
+          },
+        ) =>
+          currentId == null
+            ? helpers.eq(productsTable.slug, slug)
+            : helpers.and(
+                helpers.eq(productsTable.slug, slug),
+                helpers.ne(productsTable.id, currentId),
+              ),
+      }),
+      db.query?.productSlugHistory?.findFirst?.({
+        columns: { productId: true },
+        where: (
+          historyTable: typeof productSlugHistory,
+          helpers: {
+            and: typeof import('drizzle-orm').and;
+            eq: typeof import('drizzle-orm').eq;
+            ne: typeof import('drizzle-orm').ne;
+          },
+        ) =>
+          currentId == null
+            ? helpers.eq(historyTable.slug, slug)
+            : helpers.and(
+                helpers.eq(historyTable.slug, slug),
+                helpers.ne(historyTable.productId, currentId),
+              ),
+      }),
+    ]);
 
-    return Boolean(existing);
+    return Boolean(existing || historical);
   });
 }
 

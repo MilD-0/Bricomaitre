@@ -11,7 +11,7 @@ import {
   IMPORT_HISTORY_PAGE_SIZE,
   listImportHistoryPage,
 } from '../../../lib/stats-order-import';
-import { requireOpsAccess } from '../../../lib/rbac';
+import { requireAnalyticsAccess } from '../../../lib/rbac';
 import { CACHE_TAGS, revalidateServerTags } from '../../../lib/server-cache';
 import { triggerAdminReportingRefresh } from '../../../lib/reporting-refresh-trigger';
 
@@ -25,7 +25,7 @@ const importHistoryQuerySchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
-  const denied = await requireOpsAccess();
+  const denied = await requireAnalyticsAccess();
 
   if (denied) {
     return denied;
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const denied = await requireOpsAccess();
+  const denied = await requireAnalyticsAccess();
 
   if (denied) {
     return denied;
@@ -109,7 +109,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const denied = await requireOpsAccess();
+  const denied = await requireAnalyticsAccess();
 
   if (denied) {
     return denied;
@@ -138,7 +138,7 @@ export async function DELETE(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const denied = await requireOpsAccess();
+  const denied = await requireAnalyticsAccess();
 
   if (denied) {
     return denied;

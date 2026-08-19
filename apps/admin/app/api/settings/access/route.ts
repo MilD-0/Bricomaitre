@@ -7,7 +7,7 @@ import { mutateEntityWithHistory } from '../../../../lib/action-history';
 import { auth } from '../../../../lib/auth';
 import { userAccessGrantFormSchema } from '../../../../lib/permissions';
 import { isConfiguredPrivilegedEmail } from '../../../../lib/role-config';
-import { requireOpsAccess } from '../../../../lib/rbac';
+import { requireSettingsAccess } from '../../../../lib/rbac';
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -40,7 +40,7 @@ async function loadAccessGrants() {
 }
 
 export async function GET() {
-  const denied = await requireOpsAccess();
+  const denied = await requireSettingsAccess();
   if (denied) {
     return denied;
   }
@@ -53,7 +53,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const denied = await requireOpsAccess();
+  const denied = await requireSettingsAccess();
   if (denied) {
     return denied;
   }

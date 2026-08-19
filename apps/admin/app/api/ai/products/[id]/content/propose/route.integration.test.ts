@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   propose: vi.fn(),
 }));
-vi.mock('../../../../../../../lib/rbac', () => ({ requireAiAccess: mocks.access }));
+vi.mock('../../../../../../../lib/rbac', () => ({ requireMutationAccess: mocks.access }));
 vi.mock('@bric/db/client', () => ({ hasDb: mocks.hasDb }));
 vi.mock('../../../../../../../lib/auth', () => ({ auth: mocks.auth }));
 vi.mock('../../../../../../../lib/ai-product-content', () => ({
@@ -33,7 +33,7 @@ describe('AI product content proposal route', () => {
       headers: { 'content-type': 'application/json' },
     });
 
-  it('requires the AI catalog proposal permission', async () => {
+  it('requires product management permission', async () => {
     mocks.access.mockResolvedValue(NextResponse.json({ error: 'Forbidden' }, { status: 403 }));
     const response = await POST(request({}), { params: Promise.resolve({ id: '1' }) });
     expect(response.status).toBe(403);

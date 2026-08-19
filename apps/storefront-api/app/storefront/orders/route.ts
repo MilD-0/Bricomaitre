@@ -9,6 +9,7 @@ import {
 } from '@bric/runtime/idempotency';
 import { getDb, hasDb } from '@bric/db/client';
 import { storefrontOrderCreateRequestSchema } from '@bric/storefront-core/contracts';
+import { UnorderableCartError } from '@bric/storefront-core/order-commercial';
 import {
   claimStorefrontOrderIdempotency,
   clearStorefrontOrderIdempotency,
@@ -451,6 +452,16 @@ export async function POST(req: NextRequest) {
           'storefront-order-durable-idempotency-clear-after-create-error',
         );
       }
+    }
+
+    if (error instanceof UnorderableCartError) {
+      return NextResponse.json(
+        {
+          error: 'Your cart changed. Review current product availability before ordering.',
+          code: 'cart_changed',
+        },
+        { status: 409, headers: withRequestIdHeaders(requestId) },
+      );
     }
 
     logOrderTiming({

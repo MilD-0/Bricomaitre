@@ -4,7 +4,7 @@ import { z } from 'zod';
 const optionalModel = z.string().trim().min(1).optional();
 const optionalUrl = z.string().trim().url().optional();
 
-export const aiProviderSchema = z.enum(['openai', 'openrouter']);
+export const aiProviderSchema = z.enum(['openai', 'openrouter', 'deepseek']);
 export type AiProvider = z.infer<typeof aiProviderSchema>;
 
 export const aiConfigSchema = z.object({
@@ -40,7 +40,9 @@ export function getAiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig {
     apiKey:
       provider === 'openrouter'
         ? env.OPENROUTER_API_KEY || undefined
-        : env.OPENAI_API_KEY || undefined,
+        : provider === 'deepseek'
+          ? env.DEEPSEEK_API_KEY || undefined
+          : env.OPENAI_API_KEY || undefined,
     adminModel: env.AI_ADMIN_MODEL || undefined,
     storefrontModel: env.AI_STOREFRONT_MODEL || undefined,
     contentModel: env.AI_CONTENT_MODEL || undefined,
@@ -58,7 +60,13 @@ export function assertAiConfigured(config: AiConfig) {
   }
   if (!config.apiKey) {
     throw new Error(
-      `${config.provider === 'openrouter' ? 'OPENROUTER_API_KEY' : 'OPENAI_API_KEY'} is not configured`,
+      `${
+        config.provider === 'openrouter'
+          ? 'OPENROUTER_API_KEY'
+          : config.provider === 'deepseek'
+            ? 'DEEPSEEK_API_KEY'
+            : 'OPENAI_API_KEY'
+      } is not configured`,
     );
   }
 }
@@ -112,6 +120,14 @@ export function createAiLanguageModel(
         : undefined,
     });
     return provider.chat(model);
+  }
+
+  if (config.provider === 'deepseek') {
+    return createOpenAI({
+      name: 'deepseek',
+      apiKey: config.apiKey,
+      baseURL: 'https://api.deepseek.com',
+    }).chat(model);
   }
 
   return createOpenAI({ apiKey: config.apiKey }).responses(model);

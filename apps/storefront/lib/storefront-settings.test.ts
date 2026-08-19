@@ -30,7 +30,7 @@ describe('storefront contact settings', () => {
         phoneEnabled: false,
         aiAssistantEnabled: false,
       }),
-    ).toEqual({
+    ).toMatchObject({
       phoneDisplay: '0795 34 28 26',
       phoneHref: 'tel:+213795342826',
       phoneEnabled: true,

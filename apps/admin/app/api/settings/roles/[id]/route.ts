@@ -7,7 +7,7 @@ import { mutateEntityWithHistory } from '../../../../../lib/action-history';
 import { auth } from '../../../../../lib/auth';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { roleDefinitionFormSchema } from '../../../../../lib/permissions';
-import { requireOpsAccess } from '../../../../../lib/rbac';
+import { requireSettingsAccess } from '../../../../../lib/rbac';
 
 function slugifyRoleName(name: string) {
   return name
@@ -18,7 +18,7 @@ function slugifyRoleName(name: string) {
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireOpsAccess();
+  const denied = await requireSettingsAccess();
   if (denied) {
     return denied;
   }

@@ -8,6 +8,7 @@ import {
   dispatchEcotrackOrder,
   fetchEcotrackOrderLabel,
   getEcotrackMaj,
+  getEcotrackOrder,
   getEcotrackOrdersStatus,
   getEcotrackTrackingsInfo,
   requestEcotrackReturn as requestEcotrackReturnUpstream,
@@ -17,16 +18,25 @@ import {
   updateEcotrackOrder,
 } from '@bric/storefront-core/ecotrack-client';
 import { readEcotrackActivityTimestamp } from '@bric/storefront-core/ecotrack-tracking';
+import {
+  restoreCanonicalOrderSnapshot,
+  updateCanonicalOrder,
+} from '@bric/storefront-core/order-write';
 
 import { getDb, hasDb } from '@bric/db/client';
 import {
   ecotrackOrderMajEntries,
   ecotrackOrderStates,
   ecotrackOrderTrackingEvents,
-  orderStatusHistory,
+  orderLineItems,
   orders,
   products,
 } from '@bric/db/schema';
+import {
+  readOrderProductSubtotal,
+  resolveOrderCommercialState,
+} from '@bric/storefront-core/order-commercial';
+import { normalizeAlgeriaPhone } from '@bric/storefront-core/meta';
 import { recordExplicitActionLog, type ActionActor } from './action-history';
 import type {
   EcotrackBulkActionFailure,
@@ -231,6 +241,8 @@ const TERMINAL_STATUSES = new Set(['annule', 'paye_et_archive', 'retour_archive'
 const STATUS_STALE_MS = 15 * 60 * 1000;
 const TRACKING_STALE_MS = 30 * 60 * 1000;
 const MAJ_STALE_MS = 30 * 60 * 1000;
+const MISSING_STATUS_RETIRE_MS = 24 * 60 * 60 * 1000;
+const MISSING_STATUS_CONFIRMATION_LIMIT = 40;
 const FAILED_STATUS_MAX_AGE_MS = 15 * 24 * 60 * 60 * 1000;
 const ECOTRACK_SYNC_ACTOR_NAME = 'ECOTRACK sync';
 const ECOTRACK_DISPATCHED_STATUSES = new Set([
@@ -267,6 +279,25 @@ function resolveEcotrackActor(actor?: ActionActor | null): ActionActor {
     email: null,
     name: ECOTRACK_SYNC_ACTOR_NAME,
   };
+}
+
+export function shouldRetireShipmentMissingFromStatusFeed(
+  row: Pick<ShipmentRow, 'lastStatusSyncedAt' | 'createdAt'>,
+  now = new Date(),
+) {
+  const lastAuthoritativeStatusAt = row.lastStatusSyncedAt ?? row.createdAt;
+  return now.getTime() - lastAuthoritativeStatusAt.getTime() >= MISSING_STATUS_RETIRE_MS;
+}
+
+async function confirmShipmentStatusFromCurrentOrders(row: ShipmentRow) {
+  const response = await getEcotrackOrder(row.trackingNumber, {
+    ...providerRequestOptions(row),
+    startDate: row.createdAt.toISOString().slice(0, 10),
+  });
+
+  return response.data
+    ? ({ status: response.data.status, activity: [] } satisfies EcotrackStatusItem)
+    : null;
 }
 
 async function loadMajSyncSummary(
@@ -628,7 +659,7 @@ async function loadActiveShipmentRows(db: Database) {
     })
     .from(ecotrackOrderStates)
     .innerJoin(orders, eq(ecotrackOrderStates.orderId, orders.id))
-    .where(and(isNull(ecotrackOrderStates.deletedAt), isNull(orders.archivedAt)))
+    .where(isNull(ecotrackOrderStates.deletedAt))
     .orderBy(desc(ecotrackOrderStates.updatedAt), desc(ecotrackOrderStates.id));
 
   return rows.map((entry) => ({ ...entry.state, order: entry.order })) as ShipmentRow[];
@@ -675,13 +706,7 @@ async function loadShipmentRowByOrderId(db: Database, orderId: number) {
     })
     .from(ecotrackOrderStates)
     .innerJoin(orders, eq(ecotrackOrderStates.orderId, orders.id))
-    .where(
-      and(
-        eq(ecotrackOrderStates.orderId, orderId),
-        isNull(ecotrackOrderStates.deletedAt),
-        isNull(orders.archivedAt),
-      ),
-    )
+    .where(and(eq(ecotrackOrderStates.orderId, orderId), isNull(ecotrackOrderStates.deletedAt)))
     .limit(1);
 
   const row = rows[0];
@@ -947,17 +972,17 @@ async function softDeleteShipmentRow(
   const beforeShipmentState = buildEcotrackShipmentActionSnapshot(row);
 
   await db.transaction(async (tx) => {
-    await tx
-      .update(orders)
-      .set({
+    await updateCanonicalOrder(tx, {
+      orderId: row.order.id,
+      values: {
         ecotrackStatus: null,
         ecotrackStatusLastUpdate: null,
         ecotrackStatusData: null,
         ecotrackReference: null,
         ecotrackTrackingNumber: null,
-        updatedAt: now,
-      })
-      .where(eq(orders.id, row.order.id));
+      },
+      now,
+    });
 
     await tx
       .update(ecotrackOrderStates)
@@ -1139,33 +1164,16 @@ async function upsertShipmentState(
         updatedAt: now,
       };
 
-      if (nextLocalStatus !== null && nextLocalStatus !== currentLocalStatus) {
-        nextOrderValues.confirmed = nextLocalStatus;
-        nextOrderValues.noAnswerCount = 0;
-
-        if (isConfirmedLifecycleStatus(nextLocalStatus)) {
-          nextOrderValues.confirmedBy = row.order.confirmedBy ?? null;
-          nextOrderValues.confirmedByName = row.order.confirmedByName ?? null;
-          nextOrderValues.confirmedAt = row.order.confirmedAt ?? now;
-        } else {
-          nextOrderValues.confirmedBy = null;
-          nextOrderValues.confirmedByName = null;
-          nextOrderValues.confirmedAt = null;
-        }
-      }
-
-      await tx.update(orders).set(nextOrderValues).where(eq(orders.id, row.order.id));
-
-      if (nextLocalStatus !== null && nextLocalStatus !== currentLocalStatus) {
-        await tx.insert(orderStatusHistory).values({
-          orderId: row.order.id,
-          status: nextLocalStatus,
-          noAnswerCount: 0,
-          changedBy: null,
-          changedByName: ECOTRACK_SYNC_ACTOR_NAME,
-          changedAt: now,
-        });
-      }
+      await updateCanonicalOrder(tx, {
+        orderId: row.order.id,
+        values: nextOrderValues,
+        status:
+          nextLocalStatus !== null && nextLocalStatus !== currentLocalStatus
+            ? { value: nextLocalStatus, noAnswerCount: 0 }
+            : undefined,
+        actor: { name: ECOTRACK_SYNC_ACTOR_NAME },
+        now,
+      });
     }
 
     if (payload.majEntries) {
@@ -1269,11 +1277,20 @@ async function refreshShipmentRow(
     return null;
   }
 
+  let statusItem = statusResponse.data.get(row.trackingNumber) ?? null;
+  if (!statusItem && shouldRetireShipmentMissingFromStatusFeed(row)) {
+    statusItem = await confirmShipmentStatusFromCurrentOrders(row);
+    if (!statusItem) {
+      await softDeleteShipmentRow(db, row, { actor: options.actor, operation: 'delete' });
+      return null;
+    }
+  }
+
   await upsertShipmentState(
     db,
     row,
     {
-      statusItem: statusResponse.data.get(row.trackingNumber) ?? null,
+      statusItem,
       trackingInfo: trackingResponse?.data.get(row.trackingNumber) ?? null,
       majEntries: majResponse?.data ?? null,
     },
@@ -1555,12 +1572,21 @@ export async function refreshEcotrackOrdersBatch(
           continue;
         }
 
+        let statusItem = statusResponse.data.get(row.trackingNumber) ?? null;
+        if (!statusItem && shouldRetireShipmentMissingFromStatusFeed(row)) {
+          statusItem = await confirmShipmentStatusFromCurrentOrders(row);
+          if (!statusItem) {
+            await softDeleteShipmentRow(db, row, { actor, operation: 'delete' });
+            continue;
+          }
+        }
+
         const majResponse = await getEcotrackMaj(row.trackingNumber, providerRequestOptions(row));
         await upsertShipmentState(
           db,
           row,
           {
-            statusItem: statusResponse.data.get(row.trackingNumber) ?? null,
+            statusItem,
             trackingInfo: trackingResponse.data.get(row.trackingNumber) ?? null,
             majEntries: majResponse.data,
           },
@@ -1632,6 +1658,14 @@ export async function updatePostedEcotrackOrder(
     cartProducts: row.order.cartProducts,
     delPr: row.order.delPr,
     price: row.order.price,
+    normalizedPhone: row.order.normalizedPhone,
+    productSubtotal: row.order.productSubtotal,
+    totalAmount: row.order.totalAmount,
+    promoCode: row.order.promoCode,
+    promoProductId: row.order.promoProductId,
+    promoOriginalSubtotal: row.order.promoOriginalSubtotal,
+    promoDiscountAmount: row.order.promoDiscountAmount,
+    promoFinalSubtotal: row.order.promoFinalSubtotal,
   };
 
   const catalog = await readEcotrackCatalog(db);
@@ -1644,27 +1678,48 @@ export async function updatePostedEcotrackOrder(
     draft.cartProducts === undefined
       ? row.order.cartProducts
       : await canonicalizeOrderCartProducts(db, draft.cartProducts);
+  const commercial =
+    draft.cartProducts === undefined
+      ? null
+      : await resolveOrderCommercialState(db, {
+          cartProducts: nextCartProducts,
+          promoCode: row.order.promoCode,
+          now,
+        });
+  const canonicalSubtotal =
+    commercial?.productSubtotal ?? (await readOrderProductSubtotal(db, row.order));
+  const previousLines =
+    commercial === null
+      ? []
+      : await db.select().from(orderLineItems).where(eq(orderLineItems.orderId, orderId));
 
-  const [updatedOrder] = await db
-    .update(orders)
-    .set({
-      firstName: draft.firstName,
-      lastName: sanitizeNullableText(draft.lastName),
-      phoneNumber1: draft.phoneNumber1,
-      phoneNumber2: sanitizeNullableText(draft.phoneNumber2),
-      delivery: draft.delivery,
-      state: draft.state,
-      city: draft.city,
-      homeAddress: sanitizeNullableText(draft.homeAddress),
-      note: sanitizeNullableText(draft.note),
-      cartProducts: nextCartProducts,
-      delPr: nextDeliveryFeeValue,
-      price:
-        draft.subtotalOverride === null ? null : String(Number(draft.subtotalOverride).toFixed(2)),
-      updatedAt: now,
-    })
-    .where(eq(orders.id, orderId))
-    .returning();
+  const updatedOrder = await db.transaction(async (tx) => {
+    const result = await updateCanonicalOrder(tx, {
+      orderId,
+      values: {
+        firstName: draft.firstName,
+        lastName: sanitizeNullableText(draft.lastName),
+        phoneNumber1: draft.phoneNumber1,
+        normalizedPhone: normalizeAlgeriaPhone(draft.phoneNumber1),
+        phoneNumber2: sanitizeNullableText(draft.phoneNumber2),
+        delivery: draft.delivery,
+        state: draft.state,
+        city: draft.city,
+        homeAddress: sanitizeNullableText(draft.homeAddress),
+        note: sanitizeNullableText(draft.note),
+        delPr: nextDeliveryFeeValue,
+      },
+      commercial: commercial ?? undefined,
+      deliveryFee: commercial ? Number(nextDeliveryFeeValue) : undefined,
+      totals: {
+        productSubtotal: canonicalSubtotal,
+        deliveryFee: Number(nextDeliveryFeeValue),
+        subtotalOverride: draft.subtotalOverride,
+      },
+      now,
+    });
+    return result.order;
+  });
 
   try {
     const productLookup = await getOrderProductLookup(db, [updatedOrder]);
@@ -1674,13 +1729,13 @@ export async function updatePostedEcotrackOrder(
       providerRequestOptions(row),
     );
   } catch (error) {
-    await db
-      .update(orders)
-      .set({
-        ...previous,
-        updatedAt: row.order.updatedAt,
-      })
-      .where(eq(orders.id, orderId));
+    await db.transaction(async (tx) => {
+      await restoreCanonicalOrderSnapshot(tx, {
+        orderId,
+        values: { ...previous, updatedAt: row.order.updatedAt },
+        lineItems: commercial ? previousLines : undefined,
+      });
+    });
     throw new Error(formatEcotrackActionError('update', row, error).summary);
   }
 
@@ -1770,6 +1825,14 @@ export async function recreatePostedEcotrackOrder(
     cartProducts: row.order.cartProducts,
     delPr: row.order.delPr,
     price: row.order.price,
+    normalizedPhone: row.order.normalizedPhone,
+    productSubtotal: row.order.productSubtotal,
+    totalAmount: row.order.totalAmount,
+    promoCode: row.order.promoCode,
+    promoProductId: row.order.promoProductId,
+    promoOriginalSubtotal: row.order.promoOriginalSubtotal,
+    promoDiscountAmount: row.order.promoDiscountAmount,
+    promoFinalSubtotal: row.order.promoFinalSubtotal,
     ecotrackStatus: row.order.ecotrackStatus,
     ecotrackStatusLastUpdate: row.order.ecotrackStatusLastUpdate,
     ecotrackStatusData: row.order.ecotrackStatusData,
@@ -1788,29 +1851,51 @@ export async function recreatePostedEcotrackOrder(
     draft.cartProducts === undefined
       ? row.order.cartProducts
       : await canonicalizeOrderCartProducts(db, draft.cartProducts);
-  const [updatedOrder] = await db
-    .update(orders)
-    .set({
-      firstName: draft.firstName,
-      lastName: sanitizeNullableText(draft.lastName),
-      phoneNumber1: draft.phoneNumber1,
-      phoneNumber2: sanitizeNullableText(draft.phoneNumber2),
-      delivery: draft.delivery,
-      state: draft.state,
-      city: draft.city,
-      homeAddress: sanitizeNullableText(draft.homeAddress),
-      note: sanitizeNullableText(draft.note),
-      cartProducts: nextCartProducts,
-      delPr:
-        draft.deliveryFee === null
-          ? (row.order.delPr ?? '0.00')
-          : String(Number(draft.deliveryFee).toFixed(2)),
-      price:
-        draft.subtotalOverride === null ? null : String(Number(draft.subtotalOverride).toFixed(2)),
-      updatedAt: now,
-    })
-    .where(eq(orders.id, orderId))
-    .returning();
+  const nextDeliveryFeeValue =
+    draft.deliveryFee === null
+      ? (row.order.delPr ?? '0.00')
+      : String(Number(draft.deliveryFee).toFixed(2));
+  const commercial =
+    draft.cartProducts === undefined
+      ? null
+      : await resolveOrderCommercialState(db, {
+          cartProducts: nextCartProducts,
+          promoCode: row.order.promoCode,
+          now,
+        });
+  const canonicalSubtotal =
+    commercial?.productSubtotal ?? (await readOrderProductSubtotal(db, row.order));
+  const previousLines =
+    commercial === null
+      ? []
+      : await db.select().from(orderLineItems).where(eq(orderLineItems.orderId, orderId));
+  const updatedOrder = await db.transaction(async (tx) => {
+    const result = await updateCanonicalOrder(tx, {
+      orderId,
+      values: {
+        firstName: draft.firstName,
+        lastName: sanitizeNullableText(draft.lastName),
+        phoneNumber1: draft.phoneNumber1,
+        normalizedPhone: normalizeAlgeriaPhone(draft.phoneNumber1),
+        phoneNumber2: sanitizeNullableText(draft.phoneNumber2),
+        delivery: draft.delivery,
+        state: draft.state,
+        city: draft.city,
+        homeAddress: sanitizeNullableText(draft.homeAddress),
+        note: sanitizeNullableText(draft.note),
+        delPr: nextDeliveryFeeValue,
+      },
+      commercial: commercial ?? undefined,
+      deliveryFee: commercial ? Number(nextDeliveryFeeValue) : undefined,
+      totals: {
+        productSubtotal: canonicalSubtotal,
+        deliveryFee: Number(nextDeliveryFeeValue),
+        subtotalOverride: draft.subtotalOverride,
+      },
+      now,
+    });
+    return result.order;
+  });
 
   let recreated = false;
 
@@ -1841,7 +1926,11 @@ export async function recreatePostedEcotrackOrder(
     recreated = true;
   } catch (error) {
     await db.transaction(async (tx) => {
-      await tx.update(orders).set(previousOrderValues).where(eq(orders.id, orderId));
+      await restoreCanonicalOrderSnapshot(tx, {
+        orderId,
+        values: previousOrderValues,
+        lineItems: commercial ? previousLines : undefined,
+      });
 
       await tx
         .update(ecotrackOrderStates)
@@ -1988,21 +2077,11 @@ export async function dispatchPostedEcotrackOrder(
         updatedAt: now,
       })
       .where(eq(ecotrackOrderStates.id, row.id));
-    await tx
-      .update(orders)
-      .set({
-        confirmed: 3,
-        noAnswerCount: 0,
-        updatedAt: now,
-      })
-      .where(eq(orders.id, orderId));
-    await tx.insert(orderStatusHistory).values({
+    await updateCanonicalOrder(tx, {
       orderId,
-      status: 3,
-      noAnswerCount: 0,
-      changedBy: actor.email ?? null,
-      changedByName: actor.name ?? null,
-      changedAt: now,
+      status: { value: 3, noAnswerCount: 0 },
+      actor,
+      now,
     });
   });
 
@@ -2280,6 +2359,11 @@ export async function syncEcotrackShipmentStates(
   }
 
   let synced = 0;
+  let missing = 0;
+  let retired = 0;
+  let fallbackChecked = 0;
+  let fallbackRecovered = 0;
+  let fallbackDeferred = 0;
   let failed = 0;
   let batchFailed = 0;
   let majFailed = 0;
@@ -2299,6 +2383,31 @@ export async function syncEcotrackShipmentStates(
     }
 
     for (const row of batch) {
+      let statusItem = statusResponse.data.get(row.trackingNumber) ?? null;
+      if (!statusItem && shouldRetireShipmentMissingFromStatusFeed(row)) {
+        if (fallbackChecked >= MISSING_STATUS_CONFIRMATION_LIMIT) {
+          fallbackDeferred += 1;
+        } else {
+          fallbackChecked += 1;
+          try {
+            statusItem = await confirmShipmentStatusFromCurrentOrders(row);
+            if (statusItem) {
+              fallbackRecovered += 1;
+            } else {
+              await softDeleteShipmentRow(db, row, {
+                actor: options.actor,
+                operation: 'delete',
+              });
+              retired += 1;
+              continue;
+            }
+          } catch {
+            failed += 1;
+            continue;
+          }
+        }
+      }
+
       let majEntries: UpstreamEcotrackMajEntry[] | null = null;
       // MAJ is a per-shipment endpoint subject to the provider's global request
       // pacing. A scheduled reconciliation can contain thousands of shipments,
@@ -2321,22 +2430,37 @@ export async function syncEcotrackShipmentStates(
           db,
           row,
           {
-            statusItem: statusResponse.data.get(row.trackingNumber) ?? null,
+            statusItem,
             trackingInfo: trackingResponse.data.get(row.trackingNumber) ?? null,
             majEntries,
           },
           options.actor,
         );
-        synced += 1;
+        if (statusItem) {
+          synced += 1;
+        } else {
+          missing += 1;
+        }
       } catch {
         failed += 1;
       }
     }
   }
 
-  if (candidates.length > 0 && synced === 0 && failed > 0) {
+  if (candidates.length > 0 && synced + missing + retired === 0 && failed > 0) {
     throw new Error(`ECOTRACK shipment sync failed for all ${failed} candidates.`);
   }
 
-  return { total: candidates.length, synced, failed, batchFailed, majFailed };
+  return {
+    total: candidates.length,
+    synced,
+    missing,
+    retired,
+    fallbackChecked,
+    fallbackRecovered,
+    fallbackDeferred,
+    failed,
+    batchFailed,
+    majFailed,
+  };
 }

@@ -59,4 +59,51 @@ describe('CatalogFilters', () => {
     fireEvent.click(screen.getByRole('button', { name: labels.close }));
     await waitFor(() => expect(trigger).toHaveFocus());
   });
+
+  it('uses one in-stock checkbox and a bounded two-handle price slider', () => {
+    render(
+      <CatalogFilters
+        locale="fr"
+        categories={[]}
+        brands={[]}
+        selectedCategory={null}
+        selectedBrand={null}
+        discounted={false}
+        stock="in"
+        minPrice={2_000}
+        maxPrice={12_000}
+        search=""
+        sort="recommended"
+        labels={{ ...labels, stock: 'Disponibilité', inStock: 'En stock seulement' }}
+      />,
+    );
+
+    expect(screen.getAllByRole('checkbox', { name: 'En stock seulement' })[0]).toBeChecked();
+    expect(screen.queryByRole('radio', { name: /stock/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('slider', { name: 'Minimum' })[0]).toHaveValue('2000');
+    expect(screen.getAllByRole('slider', { name: 'Maximum' })[0]).toHaveValue('12000');
+  });
+
+  it('shows category product counts and indents child categories', () => {
+    const { container } = render(
+      <CatalogFilters
+        locale="fr"
+        categories={[
+          { id: 1, label: 'Outillage', productCount: 12 },
+          { id: 2, label: 'Perceuses', parentId: 1, productCount: 4 },
+        ]}
+        brands={[]}
+        selectedCategory={null}
+        selectedBrand={null}
+        discounted={false}
+        search=""
+        sort="recommended"
+        labels={labels}
+      />,
+    );
+
+    expect(screen.getAllByText('12')[0]).toBeVisible();
+    expect(screen.getAllByText('4')[0]).toBeVisible();
+    expect(container.querySelector('label[data-child="true"]')).toHaveTextContent('Perceuses');
+  });
 });

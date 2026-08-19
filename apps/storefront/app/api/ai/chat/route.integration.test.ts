@@ -189,7 +189,9 @@ describe('POST /api/ai/chat', () => {
       mode: 'ai',
       products: [{ id: 12, token: 'perceuse-beton', brand: 'Bric Pro', category: 'Perçage' }],
     });
-    expect(mocks.createModel).toHaveBeenCalledWith(expect.anything(), 'storefront');
+    expect(mocks.createModel).toHaveBeenCalledWith(expect.anything(), 'storefront', {
+      model: 'storefront-model-id',
+    });
     expect(mocks.catalog).toHaveBeenCalledWith(
       expect.objectContaining({ search: 'perceuse béton' }),
     );

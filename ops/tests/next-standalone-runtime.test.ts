@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const hydrator = resolve(workspaceRoot, 'ops/scripts/hydrate-next-standalone.sh');
+const standaloneLauncher = resolve(workspaceRoot, 'ops/scripts/start-next-standalone.mjs');
 const temporaryDirectories: string[] = [];
 
 afterEach(() => {
@@ -37,6 +38,28 @@ function makeFixture({ includeTarget = true } = {}) {
 }
 
 describe('Next standalone dependency hydration', () => {
+  it('loads app-local production environment files before starting the traced server', () => {
+    const source = readFileSync(standaloneLauncher, 'utf8');
+
+    expect(source).toContain("'.env.production.local'");
+    expect(source).toContain("'.env.local'");
+    expect(source).toContain('process.loadEnvFile(envPath)');
+  });
+
+  it.each(['admin', 'storefront-api', 'storefront'])(
+    'hydrates the %s standalone tree before local production start',
+    (app) => {
+      const packageJson = JSON.parse(
+        readFileSync(join(workspaceRoot, 'apps', app, 'package.json'), 'utf8'),
+      ) as { scripts?: { start?: string } };
+
+      expect(packageJson.scripts?.start).toContain(
+        `hydrate-next-standalone.sh apps/${app}`,
+      );
+      expect(packageJson.scripts?.start).toContain('start-next-standalone.mjs');
+    },
+  );
+
   it('copies the complete SWC helper runtime into traced standalone targets', () => {
     const fixture = makeFixture();
     const result = spawnSync('bash', [hydrator, fixture.appDirectory], {

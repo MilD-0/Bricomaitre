@@ -30,7 +30,10 @@ import {
   getStorefrontSettings,
   recordStorefrontAssistantRun,
 } from '@/lib/storefront-api';
-import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
+import {
+  defaultStorefrontSettingsResponse,
+  type StorefrontSettingsResponse,
+} from '@bric/storefront-core/contracts';
 
 function catalogQuery(search: string, limit: number) {
   return {
@@ -48,14 +51,30 @@ function catalogQuery(search: string, limit: number) {
   };
 }
 
-async function searchPublicCatalog(input: { query: string; inStockOnly: boolean; limit: number }) {
+const catalogSearchCache = new Map<
+  string,
+  { expiresAt: number; products: ShoppingAssistantProduct[] }
+>();
+
+// Temporary retrieval behavior retained until the storefront AI product-feeding overhaul.
+// It is deliberately not exposed as a business setting.
+const LEGACY_CONTEXT_PRODUCT_LIMIT = 12;
+const LEGACY_CATALOG_CACHE_SECONDS = 300;
+
+async function searchPublicCatalog(
+  input: { query: string; inStockOnly: boolean; limit: number },
+  cacheSeconds = 0,
+) {
+  const cacheKey = JSON.stringify(input);
+  const cached = catalogSearchCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.products;
   const [catalog, meta] = await Promise.all([
     fetchStorefrontCatalog(catalogQuery(input.query, input.limit)),
     fetchStorefrontCatalogMeta(),
   ]);
   const brandNames = new Map(meta.brands.map((brand) => [brand.id, brand.name]));
   const categoryNames = new Map(meta.categories.map((category) => [category.id, category.name]));
-  return catalog.items
+  const resolved = catalog.items
     .filter((product) => !input.inStockOnly || product.inStock)
     .slice(0, input.limit)
     .map((product) =>
@@ -64,14 +83,41 @@ async function searchPublicCatalog(input: { query: string; inStockOnly: boolean;
         category: product.categoryId ? (categoryNames.get(product.categoryId) ?? null) : null,
       }),
     );
+  // Empty catalog responses may be transient during a rolling API refresh;
+  // do not turn them into a storefront-wide negative cache entry.
+  if (cacheSeconds > 0 && resolved.length > 0) {
+    catalogSearchCache.set(cacheKey, {
+      products: resolved,
+      expiresAt: Date.now() + cacheSeconds * 1_000,
+    });
+    if (catalogSearchCache.size > 200) {
+      const oldest = catalogSearchCache.keys().next().value;
+      if (oldest) catalogSearchCache.delete(oldest);
+    }
+  }
+  return resolved;
 }
 
-function remember(products: ShoppingAssistantProduct[], product: ShoppingAssistantProduct | null) {
+function remember(
+  products: ShoppingAssistantProduct[],
+  product: ShoppingAssistantProduct | null,
+  limit: number,
+) {
   if (!product) return;
   const existingIndex = products.findIndex((item) => item.id === product.id);
   if (existingIndex >= 0) products.splice(existingIndex, 1);
   products.push(product);
-  if (products.length > 8) products.splice(0, products.length - 8);
+  if (products.length > limit) products.splice(0, products.length - limit);
+}
+
+function getStorefrontAiConfig(settings: StorefrontSettingsResponse) {
+  const configured = getAiConfig();
+  return {
+    ...configured,
+    provider: 'openrouter' as const,
+    apiKey: process.env.OPENROUTER_API_KEY?.trim() || undefined,
+    storefrontModel: settings.aiModel,
+  };
 }
 
 function conversationPrompt(input: ShoppingAssistantRequest) {
@@ -95,17 +141,21 @@ function groundedConversationPrompt(
 async function deterministicFallback(
   input: ShoppingAssistantRequest,
   remembered: ShoppingAssistantProduct[],
+  cacheSeconds = 0,
 ) {
   let products = [...remembered];
   if (!products.length) {
     const lastQuestion =
       [...input.messages].reverse().find((message) => message.role === 'user')?.content ?? '';
     if (lastQuestion) {
-      products = await searchPublicCatalog({
-        query: lastQuestion.slice(0, 160),
-        inStockOnly: true,
-        limit: 5,
-      }).catch(() => []);
+      products = await searchPublicCatalog(
+        {
+          query: lastQuestion.slice(0, 160),
+          inStockOnly: true,
+          limit: 5,
+        },
+        cacheSeconds,
+      ).catch(() => []);
     }
   }
   return shoppingAssistantResponseSchema.parse({
@@ -128,6 +178,7 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'assistant_unavailable' }, { status: 503 });
   }
+  settings = { ...defaultStorefrontSettingsResponse, ...settings };
   if (!rateLimit.ok) {
     return NextResponse.json(
       { error: 'assistant_rate_limited' },
@@ -162,18 +213,25 @@ export async function POST(request: NextRequest) {
         let emittedText = '';
         let usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } = {};
         try {
-          const config = getAiConfig();
-          modelName = resolveAiModel(config, 'storefront');
+          const config = getStorefrontAiConfig(settings);
+          const primaryModel = resolveAiModel(config, 'storefront');
+          const modelCandidates = [primaryModel, settings.aiFallbackModel]
+            .filter((model): model is string => Boolean(model?.trim()))
+            .filter((model, index, models) => models.indexOf(model) === index);
+          modelName = primaryModel;
           const lastQuestion =
             [...parsed.data.messages].reverse().find((message) => message.role === 'user')
               ?.content ?? '';
           toolCallCount += 1;
           const prefetchedProducts = lastQuestion
-            ? await searchPublicCatalog({
-                query: catalogSearchQuery(lastQuestion),
-                inStockOnly: false,
-                limit: 3,
-              }).catch((error) => {
+            ? await searchPublicCatalog(
+                {
+                  query: catalogSearchQuery(lastQuestion),
+                  inStockOnly: false,
+                  limit: Math.min(8, LEGACY_CONTEXT_PRODUCT_LIMIT),
+                },
+                LEGACY_CATALOG_CACHE_SECONDS,
+              ).catch((error) => {
                 console.error(
                   '[shopping-assistant] catalog prefetch failed',
                   error instanceof Error ? error.message : 'unknown error',
@@ -181,68 +239,93 @@ export async function POST(request: NextRequest) {
                 return [];
               })
             : [];
-          prefetchedProducts.forEach((product) => remember(remembered, product));
-          const generationOptions = {
-            model: createAiLanguageModel(config, 'storefront'),
-            instructions: shoppingAssistantInstructions(parsed.data.locale),
-            prompt: prefetchedProducts.length
-              ? groundedConversationPrompt(parsed.data, prefetchedProducts)
-              : conversationPrompt(parsed.data),
-            abortSignal: AbortSignal.timeout(config.requestTimeoutMs),
-            maxRetries: config.maxRetries,
-          };
-          const result = prefetchedProducts.length
-            ? streamText(generationOptions)
-            : streamText({
-                ...generationOptions,
-                stopWhen: stepCountIs(5),
-                tools: {
-                  search_catalog: tool({
-                    description:
-                      'Search the live public Bricomaitre catalog before recommending products.',
-                    inputSchema: shoppingAssistantCatalogSearchSchema,
-                    execute: async (input) => {
-                      toolCallCount += 1;
-                      const products = await searchPublicCatalog(input);
-                      products.forEach((product) => remember(remembered, product));
-                      return { products, count: products.length };
+          prefetchedProducts.forEach((product) =>
+            remember(remembered, product, LEGACY_CONTEXT_PRODUCT_LIMIT),
+          );
+          let generationError: unknown;
+          for (const candidateModel of modelCandidates) {
+            try {
+              modelName = candidateModel;
+              const generationOptions = {
+                model: createAiLanguageModel(config, 'storefront', { model: candidateModel }),
+                instructions: shoppingAssistantInstructions(parsed.data.locale),
+                prompt: prefetchedProducts.length
+                  ? groundedConversationPrompt(parsed.data, prefetchedProducts)
+                  : conversationPrompt(parsed.data),
+                abortSignal: AbortSignal.timeout(config.requestTimeoutMs),
+                maxRetries: config.maxRetries,
+              };
+              const result = prefetchedProducts.length
+                ? streamText(generationOptions)
+                : streamText({
+                    ...generationOptions,
+                    stopWhen: stepCountIs(5),
+                    tools: {
+                      search_catalog: tool({
+                        description:
+                          'Search the live public Bricomaitre catalog before recommending products.',
+                        inputSchema: shoppingAssistantCatalogSearchSchema,
+                        execute: async (input) => {
+                          toolCallCount += 1;
+                          const products = await searchPublicCatalog(
+                            input,
+                            LEGACY_CATALOG_CACHE_SECONDS,
+                          );
+                          products.forEach((product) =>
+                            remember(remembered, product, LEGACY_CONTEXT_PRODUCT_LIMIT),
+                          );
+                          return { products, count: products.length };
+                        },
+                      }),
+                      inspect_products: tool({
+                        description:
+                          'Inspect up to four public products by ID or slug before answering detailed questions or comparisons.',
+                        inputSchema: shoppingAssistantProductLookupSchema,
+                        execute: async ({ tokens }) => {
+                          toolCallCount += 1;
+                          const products = (
+                            await Promise.all(
+                              tokens.map((token) => fetchStorefrontProductDetail(token)),
+                            )
+                          )
+                            .filter((product) => product !== null)
+                            .map((product) => toAssistantDetailProduct(product.item));
+                          products.forEach((product) =>
+                            remember(remembered, product, LEGACY_CONTEXT_PRODUCT_LIMIT),
+                          );
+                          return { products };
+                        },
+                      }),
                     },
-                  }),
-                  inspect_products: tool({
-                    description:
-                      'Inspect up to four public products by ID or slug before answering detailed questions or comparisons.',
-                    inputSchema: shoppingAssistantProductLookupSchema,
-                    execute: async ({ tokens }) => {
-                      toolCallCount += 1;
-                      const products = (
-                        await Promise.all(
-                          tokens.map((token) => fetchStorefrontProductDetail(token)),
-                        )
-                      )
-                        .filter((product) => product !== null)
-                        .map((product) => toAssistantDetailProduct(product.item));
-                      products.forEach((product) => remember(remembered, product));
-                      return { products };
-                    },
-                  }),
-                },
-              });
+                  });
 
-          for await (const part of result.stream) {
-            if (part.type === 'tool-call') write({ type: 'status', status: 'catalog' });
-            if (part.type === 'text-delta' && part.text && emittedText.length < 4_000) {
-              const delta = part.text.slice(0, 4_000 - emittedText.length);
-              if (delta) {
-                emittedText += delta;
-                write({ type: 'text-delta', delta });
+              for await (const part of result.stream) {
+                if (part.type === 'tool-call') write({ type: 'status', status: 'catalog' });
+                if (part.type === 'text-delta' && part.text && emittedText.length < 4_000) {
+                  const delta = part.text.slice(0, 4_000 - emittedText.length);
+                  if (delta) {
+                    emittedText += delta;
+                    write({ type: 'text-delta', delta });
+                  }
+                }
+                if (part.type === 'finish') usage = part.totalUsage;
+                if (part.type === 'error') throw part.error;
               }
+              generationError = undefined;
+              break;
+            } catch (error) {
+              generationError = error;
+              if (emittedText) throw error;
             }
-            if (part.type === 'finish') usage = part.totalUsage;
-            if (part.type === 'error') throw part.error;
           }
+          if (generationError) throw generationError;
 
           if (!emittedText.trim()) {
-            const fallback = await deterministicFallback(parsed.data, remembered);
+            const fallback = await deterministicFallback(
+              parsed.data,
+              remembered,
+              LEGACY_CATALOG_CACHE_SECONDS,
+            );
             write({ type: 'text-delta', delta: fallback.message });
             write({ type: 'result', mode: fallback.mode, products: fallback.products });
             void recordStorefrontAssistantRun({
@@ -292,7 +375,11 @@ export async function POST(request: NextRequest) {
             write({ type: 'error', code: 'assistant_unavailable' });
             return;
           }
-          const fallback = await deterministicFallback(parsed.data, remembered).catch(() => null);
+          const fallback = await deterministicFallback(
+            parsed.data,
+            remembered,
+            LEGACY_CATALOG_CACHE_SECONDS,
+          ).catch(() => null);
           if (!fallback) {
             write({ type: 'error', code: 'assistant_unavailable' });
             return;

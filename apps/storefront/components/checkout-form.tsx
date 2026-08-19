@@ -18,11 +18,18 @@ import { StorefrontImage } from '@/components/storefront-image';
 import {
   SupportContactActions,
   type SupportContactLabels,
+  type StorefrontSupportContact,
 } from '@/components/support-contact-actions';
 import { ShieldCheckIcon, type ShieldCheckIconHandle } from '@/components/ui/shield-check';
 import type { Locale } from '@/i18n/config';
 import { getAnalyticsIdentity, trackCheckoutEvent } from '@/lib/analytics';
-import { readCart, STOREFRONT_CART_KEY, type CartItem } from '@/lib/cart';
+import {
+  readCart,
+  reconcileCartWithCatalog,
+  STOREFRONT_CART_KEY,
+  writeCart,
+  type CartItem,
+} from '@/lib/cart';
 import {
   buildCheckoutOrderPayload,
   checkoutFormSchema,
@@ -43,7 +50,6 @@ import { CheckoutContentSkeleton } from '@/components/storefront-skeletons';
 import { CheckoutOrderError, createCheckoutOrder } from '@/lib/orders';
 import { formatProductPrice } from '@/lib/product-presentation';
 import { getMarketingOrderContext } from '@/lib/marketing-attribution';
-import type { StorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 import type { CheckoutLabels } from '@/lib/checkout-labels';
 import {
   LANDING_ORDER_QUANTITY_EVENT,
@@ -72,7 +78,7 @@ export function CheckoutForm({
   landingAttribution?: { landingPageId: number; landingRevision: number };
   embedded?: boolean;
   labels: CheckoutLabels;
-  support?: { contact: StorefrontSettingsResponse; labels: SupportContactLabels };
+  support?: { contact: StorefrontSupportContact; labels: SupportContactLabels };
 }) {
   const router = useRouter();
   const [items, setItems] = useState<CartItem[]>(directItem ? [directItem] : []);
@@ -95,7 +101,19 @@ export function CheckoutForm({
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- Checkout persistence must hydrate before the customer can submit the form. */
-    if (!directItem) setItems(readCart(window.localStorage));
+    if (!directItem) {
+      const storedItems = readCart(window.localStorage);
+      setItems(storedItems);
+      void reconcileCartWithCatalog(storedItems)
+        .then((reconciled) => {
+          if (!reconciled.changed) return;
+          setItems(reconciled.items);
+          writeCart(window.localStorage, reconciled.items);
+          window.dispatchEvent(new CustomEvent('bric:cart-updated'));
+          setRequestError(labels.cartUpdated);
+        })
+        .catch(() => undefined);
+    }
     const savedAttempt = readPendingCheckout(window.localStorage);
     const savedDraft = readCheckoutDraft(window.localStorage);
     const restored =
@@ -131,13 +149,30 @@ export function CheckoutForm({
       setHomeAddress(restored.homeAddress);
       setEmail(restored.email);
       setDelivery(restored.delivery === 'office' && officeAvailableForDraft ? 'office' : 'home');
+    } else {
+      try {
+        const estimate = JSON.parse(
+          window.localStorage.getItem('bric:cart:delivery-estimate:v1') ?? 'null',
+        ) as { wilayaId?: unknown; delivery?: unknown } | null;
+        const estimatedState = Number(estimate?.wilayaId);
+        if (Number.isInteger(estimatedState) && estimatedState > 0) {
+          setState(estimatedState);
+          setDelivery(
+            estimate?.delivery === 'office' && hasCheckoutStopDesk(catalog, estimatedState)
+              ? 'office'
+              : 'home',
+          );
+        }
+      } catch {
+        window.localStorage.removeItem('bric:cart:delivery-estimate:v1');
+      }
     }
     setPending(savedAttempt);
     if (savedAttempt) setRequestError(labels.submitError);
     setHydrated(true);
     /* eslint-enable react-hooks/set-state-in-effect */
     void prepareHaptics();
-  }, [catalog.communes, directItem, labels.submitError]);
+  }, [catalog, directItem, labels.cartUpdated, labels.submitError]);
 
   useEffect(() => {
     if (!embedded || !directItem) return;
@@ -267,6 +302,23 @@ export function CheckoutForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!hydrated || items.length === 0) return;
+    let validatedItems = items;
+    try {
+      const reconciled = await reconcileCartWithCatalog(items);
+      validatedItems = reconciled.items;
+      if (reconciled.changed) {
+        setItems(reconciled.items);
+        if (!directItem) writeCart(window.localStorage, reconciled.items);
+        window.dispatchEvent(new CustomEvent('bric:cart-updated'));
+        if (reconciled.requiresReview) {
+          setRequestError(labels.cartUpdated);
+          return;
+        }
+      }
+    } catch {
+      setRequestError(labels.submitError);
+      return;
+    }
     const parsed = checkoutFormSchema.safeParse({
       phoneNumber1,
       lastName,
@@ -301,7 +353,7 @@ export function CheckoutForm({
     const purchaseEventId = createId();
     const payload = buildCheckoutOrderPayload({
       form: parsed.data,
-      cartProducts: expandCheckoutCart(items),
+      cartProducts: expandCheckoutCart(validatedItems),
       visitId: identity.visitId,
       journeyId: identity.journeyId,
       sessionId: identity.sessionId,

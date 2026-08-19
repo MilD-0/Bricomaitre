@@ -1,6 +1,7 @@
 import { OrdersEcotrackManager } from '../../../../../components/orders/orders-ecotrack-manager';
 import { getDb, hasDb } from '@bric/db/client';
 import { loadEcotrackOrdersPageData } from '../../../../../lib/admin-ecotrack-orders-data';
+import { readLegacyUiPreference } from '../../../../../lib/admin-ui-preference.server';
 import { readEcotrackCatalog } from '../../../../../lib/ecotrack';
 import { requireOrdersPageAccess } from '../../../../../lib/page-access';
 
@@ -11,6 +12,7 @@ export default async function OrdersEcotrackPage({
 }) {
   const { locale } = await params;
   await requireOrdersPageAccess(locale);
+  const legacyUi = await readLegacyUiPreference();
 
   const [initialOrders, initialCatalog] = await Promise.all([
     loadEcotrackOrdersPageData(
@@ -36,5 +38,11 @@ export default async function OrdersEcotrackPage({
       : Promise.resolve(undefined),
   ]);
 
-  return <OrdersEcotrackManager initialOrders={initialOrders} initialCatalog={initialCatalog} />;
+  return (
+    <OrdersEcotrackManager
+      initialOrders={initialOrders}
+      initialCatalog={initialCatalog}
+      presentation={legacyUi ? undefined : 2}
+    />
+  );
 }

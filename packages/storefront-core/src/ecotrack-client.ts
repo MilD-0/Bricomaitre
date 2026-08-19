@@ -112,9 +112,17 @@ const ecotrackStatusItemSchema = z.object({
   activity: z.array(ecotrackStatusActivitySchema).default([]),
 });
 
+const ecotrackOrderSummarySchema = z
+  .object({
+    tracking: z.string().trim().min(1),
+    status: z.string().trim().min(1),
+  })
+  .passthrough();
+
 export type EcotrackMajEntry = z.infer<typeof ecotrackMajEntrySchema>;
 export type EcotrackTrackingInfo = z.infer<typeof ecotrackTrackingInfoSchema>;
 export type EcotrackStatusItem = z.infer<typeof ecotrackStatusItemSchema>;
+export type EcotrackOrderSummary = z.infer<typeof ecotrackOrderSummarySchema>;
 
 function getLimiterState() {
   if (!limiterGlobal.__ecotrackRequestLimiter) {
@@ -651,6 +659,37 @@ export async function getEcotrackOrdersStatus(
   return {
     ...result,
     data: normalized,
+  };
+}
+
+export async function getEcotrackOrder(
+  tracking: string,
+  options: {
+    startDate?: string;
+    fetchImpl?: typeof fetch;
+    env?: NodeJS.ProcessEnv;
+  } = {},
+) {
+  const result = await requestEcotrack({
+    path: '/get/orders',
+    method: 'GET',
+    query: {
+      tracking,
+      start_date: options.startDate,
+    },
+    fetchImpl: options.fetchImpl,
+    env: options.env,
+  });
+
+  const payload =
+    typeof result.payload === 'object' && result.payload !== null
+      ? (result.payload as Record<string, unknown>)
+      : {};
+  const parsed = z.array(ecotrackOrderSummarySchema).parse(payload.data ?? []);
+
+  return {
+    ...result,
+    data: parsed.find((order) => order.tracking === tracking) ?? null,
   };
 }
 

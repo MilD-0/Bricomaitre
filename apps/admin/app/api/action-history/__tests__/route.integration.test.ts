@@ -9,17 +9,17 @@ const {
   hasDbMock,
   getDbMock,
   listActionHistoryMock,
-  toActionHistoryItemMock,
+  toActionHistoryListItemMock,
 } = vi.hoisted(() => ({
   requireOpsAccessMock: vi.fn(),
   hasDbMock: vi.fn(),
   getDbMock: vi.fn(),
   listActionHistoryMock: vi.fn(),
-  toActionHistoryItemMock: vi.fn(),
+  toActionHistoryListItemMock: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: hasDbMock, getDb: getDbMock }));
-vi.mock('../../../../lib/rbac', () => ({ requireOpsAccess: requireOpsAccessMock }));
+vi.mock('../../../../lib/rbac', () => ({ requireSettingsAccess: requireOpsAccessMock }));
 vi.mock('../../../../lib/action-history', () => ({
   actionHistoryQuerySchema: z
     .object({
@@ -59,7 +59,7 @@ vi.mock('../../../../lib/action-history', () => ({
           : [{ key: value.sortKey, direction: value.sortDirection }],
     })),
   listActionHistory: listActionHistoryMock,
-  toActionHistoryItem: toActionHistoryItemMock,
+  toActionHistoryListItem: toActionHistoryListItemMock,
 }));
 
 describe('app/api/action-history/route', () => {
@@ -69,8 +69,8 @@ describe('app/api/action-history/route', () => {
     hasDbMock.mockReset();
     getDbMock.mockReset();
     listActionHistoryMock.mockReset();
-    toActionHistoryItemMock.mockReset();
-    toActionHistoryItemMock.mockImplementation((item) => ({
+    toActionHistoryListItemMock.mockReset();
+    toActionHistoryListItemMock.mockImplementation((item) => ({
       id: item.id,
       createdAt: item.createdAt.toISOString(),
     }));

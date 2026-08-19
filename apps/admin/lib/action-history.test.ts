@@ -4,8 +4,10 @@ import {
   applyHistoryAction,
   getActionEntityConfig,
   getActionHistoryChanges,
+  getActionHistoryPreview,
   mutateEntityWithHistory,
   recordExplicitActionLog,
+  resolveActionHistoryRecovery,
   toActionHistoryItem,
 } from './action-history';
 
@@ -480,10 +482,92 @@ describe('action-history helpers', () => {
       } as never),
     ).toEqual([
       {
+        key: 'inStock',
         field: 'In Stock',
         before: false,
         after: true,
       },
     ]);
+  });
+
+  it('extracts recorded fields for create and delete details', () => {
+    expect(
+      getActionHistoryChanges({
+        operation: 'create',
+        beforeState: null,
+        afterState: { id: 9, title: 'Widget', active: true },
+      } as never),
+    ).toEqual([
+      { key: 'title', field: 'Title', before: null, after: 'Widget' },
+      { key: 'active', field: 'Active', before: null, after: true },
+    ]);
+    expect(
+      getActionHistoryChanges({
+        operation: 'delete',
+        beforeState: { id: 9, title: 'Widget' },
+        afterState: null,
+      } as never),
+    ).toEqual([{ key: 'title', field: 'Title', before: 'Widget', after: null }]);
+  });
+
+  it('collapses confirmation and shipment metadata into semantic preview groups', () => {
+    expect(
+      getActionHistoryPreview({
+        operation: 'update',
+        beforeState: { confirmed: 0, confirmedBy: null, ecotrackStatus: null, note: null },
+        afterState: {
+          confirmed: 2,
+          confirmedBy: 'admin@example.com',
+          ecotrackStatus: 'posted',
+          note: 'Call first',
+        },
+      } as never),
+    ).toEqual({
+      items: [
+        { key: 'confirmation', kind: 'group', field: 'Confirmation' },
+        { key: 'shipment', kind: 'group', field: 'Shipment' },
+      ],
+      total: 3,
+    });
+  });
+
+  it('resolves the exact next recovery action', () => {
+    const applied = [
+      { id: 1, isUndone: false },
+      { id: 2, isUndone: false },
+    ];
+    expect(
+      resolveActionHistoryRecovery({ id: 2, isReversible: true, isUndone: false }, applied),
+    ).toEqual({ nextAction: 'undo', blockedReason: null });
+    expect(
+      resolveActionHistoryRecovery({ id: 1, isReversible: true, isUndone: false }, applied),
+    ).toEqual({ nextAction: null, blockedReason: 'newer_action' });
+
+    const undone = [
+      { id: 1, isUndone: false },
+      { id: 2, isUndone: true },
+      { id: 3, isUndone: true },
+    ];
+    expect(
+      resolveActionHistoryRecovery({ id: 2, isReversible: true, isUndone: true }, undone),
+    ).toEqual({ nextAction: 'redo', blockedReason: null });
+    expect(
+      resolveActionHistoryRecovery({ id: 3, isReversible: true, isUndone: true }, undone),
+    ).toEqual({ nextAction: null, blockedReason: 'redo_order' });
+    expect(
+      resolveActionHistoryRecovery(
+        { id: 1, isReversible: false, isUndone: false },
+        [{ id: 1, isUndone: false }],
+      ),
+    ).toEqual({ nextAction: null, blockedReason: 'non_reversible' });
+    expect(
+      resolveActionHistoryRecovery(
+        { id: 2, isReversible: true, isUndone: true },
+        [
+          { id: 1, isUndone: true },
+          { id: 2, isUndone: false },
+        ],
+      ),
+    ).toEqual({ nextAction: null, blockedReason: 'history_out_of_sync' });
   });
 });

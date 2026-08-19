@@ -2,10 +2,10 @@ import { NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
 import { getMarketingDestinationDiagnostics } from '../../../../lib/marketing-diagnostics';
-import { requireOpsAccess } from '../../../../lib/rbac';
+import { requireAnalyticsAccess } from '../../../../lib/rbac';
 
 export async function GET() {
-  const denied = await requireOpsAccess();
+  const denied = await requireAnalyticsAccess();
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });

@@ -36,7 +36,7 @@ export const LANDING_PAGE_GENERATION_INSTRUCTIONS = [
   'Do not mention price, discounts, stock, shipping cost, return policy, delivery time, ratings, sales counts, scarcity, or guarantees. Those are rendered from live storefront data where applicable.',
   'Use every imageUrl, including gallery image URLs, only when it exactly matches one of product.images. Never create or transform an image URL. Use image-gallery only when at least two distinct verified images exist.',
   'The storefront automatically adds the order form after the authored blocks. Do not describe or simulate form fields in a block.',
-  'Keep CTAs action-oriented. SEO title and description must accurately describe the product. Every generated result is a non-indexable review draft.',
+  'Keep CTAs action-oriented. SEO title and description must accurately describe the product. Every generated result is an inactive, non-indexable review document.',
   'No HTML, Markdown, scripts, custom code, tracking code, or unsupported block types.',
   'In groundingNotes, briefly identify which supplied facts informed technical or product-specific claims.',
 ].join(' ');

@@ -1,25 +1,23 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, gte, sql } from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
 import { products } from '@bric/db/schema';
 import { mutateEntityWithHistory, type ActionActor } from './action-history';
 
 type Database = ReturnType<typeof getDb>;
+type InventoryRow = Pick<
+  typeof products.$inferSelect,
+  | 'id'
+  | 'title'
+  | 'sku'
+  | 'barcode'
+  | 'inStock'
+  | 'availabilityStatus'
+  | 'inventoryQuantity'
+  | 'updatedAt'
+>;
 
-function normalizeAvailability(nextQuantity: number, currentStatus: string) {
-  if (nextQuantity > 0) {
-    return {
-      inStock: true,
-      availabilityStatus: 'in_stock',
-    };
-  }
-
-  return {
-    inStock: false,
-    availabilityStatus:
-      currentStatus === 'in_stock' ? 'out_of_stock' : currentStatus || 'out_of_stock',
-  };
-}
+class InventoryQuantityConflictError extends Error {}
 
 export function buildInventoryRowSelection() {
   return {
@@ -49,40 +47,65 @@ export async function applyInventoryQuantityChange(
     actor?: ActionActor;
   },
 ) {
-  const current = await readInventoryProductById(db, input.productId);
+  const delta = input.mode === 'increase' ? input.quantity : -input.quantity;
+  const nextQuantity = sql<number>`${products.inventoryQuantity} + ${delta}`;
+  let updated: InventoryRow | undefined;
 
-  if (!current) {
-    return { kind: 'missing' as const };
+  try {
+    [updated] = await mutateEntityWithHistory(db, {
+      entityType: 'products',
+      entityId: input.productId,
+      operation: 'update',
+      actor: input.actor,
+      execute: async (tx) => {
+        const rows = await tx
+          .update(products)
+          .set({
+            inventoryQuantity: nextQuantity,
+            inStock: sql`${nextQuantity} > 0`,
+            availabilityStatus: sql`case
+              when ${nextQuantity} > 0 then 'in_stock'
+              when nullif(${products.availabilityStatus}, '') is null
+                or ${products.availabilityStatus} = 'in_stock' then 'out_of_stock'
+              else ${products.availabilityStatus}
+            end`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(products.id, input.productId),
+              input.mode === 'decrease'
+                ? gte(products.inventoryQuantity, input.quantity)
+                : undefined,
+            ),
+          )
+          .returning(buildInventoryRowSelection());
+
+        if (rows.length === 0) {
+          throw new InventoryQuantityConflictError();
+        }
+
+        return rows;
+      },
+    });
+  } catch (error) {
+    if (!(error instanceof InventoryQuantityConflictError)) {
+      throw error;
+    }
+
+    const current = await readInventoryProductById(db, input.productId);
+    return current
+      ? { kind: 'insufficient' as const, available: current.inventoryQuantity }
+      : { kind: 'missing' as const };
   }
 
-  const previousQuantity = current.inventoryQuantity;
-  const nextQuantity =
-    input.mode === 'increase'
-      ? previousQuantity + input.quantity
-      : Math.max(0, previousQuantity - input.quantity);
-  const stockValues = normalizeAvailability(nextQuantity, current.availabilityStatus);
-
-  const [updated] = await mutateEntityWithHistory(db, {
-    entityType: 'products',
-    entityId: input.productId,
-    operation: 'update',
-    actor: input.actor,
-    execute: (tx) =>
-      tx
-        .update(products)
-        .set({
-          inventoryQuantity: nextQuantity,
-          ...stockValues,
-          updatedAt: new Date(),
-        })
-        .where(eq(products.id, input.productId))
-        .returning(buildInventoryRowSelection()),
-  });
+  const resolvedNextQuantity = updated!.inventoryQuantity;
+  const previousQuantity = resolvedNextQuantity - delta;
 
   return {
     kind: 'updated' as const,
     previousQuantity,
-    nextQuantity,
-    item: updated,
+    nextQuantity: resolvedNextQuantity,
+    item: updated!,
   };
 }

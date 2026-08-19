@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildDefaultLandingPageDocument, landingPageSlugFromProduct } from './landing-pages';
+import {
+  buildLandingPagePublicationUpdate,
+  buildDefaultLandingPageDocument,
+  landingPageSlugFromProduct,
+  normalizeLandingPageDocument,
+} from './landing-pages';
 
 describe('admin landing-page defaults', () => {
   it('creates a complete six-block French campaign without inventing price or stock', () => {
@@ -42,5 +47,23 @@ describe('admin landing-page defaults', () => {
     const longSlug = 'a'.repeat(160);
     expect(landingPageSlugFromProduct({ slug: longSlug }, 987654321)).toMatch(/-987654321$/);
     expect(landingPageSlugFromProduct({ slug: longSlug }, 987654321)).toHaveLength(160);
+  });
+
+  it('forces direct-link campaigns out of search indexing', () => {
+    const document = buildDefaultLandingPageDocument({ locale: 'fr', title: 'Campaign' });
+    document.seo.indexable = true;
+    expect(normalizeLandingPageDocument(document).seo.indexable).toBe(false);
+  });
+
+  it('changes visibility without erasing the last public revision while inactive', () => {
+    const now = new Date('2026-08-19T00:00:00.000Z');
+    expect(buildLandingPagePublicationUpdate({ active: false, revision: 4, now })).toEqual({
+      status: 'draft',
+    });
+    expect(buildLandingPagePublicationUpdate({ active: true, revision: 5, now })).toEqual({
+      status: 'published',
+      publishedRevision: 5,
+      publishedAt: now,
+    });
   });
 });

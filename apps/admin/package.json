@@ -9,7 +9,7 @@
     "build": "next build",
     "build:db-tasks": "node ../../ops/scripts/build-worker.mjs apps/admin/scripts/run-db-migrations.ts apps/admin/dist/run-db-migrations.cjs && node ../../ops/scripts/build-worker.mjs apps/admin/scripts/verify-db-migrations.ts apps/admin/dist/verify-db-migrations.cjs",
     "build:worker": "node ../../ops/scripts/build-worker.mjs apps/admin/scripts/run-background-workers.ts apps/admin/dist/run-background-workers.cjs && ADMIN_WORKER_BOOTSTRAP_CHECK=1 node dist/run-background-workers.cjs",
-    "start": "node ../../ops/scripts/start-next-standalone.mjs --app-dir . --nested-dir apps/admin --default-port 3000",
+    "start": "bash ../../ops/scripts/hydrate-next-standalone.sh apps/admin && node ../../ops/scripts/start-next-standalone.mjs --app-dir . --nested-dir apps/admin --default-port 3000",
     "worker": "tsx scripts/run-background-workers.ts",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",

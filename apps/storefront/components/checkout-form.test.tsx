@@ -11,12 +11,20 @@ const mocks = vi.hoisted(() => ({
   haptic: vi.fn(),
   iconStart: vi.fn(),
   iconStop: vi.fn(),
+  reconcile: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock('@/lib/orders', async () => {
   const actual = await vi.importActual<typeof import('@/lib/orders')>('@/lib/orders');
   return { ...actual, createCheckoutOrder: mocks.create };
+});
+vi.mock('@/lib/cart', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/cart')>('@/lib/cart');
+  return {
+    ...actual,
+    reconcileCartWithCatalog: mocks.reconcile,
+  };
 });
 vi.mock('@/lib/analytics', () => ({
   getAnalyticsIdentity: mocks.identity,
@@ -70,6 +78,7 @@ const labels = Object.fromEntries(
     'requiredError',
     'emailError',
     'submitError',
+    'cartUpdated',
     'retry',
     'savedAttempt',
     'trustPhone',
@@ -163,6 +172,13 @@ describe('CheckoutForm', () => {
     mocks.haptic.mockReset();
     mocks.iconStart.mockReset();
     mocks.iconStop.mockReset();
+    mocks.reconcile.mockReset().mockImplementation(async (items) => ({
+      items,
+      removedProductIds: [],
+      priceChangedProductIds: [],
+      changed: false,
+      requiresReview: false,
+    }));
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }));
   });
 
@@ -403,6 +419,71 @@ describe('CheckoutForm', () => {
     expect(mocks.track.mock.calls.flatMap((call) => JSON.stringify(call))).not.toContain(
       '0550000000',
     );
+  });
+
+  it('uses a canonicalized token without forcing another click when only product metadata changed', async () => {
+    mocks.reconcile.mockResolvedValue({
+      items: [{ ...directItem, token: 'canonical-desk-lamp', title: 'Updated title' }],
+      removedProductIds: [],
+      priceChangedProductIds: [],
+      changed: true,
+      requiresReview: false,
+    });
+    render(
+      <CheckoutForm
+        locale="fr"
+        catalog={catalog}
+        directItem={directItem}
+        labels={labels as never}
+      />,
+    );
+    fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
+      target: { value: '0550000000' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), {
+      target: { value: '16' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), {
+      target: { value: 'Alger Centre' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
+    expect(mocks.create.mock.calls[0][0].cartProducts).toEqual([
+      'canonical-desk-lamp',
+      'canonical-desk-lamp',
+    ]);
+  });
+
+  it('requires explicit review when catalog revalidation changes a price', async () => {
+    mocks.reconcile.mockResolvedValue({
+      items: [{ ...directItem, unitPrice: 4700 }],
+      removedProductIds: [],
+      priceChangedProductIds: [12],
+      changed: true,
+      requiresReview: true,
+    });
+    render(
+      <CheckoutForm
+        locale="fr"
+        catalog={catalog}
+        directItem={directItem}
+        labels={labels as never}
+      />,
+    );
+    fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
+      target: { value: '0550000000' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), {
+      target: { value: '16' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), {
+      target: { value: 'Alger Centre' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+
+    expect(await screen.findByText('cartUpdated')).toBeVisible();
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 
   it('keeps the attempt and exposes a retry action after a recoverable failure', async () => {

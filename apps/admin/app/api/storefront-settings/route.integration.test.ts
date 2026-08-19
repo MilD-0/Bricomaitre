@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../lib/rbac', () => ({ requireMutationAccess: mocks.authorize }));
 vi.mock('../../../lib/storefront-settings', () => ({
+  getStorefrontAiModelOptions: () => ['openai/gpt-4.1-mini'],
   loadStorefrontSettings: mocks.load,
   saveStorefrontSettings: mocks.save,
 }));
@@ -45,17 +46,20 @@ describe('app/api/storefront-settings/route', () => {
           contactPhone: '0795 34 28 26',
           phoneEnabled: false,
           aiAssistantEnabled: false,
+          aiModel: 'openai/gpt-4.1-mini',
         }),
         headers: { 'content-type': 'application/json' },
       }),
     );
 
     expect(mocks.authorize).toHaveBeenCalledWith('settings');
-    expect(mocks.save).toHaveBeenCalledWith({
-      contactPhone: '0795342826',
-      phoneEnabled: true,
-      aiAssistantEnabled: false,
-    });
+    expect(mocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contactPhone: '0795342826',
+        phoneEnabled: true,
+        aiAssistantEnabled: false,
+      }),
+    );
     expect(mocks.revalidate).toHaveBeenCalledOnce();
     expect(response.status).toBe(200);
   });

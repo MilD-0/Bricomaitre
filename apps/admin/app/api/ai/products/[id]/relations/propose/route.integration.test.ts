@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  requireAiAccess: vi.fn(),
+  mutationAccess: vi.fn(),
   hasDb: vi.fn(),
   auth: vi.fn(),
   propose: vi.fn(),
 }));
 
-vi.mock('../../../../../../../lib/rbac', () => ({ requireAiAccess: mocks.requireAiAccess }));
+vi.mock('../../../../../../../lib/rbac', () => ({ requireMutationAccess: mocks.mutationAccess }));
 vi.mock('@bric/db/client', () => ({ hasDb: mocks.hasDb }));
 vi.mock('../../../../../../../lib/auth', () => ({ auth: mocks.auth }));
 vi.mock('../../../../../../../lib/ai-product-knowledge', () => ({
@@ -29,14 +29,14 @@ function request(body: unknown) {
 
 describe('admin product relation AI proposal route', () => {
   beforeEach(() => {
-    mocks.requireAiAccess.mockReset().mockResolvedValue(null);
+    mocks.mutationAccess.mockReset().mockResolvedValue(null);
     mocks.hasDb.mockReset().mockReturnValue(true);
     mocks.auth.mockReset().mockResolvedValue({ user: { email: 'admin@example.com' } });
     mocks.propose.mockReset().mockResolvedValue({ id: 9, status: 'proposed' });
   });
 
-  it('enforces the dedicated AI proposal permission', async () => {
-    mocks.requireAiAccess.mockResolvedValue(
+  it('derives proposal access from product management', async () => {
+    mocks.mutationAccess.mockResolvedValue(
       NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
     );
 

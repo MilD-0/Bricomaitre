@@ -33,7 +33,6 @@ import {
 import {
   AI_CATALOG_EDIT_FIELDS,
   AI_TAXONOMY_CREATE_FIELDS,
-  proposeBundle,
   proposeDiscount,
   proposeEntityEdit,
   proposeFeaturedProducts,
@@ -57,7 +56,7 @@ import {
   hasPermission,
   normalizePermissions,
 } from '../../../../lib/permissions';
-import { requireAiUseAccess } from '../../../../lib/rbac';
+import { requireAppAccess } from '../../../../lib/rbac';
 import {
   adminAiChatStreamEventSchema,
   type AdminAiChatStreamEvent,
@@ -107,7 +106,7 @@ function conversationTitle(message: string) {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireAiUseAccess();
+  const denied = await requireAppAccess();
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
@@ -274,7 +273,7 @@ export async function POST(request: NextRequest) {
               )
               .limit(limit),
         }),
-        ...(hasPermission(permissions, 'ai_catalog_propose')
+        ...(hasPermission(permissions, 'products_write')
           ? {
               generate_product_content: tool({
                 description:
@@ -308,7 +307,6 @@ export async function POST(request: NextRequest) {
                     onlyMissing: scope === 'all_missing',
                     autoApply:
                       parsed.data.autoAcceptProposals &&
-                      hasPermission(permissions, 'ai_catalog_apply') &&
                       hasPermission(permissions, 'products_write'),
                     conversationId: conversation.id,
                     context,
@@ -326,15 +324,15 @@ export async function POST(request: NextRequest) {
               }),
             }
           : {}),
-        ...(hasPermission(permissions, 'ai_analytics_query')
+        ...(hasPermission(permissions, 'analytics_manage')
           ? {
               query_analytics: tool({
                 description:
-                  'Run one read-only semantic analytics query over catalog, sales, orders, funnel, product/category/brand performance, inventory, promotions, bundles, or content gaps. Dates use YYYY-MM-DD. Raw SQL is never accepted.',
+                  'Run one read-only semantic analytics query over catalog, sales, orders, funnel, product/category/brand performance, inventory, promotions, or content gaps. Dates use YYYY-MM-DD. Raw SQL is never accepted.',
                 inputSchema: semanticAnalyticsQuerySchema,
                 execute: (input) =>
                   executeSemanticAnalytics(input, {
-                    canViewProfit: canViewProfitStats(session?.user?.role),
+                    canViewProfit: canViewProfitStats(session?.user?.permissions ?? []),
                   }),
               }),
               compare_analytics_periods: tool({
@@ -343,7 +341,7 @@ export async function POST(request: NextRequest) {
                 inputSchema: semanticAnalyticsComparisonSchema,
                 execute: (input) =>
                   executeSemanticAnalyticsComparison(input, {
-                    canViewProfit: canViewProfitStats(session?.user?.role),
+                    canViewProfit: canViewProfitStats(session?.user?.permissions ?? []),
                   }),
               }),
             }
@@ -393,7 +391,7 @@ export async function POST(request: NextRequest) {
               }),
             }
           : {}),
-        ...(hasPermission(permissions, 'ai_pricing_analyze')
+        ...(hasPermission(permissions, 'products_write')
           ? {
               suggest_discount: tool({
                 description: 'Create a reviewable margin-safe product discount proposal.',
@@ -404,28 +402,9 @@ export async function POST(request: NextRequest) {
                 }),
                 execute: (input) => proposeDiscount({ ...input, actorId: actor.email }),
               }),
-              suggest_bundle: tool({
-                description:
-                  'Create a reviewable proposal for a new inactive bundle product listing.',
-                inputSchema: z.object({
-                  title: z.string().trim().min(1).max(240),
-                  titleAr: z.string().trim().max(240).optional(),
-                  components: z
-                    .array(
-                      z.object({
-                        productId: z.number().int().positive(),
-                        quantity: z.number().int().positive().max(100),
-                      }),
-                    )
-                    .min(2)
-                    .max(30),
-                  minimumMargin: z.number().min(0).max(0.95).optional(),
-                }),
-                execute: (input) => proposeBundle({ ...input, actorId: actor.email }),
-              }),
             }
           : {}),
-        ...(hasPermission(permissions, 'ai_catalog_propose')
+        ...(hasPermission(permissions, 'assets_write')
           ? {
               suggest_featured_products: tool({
                 description:
@@ -438,11 +417,11 @@ export async function POST(request: NextRequest) {
               }),
             }
           : {}),
-        ...(hasPermission(permissions, 'ai_catalog_propose')
+        ...(hasPermission(permissions, 'assets_write')
           ? {
               suggest_landing_page: tool({
                 description:
-                  'Create a distinct, conversion-focused and reviewable landing-page draft grounded in verified product data and registered performance-bounded blocks. Price, stock, assets, and technical claims remain protected.',
+                  'Create a distinct, conversion-focused landing-page document for review, grounded in verified product data and registered performance-bounded blocks. Price, stock, assets, and technical claims remain protected.',
                 inputSchema: z.object({
                   productId: z.number().int().positive(),
                   locale: z.enum(['fr', 'ar']),
@@ -452,7 +431,7 @@ export async function POST(request: NextRequest) {
               }),
             }
           : {}),
-        ...(hasPermission(permissions, 'ai_catalog_propose')
+        ...(hasPermission(permissions, 'products_write')
           ? {
               categorize_catalog: tool({
                 description:
@@ -468,7 +447,6 @@ export async function POST(request: NextRequest) {
                     ...input,
                     autoApply:
                       parsed.data.autoAcceptProposals &&
-                      hasPermission(permissions, 'ai_catalog_apply') &&
                       hasPermission(permissions, 'products_write'),
                     conversationId: conversation.id,
                     actor,
@@ -496,6 +474,10 @@ export async function POST(request: NextRequest) {
                     actorId: actor.email,
                   }),
               }),
+            }
+          : {}),
+        ...(hasPermission(permissions, 'brands_categories_write')
+          ? {
               propose_brand_edit: tool({
                 description:
                   'Create a reviewable brand edit. Supports name, image, active/draft status, and featured status. Resolve the brand with find_brands first.',

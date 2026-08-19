@@ -67,6 +67,7 @@ describe('productPayloadSchema', () => {
         brandId: '3',
         categoryId: '',
         imageOrigin: 'external',
+        state: 'inactive',
         sortKey: 'price',
         sortDirection: 'asc',
       }),
@@ -77,11 +78,17 @@ describe('productPayloadSchema', () => {
       brandId: 3,
       categoryId: null,
       imageOrigin: 'external',
+      state: 'inactive',
       sort: [],
       sortKey: 'price',
       sortDirection: 'asc',
       sortRules: [{ key: 'price', direction: 'asc' }],
     });
+  });
+
+  it('validates server-backed product state filters', () => {
+    expect(productListQuerySchema.parse({ state: 'out' }).state).toBe('out');
+    expect(productListQuerySchema.safeParse({ state: 'archived' }).success).toBe(false);
   });
 
   it('prefers ordered multi-sort params over legacy single-sort fields', () => {

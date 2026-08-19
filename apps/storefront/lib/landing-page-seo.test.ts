@@ -102,4 +102,11 @@ describe('landing page metadata', () => {
       },
     });
   });
+
+  it('keeps direct-link campaign pages out of indexing regardless of legacy document flags', () => {
+    expect(buildLandingPageMetadata(page, 'fr', true).robots).toEqual({
+      index: false,
+      follow: false,
+    });
+  });
 });

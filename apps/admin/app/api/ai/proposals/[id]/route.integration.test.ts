@@ -2,25 +2,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  aiAccess: vi.fn(),
+  appAccess: vi.fn(),
   mutationAccess: vi.fn(),
   hasDb: vi.fn(),
   auth: vi.fn(),
   review: vi.fn(),
   reviewAdmin: vi.fn(),
   proposalRow: vi.fn(),
+  deleteRows: vi.fn(),
   revalidateTags: vi.fn(),
   revalidateProducts: vi.fn(),
   refreshFeed: vi.fn(),
 }));
 vi.mock('../../../../../lib/rbac', () => ({
-  requireAiAccess: mocks.aiAccess,
+  requireAppAccess: mocks.appAccess,
   requireMutationAccess: mocks.mutationAccess,
 }));
 vi.mock('@bric/db/client', () => ({
   hasDb: mocks.hasDb,
   getDb: () => ({
     select: () => ({ from: () => ({ where: () => ({ limit: mocks.proposalRow }) }) }),
+    delete: () => ({
+      where: () => ({ returning: mocks.deleteRows }),
+    }),
   }),
 }));
 vi.mock('../../../../../lib/auth', () => ({ auth: mocks.auth }));
@@ -44,7 +48,7 @@ vi.mock('../../../../../lib/storefront-revalidate', () => ({
   revalidateStorefrontProducts: mocks.revalidateProducts,
 }));
 
-import { PATCH } from './route';
+import { DELETE, PATCH } from './route';
 
 const request = (action: string) =>
   new NextRequest('http://localhost/api/ai/proposals/4', {
@@ -55,7 +59,7 @@ const request = (action: string) =>
 
 describe('AI proposal review route', () => {
   beforeEach(() => {
-    mocks.aiAccess.mockReset().mockResolvedValue(null);
+    mocks.appAccess.mockReset().mockResolvedValue(null);
     mocks.mutationAccess.mockReset().mockResolvedValue(null);
     mocks.hasDb.mockReset().mockReturnValue(true);
     mocks.auth
@@ -73,6 +77,7 @@ describe('AI proposal review route', () => {
     mocks.proposalRow
       .mockReset()
       .mockResolvedValue([{ type: 'product_content', entityType: 'products' }]);
+    mocks.deleteRows.mockReset().mockResolvedValue([{ id: 4 }]);
     mocks.revalidateTags.mockReset();
     mocks.revalidateProducts.mockReset().mockResolvedValue(undefined);
     mocks.refreshFeed.mockReset().mockResolvedValue(undefined);
@@ -88,11 +93,11 @@ describe('AI proposal review route', () => {
     expect(mocks.reviewAdmin).toHaveBeenCalled();
   });
 
-  it('requires pricing apply access for a discount proposal', async () => {
+  it('derives discount review access from product management', async () => {
     mocks.proposalRow.mockResolvedValue([{ type: 'product_discount', entityType: 'products' }]);
     const response = await PATCH(request('approve'), { params: Promise.resolve({ id: '4' }) });
     expect(response.status).toBe(200);
-    expect(mocks.aiAccess).toHaveBeenCalledWith('ai_pricing_apply');
+    expect(mocks.mutationAccess).toHaveBeenCalledWith('products');
   });
 
   it('uses brands and categories access for taxonomy creation', async () => {
@@ -108,7 +113,7 @@ describe('AI proposal review route', () => {
     );
   });
 
-  it('requires AI apply and normal product-write access for approval', async () => {
+  it('requires the proposal domain permission for approval', async () => {
     mocks.mutationAccess.mockResolvedValue(
       NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
     );
@@ -120,18 +125,41 @@ describe('AI proposal review route', () => {
   it('applies an approved proposal and refreshes catalog consumers', async () => {
     const response = await PATCH(request('approve'), { params: Promise.resolve({ id: '4' }) });
     expect(response.status).toBe(200);
-    expect(mocks.aiAccess).toHaveBeenCalledWith('ai_catalog_apply');
+    expect(mocks.appAccess).toHaveBeenCalledOnce();
     expect(mocks.mutationAccess).toHaveBeenCalledWith('products');
     expect(mocks.revalidateProducts).toHaveBeenCalled();
     expect(mocks.refreshFeed).toHaveBeenCalled();
   });
 
-  it('allows rejection with proposal permission and no product mutation permission', async () => {
+  it('requires the proposal domain permission for rejection', async () => {
     mocks.review.mockResolvedValue({ id: 4, status: 'rejected' });
     const response = await PATCH(request('reject'), { params: Promise.resolve({ id: '4' }) });
     expect(response.status).toBe(200);
-    expect(mocks.aiAccess).toHaveBeenCalledWith('ai_catalog_propose');
-    expect(mocks.mutationAccess).not.toHaveBeenCalled();
+    expect(mocks.appAccess).toHaveBeenCalledOnce();
+    expect(mocks.mutationAccess).toHaveBeenCalledWith('products');
     expect(mocks.revalidateProducts).not.toHaveBeenCalled();
+  });
+
+  it('deletes an expired pending proposal through its domain permission', async () => {
+    const response = await DELETE(request('reject'), {
+      params: Promise.resolve({ id: '4' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(mocks.mutationAccess).toHaveBeenCalledWith('products');
+    expect(mocks.deleteRows).toHaveBeenCalledOnce();
+    await expect(response.json()).resolves.toEqual({ deleted: { id: 4 } });
+  });
+
+  it('keeps non-expired or already-reviewed proposals', async () => {
+    mocks.deleteRows.mockResolvedValue([]);
+    const response = await DELETE(request('reject'), {
+      params: Promise.resolve({ id: '4' }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Only expired pending proposals can be deleted.',
+    });
   });
 });

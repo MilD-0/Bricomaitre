@@ -71,3 +71,67 @@ export function getCartSubtotal(current: unknown) {
     ? parsed.data.reduce((total, item) => total + item.unitPrice * item.quantity, 0)
     : 0;
 }
+
+export async function reconcileCartWithCatalog(current: CartItem[], fetcher: typeof fetch = fetch) {
+  if (current.length === 0) {
+    return {
+      items: [],
+      removedProductIds: [],
+      priceChangedProductIds: [],
+      changed: false,
+      requiresReview: false,
+    };
+  }
+  const response = await fetcher('/api/cart/validate', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ productIds: current.map((item) => item.productId) }),
+  });
+  if (!response.ok) throw new Error('Cart validation is unavailable.');
+  const payload = (await response.json()) as {
+    items?: Array<{
+      id: number;
+      slug: string | null;
+      title: string;
+      price: string | null;
+      inStock: boolean;
+      availabilityStatus: string;
+      images: string[];
+    }>;
+  };
+  const products = new Map((payload.items ?? []).map((product) => [product.id, product]));
+  const removedProductIds: number[] = [];
+  const priceChangedProductIds: number[] = [];
+  const items = current.flatMap((item) => {
+    const product = products.get(item.productId);
+    const unitPrice = Number(product?.price);
+    if (
+      !product?.inStock ||
+      product.price === null ||
+      !Number.isFinite(unitPrice) ||
+      unitPrice < 0
+    ) {
+      removedProductIds.push(item.productId);
+      return [];
+    }
+    if (unitPrice !== item.unitPrice) priceChangedProductIds.push(item.productId);
+    return [
+      {
+        ...item,
+        token: product.slug ?? String(product.id),
+        title: product.title,
+        unitPrice,
+        imageUrl: product.images[0] ?? null,
+        availabilityStatus: product.availabilityStatus,
+      },
+    ];
+  });
+
+  return {
+    items,
+    removedProductIds,
+    priceChangedProductIds,
+    changed: JSON.stringify(items) !== JSON.stringify(current),
+    requiresReview: removedProductIds.length > 0 || priceChangedProductIds.length > 0,
+  };
+}

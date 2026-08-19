@@ -10,7 +10,7 @@ import {
   canAccessStats,
   getDefaultAuthorizedHref,
 } from './navigation-access';
-import { canManageSettings } from './permissions';
+import { canManageSettings, hasPermission } from './permissions';
 
 async function requireAllowedAppUser(locale: string) {
   const session = await auth();
@@ -31,6 +31,28 @@ export async function requireProductsPageAccess(locale: string) {
         isAllowed: session.user.isAllowed,
         locale,
         permissions: session.user.permissions,
+        role: session.user.role,
+      }),
+    );
+  }
+
+  return session;
+}
+
+export async function requireAiProposalPageAccess(locale: string) {
+  const session = await requireAllowedAppUser(locale);
+  const permissions = session.user.permissions;
+
+  if (
+    !hasPermission(permissions, 'products_write') &&
+    !hasPermission(permissions, 'assets_write') &&
+    !hasPermission(permissions, 'brands_categories_write')
+  ) {
+    redirect(
+      getDefaultAuthorizedHref({
+        isAllowed: session.user.isAllowed,
+        locale,
+        permissions,
         role: session.user.role,
       }),
     );
@@ -118,23 +140,6 @@ export async function requireBulletinPageAccess(locale: string) {
 }
 
 export async function requireAdministrationPageAccess(locale: string) {
-  const session = await requireAllowedAppUser(locale);
-
-  if (session.user.role !== 'admin' && session.user.role !== 'developer') {
-    redirect(
-      getDefaultAuthorizedHref({
-        isAllowed: session.user.isAllowed,
-        locale,
-        permissions: session.user.permissions,
-        role: session.user.role,
-      }),
-    );
-  }
-
-  return session;
-}
-
-export async function requireStorefrontSettingsPageAccess(locale: string) {
   const session = await requireAllowedAppUser(locale);
 
   if (!canManageSettings(session.user.permissions)) {

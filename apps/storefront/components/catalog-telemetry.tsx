@@ -1,14 +1,14 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import type { Locale } from '@/i18n/config';
 import { trackCatalogEvent } from '@/lib/analytics';
-import type { CatalogPageQuery } from '@/lib/catalog-query';
+import { parseCatalogPageQuery, type CatalogPageQueryInput } from '@/lib/catalog-query';
 
 type CatalogTelemetryProps = {
   locale: Locale;
-  query: CatalogPageQuery;
+  query: CatalogPageQueryInput;
   resultsCount: number;
   visibleProductIds: number[];
 };
@@ -19,45 +19,57 @@ export function CatalogTelemetry({
   resultsCount,
   visibleProductIds,
 }: CatalogTelemetryProps) {
+  const normalizedQuery = useMemo(() => parseCatalogPageQuery(query), [query]);
   const trackedKey = useRef('');
 
   useEffect(() => {
-    const key = JSON.stringify([query, visibleProductIds]);
+    const key = JSON.stringify([normalizedQuery, visibleProductIds]);
     if (trackedKey.current === key) return;
     trackedKey.current = key;
 
     const base = {
       locale,
-      metadata: { resultsCount, page: query.page, sort: query.sort, discounted: query.discounted },
+      metadata: {
+        resultsCount,
+        page: normalizedQuery.page,
+        sort: normalizedQuery.sort,
+        discounted: normalizedQuery.discounted,
+      },
     };
     void trackCatalogEvent({
       eventName: 'view_item_list',
       ...base,
       metadata: { ...base.metadata, visibleProductIds },
     });
-    if (query.q) void trackCatalogEvent({ eventName: 'search', ...base, searchTerm: query.q });
-    if (query.category)
+    if (normalizedQuery.q)
+      void trackCatalogEvent({ eventName: 'search', ...base, searchTerm: normalizedQuery.q });
+    if (normalizedQuery.category)
       void trackCatalogEvent({
         eventName: 'filter_apply',
         ...base,
-        categoryId: query.category,
-        metadata: { ...base.metadata, filterKind: 'category', filterId: query.category },
+        categoryId: normalizedQuery.category,
+        metadata: {
+          ...base.metadata,
+          filterKind: 'category',
+          filterId: normalizedQuery.category,
+        },
       });
-    if (query.brand)
+    if (normalizedQuery.brand)
       void trackCatalogEvent({
         eventName: 'filter_apply',
         ...base,
-        brandId: query.brand,
-        metadata: { ...base.metadata, filterKind: 'brand', filterId: query.brand },
+        brandId: normalizedQuery.brand,
+        metadata: { ...base.metadata, filterKind: 'brand', filterId: normalizedQuery.brand },
       });
-    if (query.discounted)
+    if (normalizedQuery.discounted)
       void trackCatalogEvent({
         eventName: 'filter_apply',
         ...base,
         metadata: { ...base.metadata, filterKind: 'discounted' },
       });
-    if (query.sort !== 'recommended') void trackCatalogEvent({ eventName: 'sort_change', ...base });
-  }, [locale, query, resultsCount, visibleProductIds]);
+    if (normalizedQuery.sort !== 'recommended')
+      void trackCatalogEvent({ eventName: 'sort_change', ...base });
+  }, [locale, normalizedQuery, resultsCount, visibleProductIds]);
 
   useEffect(() => {
     function handleClick(event: MouseEvent) {
@@ -76,13 +88,13 @@ export function CatalogTelemetry({
         productSlug: target.dataset.productSlug || null,
         categoryId: Number(target.dataset.categoryId) || null,
         brandId: Number(target.dataset.brandId) || null,
-        metadata: { position, page: query.page, sort: query.sort },
+        metadata: { position, page: normalizedQuery.page, sort: normalizedQuery.sort },
       });
     }
 
     document.addEventListener('click', handleClick);
     return () => document.removeEventListener('click', handleClick);
-  }, [locale, query.page, query.sort]);
+  }, [locale, normalizedQuery.page, normalizedQuery.sort]);
 
   return null;
 }

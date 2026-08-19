@@ -1,4 +1,4 @@
-import { asc, desc } from 'drizzle-orm';
+import { and, asc, count, desc, ilike, inArray, isNull, or } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
 import {
@@ -17,10 +17,29 @@ import type {
   AssetMetaBrand,
   AssetMetaCategory,
   AssetMetaProduct,
+  AssetProductOption,
   AssetsResponse,
   FeaturedProductGroupRecord,
   ProductCardRecord,
 } from './assets';
+
+function toProductOption(row: {
+  id: number;
+  title: string;
+  slug: string;
+  sku: string | null;
+  images: string[];
+  active: boolean;
+}): AssetProductOption {
+  return {
+    id: row.id,
+    title: row.title,
+    slug: row.slug,
+    sku: row.sku,
+    imageUrl: row.images[0] ?? null,
+    active: row.active,
+  };
+}
 
 function serializeAssetRecord<T extends { createdAt: Date; updatedAt: Date }>(
   item: T,
@@ -132,5 +151,78 @@ export async function loadAssetsMetaData(): Promise<{
     products: productRows,
     brands: brandRows,
     categories: categoryRows,
+  };
+}
+
+export async function loadAssetsTaxonomyData(): Promise<{
+  brands: AssetMetaBrand[];
+  categories: AssetMetaCategory[];
+}> {
+  if (!hasDb()) return { brands: [], categories: [] };
+  const db = getDb();
+  const [brandRows, categoryRows] = await Promise.all([
+    db.select({ id: brands.id, name: brands.name }).from(brands).orderBy(asc(brands.name)),
+    db
+      .select({ id: categories.id, name: categories.name })
+      .from(categories)
+      .orderBy(asc(categories.name)),
+  ]);
+  return { brands: brandRows, categories: categoryRows };
+}
+
+export async function searchAssetProductOptions(input: {
+  search: string;
+  ids: number[];
+  page: number;
+  limit: number;
+}) {
+  if (!hasDb())
+    return { items: [] as AssetProductOption[], page: input.page, limit: input.limit, total: 0 };
+  const db = getDb();
+  const selection = {
+    id: products.id,
+    title: products.title,
+    slug: products.slug,
+    sku: products.sku,
+    images: products.images,
+    active: products.active,
+  };
+
+  if (input.ids.length > 0) {
+    const uniqueIds = [...new Set(input.ids)];
+    const rows = await db
+      .select(selection)
+      .from(products)
+      .where(and(isNull(products.archivedAt), inArray(products.id, uniqueIds)));
+    const byId = new Map(rows.map((row) => [row.id, toProductOption(row)]));
+    const items = uniqueIds.flatMap((id) => byId.get(id) ?? []);
+    return { items, page: 1, limit: uniqueIds.length || input.limit, total: items.length };
+  }
+
+  const query = input.search.trim();
+  const searchCondition = query
+    ? or(
+        ilike(products.title, `%${query}%`),
+        ilike(products.sku, `%${query}%`),
+        ilike(products.barcode, `%${query}%`),
+      )
+    : undefined;
+  const where = and(isNull(products.archivedAt), searchCondition);
+  const offset = (input.page - 1) * input.limit;
+  const [countRows, rows] = await Promise.all([
+    db.select({ value: count() }).from(products).where(where),
+    db
+      .select(selection)
+      .from(products)
+      .where(where)
+      .orderBy(asc(products.title), asc(products.id))
+      .limit(input.limit)
+      .offset(offset),
+  ]);
+  return {
+    items: rows.map(toProductOption),
+    page: input.page,
+    limit: input.limit,
+    total: Number(countRows[0]?.value ?? 0),
   };
 }

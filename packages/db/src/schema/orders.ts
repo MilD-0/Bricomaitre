@@ -9,6 +9,7 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  check,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { products } from './products';
@@ -25,6 +26,7 @@ export const orders = pgTable(
     homeAddress: text('home_address'),
     email: text('email'),
     phoneNumber1: text('phone_number_1').notNull(),
+    normalizedPhone: text('normalized_phone'),
     phoneNumber2: text('phone_number_2'),
     publicToken: text('public_token'),
     cartProducts: text('cart_products').array().notNull().default([]),
@@ -34,6 +36,8 @@ export const orders = pgTable(
     variant: text('variant'),
     delivery: integer('delivery').notNull().default(0),
     delPr: numeric('del_pr', { precision: 10, scale: 2 }),
+    productSubtotal: numeric('product_subtotal', { precision: 12, scale: 2 }),
+    totalAmount: numeric('total_amount', { precision: 12, scale: 2 }),
     price: numeric('price', { precision: 12, scale: 2 }),
     promoCode: text('promo_code'),
     promoProductId: bigint('promo_product_id', { mode: 'number' }).references(() => products.id, {
@@ -49,7 +53,6 @@ export const orders = pgTable(
     confirmedBy: text('confirmed_by'),
     confirmedByName: text('confirmed_by_name'),
     confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
-    archivedAt: timestamp('archived_at', { withTimezone: true }),
 
     ecotrackStatus: text('ecotrack_status'),
     ecotrackStatusLastUpdate: timestamp('ecotrack_status_last_update', {
@@ -72,15 +75,11 @@ export const orders = pgTable(
     index('idx_orders_promo_product')
       .on(t.promoProductId)
       .where(sql`${t.promoProductId} is not null`),
-    index('idx_orders_archived_at').on(t.archivedAt),
+    index('idx_orders_normalized_phone_created').on(t.normalizedPhone, t.createdAt.desc()),
     index('idx_orders_cart_products_gin').using('gin', t.cartProducts),
     uniqueIndex('orders_public_token_unique').on(t.publicToken),
-    index('idx_orders_active_created_at')
-      .on(t.createdAt.desc())
-      .where(sql`${t.archivedAt} is null`),
-    index('idx_orders_active_confirmed_created_at')
-      .on(t.confirmed, t.createdAt.desc())
-      .where(sql`${t.archivedAt} is null`),
+    index('idx_orders_created_desc').on(t.createdAt.desc()),
+    index('idx_orders_confirmed_created_desc').on(t.confirmed, t.createdAt.desc()),
   ],
 );
 

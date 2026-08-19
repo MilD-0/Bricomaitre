@@ -1,5 +1,5 @@
 import { evaluateDiscountPrice, getAiConfig, minimumSellingPriceForMargin } from '@bric/ai-core';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
@@ -8,8 +8,6 @@ import {
   aiProposals,
   aiRuns,
   brands,
-  bundleComponents,
-  bundleListings,
   categories,
   featuredProductGroupProducts,
   featuredProductGroups,
@@ -26,7 +24,7 @@ import {
 } from './ai-landing-page';
 import { resolveBrandSlug, resolveCategorySlug } from './brands-categories-api';
 import { persistedProposalValuesMatch } from './ai-proposal-verification';
-import { slugify } from './slug';
+import { assertCategoryParentAllowed } from './category-hierarchy';
 
 export const AI_CATALOG_EDIT_FIELDS = {
   products: z
@@ -352,69 +350,6 @@ export async function proposeLandingPage(input: {
   });
 }
 
-export async function proposeBundle(input: {
-  title: string;
-  titleAr?: string;
-  components: Array<{ productId: number; quantity: number }>;
-  minimumMargin?: number;
-  actorId?: string | null;
-}) {
-  const db = getDb();
-  const ids = [...new Set(input.components.map((item) => item.productId))];
-  const rows = await db
-    .select()
-    .from(products)
-    .where(and(inArray(products.id, ids), eq(products.active, true)));
-  if (rows.length !== ids.length)
-    throw new AiAdminCapabilityError('Every bundle component must be an active product.');
-  const byId = new Map(rows.map((row) => [row.id, row]));
-  let cost = 0;
-  let retail = 0;
-  for (const component of input.components) {
-    const product = byId.get(component.productId)!;
-    if (product.purchasePrice == null)
-      throw new AiAdminCapabilityError(`Purchase price is missing for product ${product.id}.`);
-    cost += Number(product.purchasePrice) * component.quantity;
-    retail += Number(product.price) * component.quantity;
-  }
-  const [policy] = await db
-    .select()
-    .from(aiPricingPolicies)
-    .where(eq(aiPricingPolicies.id, 1))
-    .limit(1);
-  const defaultMargin = Number(policy?.defaultMinimumGrossMargin ?? 0.15);
-  const margin = input.minimumMargin ?? defaultMargin;
-  if (input.minimumMargin != null && policy?.allowRequestOverride === false)
-    throw new AiAdminCapabilityError('Margin overrides are disabled.');
-  const minimumPrice = minimumSellingPriceForMargin({
-    purchaseCost: cost,
-    minimumGrossMargin: margin,
-  });
-  const suggestedPrice = Math.min(retail, Math.max(minimumPrice, retail * 0.9));
-  return createProposal({
-    task: 'bundle_suggestion',
-    type: 'bundle_listing',
-    entityType: 'bundle_listings',
-    entityId: 0,
-    actorId: input.actorId,
-    reasoning: `New bundle listing priced with at least ${(margin * 100).toFixed(1)}% gross margin and compared with component retail total.`,
-    payload: {
-      title: input.title,
-      titleAr: input.titleAr ?? null,
-      components: input.components.map((item) => ({
-        ...item,
-        unitPurchasePriceSnapshot: byId.get(item.productId)!.purchasePrice,
-      })),
-      totalPurchaseCost: cost.toFixed(2),
-      componentRetailTotal: retail.toFixed(2),
-      price: suggestedPrice.toFixed(2),
-      minimumGrossMargin: margin,
-      defaultMinimumGrossMargin: defaultMargin,
-      belowDefaultMargin: margin < defaultMargin,
-    },
-  });
-}
-
 export async function proposeEntityEdit(input: {
   entityType: EditableEntity;
   entityId: number;
@@ -446,11 +381,12 @@ export async function proposeEntityEdit(input: {
     .where(eq((table as typeof products).id, input.entityId))
     .limit(1);
   if (!entity) throw new AiAdminCapabilityError('Entity not found.');
-  if (
-    input.entityType === 'categories' &&
-    AI_CATALOG_EDIT_FIELDS.categories.parse(changes).parentId === input.entityId
-  )
-    throw new AiAdminCapabilityError('A category cannot be its own parent.');
+  if (input.entityType === 'categories') {
+    const parentId = AI_CATALOG_EDIT_FIELDS.categories.parse(changes).parentId;
+    if (parentId !== undefined) {
+      await assertCategoryParentAllowed(db, input.entityId, parentId ?? null);
+    }
+  }
   if (persistedProposalValuesMatch(entity as Record<string, unknown>, changes))
     throw new AiAdminCapabilityError('The requested edit does not change the current entity.');
   return createProposal({
@@ -492,12 +428,7 @@ export async function proposeTaxonomyCreate(input: {
       ? AI_TAXONOMY_CREATE_FIELDS.categories.parse(values).parentId
       : null;
   if (parentId != null) {
-    const [parent] = await db
-      .select({ id: categories.id })
-      .from(categories)
-      .where(eq(categories.id, parentId))
-      .limit(1);
-    if (!parent) throw new AiAdminCapabilityError('Parent category not found.');
+    await assertCategoryParentAllowed(db, null, parentId);
   }
   return createProposal({
     task: 'catalog_taxonomy_create',
@@ -600,8 +531,11 @@ export async function reviewAdminProposal(input: {
         });
       } else if (proposal.entityType === 'categories') {
         const changes = AI_CATALOG_EDIT_FIELDS.categories.parse(payload.changes);
-        if (changes.parentId === proposal.entityId)
-          throw new AiAdminCapabilityError('A category cannot be its own parent.');
+        if (changes.parentId !== undefined) {
+          await assertCategoryParentAllowed(tx, proposal.entityId, changes.parentId ?? null, {
+            lockHierarchy: true,
+          });
+        }
         const slug =
           changes.name === undefined
             ? undefined
@@ -637,14 +571,9 @@ export async function reviewAdminProposal(input: {
         requirePersistedProposalValues(persisted, expected);
       } else if (proposal.entityType === 'categories') {
         const values = AI_TAXONOMY_CREATE_FIELDS.categories.parse(payload.values);
-        if (values.parentId != null) {
-          const [parent] = await tx
-            .select({ id: categories.id })
-            .from(categories)
-            .where(eq(categories.id, values.parentId))
-            .limit(1);
-          if (!parent) throw new AiAdminCapabilityError('Parent category not found.');
-        }
+        await assertCategoryParentAllowed(tx, null, values.parentId ?? null, {
+          lockHierarchy: true,
+        });
         const slug = await resolveCategorySlug(values.name);
         const expected = buildTaxonomyCreateValues({
           entityType: 'categories',
@@ -672,50 +601,6 @@ export async function reviewAdminProposal(input: {
         );
       if (!featuredProductsVerified)
         throw new AiAdminCapabilityError('The approved featured products could not be verified.');
-    } else if (proposal.proposalType === 'bundle_listing') {
-      const suffix = `${Date.now()}-${proposal.id}`;
-      const expectedProduct = {
-        title: String(payload.title),
-        titleAr: z.string().nullable().optional().parse(payload.titleAr),
-        slug: `${slugify(String(payload.title))}-${suffix}`,
-        price: String(payload.price),
-        purchasePrice: String(payload.totalPurchaseCost),
-        active: false,
-        inStock: true,
-        inventoryQuantity: 0,
-      };
-      const [product] = await tx.insert(products).values(expectedProduct).returning();
-      requirePersistedProposalValues(product, expectedProduct);
-      const expectedBundle = {
-        productId: product.id,
-        active: false,
-        createdBy: input.actorId ?? null,
-      };
-      const [bundle] = await tx.insert(bundleListings).values(expectedBundle).returning();
-      requirePersistedProposalValues(bundle, expectedBundle);
-      const components = z
-        .array(
-          z.object({
-            productId: z.number().int().positive(),
-            quantity: z.number().int().positive(),
-            unitPurchasePriceSnapshot: z.string().nullable(),
-          }),
-        )
-        .min(2)
-        .parse(payload.components);
-      const persistedComponents = await tx
-        .insert(bundleComponents)
-        .values(components.map((item) => ({ bundleId: bundle.id, ...item })))
-        .returning();
-      const componentsVerified =
-        persistedComponents.length === components.length &&
-        components.every((component) =>
-          persistedComponents.some((row) =>
-            persistedProposalValuesMatch(row, { bundleId: bundle.id, ...component }),
-          ),
-        );
-      if (!componentsVerified)
-        throw new AiAdminCapabilityError('The approved bundle components could not be verified.');
     } else if (proposal.proposalType === 'landing_page') {
       const temporarySlug = landingPageSlugFromProduct(
         { slug: String(payload.slug) },

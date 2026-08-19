@@ -137,6 +137,11 @@ describe('app/api/orders/route', () => {
             },
           ]),
         }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
       });
 
     getDbMock.mockReturnValue({ select: selectMock });
@@ -260,6 +265,11 @@ describe('app/api/orders/route', () => {
             },
           ]),
         }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
       });
 
     getDbMock.mockReturnValue({ select: selectMock });
@@ -303,7 +313,7 @@ describe('app/api/orders/route', () => {
     ]);
   });
 
-  it('excludes archived orders from the operational list', async () => {
+  it('returns the operational order list', async () => {
     hasDbMock.mockReturnValue(true);
     const selectMock = vi
       .fn()

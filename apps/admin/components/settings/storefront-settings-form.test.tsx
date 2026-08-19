@@ -41,17 +41,20 @@ describe('StorefrontSettingsForm', () => {
           phoneEnabled: false,
           aiAssistantEnabled: true,
         }}
+        modelOptions={['openai/gpt-4.1-mini', 'deepseek/deepseek-chat-v3-0324']}
       />,
     );
 
     expect(container.querySelector('form')).toHaveClass('pt-6', 'sm:pt-9');
 
-    expect(screen.getAllByRole('heading')).toHaveLength(2);
+    expect(screen.getAllByRole('heading')).toHaveLength(3);
     expect(screen.getByRole('heading', { name: 'contactTitle' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'assistantTitle' })).toBeVisible();
     expect(screen.queryByText('description')).not.toBeInTheDocument();
     expect(screen.queryByRole('switch', { name: 'callsLabel' })).not.toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'saveAction' })).toHaveLength(1);
+    expect(screen.getByRole('combobox', { name: 'modelLabel' })).toBeVisible();
+    expect(screen.queryByRole('combobox', { name: 'fallbackModelLabel' })).not.toBeInTheDocument();
 
     const phoneInput = screen.getByRole('textbox', { name: 'contactTitle' });
     await user.clear(phoneInput);
@@ -59,19 +62,15 @@ describe('StorefrontSettingsForm', () => {
     await user.click(screen.getByRole('switch', { name: 'assistantTitle' }));
     await user.click(screen.getByRole('button', { name: 'saveAction' }));
 
-    await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith(
-        '/api/storefront-settings',
-        expect.objectContaining({
-          method: 'PUT',
-          body: JSON.stringify({
-            contactPhone: '+213 795 34 28 26',
-            phoneEnabled: true,
-            aiAssistantEnabled: false,
-          }),
-        }),
-      ),
-    );
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    const [url, init] = vi.mocked(fetch).mock.calls[0] ?? [];
+    expect(url).toBe('/api/storefront-settings');
+    expect(init).toMatchObject({ method: 'PUT' });
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      contactPhone: '+213 795 34 28 26',
+      phoneEnabled: true,
+      aiAssistantEnabled: false,
+    });
     expect(mocks.success).toHaveBeenCalledWith('saved', { id: 'toast-id' });
   });
 });

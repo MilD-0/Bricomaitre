@@ -11,7 +11,10 @@ import { NavigationActions } from '@/components/navigation-actions';
 import { NavigationCategories } from '@/components/navigation-categories';
 import { ShoppingAssistantLauncher } from '@/components/shopping-assistant-launcher';
 import { isLocale, type Locale } from '@/i18n/config';
-import { getStorefrontSettings } from '@/lib/storefront-api';
+import {
+  getStorefrontContent,
+  getStorefrontSettings,
+} from '@/lib/storefront-api';
 import {
   defaultStorefrontSettingsResponse,
   type StorefrontSettingsResponse,
@@ -20,7 +23,11 @@ import {
 type PageShellProps = {
   children: React.ReactNode;
   locale?: Locale;
-  contactSettings?: StorefrontSettingsResponse;
+  contactSettings?: Pick<
+    StorefrontSettingsResponse,
+    'phoneDisplay' | 'phoneHref' | 'phoneEnabled' | 'aiAssistantEnabled'
+  > &
+    Partial<StorefrontSettingsResponse>;
 };
 
 export async function PageShell({
@@ -34,15 +41,27 @@ export async function PageShell({
   const t = await getTranslations({ locale, namespace: 'Navigation' });
   const assistant = await getTranslations({ locale, namespace: 'ShoppingAssistant' });
   const alternateLabel = alternateLocale === 'ar' ? 'العربية' : 'Français';
-  const contactSettings =
-    contactSettingsProp ??
-    (await getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse));
+  const loadedContactSettings = contactSettingsProp
+    ? contactSettingsProp
+    : await getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse);
+  const contactSettings = { ...defaultStorefrontSettingsResponse, ...loadedContactSettings };
+  const storefrontContent = await getStorefrontContent(locale).catch(() => ({
+    announcement: null,
+  }));
 
   return (
     <div className="site-shell">
       <a className="skip-link" href="#main-content">
         {t('skip')}
       </a>
+      {storefrontContent.announcement ? (
+        <aside
+          className="storefront-announcement"
+          aria-label={storefrontContent.announcement.message}
+        >
+          <span>{storefrontContent.announcement.message}</span>
+        </aside>
+      ) : null}
       <header className="site-header">
         <div className="site-header-inner">
           <div className="site-header-primary">
@@ -161,29 +180,31 @@ export async function PageShell({
                   {contactSettings.phoneDisplay}
                 </FooterContactLink>
               </li>
-              <li>
-                <FooterContactLink icon="email" href="mailto:bricomaitre@gmail.com">
-                  bricomaitre@gmail.com
-                </FooterContactLink>
-              </li>
-              <li>
-                <FooterContactLink
-                  icon="location"
-                  href="https://maps.app.goo.gl/MpAM58nHS2G5JBah8"
-                  external
-                >
-                  BT N20, Cité 08 Mai 45, Bab Ezzouar 16024, Alger
-                </FooterContactLink>
-              </li>
-              <li>
-                <FooterContactLink
-                  icon="external"
-                  href="https://www.facebook.com/profile.php?id=61562272954715"
-                  external
-                >
-                  Facebook
-                </FooterContactLink>
-              </li>
+              {contactSettings.contactEmail ? (
+                <li>
+                  <FooterContactLink icon="email" href={`mailto:${contactSettings.contactEmail}`}>
+                    {contactSettings.contactEmail}
+                  </FooterContactLink>
+                </li>
+              ) : null}
+              {contactSettings.address ? (
+                <li>
+                  <FooterContactLink
+                    icon="location"
+                    href={contactSettings.mapUrl ?? '#'}
+                    external={Boolean(contactSettings.mapUrl)}
+                  >
+                    {contactSettings.address}
+                  </FooterContactLink>
+                </li>
+              ) : null}
+              {contactSettings.facebookUrl ? (
+                <li>
+                  <FooterContactLink icon="external" href={contactSettings.facebookUrl} external>
+                    Facebook
+                  </FooterContactLink>
+                </li>
+              ) : null}
             </ul>
           </section>
         </div>
@@ -219,6 +240,8 @@ export async function PageShell({
             outOfStock: assistant('outOfStock'),
             priceOnRequest: assistant('priceOnRequest'),
             viewProduct: assistant('viewProduct'),
+            addToCart: assistant('addToCart'),
+            addedToCart: assistant('addedToCart'),
             inputLabel: assistant('inputLabel'),
             quickPrompts: [
               assistant('quickPromptOne'),
