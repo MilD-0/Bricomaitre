@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   cancel: vi.fn(),
   cancelExact: vi.fn(),
   denied: vi.fn(),
-  permissions: ['ai_catalog_propose'] as string[],
+  permissions: ['products_write'] as string[],
 }));
 
 vi.mock('../../../../../lib/background-jobs', () => ({
@@ -20,7 +20,7 @@ vi.mock('../../../../../lib/ai-background-jobs', () => ({
 vi.mock('../../../../../lib/auth', () => ({
   auth: async () => ({ user: { email: 'admin@example.com', permissions: mocks.permissions } }),
 }));
-vi.mock('../../../../../lib/rbac', () => ({ requireAiUseAccess: mocks.denied }));
+vi.mock('../../../../../lib/rbac', () => ({ requireAppAccess: mocks.denied }));
 
 import { POST } from './route';
 
@@ -39,7 +39,7 @@ describe('POST /api/ai/jobs/cancel', () => {
     mocks.cancelExact
       .mockReset()
       .mockResolvedValue({ job: { id: 'job-2', status: 'running', cancelRequested: true } });
-    mocks.permissions = ['ai_catalog_propose'];
+    mocks.permissions = ['products_write'];
   });
 
   it('cancels the catalog categorization queue for the signed-in owner', async () => {

@@ -2,13 +2,20 @@ import { landingPageCreateSchema } from '@bric/storefront-core/landing-pages';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { auth } from '../../../lib/auth';
-import { createLandingPage, listLandingPages } from '../../../lib/landing-pages';
+import {
+  createLandingPage,
+  listLandingPages,
+  listLandingPageSummaries,
+} from '../../../lib/landing-pages';
 import { requireMutationAccess } from '../../../lib/rbac';
 
-export async function GET() {
+export async function GET(request?: NextRequest) {
   const denied = await requireMutationAccess('assets');
   if (denied) return denied;
-  return NextResponse.json({ items: await listLandingPages() });
+  const summariesOnly = request?.nextUrl.searchParams.get('view') === 'index';
+  return NextResponse.json({
+    items: summariesOnly ? await listLandingPageSummaries() : await listLandingPages(),
+  });
 }
 
 export async function POST(request: NextRequest) {

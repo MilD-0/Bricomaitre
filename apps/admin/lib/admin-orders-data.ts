@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
 import {
@@ -6,6 +6,7 @@ import {
   ecotrackOrderMajEntries,
   ecotrackOrderStates,
   ecotrackOrderTrackingEvents,
+  orderLineItems,
   orderStatusHistory,
   orders,
   products,
@@ -36,14 +37,15 @@ type OrdersQueryInput = {
   page?: string | number | undefined;
   limit?: string | number | undefined;
   search?: string | undefined;
-  confirmed?: number | undefined;
-  noAnswerCount?: number | undefined;
+  confirmed?: number | null | undefined;
+  noAnswerCount?: number | null | undefined;
   sort?: string[] | undefined;
   sortKey?: string | undefined;
   sortDirection?: string | undefined;
 };
 
 type ProjectionOrderRow = {
+  id: number;
   cartProducts: string[];
 };
 
@@ -157,7 +159,7 @@ function reportDateRangePredicate(
 }
 
 function activeOrdersJoinPredicate() {
-  return sql`${orders.archivedAt} is null`;
+  return sql`true`;
 }
 
 function calculateCartGrossProfit(
@@ -197,7 +199,6 @@ async function loadProfitProjection(
       .innerJoin(orders, eq(orders.id, orderStatusHistory.orderId))
       .where(
         and(
-          sql`${orders.archivedAt} is null`,
           eq(orderStatusHistory.status, projectionStatus),
           reportDayPredicate(sql`${orderStatusHistory.changedAt}`, reportDay),
         ),
@@ -217,7 +218,6 @@ async function loadProfitProjection(
       .innerJoin(orders, eq(orders.id, orderStatusHistory.orderId))
       .where(
         and(
-          sql`${orders.archivedAt} is null`,
           eq(orderStatusHistory.status, projectionStatus),
           reportDateRangePredicate(
             sql`${orderStatusHistory.changedAt}`,
@@ -250,7 +250,29 @@ async function loadProfitProjection(
                 : []),
             ),
           );
-  const grossProfit = calculateCartGrossProfit(orderRows, productRows);
+  const snapshotProfitRows =
+    orderRows.length === 0
+      ? []
+      : await db
+          .select({
+            orderId: orderLineItems.orderId,
+            grossProfit: sql<number>`coalesce(sum(${orderLineItems.lineTotal} - coalesce(${orderLineItems.unitPurchasePriceSnapshot}, 0) * ${orderLineItems.quantity}), 0)::double precision`,
+          })
+          .from(orderLineItems)
+          .where(
+            inArray(
+              orderLineItems.orderId,
+              orderRows.map((order) => order.id),
+            ),
+          )
+          .groupBy(orderLineItems.orderId);
+  const snapshotProfitByOrder = new Map(
+    snapshotProfitRows.map((row) => [row.orderId, numberOrZero(row.grossProfit)]),
+  );
+  const legacyRows = orderRows.filter((order) => !snapshotProfitByOrder.has(order.id));
+  const grossProfit =
+    [...snapshotProfitByOrder.values()].reduce((sum, value) => sum + value, 0) +
+    calculateCartGrossProfit(legacyRows, productRows);
   const previousMonthStats = previousMonthRows[0];
   const previousMonthOrders = previousMonthStats?.totalOrders ?? 0;
   const previousMonthNegativeOutcomeOrders = previousMonthStats?.negativeOutcomeOrders ?? 0;
@@ -444,6 +466,7 @@ export async function loadDailyOrderStatusOverview(
   options: {
     includeProfitProjection?: boolean;
     profitProjectionBasis?: ProfitProjectionBasis;
+    reportDays?: number;
   } = {},
 ): Promise<DailyOrderStatusOverview> {
   if (!hasDb()) {
@@ -457,20 +480,31 @@ export async function loadDailyOrderStatusOverview(
   const db = getDb();
   const reportDay = getAlgiersReportDay();
   const profitProjectionBasis = options.profitProjectionBasis ?? 'confirmed';
-  const reports = await Promise.all([
-    loadDailyOrderStatusReport(
-      db,
-      reportDay,
-      Boolean(options.includeProfitProjection),
-      profitProjectionBasis,
-    ),
-    loadDailyOrderStatusReport(
-      db,
-      shiftIsoDate(reportDay, -1),
-      Boolean(options.includeProfitProjection),
-      profitProjectionBasis,
-    ),
-  ]);
+  const reportDays = Math.min(7, Math.max(1, Math.trunc(options.reportDays ?? 2)));
+  const requestedDays = Array.from({ length: reportDays }, (_, index) =>
+    shiftIsoDate(reportDay, -index),
+  );
+  const reports: DailyOrderStatusReport[] = [];
+
+  // Each daily projection performs several independent reads. Keeping the batch
+  // small avoids turning the weekly admin view into a burst of dozens of
+  // concurrent database queries while still loading materially faster than a
+  // fully sequential report.
+  for (let index = 0; index < requestedDays.length; index += 2) {
+    const batch = requestedDays.slice(index, index + 2);
+    reports.push(
+      ...(await Promise.all(
+        batch.map((day) =>
+          loadDailyOrderStatusReport(
+            db,
+            day,
+            Boolean(options.includeProfitProjection),
+            profitProjectionBasis,
+          ),
+        ),
+      )),
+    );
+  }
   const today = reports[0]!;
 
   return {
@@ -521,7 +555,6 @@ export async function loadOrdersPageData(
       )
     : undefined;
   const whereClause = and(
-    isNull(orders.archivedAt),
     query.confirmed !== undefined ? sql`${orders.confirmed} = ${query.confirmed}` : undefined,
     query.confirmed === 1 && query.noAnswerCount !== undefined
       ? sql`${orders.noAnswerCount} = ${query.noAnswerCount}`

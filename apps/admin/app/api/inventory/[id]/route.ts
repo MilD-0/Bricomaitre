@@ -92,6 +92,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         };
 
   if (updated.kind !== 'updated') {
+    if (updated.kind === 'insufficient') {
+      return NextResponse.json(
+        {
+          error: 'Insufficient inventory quantity',
+          available: updated.available,
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 

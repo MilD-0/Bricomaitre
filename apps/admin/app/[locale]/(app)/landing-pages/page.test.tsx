@@ -9,6 +9,10 @@ const { listLandingPagesMock, loadAssetsMetaDataMock, requireAssetsPageAccessMoc
   }),
 );
 const { getStorefrontBaseUrlMock } = vi.hoisted(() => ({ getStorefrontBaseUrlMock: vi.fn() }));
+const { readLegacyUiPreferenceMock, redirectMock } = vi.hoisted(() => ({
+  readLegacyUiPreferenceMock: vi.fn(),
+  redirectMock: vi.fn(),
+}));
 
 vi.mock('../../../../lib/landing-pages', () => ({ listLandingPages: listLandingPagesMock }));
 vi.mock('../../../../lib/admin-assets-data', () => ({
@@ -17,6 +21,10 @@ vi.mock('../../../../lib/admin-assets-data', () => ({
 vi.mock('../../../../lib/page-access', () => ({
   requireAssetsPageAccess: requireAssetsPageAccessMock,
 }));
+vi.mock('../../../../lib/admin-ui-preference.server', () => ({
+  readLegacyUiPreference: readLegacyUiPreferenceMock,
+}));
+vi.mock('next/navigation', () => ({ redirect: redirectMock }));
 vi.mock('../../../../lib/storefront-revalidate', () => ({
   getStorefrontBaseUrl: getStorefrontBaseUrlMock,
 }));
@@ -44,6 +52,7 @@ describe('LandingPagesPage', () => {
     listLandingPagesMock.mockResolvedValue([{ id: 1 }]);
     loadAssetsMetaDataMock.mockResolvedValue({ products: [{ id: 7 }], brands: [], categories: [] });
     getStorefrontBaseUrlMock.mockReturnValue('https://shop.example.com');
+    readLegacyUiPreferenceMock.mockResolvedValue(true);
   });
 
   it('loads the dedicated landing page manager under assets access', async () => {
@@ -52,5 +61,18 @@ describe('LandingPagesPage', () => {
     expect(requireAssetsPageAccessMock).toHaveBeenCalledWith('fr');
     expect(listLandingPagesMock).toHaveBeenCalledOnce();
     expect(loadAssetsMetaDataMock).toHaveBeenCalledOnce();
+  });
+
+  it('routes modern users to the canonical Assets workspace', async () => {
+    readLegacyUiPreferenceMock.mockResolvedValue(false);
+    redirectMock.mockImplementation(() => {
+      throw new Error('NEXT_REDIRECT');
+    });
+
+    await expect(LandingPagesPage({ params: Promise.resolve({ locale: 'fr' }) })).rejects.toThrow(
+      'NEXT_REDIRECT',
+    );
+    expect(redirectMock).toHaveBeenCalledWith('/fr/assets/landing-pages');
+    expect(listLandingPagesMock).not.toHaveBeenCalled();
   });
 });

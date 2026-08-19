@@ -4,6 +4,7 @@ import { getDb, hasDb } from '@bric/db/client';
 import { storefrontSettings } from '@bric/db/schema';
 import {
   DEFAULT_STOREFRONT_SETTINGS,
+  storefrontSettingsInputSchema,
   toStorefrontContactSettings,
 } from '@bric/storefront-core/settings';
 import { CACHE_TAGS, createServerCache } from '@bric/storefront-core/server-cache';
@@ -17,11 +18,19 @@ const loadSettings = createServerCache({
       .select({
         contactPhone: storefrontSettings.contactPhone,
         phoneEnabled: storefrontSettings.phoneEnabled,
+        contactEmail: storefrontSettings.contactEmail,
+        address: storefrontSettings.address,
+        mapUrl: storefrontSettings.mapUrl,
+        facebookUrl: storefrontSettings.facebookUrl,
         aiAssistantEnabled: storefrontSettings.aiAssistantEnabled,
+        aiModel: storefrontSettings.aiModel,
+        aiFallbackModel: storefrontSettings.aiFallbackModel,
       })
       .from(storefrontSettings)
       .limit(1);
-    return toStorefrontContactSettings(stored ?? DEFAULT_STOREFRONT_SETTINGS);
+    return toStorefrontContactSettings(
+      storefrontSettingsInputSchema.parse(stored ?? DEFAULT_STOREFRONT_SETTINGS),
+    );
   },
 });
 

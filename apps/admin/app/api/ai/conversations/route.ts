@@ -4,10 +4,10 @@ import { NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
 import { aiConversations, aiMessages } from '@bric/db/schema';
 import { auth } from '../../../../lib/auth';
-import { requireAiUseAccess } from '../../../../lib/rbac';
+import { requireAppAccess } from '../../../../lib/rbac';
 
 export async function GET() {
-  const denied = await requireAiUseAccess();
+  const denied = await requireAppAccess();
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });

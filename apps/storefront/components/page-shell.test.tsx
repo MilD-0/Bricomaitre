@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ settings: vi.fn() }));
+const mocks = vi.hoisted(() => ({ settings: vi.fn(), content: vi.fn(), catalog: vi.fn() }));
 
 vi.mock('next-intl/server', () => ({
   getLocale: vi.fn().mockResolvedValue('fr'),
@@ -38,12 +38,20 @@ vi.mock('@/components/navigation-categories', () => ({ NavigationCategories: () 
 vi.mock('@/components/shopping-assistant-launcher', () => ({
   ShoppingAssistantLauncher: () => <button type="button">AI advisor</button>,
 }));
-vi.mock('@/lib/storefront-api', () => ({ getStorefrontSettings: mocks.settings }));
+vi.mock('@/lib/storefront-api', () => ({
+  getStorefrontSettings: mocks.settings,
+  getStorefrontContent: mocks.content,
+  getStorefrontEcotrackCatalog: mocks.catalog,
+}));
 
 import { PageShell } from './page-shell';
 
 describe('PageShell storefront AI setting', () => {
-  beforeEach(() => mocks.settings.mockReset());
+  beforeEach(() => {
+    mocks.settings.mockReset();
+    mocks.content.mockReset().mockResolvedValue({ announcement: null });
+    mocks.catalog.mockReset().mockResolvedValue(null);
+  });
   afterEach(cleanup);
 
   it('renders the shopping advisor when enabled', async () => {

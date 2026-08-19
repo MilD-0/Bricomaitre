@@ -41,7 +41,10 @@ const document = landingPageDocumentSchema.parse({
 
 describe('LandingDraftPreview', () => {
   beforeEach(() => vi.restoreAllMocks());
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
 
   it('shows the permanent inline order form after the custom campaign blocks', () => {
     render(<LandingDraftPreview document={document} locale="fr" mobile={false} />);
@@ -140,7 +143,7 @@ describe('LandingDraftPreview', () => {
     await user.type(screen.getByPlaceholderText('Rechercher par nom ou slug…'), 'robuste');
     await user.click(screen.getByRole('button', { name: 'chooseSelection: Lampe robuste' }));
     expect(screen.getByText('/fr/landing/lampe-robuste')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Créer le brouillon' }));
+    await user.click(screen.getByRole('button', { name: 'Créer la page' }));
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/landing-pages',
@@ -149,6 +152,55 @@ describe('LandingDraftPreview', () => {
         body: JSON.stringify({ productId: 7, locale: 'fr' }),
       }),
     );
+  });
+
+  it('uses the revision-protected Save and Active contract in the legacy editor', async () => {
+    const user = userEvent.setup();
+    const item = {
+      id: 1,
+      productId: 7,
+      productTitle: 'Lampe',
+      locale: 'fr' as const,
+      slug: 'lampe',
+      status: 'draft' as const,
+      draftRevision: 1,
+      publishedRevision: null,
+      updatedAt: '2026-07-18T00:00:00.000Z',
+      document,
+    };
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => ({
+      ok: true,
+      json: async () =>
+        init?.method === 'PATCH'
+          ? { id: 1, active: true, currentRevision: 1 }
+          : { items: [{ ...item, status: 'published', publishedRevision: 1 }] },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <LandingPageManager
+        initialItems={[item]}
+        products={[]}
+        storefrontBaseUrl="https://shop.example.com"
+      />,
+    );
+    await user.click(screen.getByRole('switch', { name: 'Active' }));
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/landing-pages/1',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: expect.stringContaining('"action":"save-active"'),
+      }),
+    );
+    const patch = JSON.parse(
+      String(fetchMock.mock.calls.find(([, init]) => init?.method === 'PATCH')?.[1]?.body),
+    );
+    expect(patch).toMatchObject({ active: true, expectedRevision: 1 });
+    expect(patch.document.seo.indexable).toBe(false);
+    expect(await screen.findByText('Page enregistrée.')).toBeVisible();
+    expect(screen.queryByText(/Publier|Dépublier|Indexable/)).not.toBeInTheDocument();
   });
 
   it('builds the public view link from the configured storefront environment URL', () => {

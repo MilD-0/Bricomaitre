@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   getDbMock,
   deleteEcotrackOrderMock,
+  getEcotrackOrderMock,
   getEcotrackOrdersStatusMock,
   getEcotrackTrackingsInfoMock,
   getEcotrackMajMock,
 } = vi.hoisted(() => ({
   getDbMock: vi.fn(),
   deleteEcotrackOrderMock: vi.fn(),
+  getEcotrackOrderMock: vi.fn(),
   getEcotrackOrdersStatusMock: vi.fn(),
   getEcotrackTrackingsInfoMock: vi.fn(),
   getEcotrackMajMock: vi.fn(),
@@ -26,6 +28,7 @@ vi.mock('@bric/storefront-core/ecotrack-client', async () => {
   return {
     ...actual,
     deleteEcotrackOrder: deleteEcotrackOrderMock,
+    getEcotrackOrder: getEcotrackOrderMock,
     getEcotrackOrdersStatus: getEcotrackOrdersStatusMock,
     getEcotrackTrackingsInfo: getEcotrackTrackingsInfoMock,
     getEcotrackMaj: getEcotrackMajMock,
@@ -35,6 +38,7 @@ vi.mock('@bric/storefront-core/ecotrack-client', async () => {
 import {
   deletePostedEcotrackOrder,
   refreshEcotrackOrdersBatch,
+  shouldRetireShipmentMissingFromStatusFeed,
   syncEcotrackShipmentStates,
 } from './admin-ecotrack-orders-data';
 import {
@@ -42,6 +46,7 @@ import {
   ecotrackOrderStates,
   ecotrackOrderTrackingEvents,
   ecotrackSyncRuns,
+  orderLineItems,
   orders,
 } from '@bric/db/schema';
 
@@ -75,7 +80,6 @@ function createShipmentRow(orderId = 11) {
       publicToken: null,
       variant: null,
       createdAt: now,
-      archivedAt: null,
       firstName: 'Ada',
       lastName: 'Lovelace',
       email: null,
@@ -125,16 +129,20 @@ function createDbMock(
         }),
       })),
     })),
-    where: vi.fn(() => ({
-      orderBy: vi.fn(async () => {
-        if (table === ecotrackOrderMajEntries || table === ecotrackOrderTrackingEvents) {
-          return [];
-        }
+    where: vi.fn(() =>
+      table === orderLineItems
+        ? Promise.resolve([])
+        : {
+            orderBy: vi.fn(async () => {
+              if (table === ecotrackOrderMajEntries || table === ecotrackOrderTrackingEvents) {
+                return [];
+              }
 
-        return rows.map((row) => ({ state: row, order: row.order }));
-      }),
-      limit: vi.fn(async () => []),
-    })),
+              return rows.map((row) => ({ state: row, order: row.order }));
+            }),
+            limit: vi.fn(async () => []),
+          },
+    ),
     orderBy: vi.fn(() => {
       if (table === ecotrackSyncRuns) {
         return {
@@ -148,14 +156,20 @@ function createDbMock(
   const tx = {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
-        where: vi.fn(async () => []),
+        where: vi.fn(() => ({
+          for: vi.fn(async () => (rows[0] ? [rows[0].order] : [])),
+          then: (resolve: (value: unknown[]) => unknown) => Promise.resolve([]).then(resolve),
+        })),
       })),
     })),
     update: vi.fn((table: unknown) => ({
       set: (values: Record<string, unknown>) => ({
-        where: vi.fn(async () => {
+        where: vi.fn(() => {
           updates.push({ target: table, values });
-          return [];
+          return {
+            returning: vi.fn(async () => (rows[0] ? [{ ...rows[0].order, ...values }] : [])),
+            then: (resolve: (value: unknown[]) => unknown) => Promise.resolve([]).then(resolve),
+          };
         }),
       }),
     })),
@@ -176,9 +190,33 @@ describe('admin ecotrack shipment reconciliation', () => {
   beforeEach(() => {
     getDbMock.mockReset();
     deleteEcotrackOrderMock.mockReset();
+    getEcotrackOrderMock.mockReset();
     getEcotrackOrdersStatusMock.mockReset();
     getEcotrackTrackingsInfoMock.mockReset();
     getEcotrackMajMock.mockReset();
+  });
+
+  it('requires a full day without an authoritative status before retiring a shipment', () => {
+    const now = new Date('2026-08-19T12:00:00.000Z');
+
+    expect(
+      shouldRetireShipmentMissingFromStatusFeed(
+        {
+          createdAt: new Date('2026-08-18T00:00:00.000Z'),
+          lastStatusSyncedAt: new Date('2026-08-18T12:00:01.000Z'),
+        },
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      shouldRetireShipmentMissingFromStatusFeed(
+        {
+          createdAt: new Date('2026-08-17T00:00:00.000Z'),
+          lastStatusSyncedAt: new Date('2026-08-18T12:00:00.000Z'),
+        },
+        now,
+      ),
+    ).toBe(true);
   });
 
   it('soft-deletes the local row when upstream delete returns 400 but the tracking is already gone', async () => {
@@ -340,6 +378,11 @@ describe('admin ecotrack shipment reconciliation', () => {
     await expect(syncEcotrackShipmentStates({ includeMaj: true })).resolves.toEqual({
       total: 2,
       synced: 2,
+      missing: 0,
+      retired: 0,
+      fallbackChecked: 0,
+      fallbackRecovered: 0,
+      fallbackDeferred: 0,
       failed: 0,
       batchFailed: 0,
       majFailed: 1,
@@ -364,11 +407,158 @@ describe('admin ecotrack shipment reconciliation', () => {
     await expect(syncEcotrackShipmentStates()).resolves.toEqual({
       total: 1,
       synced: 1,
+      missing: 0,
+      retired: 0,
+      fallbackChecked: 0,
+      fallbackRecovered: 0,
+      fallbackDeferred: 0,
       failed: 0,
       batchFailed: 0,
       majFailed: 0,
     });
     expect(getEcotrackMajMock).not.toHaveBeenCalled();
+  });
+
+  it('reports a recent authoritative-status omission without claiming the row was synced', async () => {
+    const row = createShipmentRow(11);
+    const { db, updates } = createDbMock([row]);
+    getDbMock.mockReturnValue(db);
+    getEcotrackOrdersStatusMock.mockResolvedValue({ data: new Map() });
+    getEcotrackTrackingsInfoMock.mockResolvedValue({
+      data: new Map([['TRK-11', { activity: [] }]]),
+    });
+
+    await expect(syncEcotrackShipmentStates()).resolves.toEqual({
+      total: 1,
+      synced: 0,
+      missing: 1,
+      retired: 0,
+      fallbackChecked: 0,
+      fallbackRecovered: 0,
+      fallbackDeferred: 0,
+      failed: 0,
+      batchFailed: 0,
+      majFailed: 0,
+    });
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({
+      target: ecotrackOrderStates,
+      values: {
+        rawLastTrackingPayload: { activity: [] },
+      },
+    });
+    expect(updates[0]?.values).not.toHaveProperty('lastStatusSyncedAt');
+  });
+
+  it('soft-retires a shipment omitted from the authoritative status feed for a full day', async () => {
+    const row = {
+      ...createShipmentRow(11),
+      lastStatusSyncedAt: new Date('2026-08-17T00:00:00.000Z'),
+      createdAt: new Date('2026-08-16T00:00:00.000Z'),
+    };
+    const { db, updates } = createDbMock([row]);
+    getDbMock.mockReturnValue(db);
+    getEcotrackOrdersStatusMock.mockResolvedValue({ data: new Map() });
+    getEcotrackTrackingsInfoMock.mockResolvedValue({
+      data: new Map([['TRK-11', { activity: [] }]]),
+    });
+    getEcotrackOrderMock.mockResolvedValue({ data: null });
+
+    await expect(syncEcotrackShipmentStates()).resolves.toEqual({
+      total: 1,
+      synced: 0,
+      missing: 0,
+      retired: 1,
+      fallbackChecked: 1,
+      fallbackRecovered: 0,
+      fallbackDeferred: 0,
+      failed: 0,
+      batchFailed: 0,
+      majFailed: 0,
+    });
+    expect(updates).toHaveLength(2);
+    expect(updates[0]).toMatchObject({
+      target: orders,
+      values: {
+        ecotrackStatus: null,
+        ecotrackStatusLastUpdate: null,
+        ecotrackStatusData: null,
+        ecotrackReference: null,
+        ecotrackTrackingNumber: null,
+      },
+    });
+    expect(updates[1]).toMatchObject({ target: ecotrackOrderStates });
+    expect(updates[1]?.values.deletedAt).toBeInstanceOf(Date);
+  });
+
+  it('recovers an omitted bulk status from the documented current-order endpoint', async () => {
+    const row = {
+      ...createShipmentRow(11),
+      lastStatusSyncedAt: new Date('2026-08-17T00:00:00.000Z'),
+      createdAt: new Date('2026-08-16T00:00:00.000Z'),
+    };
+    const { db, updates } = createDbMock([row]);
+    getDbMock.mockReturnValue(db);
+    getEcotrackOrdersStatusMock.mockResolvedValue({ data: new Map() });
+    getEcotrackTrackingsInfoMock.mockResolvedValue({
+      data: new Map([['TRK-11', { activity: [] }]]),
+    });
+    getEcotrackOrderMock.mockResolvedValue({
+      data: { tracking: 'TRK-11', status: 'en_livraison' },
+    });
+
+    await expect(syncEcotrackShipmentStates()).resolves.toEqual({
+      total: 1,
+      synced: 1,
+      missing: 0,
+      retired: 0,
+      fallbackChecked: 1,
+      fallbackRecovered: 1,
+      fallbackDeferred: 0,
+      failed: 0,
+      batchFailed: 0,
+      majFailed: 0,
+    });
+    expect(getEcotrackOrderMock).toHaveBeenCalledWith(
+      'TRK-11',
+      expect.objectContaining({ startDate: '2026-08-16' }),
+    );
+    expect(updates).toContainEqual(
+      expect.objectContaining({
+        target: ecotrackOrderStates,
+        values: expect.objectContaining({
+          currentStatus: 'en_livraison',
+          lastStatusSyncedAt: expect.any(Date),
+        }),
+      }),
+    );
+  });
+
+  it('bounds current-order fallback checks so one reconciliation stays within provider limits', async () => {
+    const rows = Array.from({ length: 41 }, (_, index) => ({
+      ...createShipmentRow(index + 1),
+      lastStatusSyncedAt: new Date('2026-08-17T00:00:00.000Z'),
+      createdAt: new Date('2026-08-16T00:00:00.000Z'),
+    }));
+    const { db } = createDbMock(rows);
+    getDbMock.mockReturnValue(db);
+    getEcotrackOrdersStatusMock.mockResolvedValue({ data: new Map() });
+    getEcotrackTrackingsInfoMock.mockResolvedValue({
+      data: new Map(rows.map((row) => [row.trackingNumber, { activity: [] }])),
+    });
+    getEcotrackOrderMock.mockResolvedValue({ data: null });
+
+    await expect(syncEcotrackShipmentStates()).resolves.toMatchObject({
+      total: 41,
+      synced: 0,
+      missing: 1,
+      retired: 40,
+      fallbackChecked: 40,
+      fallbackRecovered: 0,
+      fallbackDeferred: 1,
+      failed: 0,
+    });
+    expect(getEcotrackOrderMock).toHaveBeenCalledTimes(40);
   });
 
   it('keeps a complete scheduled upstream outage visible as a failed job', async () => {

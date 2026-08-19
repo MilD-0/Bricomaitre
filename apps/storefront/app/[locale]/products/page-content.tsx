@@ -110,11 +110,16 @@ export async function CatalogPageContent({
           categories={categories.map((category) => ({
             id: category.id,
             label: locale === 'ar' && category.nameAr?.trim() ? category.nameAr : category.name,
+            parentId: category.parentId,
+            productCount: category.productCount,
           }))}
           brands={brands.map((brand) => ({ id: brand.id, label: brand.name }))}
           selectedCategory={query.category}
           selectedBrand={query.brand}
           discounted={query.discounted}
+          stock={query.stock}
+          minPrice={query.minPrice}
+          maxPrice={query.maxPrice}
           search={query.q}
           sort={query.sort}
           labels={{
@@ -124,6 +129,12 @@ export async function CatalogPageContent({
             allCategories: t('allCategories'),
             brand: t('brandLabel'),
             allBrands: t('allBrands'),
+            discounted: t('discounted'),
+            stock: t('stockLabel'),
+            inStock: t('inStock'),
+            price: t('priceLabel'),
+            minPrice: t('minPrice'),
+            maxPrice: t('maxPrice'),
             apply: t('applyFilters'),
             reset: t('reset'),
           }}
@@ -154,6 +165,43 @@ export async function CatalogPageContent({
             <strong>{t('results', { count: totalProducts })}</strong>
             {query.page > 1 ? <span>{t('page', { page: query.page })}</span> : null}
           </div>
+
+          {isFilteredCatalog({ ...query, page: 1, sort: 'recommended', q: '' }) ? (
+            <div className="catalog-active-filters" aria-label={t('activeFilters')}>
+              {query.category !== null ? (
+                <a href={buildCatalogPath(locale, { ...query, category: null, page: 1 })}>
+                  {categoryById.get(query.category)?.name ?? t('categoryLabel')} ×
+                </a>
+              ) : null}
+              {query.brand !== null ? (
+                <a href={buildCatalogPath(locale, { ...query, brand: null, page: 1 })}>
+                  {brandById.get(query.brand)?.name ?? t('brandLabel')} ×
+                </a>
+              ) : null}
+              {query.stock !== 'all' ? (
+                <a href={buildCatalogPath(locale, { ...query, stock: 'all', page: 1 })}>
+                  {query.stock === 'in' ? t('inStock') : t('outOfStock')} ×
+                </a>
+              ) : null}
+              {query.discounted ? (
+                <a href={buildCatalogPath(locale, { ...query, discounted: false, page: 1 })}>
+                  {t('discounted')} ×
+                </a>
+              ) : null}
+              {query.minPrice !== null || query.maxPrice !== null ? (
+                <a
+                  href={buildCatalogPath(locale, {
+                    ...query,
+                    minPrice: null,
+                    maxPrice: null,
+                    page: 1,
+                  })}
+                >
+                  {t('priceRange')} ×
+                </a>
+              ) : null}
+            </div>
+          ) : null}
 
           {unavailable ? (
             <section className="catalog-state" role="status">

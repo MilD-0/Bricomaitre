@@ -10,7 +10,7 @@ import {
   proposeProductContent,
 } from '../../../../../../../lib/ai-product-content';
 import { auth } from '../../../../../../../lib/auth';
-import { requireAiAccess } from '../../../../../../../lib/rbac';
+import { requireMutationAccess } from '../../../../../../../lib/rbac';
 
 const requestSchema = z.object({
   fields: z.array(productContentFieldSchema).min(1).optional(),
@@ -18,7 +18,7 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireAiAccess('ai_catalog_propose');
+  const denied = await requireMutationAccess('products');
   if (denied) return denied;
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });

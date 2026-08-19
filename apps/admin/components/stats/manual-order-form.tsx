@@ -9,14 +9,7 @@ import { requestJson as request } from '../../lib/admin-api';
 import { toast } from '../../lib/toast';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
 
 type ProductRow = {
@@ -360,7 +353,6 @@ export function ManualOrderForm({
         <div className="flex flex-col gap-5">
           <div>
             <h2 className="text-xl font-semibold tracking-tight text-foreground">{t('title')}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{t('description')}</p>
           </div>
           {content}
           <div className="flex justify-end">
@@ -385,7 +377,6 @@ export function ManualOrderForm({
       <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>{t('title')}</DialogTitle>
-          <DialogDescription>{t('description')}</DialogDescription>
         </DialogHeader>
         {content}
         <DialogFooter>

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -31,8 +31,10 @@ vi.mock('../../lib/toast', () => ({
 
 function renderOrdersEcotrackManager({
   initialOrders,
+  presentation,
 }: {
   initialOrders?: Parameters<typeof OrdersEcotrackManager>[0]['initialOrders'];
+  presentation?: Parameters<typeof OrdersEcotrackManager>[0]['presentation'];
 } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -57,6 +59,7 @@ function renderOrdersEcotrackManager({
           lastSync: null,
         }}
         initialOrders={initialOrders ?? buildInitialOrders()}
+        presentation={presentation}
       />
     </QueryClientProvider>,
   );
@@ -200,6 +203,103 @@ describe('OrdersEcotrackManager', () => {
     expect(
       screen.queryByRole('button', { name: 'ordersEcotrackManager.actions.refresh' }),
     ).not.toBeInTheDocument();
+  });
+
+  it.each([2, 3, 4] as const)(
+    'renders functional ECOTRACK presentation %s without changing the controller contract',
+    (presentation) => {
+      const view = renderOrdersEcotrackManager({
+        initialOrders: buildInitialOrders(2),
+        presentation,
+      });
+
+      expect(
+        view.container.querySelector(`[data-ecotrack-variant="${presentation}"]`),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText('ordersEcotrackManager.fields.scanTrackingNumber'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', {
+          name: 'ordersEcotrackManager.actions.refreshVisible',
+        }),
+      ).toBeInTheDocument();
+      expect(screen.getAllByText('TRK-11').length).toBeGreaterThan(0);
+    },
+  );
+
+  it('opens the flat shipment inspector from the refined ledger', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          item: {
+            ...buildShipment(11, 'Ada Lovelace', 'TRK-11', '0550123456', 'Chair'),
+            majEntries: [],
+            trackingEvents: [],
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    renderOrdersEcotrackManager({
+      initialOrders: buildInitialOrders(2),
+      presentation: 2,
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: /TRK-11/ })[0]!);
+
+    expect(
+      screen.getAllByRole('heading', { name: 'ordersEcotrackManager.columns.client' }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByText('ordersEcotrackManager.history.emptyTimeline')).length,
+    ).toBeGreaterThan(0);
+  }, 15_000);
+
+  it('closes the modern filter disclosure on outside interaction', () => {
+    const view = renderOrdersEcotrackManager({
+      initialOrders: buildInitialOrders(2),
+      presentation: 2,
+    });
+    expect(view.container.querySelector('[data-mobile-ecotrack-controls]')).toHaveClass(
+      'grid-cols-[minmax(0,1fr)_auto]',
+    );
+    const filters = screen.getByRole('button', {
+      name: 'ordersEcotrackManager.filters.sortKeyLabel',
+    });
+
+    fireEvent.click(filters);
+    expect(filters).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.pointerDown(document.body);
+    expect(filters).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('reveals complete bulk operations only after selecting a modern-workspace row', async () => {
+    const user = userEvent.setup();
+    renderOrdersEcotrackManager({
+      initialOrders: buildDispatchableOrders(2),
+      presentation: 3,
+    });
+
+    expect(
+      screen.queryByRole('button', { name: 'ordersEcotrackManager.actions.printSelected' }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('checkbox')[1]!);
+
+    expect(
+      screen.getByRole('button', { name: 'ordersEcotrackManager.actions.dispatchSelected' }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole('button', {
+        name: 'ordersEcotrackManager.actions.dispatchSelected menu',
+      }),
+    );
+    expect(
+      screen.getByRole('menuitem', { name: 'ordersEcotrackManager.actions.printSelected' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitem', { name: 'ordersEcotrackManager.actions.refreshSelected' }),
+    ).toBeInTheDocument();
   });
 
   it('shows a partial-success toast and invalidates shipments after a mixed refresh result', async () => {

@@ -82,6 +82,51 @@ describe('loadDailyOrderStatusOverview', () => {
     expect(noAnswerQueries[1]?.params).toEqual(expect.arrayContaining(['2026-07-01']));
   });
 
+  it('can load a bounded seven-day operating window without changing the default', async () => {
+    const dialect = new PgDialect();
+    const executeMock = vi.fn(async () => ({ rows: [{ value: 0 }] }));
+
+    getDbMock.mockReturnValue({ execute: executeMock });
+
+    const overview = await loadDailyOrderStatusOverview({
+      includeProfitProjection: false,
+      reportDays: 7,
+    });
+
+    expect(overview).toMatchObject({
+      available: true,
+      reportDay: '2026-07-02',
+      reports: [
+        { reportDay: '2026-07-02' },
+        { reportDay: '2026-07-01' },
+        { reportDay: '2026-06-30' },
+        { reportDay: '2026-06-29' },
+        { reportDay: '2026-06-28' },
+        { reportDay: '2026-06-27' },
+        { reportDay: '2026-06-26' },
+      ],
+    });
+
+    const reportDays = new Set(
+      executeMock.mock.calls
+        .flatMap(([query]) => dialect.sqlToQuery(query).params)
+        .filter(
+          (value): value is string => typeof value === 'string' && /^2026-\d{2}-\d{2}$/.test(value),
+        ),
+    );
+    expect(reportDays).toEqual(
+      new Set([
+        '2026-07-02',
+        '2026-07-01',
+        '2026-06-30',
+        '2026-06-29',
+        '2026-06-28',
+        '2026-06-27',
+        '2026-06-26',
+      ]),
+    );
+  });
+
   it('uses posted status transitions for both daily and previous-month projection cohorts', async () => {
     const dialect = new PgDialect();
     const projectionPredicates: Parameters<PgDialect['sqlToQuery']>[0][] = [];

@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ShoppingAssistantPanel, type ShoppingAssistantLabels } from './shopping-assistant-panel';
+import { STOREFRONT_CART_KEY } from '../lib/cart';
 
 const behavior = vi.hoisted(() => ({ analytics: vi.fn(), haptic: vi.fn() }));
 vi.mock('@/lib/analytics', () => ({
@@ -33,6 +34,8 @@ const labels: ShoppingAssistantLabels = {
   outOfStock: 'Indisponible',
   priceOnRequest: 'Prix sur demande',
   viewProduct: 'Voir',
+  addToCart: 'Ajouter au panier',
+  addedToCart: 'Ajouté',
   quickPrompts: ['Une perceuse', 'Comparer', 'Disponible'],
 };
 
@@ -88,6 +91,9 @@ describe('ShoppingAssistantPanel', () => {
     expect(screen.getByText('Adaptée au béton', { selector: 'li' })).toBeInTheDocument();
     const result = screen.getByRole('link', { name: /Perceuse béton/ });
     expect(result).toHaveAttribute('href', '/fr/products/perceuse-beton');
+    fireEvent.click(screen.getByRole('button', { name: labels.addToCart }));
+    expect(screen.getByRole('button', { name: labels.addedToCart })).toBeInTheDocument();
+    expect(localStorage.getItem(STOREFRONT_CART_KEY)).toContain('perceuse-beton');
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(body).toEqual({
       locale: 'fr',

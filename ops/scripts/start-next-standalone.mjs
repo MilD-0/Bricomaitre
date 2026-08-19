@@ -34,6 +34,10 @@ if (!appDirOption || !nestedDir || !defaultPort) {
 }
 
 const appDir = path.resolve(process.cwd(), appDirOption);
+for (const filename of ['.env.production.local', '.env.local', '.env.production', '.env']) {
+  const envPath = path.join(appDir, filename);
+  if (existsSync(envPath)) process.loadEnvFile(envPath);
+}
 const standaloneAppDir = path.join(appDir, '.next', 'standalone', nestedDir);
 const standaloneServerPath = path.join(standaloneAppDir, 'server.js');
 const buildStaticPath = path.join(appDir, '.next', 'static');

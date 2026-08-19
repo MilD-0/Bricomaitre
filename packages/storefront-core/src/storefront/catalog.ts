@@ -1,4 +1,19 @@
-import { and, asc, count, desc, eq, gt, ilike, inArray, notInArray, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  lte,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
 import {
@@ -8,6 +23,7 @@ import {
   featuredProductGroupCategories,
   featuredProductGroupProducts,
   featuredProductGroups,
+  productSlugHistory,
   products,
 } from '@bric/db/schema';
 import type { StorefrontProductListQuery } from './contracts';
@@ -149,7 +165,16 @@ export async function readStorefrontProductByToken(db: Database, value: string) 
     return null;
   }
 
-  const tokenConditions = [eq(products.slug, token), eq(products.mongoId, token)];
+  const legacySlugCondition = sql<boolean>`exists (
+    select 1 from ${productSlugHistory}
+    where ${productSlugHistory.productId} = ${products.id}
+      and ${productSlugHistory.slug} = ${token}
+  )`;
+  const tokenConditions = [
+    eq(products.slug, token),
+    eq(products.mongoId, token),
+    legacySlugCondition,
+  ];
   if (numericId !== null) {
     tokenConditions.push(eq(products.id, numericId));
   }
@@ -198,18 +223,21 @@ export async function readStorefrontProductByToken(db: Database, value: string) 
       categories,
       and(eq(products.categoryId, categories.id), eq(categories.isActive, true)),
     )
-    .where(and(eq(products.active, true), or(...tokenConditions)))
+    .where(and(eq(products.active, true), isNull(products.archivedAt), or(...tokenConditions)))
     .orderBy(
       asc(sql<number>`case
         when ${products.slug} = ${token} then 0
         when ${products.mongoId} = ${token} then 1
-        else 2
+        when ${legacySlugCondition} then 2
+        else 3
       end`),
       asc(products.id),
     )
     .limit(1);
 
-  const match = selectStorefrontProductTokenMatch(rows, token);
+  const match =
+    selectStorefrontProductTokenMatch(rows, token) ??
+    (rows[0] ? { row: rows[0], matchedBy: 'slug' as const } : null);
   if (!match) {
     return null;
   }
@@ -307,7 +335,9 @@ export async function readStorefrontProductsByIds(db: Database, ids: number[]) {
       updatedAt: products.updatedAt,
     })
     .from(products)
-    .where(and(eq(products.active, true), inArray(products.id, uniqueIds)));
+    .where(
+      and(eq(products.active, true), isNull(products.archivedAt), inArray(products.id, uniqueIds)),
+    );
   const byId = new Map(
     rows.map((row) => [row.id, toStorefrontProductDto(row satisfies StorefrontProductDtoRow)]),
   );
@@ -343,6 +373,7 @@ export async function readStorefrontProductsForSelectionPage(
 
   const dynamicWhere = and(
     eq(products.active, true),
+    isNull(products.archivedAt),
     or(...dynamicConditions),
     uniqueDirect.length > 0
       ? notInArray(
@@ -461,12 +492,31 @@ export function buildRecommendedProductOrderBy(search = '') {
 function buildStorefrontProductWhereClause(query: StorefrontProductListQuery) {
   return and(
     eq(products.active, true),
+    isNull(products.archivedAt),
     query.id === null ? undefined : eq(products.id, query.id),
     query.mongoId ? eq(products.mongoId, query.mongoId) : undefined,
     query.slug ? eq(products.slug, query.slug) : undefined,
     query.search ? buildCatalogSearchCondition(query.search) : undefined,
     query.brandId === null ? undefined : eq(products.brandId, query.brandId),
-    query.categoryId === null ? undefined : eq(products.categoryId, query.categoryId),
+    query.categoryId === null
+      ? undefined
+      : sql`${products.categoryId} in (
+          with recursive category_tree as (
+            select ${categories.id} from ${categories} where ${categories.id} = ${query.categoryId}
+            union all
+            select child.${sql.identifier('id')}
+            from ${categories} child
+            inner join category_tree parent on child.${sql.identifier('parent_id')} = parent.${sql.identifier('id')}
+          )
+          select ${sql.identifier('id')} from category_tree
+        )`,
+    query.minPrice === null ? undefined : gte(products.price, query.minPrice.toFixed(2)),
+    query.maxPrice === null ? undefined : lte(products.price, query.maxPrice.toFixed(2)),
+    query.stock === 'in'
+      ? eq(products.inStock, true)
+      : query.stock === 'out'
+        ? eq(products.inStock, false)
+        : undefined,
     query.discounted
       ? and(sql`${products.oldPrice} is not null`, gt(products.oldPrice, products.price))
       : undefined,
@@ -495,7 +545,7 @@ export async function readStorefrontProductBuildFeed(db: Database) {
       updatedAt: products.updatedAt,
     })
     .from(products)
-    .where(eq(products.active, true))
+    .where(and(eq(products.active, true), isNull(products.archivedAt)))
     .orderBy(desc(products.updatedAt), desc(products.id));
 
   return rows.map(
@@ -527,29 +577,65 @@ export async function readStorefrontBrands(db: Database) {
 }
 
 export async function readStorefrontCategories(db: Database) {
-  const rows = await db
-    .select({
-      id: categories.id,
-      name: categories.name,
-      slug: categories.slug,
-      nameEn: categories.nameEn,
-      nameAr: categories.nameAr,
-      image: categories.image,
-      parentId: categories.parentId,
-      properties: categories.properties,
-      featured: categories.featured,
-      createdAt: categories.createdAt,
-      updatedAt: categories.updatedAt,
-    })
-    .from(categories)
-    .where(eq(categories.isActive, true))
-    .orderBy(asc(categories.name));
+  const [rows, directProductCounts] = await Promise.all([
+    db
+      .select({
+        id: categories.id,
+        name: categories.name,
+        slug: categories.slug,
+        nameEn: categories.nameEn,
+        nameAr: categories.nameAr,
+        image: categories.image,
+        parentId: categories.parentId,
+        properties: categories.properties,
+        featured: categories.featured,
+        createdAt: categories.createdAt,
+        updatedAt: categories.updatedAt,
+      })
+      .from(categories)
+      .where(eq(categories.isActive, true))
+      .orderBy(asc(categories.name)),
+    db
+      .select({ categoryId: products.categoryId, count: count() })
+      .from(products)
+      .where(
+        and(
+          eq(products.active, true),
+          isNull(products.archivedAt),
+          sql`${products.categoryId} is not null`,
+        ),
+      )
+      .groupBy(products.categoryId),
+  ]);
 
-  return rows.map(toStorefrontCategoryDto);
+  const directCounts = new Map(
+    directProductCounts.map((row) => [row.categoryId, Number(row.count)]),
+  );
+  const children = new Map<number, number[]>();
+  for (const row of rows) {
+    if (row.parentId == null) continue;
+    children.set(row.parentId, [...(children.get(row.parentId) ?? []), row.id]);
+  }
+  const countWithDescendants = (categoryId: number, seen = new Set<number>()): number => {
+    if (seen.has(categoryId)) return 0;
+    seen.add(categoryId);
+    return (
+      (directCounts.get(categoryId) ?? 0) +
+      (children.get(categoryId) ?? []).reduce(
+        (sum, childId) => sum + countWithDescendants(childId, new Set(seen)),
+        0,
+      )
+    );
+  };
+
+  return rows.map((row) => ({
+    ...toStorefrontCategoryDto(row),
+    productCount: countWithDescendants(row.id),
+  }));
 }
 
 export async function readStorefrontCatalogCounts(db: Database) {
-  const productWhereClause = eq(products.active, true);
+  const productWhereClause = and(eq(products.active, true), isNull(products.archivedAt));
   const brandWhereClause = eq(brands.isActive, true);
   const categoryWhereClause = eq(categories.isActive, true);
 

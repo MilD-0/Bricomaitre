@@ -165,7 +165,7 @@ test('supports touch navigation, search, and homepage carousels', async ({ page,
   const nestedOverflows = await filters
     .locator('.catalog-filter-options')
     .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).overflowY));
-  expect(nestedOverflows).toEqual(['visible', 'visible']);
+  expect(nestedOverflows).toEqual(['visible', 'visible', 'visible']);
   await filterScroller.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
   await expect
     .poll(() => filterScroller.evaluate((element) => element.scrollTop))

@@ -30,7 +30,7 @@ vi.mock('@bric/db/client', () => ({
 }));
 
 vi.mock('../../../../../lib/rbac', () => ({
-  requireOpsAccess: requireOpsAccessMock,
+  requireAnalyticsAccess: requireOpsAccessMock,
 }));
 
 vi.mock('../../../../../lib/auth', () => ({

@@ -68,6 +68,7 @@ const category = {
   parentId: null,
   properties: [],
   featured: false,
+  productCount: 0,
   createdAt: stamp,
   updatedAt: stamp,
 };

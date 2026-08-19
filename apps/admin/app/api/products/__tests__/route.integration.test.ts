@@ -112,9 +112,14 @@ describe('app/api/products/route', () => {
     hasDbMock.mockReturnValue(true);
 
     const res = await GET(new NextRequest('http://localhost/api/products?page=0'));
+    const invalidStateRes = await GET(
+      new NextRequest('http://localhost/api/products?page=1&state=archived'),
+    );
 
     expect(res.status).toBe(400);
+    expect(invalidStateRes.status).toBe(400);
     expect(await res.json()).toHaveProperty('error');
+    expect(await invalidStateRes.json()).toHaveProperty('error');
     expect(getDbMock).not.toHaveBeenCalled();
   });
 
@@ -135,7 +140,9 @@ describe('app/api/products/route', () => {
     ];
 
     const orderByMock = vi.fn().mockResolvedValue(rows);
-    const fromMock = vi.fn(() => ({ orderBy: orderByMock }));
+    const fromMock = vi.fn(() => ({
+      where: vi.fn(() => ({ orderBy: orderByMock })),
+    }));
     const selectMock = vi.fn(() => ({ from: fromMock }));
     getDbMock.mockReturnValue({ select: selectMock, execute: vi.fn() });
 
@@ -375,7 +382,15 @@ describe('app/api/products/route', () => {
       .mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 55 }]) });
     const insertMock = vi.fn().mockReturnValue({ values: valuesMock });
 
-    await execute({ insert: insertMock });
+    await execute({
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({ limit: vi.fn().mockResolvedValue([]) })),
+        })),
+      })),
+      insert: insertMock,
+    });
 
     expect(insertMock).toHaveBeenCalledOnce();
     expect(valuesMock).toHaveBeenCalledWith(

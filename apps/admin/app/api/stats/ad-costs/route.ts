@@ -12,11 +12,11 @@ import {
   upsertAdCostEntry,
 } from '../../../../lib/stats-ad-costs';
 import { statsQuerySchema } from '../../../../lib/stats';
-import { requireOpsAccess } from '../../../../lib/rbac';
+import { requireAnalyticsAccess } from '../../../../lib/rbac';
 import { triggerAdminReportingRefresh } from '../../../../lib/reporting-refresh-trigger';
 
 export async function GET(request: NextRequest) {
-  const denied = await requireOpsAccess();
+  const denied = await requireAnalyticsAccess();
   if (denied) return denied;
 
   if (!hasDb()) {
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireOpsAccess();
+  const denied = await requireAnalyticsAccess();
   if (denied) return denied;
 
   if (!hasDb()) {
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const denied = await requireOpsAccess();
+  const denied = await requireAnalyticsAccess();
   if (denied) return denied;
 
   if (!hasDb()) {

@@ -248,7 +248,16 @@ describe('app/api/products/[id]/route', () => {
     const whereMock = vi.fn().mockResolvedValue(undefined);
     const setMock = vi.fn().mockReturnValue({ where: whereMock });
     const updateMock = vi.fn().mockReturnValue({ set: setMock });
-    await execute({ update: updateMock });
+    await execute({
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn().mockResolvedValue([{ slug: 'updated-product' }]),
+          })),
+        })),
+      })),
+      update: updateMock,
+    });
 
     expect(setMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -326,7 +335,7 @@ describe('app/api/products/[id]/route', () => {
     await expect(res.json()).resolves.toEqual({ ok: true });
   });
 
-  it('deletes a product when RBAC allows it', async () => {
+  it('archives a product when RBAC allows it', async () => {
     hasDbMock.mockReturnValue(true);
     const db = { marker: 'db' };
     getDbMock.mockReturnValue(db);
@@ -344,7 +353,7 @@ describe('app/api/products/[id]/route', () => {
       expect.objectContaining({
         entityType: 'products',
         entityId: 4,
-        operation: 'delete',
+        operation: 'update',
         actor: { email: 'admin@example.com', name: 'Admin' },
         execute: expect.any(Function),
       }),
@@ -352,10 +361,18 @@ describe('app/api/products/[id]/route', () => {
 
     const { execute } = mutateEntityWithHistoryMock.mock.calls[0][1];
     const whereMock = vi.fn().mockResolvedValue(undefined);
-    const deleteMock = vi.fn().mockReturnValue({ where: whereMock });
-    await execute({ delete: deleteMock });
+    const setMock = vi.fn().mockReturnValue({ where: whereMock });
+    const updateMock = vi.fn().mockReturnValue({ set: setMock });
+    await execute({ update: updateMock });
 
-    expect(deleteMock).toHaveBeenCalledOnce();
+    expect(setMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        archivedAt: expect.any(Date),
+        active: false,
+        inStock: false,
+        availabilityStatus: 'out_of_stock',
+      }),
+    );
     expect(startProductCatalogFeedRefreshJobMock).toHaveBeenCalledWith(
       'product:delete',
       'request-2',
@@ -363,7 +380,7 @@ describe('app/api/products/[id]/route', () => {
     expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
     expect(revalidateStorefrontProductsMock).toHaveBeenCalledOnce();
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ ok: true });
+    await expect(res.json()).resolves.toEqual({ ok: true, archived: true });
   });
 
   it('does not fail product deletion when feed enqueue fails', async () => {

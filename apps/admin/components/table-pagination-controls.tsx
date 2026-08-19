@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import { cn } from '../lib/utils';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { PendingInline } from './ui/motion';
 
 type TablePaginationControlsProps = {
   currentPage: number;
@@ -73,23 +73,21 @@ export function TablePaginationControls({
   return (
     <div
       className={cn(
-        'flex flex-col gap-3 border-t border-border/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between',
+        'flex flex-col gap-2 border-t border-border/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-4',
         className,
       )}
     >
-      <div className="flex flex-col gap-2">
-        <p className="text-sm text-muted-foreground">
-          {t('labels.pageOfTotal', { page: currentPage, total: totalPages })}
-        </p>
-        <PendingInline active={false} label={t('labels.loading')} />
-      </div>
+      <p className="text-center text-xs text-muted-foreground sm:text-start sm:text-sm">
+        {t('labels.pageOfTotal', { page: currentPage, total: totalPages })}
+      </p>
 
-      <div className="flex flex-col gap-3 sm:items-end">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex min-w-0 flex-col gap-3 sm:items-end">
+        <div className="flex min-w-0 items-center justify-center gap-1 sm:flex-wrap sm:gap-2">
           <Button
             type="button"
             variant="outline"
             size="sm"
+            className="hidden sm:inline-flex"
             disabled={currentPage <= 1}
             onClick={() => transitionToPage(1)}
           >
@@ -99,19 +97,23 @@ export function TablePaginationControls({
             type="button"
             variant="outline"
             size="sm"
+            className="size-9 shrink-0 px-0 sm:h-9 sm:w-auto sm:px-3"
+            aria-label={t('actions.previous')}
             disabled={currentPage <= 1}
             onClick={() => transitionToPage(currentPage - 1)}
           >
-            {t('actions.previous')}
+            <ChevronLeft className="size-4 rtl:hidden" aria-hidden="true" />
+            <ChevronRight className="hidden size-4 rtl:block" aria-hidden="true" />
+            <span className="hidden sm:inline">{t('actions.previous')}</span>
           </Button>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 items-center gap-1 overflow-x-auto sm:flex-wrap sm:gap-2 sm:overflow-visible">
             {pageItems.map((item, index) =>
               item === 'ellipsis' ? (
                 <span
                   key={`ellipsis-${index}`}
                   aria-hidden="true"
-                  className="px-1 text-sm text-muted-foreground"
+                  className="shrink-0 px-0.5 text-sm text-muted-foreground sm:px-1"
                 >
                   ...
                 </span>
@@ -121,6 +123,7 @@ export function TablePaginationControls({
                   type="button"
                   size="sm"
                   variant={item === currentPage ? 'default' : 'outline'}
+                  className="size-9 shrink-0 px-0 sm:h-9 sm:w-auto sm:min-w-9 sm:px-3"
                   aria-current={item === currentPage ? 'page' : undefined}
                   aria-label={t('labels.goToPage', { page: item })}
                   onClick={() => transitionToPage(item)}
@@ -135,15 +138,20 @@ export function TablePaginationControls({
             type="button"
             variant="outline"
             size="sm"
+            className="size-9 shrink-0 px-0 sm:h-9 sm:w-auto sm:px-3"
+            aria-label={t('actions.next')}
             disabled={currentPage >= totalPages}
             onClick={() => transitionToPage(currentPage + 1)}
           >
-            {t('actions.next')}
+            <span className="hidden sm:inline">{t('actions.next')}</span>
+            <ChevronRight className="size-4 rtl:hidden" aria-hidden="true" />
+            <ChevronLeft className="hidden size-4 rtl:block" aria-hidden="true" />
           </Button>
           <Button
             type="button"
             variant="outline"
             size="sm"
+            className="hidden sm:inline-flex"
             disabled={currentPage >= totalPages}
             onClick={() => transitionToPage(totalPages)}
           >
@@ -152,7 +160,7 @@ export function TablePaginationControls({
         </div>
 
         <form
-          className="flex items-center gap-2"
+          className="hidden items-center gap-2 sm:flex"
           onSubmit={(event) => {
             event.preventDefault();
             const parsedPage = Number.parseInt(jumpPage, 10);

@@ -16,6 +16,7 @@ describe('navigationKeys', () => {
     expect(navigationKeys).toEqual([
       'administration',
       'products',
+      'aiProposals',
       'orders',
       'inventory',
       'assets',

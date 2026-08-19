@@ -22,7 +22,7 @@ vi.mock('@bric/db/client', () => ({
 vi.mock('../../../../lib/auth', () => ({
   auth: async () => ({ user: { email: 'admin@example.com', permissions: ['settings_manage'] } }),
 }));
-vi.mock('../../../../lib/rbac', () => ({ requireAiUseAccess: async () => null }));
+vi.mock('../../../../lib/rbac', () => ({ requireAppAccess: async () => null }));
 
 import { GET } from './route';
 

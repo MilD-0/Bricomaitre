@@ -1,7 +1,7 @@
 import { inArray, or, sql } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
-import { orders, products } from '@bric/db/schema';
+import { orderLineItems, orders, products } from '@bric/db/schema';
 import {
   DEGRADED_CAPTURE_VARIANT,
   buildOrderProductSummaries,
@@ -28,9 +28,27 @@ export type ProductLookupEntry = {
   thumbnailUrl: string | null;
 };
 
+export type OrderLineSnapshot = {
+  productId: number | null;
+  contentId: string;
+  rawValue: string;
+  title: string;
+  effectiveUnitPrice: number;
+  quantity: number;
+  lineTotal: number;
+  thumbnailUrl: string | null;
+};
+
+export class OrderProductLookup extends Map<string, ProductLookupEntry> {
+  readonly orderLinesByOrderId = new Map<number, OrderLineSnapshot[]>();
+}
+
 export async function getOrderProductLookup(
   db: Database,
-  rows: Array<Pick<typeof orders.$inferSelect, 'cartProducts'>>,
+  rows: Array<
+    Pick<typeof orders.$inferSelect, 'cartProducts'> &
+      Partial<Pick<typeof orders.$inferSelect, 'id'>>
+  >,
 ) {
   const productIds = [
     ...new Set(
@@ -59,30 +77,36 @@ export async function getOrderProductLookup(
     ),
   ];
 
-  if (productIds.length === 0 && mongoIds.length === 0 && slugs.length === 0) {
-    return new Map<string, ProductLookupEntry>();
-  }
+  const orderIds = [
+    ...new Set(
+      rows
+        .map((row) => row.id)
+        .filter((value): value is number => Number.isInteger(value) && Number(value) > 0),
+    ),
+  ];
+  const lookup = new OrderProductLookup();
 
-  const productRows = await db
-    .select({
-      id: products.id,
-      mongoId: products.mongoId,
-      brandId: products.brandId,
-      slug: products.slug,
-      title: products.title,
-      price: sql<number>`coalesce(${products.price}, 0)::double precision`,
-      images: products.images,
-    })
-    .from(products)
-    .where(
-      or(
-        ...(productIds.length > 0 ? [inArray(products.id, productIds)] : []),
-        ...(mongoIds.length > 0 ? [inArray(products.mongoId, mongoIds)] : []),
-        ...(slugs.length > 0 ? [inArray(products.slug, slugs)] : []),
-      ),
-    );
-
-  const lookup = new Map<string, ProductLookupEntry>();
+  const productRows =
+    productIds.length === 0 && mongoIds.length === 0 && slugs.length === 0
+      ? []
+      : await db
+          .select({
+            id: products.id,
+            mongoId: products.mongoId,
+            brandId: products.brandId,
+            slug: products.slug,
+            title: products.title,
+            price: sql<number>`coalesce(${products.price}, 0)::double precision`,
+            images: products.images,
+          })
+          .from(products)
+          .where(
+            or(
+              ...(productIds.length > 0 ? [inArray(products.id, productIds)] : []),
+              ...(mongoIds.length > 0 ? [inArray(products.mongoId, mongoIds)] : []),
+              ...(slugs.length > 0 ? [inArray(products.slug, slugs)] : []),
+            ),
+          );
 
   for (const product of productRows) {
     const entry = {
@@ -105,19 +129,52 @@ export async function getOrderProductLookup(
     }
   }
 
+  if (orderIds.length > 0) {
+    const lineRows = await db
+      .select({
+        orderId: orderLineItems.orderId,
+        productId: orderLineItems.productId,
+        contentId: orderLineItems.contentId,
+        rawValue: orderLineItems.rawValue,
+        title: orderLineItems.titleSnapshot,
+        effectiveUnitPrice: orderLineItems.effectiveUnitPrice,
+        quantity: orderLineItems.quantity,
+        lineTotal: orderLineItems.lineTotal,
+        thumbnailUrl: orderLineItems.thumbnailUrl,
+      })
+      .from(orderLineItems)
+      .where(inArray(orderLineItems.orderId, orderIds));
+
+    for (const line of lineRows) {
+      const current = lookup.orderLinesByOrderId.get(line.orderId) ?? [];
+      current.push({
+        productId: line.productId,
+        contentId: line.contentId,
+        rawValue: line.rawValue,
+        title: line.title,
+        effectiveUnitPrice: parseNumericAmount(line.effectiveUnitPrice),
+        quantity: line.quantity,
+        lineTotal: parseNumericAmount(line.lineTotal),
+        thumbnailUrl: line.thumbnailUrl,
+      });
+      lookup.orderLinesByOrderId.set(line.orderId, current);
+    }
+  }
+
   return lookup;
 }
 
 export function toOrderRecord(
   row: typeof orders.$inferSelect,
   history: OrderStatusHistoryRecord[] = [],
-  productLookup: Map<string, ProductLookupEntry> = new Map(),
+  productLookup: OrderProductLookup = new OrderProductLookup(),
 ): OrderRecord {
   const confirmed = coerceOrderStatus(row.confirmed);
   const noAnswerCount = coerceNoAnswerCount(confirmed, row.noAnswerCount, row.confirmed);
   const deliveryFee = parseNumericAmount(row.delPr);
   const subtotalOverride = row.price === null ? null : parseNumericAmount(row.price);
-  const rawOrderProducts = buildOrderProductSummaries(
+  const snapshotLines = productLookup.orderLinesByOrderId.get(row.id) ?? [];
+  const mutableCatalogProducts = buildOrderProductSummaries(
     row.cartProducts ?? [],
     (_rawValue, productId) => {
       const rawValue = _rawValue.trim();
@@ -147,13 +204,37 @@ export function toOrderRecord(
     },
   );
   const promoDiscountAmount = parseNumericAmount(row.promoDiscountAmount);
-  const orderProducts = applyPromoToOrderProducts(rawOrderProducts, {
-    productId: row.promoProductId,
-    discountAmount: promoDiscountAmount,
-  });
-  const derivedSubtotal = rawOrderProducts.reduce((sum, product) => sum + product.lineTotal, 0);
-  const productSubtotal = subtotalOverride ?? derivedSubtotal;
-  const totalAmount = productSubtotal + deliveryFee;
+  const orderProducts =
+    snapshotLines.length > 0
+      ? snapshotLines.map((line) => {
+          const catalog =
+            line.productId == null ? null : (productLookup.get(`id:${line.productId}`) ?? null);
+          return {
+            productId: line.productId,
+            brandId: catalog?.brandId ?? null,
+            ...(catalog?.slug != null ? { slug: catalog.slug } : {}),
+            rawValue: line.rawValue,
+            title: line.title,
+            unitPrice: line.effectiveUnitPrice,
+            quantity: line.quantity,
+            lineTotal: line.lineTotal,
+            thumbnailUrl: line.thumbnailUrl,
+            missing: false,
+          };
+        })
+      : applyPromoToOrderProducts(mutableCatalogProducts, {
+          productId: row.promoProductId,
+          discountAmount: promoDiscountAmount,
+        });
+  const derivedSubtotal = orderProducts.reduce((sum, product) => sum + product.lineTotal, 0);
+  const persistedSubtotal =
+    row.productSubtotal === null ? null : parseNumericAmount(row.productSubtotal);
+  const productSubtotal = subtotalOverride ?? persistedSubtotal ?? derivedSubtotal;
+  const persistedTotal = row.totalAmount === null ? null : parseNumericAmount(row.totalAmount);
+  const totalAmount =
+    subtotalOverride === null
+      ? (persistedTotal ?? productSubtotal + deliveryFee)
+      : productSubtotal + deliveryFee;
 
   return {
     id: row.id,
@@ -200,7 +281,7 @@ export function toOrderRecord(
 export function toStorefrontOrderRecord(
   row: typeof orders.$inferSelect,
   history: OrderStatusHistoryRecord[] = [],
-  productLookup: Map<string, ProductLookupEntry> = new Map(),
+  productLookup: OrderProductLookup = new OrderProductLookup(),
   purchaseEventId: string | null = null,
 ) {
   const record = toOrderRecord(row, history, productLookup);

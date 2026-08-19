@@ -4,11 +4,11 @@ import { hasDb } from '@bric/db/client';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { auth } from '../../../../../lib/auth';
 import { deleteManualOrder } from '../../../../../lib/manual-orders';
-import { requireOpsAccess } from '../../../../../lib/rbac';
+import { requireAnalyticsAccess } from '../../../../../lib/rbac';
 import { triggerAdminReportingRefresh } from '../../../../../lib/reporting-refresh-trigger';
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireOpsAccess();
+  const denied = await requireAnalyticsAccess();
   if (denied) return denied;
 
   if (!hasDb()) {

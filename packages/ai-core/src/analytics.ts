@@ -11,7 +11,6 @@ export const semanticAnalyticsQueryNameSchema = z.enum([
   'brand_performance',
   'inventory_risk',
   'promotion_performance',
-  'bundle_performance',
   'missing_content',
 ]);
 
@@ -60,12 +59,7 @@ export const semanticAnalyticsQuerySchema = z
         message: `${value.query} does not support date filters.`,
       });
     }
-    const productFilterAware = [
-      'product_performance',
-      'inventory_risk',
-      'bundle_performance',
-      'missing_content',
-    ];
+    const productFilterAware = ['product_performance', 'inventory_risk', 'missing_content'];
     if (value.productId && !productFilterAware.includes(value.query))
       ctx.addIssue({
         code: 'custom',
@@ -159,7 +153,5 @@ export const SEMANTIC_ANALYTICS_CATALOG = {
   inventory_risk: 'Current low-stock, out-of-stock, and missing-cost product risks.',
   promotion_performance:
     'Order usage, original subtotal, discount, and final subtotal grouped by promo code.',
-  bundle_performance:
-    'Current bundle listing state, pricing, component count, sales, and conversion signals.',
   missing_content: 'Active products missing Arabic title or French/Arabic descriptions.',
 } as const;

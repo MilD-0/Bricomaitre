@@ -193,6 +193,7 @@ export const homepageFixtureResponse: StorefrontHomepageResponse = {
     parentId: null,
     properties: [],
     featured: true,
+    productCount: 0,
     createdAt: now,
     updatedAt: now,
   })),

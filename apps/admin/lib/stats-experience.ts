@@ -276,7 +276,6 @@ export function buildLandingPagePerformanceQuery(filters: ExperienceStatsFilters
 export function buildCustomerProductQuery(filters: ExperienceStatsFilters) {
   const orderWhere = and(
     dateCondition(orders.createdAt, filters),
-    sql`${orders.archivedAt} is null`,
     inArray(orders.confirmed, [...CUSTOMER_SUCCESSFUL_ORDER_STATUSES]),
   );
 
@@ -294,7 +293,6 @@ export function buildCustomerProductQuery(filters: ExperienceStatsFilters) {
 export function buildCustomerSummaryQuery(filters: ExperienceStatsFilters) {
   const orderWhere = and(
     dateCondition(orders.createdAt, filters),
-    sql`${orders.archivedAt} is null`,
     inArray(orders.confirmed, [...CUSTOMER_SUCCESSFUL_ORDER_STATUSES]),
   );
 

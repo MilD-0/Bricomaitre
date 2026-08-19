@@ -8,6 +8,8 @@ import {
   orders,
   storefrontOrderIdempotency,
 } from '@bric/db/schema';
+import { readOrderProductSubtotal, resolveOrderCommercialState } from '../order-commercial';
+import { insertCanonicalOrder, updateCanonicalOrder } from '../order-write';
 import { attachJourneyToOrder } from './analytics';
 import { readEcotrackDeliveryFee } from '../ecotrack-support';
 import {
@@ -17,7 +19,7 @@ import {
   coerceOrderStatus,
   type OrderStatusHistoryRecord,
 } from '../orders-support';
-import { getOrderProductLookup, type ProductLookupEntry } from '../order-records';
+import { getOrderProductLookup, OrderProductLookup } from '../order-records';
 import type { StorefrontOrderCreateRequest, StorefrontOrderPatchRequest } from './contracts';
 import { toStorefrontOrderDto } from './dto';
 import {
@@ -25,15 +27,7 @@ import {
   requireStorefrontOrderAccess,
   requireStorefrontOrderAccessByToken,
 } from './order-access';
-import { resolveOrderPromo } from './promos';
-import {
-  createOrderMetaArtifacts,
-  readMetaOrderLocation,
-  replaceOrderLineSnapshots,
-  resolveOrderLineSnapshots,
-  type MetaCommerceLine,
-  type MetaRequestContext,
-} from './meta';
+import { createOrderMetaArtifacts, readMetaOrderLocation, type MetaRequestContext } from './meta';
 import { createOrderMarketingArtifacts } from './marketing';
 
 type Database = ReturnType<typeof getDb>;
@@ -121,14 +115,6 @@ async function readPurchaseEventId(db: Database, orderId: number) {
   );
 }
 
-function buildCanonicalCartProducts(fallback: string[], lines: MetaCommerceLine[]) {
-  if (lines.length === 0) {
-    return fallback;
-  }
-
-  return lines.flatMap((line) => Array.from({ length: line.quantity }, () => line.contentId));
-}
-
 export async function createStorefrontOrder(
   db: Database,
   payload: StorefrontOrderCreateRequest,
@@ -146,34 +132,41 @@ export async function createStorefrontOrder(
   const publicToken = createPublicOrderToken();
   let currentOrder: typeof orders.$inferSelect;
   let degradedCapture = shouldStartAsDegradedCapture(payload);
-  const orderPromo = await resolveOrderPromo(db, {
+  const commercial = await resolveOrderCommercialState(db, {
     cartProducts: payload.cartProducts,
     promoCode: payload.promoCode,
     now,
+    requireOrderable: true,
   });
-  const orderLines = await resolveOrderLineSnapshots(db, {
-    cartProducts: payload.cartProducts,
-    promoCode: orderPromo?.code ?? null,
-    now,
-  });
+  const orderLines = commercial.lines;
+  let deliveryFee = 0;
+  if (payload.state != null) {
+    try {
+      deliveryFee = await measureStep('readEcotrackDeliveryFee', reportTiming, () =>
+        readEcotrackDeliveryFee(db, payload.state, coerceDeliveryType(payload.delivery)),
+      );
+    } catch {
+      degradedCapture = true;
+    }
+  }
   const metaLocation = payload.meta
     ? await readMetaOrderLocation(db, payload.state, payload.city).catch(() => null)
     : null;
-  const canonicalCartProducts = buildCanonicalCartProducts(payload.cartProducts, orderLines);
   let historyRows: (typeof orderStatusHistory.$inferSelect)[] = [];
   let metaResponse: Awaited<ReturnType<typeof createOrderMetaArtifacts>> | undefined;
   const created = await db.transaction(async (tx) => {
-    const [createdOrder] = await measureStep('insertOrder', reportTiming, () =>
-      tx
-        .insert(orders)
-        .values({
+    const canonical = await measureStep('insertOrder', reportTiming, () =>
+      insertCanonicalOrder(tx, {
+        commercial,
+        deliveryFee,
+        now,
+        values: {
           firstName: payload.firstName,
           lastName: payload.lastName,
           email: payload.email,
           phoneNumber1: payload.phoneNumber1,
           phoneNumber2: payload.phoneNumber2,
           publicToken,
-          cartProducts: canonicalCartProducts,
           visitId: payload.visitId,
           journeyId: payload.journeyId,
           sessionId: payload.sessionId,
@@ -182,31 +175,15 @@ export async function createStorefrontOrder(
           city: payload.city,
           homeAddress: payload.homeAddress,
           note: payload.note,
-          delPr: null,
-          price: orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null,
-          promoCode: orderPromo?.code ?? null,
-          promoProductId: orderPromo?.productId ?? null,
-          promoOriginalSubtotal: orderPromo ? orderPromo.originalSubtotal.toFixed(2) : null,
-          promoDiscountAmount: orderPromo ? orderPromo.discountAmount.toFixed(2) : null,
-          promoFinalSubtotal: orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null,
+          price: null,
           variant: degradedCapture ? DEGRADED_CAPTURE_VARIANT : null,
           createdAt: now,
           updatedAt: now,
-        })
-        .returning(),
+        },
+      }),
     );
-    const insertedHistory = await measureStep('insertStatusHistory', reportTiming, () =>
-      tx
-        .insert(orderStatusHistory)
-        .values({
-          orderId: createdOrder.id,
-          status: createdOrder.confirmed,
-          noAnswerCount: createdOrder.noAnswerCount,
-          changedAt: now,
-        })
-        .returning(),
-    );
-    historyRows = insertedHistory;
+    const createdOrder = canonical.order;
+    historyRows = [canonical.history];
     if (payload.meta) {
       metaResponse = await createOrderMetaArtifacts(tx, {
         order: createdOrder,
@@ -216,9 +193,8 @@ export async function createStorefrontOrder(
         requestContext: options?.metaRequestContext ?? {},
         location: metaLocation,
         now,
+        linesAlreadyPersisted: true,
       });
-    } else {
-      await replaceOrderLineSnapshots(tx, createdOrder.id, orderLines, now);
     }
     if (payload.marketing) {
       await createOrderMarketingArtifacts(tx, {
@@ -263,41 +239,16 @@ export async function createStorefrontOrder(
 
     degradedCapture = true;
     try {
-      const [updatedOrder] = await db
-        .update(orders)
-        .set({
-          variant: DEGRADED_CAPTURE_VARIANT,
-          updatedAt: new Date(),
-        })
-        .where(eq(orders.id, currentOrder.id))
-        .returning();
-      currentOrder = updatedOrder ?? { ...currentOrder, variant: DEGRADED_CAPTURE_VARIANT };
+      const result = await db.transaction((tx) =>
+        updateCanonicalOrder(tx, {
+          orderId: currentOrder.id,
+          values: { variant: DEGRADED_CAPTURE_VARIANT },
+        }),
+      );
+      currentOrder = result.order;
     } catch {
       currentOrder = { ...currentOrder, variant: DEGRADED_CAPTURE_VARIANT };
     }
-  }
-
-  if (payload.state != null) {
-    pendingTimings.push(
-      (async () => {
-        try {
-          const deliveryFee = await measureStep('readEcotrackDeliveryFee', reportTiming, () =>
-            readEcotrackDeliveryFee(db, payload.state, coerceDeliveryType(payload.delivery)),
-          );
-          const deliveryFeeValue = deliveryFee.toFixed(2);
-          await db
-            .update(orders)
-            .set({
-              delPr: deliveryFeeValue,
-              updatedAt: new Date(),
-            })
-            .where(eq(orders.id, currentOrder.id));
-          currentOrder = { ...currentOrder, delPr: deliveryFeeValue };
-        } catch {
-          await markDegradedCapture();
-        }
-      })(),
-    );
   }
 
   if (payload.journeyId || payload.sessionId) {
@@ -313,7 +264,7 @@ export async function createStorefrontOrder(
     });
   }
 
-  let productLookup = new Map<string, ProductLookupEntry>();
+  let productLookup = new OrderProductLookup();
 
   pendingTimings.push(
     (async () => {
@@ -450,43 +401,41 @@ export async function updateStorefrontOrder(
   if (changes.state !== undefined) update.state = changes.state;
   if (changes.city !== undefined) update.city = changes.city;
   if (changes.homeAddress !== undefined) update.homeAddress = changes.homeAddress;
-  let nextOrderLines: MetaCommerceLine[] | null = null;
+  let nextCommercial: Awaited<ReturnType<typeof resolveOrderCommercialState>> | null = null;
 
   if (changes.cartProducts !== undefined || changes.promoCode !== undefined) {
     const nextCartProducts = changes.cartProducts ?? access.order.cartProducts ?? [];
     const nextPromoCode =
       changes.promoCode !== undefined ? changes.promoCode : access.order.promoCode;
-    const orderPromo = await resolveOrderPromo(db, {
+    nextCommercial = await resolveOrderCommercialState(db, {
       cartProducts: nextCartProducts,
       promoCode: nextPromoCode,
     });
-    nextOrderLines = await resolveOrderLineSnapshots(db, {
-      cartProducts: nextCartProducts,
-      promoCode: orderPromo?.code ?? null,
-    });
-
-    update.cartProducts = buildCanonicalCartProducts(nextCartProducts, nextOrderLines);
-    update.price = orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null;
-    update.promoCode = orderPromo?.code ?? null;
-    update.promoProductId = orderPromo?.productId ?? null;
-    update.promoOriginalSubtotal = orderPromo ? orderPromo.originalSubtotal.toFixed(2) : null;
-    update.promoDiscountAmount = orderPromo ? orderPromo.discountAmount.toFixed(2) : null;
-    update.promoFinalSubtotal = orderPromo ? orderPromo.finalSubtotal.toFixed(2) : null;
   }
 
+  let nextDeliveryFee = Number(access.order.delPr ?? 0);
   if (shouldResolveDeliveryFee) {
     const nextDelivery = coerceDeliveryType(changes.delivery ?? access.order.delivery);
     const nextState = changes.state !== undefined ? changes.state : access.order.state;
-    update.delPr = (await readEcotrackDeliveryFee(db, nextState, nextDelivery)).toFixed(2);
+    nextDeliveryFee = await readEcotrackDeliveryFee(db, nextState, nextDelivery);
+    update.delPr = nextDeliveryFee.toFixed(2);
+  }
+
+  if (!nextCommercial && shouldResolveDeliveryFee) {
+    const productSubtotal = await readOrderProductSubtotal(db, access.order);
+    update.productSubtotal = productSubtotal.toFixed(2);
+    update.totalAmount = (productSubtotal + nextDeliveryFee).toFixed(2);
   }
 
   let updatedOrder!: typeof orders.$inferSelect;
   await db.transaction(async (tx) => {
-    const [row] = await tx.update(orders).set(update).where(eq(orders.id, id)).returning();
-    updatedOrder = row;
-    if (changes.cartProducts !== undefined || changes.promoCode !== undefined) {
-      await replaceOrderLineSnapshots(tx, id, nextOrderLines ?? []);
-    }
+    const result = await updateCanonicalOrder(tx, {
+      orderId: id,
+      values: update,
+      commercial: nextCommercial ?? undefined,
+      deliveryFee: nextCommercial ? nextDeliveryFee : undefined,
+    });
+    updatedOrder = result.order;
   });
   const [historyRows, productLookup, purchaseEventId] = await Promise.all([
     db

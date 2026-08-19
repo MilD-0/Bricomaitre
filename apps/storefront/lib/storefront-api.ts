@@ -11,6 +11,8 @@ import {
   storefrontProductListQuerySchema,
   storefrontProductsResponseSchema,
   storefrontSettingsResponseSchema,
+  storefrontCartValidationResponseSchema,
+  storefrontContentResponseSchema,
   storefrontProductTokenSchema,
   type StorefrontBrandsResponse,
   type StorefrontCategoriesResponse,
@@ -18,10 +20,11 @@ import {
   type StorefrontHomepageResponse,
   type StorefrontHomepageFeaturedGroupProductsResponse,
   type StorefrontProductDetailResponse,
-  type StorefrontProductListQuery,
+  type StorefrontProductListQueryInput,
   type StorefrontProductsResponse,
   type StorefrontOrderResponseItem,
   type StorefrontSettingsResponse,
+  type StorefrontContentResponse,
   STOREFRONT_ANALYTICS_PROJECT,
 } from '@bric/storefront-core/contracts';
 import {
@@ -178,7 +181,7 @@ async function parseUpstreamJson<T>(
 }
 
 export async function fetchStorefrontCatalog(
-  input: StorefrontProductListQuery,
+  input: StorefrontProductListQueryInput,
 ): Promise<StorefrontProductsResponse> {
   const query = storefrontProductListQuerySchema.parse(input);
   const params = new URLSearchParams({
@@ -191,11 +194,28 @@ export async function fetchStorefrontCatalog(
   if (query.brandId !== null) params.set('brandId', String(query.brandId));
   if (query.categoryId !== null) params.set('categoryId', String(query.categoryId));
   if (query.discounted) params.set('discounted', '1');
+  if (query.stock !== 'all') params.set('stock', query.stock);
+  if (query.minPrice !== null) params.set('minPrice', String(query.minPrice));
+  if (query.maxPrice !== null) params.set('maxPrice', String(query.maxPrice));
   const pathname = `/storefront/products?${params.toString()}`;
   return parseUpstreamJson(
     await fetchStorefrontUpstream(pathname),
     pathname,
     storefrontProductsResponseSchema,
+  );
+}
+
+export async function fetchStorefrontCartValidation(productIds: number[]) {
+  const pathname = '/storefront/products/validate';
+  return parseUpstreamJson(
+    await fetchStorefrontUpstream(pathname, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ productIds }),
+      cache: 'no-store',
+    }),
+    pathname,
+    storefrontCartValidationResponseSchema,
   );
 }
 
@@ -263,6 +283,15 @@ export async function fetchStorefrontSettings(): Promise<StorefrontSettingsRespo
   return parseUpstreamJson(response, pathname, storefrontSettingsResponseSchema);
 }
 
+export async function fetchStorefrontContent(
+  locale: 'fr' | 'ar',
+): Promise<StorefrontContentResponse> {
+  const pathname = `/storefront/content?locale=${locale}`;
+  const response = await fetchStorefrontUpstream(pathname);
+  if (response.status === 404) return { announcement: null };
+  return parseUpstreamJson(response, pathname, storefrontContentResponseSchema);
+}
+
 export async function fetchStorefrontOrder(
   orderId: number,
   publicToken: string,
@@ -315,6 +344,13 @@ export async function getStorefrontSettings() {
   )();
 }
 
+export async function getStorefrontContent(locale: 'fr' | 'ar') {
+  return unstable_cache(() => fetchStorefrontContent(locale), ['storefront-content', locale], {
+    revalidate: 300,
+    tags: [STOREFRONT_CACHE_TAGS.settings],
+  })();
+}
+
 export async function getStorefrontHomepage() {
   return unstable_cache(fetchStorefrontHomepage, ['storefront-homepage'], {
     revalidate: 120,
@@ -333,7 +369,7 @@ export async function getStorefrontEcotrackCatalog() {
   return fetchStorefrontEcotrackCatalog();
 }
 
-export async function getStorefrontCatalog(input: StorefrontProductListQuery) {
+export async function getStorefrontCatalog(input: StorefrontProductListQueryInput) {
   const query = storefrontProductListQuerySchema.parse(input);
   return unstable_cache(
     () => fetchStorefrontCatalog(query),
@@ -349,6 +385,9 @@ export async function fetchStorefrontSitemapProducts() {
     search: '',
     brandId: null,
     categoryId: null,
+    stock: 'all',
+    minPrice: null,
+    maxPrice: null,
     sortKey: 'updatedAt',
     sortDirection: 'desc',
     id: null,

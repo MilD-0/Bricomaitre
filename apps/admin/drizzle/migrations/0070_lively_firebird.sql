@@ -1,0 +1,1 @@
+CREATE INDEX "idx_meta_ads_insights_day_adset" ON "meta_ads_daily_insights" USING btree ("day" DESC NULLS LAST,"adset_id");

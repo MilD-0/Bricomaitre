@@ -353,9 +353,7 @@
 .shopping-assistant-product {
   min-height: 5.1rem;
   display: grid;
-  grid-template-columns: 4.2rem minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.65rem;
+  gap: 0.4rem;
   border: 1px solid #dce1e2;
   border-radius: 1.05rem;
   corner-shape: squircle;
@@ -366,6 +364,12 @@
     border-color 150ms ease,
     transform 150ms ease,
     box-shadow 150ms ease;
+}
+.shopping-assistant-product-link {
+  display: grid;
+  grid-template-columns: 4.2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
 }
 .shopping-assistant-product:hover {
   border-color: #8bbebb;
@@ -422,6 +426,22 @@
   color: var(--brand-teal-strong);
   font-size: 0.63rem;
   font-weight: 750;
+}
+.shopping-assistant-product-cart {
+  min-height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border-radius: 0.7rem;
+  background: var(--brand-teal-strong);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 780;
+}
+.shopping-assistant-product-cart:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 .shopping-assistant-thinking {
   min-height: 2.3rem;
@@ -539,7 +559,7 @@
   .shopping-assistant-conversation {
     padding: 0.8rem;
   }
-  .shopping-assistant-product {
+  .shopping-assistant-product-link {
     grid-template-columns: 3.8rem minmax(0, 1fr) auto;
   }
   .shopping-assistant-product-media {

@@ -21,6 +21,7 @@ const brandRowSchema = z
     isActive: z.boolean(),
     status: z.enum(['active', 'draft']),
     image: z.string().nullable().optional(),
+    productCount: z.number().int().nonnegative().default(0),
   })
   .extend(auditFieldsSchema.shape);
 
@@ -35,6 +36,7 @@ const categoryRowSchema = z
     status: z.enum(['active', 'draft']),
     parentId: z.string().nullable(),
     parentName: z.string().nullable(),
+    productCount: z.number().int().nonnegative().default(0),
   })
   .extend(auditFieldsSchema.shape);
 

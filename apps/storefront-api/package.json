@@ -7,7 +7,7 @@
     "dev": "next dev --port 3001",
     "build": "next build",
     "build:worker": "node ../../ops/scripts/build-worker.mjs apps/storefront-api/scripts/run-meta-worker.ts apps/storefront-api/dist/run-meta-worker.cjs",
-    "start": "node ../../ops/scripts/start-next-standalone.mjs --app-dir . --nested-dir apps/storefront-api --default-port 3001",
+    "start": "bash ../../ops/scripts/hydrate-next-standalone.sh apps/storefront-api && node ../../ops/scripts/start-next-standalone.mjs --app-dir . --nested-dir apps/storefront-api --default-port 3001",
     "worker:meta": "tsx scripts/run-meta-worker.ts",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",

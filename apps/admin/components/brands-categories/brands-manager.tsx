@@ -327,6 +327,7 @@ export function BrandsManager() {
         image: values.imageUrl,
         isActive: true,
         status: 'active',
+        productCount: 0,
         createdAt: now,
         updatedAt: now,
         createdBy: null,

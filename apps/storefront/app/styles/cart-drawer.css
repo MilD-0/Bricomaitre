@@ -252,6 +252,49 @@
   font-size: 1.1rem;
   font-weight: 730;
 }
+.cart-drawer-footer > .cart-drawer-delivery-estimate {
+  display: grid;
+  align-items: stretch;
+  gap: 0.55rem;
+  border-radius: 0.9rem;
+  background: #f5f7f7;
+  padding: 0.7rem;
+}
+.cart-drawer-delivery-estimate > strong {
+  font-size: 0.75rem;
+}
+.cart-drawer-delivery-estimate select {
+  min-height: 2.5rem;
+  width: 100%;
+  border: 1px solid #d7ddde;
+  border-radius: 0.7rem;
+  background: #fff;
+  padding-inline: 0.65rem;
+  color: #30383b;
+}
+.cart-drawer-delivery-estimate > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+.cart-drawer-delivery-estimate button {
+  min-height: 2.2rem;
+  border: 1px solid #d7ddde;
+  border-radius: 0.65rem;
+  background: #fff;
+  color: #586164;
+  font-size: 0.72rem;
+  font-weight: 680;
+}
+.cart-drawer-delivery-estimate button[aria-pressed='true'] {
+  border-color: var(--brand-teal);
+  background: color-mix(in srgb, var(--brand-teal) 9%, #fff);
+  color: var(--brand-teal-strong);
+}
+.cart-drawer-footer > .cart-drawer-estimated-total {
+  border-top: 1px solid #e3e7e8;
+  padding-top: 0.75rem;
+}
 .cart-drawer-footer > a {
   min-height: 3.25rem;
   display: flex;

@@ -18,7 +18,7 @@ vi.mock('@bric/db/client', () => ({
 }));
 
 vi.mock('../../../../../../lib/rbac', () => ({
-  requireOpsAccess: requireOpsAccessMock,
+  requireSettingsAccess: requireOpsAccessMock,
 }));
 vi.mock('../../../../../../lib/auth', () => ({
   auth: authMock,

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { auth } from './auth';
-import { canViewOps, hasPermission, normalizePermissions, type PermissionKey } from './permissions';
+import { hasPermission, normalizePermissions, type PermissionKey } from './permissions';
 
 export type MutationResource =
   | 'products'
@@ -19,7 +19,7 @@ const resourcePermissions: Record<MutationResource, PermissionKey> = {
   assets: 'assets_write',
   brandsCategories: 'brands_categories_write',
   bulletin: 'bulletin_moderate',
-  stats: 'ops_view',
+  stats: 'analytics_manage',
   settings: 'settings_manage',
   ecotrack: 'orders_write',
 };
@@ -31,7 +31,7 @@ export function canMutateResource(
   return hasPermission(access ?? [], resourcePermissions[resource]);
 }
 
-export async function requireOpsAccess() {
+async function requirePermissionAccess(permission: PermissionKey) {
   const session = await auth();
 
   if (!session?.user) {
@@ -44,28 +44,27 @@ export async function requireOpsAccess() {
 
   const permissions = normalizePermissions(session.user.permissions);
 
-  if (!canViewOps(permissions)) {
+  if (!hasPermission(permissions, permission)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   return null;
 }
 
+export async function requireAnalyticsAccess() {
+  return requirePermissionAccess('analytics_manage');
+}
+
+export async function requireSettingsAccess() {
+  return requirePermissionAccess('settings_manage');
+}
+
+export async function requireOpsAccess() {
+  return requirePermissionAccess('ops_view');
+}
+
 export async function requireAdministrationAccess() {
-  const session = await auth();
-
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  if (
-    !session.user.isAllowed ||
-    (session.user.role !== 'admin' && session.user.role !== 'developer')
-  ) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  return null;
+  return requireSettingsAccess();
 }
 
 export async function requireMutationAccess(resource: MutationResource) {
@@ -88,31 +87,12 @@ export async function requireMutationAccess(resource: MutationResource) {
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }
 
-export async function requireAiAccess(permission: Extract<PermissionKey, `ai_${string}`>) {
-  const session = await auth();
-
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  if (!session.user.isAllowed) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  const permissions = normalizePermissions(session.user.permissions);
-  if (!hasPermission(permissions, 'ai_use') || !hasPermission(permissions, permission)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  return null;
-}
-
-export async function requireAiUseAccess() {
+export async function requireAnyMutationAccess(resources: readonly MutationResource[]) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!session.user.isAllowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const permissions = normalizePermissions(session.user.permissions);
-  return hasPermission(permissions, 'ai_use')
+  return resources.some((resource) => canMutateResource(permissions, resource))
     ? null
     : NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }

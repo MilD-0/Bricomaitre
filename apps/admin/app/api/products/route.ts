@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, asc, count, desc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { orders, productPromoCodes, products } from '@bric/db/schema';
@@ -8,6 +8,10 @@ import { auth } from '../../../lib/auth';
 import { startProductCatalogFeedRefreshJob } from '../../../lib/background-jobs';
 import { productListQuerySchema, productPayloadSchema } from '../../../lib/products';
 import { toProductMutationValues, toProductPromoRows } from '../../../lib/product-mutations';
+import {
+  assertUniqueProductIdentifiers,
+  ProductIntegrityConflictError,
+} from '../../../lib/product-integrity';
 import { requireMutationAccess } from '../../../lib/rbac';
 import { captureAdminException, getRequestId } from '../../../lib/sentry';
 import { CACHE_TAGS, createServerCache, revalidateServerTags } from '../../../lib/server-cache';
@@ -183,12 +187,17 @@ async function addOrderMetricsToProducts<T extends { id: number; mongoId?: strin
 }
 
 async function loadAllProducts() {
-  return getDb().select().from(products).orderBy(desc(products.updatedAt));
+  return getDb()
+    .select()
+    .from(products)
+    .where(isNull(products.archivedAt))
+    .orderBy(desc(products.updatedAt));
 }
 
 async function loadPaginatedProducts(query: ProductListQuery) {
   const db = getDb();
   const filters = [
+    isNull(products.archivedAt),
     query.search
       ? or(
           ilike(products.title, `%${query.search}%`),
@@ -199,6 +208,13 @@ async function loadPaginatedProducts(query: ProductListQuery) {
     query.brandId === null ? undefined : eq(products.brandId, query.brandId),
     query.categoryId === null ? undefined : eq(products.categoryId, query.categoryId),
     query.imageOrigin === 'external' ? buildExternalImageWhereClause() : undefined,
+    query.state === 'active'
+      ? eq(products.active, true)
+      : query.state === 'inactive'
+        ? eq(products.active, false)
+        : query.state === 'out'
+          ? eq(products.inStock, false)
+          : undefined,
   ].filter((value) => value !== undefined);
   const whereClause = filters.length > 0 ? and(...filters) : undefined;
 
@@ -277,6 +293,7 @@ export async function GET(req: NextRequest) {
     'brandId',
     'categoryId',
     'imageOrigin',
+    'state',
     'sort',
     'sortKey',
     'sortDirection',
@@ -294,6 +311,7 @@ export async function GET(req: NextRequest) {
     brandId: searchParams?.get('brandId'),
     categoryId: searchParams?.get('categoryId'),
     imageOrigin: searchParams?.get('imageOrigin') ?? undefined,
+    state: searchParams?.get('state') ?? undefined,
     sort: searchParams.getAll('sort'),
     sortKey: searchParams?.get('sortKey') ?? undefined,
     sortDirection: searchParams?.get('sortDirection') ?? undefined,
@@ -328,21 +346,29 @@ export async function POST(req: NextRequest) {
   const actor = { email: session?.user?.email, name: session?.user?.name };
   const values = await toProductMutationValues(data);
 
-  await mutateEntityWithHistory(db, {
-    entityType: 'products',
-    operation: 'create',
-    actor,
-    execute: async (tx) => {
-      const rows = await tx.insert(products).values(values).returning({ id: products.id });
-      const productId = rows[0]?.id;
-      const promoCodes = data.promoCodes ?? [];
-      if (productId && promoCodes.length > 0) {
-        await tx.insert(productPromoCodes).values(toProductPromoRows(productId, promoCodes));
-      }
-      return rows;
-    },
-    resolveEntityId: (rows) => rows[0]?.id,
-  });
+  try {
+    await mutateEntityWithHistory(db, {
+      entityType: 'products',
+      operation: 'create',
+      actor,
+      execute: async (tx) => {
+        await assertUniqueProductIdentifiers(tx, values);
+        const rows = await tx.insert(products).values(values).returning({ id: products.id });
+        const productId = rows[0]?.id;
+        const promoCodes = data.promoCodes ?? [];
+        if (productId && promoCodes.length > 0) {
+          await tx.insert(productPromoCodes).values(toProductPromoRows(productId, promoCodes));
+        }
+        return rows;
+      },
+      resolveEntityId: (rows) => rows[0]?.id,
+    });
+  } catch (error) {
+    if (error instanceof ProductIntegrityConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    throw error;
+  }
 
   revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
   await revalidateStorefrontProducts();

@@ -125,6 +125,107 @@ export function buildDefaultLandingPageDocument(input: {
   });
 }
 
+export class LandingPageConflictError extends Error {
+  constructor(message = 'This landing page changed after you opened it.') {
+    super(message);
+    this.name = 'LandingPageConflictError';
+  }
+}
+
+export class LandingPageNotFoundError extends Error {
+  constructor() {
+    super('Landing page not found.');
+    this.name = 'LandingPageNotFoundError';
+  }
+}
+
+export function normalizeLandingPageDocument(document: unknown): LandingPageDocument {
+  const parsed = landingPageDocumentSchema.parse(document);
+  return landingPageDocumentSchema.parse({
+    ...parsed,
+    seo: { ...parsed.seo, indexable: false },
+  });
+}
+
+function documentsMatch(left: LandingPageDocument, right: LandingPageDocument) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+export function buildLandingPagePublicationUpdate(input: {
+  active: boolean;
+  revision: number;
+  now: Date;
+}) {
+  if (!input.active) return { status: 'draft' as const };
+  return {
+    status: 'published' as const,
+    publishedRevision: input.revision,
+    publishedAt: input.now,
+  };
+}
+
+export async function listLandingPageSummaries() {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: landingPages.id,
+      productId: landingPages.productId,
+      productTitle: products.title,
+      productSlug: products.slug,
+      locale: landingPages.locale,
+      slug: landingPages.slug,
+      status: landingPages.status,
+      currentRevision: landingPages.draftRevision,
+      updatedAt: landingPages.updatedAt,
+    })
+    .from(landingPages)
+    .innerJoin(products, eq(landingPages.productId, products.id))
+    .orderBy(desc(landingPages.updatedAt));
+
+  return rows.map(({ status, updatedAt, ...row }) => ({
+    ...row,
+    active: status === 'published',
+    updatedAt: updatedAt.toISOString(),
+  }));
+}
+
+export async function getLandingPageDetail(id: number) {
+  const db = getDb();
+  const [row] = await db
+    .select({
+      id: landingPages.id,
+      productId: landingPages.productId,
+      productTitle: products.title,
+      productSlug: products.slug,
+      locale: landingPages.locale,
+      slug: landingPages.slug,
+      status: landingPages.status,
+      currentRevision: landingPages.draftRevision,
+      updatedAt: landingPages.updatedAt,
+      document: landingPageRevisions.document,
+    })
+    .from(landingPages)
+    .innerJoin(products, eq(landingPages.productId, products.id))
+    .innerJoin(
+      landingPageRevisions,
+      and(
+        eq(landingPageRevisions.landingPageId, landingPages.id),
+        eq(landingPageRevisions.revision, landingPages.draftRevision),
+      ),
+    )
+    .where(eq(landingPages.id, id))
+    .limit(1);
+
+  if (!row) throw new LandingPageNotFoundError();
+  const { status, updatedAt, document, ...rest } = row;
+  return {
+    ...rest,
+    active: status === 'published',
+    updatedAt: updatedAt.toISOString(),
+    document: normalizeLandingPageDocument(document),
+  };
+}
+
 export async function listLandingPages() {
   const db = getDb();
   const rows = await db
@@ -194,7 +295,7 @@ export async function createLandingPage(input: {
             description: input.locale === 'ar' ? product.descriptionAr : product.description,
             imageUrl: product.images[0] ?? null,
           })
-        : landingPageDocumentSchema.parse(input.document);
+        : normalizeLandingPageDocument(input.document);
     const [page] = await tx
       .insert(landingPages)
       .values({
@@ -218,44 +319,78 @@ export async function createLandingPage(input: {
   });
 }
 
-export async function saveLandingPageRevision(input: {
+export async function saveLandingPage(input: {
   id: number;
   document: unknown;
+  active: boolean;
+  expectedRevision: number;
   actorId?: string | null;
   source?: string;
 }) {
-  const document = landingPageDocumentSchema.parse(input.document);
+  const document = normalizeLandingPageDocument(input.document);
   const db = getDb();
   return db.transaction(async (tx) => {
-    const [page] = await tx
-      .select({ id: landingPages.id })
+    const [current] = await tx
+      .select({
+        id: landingPages.id,
+        status: landingPages.status,
+        draftRevision: landingPages.draftRevision,
+      })
       .from(landingPages)
       .where(eq(landingPages.id, input.id))
-      .limit(1);
-    if (!page) throw new Error('Landing page not found.');
-    const [next] = await tx
-      .select({ revision: sql<number>`coalesce(max(${landingPageRevisions.revision}), 0) + 1` })
+      .limit(1)
+      .for('update');
+    if (!current) throw new LandingPageNotFoundError();
+    if (current.draftRevision !== input.expectedRevision) throw new LandingPageConflictError();
+
+    const [savedRevision] = await tx
+      .select({ document: landingPageRevisions.document })
       .from(landingPageRevisions)
-      .where(eq(landingPageRevisions.landingPageId, input.id));
-    const revision = Number(next?.revision ?? 1);
-    await tx.insert(landingPageRevisions).values({
-      landingPageId: input.id,
-      revision,
-      document,
-      source: input.source ?? 'admin',
-      createdBy: input.actorId,
-    });
+      .where(
+        and(
+          eq(landingPageRevisions.landingPageId, input.id),
+          eq(landingPageRevisions.revision, current.draftRevision),
+        ),
+      )
+      .limit(1);
+    if (!savedRevision) throw new LandingPageConflictError('The current revision is unavailable.');
+
+    const changed = !documentsMatch(normalizeLandingPageDocument(savedRevision.document), document);
+    let revision = current.draftRevision;
+    if (changed) {
+      const [next] = await tx
+        .select({ revision: sql<number>`coalesce(max(${landingPageRevisions.revision}), 0) + 1` })
+        .from(landingPageRevisions)
+        .where(eq(landingPageRevisions.landingPageId, input.id));
+      revision = Number(next?.revision ?? current.draftRevision + 1);
+      await tx.insert(landingPageRevisions).values({
+        landingPageId: input.id,
+        revision,
+        document,
+        source: input.source ?? 'admin',
+        createdBy: input.actorId,
+      });
+    }
+
+    const now = new Date();
     await tx
       .update(landingPages)
-      .set({ draftRevision: revision, updatedBy: input.actorId, updatedAt: new Date() })
+      .set({
+        ...buildLandingPagePublicationUpdate({ active: input.active, revision, now }),
+        draftRevision: revision,
+        updatedBy: input.actorId,
+        updatedAt: now,
+      })
       .where(eq(landingPages.id, input.id));
-    return { id: input.id, revision };
+
+    return { id: input.id, active: input.active, currentRevision: revision, changed };
   });
 }
 
-export async function setLandingPagePublication(input: {
+export async function setLandingPageActive(input: {
   id: number;
-  publish: boolean;
+  active: boolean;
+  expectedRevision: number;
   actorId?: string | null;
 }) {
   const db = getDb();
@@ -264,30 +399,24 @@ export async function setLandingPagePublication(input: {
       .select({ draftRevision: landingPages.draftRevision })
       .from(landingPages)
       .where(eq(landingPages.id, input.id))
-      .limit(1);
-    if (!current) throw new Error('Landing page not found.');
+      .limit(1)
+      .for('update');
+    if (!current) throw new LandingPageNotFoundError();
+    if (current.draftRevision !== input.expectedRevision) throw new LandingPageConflictError();
 
-    const [page] = await tx
+    const now = new Date();
+    await tx
       .update(landingPages)
-      .set(
-        input.publish
-          ? {
-              status: 'published',
-              publishedRevision: current.draftRevision,
-              publishedAt: new Date(),
-              updatedAt: new Date(),
-              updatedBy: input.actorId,
-            }
-          : {
-              status: 'draft',
-              publishedRevision: null,
-              publishedAt: null,
-              updatedAt: new Date(),
-              updatedBy: input.actorId,
-            },
-      )
-      .where(eq(landingPages.id, input.id))
-      .returning({ id: landingPages.id, status: landingPages.status });
-    return page;
+      .set({
+        ...buildLandingPagePublicationUpdate({
+          active: input.active,
+          revision: current.draftRevision,
+          now,
+        }),
+        updatedBy: input.actorId,
+        updatedAt: now,
+      })
+      .where(eq(landingPages.id, input.id));
+    return { id: input.id, active: input.active, currentRevision: current.draftRevision };
   });
 }

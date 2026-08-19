@@ -1,0 +1,71 @@
+import { NextRequest } from 'next/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { getReportMock, upsertDayMock, requireOpsMock, requireMutationMock } = vi.hoisted(() => ({
+  getReportMock: vi.fn(),
+  upsertDayMock: vi.fn(),
+  requireOpsMock: vi.fn(),
+  requireMutationMock: vi.fn(),
+}));
+
+vi.mock('@bric/db/client', () => ({ hasDb: () => true }));
+vi.mock('../../../../../lib/rbac', () => ({
+  requireAnalyticsAccess: requireOpsMock,
+  requireMutationAccess: requireMutationMock,
+}));
+vi.mock('../../../../../lib/profit-tracker', async () => {
+  const actual = await vi.importActual<typeof import('../../../../../lib/profit-tracker')>(
+    '../../../../../lib/profit-tracker',
+  );
+  return {
+    ...actual,
+    getProfitTrackerReport: getReportMock,
+    upsertProfitTrackerDay: upsertDayMock,
+  };
+});
+
+import { GET, POST } from './route';
+
+describe('profit tracker days route', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireOpsMock.mockResolvedValue(null);
+    requireMutationMock.mockResolvedValue(null);
+    getReportMock.mockResolvedValue({ days: [{ date: '2026-08-15' }] });
+    upsertDayMock.mockImplementation(async (value) => value);
+  });
+
+  it('returns only the range day facts', async () => {
+    const response = await GET(
+      new NextRequest('http://localhost/api/stats/profit-tracker/days?range=30d'),
+    );
+    await expect(response.json()).resolves.toEqual({ data: [{ date: '2026-08-15' }] });
+  });
+
+  it('accepts partial manual economics without requiring Meta fields', async () => {
+    const input = {
+      date: '2026-08-15',
+      grossProfitDzd: 100000,
+      confirmedOrders: 15,
+    };
+    const response = await POST(
+      new Request('http://localhost/api/stats/profit-tracker/days', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(upsertDayMock).toHaveBeenCalledWith(input);
+  });
+
+  it('rejects out-of-range return rates', async () => {
+    const response = await POST(
+      new Request('http://localhost/api/stats/profit-tracker/days', {
+        method: 'POST',
+        body: JSON.stringify({ date: '2026-08-15', returnRatePct: 101 }),
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(upsertDayMock).not.toHaveBeenCalled();
+  });
+});

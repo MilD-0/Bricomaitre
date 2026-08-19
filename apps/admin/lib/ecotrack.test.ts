@@ -60,6 +60,8 @@ describe('lib/ecotrack', () => {
       id: 11,
       ecotrackReference: null,
       ecotrackTrackingNumber: null,
+      confirmed: 2,
+      noAnswerCount: 0,
       confirmedAt: null,
       confirmedBy: null,
       confirmedByName: null,
@@ -601,7 +603,11 @@ describe('lib/ecotrack', () => {
         ),
       );
 
-    const updateSetMock = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+    const updateSetMock = vi.fn((values: Record<string, unknown>) => ({
+      where: vi.fn(() => ({
+        returning: vi.fn().mockResolvedValue([{ ...orderInput.row, ...values }]),
+      })),
+    }));
     const upsertValuesMock = vi
       .fn()
       .mockReturnValue({ onConflictDoUpdate: vi.fn().mockResolvedValue(undefined) });
@@ -614,6 +620,7 @@ describe('lib/ecotrack', () => {
             from: vi.fn().mockReturnValue({
               where: vi.fn().mockReturnValue({
                 limit: vi.fn().mockResolvedValue([]),
+                for: vi.fn().mockResolvedValue([orderInput.row]),
               }),
             }),
           }),

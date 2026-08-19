@@ -1,27 +1,31 @@
-import { canViewOps, hasPermission, type PermissionKey, type Role } from './permissions';
+import { canManageAnalytics, canManageSettings, hasPermission, type PermissionKey, type Role } from './permissions';
 import type { NavigationKey } from './navigation';
 
-export function canAccessNavigationItem({
-  isAllowed,
-  key,
-  permissions,
-  role,
-}: {
+export function canAccessNavigationItem(access: {
   isAllowed: boolean;
   key: NavigationKey;
   permissions: readonly PermissionKey[];
   role: Role;
 }) {
+  const { isAllowed, key, permissions } = access;
   if (!isAllowed) {
     return false;
   }
 
   if (key === 'administration') {
-    return role === 'admin' || role === 'developer';
+    return canManageSettings(permissions);
   }
 
   if (key === 'products' || key === 'inventory') {
     return hasPermission(permissions, 'products_write');
+  }
+
+  if (key === 'aiProposals') {
+    return (
+      hasPermission(permissions, 'products_write') ||
+      hasPermission(permissions, 'assets_write') ||
+      hasPermission(permissions, 'brands_categories_write')
+    );
   }
 
   if (key === 'orders') {
@@ -37,7 +41,7 @@ export function canAccessNavigationItem({
   }
 
   if (key === 'stats') {
-    return canViewOps(permissions);
+    return canManageAnalytics(permissions);
   }
 
   if (key === 'bulletin') {
@@ -65,6 +69,7 @@ export function getDefaultAuthorizedHref({
   const orderedKeys: NavigationKey[] = [
     'administration',
     'products',
+    'aiProposals',
     'orders',
     'inventory',
     'assets',
@@ -75,6 +80,7 @@ export function getDefaultAuthorizedHref({
   const hrefByKey: Record<NavigationKey, string> = {
     administration: '/administration',
     products: '/products',
+    aiProposals: '/ai-proposals',
     orders: '/orders',
     inventory: '/inventory',
     assets: '/assets',
@@ -110,5 +116,5 @@ export function canAccessBrandsCategories(permissions: readonly PermissionKey[])
 }
 
 export function canAccessStats(permissions: readonly PermissionKey[]) {
-  return canViewOps(permissions);
+  return canManageAnalytics(permissions);
 }

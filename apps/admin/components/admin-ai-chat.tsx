@@ -912,7 +912,7 @@ export function AdminAiChat() {
     <>
       <Button
         type="button"
-        className="group fixed bottom-4 end-4 z-30 size-12 rounded-[1rem] p-0 shadow-[var(--shadow-vapor-strong)] sm:bottom-6 sm:end-6 sm:h-12 sm:w-auto sm:px-4"
+        className="group fixed bottom-[5.5rem] end-4 z-30 size-12 rounded-[1rem] p-0 shadow-[var(--shadow-vapor-strong)] sm:bottom-6 sm:end-6 sm:h-12 sm:w-auto sm:px-4"
         onClick={() => setOpen(true)}
         aria-label={t('aiChat.open')}
       >

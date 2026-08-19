@@ -12,7 +12,7 @@ import {
   cancelExportJob,
 } from '../../../../../lib/background-jobs';
 import { hasPermission, normalizePermissions } from '../../../../../lib/permissions';
-import { requireAiUseAccess } from '../../../../../lib/rbac';
+import { requireAppAccess } from '../../../../../lib/rbac';
 
 const requestSchema = z.union([
   z.object({ kind: z.enum(['content', 'categorization']).default('content') }).strict(),
@@ -20,7 +20,7 @@ const requestSchema = z.union([
 ]);
 
 export async function POST(request: NextRequest) {
-  const denied = await requireAiUseAccess();
+  const denied = await requireAppAccess();
   if (denied) return denied;
   const parsed = requestSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success)
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json(await cancelAdminBackgroundJob(parsed.data.type, parsed.data.jobId));
   }
-  if (!hasPermission(permissions, 'ai_catalog_propose')) {
+  if (!hasPermission(permissions, 'products_write')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   const queue =

@@ -1,27 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { type InferInsertModel, and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { type InferInsertModel, asc, eq } from 'drizzle-orm';
 import {
   ensureOrderCompletedEventForOrder,
   ensureOrderConfirmedEventForOrder,
   isMetaCompletedStatus,
   isMetaOrderConfirmedStatus,
+  normalizeAlgeriaPhone,
 } from '@bric/storefront-core/meta';
 import { ensureMarketingOrderStatusEvents } from '@bric/storefront-core/marketing';
+import {
+  readOrderProductSubtotal,
+  resolveOrderCommercialState,
+} from '@bric/storefront-core/order-commercial';
 import { createPublicOrderToken } from '@bric/storefront-core/order-access';
+import {
+  CanonicalOrderNotFoundError,
+  ensureCanonicalOrderPublicToken,
+  updateCanonicalOrder,
+} from '@bric/storefront-core/order-write';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { loadOrderDetail } from '../../../../lib/admin-orders-data';
-import { orderStatusHistory, orders, products } from '@bric/db/schema';
+import { orderStatusHistory, orders } from '@bric/db/schema';
 import { mutateEntityWithHistory } from '../../../../lib/action-history';
 import { auth } from '../../../../lib/auth';
 import { readEcotrackCatalog, resolveEcotrackDeliveryFee } from '../../../../lib/ecotrack';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import {
   DEGRADED_CAPTURE_VARIANT,
+  canTransitionOrderStatus,
   coerceDeliveryType,
   coerceNoAnswerCount,
   coerceOrderStatus,
-  isConfirmedLifecycleStatus,
   orderPatchSchema,
 } from '../../../../lib/orders';
 import { requireMutationAccess } from '../../../../lib/rbac';
@@ -46,41 +56,6 @@ function shouldUseDegradedCaptureVariant(input: {
     isBlank(input.city) ||
     (input.delivery === 0 && isBlank(input.homeAddress))
   );
-}
-
-type Database = ReturnType<typeof getDb>;
-type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
-
-function isMongoObjectId(value: string) {
-  return /^[a-f\d]{24}$/i.test(value.trim());
-}
-
-async function canonicalizeOrderCartProducts(db: Transaction, cartProducts: string[]) {
-  const normalized = cartProducts
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .map((value) =>
-      /^\d+$/.test(value) && !isMongoObjectId(value) ? String(Number.parseInt(value, 10)) : value,
-    );
-  const mongoIds = [...new Set(normalized.filter(isMongoObjectId))];
-
-  if (mongoIds.length === 0) {
-    return normalized;
-  }
-
-  const productRows = await db
-    .select({ id: products.id, mongoId: products.mongoId })
-    .from(products)
-    .where(inArray(products.mongoId, mongoIds));
-  const lookup = new Map<string, string>();
-
-  for (const product of productRows) {
-    if (product.mongoId) {
-      lookup.set(product.mongoId, String(product.id));
-    }
-  }
-
-  return normalized.map((value) => lookup.get(value) ?? value);
 }
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -120,29 +95,17 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
   }
 
   const db = getDb();
-  const existing = await db.query.orders.findFirst({ where: eq(orders.id, numericId) });
-  if (!existing) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  try {
+    const publicToken = await db.transaction((tx) =>
+      ensureCanonicalOrderPublicToken(tx, numericId, createPublicOrderToken()),
+    );
+    return NextResponse.json({ ok: true, publicToken });
+  } catch (error) {
+    if (error instanceof CanonicalOrderNotFoundError) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    throw error;
   }
-  if (existing.publicToken) {
-    return NextResponse.json({ ok: true, publicToken: existing.publicToken });
-  }
-
-  const publicToken = createPublicOrderToken();
-  const [updated] = await db
-    .update(orders)
-    .set({ publicToken, updatedAt: new Date() })
-    .where(and(eq(orders.id, numericId), isNull(orders.publicToken)))
-    .returning({ publicToken: orders.publicToken });
-
-  if (updated?.publicToken) {
-    return NextResponse.json({ ok: true, publicToken: updated.publicToken });
-  }
-
-  const concurrent = await db.query.orders.findFirst({ where: eq(orders.id, numericId) });
-  return concurrent?.publicToken
-    ? NextResponse.json({ ok: true, publicToken: concurrent.publicToken })
-    : NextResponse.json({ error: 'Unable to create tracking token' }, { status: 503 });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -175,10 +138,38 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
   const changes = parsed.data;
+  const currentStatus = coerceOrderStatus(existing.confirmed);
+  if (
+    changes.confirmed !== undefined &&
+    !canTransitionOrderStatus(currentStatus, changes.confirmed)
+  ) {
+    return NextResponse.json(
+      {
+        error: 'This status change requires an explicit correction.',
+        from: currentStatus,
+        to: changes.confirmed,
+      },
+      { status: 409 },
+    );
+  }
   const catalog =
     changes.delivery !== undefined || changes.state !== undefined || changes.city !== undefined
       ? await readEcotrackCatalog(db)
       : null;
+  const nextDelivery = coerceDeliveryType(changes.delivery ?? existing.delivery);
+  const nextState = changes.state !== undefined ? changes.state : existing.state;
+  const nextDeliveryFee = catalog
+    ? resolveEcotrackDeliveryFee(catalog, nextState, nextDelivery)
+    : Number(existing.delPr ?? 0);
+  const commercial =
+    changes.cartProducts === undefined
+      ? null
+      : await resolveOrderCommercialState(db, {
+          cartProducts: changes.cartProducts,
+          promoCode: existing.promoCode,
+        });
+  const persistedSubtotal =
+    commercial === null ? await readOrderProductSubtotal(db, existing) : commercial.productSubtotal;
   let shouldQueueConfirmation = false;
   let shouldQueueCompletion = false;
 
@@ -188,7 +179,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     operation: 'update',
     actor,
     execute: async (tx) => {
-      const currentStatus = coerceOrderStatus(existing.confirmed);
       const currentNoAnswerCount = coerceNoAnswerCount(
         currentStatus,
         existing.noAnswerCount,
@@ -203,8 +193,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
               existing.confirmed,
             )
           : 0;
-      const statusChanged =
-        nextStatus !== currentStatus || nextNoAnswerCount !== currentNoAnswerCount;
       const now = new Date();
 
       const update: Partial<InferInsertModel<typeof orders>> & { updatedAt: Date } = {
@@ -217,18 +205,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         update.lastName = changes.lastName;
       }
       const nextPhoneNumber1 = changes.phoneNumber1 ?? existing.phoneNumber1;
-      const nextDelivery = coerceDeliveryType(changes.delivery ?? existing.delivery);
-      const nextState = changes.state !== undefined ? changes.state : existing.state;
       const nextCity = changes.city !== undefined ? changes.city : existing.city;
       const nextHomeAddress =
         changes.homeAddress !== undefined ? changes.homeAddress : existing.homeAddress;
-      const nextCartProducts =
-        changes.cartProducts !== undefined
-          ? await canonicalizeOrderCartProducts(tx, changes.cartProducts)
-          : (existing.cartProducts ?? []);
+      const nextCartProducts = commercial?.cartProducts ?? existing.cartProducts ?? [];
 
       if (changes.phoneNumber1 !== undefined) {
         update.phoneNumber1 = changes.phoneNumber1;
+        update.normalizedPhone = normalizeAlgeriaPhone(changes.phoneNumber1);
       }
       if (changes.note !== undefined) {
         update.note = changes.note;
@@ -245,33 +229,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (changes.homeAddress !== undefined) {
         update.homeAddress = changes.homeAddress;
       }
-      if (changes.cartProducts !== undefined) {
-        update.cartProducts = nextCartProducts;
-      }
-      if (changes.confirmed !== undefined) {
-        update.confirmed = nextStatus;
-      }
-      if (changes.confirmed !== undefined || changes.noAnswerCount !== undefined) {
-        update.noAnswerCount = nextNoAnswerCount;
-
-        if (isConfirmedLifecycleStatus(nextStatus)) {
-          update.confirmedBy = existing.confirmedBy ?? actor.email ?? null;
-          update.confirmedByName = existing.confirmedByName ?? actor.name ?? null;
-          update.confirmedAt = existing.confirmedAt ?? now;
-        } else {
-          update.confirmedBy = null;
-          update.confirmedByName = null;
-          update.confirmedAt = null;
-        }
-      }
-
       if (
         catalog &&
         (changes.delivery !== undefined ||
           changes.state !== undefined ||
           changes.city !== undefined)
       ) {
-        update.delPr = resolveEcotrackDeliveryFee(catalog, nextState, nextDelivery).toFixed(2);
+        update.delPr = nextDeliveryFee.toFixed(2);
+        update.productSubtotal = persistedSubtotal.toFixed(2);
+        update.totalAmount = (persistedSubtotal + nextDeliveryFee).toFixed(2);
       }
 
       update.variant = shouldUseDegradedCaptureVariant({
@@ -285,22 +251,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ? DEGRADED_CAPTURE_VARIANT
         : null;
 
-      const rows = await tx.update(orders).set(update).where(eq(orders.id, numericId)).returning();
+      const result = await updateCanonicalOrder(tx, {
+        orderId: numericId,
+        values: update,
+        commercial: commercial ?? undefined,
+        deliveryFee: commercial ? nextDeliveryFee : undefined,
+        status:
+          changes.confirmed !== undefined || changes.noAnswerCount !== undefined
+            ? { value: nextStatus, noAnswerCount: nextNoAnswerCount }
+            : undefined,
+        actor,
+        now,
+      });
 
-      if (statusChanged) {
-        await tx.insert(orderStatusHistory).values({
-          orderId: numericId,
-          status: nextStatus,
-          noAnswerCount: nextNoAnswerCount,
-          changedBy: actor.email ?? null,
-          changedByName: actor.name ?? null,
-          changedAt: now,
-        });
+      if (result.statusChanged) {
         shouldQueueConfirmation = isMetaOrderConfirmedStatus(nextStatus);
         shouldQueueCompletion = isMetaCompletedStatus(nextStatus);
       }
 
-      return rows;
+      return [result.order];
     },
   });
 

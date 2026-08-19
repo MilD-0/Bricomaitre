@@ -8,6 +8,8 @@ import {
   pgTable,
   text,
   timestamp,
+  numeric,
+  check,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -123,6 +125,11 @@ export const aiProposals = pgTable(
     sourceUpdatedAt: timestamp('source_updated_at', { withTimezone: true }),
     payload: jsonb('payload').notNull(),
     reasoning: text('reasoning'),
+    evidence: jsonb('evidence')
+      .$type<Array<{ label: string; url?: string; excerpt?: string }>>()
+      .notNull()
+      .default([]),
+    confidence: numeric('confidence', { precision: 5, scale: 4 }),
     requestedBy: text('requested_by'),
     reviewedBy: text('reviewed_by'),
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
@@ -136,5 +143,9 @@ export const aiProposals = pgTable(
     index('idx_ai_proposals_entity_status').on(t.entityType, t.entityId, t.status),
     index('idx_ai_proposals_requested_created').on(t.requestedBy, t.createdAt),
     index('idx_ai_proposals_expires').on(t.expiresAt),
+    check(
+      'ai_proposals_confidence_check',
+      sql`${t.confidence} is null or (${t.confidence} >= 0 and ${t.confidence} <= 1)`,
+    ),
   ],
 );

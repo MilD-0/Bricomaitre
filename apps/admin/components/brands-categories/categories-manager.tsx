@@ -404,6 +404,7 @@ export function CategoriesManager() {
         status: 'active',
         parentId: values.parentId ? String(values.parentId) : null,
         parentName: parentOption?.name ?? null,
+        productCount: 0,
         createdAt: now,
         updatedAt: now,
         createdBy: null,

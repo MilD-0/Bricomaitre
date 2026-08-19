@@ -1,6 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const useProductionServer = process.env.BRIC_PLAYWRIGHT_SERVER === 'production';
+const playwrightServerMode = process.env.BRIC_PLAYWRIGHT_SERVER;
+const useProductionServer =
+  playwrightServerMode === 'production' || playwrightServerMode === 'prebuilt';
+const usePrebuiltProductionServer = playwrightServerMode === 'prebuilt';
 
 export default defineConfig({
   testDir: './tests',
@@ -53,7 +56,14 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
-      command: useProductionServer ? 'pnpm build && pnpm start' : 'pnpm dev',
+      // Keep the production performance gate within the memory envelope used
+      // by local and constrained CI runners. The cap applies to compilation;
+      // the measured standalone server starts with its normal runtime limits.
+      command: usePrebuiltProductionServer
+        ? 'pnpm start'
+        : useProductionServer
+          ? 'NODE_OPTIONS=--max-old-space-size=2048 pnpm build && pnpm start'
+          : 'pnpm dev',
       url: 'http://127.0.0.1:3003/api/health',
       reuseExistingServer: false,
       timeout: useProductionServer ? 180_000 : 60_000,

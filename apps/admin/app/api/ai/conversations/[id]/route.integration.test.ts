@@ -27,7 +27,7 @@ vi.mock('@bric/db/client', () => ({
 vi.mock('../../../../../lib/auth', () => ({
   auth: async () => ({ user: { email: 'owner@bricomaitre.com' } }),
 }));
-vi.mock('../../../../../lib/rbac', () => ({ requireAiUseAccess: async () => null }));
+vi.mock('../../../../../lib/rbac', () => ({ requireAppAccess: async () => null }));
 
 import { GET } from './route';
 

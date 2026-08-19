@@ -4,7 +4,15 @@ import type {
   ShoppingAssistantProduct,
   ShoppingAssistantResponse,
 } from '@bric/storefront-core/shopping-assistant-contracts';
-import { ArrowUp, Bot, MessageSquarePlus, PackageSearch, Sparkles } from 'lucide-react';
+import {
+  ArrowUp,
+  Bot,
+  Check,
+  MessageSquarePlus,
+  PackageSearch,
+  ShoppingCart,
+  Sparkles,
+} from 'lucide-react';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 
 import { AssistantMarkdown } from '@/components/assistant-markdown';
@@ -18,6 +26,7 @@ import {
 } from '@/lib/assistant-attribution';
 import { triggerHaptic } from '@/lib/haptics';
 import { formatProductPrice } from '@/lib/product-presentation';
+import { addCartItem, readCart, writeCart } from '@/lib/cart';
 import { classifyShoppingAssistantIntent } from '@/lib/shopping-assistant';
 import { consumeShoppingAssistantResponse } from '@/lib/shopping-assistant-stream';
 
@@ -39,6 +48,8 @@ export type ShoppingAssistantLabels = {
   outOfStock: string;
   priceOnRequest: string;
   viewProduct: string;
+  addToCart?: string;
+  addedToCart?: string;
   inputLabel: string;
   quickPrompts: string[];
 };
@@ -112,45 +123,86 @@ function ProductResult({
   position: number;
 }) {
   const title = localizedTitle(product, locale);
+  const [added, setAdded] = useState(false);
+
+  function addExactProduct() {
+    if (!product.inStock || product.price === null) return;
+    const next = addCartItem(readCart(window.localStorage), {
+      productId: product.id,
+      token: product.token,
+      title,
+      imageUrl: product.imageUrl,
+      unitPrice: Number(product.price),
+      quantity: 1,
+      availabilityStatus: product.availabilityStatus,
+    });
+    writeCart(window.localStorage, next);
+    window.dispatchEvent(new Event('bric:cart-updated'));
+    setAdded(true);
+    void triggerHaptic('success');
+    void trackNavigationEvent({
+      eventName: 'add_to_cart',
+      locale,
+      productId: product.id,
+      productSlug: product.token,
+      metadata: { surface: 'ai_assistant', target: 'exact_catalog_result', position },
+    });
+  }
+
   return (
-    <a
-      className="shopping-assistant-product"
-      href={`/${locale}/products/${encodeURIComponent(product.token)}`}
-      onClick={() => {
-        void triggerHaptic('navigation');
-        recordAssistantRecommendationClick(getAnalyticsIdentity(), product.id);
-        void trackNavigationEvent({
-          eventName: 'ai_assistant_result_click',
-          locale,
-          productId: product.id,
-          productSlug: product.token,
-          metadata: { surface: 'ai_assistant', target: 'product_result', position },
-        });
-      }}
-    >
-      <span className="shopping-assistant-product-media">
-        {product.imageUrl ? (
-          <StorefrontImage
-            src={product.imageUrl}
-            alt=""
-            width={96}
-            height={96}
-            sizes="72px"
-            quality={60}
-          />
-        ) : (
-          <PackageSearch aria-hidden="true" size={26} />
-        )}
-      </span>
-      <span className="shopping-assistant-product-copy">
-        <span className={product.inStock ? 'is-available' : 'is-unavailable'}>
-          {product.inStock ? labels.inStock : labels.outOfStock}
+    <div className="shopping-assistant-product">
+      <a
+        className="shopping-assistant-product-link"
+        href={`/${locale}/products/${encodeURIComponent(product.token)}`}
+        onClick={() => {
+          void triggerHaptic('navigation');
+          recordAssistantRecommendationClick(getAnalyticsIdentity(), product.id);
+          void trackNavigationEvent({
+            eventName: 'ai_assistant_result_click',
+            locale,
+            productId: product.id,
+            productSlug: product.token,
+            metadata: { surface: 'ai_assistant', target: 'product_result', position },
+          });
+        }}
+      >
+        <span className="shopping-assistant-product-media">
+          {product.imageUrl ? (
+            <StorefrontImage
+              src={product.imageUrl}
+              alt=""
+              width={96}
+              height={96}
+              sizes="72px"
+              quality={60}
+            />
+          ) : (
+            <PackageSearch aria-hidden="true" size={26} />
+          )}
         </span>
-        <strong>{title}</strong>
-        <b>{product.price ? formatProductPrice(product.price, locale) : labels.priceOnRequest}</b>
-      </span>
-      <span className="shopping-assistant-product-action">{labels.viewProduct}</span>
-    </a>
+        <span className="shopping-assistant-product-copy">
+          <span className={product.inStock ? 'is-available' : 'is-unavailable'}>
+            {product.inStock ? labels.inStock : labels.outOfStock}
+          </span>
+          <strong>{title}</strong>
+          <b>{product.price ? formatProductPrice(product.price, locale) : labels.priceOnRequest}</b>
+        </span>
+        <span className="shopping-assistant-product-action">{labels.viewProduct}</span>
+      </a>
+      <button
+        type="button"
+        className="shopping-assistant-product-cart"
+        disabled={!product.inStock || product.price === null}
+        onClick={addExactProduct}
+      >
+        {added ? (
+          <Check aria-hidden="true" size={14} />
+        ) : (
+          <ShoppingCart aria-hidden="true" size={14} />
+        )}
+        {added ? (labels.addedToCart ?? 'Added') : (labels.addToCart ?? 'Add to cart')}
+      </button>
+    </div>
   );
 }
 

@@ -7,6 +7,10 @@ import { mutateEntityWithHistory } from '../../../../lib/action-history';
 import { auth } from '../../../../lib/auth';
 import { readCategory, resolveCategorySlug } from '../../../../lib/brands-categories-api';
 import { categoryUpdateSchema } from '../../../../lib/brands-categories';
+import {
+  assertCategoryParentAllowed,
+  CategoryHierarchyError,
+} from '../../../../lib/category-hierarchy';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
 import { revalidateStorefrontProductMeta } from '../../../../lib/storefront-revalidate';
@@ -66,40 +70,52 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const actor = { email: session?.user?.email, name: session?.user?.name };
   const data = parsed.data;
 
-  await mutateEntityWithHistory(db, {
-    entityType: 'categories',
-    entityId: numericId,
-    operation: 'update',
-    actor,
-    execute: async (tx) => {
-      const update: {
-        name?: string;
-        slug?: string;
-        nameAr?: string | null;
-        image?: string | null;
-        parentId?: number | null;
-        isActive?: boolean;
-        updatedAt: Date;
-        updatedBy: string | null;
-        updatedByName: string | null;
-      } = {
-        updatedAt: new Date(),
-        updatedBy: actor.email ?? null,
-        updatedByName: actor.name ?? null,
-      };
+  try {
+    await mutateEntityWithHistory(db, {
+      entityType: 'categories',
+      entityId: numericId,
+      operation: 'update',
+      actor,
+      execute: async (tx) => {
+        if (data.parentId !== undefined) {
+          await assertCategoryParentAllowed(tx, numericId, data.parentId ?? null, {
+            lockHierarchy: true,
+          });
+        }
+        const update: {
+          name?: string;
+          slug?: string;
+          nameAr?: string | null;
+          image?: string | null;
+          parentId?: number | null;
+          isActive?: boolean;
+          updatedAt: Date;
+          updatedBy: string | null;
+          updatedByName: string | null;
+        } = {
+          updatedAt: new Date(),
+          updatedBy: actor.email ?? null,
+          updatedByName: actor.name ?? null,
+        };
 
-      if (data.name !== undefined) {
-        update.name = data.name;
-        update.slug = await resolveCategorySlug(data.name, numericId);
-      }
-      if (data.nameAr !== undefined) update.nameAr = data.nameAr;
-      if (data.imageUrl !== undefined) update.image = data.imageUrl;
-      if (data.parentId !== undefined) update.parentId = data.parentId ?? null;
-      if (data.status !== undefined) update.isActive = data.status === 'active';
+        if (data.name !== undefined) {
+          update.name = data.name;
+          update.slug = await resolveCategorySlug(data.name, numericId);
+        }
+        if (data.nameAr !== undefined) update.nameAr = data.nameAr;
+        if (data.imageUrl !== undefined) update.image = data.imageUrl;
+        if (data.parentId !== undefined) update.parentId = data.parentId ?? null;
+        if (data.status !== undefined) update.isActive = data.status === 'active';
 
-      await tx.update(categories).set(update).where(eq(categories.id, numericId));
-    },
-  });
+        await tx.update(categories).set(update).where(eq(categories.id, numericId));
+      },
+    });
+  } catch (error) {
+    if (error instanceof CategoryHierarchyError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: 409 });
+    }
+    throw error;
+  }
 
   await revalidateStorefrontProductMeta();
 

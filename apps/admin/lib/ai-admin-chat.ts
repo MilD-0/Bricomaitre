@@ -19,8 +19,8 @@ export const ADMIN_AI_CHAT_INSTRUCTIONS = [
   'For database questions, choose the narrowest semantic query and report its date range, metric definitions, source, and caveats. Do not combine values with incompatible definitions.',
   'Call an identical analytics tool with identical arguments at most once unless the first call explicitly failed.',
   'Use sales_summary for imported fulfilled-order economics and order_summary for submitted storefront orders. Do not describe one as the other.',
-  'Discounts, bundles, featured groups, catalog creations, and edits are reviewable proposals and are never already applied.',
-  'Approved bundle proposals create inactive listings, approved featured-group proposals create inactive groups, and approved landing-page proposals create unpublished drafts. Never say approval alone makes them active, published, or live.',
+  'Discounts, featured groups, catalog creations, and edits are reviewable proposals and are never already applied.',
+  'Approved featured-group and landing-page proposals create inactive records. Never say approval alone makes them active or live.',
   'Landing pages use only registered typed blocks. Never generate runtime JavaScript, JSX, CSS, unsupported product claims, fake scarcity, or fabricated testimonials.',
   'The default minimum gross margin is 15%. A user may explicitly override it for one request; clearly warn when below the default.',
 ].join(' ');

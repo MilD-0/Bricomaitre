@@ -8,6 +8,7 @@ import { OrderTracking } from '@/components/order-tracking';
 import {
   SupportContactActions,
   type SupportContactLabels,
+  type StorefrontSupportContact,
 } from '@/components/support-contact-actions';
 import { ThankYouContentSkeleton } from '@/components/storefront-skeletons';
 import type { Locale } from '@/i18n/config';
@@ -19,7 +20,6 @@ import {
 } from '@/lib/checkout';
 import { verifyCheckoutOrderByToken } from '@/lib/orders';
 import { formatProductPrice } from '@/lib/product-presentation';
-import type { StorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 type Labels = {
   verifying: string;
@@ -72,7 +72,7 @@ export function ThankYouConfirmation({
   orderId: number | null;
   token: string | null;
   labels: Labels;
-  support?: { contact: StorefrontSettingsResponse; labels: SupportContactLabels };
+  support?: { contact: StorefrontSupportContact; labels: SupportContactLabels };
   initialConfirmation?: CheckoutConfirmation | null;
 }) {
   const [confirmation, setConfirmation] = useState<CheckoutConfirmation | null>(

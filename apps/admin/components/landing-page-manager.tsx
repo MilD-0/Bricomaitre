@@ -5,7 +5,7 @@ import type {
   LandingPageDocument,
   LandingPageRecord,
 } from '@bric/storefront-core/landing-pages';
-import { ArrowDown, ArrowUp, Eye, LayoutTemplate, Plus, Save, Send, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Eye, LayoutTemplate, Plus, Save, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import type { AssetMetaProduct } from '../lib/assets';
@@ -507,6 +507,7 @@ export function LandingPageManager({
   const [items, setItems] = useState(initialItems);
   const [selectedId, setSelectedId] = useState<number | null>(initialItems[0]?.id ?? null);
   const [draft, setDraft] = useState<LandingPageDocument | null>(initialItems[0]?.document ?? null);
+  const [active, setActive] = useState(initialItems[0]?.status === 'published');
   const [productId, setProductId] = useState(0);
   const [locale, setLocale] = useState<'fr' | 'ar'>('fr');
   const [busy, setBusy] = useState(false);
@@ -535,6 +536,7 @@ export function LandingPageManager({
   function selectPage(page: PageItem) {
     setSelectedId(page.id);
     setDraft(structuredClone(page.document));
+    setActive(page.status === 'published');
     setMessage('');
   }
   function patchDocument(updater: (current: LandingPageDocument) => LandingPageDocument) {
@@ -563,6 +565,7 @@ export function LandingPageManager({
     const page = result.items.find((item) => item.id === preferredId) ?? result.items[0] ?? null;
     setSelectedId(page?.id ?? null);
     setDraft(page ? structuredClone(page.document) : null);
+    setActive(page?.status === 'published');
   }
 
   async function create(event: React.FormEvent) {
@@ -576,7 +579,7 @@ export function LandingPageManager({
       });
       await reload(result.id);
       setProductId(0);
-      setMessage('Brouillon créé.');
+      setMessage('Page créée.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Création impossible.');
     } finally {
@@ -584,25 +587,22 @@ export function LandingPageManager({
     }
   }
 
-  async function action(actionName: 'save' | 'publish' | 'unpublish') {
+  async function save() {
     if (!selected || !draft) return;
     setBusy(true);
     setMessage('');
     try {
       await api(`/api/landing-pages/${selected.id}`, {
         method: 'PATCH',
-        body: JSON.stringify(
-          actionName === 'save' ? { action: actionName, document: draft } : { action: actionName },
-        ),
+        body: JSON.stringify({
+          action: 'save-active',
+          document: { ...draft, seo: { ...draft.seo, indexable: false } },
+          active,
+          expectedRevision: selected.draftRevision,
+        }),
       });
       await reload(selected.id);
-      setMessage(
-        actionName === 'save'
-          ? 'Nouvelle révision enregistrée.'
-          : actionName === 'publish'
-            ? 'Landing page publiée.'
-            : 'Landing page dépubliée.',
-      );
+      setMessage('Page enregistrée.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Mise à jour impossible.');
     } finally {
@@ -616,7 +616,7 @@ export function LandingPageManager({
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Landing pages produit</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Créez, prévisualisez et publiez des expériences produit ciblées pour le storefront.
+            Créez et modifiez des expériences produit ciblées pour le storefront.
           </p>
         </div>
       </header>
@@ -667,7 +667,7 @@ export function LandingPageManager({
             </div>
             <Button className="w-full" disabled={busy || !productId}>
               <Plus />
-              Créer le brouillon
+              Créer la page
             </Button>
           </div>
         </form>
@@ -687,7 +687,7 @@ export function LandingPageManager({
                   /{page.locale}/landing/{page.slug}
                 </span>
                 <span className="mt-2 inline-flex rounded-full bg-muted px-2 py-1 text-[.65rem] font-semibold">
-                  {page.status}
+                  {page.status === 'published' ? 'Active' : 'Inactive'}
                 </span>
               </button>
             ))
@@ -703,21 +703,15 @@ export function LandingPageManager({
                 <p className="text-xs text-muted-foreground">Révision {selected.draftRevision}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" onClick={() => action('save')} disabled={busy}>
+                <label className="flex items-center gap-2 rounded-xl border border-border/70 px-3 text-sm font-medium">
+                  Active
+                  <Switch aria-label="Active" checked={active} onCheckedChange={setActive} />
+                </label>
+                <Button onClick={() => void save()} disabled={busy}>
                   <Save />
                   Enregistrer
                 </Button>
-                {selected.status === 'published' ? (
-                  <Button variant="outline" onClick={() => action('unpublish')} disabled={busy}>
-                    Dépublier
-                  </Button>
-                ) : (
-                  <Button onClick={() => action('publish')} disabled={busy}>
-                    <Send />
-                    Publier
-                  </Button>
-                )}
-                {storefrontBaseUrl ? (
+                {storefrontBaseUrl && selected.status === 'published' ? (
                   <a
                     className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-secondary px-4 text-sm font-semibold text-secondary-foreground"
                     href={`${storefrontBaseUrl}/${selected.locale}/landing/${selected.slug}`}
@@ -727,12 +721,12 @@ export function LandingPageManager({
                     <Eye className="size-4" />
                     Voir
                   </a>
-                ) : (
+                ) : selected.status === 'published' ? (
                   <Button variant="outline" disabled title="Configurez STOREFRONT_BASE_URL">
                     <Eye className="size-4" />
                     Voir
                   </Button>
-                )}
+                ) : null}
               </div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
@@ -743,7 +737,7 @@ export function LandingPageManager({
                   onChange={(event) =>
                     patchDocument((current) => ({
                       ...current,
-                      seo: { ...current.seo, title: event.target.value },
+                      seo: { ...current.seo, title: event.target.value, indexable: false },
                     }))
                   }
                 />
@@ -755,22 +749,10 @@ export function LandingPageManager({
                   onChange={(event) =>
                     patchDocument((current) => ({
                       ...current,
-                      seo: { ...current.seo, description: event.target.value },
+                      seo: { ...current.seo, description: event.target.value, indexable: false },
                     }))
                   }
                 />
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <Switch
-                  checked={draft.seo.indexable}
-                  onCheckedChange={(checked) =>
-                    patchDocument((current) => ({
-                      ...current,
-                      seo: { ...current.seo, indexable: checked },
-                    }))
-                  }
-                />
-                Indexable
               </label>
               <select
                 className="h-10 rounded-xl border bg-background px-3 text-sm"
@@ -793,7 +775,7 @@ export function LandingPageManager({
             <div className="rounded-2xl bg-muted/20 p-3">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <strong className="text-sm">Aperçu du brouillon</strong>
+                  <strong className="text-sm">Aperçu de la page</strong>
                   <p className="text-xs text-muted-foreground">
                     Le prix, le stock et les frais seront résolus en direct. Le formulaire de
                     commande est toujours inclus.
@@ -859,9 +841,6 @@ export function LandingPageManager({
                 <Plus />
                 Ajouter un bloc
               </Button>
-              <span className="text-xs text-muted-foreground">
-                L’assistant IA peut composer librement avec toute cette bibliothèque contrôlée.
-              </span>
             </div>
             <div className="space-y-3">
               {draft.blocks.map((block, index) => (

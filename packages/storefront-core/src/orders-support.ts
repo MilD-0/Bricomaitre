@@ -343,6 +343,41 @@ export function isConfirmedLifecycleStatus(status: OrderStatus) {
   );
 }
 
+const ALLOWED_ORDER_STATUS_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
+  0: [1, 2, 6, 10],
+  1: [2, 6, 10],
+  2: [3, 4, 5, 6, 7, 8, 9, 10, 11],
+  3: [4, 5, 7, 8, 9, 10],
+  4: [],
+  5: [2, 3, 4, 6, 7, 8, 9, 10, 11],
+  6: [],
+  7: [4, 5, 8, 9, 10],
+  8: [],
+  9: [],
+  10: [],
+  11: [3, 4, 5, 6, 7, 8, 9, 10],
+};
+
+export function canTransitionOrderStatus(from: OrderStatus, to: OrderStatus) {
+  return from === to || ALLOWED_ORDER_STATUS_TRANSITIONS[from].includes(to);
+}
+
+export class InvalidOrderStatusTransitionError extends Error {
+  constructor(
+    readonly from: OrderStatus,
+    readonly to: OrderStatus,
+  ) {
+    super(`Order status cannot transition from ${from} to ${to} without a correction.`);
+    this.name = 'InvalidOrderStatusTransitionError';
+  }
+}
+
+export function assertOrderStatusTransition(from: OrderStatus, to: OrderStatus) {
+  if (!canTransitionOrderStatus(from, to)) {
+    throw new InvalidOrderStatusTransitionError(from, to);
+  }
+}
+
 export function getOrderStatusLabelKey(status: OrderStatus) {
   return ORDER_STATUS_LABEL_KEYS[status];
 }

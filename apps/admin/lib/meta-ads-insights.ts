@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
 import { metaAdsDailyInsights, metaAdsSyncRuns } from '@bric/db/schema';
+import { syncProfitTrackerMetaRows } from './profit-tracker';
 
 const DEFAULT_GRAPH_API_VERSION = 'v25.0';
 const DEFAULT_LOOKBACK_DAYS = 28;
@@ -457,6 +458,13 @@ export async function syncMetaAdsInsights(
       if (loaded.rows.length > 0) {
         await tx.insert(metaAdsDailyInsights).values(loaded.rows);
       }
+    });
+
+    await syncProfitTrackerMetaRows(loaded.rows, db, {
+      since: loaded.since,
+      until: loaded.until,
+      accountCurrency: loaded.account.currency,
+      syncedAt: now,
     });
 
     await db
