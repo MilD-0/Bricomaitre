@@ -8,6 +8,7 @@ export const navigationKeys = [
   'inventory',
   'assets',
   'brandsCategories',
+  'analytics2',
   'stats',
   'bulletin',
 ] as const;
@@ -77,6 +78,10 @@ export const navigationItems: NavigationItem[] = [
       { key: 'brands', href: '/brands', translationKey: 'nav.brands' },
       { key: 'categories', href: '/categories', translationKey: 'nav.categories' },
     ],
+  },
+  {
+    key: 'analytics2',
+    href: '/analytics2',
   },
   {
     key: 'stats',

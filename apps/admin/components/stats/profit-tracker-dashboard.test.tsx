@@ -12,6 +12,12 @@ vi.mock('next-intl', () => ({
     values ? `${key}:${Object.values(values).join('|')}` : key,
 }));
 
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/en/stats/costs',
+  useRouter: () => ({ replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 const report = {
   filters: { range: '30d', startDate: '2026-08-01', endDate: '2026-08-18' },
   settings: { fxRate: 280, defaultReturnRate: 10, restFrom: '2026-08-01' },

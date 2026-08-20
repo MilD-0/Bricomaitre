@@ -96,5 +96,8 @@ export const orderStatusHistory = pgTable(
     changedByName: text('changed_by_name'),
     changedAt: timestamp('changed_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('idx_osh_order').on(t.orderId, t.changedAt)],
+  (t) => [
+    index('idx_osh_order').on(t.orderId, t.changedAt),
+    index('idx_osh_status_changed_order').on(t.status, t.changedAt, t.orderId),
+  ],
 );

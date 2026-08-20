@@ -40,7 +40,7 @@ export function canAccessNavigationItem(access: {
     return hasPermission(permissions, 'brands_categories_write');
   }
 
-  if (key === 'stats') {
+  if (key === 'stats' || key === 'analytics2') {
     return canManageAnalytics(permissions);
   }
 
@@ -74,6 +74,7 @@ export function getDefaultAuthorizedHref({
     'inventory',
     'assets',
     'brandsCategories',
+    'analytics2',
     'stats',
     'bulletin',
   ];
@@ -85,6 +86,7 @@ export function getDefaultAuthorizedHref({
     inventory: '/inventory',
     assets: '/assets',
     brandsCategories: '/brands',
+    analytics2: '/analytics2',
     stats: '/stats',
     bulletin: '/bulletin',
   };

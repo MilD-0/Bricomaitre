@@ -5,6 +5,7 @@ import { hasDb } from '@bric/db/client';
 import { auth } from '../../../lib/auth';
 import { ADMIN_STATS_IMPORT_QUEUE, getLatestExportJob } from '../../../lib/background-jobs';
 import { getStatsDashboard, refreshStatsDashboard, statsQuerySchema } from '../../../lib/stats';
+import { getAnalyticsSectionData, type AnalyticsSection } from '../../../lib/stats-sections';
 import {
   deleteImportBatch,
   dismissUnmatchedReference,
@@ -23,6 +24,17 @@ const importHistoryQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(50).default(IMPORT_HISTORY_PAGE_SIZE),
 });
+const analyticsSections = new Set<AnalyticsSection>([
+  'overview',
+  'website',
+  'landingPages',
+  'aiAssistants',
+  'customers',
+  'products',
+  'geography',
+  'time',
+  'metaAds',
+]);
 
 export async function GET(request: NextRequest) {
   const denied = await requireAnalyticsAccess();
@@ -73,7 +85,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  return NextResponse.json({ data: await getStatsDashboard(parsed.data) });
+  const section = request.nextUrl.searchParams.get('section') as AnalyticsSection | null;
+  return NextResponse.json({
+    data:
+      section && analyticsSections.has(section)
+        ? await getAnalyticsSectionData(section, parsed.data)
+        : await getStatsDashboard(parsed.data),
+  });
 }
 
 export async function PUT(request: NextRequest) {
@@ -102,7 +120,11 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const data = await refreshStatsDashboard(parsed.data, 'manual-refresh');
+  const section = typeof body.section === 'string' ? (body.section as AnalyticsSection) : null;
+  const data =
+    section && analyticsSections.has(section)
+      ? await getAnalyticsSectionData(section, parsed.data, true)
+      : await refreshStatsDashboard(parsed.data, 'manual-refresh');
   revalidateServerTags(CACHE_TAGS.stats, CACHE_TAGS.statsHistory);
 
   return NextResponse.json({ data });

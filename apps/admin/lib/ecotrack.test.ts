@@ -386,7 +386,7 @@ describe('lib/ecotrack', () => {
 
     expect(snapshot.wilayas).toEqual([
       { wilayaId: 16, name: 'Alger' },
-      { wilayaId: 50, name: 'In Salah' },
+      { wilayaId: 50, name: 'Bordj Badji Mokhtar' },
     ]);
   });
 

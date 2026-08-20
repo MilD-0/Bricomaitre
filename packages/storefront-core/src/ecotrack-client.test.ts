@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { getEcotrackOrder } from './ecotrack-client';
+import {
+  getEcotrackOrder,
+  getEcotrackTrackingsInfo,
+  listEcotrackOrders,
+} from './ecotrack-client';
 
 const env = {
   ECOTRACK_BASE_URL: 'https://ecotrack.example/api/v1',
@@ -65,5 +69,93 @@ describe('getEcotrackOrder', () => {
     );
 
     await expect(getEcotrackOrder('TRK-11', { fetchImpl, env })).rejects.toThrow();
+  });
+
+  it('paginates the current-order feed and preserves provider fields outside the known contract', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            current_page: 1,
+            last_page: 2,
+            data: [
+              {
+                tracking: 'TRK-11',
+                status: 'encaisse_non_paye',
+                montant: '12700',
+                tarif_prestation: '400',
+                provider_new_field: 'retained',
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            current_page: 2,
+            last_page: 2,
+            data: [{ tracking: 'TRK-12', status: 'paye_et_archive', montant: 9000 }],
+          }),
+          { status: 200 },
+        ),
+      );
+
+    const result = await listEcotrackOrders({ fetchImpl, env, maxPages: 5 });
+
+    expect(result.pagesFetched).toBe(2);
+    expect(result.truncated).toBe(false);
+    expect(result.data).toHaveLength(2);
+    expect(result.data[0]).toMatchObject({
+      tracking: 'TRK-11',
+      montant: '12700',
+      tarif_prestation: '400',
+      provider_new_field: 'retained',
+    });
+    expect(result.rawData.get('TRK-11')).toMatchObject({ provider_new_field: 'retained' });
+    expect(
+      fetchImpl.mock.calls.map(([url]) => new URL(String(url)).searchParams.get('page')),
+    ).toEqual(['1', '2']);
+  });
+
+  it('normalizes undocumented OrderInfo from bulk tracking without dropping the raw payload', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          'TRK-11': {
+            status: 'paye_et_archive',
+            activity: [],
+            OrderInfo: {
+              tracking: 'TRK-11',
+              reference: '11',
+              montant: '12700',
+              tarif_prestation: '400',
+              stop_desk: false,
+              provider_new_field: 'retained',
+            },
+            deliveryAttempts: [{ reason: 'No answer' }],
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const result = await getEcotrackTrackingsInfo(['TRK-11'], { fetchImpl, env });
+
+    expect(result.data.get('TRK-11')).toMatchObject({
+      status: 'paye_et_archive',
+      OrderInfo: {
+        tracking: 'TRK-11',
+        montant: '12700',
+        tarif_prestation: '400',
+        provider_new_field: 'retained',
+      },
+      deliveryAttempts: [{ reason: 'No answer' }],
+    });
+    expect(result.rawData.get('TRK-11')).toMatchObject({
+      OrderInfo: { provider_new_field: 'retained' },
+    });
   });
 });

@@ -2,8 +2,14 @@ import { and, eq, gte, lte } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
-import { metaAdsDailyInsights, metaAdsSyncRuns } from '@bric/db/schema';
+import {
+  metaAdsBreakdownDailyInsights,
+  metaAdsDailyInsights,
+  metaAdsDeliveryEntities,
+  metaAdsSyncRuns,
+} from '@bric/db/schema';
 import { syncProfitTrackerMetaRows } from './profit-tracker';
+import { refreshAnalytics2Facts } from './analytics2-facts';
 
 const DEFAULT_GRAPH_API_VERSION = 'v25.0';
 const DEFAULT_LOOKBACK_DAYS = 28;
@@ -11,7 +17,8 @@ const MAX_LOOKBACK_DAYS = 90;
 const ACTION_REPORT_TIME = 'conversion';
 const META_GRAPH_HOST = 'graph.facebook.com';
 const META_PAGE_LIMIT = 500;
-const MAX_PAGES = 100;
+const MAX_PAGES = 300;
+const MAX_INSIGHTS_DAYS_PER_REQUEST = 30;
 
 type Database = ReturnType<typeof getDb>;
 type MetaAdsEnvironment = Record<string, string | undefined> &
@@ -57,6 +64,18 @@ const insightResponseRowSchema = z
     reach: z.union([z.string(), z.number()]).optional(),
     clicks: z.union([z.string(), z.number()]).optional(),
     inline_link_clicks: z.union([z.string(), z.number()]).optional(),
+    outbound_clicks: z.array(actionMetricSchema).optional(),
+    unique_outbound_clicks: z.array(actionMetricSchema).optional(),
+    video_play_actions: z.array(actionMetricSchema).optional(),
+    video_p25_watched_actions: z.array(actionMetricSchema).optional(),
+    video_p50_watched_actions: z.array(actionMetricSchema).optional(),
+    video_p75_watched_actions: z.array(actionMetricSchema).optional(),
+    video_p95_watched_actions: z.array(actionMetricSchema).optional(),
+    video_p100_watched_actions: z.array(actionMetricSchema).optional(),
+    video_avg_time_watched_actions: z.array(actionMetricSchema).optional(),
+    quality_ranking: z.string().optional(),
+    engagement_rate_ranking: z.string().optional(),
+    conversion_rate_ranking: z.string().optional(),
     actions: z.array(actionMetricSchema).optional(),
     action_values: z.array(actionMetricSchema).optional(),
   })
@@ -71,6 +90,47 @@ const insightsPageSchema = z
       })
       .passthrough()
       .optional(),
+  })
+  .passthrough();
+
+const breakdownInsightRowSchema = insightResponseRowSchema.extend({
+  publisher_platform: z.string().optional(),
+  platform_position: z.string().optional(),
+  impression_device: z.string().optional(),
+  region: z.string().optional(),
+});
+
+const breakdownInsightsPageSchema = z
+  .object({
+    data: z.array(breakdownInsightRowSchema),
+    paging: z.object({ next: z.string().url().optional() }).passthrough().optional(),
+  })
+  .passthrough();
+
+const deliveryEntitySchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    campaign_id: z.string().optional(),
+    status: z.string().optional(),
+    effective_status: z.string().optional(),
+    objective: z.string().optional(),
+    optimization_goal: z.string().optional(),
+    billing_event: z.string().optional(),
+    bid_strategy: z.string().optional(),
+    daily_budget: z.union([z.string(), z.number()]).optional(),
+    lifetime_budget: z.union([z.string(), z.number()]).optional(),
+    budget_remaining: z.union([z.string(), z.number()]).optional(),
+    start_time: z.string().optional(),
+    stop_time: z.string().optional(),
+    end_time: z.string().optional(),
+  })
+  .passthrough();
+
+const deliveryEntitiesPageSchema = z
+  .object({
+    data: z.array(deliveryEntitySchema),
+    paging: z.object({ next: z.string().url().optional() }).passthrough().optional(),
   })
   .passthrough();
 
@@ -123,6 +183,15 @@ function actionMetric(
   return 0;
 }
 
+function firstActionMetric(rows: z.infer<typeof actionMetricSchema>[] | undefined) {
+  return rows?.length ? finiteNumber(rows[0]?.value) : 0;
+}
+
+function nullableRanking(value: string | undefined) {
+  const normalized = value?.trim();
+  return normalized && normalized !== 'UNKNOWN' ? normalized : null;
+}
+
 function attributionWindows(setting: string) {
   return setting
     .split(',')
@@ -158,6 +227,8 @@ export function mapMetaAdsInsightRow(
     reach: integerMetric(row.reach),
     clicks: integerMetric(row.clicks),
     inlineLinkClicks: integerMetric(row.inline_link_clicks),
+    outboundClicks: firstActionMetric(row.outbound_clicks).toFixed(4),
+    uniqueOutboundClicks: firstActionMetric(row.unique_outbound_clicks).toFixed(4),
     landingPageViews: actionMetric(row.actions, ['landing_page_view']).toFixed(4),
     addToCarts: actionMetric(row.actions, [
       'offsite_conversion.fb_pixel_add_to_cart',
@@ -184,9 +255,67 @@ export function mapMetaAdsInsightRow(
       'omni_purchase',
       'purchase',
     ]).toFixed(2),
+    videoPlays: firstActionMetric(row.video_play_actions).toFixed(4),
+    videoP25Watched: firstActionMetric(row.video_p25_watched_actions).toFixed(4),
+    videoP50Watched: firstActionMetric(row.video_p50_watched_actions).toFixed(4),
+    videoP75Watched: firstActionMetric(row.video_p75_watched_actions).toFixed(4),
+    videoP95Watched: firstActionMetric(row.video_p95_watched_actions).toFixed(4),
+    videoP100Watched: firstActionMetric(row.video_p100_watched_actions).toFixed(4),
+    videoAverageWatchSeconds: firstActionMetric(row.video_avg_time_watched_actions).toFixed(4),
+    qualityRanking: nullableRanking(row.quality_ranking),
+    engagementRateRanking: nullableRanking(row.engagement_rate_ranking),
+    conversionRateRanking: nullableRanking(row.conversion_rate_ranking),
     syncedAt,
     updatedAt: syncedAt,
   };
+}
+
+function mapMetaAdsBreakdownRow(raw: unknown, kind: 'placement_device' | 'region', syncedAt: Date) {
+  const row = breakdownInsightRowSchema.parse(raw);
+  return {
+    day: row.date_start,
+    accountId: row.account_id.replace(/^act_/, ''),
+    campaignId: row.campaign_id,
+    campaignName: row.campaign_name?.trim() || null,
+    adsetId: row.adset_id,
+    adsetName: row.adset_name?.trim() || null,
+    adId: row.ad_id,
+    adName: row.ad_name?.trim() || null,
+    breakdownKind: kind,
+    publisherPlatform: row.publisher_platform?.trim() || '',
+    platformPosition: row.platform_position?.trim() || '',
+    impressionDevice: row.impression_device?.trim() || '',
+    region: row.region?.trim() || '',
+    spend: finiteNumber(row.spend).toFixed(4),
+    impressions: integerMetric(row.impressions),
+    reach: integerMetric(row.reach),
+    clicks: integerMetric(row.clicks),
+    outboundClicks: firstActionMetric(row.outbound_clicks).toFixed(4),
+    landingPageViews: actionMetric(row.actions, ['landing_page_view']).toFixed(4),
+    purchases: actionMetric(row.actions, [
+      'offsite_conversion.fb_pixel_purchase',
+      'omni_purchase',
+      'purchase',
+    ]).toFixed(4),
+    purchaseValue: actionMetric(row.action_values, [
+      'offsite_conversion.fb_pixel_purchase',
+      'omni_purchase',
+      'purchase',
+    ]).toFixed(2),
+    syncedAt,
+    updatedAt: syncedAt,
+  };
+}
+
+function metaMoney(value: string | number | undefined) {
+  if (value == null) return null;
+  return (finiteNumber(value) / 100).toFixed(2);
+}
+
+function metaTimestamp(value: string | undefined) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 function safeJsonHeader(value: string | null) {
@@ -277,6 +406,25 @@ function subtractDays(day: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
+function addDays(day: string, days: number) {
+  const date = new Date(`${day}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function splitInsightsRange(since: string, until: string) {
+  const ranges: Array<{ since: string; until: string }> = [];
+  for (
+    let cursor = since;
+    cursor <= until;
+    cursor = addDays(cursor, MAX_INSIGHTS_DAYS_PER_REQUEST)
+  ) {
+    const candidateUntil = addDays(cursor, MAX_INSIGHTS_DAYS_PER_REQUEST - 1);
+    ranges.push({ since: cursor, until: candidateUntil < until ? candidateUntil : until });
+  }
+  return ranges;
+}
+
 function dateOnly(value: string, field: string) {
   const parsed = new Date(`${value}T00:00:00.000Z`);
   if (
@@ -317,63 +465,225 @@ export async function fetchMetaAdsInsightRows(input: {
     throw new MetaAdsSyncError('since must not follow until.', 'invalid_date_range');
   }
 
-  const insightsUrl = new URL(
-    `https://${META_GRAPH_HOST}/${input.config.apiVersion}/act_${input.config.accountId}/insights`,
-  );
-  insightsUrl.searchParams.set('level', 'ad');
-  insightsUrl.searchParams.set('time_increment', '1');
-  insightsUrl.searchParams.set('time_range', JSON.stringify({ since, until }));
-  insightsUrl.searchParams.set('action_report_time', ACTION_REPORT_TIME);
-  insightsUrl.searchParams.set('use_account_attribution_setting', 'true');
-  insightsUrl.searchParams.set('limit', String(META_PAGE_LIMIT));
-  insightsUrl.searchParams.set(
-    'fields',
-    [
-      'date_start',
-      'account_id',
-      'account_currency',
-      'campaign_id',
-      'campaign_name',
-      'adset_id',
-      'adset_name',
-      'ad_id',
-      'ad_name',
-      'objective',
-      'attribution_setting',
-      'spend',
-      'impressions',
-      'reach',
-      'clicks',
-      'inline_link_clicks',
-      'actions',
-      'action_values',
-    ].join(','),
-  );
+  const fields = [
+    'date_start',
+    'account_id',
+    'account_currency',
+    'campaign_id',
+    'campaign_name',
+    'adset_id',
+    'adset_name',
+    'ad_id',
+    'ad_name',
+    'objective',
+    'attribution_setting',
+    'spend',
+    'impressions',
+    'reach',
+    'clicks',
+    'inline_link_clicks',
+    'outbound_clicks',
+    'unique_outbound_clicks',
+    'actions',
+    'action_values',
+    'video_play_actions',
+    'video_p25_watched_actions',
+    'video_p50_watched_actions',
+    'video_p75_watched_actions',
+    'video_p95_watched_actions',
+    'video_p100_watched_actions',
+    'video_avg_time_watched_actions',
+    'quality_ranking',
+    'engagement_rate_ranking',
+    'conversion_rate_ranking',
+  ].join(',');
+  const breakdownFields = [
+    'date_start',
+    'account_id',
+    'campaign_id',
+    'campaign_name',
+    'adset_id',
+    'adset_name',
+    'ad_id',
+    'ad_name',
+    'spend',
+    'impressions',
+    'reach',
+    'clicks',
+    'outbound_clicks',
+    'actions',
+    'action_values',
+  ].join(',');
+
+  const buildInsightsUrl = (range: { since: string; until: string }) => {
+    const url = new URL(
+      `https://${META_GRAPH_HOST}/${input.config.apiVersion}/act_${input.config.accountId}/insights`,
+    );
+    url.searchParams.set('level', 'ad');
+    url.searchParams.set('time_increment', '1');
+    url.searchParams.set('time_range', JSON.stringify(range));
+    url.searchParams.set('action_report_time', ACTION_REPORT_TIME);
+    url.searchParams.set('use_account_attribution_setting', 'true');
+    url.searchParams.set('limit', String(META_PAGE_LIMIT));
+    url.searchParams.set('fields', fields);
+    return url;
+  };
+
+  const buildBreakdownUrl = (range: { since: string; until: string }, breakdowns: string) => {
+    const url = new URL(
+      `https://${META_GRAPH_HOST}/${input.config.apiVersion}/act_${input.config.accountId}/insights`,
+    );
+    url.searchParams.set('level', 'ad');
+    url.searchParams.set('time_increment', '1');
+    url.searchParams.set('time_range', JSON.stringify(range));
+    url.searchParams.set('action_report_time', ACTION_REPORT_TIME);
+    url.searchParams.set('use_account_attribution_setting', 'true');
+    url.searchParams.set('limit', String(META_PAGE_LIMIT));
+    url.searchParams.set('fields', breakdownFields);
+    url.searchParams.set('breakdowns', breakdowns);
+    return url;
+  };
 
   const rows: ReturnType<typeof mapMetaAdsInsightRow>[] = [];
   let pagesFetched = 0;
-  let next: URL | null = insightsUrl;
   let usage: Record<string, unknown> = { account: accountResult.usage };
 
-  while (next) {
-    if (pagesFetched >= MAX_PAGES) {
-      throw new MetaAdsSyncError('Meta Ads pagination exceeded the safety limit.', 'page_limit');
-    }
-    const result = await metaRequest(next, input.config, input.fetchImpl, wait);
-    const page = insightsPageSchema.parse(result.body);
-    rows.push(
-      ...page.data.map((row) =>
-        mapMetaAdsInsightRow(
-          row,
-          { currency: accountBody.currency, timezone: accountBody.timezone_name },
-          input.now,
+  for (const [rangeIndex, range] of splitInsightsRange(since, until).entries()) {
+    let pageInRange = 0;
+    let next: URL | null = buildInsightsUrl(range);
+    while (next) {
+      if (pagesFetched >= MAX_PAGES) {
+        throw new MetaAdsSyncError('Meta Ads pagination exceeded the safety limit.', 'page_limit');
+      }
+      const result = await metaRequest(next, input.config, input.fetchImpl, wait);
+      const page = insightsPageSchema.parse(result.body);
+      rows.push(
+        ...page.data.map((row) =>
+          mapMetaAdsInsightRow(
+            row,
+            { currency: accountBody.currency, timezone: accountBody.timezone_name },
+            input.now,
+          ),
         ),
-      ),
-    );
-    pagesFetched += 1;
-    usage = { ...usage, [`page_${pagesFetched}`]: result.usage };
-    next = page.paging?.next ? new URL(page.paging.next) : null;
+      );
+      pagesFetched += 1;
+      pageInRange += 1;
+      usage = {
+        ...usage,
+        [`range_${rangeIndex + 1}_page_${pageInRange}`]: result.usage,
+      };
+      next = page.paging?.next ? new URL(page.paging.next) : null;
+    }
   }
+
+  const breakdownRows: ReturnType<typeof mapMetaAdsBreakdownRow>[] = [];
+  const breakdownRequests = [
+    {
+      kind: 'placement_device' as const,
+      value: 'publisher_platform,platform_position,impression_device',
+    },
+    { kind: 'region' as const, value: 'region' },
+  ];
+  for (const [breakdownIndex, breakdown] of breakdownRequests.entries()) {
+    for (const [rangeIndex, range] of splitInsightsRange(since, until).entries()) {
+      let pageInRange = 0;
+      let next: URL | null = buildBreakdownUrl(range, breakdown.value);
+      while (next) {
+        if (pagesFetched >= MAX_PAGES) {
+          throw new MetaAdsSyncError(
+            'Meta Ads pagination exceeded the safety limit.',
+            'page_limit',
+          );
+        }
+        const result = await metaRequest(next, input.config, input.fetchImpl, wait);
+        const page = breakdownInsightsPageSchema.parse(result.body);
+        breakdownRows.push(
+          ...page.data.map((row) => mapMetaAdsBreakdownRow(row, breakdown.kind, input.now)),
+        );
+        pagesFetched += 1;
+        pageInRange += 1;
+        usage = {
+          ...usage,
+          [`breakdown_${breakdownIndex + 1}_range_${rangeIndex + 1}_page_${pageInRange}`]:
+            result.usage,
+        };
+        next = page.paging?.next ? new URL(page.paging.next) : null;
+      }
+    }
+  }
+
+  const campaignUrl = new URL(
+    `https://${META_GRAPH_HOST}/${input.config.apiVersion}/act_${input.config.accountId}/campaigns`,
+  );
+  campaignUrl.searchParams.set(
+    'fields',
+    'id,name,status,effective_status,objective,bid_strategy,daily_budget,lifetime_budget,budget_remaining,start_time,stop_time',
+  );
+  campaignUrl.searchParams.set('limit', String(META_PAGE_LIMIT));
+  const adsetUrl = new URL(
+    `https://${META_GRAPH_HOST}/${input.config.apiVersion}/act_${input.config.accountId}/adsets`,
+  );
+  adsetUrl.searchParams.set(
+    'fields',
+    'id,name,campaign_id,status,effective_status,optimization_goal,billing_event,bid_strategy,daily_budget,lifetime_budget,budget_remaining,start_time,end_time',
+  );
+  adsetUrl.searchParams.set('limit', String(META_PAGE_LIMIT));
+  const entityPages: Array<{
+    entityType: 'campaign' | 'adset';
+    rows: z.infer<typeof deliveryEntitySchema>[];
+  }> = [];
+  for (const [entityType, firstUrl] of [
+    ['campaign', campaignUrl],
+    ['adset', adsetUrl],
+  ] as const) {
+    const entityRows: z.infer<typeof deliveryEntitySchema>[] = [];
+    let next: URL | null = firstUrl;
+    let pageIndex = 0;
+    while (next) {
+      if (pagesFetched >= MAX_PAGES) {
+        throw new MetaAdsSyncError('Meta Ads pagination exceeded the safety limit.', 'page_limit');
+      }
+      const result = await metaRequest(next, input.config, input.fetchImpl, wait);
+      const page = deliveryEntitiesPageSchema.parse(result.body);
+      entityRows.push(...page.data);
+      pagesFetched += 1;
+      pageIndex += 1;
+      usage = { ...usage, [`${entityType}_page_${pageIndex}`]: result.usage };
+      next = page.paging?.next ? new URL(page.paging.next) : null;
+    }
+    entityPages.push({ entityType, rows: entityRows });
+  }
+  const campaignNames = new Map(
+    entityPages
+      .find((page) => page.entityType === 'campaign')
+      ?.rows.map((row) => [row.id, row.name]) ?? [],
+  );
+  const deliveryEntities = entityPages.flatMap(({ entityType, rows: entityRows }) =>
+    entityRows.map((row) => {
+      const campaignId = entityType === 'campaign' ? row.id : (row.campaign_id ?? null);
+      return {
+        entityType,
+        entityId: row.id,
+        accountId: accountBody.id.replace(/^act_/, ''),
+        campaignId,
+        campaignName: campaignId ? (campaignNames.get(campaignId) ?? null) : null,
+        name: row.name,
+        status: row.status ?? null,
+        effectiveStatus: row.effective_status ?? null,
+        objective: row.objective ?? null,
+        optimizationGoal: row.optimization_goal ?? null,
+        billingEvent: row.billing_event ?? null,
+        bidStrategy: row.bid_strategy ?? null,
+        dailyBudget: metaMoney(row.daily_budget),
+        lifetimeBudget: metaMoney(row.lifetime_budget),
+        budgetRemaining: metaMoney(row.budget_remaining),
+        startTime: metaTimestamp(row.start_time),
+        stopTime: metaTimestamp(row.stop_time ?? row.end_time),
+        syncedAt: input.now,
+        updatedAt: input.now,
+      };
+    }),
+  );
 
   return {
     account: {
@@ -384,6 +694,8 @@ export async function fetchMetaAdsInsightRows(input: {
     since,
     until,
     rows,
+    breakdownRows,
+    deliveryEntities,
     pagesFetched,
     usage,
   };
@@ -455,8 +767,28 @@ export async function syncMetaAdsInsights(
           ),
         );
 
+      await tx
+        .delete(metaAdsBreakdownDailyInsights)
+        .where(
+          and(
+            eq(metaAdsBreakdownDailyInsights.accountId, loaded.account.id),
+            gte(metaAdsBreakdownDailyInsights.day, loaded.since),
+            lte(metaAdsBreakdownDailyInsights.day, loaded.until),
+          ),
+        );
+
+      await tx
+        .delete(metaAdsDeliveryEntities)
+        .where(eq(metaAdsDeliveryEntities.accountId, loaded.account.id));
+
       if (loaded.rows.length > 0) {
         await tx.insert(metaAdsDailyInsights).values(loaded.rows);
+      }
+      if (loaded.breakdownRows.length > 0) {
+        await tx.insert(metaAdsBreakdownDailyInsights).values(loaded.breakdownRows);
+      }
+      if (loaded.deliveryEntities.length > 0) {
+        await tx.insert(metaAdsDeliveryEntities).values(loaded.deliveryEntities);
       }
     });
 
@@ -465,6 +797,12 @@ export async function syncMetaAdsInsights(
       until: loaded.until,
       accountCurrency: loaded.account.currency,
       syncedAt: now,
+    });
+    await refreshAnalytics2Facts({
+      db,
+      startDate: loaded.since,
+      endDate: loaded.until,
+      now,
     });
 
     await db
@@ -477,8 +815,10 @@ export async function syncMetaAdsInsights(
         sinceDay: loaded.since,
         untilDay: loaded.until,
         pagesFetched: loaded.pagesFetched,
-        rowsFetched: loaded.rows.length,
-        rowsUpserted: loaded.rows.length,
+        rowsFetched:
+          loaded.rows.length + loaded.breakdownRows.length + loaded.deliveryEntities.length,
+        rowsUpserted:
+          loaded.rows.length + loaded.breakdownRows.length + loaded.deliveryEntities.length,
         usage: loaded.usage,
         completedAt: now,
         updatedAt: now,
@@ -492,6 +832,8 @@ export async function syncMetaAdsInsights(
       until: loaded.until,
       pagesFetched: loaded.pagesFetched,
       rows: loaded.rows.length,
+      breakdownRows: loaded.breakdownRows.length,
+      deliveryEntities: loaded.deliveryEntities.length,
     };
   } catch (error) {
     const failure =

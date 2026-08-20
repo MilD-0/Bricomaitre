@@ -3,8 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildUpdatePayload,
   deriveLatestUpstreamActivityAt,
+  mapEcotrackOrderSnapshot,
   mapEcotrackStatusToOrderStatus,
+  parseEcotrackProviderTimestamp,
   parseEcotrackShipmentUpdateDraft,
+  resolveEcotrackStatusEvidence,
 } from './admin-ecotrack-orders-data';
 import type { EcotrackCatalogRecord } from './ecotrack';
 
@@ -79,6 +82,56 @@ describe('admin ECOTRACK shipment mapping', () => {
     expect(deriveLatestUpstreamActivityAt(rowWithoutStatusUpdate, {})?.toISOString()).toBe(
       '2026-03-02T00:00:00.000Z',
     );
+  });
+
+  it('keeps current provider COD and tariff distinct from submitted order value', () => {
+    expect(
+      mapEcotrackOrderSnapshot({
+        tracking: 'TRK-11',
+        status: 'paye_et_archive',
+        montant: '12700',
+        tarif_prestation: '400',
+        tarif_retour: '0',
+        stop_desk: 1,
+        payment_id: 22,
+        status_reason: '',
+        created_at: '2026-08-15 10:30:00',
+        last_updated_at: '2026-08-16T12:00:00Z',
+      }),
+    ).toMatchObject({
+      currentAmount: '12700',
+      currentAmountSource: 'ecotrack_orders',
+      deliveryTariff: '400',
+      returnTariff: '0',
+      stopDesk: true,
+      paymentId: '22',
+      statusReason: null,
+    });
+  });
+
+  it('interprets timezone-less provider timestamps as Algeria time', () => {
+    expect(parseEcotrackProviderTimestamp('2026-08-15 10:30:00')?.toISOString()).toBe(
+      '2026-08-15T09:30:00.000Z',
+    );
+    expect(parseEcotrackProviderTimestamp('2026-08-15T10:30:00Z')?.toISOString()).toBe(
+      '2026-08-15T10:30:00.000Z',
+    );
+  });
+
+  it('uses bulk tracking status before treating an archived shipment as missing', () => {
+    expect(
+      resolveEcotrackStatusEvidence(null, {
+        status: 'paye_et_archive',
+        activity: [],
+        deliveryAttempts: [],
+      }),
+    ).toEqual({ status: 'paye_et_archive', activity: [] });
+    expect(
+      resolveEcotrackStatusEvidence(
+        { status: 'encaisse_non_paye', activity: [] },
+        { status: 'paye_et_archive', activity: [], deliveryAttempts: [] },
+      ),
+    ).toEqual({ status: 'encaisse_non_paye', activity: [] });
   });
 
   it('builds update payloads with the fixed ECOTRACK-required fields', () => {

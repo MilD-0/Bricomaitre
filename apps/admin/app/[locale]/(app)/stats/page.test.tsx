@@ -1,12 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getTranslationsMock, requireStatsPageAccessMock, hasDbMock, getStatsDashboardMock } =
+const { getTranslationsMock, requireStatsPageAccessMock, hasDbMock, getAnalyticsSectionDataMock } =
   vi.hoisted(() => ({
     getTranslationsMock: vi.fn(),
     requireStatsPageAccessMock: vi.fn(),
     hasDbMock: vi.fn(),
-    getStatsDashboardMock: vi.fn(),
+    getAnalyticsSectionDataMock: vi.fn(),
   }));
 
 vi.mock('next-intl/server', () => ({
@@ -21,8 +21,8 @@ vi.mock('../../../../lib/page-access', () => ({
   requireStatsPageAccess: requireStatsPageAccessMock,
 }));
 
-vi.mock('../../../../lib/stats', () => ({
-  getStatsDashboard: getStatsDashboardMock,
+vi.mock('../../../../lib/stats-sections', () => ({
+  getAnalyticsSectionData: getAnalyticsSectionDataMock,
 }));
 
 vi.mock('../../../../components/stats/stats-dashboard', () => ({
@@ -54,7 +54,7 @@ describe('StatsPage', () => {
     vi.clearAllMocks();
     requireStatsPageAccessMock.mockResolvedValue(undefined);
     hasDbMock.mockReturnValue(true);
-    getStatsDashboardMock.mockResolvedValue({ summary: { totalOrders: 12 } });
+    getAnalyticsSectionDataMock.mockResolvedValue({ summary: { totalOrders: 12 } });
     getTranslationsMock.mockResolvedValue((key: string) => {
       if (key === 'nav.stats') return 'Stats';
       if (key === 'pages.stats') return 'Stats description';
@@ -67,7 +67,7 @@ describe('StatsPage', () => {
     render(ui);
 
     expect(requireStatsPageAccessMock).toHaveBeenCalledWith('en');
-    expect(getStatsDashboardMock).toHaveBeenCalledWith({ range: '90d' });
+    expect(getAnalyticsSectionDataMock).toHaveBeenCalledWith('overview', { range: '30d' });
     expect(screen.getByText('Stats')).toBeInTheDocument();
     expect(screen.getByText('Stats description')).toBeInTheDocument();
     expect(screen.getByText('overview')).toBeInTheDocument();
@@ -81,7 +81,7 @@ describe('StatsPage', () => {
     const ui = await StatsPage({ params: Promise.resolve({ locale: 'en' }) });
     render(ui);
 
-    expect(getStatsDashboardMock).not.toHaveBeenCalled();
+    expect(getAnalyticsSectionDataMock).not.toHaveBeenCalled();
     expect(screen.getByText('no-initial-data')).toBeInTheDocument();
   });
 });

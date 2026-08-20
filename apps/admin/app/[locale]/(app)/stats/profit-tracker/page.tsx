@@ -1,27 +1,21 @@
-import { getTranslations } from 'next-intl/server';
+import { redirect } from 'next/navigation';
 
-import { hasDb } from '@bric/db/client';
-import { ProfitTrackerDashboard } from '../../../../../components/stats/profit-tracker-dashboard';
 import { requireStatsPageAccess } from '../../../../../lib/page-access';
-import { getProfitTrackerReport } from '../../../../../lib/profit-tracker';
 
-export default async function ProfitTrackerPage({
+export default async function LegacyProfitTrackerPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { locale } = await params;
   await requireStatsPageAccess(locale);
-  const [t, initialData] = await Promise.all([
-    getTranslations(),
-    hasDb() ? getProfitTrackerReport({ range: '30d' }) : Promise.resolve(null),
-  ]);
-
-  return (
-    <ProfitTrackerDashboard
-      title={t('statsDashboard.profitTracker.title')}
-      description={t('statsDashboard.profitTracker.description')}
-      initialData={initialData}
-    />
-  );
+  const source = await searchParams;
+  const target = new URLSearchParams();
+  for (const key of ['range', 'startDate', 'endDate']) {
+    const value = source[key];
+    if (typeof value === 'string') target.set(key, value);
+  }
+  redirect(`/${locale}/stats/time${target.size ? `?${target.toString()}` : ''}`);
 }

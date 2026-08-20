@@ -7,6 +7,7 @@ export type ProfitTrackerSettings = {
 export type ProfitTrackerDayInput = {
   date: string;
   spendEur: number | null;
+  impressions?: number | null;
   fbPurchases: number | null;
   cpm: number | null;
   ctr: number | null;
@@ -18,6 +19,12 @@ export type ProfitTrackerDayInput = {
   note: string | null;
   fxRateUsed: number | null;
   metaSyncedAt?: string | null;
+  grossProfitSource?: 'manual' | 'automatic' | 'missing';
+  returnRateSource?: 'manual' | 'default' | 'missing';
+  confirmedOrdersSource?: 'manual' | 'automatic' | 'missing';
+  postedOrders?: number;
+  costCompleteOrders?: number;
+  projectedCoveragePct?: number | null;
 };
 
 export type ProfitTrackerMetrics = {
@@ -50,6 +57,7 @@ export type ProfitTrackerOperatingCost = {
 
 export type ProfitTrackerSummary = {
   spendEur: number;
+  impressions: number;
   rawAdCostDzd: number;
   ratioAdCostDzd: number;
   grossProfitDzd: number;
@@ -64,6 +72,9 @@ export type ProfitTrackerSummary = {
   costPerConfirmedDzd: number | null;
   confirmationRatePct: number | null;
   clickToPageRatePct: number | null;
+  postedOrders: number;
+  costCompleteOrders: number;
+  projectedCoveragePct: number | null;
 };
 
 export type ProfitTrackerWeek = {
@@ -250,6 +261,7 @@ export function summarizeProfitTracker(
 ): ProfitTrackerSummary {
   const completeDays = days.filter((day) => day.metrics.adjustedProfitDzd !== null);
   const spendEur = days.reduce((total, day) => total + (day.spendEur || 0), 0);
+  const impressions = days.reduce((total, day) => total + (day.impressions || 0), 0);
   const rawAdCostDzd = days.reduce(
     (total, day) => total + (day.spendEur || 0) * (day.fxRateUsed || 0),
     0,
@@ -280,9 +292,12 @@ export function summarizeProfitTracker(
   const operatingCostDzd =
     startDate && endDate ? operatingCostBetween(startDate, endDate, costs) : 0;
   const beforeReturnsProfitX = ratioAdCostDzd > 0 ? grossProfitDzd / ratioAdCostDzd : null;
+  const postedOrders = days.reduce((total, day) => total + (day.postedOrders || 0), 0);
+  const costCompleteOrders = days.reduce((total, day) => total + (day.costCompleteOrders || 0), 0);
 
   return {
     spendEur,
+    impressions,
     rawAdCostDzd,
     ratioAdCostDzd,
     grossProfitDzd,
@@ -298,6 +313,9 @@ export function summarizeProfitTracker(
       confirmedOrders > 0 && ratioAdCostDzd > 0 ? ratioAdCostDzd / confirmedOrders : null,
     confirmationRatePct: fbPurchases > 0 ? (confirmedOrders / fbPurchases) * 100 : null,
     clickToPageRatePct: linkClicks > 0 ? (landingPageViews / linkClicks) * 100 : null,
+    postedOrders,
+    costCompleteOrders,
+    projectedCoveragePct: postedOrders > 0 ? (costCompleteOrders / postedOrders) * 100 : null,
   };
 }
 

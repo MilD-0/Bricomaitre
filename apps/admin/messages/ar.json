@@ -12,6 +12,7 @@
     "brands": "العلامات",
     "categories": "التصنيفات",
     "brandsCategories": "العلامات/التصنيفات",
+    "analytics2": "التحليلات 2",
     "stats": "الإحصائيات",
     "bulletin": "النشرات",
     "settings": "الإعدادات"
@@ -611,7 +612,12 @@
       "geography": "الجغرافيا",
       "time": "التحليل الزمني",
       "profitTracker": "متابعة الأرباح",
+      "costs": "التكاليف والافتراضات",
       "metaAds": "إعلانات ميتا"
+    },
+    "costsPage": {
+      "title": "التكاليف والافتراضات",
+      "description": "إدارة سعر الصرف وافتراضات المرتجعات وتكاليف التشغيل والتعديلات اليومية مع إبقاء الحسابات التلقائية للطلبات المرسلة ظاهرة."
     },
     "profitTracker": {
       "title": "متابعة الأرباح",
@@ -654,6 +660,12 @@
         "clickToPage": "معدل النقر إلى الصفحة",
         "costConfirmed": "التكلفة لكل طلب مؤكد"
       },
+      "sources": {
+        "manual": "تعديل يدوي",
+        "automatic": "تلقائي",
+        "default": "القيمة العامة",
+        "missing": "غير متاح"
+      },
       "settings": {
         "title": "إعدادات الحاسبة",
         "fx": "سعر EUR ← DZD",
@@ -684,6 +696,7 @@
         "actions": "الإجراءات",
         "edit": "تعديل {date}",
         "delete": "حذف {date}",
+        "reset": "إعادة إلى التلقائي",
         "confirmDelete": "حذف البيانات المحفوظة ليوم {date}؟"
       },
       "adsets": {
@@ -709,12 +722,15 @@
         "cancel": "إلغاء التعديل",
         "delete": "حذف {name}",
         "confirmDelete": "حذف تكلفة التشغيل {name}؟",
-        "deleteAction": "حذف"
+        "deleteAction": "حذف",
+        "rangeTotal": "تكاليف الفترة المحددة",
+        "monthlyBurn": "المصروف الشهري النشط"
       },
       "notifications": {
         "settingsSaved": "تم حفظ إعدادات الحاسبة.",
         "daySaved": "تم حفظ البيانات اليومية.",
         "dayDeleted": "تم حذف البيانات اليومية.",
+        "dayReset": "تمت إعادة التعديل اليومي إلى القيمة التلقائية.",
         "metaFetched": "تم تحديث بيانات ميتا لليوم المحدد.",
         "costSaved": "تم حفظ تكلفة التشغيل.",
         "costDeleted": "تم حذف تكلفة التشغيل."
@@ -731,6 +747,16 @@
       "pending": "جارٍ الاستيراد..."
     },
     "overview": {
+      "analytics": {
+        "settledProfit": "الربح المحصل",
+        "settledAfterAds": "الربح المحصل بعد إنفاق ميتا المعروف",
+        "postedOrders": "الطلبات المرسلة",
+        "fulfillment": "التنفيذ",
+        "settlementCoverage": "تغطية التحصيل",
+        "reportThrough": "التحصيل حتى",
+        "projectedCoverage": "تغطية البيانات المتوقعة",
+        "trajectory": "مسار الربح المحقق والمعدل"
+      },
       "cards": {
         "totalOrders": "الطلبات المقدمة",
         "totalOrdersHint": "الطلبات المقدمة عبر مسار التجارة الأساسي.",
@@ -1099,6 +1125,17 @@
         "weekly": "أسبوعي",
         "monthly": "شهري"
       },
+      "economics": {
+        "realized": "محقق",
+        "adjusted": "معدل",
+        "performance": "الأداء المالي",
+        "settledRevenue": "الإيراد المحصل",
+        "settledFees": "الرسوم المحصلة",
+        "settledProfit": "الربح المحصل",
+        "settledAfterAds": "الربح المحصل بعد إنفاق ميتا المعروف",
+        "beforeReturns": "الربح قبل المرتجعات",
+        "fridayWeeks": "{count} أسابيع تبدأ يوم الجمعة ضمن هذه الفترة."
+      },
       "orders": {
         "eyebrow": "تدفق الطلبات",
         "title": "الطلبات عبر الزمن"
@@ -1194,6 +1231,15 @@
       "managerTitle": "تكاليف الإعلانات",
       "conversionRate": "معدل التحويل",
       "unknownCampaign": "حملة غير معروفة",
+      "performance": {
+        "fetchRange": "جلب الفترة النشطة من ميتا",
+        "impressions": "مرات الظهور",
+        "landingViews": "مشاهدات صفحة الهبوط",
+        "purchases": "مشتريات ميتا",
+        "costPurchase": "التكلفة لكل عملية شراء",
+        "adsetSpend": "الإنفاق اليومي حسب مجموعة الإعلانات",
+        "trackingHealth": "صحة التتبع"
+      },
       "attribution": {
         "title": "اكتساب Meta ونتائج الطلبات",
         "description": "جلسات الطرف الأول الأساسية المصنفة من حملات Meta ومعرّفات النقر والإحالات والأدلة العضوية، والمرتبطة بنتائج طلبات المتجر.",

@@ -7,6 +7,22 @@ describe('navigation access', () => {
     expect(canAccessStats(['analytics_manage'])).toBe(true);
     expect(canAccessStats(['ops_view'])).toBe(false);
     expect(canAccessStats(['settings_manage'])).toBe(false);
+    expect(
+      canAccessNavigationItem({
+        isAllowed: true,
+        key: 'analytics2',
+        permissions: ['analytics_manage'],
+        role: 'employee',
+      }),
+    ).toBe(true);
+    expect(
+      canAccessNavigationItem({
+        isAllowed: true,
+        key: 'analytics2',
+        permissions: ['ops_view'],
+        role: 'employee',
+      }),
+    ).toBe(false);
   });
 
   it('allows settings managers to see Administration without a built-in privileged role', () => {
