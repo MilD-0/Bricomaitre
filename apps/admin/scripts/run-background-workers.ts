@@ -36,6 +36,10 @@ import { publishAiTaskTerminalMessage, type AiTaskTerminalStatus } from '../lib/
 import { runDatabaseMaintenance } from '../lib/database-maintenance';
 import { startEcotrackScheduler, stopEcotrackScheduler } from '../lib/ecotrack-scheduler';
 import { startMetaAdsScheduler, stopMetaAdsScheduler } from '../lib/meta-ads-scheduler';
+import {
+  startSearchConsoleScheduler,
+  stopSearchConsoleScheduler,
+} from '../lib/search-console-scheduler';
 
 const DEFAULT_REPORTING_REFRESH_CRON = '11 3 * * *';
 const DEFAULT_REPORTING_REFRESH_TIMEZONE = 'Africa/Algiers';
@@ -66,6 +70,7 @@ Sentry.init({
 
 startEcotrackScheduler();
 startMetaAdsScheduler();
+startSearchConsoleScheduler();
 
 const workers = [
   createQueueWorker(ADMIN_AI_CATEGORIZATION_QUEUE, runAiCategorizationJob),
@@ -262,6 +267,7 @@ async function shutdown(signal: string, exitCode = 0) {
   databaseMaintenanceTask.stop();
   stopEcotrackScheduler();
   stopMetaAdsScheduler();
+  stopSearchConsoleScheduler();
   await Promise.all(workers.map((worker) => worker.close()));
   await Sentry.close(2000);
   process.exit(exitCode);

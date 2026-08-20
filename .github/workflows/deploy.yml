@@ -305,6 +305,10 @@ jobs:
       META_AD_ACCOUNT_ID: ${{ secrets.META_AD_ACCOUNT_ID }}
       META_ADS_ACCESS_TOKEN: ${{ secrets.META_ADS_ACCESS_TOKEN }}
       META_ADS_GRAPH_API_VERSION: ${{ vars.META_ADS_GRAPH_API_VERSION || 'v25.0' }}
+      ADMIN_SEARCH_CONSOLE_SYNC_ENABLED: ${{ vars.ADMIN_SEARCH_CONSOLE_SYNC_ENABLED || 'false' }}
+      GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64 }}
+      SEARCH_CONSOLE_SITE_URL: ${{ vars.SEARCH_CONSOLE_SITE_URL || 'sc-domain:bricomaitre.com' }}
+      SEARCH_CONSOLE_SITE_ORIGIN: ${{ vars.SEARCH_CONSOLE_SITE_ORIGIN || 'https://bricomaitre.com' }}
       GOOGLE_ANALYTICS_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}
       GOOGLE_ANALYTICS_API_SECRET: ${{ secrets.GOOGLE_ANALYTICS_API_SECRET }}
       GHCR_USERNAME: ${{ github.actor }}
@@ -435,6 +439,30 @@ jobs:
               grep -v -E "^(ADMIN_META_ADS_SYNC_ENABLED|META_AD_ACCOUNT_ID|META_ADS_ACCESS_TOKEN|META_ADS_GRAPH_API_VERSION)=" "$env_file" > "$tmp_file" || true
               printf "ADMIN_META_ADS_SYNC_ENABLED=%s\nMETA_AD_ACCOUNT_ID=%s\nMETA_ADS_ACCESS_TOKEN=%s\nMETA_ADS_GRAPH_API_VERSION=%s\n" \
                 "$sync_enabled" "$account_id" "$access_token" "$graph_version" >> "$tmp_file"
+              mv "$tmp_file" "$env_file"
+            '
+          printf '%s\n%s\n%s\n%s\n' \
+            "$ADMIN_SEARCH_CONSOLE_SYNC_ENABLED" \
+            "$GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64" \
+            "$SEARCH_CONSOLE_SITE_URL" \
+            "$SEARCH_CONSOLE_SITE_ORIGIN" | \
+            ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+              set -euo pipefail
+              IFS= read -r sync_enabled
+              IFS= read -r credentials_base64
+              IFS= read -r site_url
+              IFS= read -r site_origin
+              case "$sync_enabled" in
+                true) test -n "$credentials_base64" ;;
+                false) ;;
+                *) echo "ADMIN_SEARCH_CONSOLE_SYNC_ENABLED must be true or false" >&2; exit 64 ;;
+              esac
+              env_file="/srv/bric/env/admin.env"
+              umask 077
+              tmp_file="${env_file}.tmp.$$"
+              grep -v -E "^(ADMIN_SEARCH_CONSOLE_SYNC_ENABLED|GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64|SEARCH_CONSOLE_SITE_URL|SEARCH_CONSOLE_SITE_ORIGIN)=" "$env_file" > "$tmp_file" || true
+              printf "ADMIN_SEARCH_CONSOLE_SYNC_ENABLED=%s\nGOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64=%s\nSEARCH_CONSOLE_SITE_URL=%s\nSEARCH_CONSOLE_SITE_ORIGIN=%s\n" \
+                "$sync_enabled" "$credentials_base64" "$site_url" "$site_origin" >> "$tmp_file"
               mv "$tmp_file" "$env_file"
             '
           printf '%s\n%s\n' "$GOOGLE_ANALYTICS_MEASUREMENT_ID" "$GOOGLE_ANALYTICS_API_SECRET" | \

@@ -11,6 +11,7 @@ import {
   timestamp,
   uniqueIndex,
   bigint,
+  check,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { adminSchema } from './namespaces';
@@ -111,6 +112,15 @@ export const ecotrackOrderStates = adminSchema.table(
     trackingNumber: text('tracking_number').notNull(),
     provider: text('provider').notNull().default('delivro'),
     currentStatus: text('current_status').notNull(),
+    currentAmount: numeric('current_amount', { precision: 14, scale: 2 }),
+    currentAmountSource: text('current_amount_source'),
+    deliveryTariff: numeric('delivery_tariff', { precision: 12, scale: 2 }),
+    returnTariff: numeric('return_tariff', { precision: 12, scale: 2 }),
+    stopDesk: boolean('stop_desk'),
+    paymentId: text('payment_id'),
+    statusReason: text('status_reason'),
+    providerCreatedAt: timestamp('provider_created_at', { withTimezone: true }),
+    providerUpdatedAt: timestamp('provider_updated_at', { withTimezone: true }),
     driverPhone: text('driver_phone'),
     estimatedFee: numeric('estimated_fee', { precision: 12, scale: 2 }),
     deskPhone: text('desk_phone'),
@@ -121,9 +131,11 @@ export const ecotrackOrderStates = adminSchema.table(
     rawCreatePayload: jsonb('raw_create_payload'),
     rawLastTrackingPayload: jsonb('raw_last_tracking_payload'),
     rawLastMajPayload: jsonb('raw_last_maj_payload'),
+    rawOrderPayload: jsonb('raw_order_payload'),
     lastStatusSyncedAt: timestamp('last_status_synced_at', { withTimezone: true }),
     lastTrackingSyncedAt: timestamp('last_tracking_synced_at', { withTimezone: true }),
     lastMajSyncedAt: timestamp('last_maj_synced_at', { withTimezone: true }),
+    lastOrderSyncedAt: timestamp('last_order_synced_at', { withTimezone: true }),
     lastActionAt: timestamp('last_action_at', { withTimezone: true }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -138,6 +150,76 @@ export const ecotrackOrderStates = adminSchema.table(
       t.deletedAt,
       t.currentStatus,
       t.updatedAt.desc(),
+    ),
+    index('idx_ecotrack_order_states_order_synced').on(t.lastOrderSyncedAt.desc()),
+    check(
+      'ecotrack_order_states_current_amount_nonnegative_check',
+      sql`${t.currentAmount} is null or ${t.currentAmount} >= 0`,
+    ),
+    check(
+      'ecotrack_order_states_delivery_tariff_nonnegative_check',
+      sql`${t.deliveryTariff} is null or ${t.deliveryTariff} >= 0`,
+    ),
+    check(
+      'ecotrack_order_states_return_tariff_nonnegative_check',
+      sql`${t.returnTariff} is null or ${t.returnTariff} >= 0`,
+    ),
+  ],
+);
+
+export const ecotrackOrderStatusObservations = adminSchema.table(
+  'ecotrack_order_status_observations',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    orderId: bigint('order_id', { mode: 'number' })
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    trackingNumber: text('tracking_number').notNull(),
+    status: text('status').notNull(),
+    effectiveAt: timestamp('effective_at', { withTimezone: true }),
+    firstObservedAt: timestamp('first_observed_at', { withTimezone: true }).notNull(),
+    lastObservedAt: timestamp('last_observed_at', { withTimezone: true }).notNull(),
+    source: text('source').notNull().default('orders_status'),
+    sourceKey: text('source_key').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('ecotrack_order_status_observations_source_unique').on(t.orderId, t.sourceKey),
+    index('idx_ecotrack_order_status_observations_order_time').on(
+      t.orderId,
+      t.firstObservedAt.desc(),
+    ),
+    index('idx_ecotrack_order_status_observations_status_time').on(
+      t.status,
+      t.firstObservedAt.desc(),
+    ),
+  ],
+);
+
+export const ecotrackOrderActivities = adminSchema.table(
+  'ecotrack_order_activities',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    orderId: bigint('order_id', { mode: 'number' })
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    trackingNumber: text('tracking_number').notNull(),
+    reason: text('reason'),
+    details: text('details'),
+    effectiveAt: timestamp('effective_at', { withTimezone: true }),
+    postponedTo: date('postponed_to'),
+    firstObservedAt: timestamp('first_observed_at', { withTimezone: true }).notNull(),
+    lastObservedAt: timestamp('last_observed_at', { withTimezone: true }).notNull(),
+    sourceKey: text('source_key').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('ecotrack_order_activities_source_unique').on(t.orderId, t.sourceKey),
+    index('idx_ecotrack_order_activities_order_time').on(t.orderId, t.effectiveAt.desc()),
+    index('idx_ecotrack_order_activities_postponed').on(t.postponedTo).where(
+      sql`${t.postponedTo} is not null`,
     ),
   ],
 );

@@ -16,7 +16,8 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
-import { type FormEvent, type ReactNode, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
 
 import { requestJson as request } from '../../lib/admin-api';
 import type { getProfitTrackerReport } from '../../lib/profit-tracker';
@@ -97,19 +98,42 @@ function EmptyRows({ colSpan, label }: { colSpan: number; label: string }) {
 export function ProfitTrackerDashboard({
   description,
   initialData,
+  surface = 'full',
   title,
 }: {
   description: string;
   initialData?: ProfitTrackerReport | null;
+  surface?: 'full' | 'costs';
   title: string;
 }) {
   const locale = useLocale();
   const t = useTranslations('statsDashboard');
   const queryClient = useQueryClient();
-  const [selectedRange, setSelectedRange] = useState<RangeKey>('30d');
-  const [activeRange, setActiveRange] = useState<ActiveRange>({ range: '30d' });
-  const [customStart, setCustomStart] = useState(initialData?.filters.startDate ?? '');
-  const [customEnd, setCustomEnd] = useState(initialData?.filters.endDate ?? '');
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedRange = searchParams.get('range') as RangeKey | null;
+  const initialRange =
+    requestedRange && RANGE_KEYS.includes(requestedRange) ? requestedRange : '30d';
+  const requestedStart = searchParams.get('startDate') ?? '';
+  const requestedEnd = searchParams.get('endDate') ?? '';
+  const hasValidCustom =
+    initialRange === 'custom' &&
+    Boolean(requestedStart) &&
+    Boolean(requestedEnd) &&
+    requestedStart <= requestedEnd;
+  const [selectedRange, setSelectedRange] = useState<RangeKey>(
+    hasValidCustom ? 'custom' : initialRange === 'custom' ? '30d' : initialRange,
+  );
+  const [activeRange, setActiveRange] = useState<ActiveRange>(
+    hasValidCustom
+      ? { range: 'custom', startDate: requestedStart, endDate: requestedEnd }
+      : { range: initialRange === 'custom' ? '30d' : initialRange },
+  );
+  const [customStart, setCustomStart] = useState(
+    requestedStart || initialData?.filters.startDate || '',
+  );
+  const [customEnd, setCustomEnd] = useState(requestedEnd || initialData?.filters.endDate || '');
   const [settingsForm, setSettingsForm] = useState({
     fxRate: String(initialData?.settings.fxRate ?? 280),
     defaultReturnRate: String(initialData?.settings.defaultReturnRate ?? 10),
@@ -134,7 +158,15 @@ export function ProfitTrackerDashboard({
   const params = queryString(activeRange);
   const reportQuery = useQuery({
     queryKey: ['profit-tracker', params],
-    queryFn: () => request<ReportResponse>(`/api/stats/profit-tracker?${params}`),
+    queryFn: async () => {
+      if (surface === 'costs') {
+        const response = await request<{ data: { economics: ProfitTrackerReport } }>(
+          `/api/stats/costs?${params}`,
+        );
+        return { data: response.data.economics };
+      }
+      return request<ReportResponse>(`/api/stats/profit-tracker?${params}`);
+    },
     initialData: initialData && activeRange.range === '30d' ? { data: initialData } : undefined,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
@@ -142,7 +174,16 @@ export function ProfitTrackerDashboard({
   });
   const report = reportQuery.data?.data;
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['profit-tracker'] });
+  useEffect(() => {
+    const query = queryString(activeRange);
+    router.replace(`${pathname}?${query}`, { scroll: false });
+  }, [activeRange, pathname, router]);
+
+  const invalidate = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['profit-tracker'] }),
+      queryClient.invalidateQueries({ queryKey: ['stats-dashboard'] }),
+    ]);
   const settingsMutation = useMutation({
     mutationFn: () =>
       request('/api/stats/profit-tracker/settings', {
@@ -187,6 +228,24 @@ export function ProfitTrackerDashboard({
       request(`/api/stats/profit-tracker/days/${date}`, { method: 'DELETE' }),
     onSuccess: () => {
       toast.success(t('profitTracker.notifications.dayDeleted'));
+      void invalidate();
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('errorDescription')),
+  });
+  const resetDayFieldMutation = useMutation({
+    mutationFn: ({
+      date,
+      field,
+    }: {
+      date: string;
+      field: 'grossProfitDzd' | 'returnRatePct' | 'confirmedOrders';
+    }) =>
+      request('/api/stats/profit-tracker/days', {
+        method: 'POST',
+        body: JSON.stringify({ date, [field]: null }),
+      }),
+    onSuccess: () => {
+      toast.success(t('profitTracker.notifications.dayReset'));
       void invalidate();
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : t('errorDescription')),
@@ -371,6 +430,15 @@ export function ProfitTrackerDashboard({
     });
   };
   const exportHref = `/api/stats/profit-tracker/export.csv?${params}`;
+  const activeMonthlyBurn =
+    report?.costs
+      .filter(
+        (cost) =>
+          cost.period === 'monthly' &&
+          cost.startDate <= (report.filters.endDate || '') &&
+          (!cost.endDate || cost.endDate >= (report.filters.endDate || '')),
+      )
+      .reduce((total, cost) => total + cost.amountDzd, 0) ?? 0;
 
   if (reportQuery.isLoading && !report) return <StatsPageSkeleton />;
   if (reportQuery.isError || !report) {
@@ -456,158 +524,115 @@ export function ProfitTrackerDashboard({
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">
-        <MetricCard
-          accent="bg-violet-500"
-          icon={TrendingUp}
-          title={t('profitTracker.cards.profitX')}
-          value={formatRatio(locale, report.summary.profitX)}
-        />
-        <MetricCard
-          accent="bg-emerald-500"
-          icon={CircleDollarSign}
-          title={t('profitTracker.cards.adjusted')}
-          value={formatCurrency(locale, report.summary.adjustedProfitDzd)}
-        />
-        <MetricCard
-          accent="bg-blue-500"
-          icon={Activity}
-          title={t('profitTracker.cards.net')}
-          value={formatCurrency(locale, report.summary.netProfitDzd)}
-        />
-        <MetricCard
-          accent="bg-amber-500"
-          icon={WalletCards}
-          title={t('profitTracker.cards.trueProfit')}
-          value={formatCurrency(locale, report.summary.trueProfitDzd)}
-        />
-        <MetricCard
-          accent="bg-rose-500"
-          icon={Target}
-          title={t('profitTracker.cards.spend')}
-          value={formatEur(locale, report.summary.spendEur)}
-        />
-        <MetricCard
-          accent="bg-cyan-500"
-          icon={CalendarDays}
-          title={t('profitTracker.cards.confirmed')}
-          value={formatNumber(locale, report.summary.confirmedOrders)}
-        />
-      </div>
+      {surface === 'full' ? (
+        <>
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">
+            <MetricCard
+              accent="bg-violet-500"
+              icon={TrendingUp}
+              title={t('profitTracker.cards.profitX')}
+              value={formatRatio(locale, report.summary.profitX)}
+            />
+            <MetricCard
+              accent="bg-emerald-500"
+              icon={CircleDollarSign}
+              title={t('profitTracker.cards.adjusted')}
+              value={formatCurrency(locale, report.summary.adjustedProfitDzd)}
+            />
+            <MetricCard
+              accent="bg-blue-500"
+              icon={Activity}
+              title={t('profitTracker.cards.net')}
+              value={formatCurrency(locale, report.summary.netProfitDzd)}
+            />
+            <MetricCard
+              accent="bg-amber-500"
+              icon={WalletCards}
+              title={t('profitTracker.cards.trueProfit')}
+              value={formatCurrency(locale, report.summary.trueProfitDzd)}
+            />
+            <MetricCard
+              accent="bg-rose-500"
+              icon={Target}
+              title={t('profitTracker.cards.spend')}
+              value={formatEur(locale, report.summary.spendEur)}
+            />
+            <MetricCard
+              accent="bg-cyan-500"
+              icon={CalendarDays}
+              title={t('profitTracker.cards.confirmed')}
+              value={formatNumber(locale, report.summary.confirmedOrders)}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <MetricCard
+            accent="bg-amber-500"
+            icon={WalletCards}
+            title={t('profitTracker.costs.rangeTotal')}
+            value={formatCurrency(locale, report.summary.operatingCostDzd)}
+          />
+          <MetricCard
+            accent="bg-violet-500"
+            icon={CalendarDays}
+            title={t('profitTracker.costs.monthlyBurn')}
+            value={formatCurrency(locale, activeMonthlyBurn)}
+          />
+        </div>
+      )}
 
-      <div className="grid min-w-0 gap-5 xl:grid-cols-2">
-        <SectionCard title={t('profitTracker.charts.daily')}>
-          <ChartContainer config={profitConfig}>
-            <ComposedChart data={chartDays}>
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="date"
-                tickFormatter={(value) => formatBucket(locale, value)}
-                minTickGap={28}
-              />
-              <YAxis tickFormatter={(value) => formatNumber(locale, Number(value))} width={72} />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent formatter={(value) => formatCurrency(locale, value)} />
-                }
-              />
-              <Bar dataKey="netProfitDzd" fill="var(--color-netProfitDzd)" radius={[4, 4, 0, 0]} />
-              <Bar
-                dataKey="netProfitBeforeReturnsDzd"
-                fill="var(--color-netProfitBeforeReturnsDzd)"
-                opacity={0.3}
-                radius={[4, 4, 0, 0]}
-              />
-              <Line
-                dataKey="netTrendDzd"
-                stroke="var(--color-netTrendDzd)"
-                dot={false}
-                strokeWidth={2}
-              />
-              <Line
-                dataKey="trueProfitDzd"
-                stroke="var(--color-trueProfitDzd)"
-                dot={false}
-                strokeWidth={2}
-              />
-              <Line
-                dataKey="adCostDzd"
-                stroke="var(--color-adCostDzd)"
-                dot={false}
-                strokeWidth={2}
-              />
-            </ComposedChart>
-          </ChartContainer>
-        </SectionCard>
-        <SectionCard title={t('profitTracker.charts.cumulative')}>
-          <ChartContainer config={cumulativeConfig}>
-            <LineChart data={chartDays}>
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="date"
-                tickFormatter={(value) => formatBucket(locale, value)}
-                minTickGap={28}
-              />
-              <YAxis tickFormatter={(value) => formatNumber(locale, Number(value))} width={72} />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent formatter={(value) => formatCurrency(locale, value)} />
-                }
-              />
-              <Line
-                dataKey="cumulativeNetDzd"
-                stroke="var(--color-cumulativeNetDzd)"
-                dot={false}
-                strokeWidth={2}
-              />
-              <Line
-                dataKey="cumulativeNetBeforeReturnsDzd"
-                stroke="var(--color-cumulativeNetBeforeReturnsDzd)"
-                dot={false}
-                strokeWidth={2}
-                strokeDasharray="6 5"
-              />
-              <Line
-                dataKey="cumulativeTrueProfitDzd"
-                stroke="var(--color-cumulativeTrueProfitDzd)"
-                dot={false}
-                strokeWidth={2}
-              />
-            </LineChart>
-          </ChartContainer>
-        </SectionCard>
-        <SectionCard title={t('profitTracker.charts.creative')}>
-          <ChartContainer config={creativeConfig}>
-            <LineChart data={chartDays}>
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="date"
-                tickFormatter={(value) => formatBucket(locale, value)}
-                minTickGap={28}
-              />
-              <YAxis yAxisId="left" width={58} />
-              <YAxis yAxisId="right" orientation="right" width={48} />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <Line
-                yAxisId="left"
-                dataKey="cpm"
-                stroke="var(--color-cpm)"
-                dot={false}
-                strokeWidth={2}
-              />
-              <Line
-                yAxisId="right"
-                dataKey="ctr"
-                stroke="var(--color-ctr)"
-                dot={false}
-                strokeWidth={2}
-              />
-            </LineChart>
-          </ChartContainer>
-        </SectionCard>
-        <div className="xl:col-span-2">
-          <SectionCard title={t('profitTracker.charts.roas')}>
-            <ChartContainer config={roasConfig}>
+      {surface === 'full' ? (
+        <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+          <SectionCard title={t('profitTracker.charts.daily')}>
+            <ChartContainer config={profitConfig}>
+              <ComposedChart data={chartDays}>
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(value) => formatBucket(locale, value)}
+                  minTickGap={28}
+                />
+                <YAxis tickFormatter={(value) => formatNumber(locale, Number(value))} width={72} />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent formatter={(value) => formatCurrency(locale, value)} />
+                  }
+                />
+                <Bar
+                  dataKey="netProfitDzd"
+                  fill="var(--color-netProfitDzd)"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  dataKey="netProfitBeforeReturnsDzd"
+                  fill="var(--color-netProfitBeforeReturnsDzd)"
+                  opacity={0.3}
+                  radius={[4, 4, 0, 0]}
+                />
+                <Line
+                  dataKey="netTrendDzd"
+                  stroke="var(--color-netTrendDzd)"
+                  dot={false}
+                  strokeWidth={2}
+                />
+                <Line
+                  dataKey="trueProfitDzd"
+                  stroke="var(--color-trueProfitDzd)"
+                  dot={false}
+                  strokeWidth={2}
+                />
+                <Line
+                  dataKey="adCostDzd"
+                  stroke="var(--color-adCostDzd)"
+                  dot={false}
+                  strokeWidth={2}
+                />
+              </ComposedChart>
+            </ChartContainer>
+          </SectionCard>
+          <SectionCard title={t('profitTracker.charts.cumulative')}>
+            <ChartContainer config={cumulativeConfig}>
               <LineChart data={chartDays}>
                 <CartesianGrid vertical={false} />
                 <XAxis
@@ -615,77 +640,150 @@ export function ProfitTrackerDashboard({
                   tickFormatter={(value) => formatBucket(locale, value)}
                   minTickGap={28}
                 />
-                <YAxis tickFormatter={(value) => `${value}×`} width={48} />
+                <YAxis tickFormatter={(value) => formatNumber(locale, Number(value))} width={72} />
                 <ChartTooltip
                   content={
-                    <ChartTooltipContent formatter={(value) => formatRatio(locale, value)} />
+                    <ChartTooltipContent formatter={(value) => formatCurrency(locale, value)} />
                   }
                 />
-                <Line dataKey="profitX" stroke="var(--color-profitX)" dot={false} strokeWidth={3} />
                 <Line
-                  dataKey="profitXBeforeReturns"
-                  stroke="var(--color-profitXBeforeReturns)"
-                  strokeDasharray="6 5"
+                  dataKey="cumulativeNetDzd"
+                  stroke="var(--color-cumulativeNetDzd)"
                   dot={false}
                   strokeWidth={2}
                 />
                 <Line
-                  dataKey="breakEven"
-                  stroke="var(--color-breakEven)"
-                  strokeDasharray="3 4"
+                  dataKey="cumulativeNetBeforeReturnsDzd"
+                  stroke="var(--color-cumulativeNetBeforeReturnsDzd)"
                   dot={false}
-                  strokeWidth={1.5}
+                  strokeWidth={2}
+                  strokeDasharray="6 5"
+                />
+                <Line
+                  dataKey="cumulativeTrueProfitDzd"
+                  stroke="var(--color-cumulativeTrueProfitDzd)"
+                  dot={false}
+                  strokeWidth={2}
                 />
               </LineChart>
             </ChartContainer>
           </SectionCard>
+          <SectionCard title={t('profitTracker.charts.creative')}>
+            <ChartContainer config={creativeConfig}>
+              <LineChart data={chartDays}>
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(value) => formatBucket(locale, value)}
+                  minTickGap={28}
+                />
+                <YAxis yAxisId="left" width={58} />
+                <YAxis yAxisId="right" orientation="right" width={48} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Line
+                  yAxisId="left"
+                  dataKey="cpm"
+                  stroke="var(--color-cpm)"
+                  dot={false}
+                  strokeWidth={2}
+                />
+                <Line
+                  yAxisId="right"
+                  dataKey="ctr"
+                  stroke="var(--color-ctr)"
+                  dot={false}
+                  strokeWidth={2}
+                />
+              </LineChart>
+            </ChartContainer>
+          </SectionCard>
+          <div className="xl:col-span-2">
+            <SectionCard title={t('profitTracker.charts.roas')}>
+              <ChartContainer config={roasConfig}>
+                <LineChart data={chartDays}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tickFormatter={(value) => formatBucket(locale, value)}
+                    minTickGap={28}
+                  />
+                  <YAxis tickFormatter={(value) => `${value}×`} width={48} />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent formatter={(value) => formatRatio(locale, value)} />
+                    }
+                  />
+                  <Line
+                    dataKey="profitX"
+                    stroke="var(--color-profitX)"
+                    dot={false}
+                    strokeWidth={3}
+                  />
+                  <Line
+                    dataKey="profitXBeforeReturns"
+                    stroke="var(--color-profitXBeforeReturns)"
+                    strokeDasharray="6 5"
+                    dot={false}
+                    strokeWidth={2}
+                  />
+                  <Line
+                    dataKey="breakEven"
+                    stroke="var(--color-breakEven)"
+                    strokeDasharray="3 4"
+                    dot={false}
+                    strokeWidth={1.5}
+                  />
+                </LineChart>
+              </ChartContainer>
+            </SectionCard>
+          </div>
+          <SectionCard title={t('profitTracker.charts.funnel')}>
+            <ChartContainer config={funnelConfig}>
+              <ComposedChart data={chartDays}>
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(value) => formatBucket(locale, value)}
+                  minTickGap={28}
+                />
+                <YAxis
+                  yAxisId="cost"
+                  tickFormatter={(value) => formatNumber(locale, Number(value))}
+                  width={64}
+                />
+                <YAxis
+                  yAxisId="percent"
+                  orientation="right"
+                  domain={[0, 100]}
+                  tickFormatter={(value) => `${value}%`}
+                  width={48}
+                />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Bar
+                  yAxisId="cost"
+                  dataKey="costPerConfirmedDzd"
+                  fill="var(--color-costPerConfirmedDzd)"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Line
+                  yAxisId="percent"
+                  dataKey="confirmationRatePct"
+                  stroke="var(--color-confirmationRatePct)"
+                  dot={false}
+                  strokeWidth={2}
+                />
+                <Line
+                  yAxisId="percent"
+                  dataKey="clickToPageRatePct"
+                  stroke="var(--color-clickToPageRatePct)"
+                  dot={false}
+                  strokeWidth={2}
+                />
+              </ComposedChart>
+            </ChartContainer>
+          </SectionCard>
         </div>
-        <SectionCard title={t('profitTracker.charts.funnel')}>
-          <ChartContainer config={funnelConfig}>
-            <ComposedChart data={chartDays}>
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="date"
-                tickFormatter={(value) => formatBucket(locale, value)}
-                minTickGap={28}
-              />
-              <YAxis
-                yAxisId="cost"
-                tickFormatter={(value) => formatNumber(locale, Number(value))}
-                width={64}
-              />
-              <YAxis
-                yAxisId="percent"
-                orientation="right"
-                domain={[0, 100]}
-                tickFormatter={(value) => `${value}%`}
-                width={48}
-              />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <Bar
-                yAxisId="cost"
-                dataKey="costPerConfirmedDzd"
-                fill="var(--color-costPerConfirmedDzd)"
-                radius={[4, 4, 0, 0]}
-              />
-              <Line
-                yAxisId="percent"
-                dataKey="confirmationRatePct"
-                stroke="var(--color-confirmationRatePct)"
-                dot={false}
-                strokeWidth={2}
-              />
-              <Line
-                yAxisId="percent"
-                dataKey="clickToPageRatePct"
-                stroke="var(--color-clickToPageRatePct)"
-                dot={false}
-                strokeWidth={2}
-              />
-            </ComposedChart>
-          </ChartContainer>
-        </SectionCard>
-      </div>
+      ) : null}
 
       <div className="grid gap-5 xl:grid-cols-2">
         <SectionCard title={t('profitTracker.settings.title')}>
@@ -813,52 +911,58 @@ export function ProfitTrackerDashboard({
               <Button type="submit" disabled={dayMutation.isPending || !dayForm.date}>
                 {t('profitTracker.day.save')}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={metaMutation.isPending || !dayForm.date}
-                onClick={() => metaMutation.mutate()}
-              >
-                <RefreshCcw className={metaMutation.isPending ? 'size-4 animate-spin' : 'size-4'} />
-                {t('profitTracker.day.fetchMeta')}
-              </Button>
+              {surface === 'full' ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={metaMutation.isPending || !dayForm.date}
+                  onClick={() => metaMutation.mutate()}
+                >
+                  <RefreshCcw
+                    className={metaMutation.isPending ? 'size-4 animate-spin' : 'size-4'}
+                  />
+                  {t('profitTracker.day.fetchMeta')}
+                </Button>
+              ) : null}
             </div>
           </form>
         </SectionCard>
       </div>
 
-      <SectionCard title={t('profitTracker.weekly.title')}>
-        <div className="max-w-full overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('profitTracker.weekly.week')}</TableHead>
-                <TableHead>{t('profitTracker.weekly.days')}</TableHead>
-                <TableHead>{t('profitTracker.cards.spend')}</TableHead>
-                <TableHead>{t('profitTracker.cards.net')}</TableHead>
-                <TableHead>{t('profitTracker.cards.profitX')}</TableHead>
-                <TableHead>{t('profitTracker.cards.trueProfit')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {report.weeks.length === 0 ? (
-                <EmptyRows colSpan={6} label={t('profitTracker.empty')} />
-              ) : (
-                report.weeks.map((week) => (
-                  <TableRow key={week.weekStart}>
-                    <TableCell className="font-medium">{week.weekStart}</TableCell>
-                    <TableCell>{formatNumber(locale, week.trackedDays)}</TableCell>
-                    <TableCell>{formatEur(locale, week.spendEur)}</TableCell>
-                    <TableCell>{formatCurrency(locale, week.netProfitDzd)}</TableCell>
-                    <TableCell>{formatRatio(locale, week.profitX)}</TableCell>
-                    <TableCell>{formatCurrency(locale, week.trueProfitDzd)}</TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </SectionCard>
+      {surface === 'full' ? (
+        <SectionCard title={t('profitTracker.weekly.title')}>
+          <div className="max-w-full overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('profitTracker.weekly.week')}</TableHead>
+                  <TableHead>{t('profitTracker.weekly.days')}</TableHead>
+                  <TableHead>{t('profitTracker.cards.spend')}</TableHead>
+                  <TableHead>{t('profitTracker.cards.net')}</TableHead>
+                  <TableHead>{t('profitTracker.cards.profitX')}</TableHead>
+                  <TableHead>{t('profitTracker.cards.trueProfit')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {report.weeks.length === 0 ? (
+                  <EmptyRows colSpan={6} label={t('profitTracker.empty')} />
+                ) : (
+                  report.weeks.map((week) => (
+                    <TableRow key={week.weekStart}>
+                      <TableCell className="font-medium">{week.weekStart}</TableCell>
+                      <TableCell>{formatNumber(locale, week.trackedDays)}</TableCell>
+                      <TableCell>{formatEur(locale, week.spendEur)}</TableCell>
+                      <TableCell>{formatCurrency(locale, week.netProfitDzd)}</TableCell>
+                      <TableCell>{formatRatio(locale, week.profitX)}</TableCell>
+                      <TableCell>{formatCurrency(locale, week.trueProfitDzd)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </SectionCard>
+      ) : null}
 
       <SectionCard title={t('profitTracker.history.title')}>
         <div className="max-h-[620px] max-w-full overflow-auto">
@@ -868,6 +972,7 @@ export function ProfitTrackerDashboard({
                 <TableHead>{t('profitTracker.day.date')}</TableHead>
                 <TableHead>{t('profitTracker.cards.spend')}</TableHead>
                 <TableHead>{t('profitTracker.day.gross')}</TableHead>
+                <TableHead>{t('profitTracker.day.confirmed')}</TableHead>
                 <TableHead>{t('profitTracker.cards.adjusted')}</TableHead>
                 <TableHead>{t('profitTracker.metrics.adCost')}</TableHead>
                 <TableHead>{t('profitTracker.cards.net')}</TableHead>
@@ -880,7 +985,7 @@ export function ProfitTrackerDashboard({
             </TableHeader>
             <TableBody>
               {report.days.length === 0 ? (
-                <EmptyRows colSpan={11} label={t('profitTracker.empty')} />
+                <EmptyRows colSpan={12} label={t('profitTracker.empty')} />
               ) : (
                 report.days.map((day) => (
                   <TableRow
@@ -897,14 +1002,76 @@ export function ProfitTrackerDashboard({
                     </TableCell>
                     <TableCell>{formatEur(locale, day.spendEur ?? 0)}</TableCell>
                     <TableCell>
-                      {day.grossProfitDzd == null
-                        ? '—'
-                        : formatCurrency(locale, day.grossProfitDzd)}
+                      <div>
+                        {day.grossProfitDzd == null
+                          ? '—'
+                          : formatCurrency(locale, day.grossProfitDzd)}
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {t(`profitTracker.sources.${day.grossProfitSource ?? 'missing'}`)}
+                      </span>
+                      {day.grossProfitSource === 'manual' ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            resetDayFieldMutation.mutate({
+                              date: day.date,
+                              field: 'grossProfitDzd',
+                            })
+                          }
+                        >
+                          {t('profitTracker.history.reset')}
+                        </Button>
+                      ) : null}
                     </TableCell>
                     <TableCell>
-                      {day.metrics.adjustedProfitDzd == null
-                        ? '—'
-                        : formatCurrency(locale, day.metrics.adjustedProfitDzd)}
+                      <div>
+                        {day.confirmedOrders == null
+                          ? '—'
+                          : formatNumber(locale, day.confirmedOrders)}
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {t(`profitTracker.sources.${day.confirmedOrdersSource ?? 'missing'}`)}
+                      </span>
+                      {day.confirmedOrdersSource === 'manual' ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            resetDayFieldMutation.mutate({
+                              date: day.date,
+                              field: 'confirmedOrders',
+                            })
+                          }
+                        >
+                          {t('profitTracker.history.reset')}
+                        </Button>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        {day.metrics.adjustedProfitDzd == null
+                          ? '—'
+                          : formatCurrency(locale, day.metrics.adjustedProfitDzd)}
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {t(`profitTracker.sources.${day.returnRateSource ?? 'missing'}`)}
+                      </span>
+                      {day.returnRateSource === 'manual' ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            resetDayFieldMutation.mutate({ date: day.date, field: 'returnRatePct' })
+                          }
+                        >
+                          {t('profitTracker.history.reset')}
+                        </Button>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       {day.metrics.adCostDzd == null
@@ -966,48 +1133,50 @@ export function ProfitTrackerDashboard({
         </div>
       </SectionCard>
 
-      <SectionCard title={t('profitTracker.adsets.title')}>
-        <div className="max-w-full overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('profitTracker.adsets.name')}</TableHead>
-                <TableHead>{t('profitTracker.weekly.days')}</TableHead>
-                <TableHead>{t('profitTracker.cards.spend')}</TableHead>
-                <TableHead>{t('profitTracker.adsets.purchases')}</TableHead>
-                <TableHead>{t('profitTracker.adsets.costPerPurchase')}</TableHead>
-                <TableHead>{t('profitTracker.adsets.value')}</TableHead>
-                <TableHead>{t('profitTracker.adsets.estimatedNet')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {report.adsets.length === 0 ? (
-                <EmptyRows colSpan={7} label={t('profitTracker.empty')} />
-              ) : (
-                report.adsets.map((adset) => (
-                  <TableRow key={adset.adsetId}>
-                    <TableCell className="font-medium">{adset.adsetName}</TableCell>
-                    <TableCell>{formatNumber(locale, adset.days)}</TableCell>
-                    <TableCell>{formatEur(locale, adset.spendEur)}</TableCell>
-                    <TableCell>{formatNumber(locale, adset.purchases)}</TableCell>
-                    <TableCell>
-                      {adset.costPerPurchaseDzd == null
-                        ? '—'
-                        : formatCurrency(locale, adset.costPerPurchaseDzd)}
-                    </TableCell>
-                    <TableCell>{formatNumber(locale, adset.purchaseValue)}</TableCell>
-                    <TableCell>
-                      {adset.hasEstimate
-                        ? formatCurrency(locale, adset.estimatedNetProfitDzd)
-                        : '—'}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </SectionCard>
+      {surface === 'full' ? (
+        <SectionCard title={t('profitTracker.adsets.title')}>
+          <div className="max-w-full overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('profitTracker.adsets.name')}</TableHead>
+                  <TableHead>{t('profitTracker.weekly.days')}</TableHead>
+                  <TableHead>{t('profitTracker.cards.spend')}</TableHead>
+                  <TableHead>{t('profitTracker.adsets.purchases')}</TableHead>
+                  <TableHead>{t('profitTracker.adsets.costPerPurchase')}</TableHead>
+                  <TableHead>{t('profitTracker.adsets.value')}</TableHead>
+                  <TableHead>{t('profitTracker.adsets.estimatedNet')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {report.adsets.length === 0 ? (
+                  <EmptyRows colSpan={7} label={t('profitTracker.empty')} />
+                ) : (
+                  report.adsets.map((adset) => (
+                    <TableRow key={adset.adsetId}>
+                      <TableCell className="font-medium">{adset.adsetName}</TableCell>
+                      <TableCell>{formatNumber(locale, adset.days)}</TableCell>
+                      <TableCell>{formatEur(locale, adset.spendEur)}</TableCell>
+                      <TableCell>{formatNumber(locale, adset.purchases)}</TableCell>
+                      <TableCell>
+                        {adset.costPerPurchaseDzd == null
+                          ? '—'
+                          : formatCurrency(locale, adset.costPerPurchaseDzd)}
+                      </TableCell>
+                      <TableCell>{formatNumber(locale, adset.purchaseValue)}</TableCell>
+                      <TableCell>
+                        {adset.hasEstimate
+                          ? formatCurrency(locale, adset.estimatedNetProfitDzd)
+                          : '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </SectionCard>
+      ) : null}
 
       <SectionCard title={t('profitTracker.costs.title')}>
         <form

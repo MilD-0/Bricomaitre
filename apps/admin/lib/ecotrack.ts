@@ -183,7 +183,11 @@ const ecotrackFeesSchema = z.object({
 const ecotrackServiceTypes = ['livraison', 'pickup', 'echange', 'recouvrement', 'retours'] as const;
 const ecotrackWeightServiceTypes = ['livraison', 'pickup', 'echange', 'recouvrement'] as const;
 const ecotrackMissingWilayaNames = new Map<number, string>([
-  [50, 'In Salah'],
+  // The live /wilayas response omits IDs 50 and 54, while /communes still
+  // references them. Name those IDs from their returned communes rather than
+  // assuming the official 58-wilaya numbering (EcoTrack uses a different ID
+  // sequence for the ten newer wilayas).
+  [50, 'Bordj Badji Mokhtar'],
   [54, 'In Guezzam'],
 ]);
 const ECOTRACK_PLACEHOLDER_ADDRESS = 'Adresse non renseignee';
@@ -1096,6 +1100,10 @@ export async function persistEcotrackPostedOrder(
         trackingNumber: createResult.tracking ?? '',
         provider,
         currentStatus: 'prete_a_expedier',
+        currentAmount: String(input.record.totalAmount),
+        currentAmountSource: 'submitted_order',
+        stopDesk: input.record.delivery === 1,
+        providerCreatedAt: now,
         rawCreatePayload: createResult.raw,
         rawStatusPayload: {
           currentStatus: 'prete_a_expedier',
@@ -1112,6 +1120,10 @@ export async function persistEcotrackPostedOrder(
           trackingNumber: createResult.tracking ?? '',
           provider,
           currentStatus: 'prete_a_expedier',
+          currentAmount: String(input.record.totalAmount),
+          currentAmountSource: 'submitted_order',
+          stopDesk: input.record.delivery === 1,
+          providerCreatedAt: now,
           rawCreatePayload: createResult.raw,
           rawStatusPayload: {
             currentStatus: 'prete_a_expedier',

@@ -1,12 +1,12 @@
 import { resolve } from 'node:path';
 
 import { sql } from 'drizzle-orm';
-import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import type { getDb } from '@bric/db/client';
 import {
   backfillOrderCommercialSnapshots,
   backfillOrderNormalizedPhones,
 } from './order-commercial-backfill';
+import { migrateInIndependentTransactions } from './independent-db-migrator';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -106,14 +106,14 @@ export async function runDbMigrations(
 
   if (useBootstrap) {
     await db.execute(sql`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
-    await migrate(db, {
+    await migrateInIndependentTransactions(db, {
       migrationsFolder: bootstrapMigrationsFolder,
     });
   } else {
     await assertProductIdentifiersReadyForMigrations(db);
   }
 
-  await migrate(db, {
+  await migrateInIndependentTransactions(db, {
     migrationsFolder,
   });
 

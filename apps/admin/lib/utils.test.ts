@@ -21,6 +21,7 @@ describe('navigationKeys', () => {
       'inventory',
       'assets',
       'brandsCategories',
+      'analytics2',
       'stats',
       'bulletin',
     ]);

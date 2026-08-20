@@ -4,6 +4,9 @@ import { z } from 'zod';
 import { getDb } from '@bric/db/client';
 import {
   metaAdsDailyInsights,
+  orderLineItems,
+  orderStatusHistory,
+  processedOrders,
   profitTrackerDays,
   profitTrackerOperatingCosts,
   profitTrackerSettings,
@@ -26,6 +29,8 @@ const DEFAULT_SETTINGS: ProfitTrackerSettings = {
   defaultReturnRate: 10,
   restFrom: null,
 };
+const ANALYTICS_TIMEZONE = 'Africa/Algiers';
+const POSTED_ORDER_STATUS = 11;
 
 const dateOnlySchema = z
   .string()
@@ -133,6 +138,12 @@ function decimal(value: number) {
   return String(value);
 }
 
+function isoTimestamp(value: unknown) {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 function addDays(date: string, amount: number) {
   const value = new Date(`${date}T00:00:00.000Z`);
   value.setUTCDate(value.getUTCDate() + amount);
@@ -148,6 +159,207 @@ function dayInTimezone(now: Date, timezone = 'Africa/Algiers') {
   }).formatToParts(now);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
+}
+
+type AutomaticDayEconomics = {
+  date: string;
+  postedOrders: number;
+  costCompleteOrders: number;
+  grossProfitDzd: number | null;
+};
+
+type MetaDayEconomics = {
+  date: string;
+  accountCurrency: string | null;
+  spendEur: number;
+  impressions: number;
+  fbPurchases: number;
+  cpm: number;
+  ctr: number;
+  linkClicks: number;
+  landingPageViews: number;
+  metaSyncedAt: string | null;
+};
+
+type RealizedDayEconomics = {
+  date: string;
+  settledOrders: number;
+  amountCollectedDzd: number;
+  netRevenueDzd: number;
+  feesDzd: number;
+  realizedProfitDzd: number;
+};
+
+export function resolveProfitTrackerDaySources({
+  date,
+  manual,
+  automatic,
+  meta,
+  settings,
+}: {
+  date: string;
+  manual?: ProfitTrackerDayInput;
+  automatic?: AutomaticDayEconomics;
+  meta?: MetaDayEconomics;
+  settings: ProfitTrackerSettings;
+}): ProfitTrackerDayInput {
+  const grossProfitDzd = manual?.grossProfitDzd ?? automatic?.grossProfitDzd ?? null;
+  const confirmedOrders = manual?.confirmedOrders ?? automatic?.postedOrders ?? null;
+  const returnRatePct =
+    grossProfitDzd == null ? null : (manual?.returnRatePct ?? settings.defaultReturnRate);
+  const postedOrders = automatic?.postedOrders ?? 0;
+  const costCompleteOrders = automatic?.costCompleteOrders ?? 0;
+
+  return {
+    date,
+    spendEur: meta?.spendEur ?? null,
+    impressions: meta?.impressions ?? null,
+    fbPurchases: meta?.fbPurchases ?? null,
+    cpm: meta?.cpm ?? null,
+    ctr: meta?.ctr ?? null,
+    linkClicks: meta?.linkClicks ?? null,
+    landingPageViews: meta?.landingPageViews ?? null,
+    grossProfitDzd,
+    returnRatePct,
+    confirmedOrders,
+    note: manual?.note ?? null,
+    fxRateUsed: manual?.fxRateUsed ?? settings.fxRate,
+    metaSyncedAt: meta?.metaSyncedAt ?? null,
+    grossProfitSource:
+      manual?.grossProfitDzd != null
+        ? 'manual'
+        : automatic?.grossProfitDzd != null
+          ? 'automatic'
+          : 'missing',
+    returnRateSource:
+      grossProfitDzd == null ? 'missing' : manual?.returnRatePct != null ? 'manual' : 'default',
+    confirmedOrdersSource:
+      manual?.confirmedOrders != null ? 'manual' : automatic ? 'automatic' : 'missing',
+    postedOrders,
+    costCompleteOrders,
+    projectedCoveragePct: postedOrders > 0 ? (costCompleteOrders / postedOrders) * 100 : null,
+  };
+}
+
+async function loadAutomaticDayEconomics(db: Database, startDate: string | null, endDate: string) {
+  const result = await db.execute(sql`
+    with first_posted as (
+      select distinct on (${orderStatusHistory.orderId})
+        ${orderStatusHistory.orderId} as order_id,
+        (${orderStatusHistory.changedAt} at time zone ${ANALYTICS_TIMEZONE})::date as day
+      from ${orderStatusHistory}
+      where ${orderStatusHistory.status} = ${POSTED_ORDER_STATUS}
+      order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
+    ), line_economics as (
+      select ${orderLineItems.orderId} as order_id,
+        bool_and(
+          ${orderLineItems.unitPurchasePriceSnapshot} is not null
+          and ${orderLineItems.lineTotal} is not null
+        ) as cost_complete,
+        sum(
+          ${orderLineItems.lineTotal}
+          - ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity}
+        )::double precision as gross_profit
+      from ${orderLineItems}
+      group by ${orderLineItems.orderId}
+    )
+    select first_posted.day::text as date,
+      count(*)::int as posted_orders,
+      count(*) filter (where line_economics.cost_complete)::int as cost_complete_orders,
+      case when count(*) filter (where line_economics.cost_complete) = 0 then null
+        else coalesce(sum(line_economics.gross_profit)
+          filter (where line_economics.cost_complete), 0)::double precision end as gross_profit_dzd
+    from first_posted
+    left join line_economics on line_economics.order_id = first_posted.order_id
+    where ${startDate ? sql`first_posted.day >= ${startDate}::date` : sql`true`}
+      and first_posted.day <= ${endDate}::date
+    group by first_posted.day
+    order by first_posted.day
+  `);
+
+  return (result.rows as Array<Record<string, unknown>>).map((row): AutomaticDayEconomics => ({
+    date: String(row.date),
+    postedOrders: numeric(row.posted_orders),
+    costCompleteOrders: numeric(row.cost_complete_orders),
+    grossProfitDzd: row.gross_profit_dzd == null ? null : numeric(row.gross_profit_dzd),
+  }));
+}
+
+async function loadMetaDayEconomics(db: Database, startDate: string | null, endDate: string) {
+  const conditions = [lte(metaAdsDailyInsights.day, endDate)];
+  if (startDate) conditions.push(gte(metaAdsDailyInsights.day, startDate));
+  const rows = await db
+    .select({
+      date: metaAdsDailyInsights.day,
+      accountCurrency: sql<
+        string | null
+      >`case when count(distinct ${metaAdsDailyInsights.accountCurrency}) = 1 then max(${metaAdsDailyInsights.accountCurrency}) else null end`,
+      spendEur: sql<number>`coalesce(sum(${metaAdsDailyInsights.spend}), 0)::double precision`,
+      impressions: sql<number>`coalesce(sum(${metaAdsDailyInsights.impressions}), 0)::double precision`,
+      linkClicks: sql<number>`coalesce(sum(${metaAdsDailyInsights.inlineLinkClicks}), 0)::int`,
+      landingPageViews: sql<number>`coalesce(sum(${metaAdsDailyInsights.landingPageViews}), 0)::double precision`,
+      purchases: sql<number>`coalesce(sum(${metaAdsDailyInsights.purchases}), 0)::double precision`,
+      metaSyncedAt: sql<Date | null>`max(${metaAdsDailyInsights.syncedAt})`,
+    })
+    .from(metaAdsDailyInsights)
+    .where(and(...conditions))
+    .groupBy(metaAdsDailyInsights.day)
+    .orderBy(asc(metaAdsDailyInsights.day));
+
+  return rows.map((row): MetaDayEconomics => {
+    const spendEur = numeric(row.spendEur);
+    const impressions = numeric(row.impressions);
+    const linkClicks = numeric(row.linkClicks);
+    return {
+      date: row.date,
+      accountCurrency: row.accountCurrency,
+      spendEur,
+      impressions,
+      fbPurchases: numeric(row.purchases),
+      cpm: impressions > 0 ? (spendEur / impressions) * 1_000 : 0,
+      ctr: impressions > 0 ? (linkClicks / impressions) * 100 : 0,
+      linkClicks,
+      landingPageViews: numeric(row.landingPageViews),
+      metaSyncedAt: isoTimestamp(row.metaSyncedAt),
+    };
+  });
+}
+
+async function loadRealizedDayEconomics(db: Database, startDate: string | null, endDate: string) {
+  const result = await db.execute(sql`
+    with realized as (
+      select (
+          coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt})
+          at time zone ${sql.raw(`'${ANALYTICS_TIMEZONE}'`)}
+        )::date as day,
+        ${processedOrders.amountCollected} as amount_collected,
+        ${processedOrders.netRevenue} as net_revenue,
+        ${processedOrders.totalFees} as total_fees,
+        ${processedOrders.profit} as profit
+      from ${processedOrders}
+    )
+    select day::text as date,
+      count(*)::int as settled_orders,
+      coalesce(sum(amount_collected), 0)::double precision as amount_collected_dzd,
+      coalesce(sum(net_revenue), 0)::double precision as net_revenue_dzd,
+      coalesce(sum(total_fees), 0)::double precision as fees_dzd,
+      coalesce(sum(profit), 0)::double precision as realized_profit_dzd
+    from realized
+    where day is not null
+      and ${startDate ? sql`day >= ${startDate}::date` : sql`true`}
+      and day <= ${endDate}::date
+    group by day
+    order by day
+  `);
+
+  return (result.rows as Array<Record<string, unknown>>).map((row): RealizedDayEconomics => ({
+    date: String(row.date),
+    settledOrders: numeric(row.settled_orders),
+    amountCollectedDzd: numeric(row.amount_collected_dzd),
+    netRevenueDzd: numeric(row.net_revenue_dzd),
+    feesDzd: numeric(row.fees_dzd),
+    realizedProfitDzd: numeric(row.realized_profit_dzd),
+  }));
 }
 
 function resolveProfitTrackerRange(raw: ProfitTrackerRangeInput, now = new Date()) {
@@ -275,12 +487,7 @@ export async function upsertProfitTrackerDay(
     linkClicks: value.linkClicks ?? null,
     landingPageViews: value.landingPageViews == null ? null : decimal(value.landingPageViews),
     grossProfitDzd: value.grossProfitDzd == null ? null : decimal(value.grossProfitDzd),
-    returnRatePct:
-      value.returnRatePct == null
-        ? value.grossProfitDzd == null
-          ? null
-          : decimal(settings.defaultReturnRate)
-        : decimal(value.returnRatePct),
+    returnRatePct: value.returnRatePct == null ? null : decimal(value.returnRatePct),
     confirmedOrders: value.confirmedOrders ?? null,
     note: value.note || null,
     fxRateUsed: decimal(settings.fxRate),
@@ -308,14 +515,6 @@ export async function upsertProfitTrackerDay(
       updateValue[columnKey] = insertValue[columnKey] as never;
     }
   }
-  if (
-    provided.has('grossProfitDzd') &&
-    (!provided.has('returnRatePct') || value.returnRatePct == null) &&
-    value.grossProfitDzd != null
-  ) {
-    updateValue.returnRatePct = decimal(settings.defaultReturnRate);
-  }
-
   const [row] = await db
     .insert(profitTrackerDays)
     .values(insertValue)
@@ -494,6 +693,39 @@ export async function syncProfitTrackerMetaRows(
   return [...byDay.keys()].sort();
 }
 
+export async function reconcileProfitTrackerFxSnapshots(
+  input: { since: string; until: string },
+  db: Database = getDb(),
+) {
+  const since = dateOnlySchema.parse(input.since);
+  const until = dateOnlySchema.parse(input.until);
+  if (since > until) throw new Error('since must not follow until.');
+  const [settings, metaDays] = await Promise.all([
+    getProfitTrackerSettings(db),
+    loadMetaDayEconomics(db, since, until),
+  ]);
+  if (metaDays.length === 0) return [];
+  const inserted = await db
+    .insert(profitTrackerDays)
+    .values(
+      metaDays.map((day) => ({
+        day: day.date,
+        spendEur: decimal(day.spendEur),
+        fbPurchases: decimal(day.fbPurchases),
+        cpm: decimal(day.cpm),
+        ctr: decimal(day.ctr),
+        linkClicks: day.linkClicks,
+        landingPageViews: decimal(day.landingPageViews),
+        rawMetaJson: { source: 'meta_ads_daily_insights', currency: 'EUR' },
+        fxRateUsed: decimal(settings.fxRate),
+        metaSyncedAt: day.metaSyncedAt ? new Date(day.metaSyncedAt) : null,
+      })),
+    )
+    .onConflictDoNothing({ target: profitTrackerDays.day })
+    .returning({ day: profitTrackerDays.day });
+  return inserted.map((row) => row.day).sort();
+}
+
 async function listAdsetPerformance(
   startDate: string | null,
   endDate: string,
@@ -575,12 +807,20 @@ async function listAdsetPerformance(
     byAdset.set(row.adsetId, current);
   }
 
-  return [...byAdset.values()]
-    .map((row) => ({
-      ...row,
-      costPerPurchaseDzd: row.purchases > 0 ? row.adCostDzd / row.purchases : null,
-    }))
-    .sort((left, right) => right.spendEur - left.spendEur);
+  return {
+    summary: [...byAdset.values()]
+      .map((row) => ({
+        ...row,
+        costPerPurchaseDzd: row.purchases > 0 ? row.adCostDzd / row.purchases : null,
+      }))
+      .sort((left, right) => right.spendEur - left.spendEur),
+    daily: rows.map((row) => ({
+      date: row.day,
+      adsetId: row.adsetId,
+      adsetName: row.adsetName || row.adsetId,
+      spendEur: numeric(row.spend),
+    })),
+  };
 }
 
 export async function getProfitTrackerReport(
@@ -593,15 +833,47 @@ export async function getProfitTrackerReport(
   const queryStartDate = filters.startDate ? addDays(filters.startDate, -7) : null;
   const dayConditions = [lte(profitTrackerDays.day, filters.endDate)];
   if (queryStartDate) dayConditions.push(gte(profitTrackerDays.day, queryStartDate));
-  const [dayRows, costs] = await Promise.all([
+  const [dayRows, costs, automaticDays, metaDays, realizedDays] = await Promise.all([
     db
       .select()
       .from(profitTrackerDays)
       .where(and(...dayConditions))
       .orderBy(asc(profitTrackerDays.day)),
     listProfitTrackerCosts(db),
+    loadAutomaticDayEconomics(db, queryStartDate, filters.endDate),
+    loadMetaDayEconomics(db, queryStartDate, filters.endDate),
+    loadRealizedDayEconomics(db, queryStartDate, filters.endDate),
   ]);
-  const rolled = applyProfitTrackerRollforward(dayRows.map(mapDay), settings);
+
+  const unsupportedCurrency = metaDays.find(
+    (day) => day.accountCurrency?.toUpperCase() !== 'EUR',
+  )?.accountCurrency;
+  if (unsupportedCurrency !== undefined) {
+    throw new Error(
+      `Profit tracker requires an EUR Meta account; received ${unsupportedCurrency || 'mixed currencies'}.`,
+    );
+  }
+
+  const manualByDate = new Map(dayRows.map((row) => [row.day, mapDay(row)]));
+  const automaticByDate = new Map(automaticDays.map((day) => [day.date, day]));
+  const metaByDate = new Map(metaDays.map((day) => [day.date, day]));
+  const realizedByDate = new Map(realizedDays.map((day) => [day.date, day]));
+  const dates = new Set<string>([
+    ...manualByDate.keys(),
+    ...automaticByDate.keys(),
+    ...metaByDate.keys(),
+    ...realizedByDate.keys(),
+  ]);
+  const canonicalDays = [...dates].sort().map((date): ProfitTrackerDayInput =>
+    resolveProfitTrackerDaySources({
+      date,
+      manual: manualByDate.get(date),
+      automatic: automaticByDate.get(date),
+      meta: metaByDate.get(date),
+      settings,
+    }),
+  );
+  const rolled = applyProfitTrackerRollforward(canonicalDays, settings);
   const selected = rolled.filter(
     (day) => (!filters.startDate || day.date >= filters.startDate) && day.date <= filters.endDate,
   );
@@ -634,13 +906,56 @@ export async function getProfitTrackerReport(
   });
   const days = enrichedAscending.reverse();
   const dayByDate = new Map(selected.map((day) => [day.date, day]));
-  const adsets = await listAdsetPerformance(
+  const adsetPerformance = await listAdsetPerformance(
     filters.startDate,
     filters.endDate,
     dayByDate,
     settings.fxRate,
     db,
   );
+  const realizedSelected = [...realizedByDate.values()]
+    .filter(
+      (day) => (!filters.startDate || day.date >= filters.startDate) && day.date <= filters.endDate,
+    )
+    .sort((left, right) => right.date.localeCompare(left.date))
+    .map((day) => {
+      const knownMetaAdCostDzd = dayByDate.get(day.date)?.metrics.adCostDzd ?? null;
+      return {
+        ...day,
+        knownMetaAdCostDzd,
+        realizedProfitAfterAdsDzd:
+          knownMetaAdCostDzd == null ? null : day.realizedProfitDzd - knownMetaAdCostDzd,
+      };
+    });
+  const realizedSummary = realizedSelected.reduce(
+    (total, day) => {
+      total.settledOrders += day.settledOrders;
+      total.amountCollectedDzd += day.amountCollectedDzd;
+      total.netRevenueDzd += day.netRevenueDzd;
+      total.feesDzd += day.feesDzd;
+      total.realizedProfitDzd += day.realizedProfitDzd;
+      if (day.knownMetaAdCostDzd != null) {
+        total.knownMetaAdCostDzd += day.knownMetaAdCostDzd;
+        total.realizedProfitAfterAdsDzd += day.realizedProfitAfterAdsDzd || 0;
+        total.metaCoveredDays += 1;
+      }
+      return total;
+    },
+    {
+      settledOrders: 0,
+      amountCollectedDzd: 0,
+      netRevenueDzd: 0,
+      feesDzd: 0,
+      realizedProfitDzd: 0,
+      knownMetaAdCostDzd: 0,
+      realizedProfitAfterAdsDzd: 0,
+      metaCoveredDays: 0,
+    },
+  );
+  const reportThroughDate = realizedSelected[0]?.date ?? null;
+  const settlementCoveragePct =
+    summary.postedOrders > 0 ? (realizedSummary.settledOrders / summary.postedOrders) * 100 : null;
+  const pendingRollforwardDzd = selected[0]?.isRestDay ? selected[0].rolledOutDzd : 0;
 
   return {
     filters: {
@@ -653,7 +968,39 @@ export async function getProfitTrackerReport(
     days,
     weeks: buildProfitTrackerWeeks(selected, costs, filters.endDate),
     costs,
-    adsets,
+    adsets: adsetPerformance.summary,
+    adsetDailySpend: adsetPerformance.daily,
+    realized: {
+      summary: {
+        ...realizedSummary,
+        postedOrders: summary.postedOrders,
+        settlementCoveragePct,
+      },
+      days: realizedSelected,
+      reportThroughDate,
+    },
+    coverage: {
+      projectedOrders: summary.postedOrders,
+      costCompleteOrders: summary.costCompleteOrders,
+      projectedCoveragePct: summary.projectedCoveragePct,
+      settledOrders: realizedSummary.settledOrders,
+      settlementCoveragePct,
+      metaDays: metaDays.filter(
+        (day) =>
+          (!filters.startDate || day.date >= filters.startDate) && day.date <= filters.endDate,
+      ).length,
+      pendingRollforwardDzd,
+    },
+    warnings: [
+      ...(summary.projectedCoveragePct != null && summary.projectedCoveragePct < 100
+        ? [
+            'Some posted orders are excluded from projected profit because purchase-cost snapshots are incomplete.',
+          ]
+        : []),
+      ...(pendingRollforwardDzd > 0
+        ? ['The trailing Friday Meta spend is pending roll-forward to the next working day.']
+        : []),
+    ],
     freshness: {
       metaSyncedAt:
         days
@@ -661,6 +1008,7 @@ export async function getProfitTrackerReport(
           .filter((value): value is string => Boolean(value))
           .sort()
           .at(-1) ?? null,
+      settledReportThroughDate: reportThroughDate,
     },
   };
 }
@@ -678,14 +1026,21 @@ export async function exportProfitTrackerCsv(
   const header = [
     'date',
     'spend_eur',
+    'impressions',
     'fb_purchases',
     'cpm',
     'ctr',
     'link_clicks',
     'landing_page_views',
     'gross_profit_dzd',
+    'gross_profit_source',
     'return_rate_pct',
+    'return_rate_source',
     'confirmed_orders',
+    'confirmed_orders_source',
+    'posted_orders',
+    'cost_complete_orders',
+    'projected_coverage_pct',
     'fx_rate_used',
     'ad_cost_dzd',
     'adjusted_profit_dzd',
@@ -709,14 +1064,21 @@ export async function exportProfitTrackerCsv(
       [
         day.date,
         day.spendEur,
+        day.impressions,
         day.fbPurchases,
         day.cpm,
         day.ctr,
         day.linkClicks,
         day.landingPageViews,
         day.grossProfitDzd,
+        day.grossProfitSource,
         day.returnRatePct,
+        day.returnRateSource,
         day.confirmedOrders,
+        day.confirmedOrdersSource,
+        day.postedOrders,
+        day.costCompleteOrders,
+        day.projectedCoveragePct,
         day.fxRateUsed,
         day.metrics.adCostDzd,
         day.metrics.adjustedProfitDzd,

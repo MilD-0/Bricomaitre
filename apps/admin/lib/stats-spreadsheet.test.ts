@@ -48,4 +48,19 @@ describe('parseStatsSpreadsheet', () => {
 
     expect(parseStatsSpreadsheet(buffer)).toEqual([]);
   });
+
+  it('uses the current COD side of slash amounts instead of the larger original total', () => {
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ['Référence', 'Tracking', 'Montant', 'Encaissé'],
+      ['slash-1', 'TRK-SLASH', '12 700 / 25 400', '12,700/25,400'],
+    ]);
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Sheet1');
+
+    const rows = parseStatsSpreadsheet(
+      XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer,
+    );
+
+    expect(rows[0]).toMatchObject({ montant: 12_700, encaisse: 12_700 });
+  });
 });

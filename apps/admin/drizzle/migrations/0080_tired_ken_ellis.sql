@@ -1,0 +1,1 @@
+CREATE INDEX "idx_osh_status_changed_order" ON "order_status_history" USING btree ("status","changed_at","order_id");

@@ -112,7 +112,11 @@ function createDbMock(
   options?: { limitSequence?: number[] },
 ) {
   const updates: Array<{ target: unknown; values: Record<string, unknown> }> = [];
-  const insertValues = vi.fn().mockResolvedValue(undefined);
+  const insertValues = vi.fn(() => ({
+    onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+    onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
+    then: (resolve: (value: undefined) => unknown) => Promise.resolve(undefined).then(resolve),
+  }));
   const rowByOrderId = new Map(rows.map((row) => [row.order.id, row]));
   const limitSequence = [...(options?.limitSequence ?? rows.map((row) => row.order.id))];
   const makeFromChain = (table: unknown) => ({
