@@ -58,7 +58,10 @@ describe('statsQuerySchema', () => {
 
   it('rejects invalid custom ranges', () => {
     expect(() => statsQuerySchema.parse({ range: 'custom' })).toThrowError(
-      'Provide at least one custom date.',
+      'Provide both custom dates.',
+    );
+    expect(() => statsQuerySchema.parse({ range: 'custom', startDate: '2026-08-01' })).toThrowError(
+      'Provide both custom dates.',
     );
   });
 });

@@ -77,6 +77,12 @@ vi.mock('next-intl', () => ({
   },
 }));
 
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/en/stats',
+  useRouter: () => ({ replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 function renderDashboard(section: StatsSection, initialData?: typeof baseResponse.data) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -596,7 +602,31 @@ describe('StatsDashboard', () => {
     expect((await screen.findAllByText('Stats')).length).toBeGreaterThan(0);
     expect(screen.queryByText('march.xlsx')).not.toBeInTheDocument();
     expect(screen.queryByText('manual-order-history')).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith('/api/stats?range=90d', undefined);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/stats/overview?range=30d',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('waits for Apply before fetching a custom date range', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => baseResponse });
+    vi.stubGlobal('fetch', fetchMock);
+    renderDashboard('overview');
+    await screen.findAllByText('Stats');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getByRole('button', { name: 'ranges.custom' }));
+    await userEvent.type(screen.getByLabelText('customStart'), '2026-08-01');
+    await userEvent.type(screen.getByLabelText('customEnd'), '2026-08-15');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getByRole('button', { name: 'profitTracker.applyRange' }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/stats/overview?range=custom&startDate=2026-08-01&endDate=2026-08-15',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      ),
+    );
   });
 
   it('uses server-provided initial data for the default overview render', async () => {
@@ -622,7 +652,7 @@ describe('StatsDashboard', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
-      if (url === '/api/stats' && init?.method === 'PUT') {
+      if (url === '/api/stats/overview' && init?.method === 'PUT') {
         return {
           ok: true,
           json: async () => refreshedResponse,
@@ -642,10 +672,10 @@ describe('StatsDashboard', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/stats',
+        '/api/stats/overview',
         expect.objectContaining({
           method: 'PUT',
-          body: JSON.stringify({ range: '90d' }),
+          body: JSON.stringify({ range: '30d', section: 'overview' }),
         }),
       );
     });
@@ -700,22 +730,10 @@ describe('StatsDashboard', () => {
     renderDashboard('metaAds');
 
     expect((await screen.findAllByText('Stats')).length).toBeGreaterThan(0);
-    const attributionHeading = screen.getByText('metaAds.attribution.title');
-    const providerHeading = screen.getByText('metaAds.integrated.title');
-    expect(
-      attributionHeading.compareDocumentPosition(providerHeading) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(screen.getByText('metaAds.attribution.description')).toBeInTheDocument();
-    expect(screen.getByText('metaAds.integrated.title')).toBeInTheDocument();
-    expect(screen.getByText('metaAds.integrated.description')).toBeInTheDocument();
-    expect(screen.getByText('Cordless drill video')).toBeInTheDocument();
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
-
-    const totalSpendCard = screen
-      .getByText('metaAds.integrated.cards.spend')
-      .closest('div[class*="min-w-0"]')?.parentElement?.parentElement;
-    expect(totalSpendCard?.firstElementChild).toHaveClass('bg-primary');
+    expect(screen.getByText('metaAds.paidAttribution.title')).toBeInTheDocument();
+    expect(screen.getByText('metaAds.paidAttribution.description')).toBeInTheDocument();
+    expect(screen.getByText('metaAds.performance.trackingHealth')).toBeInTheDocument();
+    expect(screen.getByRole('table')).toBeInTheDocument();
   });
 
   it('keeps first-party Meta evidence useful when direct Insights is not configured', async () => {
@@ -740,9 +758,8 @@ describe('StatsDashboard', () => {
 
     renderDashboard('metaAds', withoutDirectInsights);
 
-    expect(await screen.findByText('metaAds.attribution.title')).toBeInTheDocument();
-    expect(screen.getByText('metaAds.integrated.emptyTitle')).toBeInTheDocument();
-    expect(screen.queryByText('metaAds.integrated.cards.spend')).not.toBeInTheDocument();
+    expect(await screen.findByText('metaAds.paidAttribution.title')).toBeInTheDocument();
+    expect(screen.queryByText('metaAds.integrated.title')).not.toBeInTheDocument();
     expect(screen.queryByText('website.channels.direct_dark_social')).not.toBeInTheDocument();
   });
 
@@ -798,7 +815,7 @@ describe('StatsDashboard', () => {
     expect(screen.queryByText('website.acquisitionRateUnavailable')).not.toBeInTheDocument();
   });
 
-  it.each(['landingPages', 'customers', 'products', 'geography', 'time'] as const)(
+  it.each(['landingPages', 'customers', 'products', 'geography'] as const)(
     'uses mobile record cards instead of wide tables on the %s analytics page',
     async (section) => {
       vi.stubGlobal('fetch', vi.fn());
@@ -823,6 +840,13 @@ describe('StatsDashboard', () => {
       });
     },
   );
+
+  it('removes the obsolete spreadsheet chronology from Time', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    renderDashboard('time', baseResponse.data);
+    expect(await screen.findByText('time.orders.title')).toBeInTheDocument();
+    expect(screen.queryByText('time.imports.title')).not.toBeInTheDocument();
+  });
 
   it('distinguishes live order counts from lagging courier financial coverage', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => baseResponse }));
@@ -869,7 +893,12 @@ describe('StatsDashboard', () => {
 
     renderDashboard('aiAssistants', staleData);
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/stats?range=90d', undefined));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/stats?range=30d&section=aiAssistants',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      ),
+    );
     expect(await screen.findByText('83.3%')).toBeInTheDocument();
   });
 

@@ -87,6 +87,24 @@ describe('profit tracker economics contract', () => {
     expect(friday.isRestDay).toBe(false);
     expect(friday.metrics.adCostDzd).toBe(28_000);
   });
+
+  it('leaves a trailing Friday carry unresolved until a later working day exists', () => {
+    const [friday] = applyProfitTrackerRollforward(
+      [
+        {
+          ...baseDay,
+          date: '2026-08-14',
+          grossProfitDzd: null,
+          returnRatePct: null,
+          confirmedOrders: null,
+        },
+      ],
+      { fxRate: 280, restFrom: '2026-08-01' },
+    );
+    expect(friday.isRestDay).toBe(true);
+    expect(friday.rolledOutDzd).toBe(28_000);
+    expect(friday.rolledInDzd).toBe(0);
+  });
 });
 
 describe('profit tracker operating costs and rollups', () => {
@@ -123,6 +141,17 @@ describe('profit tracker operating costs and rollups', () => {
     expect(summary.netProfitDzd).toBe(62_000);
     expect(summary.operatingCostDzd).toBe(6_000);
     expect(summary.trueProfitDzd).toBe(56_000);
+  });
+
+  it('reports incomplete purchase-cost coverage without pricing from the current catalog', () => {
+    const days = applyProfitTrackerRollforward(
+      [{ ...baseDay, postedOrders: 10, costCompleteOrders: 8 }],
+      { fxRate: 280, restFrom: null },
+    );
+    const summary = summarizeProfitTracker(days, [], '2026-08-15', '2026-08-15');
+    expect(summary.postedOrders).toBe(10);
+    expect(summary.costCompleteOrders).toBe(8);
+    expect(summary.projectedCoveragePct).toBe(80);
   });
 
   it('starts reporting weeks on Friday so Friday spend and Saturday economics stay together', () => {

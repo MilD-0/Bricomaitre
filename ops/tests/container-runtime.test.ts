@@ -108,6 +108,13 @@ describe('production packaging and release runtime', () => {
     );
     expect(release).toContain('META_ADS_ACCESS_TOKEN: ${{ secrets.META_ADS_ACCESS_TOKEN }}');
     expect(release).toContain('ADMIN_META_ADS_SYNC_ENABLED must be true or false');
+    expect(release).toContain(
+      "ADMIN_SEARCH_CONSOLE_SYNC_ENABLED: ${{ vars.ADMIN_SEARCH_CONSOLE_SYNC_ENABLED || 'false' }}",
+    );
+    expect(release).toContain(
+      'GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64 }}',
+    );
+    expect(release).toContain('ADMIN_SEARCH_CONSOLE_SYNC_ENABLED must be true or false');
 
     const workspaceSetup = readFileSync(
       resolve(workspaceRoot, '.github/actions/setup-workspace/action.yml'),

@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { and, desc, eq, inArray, isNull, max, sql } from 'drizzle-orm';
 import { PDFDocument } from 'pdf-lib';
 import { z } from 'zod';
@@ -13,6 +15,8 @@ import {
   getEcotrackTrackingsInfo,
   requestEcotrackReturn as requestEcotrackReturnUpstream,
   type EcotrackMajEntry as UpstreamEcotrackMajEntry,
+  type EcotrackOrderInfo,
+  type EcotrackOrderSummary,
   type EcotrackStatusItem,
   type EcotrackTrackingInfo,
   updateEcotrackOrder,
@@ -25,7 +29,9 @@ import {
 
 import { getDb, hasDb } from '@bric/db/client';
 import {
+  ecotrackOrderActivities,
   ecotrackOrderMajEntries,
+  ecotrackOrderStatusObservations,
   ecotrackOrderStates,
   ecotrackOrderTrackingEvents,
   orderLineItems,
@@ -725,6 +731,139 @@ function getUpstreamTrackingValues(item: EcotrackStatusItem) {
   };
 }
 
+function nullableProviderAmount(value: string | number | null | undefined) {
+  if (value === null || value === undefined || String(value).trim() === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? String(parsed) : null;
+}
+
+export function parseEcotrackProviderTimestamp(value: string | null | undefined) {
+  if (!value?.trim()) return null;
+  const isoLike = value.includes('T') ? value.trim() : value.trim().replace(' ', 'T');
+  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(isoLike) ? isoLike : `${isoLike}+01:00`;
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function providerBoolean(value: boolean | string | number | null | undefined) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (['1', 'true', 'yes'].includes(normalized)) return true;
+  if (['0', 'false', 'no'].includes(normalized)) return false;
+  return null;
+}
+
+export function mapEcotrackOrderSnapshot(item: EcotrackOrderInfo | EcotrackOrderSummary) {
+  const currentAmount = nullableProviderAmount(item.montant);
+  return {
+    currentAmount,
+    currentAmountSource: currentAmount === null ? null : 'ecotrack_orders',
+    deliveryTariff: nullableProviderAmount(item.tarif_prestation),
+    returnTariff: nullableProviderAmount(item.tarif_retour),
+    stopDesk: providerBoolean(item.stop_desk),
+    paymentId:
+      item.payment_id === null || item.payment_id === undefined
+        ? null
+        : sanitizeNullableText(String(item.payment_id)),
+    statusReason: sanitizeNullableText(item.status_reason),
+    providerCreatedAt: parseEcotrackProviderTimestamp(item.created_at),
+    providerUpdatedAt: parseEcotrackProviderTimestamp(item.last_updated_at),
+  };
+}
+
+function sourceKey(parts: unknown[]) {
+  return createHash('sha256').update(JSON.stringify(parts)).digest('hex');
+}
+
+function validDateOnly(value: string | null | undefined) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+    ? value
+    : null;
+}
+
+async function persistStatusEvidence(
+  tx: Transaction,
+  row: ShipmentRow,
+  input: {
+    statusItem: EcotrackStatusItem;
+    orderInfo?: EcotrackOrderInfo | EcotrackOrderSummary | null;
+    observedAt: Date;
+  },
+) {
+  const latestActivityAt = input.statusItem.activity
+    .map((entry) => readEcotrackActivityTimestamp(entry))
+    .filter((value): value is Date => value !== null)
+    .sort((left, right) => right.getTime() - left.getTime())[0] ?? null;
+  const effectiveAt =
+    parseEcotrackProviderTimestamp(input.orderInfo?.last_updated_at) ?? latestActivityAt;
+  const statusSourceKey = sourceKey([
+    'status',
+    input.statusItem.status,
+    effectiveAt?.toISOString() ?? 'baseline',
+  ]);
+
+  await tx
+    .insert(ecotrackOrderStatusObservations)
+    .values({
+      orderId: row.order.id,
+      trackingNumber: row.trackingNumber,
+      status: input.statusItem.status,
+      effectiveAt,
+      firstObservedAt: input.observedAt,
+      lastObservedAt: input.observedAt,
+      source: input.orderInfo ? 'orders_list' : 'orders_status',
+      sourceKey: statusSourceKey,
+      createdAt: input.observedAt,
+      updatedAt: input.observedAt,
+    })
+    .onConflictDoUpdate({
+      target: [ecotrackOrderStatusObservations.orderId, ecotrackOrderStatusObservations.sourceKey],
+      set: {
+        lastObservedAt: input.observedAt,
+        updatedAt: input.observedAt,
+      },
+    });
+
+  const activities = input.statusItem.activity.map((activity) => {
+    const activityAt = readEcotrackActivityTimestamp(activity);
+    const postponedTo = validDateOnly(activity.postponed_to);
+    return {
+      orderId: row.order.id,
+      trackingNumber: row.trackingNumber,
+      reason: sanitizeNullableText(activity.reason),
+      details: sanitizeNullableText(activity.details),
+      effectiveAt: activityAt,
+      postponedTo,
+      firstObservedAt: input.observedAt,
+      lastObservedAt: input.observedAt,
+      sourceKey: sourceKey([
+        activityAt?.toISOString() ?? null,
+        activity.reason ?? null,
+        activity.details ?? null,
+        postponedTo,
+      ]),
+      createdAt: input.observedAt,
+      updatedAt: input.observedAt,
+    };
+  });
+
+  if (activities.length > 0) {
+    await tx
+      .insert(ecotrackOrderActivities)
+      .values(activities)
+      .onConflictDoUpdate({
+        target: [ecotrackOrderActivities.orderId, ecotrackOrderActivities.sourceKey],
+        set: {
+          lastObservedAt: input.observedAt,
+          updatedAt: input.observedAt,
+        },
+      });
+  }
+}
+
 function providerRequestOptions(row: Pick<ShipmentRow, 'provider'>) {
   return { env: getEcotrackProviderEnv(row.provider === 'emir' ? 'emir' : 'delivro') };
 }
@@ -744,16 +883,23 @@ function mapTrackingInfoEvents(
   orderId: number,
   trackingNumber: string,
   trackingInfo: EcotrackTrackingInfo,
+  rawTrackingInfo?: unknown,
 ) {
+  const rawActivity =
+    rawTrackingInfo &&
+    typeof rawTrackingInfo === 'object' &&
+    Array.isArray((rawTrackingInfo as Record<string, unknown>).activity)
+      ? ((rawTrackingInfo as Record<string, unknown>).activity as unknown[])
+      : [];
   return trackingInfo.activity
-    .map((entry) => ({
+    .map((entry, index) => ({
       orderId,
       trackingNumber,
       eventDate: entry.date,
       eventTime: entry.time,
       status: entry.status,
       scanLocation: sanitizeNullableText(entry.scanLocation),
-      raw: entry,
+      raw: rawActivity[index] ?? entry,
       createdAt: new Date(),
       updatedAt: new Date(),
     }))
@@ -1031,6 +1177,7 @@ async function getEcotrackTrackingsInfoAllowingMissing(
       : await getEcotrackTrackingsInfo(trackings);
     return {
       data: response.data,
+      rawData: response.rawData,
       missing: new Set<string>(),
     };
   } catch (error) {
@@ -1040,17 +1187,41 @@ async function getEcotrackTrackingsInfoAllowingMissing(
 
     return {
       data: new Map<string, EcotrackTrackingInfo>(),
+      rawData: new Map<string, unknown>(),
       missing: new Set(trackings),
     };
   }
+}
+
+function rawOrderInfoFromTrackingPayload(payload: unknown) {
+  if (!payload || typeof payload !== 'object') return null;
+  const orderInfo = (payload as Record<string, unknown>).OrderInfo;
+  return orderInfo && typeof orderInfo === 'object' ? orderInfo : null;
+}
+
+function statusItemFromTrackingInfo(info: EcotrackTrackingInfo | null | undefined) {
+  const status = info?.status?.trim();
+  return status ? ({ status, activity: [] } satisfies EcotrackStatusItem) : null;
+}
+
+export function resolveEcotrackStatusEvidence(
+  statusItem: EcotrackStatusItem | null | undefined,
+  trackingInfo: EcotrackTrackingInfo | null | undefined,
+) {
+  return statusItem ?? statusItemFromTrackingInfo(trackingInfo);
 }
 
 export function deriveLatestUpstreamActivityAt(
   row: ShipmentRow,
   payload: {
     statusItem?: EcotrackStatusItem | null;
+    rawStatusItem?: unknown;
     trackingInfo?: EcotrackTrackingInfo | null;
+    rawTrackingInfo?: unknown;
     majEntries?: UpstreamEcotrackMajEntry[] | null;
+    rawMajEntries?: unknown;
+    orderInfo?: EcotrackOrderInfo | EcotrackOrderSummary | null;
+    rawOrderInfo?: unknown;
   },
 ) {
   const latestActivity = findLatestDate([
@@ -1107,8 +1278,13 @@ async function upsertShipmentState(
   row: ShipmentRow,
   payload: {
     statusItem?: EcotrackStatusItem | null;
+    rawStatusItem?: unknown;
     trackingInfo?: EcotrackTrackingInfo | null;
+    rawTrackingInfo?: unknown;
     majEntries?: UpstreamEcotrackMajEntry[] | null;
+    rawMajEntries?: unknown;
+    orderInfo?: EcotrackOrderInfo | EcotrackOrderSummary | null;
+    rawOrderInfo?: unknown;
   },
   actor?: ActionActor | null,
 ) {
@@ -1117,8 +1293,22 @@ async function upsertShipmentState(
     updatedAt: now,
   };
 
-  if (payload.statusItem) {
-    const current = getUpstreamTrackingValues(payload.statusItem);
+  const possibleOrderInfoStatus = payload.orderInfo
+    ? (payload.orderInfo as Record<string, unknown>).status
+    : null;
+  const statusCandidate = payload.trackingInfo?.status ?? possibleOrderInfoStatus;
+  const orderInfoStatus =
+    typeof statusCandidate === 'string' && statusCandidate.trim()
+      ? statusCandidate.trim()
+      : null;
+  const statusItem =
+    payload.statusItem ??
+    (orderInfoStatus
+      ? ({ status: orderInfoStatus, activity: [] } satisfies EcotrackStatusItem)
+      : null);
+
+  if (statusItem) {
+    const current = getUpstreamTrackingValues(statusItem);
     updates.currentStatus = current.currentStatus;
     updates.driverPhone = current.driverPhone;
     updates.estimatedFee = current.estimatedFee;
@@ -1126,17 +1316,23 @@ async function upsertShipmentState(
     updates.deskCommune = current.deskCommune;
     updates.deskMapLink = current.deskMapLink;
     updates.deskAddress = current.deskAddress;
-    updates.rawStatusPayload = payload.statusItem;
+    updates.rawStatusPayload = payload.rawStatusItem ?? statusItem;
     updates.lastStatusSyncedAt = now;
   }
 
+  if (payload.orderInfo) {
+    Object.assign(updates, mapEcotrackOrderSnapshot(payload.orderInfo));
+    updates.rawOrderPayload = payload.rawOrderInfo ?? payload.orderInfo;
+    updates.lastOrderSyncedAt = now;
+  }
+
   if (payload.trackingInfo) {
-    updates.rawLastTrackingPayload = payload.trackingInfo;
+    updates.rawLastTrackingPayload = payload.rawTrackingInfo ?? payload.trackingInfo;
     updates.lastTrackingSyncedAt = now;
   }
 
   if (payload.majEntries) {
-    updates.rawLastMajPayload = payload.majEntries;
+    updates.rawLastMajPayload = payload.rawMajEntries ?? payload.majEntries;
     updates.lastMajSyncedAt = now;
   }
 
@@ -1148,19 +1344,27 @@ async function upsertShipmentState(
 
     await tx.update(ecotrackOrderStates).set(updates).where(eq(ecotrackOrderStates.id, row.id));
 
-    const nextLocalStatus = payload.statusItem
+    if (statusItem) {
+      await persistStatusEvidence(tx, row, {
+        statusItem,
+        orderInfo: payload.orderInfo,
+        observedAt: now,
+      });
+    }
+
+    const nextLocalStatus = statusItem
       ? mapEcotrackStatusToOrderStatus(
-          payload.statusItem.status,
+          statusItem.status,
           deriveLatestUpstreamActivityAt(row, payload),
         )
       : null;
     const currentLocalStatus = coerceOrderStatus(row.order.confirmed);
 
-    if (payload.statusItem) {
+    if (statusItem) {
       const nextOrderValues: Partial<typeof orders.$inferInsert> = {
-        ecotrackStatus: payload.statusItem.status,
+        ecotrackStatus: statusItem.status,
         ecotrackStatusLastUpdate: now,
-        ecotrackStatusData: payload.statusItem,
+        ecotrackStatusData: payload.rawStatusItem ?? payload.rawOrderInfo ?? statusItem,
         updatedAt: now,
       };
 
@@ -1194,6 +1398,7 @@ async function upsertShipmentState(
         row.order.id,
         row.trackingNumber,
         payload.trackingInfo,
+        payload.rawTrackingInfo,
       );
       if (trackingValues.length > 0) {
         await tx.insert(ecotrackOrderTrackingEvents).values(trackingValues).onConflictDoNothing();
@@ -1202,11 +1407,11 @@ async function upsertShipmentState(
 
     const afterOrderState = {
       ...beforeOrderState,
-      ...(payload.statusItem
+      ...(statusItem
         ? {
-            ecotrackStatus: payload.statusItem.status,
+            ecotrackStatus: statusItem.status,
             ecotrackStatusLastUpdate: now,
-            ecotrackStatusData: payload.statusItem,
+            ecotrackStatusData: payload.rawStatusItem ?? payload.rawOrderInfo ?? statusItem,
             updatedAt: now,
           }
         : {}),
@@ -1277,7 +1482,13 @@ async function refreshShipmentRow(
     return null;
   }
 
-  let statusItem = statusResponse.data.get(row.trackingNumber) ?? null;
+  const trackingInfo = trackingResponse?.data.get(row.trackingNumber) ?? null;
+  const rawTrackingInfo =
+    trackingResponse?.rawData?.get(row.trackingNumber) ?? trackingInfo ?? null;
+  let statusItem = resolveEcotrackStatusEvidence(
+    statusResponse.data.get(row.trackingNumber),
+    trackingInfo,
+  );
   if (!statusItem && shouldRetireShipmentMissingFromStatusFeed(row)) {
     statusItem = await confirmShipmentStatusFromCurrentOrders(row);
     if (!statusItem) {
@@ -1291,8 +1502,13 @@ async function refreshShipmentRow(
     row,
     {
       statusItem,
-      trackingInfo: trackingResponse?.data.get(row.trackingNumber) ?? null,
+      rawStatusItem: statusResponse.rawData?.get(row.trackingNumber) ?? statusItem,
+      trackingInfo,
+      rawTrackingInfo,
       majEntries: majResponse?.data ?? null,
+      rawMajEntries: majResponse?.payload ?? null,
+      orderInfo: trackingInfo?.OrderInfo ?? null,
+      rawOrderInfo: rawOrderInfoFromTrackingPayload(rawTrackingInfo),
     },
     options.actor,
   );
@@ -1572,7 +1788,13 @@ export async function refreshEcotrackOrdersBatch(
           continue;
         }
 
-        let statusItem = statusResponse.data.get(row.trackingNumber) ?? null;
+        const trackingInfo = trackingResponse.data.get(row.trackingNumber) ?? null;
+        const rawTrackingInfo =
+          trackingResponse.rawData?.get(row.trackingNumber) ?? trackingInfo ?? null;
+        let statusItem = resolveEcotrackStatusEvidence(
+          statusResponse.data.get(row.trackingNumber),
+          trackingInfo,
+        );
         if (!statusItem && shouldRetireShipmentMissingFromStatusFeed(row)) {
           statusItem = await confirmShipmentStatusFromCurrentOrders(row);
           if (!statusItem) {
@@ -1587,8 +1809,13 @@ export async function refreshEcotrackOrdersBatch(
           row,
           {
             statusItem,
-            trackingInfo: trackingResponse.data.get(row.trackingNumber) ?? null,
+            rawStatusItem: statusResponse.rawData?.get(row.trackingNumber) ?? statusItem,
+            trackingInfo,
+            rawTrackingInfo,
             majEntries: majResponse.data,
+            rawMajEntries: majResponse.payload,
+            orderInfo: trackingInfo?.OrderInfo ?? null,
+            rawOrderInfo: rawOrderInfoFromTrackingPayload(rawTrackingInfo),
           },
           actor,
         );
@@ -2345,7 +2572,9 @@ export async function syncEcotrackShipmentStates(
   const candidates = rows.filter(
     (row) =>
       !TERMINAL_STATUSES.has(row.currentStatus) ||
-      isStaleAt(row.lastStatusSyncedAt, 7 * 24 * 60 * 60 * 1000),
+      isStaleAt(row.lastStatusSyncedAt, 7 * 24 * 60 * 60 * 1000) ||
+      row.currentAmountSource !== 'ecotrack_orders' ||
+      row.deliveryTariff === null,
   );
 
   const batches: ShipmentRow[][] = [];
@@ -2383,7 +2612,13 @@ export async function syncEcotrackShipmentStates(
     }
 
     for (const row of batch) {
-      let statusItem = statusResponse.data.get(row.trackingNumber) ?? null;
+      const trackingInfo = trackingResponse.data.get(row.trackingNumber) ?? null;
+      const rawTrackingInfo =
+        trackingResponse.rawData?.get(row.trackingNumber) ?? trackingInfo ?? null;
+      let statusItem = resolveEcotrackStatusEvidence(
+        statusResponse.data.get(row.trackingNumber),
+        trackingInfo,
+      );
       if (!statusItem && shouldRetireShipmentMissingFromStatusFeed(row)) {
         if (fallbackChecked >= MISSING_STATUS_CONFIRMATION_LIMIT) {
           fallbackDeferred += 1;
@@ -2409,6 +2644,7 @@ export async function syncEcotrackShipmentStates(
       }
 
       let majEntries: UpstreamEcotrackMajEntry[] | null = null;
+      let rawMajEntries: unknown = null;
       // MAJ is a per-shipment endpoint subject to the provider's global request
       // pacing. A scheduled reconciliation can contain thousands of shipments,
       // so refreshing stale MAJ entries here would turn a 15-minute status job
@@ -2417,7 +2653,12 @@ export async function syncEcotrackShipmentStates(
       // continue to request MAJ data through their on-demand paths.
       if (options.includeMaj === true) {
         try {
-          majEntries = (await getEcotrackMaj(row.trackingNumber, providerRequestOptions(row))).data;
+          const majResponse = await getEcotrackMaj(
+            row.trackingNumber,
+            providerRequestOptions(row),
+          );
+          majEntries = majResponse.data;
+          rawMajEntries = majResponse.payload;
         } catch {
           // Status and tracking history remain useful when the optional MAJ feed
           // rejects one old or provider-incompatible tracking number.
@@ -2431,8 +2672,13 @@ export async function syncEcotrackShipmentStates(
           row,
           {
             statusItem,
-            trackingInfo: trackingResponse.data.get(row.trackingNumber) ?? null,
+            rawStatusItem: statusResponse.rawData?.get(row.trackingNumber) ?? statusItem,
+            trackingInfo,
+            rawTrackingInfo,
             majEntries,
+            rawMajEntries,
+            orderInfo: trackingInfo?.OrderInfo ?? null,
+            rawOrderInfo: rawOrderInfoFromTrackingPayload(rawTrackingInfo),
           },
           options.actor,
         );

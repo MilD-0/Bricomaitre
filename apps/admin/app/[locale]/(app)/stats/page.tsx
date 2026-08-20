@@ -3,14 +3,14 @@ import { getTranslations } from 'next-intl/server';
 import { StatsDashboard } from '../../../../components/stats/stats-dashboard';
 import { hasDb } from '@bric/db/client';
 import { requireStatsPageAccess } from '../../../../lib/page-access';
-import { getStatsDashboard } from '../../../../lib/stats';
+import { getAnalyticsSectionData } from '../../../../lib/stats-sections';
 
 export default async function StatsPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   await requireStatsPageAccess(locale);
   const [t, initialData] = await Promise.all([
     getTranslations(),
-    hasDb() ? getStatsDashboard({ range: '90d' }) : Promise.resolve(null),
+    hasDb() ? getAnalyticsSectionData('overview', { range: '30d' }) : Promise.resolve(null),
   ]);
 
   return (

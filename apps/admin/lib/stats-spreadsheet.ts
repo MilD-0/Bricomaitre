@@ -64,12 +64,11 @@ function parseSpreadsheetNumber(value: unknown) {
 
   if (typeof value === 'string') {
     if (value.includes('/')) {
-      return Math.max(
-        ...value.split('/').map((part) => {
-          const cleaned = part.replace(/[^\d.-]/g, '');
-          return Number.parseFloat(cleaned || '0');
-        }),
-      );
+      // EcoTrack settlement exports use `current/original` for adjusted COD
+      // amounts. The first side is the amount that actually reconciles to
+      // net recovered + fees; the second is the original submitted total.
+      const currentAmount = value.split('/', 1)[0]?.replace(/[^\d.-]/g, '') ?? '';
+      return Number.parseFloat(currentAmount || '0');
     }
 
     return Number.parseFloat(value.replace(/[^\d.-]/g, '') || '0');

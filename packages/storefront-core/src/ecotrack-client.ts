@@ -73,22 +73,41 @@ const ecotrackMajEntrySchema = z.object({
   livreur: z.string().trim().optional().nullable(),
   created_at: z.string().trim(),
   tracking: z.string().trim(),
-});
+}).passthrough();
 
 const ecotrackTrackingInfoActivitySchema = z.object({
   date: z.string().trim().min(1),
   time: z.string().trim().min(1),
   status: z.string().trim().min(1),
   scanLocation: z.string().trim().optional().nullable(),
-});
+}).passthrough();
+
+const ecotrackOrderInfoSchema = z
+  .object({
+    tracking: z.string().trim().min(1),
+    reference: z.union([z.string(), z.number()]).optional().nullable(),
+    montant: z.union([z.string(), z.number()]).optional().nullable(),
+    tarif_prestation: z.union([z.string(), z.number()]).optional().nullable(),
+    tarif_retour: z.union([z.string(), z.number()]).optional().nullable(),
+    stop_desk: z.union([z.boolean(), z.string(), z.number()]).optional().nullable(),
+    payment_id: z.union([z.string(), z.number()]).optional().nullable(),
+    status_reason: z.string().trim().optional().nullable(),
+    created_at: z.string().trim().optional().nullable(),
+    last_updated_at: z.string().trim().optional().nullable(),
+    livred_at: z.string().trim().optional().nullable(),
+  })
+  .passthrough();
 
 const ecotrackTrackingInfoSchema = z.object({
   recipientName: z.string().trim().optional().nullable(),
   shippedBy: z.string().trim().optional().nullable(),
   originCity: z.union([z.number(), z.string()]).optional().nullable(),
   destLocationCity: z.union([z.number(), z.string()]).optional().nullable(),
+  status: z.string().trim().optional().nullable(),
+  OrderInfo: ecotrackOrderInfoSchema.optional().nullable(),
+  deliveryAttempts: z.array(z.unknown()).default([]),
   activity: z.array(ecotrackTrackingInfoActivitySchema).default([]),
-});
+}).passthrough();
 
 const ecotrackStatusActivitySchema = z.object({
   reason: z.string().trim().optional().nullable(),
@@ -98,7 +117,7 @@ const ecotrackStatusActivitySchema = z.object({
   date: z.string().trim().optional().nullable(),
   time: z.string().trim().optional().nullable(),
   postponed_to: z.union([z.string(), z.null()]).optional(),
-});
+}).passthrough();
 
 const ecotrackStatusItemSchema = z.object({
   status: z.string().trim().min(1),
@@ -110,19 +129,27 @@ const ecotrackStatusItemSchema = z.object({
   driver_phone: z.string().trim().optional().nullable(),
   estimated_fee: z.union([z.string(), z.number()]).optional().nullable(),
   activity: z.array(ecotrackStatusActivitySchema).default([]),
-});
+}).passthrough();
 
-const ecotrackOrderSummarySchema = z
-  .object({
-    tracking: z.string().trim().min(1),
+const ecotrackOrderSummarySchema = ecotrackOrderInfoSchema.extend({
     status: z.string().trim().min(1),
+  });
+
+const ecotrackOrdersPageSchema = z
+  .object({
+    current_page: z.union([z.string(), z.number()]).optional(),
+    last_page: z.union([z.string(), z.number()]).optional(),
+    next_page_url: z.string().nullable().optional(),
+    data: z.array(ecotrackOrderSummarySchema).default([]),
   })
   .passthrough();
 
 export type EcotrackMajEntry = z.infer<typeof ecotrackMajEntrySchema>;
 export type EcotrackTrackingInfo = z.infer<typeof ecotrackTrackingInfoSchema>;
 export type EcotrackStatusItem = z.infer<typeof ecotrackStatusItemSchema>;
+export type EcotrackOrderInfo = z.infer<typeof ecotrackOrderInfoSchema>;
 export type EcotrackOrderSummary = z.infer<typeof ecotrackOrderSummarySchema>;
+export type EcotrackOrdersPage = z.infer<typeof ecotrackOrdersPageSchema>;
 
 function getLimiterState() {
   if (!limiterGlobal.__ecotrackRequestLimiter) {
@@ -610,15 +637,18 @@ export async function getEcotrackTrackingsInfo(
       ? (result.payload as Record<string, unknown>)
       : {};
   const normalized = new Map<string, EcotrackTrackingInfo>();
+  const rawData = new Map<string, unknown>();
   for (const tracking of trackings) {
     const raw = payload[tracking];
     if (!raw) continue;
+    rawData.set(tracking, raw);
     normalized.set(tracking, ecotrackTrackingInfoSchema.parse(raw));
   }
 
   return {
     ...result,
     data: normalized,
+    rawData,
   };
 }
 
@@ -650,15 +680,90 @@ export async function getEcotrackOrdersStatus(
       ? (payload.data as Record<string, unknown>)
       : {};
   const normalized = new Map<string, EcotrackStatusItem>();
+  const rawItems = new Map<string, unknown>();
   for (const tracking of trackings) {
     const raw = rawData[tracking];
     if (!raw) continue;
+    rawItems.set(tracking, raw);
     normalized.set(tracking, ecotrackStatusItemSchema.parse(raw));
   }
 
   return {
     ...result,
     data: normalized,
+    rawData: rawItems,
+  };
+}
+
+export async function getEcotrackOrdersPage(
+  options: {
+    page?: number;
+    startDate?: string;
+    endDate?: string;
+    tracking?: string;
+    fetchImpl?: typeof fetch;
+    env?: NodeJS.ProcessEnv;
+  } = {},
+) {
+  const result = await requestEcotrack({
+    path: '/get/orders',
+    method: 'GET',
+    query: {
+      page: options.page,
+      start_date: options.startDate,
+      end_date: options.endDate,
+      tracking: options.tracking,
+    },
+    fetchImpl: options.fetchImpl,
+    env: options.env,
+  });
+  const rawPage =
+    typeof result.payload === 'object' && result.payload !== null
+      ? (result.payload as Record<string, unknown>)
+      : {};
+  const page = ecotrackOrdersPageSchema.parse(rawPage);
+  const rawRows = Array.isArray(rawPage.data) ? rawPage.data : [];
+  const rawData = new Map<string, unknown>();
+  for (const raw of rawRows) {
+    if (!raw || typeof raw !== 'object') continue;
+    const tracking = (raw as Record<string, unknown>).tracking;
+    if (typeof tracking === 'string' && tracking.trim()) rawData.set(tracking, raw);
+  }
+  return { ...result, data: page.data, page, rawData };
+}
+
+export async function listEcotrackOrders(
+  options: {
+    startDate?: string;
+    endDate?: string;
+    maxPages?: number;
+    fetchImpl?: typeof fetch;
+    env?: NodeJS.ProcessEnv;
+  } = {},
+) {
+  const maxPages = Math.min(100, Math.max(1, Math.trunc(options.maxPages ?? 100)));
+  const data: EcotrackOrderSummary[] = [];
+  const rawData = new Map<string, unknown>();
+  const rateLimits: EcotrackExtendedRateLimitSnapshot[] = [];
+  let pageNumber = 1;
+  let lastPage = 1;
+
+  do {
+    const result = await getEcotrackOrdersPage({ ...options, page: pageNumber });
+    data.push(...result.data);
+    for (const [tracking, raw] of result.rawData) rawData.set(tracking, raw);
+    rateLimits.push(result.rateLimit);
+    const parsedLastPage = Number(result.page.last_page ?? pageNumber);
+    lastPage = Number.isFinite(parsedLastPage) ? Math.max(pageNumber, parsedLastPage) : pageNumber;
+    pageNumber += 1;
+  } while (pageNumber <= lastPage && pageNumber <= maxPages);
+
+  return {
+    data,
+    rawData,
+    pagesFetched: pageNumber - 1,
+    truncated: lastPage >= pageNumber && pageNumber > maxPages,
+    rateLimits,
   };
 }
 
@@ -670,26 +775,17 @@ export async function getEcotrackOrder(
     env?: NodeJS.ProcessEnv;
   } = {},
 ) {
-  const result = await requestEcotrack({
-    path: '/get/orders',
-    method: 'GET',
-    query: {
-      tracking,
-      start_date: options.startDate,
-    },
+  const result = await getEcotrackOrdersPage({
+    tracking,
+    startDate: options.startDate,
     fetchImpl: options.fetchImpl,
     env: options.env,
   });
 
-  const payload =
-    typeof result.payload === 'object' && result.payload !== null
-      ? (result.payload as Record<string, unknown>)
-      : {};
-  const parsed = z.array(ecotrackOrderSummarySchema).parse(payload.data ?? []);
-
   return {
     ...result,
-    data: parsed.find((order) => order.tracking === tracking) ?? null,
+    data: result.data.find((order) => order.tracking === tracking) ?? null,
+    raw: result.rawData.get(tracking) ?? null,
   };
 }
 

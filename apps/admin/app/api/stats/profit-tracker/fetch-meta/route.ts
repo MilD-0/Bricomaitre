@@ -6,9 +6,23 @@ import { MetaAdsSyncError, syncMetaAdsInsights } from '../../../../../lib/meta-a
 import { getProfitTrackerReport } from '../../../../../lib/profit-tracker';
 import { requireMutationAccess } from '../../../../../lib/rbac';
 
-const inputSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-});
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const inputSchema = z
+  .union([
+    z.object({ date: dateSchema }).strict(),
+    z.object({ since: dateSchema, until: dateSchema }).strict(),
+  ])
+  .superRefine((value, context) => {
+    if ('date' in value) return;
+    const since = Date.parse(`${value.since}T00:00:00Z`);
+    const until = Date.parse(`${value.until}T00:00:00Z`);
+    if (since > until) {
+      context.addIssue({ code: 'custom', message: 'since must not follow until.' });
+    }
+    if (until - since > 89 * 24 * 60 * 60 * 1_000) {
+      context.addIssue({ code: 'custom', message: 'Meta synchronization is capped at 90 days.' });
+    }
+  });
 
 export async function POST(request: Request) {
   const denied = await requireMutationAccess('stats');
@@ -23,18 +37,29 @@ export async function POST(request: Request) {
   }
 
   try {
+    const since = 'date' in parsed.data ? parsed.data.date : parsed.data.since;
+    const until = 'date' in parsed.data ? parsed.data.date : parsed.data.until;
+    const lookbackDays =
+      Math.floor(
+        (Date.parse(`${until}T00:00:00Z`) - Date.parse(`${since}T00:00:00Z`)) /
+          (24 * 60 * 60 * 1_000),
+      ) + 1;
     const sync = await syncMetaAdsInsights({
-      since: parsed.data.date,
-      until: parsed.data.date,
-      lookbackDays: 1,
+      since,
+      until,
+      lookbackDays,
       trigger: 'manual-profit-tracker',
     });
     const report = await getProfitTrackerReport({
       range: 'custom',
-      startDate: parsed.data.date,
-      endDate: parsed.data.date,
+      startDate: since,
+      endDate: until,
     });
-    return NextResponse.json({ data: report.days[0] ?? null, sync });
+    return NextResponse.json({
+      data: 'date' in parsed.data ? (report.days[0] ?? null) : report,
+      report,
+      sync,
+    });
   } catch (error) {
     if (error instanceof MetaAdsSyncError) {
       return NextResponse.json(

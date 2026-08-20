@@ -58,6 +58,7 @@ import { importStatsSpreadsheet } from './stats-order-import';
 import { refreshAdminReportingSnapshots } from './stats';
 import { proposeProductContent, reviewProductContentProposal } from './ai-product-content';
 import { proposeEntityEdit, reviewAdminProposal } from './ai-admin-capabilities';
+import { refreshAnalytics2Facts } from './analytics2-facts';
 
 export const ADMIN_PRODUCT_EXPORT_QUEUE = 'admin-product-export';
 export const ADMIN_PRODUCT_CATALOG_FEED_QUEUE = 'admin-product-catalog-feed';
@@ -1382,6 +1383,7 @@ export async function runEcotrackShipmentSyncJob(
   },
 ) {
   const result = await syncEcotrackShipmentStates({ actor: payload.actor });
+  await refreshAnalytics2Facts({ db: getDb() });
   const summary = {
     trigger: payload.trigger,
     ...result,

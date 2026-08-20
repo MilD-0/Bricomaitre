@@ -10,7 +10,6 @@ import {
   Cell,
   ComposedChart,
   Line,
-  LineChart,
   XAxis,
   YAxis,
 } from 'recharts';
@@ -29,9 +28,11 @@ import {
   Users,
 } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { StatsDashboardData } from '../../lib/stats';
+import type { AnalyticsSectionPayload } from '../../lib/stats-sections';
 import { toast } from '../../lib/toast';
 import { requestJson as request } from '../../lib/admin-api';
 import {
@@ -77,7 +78,6 @@ import {
   geographyAverageConfig,
   geographyComposedConfig,
   geographyProfitConfig,
-  importTrendConfig,
   MetricCard,
   MobileBreakdownCard,
   MobileBreakdownMetric,
@@ -85,12 +85,12 @@ import {
   segmentConfig,
   StatsPageSkeleton,
   timeOrdersConfig,
-  timeRevenueConfig,
   topProductsConfig,
 } from './stats-dashboard-primitives';
 import { StatsAiSection } from './stats-ai-section';
 import { StatsMetaSection } from './stats-meta-section';
 import { StatsOverviewSection } from './stats-overview-section';
+import { StatsTimeEconomics } from './stats-time-economics';
 import { StatsWebsiteSection } from './stats-website-section';
 
 type StatsDashboardProps = {
@@ -101,7 +101,7 @@ type StatsDashboardProps = {
 };
 
 export type StatsQueryResponse = {
-  data: StatsDashboardData;
+  data: AnalyticsSectionPayload;
 };
 
 type StatsImportHistoryResponse = {
@@ -144,31 +144,63 @@ type BackgroundJob = {
 
 const TABLE_PAGE_SIZE = 10;
 
-const rangePresets = ['30d', '90d', 'year', 'all', 'custom'] as const;
-function buildStatsUrl(range: string, startDate: string, endDate: string) {
-  const params = new URLSearchParams();
-  params.set('range', range);
+const rangePresets = ['7d', '14d', '30d', '90d', 'year', 'all', 'custom'] as const;
+type RangePreset = (typeof rangePresets)[number];
+type ActiveRange = { range: RangePreset; startDate?: string; endDate?: string };
 
-  if (range === 'custom') {
-    if (startDate) {
-      params.set('startDate', startDate);
+function sectionApiPath(section: StatsSection) {
+  if (section === 'overview') return '/api/stats/overview';
+  if (section === 'time') return '/api/stats/time';
+  if (section === 'metaAds') return '/api/stats/meta-ads';
+  return '/api/stats';
+}
+
+function buildStatsUrl(section: StatsSection, activeRange: ActiveRange) {
+  const params = new URLSearchParams();
+  params.set('range', activeRange.range);
+
+  if (activeRange.range === 'custom') {
+    if (activeRange.startDate) {
+      params.set('startDate', activeRange.startDate);
     }
 
-    if (endDate) {
-      params.set('endDate', endDate);
+    if (activeRange.endDate) {
+      params.set('endDate', activeRange.endDate);
     }
   }
+  if (!['overview', 'time', 'metaAds'].includes(section)) params.set('section', section);
 
-  return `/api/stats?${params.toString()}`;
+  return `${sectionApiPath(section)}?${params.toString()}`;
 }
 
 export function StatsDashboard({ initialData = null, section, title }: StatsDashboardProps) {
   const locale = useLocale();
   const t = useTranslations('statsDashboard');
   const queryClient = useQueryClient();
-  const [range, setRange] = useState<(typeof rangePresets)[number]>('90d');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedRange = searchParams.get('range');
+  const initialRange = rangePresets.includes(requestedRange as RangePreset)
+    ? (requestedRange as RangePreset)
+    : '30d';
+  const initialStartDate = searchParams.get('startDate') ?? '';
+  const initialEndDate = searchParams.get('endDate') ?? '';
+  const validInitialCustom =
+    initialRange === 'custom' &&
+    Boolean(initialStartDate) &&
+    Boolean(initialEndDate) &&
+    initialStartDate <= initialEndDate;
+  const [selectedRange, setSelectedRange] = useState<RangePreset>(
+    validInitialCustom ? 'custom' : initialRange === 'custom' ? '30d' : initialRange,
+  );
+  const [activeRange, setActiveRange] = useState<ActiveRange>(
+    validInitialCustom
+      ? { range: 'custom', startDate: initialStartDate, endDate: initialEndDate }
+      : { range: initialRange === 'custom' ? '30d' : initialRange },
+  );
+  const [startDate, setStartDate] = useState(initialStartDate);
+  const [endDate, setEndDate] = useState(initialEndDate);
   const [trendMode, setTrendMode] = useState<TrendMode>('daily');
   const [uploadedFiles, setUploadedFiles] = useState<BulletinAttachment[]>([]);
   const [selectedUnmatchedReference, setSelectedUnmatchedReference] = useState<
@@ -176,7 +208,6 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
   >(null);
   const [productsPage, setProductsPage] = useState(1);
   const [wilayasPage, setWilayasPage] = useState(1);
-  const [importsTrendPage, setImportsTrendPage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
   const [importStage, setImportStage] = useState<'idle' | 'uploading' | 'processing'>('idle');
   const importStatusInitializedRef = useRef(false);
@@ -185,11 +216,12 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
   const needsDashboardStats = section !== 'imports' && section !== 'manualOrders';
 
   const statsQuery = useQuery({
-    queryKey: ['stats-dashboard', section, range, startDate, endDate],
-    queryFn: () => request<StatsQueryResponse>(buildStatsUrl(range, startDate, endDate)),
+    queryKey: ['stats-dashboard', section, activeRange],
+    queryFn: ({ signal }) =>
+      request<StatsQueryResponse>(buildStatsUrl(section, activeRange), { signal }),
     initialData:
-      initialData && range === '90d' && startDate === '' && endDate === ''
-        ? { data: initialData }
+      initialData && activeRange.range === '30d'
+        ? { data: initialData as AnalyticsSectionPayload }
         : undefined,
     initialDataUpdatedAt: initialStatsUpdatedAt,
     placeholderData: keepPreviousData,
@@ -223,23 +255,34 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
   });
   const refreshStatsMutation = useMutation({
     mutationFn: () =>
-      request<StatsQueryResponse>('/api/stats', {
+      request<StatsQueryResponse>(sectionApiPath(section), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          range,
-          startDate: range === 'custom' ? startDate || undefined : undefined,
-          endDate: range === 'custom' ? endDate || undefined : undefined,
+          range: activeRange.range,
+          startDate: activeRange.range === 'custom' ? activeRange.startDate : undefined,
+          endDate: activeRange.range === 'custom' ? activeRange.endDate : undefined,
+          section,
         }),
       }),
     onSuccess: async (response) => {
-      queryClient.setQueryData(['stats-dashboard', section, range, startDate, endDate], response);
+      queryClient.setQueryData(['stats-dashboard', section, activeRange], response);
       await queryClient.invalidateQueries({ queryKey: ['stats-dashboard'] });
     },
     onError: (error) => {
       toast.error(error.message);
     },
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    params.set('range', activeRange.range);
+    if (activeRange.range === 'custom') {
+      if (activeRange.startDate) params.set('startDate', activeRange.startDate);
+      if (activeRange.endDate) params.set('endDate', activeRange.endDate);
+    }
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [activeRange, pathname, router]);
 
   const deleteBatchMutation = useMutation({
     mutationFn: (batchId: string) =>
@@ -396,15 +439,6 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
     [stats],
   );
   const trendData = stats ? stats.trends[trendMode] : [];
-  const importTrendData = useMemo(
-    () =>
-      (stats?.trends.imports ?? []).map((item) => ({
-        ...item,
-        margin: item.revenue > 0 ? (item.profit / item.revenue) * 100 : 0,
-      })),
-    [stats],
-  );
-  const importTrendRows = useMemo(() => [...importTrendData].reverse(), [importTrendData]);
   const importHistoryPageData = importHistoryQuery.data?.data;
   const importHistoryRows = useMemo(
     () =>
@@ -422,14 +456,6 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
     () =>
       paginatedWilayas.slice((wilayasPage - 1) * TABLE_PAGE_SIZE, wilayasPage * TABLE_PAGE_SIZE),
     [paginatedWilayas, wilayasPage],
-  );
-  const importsTrendPageItems = useMemo(
-    () =>
-      importTrendRows.slice(
-        (importsTrendPage - 1) * TABLE_PAGE_SIZE,
-        importsTrendPage * TABLE_PAGE_SIZE,
-      ),
-    [importTrendRows, importsTrendPage],
   );
   const historyPageItems = importHistoryRows;
   const historyTotalPages =
@@ -492,7 +518,6 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
     queueMicrotask(() => {
       setProductsPage(1);
       setWilayasPage(1);
-      setImportsTrendPage(1);
     });
   }, [stats]);
 
@@ -522,7 +547,7 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
       </Alert>
     );
   }
-  const ensuredStats = stats as StatsDashboardData;
+  const ensuredStats = stats as AnalyticsSectionPayload;
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -554,17 +579,20 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
                 <Button
                   key={preset}
                   type="button"
-                  variant={range === preset ? 'default' : 'outline'}
+                  variant={selectedRange === preset ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setRange(preset)}
+                  onClick={() => {
+                    setSelectedRange(preset);
+                    if (preset !== 'custom') setActiveRange({ range: preset });
+                  }}
                 >
                   {t(`ranges.${preset}`)}
                 </Button>
               ))}
             </div>
 
-            {range === 'custom' ? (
-              <div className="grid gap-3 sm:grid-cols-2">
+            {selectedRange === 'custom' ? (
+              <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
                 <Input
                   type="date"
                   value={startDate}
@@ -577,6 +605,13 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
                   onChange={(event) => setEndDate(event.target.value)}
                   aria-label={t('customEnd')}
                 />
+                <Button
+                  type="button"
+                  disabled={!startDate || !endDate || startDate > endDate}
+                  onClick={() => setActiveRange({ range: 'custom', startDate, endDate })}
+                >
+                  {t('profitTracker.applyRange')}
+                </Button>
               </div>
             ) : null}
 
@@ -1451,6 +1486,10 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
             ))}
           </div>
 
+          {ensuredStats.economics ? (
+            <StatsTimeEconomics grain={trendMode} report={ensuredStats.economics} />
+          ) : null}
+
           <SectionCard title={t('time.orders.title')}>
             <ChartContainer config={timeOrdersConfig} className="h-[360px]">
               <AreaChart data={trendData}>
@@ -1488,187 +1527,6 @@ export function StatsDashboard({ initialData = null, section, title }: StatsDash
               </AreaChart>
             </ChartContainer>
           </SectionCard>
-
-          <SectionCard title={t('time.revenue.title')}>
-            <ChartContainer config={timeRevenueConfig} className="h-[360px]">
-              <LineChart data={trendData}>
-                <CartesianGrid vertical={false} strokeDasharray="4 6" />
-                <XAxis
-                  dataKey="bucket"
-                  tickFormatter={(value) => formatBucket(locale, String(value))}
-                  tickLine={false}
-                  axisLine={false}
-                  minTickGap={18}
-                />
-                <YAxis hide />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value) => formatCurrency(locale, Number(value))}
-                      labelFormatter={(value) => formatBucket(locale, String(value))}
-                    />
-                  }
-                />
-                <Line
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="var(--color-revenue)"
-                  strokeWidth={3}
-                  dot={false}
-                  animationDuration={800}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="profit"
-                  stroke="var(--color-profit)"
-                  strokeWidth={3}
-                  dot={false}
-                  animationDuration={1000}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="fees"
-                  stroke="var(--color-fees)"
-                  strokeWidth={3}
-                  dot={false}
-                  animationDuration={1200}
-                />
-                <ChartLegend content={<ChartLegendContent />} />
-              </LineChart>
-            </ChartContainer>
-          </SectionCard>
-
-          {importTrendData.length > 0 ? (
-            <SectionCard title={t('time.imports.title')}>
-              <ChartContainer config={importTrendConfig} className="h-[420px]">
-                <ComposedChart data={importTrendData}>
-                  <CartesianGrid vertical={false} strokeDasharray="4 6" />
-                  <XAxis
-                    dataKey="bucket"
-                    tickFormatter={(value) => formatBucket(locale, String(value))}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis yAxisId="left" hide />
-                  <YAxis yAxisId="right" orientation="right" hide />
-                  <ChartTooltip
-                    content={
-                      <ChartTooltipContent
-                        formatter={(value) => Number(value).toLocaleString()}
-                        labelFormatter={(value) => formatBucket(locale, String(value))}
-                      />
-                    }
-                  />
-                  <Bar
-                    yAxisId="right"
-                    dataKey="orders"
-                    fill="var(--color-orders)"
-                    radius={10}
-                    animationDuration={700}
-                  />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="revenue"
-                    stroke="var(--color-revenue)"
-                    strokeWidth={3}
-                    dot={{ r: 3 }}
-                    animationDuration={850}
-                  />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="profit"
-                    stroke="var(--color-profit)"
-                    strokeWidth={3}
-                    dot={{ r: 3 }}
-                    animationDuration={1000}
-                  />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="fees"
-                    stroke="var(--color-fees)"
-                    strokeWidth={3}
-                    dot={{ r: 3 }}
-                    animationDuration={1150}
-                  />
-                  <ChartLegend content={<ChartLegendContent />} />
-                </ComposedChart>
-              </ChartContainer>
-
-              <div className="mt-5 space-y-2 md:hidden">
-                {importsTrendPageItems.map((item) => (
-                  <MobileBreakdownCard key={item.bucket} title={formatDate(locale, item.bucket)}>
-                    <dl className="mt-3 grid grid-cols-2 gap-3">
-                      <MobileBreakdownMetric
-                        label={t('time.imports.table.orders')}
-                        value={formatNumber(locale, item.orders)}
-                      />
-                      <MobileBreakdownMetric
-                        label={t('time.imports.table.revenue')}
-                        value={formatCurrency(locale, item.revenue)}
-                      />
-                      <MobileBreakdownMetric
-                        label={t('time.imports.table.fees')}
-                        value={formatCurrency(locale, item.fees)}
-                      />
-                      <MobileBreakdownMetric
-                        label={t('time.imports.table.profit')}
-                        value={formatCurrency(locale, item.profit)}
-                      />
-                      <MobileBreakdownMetric
-                        label={t('time.imports.table.margin')}
-                        value={formatPercent(locale, item.margin)}
-                      />
-                    </dl>
-                  </MobileBreakdownCard>
-                ))}
-              </div>
-              <div className="mt-5 hidden max-w-full overflow-x-auto overscroll-x-contain rounded-[1.5rem] border border-border/70 md:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t('time.imports.table.date')}</TableHead>
-                      <TableHead>{t('time.imports.table.orders')}</TableHead>
-                      <TableHead>{t('time.imports.table.revenue')}</TableHead>
-                      <TableHead>{t('time.imports.table.fees')}</TableHead>
-                      <TableHead>{t('time.imports.table.profit')}</TableHead>
-                      <TableHead>{t('time.imports.table.margin')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {importsTrendPageItems.map((item) => (
-                      <TableRow key={item.bucket}>
-                        <TableCell className="font-medium">
-                          {formatDate(locale, item.bucket)}
-                        </TableCell>
-                        <TableCell>{formatNumber(locale, item.orders)}</TableCell>
-                        <TableCell>{formatCurrency(locale, item.revenue)}</TableCell>
-                        <TableCell>{formatCurrency(locale, item.fees)}</TableCell>
-                        <TableCell
-                          className={cn(item.profit >= 0 ? 'text-emerald-600' : 'text-rose-600')}
-                        >
-                          {formatCurrency(locale, item.profit)}
-                        </TableCell>
-                        <TableCell
-                          className={cn(item.margin >= 0 ? 'text-emerald-600' : 'text-rose-600')}
-                        >
-                          {formatPercent(locale, item.margin)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <TablePaginationControls
-                className="mt-4 rounded-[1.5rem] border"
-                currentPage={importsTrendPage}
-                totalPages={Math.max(1, Math.ceil(importTrendRows.length / TABLE_PAGE_SIZE))}
-                onPageChange={setImportsTrendPage}
-              />
-            </SectionCard>
-          ) : null}
         </div>
       ) : null}
 

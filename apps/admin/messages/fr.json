@@ -12,6 +12,7 @@
     "brands": "Marques",
     "categories": "Catégories",
     "brandsCategories": "Marques & Catégories",
+    "analytics2": "Analytics 2",
     "stats": "Statistiques",
     "bulletin": "Bulletin",
     "settings": "Paramètres"
@@ -611,7 +612,12 @@
       "geography": "Géographie",
       "time": "Analyse temporelle",
       "profitTracker": "Suivi des profits",
+      "costs": "Coûts et hypothèses",
       "metaAds": "Meta Ads"
+    },
+    "costsPage": {
+      "title": "Coûts et hypothèses",
+      "description": "Gérez le taux de change, les retours, les coûts d’exploitation et les ajustements quotidiens, avec l’économie automatique des commandes expédiées en référence."
     },
     "profitTracker": {
       "title": "Suivi des profits",
@@ -654,6 +660,12 @@
         "clickToPage": "Taux clic-vers-page",
         "costConfirmed": "Coût par commande confirmée"
       },
+      "sources": {
+        "manual": "Ajustement manuel",
+        "automatic": "Automatique",
+        "default": "Valeur globale",
+        "missing": "Indisponible"
+      },
       "settings": {
         "title": "Paramètres du calculateur",
         "fx": "Taux EUR → DZD",
@@ -684,6 +696,7 @@
         "actions": "Actions",
         "edit": "Modifier le {date}",
         "delete": "Supprimer le {date}",
+        "reset": "Rétablir l’automatique",
         "confirmDelete": "Supprimer les données enregistrées du {date} ?"
       },
       "adsets": {
@@ -709,12 +722,15 @@
         "cancel": "Annuler la modification",
         "delete": "Supprimer {name}",
         "confirmDelete": "Supprimer le coût d'exploitation {name} ?",
-        "deleteAction": "Supprimer"
+        "deleteAction": "Supprimer",
+        "rangeTotal": "Coûts sur la période",
+        "monthlyBurn": "Charge mensuelle active"
       },
       "notifications": {
         "settingsSaved": "Paramètres du calculateur enregistrés.",
         "daySaved": "Économie quotidienne enregistrée.",
         "dayDeleted": "Données quotidiennes supprimées.",
+        "dayReset": "L’ajustement quotidien a été rétabli sur la valeur automatique.",
         "metaFetched": "Données Meta actualisées pour le jour sélectionné.",
         "costSaved": "Coût d'exploitation enregistré.",
         "costDeleted": "Coût d'exploitation supprimé."
@@ -731,6 +747,16 @@
       "pending": "Import en cours..."
     },
     "overview": {
+      "analytics": {
+        "settledProfit": "Profit encaissé",
+        "settledAfterAds": "Profit encaissé après dépenses Meta connues",
+        "postedOrders": "Commandes expédiées",
+        "fulfillment": "Traitement",
+        "settlementCoverage": "Couverture d’encaissement",
+        "reportThrough": "Encaissé jusqu’au",
+        "projectedCoverage": "Couverture des projections",
+        "trajectory": "Trajectoire du profit réalisé et ajusté"
+      },
       "cards": {
         "totalOrders": "Commandes soumises",
         "totalOrdersHint": "Commandes soumises via le flux commercial canonique.",
@@ -1099,6 +1125,17 @@
         "weekly": "Hebdomadaire",
         "monthly": "Mensuel"
       },
+      "economics": {
+        "realized": "Réalisé",
+        "adjusted": "Ajusté",
+        "performance": "Performance financière",
+        "settledRevenue": "Revenu encaissé",
+        "settledFees": "Frais encaissés",
+        "settledProfit": "Profit encaissé",
+        "settledAfterAds": "Profit encaissé après dépenses Meta connues",
+        "beforeReturns": "Profit avant retours",
+        "fridayWeeks": "{count} semaines commençant le vendredi sur cette période."
+      },
       "orders": {
         "eyebrow": "Flux commandes",
         "title": "Commandes au fil du temps"
@@ -1194,6 +1231,15 @@
       "managerTitle": "Coûts publicitaires",
       "conversionRate": "Taux de conversion",
       "unknownCampaign": "Campagne inconnue",
+      "performance": {
+        "fetchRange": "Récupérer la période active depuis Meta",
+        "impressions": "Impressions",
+        "landingViews": "Vues de page d’atterrissage",
+        "purchases": "Achats Meta",
+        "costPurchase": "Coût par achat",
+        "adsetSpend": "Dépenses quotidiennes par ensemble de publicités",
+        "trackingHealth": "Santé du suivi"
+      },
       "attribution": {
         "title": "Acquisition Meta et résultats des commandes",
         "description": "Sessions first-party canoniques classées à partir des campagnes Meta, identifiants de clic, référents et signaux organiques, puis reliées aux résultats des commandes storefront.",

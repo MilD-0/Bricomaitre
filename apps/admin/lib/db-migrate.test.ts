@@ -16,8 +16,8 @@ const { commercialBackfillMock, phoneBackfillMock } = vi.hoisted(() => ({
   phoneBackfillMock: vi.fn(),
 }));
 
-vi.mock('drizzle-orm/node-postgres/migrator', () => ({
-  migrate: migrateMock,
+vi.mock('./independent-db-migrator', () => ({
+  migrateInIndependentTransactions: migrateMock,
 }));
 vi.mock('./order-commercial-backfill', () => ({
   backfillOrderCommercialSnapshots: commercialBackfillMock,

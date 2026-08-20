@@ -12,6 +12,7 @@
     "brands": "Brands",
     "categories": "Categories",
     "brandsCategories": "Brands & Categories",
+    "analytics2": "Analytics 2",
     "stats": "Stats",
     "bulletin": "Bulletin",
     "settings": "Settings"
@@ -611,7 +612,12 @@
       "geography": "Geography",
       "time": "Time analysis",
       "profitTracker": "Profit tracker",
+      "costs": "Costs & assumptions",
       "metaAds": "Meta Ads"
+    },
+    "costsPage": {
+      "title": "Costs & assumptions",
+      "description": "Manage FX and return assumptions, operating costs, and daily overrides while automatic posted-order economics remain visible underneath."
     },
     "profitTracker": {
       "title": "Profit tracker",
@@ -654,6 +660,12 @@
         "clickToPage": "Click-to-page rate",
         "costConfirmed": "Cost per confirmed order"
       },
+      "sources": {
+        "manual": "Manual override",
+        "automatic": "Automatic",
+        "default": "Global default",
+        "missing": "Unavailable"
+      },
       "settings": {
         "title": "Calculator settings",
         "fx": "EUR → DZD rate",
@@ -684,6 +696,7 @@
         "actions": "Actions",
         "edit": "Edit {date}",
         "delete": "Delete {date}",
+        "reset": "Reset to automatic",
         "confirmDelete": "Delete the saved data for {date}?"
       },
       "adsets": {
@@ -709,12 +722,15 @@
         "cancel": "Cancel edit",
         "delete": "Delete {name}",
         "confirmDelete": "Delete the operating cost {name}?",
-        "deleteAction": "Delete"
+        "deleteAction": "Delete",
+        "rangeTotal": "Costs in selected range",
+        "monthlyBurn": "Active monthly burn"
       },
       "notifications": {
         "settingsSaved": "Calculator settings saved.",
         "daySaved": "Daily economics saved.",
         "dayDeleted": "Daily data deleted.",
+        "dayReset": "Daily override reset to automatic.",
         "metaFetched": "Meta data refreshed for the selected day.",
         "costSaved": "Operating cost saved.",
         "costDeleted": "Operating cost deleted."
@@ -731,6 +747,16 @@
       "pending": "Importing..."
     },
     "overview": {
+      "analytics": {
+        "settledProfit": "Settled profit",
+        "settledAfterAds": "Settled profit after known Meta spend",
+        "postedOrders": "Posted orders",
+        "fulfillment": "Fulfillment",
+        "settlementCoverage": "Settlement coverage",
+        "reportThrough": "Settled through",
+        "projectedCoverage": "Projected-data coverage",
+        "trajectory": "Realized and adjusted profit trajectory"
+      },
       "cards": {
         "totalOrders": "Submitted orders",
         "totalOrdersHint": "Orders submitted through the canonical commerce flow.",
@@ -1099,6 +1125,17 @@
         "weekly": "Weekly",
         "monthly": "Monthly"
       },
+      "economics": {
+        "realized": "Realized",
+        "adjusted": "Adjusted",
+        "performance": "Financial performance",
+        "settledRevenue": "Settled revenue",
+        "settledFees": "Settled fees",
+        "settledProfit": "Settled profit",
+        "settledAfterAds": "Settled profit after known Meta spend",
+        "beforeReturns": "Profit before returns",
+        "fridayWeeks": "{count} Friday-start weeks in this range."
+      },
       "orders": {
         "eyebrow": "Order flow",
         "title": "Orders over time"
@@ -1194,6 +1231,15 @@
       "managerTitle": "Ad costs",
       "conversionRate": "Conversion rate",
       "unknownCampaign": "Unknown campaign",
+      "performance": {
+        "fetchRange": "Fetch active range from Meta",
+        "impressions": "Impressions",
+        "landingViews": "Landing-page views",
+        "purchases": "Meta purchases",
+        "costPurchase": "Cost per purchase",
+        "adsetSpend": "Daily spend by ad set",
+        "trackingHealth": "Tracking health"
+      },
       "attribution": {
         "title": "Meta acquisition and order outcomes",
         "description": "Canonical first-party sessions classified from Meta campaign, click-ID, referrer, and organic evidence, joined to storefront order outcomes.",
