@@ -2,26 +2,20 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Activity,
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
   Check,
   ChevronRight,
-  CircleDollarSign,
   Download,
-  Gauge,
   Loader2,
-  PackageCheck,
   Plus,
   RefreshCw,
   Search,
   Settings2,
-  Sparkles,
-  Target,
   Trash2,
 } from 'lucide-react';
-import { useLocale } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -55,6 +49,13 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { NativeSelect, NativeSelectOption } from '../ui/native-select';
 import { SidePanel } from '../ui/side-panel';
+import {
+  WorkspaceActions,
+  WorkspaceFrame,
+  WorkspaceHeader,
+  WorkspaceHeading,
+  WorkspaceToolbar,
+} from '../ui/workspace';
 import { getAnalytics2Copy, type Analytics2Copy } from './analytics2-copy';
 import { AlgeriaWilayaMap } from './algeria-wilaya-map';
 
@@ -65,16 +66,6 @@ type DataOf<Kind extends Analytics2Payload['data']['kind']> = Extract<
 
 const chartColors = ['#7c3aed', '#0f766e', '#e11d48', '#d97706', '#2563eb', '#64748b'];
 const rangeKeys: Analytics2Range[] = ['7d', '14d', '30d', '90d', 'year', 'all', 'custom'];
-const viewKeys: Analytics2View[] = [
-  'command',
-  'money',
-  'acquisition',
-  'fulfillment',
-  'storefront',
-  'search',
-  'catalog',
-  'assumptions',
-];
 const grainKeys = ['auto', 'day', 'week', 'month'] as const;
 
 const ResponsiveChart = ResponsiveContainer as React.ComponentType<{
@@ -3699,28 +3690,9 @@ function AssumptionsView({
   );
 }
 
-function ViewIcon({ view }: { view: Analytics2View }) {
-  const Icon =
-    view === 'command'
-      ? Gauge
-      : view === 'money'
-        ? CircleDollarSign
-        : view === 'acquisition'
-          ? Target
-          : view === 'fulfillment'
-            ? PackageCheck
-            : view === 'storefront'
-              ? Activity
-              : view === 'search'
-                ? Search
-                : view === 'catalog'
-                  ? Sparkles
-                  : Settings2;
-  return <Icon className="size-4" aria-hidden="true" />;
-}
-
 export function Analytics2Workspace({ initialData }: { initialData: Analytics2Payload }) {
   const locale = useLocale();
+  const t = useTranslations();
   const copy = getAnalytics2Copy(locale);
   const router = useRouter();
   const pathname = usePathname();
@@ -3778,6 +3750,20 @@ export function Analytics2Workspace({ initialData }: { initialData: Analytics2Pa
     staleTime: 30_000,
   });
   const payload = analyticsQuery.data ?? initialData;
+  const titleKey = {
+    command: 'nav.statsOverview',
+    money: 'nav.statsMoney',
+    acquisition: 'nav.statsAcquisition',
+    fulfillment: 'nav.statsFulfillment',
+    storefront: 'nav.statsStorefront',
+    search: 'nav.statsSearch',
+    catalog: 'nav.statsCatalog',
+    assumptions: 'nav.statsAssumptions',
+  }[payload.filters.view] as Parameters<typeof t>[0];
+  const updatedAt = `${copy.updated} ${new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(payload.generatedAt))}`;
 
   function selectRange(range: Analytics2Range) {
     setRangeChoice(range);
@@ -3827,15 +3813,10 @@ export function Analytics2Workspace({ initialData }: { initialData: Analytics2Pa
   }
 
   return (
-    <div className="-mx-1 overflow-x-hidden sm:-mx-2 lg:-mx-4" data-admin-workspace="analytics2">
-      <header className="flex justify-end border-b border-border/60 bg-card/35 px-4 py-2.5 sm:px-6">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>
-            {copy.updated}{' '}
-            {new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(
-              new Date(payload.generatedAt),
-            )}
-          </span>
+    <WorkspaceFrame className="overflow-x-hidden" data-admin-workspace="stats">
+      <WorkspaceHeader>
+        <WorkspaceHeading title={t(titleKey)} description={updatedAt} />
+        <WorkspaceActions>
           <Button
             size="sm"
             variant="outline"
@@ -3849,9 +3830,9 @@ export function Analytics2Workspace({ initialData }: { initialData: Analytics2Pa
             )}
             <span className="sr-only sm:not-sr-only">{copy.refresh}</span>
           </Button>
-        </div>
-      </header>
-      <div className="border-b border-border/60 px-4 py-3 sm:px-6">
+        </WorkspaceActions>
+      </WorkspaceHeader>
+      <WorkspaceToolbar>
         <div className="flex flex-wrap items-center gap-2">
           <div className="hidden flex-wrap gap-1 lg:flex">
             {rangeKeys.map((range) => (
@@ -3940,41 +3921,7 @@ export function Analytics2Workspace({ initialData }: { initialData: Analytics2Pa
             ))}
           </NativeSelect>
         </div>
-      </div>
-      <nav aria-label={copy.title} className="border-b border-border/60 px-2 sm:px-4">
-        <NativeSelect
-          aria-label="Analytics view"
-          name="analytics-view"
-          className="my-2 md:hidden"
-          value={filters.view}
-          onChange={(event) =>
-            setFilters((current) => ({ ...current, view: event.target.value as Analytics2View }))
-          }
-        >
-          {viewKeys.map((view) => (
-            <NativeSelectOption key={view} value={view}>
-              {copy.tabs[view]}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-        <div className="hidden overflow-x-auto md:flex">
-          {viewKeys.map((view) => (
-            <button
-              key={view}
-              type="button"
-              onClick={() => setFilters((current) => ({ ...current, view }))}
-              className={cn(
-                'relative flex shrink-0 items-center gap-2 px-3 py-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground',
-                filters.view === view &&
-                  'text-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-primary',
-              )}
-            >
-              <ViewIcon view={view} />
-              {copy.tabs[view]}
-            </button>
-          ))}
-        </div>
-      </nav>
+      </WorkspaceToolbar>
       <SourceRail payload={payload} copy={copy} locale={locale} />
       <WarningRail payload={payload} copy={copy} locale={locale} />
       {analyticsQuery.isFetching ? (
@@ -3998,6 +3945,6 @@ export function Analytics2Workspace({ initialData }: { initialData: Analytics2Pa
       >
         {renderView()}
       </main>
-    </div>
+    </WorkspaceFrame>
   );
 }

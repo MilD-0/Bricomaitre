@@ -80,7 +80,15 @@ describe('LandingPageIndex', () => {
   it('filters concise records and exposes live links only for active pages', async () => {
     const user = userEvent.setup();
     renderIndex();
-    expect(screen.getByRole('heading', { name: 'Assets' })).toHaveClass('hidden', 'lg:block');
+    expect(screen.getByRole('heading', { name: 'Assets' })).toHaveClass(
+      'sr-only',
+      'lg:not-sr-only',
+    );
+    expect(screen.getByText('Landing pages · 2')).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-workspace-navigation]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-workspace-toolbar]')).toHaveLength(1);
     expect(screen.getByRole('link', { name: /View live page/ })).toHaveAttribute(
       'href',
       'https://bricomaitre.com/fr/landing/cordless-drill-7',

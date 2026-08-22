@@ -28,19 +28,20 @@ vi.mock('next-intl', () => ({
 }));
 
 vi.mock('next/link', () => ({
-  default: ({
-    children,
-    href,
-    className,
-  }: {
-    children: React.ReactNode;
-    href: string;
-    className?: string;
-  }) => (
-    <a href={href} className={className}>
-      {children}
-    </a>
-  ),
+  default: (
+    linkProps: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+      href: string;
+      prefetch?: boolean;
+    },
+  ) => {
+    const { children, href, className, prefetch, ...props } = linkProps;
+    void prefetch;
+    return (
+      <a href={href} className={className} {...props}>
+        {children}
+      </a>
+    );
+  },
 }));
 
 vi.mock('next/navigation', () => ({
@@ -100,7 +101,7 @@ describe('AppShell', () => {
       if (key === 'auth.signOut') return 'Sign out';
       if (key === 'profile.legacyUi') return 'Legacy UI';
       if (key === 'profile.legacyUiDescription')
-        return 'Use the original Products, Orders, Assets, and Landing Pages interfaces.';
+        return 'Use the original Products, Orders, Assets, Landing Pages, and Stats interfaces.';
       if (key === 'labels.opsAccess') return 'Ops controls and logs are available.';
       if (key === 'assetsManager.bannersTitle') return 'Banners';
       if (key === 'assetsManager.groupsTitle') return 'Featured product groups';
@@ -116,6 +117,14 @@ describe('AppShell', () => {
       if (key === 'statsDashboard.tabs.metaAds') return 'Meta ads';
       if (key === 'statsDashboard.manualOrders.sectionTitle') return 'Manual orders';
       if (key === 'statsDashboard.imports.title') return 'Import spreadsheet';
+      if (key === 'nav.statsOverview') return 'Overview';
+      if (key === 'nav.statsMoney') return 'Money';
+      if (key === 'nav.statsAcquisition') return 'Acquisition';
+      if (key === 'nav.statsFulfillment') return 'Fulfillment';
+      if (key === 'nav.statsStorefront') return 'Storefront';
+      if (key === 'nav.statsSearch') return 'Search visibility';
+      if (key === 'nav.statsCatalog') return 'Catalog';
+      if (key === 'nav.statsAssumptions') return 'Costs & assumptions';
       if (key.startsWith('nav.')) return key;
       return key;
     });
@@ -124,16 +133,68 @@ describe('AppShell', () => {
   it('preserves the active analytics range across stats navigation', () => {
     usePathnameMock.mockReturnValue('/en/stats/time');
     useSearchParamsMock.mockReturnValue(
-      new URLSearchParams('range=custom&startDate=2026-08-01&endDate=2026-08-15'),
+      new URLSearchParams('range=custom&startDate=2026-08-01&endDate=2026-08-15&grain=week'),
     );
     render(
-      <AppShell initialPermissions={['analytics_manage']} initialRole="employee">
+      <AppShell
+        initialPermissions={['analytics_manage']}
+        initialRole="employee"
+        initialLegacyUi={false}
+      >
         <div>child</div>
       </AppShell>,
     );
-    expect(screen.getByRole('link', { name: 'Meta ads' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Acquisition' })).toHaveAttribute(
       'href',
-      '/en/stats/meta-ads?range=custom&startDate=2026-08-01&endDate=2026-08-15',
+      '/en/stats/meta-ads?range=custom&startDate=2026-08-01&endDate=2026-08-15&grain=week',
+    );
+  });
+
+  it('uses a flat desktop navigation rail with a compact collapsed state', async () => {
+    usePathnameMock.mockReturnValue('/en/products');
+    const view = render(
+      <AppShell
+        initialPermissions={['products_write', 'orders_write', 'assets_write']}
+        initialRole="employee"
+        initialUserEmail="operator@example.com"
+      >
+        <div>child</div>
+      </AppShell>,
+    );
+
+    const sidebar = view.container.querySelector('[data-desktop-navigation]');
+    const navigation = view.container.querySelector('[data-desktop-navigation-list]');
+    const activeLink = screen.getByRole('link', { name: 'nav.products' });
+
+    expect(sidebar).toHaveClass('lg:w-[17rem]', 'lg:rounded-xl', 'lg:shadow-sm');
+    expect(navigation).not.toHaveClass('lg:bg-card/60', 'lg:shadow-[var(--shadow-vapor)]');
+    expect(activeLink).toHaveAttribute('data-navigation-active', 'true');
+    expect(activeLink).toHaveClass('bg-primary/10');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+
+    expect(sidebar).toHaveClass('lg:w-[4.75rem]');
+    expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
+    expect(activeLink).toHaveAttribute('title', 'nav.products');
+  });
+
+  it('associates the product archive with the Products navigation family', () => {
+    usePathnameMock.mockReturnValue('/en/archive');
+    const view = render(
+      <AppShell
+        initialPermissions={['products_write']}
+        initialRole="employee"
+        initialLegacyUi={false}
+      >
+        <div>archive</div>
+      </AppShell>,
+    );
+
+    const mobileHeader = view.container.querySelector('[data-mobile-workflow-header]');
+    expect(within(mobileHeader as HTMLElement).getByText('nav.products')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'nav.products' })).toHaveAttribute(
+      'data-navigation-active',
+      'true',
     );
   });
 
@@ -171,7 +232,8 @@ describe('AppShell', () => {
       ]);
     });
 
-    expect(screen.getByRole('heading', { name: 'BricAdmin' })).toBeInTheDocument();
+    expect(screen.getByLabelText('BricAdmin')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'BricAdmin' })).not.toBeInTheDocument();
     expect(screen.queryByText('Brico Admin')).not.toBeInTheDocument();
     expect(screen.queryByText('Administration')).not.toBeInTheDocument();
     expect(screen.queryByText('pages.administration')).not.toBeInTheDocument();
@@ -272,6 +334,16 @@ describe('AppShell', () => {
       'href',
       '/en/assets/landing-pages',
     );
+    expect(screen.getByRole('link', { name: 'Money' })).toHaveAttribute('href', '/en/stats/time');
+    expect(screen.getByRole('link', { name: 'Fulfillment' })).toHaveAttribute(
+      'href',
+      '/en/stats/fulfillment',
+    );
+    expect(screen.getByRole('link', { name: 'Search visibility' })).toHaveAttribute(
+      'href',
+      '/en/stats/search',
+    );
+    expect(screen.queryByRole('link', { name: 'Import spreadsheet' })).not.toBeInTheDocument();
   });
 
   it('derives AI proposal review from catalog permissions', async () => {
@@ -303,7 +375,7 @@ describe('AppShell', () => {
     expect(screen.queryByRole('link', { name: 'nav.aiProposals' })).not.toBeInTheDocument();
   });
 
-  it('presents the current workflow and a deliberate phone navigation path', async () => {
+  it('presents the current workflow without a mobile bottom dock', async () => {
     usePathnameMock.mockReturnValue('/en/orders/ecotrack');
     render(
       <AppShell
@@ -316,25 +388,23 @@ describe('AppShell', () => {
     );
 
     const mobileHeader = document.querySelector('[data-mobile-workflow-header]');
-    const mobileDock = document.querySelector('[data-mobile-navigation-dock]');
     expect(mobileHeader).not.toBeNull();
-    expect(mobileDock).not.toBeNull();
+    expect(document.querySelector('[data-mobile-navigation-dock]')).toBeNull();
     expect(within(mobileHeader as HTMLElement).getByText('nav.ecotrackShipments')).toBeVisible();
     expect(within(mobileHeader as HTMLElement).getByText('nav.orders')).toBeVisible();
-    expect(
-      within(mobileDock as HTMLElement).getByRole('link', { name: 'nav.products' }),
-    ).toHaveAttribute('href', '/en/products');
-    expect(
-      within(mobileDock as HTMLElement).getByRole('link', { name: 'nav.orders' }),
-    ).toHaveAttribute('href', '/en/orders');
 
     await userEvent.click(
-      within(mobileDock as HTMLElement).getByRole('button', {
-        name: 'adminWorkspace.products.selectionMore',
+      within(mobileHeader as HTMLElement).getByRole('button', {
+        name: 'Open sidebar',
       }),
     );
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(document.body.style.overflow).toBe('hidden');
+    expect(screen.getByRole('link', { name: 'nav.products' })).toHaveAttribute(
+      'href',
+      '/en/products',
+    );
+    expect(screen.getByRole('link', { name: 'nav.orders' })).toHaveAttribute('href', '/en/orders');
 
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());

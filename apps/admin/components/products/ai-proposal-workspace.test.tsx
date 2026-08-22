@@ -140,9 +140,13 @@ describe('AI proposal review workspace preview', () => {
       'grid-cols-[minmax(0,1fr)_auto_auto]',
     );
     expect(screen.getByRole('heading', { name: 'AI proposal review' })).toHaveClass(
-      'hidden',
-      'lg:flex',
+      'sr-only',
+      'lg:not-sr-only',
     );
+    expect(view.container.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
+    expect(view.container.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
+    expect(view.container.querySelectorAll('[data-workspace-toolbar]')).toHaveLength(1);
+    expect(screen.getByText('42 proposals')).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Proposal type' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Filters' }));
 
@@ -217,6 +221,7 @@ describe('AI proposal review workspace preview', () => {
     );
     renderWorkspace();
 
+    expect(screen.getByText('42 proposals')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Delete expired' }));
     const confirmation = screen.getByRole('dialog', { name: 'Delete expired proposals?' });
     expect(
@@ -226,6 +231,7 @@ describe('AI proposal review workspace preview', () => {
 
     await waitFor(() => expect(deleted).toEqual(['2']));
     await waitFor(() => expect(screen.queryByText('AR landing page')).not.toBeInTheDocument());
+    expect(screen.getByText('41 proposals')).toBeInTheDocument();
     expect(screen.getByText('Title, Active')).toBeInTheDocument();
     expect(await screen.findByText('Deleted 1 expired proposals.')).toBeInTheDocument();
   });

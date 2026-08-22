@@ -138,7 +138,14 @@ describe('AssetsWorkspace', () => {
   it('renders one flat resource list with URL-backed local navigation', () => {
     const { container } = renderWorkspace();
     expect(container.querySelector('[data-assets-workspace="banners"]')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Assets' })).toHaveClass('hidden', 'lg:block');
+    expect(screen.getByRole('heading', { name: 'Assets' })).toHaveClass(
+      'sr-only',
+      'lg:not-sr-only',
+    );
+    expect(container.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-workspace-navigation]')).toHaveLength(1);
+    expect(screen.getByText('Banners · 2')).toBeInTheDocument();
     expect(container.querySelector('table')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Featured groups' })).toHaveAttribute(
       'href',
