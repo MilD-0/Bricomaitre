@@ -2,8 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element -- Taxonomy thumbnails use admin-configured CDN origins. */
 
-import { FolderTree, ImageIcon, Plus, Search, Tags } from 'lucide-react';
-import Link from 'next/link';
+import { ImageIcon, Plus, Search } from 'lucide-react';
 import { useLocale } from 'next-intl';
 import * as React from 'react';
 
@@ -17,13 +16,21 @@ import {
   categoriesListResponseSchema,
 } from '../../lib/brands-categories';
 import { toast } from '../../lib/toast';
-import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { CompactMenu, CompactMenuItem } from '../ui/compact-menu';
 import { Input } from '../ui/input';
 import { NativeSelect, NativeSelectOption } from '../ui/native-select';
 import { Switch } from '../ui/switch';
+import {
+  WorkspaceActions,
+  WorkspaceFrame,
+  WorkspaceHeader,
+  WorkspaceHeading,
+  WorkspaceNavigation,
+  WorkspaceNavigationLink,
+  WorkspaceToolbar,
+} from '../ui/workspace';
 import { TablePaginationControls } from '../table-pagination-controls';
 
 import { DeleteDialog } from './manager-shared';
@@ -291,55 +298,36 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
   };
 
   return (
-    <div className="min-w-0 pb-10">
-      <header className="flex items-center justify-between gap-4 border-b border-border/70 pb-4 lg:items-end lg:pb-5">
-        <div className="min-w-0">
-          <p className="hidden text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground lg:block">
-            {t.title}
-          </p>
-          <div className="flex items-baseline gap-3 lg:mt-1">
-            <h1 className="hidden text-3xl font-semibold tracking-[-0.025em] lg:block">
-              {viewTitle}
-            </h1>
-            <span className="text-sm tabular-nums text-muted-foreground">
-              {data.pagination.totalItems}
-            </span>
-          </div>
-        </div>
-        <Button
-          type="button"
-          disabled={!data.writable || pending}
-          onClick={() => setEditor({ mode: 'create' })}
-        >
-          <Plus className="size-4" aria-hidden="true" />
-          {t.create} {singular.toLocaleLowerCase(locale)}
-        </Button>
-      </header>
+    <WorkspaceFrame className="pb-10" data-admin-workspace="taxonomy">
+      <WorkspaceHeader>
+        <WorkspaceHeading title={viewTitle} meta={data.pagination.totalItems} />
+        <WorkspaceActions>
+          <Button
+            type="button"
+            disabled={!data.writable || pending}
+            onClick={() => setEditor({ mode: 'create' })}
+          >
+            <Plus className="size-4" aria-hidden="true" />
+            {t.create} {singular.toLocaleLowerCase(locale)}
+          </Button>
+        </WorkspaceActions>
+      </WorkspaceHeader>
 
-      <nav aria-label={t.title} className="flex gap-1 border-b border-border/70 py-3">
+      <WorkspaceNavigation aria-label={t.title}>
         {(
           [
-            ['brands', t.brands, Tags],
-            ['categories', t.categories, FolderTree],
+            ['brands', t.brands],
+            ['categories', t.categories],
           ] as const
-        ).map(([value, label, Icon]) => (
-          <Link
-            key={value}
-            href={`/${locale}/${value}`}
-            aria-current={view === value ? 'page' : undefined}
-            className={cn(
-              'inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-              view === value && 'bg-primary/12 text-foreground',
-            )}
-          >
-            <Icon className="size-4" aria-hidden="true" />
+        ).map(([value, label]) => (
+          <WorkspaceNavigationLink key={value} href={`/${locale}/${value}`} active={view === value}>
             {label}
-          </Link>
+          </WorkspaceNavigationLink>
         ))}
-      </nav>
+      </WorkspaceNavigation>
 
-      <div
-        className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-b border-border/70 py-3 md:flex md:items-center md:gap-3"
+      <WorkspaceToolbar
+        className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 md:flex md:items-center md:gap-3"
         data-mobile-taxonomy-controls
       >
         <label className="relative col-span-2 min-w-0 md:flex-1">
@@ -372,7 +360,7 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
             <NativeSelectOption value="products">{t.mostProducts}</NativeSelectOption>
           </NativeSelect>
         </label>
-      </div>
+      </WorkspaceToolbar>
 
       {selected.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2 border-b border-border/70 bg-muted/35 px-3 py-2">
@@ -561,6 +549,6 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
         pending={pending}
         onConfirm={() => void remove(deleteIds)}
       />
-    </div>
+    </WorkspaceFrame>
   );
 }

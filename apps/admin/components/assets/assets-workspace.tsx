@@ -3,7 +3,6 @@
 /* eslint-disable @next/next/no-img-element -- Asset previews use admin-configured CDN origins. */
 
 import { ImageIcon, Layers3, Plus } from 'lucide-react';
-import Link from 'next/link';
 import { useLocale } from 'next-intl';
 import * as React from 'react';
 
@@ -21,10 +20,17 @@ import type {
   ProductCardRecord,
 } from '../../lib/assets';
 import { toast } from '../../lib/toast';
-import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { CompactMenu, CompactMenuItem } from '../ui/compact-menu';
 import { Switch } from '../ui/switch';
+import {
+  WorkspaceActions,
+  WorkspaceFrame,
+  WorkspaceHeader,
+  WorkspaceHeading,
+  WorkspaceNavigation,
+  WorkspaceNavigationLink,
+} from '../ui/workspace';
 import {
   AssetsEditorPanel,
   type AssetsEditorState,
@@ -457,38 +463,27 @@ export function AssetsWorkspace({
     );
 
   return (
-    <div className="-mx-1 sm:-mx-2 lg:-mx-4" data-assets-workspace={view}>
-      <header className="border-b border-border/60 px-2 pb-4 sm:px-3 lg:px-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="hidden text-2xl font-semibold tracking-[-0.025em] lg:block">
-              {t.title}
-            </h1>
-            <p className="text-sm font-medium text-foreground lg:mt-1 lg:font-normal lg:text-muted-foreground">
-              {viewTitle} · {items.length}
-            </p>
-          </div>
+    <WorkspaceFrame data-assets-workspace={view}>
+      <WorkspaceHeader>
+        <WorkspaceHeading title={t.title} meta={`${viewTitle} · ${items.length}`} />
+        <WorkspaceActions>
           <Button onClick={createEditor}>
             <Plus className="size-4" aria-hidden="true" />
             {t.create}
           </Button>
-        </div>
-        <nav className="mt-4 flex gap-1 overflow-x-auto" aria-label={t.title}>
-          {routes.map((route) => (
-            <Link
-              key={route.value}
-              href={`/${locale}${route.href}`}
-              className={cn(
-                'whitespace-nowrap rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground',
-                route.value === view &&
-                  'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground',
-              )}
-            >
-              {route.label}
-            </Link>
-          ))}
-        </nav>
-      </header>
+        </WorkspaceActions>
+      </WorkspaceHeader>
+      <WorkspaceNavigation aria-label={t.title}>
+        {routes.map((route) => (
+          <WorkspaceNavigationLink
+            key={route.value}
+            href={`/${locale}${route.href}`}
+            active={route.value === view}
+          >
+            {route.label}
+          </WorkspaceNavigationLink>
+        ))}
+      </WorkspaceNavigation>
 
       <div className="divide-y divide-border/60 border-b border-border/60">
         {items.map((item, index) => {
@@ -570,6 +565,6 @@ export function AssetsWorkspace({
           onSubmit={submit}
         />
       ) : null}
-    </div>
+    </WorkspaceFrame>
   );
 }

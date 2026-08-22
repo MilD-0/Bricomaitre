@@ -217,6 +217,12 @@ describe('OrdersEcotrackManager', () => {
         view.container.querySelector(`[data-ecotrack-variant="${presentation}"]`),
       ).toBeInTheDocument();
       expect(
+        screen.getByRole('heading', { level: 1, name: 'nav.ecotrackShipments' }),
+      ).toHaveClass('sr-only', 'lg:not-sr-only');
+      expect(view.container.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
+      expect(view.container.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
+      expect(view.container.querySelectorAll('[data-workspace-toolbar]')).toHaveLength(1);
+      expect(
         screen.getByLabelText('ordersEcotrackManager.fields.scanTrackingNumber'),
       ).toBeInTheDocument();
       expect(

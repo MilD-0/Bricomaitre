@@ -1,6 +1,6 @@
 'use client';
 
-import { Bot, Check, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { Check, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
@@ -24,6 +24,13 @@ import {
 import { Input } from '../ui/input';
 import { NativeSelect, NativeSelectOption } from '../ui/native-select';
 import { SidePanel } from '../ui/side-panel';
+import {
+  WorkspaceActions,
+  WorkspaceFrame,
+  WorkspaceHeader,
+  WorkspaceHeading,
+  WorkspaceToolbar,
+} from '../ui/workspace';
 
 import { AiProposalInspector } from './ai-proposal-inspector';
 import {
@@ -119,11 +126,16 @@ export function AiProposalWorkspace({
     action: 'approve' | 'reject';
   } | null>(null);
   const [deleteExpiredRequest, setDeleteExpiredRequest] = React.useState(false);
-  const [reviewedIds, setReviewedIds] = React.useState<Set<number>>(new Set());
+  const [removedIds, setRemovedIds] = React.useState<Set<number>>(new Set());
   const [pending, setPending] = React.useState(false);
   const nowMs = Date.parse(now);
 
-  const proposals = initialData.items.filter((proposal) => !reviewedIds.has(proposal.id));
+  const proposals = initialData.items.filter((proposal) => !removedIds.has(proposal.id));
+  const remainingTotal = Math.max(0, initialData.pagination.total - removedIds.size);
+  const remainingTotalPages = Math.max(
+    1,
+    Math.ceil(remainingTotal / initialData.pagination.pageSize),
+  );
   const effectiveSelected =
     proposals.find((proposal) => proposal.id === selectedId) ?? proposals[0] ?? null;
   const selectedProposals = proposals.filter((proposal) => selectedIds.has(proposal.id));
@@ -182,7 +194,7 @@ export function AiProposalWorkspace({
       }
     }
 
-    setReviewedIds((current) => new Set([...current, ...completed]));
+    setRemovedIds((current) => new Set([...current, ...completed]));
     setSelectedIds((current) => new Set([...current].filter((id) => !completed.includes(id))));
     if (completed.includes(selectedId ?? -1)) setMobileInspectorOpen(false);
 
@@ -219,7 +231,7 @@ export function AiProposalWorkspace({
       }
     }
 
-    setReviewedIds((current) => new Set([...current, ...completed]));
+    setRemovedIds((current) => new Set([...current, ...completed]));
     setSelectedIds((current) => new Set([...current].filter((id) => !completed.includes(id))));
     if (completed.includes(selectedId ?? -1)) setMobileInspectorOpen(false);
     if (failures.length > 0) toast.error(failures.join('\n'), { id: toastId });
@@ -252,154 +264,155 @@ export function AiProposalWorkspace({
     : '';
 
   return (
-    <div className="min-w-0 pb-10">
-      <header className="flex items-center justify-between gap-3 border-b border-border/70 pb-4 lg:items-end lg:pb-5">
-        <div className="min-w-0">
-          <h1 className="hidden items-center gap-2 text-3xl font-semibold tracking-[-0.025em] lg:flex">
-            <Bot className="size-6 text-violet-500" aria-hidden="true" />
-            {t('title')}
-          </h1>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground lg:mt-1">
-            <span>{t('resultCount', { count: initialData.pagination.total })}</span>
-            {expiredCount > 0 ? (
+    <WorkspaceFrame className="pb-10" data-admin-workspace="ai-proposals">
+      <WorkspaceHeader>
+        <WorkspaceHeading
+          title={t('title')}
+          meta={t('resultCount', { count: remainingTotal })}
+          description={
+            expiredCount > 0 ? (
               <span className="text-amber-600 dark:text-amber-400">
                 {t('expired', { count: expiredCount })}
               </span>
-            ) : null}
-          </div>
-        </div>
-        {expiredCount > 0 ? (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={pending}
-            onClick={() => setDeleteExpiredRequest(true)}
-          >
-            <Trash2 className="size-4" aria-hidden="true" />
-            {t('deleteExpired')}
-          </Button>
-        ) : null}
-      </header>
-
-      <form className="border-b border-border/70 py-3" data-mobile-proposal-filters>
-        <input type="hidden" name="page" value="1" />
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 md:flex md:items-center">
-          <Input
-            name="q"
-            type="search"
-            defaultValue={initialData.query.q ?? ''}
-            placeholder={t('search')}
-            aria-label={t('search')}
-            className="col-span-3 min-w-0 md:flex-1"
-          />
-          <NativeSelect
-            name="sort"
-            defaultValue={initialData.query.sort}
-            aria-label={t('sort')}
-            className="min-w-0 md:w-48"
-          >
-            <NativeSelectOption value="newest">{t('sortNewest')}</NativeSelectOption>
-            <NativeSelectOption value="oldest">{t('sortOldest')}</NativeSelectOption>
-            <NativeSelectOption value="confidence">{t('sortConfidence')}</NativeSelectOption>
-            <NativeSelectOption value="expires">{t('sortExpiry')}</NativeSelectOption>
-            <NativeSelectOption value="type">{t('sortType')}</NativeSelectOption>
-          </NativeSelect>
-          <div className="contents md:flex md:gap-2">
-            <Button type="submit" aria-label={t('applyFilters')}>
-              <Search className="size-4" aria-hidden="true" />
-              <span className="hidden sm:inline">{t('applyFilters')}</span>
-            </Button>
+            ) : null
+          }
+        />
+        <WorkspaceActions>
+          {expiredCount > 0 ? (
             <Button
               type="button"
-              variant={filtersOpen || activeFilterCount > 0 ? 'default' : 'outline'}
-              aria-expanded={filtersOpen}
-              onClick={() => setFiltersOpen((open) => !open)}
+              variant="outline"
+              disabled={pending}
+              onClick={() => setDeleteExpiredRequest(true)}
             >
-              <SlidersHorizontal className="size-4" aria-hidden="true" />
-              <span className="hidden sm:inline">{copy.filters}</span>
-              {activeFilterCount > 0 ? activeFilterCount : null}
+              <Trash2 className="size-4" aria-hidden="true" />
+              {t('deleteExpired')}
             </Button>
-          </div>
-        </div>
+          ) : null}
+        </WorkspaceActions>
+      </WorkspaceHeader>
 
-        {filtersOpen ? (
-          <div className="mt-3 grid gap-3 border-t border-border/50 pt-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <WorkspaceToolbar>
+        <form data-mobile-proposal-filters>
+          <input type="hidden" name="page" value="1" />
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 md:flex md:items-center">
+            <Input
+              name="q"
+              type="search"
+              defaultValue={initialData.query.q ?? ''}
+              placeholder={t('search')}
+              aria-label={t('search')}
+              className="col-span-3 min-w-0 md:flex-1"
+            />
             <NativeSelect
-              name="proposalType"
-              defaultValue={initialData.query.proposalType ?? ''}
-              aria-label={t('proposalType')}
+              name="sort"
+              defaultValue={initialData.query.sort}
+              aria-label={t('sort')}
+              className="min-w-0 md:w-48"
             >
-              <NativeSelectOption value="">{t('allProposalTypes')}</NativeSelectOption>
-              {initialData.facets.proposalTypes.map((value) => (
-                <NativeSelectOption key={value} value={value}>
-                  {humanizeProposalToken(value)}
-                </NativeSelectOption>
-              ))}
+              <NativeSelectOption value="newest">{t('sortNewest')}</NativeSelectOption>
+              <NativeSelectOption value="oldest">{t('sortOldest')}</NativeSelectOption>
+              <NativeSelectOption value="confidence">{t('sortConfidence')}</NativeSelectOption>
+              <NativeSelectOption value="expires">{t('sortExpiry')}</NativeSelectOption>
+              <NativeSelectOption value="type">{t('sortType')}</NativeSelectOption>
             </NativeSelect>
-            <NativeSelect
-              name="entityType"
-              defaultValue={initialData.query.entityType ?? ''}
-              aria-label={t('entityType')}
-            >
-              <NativeSelectOption value="">{t('allEntityTypes')}</NativeSelectOption>
-              {initialData.facets.entityTypes.map((value) => (
-                <NativeSelectOption key={value} value={value}>
-                  {humanizeProposalToken(value)}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-            <NativeSelect
-              name="model"
-              defaultValue={initialData.query.model ?? ''}
-              aria-label={t('model')}
-            >
-              <NativeSelectOption value="">{t('allModels')}</NativeSelectOption>
-              {initialData.facets.models.map((value) => (
-                <NativeSelectOption key={value} value={value}>
-                  {value}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-            <NativeSelect
-              name="expiry"
-              defaultValue={initialData.query.expiry}
-              aria-label={t('expiry')}
-            >
-              <NativeSelectOption value="all">{t('allExpiry')}</NativeSelectOption>
-              <NativeSelectOption value="active">{t('activeOnly')}</NativeSelectOption>
-              <NativeSelectOption value="expired">{t('expiredOnly')}</NativeSelectOption>
-            </NativeSelect>
-            <NativeSelect
-              name="evidence"
-              defaultValue={initialData.query.evidence}
-              aria-label={t('evidenceFilter')}
-            >
-              <NativeSelectOption value="all">{t('allEvidence')}</NativeSelectOption>
-              <NativeSelectOption value="present">{t('withEvidence')}</NativeSelectOption>
-              <NativeSelectOption value="missing">{t('withoutEvidence')}</NativeSelectOption>
-            </NativeSelect>
-            <NativeSelect
-              name="pageSize"
-              defaultValue={String(initialData.query.pageSize)}
-              aria-label={t('pageSize')}
-            >
-              {[10, 20, 50, 100].map((value) => (
-                <NativeSelectOption key={value} value={value}>
-                  {t('perPage', { count: value })}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-            {activeFilterCount > 0 || initialData.query.q ? (
-              <Link
-                href={`/${locale}/ai-proposals`}
-                className="text-sm font-medium text-muted-foreground hover:text-foreground sm:col-span-2 lg:col-span-3 xl:col-span-6"
+            <div className="contents md:flex md:gap-2">
+              <Button type="submit" aria-label={t('applyFilters')}>
+                <Search className="size-4" aria-hidden="true" />
+                <span className="hidden sm:inline">{t('applyFilters')}</span>
+              </Button>
+              <Button
+                type="button"
+                variant={filtersOpen || activeFilterCount > 0 ? 'default' : 'outline'}
+                aria-expanded={filtersOpen}
+                onClick={() => setFiltersOpen((open) => !open)}
               >
-                {t('resetFilters')}
-              </Link>
-            ) : null}
+                <SlidersHorizontal className="size-4" aria-hidden="true" />
+                <span className="hidden sm:inline">{copy.filters}</span>
+                {activeFilterCount > 0 ? activeFilterCount : null}
+              </Button>
+            </div>
           </div>
-        ) : null}
-      </form>
+
+          {filtersOpen ? (
+            <div className="mt-3 grid gap-3 border-t border-border/50 pt-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              <NativeSelect
+                name="proposalType"
+                defaultValue={initialData.query.proposalType ?? ''}
+                aria-label={t('proposalType')}
+              >
+                <NativeSelectOption value="">{t('allProposalTypes')}</NativeSelectOption>
+                {initialData.facets.proposalTypes.map((value) => (
+                  <NativeSelectOption key={value} value={value}>
+                    {humanizeProposalToken(value)}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+              <NativeSelect
+                name="entityType"
+                defaultValue={initialData.query.entityType ?? ''}
+                aria-label={t('entityType')}
+              >
+                <NativeSelectOption value="">{t('allEntityTypes')}</NativeSelectOption>
+                {initialData.facets.entityTypes.map((value) => (
+                  <NativeSelectOption key={value} value={value}>
+                    {humanizeProposalToken(value)}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+              <NativeSelect
+                name="model"
+                defaultValue={initialData.query.model ?? ''}
+                aria-label={t('model')}
+              >
+                <NativeSelectOption value="">{t('allModels')}</NativeSelectOption>
+                {initialData.facets.models.map((value) => (
+                  <NativeSelectOption key={value} value={value}>
+                    {value}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+              <NativeSelect
+                name="expiry"
+                defaultValue={initialData.query.expiry}
+                aria-label={t('expiry')}
+              >
+                <NativeSelectOption value="all">{t('allExpiry')}</NativeSelectOption>
+                <NativeSelectOption value="active">{t('activeOnly')}</NativeSelectOption>
+                <NativeSelectOption value="expired">{t('expiredOnly')}</NativeSelectOption>
+              </NativeSelect>
+              <NativeSelect
+                name="evidence"
+                defaultValue={initialData.query.evidence}
+                aria-label={t('evidenceFilter')}
+              >
+                <NativeSelectOption value="all">{t('allEvidence')}</NativeSelectOption>
+                <NativeSelectOption value="present">{t('withEvidence')}</NativeSelectOption>
+                <NativeSelectOption value="missing">{t('withoutEvidence')}</NativeSelectOption>
+              </NativeSelect>
+              <NativeSelect
+                name="pageSize"
+                defaultValue={String(initialData.query.pageSize)}
+                aria-label={t('pageSize')}
+              >
+                {[10, 20, 50, 100].map((value) => (
+                  <NativeSelectOption key={value} value={value}>
+                    {t('perPage', { count: value })}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+              {activeFilterCount > 0 || initialData.query.q ? (
+                <Link
+                  href={`/${locale}/ai-proposals`}
+                  className="text-sm font-medium text-muted-foreground hover:text-foreground sm:col-span-2 lg:col-span-3 xl:col-span-6"
+                >
+                  {t('resetFilters')}
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
+        </form>
+      </WorkspaceToolbar>
 
       {selectedIds.size > 0 ? (
         <div className="flex flex-wrap items-center gap-2 border-b border-border/70 bg-muted/35 px-3 py-2">
@@ -529,7 +542,7 @@ export function AiProposalWorkspace({
 
           <TablePaginationControls
             currentPage={initialData.pagination.page}
-            totalPages={initialData.pagination.totalPages}
+            totalPages={remainingTotalPages}
             onPageChange={(page) => router.push(pageHref(initialData, page))}
           />
         </div>
@@ -625,6 +638,6 @@ export function AiProposalWorkspace({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </WorkspaceFrame>
   );
 }

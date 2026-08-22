@@ -1,29 +1,27 @@
 import { Card } from '../../../../components/ui/card';
 import { Skeleton } from '../../../../components/ui/skeleton';
+import {
+  WorkspaceActions,
+  WorkspaceFrame,
+  WorkspaceHeader,
+  WorkspaceToolbar,
+} from '../../../../components/ui/workspace';
 
 export default function ProductsLoading() {
   return (
-    <section className="scroll-mt-24 overflow-hidden rounded-[1.75rem] border border-border/70 bg-background/95 shadow-sm">
-      <div className="flex flex-col gap-4 px-4 py-4 sm:px-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex flex-col gap-2">
-            <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-7 w-36" />
-          </div>
-          <Skeleton className="h-9 w-32" />
-        </div>
-
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <Skeleton className="h-9 w-full max-w-sm" />
-          <div className="flex flex-wrap gap-2">
-            <Skeleton className="h-8 w-32" />
-            <Skeleton className="h-8 w-32" />
-            <Skeleton className="h-8 w-32" />
-            <Skeleton className="h-8 w-36" />
-            <Skeleton className="h-8 w-32" />
-          </div>
-        </div>
-      </div>
+    <WorkspaceFrame className="scroll-mt-24 overflow-hidden" data-workspace-loading="products">
+      <WorkspaceHeader>
+        <Skeleton className="hidden h-9 w-40 lg:block" />
+        <WorkspaceActions>
+          <Skeleton className="h-10 w-32" />
+        </WorkspaceActions>
+      </WorkspaceHeader>
+      <WorkspaceToolbar className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+        <Skeleton className="h-10 min-w-0 flex-1 sm:min-w-64" />
+        <Skeleton className="h-10 w-36" />
+        <Skeleton className="h-10 w-36" />
+        <Skeleton className="h-10 w-36" />
+      </WorkspaceToolbar>
 
       <div className="hidden overflow-x-auto md:block">
         <div className="grid grid-cols-[3rem_7rem_minmax(14rem,1fr)_9rem_9rem_7rem_11rem_11rem_10rem] gap-4 border-y border-border/70 px-4 py-3 text-sm sm:px-5">
@@ -80,6 +78,6 @@ export default function ProductsLoading() {
           <Skeleton className="h-8 w-16" />
         </div>
       </div>
-    </section>
+    </WorkspaceFrame>
   );
 }

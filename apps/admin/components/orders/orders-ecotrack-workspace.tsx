@@ -36,6 +36,13 @@ import { Skeleton } from '../ui/skeleton';
 import { Switch } from '../ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import {
+  WorkspaceActions,
+  WorkspaceFrame,
+  WorkspaceHeader,
+  WorkspaceHeading,
+  WorkspaceToolbar,
+} from '../ui/workspace';
+import {
   formatEcotrackDateTime,
   formatEcotrackMoney,
   getTrackingHistoryStatusKey,
@@ -352,7 +359,7 @@ function ShipmentInspector({
   );
 }
 
-function WorkspaceToolbar(props: OrdersEcotrackWorkspaceProps) {
+function EcotrackWorkspaceChrome(props: OrdersEcotrackWorkspaceProps) {
   const t = useTranslations();
   const dispatchable = props.items.filter((item) => item.canDispatch).length;
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -380,15 +387,13 @@ function WorkspaceToolbar(props: OrdersEcotrackWorkspaceProps) {
 
   return (
     <>
-      <header className="flex items-center gap-3 border-b border-border pb-3 sm:pb-4 lg:items-end lg:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="hidden text-xl font-semibold lg:block">{t('nav.ecotrackShipments')}</h1>
-            <Badge variant="outline">{props.pagination.total}</Badge>
-          </div>
-          <PendingInline active={props.isRefreshing} label={t('labels.loading')} />
-        </div>
-        <div className="flex shrink-0 gap-2">
+      <WorkspaceHeader>
+        <WorkspaceHeading
+          title={t('nav.ecotrackShipments')}
+          meta={props.pagination.total}
+          description={<PendingInline active={props.isRefreshing} label={t('labels.loading')} />}
+        />
+        <WorkspaceActions>
           <Button
             type="button"
             variant="outline"
@@ -410,11 +415,11 @@ function WorkspaceToolbar(props: OrdersEcotrackWorkspaceProps) {
             <Send data-icon="inline-start" />
             {t('ordersEcotrackManager.actions.dispatchReady')}
           </Button>
-        </div>
-      </header>
+        </WorkspaceActions>
+      </WorkspaceHeader>
 
-      <div
-        className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-b border-border py-3 sm:gap-3 xl:grid-cols-[minmax(16rem,1fr)_14rem_auto]"
+      <WorkspaceToolbar
+        className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:gap-3 xl:grid-cols-[minmax(16rem,1fr)_14rem_auto]"
         data-mobile-ecotrack-controls
       >
         <div className="col-span-2 xl:col-span-1">
@@ -490,10 +495,10 @@ function WorkspaceToolbar(props: OrdersEcotrackWorkspaceProps) {
             </div>
           ) : null}
         </div>
-      </div>
+      </WorkspaceToolbar>
 
       <form
-        className="flex gap-2 border-b border-border py-3"
+        className="flex gap-2 border-b border-border px-3 py-3 sm:px-4 lg:px-5"
         onSubmit={(event) => {
           event.preventDefault();
           props.onScanSubmit();
@@ -518,7 +523,7 @@ function WorkspaceToolbar(props: OrdersEcotrackWorkspaceProps) {
       </form>
 
       {props.selectedIds.length ? (
-        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/20 py-2">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/20 px-3 py-2 sm:px-4 lg:px-5">
           <Badge>{t('labels.bulkSelectionCount', { count: props.selectedIds.length })}</Badge>
           <div className="ms-auto">
             <SplitActionButton
@@ -942,8 +947,8 @@ export function OrdersEcotrackWorkspace(props: OrdersEcotrackWorkspaceProps) {
   const t = useTranslations();
 
   return (
-    <section className="min-w-0" data-ecotrack-variant={props.variant}>
-      <WorkspaceToolbar {...props} />
+    <WorkspaceFrame data-ecotrack-variant={props.variant}>
+      <EcotrackWorkspaceChrome {...props} />
       {props.isInitialLoading ? (
         <div className="grid gap-3 py-6">
           <Skeleton className="h-16 w-full" />
@@ -985,6 +990,6 @@ export function OrdersEcotrackWorkspace(props: OrdersEcotrackWorkspaceProps) {
           onPageChange={props.onPageChange}
         />
       ) : null}
-    </section>
+    </WorkspaceFrame>
   );
 }

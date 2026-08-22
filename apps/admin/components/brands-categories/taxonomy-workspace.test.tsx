@@ -158,7 +158,14 @@ describe('taxonomy workspace preview', () => {
     expect(view.container.querySelector('[data-mobile-taxonomy-controls]')).toHaveClass(
       'grid-cols-[minmax(0,1fr)_auto]',
     );
-    expect(screen.getByRole('heading', { name: 'Brands' })).toHaveClass('hidden', 'lg:block');
+    expect(screen.getByRole('heading', { name: 'Brands' })).toHaveClass(
+      'sr-only',
+      'lg:not-sr-only',
+    );
+    expect(view.container.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
+    expect(view.container.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
+    expect(view.container.querySelectorAll('[data-workspace-navigation]')).toHaveLength(1);
+    expect(view.container.querySelectorAll('[data-workspace-toolbar]')).toHaveLength(1);
     expect(screen.getByText('18 products')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Brands' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: 'Categories' })).toHaveAttribute(

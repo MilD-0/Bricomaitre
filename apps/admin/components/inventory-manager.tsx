@@ -50,6 +50,12 @@ import { Switch } from './ui/switch';
 import { TablePaginationControls } from './table-pagination-controls';
 import { SearchField } from './search-field';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import {
+  WorkspaceFrame,
+  WorkspaceHeader,
+  WorkspaceHeading,
+  WorkspaceToolbar,
+} from './ui/workspace';
 
 type MutationMessages = {
   loading: string;
@@ -283,17 +289,14 @@ function ScanOrderDialog({
 
   return (
     <Dialog open={state.open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+      <DialogContent className="h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] max-w-none overflow-y-auto rounded-xl p-4 sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-[1.5rem] sm:p-6">
         <DialogHeader>
           <DialogTitle>{t('inventory.scan.orderTitle', { id: state.order?.id ?? 0 })}</DialogTitle>
           <DialogDescription>{state.order?.fullName ?? ''}</DialogDescription>
         </DialogHeader>
-        <div className="mt-4 flex flex-col gap-3">
+        <div className="mt-4 divide-y divide-border/60 border-y border-border/60">
           {state.items.map((item) => (
-            <div
-              key={`${item.productId ?? item.title}`}
-              className="rounded-xl border border-border/70 p-3"
-            >
+            <div key={`${item.productId ?? item.title}`} className="py-3">
               <div className="flex items-start gap-3">
                 <Checkbox
                   checked={item.selected}
@@ -702,27 +705,61 @@ export function InventoryManager({ title }: { title: string }) {
   const isLoading = query.isPending;
   const isMutating = mutation.isPending || batchApplyMutation.isPending;
 
-  return (
-    <motion.section
-      className="scroll-mt-24 overflow-hidden rounded-[1.75rem] border border-border/70 bg-background/95 shadow-sm"
-      {...sectionTransitionProps}
-    >
-      <div className="flex flex-col gap-4 px-4 py-4 sm:px-5">
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex flex-col gap-2">
-            <h2 className="text-lg font-semibold">{title}</h2>
-            <PendingInline
-              active={isFilterPending || query.isFetching}
-              label={t('labels.loading')}
-            />
-          </div>
-        </div>
+  function changeQuantity(item: InventoryRow, delta: -1 | 1) {
+    const direction = delta > 0 ? 'increase' : 'decrease';
+    mutation.mutate({
+      id: item.id,
+      payload: { delta },
+      messages: buildMessages(
+        t,
+        `inventory.notifications.quantity.${direction}.loading`,
+        `inventory.notifications.quantity.${direction}.success`,
+        `inventory.notifications.quantity.${direction}.error`,
+        { name: item.title },
+      ),
+    });
+  }
 
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2 rounded-2xl border border-border/70 bg-muted/20 p-3">
+  function changeStock(item: InventoryRow, checked: boolean) {
+    const direction = checked ? 'enable' : 'disable';
+    mutation.mutate({
+      id: item.id,
+      payload: { inStock: checked },
+      messages: buildMessages(
+        t,
+        `inventory.notifications.stock.${direction}.loading`,
+        `inventory.notifications.stock.${direction}.success`,
+        `inventory.notifications.stock.${direction}.error`,
+        { name: item.title },
+      ),
+    });
+  }
+
+  return (
+    <WorkspaceFrame>
+      <motion.section
+        className="scroll-mt-24"
+        {...sectionTransitionProps}
+        data-admin-workspace="inventory"
+      >
+        <WorkspaceHeader>
+          <WorkspaceHeading
+            title={title}
+            meta={query.data?.pagination.totalItems}
+            description={
+              <PendingInline
+                active={isFilterPending || query.isFetching}
+                label={t('labels.loading')}
+              />
+            }
+          />
+        </WorkspaceHeader>
+
+        <WorkspaceToolbar className="grid gap-3 lg:grid-cols-[minmax(20rem,0.8fr)_minmax(18rem,1.2fr)]">
+          <section className="min-w-0">
             <p className="text-sm font-medium">{t('inventory.scan.title')}</p>
             <p className="text-xs text-muted-foreground">{t('inventory.scan.description')}</p>
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="mt-2 flex gap-2">
               <Input
                 value={scanQuery}
                 onChange={(event) => setScanQuery(event.target.value)}
@@ -746,231 +783,276 @@ export function InventoryManager({ title }: { title: string }) {
                 {t('inventory.scan.action')}
               </Button>
             </div>
+          </section>
+          <div className="flex min-w-0 items-end">
+            <SearchField
+              value={search}
+              placeholder={t('inventory.searchPlaceholder')}
+              onChange={(value) => {
+                startFilterTransition(() => {
+                  setPage(1);
+                  setSearch(value);
+                });
+              }}
+            />
           </div>
-          <SearchField
-            value={search}
-            placeholder={t('inventory.searchPlaceholder')}
-            onChange={(value) => {
-              startFilterTransition(() => {
-                setPage(1);
-                setSearch(value);
-              });
-            }}
-          />
-        </div>
-      </div>
+        </WorkspaceToolbar>
 
-      <div className="relative" aria-busy={query.isFetching && !isLoading}>
-        <div
-          className={
-            query.isFetching && !isLoading
-              ? 'transition-opacity duration-200 opacity-70'
-              : 'transition-opacity duration-200'
-          }
-        >
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>
-                    <MultiSortHeader
-                      label={t('inventory.columns.product')}
-                      sortState={getSortRuleState(sortRules, 'title')}
-                      onClick={() => toggleSort('title')}
-                    />
-                  </TableHead>
-                  <TableHead>{t('inventory.columns.barcode')}</TableHead>
-                  <TableHead>
-                    <MultiSortHeader
-                      label={t('inventory.columns.quantity')}
-                      sortState={getSortRuleState(sortRules, 'inventoryQuantity')}
-                      onClick={() => toggleSort('inventoryQuantity')}
-                    />
-                  </TableHead>
-                  <TableHead className="w-40">
-                    <MultiSortHeader
-                      label={t('inventory.columns.inStock')}
-                      sortState={getSortRuleState(sortRules, 'inStock')}
-                      onClick={() => toggleSort('inStock')}
-                    />
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? <InventoryTableSkeleton /> : null}
-
-                {!isLoading && items.length === 0 ? (
+        <div className="relative" aria-busy={query.isFetching && !isLoading}>
+          <div
+            className={
+              query.isFetching && !isLoading
+                ? 'transition-opacity duration-200 opacity-70'
+                : 'transition-opacity duration-200'
+            }
+          >
+            <div className="hidden overflow-x-auto md:block">
+              <Table>
+                <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={4}>
-                      <Empty className="border-none">
-                        <EmptyHeader>
-                          <EmptyMedia variant="icon">
-                            <Search />
-                          </EmptyMedia>
-                          <EmptyTitle>{t('inventory.emptyTitle')}</EmptyTitle>
-                          <EmptyDescription>{t('inventory.empty')}</EmptyDescription>
-                        </EmptyHeader>
-                      </Empty>
-                    </TableCell>
+                    <TableHead>
+                      <MultiSortHeader
+                        label={t('inventory.columns.product')}
+                        sortState={getSortRuleState(sortRules, 'title')}
+                        onClick={() => toggleSort('title')}
+                      />
+                    </TableHead>
+                    <TableHead>{t('inventory.columns.barcode')}</TableHead>
+                    <TableHead>
+                      <MultiSortHeader
+                        label={t('inventory.columns.quantity')}
+                        sortState={getSortRuleState(sortRules, 'inventoryQuantity')}
+                        onClick={() => toggleSort('inventoryQuantity')}
+                      />
+                    </TableHead>
+                    <TableHead className="w-40">
+                      <MultiSortHeader
+                        label={t('inventory.columns.inStock')}
+                        sortState={getSortRuleState(sortRules, 'inStock')}
+                        onClick={() => toggleSort('inStock')}
+                      />
+                    </TableHead>
                   </TableRow>
-                ) : null}
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? <InventoryTableSkeleton /> : null}
 
-                {!isLoading
-                  ? items.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            <span className="font-medium">{item.title}</span>
-                            <span className="text-sm text-muted-foreground">
-                              {item.sku
-                                ? t('inventory.productMeta', { sku: item.sku })
-                                : t('inventory.noSku')}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
+                  {!isLoading && items.length === 0 ? (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={4}>
+                        <Empty className="border-none">
+                          <EmptyHeader>
+                            <EmptyMedia variant="icon">
+                              <Search />
+                            </EmptyMedia>
+                            <EmptyTitle>{t('inventory.emptyTitle')}</EmptyTitle>
+                            <EmptyDescription>{t('inventory.empty')}</EmptyDescription>
+                          </EmptyHeader>
+                        </Empty>
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+
+                  {!isLoading
+                    ? items.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <span className="font-medium">{item.title}</span>
+                              <span className="text-sm text-muted-foreground">
+                                {item.sku
+                                  ? t('inventory.productMeta', { sku: item.sku })
+                                  : t('inventory.noSku')}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              type="button"
+                              variant={item.barcode ? 'ghost' : 'outline'}
+                              size="sm"
+                              disabled={!writable || isMutating}
+                              onClick={() => openBarcodeDialog(item)}
+                            >
+                              {item.barcode ?? t('inventory.addBarcode')}
+                            </Button>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                aria-label={t('inventory.decreaseRow', { name: item.title })}
+                                disabled={!writable || isMutating || item.inventoryQuantity === 0}
+                                onClick={() => changeQuantity(item, -1)}
+                              >
+                                -1
+                              </Button>
+                              <div className="min-w-12 text-center">
+                                <p className="font-medium">{item.inventoryQuantity}</p>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                aria-label={t('inventory.increaseRow', { name: item.title })}
+                                disabled={!writable || isMutating}
+                                onClick={() => changeQuantity(item, 1)}
+                              >
+                                +1
+                              </Button>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(item.updatedAt).toLocaleString()}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Switch
+                              checked={item.inStock}
+                              aria-label={t('inventory.toggleStock', { name: item.title })}
+                              disabled={!writable || isMutating}
+                              onCheckedChange={(checked) => changeStock(item, checked)}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    : null}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div
+              className="divide-y divide-border/60 border-b border-border/60 md:hidden"
+              data-mobile-inventory-list
+            >
+              {isLoading
+                ? Array.from({ length: 4 }).map((_, index) => (
+                    <div key={index} className="space-y-3 px-3 py-4">
+                      <Skeleton className="h-4 w-2/3" />
+                      <Skeleton className="h-9 w-full" />
+                    </div>
+                  ))
+                : null}
+              {!isLoading && items.length === 0 ? (
+                <Empty className="border-none px-3 py-10">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <Search />
+                    </EmptyMedia>
+                    <EmptyTitle>{t('inventory.emptyTitle')}</EmptyTitle>
+                    <EmptyDescription>{t('inventory.empty')}</EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : null}
+              {!isLoading
+                ? items.map((item) => (
+                    <article key={item.id} className="px-3 py-3.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="truncate text-sm font-semibold">{item.title}</h3>
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {item.sku
+                              ? t('inventory.productMeta', { sku: item.sku })
+                              : t('inventory.noSku')}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={item.inStock}
+                          aria-label={t('inventory.toggleStock', { name: item.title })}
+                          disabled={!writable || isMutating}
+                          onCheckedChange={(checked) => changeStock(item, checked)}
+                        />
+                      </div>
+                      <div className="mt-3 flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant={item.barcode ? 'ghost' : 'outline'}
+                          size="sm"
+                          className="min-w-0 max-w-[45%] truncate"
+                          disabled={!writable || isMutating}
+                          onClick={() => openBarcodeDialog(item)}
+                        >
+                          {item.barcode ?? t('inventory.addBarcode')}
+                        </Button>
+                        <div className="ms-auto flex items-center gap-1.5">
                           <Button
                             type="button"
-                            variant={item.barcode ? 'ghost' : 'outline'}
+                            variant="outline"
                             size="sm"
-                            disabled={!writable || isMutating}
-                            onClick={() => openBarcodeDialog(item)}
+                            className="size-8 px-0"
+                            aria-label={t('inventory.decreaseRow', { name: item.title })}
+                            disabled={!writable || isMutating || item.inventoryQuantity === 0}
+                            onClick={() => changeQuantity(item, -1)}
                           >
-                            {item.barcode ?? t('inventory.addBarcode')}
+                            −
                           </Button>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              aria-label={t('inventory.decreaseRow', { name: item.title })}
-                              disabled={!writable || isMutating || item.inventoryQuantity === 0}
-                              onClick={() =>
-                                mutation.mutate({
-                                  id: item.id,
-                                  payload: { delta: -1 },
-                                  messages: buildMessages(
-                                    t,
-                                    'inventory.notifications.quantity.decrease.loading',
-                                    'inventory.notifications.quantity.decrease.success',
-                                    'inventory.notifications.quantity.decrease.error',
-                                    { name: item.title },
-                                  ),
-                                })
-                              }
-                            >
-                              -1
-                            </Button>
-                            <div className="min-w-12 text-center">
-                              <p className="font-medium">{item.inventoryQuantity}</p>
-                            </div>
-                            <Button
-                              type="button"
-                              size="sm"
-                              aria-label={t('inventory.increaseRow', { name: item.title })}
-                              disabled={!writable || isMutating}
-                              onClick={() =>
-                                mutation.mutate({
-                                  id: item.id,
-                                  payload: { delta: 1 },
-                                  messages: buildMessages(
-                                    t,
-                                    'inventory.notifications.quantity.increase.loading',
-                                    'inventory.notifications.quantity.increase.success',
-                                    'inventory.notifications.quantity.increase.error',
-                                    { name: item.title },
-                                  ),
-                                })
-                              }
-                            >
-                              +1
-                            </Button>
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(item.updatedAt).toLocaleString()}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Switch
-                            checked={item.inStock}
-                            aria-label={t('inventory.toggleStock', { name: item.title })}
+                          <span className="min-w-8 text-center text-sm font-semibold tabular-nums">
+                            {item.inventoryQuantity}
+                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="size-8 px-0"
+                            aria-label={t('inventory.increaseRow', { name: item.title })}
                             disabled={!writable || isMutating}
-                            onCheckedChange={(checked) =>
-                              mutation.mutate({
-                                id: item.id,
-                                payload: { inStock: checked },
-                                messages: buildMessages(
-                                  t,
-                                  checked
-                                    ? 'inventory.notifications.stock.enable.loading'
-                                    : 'inventory.notifications.stock.disable.loading',
-                                  checked
-                                    ? 'inventory.notifications.stock.enable.success'
-                                    : 'inventory.notifications.stock.disable.success',
-                                  checked
-                                    ? 'inventory.notifications.stock.enable.error'
-                                    : 'inventory.notifications.stock.disable.error',
-                                  { name: item.title },
-                                ),
-                              })
-                            }
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  : null}
-              </TableBody>
-            </Table>
-          </div>
+                            onClick={() => changeQuantity(item, 1)}
+                          >
+                            +
+                          </Button>
+                        </div>
+                      </div>
+                    </article>
+                  ))
+                : null}
+            </div>
 
-          <TablePaginationControls
-            currentPage={query.data?.pagination.page ?? page}
-            totalPages={query.data?.pagination.totalPages ?? 1}
-            onPageChange={(nextPage) => startFilterTransition(() => setPage(nextPage))}
+            <TablePaginationControls
+              currentPage={query.data?.pagination.page ?? page}
+              totalPages={query.data?.pagination.totalPages ?? 1}
+              onPageChange={(nextPage) => startFilterTransition(() => setPage(nextPage))}
+            />
+          </div>
+          <SurfacePendingOverlay
+            active={query.isFetching && !isLoading}
+            label={t('inventory.refreshing')}
           />
         </div>
-        <SurfacePendingOverlay
-          active={query.isFetching && !isLoading}
-          label={t('inventory.refreshing')}
-        />
-      </div>
 
-      <BarcodeDialog
-        state={barcodeDialogState}
-        pending={mutation.isPending}
-        form={barcodeForm}
-        onOpenChange={(open) => {
-          if (!open) {
-            closeBarcodeDialog();
-          }
-        }}
-        onSubmit={submitBarcode}
-      />
-      <ScanBarcodeDialog
-        state={scanBarcodeState}
-        pending={batchApplyMutation.isPending}
-        onOpenChange={(open) => {
-          if (!open) {
-            closeScanBarcodeDialog();
-          }
-        }}
-        onConfirm={() => void confirmBarcodeScanAdd()}
-      />
-      <ScanOrderDialog
-        state={scanOrderState}
-        pending={batchApplyMutation.isPending}
-        onOpenChange={(open) => {
-          if (!open) {
-            closeScanOrderDialog();
-          }
-        }}
-        onToggleItem={toggleScanOrderItem}
-        onIncreaseQuantity={increaseScanOrderQuantity}
-        onDecreaseQuantity={decreaseScanOrderQuantity}
-        onConfirm={() => void confirmOrderScanAdd()}
-      />
-    </motion.section>
+        <BarcodeDialog
+          state={barcodeDialogState}
+          pending={mutation.isPending}
+          form={barcodeForm}
+          onOpenChange={(open) => {
+            if (!open) {
+              closeBarcodeDialog();
+            }
+          }}
+          onSubmit={submitBarcode}
+        />
+        <ScanBarcodeDialog
+          state={scanBarcodeState}
+          pending={batchApplyMutation.isPending}
+          onOpenChange={(open) => {
+            if (!open) {
+              closeScanBarcodeDialog();
+            }
+          }}
+          onConfirm={() => void confirmBarcodeScanAdd()}
+        />
+        <ScanOrderDialog
+          state={scanOrderState}
+          pending={batchApplyMutation.isPending}
+          onOpenChange={(open) => {
+            if (!open) {
+              closeScanOrderDialog();
+            }
+          }}
+          onToggleItem={toggleScanOrderItem}
+          onIncreaseQuantity={increaseScanOrderQuantity}
+          onDecreaseQuantity={decreaseScanOrderQuantity}
+          onConfirm={() => void confirmOrderScanAdd()}
+        />
+      </motion.section>
+    </WorkspaceFrame>
   );
 }

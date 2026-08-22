@@ -34,8 +34,8 @@ import { requestJson as request } from '../lib/admin-api';
 import { toast } from '../lib/toast';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { Card } from './ui/card';
 import { Checkbox } from './ui/checkbox';
+import { CompactMenu, CompactMenuItem } from './ui/compact-menu';
 import {
   Dialog,
   DialogContent,
@@ -49,8 +49,14 @@ import { FileUploadField } from './file-upload-field';
 import { Input } from './ui/input';
 import { Markdown } from './ui/markdown';
 import { NativeSelect, NativeSelectOption } from './ui/native-select';
-import { Separator } from './ui/separator';
 import { Textarea } from './ui/textarea';
+import {
+  WorkspaceActions,
+  WorkspaceFrame,
+  WorkspaceHeader,
+  WorkspaceHeading,
+  WorkspaceToolbar,
+} from './ui/workspace';
 
 type BulletinResponse = {
   posts: BulletinPostRecord[];
@@ -195,6 +201,7 @@ function updateBulletinBoard(
 
 export function BulletinBoard() {
   const t = useTranslations('bulletinBoard');
+  const labelsT = useTranslations('labels');
   const queryClient = useQueryClient();
   const loadingToastIdRef = useRef<string | null>(null);
   const [editingPost, setEditingPost] = useState<BulletinPostRecord | null>(null);
@@ -728,94 +735,87 @@ export function BulletinBoard() {
     replyReactionMutation.isPending;
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card className="flex flex-col gap-4 rounded-[1.75rem] border-border/70 bg-background/95 p-5 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-2xl">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-lg font-semibold text-foreground">{t('title')}</p>
-              {boardQuery.isFetching ? (
-                <Badge variant="outline" className="gap-1">
-                  <LoaderCircle className="size-3.5 animate-spin" />
-                  {t('feedback.refreshing')}
-                </Badge>
-              ) : null}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void refreshBoard()}
-              disabled={boardQuery.isFetching}
-            >
-              <RefreshCcw
-                data-icon="inline-start"
-                className={boardQuery.isFetching ? 'animate-spin' : ''}
-              />
-              {t('actions.refresh')}
-            </Button>
-            <Button
-              type="button"
-              onClick={composerOpen && !editingPost ? cancelComposer : openComposer}
-              disabled={!boardQuery.data.permissions.canPost}
-            >
-              <MessageSquarePlus data-icon="inline-start" />
-              {composerOpen && !editingPost
-                ? t('actions.closeComposer')
-                : t('actions.openComposer')}
-            </Button>
-          </div>
-        </div>
-
-        <Separator />
-
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap gap-2">
-            {allTags.map((tag) => {
-              const active = tag === activeTag;
-              return (
-                <Button
-                  key={tag}
-                  type="button"
-                  variant={active ? 'default' : 'outline'}
-                  size="sm"
-                  className="rounded-full"
-                  onClick={() => {
-                    setActiveTag(tag);
-                    setPage(1);
-                  }}
-                >
-                  {tag === 'all' ? t('filters.allTags') : tag}
-                </Button>
-              );
-            })}
-          </div>
-
-          <NativeSelect
-            aria-label={t('filters.sortLabel')}
-            value={sort}
-            onChange={(event) => {
-              setSort(event.target.value as typeof sort);
-              setPage(1);
-            }}
+    <WorkspaceFrame className="overflow-hidden" data-admin-workspace="bulletin">
+      <WorkspaceHeader>
+        <WorkspaceHeading
+          title={t('title')}
+          meta={boardQuery.data.posts.length}
+          description={
+            boardQuery.isFetching ? (
+              <span className="inline-flex items-center gap-1">
+                <LoaderCircle className="size-3.5 animate-spin" />
+                {t('feedback.refreshing')}
+              </span>
+            ) : null
+          }
+        />
+        <WorkspaceActions>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void refreshBoard()}
+            disabled={boardQuery.isFetching}
           >
-            <NativeSelectOption value="updated-desc">
-              {t('filters.sortUpdatedDesc')}
-            </NativeSelectOption>
-            <NativeSelectOption value="updated-asc">
-              {t('filters.sortUpdatedAsc')}
-            </NativeSelectOption>
-            <NativeSelectOption value="created-desc">
-              {t('filters.sortCreatedDesc')}
-            </NativeSelectOption>
-          </NativeSelect>
+            <RefreshCcw
+              data-icon="inline-start"
+              className={boardQuery.isFetching ? 'animate-spin' : ''}
+            />
+            {t('actions.refresh')}
+          </Button>
+          <Button
+            type="button"
+            onClick={composerOpen && !editingPost ? cancelComposer : openComposer}
+            disabled={!boardQuery.data.permissions.canPost}
+          >
+            <MessageSquarePlus data-icon="inline-start" />
+            {composerOpen && !editingPost ? t('actions.closeComposer') : t('actions.openComposer')}
+          </Button>
+        </WorkspaceActions>
+      </WorkspaceHeader>
+
+      <WorkspaceToolbar className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-wrap lg:overflow-visible lg:pb-0">
+          {allTags.map((tag) => {
+            const active = tag === activeTag;
+            return (
+              <Button
+                key={tag}
+                type="button"
+                variant={active ? 'default' : 'outline'}
+                size="sm"
+                className="rounded-full"
+                onClick={() => {
+                  setActiveTag(tag);
+                  setPage(1);
+                }}
+              >
+                {tag === 'all' ? t('filters.allTags') : tag}
+              </Button>
+            );
+          })}
         </div>
-      </Card>
+
+        <NativeSelect
+          aria-label={t('filters.sortLabel')}
+          value={sort}
+          onChange={(event) => {
+            setSort(event.target.value as typeof sort);
+            setPage(1);
+          }}
+        >
+          <NativeSelectOption value="updated-desc">
+            {t('filters.sortUpdatedDesc')}
+          </NativeSelectOption>
+          <NativeSelectOption value="updated-asc">{t('filters.sortUpdatedAsc')}</NativeSelectOption>
+          <NativeSelectOption value="created-desc">
+            {t('filters.sortCreatedDesc')}
+          </NativeSelectOption>
+        </NativeSelect>
+      </WorkspaceToolbar>
 
       {composerOpen || editingPost ? (
-        <Card className="flex flex-col gap-4 rounded-[1.75rem] border-border/70 bg-background/95 p-5 shadow-sm">
+        <section className="border-b border-border/60 px-3 py-4 sm:px-4 lg:px-5 lg:py-5">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-semibold text-foreground">
@@ -891,7 +891,7 @@ export function BulletinBoard() {
 
             <Field
               orientation="horizontal"
-              className="rounded-xl border border-border/70 bg-muted/30 px-3 py-2 text-sm text-foreground"
+              className="border-y border-border/60 py-3 text-sm text-foreground"
             >
               <Checkbox
                 id="bulletin-pinned"
@@ -919,20 +919,20 @@ export function BulletinBoard() {
               </Button>
             </div>
           </form>
-        </Card>
+        </section>
       ) : null}
 
       {boardQuery.isLoading && boardQuery.data.posts.length === 0 ? (
-        <Card className="rounded-[1.5rem] border-border/70 bg-background/95 p-6">
+        <div className="border-b border-border/60 px-3 py-8 sm:px-4 lg:px-5">
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <LoaderCircle className="size-4 animate-spin" />
             {t('feedback.loading')}
           </div>
-        </Card>
+        </div>
       ) : null}
 
       {boardQuery.isError ? (
-        <Card className="rounded-[1.5rem] border-destructive/30 bg-destructive/5 p-6">
+        <div className="border-b border-destructive/30 bg-destructive/5 px-3 py-6 sm:px-4 lg:px-5">
           <p className="text-sm font-medium text-foreground">{t('feedback.loadError')}</p>
           <p className="mt-1 text-sm text-muted-foreground">{t('feedback.retryHint')}</p>
           <Button
@@ -944,19 +944,19 @@ export function BulletinBoard() {
           >
             {t('actions.refresh')}
           </Button>
-        </Card>
+        </div>
       ) : null}
 
-      <div className="flex flex-col gap-4">
+      <div>
         {pinnedPosts.length > 0 ? (
-          <section className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
+          <section>
+            <div className="flex items-center gap-2 border-b border-border/60 bg-muted/15 px-3 py-2.5 sm:px-4 lg:px-5">
               <Pin className="text-amber-600" />
               <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 {t('sections.pinned')}
               </p>
             </div>
-            <div className="grid gap-3">
+            <div className="divide-y divide-border/60">
               {pinnedPosts.map((post) => (
                 <BulletinPostCard
                   key={post.id}
@@ -965,6 +965,7 @@ export function BulletinBoard() {
                   busy={busy}
                   reactionOptions={reactionOptions}
                   labels={{
+                    actions: labelsT('actions'),
                     delete: t('actions.delete'),
                     edit: t('actions.edit'),
                     unpin: t('actions.unpin'),
@@ -1043,8 +1044,8 @@ export function BulletinBoard() {
           </section>
         ) : null}
 
-        <section className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
+        <section>
+          <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/15 px-3 py-2.5 sm:px-4 lg:px-5">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               {t('sections.recent')}
             </p>
@@ -1054,13 +1055,13 @@ export function BulletinBoard() {
           </div>
 
           {pagePosts.length === 0 ? (
-            <Card className="rounded-[1.5rem] border-dashed border-border bg-muted/20 p-6">
+            <div className="border-b border-border/60 px-3 py-10 sm:px-4 lg:px-5">
               <p className="text-sm font-medium text-foreground">{t('empty.title')}</p>
               <p className="mt-1 text-sm text-muted-foreground">{t('empty.description')}</p>
-            </Card>
+            </div>
           ) : null}
 
-          <div className="grid gap-3">
+          <div className="divide-y divide-border/60">
             {recentPosts.map((post) => (
               <BulletinPostCard
                 key={post.id}
@@ -1069,6 +1070,7 @@ export function BulletinBoard() {
                 busy={busy}
                 reactionOptions={reactionOptions}
                 labels={{
+                  actions: labelsT('actions'),
                   delete: t('actions.delete'),
                   edit: t('actions.edit'),
                   unpin: t('actions.unpin'),
@@ -1147,7 +1149,7 @@ export function BulletinBoard() {
         </section>
 
         {sortedPosts.length > pageSize ? (
-          <Card className="flex flex-col gap-3 rounded-[1.5rem] border-border/70 bg-background/95 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 border-t border-border/60 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 lg:px-5">
             <p className="text-sm text-muted-foreground">
               {t('pagination.page', { page: currentPage, total: totalPages })}
             </p>
@@ -1171,7 +1173,7 @@ export function BulletinBoard() {
                 {t('pagination.next')}
               </Button>
             </div>
-          </Card>
+          </div>
         ) : null}
       </div>
 
@@ -1206,7 +1208,7 @@ export function BulletinBoard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </WorkspaceFrame>
   );
 }
 
@@ -1291,6 +1293,7 @@ function BulletinPostCard({
   busy: boolean;
   reactionOptions: string[];
   labels: {
+    actions: string;
     delete: string;
     edit: string;
     pin: string;
@@ -1321,8 +1324,9 @@ function BulletinPostCard({
   const [deleteReply, setDeleteReply] = useState<BulletinReplyRecord | null>(null);
 
   return (
-    <Card
-      className={`flex flex-col gap-4 rounded-[1.5rem] border-border/70 p-5 ${post.pinned ? 'bg-muted/30' : 'bg-background/95'}`}
+    <article
+      className={`px-3 py-5 sm:px-4 lg:px-5 ${post.pinned ? 'bg-amber-500/[0.035]' : ''}`}
+      data-bulletin-post={post.id}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-col gap-2">
@@ -1336,45 +1340,38 @@ function BulletinPostCard({
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {post.permissions.canPin ? (
-            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onTogglePin}>
-              <Pin data-icon="inline-start" />
-              {post.pinned ? labels.unpin : labels.pin}
-            </Button>
-          ) : null}
-          {post.permissions.canEdit ? (
-            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onEdit}>
-              <SquarePen data-icon="inline-start" />
-              {labels.edit}
-            </Button>
-          ) : null}
-          {post.permissions.canDelete ? (
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              disabled={busy}
-              onClick={onDelete}
-            >
-              <Trash2 data-icon="inline-start" />
-              {labels.delete}
-            </Button>
-          ) : null}
-        </div>
+        {post.permissions.canPin || post.permissions.canEdit || post.permissions.canDelete ? (
+          <CompactMenu label={`${labels.actions} · ${post.title}`}>
+            {post.permissions.canPin ? (
+              <CompactMenuItem disabled={busy} onClick={onTogglePin}>
+                {post.pinned ? labels.unpin : labels.pin}
+              </CompactMenuItem>
+            ) : null}
+            {post.permissions.canEdit ? (
+              <CompactMenuItem disabled={busy} onClick={onEdit}>
+                {labels.edit}
+              </CompactMenuItem>
+            ) : null}
+            {post.permissions.canDelete ? (
+              <CompactMenuItem destructive disabled={busy} onClick={onDelete}>
+                {labels.delete}
+              </CompactMenuItem>
+            ) : null}
+          </CompactMenu>
+        ) : null}
       </div>
 
-      <Markdown>{post.body}</Markdown>
+      <Markdown className="mt-4">{post.body}</Markdown>
 
       {post.attachments.length > 0 ? (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
           {post.attachments.map((attachment) => (
             <a
               key={`${post.id}-${attachment.fileUrl}`}
               href={attachment.fileUrl}
               target="_blank"
               rel="noreferrer"
-              className="rounded-xl border border-border/70 bg-background px-3 py-3 transition-colors hover:bg-accent"
+              className="border-y border-border/60 px-1 py-3 transition-colors hover:bg-accent/50"
             >
               <div className="flex items-center gap-3">
                 {attachment.contentType.startsWith('image/') ? (
@@ -1400,7 +1397,7 @@ function BulletinPostCard({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
         {post.tags.map((tag) => (
           <Badge key={`${post.id}-${tag}`} variant="secondary">
             {tag}
@@ -1408,18 +1405,20 @@ function BulletinPostCard({
         ))}
       </div>
 
-      <ReactionRow
-        currentUserId={currentUserId}
-        reactions={post.reactions}
-        options={reactionOptions}
-        busy={busy}
-        onReact={onReact}
-        addReactionLabel={labels.addReaction}
-        byLabel={labels.reactionsBy}
-        byYouLabel={labels.byYou}
-      />
+      <div className="mt-4">
+        <ReactionRow
+          currentUserId={currentUserId}
+          reactions={post.reactions}
+          options={reactionOptions}
+          busy={busy}
+          onReact={onReact}
+          addReactionLabel={labels.addReaction}
+          byLabel={labels.reactionsBy}
+          byYouLabel={labels.byYou}
+        />
+      </div>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
+      <div className="mt-5 border-t border-border/60 pt-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <MessageCircle className="size-4 text-muted-foreground" />
@@ -1437,7 +1436,7 @@ function BulletinPostCard({
         </div>
 
         {replyOpen ? (
-          <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-background/80 p-3">
+          <div className="mt-3 flex flex-col gap-3 border-y border-border/60 py-3">
             <Textarea
               value={replyBody}
               onChange={(event) => setReplyBody(event.target.value)}
@@ -1464,12 +1463,9 @@ function BulletinPostCard({
         ) : null}
 
         {post.replies.length > 0 ? (
-          <div className="grid gap-3">
+          <div className="mt-3 divide-y divide-border/60 border-t border-border/60">
             {post.replies.map((reply) => (
-              <div
-                key={reply.id}
-                className="rounded-xl border border-border/70 bg-background/80 p-3"
-              >
+              <div key={reply.id} className="py-3" data-bulletin-reply={reply.id}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium text-foreground">
@@ -1544,6 +1540,6 @@ function BulletinPostCard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </article>
   );
 }

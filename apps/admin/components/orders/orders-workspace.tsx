@@ -69,6 +69,13 @@ import { NativeSelect, NativeSelectOption } from '../ui/native-select';
 import { Spinner } from '../ui/spinner';
 import { Switch } from '../ui/switch';
 import { Textarea } from '../ui/textarea';
+import {
+  WorkspaceActions,
+  WorkspaceFrame,
+  WorkspaceHeader,
+  WorkspaceHeading,
+  WorkspaceToolbar,
+} from '../ui/workspace';
 import { OrdersWorkflows } from './orders-workflows';
 import { OrderSalesDesk } from './order-sales-desk';
 import { ReturningCustomerIndicator } from './returning-customer-indicator';
@@ -1338,14 +1345,34 @@ export function OrdersWorkspace({
 
   return (
     <>
-      <div className="-mx-1 overflow-hidden sm:-mx-2 lg:-mx-4" data-admin-workspace="orders">
+      <WorkspaceFrame className="overflow-hidden" data-admin-workspace="orders">
+        <WorkspaceHeader>
+          <WorkspaceHeading
+            title={t('nav.orders')}
+            meta={t('adminWorkspace.orders.resultCount', {
+              count: pagination?.totalItems ?? orders.length,
+            })}
+          />
+          <WorkspaceActions>
+            <OrderSalesDesk
+              catalog={initialCatalog}
+              writable={writable}
+              onOpenOrder={(id) => void openOrderById(id)}
+              onCreated={async (order) => {
+                setOpenedOrder(order);
+                setActiveOrderId(order.id);
+                await queryClient.invalidateQueries({ queryKey: ['orders-workspace'] });
+              }}
+            />
+          </WorkspaceActions>
+        </WorkspaceHeader>
         <OrdersPulse
           overview={overviewByBasis[projectionBasis] ?? overviewByBasis.confirmed}
           projectionBasis={projectionBasis}
           loading={overviewMutation.isPending && overviewMutation.variables === projectionBasis}
           onProjectionBasisChange={changeProjectionBasis}
         />
-        <div className="flex flex-wrap items-center gap-2 border-b border-border/60 p-3 sm:flex-nowrap">
+        <WorkspaceToolbar className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
           <label className="relative w-full min-w-0 flex-1 sm:w-auto">
             <span className="sr-only">{t('adminWorkspace.common.search')}</span>
             <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -1387,11 +1414,6 @@ export function OrdersWorkspace({
               </NativeSelectOption>
             ))}
           </NativeSelect>
-          <span className="me-auto text-sm text-muted-foreground sm:me-0 sm:px-2">
-            {t('adminWorkspace.orders.resultCount', {
-              count: ordersQuery.data?.pagination.totalItems ?? orders.length,
-            })}
-          </span>
           <Button
             type="button"
             size="sm"
@@ -1404,17 +1426,7 @@ export function OrdersWorkspace({
             {t('adminWorkspace.common.filters')}
             {statusFilter !== 'all' ? ' · 1' : ''}
           </Button>
-          <OrderSalesDesk
-            catalog={initialCatalog}
-            writable={writable}
-            onOpenOrder={(id) => void openOrderById(id)}
-            onCreated={async (order) => {
-              setOpenedOrder(order);
-              setActiveOrderId(order.id);
-              await queryClient.invalidateQueries({ queryKey: ['orders-workspace'] });
-            }}
-          />
-        </div>
+        </WorkspaceToolbar>
 
         <OrdersWorkflows
           selectedOrders={selectedOrders}
@@ -1714,7 +1726,7 @@ export function OrdersWorkspace({
             />
           </aside>
         </div>
-      </div>
+      </WorkspaceFrame>
       <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>

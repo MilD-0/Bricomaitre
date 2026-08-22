@@ -110,6 +110,16 @@ describe('ProductsWorkspace', () => {
 
     expect(workspace).toBeInTheDocument();
     expect(workspace?.className).not.toMatch(/rounded|shadow|glass-surface/);
+    expect(workspace?.querySelectorAll('[data-workspace-frame]')).toHaveLength(0);
+    expect(workspace?.matches('[data-workspace-frame]')).toBe(true);
+    expect(workspace?.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
+    expect(screen.getByRole('heading', { name: 'Products' })).toHaveClass(
+      'sr-only',
+      'lg:not-sr-only',
+    );
+    expect(screen.getByText('2 products')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New product' })).toBeInTheDocument();
+    expect(workspace?.querySelector('[data-workspace-toolbar]')).toBeInTheDocument();
   });
 
   it('keeps secondary product filters behind a deliberate phone control', async () => {

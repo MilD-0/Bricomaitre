@@ -164,7 +164,20 @@ describe('OrdersWorkspace', () => {
     const { container } = renderWorkspace();
 
     expect(container.querySelector('[data-admin-workspace="orders"]')).toBeInTheDocument();
+    expect(container.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-workspace-toolbar]')).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Orders' })).toHaveClass(
+      'sr-only',
+      'lg:not-sr-only',
+    );
+    expect(screen.getByText('2 orders')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Phone order' })).toBeInTheDocument();
     expect(screen.getAllByText('Projected profit').length).toBeGreaterThan(0);
+    expect(container.querySelector('[data-workspace-header]')?.nextElementSibling).toHaveAttribute(
+      'aria-label',
+      'Seven-day outlook',
+    );
   });
 
   it('keeps the complete status filter behind one deliberate phone control', async () => {

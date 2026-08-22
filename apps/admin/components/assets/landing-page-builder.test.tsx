@@ -60,6 +60,17 @@ describe('LandingPageBuilder', () => {
     vi.restoreAllMocks();
   });
 
+  it('uses sticky document chrome and keeps product identity visible on mobile', () => {
+    const view = renderBuilder();
+    expect(view.container.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
+    expect(view.container.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Cordless drill' })).toHaveClass(
+      'text-xl',
+    );
+    expect(screen.getByText('Revision 3')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+  });
+
   it('edits structured repeated content without newline or pipe protocols', async () => {
     const user = userEvent.setup();
     renderBuilder();

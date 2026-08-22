@@ -18,6 +18,12 @@ import { FieldError } from '../ui/field';
 import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
 import { Textarea } from '../ui/textarea';
+import {
+  WorkspaceActions,
+  WorkspaceFrame,
+  WorkspaceHeader,
+  WorkspaceHeading,
+} from '../ui/workspace';
 import { getLandingWorkspaceCopy } from './landing-copy';
 import { blockLabels, StructuredBlockEditor } from './structured-block-editor';
 
@@ -388,9 +394,9 @@ export function LandingPageBuilder({
   };
 
   return (
-    <div className="-mx-1 sm:-mx-2 lg:-mx-4" data-landing-builder>
-      <header className="sticky top-0 z-20 border-b border-border/60 bg-background/92 px-2 py-3 backdrop-blur-xl sm:px-3 lg:px-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <WorkspaceFrame data-landing-builder>
+      <div className="sticky top-0 z-20 bg-background/92 backdrop-blur-xl">
+        <WorkspaceHeader>
           <div className="flex min-w-0 items-center gap-3">
             <Link
               href={`/${adminLocale}/assets/landing-pages`}
@@ -400,14 +406,14 @@ export function LandingPageBuilder({
             >
               <ArrowLeft className="size-4 rtl:rotate-180" />
             </Link>
-            <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold">{page.productTitle}</h1>
-              <p className="truncate text-xs text-muted-foreground">
-                {t.revision} {page.currentRevision} · /{page.locale}/landing/{page.slug}
-              </p>
-            </div>
+            <WorkspaceHeading
+              title={page.productTitle}
+              meta={`${t.revision} ${page.currentRevision}`}
+              description={`/${page.locale}/landing/${page.slug}`}
+              showTitleOnMobile
+            />
           </div>
-          <div className="flex items-center gap-2">
+          <WorkspaceActions>
             {active ? (
               <a
                 href={`${storefrontBaseUrl}/${page.locale}/landing/${encodeURIComponent(page.slug)}`}
@@ -430,9 +436,9 @@ export function LandingPageBuilder({
             <Button disabled={pending || !dirty} onClick={() => void save()}>
               {pending ? t.saving : t.save}
             </Button>
-          </div>
-        </div>
-        <div className="mt-2 flex min-h-5 items-center justify-between gap-3 text-xs">
+          </WorkspaceActions>
+        </WorkspaceHeader>
+        <div className="flex min-h-9 items-center justify-between gap-3 border-b border-border/60 px-3 py-1.5 text-xs sm:px-4 lg:px-5">
           <span
             className={cn(
               message ? 'text-destructive' : 'text-muted-foreground',
@@ -447,7 +453,7 @@ export function LandingPageBuilder({
             </Button>
           ) : null}
         </div>
-      </header>
+      </div>
 
       <div className="grid min-h-[calc(100dvh-11rem)] md:grid-cols-[20rem_minmax(0,1fr)] xl:grid-cols-[24rem_minmax(0,1fr)]">
         <aside className={cn('border-e border-border/60', showEditor && 'hidden md:block')}>
@@ -600,6 +606,6 @@ export function LandingPageBuilder({
           ) : null}
         </main>
       </div>
-    </div>
+    </WorkspaceFrame>
   );
 }

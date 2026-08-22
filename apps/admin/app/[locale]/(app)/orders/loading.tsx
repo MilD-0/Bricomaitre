@@ -1,19 +1,33 @@
 import { Card } from '../../../../components/ui/card';
 import { Skeleton } from '../../../../components/ui/skeleton';
+import {
+  WorkspaceActions,
+  WorkspaceFrame,
+  WorkspaceHeader,
+  WorkspaceToolbar,
+} from '../../../../components/ui/workspace';
 
 export default function OrdersLoading() {
   return (
-    <section className="scroll-mt-24 overflow-hidden rounded-[1.75rem] border border-border/70 bg-background/95 shadow-sm">
-      <div className="flex flex-col gap-4 px-4 py-4 sm:px-5">
-        <div className="flex flex-col gap-2">
-          <Skeleton className="h-7 w-28" />
-          <Skeleton className="h-4 w-72" />
-        </div>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <Skeleton className="h-9 w-full max-w-sm" />
-          <Skeleton className="h-8 w-24" />
-        </div>
+    <WorkspaceFrame className="scroll-mt-24 overflow-hidden" data-workspace-loading="orders">
+      <WorkspaceHeader>
+        <Skeleton className="hidden h-9 w-36 lg:block" />
+        <WorkspaceActions>
+          <Skeleton className="h-10 w-32" />
+        </WorkspaceActions>
+      </WorkspaceHeader>
+      <div className="grid grid-cols-2 gap-px border-b border-border/60 bg-border/50 p-px sm:grid-cols-4 lg:grid-cols-7">
+        {Array.from({ length: 7 }).map((_, index) => (
+          <div key={index} className="bg-background px-3 py-3">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="mt-2 h-6 w-24" />
+          </div>
+        ))}
       </div>
+      <WorkspaceToolbar className="flex flex-col gap-2 sm:flex-row">
+        <Skeleton className="h-10 min-w-0 flex-1" />
+        <Skeleton className="h-10 w-full sm:w-56" />
+      </WorkspaceToolbar>
 
       <div className="hidden overflow-x-auto lg:block">
         <div className="grid grid-cols-[3rem_9rem_17rem_12rem_16rem_11rem_10rem_11rem_12rem_8rem] gap-4 border-y border-border/70 px-4 py-3 text-sm sm:px-5">
@@ -64,6 +78,6 @@ export default function OrdersLoading() {
       <div className="border-t border-border/70 px-4 py-3">
         <Skeleton className="h-8 w-56" />
       </div>
-    </section>
+    </WorkspaceFrame>
   );
 }
