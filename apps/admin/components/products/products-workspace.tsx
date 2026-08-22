@@ -67,6 +67,13 @@ import { SidePanel } from '../ui/side-panel';
 import { Spinner } from '../ui/spinner';
 import { Switch } from '../ui/switch';
 import { Textarea } from '../ui/textarea';
+import {
+  WorkspaceActions,
+  WorkspaceFrame,
+  WorkspaceHeader,
+  WorkspaceHeading,
+  WorkspaceToolbar,
+} from '../ui/workspace';
 
 type ProductsResponse = { items: ProductRecord[]; pagination: PaginationMeta };
 type CatalogOption = { id: number; name: string };
@@ -1072,40 +1079,22 @@ export function ProductsWorkspace({
 
   return (
     <>
-      <div className="-mx-1 sm:-mx-2 lg:-mx-4" data-admin-workspace="products">
-        <div className="border-b border-border/60 bg-card/45 p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="relative w-full min-w-0 flex-1 sm:w-auto sm:min-w-[16rem]">
-              <span className="sr-only">{t('adminWorkspace.common.search')}</span>
-              <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setPage(1);
-                }}
-                className="ps-9"
-                placeholder={t('adminWorkspace.products.searchPlaceholder')}
-              />
-            </label>
-            <span className="me-auto px-1 text-sm text-muted-foreground">
-              {t('adminWorkspace.products.resultCount', {
-                count: pagination?.totalItems ?? visibleProducts.length,
-              })}
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              variant={mobileFiltersOpen || activeFilterCount > 0 ? 'default' : 'outline'}
-              className="sm:hidden"
-              aria-expanded={mobileFiltersOpen}
-              onClick={() => setMobileFiltersOpen((open) => !open)}
-            >
-              <SlidersHorizontal className="size-4" aria-hidden="true" />
-              {t('adminWorkspace.common.filters')}
-              {activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
-            </Button>
+      <WorkspaceFrame data-admin-workspace="products">
+        <WorkspaceHeader>
+          <WorkspaceHeading
+            title={t('nav.products')}
+            meta={
+              pagination ? (
+                t('adminWorkspace.products.resultCount', { count: pagination.totalItems })
+              ) : (
+                <span
+                  className="inline-block h-4 w-20 animate-pulse rounded bg-muted"
+                  aria-label={t('labels.loading')}
+                />
+              )
+            }
+          />
+          <WorkspaceActions>
             {canExportEntireCatalog ? (
               <CompactActionsMenu label={t('labels.actions')}>
                 <ActionMenuButton
@@ -1126,6 +1115,36 @@ export function ProductsWorkspace({
             <Button type="button" onClick={() => setEditorState({ mode: 'create', product: null })}>
               <Plus className="size-4" aria-hidden="true" />
               {t('actions.createProduct')}
+            </Button>
+          </WorkspaceActions>
+        </WorkspaceHeader>
+        <WorkspaceToolbar>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="relative w-full min-w-0 flex-1 sm:w-auto sm:min-w-[16rem]">
+              <span className="sr-only">{t('adminWorkspace.common.search')}</span>
+              <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setPage(1);
+                }}
+                className="ps-9"
+                placeholder={t('adminWorkspace.products.searchPlaceholder')}
+              />
+            </label>
+            <Button
+              type="button"
+              size="sm"
+              variant={mobileFiltersOpen || activeFilterCount > 0 ? 'default' : 'outline'}
+              className="sm:hidden"
+              aria-expanded={mobileFiltersOpen}
+              onClick={() => setMobileFiltersOpen((open) => !open)}
+            >
+              <SlidersHorizontal className="size-4" aria-hidden="true" />
+              {t('adminWorkspace.common.filters')}
+              {activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
             </Button>
           </div>
           <div
@@ -1188,7 +1207,7 @@ export function ProductsWorkspace({
               ))}
             </NativeSelect>
           </div>
-        </div>
+        </WorkspaceToolbar>
 
         {selectedIds.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2 border-b border-primary/20 bg-primary/[0.045] px-3 py-2">
@@ -1570,7 +1589,7 @@ export function ProductsWorkspace({
             </nav>
           </div>
         ) : null}
-      </div>
+      </WorkspaceFrame>
 
       <ProductEditorPanel
         state={editorState}

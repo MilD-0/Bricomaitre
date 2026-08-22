@@ -177,60 +177,72 @@ describe('InventoryManager', () => {
   }
 
   it('renders the inventory table with pagination and hides zero-quantity items by default', async () => {
-    renderInventoryManager();
+    const view = renderInventoryManager();
 
-    expect(await screen.findByText('Hammer')).toBeInTheDocument();
+    expect((await screen.findAllByText('Hammer')).length).toBeGreaterThan(0);
     expect(screen.queryByText('Wrench')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
+    expect(view.container.querySelector('[data-admin-workspace="inventory"]')).toBeInTheDocument();
+    expect(view.container.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
+    expect(view.container.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
+    expect(view.container.querySelectorAll('[data-workspace-toolbar]')).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Inventory' })).toHaveClass(
+      'sr-only',
+      'lg:not-sr-only',
+    );
+    expect(screen.getByText('1')).toHaveClass('tabular-nums');
+    expect(view.container.querySelector('[data-mobile-inventory-list]')).toBeInTheDocument();
   });
 
   it('supports hierarchical sorting with three-click header toggles', async () => {
     renderInventoryManager();
 
-    await screen.findByText('Hammer');
-    expect(screen.getByRole('button', { name: /^Product/ })).toHaveClass('cursor-pointer');
+    await screen.findAllByText('Hammer');
+    const table = screen.getByRole('table');
+    expect(within(table).getByRole('button', { name: /^Product/ })).toHaveClass('cursor-pointer');
 
     const searchField = screen.getByPlaceholderText('Search by product, SKU, or barcode');
     await userEvent.type(searchField, 'r');
 
-    expect(await screen.findByText('Wrench')).toBeInTheDocument();
+    expect((await screen.findAllByText('Wrench')).length).toBeGreaterThan(0);
 
     const getProductOrder = () =>
-      screen
+      within(table)
         .getAllByRole('row')
         .slice(1)
         .map((row) => within(row).getByText(/Hammer|Wrench/).textContent);
 
     expect(getProductOrder()).toEqual(['Hammer', 'Wrench']);
 
-    await userEvent.click(screen.getByRole('button', { name: /^Product/ }));
+    await userEvent.click(within(table).getByRole('button', { name: /^Product/ }));
     expect(getProductOrder()).toEqual(['Hammer', 'Wrench']);
 
-    await userEvent.click(screen.getByRole('button', { name: /^Product/ }));
+    await userEvent.click(within(table).getByRole('button', { name: /^Product/ }));
     expect(getProductOrder()).toEqual(['Wrench', 'Hammer']);
 
-    await userEvent.click(screen.getByRole('button', { name: /^Inventory quantity/ }));
+    await userEvent.click(within(table).getByRole('button', { name: /^Inventory quantity/ }));
     expect(getProductOrder()).toEqual(['Wrench', 'Hammer']);
 
-    await userEvent.click(screen.getByRole('button', { name: /^Inventory quantity/ }));
+    await userEvent.click(within(table).getByRole('button', { name: /^Inventory quantity/ }));
     expect(getProductOrder()).toEqual(['Wrench', 'Hammer']);
 
-    await userEvent.click(screen.getByRole('button', { name: /^Product/ }));
+    await userEvent.click(within(table).getByRole('button', { name: /^Product/ }));
     expect(getProductOrder()).toEqual(['Hammer', 'Wrench']);
 
-    await userEvent.click(screen.getByRole('button', { name: /^In stock/ }));
+    await userEvent.click(within(table).getByRole('button', { name: /^In stock/ }));
     expect(getProductOrder()).toEqual(['Hammer', 'Wrench']);
 
-    await userEvent.click(screen.getByRole('button', { name: /^In stock/ }));
+    await userEvent.click(within(table).getByRole('button', { name: /^In stock/ }));
     expect(getProductOrder()).toEqual(['Hammer', 'Wrench']);
   });
 
   it('supports barcode add and inventory controls from the table', async () => {
     renderInventoryManager();
 
-    await screen.findByText('Hammer');
+    await screen.findAllByText('Hammer');
+    const table = screen.getByRole('table');
 
-    await userEvent.click(screen.getByRole('button', { name: '123456' }));
+    await userEvent.click(within(table).getByRole('button', { name: '123456' }));
     const dialog = await screen.findByRole('dialog');
     const barcodeField = within(dialog).getByRole('textbox', { name: 'Barcode' });
     await userEvent.clear(barcodeField);
@@ -243,14 +255,18 @@ describe('InventoryManager', () => {
       expect(patchCalls).toContainEqual({ id: 1, body: { barcode: '654321' } });
     });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Increase quantity for Hammer' }));
+    await userEvent.click(
+      within(table).getByRole('button', { name: 'Increase quantity for Hammer' }),
+    );
     await screen.findByText('Increased quantity for Hammer.');
 
     await waitFor(() => {
       expect(patchCalls).toContainEqual({ id: 1, body: { delta: 1 } });
     });
 
-    await userEvent.click(screen.getByRole('switch', { name: 'Toggle in-stock for Hammer' }));
+    await userEvent.click(
+      within(table).getByRole('switch', { name: 'Toggle in-stock for Hammer' }),
+    );
     await screen.findByText('Marked Hammer as out of stock.');
 
     await waitFor(() => {
@@ -261,14 +277,15 @@ describe('InventoryManager', () => {
   it('lets search reveal hidden products and scan them back into inventory', async () => {
     renderInventoryManager();
 
-    await screen.findByText('Hammer');
+    await screen.findAllByText('Hammer');
 
     const searchField = screen.getByPlaceholderText('Search by product, SKU, or barcode');
     await userEvent.clear(searchField);
     await userEvent.type(searchField, 'Wrench');
 
-    expect(await screen.findByText('Wrench')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Add barcode' }));
+    expect((await screen.findAllByText('Wrench')).length).toBeGreaterThan(0);
+    const table = screen.getByRole('table');
+    await userEvent.click(within(table).getByRole('button', { name: 'Add barcode' }));
 
     const dialog = await screen.findByRole('dialog');
     await userEvent.type(within(dialog).getByRole('textbox', { name: 'Barcode' }), '999999');
@@ -278,8 +295,10 @@ describe('InventoryManager', () => {
 
     await userEvent.clear(searchField);
     await userEvent.type(searchField, '999999');
-    expect(await screen.findByText('Wrench')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Increase quantity for Wrench' }));
+    expect((await screen.findAllByText('Wrench')).length).toBeGreaterThan(0);
+    await userEvent.click(
+      within(table).getByRole('button', { name: 'Increase quantity for Wrench' }),
+    );
 
     await screen.findByText('Increased quantity for Wrench.');
 
@@ -292,7 +311,7 @@ describe('InventoryManager', () => {
   it('scans barcodes and order IDs into inventory with preview dialogs', async () => {
     renderInventoryManager();
 
-    await screen.findByText('Hammer');
+    await screen.findAllByText('Hammer');
 
     const scanField = screen.getByPlaceholderText('Barcode or order ID');
     await userEvent.type(scanField, '123456');

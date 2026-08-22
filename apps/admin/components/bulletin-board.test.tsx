@@ -217,9 +217,20 @@ describe('BulletinBoard', () => {
   }
 
   it('creates a post with normalized tags and attachments from the closed composer flow', async () => {
-    renderBoard();
+    const view = renderBoard();
 
     await screen.findByText('Pinned issue');
+    expect(view.container.querySelector('[data-admin-workspace="bulletin"]')).toBeInTheDocument();
+    expect(view.container.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
+    expect(view.container.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
+    expect(view.container.querySelectorAll('[data-workspace-toolbar]')).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Bulletin board' })).toHaveClass(
+      'sr-only',
+      'lg:not-sr-only',
+    );
+    expect(screen.getByText('22')).toHaveClass('tabular-nums');
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
+    expect(view.container.querySelector('[data-bulletin-post="1"]')).toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Post title')).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'New post' }));
@@ -267,9 +278,12 @@ describe('BulletinBoard', () => {
     expect(screen.queryByText('Packing reminder 1')).not.toBeInTheDocument();
     expect(screen.queryByText('#urgent')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Actions · Pinned issue' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
     expect(screen.getByText('Delete post?')).toBeInTheDocument();
-    await userEvent.click(screen.getAllByRole('button', { name: 'Delete' })[1]);
+    await userEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }),
+    );
 
     await waitFor(() => {
       expect(deleteCalls).toContain('http://localhost:3000/api/bulletin/1');
@@ -352,7 +366,7 @@ describe('BulletinBoard', () => {
     renderBoard();
 
     await screen.findByText('Pinned issue');
-    const replyCard = screen.getByText('I can cover this.').closest('.rounded-xl');
+    const replyCard = screen.getByText('I can cover this.').closest('[data-bulletin-reply]');
 
     expect(replyCard).not.toBeNull();
 

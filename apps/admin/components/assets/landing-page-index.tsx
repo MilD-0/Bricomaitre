@@ -8,7 +8,6 @@ import * as React from 'react';
 
 import { requestJson } from '../../lib/admin-api';
 import { toast } from '../../lib/toast';
-import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import {
   Dialog,
@@ -20,6 +19,15 @@ import {
 } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
+import {
+  WorkspaceActions,
+  WorkspaceFrame,
+  WorkspaceHeader,
+  WorkspaceHeading,
+  WorkspaceNavigation,
+  WorkspaceNavigationLink,
+  WorkspaceToolbar,
+} from '../ui/workspace';
 import { getAssetsWorkspaceCopy } from './assets-workspace';
 import { getLandingWorkspaceCopy } from './landing-copy';
 import { RemoteProductPicker } from './remote-product-picker';
@@ -108,40 +116,29 @@ export function LandingPageIndex({
   };
 
   return (
-    <div className="-mx-1 sm:-mx-2 lg:-mx-4" data-assets-workspace="landing-pages">
-      <header className="border-b border-border/60 px-2 pb-4 sm:px-3 lg:px-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="hidden text-2xl font-semibold tracking-[-0.025em] lg:block">
-              {assetsCopy.title}
-            </h1>
-            <p className="text-sm font-medium text-foreground lg:mt-1 lg:font-normal lg:text-muted-foreground">
-              {t.landingPages} · {items.length}
-            </p>
-          </div>
+    <WorkspaceFrame data-assets-workspace="landing-pages">
+      <WorkspaceHeader>
+        <WorkspaceHeading title={assetsCopy.title} meta={`${t.landingPages} · ${items.length}`} />
+        <WorkspaceActions>
           <Button onClick={() => setCreating(true)}>
             <Plus className="size-4" aria-hidden="true" />
             {t.create}
           </Button>
-        </div>
-        <nav className="mt-4 flex gap-1 overflow-x-auto" aria-label={assetsCopy.title}>
-          {routes.map((route) => (
-            <Link
-              key={route.href}
-              href={`/${adminLocale}${route.href}`}
-              className={cn(
-                'whitespace-nowrap rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground',
-                route.active &&
-                  'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground',
-              )}
-            >
-              {route.label}
-            </Link>
-          ))}
-        </nav>
-      </header>
+        </WorkspaceActions>
+      </WorkspaceHeader>
+      <WorkspaceNavigation aria-label={assetsCopy.title}>
+        {routes.map((route) => (
+          <WorkspaceNavigationLink
+            key={route.href}
+            href={`/${adminLocale}${route.href}`}
+            active={route.active}
+          >
+            {route.label}
+          </WorkspaceNavigationLink>
+        ))}
+      </WorkspaceNavigation>
 
-      <div className="border-b border-border/60 px-2 py-3 sm:px-3 lg:px-4">
+      <WorkspaceToolbar>
         <div className="relative max-w-xl">
           <Search className="pointer-events-none absolute start-3 top-3 size-4 text-muted-foreground" />
           <Input
@@ -152,7 +149,7 @@ export function LandingPageIndex({
             className="ps-9"
           />
         </div>
-      </div>
+      </WorkspaceToolbar>
 
       <div className="divide-y divide-border/60 border-b border-border/60">
         {filtered.map((item) => (
@@ -251,6 +248,6 @@ export function LandingPageIndex({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </WorkspaceFrame>
   );
 }

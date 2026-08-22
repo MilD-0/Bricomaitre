@@ -24,10 +24,17 @@ describe('AdministrationShell', () => {
       screen.getAllByRole('link', { name: 'settings.accessManager.title' })[0],
     ).toHaveAttribute('href', '/fr/administration');
     expect(screen.queryByText(/variation/i)).not.toBeInTheDocument();
-    expect(view.container.firstElementChild).toHaveClass(
-      '-mx-2',
-      'border-y',
-      'sm:rounded-[1.4rem]',
+    expect(view.container.firstElementChild).toHaveClass('-mx-1', 'min-w-0', 'lg:-mx-4');
+    expect(view.container.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
+    expect(view.container.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
+    expect(view.container.querySelectorAll('[data-workspace-navigation]')).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'nav.administration' })).toHaveClass(
+      'sr-only',
+      'lg:not-sr-only',
+    );
+    expect(screen.getByRole('link', { name: 'settings.rolesManager.title' })).toHaveAttribute(
+      'aria-current',
+      'page',
     );
   });
 });

@@ -1,58 +1,47 @@
-import { Card } from '../../../../components/ui/card';
 import { Skeleton } from '../../../../components/ui/skeleton';
+import {
+  WorkspaceActions,
+  WorkspaceFrame,
+  WorkspaceHeader,
+  WorkspaceToolbar,
+} from '../../../../components/ui/workspace';
 
 export default function StatsLoading() {
   return (
-    <div className="flex flex-col gap-6">
-      <Card className="rounded-[2rem] p-6">
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex flex-col gap-2">
-              <Skeleton className="h-4 w-28" />
-              <Skeleton className="h-10 w-48" />
-            </div>
-            <Skeleton className="h-9 w-28" />
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div className="h-full w-2/5 animate-pulse rounded-full bg-primary/60" />
-          </div>
-          <div className="grid gap-2 sm:grid-cols-5">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <Skeleton key={index} className="h-9 rounded-xl" />
-            ))}
-          </div>
+    <WorkspaceFrame className="overflow-hidden" data-workspace-loading="stats">
+      <WorkspaceHeader>
+        <div className="hidden space-y-2 lg:block">
+          <Skeleton className="h-9 w-44" />
+          <Skeleton className="h-4 w-56" />
         </div>
-      </Card>
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <WorkspaceActions>
+          <Skeleton className="h-8 w-24" />
+        </WorkspaceActions>
+      </WorkspaceHeader>
+      <WorkspaceToolbar className="flex flex-wrap gap-2">
+        <Skeleton className="h-10 w-28" />
+        <Skeleton className="h-10 w-28" />
+        <Skeleton className="h-10 w-28" />
+        <Skeleton className="ms-auto h-10 w-32" />
+      </WorkspaceToolbar>
+      <div className="grid grid-cols-2 border-b border-border/60 sm:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-32 rounded-[1.75rem]" />
+          <div key={index} className="border-e border-border/50 px-4 py-5 last:border-e-0">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="mt-3 h-8 w-32 max-w-full" />
+          </div>
         ))}
       </div>
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card className="rounded-[2rem] p-6">
-          <div className="flex flex-col gap-4">
-            <Skeleton className="h-6 w-48" />
-            <Skeleton className="h-[320px] rounded-[1.5rem]" />
-          </div>
-        </Card>
-        <Card className="rounded-[2rem] p-6">
-          <div className="flex flex-col gap-4">
-            <Skeleton className="h-6 w-40" />
-            <Skeleton className="h-[320px] rounded-[1.5rem]" />
-          </div>
-        </Card>
-      </div>
-
-      <Card className="rounded-[2rem] p-6">
-        <div className="flex flex-col gap-4">
-          <Skeleton className="h-6 w-56" />
-          <Skeleton className="h-16 rounded-[1.4rem]" />
-          <Skeleton className="h-16 rounded-[1.4rem]" />
-          <Skeleton className="h-16 rounded-[1.4rem]" />
+      <div className="grid gap-0 xl:grid-cols-2">
+        <div className="border-b border-border/60 p-5 xl:border-e">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="mt-4 h-[320px] w-full" />
         </div>
-      </Card>
-    </div>
+        <div className="border-b border-border/60 p-5">
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="mt-4 h-[320px] w-full" />
+        </div>
+      </div>
+    </WorkspaceFrame>
   );
 }

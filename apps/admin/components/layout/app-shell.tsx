@@ -4,9 +4,9 @@ import {
   BarChart3,
   Bot,
   Boxes,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronsUpDown,
   ClipboardList,
   FolderKanban,
   LogOut,
@@ -15,7 +15,6 @@ import {
   PanelsTopLeft,
   Radio,
   ShieldCheck,
-  TrendingUp,
   X,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
@@ -82,13 +81,11 @@ const navIcons: Record<NavigationKey, React.ComponentType<{ className?: string }
   inventory: Boxes,
   assets: FolderKanban,
   brandsCategories: PanelsTopLeft,
-  analytics2: TrendingUp,
   stats: BarChart3,
   bulletin: Radio,
 };
 
 const desktopMediaQuery = '(min-width: 1024px)';
-const mobileDockKeys: NavigationKey[] = ['products', 'orders', 'inventory'];
 
 function useDesktopLayout() {
   return useSyncExternalStore(
@@ -211,14 +208,19 @@ export function AppShell({
       if (startDate) params.set('startDate', startDate);
       if (endDate) params.set('endDate', endDate);
     }
+    const grain = searchParams.get('grain');
+    if (grain) params.set('grain', grain);
     const value = params.toString();
     return value ? `?${value}` : '';
   }, [locale, pathname, searchParams]);
   const activeNavigation = useMemo(() => {
-    const item = items.find((candidate) => {
-      const baseHref = `/${locale}${candidate.href}`;
-      return pathname === baseHref || pathname.startsWith(`${baseHref}/`);
-    });
+    const item =
+      pathname === `/${locale}/archive`
+        ? items.find((candidate) => candidate.key === 'products')
+        : items.find((candidate) => {
+            const baseHref = `/${locale}${candidate.href}`;
+            return pathname === baseHref || pathname.startsWith(`${baseHref}/`);
+          });
     const subItem = item?.subItems
       ? [...item.subItems]
           .sort(
@@ -243,11 +245,6 @@ export function AppShell({
       parent: subItem && item ? t(`nav.${item.key}`) : null,
     };
   }, [currentHash, items, locale, pathname, t]);
-  const mobileDockItems = useMemo(
-    () => mobileDockKeys.map((key) => items.find((item) => item.key === key)).filter(Boolean),
-    [items],
-  ) as NavigationItem[];
-
   useEffect(() => {
     if (isDesktop || !sidebarOpen) return;
 
@@ -309,34 +306,48 @@ export function AppShell({
 
       <div className="flex w-full gap-2 p-2 sm:gap-4 sm:p-4">
         <motion.aside
+          data-desktop-navigation
           aria-label={t('adminWorkspace.products.selectionMore')}
           aria-modal={!isDesktop && sidebarOpen ? true : undefined}
           role={!isDesktop && sidebarOpen ? 'dialog' : undefined}
           inert={!isDesktop && !sidebarOpen ? true : undefined}
           className={cn(
-            'fixed inset-0 z-40 flex w-full flex-col bg-background p-0 text-card-foreground shadow-[var(--shadow-vapor-strong)] transition-transform duration-300 lg:sticky lg:inset-auto lg:top-4 lg:h-[calc(100vh-2rem)] lg:w-80 lg:rounded-[1.75rem] lg:bg-[var(--glass-surface)] lg:p-3 lg:backdrop-blur-xl',
+            'fixed inset-0 z-40 flex w-full flex-col bg-background p-0 text-card-foreground shadow-[var(--shadow-vapor-strong)] transition-transform duration-300 lg:sticky lg:inset-auto lg:top-3 lg:h-[calc(100vh-1.5rem)] lg:w-[17rem] lg:rounded-xl lg:border lg:border-border/60 lg:bg-background/92 lg:shadow-sm lg:backdrop-blur-xl',
             sidebarOpen
               ? 'translate-x-0'
               : '-translate-x-[110%] rtl:translate-x-[110%] lg:translate-x-0',
-            sidebarCollapsed ? 'lg:w-24' : 'lg:w-80',
+            sidebarCollapsed ? 'lg:w-[4.75rem]' : 'lg:w-[17rem]',
           )}
           animate={{ opacity: sidebarOpen ? 1 : 0.98 }}
           transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
         >
           <motion.div
             layout
-            className="flex items-center justify-between gap-2 border-b border-border/60 bg-background px-4 py-3 lg:rounded-2xl lg:border-b-0 lg:bg-card/80 lg:px-3 lg:shadow-[var(--shadow-vapor)] lg:backdrop-blur-xl"
+            className="flex items-center justify-between gap-2 border-b border-border/60 bg-background px-4 py-3 lg:min-h-16 lg:bg-transparent lg:px-3"
           >
-            <div className={cn('min-w-0 flex-1', sidebarCollapsed && 'lg:hidden')}>
-              <h1 className="truncate text-[1.85rem] leading-none font-semibold tracking-[-0.05em] antialiased">
-                <span className="text-foreground/88">Bric</span>
-                <span className="bg-gradient-to-r from-foreground via-foreground to-primary bg-clip-text text-transparent">
-                  Admin
+            <div className="min-w-0 flex-1">
+              <div
+                aria-label="BricAdmin"
+                className={cn(
+                  'truncate leading-none font-semibold tracking-[-0.05em] antialiased',
+                  sidebarCollapsed ? 'lg:text-center lg:text-xl' : 'text-[1.6rem]',
+                )}
+              >
+                <span className={cn(sidebarCollapsed && 'lg:hidden')}>
+                  <span className="text-foreground/88">Bric</span>
+                  <span className="bg-gradient-to-r from-foreground via-foreground to-primary bg-clip-text text-transparent">
+                    Admin
+                  </span>
                 </span>
-              </h1>
+                <span className={cn('hidden text-primary', sidebarCollapsed && 'lg:inline')}>
+                  B
+                </span>
+              </div>
             </div>
             <div className="flex items-center gap-2">
-              <ThemeToggle />
+              <div className="lg:hidden">
+                <ThemeToggle />
+              </div>
               <Button
                 ref={sidebarCloseRef}
                 type="button"
@@ -350,9 +361,9 @@ export function AppShell({
               </Button>
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="hidden lg:inline-flex"
+                className="hidden size-9 px-0 lg:inline-flex"
                 onClick={() => setSidebarCollapsed((value) => !value)}
                 aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               >
@@ -361,8 +372,8 @@ export function AppShell({
             </div>
           </motion.div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-3 lg:mt-4 lg:rounded-[1.25rem] lg:bg-card/60 lg:p-2 lg:shadow-[var(--shadow-vapor)]">
-            <div className="flex flex-col gap-2">
+          <nav data-desktop-navigation-list className="min-h-0 flex-1 overflow-y-auto p-3 lg:p-2.5">
+            <div className="flex flex-col gap-1">
               {items.map((item) => (
                 <SidebarNavItem
                   key={item.key}
@@ -378,13 +389,13 @@ export function AppShell({
                 />
               ))}
             </div>
-          </div>
+          </nav>
 
-          <div className="flex flex-col gap-3 border-t border-border/60 bg-background p-3 lg:mt-4 lg:rounded-2xl lg:border-t-0 lg:bg-card/75 lg:shadow-[var(--shadow-vapor)]">
+          <div className="flex flex-col gap-3 border-t border-border/60 bg-background p-3 lg:bg-transparent">
             <button
               type="button"
               className={cn(
-                'flex items-center gap-3 rounded-2xl bg-secondary/55 p-3 text-start transition-colors hover:bg-secondary hover:text-accent-foreground',
+                'flex items-center gap-3 rounded-lg px-1 py-1.5 text-start transition-colors hover:bg-muted hover:text-foreground',
                 sidebarCollapsed && 'lg:justify-center',
               )}
               aria-controls="sidebar-profile-drawer"
@@ -392,7 +403,7 @@ export function AppShell({
               aria-label={t('labels.userProfile')}
               onClick={() => setProfileOpen(true)}
             >
-              <Avatar className="size-11">
+              <Avatar className="size-9">
                 {initialUserImage ? (
                   <AvatarImage
                     src={initialUserImage}
@@ -411,29 +422,41 @@ export function AppShell({
               <ChevronRight className={cn('shrink-0', sidebarCollapsed && 'lg:hidden')} />
             </button>
 
-            <Separator />
-
-            <div className={cn('flex flex-wrap gap-1', sidebarCollapsed && 'lg:flex-col')}>
+            <div
+              className={cn(
+                'flex items-center gap-1 border-t border-border/50 pt-3',
+                sidebarCollapsed && 'lg:flex-col',
+              )}
+            >
+              <div className="hidden lg:block">
+                <ThemeToggle />
+              </div>
               {locales.map((l) => (
                 <Button
                   key={l}
                   variant={l === locale ? 'default' : 'outline'}
                   size="sm"
-                  className={cn(sidebarCollapsed && 'lg:w-full')}
+                  className={cn(
+                    'min-w-0 flex-1 px-2',
+                    sidebarCollapsed && 'lg:w-full lg:flex-none',
+                  )}
                   disabled={isNavigating}
                   onClick={() => switchLocale(l)}
                 >
                   {isNavigating && pendingHref === pathname.replace(`/${locale}`, `/${l}`) ? (
                     <Spinner data-icon="inline-start" className="size-3.5" />
                   ) : null}
-                  {sidebarCollapsed ? l.toUpperCase() : localeLabels[l]}
+                  <span className={cn(sidebarCollapsed && 'lg:hidden')}>{localeLabels[l]}</span>
+                  <span className={cn('hidden', sidebarCollapsed && 'lg:inline')}>
+                    {l.toUpperCase()}
+                  </span>
                 </Button>
               ))}
             </div>
           </div>
         </motion.aside>
 
-        <main className="min-w-0 flex-1 space-y-3 pb-20 sm:space-y-4 lg:pb-0">
+        <main className="min-w-0 flex-1 space-y-3 sm:space-y-4">
           <div
             data-mobile-workflow-header
             className="sticky top-2 z-20 flex items-center justify-between gap-3 rounded-[1rem] border border-border/50 bg-[var(--glass-surface)] px-2.5 py-2 shadow-[var(--shadow-vapor)] backdrop-blur-xl sm:px-4 sm:py-3 lg:hidden"
@@ -484,52 +507,6 @@ export function AppShell({
           <PageTransition routeKey={`${pathname}${currentHash}`}>{children}</PageTransition>
         </main>
       </div>
-
-      {mobileDockItems.length > 0 ? (
-        <nav
-          data-mobile-navigation-dock
-          aria-label={t('adminWorkspace.products.selectionMore')}
-          className="fixed inset-x-2 bottom-2 z-30 grid grid-flow-col auto-cols-fr rounded-[1rem] border border-border/55 bg-[var(--glass-surface)] p-1.5 shadow-[var(--shadow-vapor-strong)] backdrop-blur-xl lg:hidden"
-        >
-          {mobileDockItems.map((item) => {
-            const href = `/${locale}${item.href}`;
-            const active = activeNavigation.item?.key === item.key;
-            const Icon = navIcons[item.key];
-            return (
-              <Link
-                key={item.key}
-                href={href}
-                onClick={(event) => {
-                  event.preventDefault();
-                  navigate(href);
-                }}
-                className={cn(
-                  'flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-[0.7rem] px-1 py-1.5 text-[0.68rem] font-medium text-muted-foreground',
-                  active && 'bg-primary text-primary-foreground',
-                )}
-              >
-                <Icon className="size-4" aria-hidden="true" />
-                <span className="max-w-full truncate">{t(`nav.${item.key}`)}</span>
-              </Link>
-            );
-          })}
-          <button
-            type="button"
-            className={cn(
-              'flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-[0.7rem] px-1 py-1.5 text-[0.68rem] font-medium text-muted-foreground',
-              activeNavigation.item &&
-                !mobileDockKeys.includes(activeNavigation.item.key) &&
-                'bg-primary text-primary-foreground',
-            )}
-            onClick={() => setSidebarOpen(true)}
-          >
-            <Menu className="size-4" aria-hidden="true" />
-            <span className="max-w-full truncate">
-              {t('adminWorkspace.products.selectionMore')}
-            </span>
-          </button>
-        </nav>
-      ) : null}
 
       <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
         <DialogContent
@@ -601,12 +578,16 @@ function SidebarNavItem({
   t: ReturnType<typeof useTranslations>;
   onNavigate: (href: string) => void;
 }) {
+  const belongsToProductArchive = item.key === 'products' && pathname === `/${locale}/archive`;
   const [open, setOpen] = useState(
-    pathname === `/${locale}${item.href}` || pathname.startsWith(`/${locale}${item.href}/`),
+    belongsToProductArchive ||
+      pathname === `/${locale}${item.href}` ||
+      pathname.startsWith(`/${locale}${item.href}/`),
   );
   const baseHref = `/${locale}${item.href}`;
   const href = item.key === 'stats' ? `${baseHref}${analyticsQuery}` : baseHref;
-  const active = pathname === baseHref || pathname.startsWith(`${baseHref}/`);
+  const active =
+    belongsToProductArchive || pathname === baseHref || pathname.startsWith(`${baseHref}/`);
   const Icon = navIcons[item.key];
   const hasSubItems = Boolean(item.subItems?.length);
   const isPending = pendingHref === href;
@@ -618,8 +599,8 @@ function SidebarNavItem({
   }, [active]);
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-center gap-1">
         <Link
           href={href}
           prefetch
@@ -639,15 +620,17 @@ function SidebarNavItem({
             onNavigate(href);
           }}
           className={cn(
-            'flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-[background-color,color,box-shadow,transform,opacity]',
+            'flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2.5 py-2.5 text-sm transition-[background-color,color,transform,opacity]',
             active
-              ? 'bg-primary text-primary-foreground shadow-[var(--shadow-vapor)]'
-              : 'bg-transparent hover:bg-secondary/70 hover:text-foreground',
+              ? 'bg-primary/10 font-medium text-foreground'
+              : 'bg-transparent text-muted-foreground hover:bg-muted/70 hover:text-foreground',
             isPending && 'scale-[0.99] opacity-80',
             collapsed && 'lg:justify-center',
           )}
+          title={collapsed ? t(`nav.${item.key}`) : undefined}
+          data-navigation-active={active ? 'true' : undefined}
         >
-          <Icon className="size-4 shrink-0" />
+          <Icon className={cn('size-4 shrink-0', active && 'text-primary')} />
           {isPending ? <Spinner className="size-3.5 shrink-0" /> : null}
           <span
             className={cn(
@@ -661,13 +644,13 @@ function SidebarNavItem({
         {hasSubItems ? (
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="sm"
-            className={cn('shrink-0 bg-secondary/60', collapsed && 'lg:hidden')}
+            className={cn('size-8 shrink-0 px-0 text-muted-foreground', collapsed && 'lg:hidden')}
             aria-label={`${open ? 'Hide' : 'Show'} ${t(`nav.${item.key}`)} submenu`}
             onClick={() => setOpen((value) => !value)}
           >
-            <ChevronsUpDown className="size-4" />
+            <ChevronDown className={cn('size-4 transition-transform', open && 'rotate-180')} />
           </Button>
         ) : null}
       </div>
@@ -678,9 +661,9 @@ function SidebarNavItem({
             initial={{ opacity: 0, height: 0, y: -8 }}
             animate={{ opacity: 1, height: 'auto', y: 0 }}
             exit={{ opacity: 0, height: 0, y: -8 }}
-            className="ml-4 overflow-hidden"
+            className="ms-[1.15rem] overflow-hidden"
           >
-            <div className="flex flex-col gap-1 rounded-[0.75rem] bg-muted/35 p-2">
+            <div className="flex flex-col gap-0.5 border-s border-border/70 py-1 ps-3">
               {item.subItems?.map((subItem) => {
                 const baseSubHref = `/${locale}${subItem.href}`;
                 const subHref = `${baseSubHref}${analyticsQuery}`;
@@ -706,11 +689,11 @@ function SidebarNavItem({
                       onNavigate(subHref);
                     }}
                     className={cn(
-                      'rounded-xl px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-card/80 hover:text-accent-foreground',
+                      'rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground',
                       pendingHref === subHref && 'opacity-70',
                       pathname === baseSubHref ||
                         (pathname === `/${locale}${item.href}` && currentHash === subHash)
-                        ? 'bg-card text-foreground shadow-[var(--shadow-vapor)]'
+                        ? 'bg-muted font-medium text-foreground'
                         : '',
                     )}
                   >

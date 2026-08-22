@@ -7,7 +7,20 @@ import { Analytics2Workspace } from './analytics2-workspace';
 
 const { replaceMock } = vi.hoisted(() => ({ replaceMock: vi.fn() }));
 
-vi.mock('next-intl', () => ({ useLocale: () => 'en' }));
+vi.mock('next-intl', () => ({
+  useLocale: () => 'en',
+  useTranslations: () => (key: string) =>
+    ({
+      'nav.statsOverview': 'Overview',
+      'nav.statsMoney': 'Money',
+      'nav.statsAcquisition': 'Acquisition',
+      'nav.statsFulfillment': 'Fulfillment',
+      'nav.statsStorefront': 'Storefront',
+      'nav.statsSearch': 'Search visibility',
+      'nav.statsCatalog': 'Catalog',
+      'nav.statsAssumptions': 'Costs & assumptions',
+    })[key] ?? key,
+}));
 vi.mock('next/navigation', () => ({
   usePathname: () => '/en/analytics2',
   useRouter: () => ({ replace: replaceMock }),
@@ -396,7 +409,15 @@ describe('Analytics2Workspace', () => {
   it('renders a lean operational workspace with source health and operator signals', () => {
     const { container } = renderWorkspace();
 
-    expect(container.querySelector('[data-admin-workspace="analytics2"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-admin-workspace="stats"]')).toBeInTheDocument();
+    expect(container.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-workspace-toolbar]')).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Overview' })).toHaveClass(
+      'sr-only',
+      'lg:not-sr-only',
+    );
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
     expect(screen.getByText('EcoTrack')).toBeInTheDocument();
     expect(screen.getByText('Profit × is above break-even')).toBeInTheDocument();
     expect(screen.getByText('Business trajectory')).toBeInTheDocument();
