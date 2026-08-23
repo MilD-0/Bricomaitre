@@ -1,5 +1,5 @@
 import { createAiLanguageModel, getAiConfig, productContentFieldSchema } from '@bric/ai-core';
-import { stepCountIs, streamText, tool } from 'ai';
+import { stepCountIs, streamText, tool, type ToolSet } from 'ai';
 import { and, desc, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -137,6 +137,10 @@ import {
   type AdminAiChatStreamEvent,
 } from '../../../../lib/admin-ai-chat-stream';
 import {
+  ADMIN_AI_CONTEXT_QUERY_LIMIT,
+  buildAdminAiConversationContext,
+} from '../../../../lib/admin-ai-conversation-context';
+import {
   ADMIN_AI_DEFAULT_MODEL,
   ADMIN_AI_MAX_OUTPUT_TOKENS,
   adminAiModelIdSchema,
@@ -176,7 +180,7 @@ const requestSchema = z
     reasoningEffort: input.reasoningEffort ?? getDefaultAdminAiReasoningEffort(input.model),
   }));
 
-export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-v21';
+export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-v22';
 export const ADMIN_AI_INLINE_PRODUCT_LIMIT = 20;
 
 const productLookupPermissions: PermissionKey[] = [
@@ -198,16 +202,10 @@ function hasAnyPermission(
   return required.some((permission) => hasPermission(permissions, permission));
 }
 
-function storedMessageText(content: unknown) {
-  if (typeof content === 'string') return content;
-  if (
-    content &&
-    typeof content === 'object' &&
-    typeof (content as { text?: unknown }).text === 'string'
-  ) {
-    return (content as { text: string }).text;
-  }
-  return null;
+function repeatableStreamText<TOOLS extends ToolSet>(
+  options: Parameters<typeof streamText<TOOLS>>[0],
+) {
+  return () => streamText(options);
 }
 
 function conversationTitle(message: string) {
@@ -311,15 +309,8 @@ export async function POST(request: NextRequest) {
       .from(aiMessages)
       .where(eq(aiMessages.conversationId, conversation.id))
       .orderBy(desc(aiMessages.createdAt))
-      .limit(20);
-    const previousMessages = previousRows
-      .reverse()
-      .flatMap((row): Array<{ role: 'user' | 'assistant'; content: string }> => {
-        const content = storedMessageText(row.content);
-        return content && (row.role === 'user' || row.role === 'assistant')
-          ? [{ role: row.role, content }]
-          : [];
-      });
+      .limit(ADMIN_AI_CONTEXT_QUERY_LIMIT);
+    const previousMessages = buildAdminAiConversationContext(previousRows);
     const effectiveTitle = previousMessages.length === 0 ? title : conversation.title || title;
     await Promise.all([
       db.insert(aiMessages).values({
@@ -374,7 +365,7 @@ export async function POST(request: NextRequest) {
           })
         : null;
     let analyticsQueryExecutionCount = 0;
-    const result = streamText({
+    const createResult = repeatableStreamText({
       model: createAiLanguageModel(config, 'admin', {
         model: selectedModel.model,
         openRouterRequestBody: selectedModel.openRouterRequestBody,
@@ -1033,53 +1024,84 @@ export async function POST(request: NextRequest) {
           const toolResults: unknown[] = [];
           const toolTraces = new Map<string, ToolTrace>();
           let anonymousToolCall = 0;
+          let emptyStreamRetryCount = 0;
           let usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } = {};
           try {
-            for await (const part of result.stream) {
-              if (part.type === 'tool-call') {
-                const toolCallId = part.toolCallId || `${part.toolName}:${anonymousToolCall++}`;
-                toolTraces.set(toolCallId, {
-                  toolCallId,
-                  toolName: part.toolName,
-                  status: 'running',
-                  input: part.input,
-                  startedAt: new Date(),
-                });
-                write({ type: 'status', status: 'working' });
+            while (true) {
+              try {
+                for await (const part of createResult().stream) {
+                  if (part.type === 'tool-call') {
+                    const toolCallId = part.toolCallId || `${part.toolName}:${anonymousToolCall++}`;
+                    toolTraces.set(toolCallId, {
+                      toolCallId,
+                      toolName: part.toolName,
+                      status: 'running',
+                      input: part.input,
+                      startedAt: new Date(),
+                    });
+                    write({
+                      type: 'status',
+                      status: 'working',
+                      toolName: part.toolName,
+                      phase: 'running',
+                    });
+                  }
+                  if (part.type === 'tool-result') {
+                    toolResults.push(part);
+                    const completedAt = new Date();
+                    const current = toolTraces.get(part.toolCallId);
+                    toolTraces.set(part.toolCallId, {
+                      toolCallId: part.toolCallId,
+                      toolName: part.toolName,
+                      status: 'completed',
+                      input: part.input,
+                      output: part.output,
+                      startedAt: current?.startedAt ?? completedAt,
+                      completedAt,
+                    });
+                    write({
+                      type: 'status',
+                      status: 'working',
+                      toolName: part.toolName,
+                      phase: 'completed',
+                    });
+                  }
+                  if (part.type === 'tool-error') {
+                    const completedAt = new Date();
+                    const current = toolTraces.get(part.toolCallId);
+                    toolTraces.set(part.toolCallId, {
+                      toolCallId: part.toolCallId,
+                      toolName: part.toolName,
+                      status: 'failed',
+                      input: part.input,
+                      errorCode: toolErrorCode(part.error),
+                      startedAt: current?.startedAt ?? completedAt,
+                      completedAt,
+                    });
+                    write({
+                      type: 'status',
+                      status: 'working',
+                      toolName: part.toolName,
+                      phase: 'failed',
+                    });
+                  }
+                  if (part.type === 'text-delta' && part.text) {
+                    text += part.text;
+                    write({ type: 'text-delta', delta: part.text });
+                  }
+                  if (part.type === 'finish') usage = part.totalUsage;
+                  if (part.type === 'error') throw part.error;
+                }
+                break;
+              } catch (error) {
+                const canRetryWithoutRepeatingWork =
+                  !request.signal.aborted &&
+                  emptyStreamRetryCount === 0 &&
+                  text.length === 0 &&
+                  toolTraces.size === 0;
+                if (!canRetryWithoutRepeatingWork) throw error;
+                emptyStreamRetryCount += 1;
               }
-              if (part.type === 'tool-result') {
-                toolResults.push(part);
-                const completedAt = new Date();
-                const current = toolTraces.get(part.toolCallId);
-                toolTraces.set(part.toolCallId, {
-                  toolCallId: part.toolCallId,
-                  toolName: part.toolName,
-                  status: 'completed',
-                  input: part.input,
-                  output: part.output,
-                  startedAt: current?.startedAt ?? completedAt,
-                  completedAt,
-                });
-              }
-              if (part.type === 'tool-error') {
-                const completedAt = new Date();
-                const current = toolTraces.get(part.toolCallId);
-                toolTraces.set(part.toolCallId, {
-                  toolCallId: part.toolCallId,
-                  toolName: part.toolName,
-                  status: 'failed',
-                  input: part.input,
-                  errorCode: toolErrorCode(part.error),
-                  startedAt: current?.startedAt ?? completedAt,
-                  completedAt,
-                });
-              }
-              if (part.type === 'text-delta' && part.text) {
-                text += part.text;
-                write({ type: 'text-delta', delta: part.text });
-              }
-              if (part.type === 'finish') usage = part.totalUsage;
-              if (part.type === 'error') throw part.error;
             }
             if (!text.trim()) {
               text = 'Completed.';
@@ -1176,7 +1198,12 @@ export async function POST(request: NextRequest) {
                   : Promise.resolve(),
               ]).catch(() => undefined);
             }
-            if (!request.signal.aborted) write({ type: 'error', code: 'admin_ai_failed' });
+            if (!request.signal.aborted)
+              write({
+                type: 'error',
+                code: 'admin_ai_failed',
+                ...(toolResults.length > 0 ? { toolResults } : {}),
+              });
           } finally {
             controller.close();
           }

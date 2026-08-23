@@ -45,6 +45,20 @@ export type AdminAiToolPresentation = {
   href?: string;
 };
 
+export type AdminAiToolActivityKey =
+  | 'products'
+  | 'taxonomy'
+  | 'orders'
+  | 'inventory'
+  | 'assets'
+  | 'proposals'
+  | 'bulletin'
+  | 'administration'
+  | 'storefront'
+  | 'background'
+  | 'analytics'
+  | 'result';
+
 const labelKeys: Record<string, AdminAiToolLabelKey> = {
   find_products: 'catalog',
   inspect_products: 'catalog',
@@ -145,6 +159,36 @@ const destinationKeys: Record<string, AdminAiToolDestinationKey> = {
   propose_category_create: 'proposals',
 };
 
+const activityKeysByLabel: Record<AdminAiToolLabelKey, AdminAiToolActivityKey> = {
+  catalog: 'products',
+  productCreated: 'products',
+  catalogUpdated: 'products',
+  productsArchived: 'products',
+  taxonomy: 'taxonomy',
+  taxonomyUpdated: 'taxonomy',
+  orders: 'orders',
+  ordersUpdated: 'orders',
+  inventory: 'inventory',
+  inventoryUpdated: 'inventory',
+  assets: 'assets',
+  assetsUpdated: 'assets',
+  landingPages: 'assets',
+  landingPageCreated: 'assets',
+  landingPageUpdated: 'assets',
+  proposals: 'proposals',
+  proposalsReviewed: 'proposals',
+  bulletin: 'bulletin',
+  bulletinUpdated: 'bulletin',
+  administration: 'administration',
+  administrationUpdated: 'administration',
+  storefront: 'storefront',
+  storefrontUpdated: 'storefront',
+  background: 'background',
+  content: 'products',
+  categorization: 'products',
+  result: 'result',
+};
+
 function positiveInteger(value: unknown) {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null;
 }
@@ -200,6 +244,11 @@ export function adminAiToolPresentation(
     destinationKey,
     href: destinationHref(toolName, destinationKey, output, locale),
   };
+}
+
+export function adminAiToolActivityKey(toolName: string): AdminAiToolActivityKey {
+  if (toolName === 'query_analytics') return 'analytics';
+  return activityKeysByLabel[labelKeys[toolName] ?? 'result'];
 }
 
 export const ADMIN_AI_PRESENTED_TOOL_NAMES = Object.freeze(Object.keys(labelKeys));

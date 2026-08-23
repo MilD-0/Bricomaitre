@@ -60,13 +60,13 @@ describe('shopping assistant contracts', () => {
     expect(
       shoppingAssistantRequestSchema.safeParse({
         locale: 'fr',
-        messages: Array.from({ length: 30 }, () => ({ role: 'user', content: 'drill' })),
+        messages: Array.from({ length: 40 }, () => ({ role: 'user', content: 'drill' })),
       }).success,
     ).toBe(true);
     expect(
       shoppingAssistantRequestSchema.safeParse({
         locale: 'fr',
-        messages: Array.from({ length: 31 }, () => ({ role: 'user', content: 'drill' })),
+        messages: Array.from({ length: 41 }, () => ({ role: 'user', content: 'drill' })),
       }).success,
     ).toBe(false);
   });

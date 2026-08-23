@@ -317,6 +317,12 @@
   font-size: 0.59rem;
   font-weight: 700;
 }
+.shopping-assistant-bubble > .shopping-assistant-interrupted {
+  margin-block: 0.55rem 0;
+  border: 1px solid #efc9c4;
+  background: #fff5f3;
+  color: #92382f;
+}
 .shopping-assistant-sheet .shopping-assistant-new-chat {
   width: 2.25rem;
   height: 2.25rem;
@@ -472,18 +478,28 @@
   gap: 0.28rem;
   color: #6b7679;
 }
-.shopping-assistant-thinking span {
+.shopping-assistant-thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+}
+.shopping-assistant-thinking-dots i {
+  display: block;
   width: 0.36rem;
   height: 0.36rem;
   border-radius: 50%;
   background: var(--brand-teal);
   animation: shopping-assistant-dot 900ms ease-in-out infinite alternate;
 }
-.shopping-assistant-thinking span:nth-child(2) {
+.shopping-assistant-thinking-dots i:nth-child(2) {
   animation-delay: 150ms;
 }
-.shopping-assistant-thinking span:nth-child(3) {
+.shopping-assistant-thinking-dots i:nth-child(3) {
   animation-delay: 300ms;
+}
+.shopping-assistant-thinking svg {
+  flex: 0 0 auto;
+  color: var(--brand-teal-strong);
 }
 .shopping-assistant-thinking em {
   margin-inline-start: 0.3rem;
@@ -613,7 +629,7 @@
   .shopping-assistant-prompts button {
     transition: none;
   }
-  .shopping-assistant-thinking span {
+  .shopping-assistant-thinking-dots i {
     animation: none;
   }
 }

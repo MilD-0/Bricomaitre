@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { zodSchema } from 'ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -25,7 +26,8 @@ vi.mock('@bric/ai-core', () => ({
   resolveAiModel: mocks.resolveModel,
   createAiLanguageModel: mocks.createModel,
 }));
-vi.mock('ai', () => ({
+vi.mock('ai', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('ai')>()),
   streamText: mocks.streamText,
   stepCountIs: vi.fn(() => 'stop-condition'),
   tool: vi.fn((definition) => definition),
@@ -356,6 +358,15 @@ describe('POST /api/ai/chat', () => {
     expect(modelOptions).toHaveProperty('tools.inspect_delivery_support');
     expect(modelOptions).toHaveProperty('tools.inspect_promotion');
     expect(modelOptions).toHaveProperty('tools.present_products');
+    const registeredTools = modelOptions.tools as Record<string, { inputSchema: unknown }>;
+    expect(Object.keys(registeredTools)).toHaveLength(6);
+    for (const [name, definition] of Object.entries(registeredTools)) {
+      expect(() => zodSchema(definition.inputSchema as never).jsonSchema, name).not.toThrow();
+      expect(
+        JSON.stringify(zodSchema(definition.inputSchema as never).jsonSchema),
+        name,
+      ).not.toContain('(?');
+    }
     expect(modelOptions.maxOutputTokens).toBe(900);
     expect(
       (modelOptions.prepareStep as (input: { stepNumber: number }) => unknown)({ stepNumber: 0 }),
@@ -487,6 +498,41 @@ describe('POST /api/ai/chat', () => {
     });
   });
 
+  it('prioritizes cart and recent recommendation references when re-grounding long chats', async () => {
+    mocks.streamText.mockReturnValue({
+      stream: (async function* () {
+        yield { type: 'text-delta', text: 'Je garde les options récentes.' };
+        yield {
+          type: 'finish',
+          totalUsage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        };
+      })(),
+    });
+    const messages = [
+      ...Array.from({ length: 39 }, (_, index) => ({
+        role: 'assistant' as const,
+        content: `Options ${index + 1}`,
+        productIds: [index * 2 + 1, index * 2 + 2],
+      })),
+      { role: 'user' as const, content: 'Compare les options les plus récentes.' },
+    ];
+
+    const response = await POST(
+      request({
+        locale: 'fr',
+        context: { pathname: '/fr/cart', cartItems: [{ productId: 999, quantity: 1 }] },
+        messages,
+      }),
+    );
+    await streamEvents(response);
+
+    const referencedIds = mocks.cartValidation.mock.calls[0]?.[0] as number[];
+    expect(referencedIds).toHaveLength(50);
+    expect(referencedIds.slice(0, 5)).toEqual([999, 77, 78, 75, 76]);
+    expect(referencedIds).not.toContain(1);
+    expect(referencedIds).not.toContain(2);
+  });
+
   it('refreshes the linked order and forces order grounding on the confirmation journey', async () => {
     const order = {
       id: 84,
@@ -590,6 +636,61 @@ describe('POST /api/ai/chat', () => {
     });
     expect(mocks.recordRun).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'completed', model: 'fallback-model' }),
+    );
+  });
+
+  it('returns grounded selections when a response is interrupted after partial text', async () => {
+    mocks.streamText.mockImplementation(
+      (options: {
+        tools: {
+          search_catalog: {
+            execute: (input: {
+              search: string;
+              stock: 'all' | 'in' | 'out';
+              page: number;
+              limit: number;
+            }) => Promise<unknown>;
+          };
+          present_products: {
+            execute: (input: { productIds: number[] }) => Promise<unknown>;
+          };
+        };
+      }) => ({
+        stream: (async function* () {
+          await options.tools.search_catalog.execute({
+            search: 'perceuse',
+            stock: 'in',
+            page: 1,
+            limit: 5,
+          });
+          await options.tools.present_products.execute({ productIds: [12] });
+          yield { type: 'text-delta', text: 'Cette perceuse est' };
+          yield { type: 'error', error: new Error('terminated') };
+        })(),
+      }),
+    );
+
+    const events = await streamEvents(
+      await POST(
+        request({
+          locale: 'fr',
+          messages: [{ role: 'user', content: 'Une perceuse pour le béton' }],
+        }),
+      ),
+    );
+
+    expect(mocks.streamText).toHaveBeenCalledTimes(1);
+    expect(events.at(-1)).toMatchObject({
+      type: 'error',
+      code: 'assistant_unavailable',
+      products: [{ id: 12, token: 'perceuse-beton' }],
+    });
+    expect(mocks.recordRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'failed',
+        resultsCount: 1,
+        response: 'Cette perceuse est',
+      }),
     );
   });
 

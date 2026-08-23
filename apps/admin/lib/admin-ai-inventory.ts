@@ -7,12 +7,21 @@ import { revalidateStorefrontProducts } from './storefront-revalidate';
 import type { ActionActor } from './action-history';
 
 export const adminAiInventoryAdjustmentSchema = z.object({
-  mode: z.enum(['increase', 'decrease']),
+  mode: z
+    .enum(['increase', 'decrease'])
+    .describe('Direction of the requested stock change; this is not an absolute stock setter.'),
   items: z
     .array(
       z.object({
-        productId: z.number().int().positive(),
-        quantity: z.number().int().positive().max(1_000_000),
+        productId: z.number().int().positive().describe('Exact product ID resolved by inspection.'),
+        quantity: z
+          .number()
+          .int()
+          .positive()
+          .max(1_000_000)
+          .describe(
+            'Positive delta to add or subtract, never the desired final inventory quantity.',
+          ),
       }),
     )
     .min(1)

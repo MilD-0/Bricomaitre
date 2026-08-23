@@ -60,7 +60,7 @@ export const brandUpdateSchema = brandFormSchema.partial().extend({
 });
 
 const categoryParentIdSchema = z
-  .union([z.coerce.number().int().positive(), z.literal(''), z.literal(0), z.nan(), z.null()])
+  .union([z.coerce.number().int().positive(), z.literal(''), z.literal(0), z.null()])
   .transform((value) =>
     typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null,
   );

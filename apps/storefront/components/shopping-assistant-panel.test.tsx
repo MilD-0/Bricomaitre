@@ -30,7 +30,17 @@ const labels: ShoppingAssistantLabels = {
   stopped: 'Réponse arrêtée',
   retry: 'Réessayer',
   thinking: 'Recherche…',
+  toolActivity: {
+    search_catalog: 'Recherche catalogue…',
+    inspect_products: 'Vérification produits…',
+    inspect_order: 'Vérification commande…',
+    inspect_delivery_support: 'Vérification livraison…',
+    inspect_promotion: 'Vérification promotion…',
+    present_products: 'Préparation options…',
+  },
+  toolRetrying: 'Nouvelle tentative…',
   error: 'Indisponible',
+  interrupted: 'Réponse interrompue',
   rateLimited: 'Patientez',
   fallback: 'Résultats du catalogue',
   inStock: 'En stock',
@@ -191,11 +201,116 @@ describe('ShoppingAssistantPanel', () => {
     await waitFor(() => expect(screen.getByLabelText(labels.inputLabel)).not.toBeDisabled());
   });
 
-  it('carries thirty recent turns into the next answer', async () => {
+  it('keeps interrupted partial text visibly incomplete and unavailable for feedback', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          [
+            JSON.stringify({ type: 'text-delta', delta: 'Cette perceuse est' }),
+            JSON.stringify({
+              type: 'error',
+              code: 'assistant_unavailable',
+              products: [],
+            }),
+            '',
+          ].join('\n'),
+          { headers: { 'content-type': 'application/x-ndjson' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ mode: 'ai', message: 'Nouvelle réponse complète', products: [] }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ShoppingAssistantPanel locale="fr" labels={labels} onClose={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText(labels.inputLabel), {
+      target: { value: 'Une perceuse' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: labels.send }));
+
+    expect(await screen.findByText('Cette perceuse est')).toBeInTheDocument();
+    expect(await screen.findByText(labels.interrupted)).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent(labels.error);
+    expect(screen.queryByRole('button', { name: labels.helpful })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        JSON.parse(localStorage.getItem('bricomaitre-shopping-assistant-chat-v1:fr') ?? '[]'),
+      ).toContainEqual(expect.objectContaining({ interrupted: true })),
+    );
+
+    fireEvent.change(screen.getByLabelText(labels.inputLabel), {
+      target: { value: 'Une autre question' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: labels.send }));
+    expect(await screen.findByText('Nouvelle réponse complète')).toBeInTheDocument();
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)).messages).toEqual([
+      expect.objectContaining({ role: 'user', content: 'Une perceuse' }),
+      expect.objectContaining({ role: 'user', content: 'Une autre question' }),
+    ]);
+  });
+
+  it('shows the exact live Storefront tool activity before the answer starts', async () => {
+    const encoder = new TextEncoder();
+    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller;
+        controller.enqueue(
+          encoder.encode(
+            '{"type":"status","status":"thinking"}\n{"type":"tool","name":"search_catalog","status":"started"}\n',
+          ),
+        );
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(stream, { headers: { 'content-type': 'application/x-ndjson' } }),
+        ),
+    );
+    render(<ShoppingAssistantPanel locale="fr" labels={labels} onClose={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText(labels.inputLabel), {
+      target: { value: 'Une perceuse pour le béton' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: labels.send }));
+
+    const activity = await screen.findByText(labels.toolActivity.search_catalog);
+    expect(activity.closest('[data-activity="search_catalog"]')).toHaveAttribute(
+      'data-phase',
+      'started',
+    );
+    await act(async () => {
+      streamController!.enqueue(
+        encoder.encode('{"type":"tool","name":"search_catalog","status":"completed"}\n'),
+      );
+    });
+    await waitFor(() =>
+      expect(activity.closest('[data-activity="search_catalog"]')).toHaveAttribute(
+        'data-phase',
+        'completed',
+      ),
+    );
+    await act(async () => {
+      streamController!.enqueue(
+        encoder.encode(
+          '{"type":"text-delta","delta":"J’ai trouvé une option."}\n{"type":"result","mode":"ai","products":[]}\n',
+        ),
+      );
+      streamController!.close();
+    });
+    expect(await screen.findByText('J’ai trouvé une option.')).toBeInTheDocument();
+    expect(screen.queryByText(labels.toolActivity.search_catalog)).not.toBeInTheDocument();
+  });
+
+  it('carries forty recent turns into the next answer', async () => {
     localStorage.setItem(
       'bricomaitre-shopping-assistant-chat-v1:fr',
       JSON.stringify(
-        Array.from({ length: 35 }, (_, index) => ({
+        Array.from({ length: 40 }, (_, index) => ({
           id: `saved-${index + 1}`,
           role: index % 2 === 0 ? 'user' : 'assistant',
           content: `history-${index + 1}`,
@@ -208,14 +323,14 @@ describe('ShoppingAssistantPanel', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<ShoppingAssistantPanel locale="fr" labels={labels} onClose={vi.fn()} />);
 
-    expect(await screen.findByText('history-35')).toBeInTheDocument();
+    expect(await screen.findByText('history-40')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(labels.inputLabel), { target: { value: 'continue' } });
     fireEvent.click(screen.getByRole('button', { name: labels.send }));
     await screen.findByText('Réponse continue');
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(body.messages).toHaveLength(30);
-    expect(body.messages[0]).toMatchObject({ content: 'history-7' });
+    expect(body.messages).toHaveLength(40);
+    expect(body.messages[0]).toMatchObject({ content: 'history-2' });
     expect(body.messages.at(-1)).toMatchObject({ role: 'user', content: 'continue' });
   });
 

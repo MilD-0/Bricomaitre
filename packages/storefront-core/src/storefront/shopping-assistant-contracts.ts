@@ -64,7 +64,7 @@ export const shoppingAssistantPageContextSchema = z
 export const shoppingAssistantRequestSchema = z
   .object({
     locale: shoppingAssistantLocaleSchema,
-    messages: z.array(shoppingAssistantMessageSchema).min(1).max(30),
+    messages: z.array(shoppingAssistantMessageSchema).min(1).max(40),
     context: shoppingAssistantPageContextSchema.optional(),
     telemetry: z
       .object({
@@ -142,7 +142,13 @@ export const shoppingAssistantStreamEventSchema = z.discriminatedUnion('type', [
       mode: z.enum(['ai', 'fallback']),
     })
     .strict(),
-  z.object({ type: z.literal('error'), code: z.literal('assistant_unavailable') }).strict(),
+  z
+    .object({
+      type: z.literal('error'),
+      code: z.literal('assistant_unavailable'),
+      products: z.array(shoppingAssistantProductSchema).max(8).optional(),
+    })
+    .strict(),
 ]);
 
 export const shoppingAssistantProductLookupSchema = z
@@ -188,3 +194,4 @@ export type ShoppingAssistantCatalogSearch = z.infer<typeof shoppingAssistantCat
 export type ShoppingAssistantPageContext = z.infer<typeof shoppingAssistantPageContextSchema>;
 export type ShoppingAssistantResponse = z.infer<typeof shoppingAssistantResponseSchema>;
 export type ShoppingAssistantStreamEvent = z.infer<typeof shoppingAssistantStreamEventSchema>;
+export type ShoppingAssistantToolName = z.infer<typeof shoppingAssistantToolNameSchema>;

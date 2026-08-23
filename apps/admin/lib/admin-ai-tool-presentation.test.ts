@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ADMIN_AI_PRESENTED_TOOL_NAMES,
+  adminAiToolActivityKey,
   adminAiToolPresentation,
 } from './admin-ai-tool-presentation';
 
@@ -62,7 +63,9 @@ describe('admin assistant tool presentation', () => {
     expect([...ADMIN_AI_PRESENTED_TOOL_NAMES].sort()).toEqual(toolNames.sort());
     for (const toolName of toolNames) {
       expect(adminAiToolPresentation(toolName, {}, 'fr').labelKey).not.toBe('result');
+      expect(adminAiToolActivityKey(toolName)).not.toBe('result');
     }
+    expect(adminAiToolActivityKey('query_analytics')).toBe('analytics');
   });
 
   it('links landing-page mutations to the exact persisted editor', () => {

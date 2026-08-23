@@ -15,6 +15,7 @@
     "build:apps": "pnpm build:storefront-api && pnpm build:admin && pnpm build:storefront",
     "test:admin": "pnpm --filter @bric/admin test",
     "test:admin:integration": "pnpm --filter @bric/admin test:integration",
+    "test:admin:browser": "pnpm --filter @bric/admin test:browser",
     "test:services": "pnpm --filter @bric/admin test:services",
     "test:ops": "pnpm --filter @bric/ops test",
     "test:storefront-api": "pnpm --filter @bric/storefront-api test",

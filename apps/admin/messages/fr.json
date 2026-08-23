@@ -1484,6 +1484,8 @@
     "close": "Fermer l’assistant IA",
     "title": "Assistant IA administrateur",
     "conversation": "Conversation avec l’assistant IA",
+    "conversationTab": "Conversation",
+    "mobilePanels": "Panneaux de l’espace assistant",
     "emptyTitle": "Comment puis-je vous aider dans cet espace ?",
     "currentSurface": "Espace actuel : {surface}",
     "surfaceLabels": {
@@ -1530,8 +1532,28 @@
     "placeholder": "Écrire à l’assistant IA",
     "send": "Envoyer",
     "thinking": "Traitement…",
+    "toolActivity": {
+      "running": "Travail en cours sur {tool}…",
+      "completed": "Travail terminé sur {tool}",
+      "failed": "Impossible de terminer le travail sur {tool}",
+      "labels": {
+        "products": "le catalogue et les fiches produits",
+        "taxonomy": "les marques et les catégories",
+        "orders": "les commandes",
+        "inventory": "le stock",
+        "assets": "les ressources de la vitrine et les pages d’atterrissage",
+        "proposals": "les propositions IA",
+        "bulletin": "le Bulletin",
+        "administration": "les accès et les rôles de l’équipe",
+        "storefront": "la configuration de la vitrine",
+        "background": "les tâches en arrière-plan",
+        "analytics": "les analyses canoniques",
+        "result": "les outils de l’assistant"
+      }
+    },
     "completed": "L’assistant a renvoyé les résultats demandés.",
     "error": "La demande à l’assistant IA a échoué.",
+    "interrupted": "La réponse a été interrompue. Vérifiez tout enregistrement concerné avant de réessayer.",
     "stopResponse": "Arrêter la réponse",
     "newChat": "Nouvelle discussion",
     "chats": "Vos discussions",
