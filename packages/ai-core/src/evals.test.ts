@@ -66,4 +66,26 @@ describe('AI evals', () => {
     expect(report.criteria.tools).toEqual({ evaluated: 2, passed: 2, passRate: 1 });
     expect(execute).toHaveBeenCalledTimes(2);
   });
+
+  it('retains execution failure evidence in the completion criterion', async () => {
+    const report = await runAiEvalSuite({
+      scenarios: [scenario],
+      execute: async () => {
+        throw new Error('provider timed out after retries');
+      },
+    });
+
+    expect(report.results[0]).toMatchObject({
+      scenarioId: scenario.id,
+      passed: false,
+    });
+    expect(report.results[0].criteria.find((criterion) => criterion.name === 'completion')).toEqual(
+      {
+        name: 'completion',
+        score: 0,
+        passed: false,
+        details: ['Run ended with failed: provider timed out after retries'],
+      },
+    );
+  });
 });

@@ -9,6 +9,8 @@ import {
   buildShoppingAssistantPageContext,
   classifyShoppingAssistantIntent,
   deterministicAssistantMessage,
+  isRetiredStorefrontAiModel,
+  shoppingAssistantToolPlan,
   shoppingAssistantInstructions,
   toAssistantCatalogProduct,
 } from './shopping-assistant';
@@ -114,7 +116,40 @@ describe('storefront shopping assistant', () => {
     );
     expect(classifyShoppingAssistantIntent('كم سعر هذا المنتج؟')).toBe('price');
     expect(classifyShoppingAssistantIntent('Je cherche une ponceuse')).toBe('product_search');
+    expect(classifyShoppingAssistantIntent('أحتاج أداة لثقب الخرسانة')).toBe('product_search');
+    expect(classifyShoppingAssistantIntent('Propose une alternative moins chère')).toBe(
+      'recommendation',
+    );
     expect(classifyShoppingAssistantIntent('Bonjour')).toBe('other');
+  });
+
+  it('plans required grounding and presentation steps from intent and surface context', () => {
+    expect(
+      shoppingAssistantToolPlan('Je cherche une perceuse en stock', {
+        hasInspectableProducts: false,
+      }),
+    ).toEqual({ groundingTool: 'search_catalog', presentProducts: true });
+    expect(
+      shoppingAssistantToolPlan('Compare les deux options', { hasInspectableProducts: true }),
+    ).toEqual({ groundingTool: 'inspect_products', presentProducts: true });
+    expect(
+      shoppingAssistantToolPlan('هل هذه القطع متوافقة؟', { hasInspectableProducts: true }),
+    ).toEqual({ groundingTool: 'inspect_products', presentProducts: false });
+    expect(
+      shoppingAssistantToolPlan('Explique les caractéristiques de ce produit', {
+        hasInspectableProducts: true,
+      }),
+    ).toEqual({ groundingTool: 'inspect_products', presentProducts: false });
+    expect(shoppingAssistantToolPlan('Bonjour', { hasInspectableProducts: true })).toEqual({
+      groundingTool: null,
+      presentProducts: false,
+    });
+  });
+
+  it('retires the legacy Mini model aliases from storefront execution', () => {
+    expect(isRetiredStorefrontAiModel('gpt-5-mini')).toBe(true);
+    expect(isRetiredStorefrontAiModel('openai/gpt-5-mini')).toBe(true);
+    expect(isRetiredStorefrontAiModel('openai/gpt-5.6-luna')).toBe(false);
   });
 
   it('reduces conversational prompts to catalog search terms without losing models', () => {

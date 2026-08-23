@@ -98,7 +98,11 @@ describe('POST /api/ai/chat', () => {
       brands: [{ id: 2, name: 'Bric Pro' }],
       categories: [{ id: 3, name: 'Perçage' }],
     });
-    mocks.settings.mockResolvedValue({ aiAssistantEnabled: true });
+    mocks.settings.mockResolvedValue({
+      aiAssistantEnabled: true,
+      aiModel: 'storefront-model-id',
+      aiFallbackModel: null,
+    });
     mocks.cartValidation.mockResolvedValue({ items: [catalogProduct] });
     mocks.assets.mockResolvedValue({
       banners: [],
@@ -297,7 +301,7 @@ describe('POST /api/ai/chat', () => {
             limit: 24,
           },
         },
-        messages: [{ role: 'user', content: 'Une perceuse pour le béton' }],
+        messages: [{ role: 'user', content: 'Je cherche une perceuse pour le béton' }],
       }),
     );
     const events = await streamEvents(response);
@@ -307,10 +311,56 @@ describe('POST /api/ai/chat', () => {
     expect(modelOptions).toHaveProperty('tools.search_catalog');
     expect(modelOptions).toHaveProperty('tools.inspect_products');
     expect(modelOptions).toHaveProperty('tools.present_products');
+    expect(modelOptions.maxOutputTokens).toBe(900);
+    expect(
+      (modelOptions.prepareStep as (input: { stepNumber: number }) => unknown)({ stepNumber: 0 }),
+    ).toEqual({
+      activeTools: ['search_catalog'],
+      toolChoice: { type: 'tool', toolName: 'search_catalog' },
+    });
     expect(modelOptions.prompt).toContain('complete public catalog');
     expect(modelOptions.prompt).toContain('"total":1043');
     expect(modelOptions.prompt).toContain('Perceuse béton');
     expect(mocks.catalog).toHaveBeenCalledTimes(1);
+  });
+
+  it('continues with the configured capability fallback when the primary model fails', async () => {
+    mocks.settings.mockResolvedValue({
+      aiAssistantEnabled: true,
+      aiModel: 'primary-model',
+      aiFallbackModel: 'fallback-model',
+    });
+    mocks.streamText
+      .mockImplementationOnce(() => ({
+        stream: (async function* () {
+          yield { type: 'error', error: new Error('primary provider failed') };
+        })(),
+      }))
+      .mockImplementationOnce(() => ({
+        stream: (async function* () {
+          yield { type: 'text-delta', text: 'Le modèle de secours répond.' };
+          yield {
+            type: 'finish',
+            totalUsage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 },
+          };
+        })(),
+      }));
+
+    const response = await POST(
+      request({ locale: 'fr', messages: [{ role: 'user', content: 'Bonjour' }] }),
+    );
+    const events = await streamEvents(response);
+
+    expect(events.at(-1)).toMatchObject({ type: 'result', mode: 'ai', products: [] });
+    expect(mocks.createModel).toHaveBeenNthCalledWith(1, expect.anything(), 'storefront', {
+      model: 'primary-model',
+    });
+    expect(mocks.createModel).toHaveBeenNthCalledWith(2, expect.anything(), 'storefront', {
+      model: 'fallback-model',
+    });
+    expect(mocks.recordRun).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'completed', model: 'fallback-model' }),
+    );
   });
 
   it('cancels provider generation and records the interrupted run when the shopper stops', async () => {

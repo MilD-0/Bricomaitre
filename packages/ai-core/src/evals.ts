@@ -23,6 +23,7 @@ export type AiEvalScenario<Input = unknown> = {
 export type AiEvalTranscript = {
   status: 'completed' | 'failed' | 'cancelled';
   answer: string;
+  failureReason?: string;
   toolCalls?: Array<{ name: string; status?: 'completed' | 'failed' }>;
   renderedEntityIds?: number[];
 };
@@ -72,11 +73,18 @@ function languageScore(answer: string, locale: AiEvalLocale) {
 
 function completionCriterion(transcript: AiEvalTranscript): AiEvalCriterion {
   const passed = transcript.status === 'completed';
+  const failureReason = transcript.failureReason?.trim();
   return {
     name: 'completion',
     score: passed ? 1 : 0,
     passed,
-    details: passed ? [] : [`Run ended with ${transcript.status}.`],
+    details: passed
+      ? []
+      : [
+          failureReason
+            ? `Run ended with ${transcript.status}: ${failureReason}`
+            : `Run ended with ${transcript.status}.`,
+        ],
   };
 }
 
@@ -276,6 +284,7 @@ export async function runAiEvalSuite<Input>(input: {
           results[index] = evaluateAiTranscript(scenario, {
             status: 'failed',
             answer: `Evaluation failed: ${detail}`,
+            failureReason: detail,
           });
         }
       }

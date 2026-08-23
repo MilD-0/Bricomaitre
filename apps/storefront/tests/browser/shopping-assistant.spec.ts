@@ -34,7 +34,9 @@ const assistantStreamBody =
     .map((event) => JSON.stringify(event))
     .join('\n') + '\n';
 
-test('offers a grounded, private product-advisor conversation in French', async ({ page }) => {
+test('offers a grounded, fully observable product-advisor conversation in French', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 486, height: 870 });
   const analyticsBodies: string[] = [];
   let assistantRequest: Record<string, unknown> | null = null;
@@ -72,7 +74,7 @@ test('offers a grounded, private product-advisor conversation in French', async 
   );
   await advisor
     .getByLabel('Votre question sur les produits')
-    .fill('Une perceuse privée pour du béton');
+    .fill('Une perceuse fiable pour du béton');
   await advisor.getByRole('button', { name: 'Envoyer la question' }).click();
 
   await expect(advisor.getByText(/option la plus proche/)).toBeVisible();
@@ -97,12 +99,12 @@ test('offers a grounded, private product-advisor conversation in French', async 
   );
   expect(assistantRequest).toMatchObject({
     locale: 'fr',
-    messages: [{ role: 'user', content: 'Une perceuse privée pour du béton' }],
+    messages: [{ role: 'user', content: 'Une perceuse fiable pour du béton' }],
   });
   await expect
     .poll(() => analyticsBodies.some((body) => body.includes('ai_assistant_message')))
     .toBe(true);
-  expect(analyticsBodies.join(' ')).not.toContain('Une perceuse privée pour du béton');
+  expect(analyticsBodies.join(' ')).toContain('Une perceuse fiable pour du béton');
 
   const accessibility = await new AxeBuilder({ page })
     .include('.shopping-assistant-sheet')
@@ -111,7 +113,7 @@ test('offers a grounded, private product-advisor conversation in French', async 
   expect(accessibility.violations).toEqual([]);
 });
 
-test('uses a real RTL mobile drawer and stays out of checkout', async ({ page }) => {
+test('uses a real RTL mobile drawer across the shopping and checkout journey', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await page.goto('/ar');
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
@@ -132,5 +134,5 @@ test('uses a real RTL mobile drawer and stays out of checkout', async ({ page })
   await expect(advisor).toHaveCount(0);
 
   await page.goto('/ar/checkout');
-  await expect(page.getByRole('button', { name: 'اعثر على الأداة المناسبة' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'اعثر على الأداة المناسبة' })).toBeVisible();
 });

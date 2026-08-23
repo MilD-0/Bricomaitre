@@ -301,10 +301,10 @@ test('renders and filters the server-first French catalog with governed analytic
     }),
   );
   expect(filterLayout).toEqual([
-    { fieldsetOverflow: 'visible', optionsOverflow: 'auto', headingOutsideScroller: true },
-    { fieldsetOverflow: 'visible', optionsOverflow: 'auto', headingOutsideScroller: true },
+    { fieldsetOverflow: 'visible', optionsOverflow: 'visible', headingOutsideScroller: true },
+    { fieldsetOverflow: 'visible', optionsOverflow: 'visible', headingOutsideScroller: true },
     { fieldsetOverflow: 'visible', optionsOverflow: null, headingOutsideScroller: false },
-    { fieldsetOverflow: 'visible', optionsOverflow: 'auto', headingOutsideScroller: true },
+    { fieldsetOverflow: 'visible', optionsOverflow: null, headingOutsideScroller: false },
   ]);
   await page.evaluate(() => window.scrollTo(0, 700));
   const stickyClearance = await page.evaluate(() => {

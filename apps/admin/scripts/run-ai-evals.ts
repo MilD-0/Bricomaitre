@@ -79,12 +79,19 @@ async function executeScenario(
   };
 }
 
-const report = await runAiEvalSuite({
-  scenarios: [...ADMIN_AI_EVAL_SCENARIOS],
-  execute: executeScenario,
-  concurrency: Number(process.env.AI_EVAL_CONCURRENCY ?? 2),
-});
+async function main() {
+  const report = await runAiEvalSuite({
+    scenarios: [...ADMIN_AI_EVAL_SCENARIOS],
+    execute: executeScenario,
+    concurrency: Number(process.env.AI_EVAL_CONCURRENCY ?? 1),
+  });
 
-console.log(JSON.stringify(report, null, 2));
-const threshold = Number(process.env.AI_EVAL_PASS_RATE ?? 0.85);
-if (report.passRate < threshold) process.exitCode = 1;
+  console.log(JSON.stringify(report, null, 2));
+  const threshold = Number(process.env.AI_EVAL_PASS_RATE ?? 0.85);
+  if (report.passRate < threshold) process.exitCode = 1;
+}
+
+void main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+});

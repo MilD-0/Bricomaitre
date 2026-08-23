@@ -41,7 +41,7 @@ export const storefrontSettingsInputSchema = z.object({
   mapUrl: nullableUrl,
   facebookUrl: nullableUrl,
   aiAssistantEnabled: z.boolean().default(true),
-  aiModel: z.string().trim().min(1).max(120).default('gpt-5-mini'),
+  aiModel: z.string().trim().min(1).max(120).default('openai/gpt-5.6-luna'),
   aiFallbackModel: nullableText(120),
 });
 
@@ -56,7 +56,7 @@ export const DEFAULT_STOREFRONT_SETTINGS: StorefrontSettingsInput = {
   mapUrl: 'https://maps.app.goo.gl/MpAM58nHS2G5JBah8',
   facebookUrl: 'https://www.facebook.com/profile.php?id=61562272954715',
   aiAssistantEnabled: true,
-  aiModel: 'gpt-5-mini',
+  aiModel: 'openai/gpt-5.6-luna',
   aiFallbackModel: null,
 };
 

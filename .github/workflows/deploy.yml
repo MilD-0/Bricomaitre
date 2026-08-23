@@ -301,6 +301,9 @@ jobs:
       DEPLOY_KNOWN_HOSTS: ${{ secrets.BRIC_DEPLOY_KNOWN_HOSTS }}
       ECOTRACK_EMIR_BASE_URL: ${{ secrets.ECOTRACK_EMIR_BASE_URL }}
       ECOTRACK_EMIR_TOKEN: ${{ secrets.ECOTRACK_EMIR_TOKEN }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      AI_STOREFRONT_MODEL: ${{ vars.AI_STOREFRONT_MODEL || 'openai/gpt-5.6-luna' }}
+      AI_STOREFRONT_FALLBACK_MODEL: ${{ vars.AI_STOREFRONT_FALLBACK_MODEL || 'deepseek/deepseek-v4-flash' }}
       ADMIN_META_ADS_SYNC_ENABLED: ${{ vars.ADMIN_META_ADS_SYNC_ENABLED || 'false' }}
       META_AD_ACCOUNT_ID: ${{ secrets.META_AD_ACCOUNT_ID }}
       META_ADS_ACCESS_TOKEN: ${{ secrets.META_ADS_ACCESS_TOKEN }}
@@ -413,6 +416,27 @@ jobs:
               grep -v -E "^ECOTRACK_EMIR_(BASE_URL|TOKEN)=" "$env_file" > "$tmp_file" || true
               printf "ECOTRACK_EMIR_BASE_URL=%s\nECOTRACK_EMIR_TOKEN=%s\n" "$emir_base_url" "$emir_token" >> "$tmp_file"
               mv "$tmp_file" "$env_file"
+            '
+          printf '%s\n%s\n%s\n' \
+            "$OPENROUTER_API_KEY" \
+            "$AI_STOREFRONT_MODEL" \
+            "$AI_STOREFRONT_FALLBACK_MODEL" | \
+            ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+              set -euo pipefail
+              IFS= read -r openrouter_api_key
+              IFS= read -r storefront_model
+              IFS= read -r storefront_fallback_model
+              test -n "$openrouter_api_key"
+              test -n "$storefront_model"
+              test -n "$storefront_fallback_model"
+              for env_file in /srv/bric/env/admin.env /srv/bric/env/storefront.env; do
+                umask 077
+                tmp_file="${env_file}.tmp.$$"
+                grep -v -E "^(OPENROUTER_API_KEY|AI_STOREFRONT_MODEL|AI_STOREFRONT_FALLBACK_MODEL)=" "$env_file" > "$tmp_file" || true
+                printf "OPENROUTER_API_KEY=%s\nAI_STOREFRONT_MODEL=%s\nAI_STOREFRONT_FALLBACK_MODEL=%s\n" \
+                  "$openrouter_api_key" "$storefront_model" "$storefront_fallback_model" >> "$tmp_file"
+                mv "$tmp_file" "$env_file"
+              done
             '
           printf '%s\n%s\n%s\n%s\n' \
             "$ADMIN_META_ADS_SYNC_ENABLED" \

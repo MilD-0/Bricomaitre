@@ -266,6 +266,22 @@ describe('production packaging and release runtime', () => {
     expect(compose).toContain('bric-storefront-meta-worker-heartbeat');
   });
 
+  it('gives the public commerce path explicit memory and OOM priority over admin', () => {
+    const compose = readFileSync(resolve(workspaceRoot, 'ops/docker/compose.prod.yml'), 'utf8');
+
+    expect(compose).toContain('oom_score_adj: ${BRIC_STOREFRONT_API_OOM_SCORE_ADJ:--900}');
+    expect(compose).toContain('mem_limit: ${BRIC_STOREFRONT_API_MEM_LIMIT:-1536m}');
+    expect(compose).toContain('mem_reservation: ${BRIC_STOREFRONT_API_MEM_RESERVATION:-1024m}');
+    expect(compose).toContain('oom_score_adj: ${BRIC_STOREFRONT_WEB_OOM_SCORE_ADJ:--900}');
+    expect(compose).toContain('mem_limit: ${BRIC_STOREFRONT_WEB_MEM_LIMIT:-3072m}');
+    expect(compose).toContain('mem_reservation: ${BRIC_STOREFRONT_WEB_MEM_RESERVATION:-1536m}');
+    expect(compose).toContain('oom_score_adj: ${BRIC_ADMIN_WEB_OOM_SCORE_ADJ:-500}');
+    expect(compose).toContain('mem_limit: ${BRIC_ADMIN_WEB_MEM_LIMIT:-1200m}');
+    expect(compose).toContain('oom_score_adj: ${BRIC_ADMIN_WORKER_OOM_SCORE_ADJ:-650}');
+    expect(compose).toContain('mem_limit: ${BRIC_ADMIN_WORKER_MEM_LIMIT:-640m}');
+    expect(compose).toContain('oom_score_adj: ${BRIC_NGINX_OOM_SCORE_ADJ:--950}');
+  });
+
   it('propagates the immutable release identity to every application process', () => {
     const compose = readFileSync(resolve(workspaceRoot, 'ops/docker/compose.prod.yml'), 'utf8');
 
@@ -308,7 +324,8 @@ describe('production packaging and release runtime', () => {
 
     expect(compose).toContain('\n  admin-blue:');
     expect(compose).toContain('\n  admin-green:');
-    expect(nginx).toContain('proxy_pass http://admin-${BRIC_ACTIVE_SLOT}:3000;');
+    expect(nginx).toContain('set $admin_upstream admin-${BRIC_ACTIVE_SLOT}:3000;');
+    expect(nginx).toContain('proxy_pass http://$admin_upstream;');
     expect(`${compose}\n${nginx}\n${blueGreen}\n${deploy}\n${rollback}`).not.toContain(
       ['admin', 'stration'].join(''),
     );
@@ -347,6 +364,12 @@ describe('production packaging and release runtime', () => {
     expect(compose).toContain('max-size: ${BRIC_LOG_MAX_SIZE:-20m}');
     expect(compose.match(/logging: \*default-logging/g)).toHaveLength(9);
     expect(compose).toContain('/var/cache/nginx:size=32m,mode=0755');
+    expect(compose).toContain(
+      'curl --fail --silent --show-error --insecure --resolve "${BRIC_API_DOMAIN:-api.example.com}:443:127.0.0.1"',
+    );
+    expect(compose).toContain(
+      'curl --fail --silent --show-error --insecure --resolve "${BRIC_STOREFRONT_DOMAIN:-www.example.com}:443:127.0.0.1"',
+    );
     expect(nginx).toContain('$request_method $uri $server_protocol');
     expect(nginx).toContain('$request_id $remote_addr');
     expect(nginx).not.toContain('"$request"');
