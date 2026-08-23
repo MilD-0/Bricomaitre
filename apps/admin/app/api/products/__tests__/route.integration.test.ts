@@ -10,6 +10,7 @@ const {
   requireMutationAccessMock,
   authMock,
   mutateEntityWithHistoryMock,
+  createProductMock,
   startProductCatalogFeedRefreshJobMock,
   revalidateStorefrontProductsMock,
 } = vi.hoisted(() => ({
@@ -18,6 +19,7 @@ const {
   requireMutationAccessMock: vi.fn(),
   authMock: vi.fn(),
   mutateEntityWithHistoryMock: vi.fn(),
+  createProductMock: vi.fn(),
   startProductCatalogFeedRefreshJobMock: vi.fn(),
   revalidateStorefrontProductsMock: vi.fn(),
 }));
@@ -41,6 +43,11 @@ vi.mock('../../../../lib/auth', () => ({
 
 vi.mock('../../../../lib/action-history', () => ({
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
+}));
+
+vi.mock('../../../../lib/product-update-workflow', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../lib/product-update-workflow')>()),
+  createProductThroughCanonicalWorkflow: createProductMock,
 }));
 
 vi.mock('../../../../lib/background-jobs', () => ({
@@ -75,6 +82,8 @@ describe('app/api/products/route', () => {
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mutateEntityWithHistoryMock.mockReset();
     mutateEntityWithHistoryMock.mockResolvedValue(undefined);
+    createProductMock.mockReset();
+    createProductMock.mockResolvedValue({ id: 55, slug: 'test-product' });
     startProductCatalogFeedRefreshJobMock.mockReset();
     startProductCatalogFeedRefreshJobMock.mockResolvedValue({ kind: 'started', job: null });
     revalidateStorefrontProductsMock.mockReset();
@@ -327,7 +336,7 @@ describe('app/api/products/route', () => {
     await expect(res.json()).resolves.toEqual({ error: { formErrors: ['invalid'] } });
   });
 
-  it('creates product and applies numeric formatting rules', async () => {
+  it('creates a product through the canonical lifecycle workflow', async () => {
     hasDbMock.mockReturnValue(true);
     const db = { marker: 'db' };
     getDbMock.mockReturnValue(db);
@@ -365,49 +374,20 @@ describe('app/api/products/route', () => {
 
     expect(requireMutationAccessMock).toHaveBeenCalledWith('products');
     expect(res.status).toBe(200);
-    expect(mutateEntityWithHistoryMock).toHaveBeenCalledWith(
+    expect(createProductMock).toHaveBeenCalledWith(
       db,
       expect.objectContaining({
-        entityType: 'products',
-        operation: 'create',
-        actor: { email: 'admin@example.com', name: 'Admin' },
-        execute: expect.any(Function),
-        resolveEntityId: expect.any(Function),
-      }),
-    );
-
-    const { execute, resolveEntityId } = mutateEntityWithHistoryMock.mock.calls[0][1];
-    const valuesMock = vi
-      .fn()
-      .mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 55 }]) });
-    const insertMock = vi.fn().mockReturnValue({ values: valuesMock });
-
-    await execute({
-      execute: vi.fn().mockResolvedValue(undefined),
-      select: vi.fn(() => ({
-        from: vi.fn(() => ({
-          where: vi.fn(() => ({ limit: vi.fn().mockResolvedValue([]) })),
-        })),
-      })),
-      insert: insertMock,
-    });
-
-    expect(insertMock).toHaveBeenCalledOnce();
-    expect(valuesMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        price: '12.30',
-        slug: 'test-product',
-        oldPrice: '14.00',
-        purchasePrice: '9.50',
-        active: true,
+        title: 'Test Product',
+        price: 12.3,
+        purchasePrice: 9.5,
         inventoryQuantity: 8,
       }),
+      { email: 'admin@example.com', name: 'Admin' },
     );
     expect(startProductCatalogFeedRefreshJobMock).toHaveBeenCalledWith(
       'product:create',
       'request-1',
     );
-    expect(resolveEntityId([{ id: 55 }])).toBe(55);
     expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
     expect(revalidateStorefrontProductsMock).toHaveBeenCalledOnce();
     await expect(res.json()).resolves.toEqual({ ok: true });

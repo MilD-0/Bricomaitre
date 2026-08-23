@@ -1,7 +1,10 @@
 export type AdminAiToolLabelKey =
   | 'catalog'
+  | 'productCreated'
   | 'catalogUpdated'
+  | 'productsArchived'
   | 'taxonomy'
+  | 'taxonomyUpdated'
   | 'orders'
   | 'ordersUpdated'
   | 'inventory'
@@ -45,9 +48,12 @@ export type AdminAiToolPresentation = {
 const labelKeys: Record<string, AdminAiToolLabelKey> = {
   find_products: 'catalog',
   inspect_products: 'catalog',
+  create_product: 'productCreated',
   update_products: 'catalogUpdated',
+  archive_products: 'productsArchived',
   find_brands: 'taxonomy',
   find_categories: 'taxonomy',
+  manage_taxonomy: 'taxonomyUpdated',
   inspect_orders: 'orders',
   update_order_status: 'ordersUpdated',
   update_order_details: 'ordersUpdated',
@@ -94,9 +100,12 @@ const labelKeys: Record<string, AdminAiToolLabelKey> = {
 const destinationKeys: Record<string, AdminAiToolDestinationKey> = {
   find_products: 'products',
   inspect_products: 'products',
+  create_product: 'products',
   update_products: 'products',
+  archive_products: 'products',
   find_brands: 'taxonomy',
   find_categories: 'taxonomy',
+  manage_taxonomy: 'taxonomy',
   inspect_orders: 'orders',
   update_order_status: 'orders',
   update_order_details: 'orders',

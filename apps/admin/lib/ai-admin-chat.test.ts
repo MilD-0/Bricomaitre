@@ -4,16 +4,23 @@ import { ADMIN_AI_CHAT_INSTRUCTIONS } from './ai-admin-chat';
 
 describe('admin AI chat instructions', () => {
   it('prevents duplicate analytics calls and overclaiming proposal activation', () => {
-    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('at most once');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('answer immediately without another query');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('never issue an identical query twice');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('requested versus effective ranges');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('Use focus.dimension');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('derive totals from visible ranked rows');
     expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('inactive records');
     expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('Never say approval alone makes them active');
   });
 
-  it('requires taxonomy resolution and keeps new taxonomy entities in draft state', () => {
+  it('requires taxonomy resolution and executes exact taxonomy changes directly', () => {
     expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('find_brands');
     expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('find_categories');
-    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('inactive drafts');
-    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('deactivation');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('call manage_taxonomy exactly once');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('Category hierarchy conflicts');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain(
+      'Assistant-invented taxonomy recommendations remain reviewable proposals',
+    );
   });
 
   it('requires verified persistence before treating an approved task as complete', () => {

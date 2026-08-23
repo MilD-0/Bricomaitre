@@ -1,19 +1,18 @@
-import { eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { categories } from '@bric/db/schema';
-import { mutateEntityWithHistory } from '../../../../lib/action-history';
 import { auth } from '../../../../lib/auth';
-import { readCategory, resolveCategorySlug } from '../../../../lib/brands-categories-api';
+import { readCategory } from '../../../../lib/brands-categories-api';
 import { categoryUpdateSchema } from '../../../../lib/brands-categories';
-import {
-  assertCategoryParentAllowed,
-  CategoryHierarchyError,
-} from '../../../../lib/category-hierarchy';
+import { CategoryHierarchyError } from '../../../../lib/category-hierarchy';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
 import { revalidateStorefrontProductMeta } from '../../../../lib/storefront-revalidate';
+import {
+  deleteCategoryThroughCanonicalWorkflow,
+  TaxonomyMutationNotFoundError,
+  updateCategoryThroughCanonicalWorkflow,
+} from '../../../../lib/taxonomy-mutations';
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await requireAppAccess();
@@ -60,59 +59,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const existing = await readCategory(numericId);
-  if (!existing) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-
   const db = getDb();
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
-  const data = parsed.data;
-
   try {
-    await mutateEntityWithHistory(db, {
-      entityType: 'categories',
-      entityId: numericId,
-      operation: 'update',
-      actor,
-      execute: async (tx) => {
-        if (data.parentId !== undefined) {
-          await assertCategoryParentAllowed(tx, numericId, data.parentId ?? null, {
-            lockHierarchy: true,
-          });
-        }
-        const update: {
-          name?: string;
-          slug?: string;
-          nameAr?: string | null;
-          image?: string | null;
-          parentId?: number | null;
-          isActive?: boolean;
-          updatedAt: Date;
-          updatedBy: string | null;
-          updatedByName: string | null;
-        } = {
-          updatedAt: new Date(),
-          updatedBy: actor.email ?? null,
-          updatedByName: actor.name ?? null,
-        };
-
-        if (data.name !== undefined) {
-          update.name = data.name;
-          update.slug = await resolveCategorySlug(data.name, numericId);
-        }
-        if (data.nameAr !== undefined) update.nameAr = data.nameAr;
-        if (data.imageUrl !== undefined) update.image = data.imageUrl;
-        if (data.parentId !== undefined) update.parentId = data.parentId ?? null;
-        if (data.status !== undefined) update.isActive = data.status === 'active';
-
-        await tx.update(categories).set(update).where(eq(categories.id, numericId));
-      },
-    });
+    await updateCategoryThroughCanonicalWorkflow(db, numericId, parsed.data, actor);
   } catch (error) {
     if (error instanceof CategoryHierarchyError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: 409 });
+    }
+    if (error instanceof TaxonomyMutationNotFoundError) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
     throw error;
   }
@@ -138,22 +95,18 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Invalid category id' }, { status: 400 });
   }
 
-  const existing = await readCategory(numericId);
-  if (!existing) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-
   const db = getDb();
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
-  await mutateEntityWithHistory(db, {
-    entityType: 'categories',
-    entityId: numericId,
-    operation: 'delete',
-    actor,
-    execute: (tx) => tx.delete(categories).where(eq(categories.id, numericId)),
-  });
+  try {
+    await deleteCategoryThroughCanonicalWorkflow(db, numericId, actor);
+  } catch (error) {
+    if (error instanceof TaxonomyMutationNotFoundError) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    throw error;
+  }
 
   await revalidateStorefrontProductMeta();
 

@@ -27,7 +27,17 @@ import {
   proposeLandingPage,
   proposeTaxonomyCreate,
 } from '../../../../lib/ai-admin-capabilities';
-import { queryAdminAnalytics } from '../../../../lib/ai-analytics';
+import {
+  ADMIN_AI_ANALYTICS_TOOL_DESCRIPTION,
+  adminAiAnalyticsQuerySchema,
+  queryAdminAnalytics,
+} from '../../../../lib/ai-analytics';
+import { ADMIN_AI_ANALYTICS_INSTRUCTIONS } from '../../../../lib/admin-ai-analytics-contract';
+import {
+  adminAiAnalyticsPlanMessage,
+  applyAdminAiAnalyticsQueryPlan,
+  planAdminAiAnalyticsQuery,
+} from '../../../../lib/admin-ai-analytics-plan';
 import {
   adjustAdminInventory,
   adminAiInventoryAdjustmentSchema,
@@ -55,10 +65,18 @@ import {
   updateAdminOrderStatuses,
 } from '../../../../lib/admin-ai-orders';
 import {
+  adminAiProductArchiveSchema,
+  adminAiProductCreateSchema,
   adminAiProductUpdateSchema,
+  archiveAdminAiProducts,
+  createAdminAiProduct,
   updateAdminAiProducts,
 } from '../../../../lib/admin-ai-products';
 import { adminAiAssetCrudSchema, manageAdminAiAsset } from '../../../../lib/admin-ai-assets';
+import {
+  adminAiTaxonomyMutationSchema,
+  manageAdminAiTaxonomy,
+} from '../../../../lib/admin-ai-taxonomy';
 import {
   adminAiLandingPageCreateSchema,
   adminAiLandingPageEditSchema,
@@ -94,7 +112,6 @@ import {
   adminAiContextMessage,
 } from '../../../../lib/admin-ai-capabilities';
 import { adminAiSurfaceContextSchema } from '../../../../lib/admin-ai-context';
-import { analytics2QuerySchema } from '../../../../lib/analytics2';
 import {
   adminAssetStateMutationSchema,
   reorderAdminAssets,
@@ -128,7 +145,12 @@ import {
   resolveAdminAiModel,
   supportsAdminAiReasoningEffort,
 } from '../../../../lib/admin-ai-models';
-import { adminAiGroundingTool, adminAiMutationTool } from '../../../../lib/admin-ai-tool-plan';
+import {
+  adminAiGroundingTool,
+  adminAiMutationTool,
+  adminAiRequestTimeoutMs,
+  adminAiStepPlan,
+} from '../../../../lib/admin-ai-tool-plan';
 
 const requestSchema = z
   .object({
@@ -154,7 +176,7 @@ const requestSchema = z
     reasoningEffort: input.reasoningEffort ?? getDefaultAdminAiReasoningEffort(input.model),
   }));
 
-export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-v16';
+export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-v21';
 export const ADMIN_AI_INLINE_PRODUCT_LIMIT = 20;
 
 const productLookupPermissions: PermissionKey[] = [
@@ -340,14 +362,26 @@ export async function POST(request: NextRequest) {
       section: parsed.data.context?.section,
       permissions,
     });
+    const analyticsInstructions =
+      groundingTool === 'query_analytics' || parsed.data.context?.surface === 'stats'
+        ? ` ${ADMIN_AI_ANALYTICS_INSTRUCTIONS}`
+        : '';
+    const analyticsPlan =
+      groundingTool === 'query_analytics'
+        ? planAdminAiAnalyticsQuery({
+            message: parsed.data.message,
+            context: parsed.data.context,
+          })
+        : null;
+    let analyticsQueryExecutionCount = 0;
     const result = streamText({
       model: createAiLanguageModel(config, 'admin', {
         model: selectedModel.model,
         openRouterRequestBody: selectedModel.openRouterRequestBody,
       }),
       instructions: parsed.data.context
-        ? `${ADMIN_AI_CHAT_INSTRUCTIONS} ${adminAiCapabilityInstructions(parsed.data.context, permissions)}`
-        : ADMIN_AI_CHAT_INSTRUCTIONS,
+        ? `${ADMIN_AI_CHAT_INSTRUCTIONS} ${adminAiCapabilityInstructions(parsed.data.context, permissions)}${analyticsInstructions}`
+        : `${ADMIN_AI_CHAT_INSTRUCTIONS}${analyticsInstructions}`,
       messages: [
         ...previousMessages,
         ...(parsed.data.context
@@ -358,25 +392,46 @@ export async function POST(request: NextRequest) {
               },
             ]
           : []),
+        ...(analyticsPlan
+          ? [
+              {
+                role: 'user' as const,
+                content: adminAiAnalyticsPlanMessage(analyticsPlan),
+              },
+            ]
+          : []),
         { role: 'user', content: parsed.data.message },
       ],
-      abortSignal: AbortSignal.any([request.signal, AbortSignal.timeout(config.requestTimeoutMs)]),
+      abortSignal: AbortSignal.any([
+        request.signal,
+        AbortSignal.timeout(adminAiRequestTimeoutMs(config.requestTimeoutMs, mutationTool)),
+      ]),
       maxRetries: config.maxRetries,
       maxOutputTokens: ADMIN_AI_MAX_OUTPUT_TOKENS,
       stopWhen: stepCountIs(8),
-      prepareStep: ({ stepNumber }) => {
-        if (stepNumber === 0 && groundingTool) {
+      prepareStep: ({ stepNumber, steps = [] }) => {
+        const analyticsQueryCount = steps.reduce(
+          (count, step) =>
+            count + step.toolCalls.filter((call) => call?.toolName === 'query_analytics').length,
+          0,
+        );
+        const plan = adminAiStepPlan({
+          stepNumber,
+          groundingTool,
+          mutationTool,
+          analyticsQueryCount,
+          analyticsQueryLimit: analyticsPlan?.maxQueries,
+        });
+        if (plan?.kind === 'force_tool') {
           return {
-            activeTools: [groundingTool],
-            toolChoice: { type: 'tool', toolName: groundingTool },
+            activeTools: [plan.toolName],
+            toolChoice: { type: 'tool', toolName: plan.toolName },
           };
         }
-        if (mutationTool && stepNumber === (groundingTool ? 1 : 0)) {
-          return {
-            activeTools: [mutationTool],
-            toolChoice: { type: 'tool', toolName: mutationTool },
-          };
+        if (plan?.kind === 'analytics_only') {
+          return { activeTools: ['query_analytics'], toolChoice: 'auto' };
         }
+        if (plan?.kind === 'answer_only') return { activeTools: [], toolChoice: 'none' };
         return undefined;
       },
       tools: {
@@ -403,24 +458,46 @@ export async function POST(request: NextRequest) {
           ? {
               inspect_products: tool({
                 description:
-                  'Read complete current product records through canonical product mutation inputs, including content, identifiers, prices, exact purchase cost, activation, availability, inventory quantity, taxonomy IDs, images, and complete promo-code rules. Resolve exact IDs or search across the full unarchived catalog.',
+                  'Read complete current product records through canonical product mutation inputs, including content, identifiers, prices, exact purchase cost, activation, availability, inventory quantity, taxonomy IDs, images, and complete promo-code rules. Resolve exact IDs or search across the full unarchived catalog. Before product creation, also resolve duplicate title/SKU candidates and any referenced brand or category name in this same read.',
                 inputSchema: z
                   .object({
                     query: z.string().trim().max(200).default(''),
                     productIds: z.array(z.number().int().positive()).max(20).default([]),
+                    brandQuery: z.string().trim().max(200).default(''),
+                    categoryQuery: z.string().trim().max(200).default(''),
                     page: z.number().int().positive().default(1),
                     limit: z.number().int().min(1).max(20).default(10),
                   })
-                  .refine((input) => input.query.length > 0 || input.productIds.length > 0, {
-                    message: 'Provide a search query or at least one product ID.',
-                  }),
+                  .refine(
+                    (input) =>
+                      input.query.length > 0 ||
+                      input.productIds.length > 0 ||
+                      input.brandQuery.length > 0 ||
+                      input.categoryQuery.length > 0,
+                    {
+                      message:
+                        'Provide a product search, product ID, brand query, or category query.',
+                    },
+                  ),
                 execute: inspectAdminProducts,
+              }),
+              create_product: tool({
+                description:
+                  'Create one exact product through the same canonical Product editor workflow, including unique slug resolution, identifier validation, numeric formatting, initial inventory, complete promo rules, action history, storefront refresh, and catalog-feed refresh. Resolve possible duplicates and named taxonomy first. The persisted active and availability fields determine whether it is live.',
+                inputSchema: adminAiProductCreateSchema,
+                execute: (input) => createAdminAiProduct(input, actor),
               }),
               update_products: tool({
                 description:
                   'Directly update up to 20 exact inspected products through the same complete replacement workflow as the Product editor. Supports content, identifiers, selling/purchase/old prices, activation, availability, taxonomy, images, and complete promo-code rules; inventory quantity remains owned by adjust_inventory. Preserves omitted fields, validates merged records and promo economics, keeps slug history and landing pages aligned, refreshes storefront caches once, queues the catalog feed once, and reports partial failures.',
                 inputSchema: adminAiProductUpdateSchema,
                 execute: (input) => updateAdminAiProducts(input, actor),
+              }),
+              archive_products: tool({
+                description:
+                  'Archive up to 20 exact inspected products through the same canonical Product delete workflow. Archiving disables sale and stock visibility without erasing historical order references. Report every archived and missing product.',
+                inputSchema: adminAiProductArchiveSchema,
+                execute: (input) => archiveAdminAiProducts(input, actor),
               }),
             }
           : {}),
@@ -443,6 +520,16 @@ export async function POST(request: NextRequest) {
                   limit: z.number().int().min(1).max(50).default(10),
                 }),
                 execute: findAdminCategories,
+              }),
+            }
+          : {}),
+        ...(hasPermission(permissions, 'brands_categories_write')
+          ? {
+              manage_taxonomy: tool({
+                description:
+                  'Directly create, update, activate, deactivate, reparent, or delete one exact brand or category through the same canonical taxonomy workflows as the admin UI. Resolve matching names and parent categories first. Category hierarchy cycles and missing parents are rejected; deletes preserve product records by clearing their taxonomy reference and refresh storefront metadata.',
+                inputSchema: adminAiTaxonomyMutationSchema,
+                execute: (input) => manageAdminAiTaxonomy(input, actor),
               }),
             }
           : {}),
@@ -737,10 +824,15 @@ export async function POST(request: NextRequest) {
         ...(hasPermission(permissions, 'analytics_manage')
           ? {
               query_analytics: tool({
-                description:
-                  'Read the canonical Analytics workspace. Choose command, money, acquisition, fulfillment, storefront, search, catalog, or assumptions; use the same range and grain controls as the UI. Every metric includes its canonical previous-period value and change when available. Raw SQL is never accepted.',
-                inputSchema: analytics2QuerySchema,
-                execute: queryAdminAnalytics,
+                description: ADMIN_AI_ANALYTICS_TOOL_DESCRIPTION,
+                inputSchema: adminAiAnalyticsQuerySchema,
+                execute: (input) => {
+                  const query =
+                    analyticsPlan && analyticsQueryExecutionCount++ === 0
+                      ? applyAdminAiAnalyticsQueryPlan(input, analyticsPlan)
+                      : input;
+                  return queryAdminAnalytics(query);
+                },
               }),
             }
           : {}),

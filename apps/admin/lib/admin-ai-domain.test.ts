@@ -162,6 +162,47 @@ describe('admin AI domain adapters', () => {
     expect(mocks.readProduct).toHaveBeenCalledWith('database', 12);
   });
 
+  it('checks product duplicates and resolves named taxonomy in one creation read', async () => {
+    mocks.searchProducts.mockResolvedValue({ items: [], page: 1, limit: 10, total: 0 });
+    mocks.readBrands.mockResolvedValue({
+      items: [
+        { id: 2, name: 'Bosch', slug: 'bosch', isActive: true, featured: false, productCount: 4 },
+      ],
+      pagination: { totalItems: 1 },
+    });
+    mocks.readCategories.mockResolvedValue({
+      items: [
+        {
+          id: 3,
+          name: 'Perceuses',
+          nameAr: 'مثاقب',
+          slug: 'perceuses',
+          parentId: null,
+          parentName: null,
+          isActive: true,
+          featured: false,
+          productCount: 8,
+        },
+      ],
+      pagination: { totalItems: 1 },
+    });
+
+    await expect(
+      inspectAdminProducts({
+        query: 'Perceuse compacte',
+        brandQuery: 'Bosch',
+        categoryQuery: 'Perceuses',
+      }),
+    ).resolves.toMatchObject({
+      items: [],
+      total: 0,
+      taxonomyMatches: {
+        brands: { items: [{ id: 2, name: 'Bosch' }], total: 1 },
+        categories: { items: [{ id: 3, name: 'Perceuses' }], total: 1 },
+      },
+    });
+  });
+
   it('resolves asset selection references in the same canonical inspection', async () => {
     mocks.loadAssets.mockResolvedValue({
       banners: [],

@@ -2,16 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, asc, count, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { orders, productPromoCodes, products } from '@bric/db/schema';
-import { mutateEntityWithHistory } from '../../../lib/action-history';
+import { orders, products } from '@bric/db/schema';
 import { auth } from '../../../lib/auth';
 import { startProductCatalogFeedRefreshJob } from '../../../lib/background-jobs';
 import { productListQuerySchema, productPayloadSchema } from '../../../lib/products';
-import { toProductMutationValues, toProductPromoRows } from '../../../lib/product-mutations';
 import {
-  assertUniqueProductIdentifiers,
+  createProductThroughCanonicalWorkflow,
   ProductIntegrityConflictError,
-} from '../../../lib/product-integrity';
+} from '../../../lib/product-update-workflow';
 import { requireMutationAccess } from '../../../lib/rbac';
 import { captureAdminException, getRequestId } from '../../../lib/sentry';
 import { CACHE_TAGS, createServerCache, revalidateServerTags } from '../../../lib/server-cache';
@@ -340,29 +338,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const data = parsed.data;
   const db = getDb();
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
-  const values = await toProductMutationValues(data);
 
   try {
-    await mutateEntityWithHistory(db, {
-      entityType: 'products',
-      operation: 'create',
-      actor,
-      execute: async (tx) => {
-        await assertUniqueProductIdentifiers(tx, values);
-        const rows = await tx.insert(products).values(values).returning({ id: products.id });
-        const productId = rows[0]?.id;
-        const promoCodes = data.promoCodes ?? [];
-        if (productId && promoCodes.length > 0) {
-          await tx.insert(productPromoCodes).values(toProductPromoRows(productId, promoCodes));
-        }
-        return rows;
-      },
-      resolveEntityId: (rows) => rows[0]?.id,
-    });
+    await createProductThroughCanonicalWorkflow(db, parsed.data, actor);
   } catch (error) {
     if (error instanceof ProductIntegrityConflictError) {
       return NextResponse.json({ error: error.message }, { status: 409 });

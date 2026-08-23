@@ -273,6 +273,415 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: { requiredTools: ['query_analytics'], forbiddenTools: ['inspect_orders'] },
   },
   {
+    id: 'admin-analytics-product-focus',
+    description:
+      'Uses the canonical catalog product decision dataset instead of accepting the generic dashboard truncation.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Analyse précisément la performance opérationnelle du produit « Perceuse Bosch 18 V » sur les 90 derniers jours : unités postées, unités payées et contribution.',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: {
+        query_analytics: {
+          view: 'catalog',
+          range: '90d',
+          focus: { dimension: 'products' },
+        },
+      },
+    },
+  },
+  {
+    id: 'admin-analytics-submitted-is-not-sale',
+    description:
+      'Keeps submitted demand, delivered outcomes, and paid outcomes semantically separate.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Du 1er au 23 août 2026, combien avons-nous fait de ventes ? Distingue précisément les commandes soumises, livrées et payées.',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: {
+        query_analytics: {
+          view: 'fulfillment',
+          range: 'custom',
+          startDate: '2026-08-01',
+          endDate: '2026-08-23',
+          focus: { dimension: 'cash_pipeline' },
+        },
+      },
+      requiredTerms: ['128', '79', '61'],
+      requiredAnyTerms: [
+        ['commandes soumises', 'demandes soumises'],
+        ['commandes livrées', 'livrées'],
+        ['commandes payées', 'payées'],
+      ],
+      requiredConcepts: [[['vente'], ['finalis', 'réalis', 'termin'], ['pas', 'non', 'ne ']]],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-submitted-is-not-sale-ar',
+    description: 'Preserves the submitted-versus-paid lifecycle distinction in Arabic.',
+    surface: 'admin',
+    locale: 'ar',
+    input: {
+      message:
+        'لدينا كم من المبيعات هذا الشهر؟ افصل بدقة بين الطلبات المقدمة والطلبات المسلمة والمدفوعة.',
+      surface: 'analytics',
+      locale: 'ar',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: {
+        query_analytics: {
+          view: 'fulfillment',
+          focus: { dimension: 'cash_pipeline' },
+        },
+      },
+      requiredTerms: ['128', '61'],
+      requiredAnyTerms: [
+        ['الطلبات المقدمة', 'طلبات مقدمة', 'طلبًا مقدمًا', 'طلباً مقدماً'],
+        ['ليست مبيعات مكتملة', 'لا تعني مبيعات مكتملة', 'ليست مبيعات منجزة'],
+        ['الطلبات المدفوعة', 'طلبات مدفوعة', 'طلبًا مدفوعًا', 'طلباً مدفوعاً', 'مدفوعة'],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-paid-contribution-vs-true-profit',
+    description:
+      'Separates automatic paid contribution from planning-based whole-business true profit.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Compare la contribution payée automatique au vrai profit sur les 30 derniers jours. Est-ce que le montant payé est notre profit global ?',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: { query_analytics: { view: 'money', range: '30d' } },
+      requiredTerms: ['310', '145'],
+      requiredAnyTerms: [
+        ['contribution payée automatique', 'contribution payée', 'profit payé automatique'],
+        ['vrai profit', 'profit réel'],
+      ],
+      requiredConcepts: [
+        [
+          ['contribution payée', 'montant payé', 'profit payé'],
+          ['vrai profit', 'profit global', 'profit de toute l’entreprise'],
+          ['pas', 'non', 'ne ', 'distinct', 'différent'],
+        ],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-observed-return-is-not-planning',
+    description:
+      'Treats the mature observed return rate as evidence rather than silently changing projections.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Le taux de retour observé est-il devenu notre hypothèse de projection ? Compare les deux taux et dis-moi ce qui changerait les projections.',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: { query_analytics: { view: 'assumptions' } },
+      requiredTerms: ['18', '24'],
+      requiredAnyTerms: [
+        ['taux de planification', 'taux planifié', 'hypothèse de planification'],
+        ['taux observé', 'retour observé'],
+        [
+          'action explicite',
+          'adoption explicite',
+          'changement explicite',
+          'modifier explicitement',
+        ],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-common-source-cutoff',
+    description: 'Uses the common source cutoff and never fills a missing tail with zero.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Croise commandes, Meta et EcoTrack du 1er au 23 août 2026 pour juger l’acquisition payante. Que valent les résultats du 17 au 23 août ?',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: {
+        query_analytics: {
+          view: 'acquisition',
+          range: 'custom',
+          startDate: '2026-08-01',
+          endDate: '2026-08-23',
+        },
+      },
+      requiredAnyTerms: [['16 août', '2026-08-16']],
+      requiredConcepts: [
+        [
+          ['commun', 'comparable'],
+          ['période', 'fenêtre', 'couverture', 'plage', 'périmètre'],
+        ],
+        [
+          ['indispon', 'absent', 'manquant', 'pas encore'],
+          ['zéro', 'nul'],
+          ['pas', 'non', 'ne '],
+        ],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-meta-attribution-window',
+    description:
+      'Refuses to infer historical campaign identity outside exact first-party attribution coverage.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Analyse les campagnes du 1er au 23 août 2026. Comme la table ne montre que Campagne Alpha, était-ce la seule campagne active avant le 10 août ?',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: {
+        query_analytics: {
+          view: 'acquisition',
+          range: 'custom',
+          startDate: '2026-08-01',
+          endDate: '2026-08-23',
+          focus: { dimension: 'campaigns' },
+        },
+      },
+      requiredAnyTerms: [
+        ['10 août', '2026-08-10'],
+        ['17 août', '2026-08-17'],
+        [
+          'ne permet pas de conclure',
+          'ne peut pas établir',
+          'ne permet pas d’établir',
+          "ne permet pas d'établir",
+          'ne permettent pas d’établir',
+          "ne permettent pas d'établir",
+          'impossible de conclure',
+          'pas que les autres campagnes étaient absentes',
+        ],
+        [
+          'couverture d’attribution',
+          "couverture d'attribution",
+          'attribution exacte',
+          'attribution historique',
+          'capture immuable',
+        ],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-modeled-decline',
+    description: 'Labels a dotted forecast decline as modeled rather than an observed collapse.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'La courbe pointillée plonge après le 23 août. Est-ce un effondrement réellement observé du profit ?',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: {
+        query_analytics: { view: 'money', focus: { dimension: 'forecast' } },
+      },
+      requiredAnyTerms: [
+        ['modélisé', 'projection', 'prévision'],
+        [
+          'pas observé',
+          'non observé',
+          'n’est pas observé',
+          "n'est pas observé",
+          'pas un effondrement réellement observé',
+          'pas de résultats comptables finalisés',
+        ],
+        ['ligne pointillée', 'courbe pointillée', 'pointillés', 'valeurs pointillées'],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-search-position-direction',
+    description: 'Understands that a lower Search Console average position is better.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Notre position Search Console passe de 8,4 à 5,2. Est-ce une dégradation ? Explique le sens de la métrique.',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: {
+        query_analytics: { view: 'search', focus: { dimension: 'search_trend' } },
+      },
+      requiredAnyTerms: [
+        ['5,2', '5.2'],
+        ['amélioration', 'meilleure position', 's’est améliorée', "s'est améliorée"],
+      ],
+      requiredConcepts: [
+        [
+          ['position'],
+          ['bas', 'baisse', 'diminu', '5,2', '5.2'],
+          ['meilleur', 'amélior', 'favorable', 'plus haut'],
+        ],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-profit-x-zero-spend',
+    description: 'Reports Profit × as unavailable when comparable Meta ad cost is zero.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Quel est le Profit × de la période si aucune dépense Meta comparable n’est enregistrée ?',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: { query_analytics: { view: 'money' } },
+      requiredAnyTerms: [
+        ['indisponible', 'non disponible', 'non calculable'],
+        [
+          'ni zéro ni infini',
+          'ni 0, ni l’infini',
+          "ni 0, ni l'infini",
+          'ni 0 ni l’infini',
+          "ni 0 ni l'infini",
+          'non égal à zéro ou à l’infini',
+          "non égal à zéro ou à l'infini",
+          'pas zéro',
+          'pas infini',
+        ],
+      ],
+      requiredConcepts: [
+        [
+          ['meta', 'publicitaire'],
+          ['0', 'zéro', 'nul', 'aucune'],
+        ],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-missing-cost-estimation',
+    description:
+      'Qualifies profit with exact-cost coverage and the canonical fallback margin without overstating precision.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Le vrai profit affiché est-il entièrement basé sur des coûts d’achat exacts ? Quantifie la couverture et explique le reste.',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: { query_analytics: { view: 'money' } },
+      requiredAnyTerms: [
+        ['92 %', '92%'],
+        ['30 %', '30%'],
+        ['marge estimée', 'estimation de marge', 'fallback'],
+        ['pas entièrement', 'partiellement estimé', 'contient une estimation'],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-friday-accounting',
+    description:
+      'Explains Friday calculator roll-forward without claiming actual Meta timestamps moved.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Pourquoi la dépense Meta du vendredi apparaît-elle sur le prochain jour ouvré dans le calculateur ? Les horodatages réels ont-ils été déplacés ?',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: {
+        query_analytics: { view: 'money', focus: { dimension: 'friday_weeks' } },
+      },
+      requiredAnyTerms: [
+        ['jour de repos', 'vendredi sans activité'],
+        ['calculateur', 'comptabilité du calculateur'],
+        [
+          'horodatages réels ne changent pas',
+          'horodatages réels n’ont pas été déplacés',
+          "horodatages réels n'ont pas été déplacés",
+          'ne déplace pas les horodatages',
+        ],
+      ],
+      requiredConcepts: [
+        [['vendredi'], ['reste', 'conserv'], ['enregistr', 'date réelle', 'horodatage original']],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-delivery-attempt-telemetry',
+    description:
+      'Treats zero recorded delivery attempts as missing provider telemetry, not proof of no attempt.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Une commande livrée affiche zéro tentative de livraison. Est-ce la preuve qu’aucune tentative n’a eu lieu ?',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: {
+        query_analytics: { view: 'fulfillment', focus: { dimension: 'attempt_outcomes' } },
+      },
+      requiredAnyTerms: [
+        ['télémétrie', 'données EcoTrack', 'données du transporteur'],
+        ['ne prouve pas', 'pas la preuve', 'ne signifie pas nécessairement', 'pas nécessairement'],
+      ],
+      requiredConcepts: [
+        [['absent', 'manqu', 'indispon', 'non fourni', 'pas transmis', 'aucun détail']],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
     id: 'admin-categorize-entire-catalog',
     description: 'Starts exactly one resumable bulk categorization job.',
     surface: 'admin',
@@ -321,12 +730,59 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     },
   },
   {
+    id: 'admin-product-create',
+    description:
+      'Checks duplicates and taxonomy before directly creating one complete canonical product.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Crée un produit « Perceuse compacte 12 V » de marque Bosch et catégorie Perceuses, prix 12 900 DZD, coût d’achat 8 000 DZD, 5 unités, actif et en stock.',
+      surface: 'products',
+    },
+    expectations: {
+      requiredTools: ['inspect_products', 'create_product'],
+      exactToolCounts: { create_product: 1 },
+      forbiddenTools: ['propose_product_edit'],
+    },
+  },
+  {
+    id: 'admin-product-archive',
+    description:
+      'Inspects an exact product before archiving it without deleting historical references.',
+    surface: 'admin',
+    locale: 'fr',
+    input: { message: 'Archive le produit 12 et retire-le du catalogue.', surface: 'products' },
+    expectations: {
+      requiredTools: ['inspect_products', 'archive_products'],
+      exactToolCounts: { archive_products: 1 },
+    },
+  },
+  {
     id: 'admin-taxonomy-create',
-    description: 'Checks taxonomy matches before proposing a new inactive brand.',
+    description: 'Checks taxonomy matches before directly creating the exact requested brand.',
     surface: 'admin',
     locale: 'fr',
     input: { message: 'Crée la marque Atelier Pro.', surface: 'brands_categories' },
-    expectations: { requiredTools: ['find_brands', 'propose_brand_create'] },
+    expectations: {
+      requiredTools: ['find_brands', 'manage_taxonomy'],
+      exactToolCounts: { manage_taxonomy: 1 },
+      forbiddenTools: ['propose_brand_create'],
+    },
+  },
+  {
+    id: 'admin-taxonomy-reparent',
+    description: 'Resolves the category before directly applying a hierarchy-safe parent change.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Déplace la catégorie 7 sous la catégorie Perceuses (ID 3).',
+      surface: 'brands_categories',
+    },
+    expectations: {
+      requiredTools: ['find_categories', 'manage_taxonomy'],
+      exactToolCounts: { manage_taxonomy: 1 },
+    },
   },
   {
     id: 'admin-background-work',

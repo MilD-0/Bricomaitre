@@ -129,4 +129,71 @@ export async function replaceProductThroughCanonicalWorkflow(
   };
 }
 
+export async function createProductThroughCanonicalWorkflow(
+  db: Database,
+  input: unknown,
+  actor: ProductMutationActor,
+) {
+  const data = productPayloadSchema.parse(input);
+  const values = await toProductMutationValues(data);
+  const rows = await mutateEntityWithHistory(db, {
+    entityType: 'products',
+    operation: 'create',
+    actor,
+    execute: async (tx) => {
+      await assertUniqueProductIdentifiers(tx, values);
+      const created = await tx.insert(products).values(values).returning({ id: products.id });
+      const productId = created[0]?.id;
+      if (!productId) throw new Error('Unable to create product.');
+      const promoRows = toProductPromoRows(productId, data.promoCodes);
+      if (promoRows.length > 0) await tx.insert(productPromoCodes).values(promoRows);
+      return created;
+    },
+    resolveEntityId: (result) => result[0]?.id,
+  });
+  const productId = rows[0]?.id;
+  if (!productId) throw new Error('Unable to create product.');
+  return {
+    id: productId,
+    slug: values.slug,
+    title: values.title,
+    price: values.price,
+    purchasePrice: values.purchasePrice,
+    active: values.active,
+    inStock: values.inStock,
+    availabilityStatus: values.availabilityStatus,
+    inventoryQuantity: values.inventoryQuantity,
+    brandId: values.brandId,
+    categoryId: values.categoryId,
+    promoCodeCount: data.promoCodes.length,
+  };
+}
+
+export async function archiveProductThroughCanonicalWorkflow(
+  db: Database,
+  productId: number,
+  actor: ProductMutationActor,
+) {
+  const rows = await mutateEntityWithHistory(db, {
+    entityType: 'products',
+    entityId: productId,
+    operation: 'update',
+    actor,
+    execute: (tx) =>
+      tx
+        .update(products)
+        .set({
+          archivedAt: new Date(),
+          active: false,
+          inStock: false,
+          availabilityStatus: 'out_of_stock',
+          updatedAt: new Date(),
+        })
+        .where(eq(products.id, productId))
+        .returning({ id: products.id }),
+  });
+  if (!rows[0]?.id) throw new ProductMutationNotFoundError(productId);
+  return { id: productId, archived: true as const };
+}
+
 export { ProductIntegrityConflictError };

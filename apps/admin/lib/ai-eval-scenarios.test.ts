@@ -27,17 +27,32 @@ describe('admin AI commercialization eval scenarios', () => {
 
   it('can grade a perfect tool trajectory for every scenario', () => {
     for (const scenario of ADMIN_AI_EVAL_SCENARIOS) {
-      const tools = Object.entries(scenario.expectations.exactToolCounts ?? {}).flatMap(
-        ([name, count]) => Array.from({ length: count }, () => ({ name })),
+      const tools: Array<{ name: string; input?: unknown }> = Object.entries(
+        scenario.expectations.exactToolCounts ?? {},
+      ).flatMap(([name, count]) =>
+        Array.from({ length: count }, () => ({ name }) as { name: string; input?: unknown }),
       );
       for (const name of scenario.expectations.requiredTools ?? []) {
         if (!tools.some((tool) => tool.name === name)) tools.push({ name });
       }
+      for (const [name, input] of Object.entries(scenario.expectations.requiredToolInputs ?? {})) {
+        const tool = tools.find((candidate) => candidate.name === name);
+        if (tool) tool.input = input;
+        else tools.push({ name, input });
+      }
       expect(
         evaluateAiTranscript(scenario, {
           status: 'completed',
-          answer:
-            'Voici le résultat opérationnel demandé, fondé sur les données actuelles de l’application.',
+          answer: [
+            scenario.locale === 'ar'
+              ? 'هذه هي النتيجة التشغيلية المطلوبة بناءً على بيانات التطبيق الحالية.'
+              : 'Voici le résultat opérationnel demandé, fondé sur les données actuelles de l’application.',
+            ...(scenario.expectations.requiredTerms ?? []),
+            ...(scenario.expectations.requiredAnyTerms ?? []).map(([term]) => term),
+            ...(scenario.expectations.requiredConcepts ?? []).flatMap((concepts) =>
+              concepts.map(([term]) => term),
+            ),
+          ].join(' '),
           toolCalls: tools,
         }).passed,
         scenario.id,

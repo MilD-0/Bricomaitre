@@ -11,9 +11,12 @@ export type AiEvalScenario<Input = unknown> = {
     requiredTools?: string[];
     forbiddenTools?: string[];
     exactToolCounts?: Record<string, number>;
+    requiredToolInputs?: Record<string, Record<string, unknown>>;
     groundedEntityIds?: number[];
     requiredRenderedEntityIds?: number[];
     requiredTerms?: string[];
+    requiredAnyTerms?: string[][];
+    requiredConcepts?: string[][][];
     forbiddenTerms?: string[];
     minimumAnswerCharacters?: number;
     passThreshold?: number;
@@ -24,7 +27,7 @@ export type AiEvalTranscript = {
   status: 'completed' | 'failed' | 'cancelled';
   answer: string;
   failureReason?: string;
-  toolCalls?: Array<{ name: string; status?: 'completed' | 'failed' }>;
+  toolCalls?: Array<{ name: string; status?: 'completed' | 'failed'; input?: unknown }>;
   renderedEntityIds?: number[];
 };
 
@@ -55,12 +58,22 @@ export type AiEvalSuiteReport = {
   >;
 };
 
+export type CompactAiEvalSuiteReport = Omit<AiEvalSuiteReport, 'results'> & {
+  failures: AiEvalResult[];
+};
+
 function boundedScore(value: number) {
   return Math.max(0, Math.min(1, value));
 }
 
 function normalized(value: string) {
-  return value.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g, ' ').trim();
+  return value
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .replace(/[’]/g, "'")
+    .toLocaleLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function languageScore(answer: string, locale: AiEvalLocale) {
@@ -97,7 +110,8 @@ function toolsCriterion(
   if (
     !expected.requiredTools?.length &&
     !expected.forbiddenTools?.length &&
-    !expected.exactToolCounts
+    !expected.exactToolCounts &&
+    !expected.requiredToolInputs
   )
     return null;
   const calls = transcript.toolCalls ?? [];
@@ -127,9 +141,40 @@ function toolsCriterion(
     checks.push(passed);
     if (!passed) details.push(`Tool ${name} ran ${actual} times; expected ${count}.`);
   }
+  for (const [name, expectedInput] of Object.entries(expected.requiredToolInputs ?? {})) {
+    const passed = calls.some(
+      (call) =>
+        call.name === name &&
+        call.status !== 'failed' &&
+        partialObjectMatch(call.input, expectedInput),
+    );
+    checks.push(passed);
+    if (!passed) {
+      const failure = `Tool ${name} did not receive the required input fragment ${JSON.stringify(expectedInput)}.`;
+      details.push(failure);
+      hardFailures.push(failure);
+    }
+  }
 
   const score = checks.length ? checks.filter(Boolean).length / checks.length : 1;
   return { name: 'tools', score, passed: score === 1, details };
+}
+
+function partialObjectMatch(actual: unknown, expected: unknown): boolean {
+  if (Array.isArray(expected)) {
+    return (
+      Array.isArray(actual) &&
+      expected.length === actual.length &&
+      expected.every((value, index) => partialObjectMatch(actual[index], value))
+    );
+  }
+  if (expected && typeof expected === 'object') {
+    if (!actual || typeof actual !== 'object' || Array.isArray(actual)) return false;
+    return Object.entries(expected as Record<string, unknown>).every(([key, value]) =>
+      partialObjectMatch((actual as Record<string, unknown>)[key], value),
+    );
+  }
+  return Object.is(actual, expected);
 }
 
 function groundingCriterion(
@@ -182,6 +227,27 @@ function contentCriterion(
     const passed = answer.includes(normalized(term));
     checks.push(passed);
     if (!passed) details.push(`Required term was absent: ${term}.`);
+  }
+  for (const alternatives of expected.requiredAnyTerms ?? []) {
+    const passed = alternatives.some((term) => answer.includes(normalized(term)));
+    checks.push(passed);
+    if (!passed) {
+      details.push(`None of the required alternative terms appeared: ${alternatives.join(' | ')}.`);
+    }
+  }
+  for (const concepts of expected.requiredConcepts ?? []) {
+    const missing = concepts.filter(
+      (alternatives) => !alternatives.some((term) => answer.includes(normalized(term))),
+    );
+    const passed = missing.length === 0;
+    checks.push(passed);
+    if (!passed) {
+      details.push(
+        `Required concept assertion was incomplete; missing: ${missing
+          .map((alternatives) => alternatives.join(' | '))
+          .join(' AND ')}.`,
+      );
+    }
   }
   for (const term of expected.forbiddenTerms ?? []) {
     const passed = !answer.includes(normalized(term));
@@ -261,6 +327,14 @@ export function summarizeAiEvalResults(results: AiEvalResult[]): AiEvalSuiteRepo
       : 1,
     results,
     criteria,
+  };
+}
+
+export function compactAiEvalSuiteReport(report: AiEvalSuiteReport): CompactAiEvalSuiteReport {
+  const { results, ...summary } = report;
+  return {
+    ...summary,
+    failures: results.filter((result) => !result.passed),
   };
 }
 

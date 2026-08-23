@@ -531,6 +531,7 @@ export async function loadSearchAnalytics(db: Database, filters: SearchAnalytics
     },
     indexHealth: index,
     source: {
+      fromDate: current.firstDay,
       throughDate: current.throughDay,
       updatedAt: current.syncedAt,
       records: current.days,
