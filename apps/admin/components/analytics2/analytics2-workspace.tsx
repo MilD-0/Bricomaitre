@@ -3900,6 +3900,7 @@ export function StatsWorkspace({ initialData }: { initialData: Analytics2Payload
       queryDurationMs: payload.diagnostics.queryDurationMs,
       responseSizeBytes: payload.diagnostics.responseSizeBytes,
       sources: payload.sources,
+      effectiveRanges: payload.effectiveRanges,
       warnings: payload.warnings,
       fetching: analyticsQuery.isFetching,
     }),

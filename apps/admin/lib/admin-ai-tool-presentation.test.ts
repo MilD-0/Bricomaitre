@@ -10,9 +10,12 @@ describe('admin assistant tool presentation', () => {
     const toolNames = [
       'find_products',
       'inspect_products',
+      'create_product',
       'update_products',
+      'archive_products',
       'find_brands',
       'find_categories',
+      'manage_taxonomy',
       'inspect_orders',
       'update_order_status',
       'update_order_details',

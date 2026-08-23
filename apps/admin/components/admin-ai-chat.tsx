@@ -31,6 +31,8 @@ import {
 } from 'recharts';
 
 import { consumeAdminAiChatResponse } from '../lib/admin-ai-chat-stream';
+import { localizedStatsUrl } from '../lib/analytics2-routes';
+import type { Analytics2View } from '../lib/analytics2';
 import { suggestionKeysForAdminAi } from '../lib/admin-ai-capabilities';
 import { adminAiToolPresentation } from '../lib/admin-ai-tool-presentation';
 import {
@@ -63,14 +65,55 @@ import { Switch } from './ui/switch';
 import { Textarea } from './ui/textarea';
 import { useAdminAiSurfaceContext } from './admin-ai-surface-context';
 
+type AnalyticsMetricResult = {
+  key: string;
+  name?: string;
+  value: unknown;
+  previous?: unknown;
+  changePct?: number | null;
+  unit?: string;
+  definition?: string;
+  requestedRange?: { startDate?: string | null; endDate?: string | null };
+  effectiveRange?: { startDate?: string | null; endDate?: string | null };
+  dateBasis?: string;
+  asOf?: string | null;
+  coveragePct?: number | null;
+  maturity?: string;
+  estimated?: boolean;
+  assumptions?: string[];
+  attributionCoveragePct?: number | null;
+  comparisonStatus?: string;
+  warning?: string | null;
+};
+type AnalyticsFocusResult = {
+  dimension?: string;
+  definition?: string;
+  dateBasis?: string;
+  totalSemantics?: string;
+  requestedRange?: { startDate?: string | null; endDate?: string | null };
+  effectiveRange?: { startDate?: string | null; endDate?: string | null };
+  available?: number;
+  matched?: number;
+  included?: number;
+  truncated?: boolean;
+  warning?: string | null;
+  rows?: unknown[];
+};
 type AnalyticsResult = {
   query?: string;
   view?: string;
   source?: string;
   definition?: string;
+  metrics?: AnalyticsMetricResult[];
+  focus?: AnalyticsFocusResult | null;
   data?: unknown;
   caveats?: string[];
-  filters?: { startDate?: string | null; endDate?: string | null; range?: string };
+  filters?: {
+    startDate?: string | null;
+    endDate?: string | null;
+    range?: string;
+    grain?: string;
+  };
   generatedAt?: string;
   sources?: Array<Record<string, unknown>>;
   warnings?: unknown[];
@@ -105,6 +148,17 @@ type AiJob = {
   errorMessage: string | null;
   resultSummary: Record<string, unknown> | null;
 };
+type LandingPageGenerationPresentation = {
+  status: 'completed' | 'partial-fallback' | 'full-fallback';
+  generatedSections: number;
+  plannedSections: number;
+  preservedSections: number;
+  fallbackSections: number;
+  skippedSections: number;
+  retryCount: number;
+  reasoning: string | null;
+  failures: Array<{ type: string | null; reason: string }>;
+};
 type ProposalNextAction = 'refresh' | 'regenerate' | 'review' | 'retry';
 
 const ADMIN_AI_JOB_LABEL_KEYS: Record<string, string> = {
@@ -127,6 +181,15 @@ export const ADMIN_AI_MODEL_STORAGE_KEY = 'bricomaitre:admin-ai:model';
 export const ADMIN_AI_REASONING_EFFORT_STORAGE_KEY = 'bricomaitre:admin-ai:reasoning-effort';
 
 const analyticsChartMetricKeys = [
+  'postedUnits',
+  'paidUnits',
+  'postedOrders',
+  'paidOrders',
+  'adCostDzd',
+  'spendEur',
+  'impressions',
+  'outboundClicks',
+  'clicks',
   'purchases',
   'unitsSold',
   'orders',
@@ -139,6 +202,8 @@ const analyticsChartMetricKeys = [
   'pageViews',
   'count',
   'totalValue',
+  'contributionLtvDzd',
+  'projectedContributionDzd',
 ] as const;
 const analyticsChartPalette = [
   'hsl(var(--chart-1))',
@@ -159,14 +224,69 @@ function finiteNumber(value: unknown) {
 }
 
 export function selectAnalyticsChartMetric(rows: Record<string, unknown>[], columns: string[]) {
-  const [selected] = analyticsChartMetricKeys
-    .filter((key) => columns.includes(key))
-    .map((key) => ({
-      key,
-      magnitude: Math.max(0, ...rows.map((row) => Math.abs(finiteNumber(row[key]) ?? 0))),
-    }))
-    .sort((left, right) => right.magnitude - left.magnitude);
-  return selected && selected.magnitude > 0 ? selected.key : null;
+  for (const key of analyticsChartMetricKeys) {
+    if (columns.includes(key) && rows.some((row) => Math.abs(finiteNumber(row[key]) ?? 0) > 0)) {
+      return key;
+    }
+  }
+  return null;
+}
+
+export function analyticsChartRows(rows: Record<string, unknown>[], valueKey: string | null) {
+  if (!valueKey) return [];
+  return rows.flatMap((row) => {
+    const value = finiteNumber(row[valueKey]);
+    return value == null ? [] : [{ ...row, __chartValue: value }];
+  });
+}
+
+const analyticsViews = new Set<Analytics2View>([
+  'command',
+  'money',
+  'acquisition',
+  'fulfillment',
+  'storefront',
+  'search',
+  'catalog',
+  'assumptions',
+]);
+
+function analyticsWorkspaceUrl(result: AnalyticsResult, locale: string) {
+  const view = result.view;
+  if (!view || !analyticsViews.has(view as Analytics2View)) return `/${locale}/stats`;
+  const source = Object.fromEntries(
+    Object.entries(result.filters ?? {}).flatMap(([key, value]) =>
+      typeof value === 'string' ? [[key, value]] : [],
+    ),
+  );
+  return localizedStatsUrl(locale, view as Analytics2View, source);
+}
+
+function analyticsFocusTable(focus: AnalyticsFocusResult | null | undefined) {
+  const rows = (focus?.rows ?? []).filter(
+    (row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object',
+  );
+  if (!rows.length) return null;
+  const columns = [...new Set(rows.flatMap((row) => Object.keys(row)))]
+    .filter((column) => rows.some((row) => isAdminAiScalar(row[column])))
+    .slice(0, 8);
+  return columns.length
+    ? {
+        path: focus?.dimension ?? 'focus',
+        rows: rows.slice(0, 20),
+        columns,
+        available: focus?.matched ?? rows.length,
+      }
+    : null;
+}
+
+function analyticsRangesDiffer(metric: AnalyticsMetricResult) {
+  return Boolean(
+    metric.requestedRange &&
+    metric.effectiveRange &&
+    (metric.requestedRange.startDate !== metric.effectiveRange.startDate ||
+      metric.requestedRange.endDate !== metric.effectiveRange.endDate),
+  );
 }
 
 function resultFromUnknown(value: unknown, depth = 0): AnalyticsResult[] {
@@ -263,58 +383,163 @@ function displayAdminAiValue(
   return text.length > 180 ? `${text.slice(0, 179)}…` : text;
 }
 
+function objectValue(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function landingPageGenerationPresentation(
+  toolName: string,
+  output: unknown,
+): LandingPageGenerationPresentation | null {
+  if (toolName !== 'create_landing_page' && toolName !== 'edit_landing_page') return null;
+  const generation = objectValue(objectValue(output)?.generation);
+  const stages = objectValue(generation?.stages);
+  if (!stages) return null;
+  const status = stages.status;
+  if (status !== 'completed' && status !== 'partial-fallback' && status !== 'full-fallback')
+    return null;
+  const count = (value: unknown) =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  const failures = Array.isArray(stages.failures)
+    ? stages.failures.flatMap((value) => {
+        const failure = objectValue(value);
+        return failure && typeof failure.reason === 'string'
+          ? [
+              {
+                type: typeof failure.type === 'string' ? failure.type : null,
+                reason: failure.reason,
+              },
+            ]
+          : [];
+      })
+    : [];
+  return {
+    status,
+    generatedSections: count(stages.generatedSections),
+    plannedSections: count(stages.plannedSections),
+    preservedSections: count(stages.preservedSections),
+    fallbackSections: count(stages.fallbackSections),
+    skippedSections: count(stages.skippedSections),
+    retryCount: count(stages.retryCount),
+    reasoning: typeof generation?.reasoning === 'string' ? generation.reasoning : null,
+    failures,
+  };
+}
+
 function adminAiNoticeText(value: unknown) {
   if (isAdminAiScalar(value)) return queryLabel(String(value ?? ''));
   const entries = adminAiScalarEntries(value, 5);
   return entries.map(([key, child]) => `${queryLabel(key)}: ${String(child ?? '—')}`).join(' · ');
 }
 
-function AnalyticsCard({ result }: { result: AnalyticsResult }) {
+function AnalyticsCard({
+  result,
+  onNavigate,
+}: {
+  result: AnalyticsResult;
+  onNavigate: () => void;
+}) {
   const t = useTranslations();
   const locale = useLocale();
   const displayValue = (value: unknown, unit?: string) =>
     displayAdminAiValue(value, locale, t('aiChat.yes'), t('aiChat.no'), unit);
 
   const data = result.data;
-  const metrics = adminAiMetricsFromUnknown(data).slice(0, 8);
-  const analyticsTables = adminAiResultTables(data).filter(
-    (table) => !table.path.endsWith('metrics'),
-  );
+  const metrics = (result.metrics?.length ? result.metrics : adminAiMetricsFromUnknown(data)).slice(
+    0,
+    8,
+  ) as AnalyticsMetricResult[];
+  const focusTable = analyticsFocusTable(result.focus);
+  const analyticsTables = focusTable
+    ? [focusTable]
+    : adminAiResultTables(data).filter((table) => !table.path.endsWith('metrics'));
   const [primaryTable] = analyticsTables;
   const rows = primaryTable?.rows ?? [];
   const summary = metrics.length === 0 ? adminAiScalarEntries(data, 8) : [];
   const allColumns = primaryTable?.columns ?? [];
   const labelKey = allColumns.find((key) =>
-    ['title', 'name', 'promoCode', 'sku', 'risk'].includes(key),
+    [
+      'title',
+      'name',
+      'promoCode',
+      'sku',
+      'risk',
+      'bucket',
+      'date',
+      'day',
+      'weekStart',
+      'status',
+      'key',
+      'query',
+      'city',
+    ].includes(key),
   );
   const valueKey = selectAnalyticsChartMetric(rows, allColumns);
-  const chartRows = valueKey
-    ? rows.map((row) => ({ ...row, __chartValue: finiteNumber(row[valueKey]) ?? 0 }))
-    : [];
+  const chartRows = analyticsChartRows(rows, valueKey);
+  const requestedRange = result.filters
+    ? { startDate: result.filters.startDate, endDate: result.filters.endDate }
+    : null;
+  const effectiveRange =
+    result.focus?.effectiveRange ?? metrics.find(analyticsRangesDiffer)?.effectiveRange ?? null;
+  const metricWarnings = [
+    ...new Set(
+      metrics.map((metric) => metric.warning).filter((value): value is string => Boolean(value)),
+    ),
+  ];
 
   return (
     <section className="mt-4 overflow-hidden rounded-[1.15rem] border border-border/60 bg-card shadow-[var(--shadow-vapor)]">
       <div className="border-b border-border/60 bg-secondary/35 px-4 py-3">
-        <p className="text-xs font-semibold capitalize text-foreground">
-          {queryLabel(result.view ?? result.query)}
-        </p>
-        {result.filters?.startDate || result.filters?.endDate ? (
-          <p className="mt-1 text-[0.68rem] text-muted-foreground">
-            {result.filters.startDate ?? '…'}–{result.filters.endDate ?? '…'}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold capitalize text-foreground">
+              {queryLabel(result.focus?.dimension ?? result.view ?? result.query)}
+            </p>
+            <p className="mt-0.5 text-[0.65rem] capitalize text-muted-foreground">
+              {queryLabel(result.view ?? result.query)}
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-[0.62rem] font-semibold text-primary">
+            Analytics
+          </span>
+        </div>
+        {requestedRange?.startDate || requestedRange?.endDate ? (
+          <p className="mt-2 text-[0.68rem] text-muted-foreground">
+            {t('aiChat.analyticsRequestedRange')}: {requestedRange.startDate ?? '…'}–
+            {requestedRange.endDate ?? '…'}
           </p>
         ) : null}
-        {result.definition ? (
-          <p className="mt-1 text-[0.68rem] leading-5 text-muted-foreground">{result.definition}</p>
+        {effectiveRange &&
+        (effectiveRange.startDate !== requestedRange?.startDate ||
+          effectiveRange.endDate !== requestedRange?.endDate) ? (
+          <p className="mt-1 text-[0.68rem] font-medium text-amber-700 dark:text-amber-300">
+            {t('aiChat.analyticsEffectiveRange')}: {effectiveRange.startDate ?? '…'}–
+            {effectiveRange.endDate ?? '…'}
+          </p>
+        ) : null}
+        {(result.focus?.definition ?? result.definition) ? (
+          <p className="mt-2 text-[0.68rem] leading-5 text-muted-foreground">
+            {result.focus?.definition ?? result.definition}
+          </p>
         ) : null}
       </div>
       {metrics.length ? (
-        <div className="grid grid-cols-2 gap-px bg-border/50 sm:grid-cols-4">
+        <div className="grid grid-cols-1 gap-px bg-border/50 sm:grid-cols-2">
           {metrics.map((metric) => (
-            <div key={metric.key} className="bg-card px-3 py-3">
-              <p className="truncate text-[0.66rem] capitalize text-muted-foreground">
-                {queryLabel(metric.key)}
-              </p>
-              <p className="mt-1 text-sm font-semibold text-foreground">
+            <div key={metric.key} className="min-w-0 bg-card px-3 py-3">
+              <div className="flex items-start justify-between gap-2">
+                <p className="min-w-0 text-[0.66rem] font-medium capitalize text-muted-foreground">
+                  {queryLabel(metric.name ?? metric.key)}
+                </p>
+                {metric.estimated ? (
+                  <span className="shrink-0 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[0.58rem] font-semibold text-amber-700 dark:text-amber-300">
+                    {t('aiChat.analyticsEstimated')}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-1 text-base font-semibold text-foreground">
                 {displayValue(metric.value, metric.unit)}
               </p>
               {'previous' in metric ? (
@@ -325,8 +550,53 @@ function AnalyticsCard({ result }: { result: AnalyticsResult }) {
                     : ''}
                 </p>
               ) : null}
+              {metric.definition ? (
+                <p className="mt-2 text-[0.65rem] leading-4 text-muted-foreground">
+                  {metric.definition}
+                </p>
+              ) : null}
+              {metric.asOf || typeof metric.coveragePct === 'number' ? (
+                <p className="mt-1.5 text-[0.62rem] leading-4 text-muted-foreground">
+                  {metric.asOf ? `${t('aiChat.analyticsAsOf')}: ${metric.asOf}` : ''}
+                  {metric.asOf && typeof metric.coveragePct === 'number' ? ' · ' : ''}
+                  {typeof metric.coveragePct === 'number'
+                    ? `${t('aiChat.analyticsCoverage')}: ${displayValue(metric.coveragePct, 'percent')}`
+                    : ''}
+                </p>
+              ) : null}
+              {analyticsRangesDiffer(metric) ? (
+                <p className="mt-1 text-[0.62rem] text-amber-700 dark:text-amber-300">
+                  {t('aiChat.analyticsEffectiveRange')}: {metric.effectiveRange?.startDate ?? '…'}–
+                  {metric.effectiveRange?.endDate ?? '…'}
+                </p>
+              ) : null}
             </div>
           ))}
+        </div>
+      ) : null}
+      {result.focus ? (
+        <div className="border-t border-border/50 px-4 py-3 text-[0.68rem] leading-5 text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="font-semibold text-foreground">
+              {t('aiChat.analyticsMatched', {
+                matched: result.focus.matched ?? 0,
+                available: result.focus.available ?? 0,
+              })}
+            </span>
+            {result.focus.dateBasis ? (
+              <span>
+                {t('aiChat.analyticsDateBasis')}: {result.focus.dateBasis}
+              </span>
+            ) : null}
+          </div>
+          {result.focus.totalSemantics ? (
+            <p className="mt-1">{result.focus.totalSemantics}</p>
+          ) : null}
+          {result.focus.warning ? (
+            <p className="mt-1 font-medium text-amber-700 dark:text-amber-300">
+              {result.focus.warning}
+            </p>
+          ) : null}
         </div>
       ) : null}
       {summary.length ? (
@@ -438,13 +708,21 @@ function AnalyticsCard({ result }: { result: AnalyticsResult }) {
               >
                 {queryLabel(String(source.key ?? ''))} · {queryLabel(String(source.state ?? ''))}
                 {typeof source.coveragePct === 'number' ? ` · ${source.coveragePct}%` : ''}
+                {typeof source.throughDate === 'string'
+                  ? ` · ${t('aiChat.analyticsAsOf')} ${source.throughDate}`
+                  : ''}
               </span>
             ))}
           </div>
         </div>
       ) : null}
-      {result.warnings?.length || result.truncations?.length ? (
+      {metricWarnings.length || result.warnings?.length || result.truncations?.length ? (
         <div className="space-y-1 border-t border-border/50 px-4 py-3 text-[0.68rem] leading-5 text-amber-700 dark:text-amber-300">
+          {metricWarnings.slice(0, 3).map((warning) => (
+            <p key={warning}>
+              {t('aiChat.analyticsWarning')}: {warning}
+            </p>
+          ))}
           {result.warnings?.slice(0, 3).map((warning, index) => (
             <p key={`warning-${index}`}>
               {t('aiChat.analyticsWarning')}: {adminAiNoticeText(warning)}
@@ -461,6 +739,19 @@ function AnalyticsCard({ result }: { result: AnalyticsResult }) {
           ))}
         </div>
       ) : null}
+      <div className="flex items-center justify-between gap-3 border-t border-border/50 px-4 py-3">
+        <p className="text-[0.62rem] text-muted-foreground">
+          {result.generatedAt ? `${t('aiChat.analyticsGeneratedAt')}: ${result.generatedAt}` : ''}
+        </p>
+        <Link
+          href={analyticsWorkspaceUrl(result, locale)}
+          onClick={onNavigate}
+          className="inline-flex h-8 shrink-0 items-center justify-center rounded-full bg-secondary px-3 text-xs font-semibold text-secondary-foreground shadow-[var(--shadow-vapor)] transition-colors hover:bg-accent hover:text-accent-foreground"
+        >
+          {t('aiChat.openAnalytics')}
+          <ArrowUpRight className="ms-1.5 size-3.5" />
+        </Link>
+      </div>
     </section>
   );
 }
@@ -477,8 +768,9 @@ function StructuredToolResultCard({
   const presentation = adminAiToolPresentation(result.toolName, result.output, locale);
   const displayValue = (value: unknown) =>
     displayAdminAiValue(value, locale, t('aiChat.yes'), t('aiChat.no'));
-  const summary = adminAiScalarEntries(result.output, 10);
-  const tables = adminAiResultTables(result.output);
+  const landingGeneration = landingPageGenerationPresentation(result.toolName, result.output);
+  const summary = landingGeneration ? [] : adminAiScalarEntries(result.output, 10);
+  const tables = landingGeneration ? [] : adminAiResultTables(result.output);
   const error =
     result.output &&
     typeof result.output === 'object' &&
@@ -500,6 +792,52 @@ function StructuredToolResultCard({
         <p className="px-4 py-3 text-xs text-destructive" role="alert">
           {error}
         </p>
+      ) : null}
+      {landingGeneration ? (
+        <div className="space-y-3 px-4 py-4">
+          <div>
+            <p className="text-xs font-semibold text-foreground">
+              {t(`aiChat.landingGeneration.status.${landingGeneration.status}`)}
+            </p>
+            {landingGeneration.reasoning ? (
+              <p className="mt-1 text-[0.7rem] leading-5 text-muted-foreground">
+                {landingGeneration.reasoning}
+              </p>
+            ) : null}
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {[
+              ['generated', landingGeneration.generatedSections],
+              ['planned', landingGeneration.plannedSections],
+              ['preserved', landingGeneration.preservedSections],
+              ['fallback', landingGeneration.fallbackSections],
+              ['skipped', landingGeneration.skippedSections],
+              ['retries', landingGeneration.retryCount],
+            ].map(([key, value]) => (
+              <div key={key} className="rounded-xl bg-secondary/45 px-3 py-2.5">
+                <p className="text-[0.64rem] text-muted-foreground">
+                  {t(`aiChat.landingGeneration.${key}`)}
+                </p>
+                <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">{value}</p>
+              </div>
+            ))}
+          </div>
+          {landingGeneration.failures.length ? (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/8 px-3 py-2.5">
+              <p className="text-[0.68rem] font-semibold text-amber-800 dark:text-amber-200">
+                {t('aiChat.landingGeneration.fallbackDetails')}
+              </p>
+              <ul className="mt-1 space-y-1 text-[0.68rem] text-amber-800/90 dark:text-amber-100/90">
+                {landingGeneration.failures.map((failure, index) => (
+                  <li key={`${failure.type ?? 'plan'}:${failure.reason}:${index}`}>
+                    {failure.type ? `${queryLabel(failure.type)} · ` : ''}
+                    {t(`aiChat.landingGeneration.reasons.${failure.reason}`)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
       ) : null}
       {summary.length ? (
         <div className="grid grid-cols-2 gap-px bg-border/50 sm:grid-cols-4">
@@ -555,7 +893,7 @@ function StructuredToolResultCard({
           </table>
         </div>
       ))}
-      {!error && summary.length === 0 && tables.length === 0 ? (
+      {!error && !landingGeneration && summary.length === 0 && tables.length === 0 ? (
         <p className="px-4 py-3 text-xs text-muted-foreground">{t('aiChat.noToolData')}</p>
       ) : null}
       {presentation.href && presentation.destinationKey ? (
@@ -1454,6 +1792,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
                                 <AnalyticsCard
                                   key={`${result.query}-${analyticsIndex}`}
                                   result={result}
+                                  onNavigate={() => setOpen(false)}
                                 />
                               ))
                             : null}

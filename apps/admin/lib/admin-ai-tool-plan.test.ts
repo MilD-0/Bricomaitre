@@ -1,6 +1,66 @@
 import { describe, expect, it } from 'vitest';
 
-import { adminAiGroundingTool, adminAiMutationTool } from './admin-ai-tool-plan';
+import {
+  ADMIN_AI_LONG_OPERATION_TIMEOUT_MS,
+  adminAiGroundingTool,
+  adminAiMutationTool,
+  adminAiRequestTimeoutMs,
+  adminAiStepPlan,
+} from './admin-ai-tool-plan';
+
+describe('admin AI model-loop planning', () => {
+  it('keeps ordinary requests bounded while allowing staged landing-page work to finish', () => {
+    expect(adminAiRequestTimeoutMs(30_000, 'update_order_status')).toBe(30_000);
+    expect(adminAiRequestTimeoutMs(30_000, 'create_landing_page')).toBe(
+      ADMIN_AI_LONG_OPERATION_TIMEOUT_MS,
+    );
+    expect(adminAiRequestTimeoutMs(30_000, 'edit_landing_page')).toBe(
+      ADMIN_AI_LONG_OPERATION_TIMEOUT_MS,
+    );
+  });
+
+  it('forces canonical Analytics first, isolates later Analytics work, and bounds cross-view plans', () => {
+    expect(
+      adminAiStepPlan({ stepNumber: 0, groundingTool: 'query_analytics', mutationTool: null }),
+    ).toEqual({ kind: 'force_tool', toolName: 'query_analytics' });
+    expect(
+      adminAiStepPlan({
+        stepNumber: 1,
+        groundingTool: 'query_analytics',
+        mutationTool: null,
+        analyticsQueryCount: 1,
+        analyticsQueryLimit: 3,
+      }),
+    ).toEqual({ kind: 'analytics_only' });
+    expect(
+      adminAiStepPlan({
+        stepNumber: 1,
+        groundingTool: 'query_analytics',
+        mutationTool: null,
+        analyticsQueryCount: 1,
+        analyticsQueryLimit: 1,
+      }),
+    ).toEqual({ kind: 'answer_only' });
+    expect(
+      adminAiStepPlan({
+        stepNumber: 3,
+        groundingTool: 'query_analytics',
+        mutationTool: null,
+        analyticsQueryCount: 3,
+      }),
+    ).toEqual({ kind: 'answer_only' });
+  });
+
+  it('preserves read-then-write sequencing for explicit operations', () => {
+    expect(
+      adminAiStepPlan({
+        stepNumber: 1,
+        groundingTool: 'inspect_orders',
+        mutationTool: 'update_order_status',
+      }),
+    ).toEqual({ kind: 'force_tool', toolName: 'update_order_status' });
+  });
+});
 
 describe('admin AI first-step grounding', () => {
   it.each([
@@ -72,6 +132,20 @@ describe('admin AI first-step grounding', () => {
         permissions: ['products_write'],
       }),
     ).toBe('inspect_products');
+    expect(
+      adminAiGroundingTool({
+        surface: 'products',
+        message: 'Crée un produit Perceuse compacte à 12 900 DZD.',
+        permissions: ['products_write'],
+      }),
+    ).toBe('inspect_products');
+    expect(
+      adminAiGroundingTool({
+        surface: 'products',
+        message: 'Archive le produit 12.',
+        permissions: ['products_write'],
+      }),
+    ).toBe('inspect_products');
   });
 
   it('does not force data access for help or without the domain permission', () => {
@@ -132,11 +206,25 @@ describe('admin AI explicit mutation planning', () => {
       'update_products',
     ],
     [
+      'products',
+      'Crée un produit Perceuse compacte à 12 900 DZD.',
+      ['products_write'],
+      'create_product',
+    ],
+    ['products', 'Archive le produit 12.', ['products_write'], 'archive_products'],
+    [
       'brands_categories',
       'Crée la marque Atelier Pro.',
       ['brands_categories_write'],
-      'propose_brand_create',
+      'manage_taxonomy',
     ],
+    [
+      'brands_categories',
+      'Déplace la catégorie 7 sous la catégorie 3.',
+      ['brands_categories_write'],
+      'manage_taxonomy',
+    ],
+    ['brands_categories', 'Supprime la marque 9.', ['brands_categories_write'], 'manage_taxonomy'],
   ] as const)(
     'plans one explicit %s mutation after grounding',
     (surface, message, permissions, expected) => {

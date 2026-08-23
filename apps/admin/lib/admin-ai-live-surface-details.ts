@@ -66,6 +66,7 @@ export function analyticsAiSurfaceDetails(input: {
   queryDurationMs: number;
   responseSizeBytes: number;
   sources: Array<{ key: string; state: string }>;
+  effectiveRanges?: Array<{ key: string; startDate: string | null; endDate: string }>;
   warnings: Array<{ key: string }>;
   fetching: boolean;
 }): AdminAiSurfaceDetails {
@@ -81,6 +82,9 @@ export function analyticsAiSurfaceDetails(input: {
       queryDurationMs: input.queryDurationMs,
       responseSizeBytes: input.responseSizeBytes,
       sourceStates: input.sources.map((source) => `${source.key}:${source.state}`).join(','),
+      effectiveRanges: (input.effectiveRanges ?? [])
+        .map((range) => `${range.key}:${range.startDate ?? 'all'}..${range.endDate}`)
+        .join(','),
       warnings: input.warnings.map((warning) => warning.key).join(','),
       fetching: input.fetching,
     },

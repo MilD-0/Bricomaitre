@@ -1,4 +1,10 @@
-import { createAiLanguageModel, getAiConfig, resolveAiModel, type AiConfig } from '@bric/ai-core';
+import {
+  createAiLanguageModel,
+  getAiConfig,
+  resolveAiModel,
+  strictStructuredOutputSchema,
+  type AiConfig,
+} from '@bric/ai-core';
 import {
   landingPageBenefitsBlockSchema,
   landingPageBlockSchema,
@@ -25,6 +31,8 @@ import { z } from 'zod';
 import { buildDefaultLandingPageDocument } from './landing-pages';
 
 export const LANDING_PAGE_PROMPT_VERSION = 'landing-page-v3-staged';
+export const LANDING_PAGE_MODEL_TIMEOUT_MS = 120_000;
+const LANDING_PAGE_STAGE_ATTEMPTS = 2;
 
 export const LANDING_PAGE_GENERATION_INSTRUCTIONS = [
   'You are the conversion-focused landing-page designer for Bricomaitre, an Algerian tools and equipment retailer.',
@@ -162,6 +170,12 @@ interface LandingPageGenerationStages {
   generatedSections: number;
   fallbackSections: number;
   skippedSections: number;
+  retryCount: number;
+  failures: Array<{
+    stage: 'plan' | 'block';
+    type: LandingPageBlock['type'] | null;
+    reason: 'timeout' | 'invalid-structured-output' | 'provider-error' | 'insufficient-assets';
+  }>;
 }
 
 export interface LandingPageGenerationResult {
@@ -250,6 +264,7 @@ export interface LandingPageEditResult extends LandingPageGenerationResult {
       blockId: string | null;
       type: LandingPageBlock['type'];
       action: 'preserved-existing' | 'skipped-new';
+      reason: LandingPageGenerationStages['failures'][number]['reason'];
     }>;
   };
 }
@@ -268,7 +283,7 @@ export async function generateLandingPageDraft(input: {
         input.generationInput.product.images,
       ),
     };
-  } catch {
+  } catch (error) {
     return {
       document: landingPageDocumentSchema.parse(input.fallbackDocument),
       reasoning:
@@ -284,6 +299,8 @@ export async function generateLandingPageDraft(input: {
         generatedSections: 0,
         fallbackSections: input.fallbackDocument.blocks.length,
         skippedSections: 0,
+        retryCount: 0,
+        failures: [{ stage: 'plan', type: null, reason: landingPageFailureReason(error) }],
       },
     };
   }
@@ -358,11 +375,11 @@ function createModelStageRunner(config: AiConfig): LandingPageStageRunner {
         instructions: `${LANDING_PAGE_GENERATION_INSTRUCTIONS} Return only the compact creative plan requested by the schema. Plan two to five distinct middle sections.`,
         prompt: JSON.stringify(input),
         output: Output.object({
-          schema: landingPagePlanSchema,
+          schema: strictStructuredOutputSchema(landingPagePlanSchema),
           name: 'storefront_landing_page_plan',
         }),
         maxRetries: config.maxRetries,
-        timeout: config.requestTimeoutMs,
+        timeout: Math.max(config.requestTimeoutMs, LANDING_PAGE_MODEL_TIMEOUT_MS),
       });
       return { plan: landingPagePlanSchema.parse(await result.output), usage: result.usage };
     },
@@ -378,11 +395,11 @@ function createModelStageRunner(config: AiConfig): LandingPageStageRunner {
           plannedSection: section,
         }),
         output: Output.object({
-          schema,
+          schema: strictStructuredOutputSchema(schema),
           name: `storefront_landing_page_${section.type.replaceAll('-', '_')}`,
         }),
         maxRetries: config.maxRetries,
-        timeout: config.requestTimeoutMs,
+        timeout: Math.max(config.requestTimeoutMs, LANDING_PAGE_MODEL_TIMEOUT_MS),
       });
       const rawBlock = schema.parse(await result.output) as Record<string, unknown>;
       const block = landingPageBlockSchema.parse({
@@ -403,18 +420,66 @@ function addUsage(total: TokenUsage, next: TokenUsage) {
   }
 }
 
+function landingPageFailureReason(
+  error: unknown,
+): LandingPageGenerationStages['failures'][number]['reason'] {
+  const name = error instanceof Error ? error.name.toLocaleLowerCase() : '';
+  const message = error instanceof Error ? error.message.toLocaleLowerCase() : '';
+  if (name.includes('timeout') || message.includes('timeout') || message.includes('timed out')) {
+    return 'timeout';
+  }
+  if (
+    name.includes('noobjectgenerated') ||
+    name.includes('typevalidation') ||
+    message.includes('schema') ||
+    message.includes('validation') ||
+    message.includes('invalid generated') ||
+    message.includes('malformed')
+  ) {
+    return 'invalid-structured-output';
+  }
+  return 'provider-error';
+}
+
+type LandingPageStageAttempt<T> =
+  | { status: 'fulfilled'; value: T; attempts: number }
+  | { status: 'rejected'; reason: unknown; attempts: number };
+
+async function attemptLandingPageStage<T>(operation: () => Promise<T>) {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= LANDING_PAGE_STAGE_ATTEMPTS; attempt += 1) {
+    try {
+      return {
+        status: 'fulfilled' as const,
+        value: await operation(),
+        attempts: attempt,
+      } satisfies LandingPageStageAttempt<T>;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  return {
+    status: 'rejected' as const,
+    reason: lastError,
+    attempts: LANDING_PAGE_STAGE_ATTEMPTS,
+  } satisfies LandingPageStageAttempt<T>;
+}
+
 async function generateSections(
   runner: LandingPageStageRunner,
   generationInput: LandingPageGenerationInput,
   sections: PlannedSection[],
 ) {
-  const results: Array<PromiseSettledResult<{ block: LandingPageBlock; usage: TokenUsage }>> = [];
+  const results: Array<LandingPageStageAttempt<{ block: LandingPageBlock; usage: TokenUsage }>> =
+    [];
   for (let offset = 0; offset < sections.length; offset += 2) {
     const batch = sections.slice(offset, offset + 2);
     results.push(
-      ...(await Promise.allSettled(
+      ...(await Promise.all(
         batch.map((section, index) =>
-          runner.generateBlock({ generationInput, section, index: offset + index }),
+          attemptLandingPageStage(() =>
+            runner.generateBlock({ generationInput, section, index: offset + index }),
+          ),
         ),
       )),
     );
@@ -443,20 +508,45 @@ export function createLandingPageGenerator(
   return {
     async generate(rawInput) {
       const input = landingPageGenerationInputSchema.parse(rawInput);
-      const { plan, usage: planUsage } = await runner.generatePlan(input);
+      const planned = await attemptLandingPageStage(() => runner.generatePlan(input));
+      if (planned.status === 'rejected') throw planned.reason;
+      const { plan, usage: planUsage } = planned.value;
       const eligibleSections = plan.sections.filter(
         (section) => section.type !== 'image-gallery' || new Set(input.product.images).size >= 2,
       );
       const sectionResults = await generateSections(runner, input, eligibleSections);
       const usage: TokenUsage = {};
       addUsage(usage, planUsage);
+      let retryCount = planned.attempts - 1;
 
       const generatedBlocks: LandingPageBlock[] = [];
       for (const result of sectionResults) {
+        retryCount += result.attempts - 1;
         if (result.status !== 'fulfilled') continue;
         generatedBlocks.push(result.value.block);
         addUsage(usage, result.value.usage);
       }
+
+      const failures: LandingPageGenerationStages['failures'] = [
+        ...plan.sections
+          .filter((section) => !eligibleSections.includes(section))
+          .map((section) => ({
+            stage: 'block' as const,
+            type: section.type,
+            reason: 'insufficient-assets' as const,
+          })),
+        ...sectionResults.flatMap((result, index) =>
+          result.status === 'rejected'
+            ? [
+                {
+                  stage: 'block' as const,
+                  type: eligibleSections[index]!.type,
+                  reason: landingPageFailureReason(result.reason),
+                },
+              ]
+            : [],
+        ),
+      ];
 
       const fallback = localFallbackFor(input);
       const presentTypes = new Set(generatedBlocks.map((block) => block.type));
@@ -525,6 +615,8 @@ export function createLandingPageGenerator(
           generatedSections: generatedBlocks.length,
           fallbackSections: fallbackBlocks.length,
           skippedSections,
+          retryCount,
+          failures,
         },
       };
     },
@@ -593,11 +685,11 @@ function createModelEditStageRunner(config: AiConfig): LandingPageEditStageRunne
           currentDocument: input.currentDocument,
         }),
         output: Output.object({
-          schema: landingPageEditPlanSchema,
+          schema: strictStructuredOutputSchema(landingPageEditPlanSchema),
           name: 'storefront_landing_page_edit_plan',
         }),
         maxRetries: config.maxRetries,
-        timeout: config.requestTimeoutMs,
+        timeout: Math.max(config.requestTimeoutMs, LANDING_PAGE_MODEL_TIMEOUT_MS),
       });
       return { plan: landingPageEditPlanSchema.parse(await result.output), usage: result.usage };
     },
@@ -614,11 +706,11 @@ function createModelEditStageRunner(config: AiConfig): LandingPageEditStageRunne
           existingBlock,
         }),
         output: Output.object({
-          schema,
+          schema: strictStructuredOutputSchema(schema),
           name: `storefront_landing_page_edit_${slot.type.replaceAll('-', '_')}`,
         }),
         maxRetries: config.maxRetries,
-        timeout: config.requestTimeoutMs,
+        timeout: Math.max(config.requestTimeoutMs, LANDING_PAGE_MODEL_TIMEOUT_MS),
       });
       const rawBlock = schema.parse(await result.output) as Record<string, unknown>;
       return {
@@ -643,16 +735,22 @@ export function createLandingPageEditor(
   return {
     async edit(rawInput: LandingPageEditInput): Promise<LandingPageEditResult> {
       const input = landingPageEditInputSchema.parse(rawInput);
-      const { plan, usage: planUsage } = await runner.generatePlan(input);
-      validateLandingPageEditPlan(plan, input.currentDocument);
+      const planned = await attemptLandingPageStage(async () => {
+        const result = await runner.generatePlan(input);
+        validateLandingPageEditPlan(result.plan, input.currentDocument);
+        return result;
+      });
+      if (planned.status === 'rejected') throw planned.reason;
+      const { plan, usage: planUsage } = planned.value;
 
       const currentById = new Map(input.currentDocument.blocks.map((block) => [block.id, block]));
       const usedIds = new Set(input.currentDocument.blocks.map((block) => block.id));
       const usage: TokenUsage = {};
       addUsage(usage, planUsage);
+      let retryCount = planned.attempts - 1;
       const settledByIndex = new Map<
         number,
-        PromiseSettledResult<{ block: LandingPageBlock; usage: TokenUsage }>
+        LandingPageStageAttempt<{ block: LandingPageBlock; usage: TokenUsage }>
       >();
 
       const generatedSlots = plan.blocks.flatMap((slot, index) =>
@@ -660,14 +758,16 @@ export function createLandingPageEditor(
       );
       for (let offset = 0; offset < generatedSlots.length; offset += 2) {
         const batch = generatedSlots.slice(offset, offset + 2);
-        const settled = await Promise.allSettled(
+        const settled = await Promise.all(
           batch.map(({ slot, index }) =>
-            runner.generateBlock({
-              editInput: input,
-              slot,
-              existingBlock: slot.blockId ? (currentById.get(slot.blockId) ?? null) : null,
-              index,
-            }),
+            attemptLandingPageStage(() =>
+              runner.generateBlock({
+                editInput: input,
+                slot,
+                existingBlock: slot.blockId ? (currentById.get(slot.blockId) ?? null) : null,
+                index,
+              }),
+            ),
           ),
         );
         settled.forEach((result, index) => {
@@ -689,6 +789,7 @@ export function createLandingPageEditor(
           continue;
         }
         const result = settledByIndex.get(index);
+        retryCount += (result?.attempts ?? 1) - 1;
         if (result?.status === 'fulfilled') {
           const id = generatedLandingPageBlockId(slot, index, usedIds);
           blocks.push(landingPageBlockSchema.parse({ ...result.value.block, id }));
@@ -704,10 +805,16 @@ export function createLandingPageEditor(
             blockId: existing.id,
             type: slot.type,
             action: 'preserved-existing',
+            reason: landingPageFailureReason(result?.status === 'rejected' ? result.reason : null),
           });
         } else {
           skippedSections += 1;
-          failures.push({ blockId: null, type: slot.type, action: 'skipped-new' });
+          failures.push({
+            blockId: null,
+            type: slot.type,
+            action: 'skipped-new',
+            reason: landingPageFailureReason(result?.status === 'rejected' ? result.reason : null),
+          });
         }
       }
 
@@ -734,6 +841,7 @@ export function createLandingPageEditor(
           preservedSections,
           fallbackSections,
           skippedSections,
+          retryCount,
           failures,
         },
       };

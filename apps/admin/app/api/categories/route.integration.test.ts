@@ -158,7 +158,7 @@ describe('app/api/categories/route', () => {
       }),
     );
 
-    expect(resolveCategorySlugMock).toHaveBeenCalledWith('Paint');
+    expect(resolveCategorySlugMock).toHaveBeenCalledWith('Paint', undefined, {});
     expect(mutateEntityWithHistoryMock).toHaveBeenCalledWith(
       {},
       expect.objectContaining({

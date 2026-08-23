@@ -37,6 +37,14 @@ describe('admin assistant Analytics2 adapter', () => {
           title: `Product ${index + 1}`,
         })),
       },
+      effectiveRanges: [
+        {
+          key: 'catalog',
+          startDate: '2026-06-01',
+          endDate: '2026-08-19',
+          sources: ['orders', 'ecotrack', 'assumptions'],
+        },
+      ],
       sources: [
         {
           key: 'orders',
@@ -55,8 +63,24 @@ describe('admin assistant Analytics2 adapter', () => {
 
     expect(result).toMatchObject({
       kind: 'analytics2',
+      responseContractVersion: 1,
       query: 'catalog',
       view: 'catalog',
+      effectiveRanges: [{ key: 'catalog', startDate: '2026-06-01', endDate: '2026-08-19' }],
+      metrics: [
+        {
+          name: 'paidUnits',
+          definition: expect.stringContaining('payed'),
+          requestedRange: { startDate: '2026-05-26', endDate: '2026-08-23' },
+          effectiveRange: { startDate: '2026-06-01', endDate: '2026-08-19' },
+          dateBasis: expect.stringContaining('first-posted'),
+          asOf: '2026-08-23',
+          coveragePct: null,
+          estimated: false,
+          attributionCoveragePct: null,
+          comparisonStatus: 'comparable',
+        },
+      ],
       data: {
         kind: 'catalog',
         metrics: [
@@ -72,6 +96,15 @@ describe('admin assistant Analytics2 adapter', () => {
       sources: [{ key: 'orders', state: 'current', coveragePct: 100 }],
       warnings: [{ key: 'projectedCostCoverage', value: 92 }],
     });
+    expect(result.semanticContract).toMatchObject({
+      semanticsVersion: 4,
+      timezone: 'Africa/Algiers',
+      lifecycle: { submitted: expect.stringContaining('never call it a completed sale') },
+      materializedFacts: expect.stringContaining('performance cache'),
+    });
+    expect(((result.data as { metrics: Array<{ name: string }> }).metrics ?? [])[0]?.name).toBe(
+      'paidUnits',
+    );
     expect((result.data as { products: unknown[] }).products).toHaveLength(20);
     expect(result.truncations).toContainEqual({
       path: 'data.products',

@@ -1553,10 +1553,42 @@
     "showingRows": "Affichage de {shown} sur {available}",
     "sourceHealth": "État des sources",
     "analyticsWarning": "Note sur les données",
+    "analyticsRequestedRange": "Période demandée",
+    "analyticsEffectiveRange": "Période effectivement couverte",
+    "analyticsDateBasis": "Base de date",
+    "analyticsAsOf": "Données au",
+    "analyticsCoverage": "Couverture exacte",
+    "analyticsEstimated": "Inclut des estimations",
+    "analyticsMatched": "{matched} correspondance(s) · {available} dans la vue de décision",
+    "analyticsGeneratedAt": "Généré",
+    "openAnalytics": "Ouvrir dans Analytics",
+    "landingGeneration": {
+      "status": {
+        "completed": "Toutes les sections prévues ont été générées",
+        "partial-fallback": "La page a été enregistrée avec des replis de section explicites",
+        "full-fallback": "Une page de repli fondée sur le catalogue a été enregistrée"
+      },
+      "generated": "Sections générées",
+      "planned": "Sections prévues",
+      "preserved": "Sections préservées",
+      "fallback": "Sections de repli",
+      "skipped": "Sections ignorées",
+      "retries": "Relances récupérées",
+      "fallbackDetails": "Sections ayant nécessité un repli",
+      "reasons": {
+        "timeout": "Le modèle de contenu a dépassé le délai",
+        "invalid-structured-output": "Le modèle a renvoyé un contenu structuré invalide",
+        "provider-error": "Le fournisseur n’a pas terminé cette section",
+        "insufficient-assets": "Cette section nécessitait davantage de ressources produit vérifiées"
+      }
+    },
     "toolLabels": {
       "catalog": "Résultats du catalogue",
+      "productCreated": "Produit créé",
       "catalogUpdated": "Produits mis à jour",
+      "productsArchived": "Produits archivés",
       "taxonomy": "Résultats des marques et catégories",
+      "taxonomyUpdated": "Marques et catégories mises à jour",
       "orders": "Résultats des commandes",
       "ordersUpdated": "Commandes mises à jour",
       "inventory": "Résultats de l’inventaire",

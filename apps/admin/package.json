@@ -30,7 +30,7 @@
     "test:contract": "vitest run --project route-contract-node",
     "test:integration": "pnpm test:contract",
     "test:services": "vitest run --project service-integration-node",
-    "eval:ai:live": "tsx scripts/run-ai-evals.ts"
+    "eval:ai:live": "node --env-file=.env --import tsx scripts/run-ai-evals.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1111.0",

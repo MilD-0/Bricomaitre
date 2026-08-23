@@ -39,7 +39,7 @@ export const adminAiCapabilities: AdminAiCapability[] = [
   {
     id: 'product_operations',
     description:
-      'Inspect complete product records and directly update exact content, identifiers, selling and purchase prices, activation, availability, taxonomy, images, and promotion rules with canonical validation and partial-failure reporting.',
+      'Inspect complete product records; directly create, update, or archive exact products with canonical identifiers, commercial fields, inventory, taxonomy, images, promotion validation, history, and partial-failure reporting.',
     surfaces: ['products'],
     permission: 'products_write',
   },
@@ -98,7 +98,8 @@ export const adminAiCapabilities: AdminAiCapability[] = [
   },
   {
     id: 'taxonomy_proposals',
-    description: 'Create reviewable brand and category create/edit proposals.',
+    description:
+      'Resolve and directly create, edit, activate, deactivate, reparent, or delete exact brands and categories; keep assistant-invented taxonomy recommendations reviewable.',
     surfaces: ['brandsCategories', 'aiProposals'],
     permission: 'brands_categories_write',
   },
@@ -111,7 +112,7 @@ export const adminAiCapabilities: AdminAiCapability[] = [
   {
     id: 'analytics_workspace',
     description:
-      'Read canonical command, money, acquisition, fulfillment, storefront, search, catalog, and assumptions analytics with source health and comparisons.',
+      'Read canonical command, money, acquisition, fulfillment, storefront, search, catalog, and assumptions analytics with versioned business semantics, source health, effective-range comparisons, and exact focused drill-downs across the workspace’s decision datasets.',
     surfaces: ['stats'],
     permission: 'analytics_manage',
   },

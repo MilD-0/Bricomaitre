@@ -1553,10 +1553,42 @@
     "showingRows": "Showing {shown} of {available}",
     "sourceHealth": "Source health",
     "analyticsWarning": "Data note",
+    "analyticsRequestedRange": "Requested range",
+    "analyticsEffectiveRange": "Effective covered range",
+    "analyticsDateBasis": "Date basis",
+    "analyticsAsOf": "As of",
+    "analyticsCoverage": "Exact coverage",
+    "analyticsEstimated": "Includes estimates",
+    "analyticsMatched": "{matched} matched · {available} in the decision view",
+    "analyticsGeneratedAt": "Generated",
+    "openAnalytics": "Open in Analytics",
+    "landingGeneration": {
+      "status": {
+        "completed": "Every planned landing-page section was generated",
+        "partial-fallback": "The landing page was saved with explicit section fallbacks",
+        "full-fallback": "A catalog-grounded fallback page was saved"
+      },
+      "generated": "Generated sections",
+      "planned": "Planned sections",
+      "preserved": "Preserved sections",
+      "fallback": "Fallback sections",
+      "skipped": "Skipped sections",
+      "retries": "Recovered retries",
+      "fallbackDetails": "Sections requiring fallback",
+      "reasons": {
+        "timeout": "The content model timed out",
+        "invalid-structured-output": "The model returned invalid structured content",
+        "provider-error": "The content provider did not complete this section",
+        "insufficient-assets": "The section required more verified product assets"
+      }
+    },
     "toolLabels": {
       "catalog": "Catalog results",
+      "productCreated": "Product created",
       "catalogUpdated": "Products updated",
+      "productsArchived": "Products archived",
       "taxonomy": "Brand and category results",
+      "taxonomyUpdated": "Brands and categories updated",
       "orders": "Order results",
       "ordersUpdated": "Orders updated",
       "inventory": "Inventory results",

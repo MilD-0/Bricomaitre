@@ -64,12 +64,14 @@ describe('admin AI live surface adapters', () => {
           { key: 'orders', state: 'ready' },
           { key: 'meta', state: 'partial' },
         ],
+        effectiveRanges: [{ key: 'acquisition', startDate: '2026-07-24', endDate: '2026-08-17' }],
         warnings: [{ key: 'sourcePartial' }],
         fetching: false,
       }).filters,
     ).toMatchObject({
       view: 'acquisition',
       sourceStates: 'orders:ready,meta:partial',
+      effectiveRanges: 'acquisition:2026-07-24..2026-08-17',
       warnings: 'sourcePartial',
       queryDurationMs: 82,
     });

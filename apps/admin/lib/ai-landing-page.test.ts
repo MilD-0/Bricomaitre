@@ -39,44 +39,64 @@ const generationInput: LandingPageGenerationInput = {
   },
 };
 
-function stagedRunner(options?: { failSecondBlock?: boolean }): LandingPageStageRunner {
+function stagedRunner(options?: {
+  failPlanOnce?: boolean;
+  failSecondBlock?: boolean;
+  failSecondBlockOnce?: boolean;
+}): LandingPageStageRunner {
+  let planCalls = 0;
+  let secondBlockCalls = 0;
   return {
-    generatePlan: async () => ({
-      plan: {
-        archetype: 'problem-solution',
-        theme: { accent: 'graphite', density: 'spacious' },
-        seo: {
-          title: 'Clé à cliquet sans fil',
-          description: 'Découvrez la clé à cliquet HONESTPRO pour vos travaux.',
-        },
-        hero: {
-          variant: 'media-right',
-          heading: 'Travaillez plus simplement',
-          subheading: 'Une clé sans fil.',
-          primaryCtaLabel: 'Commander',
-        },
-        sections: [
-          {
-            type: 'editorial-intro',
-            purpose: 'Présenter le produit',
-            surface: 'plain',
-            width: 'narrow',
+    generatePlan: async () => {
+      planCalls += 1;
+      if (options?.failPlanOnce && planCalls === 1) throw new Error('provider timeout');
+      return {
+        plan: {
+          archetype: 'problem-solution',
+          theme: { accent: 'graphite', density: 'spacious' },
+          seo: {
+            title: 'Clé à cliquet sans fil',
+            description: 'Découvrez la clé à cliquet HONESTPRO pour vos travaux.',
           },
-          { type: 'trust-band', purpose: 'Expliquer la commande', surface: 'soft', width: 'wide' },
-        ],
-        finalCta: {
-          variant: 'split',
-          heading: 'Prêt à commander ?',
-          body: 'Paiement à la livraison.',
-          primaryCtaLabel: 'Commander maintenant',
+          hero: {
+            variant: 'media-right',
+            heading: 'Travaillez plus simplement',
+            subheading: 'Une clé sans fil.',
+            primaryCtaLabel: 'Commander',
+          },
+          sections: [
+            {
+              type: 'editorial-intro',
+              purpose: 'Présenter le produit',
+              surface: 'plain',
+              width: 'narrow',
+            },
+            {
+              type: 'trust-band',
+              purpose: 'Expliquer la commande',
+              surface: 'soft',
+              width: 'wide',
+            },
+          ],
+          finalCta: {
+            variant: 'split',
+            heading: 'Prêt à commander ?',
+            body: 'Paiement à la livraison.',
+            primaryCtaLabel: 'Commander maintenant',
+          },
+          reasoning: 'A concise product story followed by verified ordering reassurance.',
+          groundingNotes: ['Copy uses the catalog title and description.'],
         },
-        reasoning: 'A concise product story followed by verified ordering reassurance.',
-        groundingNotes: ['Copy uses the catalog title and description.'],
-      },
-      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-    }),
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      };
+    },
     generateBlock: async ({ section, index }) => {
-      if (options?.failSecondBlock && index === 1) throw new Error('malformed section');
+      if (index === 1) secondBlockCalls += 1;
+      if (
+        index === 1 &&
+        (options?.failSecondBlock || (options?.failSecondBlockOnce && secondBlockCalls === 1))
+      )
+        throw new Error('malformed section');
       if (section.type === 'editorial-intro')
         return {
           block: {
@@ -189,7 +209,9 @@ function generatedDocument() {
 function editRunner(options?: {
   unknownBlock?: boolean;
   failGeneratedBlock?: boolean;
+  failGeneratedBlockOnce?: boolean;
 }): LandingPageEditStageRunner {
+  let generatedBlockCalls = 0;
   return {
     generatePlan: async (input) => ({
       plan: {
@@ -217,7 +239,12 @@ function editRunner(options?: {
       usage: { inputTokens: 11, outputTokens: 12, totalTokens: 23 },
     }),
     generateBlock: async ({ slot }) => {
-      if (options?.failGeneratedBlock) throw new Error('invalid generated hero');
+      generatedBlockCalls += 1;
+      if (
+        options?.failGeneratedBlock ||
+        (options?.failGeneratedBlockOnce && generatedBlockCalls === 1)
+      )
+        throw new Error('invalid generated hero');
       return {
         block: {
           id: slot.blockId!,
@@ -333,6 +360,7 @@ describe('AI landing-page output guardrails', () => {
       preservedSections: 3,
       fallbackSections: 0,
       skippedSections: 0,
+      retryCount: 0,
     });
   });
 
@@ -352,6 +380,7 @@ describe('AI landing-page output guardrails', () => {
       status: 'partial-fallback',
       fallbackSections: 1,
       failures: [{ blockId: 'hero', type: 'product-hero', action: 'preserved-existing' }],
+      retryCount: 1,
     });
   });
 
@@ -403,6 +432,8 @@ describe('AI landing-page output guardrails', () => {
       generatedSections: 2,
       fallbackSections: 0,
       skippedSections: 0,
+      retryCount: 0,
+      failures: [],
     });
     expect(result.usage).toEqual({ inputTokens: 18, outputTokens: 30, totalTokens: 48 });
     expect(result.model).toBe('test/content-model');
@@ -426,8 +457,51 @@ describe('AI landing-page output guardrails', () => {
       generatedSections: 1,
       fallbackSections: 1,
       skippedSections: 1,
+      retryCount: 1,
+      failures: [
+        {
+          stage: 'block',
+          type: 'trust-band',
+          reason: 'invalid-structured-output',
+        },
+      ],
     });
     expect(result.reasoning).toContain('1 of 2 eligible planned sections were generated');
+  });
+
+  it('recovers transient plan and block failures before falling back', async () => {
+    const result = await createLandingPageGenerator(
+      testConfig,
+      stagedRunner({ failPlanOnce: true, failSecondBlockOnce: true }),
+    ).generate(generationInput);
+
+    expect(result.stages).toMatchObject({
+      status: 'completed',
+      generatedSections: 2,
+      retryCount: 2,
+      failures: [],
+    });
+  });
+
+  it('recovers a transient targeted-edit block failure without changing preserved sections', async () => {
+    const currentDocument = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
+    const result = await createLandingPageEditor(
+      testConfig,
+      editRunner({ failGeneratedBlockOnce: true }),
+    ).edit({
+      ...generationInput,
+      instruction: 'Réécris uniquement le hero.',
+      currentDocument,
+    });
+
+    expect(result.stages).toMatchObject({
+      status: 'completed',
+      generatedSections: 1,
+      preservedSections: 3,
+      retryCount: 1,
+      failures: [],
+    });
+    expect(result.document.blocks.slice(1)).toEqual(currentDocument.blocks.slice(1));
   });
 
   it('reapplies asset and indexing guardrails to injected generator results', async () => {

@@ -1553,10 +1553,42 @@
     "showingRows": "عرض {shown} من {available}",
     "sourceHealth": "حالة المصادر",
     "analyticsWarning": "ملاحظة حول البيانات",
+    "analyticsRequestedRange": "الفترة المطلوبة",
+    "analyticsEffectiveRange": "الفترة المغطاة فعليًا",
+    "analyticsDateBasis": "أساس التاريخ",
+    "analyticsAsOf": "البيانات حتى",
+    "analyticsCoverage": "التغطية الدقيقة",
+    "analyticsEstimated": "يتضمن تقديرات",
+    "analyticsMatched": "{matched} مطابق · {available} في عرض القرار",
+    "analyticsGeneratedAt": "تم الإنشاء",
+    "openAnalytics": "فتح في التحليلات",
+    "landingGeneration": {
+      "status": {
+        "completed": "تم إنشاء جميع أقسام صفحة الهبوط المخطط لها",
+        "partial-fallback": "تم حفظ الصفحة مع توضيح الأقسام البديلة",
+        "full-fallback": "تم حفظ صفحة بديلة مبنية على بيانات الكتالوج"
+      },
+      "generated": "الأقسام المنشأة",
+      "planned": "الأقسام المخطط لها",
+      "preserved": "الأقسام المحفوظة",
+      "fallback": "الأقسام البديلة",
+      "skipped": "الأقسام المتجاوزة",
+      "retries": "المحاولات المستعادة",
+      "fallbackDetails": "الأقسام التي احتاجت إلى بديل",
+      "reasons": {
+        "timeout": "انتهت مهلة نموذج المحتوى",
+        "invalid-structured-output": "أعاد النموذج محتوى منظماً غير صالح",
+        "provider-error": "لم يكمل مزود المحتوى هذا القسم",
+        "insufficient-assets": "يتطلب هذا القسم المزيد من موارد المنتج الموثقة"
+      }
+    },
     "toolLabels": {
       "catalog": "نتائج الكتالوج",
+      "productCreated": "تم إنشاء المنتج",
       "catalogUpdated": "تم تحديث المنتجات",
+      "productsArchived": "تمت أرشفة المنتجات",
       "taxonomy": "نتائج العلامات والفئات",
+      "taxonomyUpdated": "تم تحديث العلامات والفئات",
       "orders": "نتائج الطلبات",
       "ordersUpdated": "تم تحديث الطلبات",
       "inventory": "نتائج المخزون",
