@@ -29,6 +29,21 @@ import {
 } from '../../../../lib/ai-admin-capabilities';
 import { queryAdminAnalytics } from '../../../../lib/ai-analytics';
 import {
+  adjustAdminInventory,
+  adminAiInventoryAdjustmentSchema,
+} from '../../../../lib/admin-ai-inventory';
+import {
+  adminAiOrderStatusMutationSchema,
+  updateAdminOrderStatuses,
+} from '../../../../lib/admin-ai-orders';
+import {
+  inspectAdminStorefrontConfiguration,
+  storefrontAnnouncementMutationSchema,
+  storefrontSettingsPatchSchema,
+  updateAdminStorefrontAnnouncement,
+  updateAdminStorefrontSettings,
+} from '../../../../lib/admin-ai-storefront';
+import {
   findAdminBrands,
   findAdminCategories,
   findAdminProducts,
@@ -65,12 +80,14 @@ import {
 } from '../../../../lib/admin-ai-chat-stream';
 import {
   ADMIN_AI_DEFAULT_MODEL,
-  ADMIN_AI_DEFAULT_REASONING_EFFORT,
+  ADMIN_AI_MAX_OUTPUT_TOKENS,
   adminAiModelIdSchema,
   adminAiReasoningEffortSchema,
+  getDefaultAdminAiReasoningEffort,
   resolveAdminAiModel,
   supportsAdminAiReasoningEffort,
 } from '../../../../lib/admin-ai-models';
+import { adminAiGroundingTool } from '../../../../lib/admin-ai-tool-plan';
 
 const requestSchema = z
   .object({
@@ -79,16 +96,24 @@ const requestSchema = z
     context: adminAiSurfaceContextSchema.optional(),
     autoAcceptProposals: z.boolean().optional().default(false),
     model: adminAiModelIdSchema.optional().default(ADMIN_AI_DEFAULT_MODEL),
-    reasoningEffort: adminAiReasoningEffortSchema
-      .optional()
-      .default(ADMIN_AI_DEFAULT_REASONING_EFFORT),
+    reasoningEffort: adminAiReasoningEffortSchema.optional(),
   })
-  .refine((input) => supportsAdminAiReasoningEffort(input.model, input.reasoningEffort), {
-    message: 'The selected reasoning effort is not supported by this model.',
-    path: ['reasoningEffort'],
-  });
+  .superRefine((input, context) => {
+    const effort = input.reasoningEffort ?? getDefaultAdminAiReasoningEffort(input.model);
+    if (!supportsAdminAiReasoningEffort(input.model, effort)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'The selected reasoning effort is not supported by this model.',
+        path: ['reasoningEffort'],
+      });
+    }
+  })
+  .transform((input) => ({
+    ...input,
+    reasoningEffort: input.reasoningEffort ?? getDefaultAdminAiReasoningEffort(input.model),
+  }));
 
-export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-v2';
+export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-v5';
 export const ADMIN_AI_INLINE_PRODUCT_LIMIT = 20;
 
 const productLookupPermissions: PermissionKey[] = [
@@ -262,6 +287,12 @@ export async function POST(request: NextRequest) {
     } catch {
       // AI telemetry must never prevent the assistant from answering.
     }
+    const groundingTool = adminAiGroundingTool({
+      message: parsed.data.message,
+      surface: parsed.data.context?.surface,
+      section: parsed.data.context?.section,
+      permissions,
+    });
     const result = streamText({
       model: createAiLanguageModel(config, 'admin', {
         model: selectedModel.model,
@@ -282,8 +313,17 @@ export async function POST(request: NextRequest) {
           : []),
         { role: 'user', content: parsed.data.message },
       ],
-      abortSignal: request.signal,
-      stopWhen: stepCountIs(6),
+      abortSignal: AbortSignal.any([request.signal, AbortSignal.timeout(config.requestTimeoutMs)]),
+      maxRetries: config.maxRetries,
+      maxOutputTokens: ADMIN_AI_MAX_OUTPUT_TOKENS,
+      stopWhen: stepCountIs(8),
+      prepareStep: ({ stepNumber }) =>
+        stepNumber === 0 && groundingTool
+          ? {
+              activeTools: [groundingTool],
+              toolChoice: { type: 'tool', toolName: groundingTool },
+            }
+          : undefined,
       tools: {
         ...(hasAnyPermission(permissions, productLookupPermissions)
           ? {
@@ -339,6 +379,12 @@ export async function POST(request: NextRequest) {
                 }),
                 execute: inspectAdminOrders,
               }),
+              update_order_status: tool({
+                description:
+                  'Update exact inspected orders through the canonical Orders workflow after an explicit operator request. Semantic statuses: not_contacted, no_answer, confirmed, dispatched, completed, delayed, cancelled, in_delivery, returned, failed, manual_completed, posted. This records history, validates transitions, queues normal lifecycle events, refreshes reporting, and reports partial failures.',
+                inputSchema: adminAiOrderStatusMutationSchema,
+                execute: (input) => updateAdminOrderStatuses(input, actor),
+              }),
             }
           : {}),
         ...(hasPermission(permissions, 'products_write')
@@ -353,6 +399,12 @@ export async function POST(request: NextRequest) {
                   limit: z.number().int().min(1).max(50).default(20),
                 }),
                 execute: inspectAdminInventory,
+              }),
+              adjust_inventory: tool({
+                description:
+                  'Increase or decrease exact resolved product inventory quantities after an explicit operator request. Returns every previous/next quantity and any missing or insufficient rows, and records normal action history.',
+                inputSchema: adminAiInventoryAdjustmentSchema,
+                execute: (input) => adjustAdminInventory(input, actor),
               }),
             }
           : {}),
@@ -414,6 +466,24 @@ export async function POST(request: NextRequest) {
                   'Read the canonical role and access configuration with complete staff identities, emails, roles, permissions, and access grants.',
                 inputSchema: z.object({}),
                 execute: inspectAdminAdministration,
+              }),
+              inspect_storefront_configuration: tool({
+                description:
+                  'Read the complete storefront contact settings, AI configuration, localized announcement bar, and environment-configured storefront model choices.',
+                inputSchema: z.object({}),
+                execute: inspectAdminStorefrontConfiguration,
+              }),
+              update_storefront_settings: tool({
+                description:
+                  'Directly update one or more storefront contact or AI settings after an explicit operator request. Omitted settings are preserved and the public storefront is revalidated.',
+                inputSchema: storefrontSettingsPatchSchema,
+                execute: updateAdminStorefrontSettings,
+              }),
+              update_storefront_announcement: tool({
+                description:
+                  'Directly update the French and Arabic storefront announcement bar after an explicit operator request, then revalidate public storefront content.',
+                inputSchema: storefrontAnnouncementMutationSchema,
+                execute: (input) => updateAdminStorefrontAnnouncement(input, actor.email),
               }),
             }
           : {}),

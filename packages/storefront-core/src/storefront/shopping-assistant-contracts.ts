@@ -44,6 +44,8 @@ export const shoppingAssistantPageContextSchema = z
   .object({
     pathname: z.string().trim().min(1).max(2_048),
     currentProductToken: z.string().trim().min(1).max(200).nullable().default(null),
+    currentLandingPageSlug: z.string().trim().min(2).max(160).nullable().default(null),
+    currentOrderToken: z.string().trim().min(20).max(200).nullable().default(null),
     catalogQuery: shoppingAssistantCatalogSearchSchema.nullable().default(null),
     cartItems: z
       .array(
@@ -117,6 +119,7 @@ export const shoppingAssistantResponseSchema = z
 export const shoppingAssistantToolNameSchema = z.enum([
   'search_catalog',
   'inspect_products',
+  'inspect_order',
   'present_products',
 ]);
 
@@ -145,6 +148,8 @@ export const shoppingAssistantProductLookupSchema = z
     tokens: z.array(z.string().trim().min(1).max(200)).min(1).max(4),
   })
   .strict();
+
+export const shoppingAssistantOrderLookupSchema = z.object({}).strict();
 
 export const shoppingAssistantProductSelectionSchema = z
   .object({

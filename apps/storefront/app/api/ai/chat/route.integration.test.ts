@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   cartValidation: vi.fn(),
   assets: vi.fn(),
   detail: vi.fn(),
+  orderByToken: vi.fn(),
+  landingPage: vi.fn(),
   settings: vi.fn(),
   recordRun: vi.fn(),
 }));
@@ -36,6 +38,8 @@ vi.mock('@/lib/storefront-api', () => ({
   fetchStorefrontCartValidation: mocks.cartValidation,
   fetchStorefrontAssets: mocks.assets,
   fetchStorefrontProductDetail: mocks.detail,
+  fetchStorefrontOrderByToken: mocks.orderByToken,
+  getStorefrontLandingPage: mocks.landingPage,
   getStorefrontSettings: mocks.settings,
   recordStorefrontAssistantRun: mocks.recordRun,
 }));
@@ -104,6 +108,8 @@ describe('POST /api/ai/chat', () => {
       aiFallbackModel: null,
     });
     mocks.cartValidation.mockResolvedValue({ items: [catalogProduct] });
+    mocks.orderByToken.mockResolvedValue(null);
+    mocks.landingPage.mockResolvedValue(null);
     mocks.assets.mockResolvedValue({
       banners: [],
       featuredGroups: [],
@@ -310,6 +316,7 @@ describe('POST /api/ai/chat', () => {
     expect(events.at(-1)).toMatchObject({ type: 'result', mode: 'ai', products: [{ id: 12 }] });
     expect(modelOptions).toHaveProperty('tools.search_catalog');
     expect(modelOptions).toHaveProperty('tools.inspect_products');
+    expect(modelOptions).toHaveProperty('tools.inspect_order');
     expect(modelOptions).toHaveProperty('tools.present_products');
     expect(modelOptions.maxOutputTokens).toBe(900);
     expect(
@@ -322,6 +329,73 @@ describe('POST /api/ai/chat', () => {
     expect(modelOptions.prompt).toContain('"total":1043');
     expect(modelOptions.prompt).toContain('Perceuse béton');
     expect(mocks.catalog).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes the linked order and forces order grounding on the confirmation journey', async () => {
+    const order = {
+      id: 84,
+      confirmed: 7,
+      noAnswerCount: 0,
+      updatedAt: '2026-08-23T12:00:00.000Z',
+      delivery: 0,
+      state: 16,
+      city: 'Alger',
+      totalAmount: 18_000,
+      orderProducts: [{ title: 'Perceuse béton', quantity: 1 }],
+      statusHistory: [
+        { id: 1, status: 7, noAnswerCount: 0, changedAt: '2026-08-23T12:00:00.000Z' },
+      ],
+    };
+    mocks.orderByToken.mockResolvedValue(order);
+    let inspected: unknown;
+    mocks.streamText.mockImplementation(
+      (options: { tools: { inspect_order: { execute: () => Promise<unknown> } } }) => ({
+        stream: (async function* () {
+          inspected = await options.tools.inspect_order.execute();
+          yield { type: 'tool-call', toolName: 'inspect_order' };
+          yield { type: 'tool-result', toolName: 'inspect_order' };
+          yield { type: 'text-delta', text: 'Votre commande est en cours de livraison.' };
+          yield {
+            type: 'finish',
+            totalUsage: { inputTokens: 12, outputTokens: 7, totalTokens: 19 },
+          };
+        })(),
+      }),
+    );
+
+    const response = await POST(
+      request({
+        locale: 'fr',
+        context: {
+          pathname: '/fr/thank-you',
+          currentOrderToken: 't'.repeat(32),
+        },
+        messages: [{ role: 'user', content: 'Où en est la livraison de ma commande ?' }],
+      }),
+    );
+    const events = await streamEvents(response);
+    const modelOptions = mocks.streamText.mock.calls[0]?.[0] as Record<string, unknown>;
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { type: 'tool', name: 'inspect_order', status: 'started' },
+        { type: 'tool', name: 'inspect_order', status: 'completed' },
+      ]),
+    );
+    expect(
+      (modelOptions.prepareStep as (input: { stepNumber: number }) => unknown)({ stepNumber: 0 }),
+    ).toEqual({
+      activeTools: ['inspect_order'],
+      toolChoice: { type: 'tool', toolName: 'inspect_order' },
+    });
+    expect(modelOptions.prompt).toContain('"statusLabelKey":"inDelivery"');
+    expect(inspected).toMatchObject({
+      id: 84,
+      status: 7,
+      statusLabelKey: 'inDelivery',
+      city: 'Alger',
+    });
+    expect(mocks.orderByToken).toHaveBeenCalledTimes(2);
   });
 
   it('continues with the configured capability fallback when the primary model fails', async () => {

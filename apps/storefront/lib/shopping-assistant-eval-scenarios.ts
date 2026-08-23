@@ -2,7 +2,7 @@ import type { AiEvalScenario } from '@bric/ai-core/evals';
 
 export type ShoppingAssistantEvalInput = {
   message: string;
-  context: 'catalog' | 'product' | 'cart' | 'checkout';
+  context: 'catalog' | 'product' | 'landing' | 'cart' | 'checkout' | 'thank-you';
 };
 
 export const SHOPPING_ASSISTANT_EVAL_SCENARIOS: AiEvalScenario<ShoppingAssistantEvalInput>[] = [
@@ -15,7 +15,10 @@ export const SHOPPING_ASSISTANT_EVAL_SCENARIOS: AiEvalScenario<ShoppingAssistant
       message: 'Je cherche une perceuse en stock à moins de 15 000 DA.',
       context: 'catalog',
     },
-    expectations: { requiredTools: ['search_catalog', 'present_products'] },
+    expectations: {
+      requiredTools: ['search_catalog', 'present_products'],
+      groundedEntityIds: [12, 18],
+    },
   },
   {
     id: 'storefront-ar-project-search',
@@ -23,7 +26,10 @@ export const SHOPPING_ASSISTANT_EVAL_SCENARIOS: AiEvalScenario<ShoppingAssistant
     surface: 'storefront',
     locale: 'ar',
     input: { message: 'أحتاج أداة لثقب الخرسانة في المنزل', context: 'catalog' },
-    expectations: { requiredTools: ['search_catalog', 'present_products'] },
+    expectations: {
+      requiredTools: ['search_catalog', 'present_products'],
+      groundedEntityIds: [12, 18],
+    },
   },
   {
     id: 'storefront-fr-product-detail',
@@ -42,7 +48,11 @@ export const SHOPPING_ASSISTANT_EVAL_SCENARIOS: AiEvalScenario<ShoppingAssistant
     surface: 'storefront',
     locale: 'fr',
     input: { message: 'Compare les deux options que tu viens de proposer.', context: 'product' },
-    expectations: { requiredTools: ['inspect_products', 'present_products'] },
+    expectations: {
+      requiredTools: ['inspect_products', 'present_products'],
+      groundedEntityIds: [12, 18],
+      requiredRenderedEntityIds: [12, 18],
+    },
   },
   {
     id: 'storefront-ar-cart-compatibility',
@@ -61,7 +71,10 @@ export const SHOPPING_ASSISTANT_EVAL_SCENARIOS: AiEvalScenario<ShoppingAssistant
       message: 'Quelles ponceuses sont réellement disponibles maintenant ?',
       context: 'catalog',
     },
-    expectations: { requiredTools: ['search_catalog', 'present_products'] },
+    expectations: {
+      requiredTools: ['search_catalog', 'present_products'],
+      groundedEntityIds: [12, 18],
+    },
   },
   {
     id: 'storefront-fr-checkout-help',
@@ -72,7 +85,10 @@ export const SHOPPING_ASSISTANT_EVAL_SCENARIOS: AiEvalScenario<ShoppingAssistant
       message: 'Avant de commander, propose une alternative moins chère pour cet article.',
       context: 'checkout',
     },
-    expectations: { requiredTools: ['search_catalog', 'present_products'] },
+    expectations: {
+      requiredTools: ['search_catalog', 'present_products'],
+      groundedEntityIds: [12, 18],
+    },
   },
   {
     id: 'storefront-ar-no-match',
@@ -81,5 +97,28 @@ export const SHOPPING_ASSISTANT_EVAL_SCENARIOS: AiEvalScenario<ShoppingAssistant
     locale: 'ar',
     input: { message: 'أريد آلة صناعية نادرة بسعر أقل من 100 دج', context: 'catalog' },
     expectations: { requiredTools: ['search_catalog'], minimumAnswerCharacters: 30 },
+  },
+  {
+    id: 'storefront-fr-landing-campaign-detail',
+    description: 'Uses the active campaign product and content for a landing-page question.',
+    surface: 'storefront',
+    locale: 'fr',
+    input: {
+      message: 'Explique les caractéristiques et avantages présentés pour ce produit.',
+      context: 'landing',
+    },
+    expectations: { requiredTools: ['inspect_products'], minimumAnswerCharacters: 40 },
+  },
+  {
+    id: 'storefront-ar-order-tracking',
+    description: 'Refreshes the linked order before answering a post-purchase tracking question.',
+    surface: 'storefront',
+    locale: 'ar',
+    input: { message: 'أين وصل طلبي ومتى تم تحديث حالته؟', context: 'thank-you' },
+    expectations: {
+      requiredTools: ['inspect_order'],
+      requiredTerms: ['قيد التوصيل'],
+      minimumAnswerCharacters: 30,
+    },
   },
 ];

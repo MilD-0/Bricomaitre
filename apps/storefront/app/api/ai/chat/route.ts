@@ -1,8 +1,10 @@
 import { createAiLanguageModel, getAiConfig, resolveAiModel } from '@bric/ai-core';
 import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
+import { getOrderStatusLabelKey } from '@bric/storefront-core/order-domain';
 import {
   shoppingAssistantCatalogSearchResultSchema,
   shoppingAssistantCatalogSearchSchema,
+  shoppingAssistantOrderLookupSchema,
   shoppingAssistantProductLookupSchema,
   shoppingAssistantProductSelectionSchema,
   shoppingAssistantRequestSchema,
@@ -38,6 +40,8 @@ import {
   fetchStorefrontCatalog,
   fetchStorefrontCatalogMeta,
   fetchStorefrontProductDetail,
+  fetchStorefrontOrderByToken,
+  getStorefrontLandingPage,
   getStorefrontSettings,
   recordStorefrontAssistantRun,
 } from '@/lib/storefront-api';
@@ -174,6 +178,8 @@ function conciseProduct(product: ShoppingAssistantProduct) {
 
 type RequestGrounding = {
   currentProduct: ShoppingAssistantProduct | null;
+  currentLandingPage: Awaited<ReturnType<typeof getStorefrontLandingPage>> | null;
+  currentOrder: Awaited<ReturnType<typeof fetchStorefrontOrderByToken>> | null;
   knownProducts: ShoppingAssistantProduct[];
   cart: Array<{ quantity: number; product: ShoppingAssistantProduct }>;
   catalogPage: Awaited<ReturnType<typeof searchPublicCatalog>> | null;
@@ -182,7 +188,14 @@ type RequestGrounding = {
 async function loadRequestGrounding(input: ShoppingAssistantRequest): Promise<RequestGrounding> {
   const context = input.context;
   if (!context) {
-    return { currentProduct: null, knownProducts: [], cart: [], catalogPage: null };
+    return {
+      currentProduct: null,
+      currentLandingPage: null,
+      currentOrder: null,
+      knownProducts: [],
+      cart: [],
+      catalogPage: null,
+    };
   }
 
   const referencedIds = [
@@ -190,22 +203,30 @@ async function loadRequestGrounding(input: ShoppingAssistantRequest): Promise<Re
     ...input.messages.flatMap((message) => message.productIds ?? []),
   ];
   const uniqueIds = [...new Set(referencedIds)].slice(0, 50);
-  const [productCards, currentDetail, referencedItems, catalogPage] = await Promise.all([
-    loadProductCards().catch(() => new Map()),
-    context.currentProductToken
-      ? fetchStorefrontProductDetail(context.currentProductToken).catch(() => null)
-      : null,
-    uniqueIds.length
-      ? fetchStorefrontCartValidation(uniqueIds)
-          .then((result) => result.items)
-          .catch(() => [])
-      : [],
-    context.catalogQuery
-      ? searchPublicCatalog(context.catalogQuery, CATALOG_CACHE_SECONDS).catch(() => null)
-      : null,
-  ]);
-  const currentProduct = currentDetail
-    ? toAssistantDetailProduct(currentDetail.item, productCards.get(currentDetail.item.id))
+  const [productCards, currentDetail, landingPage, currentOrder, referencedItems, catalogPage] =
+    await Promise.all([
+      loadProductCards().catch(() => new Map()),
+      context.currentProductToken
+        ? fetchStorefrontProductDetail(context.currentProductToken).catch(() => null)
+        : null,
+      context.currentLandingPageSlug
+        ? getStorefrontLandingPage(input.locale, context.currentLandingPageSlug).catch(() => null)
+        : null,
+      context.currentOrderToken
+        ? fetchStorefrontOrderByToken(context.currentOrderToken).catch(() => null)
+        : null,
+      uniqueIds.length
+        ? fetchStorefrontCartValidation(uniqueIds)
+            .then((result) => result.items)
+            .catch(() => [])
+        : [],
+      context.catalogQuery
+        ? searchPublicCatalog(context.catalogQuery, CATALOG_CACHE_SECONDS).catch(() => null)
+        : null,
+    ]);
+  const currentDetailProduct = currentDetail?.item ?? landingPage?.product ?? null;
+  const currentProduct = currentDetailProduct
+    ? toAssistantDetailProduct(currentDetailProduct, productCards.get(currentDetailProduct.id))
     : null;
   const referenced = referencedItems.map((product) =>
     toAssistantCatalogProduct(product, undefined, productCards.get(product.id)),
@@ -220,6 +241,8 @@ async function loadRequestGrounding(input: ShoppingAssistantRequest): Promise<Re
 
   return {
     currentProduct,
+    currentLandingPage: landingPage,
+    currentOrder,
     knownProducts: [...products.values()],
     cart: referenced.flatMap((product) => {
       const quantity = cartQuantities.get(product.id);
@@ -235,6 +258,30 @@ function groundedPrompt(input: ShoppingAssistantRequest, grounding: RequestGroun
         pathname: input.context.pathname,
         catalogQuery: input.context.catalogQuery,
         currentProduct: grounding.currentProduct,
+        currentLandingPage: grounding.currentLandingPage
+          ? {
+              slug: grounding.currentLandingPage.slug,
+              document: grounding.currentLandingPage.document,
+            }
+          : null,
+        currentOrder: grounding.currentOrder
+          ? {
+              id: grounding.currentOrder.id,
+              status: grounding.currentOrder.confirmed,
+              statusLabelKey: getOrderStatusLabelKey(grounding.currentOrder.confirmed),
+              noAnswerCount: grounding.currentOrder.noAnswerCount,
+              updatedAt: grounding.currentOrder.updatedAt,
+              delivery: grounding.currentOrder.delivery,
+              state: grounding.currentOrder.state,
+              city: grounding.currentOrder.city,
+              totalAmount: grounding.currentOrder.totalAmount,
+              products: grounding.currentOrder.orderProducts.map((product) => ({
+                title: product.title,
+                quantity: product.quantity,
+              })),
+              statusHistory: grounding.currentOrder.statusHistory,
+            }
+          : null,
         cart: grounding.cart.map(({ quantity, product }) => ({
           quantity,
           product: conciseProduct(product),
@@ -368,6 +415,7 @@ export async function POST(request: NextRequest) {
               Boolean(grounding.currentProduct) ||
               grounding.cart.length > 0 ||
               parsed.data.messages.some((message) => Boolean(message.productIds?.length)),
+            hasOrder: Boolean(grounding.currentOrder),
           });
           const primaryModel = modelCandidates[0] ?? configuredModel;
           modelName = primaryModel;
@@ -436,6 +484,34 @@ export async function POST(request: NextRequest) {
                       groundingResultCount = products.length;
                       products.forEach((product) => remember(knownProducts, product));
                       return { products };
+                    },
+                  }),
+                  inspect_order: tool({
+                    description:
+                      'Refresh and inspect the customer order linked to the current confirmation page before answering tracking, delivery, or order-status questions.',
+                    inputSchema: shoppingAssistantOrderLookupSchema,
+                    execute: async () => {
+                      toolCallCount += 1;
+                      const token = parsed.data.context?.currentOrderToken;
+                      if (!token) return { error: 'No verified order is linked to this page.' };
+                      const order = await fetchStorefrontOrderByToken(token);
+                      if (!order) return { error: 'The linked order could not be found.' };
+                      return {
+                        id: order.id,
+                        status: order.confirmed,
+                        statusLabelKey: getOrderStatusLabelKey(order.confirmed),
+                        noAnswerCount: order.noAnswerCount,
+                        updatedAt: order.updatedAt,
+                        delivery: order.delivery,
+                        state: order.state,
+                        city: order.city,
+                        totalAmount: order.totalAmount,
+                        products: order.orderProducts.map((product) => ({
+                          title: product.title,
+                          quantity: product.quantity,
+                        })),
+                        statusHistory: order.statusHistory,
+                      };
                     },
                   }),
                   present_products: tool({

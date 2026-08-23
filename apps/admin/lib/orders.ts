@@ -79,6 +79,7 @@ export const orderPatchSchema = z
   });
 
 export type OrderPatch = z.infer<typeof orderPatchSchema>;
+export type OrderPatchInput = z.input<typeof orderPatchSchema>;
 
 const orderSortKeyValues = ['confirmed', 'createdAt', 'fullName'] as const;
 const sortDirectionValues = ['asc', 'desc'] as const;
