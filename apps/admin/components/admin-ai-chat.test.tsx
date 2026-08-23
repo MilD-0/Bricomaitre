@@ -9,10 +9,17 @@ import {
   AdminAiChat,
   selectAnalyticsChartMetric,
 } from './admin-ai-chat';
+import { AdminAiSurfaceProvider } from './admin-ai-surface-context';
+
+const navigation = vi.hoisted(() => ({ pathname: '/en/stats/website' }));
 
 vi.mock('next-intl', () => ({
   useLocale: () => 'en',
   useTranslations: () => (key: string) => key,
+}));
+vi.mock('next/navigation', () => ({
+  usePathname: () => navigation.pathname,
+  useSearchParams: () => new URLSearchParams('range=90d&grain=week'),
 }));
 
 describe('AdminAiChat', () => {
@@ -39,6 +46,7 @@ describe('AdminAiChat', () => {
                 sessionKey: 'e7249553-56ac-49f5-9e9c-dd8d724a6fac',
                 title: 'Find missing Arabic titles',
               },
+              messageId: 71,
             }),
             { status: 200 },
           );
@@ -72,6 +80,39 @@ describe('AdminAiChat', () => {
     expect(within(dialog).getByRole('switch', { name: 'aiChat.autoAccept' })).not.toBeChecked();
   });
 
+  it('offers current-surface suggestions and sends the resolved context', async () => {
+    const user = userEvent.setup();
+    render(
+      <AdminAiSurfaceProvider>
+        <AdminAiChat permissions={['analytics_manage']} />
+      </AdminAiSurfaceProvider>,
+    );
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    const suggestion = await screen.findByRole('button', {
+      name: 'aiChat.surfaceSuggestions.summarizeCurrentAnalytics',
+    });
+    await user.click(suggestion);
+    expect(screen.getByRole('textbox', { name: 'aiChat.placeholder' })).toHaveValue(
+      'aiChat.surfaceSuggestions.summarizeCurrentAnalytics',
+    );
+    expect(screen.getByRole('textbox', { name: 'aiChat.placeholder' })).toHaveAttribute(
+      'placeholder',
+      'aiChat.surfacePlaceholders.stats',
+    );
+    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+
+    const chatCall = vi.mocked(fetch).mock.calls.find(([url]) => String(url) === '/api/ai/chat');
+    expect(JSON.parse(String(chatCall?.[1]?.body))).toMatchObject({
+      context: {
+        locale: 'en',
+        surface: 'stats',
+        section: 'storefront',
+        pathname: '/en/stats/website',
+        filters: { range: '90d', grain: 'week' },
+      },
+    });
+  });
+
   it('sends from the keyboard and renders the response as a conversation', async () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);
@@ -91,6 +132,24 @@ describe('AdminAiChat', () => {
       reasoningEffort: 'high',
     });
     await waitFor(() => expect(composer).toHaveValue(''));
+  });
+
+  it('persists feedback on the exact assistant message', async () => {
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await user.type(screen.getByRole('textbox', { name: 'aiChat.placeholder' }), 'Audit orders');
+    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+    const helpful = await screen.findByRole('button', { name: 'aiChat.helpful' });
+    await user.click(helpful);
+
+    expect(helpful).toHaveAttribute('aria-pressed', 'true');
+    expect(fetch).toHaveBeenCalledWith('/api/ai/messages/71/feedback', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ feedback: 'helpful' }),
+    });
   });
 
   it('persists model and reasoning choices and sends them with the next request', async () => {
@@ -247,9 +306,14 @@ describe('AdminAiChat', () => {
           { status: 200 },
         );
       if (url === '/api/ai/proposals/92')
-        return new Response(JSON.stringify({ error: 'Additional permission required.' }), {
-          status: 403,
-        });
+        return new Response(
+          JSON.stringify({
+            error: 'The source product changed after this proposal was generated.',
+            code: 'proposal_stale',
+            nextAction: 'regenerate',
+          }),
+          { status: 409 },
+        );
       return new Response('{}', { status: 200 });
     });
     const user = userEvent.setup();
@@ -263,7 +327,10 @@ describe('AdminAiChat', () => {
     );
     await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
 
-    expect(await screen.findByText('Additional permission required.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('The source product changed after this proposal was generated.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('aiChat.proposalNextActions.regenerate')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'aiChat.approve' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'aiChat.reject' })).toBeInTheDocument();
   });
@@ -351,6 +418,68 @@ describe('AdminAiChat', () => {
       controller!.close();
     });
     expect(await screen.findByText('Fast partial response.')).toBeInTheDocument();
+  });
+
+  it('renders canonical Analytics2 metrics, source health, and data notes', async () => {
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/ai/conversations')
+        return new Response(JSON.stringify({ conversations: [] }), { status: 200 });
+      if (url === '/api/ai/chat')
+        return new Response(
+          JSON.stringify({
+            message: 'Here is the current catalog performance.',
+            toolResults: [
+              {
+                type: 'tool-result',
+                toolName: 'query_analytics',
+                output: {
+                  kind: 'analytics2',
+                  query: 'catalog',
+                  view: 'catalog',
+                  filters: { startDate: '2026-06-01', endDate: '2026-08-23' },
+                  data: {
+                    kind: 'catalog',
+                    metrics: [
+                      {
+                        key: 'paidUnits',
+                        value: 120,
+                        previous: 100,
+                        changePct: 20,
+                        unit: 'number',
+                      },
+                    ],
+                    products: [{ title: 'Hammer', paidUnits: 24 }],
+                  },
+                  sources: [{ key: 'orders', state: 'current', coveragePct: 100 }],
+                  warnings: [{ key: 'projectedCostCoverage', value: 92 }],
+                },
+              },
+            ],
+            conversation: {
+              id: 30,
+              sessionKey: 'd0ee26dc-26e6-4e55-a255-b84bad75e12a',
+              title: 'Catalog performance',
+            },
+          }),
+          { status: 200 },
+        );
+      return new Response('{}', { status: 200 });
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await user.type(
+      await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
+      'Summarize catalog performance',
+    );
+    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+
+    expect((await screen.findAllByText('paid units')).length).toBeGreaterThan(0);
+    expect(screen.getByText('aiChat.sourceHealth')).toBeInTheDocument();
+    expect(screen.getByText(/orders · current · 100%/)).toBeInTheDocument();
+    expect(screen.getByText(/aiChat.analyticsWarning/)).toBeInTheDocument();
   });
 
   it('lets the user abort an in-flight assistant response without showing a failure', async () => {
@@ -497,7 +626,22 @@ describe('AdminAiChat', () => {
           JSON.stringify({
             messages: [
               { role: 'user', content: 'Saved question' },
-              { role: 'assistant', content: 'Saved answer' },
+              {
+                role: 'assistant',
+                content: 'Saved answer',
+                messageRecordId: 71,
+                feedback: 'helpful',
+                toolResults: [
+                  {
+                    type: 'tool-result',
+                    toolName: 'inspect_inventory',
+                    output: {
+                      total: 1,
+                      items: [{ sku: 'SKU-1', title: 'Saved drill', quantity: 4 }],
+                    },
+                  },
+                ],
+              },
             ],
           }),
           { status: 200 },
@@ -509,11 +653,91 @@ describe('AdminAiChat', () => {
 
     await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
     expect(await screen.findByText('Saved answer')).toBeInTheDocument();
+    expect(screen.getByText('aiChat.toolLabels.inventory')).toBeInTheDocument();
+    expect(screen.getByText('SKU-1')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'aiChat.helpful' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     expect(screen.getByRole('button', { name: 'Saved catalog chat' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'aiChat.newChat' }));
     expect(screen.queryByText('Saved answer')).not.toBeInTheDocument();
     expect(screen.getByText('aiChat.emptyTitle')).toBeInTheDocument();
+  });
+
+  it('searches, renames, and deletes saved conversations', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/ai/history'))
+        return new Response(JSON.stringify({ proposals: [], jobs: [] }), { status: 200 });
+      if (url.startsWith('/api/ai/conversations?') || url === '/api/ai/conversations')
+        return new Response(
+          JSON.stringify({
+            conversations: [
+              {
+                id: 44,
+                sessionKey: '0afc0dac-dc87-40b0-b659-b83170a11242',
+                title: 'Saved catalog chat',
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      if (url === '/api/ai/conversations/44' && init?.method === 'PATCH')
+        return new Response(
+          JSON.stringify({
+            conversation: {
+              id: 44,
+              sessionKey: '0afc0dac-dc87-40b0-b659-b83170a11242',
+              title: 'Weekly catalog review',
+            },
+          }),
+          { status: 200 },
+        );
+      if (url === '/api/ai/conversations/44' && init?.method === 'DELETE')
+        return Response.json({ deleted: true, id: 44 });
+      if (url === '/api/ai/conversations/44')
+        return Response.json({ messages: [{ role: 'assistant', content: 'Saved answer' }] });
+      return new Response('{}', { status: 200 });
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await screen.findByText('Saved answer');
+    await user.type(screen.getByRole('textbox', { name: 'aiChat.searchChats' }), 'Arabic title');
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/ai/conversations?q=Arabic%20title',
+        expect.objectContaining({ cache: 'no-store' }),
+      ),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.renameChat Saved catalog chat' }));
+    const rename = screen.getByRole('textbox', { name: 'aiChat.renameChat' });
+    await user.clear(rename);
+    await user.type(rename, 'Weekly catalog review');
+    await user.click(screen.getByRole('button', { name: 'aiChat.saveChatTitle' }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/ai/conversations/44',
+        expect.objectContaining({
+          method: 'PATCH',
+          body: JSON.stringify({ title: 'Weekly catalog review' }),
+        }),
+      ),
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: 'aiChat.deleteChat Weekly catalog review' }),
+    );
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/ai/conversations/44', { method: 'DELETE' }),
+    );
+    expect(screen.queryByText('Saved answer')).not.toBeInTheDocument();
   });
 
   it('shows loading states and never lets a slower previous chat replace the active chat', async () => {
@@ -614,7 +838,7 @@ describe('AdminAiChat', () => {
     render(<AdminAiChat />);
 
     await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
-    expect(await screen.findByText('aiChat.categorizationJob')).toBeInTheDocument();
+    expect(await screen.findByText('aiChat.jobLabels.ai_categorization')).toBeInTheDocument();
     expect(screen.getByText('40/100 · classifying products')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'aiChat.cancel' }));
 
@@ -624,7 +848,7 @@ describe('AdminAiChat', () => {
     expect(JSON.parse(String(cancelCall?.[1]?.body))).toEqual({ kind: 'categorization' });
   });
 
-  it('filters unrelated work and navigates AI jobs as a stacked card carousel', async () => {
+  it('shows every permitted background domain and navigates jobs as a stacked card carousel', async () => {
     vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
       const url = String(input);
       if (url === '/api/ai/conversations')
@@ -660,6 +884,7 @@ describe('AdminAiChat', () => {
                 id: 'ecotrack-1',
                 queue: 'admin-ecotrack-sync',
                 kind: 'admin-ecotrack-sync',
+                type: 'ecotrack_catalog_sync',
                 status: 'running',
                 progress: { phase: 'syncing', current: 5, total: 20, percentage: 25 },
                 errorMessage: null,
@@ -675,18 +900,21 @@ describe('AdminAiChat', () => {
     render(<AdminAiChat />);
 
     await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
-    expect(await screen.findByText('aiChat.categorizationJob')).toBeInTheDocument();
-    expect(screen.queryByText('aiChat.contentJob')).not.toBeInTheDocument();
-    expect(screen.queryByText('admin ecotrack sync')).not.toBeInTheDocument();
-    expect(screen.getByText('1/2')).toBeInTheDocument();
+    expect(await screen.findByText('aiChat.jobLabels.ai_categorization')).toBeInTheDocument();
+    expect(screen.queryByText('aiChat.jobLabels.ai_content')).not.toBeInTheDocument();
+    expect(screen.getByText('1/3')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'aiChat.nextJob' }));
-    expect(await screen.findByText('aiChat.contentJob')).toBeInTheDocument();
-    expect(screen.queryByText('aiChat.categorizationJob')).not.toBeInTheDocument();
-    expect(screen.getByText('2/2')).toBeInTheDocument();
+    expect(await screen.findByText('aiChat.jobLabels.ai_content')).toBeInTheDocument();
+    expect(screen.queryByText('aiChat.jobLabels.ai_categorization')).not.toBeInTheDocument();
+    expect(screen.getByText('2/3')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.nextJob' }));
+    expect(await screen.findByText('aiChat.jobLabels.ecotrack_catalog_sync')).toBeInTheDocument();
+    expect(screen.getByText('3/3')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'aiChat.previousJob' }));
-    expect(await screen.findByText('aiChat.categorizationJob')).toBeInTheDocument();
+    expect(await screen.findByText('aiChat.jobLabels.ai_content')).toBeInTheDocument();
   });
 
   it('sends exact server job cancellation for system-wide tasks', async () => {

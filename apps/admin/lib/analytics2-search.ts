@@ -61,6 +61,17 @@ function datePredicate(column: SQLWrapper, startDate: string | null, endDate: st
     and ${column} <= ${endDate}::date`;
 }
 
+export async function loadSearchThroughDate(db: Database, endDate: string) {
+  const result = await db.execute(sql`
+    select max(${searchConsoleDailyTotals.day}) as through_day
+    from ${searchConsoleDailyTotals}
+    where ${searchConsoleDailyTotals.searchType} = 'web'
+      and ${searchConsoleDailyTotals.day} <= ${endDate}::date
+  `);
+  const value = (result.rows[0] as { through_day?: unknown } | undefined)?.through_day;
+  return value ? String(value) : null;
+}
+
 function mondayWeekStart(day: string) {
   const value = new Date(`${day}T00:00:00.000Z`);
   const offset = (value.getUTCDay() + 6) % 7;

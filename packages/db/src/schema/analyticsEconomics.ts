@@ -22,23 +22,23 @@ export const analyticsEconomicsDailyFacts = adminSchema.table(
     paidOrders: integer('paid_orders').notNull().default(0),
     costCompleteOrders: integer('cost_complete_orders').notNull().default(0),
     paidProfitCompleteOrders: integer('paid_profit_complete_orders').notNull().default(0),
-    grossProfitDzd: numeric('gross_profit_dzd', { precision: 18, scale: 2 }),
-    adjustedProfitDzd: numeric('adjusted_profit_dzd', { precision: 18, scale: 2 }),
-    adCostDzd: numeric('ad_cost_dzd', { precision: 18, scale: 2 }).notNull().default('0'),
-    operatingCostDzd: numeric('operating_cost_dzd', { precision: 18, scale: 2 })
+    grossProfitDzd: numeric('gross_profit_dzd', { precision: 20, scale: 6 }),
+    adjustedProfitDzd: numeric('adjusted_profit_dzd', { precision: 20, scale: 6 }),
+    adCostDzd: numeric('ad_cost_dzd', { precision: 20, scale: 6 }).notNull().default('0'),
+    operatingCostDzd: numeric('operating_cost_dzd', { precision: 20, scale: 6 })
       .notNull()
       .default('0'),
-    netProfitDzd: numeric('net_profit_dzd', { precision: 18, scale: 2 }),
-    trueProfitDzd: numeric('true_profit_dzd', { precision: 18, scale: 2 }),
-    automaticPaidCodDzd: numeric('automatic_paid_cod_dzd', { precision: 18, scale: 2 })
+    netProfitDzd: numeric('net_profit_dzd', { precision: 20, scale: 6 }),
+    trueProfitDzd: numeric('true_profit_dzd', { precision: 20, scale: 6 }),
+    automaticPaidCodDzd: numeric('automatic_paid_cod_dzd', { precision: 20, scale: 6 })
       .notNull()
       .default('0'),
-    automaticPaidFeesDzd: numeric('automatic_paid_fees_dzd', { precision: 18, scale: 2 })
+    automaticPaidFeesDzd: numeric('automatic_paid_fees_dzd', { precision: 20, scale: 6 })
       .notNull()
       .default('0'),
     automaticPaidProfitDzd: numeric('automatic_paid_profit_dzd', {
-      precision: 18,
-      scale: 2,
+      precision: 20,
+      scale: 6,
     }),
     fxRateUsed: numeric('fx_rate_used', { precision: 16, scale: 4 }).notNull(),
     planningReturnRatePct: numeric('planning_return_rate_pct', {

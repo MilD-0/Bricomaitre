@@ -7,6 +7,7 @@ import { useLocale } from 'next-intl';
 import * as React from 'react';
 
 import { requestJson } from '../../lib/admin-api';
+import { assetsAiSurfaceDetails } from '../../lib/admin-ai-live-surface-details';
 import type {
   AssetBannerPayload,
   AssetBannerRecord,
@@ -21,6 +22,7 @@ import type {
 } from '../../lib/assets';
 import { toast } from '../../lib/toast';
 import { Button } from '../ui/button';
+import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { CompactMenu, CompactMenuItem } from '../ui/compact-menu';
 import { Switch } from '../ui/switch';
 import {
@@ -252,6 +254,16 @@ export function AssetsWorkspace({
     { value: 'cards', label: t.cards, href: '/assets/product-cards' },
     { value: 'landing', label: t.landingPages, href: '/assets/landing-pages' },
   ];
+  useAdminAiSurfaceDetails(
+    assetsAiSurfaceDetails({
+      view,
+      itemCount: items.length,
+      pending,
+      editor: editor
+        ? { kind: editor.kind, itemId: editor.item ? Number(editor.item.id) : null }
+        : null,
+    }),
+  );
 
   const reload = async () => {
     const next = await requestJson<AssetsResponse>('/api/assets');

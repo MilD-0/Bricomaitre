@@ -1,6 +1,7 @@
 import {
   defaultStorefrontSettingsResponse,
   storefrontBrandsResponseSchema,
+  storefrontAssetsResponseSchema,
   storefrontCategoriesResponseSchema,
   storefrontEcotrackCatalogResponseSchema,
   storefrontHomepageResponseSchema,
@@ -15,6 +16,7 @@ import {
   storefrontContentResponseSchema,
   storefrontProductTokenSchema,
   type StorefrontBrandsResponse,
+  type StorefrontAssetsResponse,
   type StorefrontCategoriesResponse,
   type StorefrontEcotrackCatalogResponse,
   type StorefrontHomepageResponse,
@@ -46,7 +48,7 @@ import { fetchStorefrontUpstream, StorefrontUpstreamError } from './storefront-u
 export async function recordStorefrontAssistantRun(input: {
   telemetry: { journeyId: string; sessionId: string; pagePath: string; intent: string } | undefined;
   locale: 'fr' | 'ar';
-  status: 'completed' | 'failed';
+  status: 'completed' | 'failed' | 'cancelled';
   mode: 'ai' | 'fallback';
   model: string;
   inputTokens?: number;
@@ -55,6 +57,9 @@ export async function recordStorefrontAssistantRun(input: {
   durationMs: number;
   toolCalls: number;
   resultsCount: number;
+  conversation: Array<{ role: 'user' | 'assistant'; content: string; productIds?: number[] }>;
+  response: string;
+  promptVersion: string;
 }) {
   if (!input.telemetry) return;
   const body = JSON.stringify({
@@ -80,6 +85,9 @@ export async function recordStorefrontAssistantRun(input: {
       durationMs: Math.max(0, Math.round(input.durationMs)),
       toolCalls: Math.max(0, Math.round(input.toolCalls)),
       resultsCount: Math.max(0, Math.round(input.resultsCount)),
+      promptVersion: input.promptVersion,
+      conversation: input.conversation,
+      response: input.response,
     },
   });
   await fetchStorefrontUpstream('/storefront/analytics', {
@@ -252,6 +260,15 @@ export async function fetchStorefrontHomepage(): Promise<StorefrontHomepageRespo
     await fetchStorefrontUpstream(pathname),
     pathname,
     storefrontHomepageResponseSchema,
+  );
+}
+
+export async function fetchStorefrontAssets(): Promise<StorefrontAssetsResponse> {
+  const pathname = '/storefront/assets';
+  return parseUpstreamJson(
+    await fetchStorefrontUpstream(pathname),
+    pathname,
+    storefrontAssetsResponseSchema,
   );
 }
 

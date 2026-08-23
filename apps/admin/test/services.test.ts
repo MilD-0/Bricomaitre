@@ -237,6 +237,26 @@ describe('real PostgreSQL and Redis contracts', () => {
         eventName: 'search',
         metadata: { ...commonEvent.metadata, resultsCount: 0 },
       });
+      await ingestStorefrontAnalyticsEvent(db, {
+        ...commonEvent,
+        eventId: `service-assistant-feedback:${runId}`,
+        eventName: 'ai_assistant_feedback',
+        metadata: { ...commonEvent.metadata, rating: 'helpful' },
+      });
+      for (const status of ['completed', 'cancelled'] as const) {
+        await ingestStorefrontAnalyticsEvent(db, {
+          ...commonEvent,
+          eventId: `service-assistant-run-${status}:${runId}`,
+          eventName: 'ai_assistant_run',
+          metadata: {
+            ...commonEvent.metadata,
+            intent: 'product_discovery',
+            status,
+            model: 'storefront-test-model',
+            totalTokens: status === 'completed' ? 20 : 5,
+          },
+        });
+      }
 
       const payload = storefrontOrderCreateRequestSchema.parse({
         phoneNumber1: '0550000004',
@@ -336,6 +356,13 @@ describe('real PostgreSQL and Redis contracts', () => {
         opens: 1,
         messages: 1,
         resultClicks: 1,
+        runs: 2,
+        completed: 1,
+        cancelled: 1,
+        successRate: 100,
+        helpful: 1,
+        notHelpful: 0,
+        helpfulRate: 100,
         influencedOrders: 1,
         recommendedProductOrders: 1,
       });
@@ -386,18 +413,25 @@ describe('real PostgreSQL and Redis contracts', () => {
       expect(searchRollups).toEqual(expect.arrayContaining([{ term: `drill-${runId}` }]));
       expect(searchRollups).not.toContainEqual({ term: 'Unknown' });
       expect(searchRollups).not.toContainEqual({ term: '' });
-      await expect(deleteExpiredAnalyticsEventsBatch(db, { now: afterRetention })).resolves.toBe(6);
+      await expect(deleteExpiredAnalyticsEventsBatch(db, { now: afterRetention })).resolves.toBe(3);
       await expect(deleteExpiredAnalyticsSessionsBatch(db, { now: afterRetention })).resolves.toBe(
-        1,
+        0,
       );
       await expect(
         db.select().from(analyticsSessions).where(eq(analyticsSessions.id, sessionId)),
-      ).resolves.toEqual([]);
+      ).resolves.toEqual([expect.objectContaining({ id: sessionId })]);
 
       await expect(getLiveStorefrontAiStats(db, filters)).resolves.toMatchObject({
         opens: 1,
         messages: 1,
         resultClicks: 1,
+        runs: 2,
+        completed: 1,
+        cancelled: 1,
+        successRate: 100,
+        helpful: 1,
+        notHelpful: 0,
+        helpfulRate: 100,
         influencedOrders: 1,
         recommendedProductOrders: 1,
       });

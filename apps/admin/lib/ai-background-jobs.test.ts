@@ -36,6 +36,8 @@ vi.mock('./background-jobs', () => ({
 }));
 
 import {
+  allowedAdminBackgroundJobTypes,
+  allowedStartableAdminBackgroundJobTypes,
   cancelAdminBackgroundJob,
   getAdminBackgroundJob,
   listAdminBackgroundJobs,
@@ -73,6 +75,21 @@ describe('admin AI background job control', () => {
       ]),
       25,
     );
+  });
+
+  it('maps each queue to its owning permission and limits list queries to that domain', async () => {
+    expect(allowedAdminBackgroundJobTypes(['orders_write'])).toEqual([
+      'order_export',
+      'order_ecotrack',
+    ]);
+    expect(allowedStartableAdminBackgroundJobTypes(['analytics_manage'])).toEqual([
+      'reporting_refresh',
+    ]);
+    expect(allowedAdminBackgroundJobTypes(['settings_manage'])).toEqual([]);
+
+    mocks.list.mockResolvedValue([{ id: 'job-2', queue: 'admin-order-export', status: 'queued' }]);
+    await listAdminBackgroundJobs(10, ['order_export', 'order_ecotrack']);
+    expect(mocks.list).toHaveBeenCalledWith(['admin-order-export', 'admin-order-ecotrack'], 10);
   });
 
   it('retrieves and cancels an exact cooperatively cancellable job', async () => {

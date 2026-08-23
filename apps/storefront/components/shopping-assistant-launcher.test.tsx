@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({ pathname: '/fr/products/desk-lamp' }));
@@ -25,6 +25,9 @@ const labels = {
   placeholder: 'Question',
   inputLabel: 'Question',
   send: 'Envoyer',
+  stop: 'Arrêter',
+  stopped: 'Arrêtée',
+  retry: 'Réessayer',
   thinking: 'Recherche',
   error: 'Erreur',
   rateLimited: 'Patientez',
@@ -33,6 +36,8 @@ const labels = {
   outOfStock: 'Indisponible',
   priceOnRequest: 'Sur demande',
   viewProduct: 'Voir',
+  helpful: 'Utile',
+  notHelpful: 'À améliorer',
   quickPrompts: ['Un', 'Deux', 'Trois'],
 };
 
@@ -55,14 +60,14 @@ describe('ShoppingAssistantLauncher', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
-  it('does not render in private conversion-completion routes', () => {
+  it('stays available through checkout and order confirmation', () => {
     state.pathname = '/ar/checkout';
     const { container, rerender } = render(
       <ShoppingAssistantLauncher locale="ar" labels={labels} />,
     );
-    expect(container).toBeEmptyDOMElement();
+    expect(within(container).getByRole('button', { name: labels.open })).toBeInTheDocument();
     state.pathname = '/ar/thank-you';
     rerender(<ShoppingAssistantLauncher locale="ar" labels={labels} />);
-    expect(container).toBeEmptyDOMElement();
+    expect(within(container).getByRole('button', { name: labels.open })).toBeInTheDocument();
   });
 });

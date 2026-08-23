@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildAnalyticsWhere,
+  buildCanonicalStorefrontSessionsQuery,
   buildLiveOrderSummaryQuery,
   buildLiveOrderTrendQuery,
   buildWebsiteProductMetricsQuery,
+  getReportThroughDate,
   isFinancialDataLagging,
+  isStatsSnapshotUsable,
   mergeCanonicalWebsitePurchases,
   mergeLiveOrderTrend,
   normalizeStatsDashboardData,
@@ -51,6 +54,47 @@ describe('normalizeStatsDashboardData', () => {
   });
 });
 
+describe('reporting snapshot correctness', () => {
+  it('does not certify financial freshness from an order-only trend tail', () => {
+    const data = normalizeStatsDashboardData(
+      {
+        trends: {
+          daily: [
+            { bucket: '2026-08-12', orders: 10, revenue: 100, profit: 40, fees: 10 },
+            { bucket: '2026-08-17', orders: 12, revenue: 0, profit: 0, fees: 0 },
+          ],
+          imports: [],
+        },
+      },
+      { range: 'custom', startDate: '2026-08-01', endDate: '2026-08-17' },
+    );
+
+    expect(getReportThroughDate(data)).toBe('2026-08-12');
+  });
+
+  it('refuses expired snapshots', () => {
+    const data = {
+      ...normalizeStatsDashboardData(
+        {},
+        { range: '30d', startDate: '2026-07-19', endDate: '2026-08-17' },
+      ),
+      snapshot: {
+        generatedAt: '2026-08-19T00:00:00.000Z',
+        staleAt: '2026-08-20T00:00:00.000Z',
+        isStale: true,
+        trigger: 'test',
+        sourceImportBatchId: null,
+        reportThroughDate: null,
+        financialDataIsLagging: false,
+      },
+    };
+    expect(isStatsSnapshotUsable(data)).toBe(false);
+    expect(isStatsSnapshotUsable({ ...data, snapshot: { ...data.snapshot!, isStale: false } })).toBe(
+      true,
+    );
+  });
+});
+
 describe('statsQuerySchema', () => {
   it('accepts preset ranges without custom dates', () => {
     expect(statsQuerySchema.parse({ range: '90d' })).toEqual({ range: '90d' });
@@ -67,6 +111,21 @@ describe('statsQuerySchema', () => {
 });
 
 describe('website analytics history scope', () => {
+  it('serves session counts from permanent daily facts plus only the unrolled raw tail', () => {
+    const query = new PgDialect().sqlToQuery(
+      buildCanonicalStorefrontSessionsQuery({
+        range: 'custom',
+        startDate: '2026-05-20',
+        endDate: '2026-08-17',
+      }),
+    );
+
+    expect(query.sql).toContain('analytics_daily_rollups');
+    expect(query.sql).toContain('analytics_acquisition_daily_rollups');
+    expect(query.sql).toContain('count(distinct');
+    expect(query.sql).toContain('not exists');
+  });
+
   it('keeps comparable events from both storefront generations in the selected dates', () => {
     const where = buildAnalyticsWhere({
       range: 'custom',

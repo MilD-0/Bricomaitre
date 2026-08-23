@@ -12,7 +12,7 @@ describe('assistant order influence', () => {
 
   beforeEach(() => window.localStorage.clear());
 
-  it('captures only durable behavioral evidence, never conversation text', () => {
+  it('captures durable behavioral evidence for assistant conversion attribution', () => {
     recordAssistantOpen(identity, 1_720_000_000_000);
     recordAssistantEngagement(identity, 1_720_000_010_000);
     recordAssistantRecommendationClick(identity, 42, 1_720_000_020_000);

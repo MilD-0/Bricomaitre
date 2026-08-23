@@ -8,17 +8,17 @@ const { hasDbMock, requireAnalyticsAccessMock, getAnalytics2DataMock } = vi.hois
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: hasDbMock }));
-vi.mock('../../../lib/rbac', () => ({ requireAnalyticsAccess: requireAnalyticsAccessMock }));
-vi.mock('../../../lib/analytics2', async () => {
-  const actual = await vi.importActual<typeof import('../../../lib/analytics2')>(
-    '../../../lib/analytics2',
+vi.mock('../../../../lib/rbac', () => ({ requireAnalyticsAccess: requireAnalyticsAccessMock }));
+vi.mock('../../../../lib/analytics2', async () => {
+  const actual = await vi.importActual<typeof import('../../../../lib/analytics2')>(
+    '../../../../lib/analytics2',
   );
   return { ...actual, getAnalytics2Data: getAnalytics2DataMock };
 });
 
 import { GET } from './route';
 
-describe('GET /api/analytics2', () => {
+describe('GET /api/stats/workspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hasDbMock.mockReturnValue(true);
@@ -32,7 +32,7 @@ describe('GET /api/analytics2', () => {
   it('validates and forwards one normalized section query', async () => {
     const response = await GET(
       new NextRequest(
-        'http://localhost/api/analytics2?view=acquisition&range=custom&startDate=2026-08-01&endDate=2026-08-19&grain=day',
+        'http://localhost/api/stats/workspace?view=acquisition&range=custom&startDate=2026-08-01&endDate=2026-08-19&grain=day',
       ),
     );
 
@@ -44,13 +44,14 @@ describe('GET /api/analytics2', () => {
       endDate: '2026-08-19',
       grain: 'day',
     });
-    expect(response.headers.get('server-timing')).toBe('analytics2;dur=37');
+    expect(response.headers.get('server-timing')).toBe('stats;dur=37');
     expect(response.headers.get('x-analytics-coverage')).toBe('complete');
+    expect(response.headers.get('cache-control')).toBe('private, no-cache, must-revalidate');
   });
 
   it('rejects an incomplete custom range without loading analytics', async () => {
     const response = await GET(
-      new NextRequest('http://localhost/api/analytics2?range=custom&startDate=2026-08-01'),
+      new NextRequest('http://localhost/api/stats/workspace?range=custom&startDate=2026-08-01'),
     );
     expect(response.status).toBe(400);
     expect(getAnalytics2DataMock).not.toHaveBeenCalled();
@@ -60,14 +61,10 @@ describe('GET /api/analytics2', () => {
     requireAnalyticsAccessMock.mockResolvedValueOnce(
       NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
     );
-    expect(
-      (await GET(new NextRequest('http://localhost/api/analytics2'))).status,
-    ).toBe(403);
+    expect((await GET(new NextRequest('http://localhost/api/stats/workspace'))).status).toBe(403);
 
     requireAnalyticsAccessMock.mockResolvedValueOnce(null);
     hasDbMock.mockReturnValueOnce(false);
-    expect(
-      (await GET(new NextRequest('http://localhost/api/analytics2'))).status,
-    ).toBe(503);
+    expect((await GET(new NextRequest('http://localhost/api/stats/workspace'))).status).toBe(503);
   });
 });

@@ -31,6 +31,7 @@ import { requestJson as request } from '../lib/admin-api';
 import { captureQueries, restoreQueries, type QuerySnapshot } from '../lib/query-cache';
 import { toast } from '../lib/toast';
 import { MultiSortHeader } from './multi-sort-header';
+import { useAdminAiSurfaceDetails } from './admin-ai-surface-context';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import {
@@ -376,6 +377,16 @@ export function InventoryManager({ title }: { title: string }) {
     open: false,
     order: null,
     items: [],
+  });
+  useAdminAiSurfaceDetails({
+    filters: { page, search: deferredSearch },
+    selection: {
+      entityType: 'inventoryProduct',
+      ids: scanOrderState.items.flatMap((item) =>
+        item.selected && item.productId ? [item.productId] : [],
+      ),
+      focusedId: barcodeDialogState.item?.id ?? scanBarcodeState.item?.id ?? null,
+    },
   });
   const [isFilterPending, startFilterTransition] = useTransition();
 

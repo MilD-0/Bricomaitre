@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
+import { refreshAnalytics2FactsAfterMutation } from '../../../../../lib/analytics2-facts';
 import {
   getProfitTrackerReport,
   profitTrackerDaySchema,
@@ -38,5 +39,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  return NextResponse.json({ data: await upsertProfitTrackerDay(parsed.data) });
+  const data = await upsertProfitTrackerDay(parsed.data);
+  await refreshAnalytics2FactsAfterMutation();
+  return NextResponse.json({ data });
 }

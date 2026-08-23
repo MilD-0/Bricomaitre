@@ -359,7 +359,11 @@ const baseResponse = {
         runs: 12,
         completed: 10,
         failed: 2,
+        cancelled: 1,
         successRate: 83.3,
+        helpful: 7,
+        notHelpful: 1,
+        helpfulRate: 87.5,
         conversations: 4,
         activeUsers: 2,
         inputTokens: 1000,
@@ -380,7 +384,11 @@ const baseResponse = {
         runs: 20,
         completed: 18,
         failed: 2,
+        cancelled: 3,
         successRate: 90,
+        helpful: 14,
+        notHelpful: 2,
+        helpfulRate: 87.5,
         conversations: 14,
         activeUsers: 14,
         inputTokens: 2000,
@@ -912,6 +920,10 @@ describe('StatsDashboard', () => {
       impactHeading.compareDocumentPosition(adminHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getByText('aiAssistants.cards.submittedValue')).toBeInTheDocument();
+    expect(screen.getAllByText('aiAssistants.cards.helpfulRate')).toHaveLength(2);
+    expect(screen.getAllByText('aiAssistants.cards.helpfulAnswers')).toHaveLength(2);
+    expect(screen.getAllByText('aiAssistants.cards.notHelpfulAnswers')).toHaveLength(2);
+    expect(screen.getAllByText('aiAssistants.cards.cancelled')).toHaveLength(2);
     expect(screen.queryByText('aiAssistants.cards.influenceShare')).not.toBeInTheDocument();
     expect(screen.getByText('aiAssistants.admin.modelsTitle')).toBeInTheDocument();
     expect(screen.queryByText('aiAssistants.storefront.modelsTitle')).not.toBeInTheDocument();

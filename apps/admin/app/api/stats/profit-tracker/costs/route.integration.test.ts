@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { listCostsMock, createCostMock, requireOpsMock, requireMutationMock } = vi.hoisted(() => ({
+const { listCostsMock, createCostMock, refreshFactsMock, requireOpsMock, requireMutationMock } = vi.hoisted(() => ({
   listCostsMock: vi.fn(),
   createCostMock: vi.fn(),
+  refreshFactsMock: vi.fn(),
   requireOpsMock: vi.fn(),
   requireMutationMock: vi.fn(),
+}));
+
+vi.mock('../../../../../lib/analytics2-facts', () => ({
+  refreshAnalytics2FactsAfterMutation: refreshFactsMock,
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: () => true }));
@@ -32,6 +37,7 @@ describe('profit tracker costs route', () => {
     requireMutationMock.mockResolvedValue(null);
     listCostsMock.mockResolvedValue([]);
     createCostMock.mockImplementation(async (value) => ({ id: 1, ...value }));
+    refreshFactsMock.mockResolvedValue(true);
   });
 
   it('lists operating costs', async () => {
@@ -54,6 +60,7 @@ describe('profit tracker costs route', () => {
     );
     expect(response.status).toBe(200);
     expect(createCostMock).toHaveBeenCalledWith(input);
+    expect(refreshFactsMock).toHaveBeenCalledOnce();
   });
 
   it('rejects an end date before the start date', async () => {

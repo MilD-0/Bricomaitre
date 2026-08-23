@@ -18,6 +18,10 @@ import {
   AiProductRelationConflictError,
   reviewProductRelationProposal,
 } from '../../../../../lib/ai-product-knowledge';
+import {
+  AiProposalReviewConflictError,
+  aiProposalReviewConflictPayload,
+} from '../../../../../lib/ai-proposal-review';
 import { auth } from '../../../../../lib/auth';
 import { startProductCatalogFeedRefreshJob } from '../../../../../lib/background-jobs';
 import { requireAppAccess, requireMutationAccess } from '../../../../../lib/rbac';
@@ -80,6 +84,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   } catch (error) {
     if (error instanceof AiContentNotFoundError)
       return NextResponse.json({ error: error.message }, { status: 404 });
+    if (error instanceof AiProposalReviewConflictError)
+      return NextResponse.json(aiProposalReviewConflictPayload(error, proposalId), { status: 409 });
     if (error instanceof AiProposalConflictError)
       return NextResponse.json({ error: error.message }, { status: 409 });
     if (error instanceof AiProductRelationConflictError)

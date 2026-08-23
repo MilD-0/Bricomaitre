@@ -3,9 +3,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Analytics2Payload } from '../../lib/analytics2';
-import { Analytics2Workspace } from './analytics2-workspace';
+import { splitPartialSeries, StatsWorkspace } from './analytics2-workspace';
 
-const { replaceMock } = vi.hoisted(() => ({ replaceMock: vi.fn() }));
+const { pushMock, replaceMock } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  replaceMock: vi.fn(),
+}));
 
 vi.mock('next-intl', () => ({
   useLocale: () => 'en',
@@ -22,9 +25,24 @@ vi.mock('next-intl', () => ({
     })[key] ?? key,
 }));
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/en/analytics2',
-  useRouter: () => ({ replace: replaceMock }),
+  usePathname: () => '/en/stats',
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
 }));
+
+describe('open-period chart series', () => {
+  it('keeps the observed endpoint while drawing projected completion separately', () => {
+    const rows = splitPartialSeries(
+      [
+        { label: 'Aug 7', profit: 100, profitProjected: null, isPartial: false },
+        { label: 'Aug 14', profit: 40, profitProjected: 90, isPartial: true },
+      ],
+      ['profit'],
+    );
+
+    expect(rows[1]).toMatchObject({ profitActual: 40, profitOpen: 90, profitDisplay: 90 });
+    expect(rows[0]).toMatchObject({ profitActual: 100, profitOpen: 100 });
+  });
+});
 
 function commandPayload(): Analytics2Payload {
   return {
@@ -71,6 +89,26 @@ function commandPayload(): Analytics2Payload {
       fulfillment: {
         summary: {},
         cashPipeline: [
+          {
+            key: 'submitted',
+            orders: 8,
+            amountDzd: 80_000,
+            providerAmountCoveragePct: null,
+            medianAgeHours: null,
+            oldestAgeHours: null,
+            staleOrders: 0,
+            confidencePct: 55,
+          },
+          {
+            key: 'confirmed',
+            orders: 6,
+            amountDzd: 60_000,
+            providerAmountCoveragePct: null,
+            medianAgeHours: null,
+            oldestAgeHours: null,
+            staleOrders: 0,
+            confidencePct: 82,
+          },
           {
             key: 'inTransit',
             orders: 10,
@@ -119,6 +157,7 @@ function commandPayload(): Analytics2Payload {
         ],
         funnel: [
           { key: 'submitted', value: 100 },
+          { key: 'confirmed', value: 82 },
           { key: 'posted', value: 70 },
           { key: 'paid', value: 50 },
         ],
@@ -381,16 +420,77 @@ function searchPayload(): Analytics2Payload {
   } as Analytics2Payload;
 }
 
+function catalogPayload(): Analytics2Payload {
+  const base = commandPayload();
+  return {
+    ...base,
+    view: 'catalog',
+    filters: { ...base.filters, view: 'catalog' },
+    data: {
+      kind: 'catalog',
+      metrics: [],
+      products: [
+        {
+          id: 'p1',
+          title: 'High confidence product',
+          sku: 'P1',
+          categoryName: 'Tools',
+          brandName: 'Bricomaitre',
+          postedOrders: 30,
+          postedUnits: 32,
+          paidOrders: 18,
+          paidUnits: 18,
+          returnedOrders: 6,
+          activeOrders: 4,
+          terminalPaidRatePct: 75,
+          costCoveragePct: 96,
+          projectedContributionDzd: 12_000,
+          deliveryMedianHours: 48,
+          paymentMedianHours: 120,
+          deliverySamples: 24,
+          metaAssociations: [],
+          viewCount: 1_200,
+          addToCartCount: 100,
+          checkoutCount: 40,
+          websitePurchaseCount: 30,
+          popularityScore: 1,
+          websiteConversionRate: 2.5,
+          changes: { unitsPct: null },
+        },
+      ],
+      basketPairs: [],
+      geography: { wilayas: [], communes: [], metaRegions: [] },
+      customers: {
+        summary: { customers: 1, secondOrderConversionPct: 0 },
+        rows: [
+          {
+            name: 'Customer A',
+            city: 'Algiers',
+            orders: 3,
+            paidOrders: 1,
+            totalValue: 30_000,
+            paidValueDzd: 10_000,
+            contributionLtvDzd: 3_000,
+            paidContributionMarginPct: 30,
+            fallbackMarginOrders: 1,
+            firstOrderAt: '2026-08-01T00:00:00.000Z',
+          },
+        ],
+      },
+    } as Analytics2Payload['data'],
+  };
+}
+
 function renderWorkspace(payload = commandPayload()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <Analytics2Workspace initialData={payload} />
+      <StatsWorkspace initialData={payload} />
     </QueryClientProvider>,
   );
 }
 
-describe('Analytics2Workspace', () => {
+describe('StatsWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal(
@@ -420,7 +520,11 @@ describe('Analytics2Workspace', () => {
     expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
     expect(screen.getByText('EcoTrack')).toBeInTheDocument();
     expect(screen.getByText('Profit × is above break-even')).toBeInTheDocument();
-    expect(screen.getByText('Business trajectory')).toBeInTheDocument();
+    expect(screen.getByText('Profit')).toBeInTheDocument();
+    expect(screen.getByText('Submitted · unconfirmed')).toBeInTheDocument();
+    expect(screen.getByText('Confirmed · unposted')).toBeInTheDocument();
+    expect(screen.getByText('55% expected to post')).toBeInTheDocument();
+    expect(screen.getByText('82% expected to post')).toBeInTheDocument();
     expect(screen.queryByText('Analytics · operational workspace')).not.toBeInTheDocument();
     expect(screen.queryByText('Query duration')).not.toBeInTheDocument();
   });
@@ -433,7 +537,39 @@ describe('Analytics2Workspace', () => {
     expect(screen.getByText('3,521 URLs')).toBeInTheDocument();
     expect(screen.queryByText('Non-brand discovery')).not.toBeInTheDocument();
     expect(screen.queryByText('Query-detail coverage')).not.toBeInTheDocument();
-    expect(screen.queryByText('Query and page detail is privacy-limited by Google')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Query and page detail is privacy-limited by Google'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('makes product outcomes and customer paid contribution comparable', () => {
+    renderWorkspace(catalogPayload());
+
+    expect(screen.getByText('Views →')).toBeInTheDocument();
+    expect(screen.getByText('Paid outcome ↑')).toBeInTheDocument();
+    expect(screen.getByText('Bubble · resolved orders')).toBeInTheDocument();
+    const customerSection = screen.getByText('Customer base').closest('section');
+    expect(customerSection).not.toBeNull();
+    expect(
+      within(customerSection as HTMLElement).getByRole('columnheader', { name: 'Paid' }),
+    ).toBeInTheDocument();
+    expect(
+      within(customerSection as HTMLElement).getByRole('columnheader', {
+        name: 'Paid revenue',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(customerSection as HTMLElement).getByRole('columnheader', { name: 'Contribution' }),
+    ).toBeInTheDocument();
+    expect(
+      within(customerSection as HTMLElement).getByRole('columnheader', { name: 'Margin' }),
+    ).toBeInTheDocument();
+    expect(within(customerSection as HTMLElement).getByText('DZD 10,000')).toBeInTheDocument();
+    expect(within(customerSection as HTMLElement).getByText('30%')).toBeInTheDocument();
+    expect(
+      within(customerSection as HTMLElement).queryByRole('columnheader', { name: 'Order value' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Paid profit')).not.toBeInTheDocument();
   });
 
   it('suppresses immaterial cost coverage and settlement-source warnings', () => {
@@ -451,20 +587,44 @@ describe('Analytics2Workspace', () => {
     expect(screen.queryByText('A source is missing for this range')).not.toBeInTheDocument();
   });
 
+  it('does not revive source-cutoff alarms on frozen review routes', () => {
+    const payload = commandPayload();
+    payload.reviewClock = true;
+    payload.sources = [
+      { ...payload.sources[0]!, state: 'partial' },
+      {
+        key: 'storefront',
+        state: 'partial',
+        updatedAt: null,
+        throughDate: '2026-08-17',
+        records: 100,
+        coveragePct: null,
+      },
+    ];
+    payload.warnings = [
+      { key: 'sourcePartial', source: 'orders', value: 100 },
+      { key: 'sourcePartial', source: 'storefront' },
+    ];
+
+    renderWorkspace(payload);
+
+    expect(screen.getAllByText('Current')).toHaveLength(2);
+    expect(screen.queryByText('Partial')).not.toBeInTheDocument();
+    expect(screen.queryByText('A source only covers part of this range')).not.toBeInTheDocument();
+  });
+
   it('routes operator signals to the workspace that can resolve them', async () => {
     renderWorkspace();
 
     fireEvent.click(screen.getByRole('button', { name: /Profit × is above break-even/ }));
 
     await waitFor(() =>
-      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-        expect.stringContaining('view=money'),
-        expect.any(Object),
-      ),
+      expect(pushMock).toHaveBeenCalledWith('/en/stats/time?range=30d&grain=auto'),
     );
-    expect(replaceMock).toHaveBeenCalledWith(expect.stringContaining('view=money'), {
+    expect(replaceMock).toHaveBeenCalledWith('/en/stats?range=30d&grain=auto', {
       scroll: false,
     });
+    expect(screen.queryByLabelText('Analytics view')).not.toBeInTheDocument();
   });
 
   it('does not fetch a custom range until Apply is used', async () => {

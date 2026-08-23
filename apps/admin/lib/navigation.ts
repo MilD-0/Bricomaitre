@@ -8,7 +8,6 @@ export const navigationKeys = [
   'inventory',
   'assets',
   'brandsCategories',
-  'analytics2',
   'stats',
   'bulletin',
 ] as const;
@@ -80,10 +79,6 @@ export const navigationItems: NavigationItem[] = [
     ],
   },
   {
-    key: 'analytics2',
-    href: '/analytics2',
-  },
-  {
     key: 'stats',
     href: '/stats',
     subItems: [
@@ -150,9 +145,22 @@ const modernAssetSubItems: NavigationSubItem[] = [
   },
 ];
 
+const modernStatsSubItems: NavigationSubItem[] = [
+  { key: 'overview', href: '/stats', translationKey: 'nav.statsOverview' },
+  { key: 'money', href: '/stats/time', translationKey: 'nav.statsMoney' },
+  { key: 'acquisition', href: '/stats/meta-ads', translationKey: 'nav.statsAcquisition' },
+  { key: 'fulfillment', href: '/stats/fulfillment', translationKey: 'nav.statsFulfillment' },
+  { key: 'storefront', href: '/stats/website', translationKey: 'nav.statsStorefront' },
+  { key: 'search', href: '/stats/search', translationKey: 'nav.statsSearch' },
+  { key: 'catalog', href: '/stats/products', translationKey: 'nav.statsCatalog' },
+  { key: 'assumptions', href: '/stats/costs', translationKey: 'nav.statsAssumptions' },
+];
+
 export function navigationItemsForUi(legacyUi: boolean): NavigationItem[] {
   if (legacyUi) return navigationItems;
-  return navigationItems.map((item) =>
-    item.key === 'assets' ? { ...item, subItems: modernAssetSubItems } : item,
-  );
+  return navigationItems.map((item) => {
+    if (item.key === 'assets') return { ...item, subItems: modernAssetSubItems };
+    if (item.key === 'stats') return { ...item, subItems: modernStatsSubItems };
+    return item;
+  });
 }

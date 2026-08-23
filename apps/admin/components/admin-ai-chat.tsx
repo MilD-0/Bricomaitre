@@ -6,12 +6,17 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageSquarePlus,
+  Pencil,
+  Search,
   Send,
   Sparkles,
+  Trash2,
+  ThumbsDown,
+  ThumbsUp,
   X,
 } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -24,6 +29,16 @@ import {
 } from 'recharts';
 
 import { consumeAdminAiChatResponse } from '../lib/admin-ai-chat-stream';
+import { suggestionKeysForAdminAi } from '../lib/admin-ai-capabilities';
+import {
+  adminAiMetricsFromUnknown,
+  adminAiResultTables,
+  adminAiScalarEntries,
+  adminAiToolResultsFromUnknown,
+  isAdminAiScalar,
+  type AdminAiToolResult,
+} from '../lib/admin-ai-result-view';
+import type { PermissionKey } from '../lib/permissions';
 import {
   ADMIN_AI_DEFAULT_MODEL,
   ADMIN_AI_DEFAULT_REASONING_EFFORT,
@@ -39,31 +54,35 @@ import {
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Markdown } from './ui/markdown';
+import { Input } from './ui/input';
 import { Spinner } from './ui/spinner';
 import { Switch } from './ui/switch';
 import { Textarea } from './ui/textarea';
+import { useAdminAiSurfaceContext } from './admin-ai-surface-context';
 
 type AnalyticsResult = {
   query?: string;
+  view?: string;
   source?: string;
   definition?: string;
   data?: unknown;
   caveats?: string[];
-  comparison?: boolean;
-  currentPeriod?: { startDate: string; endDate: string; data: unknown };
-  previousPeriod?: { startDate: string; endDate: string; data: unknown };
-  deltas?: Record<
-    string,
-    { current: number; previous: number; absolute: number; percent: number | null }
-  >;
+  filters?: { startDate?: string | null; endDate?: string | null; range?: string };
+  generatedAt?: string;
+  sources?: Array<Record<string, unknown>>;
+  warnings?: unknown[];
+  truncations?: Array<{ path?: string; available?: number; included?: number }>;
 };
 type Proposal = { id: number; status: 'proposed' | 'applied' | 'rejected' };
 type ChatMessage = {
   id?: string;
+  messageRecordId?: number;
   role: 'user' | 'assistant';
   content: string;
+  feedback?: 'helpful' | 'not_helpful';
   analytics?: AnalyticsResult[];
   proposals?: Proposal[];
+  results?: AdminAiToolResult[];
 };
 type ConversationSummary = {
   id: number;
@@ -83,8 +102,23 @@ type AiJob = {
   errorMessage: string | null;
   resultSummary: Record<string, unknown> | null;
 };
-const ADMIN_AI_VISIBLE_JOB_KINDS = new Set(['ai-product-categorization', 'ai-product-content']);
+type ProposalNextAction = 'refresh' | 'regenerate' | 'review' | 'retry';
 
+const ADMIN_AI_JOB_LABEL_KEYS: Record<string, string> = {
+  ai_categorization: 'ai_categorization',
+  ai_content: 'ai_content',
+  product_export: 'product_export',
+  catalog_feed_refresh: 'catalog_feed_refresh',
+  order_export: 'order_export',
+  order_ecotrack: 'order_ecotrack',
+  stats_import: 'stats_import',
+  ad_cost_import: 'ad_cost_import',
+  reporting_refresh: 'reporting_refresh',
+  ecotrack_catalog_sync: 'ecotrack_catalog_sync',
+  ecotrack_shipment_sync: 'ecotrack_shipment_sync',
+  'ai-product-categorization': 'ai_categorization',
+  'ai-product-content': 'ai_content',
+};
 export const ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY = 'bricomaitre:admin-ai:auto-accept';
 export const ADMIN_AI_MODEL_STORAGE_KEY = 'bricomaitre:admin-ai:model';
 export const ADMIN_AI_REASONING_EFFORT_STORAGE_KEY = 'bricomaitre:admin-ai:reasoning-effort';
@@ -132,19 +166,13 @@ export function selectAnalyticsChartMetric(rows: Record<string, unknown>[], colu
   return selected && selected.magnitude > 0 ? selected.key : null;
 }
 
-function isScalar(value: unknown): value is string | number | boolean | null {
-  return value == null || ['string', 'number', 'boolean'].includes(typeof value);
-}
-
 function resultFromUnknown(value: unknown, depth = 0): AnalyticsResult[] {
   if (depth > 5 || value == null) return [];
   if (Array.isArray(value)) return value.flatMap((item) => resultFromUnknown(item, depth + 1));
   if (typeof value !== 'object') return [];
   const item = value as Record<string, unknown>;
   return [
-    ...(typeof item.query === 'string' && ('data' in item || item.comparison === true)
-      ? [item as AnalyticsResult]
-      : []),
+    ...(typeof item.query === 'string' && 'data' in item ? [item as AnalyticsResult] : []),
     ...Object.values(item).flatMap((child) => resultFromUnknown(child, depth + 1)),
   ];
 }
@@ -168,116 +196,107 @@ function proposalsFromUnknown(value: unknown, depth = 0): Proposal[] {
 }
 
 function queryLabel(value: string | undefined) {
-  return value?.replaceAll('_', ' ') ?? '';
+  return (
+    value
+      ?.replaceAll('_', ' ')
+      .replaceAll('.', ' · ')
+      .replace(/([a-z\d])([A-Z])/g, '$1 $2')
+      .toLowerCase() ?? ''
+  );
+}
+
+function presentationFromUnknown(value: unknown) {
+  return {
+    analytics: resultFromUnknown(value),
+    proposals: [
+      ...new Map(proposalsFromUnknown(value).map((proposal) => [proposal.id, proposal])).values(),
+    ],
+    results: adminAiToolResultsFromUnknown(value).filter(
+      (result) => result.toolName !== 'query_analytics',
+    ),
+  };
+}
+
+function hydrateChatMessage(
+  message: ChatMessage & { toolResults?: unknown },
+  index: number,
+): ChatMessage {
+  if (message.role !== 'assistant' || !('toolResults' in message)) return message;
+  return {
+    id: message.id ?? `saved-assistant-${index}`,
+    messageRecordId: message.messageRecordId,
+    role: message.role,
+    content: message.content,
+    feedback: message.feedback,
+    ...presentationFromUnknown(message.toolResults),
+  };
+}
+
+function toolResultLabelKey(toolName: string) {
+  if (['find_products'].includes(toolName)) return 'catalog';
+  if (['find_brands', 'find_categories'].includes(toolName)) return 'taxonomy';
+  if (toolName === 'inspect_orders') return 'orders';
+  if (toolName === 'inspect_inventory') return 'inventory';
+  if (toolName === 'inspect_assets') return 'assets';
+  if (toolName === 'inspect_ai_proposals' || toolName.startsWith('propose_')) return 'proposals';
+  if (toolName === 'inspect_bulletin') return 'bulletin';
+  if (toolName === 'inspect_administration') return 'administration';
+  if (toolName.includes('background_job')) return 'background';
+  if (toolName.includes('content')) return 'content';
+  if (toolName.includes('categor')) return 'categorization';
+  if (toolName.startsWith('suggest_')) return 'proposals';
+  return 'result';
+}
+
+function displayAdminAiValue(
+  value: unknown,
+  locale: string,
+  yes: string,
+  no: string,
+  unit?: string,
+): string {
+  if (Array.isArray(value) && value.every(isAdminAiScalar)) {
+    const text: string = value.map((item) => displayAdminAiValue(item, locale, yes, no)).join(', ');
+    return text.length > 180 ? `${text.slice(0, 179)}…` : text;
+  }
+  if (typeof value === 'number') {
+    if (unit === 'dzd' || unit === 'eur') {
+      return new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency: unit.toUpperCase(),
+        maximumFractionDigits: 2,
+      }).format(value);
+    }
+    const formatted = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);
+    return unit === 'percent' ? `${formatted}%` : formatted;
+  }
+  if (value == null) return '—';
+  if (typeof value === 'boolean') return value ? yes : no;
+  const text = String(value);
+  return text.length > 180 ? `${text.slice(0, 179)}…` : text;
+}
+
+function adminAiNoticeText(value: unknown) {
+  if (isAdminAiScalar(value)) return queryLabel(String(value ?? ''));
+  const entries = adminAiScalarEntries(value, 5);
+  return entries.map(([key, child]) => `${queryLabel(key)}: ${String(child ?? '—')}`).join(' · ');
 }
 
 function AnalyticsCard({ result }: { result: AnalyticsResult }) {
   const t = useTranslations();
   const locale = useLocale();
-  const displayValue = (value: unknown) => {
-    if (typeof value === 'number')
-      return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);
-    if (value == null) return '—';
-    if (typeof value === 'boolean') return value ? t('aiChat.yes') : t('aiChat.no');
-    return String(value);
-  };
-
-  if (result.comparison && result.currentPeriod && result.previousPeriod && result.deltas) {
-    const rows = Object.entries(result.deltas).slice(0, 8);
-    return (
-      <section className="mt-4 overflow-hidden rounded-[1.15rem] border border-border/60 bg-card shadow-[var(--shadow-vapor)]">
-        <div className="border-b border-border/60 bg-secondary/35 px-4 py-3">
-          <p className="text-xs font-semibold capitalize text-foreground">
-            {queryLabel(result.query)}
-          </p>
-          <p className="mt-1 text-[0.68rem] text-muted-foreground">
-            {result.currentPeriod.startDate}–{result.currentPeriod.endDate} {t('aiChat.vs')}{' '}
-            {result.previousPeriod.startDate}–{result.previousPeriod.endDate}
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-px bg-border/50 sm:grid-cols-4">
-          {rows.map(([key, delta]) => (
-            <div key={key} className="bg-card px-3 py-3">
-              <p className="truncate text-[0.66rem] text-muted-foreground">{queryLabel(key)}</p>
-              <p className="mt-1 text-sm font-semibold text-foreground">
-                {displayValue(delta.current)}
-              </p>
-              <p
-                className={
-                  delta.absolute >= 0
-                    ? 'mt-0.5 text-[0.68rem] font-medium text-emerald-600'
-                    : 'mt-0.5 text-[0.68rem] font-medium text-destructive'
-                }
-              >
-                {delta.percent == null
-                  ? '—'
-                  : `${delta.percent >= 0 ? '+' : ''}${(delta.percent * 100).toFixed(1)}%`}
-              </p>
-            </div>
-          ))}
-        </div>
-        <div className="overflow-x-auto px-3 pb-3 pt-2">
-          <table className="w-full min-w-[30rem] text-start text-xs">
-            <thead>
-              <tr className="text-muted-foreground">
-                <th className="border-b px-2 py-2 font-medium">{t('aiChat.metric')}</th>
-                <th className="border-b px-2 py-2 font-medium">{t('aiChat.current')}</th>
-                <th className="border-b px-2 py-2 font-medium">{t('aiChat.previous')}</th>
-                <th className="border-b px-2 py-2 font-medium">{t('aiChat.change')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(([key, delta]) => (
-                <tr key={key}>
-                  <td className="border-b border-border/45 px-2 py-2 font-medium capitalize">
-                    {queryLabel(key)}
-                  </td>
-                  <td className="border-b border-border/45 px-2 py-2">
-                    {displayValue(delta.current)}
-                  </td>
-                  <td className="border-b border-border/45 px-2 py-2">
-                    {displayValue(delta.previous)}
-                  </td>
-                  <td
-                    className={
-                      delta.absolute >= 0
-                        ? 'border-b border-border/45 px-2 py-2 text-emerald-600'
-                        : 'border-b border-border/45 px-2 py-2 text-destructive'
-                    }
-                  >
-                    {displayValue(delta.absolute)} (
-                    {delta.percent == null ? '—' : `${(delta.percent * 100).toFixed(1)}%`})
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {result.caveats?.length ? (
-          <p className="border-t border-border/50 px-4 py-3 text-[0.68rem] leading-5 text-muted-foreground">
-            {result.caveats[0]}
-          </p>
-        ) : null}
-      </section>
-    );
-  }
+  const displayValue = (value: unknown, unit?: string) =>
+    displayAdminAiValue(value, locale, t('aiChat.yes'), t('aiChat.no'), unit);
 
   const data = result.data;
-  const rows = Array.isArray(data)
-    ? data
-        .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object')
-        .slice(0, 10)
-    : [];
-  const summary =
-    !Array.isArray(data) && data && typeof data === 'object'
-      ? Object.entries(data as Record<string, unknown>)
-          .filter(([, value]) => isScalar(value))
-          .slice(0, 10)
-      : [];
-  const allColumns = rows.length
-    ? Object.keys(rows[0]).filter((key) => rows.some((row) => isScalar(row[key])))
-    : [];
-  const columns = allColumns.slice(0, 8);
+  const metrics = adminAiMetricsFromUnknown(data).slice(0, 8);
+  const analyticsTables = adminAiResultTables(data).filter(
+    (table) => !table.path.endsWith('metrics'),
+  );
+  const [primaryTable] = analyticsTables;
+  const rows = primaryTable?.rows ?? [];
+  const summary = metrics.length === 0 ? adminAiScalarEntries(data, 8) : [];
+  const allColumns = primaryTable?.columns ?? [];
   const labelKey = allColumns.find((key) =>
     ['title', 'name', 'promoCode', 'sku', 'risk'].includes(key),
   );
@@ -290,12 +309,39 @@ function AnalyticsCard({ result }: { result: AnalyticsResult }) {
     <section className="mt-4 overflow-hidden rounded-[1.15rem] border border-border/60 bg-card shadow-[var(--shadow-vapor)]">
       <div className="border-b border-border/60 bg-secondary/35 px-4 py-3">
         <p className="text-xs font-semibold capitalize text-foreground">
-          {queryLabel(result.query)}
+          {queryLabel(result.view ?? result.query)}
         </p>
+        {result.filters?.startDate || result.filters?.endDate ? (
+          <p className="mt-1 text-[0.68rem] text-muted-foreground">
+            {result.filters.startDate ?? '…'}–{result.filters.endDate ?? '…'}
+          </p>
+        ) : null}
         {result.definition ? (
           <p className="mt-1 text-[0.68rem] leading-5 text-muted-foreground">{result.definition}</p>
         ) : null}
       </div>
+      {metrics.length ? (
+        <div className="grid grid-cols-2 gap-px bg-border/50 sm:grid-cols-4">
+          {metrics.map((metric) => (
+            <div key={metric.key} className="bg-card px-3 py-3">
+              <p className="truncate text-[0.66rem] capitalize text-muted-foreground">
+                {queryLabel(metric.key)}
+              </p>
+              <p className="mt-1 text-sm font-semibold text-foreground">
+                {displayValue(metric.value, metric.unit)}
+              </p>
+              {'previous' in metric ? (
+                <p className="mt-0.5 text-[0.68rem] text-muted-foreground">
+                  {t('aiChat.previous')}: {displayValue(metric.previous, metric.unit)}
+                  {typeof metric.changePct === 'number'
+                    ? ` · ${metric.changePct >= 0 ? '+' : ''}${metric.changePct.toFixed(1)}%`
+                    : ''}
+                </p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
       {summary.length ? (
         <div className="grid grid-cols-2 gap-px bg-border/50 sm:grid-cols-4">
           {summary.map(([key, value]) => (
@@ -352,12 +398,23 @@ function AnalyticsCard({ result }: { result: AnalyticsResult }) {
           {t('aiChat.noChartData')}
         </p>
       ) : null}
-      {rows.length ? (
-        <div className="overflow-x-auto px-3 pb-3">
+      {analyticsTables.map((table) => (
+        <div key={table.path} className="overflow-x-auto border-t border-border/50 px-3 pb-3">
+          <div className="flex items-center justify-between gap-3 px-2 pb-1 pt-3 text-[0.68rem] text-muted-foreground">
+            <p className="font-medium capitalize">{queryLabel(table.path)}</p>
+            {table.available > table.rows.length ? (
+              <p>
+                {t('aiChat.showingRows', {
+                  shown: table.rows.length,
+                  available: table.available,
+                })}
+              </p>
+            ) : null}
+          </div>
           <table className="w-full min-w-[28rem] text-start text-xs">
             <thead>
               <tr className="text-muted-foreground">
-                {columns.map((column) => (
+                {table.columns.map((column) => (
                   <th key={column} className="border-b px-2 py-2 font-medium capitalize">
                     {queryLabel(column)}
                   </th>
@@ -365,9 +422,9 @@ function AnalyticsCard({ result }: { result: AnalyticsResult }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, index) => (
+              {table.rows.map((row, index) => (
                 <tr key={index}>
-                  {columns.map((column) => (
+                  {table.columns.map((column) => (
                     <td key={column} className="border-b border-border/45 px-2 py-2">
                       {displayValue(row[column])}
                     </td>
@@ -377,11 +434,135 @@ function AnalyticsCard({ result }: { result: AnalyticsResult }) {
             </tbody>
           </table>
         </div>
-      ) : null}
+      ))}
       {result.caveats?.length ? (
         <p className="border-t border-border/50 px-4 py-3 text-[0.68rem] leading-5 text-muted-foreground">
           {result.caveats[0]}
         </p>
+      ) : null}
+      {result.sources?.length ? (
+        <div className="border-t border-border/50 px-4 py-3">
+          <p className="text-[0.68rem] font-semibold text-foreground">{t('aiChat.sourceHealth')}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {result.sources.slice(0, 8).map((source, index) => (
+              <span
+                key={`${String(source.key)}-${index}`}
+                className="rounded-full bg-secondary px-2 py-1 text-[0.65rem] text-muted-foreground"
+              >
+                {queryLabel(String(source.key ?? ''))} · {queryLabel(String(source.state ?? ''))}
+                {typeof source.coveragePct === 'number' ? ` · ${source.coveragePct}%` : ''}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {result.warnings?.length || result.truncations?.length ? (
+        <div className="space-y-1 border-t border-border/50 px-4 py-3 text-[0.68rem] leading-5 text-amber-700 dark:text-amber-300">
+          {result.warnings?.slice(0, 3).map((warning, index) => (
+            <p key={`warning-${index}`}>
+              {t('aiChat.analyticsWarning')}: {adminAiNoticeText(warning)}
+            </p>
+          ))}
+          {result.truncations?.slice(0, 3).map((truncation, index) => (
+            <p key={`truncation-${index}`}>
+              {t('aiChat.showingRows', {
+                shown: truncation.included ?? 0,
+                available: truncation.available ?? 0,
+              })}{' '}
+              ({queryLabel(truncation.path)})
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function StructuredToolResultCard({ result }: { result: AdminAiToolResult }) {
+  const t = useTranslations();
+  const locale = useLocale();
+  const displayValue = (value: unknown) =>
+    displayAdminAiValue(value, locale, t('aiChat.yes'), t('aiChat.no'));
+  const summary = adminAiScalarEntries(result.output, 10);
+  const tables = adminAiResultTables(result.output);
+  const error =
+    result.output &&
+    typeof result.output === 'object' &&
+    typeof (result.output as { error?: unknown }).error === 'string'
+      ? (result.output as { error: string }).error
+      : null;
+
+  return (
+    <section className="mt-4 overflow-hidden rounded-[1.15rem] border border-border/60 bg-card shadow-[var(--shadow-vapor)]">
+      <div className="border-b border-border/60 bg-secondary/35 px-4 py-3">
+        <p className="text-xs font-semibold text-foreground">
+          {t(`aiChat.toolLabels.${toolResultLabelKey(result.toolName)}`)}
+        </p>
+        <p className="mt-0.5 text-[0.65rem] capitalize text-muted-foreground">
+          {queryLabel(result.toolName)}
+        </p>
+      </div>
+      {error ? (
+        <p className="px-4 py-3 text-xs text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {summary.length ? (
+        <div className="grid grid-cols-2 gap-px bg-border/50 sm:grid-cols-4">
+          {summary.map(([key, value]) => (
+            <div key={key} className="min-w-0 bg-card px-3 py-3">
+              <p className="truncate text-[0.66rem] capitalize text-muted-foreground">
+                {queryLabel(key)}
+              </p>
+              <p className="mt-1 break-words text-xs font-semibold text-foreground">
+                {displayValue(value)}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {tables.map((table) => (
+        <div key={table.path} className="overflow-x-auto border-t border-border/50 px-3 pb-3">
+          <div className="flex items-center justify-between gap-3 px-2 pb-1 pt-3 text-[0.68rem] text-muted-foreground">
+            <p className="font-medium capitalize">{queryLabel(table.path)}</p>
+            {table.available > table.rows.length ? (
+              <p>
+                {t('aiChat.showingRows', {
+                  shown: table.rows.length,
+                  available: table.available,
+                })}
+              </p>
+            ) : null}
+          </div>
+          <table className="w-full min-w-[28rem] text-start text-xs">
+            <thead>
+              <tr className="text-muted-foreground">
+                {table.columns.map((column) => (
+                  <th key={column} className="border-b px-2 py-2 font-medium capitalize">
+                    {queryLabel(column)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {table.rows.map((row, index) => (
+                <tr key={index}>
+                  {table.columns.map((column) => (
+                    <td
+                      key={column}
+                      className="max-w-48 border-b border-border/45 px-2 py-2 [overflow-wrap:anywhere]"
+                    >
+                      {displayValue(row[column])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+      {!error && summary.length === 0 && tables.length === 0 ? (
+        <p className="px-4 py-3 text-xs text-muted-foreground">{t('aiChat.noToolData')}</p>
       ) : null}
     </section>
   );
@@ -393,8 +574,12 @@ function ChatSidebar({
   loading,
   jobs,
   cancellingJobId,
+  search,
   onNewChat,
+  onSearchChange,
   onSelectConversation,
+  onRenameConversation,
+  onDeleteConversation,
   onCancelJob,
 }: {
   conversations: ConversationSummary[];
@@ -402,12 +587,18 @@ function ChatSidebar({
   loading: boolean;
   jobs: AiJob[];
   cancellingJobId: string | null;
+  search: string;
   onNewChat: () => void;
+  onSearchChange: (value: string) => void;
   onSelectConversation: (conversation: ConversationSummary) => void;
+  onRenameConversation: (conversation: ConversationSummary, title: string) => Promise<boolean>;
+  onDeleteConversation: (conversation: ConversationSummary) => void;
   onCancelJob: (job: AiJob) => void;
 }) {
   const t = useTranslations();
   const [jobIndex, setJobIndex] = useState(0);
+  const [editingConversationId, setEditingConversationId] = useState<number | null>(null);
+  const [titleDraft, setTitleDraft] = useState('');
   const boundedJobIndex = Math.min(jobIndex, Math.max(0, jobs.length - 1));
   const selectedJob = jobs[boundedJobIndex];
 
@@ -429,6 +620,16 @@ function ChatSidebar({
           {t('aiChat.newChat')}
         </Button>
       </div>
+      <div className="relative border-b border-border/60 px-3 py-2 sm:px-4">
+        <Search className="pointer-events-none absolute start-6 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground sm:start-7" />
+        <Input
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+          className="h-9 ps-8 text-xs"
+          aria-label={t('aiChat.searchChats')}
+          placeholder={t('aiChat.searchChats')}
+        />
+      </div>
       <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-3 sm:p-4">
         {loading ? (
           <div
@@ -440,22 +641,95 @@ function ChatSidebar({
           </div>
         ) : (
           <>
-            {conversations.map((conversation) => (
-              <button
-                key={conversation.id}
-                type="button"
-                className={
-                  selectedConversationId === conversation.id
-                    ? 'w-full truncate rounded-lg bg-primary px-3 py-2 text-start text-xs font-medium text-primary-foreground'
-                    : 'w-full truncate rounded-lg bg-card px-3 py-2 text-start text-xs text-foreground hover:bg-secondary'
-                }
-                onClick={() => onSelectConversation(conversation)}
-              >
-                {conversation.title || t('aiChat.untitledChat')}
-              </button>
-            ))}
+            {conversations.map((conversation) => {
+              const title = conversation.title || t('aiChat.untitledChat');
+              if (editingConversationId === conversation.id)
+                return (
+                  <form
+                    key={conversation.id}
+                    className="flex items-center gap-1 rounded-lg bg-card p-1"
+                    onSubmit={async (event) => {
+                      event.preventDefault();
+                      if (await onRenameConversation(conversation, titleDraft))
+                        setEditingConversationId(null);
+                    }}
+                  >
+                    <Input
+                      autoFocus
+                      value={titleDraft}
+                      onChange={(event) => setTitleDraft(event.target.value)}
+                      maxLength={80}
+                      className="h-8 min-w-0 flex-1 text-xs"
+                      aria-label={t('aiChat.renameChat')}
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      variant="ghost"
+                      className="size-8 p-0"
+                      disabled={!titleDraft.trim()}
+                      aria-label={t('aiChat.saveChatTitle')}
+                    >
+                      <Check className="size-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="size-8 p-0"
+                      onClick={() => setEditingConversationId(null)}
+                      aria-label={t('aiChat.cancelChatRename')}
+                    >
+                      <X className="size-3.5" />
+                    </Button>
+                  </form>
+                );
+              return (
+                <div
+                  key={conversation.id}
+                  className={
+                    selectedConversationId === conversation.id
+                      ? 'group flex items-center rounded-lg bg-primary text-primary-foreground'
+                      : 'group flex items-center rounded-lg bg-card text-foreground hover:bg-secondary'
+                  }
+                >
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 truncate px-3 py-2 text-start text-xs font-medium"
+                    onClick={() => onSelectConversation(conversation)}
+                  >
+                    {title}
+                  </button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="size-8 shrink-0 p-0 opacity-70 hover:opacity-100"
+                    onClick={() => {
+                      setTitleDraft(title);
+                      setEditingConversationId(conversation.id);
+                    }}
+                    aria-label={`${t('aiChat.renameChat')} ${title}`}
+                  >
+                    <Pencil className="size-3.5" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="me-1 size-8 shrink-0 p-0 opacity-70 hover:opacity-100"
+                    onClick={() => onDeleteConversation(conversation)}
+                    aria-label={`${t('aiChat.deleteChat')} ${title}`}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+              );
+            })}
             {conversations.length === 0 ? (
-              <p className="px-1 py-2 text-xs text-muted-foreground">{t('aiChat.noChats')}</p>
+              <p className="px-1 py-2 text-xs text-muted-foreground">
+                {search ? t('aiChat.noMatchingChats') : t('aiChat.noChats')}
+              </p>
             ) : null}
           </>
         )}
@@ -499,6 +773,12 @@ function ChatSidebar({
                 const job = selectedJob;
                 const active = job.status === 'queued' || job.status === 'running';
                 const summary = job.resultSummary ?? {};
+                const summaryEntries = Object.entries(summary)
+                  .filter((entry): entry is [string, string | number | boolean | null] =>
+                    isAdminAiScalar(entry[1]),
+                  )
+                  .slice(0, 6);
+                const labelKey = ADMIN_AI_JOB_LABEL_KEYS[job.type ?? job.kind];
                 return (
                   <div className="relative pb-2">
                     {jobs.length > 2 ? (
@@ -520,11 +800,7 @@ function ChatSidebar({
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="truncate text-xs font-medium">
-                            {job.kind === 'ai-product-categorization'
-                              ? t('aiChat.categorizationJob')
-                              : job.kind === 'ai-product-content'
-                                ? t('aiChat.contentJob')
-                                : queryLabel(job.kind)}
+                            {labelKey ? t(`aiChat.jobLabels.${labelKey}`) : queryLabel(job.kind)}
                           </p>
                           <p className="mt-0.5 text-[0.68rem] text-muted-foreground">
                             {t(`aiChat.jobStatus.${job.status}`)}
@@ -567,6 +843,20 @@ function ChatSidebar({
                           })}
                         </p>
                       ) : null}
+                      {job.kind !== 'ai-product-categorization' && summaryEntries.length > 0 ? (
+                        <p className="mt-2 text-[0.68rem] leading-5 text-muted-foreground">
+                          {summaryEntries
+                            .map(([key, value]) => `${queryLabel(key)}: ${String(value ?? '—')}`)
+                            .join(' · ')}
+                        </p>
+                      ) : null}
+                      {Number(summary.autoApplyFailed ?? 0) > 0 ? (
+                        <p className="mt-2 text-[0.68rem] leading-5 text-amber-700 dark:text-amber-300">
+                          {t('aiChat.autoApplyFailed', {
+                            count: Number(summary.autoApplyFailed),
+                          })}
+                        </p>
+                      ) : null}
                       {job.errorMessage ? (
                         <p className="mt-2 text-[0.68rem] text-destructive">{job.errorMessage}</p>
                       ) : null}
@@ -581,8 +871,13 @@ function ChatSidebar({
   );
 }
 
-export function AdminAiChat() {
+export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[] }) {
   const t = useTranslations();
+  const surfaceContext = useAdminAiSurfaceContext();
+  const suggestionKeys = useMemo(
+    () => suggestionKeysForAdminAi(surfaceContext, permissions),
+    [permissions, surfaceContext],
+  );
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -599,8 +894,11 @@ export function AdminAiChat() {
   const [proposalReviewError, setProposalReviewError] = useState<{
     messageId: string;
     message: string;
+    nextAction?: ProposalNextAction;
   } | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [conversationSearch, setConversationSearch] = useState('');
+  const deferredConversationSearch = useDeferredValue(conversationSearch.trim());
   const [jobs, setJobs] = useState<AiJob[]>([]);
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
@@ -623,8 +921,10 @@ export function AdminAiChat() {
         cache: 'no-store',
       });
       if (!response.ok || requestId !== conversationRequestRef.current) return;
-      const data = (await response.json()) as { messages: ChatMessage[] };
-      setMessages(data.messages);
+      const data = (await response.json()) as {
+        messages: Array<ChatMessage & { toolResults?: unknown }>;
+      };
+      setMessages(data.messages.map(hydrateChatMessage));
       setInput('');
     } finally {
       if (requestId === conversationRequestRef.current) setLoadingConversation(false);
@@ -634,7 +934,10 @@ export function AdminAiChat() {
     async (selectLatest = false) => {
       setLoadingConversations(true);
       try {
-        const response = await fetch('/api/ai/conversations', { cache: 'no-store' });
+        const query = deferredConversationSearch
+          ? `?q=${encodeURIComponent(deferredConversationSearch)}`
+          : '';
+        const response = await fetch(`/api/ai/conversations${query}`, { cache: 'no-store' });
         if (!response.ok) return;
         const data = (await response.json()) as { conversations: ConversationSummary[] };
         setConversations(data.conversations);
@@ -645,15 +948,13 @@ export function AdminAiChat() {
         setLoadingConversations(false);
       }
     },
-    [selectConversation],
+    [deferredConversationSearch, selectConversation],
   );
   const loadAiHistory = useCallback(async () => {
     const response = await fetch('/api/ai/history', { cache: 'no-store' });
     if (!response.ok) return;
     const data = (await response.json()) as { jobs?: AiJob[] };
-    const nextJobs = Array.isArray(data.jobs)
-      ? data.jobs.filter((job) => ADMIN_AI_VISIBLE_JOB_KINDS.has(job.kind))
-      : [];
+    const nextJobs = Array.isArray(data.jobs) ? data.jobs : [];
     setJobs(nextJobs);
     const terminalJobs = nextJobs.filter((job) =>
       ['completed', 'cancelled', 'failed'].includes(job.status),
@@ -693,11 +994,13 @@ export function AdminAiChat() {
   useEffect(() => {
     if (!open) return;
     if (activeConversationRef.current) void selectConversation(activeConversationRef.current);
-    void loadConversations(activeConversationRef.current === null);
+    void loadConversations(
+      activeConversationRef.current === null && deferredConversationSearch.length === 0,
+    );
     void loadAiHistory();
     const interval = window.setInterval(() => void loadAiHistory(), 2_500);
     return () => window.clearInterval(interval);
-  }, [open, loadAiHistory, loadConversations, selectConversation]);
+  }, [deferredConversationSearch, open, loadAiHistory, loadConversations, selectConversation]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -711,6 +1014,62 @@ export function AdminAiChat() {
     setLoadingConversation(false);
     setMessages([]);
     setInput('');
+  }
+
+  async function renameConversation(conversation: ConversationSummary, title: string) {
+    const normalized = title.trim();
+    if (!normalized) return false;
+    const response = await fetch(`/api/ai/conversations/${conversation.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: normalized }),
+    });
+    if (!response.ok) return false;
+    const data = (await response.json()) as { conversation: ConversationSummary };
+    setConversations((current) =>
+      current.map((item) => (item.id === conversation.id ? data.conversation : item)),
+    );
+    if (activeConversationRef.current?.id === conversation.id)
+      activeConversationRef.current = data.conversation;
+    return true;
+  }
+
+  async function deleteConversation(conversation: ConversationSummary) {
+    if (!window.confirm(t('aiChat.deleteChatConfirm'))) return;
+    const response = await fetch(`/api/ai/conversations/${conversation.id}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) return;
+    setConversations((current) => current.filter((item) => item.id !== conversation.id));
+    if (activeConversationRef.current?.id === conversation.id) newChat();
+  }
+
+  async function rateAssistantMessage(
+    messageRecordId: number,
+    feedback: 'helpful' | 'not_helpful',
+  ) {
+    const previous = messages.find(
+      (message) => message.messageRecordId === messageRecordId,
+    )?.feedback;
+    setMessages((current) =>
+      current.map((message) =>
+        message.messageRecordId === messageRecordId ? { ...message, feedback } : message,
+      ),
+    );
+    const response = await fetch(`/api/ai/messages/${messageRecordId}/feedback`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ feedback }),
+    });
+    if (!response.ok) {
+      setMessages((current) =>
+        current.map((message) =>
+          message.messageRecordId === messageRecordId
+            ? { ...message, feedback: previous }
+            : message,
+        ),
+      );
+    }
   }
 
   function updateAutoAcceptProposals(enabled: boolean) {
@@ -750,10 +1109,18 @@ export function AdminAiChat() {
       });
       const data = (await response.json()) as {
         error?: string;
+        code?: string;
+        nextAction?: ProposalNextAction;
         proposal?: { status?: Proposal['status']; verified?: boolean };
       };
-      if (!response.ok || !data.proposal?.status)
-        throw new Error(data.error ?? 'Proposal review failed.');
+      if (!response.ok || !data.proposal?.status) {
+        setProposalReviewError({
+          messageId,
+          message: data.error ?? t('aiChat.proposalReviewError'),
+          nextAction: data.nextAction,
+        });
+        return false;
+      }
       if (data.proposal.status === 'applied' && data.proposal.verified !== true) {
         throw new Error(t('aiChat.proposalVerificationError'));
       }
@@ -812,6 +1179,7 @@ export function AdminAiChat() {
           autoAcceptProposals: autoAcceptProposalsRef.current,
           model,
           reasoningEffort,
+          context: surfaceContext.surface === 'unknown' ? undefined : surfaceContext,
         }),
         signal: abortController.signal,
       });
@@ -829,12 +1197,8 @@ export function AdminAiChat() {
           });
         },
         onResult(data) {
-          const analytics = resultFromUnknown(data.toolResults);
-          const proposals = [
-            ...new Map(
-              proposalsFromUnknown(data.toolResults).map((proposal) => [proposal.id, proposal]),
-            ).values(),
-          ];
+          const presentation = presentationFromUnknown(data.toolResults);
+          const { proposals } = presentation;
           setMessages((items) => {
             const existing = items.findIndex((item) => item.id === assistantId);
             if (existing < 0)
@@ -842,14 +1206,16 @@ export function AdminAiChat() {
                 ...items,
                 {
                   id: assistantId,
+                  messageRecordId: data.messageId ?? undefined,
                   role: 'assistant',
                   content: t('aiChat.completed'),
-                  analytics,
-                  proposals,
+                  ...presentation,
                 },
               ];
             return items.map((item, index) =>
-              index === existing ? { ...item, analytics, proposals } : item,
+              index === existing
+                ? { ...item, messageRecordId: data.messageId ?? undefined, ...presentation }
+                : item,
             );
           });
           conversationKeyRef.current = data.conversation.sessionKey;
@@ -1023,18 +1389,24 @@ export function AdminAiChat() {
                         {t('aiChat.emptyTitle')}
                       </h3>
                       <p className="mx-auto mt-2 max-w-lg text-xs leading-6 text-muted-foreground sm:text-sm">
-                        {t('aiChat.examples')}
+                        {t('aiChat.currentSurface', {
+                          surface: t(`aiChat.surfaceLabels.${surfaceContext.surface}`),
+                        })}
                       </p>
-                      <div className="mt-5 flex flex-wrap justify-center gap-2">
-                        <span className="rounded-full border border-border/60 bg-card px-3 py-1.5 text-[0.68rem] text-muted-foreground">
-                          {t('aiChat.capabilityCatalog')}
-                        </span>
-                        <span className="rounded-full border border-border/60 bg-card px-3 py-1.5 text-[0.68rem] text-muted-foreground">
-                          {t('aiChat.capabilityAnalytics')}
-                        </span>
-                        <span className="rounded-full border border-border/60 bg-card px-3 py-1.5 text-[0.68rem] text-muted-foreground">
-                          {t('aiChat.capabilityPricing')}
-                        </span>
+                      <div className="mt-5 grid gap-2 text-start sm:grid-cols-2">
+                        {suggestionKeys.map((key) => {
+                          const prompt = t(`aiChat.surfaceSuggestions.${key}`);
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              className="rounded-xl border border-border/65 bg-card px-3 py-2.5 text-xs leading-5 text-foreground transition-colors hover:border-primary/35 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+                              onClick={() => setInput(prompt)}
+                            >
+                              {prompt}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -1075,6 +1447,14 @@ export function AdminAiChat() {
                             ? message.analytics?.map((result, analyticsIndex) => (
                                 <AnalyticsCard
                                   key={`${result.query}-${analyticsIndex}`}
+                                  result={result}
+                                />
+                              ))
+                            : null}
+                          {message.role === 'assistant'
+                            ? message.results?.map((result, resultIndex) => (
+                                <StructuredToolResultCard
+                                  key={`${result.toolName}-${resultIndex}`}
                                   result={result}
                                 />
                               ))
@@ -1130,9 +1510,46 @@ export function AdminAiChat() {
                           {message.role === 'assistant' &&
                           proposalReviewError &&
                           proposalReviewError.messageId === message.id ? (
-                            <p className="mt-3 text-xs text-destructive" role="alert">
-                              {proposalReviewError.message}
-                            </p>
+                            <div className="mt-3 text-xs text-destructive" role="alert">
+                              <p>{proposalReviewError.message}</p>
+                              {proposalReviewError.nextAction ? (
+                                <p className="mt-1 text-muted-foreground">
+                                  {t(
+                                    `aiChat.proposalNextActions.${proposalReviewError.nextAction}`,
+                                  )}
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {message.role === 'assistant' && message.messageRecordId ? (
+                            <div className="mt-3 flex gap-1 border-t border-border/45 pt-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="size-8 p-0"
+                                aria-label={t('aiChat.helpful')}
+                                aria-pressed={message.feedback === 'helpful'}
+                                onClick={() =>
+                                  void rateAssistantMessage(message.messageRecordId!, 'helpful')
+                                }
+                              >
+                                <ThumbsUp className="size-3.5" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="size-8 p-0"
+                                aria-label={t('aiChat.notHelpful')}
+                                aria-pressed={message.feedback === 'not_helpful'}
+                                onClick={() =>
+                                  void rateAssistantMessage(message.messageRecordId!, 'not_helpful')
+                                }
+                              >
+                                <ThumbsDown className="size-3.5" />
+                              </Button>
+                            </div>
                           ) : null}
                         </div>
                       </article>
@@ -1164,7 +1581,7 @@ export function AdminAiChat() {
                         void send();
                       }
                     }}
-                    placeholder={t('aiChat.placeholder')}
+                    placeholder={t(`aiChat.surfacePlaceholders.${surfaceContext.surface}`)}
                     aria-label={t('aiChat.placeholder')}
                     className="min-h-12 max-h-32 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:bg-transparent focus-visible:ring-0"
                   />
@@ -1199,8 +1616,12 @@ export function AdminAiChat() {
               loading={loadingConversations}
               jobs={jobs}
               cancellingJobId={cancellingJobId}
+              search={conversationSearch}
               onNewChat={newChat}
+              onSearchChange={setConversationSearch}
               onSelectConversation={(conversation) => void selectConversation(conversation)}
+              onRenameConversation={renameConversation}
+              onDeleteConversation={(conversation) => void deleteConversation(conversation)}
               onCancelJob={(job) => void cancelJob(job)}
             />
           </div>

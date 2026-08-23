@@ -2,6 +2,8 @@
 
 import { useTranslations } from 'next-intl';
 
+import { administrationAiSurfaceDetails } from '../../lib/admin-ai-live-surface-details';
+import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { NativeSelect, NativeSelectOption } from '../ui/native-select';
 import {
   WorkspaceFrame,
@@ -26,6 +28,7 @@ export function AdministrationShell({
 }) {
   const t = useTranslations();
   const base = `/${locale}/administration`;
+  useAdminAiSurfaceDetails(administrationAiSurfaceDetails(section));
   const label = (key: AdministrationSection) => {
     if (key === 'users') return t('settings.accessManager.title');
     if (key === 'roles') return t('settings.rolesManager.title');

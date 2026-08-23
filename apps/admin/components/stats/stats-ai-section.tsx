@@ -191,6 +191,22 @@ export function StatsAiSection({ stats }: { stats: StatsDashboardData }) {
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <StatBlock
+              label={t('aiAssistants.cards.helpfulRate')}
+              value={formatPercent(locale, storefront.helpfulRate)}
+            />
+            <StatBlock
+              label={t('aiAssistants.cards.helpfulAnswers')}
+              value={formatNumber(locale, storefront.helpful)}
+            />
+            <StatBlock
+              label={t('aiAssistants.cards.notHelpfulAnswers')}
+              value={formatNumber(locale, storefront.notHelpful)}
+            />
+            <StatBlock
+              label={t('aiAssistants.cards.cancelled')}
+              value={formatNumber(locale, storefront.cancelled)}
+            />
+            <StatBlock
               label={t('aiAssistants.cards.tokens')}
               value={formatNumber(locale, storefront.totalTokens)}
             />
@@ -285,6 +301,24 @@ export function StatsAiSection({ stats }: { stats: StatsDashboardData }) {
             <p className="text-sm text-muted-foreground">{t('aiAssistants.empty')}</p>
           )}
           <div className="min-w-0 space-y-5">
+            <div className="grid grid-cols-2 gap-2">
+              <StatBlock
+                label={t('aiAssistants.cards.helpfulRate')}
+                value={formatPercent(locale, admin.helpfulRate)}
+              />
+              <StatBlock
+                label={t('aiAssistants.cards.helpfulAnswers')}
+                value={formatNumber(locale, admin.helpful)}
+              />
+              <StatBlock
+                label={t('aiAssistants.cards.notHelpfulAnswers')}
+                value={formatNumber(locale, admin.notHelpful)}
+              />
+              <StatBlock
+                label={t('aiAssistants.cards.cancelled')}
+                value={formatNumber(locale, admin.cancelled)}
+              />
+            </div>
             <div>
               <h3 className="mb-2 text-sm font-semibold text-foreground">
                 {t('aiAssistants.admin.modelsTitle')}

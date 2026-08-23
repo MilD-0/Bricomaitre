@@ -11,13 +11,14 @@ import { and, desc, eq } from 'drizzle-orm';
 import { getDb } from '@bric/db/client';
 import { aiProposals, aiRuns, brands, categories, products } from '@bric/db/schema';
 import { mutateEntityWithHistory, type ActionActor } from './action-history';
+import { AiProposalReviewConflictError } from './ai-proposal-review';
 import { persistedProposalValuesMatch } from './ai-proposal-verification';
 
 const PRODUCT_CONTENT_PROMPT_VERSION = 'product-content-v1';
 const CONTENT_FIELDS = ['title', 'titleAr', 'description', 'descriptionAr'] as const;
 
 export class AiContentNotFoundError extends Error {}
-export class AiProposalConflictError extends Error {}
+export class AiProposalConflictError extends AiProposalReviewConflictError {}
 
 export function isContentProposalFresh(input: {
   sourceUpdatedAt: Date | null;
@@ -210,10 +211,13 @@ export async function reviewProductContentProposal(input: {
     throw new AiContentNotFoundError('Product content proposal not found.');
   }
   if (initial.status !== 'proposed')
-    throw new AiProposalConflictError('This proposal has already been reviewed.');
+    throw new AiProposalConflictError(
+      'This proposal has already been reviewed.',
+      'proposal_already_reviewed',
+    );
 
   if (input.action === 'reject') {
-    await db
+    const [rejected] = await db
       .update(aiProposals)
       .set({
         status: 'rejected',
@@ -221,13 +225,17 @@ export async function reviewProductContentProposal(input: {
         reviewedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(and(eq(aiProposals.id, input.proposalId), eq(aiProposals.status, 'proposed')));
-    return { id: initial.id, status: 'rejected' as const };
+      .where(and(eq(aiProposals.id, input.proposalId), eq(aiProposals.status, 'proposed')))
+      .returning({ id: aiProposals.id });
+    if (!rejected) {
+      throw new AiProposalConflictError(
+        'This proposal changed while it was being reviewed.',
+        'proposal_already_reviewed',
+      );
+    }
+    return { id: initial.id, status: 'rejected' as const, verified: true as const };
   }
 
-  const changes = productContentChangesSchema.parse(
-    (initial.payload as { changes?: unknown }).changes,
-  );
   const [updated] = await mutateEntityWithHistory(db, {
     entityType: 'products',
     entityId: initial.entityId,
@@ -238,25 +246,37 @@ export async function reviewProductContentProposal(input: {
         .select()
         .from(aiProposals)
         .where(and(eq(aiProposals.id, input.proposalId), eq(aiProposals.status, 'proposed')))
-        .limit(1);
+        .limit(1)
+        .for('update');
       const [product] = await tx
         .select()
         .from(products)
         .where(eq(products.id, initial.entityId))
-        .limit(1);
+        .limit(1)
+        .for('update');
       if (!proposal || !product)
-        throw new AiProposalConflictError('The proposal or product is no longer available.');
-      if (
-        !isContentProposalFresh({
-          sourceUpdatedAt: proposal.sourceUpdatedAt,
-          productUpdatedAt: product.updatedAt,
-          expiresAt: proposal.expiresAt,
-        })
-      ) {
         throw new AiProposalConflictError(
-          'The proposal is stale or expired. Generate a new proposal.',
+          'The proposal or product is no longer available.',
+          'proposal_dependency_changed',
+        );
+      if (proposal.expiresAt <= new Date()) {
+        throw new AiProposalConflictError(
+          'The proposal has expired. Generate a new proposal.',
+          'proposal_expired',
         );
       }
+      if (
+        !proposal.sourceUpdatedAt ||
+        proposal.sourceUpdatedAt.getTime() !== product.updatedAt.getTime()
+      ) {
+        throw new AiProposalConflictError(
+          'The product changed after this proposal was generated. Generate a new proposal.',
+          'proposal_stale',
+        );
+      }
+      const changes = productContentChangesSchema.parse(
+        (proposal.payload as { changes?: unknown }).changes,
+      );
       const [next] = await tx
         .update(products)
         .set({ ...changes, updatedAt: new Date() })
@@ -265,6 +285,7 @@ export async function reviewProductContentProposal(input: {
       if (!persistedProposalValuesMatch(next, changes)) {
         throw new AiProposalConflictError(
           'The approved product changes could not be verified in the database. Nothing was marked as applied.',
+          'proposal_verification_failed',
         );
       }
       const [applied] = await tx
@@ -281,6 +302,7 @@ export async function reviewProductContentProposal(input: {
       if (!applied || applied.status !== 'applied') {
         throw new AiProposalConflictError(
           'The proposal result could not be recorded after verification.',
+          'proposal_already_reviewed',
         );
       }
       return [next];

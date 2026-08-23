@@ -218,7 +218,7 @@ describe('Product Detail analytics', () => {
     });
   });
 
-  it('governs assistant outcomes without accepting customer conversation text', () => {
+  it('governs assistant outcomes and retains customer conversation text', () => {
     expect(
       buildNavigationAnalyticsPayload({
         eventName: 'ai_assistant_result_click',
@@ -233,20 +233,31 @@ describe('Product Detail analytics', () => {
       metadata: { surface: 'ai_assistant', target: 'product_result', position: 1 },
     });
 
-    expect(() =>
-      buildNavigationAnalyticsPayload({
-        eventName: 'ai_assistant_message',
-        locale: 'fr',
-        searchTerm: 'private customer question',
-        metadata: { surface: 'ai_assistant', target: 'submitted' },
-      }),
-    ).toThrow();
     const payload = buildNavigationAnalyticsPayload({
       eventName: 'ai_assistant_message',
       locale: 'fr',
+      searchTerm: 'private customer question',
       metadata: { surface: 'ai_assistant', target: 'submitted' },
     });
-    expect(JSON.stringify(payload)).not.toContain('private customer question');
+    expect(payload.searchTerm).toBe('private customer question');
+
+    expect(
+      buildNavigationAnalyticsPayload({
+        eventName: 'ai_assistant_feedback',
+        locale: 'fr',
+        searchTerm: 'The complete assistant response',
+        metadata: {
+          surface: 'ai_assistant',
+          target: 'assistant_response',
+          messageId: 'message-12',
+          rating: 'helpful',
+        },
+      }),
+    ).toMatchObject({
+      eventName: 'ai_assistant_feedback',
+      searchTerm: 'The complete assistant response',
+      metadata: { messageId: 'message-12', rating: 'helpful' },
+    });
   });
 
   it('tracks checkout outcomes without accepting customer PII', () => {

@@ -55,6 +55,7 @@ describe('AI product content background job', () => {
       processed: 4,
       proposed: 1,
       applied: 0,
+      autoApplyFailed: 0,
       skipped: 1,
       alreadyProposed: 1,
       failed: 1,
@@ -90,6 +91,7 @@ describe('AI product content background job', () => {
       processed: 1,
       proposed: 0,
       applied: 1,
+      autoApplyFailed: 0,
       accounted: 1,
       complete: true,
     });
@@ -114,6 +116,7 @@ describe('AI product content background job', () => {
     ).resolves.toMatchObject({
       proposed: 1,
       applied: 0,
+      autoApplyFailed: 1,
       complete: true,
     });
   });

@@ -1,34 +1,22 @@
-import {
-  createAiLanguageModel,
-  getAiConfig,
-  productContentFieldSchema,
-  semanticAnalyticsComparisonSchema,
-  semanticAnalyticsQuerySchema,
-} from '@bric/ai-core';
+import { createAiLanguageModel, getAiConfig, productContentFieldSchema } from '@bric/ai-core';
 import { stepCountIs, streamText, tool } from 'ai';
-import { and, desc, eq, ilike, or } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getDb, hasDb } from '@bric/db/client';
-import {
-  aiConversations,
-  aiMessages,
-  aiRuns,
-  aiToolCalls,
-  brands,
-  categories,
-  products,
-} from '@bric/db/schema';
+import { aiConversations, aiMessages, aiRuns, aiToolCalls } from '@bric/db/schema';
 import { proposeProductContent } from '../../../../lib/ai-product-content';
 import { ADMIN_AI_CHAT_INSTRUCTIONS } from '../../../../lib/ai-admin-chat';
 import {
-  ADMIN_BACKGROUND_JOB_TYPES,
-  STARTABLE_ADMIN_BACKGROUND_JOB_TYPES,
+  allowedAdminBackgroundJobTypes,
+  allowedStartableAdminBackgroundJobTypes,
   cancelAdminBackgroundJob,
   getAdminBackgroundJob,
   listAdminBackgroundJobs,
   startAdminBackgroundJob,
+  type AdminBackgroundJobType,
+  type StartableAdminBackgroundJobType,
 } from '../../../../lib/ai-background-jobs';
 import {
   AI_CATALOG_EDIT_FIELDS,
@@ -39,10 +27,24 @@ import {
   proposeLandingPage,
   proposeTaxonomyCreate,
 } from '../../../../lib/ai-admin-capabilities';
+import { queryAdminAnalytics } from '../../../../lib/ai-analytics';
 import {
-  executeSemanticAnalytics,
-  executeSemanticAnalyticsComparison,
-} from '../../../../lib/ai-semantic-analytics';
+  findAdminBrands,
+  findAdminCategories,
+  findAdminProducts,
+  inspectAdminAdministration,
+  inspectAdminAssets,
+  inspectAdminBulletin,
+  inspectAdminInventory,
+  inspectAdminOrders,
+  inspectAdminProposals,
+} from '../../../../lib/admin-ai-domain';
+import {
+  adminAiCapabilityInstructions,
+  adminAiContextMessage,
+} from '../../../../lib/admin-ai-capabilities';
+import { adminAiSurfaceContextSchema } from '../../../../lib/admin-ai-context';
+import { analytics2QuerySchema } from '../../../../lib/analytics2';
 import {
   ADMIN_AI_CATEGORIZATION_QUEUE,
   ADMIN_AI_CONTENT_QUEUE,
@@ -52,9 +54,9 @@ import {
 } from '../../../../lib/background-jobs';
 import { auth } from '../../../../lib/auth';
 import {
-  canViewProfitStats,
   hasPermission,
   normalizePermissions,
+  type PermissionKey,
 } from '../../../../lib/permissions';
 import { requireAppAccess } from '../../../../lib/rbac';
 import {
@@ -74,6 +76,7 @@ const requestSchema = z
   .object({
     message: z.string().trim().min(1).max(4_000),
     conversationKey: z.uuid(),
+    context: adminAiSurfaceContextSchema.optional(),
     autoAcceptProposals: z.boolean().optional().default(false),
     model: adminAiModelIdSchema.optional().default(ADMIN_AI_DEFAULT_MODEL),
     reasoningEffort: adminAiReasoningEffortSchema
@@ -87,6 +90,25 @@ const requestSchema = z
 
 export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-v2';
 export const ADMIN_AI_INLINE_PRODUCT_LIMIT = 20;
+
+const productLookupPermissions: PermissionKey[] = [
+  'products_write',
+  'orders_write',
+  'assets_write',
+  'brands_categories_write',
+];
+const taxonomyLookupPermissions: PermissionKey[] = [
+  'products_write',
+  'assets_write',
+  'brands_categories_write',
+];
+
+function hasAnyPermission(
+  permissions: readonly PermissionKey[],
+  required: readonly PermissionKey[],
+) {
+  return required.some((permission) => hasPermission(permissions, permission));
+}
 
 function storedMessageText(content: unknown) {
   if (typeof content === 'string') return content;
@@ -105,6 +127,23 @@ function conversationTitle(message: string) {
   return title.length > 80 ? `${title.slice(0, 77)}…` : title;
 }
 
+function toolErrorCode(error: unknown) {
+  if (error instanceof Error) return error.name || 'Error';
+  if (typeof error === 'string' && error.trim()) return error.slice(0, 200);
+  return 'UnknownError';
+}
+
+type ToolTrace = {
+  toolCallId: string;
+  toolName: string;
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  input: unknown;
+  output?: unknown;
+  errorCode?: string;
+  startedAt: Date;
+  completedAt?: Date;
+};
+
 export async function POST(request: NextRequest) {
   const denied = await requireAppAccess();
   if (denied) return denied;
@@ -121,6 +160,28 @@ export async function POST(request: NextRequest) {
     const actorId = actor.email;
     if (!actorId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
     const permissions = normalizePermissions(session?.user?.permissions);
+    const allowedJobTypes = allowedAdminBackgroundJobTypes(permissions);
+    const allowedStartableJobTypes = allowedStartableAdminBackgroundJobTypes(permissions);
+    const allowedJobTypeSchema =
+      allowedJobTypes.length > 0
+        ? z.enum(
+            allowedJobTypes as unknown as [AdminBackgroundJobType, ...AdminBackgroundJobType[]],
+          )
+        : null;
+    const allowedStartableJobTypeSchema =
+      allowedStartableJobTypes.length > 0
+        ? z.enum(
+            allowedStartableJobTypes as unknown as [
+              StartableAdminBackgroundJobType,
+              ...StartableAdminBackgroundJobType[],
+            ],
+          )
+        : null;
+    const proposalScopes = [
+      ...(hasPermission(permissions, 'products_write') ? (['products'] as const) : []),
+      ...(hasPermission(permissions, 'brands_categories_write') ? (['taxonomy'] as const) : []),
+      ...(hasPermission(permissions, 'assets_write') ? (['assets'] as const) : []),
+    ];
     const db = getDb();
     const config = getAiConfig();
     if (config.provider !== 'openrouter') {
@@ -206,73 +267,156 @@ export async function POST(request: NextRequest) {
         model: selectedModel.model,
         openRouterRequestBody: selectedModel.openRouterRequestBody,
       }),
-      instructions: ADMIN_AI_CHAT_INSTRUCTIONS,
-      messages: [...previousMessages, { role: 'user', content: parsed.data.message }],
+      instructions: parsed.data.context
+        ? `${ADMIN_AI_CHAT_INSTRUCTIONS} ${adminAiCapabilityInstructions(parsed.data.context, permissions)}`
+        : ADMIN_AI_CHAT_INSTRUCTIONS,
+      messages: [
+        ...previousMessages,
+        ...(parsed.data.context
+          ? [
+              {
+                role: 'user' as const,
+                content: adminAiContextMessage(parsed.data.context),
+              },
+            ]
+          : []),
+        { role: 'user', content: parsed.data.message },
+      ],
       abortSignal: request.signal,
       stopWhen: stepCountIs(6),
       tools: {
-        find_products: tool({
-          description: 'Find active products by title or SKU before performing a catalog action.',
-          inputSchema: z.object({
-            query: z.string().trim().min(1).max(200),
-            limit: z.number().int().min(1).max(20).default(10),
-          }),
-          execute: async ({ query, limit }) =>
-            db
-              .select({ id: products.id, title: products.title, sku: products.sku })
-              .from(products)
-              .where(
-                and(
-                  eq(products.active, true),
-                  or(ilike(products.title, `%${query}%`), ilike(products.sku, `%${query}%`)),
-                ),
-              )
-              .limit(limit),
-        }),
-        find_brands: tool({
+        ...(hasAnyPermission(permissions, productLookupPermissions)
+          ? {
+              find_products: tool({
+                description:
+                  'Read catalog products through the canonical product option service. Resolve either exact IDs from the current selection or a title, SKU, or barcode search; results include pagination totals and are not limited to an arbitrary catalog subset.',
+                inputSchema: z
+                  .object({
+                    query: z.string().trim().max(200).default(''),
+                    productIds: z.array(z.number().int().positive()).max(100).default([]),
+                    page: z.number().int().positive().default(1),
+                    limit: z.number().int().min(1).max(50).default(10),
+                  })
+                  .refine((input) => input.query.length > 0 || input.productIds.length > 0, {
+                    message: 'Provide a search query or at least one product ID.',
+                  }),
+                execute: findAdminProducts,
+              }),
+            }
+          : {}),
+        ...(hasAnyPermission(permissions, taxonomyLookupPermissions)
+          ? {
+              find_brands: tool({
+                description:
+                  'Resolve a brand name through the canonical taxonomy service before editing it or assigning products.',
+                inputSchema: z.object({
+                  query: z.string().trim().min(1).max(200),
+                  limit: z.number().int().min(1).max(50).default(10),
+                }),
+                execute: findAdminBrands,
+              }),
+              find_categories: tool({
+                description:
+                  'Resolve a localized category name and its hierarchy through the canonical taxonomy service before editing it or assigning products.',
+                inputSchema: z.object({
+                  query: z.string().trim().min(1).max(200),
+                  limit: z.number().int().min(1).max(50).default(10),
+                }),
+                execute: findAdminCategories,
+              }),
+            }
+          : {}),
+        ...(hasPermission(permissions, 'orders_write')
+          ? {
+              inspect_orders: tool({
+                description:
+                  'Read selected or filtered orders through the canonical Orders service with complete customer, contact, address, note, delivery, payment, product, promotion, and staff-handled status context.',
+                inputSchema: z.object({
+                  orderIds: z.array(z.number().int().positive()).max(50).default([]),
+                  status: z.number().int().min(0).max(11).optional(),
+                  noAnswerCount: z.number().int().min(0).max(99).optional(),
+                  limit: z.number().int().min(1).max(50).default(20),
+                }),
+                execute: inspectAdminOrders,
+              }),
+            }
+          : {}),
+        ...(hasPermission(permissions, 'products_write')
+          ? {
+              inspect_inventory: tool({
+                description:
+                  'Read the canonical Inventory workspace by current product IDs, barcode, SKU, or title, including real quantities and availability state.',
+                inputSchema: z.object({
+                  productIds: z.array(z.number().int().positive()).max(100).default([]),
+                  query: z.string().trim().max(200).default(''),
+                  page: z.number().int().positive().default(1),
+                  limit: z.number().int().min(1).max(50).default(20),
+                }),
+                execute: inspectAdminInventory,
+              }),
+            }
+          : {}),
+        ...(hasPermission(permissions, 'assets_write')
+          ? {
+              inspect_assets: tool({
+                description:
+                  'Read current banners, featured groups, and product cards through the canonical Assets service before suggesting merchandising changes.',
+                inputSchema: z.object({
+                  kind: z.enum(['all', 'banners', 'featuredGroups', 'productCards']).default('all'),
+                  ids: z.array(z.number().int().positive()).max(100).default([]),
+                  limit: z.number().int().min(1).max(50).default(20),
+                }),
+                execute: inspectAdminAssets,
+              }),
+            }
+          : {}),
+        ...(proposalScopes.length > 0
+          ? {
+              inspect_ai_proposals: tool({
+                description:
+                  'Read pending AI proposals from the canonical proposal inbox. Results are server-scoped to the product, taxonomy, and asset domains the operator is permitted to manage.',
+                inputSchema: z.object({
+                  proposalIds: z.array(z.number().int().positive()).max(100).default([]),
+                  query: z.string().trim().max(120).default(''),
+                  limit: z.number().int().min(1).max(50).default(20),
+                }),
+                execute: ({ proposalIds, query, limit }) =>
+                  inspectAdminProposals({
+                    scopes: proposalScopes,
+                    proposalIds,
+                    query,
+                    limit,
+                  }),
+              }),
+            }
+          : {}),
+        inspect_bulletin: tool({
           description:
-            'Resolve a brand name to its ID before proposing brand edits or assigning products.',
+            'Read recent or matching posts from the shared Bulletin service with complete authors, emails, attachments, replies, reactions, and reaction identities.',
           inputSchema: z.object({
-            query: z.string().trim().min(1).max(200),
-            limit: z.number().int().min(1).max(20).default(10),
+            query: z.string().trim().max(200).default(''),
+            limit: z.number().int().min(1).max(50).default(20),
           }),
-          execute: async ({ query, limit }) =>
-            db
-              .select({
-                id: brands.id,
-                name: brands.name,
-                slug: brands.slug,
-                isActive: brands.isActive,
-                featured: brands.featured,
-              })
-              .from(brands)
-              .where(ilike(brands.name, `%${query}%`))
-              .limit(limit),
+          execute: ({ query, limit }) =>
+            inspectAdminBulletin({
+              query,
+              limit,
+              viewer: {
+                userId: session?.user?.id ?? null,
+                permissions,
+              },
+            }),
         }),
-        find_categories: tool({
-          description:
-            'Resolve a category name to its ID and parent before proposing category edits, hierarchy changes, or assigning products.',
-          inputSchema: z.object({
-            query: z.string().trim().min(1).max(200),
-            limit: z.number().int().min(1).max(20).default(10),
-          }),
-          execute: async ({ query, limit }) =>
-            db
-              .select({
-                id: categories.id,
-                name: categories.name,
-                nameAr: categories.nameAr,
-                slug: categories.slug,
-                parentId: categories.parentId,
-                isActive: categories.isActive,
-                featured: categories.featured,
-              })
-              .from(categories)
-              .where(
-                or(ilike(categories.name, `%${query}%`), ilike(categories.nameAr, `%${query}%`)),
-              )
-              .limit(limit),
-        }),
+        ...(hasPermission(permissions, 'settings_manage')
+          ? {
+              inspect_administration: tool({
+                description:
+                  'Read the canonical role and access configuration with complete staff identities, emails, roles, permissions, and access grants.',
+                inputSchema: z.object({}),
+                execute: inspectAdminAdministration,
+              }),
+            }
+          : {}),
         ...(hasPermission(permissions, 'products_write')
           ? {
               generate_product_content: tool({
@@ -328,67 +472,57 @@ export async function POST(request: NextRequest) {
           ? {
               query_analytics: tool({
                 description:
-                  'Run one read-only semantic analytics query over catalog, sales, orders, funnel, product/category/brand performance, inventory, promotions, or content gaps. Dates use YYYY-MM-DD. Raw SQL is never accepted.',
-                inputSchema: semanticAnalyticsQuerySchema,
-                execute: (input) =>
-                  executeSemanticAnalytics(input, {
-                    canViewProfit: canViewProfitStats(session?.user?.permissions ?? []),
-                  }),
-              }),
-              compare_analytics_periods: tool({
-                description:
-                  'Compare two explicit, bounded date periods for sales, submitted orders, storefront funnel, or promotion performance. Returns current, previous, and calculated deltas. Raw SQL is never accepted.',
-                inputSchema: semanticAnalyticsComparisonSchema,
-                execute: (input) =>
-                  executeSemanticAnalyticsComparison(input, {
-                    canViewProfit: canViewProfitStats(session?.user?.permissions ?? []),
-                  }),
+                  'Read the canonical Analytics workspace. Choose command, money, acquisition, fulfillment, storefront, search, catalog, or assumptions; use the same range and grain controls as the UI. Every metric includes its canonical previous-period value and change when available. Raw SQL is never accepted.',
+                inputSchema: analytics2QuerySchema,
+                execute: queryAdminAnalytics,
               }),
             }
           : {}),
-        ...(hasPermission(permissions, 'settings_manage')
+        ...(allowedJobTypeSchema
           ? {
               list_background_jobs: tool({
-                description:
-                  'List recent background jobs across every registered admin queue, including actual status, progress, errors, and result summaries. Use this for database-wide job inspection.',
+                description: `List recent background jobs only from the operator's permitted domains (${allowedJobTypes.join(', ')}), including persisted status, progress, errors, and result summaries.`,
                 inputSchema: z.object({ limit: z.number().int().min(1).max(100).default(30) }),
-                execute: ({ limit }) => listAdminBackgroundJobs(limit),
+                execute: ({ limit }) => listAdminBackgroundJobs(limit, allowedJobTypes),
               }),
               get_background_job: tool({
                 description:
-                  'Retrieve one exact background job by registered type and job ID. Use this to verify progress or completion instead of inferring from database changes.',
+                  'Retrieve one exact permitted background job by registered type and job ID. Use this to verify progress or completion instead of inferring from domain records.',
                 inputSchema: z.object({
-                  type: z.enum(ADMIN_BACKGROUND_JOB_TYPES),
+                  type: allowedJobTypeSchema,
                   jobId: z.string().uuid(),
                 }),
                 execute: ({ type, jobId }) => getAdminBackgroundJob(type, jobId),
-              }),
-              start_background_job: tool({
-                description:
-                  'Start an allowlisted operational background job only after the user explicitly requests it. Supported jobs are product export, catalog-feed refresh, order export, reporting refresh, Ecotrack catalog sync, and Ecotrack shipment sync. Starting a job is not completion.',
-                inputSchema: z.object({
-                  type: z.enum(STARTABLE_ADMIN_BACKGROUND_JOB_TYPES),
-                  orderMode: z.enum(['selected', 'confirmed']).optional(),
-                  orderIds: z.array(z.number().int().positive()).max(500).optional(),
-                }),
-                execute: ({ type, orderMode, orderIds }) =>
-                  startAdminBackgroundJob({
-                    type,
-                    orderMode,
-                    orderIds,
-                    conversationId: conversation.id,
-                    actor: { email: actorId, name: actor.name },
-                  }),
               }),
               stop_background_job: tool({
                 description:
                   'Request cooperative cancellation of one exact queued/running job after the user explicitly asks to stop it. The tool refuses job types whose workers cannot safely honor cancellation.',
                 inputSchema: z.object({
-                  type: z.enum(ADMIN_BACKGROUND_JOB_TYPES),
+                  type: allowedJobTypeSchema,
                   jobId: z.string().uuid(),
                 }),
                 execute: ({ type, jobId }) => cancelAdminBackgroundJob(type, jobId),
               }),
+              ...(allowedStartableJobTypeSchema
+                ? {
+                    start_background_job: tool({
+                      description: `Start a permitted operational background job only after the user explicitly requests it. Available types: ${allowedStartableJobTypes.join(', ')}. Starting a job is not completion.`,
+                      inputSchema: z.object({
+                        type: allowedStartableJobTypeSchema,
+                        orderMode: z.enum(['selected', 'confirmed']).optional(),
+                        orderIds: z.array(z.number().int().positive()).max(500).optional(),
+                      }),
+                      execute: ({ type, orderMode, orderIds }) =>
+                        startAdminBackgroundJob({
+                          type,
+                          orderMode,
+                          orderIds,
+                          conversationId: conversation.id,
+                          actor: { email: actorId, name: actor.name },
+                        }),
+                    }),
+                  }
+                : {}),
             }
           : {}),
         ...(hasPermission(permissions, 'products_write')
@@ -539,15 +673,49 @@ export async function POST(request: NextRequest) {
         void (async () => {
           let text = '';
           const toolResults: unknown[] = [];
-          const toolNames: string[] = [];
+          const toolTraces = new Map<string, ToolTrace>();
+          let anonymousToolCall = 0;
           let usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } = {};
           try {
             for await (const part of result.stream) {
               if (part.type === 'tool-call') {
-                toolNames.push(part.toolName);
+                const toolCallId = part.toolCallId || `${part.toolName}:${anonymousToolCall++}`;
+                toolTraces.set(toolCallId, {
+                  toolCallId,
+                  toolName: part.toolName,
+                  status: 'running',
+                  input: part.input,
+                  startedAt: new Date(),
+                });
                 write({ type: 'status', status: 'working' });
               }
-              if (part.type === 'tool-result') toolResults.push(part);
+              if (part.type === 'tool-result') {
+                toolResults.push(part);
+                const completedAt = new Date();
+                const current = toolTraces.get(part.toolCallId);
+                toolTraces.set(part.toolCallId, {
+                  toolCallId: part.toolCallId,
+                  toolName: part.toolName,
+                  status: 'completed',
+                  input: part.input,
+                  output: part.output,
+                  startedAt: current?.startedAt ?? completedAt,
+                  completedAt,
+                });
+              }
+              if (part.type === 'tool-error') {
+                const completedAt = new Date();
+                const current = toolTraces.get(part.toolCallId);
+                toolTraces.set(part.toolCallId, {
+                  toolCallId: part.toolCallId,
+                  toolName: part.toolName,
+                  status: 'failed',
+                  input: part.input,
+                  errorCode: toolErrorCode(part.error),
+                  startedAt: current?.startedAt ?? completedAt,
+                  completedAt,
+                });
+              }
               if (part.type === 'text-delta' && part.text) {
                 text += part.text;
                 write({ type: 'text-delta', delta: part.text });
@@ -559,10 +727,15 @@ export async function POST(request: NextRequest) {
               text = 'Completed.';
               write({ type: 'text-delta', delta: text });
             }
-            await Promise.all([
+            const [assistantMessages] = await Promise.all([
               db
                 .insert(aiMessages)
-                .values({ conversationId: conversation.id, role: 'assistant', content: { text } }),
+                .values({
+                  conversationId: conversation.id,
+                  role: 'assistant',
+                  content: { text, toolResults },
+                })
+                .returning({ id: aiMessages.id }),
               db
                 .update(aiConversations)
                 .set({ updatedAt: new Date() })
@@ -576,13 +749,17 @@ export async function POST(request: NextRequest) {
                   .update(aiRuns)
                   .set({ status: 'completed', ...usage, completedAt })
                   .where(eq(aiRuns.id, completedRunId));
-                if (toolNames.length > 0) {
+                if (toolTraces.size > 0) {
                   await db.insert(aiToolCalls).values(
-                    toolNames.map((toolName) => ({
+                    [...toolTraces.values()].map((trace) => ({
                       runId: completedRunId,
-                      toolName,
-                      status: 'completed',
-                      completedAt,
+                      toolName: trace.toolName,
+                      status: trace.status,
+                      input: trace.input,
+                      output: trace.output,
+                      errorCode: trace.errorCode,
+                      startedAt: trace.startedAt,
+                      completedAt: trace.completedAt ?? completedAt,
                     })),
                   );
                 }
@@ -598,24 +775,48 @@ export async function POST(request: NextRequest) {
                 sessionKey: parsed.data.conversationKey,
                 title: effectiveTitle,
               },
+              messageId: assistantMessages[0].id,
             });
           } catch (error) {
             if (runId !== null) {
               const cancelled =
                 request.signal.aborted || (error instanceof Error && error.name === 'AbortError');
-              await db
-                .update(aiRuns)
-                .set({
-                  status: cancelled ? 'cancelled' : 'failed',
-                  errorCode: cancelled
-                    ? 'request_aborted'
-                    : error instanceof Error
-                      ? error.name
-                      : 'UnknownError',
-                  completedAt: new Date(),
-                })
-                .where(eq(aiRuns.id, runId))
-                .catch(() => undefined);
+              const completedAt = new Date();
+              await Promise.all([
+                db
+                  .update(aiRuns)
+                  .set({
+                    status: cancelled ? 'cancelled' : 'failed',
+                    errorCode: cancelled ? 'request_aborted' : toolErrorCode(error),
+                    completedAt,
+                  })
+                  .where(eq(aiRuns.id, runId)),
+                toolTraces.size > 0
+                  ? db.insert(aiToolCalls).values(
+                      [...toolTraces.values()].map((trace) => ({
+                        runId: runId as number,
+                        toolName: trace.toolName,
+                        status:
+                          trace.status === 'running'
+                            ? cancelled
+                              ? 'cancelled'
+                              : 'failed'
+                            : trace.status,
+                        input: trace.input,
+                        output: trace.output,
+                        errorCode:
+                          trace.errorCode ??
+                          (trace.status === 'running'
+                            ? cancelled
+                              ? 'request_aborted'
+                              : toolErrorCode(error)
+                            : undefined),
+                        startedAt: trace.startedAt,
+                        completedAt: trace.completedAt ?? completedAt,
+                      })),
+                    )
+                  : Promise.resolve(),
+              ]).catch(() => undefined);
             }
             if (!request.signal.aborted) write({ type: 'error', code: 'admin_ai_failed' });
           } finally {

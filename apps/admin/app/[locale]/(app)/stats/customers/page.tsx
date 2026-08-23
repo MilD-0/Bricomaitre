@@ -1,15 +1,17 @@
 import { getTranslations } from 'next-intl/server';
 
 import { StatsDashboard } from '../../../../../components/stats/stats-dashboard';
-import { requireStatsPageAccess } from '../../../../../lib/page-access';
+import { redirectModernStatsAlias } from '../../../../../lib/analytics2-routes.server';
 
 export default async function StatsCustomersPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { locale } = await params;
-  await requireStatsPageAccess(locale);
+  await redirectModernStatsAlias({ locale, searchParams, view: 'catalog' });
   const t = await getTranslations();
   return (
     <StatsDashboard

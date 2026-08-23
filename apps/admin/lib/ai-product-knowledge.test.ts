@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  areProductRelationDependenciesFresh,
   buildProductRelationEvidence,
   hasSufficientProductRelationEvidence,
 } from './ai-product-knowledge';
@@ -61,5 +62,26 @@ describe('AI product-relation evidence', () => {
       adminContext: 'Both model numbers are listed together on the package.',
     });
     expect(hasSufficientProductRelationEvidence('compatible_with', adminEvidence)).toBe(true);
+  });
+
+  it('invalidates a relationship decision when either catalog record changes', () => {
+    const sourceUpdatedAt = new Date('2026-08-20T00:00:00.000Z');
+    const targetUpdatedAt = new Date('2026-08-21T00:00:00.000Z');
+    expect(
+      areProductRelationDependenciesFresh({
+        source: { updatedAt: new Date(sourceUpdatedAt) },
+        target: { updatedAt: new Date(targetUpdatedAt) },
+        sourceUpdatedAt,
+        targetUpdatedAt,
+      }),
+    ).toBe(true);
+    expect(
+      areProductRelationDependenciesFresh({
+        source: { updatedAt: new Date(sourceUpdatedAt) },
+        target: { updatedAt: new Date('2026-08-22T00:00:00.000Z') },
+        sourceUpdatedAt,
+        targetUpdatedAt,
+      }),
+    ).toBe(false);
   });
 });

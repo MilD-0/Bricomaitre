@@ -1,5 +1,5 @@
 import { evaluateDiscountPrice, getAiConfig, minimumSellingPriceForMargin } from '@bric/ai-core';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
@@ -23,6 +23,7 @@ import {
   type LandingPageGenerator,
 } from './ai-landing-page';
 import { resolveBrandSlug, resolveCategorySlug } from './brands-categories-api';
+import { AiProposalReviewConflictError } from './ai-proposal-review';
 import { persistedProposalValuesMatch } from './ai-proposal-verification';
 import { assertCategoryParentAllowed } from './category-hierarchy';
 
@@ -80,7 +81,116 @@ export const AI_TAXONOMY_CREATE_FIELDS = {
 };
 export type EditableEntity = keyof typeof AI_CATALOG_EDIT_FIELDS;
 export type CreatableTaxonomyEntity = keyof typeof AI_TAXONOMY_CREATE_FIELDS;
-export class AiAdminCapabilityError extends Error {}
+export class AiAdminCapabilityError extends AiProposalReviewConflictError {}
+
+type Database = ReturnType<typeof getDb>;
+type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+
+const entityDependencySchema = z
+  .object({ id: z.number().int().positive(), updatedAt: z.string().datetime() })
+  .strict();
+const proposalDependenciesSchema = z
+  .object({
+    brand: entityDependencySchema.optional(),
+    category: entityDependencySchema.optional(),
+    pricingPolicy: z
+      .object({ id: z.number().int().positive(), updatedAt: z.string().datetime().nullable() })
+      .strict()
+      .optional(),
+    featuredProducts: z.array(entityDependencySchema).min(1).optional(),
+  })
+  .strict();
+
+function versionSnapshot(row: { id: number; updatedAt: Date }) {
+  return { id: row.id, updatedAt: row.updatedAt.toISOString() };
+}
+
+function proposalDependencies(payload: Record<string, unknown>) {
+  const parsed = proposalDependenciesSchema.safeParse(payload.dependencies ?? {});
+  if (!parsed.success) {
+    throw new AiAdminCapabilityError(
+      'The proposal dependency snapshot is invalid. Generate a new proposal.',
+      'proposal_dependency_changed',
+    );
+  }
+  return parsed.data;
+}
+
+function requireDependencyVersion(
+  current: { id: number; updatedAt: Date } | undefined,
+  expected: { id: number; updatedAt: string },
+  label: string,
+) {
+  if (!current || current.updatedAt.getTime() !== new Date(expected.updatedAt).getTime()) {
+    throw new AiAdminCapabilityError(
+      `The ${label} changed after this proposal was generated. Generate a new proposal.`,
+      'proposal_dependency_changed',
+    );
+  }
+}
+
+async function assertProposalDependencies(
+  tx: Transaction,
+  dependencies: z.infer<typeof proposalDependenciesSchema>,
+) {
+  if (dependencies.brand) {
+    const [current] = await tx
+      .select({ id: brands.id, updatedAt: brands.updatedAt })
+      .from(brands)
+      .where(eq(brands.id, dependencies.brand.id))
+      .for('update');
+    requireDependencyVersion(current, dependencies.brand, 'assigned brand');
+  }
+  if (dependencies.category) {
+    const [current] = await tx
+      .select({ id: categories.id, updatedAt: categories.updatedAt })
+      .from(categories)
+      .where(eq(categories.id, dependencies.category.id))
+      .for('update');
+    requireDependencyVersion(current, dependencies.category, 'assigned category');
+  }
+  if (dependencies.pricingPolicy) {
+    const [current] = await tx
+      .select({ id: aiPricingPolicies.id, updatedAt: aiPricingPolicies.updatedAt })
+      .from(aiPricingPolicies)
+      .where(eq(aiPricingPolicies.id, dependencies.pricingPolicy.id))
+      .for('update');
+    const expectedUpdatedAt = dependencies.pricingPolicy.updatedAt;
+    if (
+      (expectedUpdatedAt === null && current) ||
+      (expectedUpdatedAt !== null &&
+        (!current || current.updatedAt.getTime() !== new Date(expectedUpdatedAt).getTime()))
+    ) {
+      throw new AiAdminCapabilityError(
+        'The pricing policy changed after this discount was proposed. Generate a new proposal.',
+        'proposal_dependency_changed',
+      );
+    }
+  }
+  if (dependencies.featuredProducts) {
+    const expected = new Map(dependencies.featuredProducts.map((item) => [item.id, item]));
+    const current = await tx
+      .select({
+        id: products.id,
+        active: products.active,
+        inStock: products.inStock,
+        updatedAt: products.updatedAt,
+      })
+      .from(products)
+      .where(inArray(products.id, [...expected.keys()]))
+      .for('update');
+    for (const [id, snapshot] of expected) {
+      const product = current.find((item) => item.id === id);
+      requireDependencyVersion(product, snapshot, `featured product #${id}`);
+      if (!product?.active || !product.inStock) {
+        throw new AiAdminCapabilityError(
+          `Featured product #${id} is no longer active and in stock. Generate a new proposal.`,
+          'proposal_dependency_changed',
+        );
+      }
+    }
+  }
+}
 
 function requirePersistedProposalValues(
   persisted: Record<string, unknown> | null | undefined,
@@ -89,6 +199,7 @@ function requirePersistedProposalValues(
   if (!persistedProposalValuesMatch(persisted, expected)) {
     throw new AiAdminCapabilityError(
       'The approved change could not be verified in the database. Nothing was marked as applied.',
+      'proposal_verification_failed',
     );
   }
 }
@@ -226,6 +337,12 @@ export async function proposeDiscount(input: {
       defaultMinimumGrossMargin: defaultMargin,
       belowDefaultMargin: margin < defaultMargin,
       evaluation,
+      dependencies: {
+        pricingPolicy: {
+          id: 1,
+          updatedAt: policy?.updatedAt.toISOString() ?? null,
+        },
+      },
     },
   });
 }
@@ -263,7 +380,12 @@ export async function proposeFeaturedProducts(input: {
     entityId: 0,
     actorId: input.actorId,
     reasoning: 'Ranked active, in-stock products by popularity, conversion rate, and units sold.',
-    payload: { name: input.name, productIds: ranked.map((row) => row.id), evidence: ranked },
+    payload: {
+      name: input.name,
+      productIds: ranked.map((row) => row.id),
+      evidence: ranked,
+      dependencies: { featuredProducts: ranked.map(versionSnapshot) },
+    },
   });
 }
 
@@ -389,6 +511,28 @@ export async function proposeEntityEdit(input: {
   }
   if (persistedProposalValuesMatch(entity as Record<string, unknown>, changes))
     throw new AiAdminCapabilityError('The requested edit does not change the current entity.');
+  const dependencies: Record<string, ReturnType<typeof versionSnapshot>> = {};
+  if (input.entityType === 'products') {
+    const productChanges = AI_CATALOG_EDIT_FIELDS.products.parse(changes);
+    if (productChanges.brandId != null) {
+      const [brand] = await db
+        .select({ id: brands.id, updatedAt: brands.updatedAt })
+        .from(brands)
+        .where(eq(brands.id, productChanges.brandId))
+        .limit(1);
+      if (!brand) throw new AiAdminCapabilityError('Assigned brand not found.');
+      dependencies.brand = versionSnapshot(brand);
+    }
+    if (productChanges.categoryId != null) {
+      const [category] = await db
+        .select({ id: categories.id, updatedAt: categories.updatedAt })
+        .from(categories)
+        .where(eq(categories.id, productChanges.categoryId))
+        .limit(1);
+      if (!category) throw new AiAdminCapabilityError('Assigned category not found.');
+      dependencies.category = versionSnapshot(category);
+    }
+  }
   return createProposal({
     task:
       input.entityType === 'products' && 'categoryId' in changes
@@ -409,6 +553,7 @@ export async function proposeEntityEdit(input: {
         Object.keys(changes).map((key) => [key, (entity as Record<string, unknown>)[key]]),
       ),
       changes,
+      ...(Object.keys(dependencies).length > 0 ? { dependencies } : {}),
     },
   });
 }
@@ -453,10 +598,15 @@ export async function reviewAdminProposal(input: {
       .select()
       .from(aiProposals)
       .where(and(eq(aiProposals.id, input.proposalId), eq(aiProposals.status, 'proposed')))
-      .limit(1);
-    if (!proposal) throw new AiAdminCapabilityError('Proposal is unavailable or already reviewed.');
+      .limit(1)
+      .for('update');
+    if (!proposal)
+      throw new AiAdminCapabilityError(
+        'Proposal is unavailable or already reviewed.',
+        'proposal_already_reviewed',
+      );
     if (input.action === 'reject') {
-      await tx
+      const [rejected] = await tx
         .update(aiProposals)
         .set({
           status: 'rejected',
@@ -464,11 +614,28 @@ export async function reviewAdminProposal(input: {
           reviewedAt: new Date(),
           updatedAt: new Date(),
         })
-        .where(eq(aiProposals.id, proposal.id));
-      return { id: proposal.id, status: 'rejected' as const, proposalType: proposal.proposalType };
+        .where(and(eq(aiProposals.id, proposal.id), eq(aiProposals.status, 'proposed')))
+        .returning({ id: aiProposals.id });
+      if (!rejected) {
+        throw new AiAdminCapabilityError(
+          'The proposal changed while it was being reviewed.',
+          'proposal_already_reviewed',
+        );
+      }
+      return {
+        id: proposal.id,
+        status: 'rejected' as const,
+        verified: true as const,
+        proposalType: proposal.proposalType,
+      };
     }
-    if (proposal.expiresAt <= new Date()) throw new AiAdminCapabilityError('Proposal expired.');
+    if (proposal.expiresAt <= new Date())
+      throw new AiAdminCapabilityError(
+        'Proposal expired. Generate a new proposal.',
+        'proposal_expired',
+      );
     const payload = proposal.payload as Record<string, unknown>;
+    const dependencies = proposalDependencies(payload);
     if (proposal.sourceUpdatedAt) {
       const table =
         proposal.entityType === 'products'
@@ -483,11 +650,16 @@ export async function reviewAdminProposal(input: {
           .select({ updatedAt: table.updatedAt })
           .from(table)
           .where(eq(table.id, proposal.entityId))
-          .limit(1);
+          .limit(1)
+          .for('update');
         if (!current || current.updatedAt.getTime() !== proposal.sourceUpdatedAt.getTime())
-          throw new AiAdminCapabilityError('Proposal is stale. Generate it again.');
+          throw new AiAdminCapabilityError(
+            'The source record changed after this proposal was generated. Generate it again.',
+            'proposal_stale',
+          );
       }
     }
+    await assertProposalDependencies(tx, dependencies);
     if (proposal.proposalType === 'product_discount') {
       const changes = z
         .object({ price: z.string(), oldPrice: z.string().nullable() })
@@ -513,7 +685,7 @@ export async function reviewAdminProposal(input: {
         const slug =
           changes.name === undefined
             ? undefined
-            : await resolveBrandSlug(changes.name, proposal.entityId);
+            : await resolveBrandSlug(changes.name, proposal.entityId, tx);
         const [persisted] = await tx
           .update(brands)
           .set({
@@ -539,7 +711,7 @@ export async function reviewAdminProposal(input: {
         const slug =
           changes.name === undefined
             ? undefined
-            : await resolveCategorySlug(changes.name, proposal.entityId);
+            : await resolveCategorySlug(changes.name, proposal.entityId, tx);
         const [persisted] = await tx
           .update(categories)
           .set({
@@ -559,7 +731,7 @@ export async function reviewAdminProposal(input: {
     } else if (proposal.proposalType === 'entity_create') {
       if (proposal.entityType === 'brands') {
         const values = AI_TAXONOMY_CREATE_FIELDS.brands.parse(payload.values);
-        const slug = await resolveBrandSlug(values.name);
+        const slug = await resolveBrandSlug(values.name, undefined, tx);
         const expected = buildTaxonomyCreateValues({
           entityType: 'brands',
           values,
@@ -574,7 +746,7 @@ export async function reviewAdminProposal(input: {
         await assertCategoryParentAllowed(tx, null, values.parentId ?? null, {
           lockHierarchy: true,
         });
-        const slug = await resolveCategorySlug(values.name);
+        const slug = await resolveCategorySlug(values.name, undefined, tx);
         const expected = buildTaxonomyCreateValues({
           entityType: 'categories',
           values,
@@ -587,9 +759,25 @@ export async function reviewAdminProposal(input: {
       } else throw new AiAdminCapabilityError('Unsupported taxonomy entity type.');
     } else if (proposal.proposalType === 'featured_products') {
       const expectedGroup = { name: String(payload.name), active: false };
+      const productIds = z.array(z.number().int().positive()).min(1).parse(payload.productIds);
+      if (!dependencies.featuredProducts) {
+        const currentProducts = await tx
+          .select({ id: products.id, active: products.active, inStock: products.inStock })
+          .from(products)
+          .where(inArray(products.id, productIds))
+          .for('update');
+        if (
+          currentProducts.length !== new Set(productIds).size ||
+          currentProducts.some((product) => !product.active || !product.inStock)
+        ) {
+          throw new AiAdminCapabilityError(
+            'One or more featured products are no longer active and in stock. Generate a new proposal.',
+            'proposal_dependency_changed',
+          );
+        }
+      }
       const [group] = await tx.insert(featuredProductGroups).values(expectedGroup).returning();
       requirePersistedProposalValues(group, expectedGroup);
-      const productIds = z.array(z.number().int().positive()).min(1).parse(payload.productIds);
       const persistedProducts = await tx
         .insert(featuredProductGroupProducts)
         .values(productIds.map((productId) => ({ groupId: group.id, productId })))
@@ -600,7 +788,10 @@ export async function reviewAdminProposal(input: {
           persistedProducts.some((row) => row.groupId === group.id && row.productId === productId),
         );
       if (!featuredProductsVerified)
-        throw new AiAdminCapabilityError('The approved featured products could not be verified.');
+        throw new AiAdminCapabilityError(
+          'The approved featured products could not be verified.',
+          'proposal_verification_failed',
+        );
     } else if (proposal.proposalType === 'landing_page') {
       const temporarySlug = landingPageSlugFromProduct(
         { slug: String(payload.slug) },
@@ -646,6 +837,7 @@ export async function reviewAdminProposal(input: {
     if (!applied || applied.status !== 'applied')
       throw new AiAdminCapabilityError(
         'The proposal result could not be recorded after verification.',
+        'proposal_already_reviewed',
       );
     return {
       id: proposal.id,

@@ -55,6 +55,9 @@
     "placeholder": "Ex. Je cherche une perceuse pour du béton…",
     "inputLabel": "Votre question sur les produits",
     "send": "Envoyer la question",
+    "stop": "Arrêter la réponse",
+    "stopped": "Réponse arrêtée. Vous pouvez la relancer.",
+    "retry": "Réessayer",
     "thinking": "Recherche dans le catalogue…",
     "error": "Le conseiller est momentanément indisponible. Réessayez dans un instant.",
     "rateLimited": "Vous avez envoyé plusieurs demandes. Patientez un instant avant de réessayer.",
@@ -65,6 +68,8 @@
     "viewProduct": "Voir",
     "addToCart": "Ajouter",
     "addedToCart": "Ajouté",
+    "helpful": "Réponse utile",
+    "notHelpful": "Réponse à améliorer",
     "quickPromptOne": "Une perceuse pour travailler le béton",
     "quickPromptTwo": "Comparer des outils pour la maison",
     "quickPromptThree": "Trouver un produit disponible pour mon projet"

@@ -800,8 +800,6 @@ export async function syncMetaAdsInsights(
     });
     await refreshAnalytics2Facts({
       db,
-      startDate: loaded.since,
-      endDate: loaded.until,
       now,
     });
 
