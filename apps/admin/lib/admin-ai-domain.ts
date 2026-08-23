@@ -32,8 +32,27 @@ export async function inspectAdminProducts(input: {
   productIds?: number[];
   page?: number;
   limit?: number;
+  brandQuery?: string;
+  categoryQuery?: string;
 }) {
-  const matches = await findAdminProducts(input);
+  const hasProductScope = Boolean(input.query?.trim() || input.productIds?.length);
+  const [matches, brandMatches, categoryMatches] = await Promise.all([
+    hasProductScope
+      ? findAdminProducts(input)
+      : Promise.resolve({
+          items: [],
+          page: input.page ?? 1,
+          limit: input.limit ?? 10,
+          total: 0,
+          totalPages: 1,
+        }),
+    input.brandQuery?.trim()
+      ? findAdminBrands({ query: input.brandQuery, limit: input.limit })
+      : Promise.resolve(null),
+    input.categoryQuery?.trim()
+      ? findAdminCategories({ query: input.categoryQuery, limit: input.limit })
+      : Promise.resolve(null),
+  ]);
   const db = getDb();
   const inspected = await Promise.all(
     matches.items.map(async (match) => ({
@@ -41,7 +60,11 @@ export async function inspectAdminProducts(input: {
       ...(await readProductMutationPayload(db, match.id)),
     })),
   );
-  return { ...matches, items: inspected };
+  return {
+    ...matches,
+    items: inspected,
+    taxonomyMatches: { brands: brandMatches, categories: categoryMatches },
+  };
 }
 
 export async function findAdminBrands(input: { query: string; limit?: number }) {

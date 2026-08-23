@@ -154,7 +154,7 @@ describe('app/api/brands/route', () => {
       }),
     );
 
-    expect(resolveBrandSlugMock).toHaveBeenCalledWith('Nova');
+    expect(resolveBrandSlugMock).toHaveBeenCalledWith('Nova', undefined, {});
     expect(mutateEntityWithHistoryMock).toHaveBeenCalledWith(
       {},
       expect.objectContaining({

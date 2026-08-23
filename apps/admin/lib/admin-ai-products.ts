@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { getDb } from '@bric/db/client';
 import { startProductCatalogFeedRefreshJob } from './background-jobs';
 import {
+  archiveProductThroughCanonicalWorkflow,
+  createProductThroughCanonicalWorkflow,
+  ProductMutationNotFoundError,
   readProductMutationPayload,
   replaceProductThroughCanonicalWorkflow,
   type ProductMutationActor,
@@ -59,6 +62,12 @@ export const adminAiProductUpdateSchema = z.object({
     .max(20),
 });
 
+export const adminAiProductCreateSchema = z.object({ product: productPayloadSchema }).strict();
+
+export const adminAiProductArchiveSchema = z
+  .object({ productIds: z.array(z.number().int().positive()).min(1).max(20) })
+  .strict();
+
 function mergedProductPayload(
   current: Awaited<ReturnType<typeof readProductMutationPayload>>,
   changes: z.output<typeof adminAiProductChangesSchema>,
@@ -84,6 +93,84 @@ function failureDetails(error: unknown) {
   return {
     code: error instanceof Error ? error.name : 'ProductUpdateError',
     message: error instanceof Error ? error.message : 'Unable to update product.',
+  };
+}
+
+async function refreshAdminAiProductSurfaces(input: {
+  trigger: string;
+  productIds: number[];
+  revalidateLandingPages?: boolean;
+}) {
+  revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
+  await Promise.all([
+    revalidateStorefrontProducts(),
+    ...(input.revalidateLandingPages ? [revalidateStorefrontLandingPages()] : []),
+  ]);
+  try {
+    await startProductCatalogFeedRefreshJob(input.trigger, getRequestId());
+    return 'queued' as const;
+  } catch (error) {
+    captureAdminException(error, {
+      requestId: getRequestId(),
+      operation: 'product-catalog-feed-enqueue',
+      route: '/api/ai/chat',
+      context: { trigger: input.trigger, productIds: input.productIds },
+    });
+    return 'unavailable' as const;
+  }
+}
+
+export async function createAdminAiProduct(
+  rawInput: z.input<typeof adminAiProductCreateSchema>,
+  actor: ProductMutationActor,
+) {
+  const input = adminAiProductCreateSchema.parse(rawInput);
+  try {
+    const created = await createProductThroughCanonicalWorkflow(getDb(), input.product, actor);
+    const catalogFeedRefresh = await refreshAdminAiProductSurfaces({
+      trigger: 'product:ai-create',
+      productIds: [created.id],
+    });
+    return { ok: true, created, catalogFeedRefresh };
+  } catch (error) {
+    return { ok: false, error: failureDetails(error) };
+  }
+}
+
+export async function archiveAdminAiProducts(
+  rawInput: z.input<typeof adminAiProductArchiveSchema>,
+  actor: ProductMutationActor,
+) {
+  const input = adminAiProductArchiveSchema.parse(rawInput);
+  const archived = [];
+  const failed = [];
+  for (const productId of [...new Set(input.productIds)]) {
+    try {
+      archived.push(await archiveProductThroughCanonicalWorkflow(getDb(), productId, actor));
+    } catch (error) {
+      failed.push({
+        productId,
+        ...(error instanceof ProductMutationNotFoundError
+          ? { code: 'product_not_found', message: error.message }
+          : failureDetails(error)),
+      });
+    }
+  }
+  const catalogFeedRefresh = archived.length
+    ? await refreshAdminAiProductSurfaces({
+        trigger: 'product:ai-archive',
+        productIds: archived.map((item) => item.id),
+        revalidateLandingPages: true,
+      })
+    : ('not-needed' as const);
+  return {
+    ok: failed.length === 0,
+    requestedCount: input.productIds.length,
+    archivedCount: archived.length,
+    failedCount: failed.length,
+    catalogFeedRefresh,
+    archived,
+    failed,
   };
 }
 
@@ -116,20 +203,11 @@ export async function updateAdminAiProducts(
 
   let catalogFeedRefresh: 'queued' | 'unavailable' | 'not-needed' = 'not-needed';
   if (updated.length > 0) {
-    revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
-    await Promise.all([revalidateStorefrontProducts(), revalidateStorefrontLandingPages()]);
-    try {
-      await startProductCatalogFeedRefreshJob('product:ai-update', getRequestId());
-      catalogFeedRefresh = 'queued';
-    } catch (error) {
-      catalogFeedRefresh = 'unavailable';
-      captureAdminException(error, {
-        requestId: getRequestId(),
-        operation: 'product-catalog-feed-enqueue',
-        route: '/api/ai/chat',
-        context: { trigger: 'product:ai-update', productIds: updated.map((item) => item.id) },
-      });
-    }
+    catalogFeedRefresh = await refreshAdminAiProductSurfaces({
+      trigger: 'product:ai-update',
+      productIds: updated.map((item) => item.id),
+      revalidateLandingPages: true,
+    });
   }
 
   return {

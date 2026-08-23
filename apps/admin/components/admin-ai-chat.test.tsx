@@ -7,6 +7,7 @@ import {
   ADMIN_AI_MODEL_STORAGE_KEY,
   ADMIN_AI_REASONING_EFFORT_STORAGE_KEY,
   AdminAiChat,
+  analyticsChartRows,
   selectAnalyticsChartMetric,
 } from './admin-ai-chat';
 import { AdminAiSurfaceProvider } from './admin-ai-surface-context';
@@ -437,19 +438,46 @@ describe('AdminAiChat', () => {
                   kind: 'analytics2',
                   query: 'catalog',
                   view: 'catalog',
-                  filters: { startDate: '2026-06-01', endDate: '2026-08-23' },
+                  filters: {
+                    range: 'custom',
+                    startDate: '2026-06-01',
+                    endDate: '2026-08-23',
+                    grain: 'week',
+                  },
+                  generatedAt: '2026-08-23T12:00:00.000Z',
+                  metrics: [
+                    {
+                      key: 'paidUnits',
+                      name: 'paidUnits',
+                      value: 120,
+                      previous: 100,
+                      changePct: 20,
+                      unit: 'number',
+                      definition: 'Units attached to recognized paid outcomes.',
+                      requestedRange: { startDate: '2026-06-01', endDate: '2026-08-23' },
+                      effectiveRange: { startDate: '2026-06-10', endDate: '2026-08-19' },
+                      dateBasis: 'Original first-posted cohort.',
+                      asOf: '2026-08-19',
+                      coveragePct: 92,
+                      estimated: true,
+                      warning: 'Uncovered economics use the canonical fallback margin.',
+                    },
+                  ],
+                  focus: {
+                    dimension: 'products',
+                    definition: 'Canonical filtered product decision view.',
+                    requestedRange: { startDate: '2026-06-01', endDate: '2026-08-23' },
+                    effectiveRange: { startDate: '2026-06-10', endDate: '2026-08-19' },
+                    dateBasis: 'Original first-posted cohort.',
+                    totalSemantics: 'Do not sum visible rows into a headline total.',
+                    available: 75,
+                    matched: 1,
+                    included: 1,
+                    rows: [{ title: 'Hammer', paidUnits: 24 }],
+                  },
                   data: {
                     kind: 'catalog',
-                    metrics: [
-                      {
-                        key: 'paidUnits',
-                        value: 120,
-                        previous: 100,
-                        changePct: 20,
-                        unit: 'number',
-                      },
-                    ],
-                    products: [{ title: 'Hammer', paidUnits: 24 }],
+                    metrics: [],
                   },
                   sources: [{ key: 'orders', state: 'current', coveragePct: 100 }],
                   warnings: [{ key: 'projectedCostCoverage', value: 92 }],
@@ -479,7 +507,14 @@ describe('AdminAiChat', () => {
     expect((await screen.findAllByText('paid units')).length).toBeGreaterThan(0);
     expect(screen.getByText('aiChat.sourceHealth')).toBeInTheDocument();
     expect(screen.getByText(/orders · current · 100%/)).toBeInTheDocument();
-    expect(screen.getByText(/aiChat.analyticsWarning/)).toBeInTheDocument();
+    expect(screen.getAllByText(/aiChat.analyticsWarning/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/aiChat.analyticsEffectiveRange/).length).toBeGreaterThan(0);
+    expect(screen.getByText('Canonical filtered product decision view.')).toBeInTheDocument();
+    expect(screen.getByText(/aiChat.analyticsMatched/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /aiChat.openAnalytics/ })).toHaveAttribute(
+      'href',
+      '/en/stats/products?range=custom&startDate=2026-06-01&endDate=2026-08-23&grain=week',
+    );
   });
 
   it('presents persisted tool actions with a human outcome and exact workspace handoff', async () => {
@@ -500,6 +535,20 @@ describe('AdminAiChat', () => {
                 locale: 'fr',
                 active: false,
                 currentRevision: 1,
+                generation: {
+                  model: 'openai/gpt-5.6-luna',
+                  reasoning: 'A mobile-first product campaign.',
+                  stages: {
+                    status: 'completed',
+                    plannedSections: 4,
+                    generatedSections: 4,
+                    preservedSections: 0,
+                    fallbackSections: 0,
+                    skippedSections: 0,
+                    retryCount: 1,
+                    failures: [],
+                  },
+                },
               },
             },
           ],
@@ -526,6 +575,10 @@ describe('AdminAiChat', () => {
       screen.getByRole('link', { name: 'aiChat.toolDestinations.landingPages' }),
     ).toHaveAttribute('href', '/en/assets/landing-pages/91');
     expect(screen.getByText('create landing page')).toBeInTheDocument();
+    expect(screen.getByText('aiChat.landingGeneration.status.completed')).toBeInTheDocument();
+    expect(screen.getByText('aiChat.landingGeneration.generated')).toBeInTheDocument();
+    expect(screen.getByText('aiChat.landingGeneration.retries')).toBeInTheDocument();
+    expect(screen.getByText('A mobile-first product campaign.')).toBeInTheDocument();
   });
 
   it('lets the user abort an in-flight assistant response without showing a failure', async () => {
@@ -1019,7 +1072,29 @@ describe('selectAnalyticsChartMetric', () => {
     expect(selectAnalyticsChartMetric(rows, ['name', 'purchases', 'views'])).toBe('views');
   });
 
+  it('uses semantic priority instead of comparing magnitudes across different units', () => {
+    const rows = [{ name: 'A', purchases: 2, views: 500_000 }];
+
+    expect(selectAnalyticsChartMetric(rows, ['name', 'purchases', 'views'])).toBe('purchases');
+  });
+
   it('does not render a misleading empty bar chart when every metric is zero', () => {
     expect(selectAnalyticsChartMetric([{ title: 'A', orders: 0 }], ['title', 'orders'])).toBeNull();
+  });
+
+  it('omits unavailable chart points instead of converting them to zero', () => {
+    expect(
+      analyticsChartRows(
+        [
+          { title: 'Missing', orders: null },
+          { title: 'Observed zero', orders: 0 },
+          { title: 'Observed', orders: 4 },
+        ],
+        'orders',
+      ),
+    ).toEqual([
+      { title: 'Observed zero', orders: 0, __chartValue: 0 },
+      { title: 'Observed', orders: 4, __chartValue: 4 },
+    ]);
   });
 });

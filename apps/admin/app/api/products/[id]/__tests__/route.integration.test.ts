@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DELETE, GET, PATCH, PUT } from '../route';
 import { productPatchSchema, productPayloadSchema } from '../../../../../lib/products';
+import { ProductMutationNotFoundError } from '../../../../../lib/product-update-workflow';
 
 const {
   hasDbMock,
@@ -11,6 +12,7 @@ const {
   requireMutationAccessMock,
   authMock,
   mutateEntityWithHistoryMock,
+  archiveProductMock,
   startProductCatalogFeedRefreshJobMock,
   revalidateStorefrontProductsMock,
   revalidateStorefrontLandingPagesMock,
@@ -21,6 +23,7 @@ const {
   requireMutationAccessMock: vi.fn(),
   authMock: vi.fn(),
   mutateEntityWithHistoryMock: vi.fn(),
+  archiveProductMock: vi.fn(),
   startProductCatalogFeedRefreshJobMock: vi.fn(),
   revalidateStorefrontProductsMock: vi.fn(),
   revalidateStorefrontLandingPagesMock: vi.fn(),
@@ -46,6 +49,11 @@ vi.mock('../../../../../lib/auth', () => ({
 
 vi.mock('../../../../../lib/action-history', () => ({
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
+}));
+
+vi.mock('../../../../../lib/product-update-workflow', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../../lib/product-update-workflow')>()),
+  archiveProductThroughCanonicalWorkflow: archiveProductMock,
 }));
 
 vi.mock('../../../../../lib/background-jobs', () => ({
@@ -82,6 +90,8 @@ describe('app/api/products/[id]/route', () => {
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mutateEntityWithHistoryMock.mockReset();
     mutateEntityWithHistoryMock.mockResolvedValue(undefined);
+    archiveProductMock.mockReset();
+    archiveProductMock.mockImplementation(async (_db, id) => ({ id, archived: true }));
     startProductCatalogFeedRefreshJobMock.mockReset();
     startProductCatalogFeedRefreshJobMock.mockResolvedValue({ kind: 'started', job: null });
     revalidateStorefrontProductsMock.mockReset();
@@ -337,6 +347,7 @@ describe('app/api/products/[id]/route', () => {
     );
     expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
     expect(revalidateStorefrontProductsMock).toHaveBeenCalledOnce();
+    expect(revalidateStorefrontLandingPagesMock).toHaveBeenCalledOnce();
     await expect(res.json()).resolves.toEqual({ ok: true });
   });
 
@@ -353,37 +364,17 @@ describe('app/api/products/[id]/route', () => {
     );
 
     expect(requireMutationAccessMock).toHaveBeenCalledWith('products');
-    expect(mutateEntityWithHistoryMock).toHaveBeenCalledWith(
-      db,
-      expect.objectContaining({
-        entityType: 'products',
-        entityId: 4,
-        operation: 'update',
-        actor: { email: 'admin@example.com', name: 'Admin' },
-        execute: expect.any(Function),
-      }),
-    );
-
-    const { execute } = mutateEntityWithHistoryMock.mock.calls[0][1];
-    const whereMock = vi.fn().mockResolvedValue(undefined);
-    const setMock = vi.fn().mockReturnValue({ where: whereMock });
-    const updateMock = vi.fn().mockReturnValue({ set: setMock });
-    await execute({ update: updateMock });
-
-    expect(setMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        archivedAt: expect.any(Date),
-        active: false,
-        inStock: false,
-        availabilityStatus: 'out_of_stock',
-      }),
-    );
+    expect(archiveProductMock).toHaveBeenCalledWith(db, 4, {
+      email: 'admin@example.com',
+      name: 'Admin',
+    });
     expect(startProductCatalogFeedRefreshJobMock).toHaveBeenCalledWith(
       'product:delete',
       'request-2',
     );
     expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
     expect(revalidateStorefrontProductsMock).toHaveBeenCalledOnce();
+    expect(revalidateStorefrontLandingPagesMock).toHaveBeenCalledOnce();
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ ok: true, archived: true });
   });
@@ -409,5 +400,20 @@ describe('app/api/products/[id]/route', () => {
         context: { trigger: 'product:delete', productId: 4 },
       }),
     );
+  });
+
+  it('returns 404 when the archive target no longer exists', async () => {
+    hasDbMock.mockReturnValue(true);
+    getDbMock.mockReturnValue({ marker: 'db' });
+    archiveProductMock.mockRejectedValue(new ProductMutationNotFoundError(404));
+
+    const res = await DELETE(
+      new NextRequest('http://localhost/api/products/404', { method: 'DELETE' }),
+      { params: Promise.resolve({ id: '404' }) },
+    );
+
+    expect(res.status).toBe(404);
+    await expect(res.json()).resolves.toEqual({ error: 'Not found' });
+    expect(startProductCatalogFeedRefreshJobMock).not.toHaveBeenCalled();
   });
 });

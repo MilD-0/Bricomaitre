@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { categories } from '@bric/db/schema';
-import { mutateEntityWithHistory } from '../../../lib/action-history';
 import { auth } from '../../../lib/auth';
-import { readCategoriesPage, resolveCategorySlug } from '../../../lib/brands-categories-api';
+import { readCategoriesPage } from '../../../lib/brands-categories-api';
 import { categoryFormSchema, paginationQuerySchema } from '../../../lib/brands-categories';
-import {
-  assertCategoryParentAllowed,
-  CategoryHierarchyError,
-} from '../../../lib/category-hierarchy';
+import { CategoryHierarchyError } from '../../../lib/category-hierarchy';
 import { requireMutationAccess } from '../../../lib/rbac';
 import { captureAdminException, getRequestId, withRequestIdHeaders } from '../../../lib/sentry';
 import { revalidateStorefrontProductMeta } from '../../../lib/storefront-revalidate';
+import { createCategoryThroughCanonicalWorkflow } from '../../../lib/taxonomy-mutations';
 
 function emptyPagination() {
   return {
@@ -84,34 +80,7 @@ export async function POST(req: NextRequest) {
   const actor = { email: session?.user?.email, name: session?.user?.name };
   const data = parsed.data;
   try {
-    const slug = await resolveCategorySlug(data.name);
-
-    await mutateEntityWithHistory(db, {
-      entityType: 'categories',
-      operation: 'create',
-      actor,
-      execute: async (tx) => {
-        await assertCategoryParentAllowed(tx, null, data.parentId ?? null, {
-          lockHierarchy: true,
-        });
-        return tx
-          .insert(categories)
-          .values({
-            name: data.name,
-            slug,
-            nameAr: data.nameAr,
-            image: data.imageUrl,
-            parentId: data.parentId ?? null,
-            isActive: true,
-            createdBy: actor.email ?? null,
-            createdByName: actor.name ?? null,
-            updatedBy: actor.email ?? null,
-            updatedByName: actor.name ?? null,
-          })
-          .returning({ id: categories.id });
-      },
-      resolveEntityId: (rows) => rows[0]?.id,
-    });
+    await createCategoryThroughCanonicalWorkflow(db, data, actor);
   } catch (error) {
     captureAdminException(error, {
       requestId,

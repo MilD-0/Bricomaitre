@@ -36,10 +36,58 @@ export type AdminAiMutationTool =
   | 'delete_bulletin_content'
   | 'categorize_catalog'
   | 'generate_product_content'
+  | 'create_product'
   | 'update_products'
+  | 'archive_products'
+  | 'manage_taxonomy'
   | 'suggest_discount'
   | 'propose_brand_create'
   | 'propose_category_create';
+
+export type AdminAiStepPlan =
+  | { kind: 'force_tool'; toolName: AdminAiGroundingTool | AdminAiMutationTool }
+  | { kind: 'analytics_only' }
+  | { kind: 'answer_only' }
+  | null;
+
+export const ADMIN_AI_LONG_OPERATION_TIMEOUT_MS = 120_000;
+
+export function adminAiRequestTimeoutMs(
+  configuredTimeoutMs: number,
+  mutationTool: AdminAiMutationTool | null,
+) {
+  return mutationTool === 'create_landing_page' || mutationTool === 'edit_landing_page'
+    ? Math.max(configuredTimeoutMs, ADMIN_AI_LONG_OPERATION_TIMEOUT_MS)
+    : configuredTimeoutMs;
+}
+
+/**
+ * Converts the route's deterministic read/write plan into one model-loop step.
+ * Once Analytics is selected, unrelated tools are removed from the loop. Up
+ * to three distinct canonical views remain possible for an explicitly
+ * cross-workspace question, while the prompt asks the model to answer after
+ * one sufficient view instead of browsing alternatives.
+ */
+export function adminAiStepPlan(input: {
+  stepNumber: number;
+  groundingTool: AdminAiGroundingTool | null;
+  mutationTool: AdminAiMutationTool | null;
+  analyticsQueryCount?: number;
+  analyticsQueryLimit?: 1 | 2 | 3;
+}): AdminAiStepPlan {
+  if (input.stepNumber === 0 && input.groundingTool) {
+    return { kind: 'force_tool', toolName: input.groundingTool };
+  }
+  if (input.groundingTool === 'query_analytics') {
+    return (input.analyticsQueryCount ?? 0) >= (input.analyticsQueryLimit ?? 3)
+      ? { kind: 'answer_only' }
+      : { kind: 'analytics_only' };
+  }
+  if (input.mutationTool && input.stepNumber === (input.groundingTool ? 1 : 0)) {
+    return { kind: 'force_tool', toolName: input.mutationTool };
+  }
+  return null;
+}
 
 function containsAny(value: string, terms: readonly string[]) {
   return terms.some((term) => value.includes(term));
@@ -125,6 +173,37 @@ function requestsDirectProductUpdate(message: string) {
       'منتج',
       'سعر',
     ])
+  );
+}
+
+function requestsProductCreation(message: string) {
+  return (
+    containsAny(message, [
+      'crée un produit',
+      'cree un produit',
+      'ajoute un produit',
+      'nouveau produit',
+      'create a product',
+      'create product',
+      'add a product',
+      'new product',
+      'أنشئ منتج',
+      'أضف منتج',
+    ]) && !containsAny(message, ['landing page', 'page de destination', 'صفحة هبوط'])
+  );
+}
+
+function requestsProductArchive(message: string) {
+  return (
+    containsAny(message, [
+      'archive',
+      'supprime',
+      'retire du catalogue',
+      'delete',
+      'remove from catalog',
+      'احذف',
+      'أرشف',
+    ]) && containsAny(message, ['produit', 'product', 'catalogue', 'catalog', 'منتج'])
   );
 }
 
@@ -227,7 +306,12 @@ export function adminAiGroundingTool(input: {
       : 'find_brands';
   }
   if (surface === 'products') {
-    if (requestsDirectProductUpdate(message) && permissions.includes('products_write')) {
+    if (
+      (requestsProductCreation(message) ||
+        requestsProductArchive(message) ||
+        requestsDirectProductUpdate(message)) &&
+      permissions.includes('products_write')
+    ) {
       return 'inspect_products';
     }
     if (
@@ -521,6 +605,8 @@ export function adminAiMutationTool(input: {
   }
 
   if (surface === 'products' && permissions.includes('products_write')) {
+    if (requestsProductCreation(message)) return 'create_product';
+    if (requestsProductArchive(message)) return 'archive_products';
     if (requestsDirectProductUpdate(message)) return 'update_products';
     if (containsAny(message, ['catégoris', 'categoris', 'classifie', 'صنّف'])) {
       return 'categorize_catalog';
@@ -540,12 +626,42 @@ export function adminAiMutationTool(input: {
   }
 
   if (surface === 'brandscategories' && permissions.includes('brands_categories_write')) {
-    const creates = containsAny(message, ['crée', 'cree', 'create', 'ajoute', 'أنشئ']);
-    if (creates && containsAny(message, ['catégorie', 'categorie', 'category', 'فئة'])) {
-      return 'propose_category_create';
-    }
-    if (creates && containsAny(message, ['marque', 'brand', 'علامة'])) {
-      return 'propose_brand_create';
+    const changesTaxonomy = containsAny(message, [
+      'crée',
+      'cree',
+      'create',
+      'ajoute',
+      'modifie',
+      'renomme',
+      'active',
+      'désactive',
+      'desactive',
+      'déplace',
+      'deplace',
+      'supprime',
+      'edit',
+      'rename',
+      'deactivate',
+      'move',
+      'delete',
+      'أنشئ',
+      'عدّل',
+      'فعّل',
+      'احذف',
+    ]);
+    if (
+      changesTaxonomy &&
+      containsAny(message, [
+        'catégorie',
+        'categorie',
+        'category',
+        'marque',
+        'brand',
+        'فئة',
+        'علامة',
+      ])
+    ) {
+      return 'manage_taxonomy';
     }
   }
 

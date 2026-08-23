@@ -83,11 +83,28 @@ const dateOnlySchema = z
 
 export const analytics2QuerySchema = z
   .object({
-    view: z.enum(analytics2Views).default('command'),
-    range: z.enum(['7d', '14d', '30d', '90d', 'year', 'all', 'custom']).default('30d'),
-    startDate: dateOnlySchema.optional(),
-    endDate: dateOnlySchema.optional(),
-    grain: z.enum(['auto', 'day', 'week', 'month']).default('auto'),
+    view: z
+      .enum(analytics2Views)
+      .default('command')
+      .describe(
+        'Choose exactly one canonical workspace: command for executive cross-section summaries and signals; money for profit meanings, paid contribution, Profit ×, economics timelines, forecasts, posting cohorts, and Friday accounting; acquisition for Meta spend, campaigns, ad sets, ads, attribution, and paid-acquisition efficiency; fulfillment for submitted/confirmed/posted/active/delivered/paid/returned lifecycle, shipments, delivery attempts, and operational forecasts; storefront for first-party sessions, funnel, landing pages, onsite searches, products, and web vitals; search for Search Console; catalog for products, baskets, customers, and geography; assumptions for planning versus observed returns, FX, operating costs, and manual calculator inputs.',
+      ),
+    range: z
+      .enum(['7d', '14d', '30d', '90d', 'year', 'all', 'custom'])
+      .default('30d')
+      .describe(
+        'Use custom whenever the operator supplies explicit start and end dates, and then pass both startDate and endDate exactly. Use a preset only when the operator requests that preset or supplies no exact dates.',
+      ),
+    startDate: dateOnlySchema
+      .optional()
+      .describe('Inclusive YYYY-MM-DD start date; required when range is custom.'),
+    endDate: dateOnlySchema
+      .optional()
+      .describe('Inclusive YYYY-MM-DD end date; required when range is custom.'),
+    grain: z
+      .enum(['auto', 'day', 'week', 'month'])
+      .default('auto')
+      .describe('Time-series grain. Keep auto unless the operator requests a specific grain.'),
   })
   .strict()
   .superRefine((value, context) => {
@@ -137,6 +154,13 @@ export type Analytics2Source = {
   throughDate: string | null;
   records: number;
   coveragePct: number | null;
+};
+
+export type Analytics2EffectiveRange = {
+  key: string;
+  startDate: string | null;
+  endDate: string;
+  sources: Analytics2Source['key'][];
 };
 
 export type Analytics2EconomicsPoint = {
@@ -571,6 +595,14 @@ function statsInput(startDate: string | null, endDate: string): StatsFilters {
 
 function economicsInput(startDate: string | null, endDate: string): ProfitTrackerRangeInput {
   return startDate ? { range: 'custom', startDate, endDate } : { range: 'all', endDate };
+}
+
+function effectiveRange(
+  key: string,
+  filters: Analytics2Filters,
+  sources: Analytics2Source['key'][],
+): Analytics2EffectiveRange {
+  return { key, startDate: filters.startDate, endDate: filters.endDate, sources };
 }
 
 export function metricChange(current: number | null, previous: number | null) {
@@ -4856,6 +4888,11 @@ async function loadCommandView(
       },
       signals: buildSignals(current, returns, fulfillment),
     },
+    effectiveRanges: [
+      effectiveRange('economics', economicsFilters, ['orders', 'meta', 'assumptions']),
+      effectiveRange('fulfillment', fulfillmentFilters, ['orders', 'ecotrack']),
+      effectiveRange('storefront', storefrontFilters, ['orders', 'storefront']),
+    ],
     sources,
     warnings: [...economicsWarnings(current), ...sourceWarnings(sources)],
   };
@@ -4929,6 +4966,10 @@ async function loadMoneyView(
         isPartial: economicsFilters.endDate < addDays(week.weekStart, 6),
       })),
     },
+    effectiveRanges: [
+      effectiveRange('economics', economicsFilters, ['orders', 'meta', 'assumptions']),
+      effectiveRange('paid', fulfillmentFilters, ['orders', 'ecotrack']),
+    ],
     sources,
     warnings: [...economicsWarnings(current), ...sourceWarnings(sources)],
   };
@@ -5102,6 +5143,14 @@ async function loadAcquisitionView(
         maxDays: 90,
       },
     },
+    effectiveRanges: [
+      effectiveRange('acquisition', performanceFilters, [
+        'orders',
+        'ecotrack',
+        'meta',
+        'assumptions',
+      ]),
+    ],
     sources,
     warnings: [...economicsWarnings(current), ...sourceWarnings(sources)],
   };
@@ -5164,6 +5213,7 @@ async function loadFulfillmentView(
       returns,
       planningReturnRatePct: economics.settings.defaultReturnRate,
     },
+    effectiveRanges: [effectiveRange('fulfillment', operationalFilters, ['orders', 'ecotrack'])],
     sources,
     warnings: [...sourceWarnings(sources)],
   };
@@ -5246,6 +5296,7 @@ async function loadStorefrontView(
         paidOrders: dashboard.aiAssistants.storefront.paidOrders,
       },
     },
+    effectiveRanges: [effectiveRange('storefront', storefrontFilters, ['orders', 'storefront'])],
     sources,
     warnings: [],
   };
@@ -5427,7 +5478,7 @@ async function loadCatalogView(
       statsInput(storefrontFilters.startDate, storefrontFilters.endDate),
     ),
     loadBasketPairs(db, catalogFilters),
-    loadSourceHealth(db, filters),
+    loadSourceHealth(db, filters, economics),
     loadOperationalProducts(db, catalogFilters, economics.settings.defaultReturnRate),
     previousAnalytics
       ? loadOperationalProducts(db, previousAnalytics, economics.settings.defaultReturnRate)
@@ -5552,6 +5603,10 @@ async function loadCatalogView(
       },
       customers: customerEconomics,
     },
+    effectiveRanges: [
+      effectiveRange('catalog', catalogFilters, ['orders', 'ecotrack', 'assumptions']),
+      effectiveRange('catalogStorefront', storefrontFilters, ['orders', 'storefront']),
+    ],
     sources,
     warnings: [...sourceWarnings(sources)],
   };
@@ -5621,6 +5676,9 @@ async function loadAssumptionsView(
         trueProfit: 'netProfitDzd - operatingCostDzd',
       },
     },
+    effectiveRanges: [
+      effectiveRange('assumptions', economicsFilters, ['orders', 'meta', 'assumptions']),
+    ],
     sources,
     warnings: [...economicsWarnings(economics), ...sourceWarnings(sources)],
   };
@@ -5719,6 +5777,16 @@ async function loadSearchView(db: Database, filters: Analytics2Filters) {
       discovery: search.discovery,
       indexHealth: search.indexHealth,
     },
+    effectiveRanges: [
+      effectiveRange(
+        'search',
+        {
+          ...searchFilters,
+          startDate: search.source.fromDate ?? searchFilters.startDate,
+        },
+        ['searchConsole'],
+      ),
+    ],
     sources: [source],
     warnings,
   };
@@ -5741,6 +5809,7 @@ export type Analytics2Payload = {
   referenceDate: string;
   reviewClock: boolean;
   data: LoadedAnalytics2Section['data'];
+  effectiveRanges: Analytics2EffectiveRange[];
   sources: Analytics2Source[];
   warnings: LoadedAnalytics2Section['warnings'];
   diagnostics: {
@@ -5801,6 +5870,7 @@ export async function getAnalytics2Data(
     referenceDate: clock.referenceDate,
     reviewClock: clock.reviewClock,
     data: loaded.data,
+    effectiveRanges: loaded.effectiveRanges,
     sources: clock.reviewClock
       ? loaded.sources.map((source: Analytics2Source) => ({
           ...source,

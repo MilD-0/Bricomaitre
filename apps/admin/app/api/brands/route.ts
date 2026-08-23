@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { brands } from '@bric/db/schema';
-import { mutateEntityWithHistory } from '../../../lib/action-history';
 import { auth } from '../../../lib/auth';
-import { readBrandsPage, resolveBrandSlug } from '../../../lib/brands-categories-api';
+import { readBrandsPage } from '../../../lib/brands-categories-api';
 import { brandFormSchema, paginationQuerySchema } from '../../../lib/brands-categories';
 import { requireMutationAccess } from '../../../lib/rbac';
 import { captureAdminException, getRequestId, withRequestIdHeaders } from '../../../lib/sentry';
 import { revalidateStorefrontProductMeta } from '../../../lib/storefront-revalidate';
+import { createBrandThroughCanonicalWorkflow } from '../../../lib/taxonomy-mutations';
 
 function emptyPagination() {
   return {
@@ -74,28 +73,7 @@ export async function POST(req: NextRequest) {
   const actor = { email: session?.user?.email, name: session?.user?.name };
   const data = parsed.data;
   try {
-    const slug = await resolveBrandSlug(data.name);
-
-    await mutateEntityWithHistory(db, {
-      entityType: 'brands',
-      operation: 'create',
-      actor,
-      execute: (tx) =>
-        tx
-          .insert(brands)
-          .values({
-            name: data.name,
-            slug,
-            isActive: true,
-            image: data.imageUrl,
-            createdBy: actor.email ?? null,
-            createdByName: actor.name ?? null,
-            updatedBy: actor.email ?? null,
-            updatedByName: actor.name ?? null,
-          })
-          .returning({ id: brands.id }),
-      resolveEntityId: (rows) => rows[0]?.id,
-    });
+    await createBrandThroughCanonicalWorkflow(db, data, actor);
   } catch (error) {
     captureAdminException(error, {
       requestId,

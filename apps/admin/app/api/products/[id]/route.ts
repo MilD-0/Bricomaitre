@@ -9,7 +9,9 @@ import { startProductCatalogFeedRefreshJob } from '../../../../lib/background-jo
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { productPatchSchema, productPayloadSchema } from '../../../../lib/products';
 import {
+  archiveProductThroughCanonicalWorkflow,
   ProductIntegrityConflictError,
+  ProductMutationNotFoundError,
   replaceProductThroughCanonicalWorkflow,
 } from '../../../../lib/product-update-workflow';
 import { assertUniqueProductIdentifiers } from '../../../../lib/product-integrity';
@@ -170,7 +172,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
-  await revalidateStorefrontProducts();
+  await Promise.all([revalidateStorefrontProducts(), revalidateStorefrontLandingPages()]);
 
   try {
     await startProductCatalogFeedRefreshJob('product:patch', requestId);
@@ -207,26 +209,17 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
-  await mutateEntityWithHistory(db, {
-    entityType: 'products',
-    entityId: numericId,
-    operation: 'update',
-    actor,
-    execute: (tx) =>
-      tx
-        .update(products)
-        .set({
-          archivedAt: new Date(),
-          active: false,
-          inStock: false,
-          availabilityStatus: 'out_of_stock',
-          updatedAt: new Date(),
-        })
-        .where(eq(products.id, numericId)),
-  });
+  try {
+    await archiveProductThroughCanonicalWorkflow(db, numericId, actor);
+  } catch (error) {
+    if (error instanceof ProductMutationNotFoundError) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    throw error;
+  }
 
   revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
-  await revalidateStorefrontProducts();
+  await Promise.all([revalidateStorefrontProducts(), revalidateStorefrontLandingPages()]);
 
   try {
     await startProductCatalogFeedRefreshJob('product:delete', requestId);
