@@ -302,7 +302,7 @@ export const storefrontSettingsResponseSchema = z.object({
   address: z.string().nullable().default(null),
   mapUrl: z.string().url().nullable().default(null),
   facebookUrl: z.string().url().nullable().default(null),
-  aiModel: z.string().default('gpt-5-mini'),
+  aiModel: z.string().default('openai/gpt-5.6-luna'),
   aiFallbackModel: z.string().nullable().default(null),
 });
 
@@ -323,7 +323,7 @@ export const defaultStorefrontSettingsResponse = storefrontSettingsResponseSchem
     address: 'BT N20, Cité 08 Mai 45, Bab Ezzouar 16024, Alger',
     mapUrl: 'https://maps.app.goo.gl/MpAM58nHS2G5JBah8',
     facebookUrl: 'https://www.facebook.com/profile.php?id=61562272954715',
-    aiModel: 'gpt-5-mini',
+    aiModel: 'openai/gpt-5.6-luna',
     aiFallbackModel: null,
   }),
 );

@@ -1,8 +1,5 @@
 import { createAiLanguageModel, getAiConfig, resolveAiModel } from '@bric/ai-core';
-import {
-  defaultStorefrontSettingsResponse,
-  type StorefrontSettingsResponse,
-} from '@bric/storefront-core/contracts';
+import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 import {
   shoppingAssistantCatalogSearchResultSchema,
   shoppingAssistantCatalogSearchSchema,
@@ -23,7 +20,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   catalogSearchQuery,
   deterministicAssistantMessage,
+  isRetiredStorefrontAiModel,
   shoppingAssistantInstructions,
+  shoppingAssistantToolPlan,
+  STOREFRONT_AI_CAPABILITY_FALLBACK_MODEL,
+  STOREFRONT_AI_MAX_OUTPUT_TOKENS,
   toAssistantCatalogProduct,
   toAssistantDetailProduct,
 } from '@/lib/shopping-assistant';
@@ -123,14 +124,21 @@ function remember(
   products.set(product.id, product);
 }
 
-function getStorefrontAiConfig(settings: StorefrontSettingsResponse) {
+function getStorefrontAiConfig() {
   const configured = getAiConfig();
   return {
     ...configured,
     provider: 'openrouter' as const,
     apiKey: process.env.OPENROUTER_API_KEY?.trim() || undefined,
-    storefrontModel: settings.aiModel,
   };
+}
+
+function distinctModels(models: Array<string | null | undefined>) {
+  return models
+    .map((model) => model?.trim())
+    .filter((model): model is string => Boolean(model))
+    .filter((model) => !isRetiredStorefrontAiModel(model))
+    .filter((model, index, candidates) => candidates.indexOf(model) === index);
 }
 
 function conversationPrompt(input: ShoppingAssistantRequest) {
@@ -344,11 +352,24 @@ export async function POST(request: NextRequest) {
         try {
           const grounding = await loadRequestGrounding(parsed.data);
           grounding.knownProducts.forEach((product) => remember(knownProducts, product));
-          const config = getStorefrontAiConfig(settings);
-          const primaryModel = resolveAiModel(config, 'storefront');
-          const modelCandidates = [primaryModel, settings.aiFallbackModel]
-            .filter((model): model is string => Boolean(model?.trim()))
-            .filter((model, index, models) => models.indexOf(model) === index);
+          const config = getStorefrontAiConfig();
+          const configuredModel = resolveAiModel(config, 'storefront');
+          const modelCandidates = distinctModels([
+            settings.aiModel,
+            settings.aiFallbackModel,
+            configuredModel,
+            STOREFRONT_AI_CAPABILITY_FALLBACK_MODEL,
+          ]);
+          const lastQuestion =
+            [...parsed.data.messages].reverse().find((message) => message.role === 'user')
+              ?.content ?? '';
+          const toolPlan = shoppingAssistantToolPlan(lastQuestion, {
+            hasInspectableProducts:
+              Boolean(grounding.currentProduct) ||
+              grounding.cart.length > 0 ||
+              parsed.data.messages.some((message) => Boolean(message.productIds?.length)),
+          });
+          const primaryModel = modelCandidates[0] ?? configuredModel;
           modelName = primaryModel;
           let generationError: unknown;
 
@@ -356,6 +377,7 @@ export async function POST(request: NextRequest) {
             try {
               modelName = candidateModel;
               selectedIds.splice(0);
+              let groundingResultCount = 0;
               const result = streamText({
                 model: createAiLanguageModel(config, 'storefront', { model: candidateModel }),
                 instructions: shoppingAssistantInstructions(parsed.data.locale),
@@ -365,7 +387,23 @@ export async function POST(request: NextRequest) {
                   AbortSignal.timeout(config.requestTimeoutMs),
                 ]),
                 maxRetries: config.maxRetries,
+                maxOutputTokens: STOREFRONT_AI_MAX_OUTPUT_TOKENS,
                 stopWhen: stepCountIs(8),
+                prepareStep: ({ stepNumber }) => {
+                  if (stepNumber === 0 && toolPlan.groundingTool) {
+                    return {
+                      activeTools: [toolPlan.groundingTool],
+                      toolChoice: { type: 'tool', toolName: toolPlan.groundingTool },
+                    };
+                  }
+                  if (stepNumber === 1 && toolPlan.presentProducts && groundingResultCount > 0) {
+                    return {
+                      activeTools: ['present_products'],
+                      toolChoice: { type: 'tool', toolName: 'present_products' },
+                    };
+                  }
+                  return undefined;
+                },
                 tools: {
                   search_catalog: tool({
                     description:
@@ -374,6 +412,7 @@ export async function POST(request: NextRequest) {
                     execute: async (input) => {
                       toolCallCount += 1;
                       const result = await searchPublicCatalog(input, CATALOG_CACHE_SECONDS);
+                      groundingResultCount = result.products.length;
                       result.products.forEach((product) => remember(knownProducts, product));
                       return result;
                     },
@@ -394,6 +433,7 @@ export async function POST(request: NextRequest) {
                         .map((product) =>
                           toAssistantDetailProduct(product.item, productCards.get(product.item.id)),
                         );
+                      groundingResultCount = products.length;
                       products.forEach((product) => remember(knownProducts, product));
                       return { products };
                     },

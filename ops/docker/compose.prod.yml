@@ -12,6 +12,10 @@ x-release-environment: &release-environment
 x-storefront-api-blue: &storefront-api-blue
   restart: unless-stopped
   init: true
+  # Public commerce is the highest-priority application tier. A host-wide OOM
+  # must reclaim admin workloads before the storefront API, while the larger
+  # hard limit prevents an isolated API cgroup from being killed first.
+  oom_score_adj: ${BRIC_STOREFRONT_API_OOM_SCORE_ADJ:--900}
   pids_limit: ${BRIC_STOREFRONT_API_PIDS_LIMIT:-256}
   stop_grace_period: 30s
   logging: *default-logging
@@ -26,8 +30,8 @@ x-storefront-api-blue: &storefront-api-blue
     - no-new-privileges:true
   tmpfs:
     - /tmp:size=64m,mode=1777
-  mem_limit: ${BRIC_STOREFRONT_API_MEM_LIMIT:-896m}
-  mem_reservation: ${BRIC_STOREFRONT_API_MEM_RESERVATION:-640m}
+  mem_limit: ${BRIC_STOREFRONT_API_MEM_LIMIT:-1536m}
+  mem_reservation: ${BRIC_STOREFRONT_API_MEM_RESERVATION:-1024m}
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront-api.env
   environment:
@@ -52,6 +56,7 @@ x-storefront-api-blue: &storefront-api-blue
 x-storefront-meta-worker: &storefront-meta-worker
   restart: unless-stopped
   init: true
+  oom_score_adj: ${BRIC_STOREFRONT_META_WORKER_OOM_SCORE_ADJ:-300}
   pids_limit: ${BRIC_STOREFRONT_META_WORKER_PIDS_LIMIT:-128}
   stop_grace_period: 30s
   logging: *default-logging
@@ -90,6 +95,9 @@ x-storefront-meta-worker: &storefront-meta-worker
 x-admin-blue: &admin-blue
   restart: unless-stopped
   init: true
+  # Admin remains available during normal operation but is deliberately more
+  # reclaimable than the customer-facing commerce path under host pressure.
+  oom_score_adj: ${BRIC_ADMIN_WEB_OOM_SCORE_ADJ:-500}
   pids_limit: ${BRIC_ADMIN_WEB_PIDS_LIMIT:-256}
   stop_grace_period: 30s
   logging: *default-logging
@@ -104,13 +112,13 @@ x-admin-blue: &admin-blue
     - no-new-privileges:true
   tmpfs:
     - /tmp:size=64m,mode=1777
-  mem_limit: ${BRIC_ADMIN_WEB_MEM_LIMIT:-1400m}
-  mem_reservation: ${BRIC_ADMIN_WEB_MEM_RESERVATION:-1024m}
+  mem_limit: ${BRIC_ADMIN_WEB_MEM_LIMIT:-1200m}
+  mem_reservation: ${BRIC_ADMIN_WEB_MEM_RESERVATION:-512m}
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/admin.env
   environment:
     <<: *release-environment
-    NODE_OPTIONS: ${BRIC_ADMIN_WEB_NODE_OPTIONS:---max-old-space-size=1024}
+    NODE_OPTIONS: ${BRIC_ADMIN_WEB_NODE_OPTIONS:---max-old-space-size=768}
     STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
   depends_on:
     storefront-api-blue:
@@ -128,6 +136,7 @@ x-admin-blue: &admin-blue
 x-admin-worker-blue: &admin-worker-blue
   restart: unless-stopped
   init: true
+  oom_score_adj: ${BRIC_ADMIN_WORKER_OOM_SCORE_ADJ:-650}
   pids_limit: ${BRIC_ADMIN_WORKER_PIDS_LIMIT:-256}
   stop_grace_period: 30s
   logging: *default-logging
@@ -142,13 +151,13 @@ x-admin-worker-blue: &admin-worker-blue
     - no-new-privileges:true
   tmpfs:
     - /tmp:size=64m,mode=1777
-  mem_limit: ${BRIC_ADMIN_WORKER_MEM_LIMIT:-768m}
-  mem_reservation: ${BRIC_ADMIN_WORKER_MEM_RESERVATION:-512m}
+  mem_limit: ${BRIC_ADMIN_WORKER_MEM_LIMIT:-640m}
+  mem_reservation: ${BRIC_ADMIN_WORKER_MEM_RESERVATION:-384m}
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/admin.env
   environment:
     <<: *release-environment
-    NODE_OPTIONS: ${BRIC_ADMIN_WORKER_NODE_OPTIONS:---max-old-space-size=512}
+    NODE_OPTIONS: ${BRIC_ADMIN_WORKER_NODE_OPTIONS:---max-old-space-size=384}
     STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
   depends_on:
     storefront-api-blue:
@@ -167,6 +176,7 @@ x-admin-worker-blue: &admin-worker-blue
 x-admin-migrations-blue: &admin-migrations-blue
   restart: 'no'
   init: true
+  oom_score_adj: ${BRIC_ADMIN_MIGRATIONS_OOM_SCORE_ADJ:-800}
   pids_limit: ${BRIC_ADMIN_MIGRATIONS_PIDS_LIMIT:-128}
   stop_grace_period: 30s
   logging: *default-logging
@@ -197,6 +207,10 @@ x-admin-migrations-blue: &admin-migrations-blue
 x-storefront-blue: &storefront-blue
   restart: unless-stopped
   init: true
+  # The web storefront shares the highest application priority with its API.
+  # Native image processing lives outside V8, so retain substantial headroom
+  # above the JavaScript heap instead of constraining both to the same ceiling.
+  oom_score_adj: ${BRIC_STOREFRONT_WEB_OOM_SCORE_ADJ:--900}
   pids_limit: ${BRIC_STOREFRONT_WEB_PIDS_LIMIT:-256}
   stop_grace_period: 30s
   logging: *default-logging
@@ -214,8 +228,8 @@ x-storefront-blue: &storefront-blue
     - no-new-privileges:true
   tmpfs:
     - /tmp:size=64m,mode=1777
-  mem_limit: ${BRIC_STOREFRONT_WEB_MEM_LIMIT:-1600m}
-  mem_reservation: ${BRIC_STOREFRONT_WEB_MEM_RESERVATION:-1024m}
+  mem_limit: ${BRIC_STOREFRONT_WEB_MEM_LIMIT:-3072m}
+  mem_reservation: ${BRIC_STOREFRONT_WEB_MEM_RESERVATION:-1536m}
   env_file:
     - ${BRIC_ENV_DIR:-/srv/bric/env}/storefront.env
   environment:
@@ -240,6 +254,7 @@ services:
     image: postgres:16-bookworm@sha256:60f4761b9035e0b8d5218f701a8c3382f641bf12b1604822574cf5be3baeb537
     restart: unless-stopped
     init: true
+    oom_score_adj: ${BRIC_POSTGRES_OOM_SCORE_ADJ:--800}
     pids_limit: ${BRIC_POSTGRES_PIDS_LIMIT:-256}
     stop_grace_period: 60s
     logging: *default-logging
@@ -261,6 +276,7 @@ services:
     image: redis:7-bookworm@sha256:e9b2e45ecd47fbb69b877cf8d045d5cccaaaed52524b6e098b4abe8212994f73
     restart: unless-stopped
     init: true
+    oom_score_adj: ${BRIC_REDIS_OOM_SCORE_ADJ:--800}
     pids_limit: ${BRIC_REDIS_PIDS_LIMIT:-128}
     stop_grace_period: 30s
     logging: *default-logging
@@ -308,7 +324,7 @@ services:
       - admin-cache-green:/app/apps/admin/.next/cache
     environment:
       <<: *release-environment
-      NODE_OPTIONS: ${BRIC_ADMIN_WEB_NODE_OPTIONS:---max-old-space-size=1024}
+      NODE_OPTIONS: ${BRIC_ADMIN_WEB_NODE_OPTIONS:---max-old-space-size=768}
       STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
     depends_on:
       storefront-api-green:
@@ -327,7 +343,7 @@ services:
     image: ${BRIC_IMAGE_ADMIN_WORKER_GREEN:-bricadmin-admin-worker-green}
     environment:
       <<: *release-environment
-      NODE_OPTIONS: ${BRIC_ADMIN_WORKER_NODE_OPTIONS:---max-old-space-size=512}
+      NODE_OPTIONS: ${BRIC_ADMIN_WORKER_NODE_OPTIONS:---max-old-space-size=384}
       STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
     depends_on:
       storefront-api-green:
@@ -365,11 +381,13 @@ services:
     image: nginx:1.27-bookworm@sha256:6784fb0834aa7dbbe12e3d7471e69c290df3e6ba810dc38b34ae33d3c1c05f7d
     restart: unless-stopped
     init: true
+    # Keep the small public edge alive long enough to route or report failures.
+    oom_score_adj: ${BRIC_NGINX_OOM_SCORE_ADJ:--950}
     pids_limit: ${BRIC_NGINX_PIDS_LIMIT:-128}
     stop_grace_period: 30s
     logging: *default-logging
     mem_limit: ${BRIC_NGINX_MEM_LIMIT:-256m}
-    mem_reservation: ${BRIC_NGINX_MEM_RESERVATION:-64m}
+    mem_reservation: ${BRIC_NGINX_MEM_RESERVATION:-128m}
     read_only: true
     security_opt:
       - no-new-privileges:true
@@ -392,10 +410,15 @@ services:
       # the old inode and silently defeat a blue/green reload.
       - ${BRIC_RUNTIME_DIR:-/srv/bric/runtime}/nginx:/etc/nginx/conf.d:ro
     healthcheck:
-      test: ['CMD', 'nginx', '-t', '-c', '/etc/nginx-main/nginx.conf']
+      test:
+        [
+          'CMD-SHELL',
+          'nginx -t -c /etc/nginx-main/nginx.conf && curl --fail --silent --show-error --insecure --resolve "${BRIC_API_DOMAIN:-api.example.com}:443:127.0.0.1" "https://${BRIC_API_DOMAIN:-api.example.com}/api/health" >/dev/null && curl --fail --silent --show-error --insecure --resolve "${BRIC_STOREFRONT_DOMAIN:-www.example.com}:443:127.0.0.1" "https://${BRIC_STOREFRONT_DOMAIN:-www.example.com}/api/health" >/dev/null',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 20s
 
 volumes:
   admin-cache-blue:

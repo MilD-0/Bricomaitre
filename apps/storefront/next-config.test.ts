@@ -19,8 +19,13 @@ describe('storefront Next configuration', () => {
       typedRoutes: true,
       transpilePackages: ['@bric/ai-core', '@bric/runtime', '@bric/storefront-core'],
       allowedDevOrigins: expect.arrayContaining(['127.0.0.1']),
+      experimental: {
+        imgOptConcurrency: 1,
+        imgOptOperationCache: false,
+        imgOptSequentialRead: true,
+      },
       images: {
-        formats: ['image/avif', 'image/webp'],
+        formats: ['image/webp'],
         qualities: [60, 75],
         maximumDiskCacheSize: 512_000_000,
         maximumResponseBody: 10_000_000,

@@ -39,9 +39,15 @@ describe('production Nginx renderer', () => {
       expect(rendered).toContain('listen 443 ssl default_server;');
       expect(rendered).toContain('ssl_reject_handshake on;');
       expect(rendered).toContain('location ^~ /.well-known/acme-challenge/');
-      expect(rendered).toContain('proxy_pass http://storefront-api-green:3001;');
-      expect(rendered).toContain('proxy_pass http://admin-green:3000;');
-      expect(rendered).toContain('proxy_pass http://storefront-green:3002;');
+      expect(rendered).toContain('resolver 127.0.0.11 ipv6=off valid=5s;');
+      expect(rendered).toContain('resolver_timeout 2s;');
+      expect(rendered).toContain('set $storefront_api_upstream storefront-api-green:3001;');
+      expect(rendered).toContain('set $admin_upstream admin-green:3000;');
+      expect(rendered).toContain('set $storefront_upstream storefront-green:3002;');
+      expect(rendered).toContain('proxy_pass http://$storefront_api_upstream;');
+      expect(rendered).toContain('proxy_pass http://$admin_upstream;');
+      expect(rendered).toContain('proxy_pass http://$storefront_upstream;');
+      expect(rendered.match(/proxy_connect_timeout 2s;/g)).toHaveLength(3);
       expect(rendered.match(/client_max_body_size 1m;/g)).toHaveLength(2);
       expect(rendered).toContain('client_max_body_size 50m;');
       expect(rendered.match(/if \(\$http_next_action != ''\)/g)).toHaveLength(2);
