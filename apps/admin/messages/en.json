@@ -1524,6 +1524,7 @@
       "improveTaxonomy": "Review the current brand and category structure.",
       "inspectBackgroundWork": "Show me the real status of current background work.",
       "inspectAdministration": "Show me the current staff access, roles, and permissions.",
+      "inspectStorefrontConfiguration": "Review the current storefront contacts, AI models, and announcement bar.",
       "summarizeBulletin": "Summarize the open topics and follow-ups in the current Bulletin view."
     },
     "placeholder": "Message the AI assistant",

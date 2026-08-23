@@ -15,6 +15,7 @@ describe('admin AI commercialization eval scenarios', () => {
         'assets',
         'ai_proposals',
         'administration',
+        'administration/storefront',
         'bulletin',
         'analytics',
         'products',

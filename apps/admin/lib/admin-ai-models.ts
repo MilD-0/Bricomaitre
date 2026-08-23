@@ -34,8 +34,9 @@ export const ADMIN_AI_MODEL_OPTIONS = [
   },
 ] as const;
 
-export const ADMIN_AI_DEFAULT_MODEL = 'deepseek-v4-flash';
-export const ADMIN_AI_DEFAULT_REASONING_EFFORT = 'high';
+export const ADMIN_AI_DEFAULT_MODEL = 'gpt-5.6-luna';
+export const ADMIN_AI_DEFAULT_REASONING_EFFORT = 'medium';
+export const ADMIN_AI_MAX_OUTPUT_TOKENS = 1_600;
 
 export const adminAiModelIdSchema = z.enum(
   ADMIN_AI_MODEL_OPTIONS.map((option) => option.id) as [

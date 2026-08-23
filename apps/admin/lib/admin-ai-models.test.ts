@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ADMIN_AI_DEFAULT_MODEL,
+  ADMIN_AI_DEFAULT_REASONING_EFFORT,
   getDefaultAdminAiReasoningEffort,
   resolveAdminAiModel,
   supportsAdminAiReasoningEffort,
 } from './admin-ai-models';
 
 describe('admin AI model selection', () => {
+  it('defaults the operating assistant to GPT-5.6 Luna at balanced reasoning', () => {
+    expect(ADMIN_AI_DEFAULT_MODEL).toBe('gpt-5.6-luna');
+    expect(ADMIN_AI_DEFAULT_REASONING_EFFORT).toBe('medium');
+  });
+
   it('uses OpenRouter model slugs and explicit reasoning effort', () => {
     expect(resolveAdminAiModel('deepseek-v4-flash', 'high')).toEqual({
       model: 'deepseek/deepseek-v4-flash',

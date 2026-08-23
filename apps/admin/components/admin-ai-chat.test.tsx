@@ -128,8 +128,8 @@ describe('AdminAiChat', () => {
       message: 'Find missing Arabic titles',
       conversationKey: expect.any(String),
       autoAcceptProposals: false,
-      model: 'deepseek-v4-flash',
-      reasoningEffort: 'high',
+      model: 'gpt-5.6-luna',
+      reasoningEffort: 'medium',
     });
     await waitFor(() => expect(composer).toHaveValue(''));
   });

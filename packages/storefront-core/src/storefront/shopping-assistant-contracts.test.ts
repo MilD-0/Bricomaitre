@@ -108,6 +108,8 @@ describe('shopping assistant contracts', () => {
       context: {
         pathname: '/fr/products/perceuse',
         currentProductToken: 'perceuse',
+        currentLandingPageSlug: null,
+        currentOrderToken: null,
         catalogQuery: null,
         cartItems: [{ productId: 12, quantity: 2 }],
       },
@@ -118,6 +120,8 @@ describe('shopping assistant contracts', () => {
     });
 
     expect(request.context?.cartItems).toEqual([{ productId: 12, quantity: 2 }]);
+    expect(request.context?.currentLandingPageSlug).toBeNull();
+    expect(request.context?.currentOrderToken).toBeNull();
     expect(request.messages[0]?.productIds).toEqual([12]);
   });
 
