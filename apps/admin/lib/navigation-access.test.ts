@@ -10,7 +10,7 @@ describe('navigation access', () => {
     expect(
       canAccessNavigationItem({
         isAllowed: true,
-        key: 'analytics2',
+        key: 'stats',
         permissions: ['analytics_manage'],
         role: 'employee',
       }),
@@ -18,7 +18,7 @@ describe('navigation access', () => {
     expect(
       canAccessNavigationItem({
         isAllowed: true,
-        key: 'analytics2',
+        key: 'stats',
         permissions: ['ops_view'],
         role: 'employee',
       }),

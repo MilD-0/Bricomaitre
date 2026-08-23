@@ -350,6 +350,28 @@
   gap: 0.5rem;
   margin-block-start: 0.65rem;
 }
+.shopping-assistant-feedback {
+  display: flex;
+  gap: 0.25rem;
+  margin-block-start: 0.55rem;
+}
+.shopping-assistant-feedback button {
+  width: 1.8rem;
+  height: 1.8rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 0.6rem;
+  background: transparent;
+  color: #778184;
+  cursor: pointer;
+}
+.shopping-assistant-feedback button:hover,
+.shopping-assistant-feedback button[aria-pressed='true'] {
+  border-color: #b8d9d6;
+  background: #eaf6f4;
+  color: var(--brand-teal-strong);
+}
 .shopping-assistant-product {
   min-height: 5.1rem;
   display: grid;
@@ -475,7 +497,6 @@
   }
 }
 .shopping-assistant-error {
-  margin: 0;
   border: 1px solid #efc9c4;
   border-radius: 0.85rem;
   background: #fff5f3;
@@ -483,6 +504,24 @@
   color: #92382f;
   font-size: 0.68rem;
   line-height: 1.45;
+}
+.shopping-assistant-error p {
+  margin: 0;
+}
+.shopping-assistant-error button {
+  min-height: 1.9rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-block-start: 0.45rem;
+  border: 1px solid #e6aaa2;
+  border-radius: 0.6rem;
+  background: #fff;
+  padding-inline: 0.6rem;
+  color: #873129;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
 }
 .shopping-assistant-form {
   min-height: 3.1rem;

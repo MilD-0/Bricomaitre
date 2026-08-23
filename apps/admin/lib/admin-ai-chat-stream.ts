@@ -16,6 +16,7 @@ export const adminAiChatStreamEventSchema = z.discriminatedUnion('type', [
       type: z.literal('result'),
       toolResults: z.unknown(),
       conversation: adminAiConversationSchema,
+      messageId: z.number().int().positive().nullable().default(null),
     })
     .strict(),
   z.object({ type: z.literal('error'), code: z.literal('admin_ai_failed') }).strict(),
@@ -28,7 +29,11 @@ export async function consumeAdminAiChatResponse(
   response: Response,
   handlers: {
     onTextDelta: (delta: string) => void;
-    onResult: (result: { toolResults: unknown; conversation: AdminAiConversation }) => void;
+    onResult: (result: {
+      toolResults: unknown;
+      conversation: AdminAiConversation;
+      messageId: number | null;
+    }) => void;
   },
 ) {
   const contentType = response.headers.get('content-type') ?? '';
@@ -38,6 +43,7 @@ export async function consumeAdminAiChatResponse(
       error?: unknown;
       toolResults?: unknown;
       conversation?: unknown;
+      messageId?: unknown;
     };
     if (!response.ok)
       throw new Error(typeof body.error === 'string' ? body.error : 'admin_ai_failed');
@@ -45,6 +51,10 @@ export async function consumeAdminAiChatResponse(
     handlers.onResult({
       toolResults: body.toolResults,
       conversation: adminAiConversationSchema.parse(body.conversation),
+      messageId:
+        typeof body.messageId === 'number' && Number.isSafeInteger(body.messageId)
+          ? body.messageId
+          : null,
     });
     return;
   }
@@ -60,7 +70,11 @@ export async function consumeAdminAiChatResponse(
     if (event.type === 'text-delta') handlers.onTextDelta(event.delta);
     if (event.type === 'result') {
       completed = true;
-      handlers.onResult({ toolResults: event.toolResults, conversation: event.conversation });
+      handlers.onResult({
+        toolResults: event.toolResults,
+        conversation: event.conversation,
+        messageId: event.messageId,
+      });
     }
     if (event.type === 'error') throw new Error(event.code);
   };

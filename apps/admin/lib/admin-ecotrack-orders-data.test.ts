@@ -10,6 +10,7 @@ import {
   resolveEcotrackStatusEvidence,
 } from './admin-ecotrack-orders-data';
 import type { EcotrackCatalogRecord } from './ecotrack';
+import { localOrderCanRemainInCashPipeline } from './ecotrack-status-policy';
 
 describe('admin ECOTRACK shipment mapping', () => {
   afterEach(() => {
@@ -27,19 +28,28 @@ describe('admin ECOTRACK shipment mapping', () => {
     expect(mapEcotrackStatusToOrderStatus('retour_recu', freshActivity)).toBe(8);
   });
 
-  it('marks non-terminal stale shipments as failed after 15 days', () => {
+  it('marks non-terminal stale shipments as failed after seven days', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-09T12:00:00.000Z'));
 
     expect(
-      mapEcotrackStatusToOrderStatus('prete_a_expedier', new Date('2026-03-24T11:59:59.000Z')),
+      mapEcotrackStatusToOrderStatus('prete_a_expedier', new Date('2026-04-02T11:59:59.000Z')),
     ).toBe(9);
     expect(
-      mapEcotrackStatusToOrderStatus('status_inconnu', new Date('2026-03-24T11:59:59.000Z')),
+      mapEcotrackStatusToOrderStatus('status_inconnu', new Date('2026-04-02T11:59:59.000Z')),
     ).toBe(9);
     expect(
-      mapEcotrackStatusToOrderStatus('status_inconnu', new Date('2026-03-25T12:00:01.000Z')),
+      mapEcotrackStatusToOrderStatus('status_inconnu', new Date('2026-04-02T12:00:01.000Z')),
     ).toBeNull();
+  });
+
+  it('keeps terminal local outcomes out of the active cash pipeline', () => {
+    expect(localOrderCanRemainInCashPipeline(11)).toBe(true);
+    expect(localOrderCanRemainInCashPipeline(4)).toBe(true);
+    expect(localOrderCanRemainInCashPipeline(6)).toBe(false);
+    expect(localOrderCanRemainInCashPipeline(8)).toBe(false);
+    expect(localOrderCanRemainInCashPipeline(9)).toBe(false);
+    expect(localOrderCanRemainInCashPipeline(10)).toBe(false);
   });
 
   it('uses the latest upstream activity timestamp and falls back to stored timestamps', () => {

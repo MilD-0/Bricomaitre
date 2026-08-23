@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   shoppingAssistantCatalogSearchSchema,
+  shoppingAssistantCatalogSearchResultSchema,
   shoppingAssistantRequestSchema,
   shoppingAssistantResponseSchema,
   shoppingAssistantStreamEventSchema,
 } from './shopping-assistant-contracts';
 
 describe('shopping assistant contracts', () => {
-  it('accepts a bounded localized conversation and customer-safe product response', () => {
+  it('accepts a bounded localized conversation and public product response', () => {
     expect(
       shoppingAssistantRequestSchema.parse({
         locale: 'fr',
@@ -27,6 +28,9 @@ describe('shopping assistant contracts', () => {
             titleAr: null,
             description: null,
             descriptionAr: null,
+            sku: 'P-1',
+            characteristics: ['13 mm chuck'],
+            characteristicsAr: ['ظرف 13 مم'],
             price: '5000.00',
             oldPrice: null,
             inStock: true,
@@ -40,7 +44,7 @@ describe('shopping assistant contracts', () => {
     ).not.toHaveProperty('purchasePrice');
   });
 
-  it('rejects unsupported locales, extra fields, and unbounded history', () => {
+  it('accepts substantial continuity while rejecting unsupported locales and unbounded history', () => {
     expect(
       shoppingAssistantRequestSchema.safeParse({
         locale: 'en',
@@ -56,32 +60,78 @@ describe('shopping assistant contracts', () => {
     expect(
       shoppingAssistantRequestSchema.safeParse({
         locale: 'fr',
-        messages: Array.from({ length: 9 }, () => ({ role: 'user', content: 'drill' })),
+        messages: Array.from({ length: 30 }, () => ({ role: 'user', content: 'drill' })),
+      }).success,
+    ).toBe(true);
+    expect(
+      shoppingAssistantRequestSchema.safeParse({
+        locale: 'fr',
+        messages: Array.from({ length: 31 }, () => ({ role: 'user', content: 'drill' })),
       }).success,
     ).toBe(false);
   });
 
-  it('bounds catalog searches to five products to limit model context', () => {
+  it('uses the full public catalog filter and pagination contract', () => {
     expect(
-      shoppingAssistantCatalogSearchSchema.safeParse({
-        query: 'drill',
-        inStockOnly: true,
-        limit: 5,
-      }).success,
-    ).toBe(true);
+      shoppingAssistantCatalogSearchSchema.parse({
+        search: 'drill',
+        brandId: 4,
+        categoryId: 8,
+        discounted: true,
+        stock: 'in',
+        minPrice: 1_000,
+        maxPrice: 20_000,
+        sortKey: 'price',
+        sortDirection: 'asc',
+        page: 42,
+        limit: 24,
+      }),
+    ).toMatchObject({ page: 42, limit: 24, stock: 'in', discounted: true });
+    expect(shoppingAssistantCatalogSearchSchema.safeParse({ limit: 25 }).success).toBe(false);
     expect(
-      shoppingAssistantCatalogSearchSchema.safeParse({
-        query: 'drill',
-        inStockOnly: true,
-        limit: 6,
-      }).success,
+      shoppingAssistantCatalogSearchSchema.safeParse({ minPrice: 20, maxPrice: 10 }).success,
     ).toBe(false);
+    expect(
+      shoppingAssistantCatalogSearchResultSchema.parse({
+        products: [],
+        total: 1_043,
+        page: 42,
+        limit: 24,
+        hasMore: true,
+      }),
+    ).toMatchObject({ total: 1_043, hasMore: true });
+  });
+
+  it('accepts current page, cart, and prior recommendation context', () => {
+    const request = shoppingAssistantRequestSchema.parse({
+      locale: 'fr',
+      context: {
+        pathname: '/fr/products/perceuse',
+        currentProductToken: 'perceuse',
+        catalogQuery: null,
+        cartItems: [{ productId: 12, quantity: 2 }],
+      },
+      messages: [
+        { role: 'assistant', content: 'Voici une option.', productIds: [12] },
+        { role: 'user', content: 'Compare-la avec une autre.' },
+      ],
+    });
+
+    expect(request.context?.cartItems).toEqual([{ productId: 12, quantity: 2 }]);
+    expect(request.messages[0]?.productIds).toEqual([12]);
   });
 
   it('defines bounded incremental response frames', () => {
     expect(
       shoppingAssistantStreamEventSchema.parse({ type: 'status', status: 'thinking' }),
     ).toEqual({ type: 'status', status: 'thinking' });
+    expect(
+      shoppingAssistantStreamEventSchema.parse({
+        type: 'tool',
+        name: 'search_catalog',
+        status: 'completed',
+      }),
+    ).toEqual({ type: 'tool', name: 'search_catalog', status: 'completed' });
     expect(
       shoppingAssistantStreamEventSchema.safeParse({ type: 'text-delta', delta: '' }).success,
     ).toBe(false);

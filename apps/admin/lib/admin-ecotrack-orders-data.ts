@@ -68,6 +68,7 @@ import {
   persistEcotrackPostedOrder,
   readEcotrackCatalog,
 } from './ecotrack';
+import { ECOTRACK_FAILED_STATUS_MAX_AGE_MS } from './ecotrack-status-policy';
 import { parseSortRuleStrings } from './multi-sort';
 import {
   coerceOrderStatus,
@@ -249,7 +250,6 @@ const TRACKING_STALE_MS = 30 * 60 * 1000;
 const MAJ_STALE_MS = 30 * 60 * 1000;
 const MISSING_STATUS_RETIRE_MS = 24 * 60 * 60 * 1000;
 const MISSING_STATUS_CONFIRMATION_LIMIT = 40;
-const FAILED_STATUS_MAX_AGE_MS = 15 * 24 * 60 * 60 * 1000;
 const ECOTRACK_SYNC_ACTOR_NAME = 'ECOTRACK sync';
 const ECOTRACK_DISPATCHED_STATUSES = new Set([
   'en_ramassage',
@@ -1265,7 +1265,7 @@ export function mapEcotrackStatusToOrderStatus(
 
   if (
     latestUpstreamActivityAt &&
-    Date.now() - latestUpstreamActivityAt.getTime() >= FAILED_STATUS_MAX_AGE_MS
+    Date.now() - latestUpstreamActivityAt.getTime() >= ECOTRACK_FAILED_STATUS_MAX_AGE_MS
   ) {
     return 9;
   }

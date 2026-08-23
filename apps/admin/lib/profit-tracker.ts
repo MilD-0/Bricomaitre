@@ -11,6 +11,8 @@ import {
   profitTrackerOperatingCosts,
   profitTrackerSettings,
 } from '@bric/db/schema';
+
+import { ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE } from './analytics2-fact-contract';
 import {
   applyProfitTrackerRollforward,
   buildProfitTrackerWeeks,
@@ -258,7 +260,10 @@ async function loadAutomaticDayEconomics(db: Database, startDate: string | null,
         ) as cost_complete,
         sum(
           ${orderLineItems.lineTotal}
-          - ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity}
+          - coalesce(
+            ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity},
+            ${orderLineItems.lineTotal} * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
+          )
         )::double precision as gross_profit
       from ${orderLineItems}
       group by ${orderLineItems.orderId}
@@ -266,9 +271,10 @@ async function loadAutomaticDayEconomics(db: Database, startDate: string | null,
     select first_posted.day::text as date,
       count(*)::int as posted_orders,
       count(*) filter (where line_economics.cost_complete)::int as cost_complete_orders,
-      case when count(*) filter (where line_economics.cost_complete) = 0 then null
+      case when count(*) filter (where line_economics.gross_profit is not null) = 0 then null
         else coalesce(sum(line_economics.gross_profit)
-          filter (where line_economics.cost_complete), 0)::double precision end as gross_profit_dzd
+          filter (where line_economics.gross_profit is not null), 0)::double precision
+        end as gross_profit_dzd
     from first_posted
     left join line_economics on line_economics.order_id = first_posted.order_id
     where ${startDate ? sql`first_posted.day >= ${startDate}::date` : sql`true`}
@@ -952,6 +958,12 @@ export async function getProfitTrackerReport(
       metaCoveredDays: 0,
     },
   );
+  const periodMetaDays = selected.filter((day) => day.metrics.adCostDzd != null);
+  const periodKnownMetaAdCostDzd = summary.ratioAdCostDzd;
+  realizedSummary.knownMetaAdCostDzd = periodKnownMetaAdCostDzd;
+  realizedSummary.realizedProfitAfterAdsDzd =
+    realizedSummary.realizedProfitDzd - periodKnownMetaAdCostDzd;
+  realizedSummary.metaCoveredDays = periodMetaDays.length;
   const reportThroughDate = realizedSelected[0]?.date ?? null;
   const settlementCoveragePct =
     summary.postedOrders > 0 ? (realizedSummary.settledOrders / summary.postedOrders) * 100 : null;
@@ -992,9 +1004,9 @@ export async function getProfitTrackerReport(
       pendingRollforwardDzd,
     },
     warnings: [
-      ...(summary.projectedCoveragePct != null && summary.projectedCoveragePct < 100
+      ...(summary.projectedCoveragePct != null && summary.projectedCoveragePct < 95
         ? [
-            'Some posted orders are excluded from projected profit because purchase-cost snapshots are incomplete.',
+            'Some posted orders use the 30% fallback product margin because purchase-cost snapshots are incomplete.',
           ]
         : []),
       ...(pendingRollforwardDzd > 0

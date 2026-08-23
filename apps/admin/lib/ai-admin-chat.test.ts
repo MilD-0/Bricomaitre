@@ -19,6 +19,8 @@ describe('admin AI chat instructions', () => {
   it('requires verified persistence before treating an approved task as complete', () => {
     expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('verified persistence');
     expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('task is not complete');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('machine-readable code and nextAction');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('live records moved');
   });
 
   it('routes catalog-wide categorization through one reconciled background job', () => {
@@ -45,5 +47,14 @@ describe('admin AI chat instructions', () => {
     expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain(
       'Do not ask the user to prompt you to check later',
     );
+  });
+
+  it('uses surface selections and complete canonical operational records', () => {
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('exact selected IDs');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('inspect_orders');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('inspect_administration');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('complete operational records');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('customer and staff identity');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('exact domain permissions');
   });
 });

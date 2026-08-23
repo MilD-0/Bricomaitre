@@ -1,0 +1,85 @@
+import type { AiEvalScenario } from '@bric/ai-core/evals';
+
+export type ShoppingAssistantEvalInput = {
+  message: string;
+  context: 'catalog' | 'product' | 'cart' | 'checkout';
+};
+
+export const SHOPPING_ASSISTANT_EVAL_SCENARIOS: AiEvalScenario<ShoppingAssistantEvalInput>[] = [
+  {
+    id: 'storefront-fr-budget-search',
+    description: 'Searches the whole catalog with a budget and presents grounded cards.',
+    surface: 'storefront',
+    locale: 'fr',
+    input: {
+      message: 'Je cherche une perceuse en stock à moins de 15 000 DA.',
+      context: 'catalog',
+    },
+    expectations: { requiredTools: ['search_catalog', 'present_products'] },
+  },
+  {
+    id: 'storefront-ar-project-search',
+    description: 'Answers an Arabic project recommendation in Arabic with catalog evidence.',
+    surface: 'storefront',
+    locale: 'ar',
+    input: { message: 'أحتاج أداة لثقب الخرسانة في المنزل', context: 'catalog' },
+    expectations: { requiredTools: ['search_catalog', 'present_products'] },
+  },
+  {
+    id: 'storefront-fr-product-detail',
+    description: 'Inspects the current product before answering a detailed question.',
+    surface: 'storefront',
+    locale: 'fr',
+    input: {
+      message: 'Explique-moi les caractéristiques importantes de ce produit.',
+      context: 'product',
+    },
+    expectations: { requiredTools: ['inspect_products'] },
+  },
+  {
+    id: 'storefront-fr-grounded-comparison',
+    description: 'Inspects and presents both products in a follow-up comparison.',
+    surface: 'storefront',
+    locale: 'fr',
+    input: { message: 'Compare les deux options que tu viens de proposer.', context: 'product' },
+    expectations: { requiredTools: ['inspect_products', 'present_products'] },
+  },
+  {
+    id: 'storefront-ar-cart-compatibility',
+    description: 'Uses cart context for an Arabic compatibility follow-up.',
+    surface: 'storefront',
+    locale: 'ar',
+    input: { message: 'هل هذه القطع متوافقة مع الأدوات الموجودة في سلتي؟', context: 'cart' },
+    expectations: { requiredTools: ['inspect_products'] },
+  },
+  {
+    id: 'storefront-fr-availability',
+    description: 'Checks current availability instead of relying on an earlier answer.',
+    surface: 'storefront',
+    locale: 'fr',
+    input: {
+      message: 'Quelles ponceuses sont réellement disponibles maintenant ?',
+      context: 'catalog',
+    },
+    expectations: { requiredTools: ['search_catalog', 'present_products'] },
+  },
+  {
+    id: 'storefront-fr-checkout-help',
+    description: 'Continues product advice during checkout with live cart context.',
+    surface: 'storefront',
+    locale: 'fr',
+    input: {
+      message: 'Avant de commander, propose une alternative moins chère pour cet article.',
+      context: 'checkout',
+    },
+    expectations: { requiredTools: ['search_catalog', 'present_products'] },
+  },
+  {
+    id: 'storefront-ar-no-match',
+    description: 'Responds clearly in Arabic when a narrow catalog query has no match.',
+    surface: 'storefront',
+    locale: 'ar',
+    input: { message: 'أريد آلة صناعية نادرة بسعر أقل من 100 دج', context: 'catalog' },
+    expectations: { requiredTools: ['search_catalog'], minimumAnswerCharacters: 30 },
+  },
+];

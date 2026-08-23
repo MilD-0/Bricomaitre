@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
+import { refreshAnalytics2FactsAfterMutation } from '../../../../../lib/analytics2-facts';
 import {
   getProfitTrackerSettings,
   profitTrackerSettingsSchema,
@@ -28,5 +29,7 @@ export async function PUT(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  return NextResponse.json({ data: await updateProfitTrackerSettings(parsed.data) });
+  const data = await updateProfitTrackerSettings(parsed.data);
+  await refreshAnalytics2FactsAfterMutation();
+  return NextResponse.json({ data });
 }

@@ -11,10 +11,7 @@ import { NavigationActions } from '@/components/navigation-actions';
 import { NavigationCategories } from '@/components/navigation-categories';
 import { ShoppingAssistantLauncher } from '@/components/shopping-assistant-launcher';
 import { isLocale, type Locale } from '@/i18n/config';
-import {
-  getStorefrontContent,
-  getStorefrontSettings,
-} from '@/lib/storefront-api';
+import { getStorefrontContent, getStorefrontSettings } from '@/lib/storefront-api';
 import {
   defaultStorefrontSettingsResponse,
   type StorefrontSettingsResponse,
@@ -232,6 +229,9 @@ export async function PageShell({
             welcomeDescription: assistant('welcomeDescription'),
             placeholder: assistant('placeholder'),
             send: assistant('send'),
+            stop: assistant('stop'),
+            stopped: assistant('stopped'),
+            retry: assistant('retry'),
             thinking: assistant('thinking'),
             error: assistant('error'),
             rateLimited: assistant('rateLimited'),
@@ -242,6 +242,8 @@ export async function PageShell({
             viewProduct: assistant('viewProduct'),
             addToCart: assistant('addToCart'),
             addedToCart: assistant('addedToCart'),
+            helpful: assistant('helpful'),
+            notHelpful: assistant('notHelpful'),
             inputLabel: assistant('inputLabel'),
             quickPrompts: [
               assistant('quickPromptOne'),

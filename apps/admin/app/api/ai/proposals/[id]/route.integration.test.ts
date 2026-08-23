@@ -49,6 +49,7 @@ vi.mock('../../../../../lib/storefront-revalidate', () => ({
 }));
 
 import { DELETE, PATCH } from './route';
+import { AiProposalReviewConflictError } from '../../../../../lib/ai-proposal-review';
 
 const request = (action: string) =>
   new NextRequest('http://localhost/api/ai/proposals/4', {
@@ -137,6 +138,26 @@ describe('AI proposal review route', () => {
     expect(response.status).toBe(200);
     expect(mocks.appAccess).toHaveBeenCalledOnce();
     expect(mocks.mutationAccess).toHaveBeenCalledWith('products');
+    expect(mocks.revalidateProducts).not.toHaveBeenCalled();
+  });
+
+  it('returns a machine-readable recovery action for stale proposal decisions', async () => {
+    mocks.review.mockRejectedValue(
+      new AiProposalReviewConflictError(
+        'The product changed after this proposal was generated.',
+        'proposal_stale',
+      ),
+    );
+
+    const response = await PATCH(request('approve'), { params: Promise.resolve({ id: '4' }) });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: 'The product changed after this proposal was generated.',
+      code: 'proposal_stale',
+      proposalId: 4,
+      nextAction: 'regenerate',
+    });
     expect(mocks.revalidateProducts).not.toHaveBeenCalled();
   });
 

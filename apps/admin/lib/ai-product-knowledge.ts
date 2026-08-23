@@ -8,6 +8,7 @@ import {
   type ProductRelationGenerator,
 } from '@bric/ai-core';
 import { and, eq, inArray } from 'drizzle-orm';
+import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
 import {
@@ -19,11 +20,12 @@ import {
   productRelations,
   products,
 } from '@bric/db/schema';
+import { AiProposalReviewConflictError } from './ai-proposal-review';
 
 const PRODUCT_RELATION_PROMPT_VERSION = 'product-relation-v1';
 
 export class AiProductNotFoundError extends Error {}
-export class AiProductRelationConflictError extends Error {}
+export class AiProductRelationConflictError extends AiProposalReviewConflictError {}
 export { UnsupportedProductRelationError };
 
 type ProposalEvidence = { label: string; url?: string; excerpt?: string };
@@ -37,6 +39,22 @@ type CatalogEvidenceProduct = {
 const ADMIN_EVIDENCE_LABEL = 'Administrator-provided evidence';
 const SOURCE_DESCRIPTION_LABEL = 'Source catalog description';
 const TARGET_DESCRIPTION_LABEL = 'Target catalog description';
+
+export function areProductRelationDependenciesFresh(input: {
+  source: { updatedAt: Date } | undefined;
+  target: { updatedAt: Date } | undefined;
+  sourceUpdatedAt: Date | null;
+  targetUpdatedAt?: Date;
+}) {
+  return Boolean(
+    input.source &&
+    input.target &&
+    input.sourceUpdatedAt &&
+    input.source.updatedAt.getTime() === input.sourceUpdatedAt.getTime() &&
+    (!input.targetUpdatedAt ||
+      input.target.updatedAt.getTime() === input.targetUpdatedAt.getTime()),
+  );
+}
 
 function truncateEvidence(value: string) {
   return value.trim().slice(0, 2_000);
@@ -193,7 +211,13 @@ export async function proposeProductRelation(input: {
         entityType: 'products',
         entityId: sourceProduct.id,
         sourceUpdatedAt: sourceProduct.updatedAt,
-        payload: generated.proposal,
+        payload: {
+          ...generated.proposal,
+          dependencyVersions: {
+            sourceUpdatedAt: sourceProduct.updatedAt.toISOString(),
+            targetUpdatedAt: targetProduct.updatedAt.toISOString(),
+          },
+        },
         reasoning: generated.reasoning,
         evidence: buildProductRelationEvidence({
           sourceProduct,
@@ -243,15 +267,19 @@ export async function reviewProductRelationProposal(input: {
     if (!proposal || proposal.proposalType !== 'product_relation') {
       throw new AiProductRelationConflictError(
         'The relationship proposal is unavailable or already reviewed.',
+        'proposal_already_reviewed',
       );
     }
     if (proposal.expiresAt <= new Date()) {
-      throw new AiProductRelationConflictError('The relationship proposal has expired.');
+      throw new AiProductRelationConflictError(
+        'The relationship proposal has expired. Generate a new proposal.',
+        'proposal_expired',
+      );
     }
 
     const now = new Date();
     if (input.action === 'reject') {
-      await tx
+      const [rejected] = await tx
         .update(aiProposals)
         .set({
           status: 'rejected',
@@ -259,11 +287,27 @@ export async function reviewProductRelationProposal(input: {
           reviewedAt: now,
           updatedAt: now,
         })
-        .where(eq(aiProposals.id, proposal.id));
+        .where(and(eq(aiProposals.id, proposal.id), eq(aiProposals.status, 'proposed')))
+        .returning({ id: aiProposals.id });
+      if (!rejected) {
+        throw new AiProductRelationConflictError(
+          'The proposal changed while it was being reviewed.',
+          'proposal_already_reviewed',
+        );
+      }
       return { id: proposal.id, status: 'rejected' as const, verified: true };
     }
 
-    const relation = productRelationProposalSchema.parse(proposal.payload);
+    const rawPayload = proposal.payload as Record<string, unknown>;
+    const relation = productRelationProposalSchema.parse(rawPayload);
+    const dependencyVersions = z
+      .object({
+        sourceUpdatedAt: z.string().datetime(),
+        targetUpdatedAt: z.string().datetime(),
+      })
+      .strict()
+      .optional()
+      .parse(rawPayload.dependencyVersions);
     const confidence = relation.confidence ?? Number(proposal.confidence ?? 0);
     const visibleEvidence = proposal.evidence.filter(
       (item) => item.label.trim() && (item.url?.trim() || item.excerpt?.trim()),
@@ -276,23 +320,39 @@ export async function reviewProductRelationProposal(input: {
     ) {
       throw new AiProductRelationConflictError(
         'A relationship needs visible source evidence and sufficient confidence before approval.',
+        'proposal_evidence_insufficient',
       );
     }
 
     const productsFound = await tx
-      .select({ id: products.id, updatedAt: products.updatedAt })
+      .select({ id: products.id, active: products.active, updatedAt: products.updatedAt })
       .from(products)
-      .where(inArray(products.id, [relation.sourceProductId, relation.targetProductId]));
-    if (productsFound.length !== 2) {
-      throw new AiProductRelationConflictError('One of the related products no longer exists.');
+      .where(inArray(products.id, [relation.sourceProductId, relation.targetProductId]))
+      .for('update');
+    if (productsFound.length !== 2 || productsFound.some((product) => !product.active)) {
+      throw new AiProductRelationConflictError(
+        'One of the related products no longer exists or is inactive. Generate a new proposal.',
+        'proposal_dependency_changed',
+      );
     }
     const source = productsFound.find((product) => product.id === relation.sourceProductId);
+    const target = productsFound.find((product) => product.id === relation.targetProductId);
+    const sourceUpdatedAt = dependencyVersions?.sourceUpdatedAt
+      ? new Date(dependencyVersions.sourceUpdatedAt)
+      : proposal.sourceUpdatedAt;
     if (
-      proposal.sourceUpdatedAt &&
-      (!source || source.updatedAt.getTime() !== proposal.sourceUpdatedAt.getTime())
+      !areProductRelationDependenciesFresh({
+        source,
+        target,
+        sourceUpdatedAt,
+        targetUpdatedAt: dependencyVersions
+          ? new Date(dependencyVersions.targetUpdatedAt)
+          : undefined,
+      })
     ) {
       throw new AiProductRelationConflictError(
-        'The source product changed. Generate a new proposal.',
+        'One of the related products changed. Generate a new proposal.',
+        'proposal_dependency_changed',
       );
     }
 
@@ -327,7 +387,10 @@ export async function reviewProductRelationProposal(input: {
       })
       .returning({ id: productRelations.id });
     if (!persisted) {
-      throw new AiProductRelationConflictError('The relationship could not be verified.');
+      throw new AiProductRelationConflictError(
+        'The relationship could not be verified.',
+        'proposal_verification_failed',
+      );
     }
     await tx
       .delete(productRelationEvidence)
@@ -357,7 +420,10 @@ export async function reviewProductRelationProposal(input: {
       .where(and(eq(aiProposals.id, proposal.id), eq(aiProposals.status, 'proposed')))
       .returning({ id: aiProposals.id });
     if (!applied) {
-      throw new AiProductRelationConflictError('The proposal changed while it was being reviewed.');
+      throw new AiProductRelationConflictError(
+        'The proposal changed while it was being reviewed.',
+        'proposal_already_reviewed',
+      );
     }
     return { id: proposal.id, status: 'applied' as const, verified: true };
   });

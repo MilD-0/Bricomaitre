@@ -13,6 +13,7 @@ import {
   backfillOrderAiInfluenceBatch,
   compactRetainedAnalyticsJourneysBatch,
   deleteExpiredAnalyticsEventsBatch,
+  deleteExpiredAnalyticsSessionsBatch,
   deleteExpiredPaidClickVisitsBatch,
   deleteTerminalMarketingOutboxBatch,
   normalizeNextPaidClickRollupDays,
@@ -155,6 +156,9 @@ describe('storefront data maintenance', () => {
     expect(rollupSql).toContain('"analytics_acquisition_daily_rollups"');
     expect(rollupSql).toContain('"analytics_ai_daily_rollups"');
     expect(rollupSql).toContain("'ai_journey'");
+    expect(rollupSql).toContain('not_helpful');
+    expect(rollupSql).toContain('cancelled');
+    expect(rollupSql).toContain("metadata->>'rating'");
   });
 
   it('persists paid-click outcome counters before making an expired day deletable', async () => {
@@ -224,5 +228,22 @@ describe('storefront data maintenance', () => {
     expect(query.sql).toMatch(/then \$\d+::timestamptz/);
     expect(query.sql).toMatch(/else \$\d+::timestamptz/);
     expect(query.params.filter((value) => value instanceof Date)).toHaveLength(2);
+    expect(query.sql).toContain('"analytics_events"."event_name" not in');
+    expect(query.sql).toContain("'ai_assistant_feedback'");
+    expect(query.sql).toContain("'ai_assistant_run'");
+  });
+
+  it('retains session context referenced by full assistant operations', async () => {
+    const execute = vi.fn().mockResolvedValue({ rows: [] });
+
+    await deleteExpiredAnalyticsSessionsBatch({ execute } as never, {
+      now: new Date('2026-07-19T00:00:00Z'),
+      limit: 25,
+    });
+
+    const query = dialect.sqlToQuery(execute.mock.calls[0]![0]);
+    expect(query.sql).toContain('not exists');
+    expect(query.sql).toContain("'ai_assistant_message'");
+    expect(query.sql).toContain('"analytics_events"."session_id"');
   });
 });

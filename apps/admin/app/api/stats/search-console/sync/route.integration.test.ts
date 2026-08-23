@@ -16,7 +16,7 @@ vi.mock('../../../../../lib/search-console', async () => {
 
 import { POST } from './route';
 
-describe('POST /api/analytics2/search-console/sync', () => {
+describe('POST /api/stats/search-console/sync', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireMutationMock.mockResolvedValue(null);
@@ -25,26 +25,26 @@ describe('POST /api/analytics2/search-console/sync', () => {
 
   it('runs the incremental Search Console synchronization under stats mutation access', async () => {
     const response = await POST(
-      new Request('http://localhost/api/analytics2/search-console/sync', { method: 'POST' }),
+      new Request('http://localhost/api/stats/search-console/sync', { method: 'POST' }),
     );
     expect(response.status).toBe(200);
     expect(syncMock).toHaveBeenCalledWith({
       since: undefined,
       until: undefined,
-      trigger: 'analytics2',
+      trigger: 'stats',
       inspectionLimit: 10,
     });
   });
 
   it('rejects incomplete and reversed explicit ranges before provider access', async () => {
     const incomplete = await POST(
-      new Request('http://localhost/api/analytics2/search-console/sync', {
+      new Request('http://localhost/api/stats/search-console/sync', {
         method: 'POST',
         body: JSON.stringify({ since: '2026-08-01' }),
       }),
     );
     const reversed = await POST(
-      new Request('http://localhost/api/analytics2/search-console/sync', {
+      new Request('http://localhost/api/stats/search-console/sync', {
         method: 'POST',
         body: JSON.stringify({ since: '2026-08-10', until: '2026-08-01' }),
       }),

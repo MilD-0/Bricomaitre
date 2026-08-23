@@ -16,6 +16,7 @@ const {
   authMock,
   mutateEntityWithHistoryMock,
   readEcotrackCatalogMock,
+  triggerAdminReportingRefreshMock,
 } = vi.hoisted(() => ({
   ensureOrderConfirmedEventForOrderMock: vi.fn(),
   ensureOrderCompletedEventForOrderMock: vi.fn(),
@@ -28,6 +29,7 @@ const {
   authMock: vi.fn(),
   mutateEntityWithHistoryMock: vi.fn(),
   readEcotrackCatalogMock: vi.fn(),
+  triggerAdminReportingRefreshMock: vi.fn(),
 }));
 
 vi.mock('@bric/storefront-core/meta', () => ({
@@ -60,6 +62,10 @@ vi.mock('../../../../../lib/action-history', () => ({
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
 }));
 
+vi.mock('../../../../../lib/reporting-refresh-trigger', () => ({
+  triggerAdminReportingRefresh: triggerAdminReportingRefreshMock,
+}));
+
 vi.mock('../../../../../lib/ecotrack', () => ({
   readEcotrackCatalog: readEcotrackCatalogMock,
   resolveEcotrackDeliveryFee: vi.fn((catalog, wilayaId, deliveryType) => {
@@ -90,6 +96,7 @@ describe('app/api/orders/[id]/route', () => {
     authMock.mockReset();
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mutateEntityWithHistoryMock.mockReset();
+    triggerAdminReportingRefreshMock.mockReset().mockResolvedValue({ kind: 'started' });
     readEcotrackCatalogMock.mockReset();
     ensureOrderConfirmedEventForOrderMock.mockReset();
     ensureOrderConfirmedEventForOrderMock.mockResolvedValue({ created: true });
@@ -430,6 +437,7 @@ describe('app/api/orders/[id]/route', () => {
     );
 
     expect(requireMutationAccessMock).toHaveBeenCalledWith('orders');
+    expect(triggerAdminReportingRefreshMock).toHaveBeenCalledWith('order-update');
     expect(mutateEntityWithHistoryMock).toHaveBeenCalledWith(
       db,
       expect.objectContaining({

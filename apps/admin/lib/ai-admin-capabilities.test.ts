@@ -87,7 +87,13 @@ describe('admin AI catalog capability schemas', () => {
 describe('admin AI proposal application verification', () => {
   const sourceUpdatedAt = new Date('2026-07-25T00:00:00.000Z');
 
-  function databaseWithResults(updateResults: unknown[][]) {
+  function databaseWithResults(
+    updateResults: unknown[][],
+    options: {
+      proposal?: Record<string, unknown>;
+      dependencySelectResults?: unknown[][];
+    } = {},
+  ) {
     const selectResults = [
       [
         {
@@ -99,15 +105,20 @@ describe('admin AI proposal application verification', () => {
           sourceUpdatedAt,
           payload: { changes: { active: false } },
           expiresAt: new Date('2099-07-27T00:00:00.000Z'),
+          ...options.proposal,
         },
       ],
       [{ updatedAt: sourceUpdatedAt }],
+      ...(options.dependencySelectResults ?? []),
     ];
     const tx = {
       select: vi.fn(() => ({
         from: vi.fn(() => ({
           where: vi.fn(() => ({
-            limit: vi.fn(async () => selectResults.shift() ?? []),
+            limit: vi.fn(() => ({
+              for: vi.fn(async () => selectResults.shift() ?? []),
+            })),
+            for: vi.fn(async () => selectResults.shift() ?? []),
           })),
         })),
       })),
@@ -167,6 +178,26 @@ describe('admin AI proposal application verification', () => {
     );
   });
 
+  it('rejects an edit when a referenced category changed after the proposal decision', async () => {
+    const categoryVersion = new Date('2026-07-24T00:00:00.000Z');
+    const { db, tx } = databaseWithResults([], {
+      proposal: {
+        payload: {
+          changes: { categoryId: 10 },
+          dependencies: { category: { id: 10, updatedAt: categoryVersion.toISOString() } },
+        },
+      },
+      dependencySelectResults: [[{ id: 10, updatedAt: new Date('2026-07-26T00:00:00.000Z') }]],
+    });
+    mocks.getDb.mockReturnValue(db);
+
+    await expect(reviewAdminProposal({ proposalId: 9, action: 'approve' })).rejects.toMatchObject({
+      code: 'proposal_dependency_changed',
+      nextAction: 'regenerate',
+    });
+    expect(tx.update).not.toHaveBeenCalled();
+  });
+
   it('does not create a proposal when the requested values are already persisted', async () => {
     const insert = vi.fn();
     mocks.getDb.mockReturnValue({
@@ -213,7 +244,11 @@ describe('admin AI proposal application verification', () => {
     const updatedValues: unknown[] = [];
     const tx = {
       select: vi.fn(() => ({
-        from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn(async () => [proposal]) })) })),
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => ({ for: vi.fn(async () => [proposal]) })),
+          })),
+        })),
       })),
       insert: vi.fn(() => ({
         values: vi.fn((values: unknown) => {

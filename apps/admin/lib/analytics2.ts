@@ -3,11 +3,12 @@ import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
 import {
+  analyticsEconomicsDailyFacts,
+  analyticsOrderCohortFacts,
   analyticsDailyRollups,
   analyticsEvents,
   brands,
   categories,
-  ecotrackOrderActivities,
   ecotrackOrderStatusObservations,
   ecotrackOrderStates,
   ecotrackOrderTrackingEvents,
@@ -21,18 +22,36 @@ import {
   orderStatusHistory,
   processedOrders,
   profitTrackerDays,
+  profitTrackerOperatingCosts,
+  profitTrackerSettings,
   products as productCatalog,
 } from '@bric/db/schema';
 import { CONFIRMED_LIFECYCLE_ORDER_STATUSES } from '@bric/storefront-core/order-domain';
 
-import { getProfitTrackerReport, type ProfitTrackerRangeInput } from './profit-tracker';
 import {
-  getStatsDashboard,
+  getProfitTrackerReport,
+  getProfitTrackerSettings,
+  listProfitTrackerCosts,
+  type ProfitTrackerRangeInput,
+} from './profit-tracker';
+import {
+  ANALYTICS2_FACT_SEMANTICS_VERSION,
+  ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE,
+} from './analytics2-fact-contract';
+import {
+  ANALYTICS_RESOLVED_SHIPMENT_STATUSES,
+  effectiveEcotrackStatusSql,
+} from './ecotrack-status-policy';
+import { operatingCostForDay } from './profit-tracker-metrics';
+import {
+  getCanonicalStorefrontSessionCount,
+  getLiveStorefrontAnalytics,
+  getLiveWebsiteProductMetrics,
   getStatsDashboardSection,
-  type StatsDashboardData,
+  type LiveWebsiteProductMetric,
   type StatsFilters,
 } from './stats';
-import { loadSearchAnalytics } from './analytics2-search';
+import { loadSearchAnalytics, loadSearchThroughDate } from './analytics2-search';
 
 type Database = ReturnType<typeof getDb>;
 type EconomicsReport = Awaited<ReturnType<typeof getProfitTrackerReport>>;
@@ -70,6 +89,7 @@ export const analytics2QuerySchema = z
     endDate: dateOnlySchema.optional(),
     grain: z.enum(['auto', 'day', 'week', 'month']).default('auto'),
   })
+  .strict()
   .superRefine((value, context) => {
     if (value.range === 'custom' && (!value.startDate || !value.endDate)) {
       context.addIssue({
@@ -138,6 +158,16 @@ export type Analytics2EconomicsPoint = {
   cumulativeTrueProfitDzd: number | null;
   cumulativeRealizedProfitDzd: number | null;
   isPartial: boolean;
+  grossProfitDzdProjected: number | null;
+  adjustedProfitDzdProjected: number | null;
+  adCostDzdProjected: number | null;
+  netProfitDzdProjected: number | null;
+  trueProfitDzdProjected: number | null;
+  profitXProjected: number | null;
+  profitXBeforeReturnsProjected: number | null;
+  cumulativeNetProfitDzdProjected: number | null;
+  cumulativeTrueProfitDzdProjected: number | null;
+  projectionDays: number;
 };
 
 export type Analytics2ReturnObservation = {
@@ -148,6 +178,10 @@ export type Analytics2ReturnObservation = {
     returned: number;
     terminal: number;
     cutoffDate: string;
+    eligibleOrders: number;
+    terminalCoveragePct: number | null;
+    cohortStartDate: string | null;
+    cohortEndDate: string | null;
   };
   allTerminal: {
     ratePct: number | null;
@@ -161,6 +195,7 @@ export type Analytics2FulfillmentSummary = {
   submittedOrders: number;
   confirmedOrders: number;
   postedOrders: number;
+  untrackedShipments: number;
   activeShipments: number;
   deliveredOrders: number;
   paidOrders: number;
@@ -250,6 +285,14 @@ export type Analytics2MetaEntity = {
   costPerDeliveredDzd: number | null;
   costPerPaidDzd: number | null;
   platformRoas: number | null;
+  attributedAdCostDzd: number;
+  outcomeSpendCoveragePct: number | null;
+  projectedAdjustedProfitDzd: number;
+  automaticPaidProfitDzd: number;
+  profitCompleteOrders: number;
+  projectedProfitX: number | null;
+  paidProfitX: number | null;
+  profitCoveragePct: number | null;
 };
 
 function numeric(value: unknown) {
@@ -316,39 +359,142 @@ export function resolveAnalytics2ReferenceNow(
   };
 }
 
-async function loadDatasetCutoffDate(db: Database, view: Analytics2View) {
-  const cutoff =
-    view === 'storefront'
-      ? sql`greatest(
-          (select max((${analyticsEvents.occurredAt} at time zone 'Africa/Algiers')::date)
-            from ${analyticsEvents}),
-          (select max(${analyticsDailyRollups.day}) from ${analyticsDailyRollups})
-        )`
-      : view === 'search'
-        ? sql`(select max(day) from search_console_daily_totals)`
-        : view === 'acquisition'
-          ? sql`(select max(${metaAdsDailyInsights.day}) from ${metaAdsDailyInsights})`
-          : view === 'fulfillment'
-            ? sql`greatest(
-                (select max(${ecotrackOrderTrackingEvents.eventDate}) from ${ecotrackOrderTrackingEvents}),
-                (select max((${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date)
-                  from ${orderStatusHistory})
-              )`
-            : view === 'catalog'
-              ? sql`greatest(
-                  (select max((${orders.createdAt} at time zone 'Africa/Algiers')::date) from ${orders}),
-                  (select max(posted_day) from admin.analytics_order_cohort_facts)
-                )`
-              : sql`greatest(
-                  (select max(day) from admin.analytics_economics_daily_facts),
-                  (select max(${metaAdsDailyInsights.day}) from ${metaAdsDailyInsights}),
-                  (select max(${profitTrackerDays.day}) from ${profitTrackerDays})
-                )`;
+async function loadDatasetCutoffDate(db: Database) {
+  const cutoff = sql`greatest(
+    (select max(day) from admin.analytics_economics_daily_facts),
+    (select max(posted_day) from admin.analytics_order_cohort_facts),
+    (select max(${metaAdsDailyInsights.day}) from ${metaAdsDailyInsights}),
+    (select max(${profitTrackerDays.day}) from ${profitTrackerDays}),
+    (select max((${orders.createdAt} at time zone 'Africa/Algiers')::date) from ${orders}),
+    (select max(${ecotrackOrderTrackingEvents.eventDate}) from ${ecotrackOrderTrackingEvents}),
+    (select max((${analyticsEvents.occurredAt} at time zone 'Africa/Algiers')::date)
+      from ${analyticsEvents}),
+    (select max(${analyticsDailyRollups.day}) from ${analyticsDailyRollups}),
+    (select max(day) from search_console_daily_totals)
+  )`;
   const result = await db.execute(sql`
     select to_char(${cutoff}, 'YYYY-MM-DD') as cutoff_date
   `);
   const value = (result.rows[0] as { cutoff_date?: unknown } | undefined)?.cutoff_date;
   return typeof value === 'string' && ISO_DATE_PATTERN.test(value) ? value : null;
+}
+
+type Analytics2CanonicalCutoffs = {
+  orders: string | null;
+  ordersFrom: string | null;
+  posted: string | null;
+  postedFrom: string | null;
+  ecotrack: string | null;
+  ecotrackFrom: string | null;
+  paidFrom: string | null;
+  meta: string | null;
+  metaFrom: string | null;
+  storefront: string | null;
+  storefrontFrom: string | null;
+};
+
+async function loadCanonicalCutoffs(db: Database): Promise<Analytics2CanonicalCutoffs> {
+  const result = await db.execute(sql`
+    select
+      to_char(max((${orders.createdAt} at time zone 'Africa/Algiers')::date), 'YYYY-MM-DD')
+        as orders_through,
+      to_char(min((${orders.createdAt} at time zone 'Africa/Algiers')::date), 'YYYY-MM-DD')
+        as orders_from,
+      to_char((select max((${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date)
+        from ${orderStatusHistory} where ${orderStatusHistory.status} = 11), 'YYYY-MM-DD')
+        as posted_through,
+      to_char((select min((${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date)
+        from ${orderStatusHistory} where ${orderStatusHistory.status} = 11), 'YYYY-MM-DD')
+        as posted_from,
+      to_char((select max((coalesce(
+        ${ecotrackOrderStates.lastOrderSyncedAt},
+        ${ecotrackOrderStates.lastStatusSyncedAt},
+        ${ecotrackOrderStates.updatedAt}
+      ) at time zone 'Africa/Algiers')::date) from ${ecotrackOrderStates}
+        where ${ecotrackOrderStates.deletedAt} is null), 'YYYY-MM-DD') as ecotrack_through,
+      to_char((select min(${ecotrackOrderTrackingEvents.eventDate})
+        from ${ecotrackOrderTrackingEvents}), 'YYYY-MM-DD') as ecotrack_from,
+      to_char((select min(${ecotrackOrderTrackingEvents.eventDate})
+        from ${ecotrackOrderTrackingEvents}
+        where ${ecotrackOrderTrackingEvents.status} = 'payed'), 'YYYY-MM-DD') as paid_from,
+      to_char((select max(${metaAdsDailyInsights.day}) from ${metaAdsDailyInsights}), 'YYYY-MM-DD')
+        as meta_through,
+      to_char((select min(${metaAdsDailyInsights.day}) from ${metaAdsDailyInsights}), 'YYYY-MM-DD')
+        as meta_from,
+      to_char(greatest(
+        (select max(${analyticsDailyRollups.day}) from ${analyticsDailyRollups}),
+        (select max((${analyticsEvents.occurredAt} at time zone 'Africa/Algiers')::date)
+          from ${analyticsEvents})
+      ), 'YYYY-MM-DD') as storefront_through,
+      to_char((
+        with storefront_days as (
+          select ${analyticsDailyRollups.day} as day
+          from ${analyticsDailyRollups}
+          where ${analyticsDailyRollups.dimension} = 'overall'
+            and ${analyticsDailyRollups.dimensionKey} = ''
+          union
+          select (${analyticsEvents.occurredAt} at time zone 'Africa/Algiers')::date as day
+          from ${analyticsEvents}
+        ), ordered_days as (
+          select day, lag(day) over (order by day) as previous_day
+          from storefront_days
+        )
+        select coalesce(
+          max(day) filter (where previous_day is not null and day - previous_day > 7),
+          min(day)
+        )
+        from ordered_days
+      ), 'YYYY-MM-DD') as storefront_from
+    from ${orders}
+  `);
+  const row = (result.rows[0] ?? {}) as Record<string, unknown>;
+  const date = (value: unknown) =>
+    typeof value === 'string' && ISO_DATE_PATTERN.test(value) ? value : null;
+  return {
+    orders: date(row.orders_through),
+    ordersFrom: date(row.orders_from),
+    posted: date(row.posted_through),
+    postedFrom: date(row.posted_from),
+    ecotrack: date(row.ecotrack_through),
+    ecotrackFrom: date(row.ecotrack_from),
+    paidFrom: date(row.paid_from),
+    meta: date(row.meta_through),
+    metaFrom: date(row.meta_from),
+    storefront: date(row.storefront_through),
+    storefrontFrom: date(row.storefront_from),
+  };
+}
+
+function commonCutoff(...dates: Array<string | null>) {
+  if (dates.some((date) => date == null)) return null;
+  return [...(dates as string[])].sort().at(0) ?? null;
+}
+
+function commonCoverageStart(...dates: Array<string | null>) {
+  if (dates.some((date) => date == null)) return null;
+  return [...(dates as string[])].sort().at(-1) ?? null;
+}
+
+export function clipAnalytics2Filters(
+  filters: Analytics2Filters,
+  throughDate: string | null,
+  coverageStartDate: string | null = null,
+): Analytics2Filters {
+  const startDate =
+    coverageStartDate && (!filters.startDate || coverageStartDate > filters.startDate)
+      ? coverageStartDate
+      : filters.startDate;
+  const endDate = throughDate && throughDate < filters.endDate ? throughDate : filters.endDate;
+  const startWasClipped = startDate !== filters.startDate;
+  if (startDate && endDate < startDate) {
+    return { ...filters, startDate, endDate, comparisonStartDate: null, comparisonEndDate: null };
+  }
+  if (!startWasClipped && endDate === filters.endDate) return filters;
+  const elapsedDays = startDate ? inclusiveDays(startDate, endDate) : null;
+  const comparisonEndDate = startWasClipped || !startDate ? null : addDays(startDate, -1);
+  const comparisonStartDate =
+    elapsedDays && comparisonEndDate ? addDays(comparisonEndDate, -(elapsedDays - 1)) : null;
+  return { ...filters, startDate, endDate, comparisonStartDate, comparisonEndDate };
 }
 
 function clampQueryToReference(query: Analytics2Query, referenceDate: string) {
@@ -423,24 +569,8 @@ function statsInput(startDate: string | null, endDate: string): StatsFilters {
   return startDate ? { range: 'custom', startDate, endDate } : { range: 'all', endDate };
 }
 
-function statsDashboard(input: StatsFilters): Promise<StatsDashboardData> {
-  return getStatsDashboard(input) as Promise<StatsDashboardData>;
-}
-
 function economicsInput(startDate: string | null, endDate: string): ProfitTrackerRangeInput {
   return startDate ? { range: 'custom', startDate, endDate } : { range: 'all', endDate };
-}
-
-function previousEconomicsInput(filters: Analytics2Filters) {
-  return filters.comparisonStartDate && filters.comparisonEndDate
-    ? economicsInput(filters.comparisonStartDate, filters.comparisonEndDate)
-    : null;
-}
-
-function previousStatsInput(filters: Analytics2Filters) {
-  return filters.comparisonStartDate && filters.comparisonEndDate
-    ? statsInput(filters.comparisonStartDate, filters.comparisonEndDate)
-    : null;
 }
 
 export function metricChange(current: number | null, previous: number | null) {
@@ -481,7 +611,15 @@ function bucketFor(date: string, grain: Analytics2ResolvedGrain) {
   return `${date.slice(0, 7)}-01`;
 }
 
-function aggregateEconomicsSeries(
+function bucketEnd(bucket: string, grain: Analytics2ResolvedGrain) {
+  if (grain === 'day') return bucket;
+  if (grain === 'week') return addDays(bucket, 6);
+  const monthAfter = new Date(`${bucket}T00:00:00.000Z`);
+  monthAfter.setUTCMonth(monthAfter.getUTCMonth() + 1);
+  return addDays(monthAfter.toISOString().slice(0, 10), -1);
+}
+
+export function aggregateEconomicsSeries(
   report: EconomicsReport,
   grain: Analytics2ResolvedGrain,
   today: string,
@@ -495,10 +633,7 @@ function aggregateEconomicsSeries(
     adjustedSamples: number;
     adCostDzd: number;
     adSamples: number;
-    netProfitDzd: number;
-    netSamples: number;
-    trueProfitDzd: number;
-    trueSamples: number;
+    operatingCostDzd: number;
     realizedProfitDzd: number;
     realizedSamples: number;
     realizedProfitAfterAdsDzd: number;
@@ -520,10 +655,7 @@ function aggregateEconomicsSeries(
       adjustedSamples: 0,
       adCostDzd: 0,
       adSamples: 0,
-      netProfitDzd: 0,
-      netSamples: 0,
-      trueProfitDzd: 0,
-      trueSamples: 0,
+      operatingCostDzd: 0,
       realizedProfitDzd: 0,
       realizedSamples: 0,
       realizedProfitAfterAdsDzd: 0,
@@ -538,6 +670,7 @@ function aggregateEconomicsSeries(
     current.postedOrders += day.postedOrders ?? 0;
     current.costCompleteOrders += day.costCompleteOrders ?? 0;
     current.settledOrders += realized?.settledOrders ?? 0;
+    current.operatingCostDzd += day.operatingCostDzd ?? 0;
     if (day.grossProfitDzd != null) {
       current.grossProfitDzd += day.grossProfitDzd;
       current.grossSamples += 1;
@@ -550,14 +683,6 @@ function aggregateEconomicsSeries(
       current.adCostDzd += day.metrics.adCostDzd;
       current.adSamples += 1;
     }
-    if (day.metrics.netProfitDzd != null) {
-      current.netProfitDzd += day.metrics.netProfitDzd;
-      current.netSamples += 1;
-    }
-    if (day.trueProfitDzd != null) {
-      current.trueProfitDzd += day.trueProfitDzd;
-      current.trueSamples += 1;
-    }
     if (realized) {
       current.realizedProfitDzd += realized.realizedProfitDzd;
       current.realizedSamples += 1;
@@ -569,20 +694,27 @@ function aggregateEconomicsSeries(
     groups.set(bucket, current);
   }
 
-  let cumulativeNetProfitDzd = 0;
-  let cumulativeTrueProfitDzd = 0;
+  let cumulativeAdjustedProfitDzd = 0;
+  let cumulativeAdCostDzd = 0;
+  let cumulativeOperatingCostDzd = 0;
   let cumulativeRealizedProfitDzd = 0;
+  const latestTrackedDate = [...groups.values()]
+    .flatMap((group) => group.days)
+    .sort()
+    .at(-1);
   return [...groups.values()]
     .sort((left, right) => left.bucket.localeCompare(right.bucket))
     .map((group) => {
       const grossProfitDzd = group.grossSamples ? group.grossProfitDzd : null;
       const adjustedProfitDzd = group.adjustedSamples ? group.adjustedProfitDzd : null;
       const adCostDzd = group.adSamples ? group.adCostDzd : null;
-      const netProfitDzd = group.netSamples ? group.netProfitDzd : null;
-      const trueProfitDzd = group.trueSamples ? group.trueProfitDzd : null;
+      const netProfitDzd =
+        adjustedProfitDzd != null && adCostDzd != null ? adjustedProfitDzd - adCostDzd : null;
+      const trueProfitDzd = netProfitDzd == null ? null : netProfitDzd - group.operatingCostDzd;
       const realizedProfitDzd = group.realizedSamples ? group.realizedProfitDzd : null;
-      if (netProfitDzd != null) cumulativeNetProfitDzd += netProfitDzd;
-      if (trueProfitDzd != null) cumulativeTrueProfitDzd += trueProfitDzd;
+      if (adjustedProfitDzd != null) cumulativeAdjustedProfitDzd += adjustedProfitDzd;
+      if (adCostDzd != null) cumulativeAdCostDzd += adCostDzd;
+      cumulativeOperatingCostDzd += group.operatingCostDzd;
       if (realizedProfitDzd != null) cumulativeRealizedProfitDzd += realizedProfitDzd;
       return {
         bucket: group.bucket,
@@ -593,9 +725,8 @@ function aggregateEconomicsSeries(
         netProfitDzd,
         trueProfitDzd,
         realizedProfitDzd,
-        realizedProfitAfterAdsDzd: group.realizedAfterAdsSamples
-          ? group.realizedProfitAfterAdsDzd
-          : null,
+        realizedProfitAfterAdsDzd:
+          realizedProfitDzd != null && adCostDzd != null ? realizedProfitDzd - adCostDzd : null,
         postedOrders: group.postedOrders,
         settledOrders: group.settledOrders,
         profitX:
@@ -608,10 +739,29 @@ function aggregateEconomicsSeries(
             : null,
         projectedCoveragePct:
           group.postedOrders > 0 ? (group.costCompleteOrders / group.postedOrders) * 100 : null,
-        cumulativeNetProfitDzd: group.netSamples ? cumulativeNetProfitDzd : null,
-        cumulativeTrueProfitDzd: group.trueSamples ? cumulativeTrueProfitDzd : null,
+        cumulativeNetProfitDzd:
+          cumulativeAdjustedProfitDzd || cumulativeAdCostDzd
+            ? cumulativeAdjustedProfitDzd - cumulativeAdCostDzd
+            : null,
+        cumulativeTrueProfitDzd:
+          cumulativeAdjustedProfitDzd || cumulativeAdCostDzd
+            ? cumulativeAdjustedProfitDzd - cumulativeAdCostDzd - cumulativeOperatingCostDzd
+            : null,
         cumulativeRealizedProfitDzd: group.realizedSamples ? cumulativeRealizedProfitDzd : null,
-        isPartial: group.days.includes(today),
+        isPartial:
+          group.days.includes(today) ||
+          (group.days.includes(latestTrackedDate ?? '') &&
+            (latestTrackedDate ?? group.bucket) < bucketEnd(group.bucket, grain)),
+        grossProfitDzdProjected: null,
+        adjustedProfitDzdProjected: null,
+        adCostDzdProjected: null,
+        netProfitDzdProjected: null,
+        trueProfitDzdProjected: null,
+        profitXProjected: null,
+        profitXBeforeReturnsProjected: null,
+        cumulativeNetProfitDzdProjected: null,
+        cumulativeTrueProfitDzdProjected: null,
+        projectionDays: 0,
       };
     });
 }
@@ -619,6 +769,7 @@ function aggregateEconomicsSeries(
 export function aggregateAutomaticPaidSeries(
   report: Analytics2AutomaticPaidEconomics,
   grain: Analytics2ResolvedGrain,
+  cutoffDate?: string,
 ) {
   const groups = new Map<string, Omit<Analytics2AutomaticPaidDay, 'date'> & { bucket: string }>();
   for (const day of report.days) {
@@ -648,13 +799,19 @@ export function aggregateAutomaticPaidSeries(
     current.submittedAmountOrders += day.submittedAmountOrders;
     groups.set(bucket, current);
   }
-  return [...groups.values()]
-    .sort((left, right) => left.bucket.localeCompare(right.bucket))
-    .map((row) => ({
-      ...row,
-      profitCoveragePct: ratio(row.completeOrders, row.paidOrders),
-      providerAmountCoveragePct: ratio(row.providerAmountOrders, row.paidOrders),
-    }));
+  const sorted = [...groups.values()].sort((left, right) =>
+    left.bucket.localeCompare(right.bucket),
+  );
+  const lastBucket = sorted.at(-1)?.bucket;
+  return sorted.map((row) => ({
+    ...row,
+    label: row.bucket,
+    profitCoveragePct: ratio(row.completeOrders, row.paidOrders),
+    providerAmountCoveragePct: ratio(row.providerAmountOrders, row.paidOrders),
+    isPartial: Boolean(
+      cutoffDate && row.bucket === lastBucket && cutoffDate < bucketEnd(row.bucket, grain),
+    ),
+  }));
 }
 
 function ratio(numerator: number, denominator: number) {
@@ -666,7 +823,7 @@ function returnRate(returned: number, paid: number) {
 }
 
 function fulfillmentPhase(status: string) {
-  if (status === 'paye_et_archive') return 'paid';
+  if (status === 'paye_et_archive' || status === 'payed') return 'paid';
   if (status.startsWith('retour')) return 'return';
   if (status === 'annule') return 'cancelled';
   if (
@@ -689,6 +846,11 @@ function fulfillmentPhase(status: string) {
   return 'exception';
 }
 
+const resolvedShipmentStatusesSql = sql.join(
+  ANALYTICS_RESOLVED_SHIPMENT_STATUSES.map((status) => sql`${status}`),
+  sql`, `,
+);
+
 async function loadFulfillmentSummary(
   db: Database,
   startDate: string | null,
@@ -703,18 +865,43 @@ async function loadFulfillmentSummary(
     with first_posted as (
       select distinct on (${orderStatusHistory.orderId})
         ${orderStatusHistory.orderId} as order_id,
+        ${orderStatusHistory.changedAt} as posted_at,
         (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day
       from ${orderStatusHistory}
       where ${orderStatusHistory.status} = 11
       order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
+    ), lifecycle as (
+      select ${ecotrackOrderTrackingEvents.orderId} as order_id,
+        min(
+          ${ecotrackOrderTrackingEvents.eventDate}::timestamp
+            + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
+        ) filter (where ${ecotrackOrderTrackingEvents.status} = 'livred') as delivered_at,
+        max(
+          ${ecotrackOrderTrackingEvents.eventDate}::timestamp
+            + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
+        ) as latest_activity_at
+      from ${ecotrackOrderTrackingEvents}
+      group by ${ecotrackOrderTrackingEvents.orderId}
     ), posted_cohort as (
       select first_posted.order_id,
         first_posted.posted_day,
-        coalesce(${ecotrackOrderStates.currentStatus}, '') as current_status
+        ${effectiveEcotrackStatusSql({
+          localStatus: orders.confirmed,
+          providerStatus: ecotrackOrderStates.currentStatus,
+          latestActivityAt: sql`lifecycle.latest_activity_at`,
+          fallbackActivityAt: sql`coalesce(
+            ${ecotrackOrderStates.providerCreatedAt} at time zone 'Africa/Algiers',
+            first_posted.posted_at at time zone 'Africa/Algiers'
+          )`,
+          referenceAt: sql`${endDate}::date + interval '1 day'`,
+        })} as current_status,
+        lifecycle.delivered_at
       from first_posted
+      inner join ${orders} on ${orders.id} = first_posted.order_id
       left join ${ecotrackOrderStates}
         on ${ecotrackOrderStates.orderId} = first_posted.order_id
         and ${ecotrackOrderStates.deletedAt} is null
+      left join lifecycle on lifecycle.order_id = first_posted.order_id
       where ${datePredicate(sql`first_posted.posted_day`, startDate, endDate)}
     ), order_cohort as (
       select ${orders.id}, ${orders.confirmed}
@@ -727,20 +914,21 @@ async function loadFulfillmentSummary(
         as confirmed_orders,
       count(*)::int as posted_orders,
       count(*) filter (
-        where current_status not in ('paye_et_archive', 'retour_archive', 'annule')
-      )::int as active_shipments,
+        where current_status = 'untracked'
+      )::int as untracked_shipments,
       count(*) filter (
-        where current_status in (
-          'livre_non_encaisse', 'encaisse_non_paye', 'paiements_prets', 'paye_et_archive'
-        )
-      )::int as delivered_orders,
-      count(*) filter (where current_status = 'paye_et_archive')::int as paid_orders,
+        where current_status <> 'untracked'
+          and current_status not in (${resolvedShipmentStatusesSql})
+      )::int as active_shipments,
+      count(delivered_at)::int as delivered_orders,
+      count(*) filter (where current_status in ('paye_et_archive', 'payed'))::int as paid_orders,
       count(*) filter (where current_status = 'retour_archive')::int as returned_orders,
       count(*) filter (where current_status = 'annule')::int as cancelled_orders,
       count(*) filter (where current_status in ('paye_et_archive', 'retour_archive'))::int
         as terminal_orders,
       count(*) filter (
-        where posted_day <= ${matureCutoffDate}::date and current_status = 'paye_et_archive'
+        where posted_day <= ${matureCutoffDate}::date
+          and current_status in ('paye_et_archive', 'payed')
       )::int as mature_paid_orders,
       count(*) filter (
         where posted_day <= ${matureCutoffDate}::date and current_status = 'retour_archive'
@@ -756,6 +944,7 @@ async function loadFulfillmentSummary(
     submittedOrders: numeric(row.submitted_orders),
     confirmedOrders: numeric(row.confirmed_orders),
     postedOrders: numeric(row.posted_orders),
+    untrackedShipments: numeric(row.untracked_shipments),
     activeShipments: numeric(row.active_shipments),
     deliveredOrders: numeric(row.delivered_orders),
     paidOrders,
@@ -779,28 +968,50 @@ async function loadReturnObservation(
     with first_posted as (
       select distinct on (${orderStatusHistory.orderId})
         ${orderStatusHistory.orderId} as order_id,
-        (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day
+        (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day,
+        ${orderStatusHistory.changedAt} at time zone 'Africa/Algiers' as posted_at
       from ${orderStatusHistory}
       where ${orderStatusHistory.status} = 11
       order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
+    ), lifecycle as (
+      select ${ecotrackOrderTrackingEvents.orderId} as order_id,
+        max(
+          ${ecotrackOrderTrackingEvents.eventDate}::timestamp
+            + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
+        ) as latest_activity_at
+      from ${ecotrackOrderTrackingEvents}
+      group by ${ecotrackOrderTrackingEvents.orderId}
     ), cohort as (
       select first_posted.posted_day,
-        ${ecotrackOrderStates.currentStatus} as current_status
+        ${effectiveEcotrackStatusSql({
+          localStatus: orders.confirmed,
+          providerStatus: ecotrackOrderStates.currentStatus,
+          latestActivityAt: sql`lifecycle.latest_activity_at`,
+          fallbackActivityAt: sql`coalesce(
+            ${ecotrackOrderStates.providerCreatedAt} at time zone 'Africa/Algiers',
+            first_posted.posted_at
+          )`,
+          referenceAt: sql`${filters.endDate}::date + interval '1 day'`,
+        })} as current_status
       from first_posted
-      inner join ${ecotrackOrderStates}
+      inner join ${orders} on ${orders.id} = first_posted.order_id
+      left join ${ecotrackOrderStates}
         on ${ecotrackOrderStates.orderId} = first_posted.order_id
         and ${ecotrackOrderStates.deletedAt} is null
+      left join lifecycle on lifecycle.order_id = first_posted.order_id
       where ${datePredicate(sql`first_posted.posted_day`, filters.startDate, filters.endDate)}
     )
     select
-      count(*) filter (where current_status = 'paye_et_archive')::int as paid,
+      count(*) filter (where current_status in ('paye_et_archive', 'payed'))::int as paid,
       count(*) filter (where current_status = 'retour_archive')::int as returned,
       count(*) filter (
-        where posted_day <= ${matureCutoffDate}::date and current_status = 'paye_et_archive'
+        where posted_day <= ${matureCutoffDate}::date
+          and current_status in ('paye_et_archive', 'payed')
       )::int as mature_paid,
       count(*) filter (
         where posted_day <= ${matureCutoffDate}::date and current_status = 'retour_archive'
-      )::int as mature_returned
+      )::int as mature_returned,
+      count(*) filter (where posted_day <= ${matureCutoffDate}::date)::int as mature_eligible
     from cohort
   `);
   const row = (result.rows[0] ?? {}) as Record<string, unknown>;
@@ -808,6 +1019,7 @@ async function loadReturnObservation(
   const returned = numeric(row.returned);
   const maturePaid = numeric(row.mature_paid);
   const matureReturned = numeric(row.mature_returned);
+  const matureEligible = numeric(row.mature_eligible);
   return {
     planningRatePct,
     mature: {
@@ -816,6 +1028,11 @@ async function loadReturnObservation(
       returned: matureReturned,
       terminal: maturePaid + matureReturned,
       cutoffDate: matureCutoffDate,
+      eligibleOrders: matureEligible,
+      terminalCoveragePct: ratio(maturePaid + matureReturned, matureEligible),
+      cohortStartDate: filters.startDate,
+      cohortEndDate:
+        !filters.startDate || filters.startDate <= matureCutoffDate ? matureCutoffDate : null,
     },
     allTerminal: {
       ratePct: returnRate(returned, paid),
@@ -862,6 +1079,7 @@ export async function loadAutomaticPaidEconomics(
           ${orderLineItems.unitPurchasePriceSnapshot} is not null
           and ${orderLineItems.lineTotal} is not null
         ) as cost_complete,
+        sum(${orderLineItems.lineTotal})::double precision as product_revenue,
         sum(
           ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity}
         )::double precision as product_cost
@@ -900,7 +1118,20 @@ export async function loadAutomaticPaidEconomics(
           ${processedOrders.totalFees}::double precision
         ) as fee_amount,
         line_economics.cost_complete,
-        line_economics.product_cost
+        line_economics.product_revenue,
+        case when line_economics.cost_complete then line_economics.product_cost else coalesce(
+          line_economics.product_revenue * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE},
+          (case
+            when ${ecotrackOrderStates.currentAmountSource} = 'ecotrack_orders'
+              and ${ecotrackOrderStates.currentAmount} is not null
+              then ${ecotrackOrderStates.currentAmount}::double precision
+            when ${processedOrders.id} is not null
+              then (${processedOrders.netRevenue} + ${processedOrders.totalFees})::double precision
+            when ${ecotrackOrderStates.currentAmount} is not null
+              then ${ecotrackOrderStates.currentAmount}::double precision
+            else ${orders.totalAmount}::double precision
+          end) * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
+        ) end as product_cost
       from ${ecotrackOrderStates}
       inner join ${orders} on ${orders.id} = ${ecotrackOrderStates.orderId}
       left join paid_events on paid_events.order_id = ${ecotrackOrderStates.orderId}
@@ -910,7 +1141,7 @@ export async function loadAutomaticPaidEconomics(
       left join ${processedOrders}
         on ${processedOrders.tracking} = ${ecotrackOrderStates.trackingNumber}
       where ${ecotrackOrderStates.deletedAt} is null
-        and ${ecotrackOrderStates.currentStatus} = 'paye_et_archive'
+        and ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
     )
     select (paid_at at time zone 'Africa/Algiers')::date::text as day,
       count(*)::int as paid_orders,
@@ -919,9 +1150,10 @@ export async function loadAutomaticPaidEconomics(
       coalesce(sum(cod_amount - fee_amount)
         filter (where cod_amount is not null and fee_amount is not null), 0)::double precision
         as net_recovered,
-      coalesce(sum(product_cost) filter (where cost_complete), 0)::double precision as product_cost,
+      coalesce(sum(product_cost) filter (where product_cost is not null), 0)::double precision
+        as product_cost,
       coalesce(sum(cod_amount - fee_amount - product_cost) filter (
-        where cod_amount is not null and fee_amount is not null and cost_complete
+        where cod_amount is not null and fee_amount is not null and product_cost is not null
       ), 0)::double precision as profit,
       count(*) filter (
         where cod_amount is not null and fee_amount is not null and cost_complete
@@ -1001,6 +1233,8 @@ export async function loadAutomaticPaidEconomics(
 
 export type Analytics2CashStage = {
   key:
+    | 'submitted'
+    | 'confirmed'
     | 'inTransit'
     | 'deliveredAwaitingCollection'
     | 'collectedAwaitingPayout'
@@ -1012,19 +1246,326 @@ export type Analytics2CashStage = {
   medianAgeHours: number | null;
   oldestAgeHours: number | null;
   staleOrders: number;
+  confidencePct?: number | null;
 };
 
-export type Analytics2FulfillmentException = {
-  orderId: number;
-  reference: string;
-  trackingNumber: string;
-  status: string;
-  reason: string;
-  postponedTo: string | null;
-  ageHours: number | null;
-  amountDzd: number | null;
-  overdue: boolean;
+export type Analytics2LeadingOrderForecast = {
+  asOfDate: string;
+  historicalWindow: {
+    startDate: string;
+    endDate: string;
+    submittedOrders: number;
+    confirmedOrders: number;
+    postedOrders: number;
+  };
+  rates: {
+    submittedToConfirmedPct: number | null;
+    confirmedToPostedPct: number | null;
+    submittedToPostedPct: number | null;
+  };
+  stages: {
+    submitted: {
+      orders: number;
+      codDzd: number;
+      grossProfitDzd: number;
+      expectedPostedOrders: number;
+      expectedGrossProfitDzd: number;
+      expectedAdjustedProfitDzd: number;
+      confidencePct: number | null;
+      expectedPostingDate: string;
+    };
+    confirmed: {
+      orders: number;
+      codDzd: number;
+      grossProfitDzd: number;
+      expectedPostedOrders: number;
+      expectedGrossProfitDzd: number;
+      expectedAdjustedProfitDzd: number;
+      confidencePct: number | null;
+      expectedPostingDate: string;
+    };
+  };
+  days: Array<{
+    date: string;
+    expectedPostedOrders: number;
+    expectedGrossProfitDzd: number;
+    expectedAdjustedProfitDzd: number;
+  }>;
+  expectedPostedOrders: number;
+  expectedGrossProfitDzd: number;
+  expectedAdjustedProfitDzd: number;
 };
+
+function nextForecastWorkingDate(date: string, restFrom: string | null) {
+  if (restFrom && date >= restFrom && new Date(`${date}T00:00:00.000Z`).getUTCDay() === 5) {
+    return addDays(date, 1);
+  }
+  return date;
+}
+
+export function buildLeadingOrderForecast(input: {
+  asOfDate: string;
+  historicalStartDate: string;
+  historicalEndDate: string;
+  historicalSubmittedOrders: number;
+  historicalConfirmedOrders: number;
+  historicalPostedOrders: number;
+  submittedOrders: number;
+  submittedCodDzd: number;
+  submittedGrossProfitDzd: number;
+  confirmedOrders: number;
+  confirmedCodDzd: number;
+  confirmedGrossProfitDzd: number;
+  medianSubmittedToPostedHours: number | null;
+  medianConfirmedToPostedHours: number | null;
+  planningReturnRatePct: number;
+  restFrom: string | null;
+}): Analytics2LeadingOrderForecast {
+  const submittedToConfirmedRate =
+    input.historicalSubmittedOrders > 0
+      ? input.historicalConfirmedOrders / input.historicalSubmittedOrders
+      : null;
+  const confirmedToPostedRate =
+    input.historicalConfirmedOrders > 0
+      ? input.historicalPostedOrders / input.historicalConfirmedOrders
+      : null;
+  const submittedToPostedRate =
+    submittedToConfirmedRate == null || confirmedToPostedRate == null
+      ? null
+      : submittedToConfirmedRate * confirmedToPostedRate;
+  const returnMultiplier = 1 - input.planningReturnRatePct / 100;
+  const dueDate = (hours: number | null) =>
+    nextForecastWorkingDate(
+      addDays(input.asOfDate, Math.max(1, Math.ceil((hours ?? 24) / 24))),
+      input.restFrom,
+    );
+  const submittedConfidence = submittedToPostedRate;
+  const confirmedConfidence = confirmedToPostedRate;
+  const submitted = {
+    orders: input.submittedOrders,
+    codDzd: input.submittedCodDzd,
+    grossProfitDzd: input.submittedGrossProfitDzd,
+    expectedPostedOrders: input.submittedOrders * (submittedConfidence ?? 0),
+    expectedGrossProfitDzd: input.submittedGrossProfitDzd * (submittedConfidence ?? 0),
+    expectedAdjustedProfitDzd:
+      input.submittedGrossProfitDzd * (submittedConfidence ?? 0) * returnMultiplier,
+    confidencePct: submittedConfidence == null ? null : submittedConfidence * 100,
+    expectedPostingDate: dueDate(input.medianSubmittedToPostedHours),
+  };
+  const confirmed = {
+    orders: input.confirmedOrders,
+    codDzd: input.confirmedCodDzd,
+    grossProfitDzd: input.confirmedGrossProfitDzd,
+    expectedPostedOrders: input.confirmedOrders * (confirmedConfidence ?? 0),
+    expectedGrossProfitDzd: input.confirmedGrossProfitDzd * (confirmedConfidence ?? 0),
+    expectedAdjustedProfitDzd:
+      input.confirmedGrossProfitDzd * (confirmedConfidence ?? 0) * returnMultiplier,
+    confidencePct: confirmedConfidence == null ? null : confirmedConfidence * 100,
+    expectedPostingDate: dueDate(input.medianConfirmedToPostedHours),
+  };
+  const byDay = new Map<
+    string,
+    {
+      date: string;
+      expectedPostedOrders: number;
+      expectedGrossProfitDzd: number;
+      expectedAdjustedProfitDzd: number;
+    }
+  >();
+  for (const stage of [submitted, confirmed]) {
+    const current = byDay.get(stage.expectedPostingDate) ?? {
+      date: stage.expectedPostingDate,
+      expectedPostedOrders: 0,
+      expectedGrossProfitDzd: 0,
+      expectedAdjustedProfitDzd: 0,
+    };
+    current.expectedPostedOrders += stage.expectedPostedOrders;
+    current.expectedGrossProfitDzd += stage.expectedGrossProfitDzd;
+    current.expectedAdjustedProfitDzd += stage.expectedAdjustedProfitDzd;
+    byDay.set(stage.expectedPostingDate, current);
+  }
+  const days = [...byDay.values()].sort((left, right) => left.date.localeCompare(right.date));
+  return {
+    asOfDate: input.asOfDate,
+    historicalWindow: {
+      startDate: input.historicalStartDate,
+      endDate: input.historicalEndDate,
+      submittedOrders: input.historicalSubmittedOrders,
+      confirmedOrders: input.historicalConfirmedOrders,
+      postedOrders: input.historicalPostedOrders,
+    },
+    rates: {
+      submittedToConfirmedPct:
+        submittedToConfirmedRate == null ? null : submittedToConfirmedRate * 100,
+      confirmedToPostedPct: confirmedToPostedRate == null ? null : confirmedToPostedRate * 100,
+      submittedToPostedPct: submittedToPostedRate == null ? null : submittedToPostedRate * 100,
+    },
+    stages: { submitted, confirmed },
+    days,
+    expectedPostedOrders: submitted.expectedPostedOrders + confirmed.expectedPostedOrders,
+    expectedGrossProfitDzd: submitted.expectedGrossProfitDzd + confirmed.expectedGrossProfitDzd,
+    expectedAdjustedProfitDzd:
+      submitted.expectedAdjustedProfitDzd + confirmed.expectedAdjustedProfitDzd,
+  };
+}
+
+async function loadLeadingOrderForecast(
+  db: Database,
+  filters: Analytics2Filters,
+  settings: Awaited<ReturnType<typeof getProfitTrackerSettings>>,
+) {
+  const historicalStartDate = addDays(filters.endDate, -111);
+  const historicalEndDate = addDays(filters.endDate, -21);
+  const recentPendingStart = addDays(filters.endDate, -20);
+  const pendingStartDate =
+    filters.startDate && filters.startDate > recentPendingStart
+      ? filters.startDate
+      : recentPendingStart;
+  const confirmedStatuses = sql.join(
+    [...CONFIRMED_LIFECYCLE_ORDER_STATUSES].map((status) => sql`${status}`),
+    sql`, `,
+  );
+  const result = await db.execute(sql`
+    with lifecycle as (
+      select ${orderStatusHistory.orderId} as order_id,
+        min(${orderStatusHistory.changedAt}) filter (
+          where ${orderStatusHistory.status} in (${confirmedStatuses})
+        ) as confirmed_at,
+        min(${orderStatusHistory.changedAt}) filter (
+          where ${orderStatusHistory.status} = 11
+        ) as posted_at
+      from ${orderStatusHistory}
+      where ${orderStatusHistory.changedAt} < ${filters.endDate}::date + interval '1 day'
+      group by ${orderStatusHistory.orderId}
+    ), line_economics as (
+      select ${orderLineItems.orderId} as order_id,
+        sum(
+          ${orderLineItems.lineTotal} - coalesce(
+            ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity},
+            ${orderLineItems.lineTotal} * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
+          )
+        )::double precision as gross_profit
+      from ${orderLineItems}
+      group by ${orderLineItems.orderId}
+    ), historical as (
+      select ${orders.id} as order_id,
+        ${orders.createdAt} as submitted_at,
+        ${orders.confirmed} as current_status,
+        lifecycle.confirmed_at,
+        coalesce(lifecycle.posted_at, ${ecotrackOrderStates.providerCreatedAt}) as posted_at,
+        ${ecotrackOrderStates.orderId} as shipment_order_id
+      from ${orders}
+      left join lifecycle on lifecycle.order_id = ${orders.id}
+      left join ${ecotrackOrderStates}
+        on ${ecotrackOrderStates.orderId} = ${orders.id}
+        and ${ecotrackOrderStates.deletedAt} is null
+      where (${orders.createdAt} at time zone 'Africa/Algiers')::date
+        between ${historicalStartDate}::date and ${historicalEndDate}::date
+    ), timing as (
+      select
+        percentile_cont(0.5) within group (
+          order by extract(epoch from (posted_at - submitted_at)) / 3600
+        ) filter (where posted_at is not null) as median_submitted_to_posted_hours,
+        percentile_cont(0.5) within group (
+          order by extract(epoch from (posted_at - confirmed_at)) / 3600
+        ) filter (where posted_at is not null and confirmed_at is not null)
+          as median_confirmed_to_posted_hours,
+        percentile_cont(0.95) within group (
+          order by extract(epoch from (confirmed_at - submitted_at)) / 3600
+        ) filter (where confirmed_at is not null) as p95_submitted_to_confirmed_hours,
+        percentile_cont(0.95) within group (
+          order by extract(epoch from (posted_at - confirmed_at)) / 3600
+        ) filter (where posted_at is not null and confirmed_at is not null)
+          as p95_confirmed_to_posted_hours
+      from historical
+    ), pending as (
+      select case
+          when ${orders.confirmed} in (2, 5) then 'confirmed'
+          when ${orders.confirmed} in (0, 1) then 'submitted'
+          else null
+        end as stage,
+        ${orders.totalAmount}::double precision as cod_dzd,
+        coalesce(
+          line_economics.gross_profit,
+          ${orders.totalAmount}::double precision * ${ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
+        ) as gross_profit_dzd
+      from ${orders}
+      left join lifecycle on lifecycle.order_id = ${orders.id}
+      left join line_economics on line_economics.order_id = ${orders.id}
+      left join ${ecotrackOrderStates}
+        on ${ecotrackOrderStates.orderId} = ${orders.id}
+        and ${ecotrackOrderStates.deletedAt} is null
+      cross join timing
+      where (${orders.createdAt} at time zone 'Africa/Algiers')::date
+        between ${pendingStartDate}::date and ${filters.endDate}::date
+        and lifecycle.posted_at is null
+        and ${ecotrackOrderStates.orderId} is null
+        and ${orders.confirmed} in (0, 1, 2, 5)
+        and (
+          (${orders.confirmed} in (0, 1) and ${orders.createdAt} >=
+            ${filters.endDate}::date + interval '1 day'
+              - greatest(
+                  24,
+                  least(168, coalesce(timing.p95_submitted_to_confirmed_hours, 72))
+                ) * interval '1 hour')
+          or
+          (${orders.confirmed} in (2, 5) and coalesce(
+            lifecycle.confirmed_at,
+            ${orders.confirmedAt},
+            ${orders.createdAt}
+          ) >= ${filters.endDate}::date + interval '1 day'
+              - greatest(
+                  24,
+                  least(168, coalesce(timing.p95_confirmed_to_posted_hours, 72))
+                ) * interval '1 hour')
+        )
+    )
+    select
+      (select count(*)::int from historical) as historical_submitted,
+      (select count(*) filter (
+        where confirmed_at is not null or current_status in (${confirmedStatuses})
+      )::int from historical)
+        as historical_confirmed,
+      (select count(*) filter (
+        where posted_at is not null or shipment_order_id is not null
+      )::int from historical)
+        as historical_posted,
+      (select median_submitted_to_posted_hours from timing)
+        as median_submitted_to_posted_hours,
+      (select median_confirmed_to_posted_hours from timing)
+        as median_confirmed_to_posted_hours,
+      count(*) filter (where stage = 'submitted')::int as submitted_orders,
+      coalesce(sum(cod_dzd) filter (where stage = 'submitted'), 0)::double precision
+        as submitted_cod_dzd,
+      coalesce(sum(gross_profit_dzd) filter (where stage = 'submitted'), 0)::double precision
+        as submitted_gross_profit_dzd,
+      count(*) filter (where stage = 'confirmed')::int as confirmed_orders,
+      coalesce(sum(cod_dzd) filter (where stage = 'confirmed'), 0)::double precision
+        as confirmed_cod_dzd,
+      coalesce(sum(gross_profit_dzd) filter (where stage = 'confirmed'), 0)::double precision
+        as confirmed_gross_profit_dzd
+    from pending
+  `);
+  const row = (result.rows[0] ?? {}) as Record<string, unknown>;
+  return buildLeadingOrderForecast({
+    asOfDate: filters.endDate,
+    historicalStartDate,
+    historicalEndDate,
+    historicalSubmittedOrders: numeric(row.historical_submitted),
+    historicalConfirmedOrders: numeric(row.historical_confirmed),
+    historicalPostedOrders: numeric(row.historical_posted),
+    submittedOrders: numeric(row.submitted_orders),
+    submittedCodDzd: numeric(row.submitted_cod_dzd),
+    submittedGrossProfitDzd: numeric(row.submitted_gross_profit_dzd),
+    confirmedOrders: numeric(row.confirmed_orders),
+    confirmedCodDzd: numeric(row.confirmed_cod_dzd),
+    confirmedGrossProfitDzd: numeric(row.confirmed_gross_profit_dzd),
+    medianSubmittedToPostedHours: nullableNumeric(row.median_submitted_to_posted_hours),
+    medianConfirmedToPostedHours: nullableNumeric(row.median_confirmed_to_posted_hours),
+    planningReturnRatePct: settings.defaultReturnRate,
+    restFrom: settings.restFrom,
+  });
+}
 
 async function loadCashPipeline(
   db: Database,
@@ -1034,75 +1575,61 @@ async function loadCashPipeline(
     with first_posted as (
       select distinct on (${orderStatusHistory.orderId})
         ${orderStatusHistory.orderId} as order_id,
-        (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day
+        (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day,
+        ${orderStatusHistory.changedAt} at time zone 'Africa/Algiers' as posted_at
       from ${orderStatusHistory}
       where ${orderStatusHistory.status} = 11
       order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
-    ), latest_stage_observation as (
-      select distinct on (
-        ${ecotrackOrderStatusObservations.orderId},
-        ${ecotrackOrderStatusObservations.status}
-      )
-        ${ecotrackOrderStatusObservations.orderId} as order_id,
-        ${ecotrackOrderStatusObservations.status} as status,
-        coalesce(
-          ${ecotrackOrderStatusObservations.effectiveAt},
-          ${ecotrackOrderStatusObservations.firstObservedAt}
-        ) as stage_at
-      from ${ecotrackOrderStatusObservations}
-      order by ${ecotrackOrderStatusObservations.orderId},
-        ${ecotrackOrderStatusObservations.status},
-        ${ecotrackOrderStatusObservations.firstObservedAt} desc
-    ), pipeline as (
-      select case
-          when ${ecotrackOrderStates.currentStatus} in (
-            'prete_a_expedier', 'en_ramassage', 'en_preparation_stock', 'en_preparation',
-            'vers_hub', 'en_hub', 'vers_wilaya', 'en_livraison', 'suspendu'
-          ) then 'inTransit'
-          when ${ecotrackOrderStates.currentStatus} = 'livre_non_encaisse'
-            then 'deliveredAwaitingCollection'
-          when ${ecotrackOrderStates.currentStatus} = 'encaisse_non_paye'
-            then 'collectedAwaitingPayout'
-          when ${ecotrackOrderStates.currentStatus} = 'paiements_prets' then 'paymentReady'
-          when ${ecotrackOrderStates.currentStatus} = 'paye_et_archive' then 'paid'
-          else null
-        end as stage,
+    ), lifecycle as (
+      select ${ecotrackOrderTrackingEvents.orderId} as order_id,
+        max(
+          ${ecotrackOrderTrackingEvents.eventDate}::timestamp
+            + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
+        ) as latest_activity_at
+      from ${ecotrackOrderTrackingEvents}
+      group by ${ecotrackOrderTrackingEvents.orderId}
+    ), effective as (
+      select ${effectiveEcotrackStatusSql({
+        localStatus: orders.confirmed,
+        providerStatus: ecotrackOrderStates.currentStatus,
+        latestActivityAt: sql`lifecycle.latest_activity_at`,
+        fallbackActivityAt: sql`coalesce(
+          ${ecotrackOrderStates.providerCreatedAt} at time zone 'Africa/Algiers',
+          first_posted.posted_at
+        )`,
+        referenceAt: sql`${filters.endDate}::date + interval '1 day'`,
+      })} as current_status,
         coalesce(
           ${ecotrackOrderStates.currentAmount}::double precision,
           ${orders.totalAmount}::double precision
         ) as amount,
-        ${ecotrackOrderStates.currentAmountSource} = 'ecotrack_orders' as provider_amount,
-        coalesce(
-          latest_stage_observation.stage_at,
-          ${ecotrackOrderStates.lastActionAt},
-          ${ecotrackOrderStates.lastStatusSyncedAt},
-          ${ecotrackOrderStates.updatedAt}
-        ) as stage_at,
-        least(now(), (${filters.endDate}::date + interval '1 day')) as reference_at
+        ${ecotrackOrderStates.currentAmountSource} = 'ecotrack_orders' as provider_amount
       from first_posted
       inner join ${ecotrackOrderStates}
         on ${ecotrackOrderStates.orderId} = first_posted.order_id
         and ${ecotrackOrderStates.deletedAt} is null
       inner join ${orders} on ${orders.id} = first_posted.order_id
-      left join latest_stage_observation
-        on latest_stage_observation.order_id = ${ecotrackOrderStates.orderId}
-        and latest_stage_observation.status = ${ecotrackOrderStates.currentStatus}
+      left join lifecycle on lifecycle.order_id = first_posted.order_id
       where ${datePredicate(sql`first_posted.posted_day`, filters.startDate, filters.endDate)}
+    ), pipeline as (
+      select case
+          when current_status in (
+            'prete_a_expedier', 'en_ramassage', 'en_preparation_stock', 'en_preparation',
+            'vers_hub', 'en_hub', 'vers_wilaya', 'en_livraison', 'suspendu'
+          ) then 'inTransit'
+          when current_status = 'livre_non_encaisse' then 'deliveredAwaitingCollection'
+          when current_status = 'encaisse_non_paye' then 'collectedAwaitingPayout'
+          when current_status = 'paiements_prets' then 'paymentReady'
+          else null
+        end as stage,
+        amount,
+        provider_amount
+      from effective
     )
     select stage,
       count(*)::int as orders,
       coalesce(sum(amount), 0)::double precision as amount,
-      count(*) filter (where provider_amount)::int as provider_amount_orders,
-      percentile_cont(0.5) within group (
-        order by extract(epoch from (reference_at - stage_at)) / 3600
-      )::double precision as median_age_hours,
-      max(extract(epoch from (reference_at - stage_at)) / 3600)::double precision
-        as oldest_age_hours,
-      count(*) filter (
-        where stage <> 'paid'
-          and reference_at - stage_at > interval '48 hours'
-      )::int
-        as stale_orders
+      count(*) filter (where provider_amount)::int as provider_amount_orders
     from pipeline
     where stage is not null
     group by stage
@@ -1112,7 +1639,6 @@ async function loadCashPipeline(
     'deliveredAwaitingCollection',
     'collectedAwaitingPayout',
     'paymentReady',
-    'paid',
   ];
   const rows = new Map<Analytics2CashStage['key'], Analytics2CashStage>();
   for (const raw of result.rows as Iterable<unknown>) {
@@ -1124,9 +1650,9 @@ async function loadCashPipeline(
       orders: ordersCount,
       amountDzd: numeric(row.amount),
       providerAmountCoveragePct: ratio(numeric(row.provider_amount_orders), ordersCount),
-      medianAgeHours: nullableNumeric(row.median_age_hours),
-      oldestAgeHours: nullableNumeric(row.oldest_age_hours),
-      staleOrders: numeric(row.stale_orders),
+      medianAgeHours: null,
+      oldestAgeHours: null,
+      staleOrders: 0,
     });
   }
   return order.map(
@@ -1143,119 +1669,33 @@ async function loadCashPipeline(
   );
 }
 
-async function loadFulfillmentExceptions(
-  db: Database,
-  filters: Analytics2Filters,
-): Promise<{
-  rows: Analytics2FulfillmentException[];
-  reasons: Array<{ reason: string; orders: number }>;
-}> {
-  const result = await db.execute(sql`
-    with first_posted as (
-      select distinct on (${orderStatusHistory.orderId})
-        ${orderStatusHistory.orderId} as order_id,
-        (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day
-      from ${orderStatusHistory}
-      where ${orderStatusHistory.status} = 11
-      order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
-    ), latest_activity as (
-      select distinct on (${ecotrackOrderActivities.orderId})
-        ${ecotrackOrderActivities.orderId} as order_id,
-        coalesce(
-          nullif(${ecotrackOrderActivities.reason}, ''),
-          nullif(${ecotrackOrderActivities.details}, '')
-        ) as reason,
-        ${ecotrackOrderActivities.postponedTo} as postponed_to,
-        coalesce(
-          ${ecotrackOrderActivities.effectiveAt},
-          ${ecotrackOrderActivities.firstObservedAt}
-        ) as activity_at
-      from ${ecotrackOrderActivities}
-      order by ${ecotrackOrderActivities.orderId},
-        coalesce(
-          ${ecotrackOrderActivities.effectiveAt},
-          ${ecotrackOrderActivities.firstObservedAt}
-        ) desc,
-        ${ecotrackOrderActivities.id} desc
-    )
-    select ${orders.id} as order_id,
-      ${ecotrackOrderStates.reference} as reference,
-      ${ecotrackOrderStates.trackingNumber} as tracking_number,
-      ${ecotrackOrderStates.currentStatus} as status,
-      coalesce(
-        nullif(${ecotrackOrderStates.statusReason}, ''),
-        latest_activity.reason,
-        case when ${ecotrackOrderStates.currentStatus} = 'suspendu' then 'Suspended' end,
-        'Stale shipment'
-      ) as reason,
-      latest_activity.postponed_to,
-      extract(epoch from (
-        least(now(), (${filters.endDate}::date + interval '1 day'))
-        - coalesce(
-          latest_activity.activity_at,
-          ${ecotrackOrderStates.lastStatusSyncedAt},
-          ${ecotrackOrderStates.updatedAt}
-        )
-      )) / 3600 as age_hours,
-      coalesce(
-        ${ecotrackOrderStates.currentAmount}::double precision,
-        ${orders.totalAmount}::double precision
-      ) as amount
-    from first_posted
-    inner join ${orders} on ${orders.id} = first_posted.order_id
-    inner join ${ecotrackOrderStates}
-      on ${ecotrackOrderStates.orderId} = first_posted.order_id
-      and ${ecotrackOrderStates.deletedAt} is null
-    left join latest_activity on latest_activity.order_id = first_posted.order_id
-    where ${datePredicate(sql`first_posted.posted_day`, filters.startDate, filters.endDate)}
-      and ${ecotrackOrderStates.currentStatus} not in (
-        'paye_et_archive', 'retour_archive', 'annule'
-      )
-      and (
-        nullif(${ecotrackOrderStates.statusReason}, '') is not null
-        or latest_activity.reason is not null
-        or latest_activity.postponed_to is not null
-        or ${ecotrackOrderStates.currentStatus} = 'suspendu'
-        or least(now(), (${filters.endDate}::date + interval '1 day'))
-          - coalesce(
-            latest_activity.activity_at,
-            ${ecotrackOrderStates.lastStatusSyncedAt},
-            ${ecotrackOrderStates.updatedAt}
-          ) >= interval '48 hours'
-      )
-    order by
-      (latest_activity.postponed_to is not null
-        and latest_activity.postponed_to < ${filters.endDate}::date) desc,
-      age_hours desc nulls last
-    limit 80
-  `);
-  const rows = Array.from(
-    result.rows as Iterable<unknown>,
-    (raw): Analytics2FulfillmentException => {
-      const row = raw as Record<string, unknown>;
-      const postponedTo = row.postponed_to ? String(row.postponed_to).slice(0, 10) : null;
-      return {
-        orderId: numeric(row.order_id),
-        reference: String(row.reference),
-        trackingNumber: String(row.tracking_number),
-        status: String(row.status),
-        reason: String(row.reason),
-        postponedTo,
-        ageHours: nullableNumeric(row.age_hours),
-        amountDzd: nullableNumeric(row.amount),
-        overdue: Boolean(postponedTo && postponedTo < filters.endDate),
-      };
+function withLeadingCashStages(
+  rows: Analytics2CashStage[],
+  leading: Analytics2LeadingOrderForecast,
+) {
+  const leadingRows: Analytics2CashStage[] = [
+    {
+      key: 'submitted',
+      orders: leading.stages.submitted.orders,
+      amountDzd: leading.stages.submitted.codDzd,
+      providerAmountCoveragePct: null,
+      medianAgeHours: null,
+      oldestAgeHours: null,
+      staleOrders: 0,
+      confidencePct: leading.stages.submitted.confidencePct,
     },
-  );
-  const reasonCounts = new Map<string, number>();
-  for (const row of rows) reasonCounts.set(row.reason, (reasonCounts.get(row.reason) ?? 0) + 1);
-  return {
-    rows,
-    reasons: [...reasonCounts.entries()]
-      .map(([reason, ordersCount]) => ({ reason, orders: ordersCount }))
-      .sort((left, right) => right.orders - left.orders || left.reason.localeCompare(right.reason))
-      .slice(0, 10),
-  };
+    {
+      key: 'confirmed',
+      orders: leading.stages.confirmed.orders,
+      amountDzd: leading.stages.confirmed.codDzd,
+      providerAmountCoveragePct: null,
+      medianAgeHours: null,
+      oldestAgeHours: null,
+      staleOrders: 0,
+      confidencePct: leading.stages.confirmed.confidencePct,
+    },
+  ];
+  return [...leadingRows, ...rows];
 }
 
 type FulfillmentStateRow = {
@@ -1277,37 +1717,57 @@ async function loadFulfillmentStates(
     with first_posted as (
       select distinct on (${orderStatusHistory.orderId})
         ${orderStatusHistory.orderId} as order_id,
-        (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day
+        (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day,
+        ${orderStatusHistory.changedAt} at time zone 'Africa/Algiers' as posted_at
       from ${orderStatusHistory}
       where ${orderStatusHistory.status} = 11
       order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
+    ), lifecycle as (
+      select ${ecotrackOrderTrackingEvents.orderId} as order_id,
+        max(
+          ${ecotrackOrderTrackingEvents.eventDate}::timestamp
+            + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
+        ) as latest_activity_at
+      from ${ecotrackOrderTrackingEvents}
+      group by ${ecotrackOrderTrackingEvents.orderId}
     ), cohort as (
-      select ${ecotrackOrderStates.currentStatus} as current_status,
+      select ${effectiveEcotrackStatusSql({
+        localStatus: orders.confirmed,
+        providerStatus: ecotrackOrderStates.currentStatus,
+        latestActivityAt: sql`lifecycle.latest_activity_at`,
+        fallbackActivityAt: sql`coalesce(
+          ${ecotrackOrderStates.providerCreatedAt} at time zone 'Africa/Algiers',
+          first_posted.posted_at
+        )`,
+        referenceAt: sql`${endDate}::date + interval '1 day'`,
+      })} as current_status,
         coalesce(
-          ${ecotrackOrderStates.lastActionAt},
-          ${ecotrackOrderStates.lastStatusSyncedAt},
-          ${ecotrackOrderStates.updatedAt}
+          lifecycle.latest_activity_at,
+          ${ecotrackOrderStates.providerCreatedAt} at time zone 'Africa/Algiers',
+          first_posted.posted_at
         ) as activity_at,
-        least(now(), (${endDate}::date + interval '1 day')) as reference_at
+        ${endDate}::date + interval '1 day' as reference_at
       from first_posted
       inner join ${ecotrackOrderStates}
         on ${ecotrackOrderStates.orderId} = first_posted.order_id
         and ${ecotrackOrderStates.deletedAt} is null
+      inner join ${orders} on ${orders.id} = first_posted.order_id
+      left join lifecycle on lifecycle.order_id = first_posted.order_id
       where ${datePredicate(sql`first_posted.posted_day`, startDate, endDate)}
     )
     select current_status,
       count(*)::int as orders,
       count(*) filter (
-        where current_status not in ('paye_et_archive', 'retour_archive', 'annule')
+        where current_status not in (${resolvedShipmentStatusesSql})
           and reference_at - activity_at > interval '48 hours'
       )::int as stale_orders,
       percentile_cont(0.5) within group (
         order by extract(epoch from (reference_at - activity_at)) / 3600
       ) filter (
-        where current_status not in ('paye_et_archive', 'retour_archive', 'annule')
+        where current_status not in (${resolvedShipmentStatusesSql})
       )::double precision as median_age_hours,
       min(activity_at) filter (
-        where current_status not in ('paye_et_archive', 'retour_archive', 'annule')
+        where current_status not in (${resolvedShipmentStatusesSql})
       ) as oldest_activity_at
     from cohort
     group by current_status
@@ -1333,109 +1793,30 @@ async function loadFulfillmentStates(
   });
 }
 
-type FulfillmentCycleMetric = {
-  key: 'carrierToAttempt' | 'carrierToDelivery' | 'deliveryToPayment';
-  medianHours: number | null;
-  p75Hours: number | null;
-  p90Hours: number | null;
-  samples: number;
-};
-
-async function loadFulfillmentCycleMetrics(
+async function loadAttemptDistribution(
   db: Database,
   startDate: string | null,
   endDate: string,
+  useMaterializedFacts = false,
 ) {
-  const result = await db.execute(sql`
-    with first_posted as (
-      select distinct on (${orderStatusHistory.orderId})
-        ${orderStatusHistory.orderId} as order_id,
-        (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day
-      from ${orderStatusHistory}
-      where ${orderStatusHistory.status} = 11
-      order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
-    ), events as (
-      select ${ecotrackOrderTrackingEvents.orderId} as order_id,
-        ${ecotrackOrderTrackingEvents.status} as status,
-        (${ecotrackOrderTrackingEvents.eventDate}::timestamp
-          + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time) as event_at
-      from ${ecotrackOrderTrackingEvents}
-      inner join first_posted
-        on first_posted.order_id = ${ecotrackOrderTrackingEvents.orderId}
-      where ${datePredicate(sql`first_posted.posted_day`, startDate, endDate)}
-    ), moments as (
-      select order_id,
-        min(event_at) filter (where status = 'accepted_by_carrier') as accepted_at,
-        min(event_at) filter (where status = 'attempt_delivery') as first_attempt_at,
-        min(event_at) filter (where status = 'livred') as delivered_at,
-        min(event_at) filter (where status = 'payed') as paid_at
-      from events
-      group by order_id
-    ), durations as (
-      select
-        case when first_attempt_at >= accepted_at
-          then extract(epoch from (first_attempt_at - accepted_at)) / 3600 end
-          as carrier_to_attempt,
-        case when delivered_at >= accepted_at
-          then extract(epoch from (delivered_at - accepted_at)) / 3600 end
-          as carrier_to_delivery,
-        case when paid_at >= delivered_at
-          then extract(epoch from (paid_at - delivered_at)) / 3600 end
-          as delivery_to_payment
-      from moments
-    )
-    select
-      percentile_cont(0.5) within group (order by carrier_to_attempt)
-        filter (where carrier_to_attempt is not null)::double precision as attempt_p50,
-      percentile_cont(0.75) within group (order by carrier_to_attempt)
-        filter (where carrier_to_attempt is not null)::double precision as attempt_p75,
-      percentile_cont(0.9) within group (order by carrier_to_attempt)
-        filter (where carrier_to_attempt is not null)::double precision as attempt_p90,
-      count(carrier_to_attempt)::int as attempt_samples,
-      percentile_cont(0.5) within group (order by carrier_to_delivery)
-        filter (where carrier_to_delivery is not null)::double precision as delivery_p50,
-      percentile_cont(0.75) within group (order by carrier_to_delivery)
-        filter (where carrier_to_delivery is not null)::double precision as delivery_p75,
-      percentile_cont(0.9) within group (order by carrier_to_delivery)
-        filter (where carrier_to_delivery is not null)::double precision as delivery_p90,
-      count(carrier_to_delivery)::int as delivery_samples,
-      percentile_cont(0.5) within group (order by delivery_to_payment)
-        filter (where delivery_to_payment is not null)::double precision as payment_p50,
-      percentile_cont(0.75) within group (order by delivery_to_payment)
-        filter (where delivery_to_payment is not null)::double precision as payment_p75,
-      percentile_cont(0.9) within group (order by delivery_to_payment)
-        filter (where delivery_to_payment is not null)::double precision as payment_p90,
-      count(delivery_to_payment)::int as payment_samples
-    from durations
-  `);
-  const row = (result.rows[0] ?? {}) as Record<string, unknown>;
-  return [
-    {
-      key: 'carrierToAttempt',
-      medianHours: nullableNumeric(row.attempt_p50),
-      p75Hours: nullableNumeric(row.attempt_p75),
-      p90Hours: nullableNumeric(row.attempt_p90),
-      samples: numeric(row.attempt_samples),
-    },
-    {
-      key: 'carrierToDelivery',
-      medianHours: nullableNumeric(row.delivery_p50),
-      p75Hours: nullableNumeric(row.delivery_p75),
-      p90Hours: nullableNumeric(row.delivery_p90),
-      samples: numeric(row.delivery_samples),
-    },
-    {
-      key: 'deliveryToPayment',
-      medianHours: nullableNumeric(row.payment_p50),
-      p75Hours: nullableNumeric(row.payment_p75),
-      p90Hours: nullableNumeric(row.payment_p90),
-      samples: numeric(row.payment_samples),
-    },
-  ] satisfies FulfillmentCycleMetric[];
-}
-
-async function loadAttemptDistribution(db: Database, startDate: string | null, endDate: string) {
-  const result = await db.execute(sql`
+  const result = useMaterializedFacts
+    ? await db.execute(sql`
+      select ${analyticsOrderCohortFacts.outcome} as outcome,
+        case when ${analyticsOrderCohortFacts.attemptCount} >= 4
+          then '4+' else ${analyticsOrderCohortFacts.attemptCount}::text end as attempt_band,
+        count(*)::int as orders,
+        avg(${analyticsOrderCohortFacts.attemptCount})::double precision as average_attempts
+      from ${analyticsOrderCohortFacts}
+      where ${datePredicate(analyticsOrderCohortFacts.postedDay, startDate, endDate)}
+        and ${analyticsOrderCohortFacts.outcome} in ('paye_et_archive', 'retour_archive')
+        and ${analyticsOrderCohortFacts.semanticsVersion}
+          = ${ANALYTICS2_FACT_SEMANTICS_VERSION}
+      group by ${analyticsOrderCohortFacts.outcome},
+        case when ${analyticsOrderCohortFacts.attemptCount} >= 4
+          then '4+' else ${analyticsOrderCohortFacts.attemptCount}::text end
+      order by ${analyticsOrderCohortFacts.outcome}, attempt_band
+    `)
+    : await db.execute(sql`
     with first_posted as (
       select distinct on (${orderStatusHistory.orderId})
         ${orderStatusHistory.orderId} as order_id,
@@ -1518,25 +1899,81 @@ async function loadFulfillmentCohorts(
   db: Database,
   startDate: string | null,
   endDate: string,
-  planningReturnRatePct: number,
+  economics: EconomicsReport,
 ) {
+  const planningReturnRatePct = economics.settings.defaultReturnRate;
+  const economicsByWeek = new Map(economics.weeks.map((week) => [week.weekStart, week]));
   const matureCutoffDate = addDays(endDate, -21);
-  const result = await db.execute(sql`
+  const result = (economics as EconomicsReport & { materializedFacts?: boolean }).materializedFacts
+    ? await db.execute(sql`
+    with cohort as (
+      select (
+          ${analyticsOrderCohortFacts.postedDay}
+          - (((extract(dow from ${analyticsOrderCohortFacts.postedDay})::int - 5 + 7) % 7))::int
+        )::date as week_start,
+        ${analyticsOrderCohortFacts.postedDay} as posted_day,
+        ${analyticsOrderCohortFacts.outcome} as current_status,
+        ${analyticsOrderCohortFacts.deliveredAt} as delivered_at,
+        ${analyticsOrderCohortFacts.costComplete} as cost_complete,
+        case when ${analyticsOrderCohortFacts.grossProfitDzd} is not null then
+          ${analyticsOrderCohortFacts.grossProfitDzd}::double precision
+          * (1 - ${planningReturnRatePct}::double precision / 100)
+        end as projected_contribution,
+        case when ${analyticsOrderCohortFacts.grossProfitDzd} is not null then
+          ${analyticsOrderCohortFacts.grossProfitDzd}::double precision
+        end as comparable_gross_profit
+      from ${analyticsOrderCohortFacts}
+      where ${datePredicate(analyticsOrderCohortFacts.postedDay, startDate, endDate)}
+        and ${analyticsOrderCohortFacts.semanticsVersion}
+          = ${ANALYTICS2_FACT_SEMANTICS_VERSION}
+    )
+    select week_start::text,
+      count(*)::int as posted,
+      count(*) filter (where current_status in ('paye_et_archive', 'payed'))::int as paid,
+      count(*) filter (where current_status = 'retour_archive')::int as returned,
+      count(*) filter (where delivered_at is not null)::int as delivered,
+      count(*) filter (
+        where current_status <> 'untracked'
+          and current_status not in (${resolvedShipmentStatusesSql})
+      )::int as active,
+      coalesce(sum(projected_contribution), 0)::double precision as projected_contribution,
+      coalesce(sum(comparable_gross_profit) filter (
+        where delivered_at is not null and current_status <> 'retour_archive'
+      ), 0)::double precision as delivered_contribution,
+      coalesce(sum(comparable_gross_profit) filter (
+        where current_status in ('paye_et_archive', 'payed')
+      ), 0)::double precision as paid_contribution,
+      count(*) filter (where cost_complete)::int as cost_complete_orders,
+      bool_and(posted_day <= ${matureCutoffDate}::date)
+        and count(*) filter (
+          where current_status = 'untracked'
+             or current_status not in (${resolvedShipmentStatusesSql})
+        ) = 0 as mature
+    from cohort
+    group by week_start
+    order by week_start desc
+    limit 18
+  `)
+    : await db.execute(sql`
     with first_posted as (
       select distinct on (${orderStatusHistory.orderId})
         ${orderStatusHistory.orderId} as order_id,
-        (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day
+        (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day,
+        ${orderStatusHistory.changedAt} at time zone 'Africa/Algiers' as posted_at
       from ${orderStatusHistory}
       where ${orderStatusHistory.status} = 11
       order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
-    ), delivered as (
+    ), lifecycle as (
       select ${ecotrackOrderTrackingEvents.orderId} as order_id,
         min(
           ${ecotrackOrderTrackingEvents.eventDate}::timestamp
           + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
-        ) as delivered_at
+        ) filter (where ${ecotrackOrderTrackingEvents.status} = 'livred') as delivered_at,
+        max(
+          ${ecotrackOrderTrackingEvents.eventDate}::timestamp
+          + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
+        ) as latest_activity_at
       from ${ecotrackOrderTrackingEvents}
-      where ${ecotrackOrderTrackingEvents.status} = 'livred'
       group by ${ecotrackOrderTrackingEvents.orderId}
     ), line_economics as (
       select ${orderLineItems.orderId} as order_id,
@@ -1546,8 +1983,11 @@ async function loadFulfillmentCohorts(
         ) as cost_complete,
         sum(${orderLineItems.lineTotal})::double precision as product_revenue,
         sum(
-          ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity}
-        )::double precision as product_cost
+          coalesce(
+            ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity},
+            ${orderLineItems.lineTotal} * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
+          )
+        )::double precision as estimated_product_cost
       from ${orderLineItems}
       group by ${orderLineItems.orderId}
     ), cohort as (
@@ -1556,54 +1996,56 @@ async function loadFulfillmentCohorts(
           - (((extract(dow from first_posted.posted_day)::int - 5 + 7) % 7))::int
         )::date as week_start,
         first_posted.posted_day,
-        coalesce(${ecotrackOrderStates.currentStatus}, '') as current_status,
-        delivered.delivered_at,
+        ${effectiveEcotrackStatusSql({
+          localStatus: orders.confirmed,
+          providerStatus: ecotrackOrderStates.currentStatus,
+          latestActivityAt: sql`lifecycle.latest_activity_at`,
+          fallbackActivityAt: sql`coalesce(
+            ${ecotrackOrderStates.providerCreatedAt} at time zone 'Africa/Algiers',
+            first_posted.posted_at
+          )`,
+          referenceAt: sql`${endDate}::date + interval '1 day'`,
+        })} as current_status,
+        lifecycle.delivered_at,
         line_economics.cost_complete,
-        case when line_economics.cost_complete then
-          (line_economics.product_revenue - line_economics.product_cost)
+        case when line_economics.product_revenue is not null then
+          (line_economics.product_revenue - line_economics.estimated_product_cost)
           * (1 - ${planningReturnRatePct}::double precision / 100)
         end as projected_contribution,
-        case when line_economics.cost_complete
-          and coalesce(
-            ${ecotrackOrderStates.currentAmount}::double precision,
-            ${orders.totalAmount}::double precision
-          ) is not null
-          and coalesce(
-            ${ecotrackOrderStates.deliveryTariff}::double precision,
-            ${ecotrackOrderStates.estimatedFee}::double precision
-          ) is not null
-        then coalesce(
-            ${ecotrackOrderStates.currentAmount}::double precision,
-            ${orders.totalAmount}::double precision
-          ) - coalesce(
-            ${ecotrackOrderStates.deliveryTariff}::double precision,
-            ${ecotrackOrderStates.estimatedFee}::double precision
-          ) - line_economics.product_cost
-        end as automatic_profit
+        case when line_economics.product_revenue is not null then
+          line_economics.product_revenue - line_economics.estimated_product_cost
+        end as comparable_gross_profit
       from first_posted
       inner join ${orders} on ${orders.id} = first_posted.order_id
       left join ${ecotrackOrderStates}
         on ${ecotrackOrderStates.orderId} = first_posted.order_id
         and ${ecotrackOrderStates.deletedAt} is null
-      left join delivered on delivered.order_id = first_posted.order_id
+      left join lifecycle on lifecycle.order_id = first_posted.order_id
       left join line_economics on line_economics.order_id = first_posted.order_id
       where ${datePredicate(sql`first_posted.posted_day`, startDate, endDate)}
     )
     select week_start::text,
       count(*)::int as posted,
-      count(*) filter (where current_status = 'paye_et_archive')::int as paid,
+      count(*) filter (where current_status in ('paye_et_archive', 'payed'))::int as paid,
       count(*) filter (where current_status = 'retour_archive')::int as returned,
       count(*) filter (where delivered_at is not null)::int as delivered,
       count(*) filter (
-        where current_status not in ('paye_et_archive', 'retour_archive', 'annule')
+        where current_status <> 'untracked'
+          and current_status not in (${resolvedShipmentStatusesSql})
       )::int as active,
       coalesce(sum(projected_contribution), 0)::double precision as projected_contribution,
-      coalesce(sum(automatic_profit) filter (where delivered_at is not null), 0)::double precision
-        as delivered_contribution,
-      coalesce(sum(automatic_profit) filter (where current_status = 'paye_et_archive'), 0)
-        ::double precision as paid_automatic_profit,
+      coalesce(sum(comparable_gross_profit) filter (
+        where delivered_at is not null and current_status <> 'retour_archive'
+      ), 0)::double precision as delivered_contribution,
+      coalesce(sum(comparable_gross_profit) filter (
+        where current_status in ('paye_et_archive', 'payed')
+      ), 0)::double precision as paid_contribution,
       count(*) filter (where cost_complete)::int as cost_complete_orders,
-      bool_and(posted_day <= ${matureCutoffDate}::date) as mature
+      bool_and(posted_day <= ${matureCutoffDate}::date)
+        and count(*) filter (
+          where current_status = 'untracked'
+             or current_status not in (${resolvedShipmentStatusesSql})
+        ) = 0 as mature
     from cohort
     group by week_start
     order by week_start desc
@@ -1611,22 +2053,32 @@ async function loadFulfillmentCohorts(
   `);
   return result.rows.map((raw: unknown) => {
     const row = raw as Record<string, unknown>;
+    const weekStart = String(row.week_start);
+    const weekEconomics = economicsByWeek.get(weekStart);
+    const adCostDzd = weekEconomics?.adCostDzd ?? 0;
+    const operatingCostDzd = weekEconomics?.operatingCostDzd ?? 0;
+    const projectedTrueProfitDzd =
+      numeric(row.projected_contribution) - adCostDzd - operatingCostDzd;
+    const deliveredTrueProfitDzd =
+      numeric(row.delivered_contribution) - adCostDzd - operatingCostDzd;
+    const paidTrueProfitDzd = numeric(row.paid_contribution) - adCostDzd - operatingCostDzd;
     const paid = numeric(row.paid);
     const returned = numeric(row.returned);
+    const mature = Boolean(row.mature);
     return {
-      weekStart: String(row.week_start),
+      weekStart,
       posted: numeric(row.posted),
       paid,
       returned,
       delivered: numeric(row.delivered),
       active: numeric(row.active),
       observedReturnRatePct: returnRate(returned, paid),
-      projectedContributionDzd: numeric(row.projected_contribution),
-      deliveredContributionDzd: numeric(row.delivered_contribution),
-      paidAutomaticProfitDzd: numeric(row.paid_automatic_profit),
-      varianceDzd: numeric(row.paid_automatic_profit) - numeric(row.projected_contribution),
+      projectedTrueProfitDzd,
+      deliveredTrueProfitDzd,
+      paidTrueProfitDzd,
+      varianceDzd: mature ? paidTrueProfitDzd - projectedTrueProfitDzd : null,
       costCoveragePct: ratio(numeric(row.cost_complete_orders), numeric(row.posted)),
-      mature: Boolean(row.mature),
+      mature,
     };
   });
 }
@@ -1634,20 +2086,50 @@ async function loadFulfillmentCohorts(
 async function loadFulfillmentData(
   db: Database,
   filters: Analytics2Filters,
-  planningReturnRatePct: number,
+  economics: EconomicsReport,
 ) {
-  const [summary, states, cycleTimes, attempts, trend, cohorts, cashPipeline, exceptions] =
+  const [summary, trackedStates, attempts, trend, cohorts, cashPipeline, leadingForecast] =
     await Promise.all([
       loadFulfillmentSummary(db, filters.startDate, filters.endDate),
       loadFulfillmentStates(db, filters.startDate, filters.endDate),
-      loadFulfillmentCycleMetrics(db, filters.startDate, filters.endDate),
-      loadAttemptDistribution(db, filters.startDate, filters.endDate),
+      loadAttemptDistribution(
+        db,
+        filters.startDate,
+        filters.endDate,
+        Boolean((economics as EconomicsReport & { materializedFacts?: boolean }).materializedFacts),
+      ),
       loadFulfillmentTrend(db, filters.startDate, filters.endDate),
-      loadFulfillmentCohorts(db, filters.startDate, filters.endDate, planningReturnRatePct),
+      loadFulfillmentCohorts(db, filters.startDate, filters.endDate, economics),
       loadCashPipeline(db, filters),
-      loadFulfillmentExceptions(db, filters),
+      loadLeadingOrderForecast(db, filters, economics.settings),
     ]);
-  return { summary, states, cycleTimes, attempts, trend, cohorts, cashPipeline, exceptions };
+  const typedStates = trackedStates as FulfillmentStateRow[];
+  const cohortSize =
+    typedStates.reduce((sum, state) => sum + state.orders, 0) + summary.untrackedShipments;
+  const states = typedStates.map((state) => ({
+    ...state,
+    sharePct: ratio(state.orders, cohortSize) ?? 0,
+  }));
+  if (summary.untrackedShipments > 0) {
+    states.push({
+      status: 'untracked',
+      phase: 'untracked',
+      orders: summary.untrackedShipments,
+      sharePct: ratio(summary.untrackedShipments, cohortSize) ?? 0,
+      staleOrders: 0,
+      medianAgeHours: null,
+      oldestActivityAt: null,
+    });
+  }
+  return {
+    summary,
+    states,
+    attempts,
+    trend,
+    cohorts,
+    cashPipeline: withLeadingCashStages(cashPipeline, leadingForecast),
+    leadingForecast,
+  };
 }
 
 type MetaDailyRow = {
@@ -1692,6 +2174,10 @@ type MetaOutcomeRow = {
   deliveredOrders: number;
   paidOrders: number;
   returnedOrders: number;
+  attributionStartDate: string | null;
+  projectedAdjustedProfitDzd: number;
+  automaticPaidProfitDzd: number;
+  profitCompleteOrders: number;
 };
 
 type MetaEntityAccumulator = Omit<
@@ -1708,6 +2194,10 @@ type MetaEntityAccumulator = Omit<
   | 'costPerDeliveredDzd'
   | 'costPerPaidDzd'
   | 'platformRoas'
+  | 'outcomeSpendCoveragePct'
+  | 'projectedProfitX'
+  | 'paidProfitX'
+  | 'profitCoveragePct'
 > & { videoWatchSecondsWeighted: number };
 
 function emptyMetaEntity(
@@ -1755,6 +2245,10 @@ function emptyMetaEntity(
     deliveredOrders: 0,
     paidOrders: 0,
     returnedOrders: 0,
+    attributedAdCostDzd: 0,
+    projectedAdjustedProfitDzd: 0,
+    automaticPaidProfitDzd: 0,
+    profitCompleteOrders: 0,
   };
 }
 
@@ -1772,11 +2266,58 @@ function finalizeMetaEntity(row: MetaEntityAccumulator): Analytics2MetaEntity {
       row.videoPlays > 0 ? (row.videoP100Watched / row.videoPlays) * 100 : null,
     videoAverageWatchSeconds:
       row.videoPlays > 0 ? videoWatchSecondsWeighted / row.videoPlays : null,
-    costPerPostedDzd: row.postedOrders > 0 ? row.adCostDzd / row.postedOrders : null,
-    costPerConfirmedDzd: row.confirmedOrders > 0 ? row.adCostDzd / row.confirmedOrders : null,
-    costPerDeliveredDzd: row.deliveredOrders > 0 ? row.adCostDzd / row.deliveredOrders : null,
-    costPerPaidDzd: row.paidOrders > 0 ? row.adCostDzd / row.paidOrders : null,
+    costPerPostedDzd: row.postedOrders > 0 ? row.attributedAdCostDzd / row.postedOrders : null,
+    costPerConfirmedDzd:
+      row.confirmedOrders > 0 ? row.attributedAdCostDzd / row.confirmedOrders : null,
+    costPerDeliveredDzd:
+      row.deliveredOrders > 0 ? row.attributedAdCostDzd / row.deliveredOrders : null,
+    costPerPaidDzd: row.paidOrders > 0 ? row.attributedAdCostDzd / row.paidOrders : null,
     platformRoas: row.spendEur > 0 ? row.purchaseValue / row.spendEur : null,
+    outcomeSpendCoveragePct: ratio(row.attributedAdCostDzd, row.adCostDzd),
+    projectedProfitX:
+      row.attributedAdCostDzd > 0 ? row.projectedAdjustedProfitDzd / row.attributedAdCostDzd : null,
+    paidProfitX:
+      row.attributedAdCostDzd > 0 && row.paidOrders > 0
+        ? row.automaticPaidProfitDzd / row.attributedAdCostDzd
+        : null,
+    profitCoveragePct: ratio(row.profitCompleteOrders, row.postedOrders),
+  };
+}
+
+function publicMetaEntity(row: Analytics2MetaEntity) {
+  return {
+    id: row.id,
+    name: row.name,
+    campaignName: row.campaignName,
+    spendEur: row.spendEur,
+    adCostDzd: row.adCostDzd,
+    impressions: row.impressions,
+    outboundClicks: row.outboundClicks,
+    uniqueOutboundClicks: row.uniqueOutboundClicks,
+    landingPageViews: row.landingPageViews,
+    metaPurchases: row.metaPurchases,
+    videoPlays: row.videoPlays,
+    videoAverageWatchSeconds: row.videoAverageWatchSeconds,
+    qualityRanking: row.qualityRanking,
+    engagementRateRanking: row.engagementRateRanking,
+    conversionRateRanking: row.conversionRateRanking,
+    bricOrders: row.bricOrders,
+    confirmedOrders: row.confirmedOrders,
+    postedOrders: row.postedOrders,
+    deliveredOrders: row.deliveredOrders,
+    paidOrders: row.paidOrders,
+    returnedOrders: row.returnedOrders,
+    outboundCtrPct: row.outboundCtrPct,
+    landingViewRatePct: row.landingViewRatePct,
+    videoCompletionRatePct: row.videoCompletionRatePct,
+    costPerPostedDzd: row.costPerPostedDzd,
+    costPerDeliveredDzd: row.costPerDeliveredDzd,
+    costPerPaidDzd: row.costPerPaidDzd,
+    attributedAdCostDzd: row.attributedAdCostDzd,
+    outcomeSpendCoveragePct: row.outcomeSpendCoveragePct,
+    projectedProfitX: row.projectedProfitX,
+    paidProfitX: row.paidProfitX,
+    profitCoveragePct: row.profitCoveragePct,
   };
 }
 
@@ -1787,6 +2328,12 @@ function groupMetaEntities(
 ) {
   const rows = new Map<string, MetaEntityAccumulator>();
   const namesByAdId = new Map(daily.map((row) => [row.adId, row]));
+  const dailyByAdId = new Map<string, MetaDailyRow[]>();
+  for (const row of daily) {
+    const adRows = dailyByAdId.get(row.adId) ?? [];
+    adRows.push(row);
+    dailyByAdId.set(row.adId, adRows);
+  }
 
   for (const day of daily) {
     const id = level === 'campaign' ? day.campaignId : level === 'adset' ? day.adsetId : day.adId;
@@ -1839,6 +2386,12 @@ function groupMetaEntities(
     current.deliveredOrders += outcome.deliveredOrders;
     current.paidOrders += outcome.paidOrders;
     current.returnedOrders += outcome.returnedOrders;
+    current.attributedAdCostDzd += (dailyByAdId.get(outcome.adId) ?? [])
+      .filter((day) => !outcome.attributionStartDate || day.day >= outcome.attributionStartDate)
+      .reduce((sum, day) => sum + day.adCostDzd, 0);
+    current.projectedAdjustedProfitDzd += outcome.projectedAdjustedProfitDzd;
+    current.automaticPaidProfitDzd += outcome.automaticPaidProfitDzd;
+    current.profitCompleteOrders += outcome.profitCompleteOrders;
     rows.set(id, current);
   }
 
@@ -1895,12 +2448,7 @@ function buildMetaDailyByLevel(
     rows.set(key, current);
   }
   return [...rows.values()]
-    .map((row) => ({
-      ...row,
-      ctrPct: row.impressions > 0 ? (row.linkClicks / row.impressions) * 100 : null,
-      outboundCtrPct: row.impressions > 0 ? (row.outboundClicks / row.impressions) * 100 : null,
-      cpmEur: row.impressions > 0 ? (row.spendEur / row.impressions) * 1_000 : null,
-    }))
+    .map((row) => ({ day: row.day, id: row.id, name: row.name, adCostDzd: row.adCostDzd }))
     .sort((left, right) => left.day.localeCompare(right.day));
 }
 
@@ -1912,6 +2460,9 @@ async function loadMetaPerformance(
   const confirmedStatuses = sql.join(
     [...CONFIRMED_LIFECYCLE_ORDER_STATUSES].map((status) => sql`${status}`),
     sql`, `,
+  );
+  const useMaterializedFacts = Boolean(
+    (economics as EconomicsReport & { materializedFacts?: boolean }).materializedFacts,
   );
   const [spendResult, outcomeResult] = await Promise.all([
     db.execute(sql`
@@ -1963,7 +2514,52 @@ async function loadMetaPerformance(
         ${metaAdsDailyInsights.adsetId}, ${metaAdsDailyInsights.adId}
       order by ${metaAdsDailyInsights.day}, sum(${metaAdsDailyInsights.spend}) desc
     `),
-    db.execute(sql`
+    useMaterializedFacts
+      ? db.execute(sql`
+          select max(${orderAcquisitionAttribution.metaCampaignId}) as campaign_id,
+            max(${orderAcquisitionAttribution.metaAdsetId}) as adset_id,
+            ${orderAcquisitionAttribution.metaAdId} as ad_id,
+            count(*)::int as bric_orders,
+            count(*) filter (where ${orders.confirmed} in (${confirmedStatuses}))::int
+              as confirmed_orders,
+            count(${analyticsOrderCohortFacts.orderId})::int as posted_orders,
+            count(${analyticsOrderCohortFacts.deliveredAt})::int as delivered_orders,
+            count(*) filter (
+              where ${analyticsOrderCohortFacts.outcome} in ('paye_et_archive', 'payed')
+            )::int as paid_orders,
+            count(*) filter (
+              where ${analyticsOrderCohortFacts.outcome} = 'retour_archive'
+            )::int as returned_orders,
+            min((${orderAcquisitionAttribution.capturedAt}
+              at time zone 'Africa/Algiers')::date)::text as attribution_start_date,
+            coalesce(sum(
+              ${analyticsOrderCohortFacts.grossProfitDzd}::double precision
+              * (1 - ${economics.settings.defaultReturnRate}::double precision / 100)
+            ) filter (
+              where ${analyticsOrderCohortFacts.grossProfitDzd} is not null
+            ), 0)::double precision
+              as projected_adjusted_profit,
+            coalesce(sum(
+              ${analyticsOrderCohortFacts.automaticPaidProfitDzd}::double precision
+            ), 0)::double precision as automatic_paid_profit,
+            count(*) filter (where ${analyticsOrderCohortFacts.costComplete})::int
+              as profit_complete_orders
+          from ${orderAcquisitionAttribution}
+          inner join ${orders} on ${orders.id} = ${orderAcquisitionAttribution.orderId}
+          left join ${analyticsOrderCohortFacts}
+            on ${analyticsOrderCohortFacts.orderId} = ${orders.id}
+            and ${analyticsOrderCohortFacts.semanticsVersion}
+              = ${ANALYTICS2_FACT_SEMANTICS_VERSION}
+          where ${orderAcquisitionAttribution.channel} = 'meta_paid'
+            and ${orderAcquisitionAttribution.metaAdId} is not null
+            and ${timestampPredicate(
+              orderAcquisitionAttribution.capturedAt,
+              filters.startDate,
+              filters.endDate,
+            )}
+          group by ${orderAcquisitionAttribution.metaAdId}
+        `)
+      : db.execute(sql`
       with first_posted as (
         select distinct on (${orderStatusHistory.orderId})
           ${orderStatusHistory.orderId} as order_id
@@ -1974,6 +2570,24 @@ async function loadMetaPerformance(
         select distinct ${ecotrackOrderTrackingEvents.orderId} as order_id
         from ${ecotrackOrderTrackingEvents}
         where ${ecotrackOrderTrackingEvents.status} = 'livred'
+      ), line_economics as (
+        select ${orderLineItems.orderId} as order_id,
+          bool_and(
+            ${orderLineItems.unitPurchasePriceSnapshot} is not null
+            and ${orderLineItems.lineTotal} is not null
+          ) as cost_complete,
+          sum(${orderLineItems.lineTotal})::double precision as product_revenue,
+          sum(
+            coalesce(
+              ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity},
+              ${orderLineItems.lineTotal} * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
+            )
+          )::double precision as estimated_product_cost,
+          sum(
+            ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity}
+          )::double precision as exact_product_cost
+        from ${orderLineItems}
+        group by ${orderLineItems.orderId}
       )
       select max(${orderAcquisitionAttribution.metaCampaignId}) as campaign_id,
         max(${orderAcquisitionAttribution.metaAdsetId}) as adset_id,
@@ -1983,10 +2597,49 @@ async function loadMetaPerformance(
           as confirmed_orders,
         count(first_posted.order_id)::int as posted_orders,
         count(delivered.order_id)::int as delivered_orders,
-        count(*) filter (where ${ecotrackOrderStates.currentStatus} = 'paye_et_archive')::int
+        count(*) filter (
+          where ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
+        )::int
           as paid_orders,
         count(*) filter (where ${ecotrackOrderStates.currentStatus} = 'retour_archive')::int
-          as returned_orders
+          as returned_orders,
+        min((${orderAcquisitionAttribution.capturedAt}
+          at time zone 'Africa/Algiers')::date)::text as attribution_start_date,
+        coalesce(sum(
+          (line_economics.product_revenue - line_economics.estimated_product_cost)
+          * (1 - ${economics.settings.defaultReturnRate}::double precision / 100)
+        ) filter (
+          where first_posted.order_id is not null
+            and line_economics.product_revenue is not null
+        ), 0)::double precision as projected_adjusted_profit,
+        coalesce(sum(
+          coalesce(
+            ${ecotrackOrderStates.currentAmount}::double precision,
+            ${orders.totalAmount}::double precision
+          )
+          - coalesce(
+            ${ecotrackOrderStates.deliveryTariff}::double precision,
+            ${ecotrackOrderStates.estimatedFee}::double precision
+          )
+          - case when line_economics.cost_complete then line_economics.exact_product_cost
+          else coalesce(
+            line_economics.product_revenue
+              * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE},
+            coalesce(
+              ${ecotrackOrderStates.currentAmount}::double precision,
+              ${orders.totalAmount}::double precision
+            ) * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
+          ) end
+        ) filter (
+          where ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
+            and coalesce(
+              ${ecotrackOrderStates.deliveryTariff},
+              ${ecotrackOrderStates.estimatedFee}
+            ) is not null
+        ), 0)::double precision as automatic_paid_profit,
+        count(*) filter (
+          where first_posted.order_id is not null and line_economics.cost_complete
+        )::int as profit_complete_orders
       from ${orderAcquisitionAttribution}
       inner join ${orders} on ${orders.id} = ${orderAcquisitionAttribution.orderId}
       left join first_posted on first_posted.order_id = ${orders.id}
@@ -1994,6 +2647,7 @@ async function loadMetaPerformance(
       left join ${ecotrackOrderStates}
         on ${ecotrackOrderStates.orderId} = ${orders.id}
         and ${ecotrackOrderStates.deletedAt} is null
+      left join line_economics on line_economics.order_id = ${orders.id}
       where ${orderAcquisitionAttribution.channel} = 'meta_paid'
         and ${orderAcquisitionAttribution.metaAdId} is not null
         and ${timestampPredicate(
@@ -2059,6 +2713,10 @@ async function loadMetaPerformance(
       deliveredOrders: numeric(row.delivered_orders),
       paidOrders: numeric(row.paid_orders),
       returnedOrders: numeric(row.returned_orders),
+      attributionStartDate: row.attribution_start_date ? String(row.attribution_start_date) : null,
+      projectedAdjustedProfitDzd: numeric(row.projected_adjusted_profit),
+      automaticPaidProfitDzd: numeric(row.automatic_paid_profit),
+      profitCompleteOrders: numeric(row.profit_complete_orders),
     };
   });
   const campaigns = groupMetaEntities('campaign', daily, outcomes);
@@ -2145,12 +2803,17 @@ async function loadMetaPerformance(
       costPerPaidDzd: total.paidOrders > 0 ? total.adCostDzd / total.paidOrders : null,
       platformRoas: total.spendEur > 0 ? total.purchaseValue / total.spendEur : null,
     },
-    entities: { campaigns, adsets, ads },
+    entities: {
+      campaigns: campaigns.slice(0, 100),
+      adsets: adsets.slice(0, 100),
+      ads: ads.slice(0, 100),
+    },
     daily: {
       campaigns: buildMetaDailyByLevel('campaign', daily, campaigns),
       adsets: buildMetaDailyByLevel('adset', daily, adsets),
       ads: buildMetaDailyByLevel('ad', daily, ads),
     },
+    summaryDaily: aggregateMetaDaily(daily),
   };
 }
 
@@ -2238,8 +2901,8 @@ async function loadMetaBreakdowns(
       ), attributed as (
         select ${orderAcquisitionAttribution.metaCampaignId} as campaign_id,
           ${orders.id} as order_id,
-          ${orders.createdAt} as ordered_at,
-          paid.paid_at,
+          (${orders.createdAt} at time zone 'Africa/Algiers')::date as ordered_day,
+          paid.paid_at::date as paid_day,
           ${ecotrackOrderStates.currentStatus} as outcome
         from ${orderAcquisitionAttribution}
         inner join ${orders} on ${orders.id} = ${orderAcquisitionAttribution.orderId}
@@ -2253,13 +2916,43 @@ async function loadMetaBreakdowns(
       )
       select campaign_id,
         count(*)::int as orders,
-        count(*) filter (where paid_at <= ordered_at + interval '1 day')::int as paid_d0,
-        count(*) filter (where paid_at <= ordered_at + interval '4 days')::int as paid_d3,
-        count(*) filter (where paid_at <= ordered_at + interval '8 days')::int as paid_d7,
-        count(*) filter (where paid_at <= ordered_at + interval '15 days')::int as paid_d14,
-        count(*) filter (where paid_at is not null)::int as paid_mature,
-        count(*) filter (where outcome in ('paye_et_archive', 'retour_archive'))::int
-          as terminal
+        count(*) filter (where ordered_day <= ${filters.endDate}::date)::int as eligible_d0,
+        count(*) filter (
+          where ordered_day <= ${filters.endDate}::date
+            and paid_day - ordered_day between 0 and 0
+        )::int as paid_d0,
+        count(*) filter (
+          where ordered_day <= ${filters.endDate}::date - interval '3 days'
+        )::int as eligible_d3,
+        count(*) filter (
+          where ordered_day <= ${filters.endDate}::date - interval '3 days'
+            and paid_day - ordered_day between 0 and 3
+        )::int as paid_d3,
+        count(*) filter (
+          where ordered_day <= ${filters.endDate}::date - interval '7 days'
+        )::int as eligible_d7,
+        count(*) filter (
+          where ordered_day <= ${filters.endDate}::date - interval '7 days'
+            and paid_day - ordered_day between 0 and 7
+        )::int as paid_d7,
+        count(*) filter (
+          where ordered_day <= ${filters.endDate}::date - interval '14 days'
+        )::int as eligible_d14,
+        count(*) filter (
+          where ordered_day <= ${filters.endDate}::date - interval '14 days'
+            and paid_day - ordered_day between 0 and 14
+        )::int as paid_d14,
+        count(*) filter (
+          where ordered_day <= ${filters.endDate}::date - interval '21 days'
+        )::int as eligible_d21,
+        count(*) filter (
+          where ordered_day <= ${filters.endDate}::date - interval '21 days'
+            and paid_day - ordered_day between 0 and 21
+        )::int as paid_d21,
+        count(*) filter (
+          where ordered_day <= ${filters.endDate}::date - interval '21 days'
+            and outcome in ('paye_et_archive', 'retour_archive')
+        )::int as terminal
       from attributed
       group by campaign_id
       order by count(*) desc
@@ -2358,19 +3051,22 @@ async function loadMetaBreakdowns(
         orders: ordersCount,
         terminal: numeric(row.terminal),
         points: [
-          { day: 0, paidRatePct: ratio(numeric(row.paid_d0), ordersCount) },
-          { day: 3, paidRatePct: ratio(numeric(row.paid_d3), ordersCount) },
-          { day: 7, paidRatePct: ratio(numeric(row.paid_d7), ordersCount) },
-          { day: 14, paidRatePct: ratio(numeric(row.paid_d14), ordersCount) },
-          { day: 21, paidRatePct: ratio(numeric(row.paid_mature), ordersCount) },
+          { day: 0, paidRatePct: ratio(numeric(row.paid_d0), numeric(row.eligible_d0)) },
+          { day: 3, paidRatePct: ratio(numeric(row.paid_d3), numeric(row.eligible_d3)) },
+          { day: 7, paidRatePct: ratio(numeric(row.paid_d7), numeric(row.eligible_d7)) },
+          { day: 14, paidRatePct: ratio(numeric(row.paid_d14), numeric(row.eligible_d14)) },
+          { day: 21, paidRatePct: ratio(numeric(row.paid_d21), numeric(row.eligible_d21)) },
         ],
-        maturityPct: ratio(numeric(row.terminal), ordersCount),
+        maturityPct: ratio(numeric(row.terminal), numeric(row.eligible_d21)),
       };
     }),
   };
 }
 
-function freshnessState(throughDate: string | null, endDate: string): Analytics2Source['state'] {
+export function freshnessState(
+  throughDate: string | null,
+  endDate: string,
+): Analytics2Source['state'] {
   if (!throughDate) return 'missing';
   const lag = Math.max(0, inclusiveDays(throughDate.slice(0, 10), endDate) - 1);
   if (lag <= 1) return 'current';
@@ -2400,23 +3096,26 @@ async function loadSourceHealth(
         on ${ecotrackOrderStates.orderId} = first_posted.order_id
         and ${ecotrackOrderStates.deletedAt} is null
       where ${datePredicate(sql`first_posted.posted_day`, filters.startDate, filters.endDate)}
-    ), settled as (
-      select * from ${processedOrders}
-      where ${datePredicate(
-        sql`(coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt}) at time zone 'Africa/Algiers')::date`,
-        filters.startDate,
-        filters.endDate,
-      )}
     )
     select
       (select count(*)::int from ${orders}
         where ${timestampPredicate(orders.createdAt, filters.startDate, filters.endDate)})
         as order_records,
+      (select max((${orders.createdAt} at time zone 'Africa/Algiers')::date) from ${orders}
+        where ${timestampPredicate(orders.createdAt, filters.startDate, filters.endDate)})
+        as orders_through_date,
       (select max(${orders.updatedAt}) from ${orders}) as orders_updated_at,
       (select count(*)::int from posted) as posted_records,
       (select count(tracked_order_id)::int from posted) as ecotrack_records,
       (select max(${ecotrackOrderStates.updatedAt}) from ${ecotrackOrderStates}
         where ${ecotrackOrderStates.deletedAt} is null) as ecotrack_updated_at,
+      (select max((coalesce(
+          ${ecotrackOrderStates.lastOrderSyncedAt},
+          ${ecotrackOrderStates.lastStatusSyncedAt},
+          ${ecotrackOrderStates.updatedAt}
+        ) at time zone 'Africa/Algiers')::date)
+        from ${ecotrackOrderStates}
+        where ${ecotrackOrderStates.deletedAt} is null) as ecotrack_through_date,
       (select count(distinct ${metaAdsDailyInsights.day})::int from ${metaAdsDailyInsights}
         where ${datePredicate(metaAdsDailyInsights.day, filters.startDate, filters.endDate)})
         as meta_days,
@@ -2425,16 +3124,7 @@ async function loadSourceHealth(
         as meta_through_date,
       (select max(${metaAdsDailyInsights.syncedAt}) from ${metaAdsDailyInsights})
         as meta_updated_at,
-      ((select count(*)::int from ${analyticsDailyRollups}
-          where ${datePredicate(analyticsDailyRollups.day, filters.startDate, filters.endDate)})
-        + (select count(*)::int from ${analyticsEvents}
-          where ${timestampPredicate(analyticsEvents.occurredAt, filters.startDate, filters.endDate)}
-            and not exists (
-              select 1 from ${analyticsDailyRollups} rollup
-              where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
-                and rollup.dimension = 'overall'
-                and rollup.dimension_key = ''
-            ))) as storefront_records,
+      0::int as storefront_records,
       greatest(
         (select max(${analyticsDailyRollups.day}) from ${analyticsDailyRollups}
           where ${datePredicate(analyticsDailyRollups.day, filters.startDate, filters.endDate)}),
@@ -2445,11 +3135,7 @@ async function loadSourceHealth(
       greatest(
         (select max(${analyticsDailyRollups.updatedAt}) from ${analyticsDailyRollups}),
         (select max(${analyticsEvents.createdAt}) from ${analyticsEvents})
-      ) as storefront_updated_at,
-      (select count(*)::int from settled) as settlement_records,
-      (select max(imported_at) from settled) as settlements_updated_at,
-      (select max((coalesce(encaissed_at, delivered_at, order_created_at)
-        at time zone 'Africa/Algiers')::date) from settled) as settlements_through_date
+      ) as storefront_updated_at
   `);
   const row = (result.rows[0] ?? {}) as Record<string, unknown>;
   const postedRecords = numeric(row.posted_records);
@@ -2459,23 +3145,22 @@ async function loadSourceHealth(
   const storefrontThrough = row.storefront_through_date
     ? String(row.storefront_through_date)
     : null;
-  const settlementsThrough = row.settlements_through_date
-    ? String(row.settlements_through_date)
-    : null;
+  const ordersThrough = row.orders_through_date ? String(row.orders_through_date) : null;
+  const ecotrackThrough = row.ecotrack_through_date ? String(row.ecotrack_through_date) : null;
   return [
     {
       key: 'orders',
-      state: 'live',
+      state: freshnessState(ordersThrough, filters.endDate),
       updatedAt: isoValue(row.orders_updated_at),
-      throughDate: filters.endDate,
+      throughDate: ordersThrough,
       records: numeric(row.order_records),
       coveragePct: 100,
     },
     {
       key: 'ecotrack',
-      state: row.ecotrack_updated_at ? 'live' : 'missing',
+      state: freshnessState(ecotrackThrough, filters.endDate),
       updatedAt: isoValue(row.ecotrack_updated_at),
-      throughDate: filters.endDate,
+      throughDate: ecotrackThrough,
       records: numeric(row.ecotrack_records),
       coveragePct: postedRecords > 0 ? (numeric(row.ecotrack_records) / postedRecords) * 100 : null,
     },
@@ -2496,14 +3181,6 @@ async function loadSourceHealth(
       coveragePct: null,
     },
     {
-      key: 'settlements',
-      state: economics?.freshness.settledReportThroughDate ? 'lagged' : 'missing',
-      updatedAt: isoValue(row.settlements_updated_at),
-      throughDate: settlementsThrough,
-      records: numeric(row.settlement_records),
-      coveragePct: economics?.coverage.settlementCoveragePct ?? null,
-    },
-    {
       key: 'assumptions',
       state: 'manual',
       updatedAt: null,
@@ -2520,13 +3197,23 @@ async function loadSourceHealth(
   ];
 }
 
-async function loadStorefrontPaths(db: Database, filters: Analytics2Filters, now = new Date()) {
+function storefrontPathCoverage(filters: Analytics2Filters, now = new Date()) {
   const retainedFrom = addDays(dayInTimezone(now), -6);
   const coverageStartDate =
     filters.startDate && filters.startDate > retainedFrom ? filters.startDate : retainedFrom;
   const coverageEndDate = filters.endDate;
+  return {
+    coverageStartDate,
+    coverageEndDate,
+    coverageIsPartial: !filters.startDate || coverageStartDate > filters.startDate,
+  };
+}
+
+async function loadStorefrontPaths(db: Database, filters: Analytics2Filters, now = new Date()) {
+  const coverage = storefrontPathCoverage(filters, now);
+  const { coverageStartDate, coverageEndDate } = coverage;
   if (coverageStartDate > coverageEndDate) {
-    return { coverageStartDate, coverageEndDate, coverageIsPartial: true, rows: [] };
+    return { ...coverage, coverageIsPartial: true, rows: [] };
   }
   const result = await db.execute(sql`
     with sequence as (
@@ -2550,9 +3237,7 @@ async function loadStorefrontPaths(db: Database, filters: Analytics2Filters, now
     limit 24
   `);
   return {
-    coverageStartDate,
-    coverageEndDate,
-    coverageIsPartial: !filters.startDate || coverageStartDate > filters.startDate,
+    ...coverage,
     rows: result.rows.map((raw: unknown) => {
       const row = raw as Record<string, unknown>;
       return {
@@ -2563,6 +3248,64 @@ async function loadStorefrontPaths(db: Database, filters: Analytics2Filters, now
       };
     }),
   };
+}
+
+async function loadStorefrontOrderConversion(db: Database, filters: Analytics2Filters) {
+  const [sessions, result] = await Promise.all([
+    getCanonicalStorefrontSessionCount(statsInput(filters.startDate, filters.endDate)),
+    db.execute(sql`
+      select (select count(*)::int from ${orders}
+        where ${timestampPredicate(orders.createdAt, filters.startDate, filters.endDate)})
+        as submitted_orders
+    `),
+  ]);
+  const row = (result.rows[0] ?? {}) as Record<string, unknown>;
+  const submittedOrders = numeric(row.submitted_orders);
+  return {
+    sessions,
+    submittedOrders,
+    conversionRatePct: ratio(submittedOrders, sessions),
+  };
+}
+
+async function loadStorefrontSessionFunnel(db: Database, startDate: string, endDate: string) {
+  const result = await db.execute(sql`
+    with session_stages as (
+      select ${analyticsEvents.sessionId} as session_id,
+        bool_or(${analyticsEvents.eventName} = 'page_view') as visited,
+        bool_or(${analyticsEvents.eventName} = 'view_item') as viewed_product,
+        bool_or(${analyticsEvents.eventName} = 'add_to_cart') as added_to_cart,
+        bool_or(${analyticsEvents.eventName} = 'begin_checkout') as began_checkout
+      from ${analyticsEvents}
+      where ${timestampPredicate(analyticsEvents.occurredAt, startDate, endDate)}
+      group by ${analyticsEvents.sessionId}
+    ), submitted_sessions as (
+      select distinct ${orders.sessionId} as session_id
+      from ${orders}
+      where ${orders.sessionId} is not null
+        and ${timestampPredicate(orders.createdAt, startDate, endDate)}
+    )
+    select count(*) filter (where visited)::int as sessions,
+      count(*) filter (where visited and viewed_product)::int as product_sessions,
+      count(*) filter (where visited and viewed_product and added_to_cart)::int as cart_sessions,
+      count(*) filter (
+        where visited and viewed_product and added_to_cart and began_checkout
+      )::int as checkout_sessions,
+      count(*) filter (
+        where visited and viewed_product and added_to_cart and began_checkout
+          and submitted_sessions.session_id is not null
+      )::int as submitted_sessions
+    from session_stages
+    left join submitted_sessions using (session_id)
+  `);
+  const row = (result.rows[0] ?? {}) as Record<string, unknown>;
+  return [
+    { name: 'Sessions', value: numeric(row.sessions) },
+    { name: 'Product-view sessions', value: numeric(row.product_sessions) },
+    { name: 'Cart sessions', value: numeric(row.cart_sessions) },
+    { name: 'Checkout sessions', value: numeric(row.checkout_sessions) },
+    { name: 'Submitted-order sessions', value: numeric(row.submitted_sessions) },
+  ].filter((stage) => stage.value > 0);
 }
 
 async function loadBasketPairs(db: Database, filters: Analytics2Filters) {
@@ -2617,10 +3360,21 @@ async function loadOperationalProducts(
   filters: Analytics2Filters,
   planningReturnRatePct: number,
 ): Promise<OperationalProductRow[]> {
+  const effectiveStatus = effectiveEcotrackStatusSql({
+    localStatus: orders.confirmed,
+    providerStatus: ecotrackOrderStates.currentStatus,
+    latestActivityAt: sql`lifecycle.latest_activity_at`,
+    fallbackActivityAt: sql`coalesce(
+      ${ecotrackOrderStates.providerCreatedAt} at time zone 'Africa/Algiers',
+      first_posted.posted_at at time zone 'Africa/Algiers'
+    )`,
+    referenceAt: sql`${filters.endDate}::date + interval '1 day'`,
+  });
   const result = await db.execute(sql`
     with first_posted as (
       select distinct on (${orderStatusHistory.orderId})
         ${orderStatusHistory.orderId} as order_id,
+        ${orderStatusHistory.changedAt} as posted_at,
         (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day
       from ${orderStatusHistory}
       where ${orderStatusHistory.status} = 11
@@ -2634,7 +3388,11 @@ async function loadOperationalProducts(
         min(
           ${ecotrackOrderTrackingEvents.eventDate}::timestamp
           + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
-        ) filter (where ${ecotrackOrderTrackingEvents.status} = 'payed') as paid_at
+        ) filter (where ${ecotrackOrderTrackingEvents.status} = 'payed') as paid_at,
+        max(
+          ${ecotrackOrderTrackingEvents.eventDate}::timestamp
+          + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
+        ) as latest_activity_at
       from ${ecotrackOrderTrackingEvents}
       group by ${ecotrackOrderTrackingEvents.orderId}
     )
@@ -2646,45 +3404,47 @@ async function loadOperationalProducts(
       count(distinct ${orderLineItems.orderId})::int as posted_orders,
       coalesce(sum(${orderLineItems.quantity}), 0)::int as posted_units,
       count(distinct ${orderLineItems.orderId}) filter (
-        where ${ecotrackOrderStates.currentStatus} = 'paye_et_archive'
+        where ${effectiveStatus} in ('paye_et_archive', 'payed')
       )::int as paid_orders,
       coalesce(sum(${orderLineItems.quantity}) filter (
-        where ${ecotrackOrderStates.currentStatus} = 'paye_et_archive'
+        where ${effectiveStatus} in ('paye_et_archive', 'payed')
       ), 0)::int as paid_units,
       count(distinct ${orderLineItems.orderId}) filter (
-        where ${ecotrackOrderStates.currentStatus} = 'retour_archive'
+        where ${effectiveStatus} = 'retour_archive'
       )::int as returned_orders,
       count(distinct ${orderLineItems.orderId}) filter (
-        where coalesce(${ecotrackOrderStates.currentStatus}, '') not in (
-          'paye_et_archive', 'retour_archive', 'annule'
-        )
+        where ${effectiveStatus} <> 'untracked'
+          and ${effectiveStatus} not in (${resolvedShipmentStatusesSql})
       )::int as active_orders,
       count(distinct ${orderLineItems.orderId}) filter (
         where ${orderLineItems.unitPurchasePriceSnapshot} is not null
       )::int as cost_complete_orders,
       sum(
         (${orderLineItems.lineTotal} - (
-          ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity}
+          coalesce(
+            ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity},
+            ${orderLineItems.lineTotal} * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
+          )
         )) * (1 - coalesce(
           ${profitTrackerDays.returnRatePct}::double precision,
           ${planningReturnRatePct}::double precision
         ) / 100)
       ) filter (
-        where ${orderLineItems.unitPurchasePriceSnapshot} is not null
-          and ${orderLineItems.lineTotal} is not null
+        where ${orderLineItems.lineTotal} is not null
       )::double precision as projected_contribution,
       percentile_cont(0.5) within group (order by
-        extract(epoch from (lifecycle.delivered_at - first_posted.posted_day::timestamp)) / 3600
+        extract(epoch from (lifecycle.delivered_at - first_posted.posted_at)) / 3600
       ) filter (where lifecycle.delivered_at is not null)::double precision
         as delivery_median_hours,
       percentile_cont(0.5) within group (order by
-        extract(epoch from (lifecycle.paid_at - first_posted.posted_day::timestamp)) / 3600
+        extract(epoch from (lifecycle.paid_at - first_posted.posted_at)) / 3600
       ) filter (where lifecycle.paid_at is not null)::double precision
         as payment_median_hours,
       count(distinct ${orderLineItems.orderId}) filter (
         where lifecycle.delivered_at is not null
       )::int as delivery_samples
     from first_posted
+    inner join ${orders} on ${orders.id} = first_posted.order_id
     inner join ${orderLineItems} on ${orderLineItems.orderId} = first_posted.order_id
     left join ${productCatalog} on ${productCatalog.id} = ${orderLineItems.productId}
     left join ${categories} on ${categories.id} = ${productCatalog.categoryId}
@@ -2698,7 +3458,7 @@ async function loadOperationalProducts(
     where ${datePredicate(sql`first_posted.posted_day`, filters.startDate, filters.endDate)}
     group by coalesce(${orderLineItems.productId}::text, ${orderLineItems.contentId})
     order by sum(${orderLineItems.quantity}) desc, max(${orderLineItems.titleSnapshot})
-    limit 500
+    limit 100
   `);
   return Array.from(result.rows as Iterable<unknown>, (raw): OperationalProductRow => {
     const row = raw as Record<string, unknown>;
@@ -2753,7 +3513,7 @@ async function loadProductMetaAssociations(
       max(insight.ad_name) as ad_name,
       count(distinct ${orders.id})::int as attributed_orders,
       count(distinct ${orders.id}) filter (
-        where ${ecotrackOrderStates.currentStatus} = 'paye_et_archive'
+        where ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
       )::int as paid_orders
     from ${orderAcquisitionAttribution}
     inner join ${orders} on ${orders.id} = ${orderAcquisitionAttribution.orderId}
@@ -2799,9 +3559,11 @@ type OperationalGeographyRow = {
   postedOrders: number;
   paidOrders: number;
   returnedOrders: number;
+  untrackedOrders: number;
   activeOrders: number;
   pipelineCodDzd: number;
   providerAmountCoveragePct: number | null;
+  providerAmountValueCoveragePct: number | null;
   terminalPaidRatePct: number | null;
   deliveryMedianHours: number | null;
   deliverySamples: number;
@@ -2812,10 +3574,21 @@ async function loadOperationalGeography(
   db: Database,
   filters: Analytics2Filters,
 ): Promise<OperationalGeographyRow[]> {
+  const effectiveStatus = effectiveEcotrackStatusSql({
+    localStatus: orders.confirmed,
+    providerStatus: ecotrackOrderStates.currentStatus,
+    latestActivityAt: sql`lifecycle.latest_activity_at`,
+    fallbackActivityAt: sql`coalesce(
+      ${ecotrackOrderStates.providerCreatedAt} at time zone 'Africa/Algiers',
+      first_posted.posted_at at time zone 'Africa/Algiers'
+    )`,
+    referenceAt: sql`${filters.endDate}::date + interval '1 day'`,
+  });
   const result = await db.execute(sql`
     with first_posted as (
       select distinct on (${orderStatusHistory.orderId})
         ${orderStatusHistory.orderId} as order_id,
+        ${orderStatusHistory.changedAt} as posted_at,
         (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day
       from ${orderStatusHistory}
       where ${orderStatusHistory.status} = 11
@@ -2828,35 +3601,47 @@ async function loadOperationalGeography(
         ) filter (where ${ecotrackOrderTrackingEvents.status} = 'livred') as delivered_at,
         count(*) filter (
           where ${ecotrackOrderTrackingEvents.status} = 'attempt_delivery'
-        )::int as attempt_count
+        )::int as attempt_count,
+        max(
+          ${ecotrackOrderTrackingEvents.eventDate}::timestamp
+          + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
+        ) as latest_activity_at
       from ${ecotrackOrderTrackingEvents}
       group by ${ecotrackOrderTrackingEvents.orderId}
     )
     select ${orders.state} as wilaya_id,
       coalesce(${ecotrackWilayas.name}, 'Unknown') as wilaya_name,
       count(*)::int as posted_orders,
-      count(*) filter (where ${ecotrackOrderStates.currentStatus} = 'paye_et_archive')::int
-        as paid_orders,
-      count(*) filter (where ${ecotrackOrderStates.currentStatus} = 'retour_archive')::int
-        as returned_orders,
       count(*) filter (
-        where coalesce(${ecotrackOrderStates.currentStatus}, '') not in (
-          'paye_et_archive', 'retour_archive', 'annule'
-        )
+        where ${effectiveStatus} in ('paye_et_archive', 'payed')
+      )::int
+        as paid_orders,
+      count(*) filter (where ${effectiveStatus} = 'retour_archive')::int
+        as returned_orders,
+      count(*) filter (where ${ecotrackOrderStates.orderId} is null)::int as untracked_orders,
+      count(*) filter (
+        where ${effectiveStatus} <> 'untracked'
+          and ${effectiveStatus} not in (${resolvedShipmentStatusesSql})
       )::int as active_orders,
       coalesce(sum(coalesce(
         ${ecotrackOrderStates.currentAmount}::double precision,
         ${orders.totalAmount}::double precision
       )) filter (
-        where coalesce(${ecotrackOrderStates.currentStatus}, '') not in (
-          'paye_et_archive', 'retour_archive', 'annule'
-        )
+        where ${effectiveStatus} <> 'untracked'
+          and ${effectiveStatus} not in (${resolvedShipmentStatusesSql})
       ), 0)::double precision as pipeline_cod,
       count(*) filter (
-        where ${ecotrackOrderStates.currentAmountSource} = 'ecotrack_orders'
+        where ${effectiveStatus} <> 'untracked'
+          and ${effectiveStatus} not in (${resolvedShipmentStatusesSql})
+          and ${ecotrackOrderStates.currentAmountSource} = 'ecotrack_orders'
       )::int as provider_amount_orders,
+      coalesce(sum(${ecotrackOrderStates.currentAmount}::double precision) filter (
+        where ${effectiveStatus} <> 'untracked'
+          and ${effectiveStatus} not in (${resolvedShipmentStatusesSql})
+          and ${ecotrackOrderStates.currentAmountSource} = 'ecotrack_orders'
+      ), 0)::double precision as provider_amount_cod,
       percentile_cont(0.5) within group (order by
-        extract(epoch from (lifecycle.delivered_at - first_posted.posted_day::timestamp)) / 3600
+        extract(epoch from (lifecycle.delivered_at - first_posted.posted_at)) / 3600
       ) filter (where lifecycle.delivered_at is not null)::double precision
         as delivery_median_hours,
       count(*) filter (where lifecycle.delivered_at is not null)::int as delivery_samples,
@@ -2879,15 +3664,19 @@ async function loadOperationalGeography(
     const postedOrders = numeric(row.posted_orders);
     const paidOrders = numeric(row.paid_orders);
     const returnedOrders = numeric(row.returned_orders);
+    const activeOrders = numeric(row.active_orders);
+    const pipelineCodDzd = numeric(row.pipeline_cod);
     return {
       wilayaId: row.wilaya_id == null ? null : numeric(row.wilaya_id),
       name: String(row.wilaya_name),
       postedOrders,
       paidOrders,
       returnedOrders,
-      activeOrders: numeric(row.active_orders),
-      pipelineCodDzd: numeric(row.pipeline_cod),
-      providerAmountCoveragePct: ratio(numeric(row.provider_amount_orders), postedOrders),
+      untrackedOrders: numeric(row.untracked_orders),
+      activeOrders,
+      pipelineCodDzd,
+      providerAmountCoveragePct: ratio(numeric(row.provider_amount_orders), activeOrders),
+      providerAmountValueCoveragePct: ratio(numeric(row.provider_amount_cod), pipelineCodDzd),
       terminalPaidRatePct: ratio(paidOrders, paidOrders + returnedOrders),
       deliveryMedianHours: nullableNumeric(row.delivery_median_hours),
       deliverySamples: numeric(row.delivery_samples),
@@ -2901,6 +3690,7 @@ async function loadOperationalCommunes(db: Database, filters: Analytics2Filters)
     with first_posted as (
       select distinct on (${orderStatusHistory.orderId})
         ${orderStatusHistory.orderId} as order_id,
+        ${orderStatusHistory.changedAt} as posted_at,
         (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day
       from ${orderStatusHistory}
       where ${orderStatusHistory.status} = 11
@@ -2921,12 +3711,14 @@ async function loadOperationalCommunes(db: Database, filters: Analytics2Filters)
       coalesce(${ecotrackWilayas.name}, 'Unknown') as wilaya_name,
       coalesce(nullif(trim(${orders.city}), ''), 'Unknown') as commune_name,
       count(*)::int as posted_orders,
-      count(*) filter (where ${ecotrackOrderStates.currentStatus} = 'paye_et_archive')::int
+      count(*) filter (
+        where ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
+      )::int
         as paid_orders,
       count(*) filter (where ${ecotrackOrderStates.currentStatus} = 'retour_archive')::int
         as returned_orders,
       percentile_cont(0.5) within group (order by
-        extract(epoch from (lifecycle.delivered_at - first_posted.posted_day::timestamp)) / 3600
+        extract(epoch from (lifecycle.delivered_at - first_posted.posted_at)) / 3600
       ) filter (where lifecycle.delivered_at is not null)::double precision
         as delivery_median_hours,
       avg(lifecycle.attempt_count) filter (
@@ -2943,7 +3735,7 @@ async function loadOperationalCommunes(db: Database, filters: Analytics2Filters)
     group by ${orders.state}, coalesce(${ecotrackWilayas.name}, 'Unknown'),
       coalesce(nullif(trim(${orders.city}), ''), 'Unknown')
     order by count(*) desc
-    limit 250
+    limit 40
   `);
   return Array.from(result.rows as Iterable<unknown>, (raw) => {
     const row = raw as Record<string, unknown>;
@@ -3001,7 +3793,11 @@ async function loadCustomerEconomics(
   const result = await db.execute(sql`
     with line_economics as (
       select ${orderLineItems.orderId} as order_id,
-        bool_and(${orderLineItems.unitPurchasePriceSnapshot} is not null) as cost_complete,
+        bool_and(
+          ${orderLineItems.unitPurchasePriceSnapshot} is not null
+          and ${orderLineItems.lineTotal} is not null
+        ) as cost_complete,
+        sum(${orderLineItems.lineTotal})::double precision as product_revenue,
         sum(
           ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity}
         )::double precision as product_cost
@@ -3034,6 +3830,12 @@ async function loadCustomerEconomics(
         ${orders.createdAt} as ordered_at,
         (${orders.createdAt} at time zone 'Africa/Algiers')::date as order_day,
         ${orders.totalAmount}::double precision as order_value,
+        case when ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
+          then coalesce(
+            ${ecotrackOrderStates.currentAmount}::double precision,
+            ${orders.totalAmount}::double precision
+          )
+        end as paid_value,
         row_number() over (
           partition by coalesce(
             nullif(${orders.normalizedPhone}, ''),
@@ -3048,8 +3850,7 @@ async function loadCustomerEconomics(
           )
           order by ${orders.createdAt}, ${orders.id}
         ) as previous_order_at,
-        case when ${ecotrackOrderStates.currentStatus} = 'paye_et_archive'
-          and line_economics.cost_complete
+        case when ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
           and coalesce(
             ${ecotrackOrderStates.currentAmount}::double precision,
             ${orders.totalAmount}::double precision
@@ -3064,8 +3865,19 @@ async function loadCustomerEconomics(
           ) - coalesce(
             ${ecotrackOrderStates.deliveryTariff}::double precision,
             ${ecotrackOrderStates.estimatedFee}::double precision
-          ) - line_economics.product_cost
+          ) - case when line_economics.cost_complete then line_economics.product_cost
+          else coalesce(
+            line_economics.product_revenue
+              * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE},
+            coalesce(
+              ${ecotrackOrderStates.currentAmount}::double precision,
+              ${orders.totalAmount}::double precision
+            ) * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
+          ) end
         end as paid_contribution,
+        case when ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
+          and not coalesce(line_economics.cost_complete, false)
+        then 1 else 0 end as paid_contribution_uses_fallback,
         ${orderAcquisitionAttribution.metaAdId} as meta_ad_id
       from ${orders}
       left join line_economics on line_economics.order_id = ${orders.id}
@@ -3104,22 +3916,47 @@ async function loadCustomerEconomics(
         (array_agg(city order by ordered_at desc))[1] as city,
         count(*)::int as orders,
         sum(order_value)::double precision as total_value,
+        coalesce(sum(paid_value), 0)::double precision as paid_value,
         min(ordered_at) as first_order_at,
+        min(ordered_at) filter (where order_number = 2) as second_order_at,
         max(ordered_at) as last_order_at,
         avg(extract(epoch from (ordered_at - previous_order_at)) / 86400)
           filter (where previous_order_at is not null)::double precision as reorder_days,
         coalesce(sum(paid_contribution), 0)::double precision as contribution_ltv,
         count(paid_contribution)::int as paid_orders,
+        coalesce(sum(paid_contribution_uses_fallback), 0)::int as fallback_margin_orders,
         max(acquisition_cost)::double precision as acquisition_cost
       from with_acquisition
       group by customer_key
+    ), summary as (
+      select count(*)::int as all_customers,
+        count(*) filter (where orders >= 2)::int as repeat_customers,
+        coalesce(sum(orders), 0)::int as all_orders,
+        coalesce(sum(total_value), 0)::double precision as all_value,
+        percentile_cont(0.5) within group (order by reorder_days)
+          filter (where reorder_days is not null)::double precision as median_reorder_days,
+        avg(contribution_ltv)::double precision as average_contribution_ltv,
+        count(*) filter (where acquisition_cost is not null)::int as attributed_customers,
+        count(*) filter (
+          where acquisition_cost > 0 and contribution_ltv / acquisition_cost >= 1
+        )::int as paid_back_customers,
+        count(*) filter (
+          where first_order_at <= (${filters.endDate}::date - interval '30 days')
+        )::int as second_order_eligible_customers,
+        count(*) filter (
+          where first_order_at <= (${filters.endDate}::date - interval '30 days')
+            and second_order_at <= first_order_at + interval '30 days'
+        )::int as second_order_converted_customers
+      from customer_rollup
     )
-    select *,
+    select customer_rollup.*,
       case when acquisition_cost > 0 then contribution_ltv / acquisition_cost end
         as acquisition_payback_ratio
+      , summary.*
     from customer_rollup
+    cross join summary
     order by orders desc, total_value desc
-    limit 500
+    limit 50
   `);
   const rows = Array.from(result.rows as Iterable<unknown>, (raw) => {
     const row = raw as Record<string, unknown>;
@@ -3135,137 +3972,39 @@ async function loadCustomerEconomics(
       reorderIntervalDays: nullableNumeric(row.reorder_days),
       contributionLtvDzd: numeric(row.contribution_ltv),
       paidOrders: numeric(row.paid_orders),
+      paidValueDzd: numeric(row.paid_value),
+      paidContributionMarginPct: ratio(numeric(row.contribution_ltv), numeric(row.paid_value)),
+      fallbackMarginOrders: numeric(row.fallback_margin_orders),
       acquisitionCostDzd: nullableNumeric(row.acquisition_cost),
       acquisitionPaybackRatio: nullableNumeric(row.acquisition_payback_ratio),
     };
   });
-  const customers = rows.length;
-  const repeatCustomers = rows.filter((row) => row.orders >= 2).length;
-  const attributed = rows.filter((row) => row.acquisitionCostDzd != null);
-  const sortedReorder = rows
-    .flatMap((row) => (row.reorderIntervalDays == null ? [] : [row.reorderIntervalDays]))
-    .sort((left, right) => left - right);
+  const summaryRow = (result.rows[0] ?? {}) as Record<string, unknown>;
+  const customers = numeric(summaryRow.all_customers);
+  const repeatCustomers = numeric(summaryRow.repeat_customers);
+  const eligibleCustomers = numeric(summaryRow.second_order_eligible_customers);
+  const convertedCustomers = numeric(summaryRow.second_order_converted_customers);
+  const attributedCustomers = numeric(summaryRow.attributed_customers);
   return {
     summary: {
       customers,
       repeatCustomers,
       repeatRate: ratio(repeatCustomers, customers),
-      secondOrderConversionPct: ratio(repeatCustomers, customers),
-      averageOrders: customers > 0 ? rows.reduce((sum, row) => sum + row.orders, 0) / customers : 0,
+      secondOrderConversionPct: ratio(convertedCustomers, eligibleCustomers),
+      secondOrderEligibleCustomers: eligibleCustomers,
+      secondOrderConvertedCustomers: convertedCustomers,
+      secondOrderWindowDays: 30,
+      averageOrders: customers > 0 ? numeric(summaryRow.all_orders) / customers : 0,
       averageOrderValue:
-        customers > 0
-          ? rows.reduce((sum, row) => sum + row.totalValue, 0) /
-            rows.reduce((sum, row) => sum + row.orders, 0)
+        numeric(summaryRow.all_orders) > 0
+          ? numeric(summaryRow.all_value) / numeric(summaryRow.all_orders)
           : 0,
-      medianReorderIntervalDays:
-        sortedReorder.length > 0 ? sortedReorder[Math.floor(sortedReorder.length / 2)] : null,
-      averageContributionLtvDzd:
-        customers > 0
-          ? rows.reduce((sum, row) => sum + row.contributionLtvDzd, 0) / customers
-          : null,
-      acquisitionPaybackPct: ratio(
-        attributed.filter((row) => (row.acquisitionPaybackRatio ?? 0) >= 1).length,
-        attributed.length,
-      ),
-      acquisitionCoveragePct: ratio(attributed.length, customers),
+      medianReorderIntervalDays: nullableNumeric(summaryRow.median_reorder_days),
+      averageContributionLtvDzd: nullableNumeric(summaryRow.average_contribution_ltv),
+      acquisitionPaybackPct: ratio(numeric(summaryRow.paid_back_customers), attributedCustomers),
+      acquisitionCoveragePct: ratio(attributedCustomers, customers),
     },
-    rows: rows.slice(0, 100),
-  };
-}
-
-async function loadAutomationDelta(db: Database, filters: Analytics2Filters) {
-  const result = await db.execute(sql`
-    with line_economics as (
-      select ${orderLineItems.orderId} as order_id,
-        bool_and(
-          ${orderLineItems.unitPurchasePriceSnapshot} is not null
-          and ${orderLineItems.lineTotal} is not null
-        ) as cost_complete,
-        coalesce(sum(
-          ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity}
-        ), 0)::double precision as product_cost
-      from ${orderLineItems}
-      group by ${orderLineItems.orderId}
-    ), overlap as (
-      select ${processedOrders.totalFees}::double precision as actual_fee,
-        ${processedOrders.netRevenue}::double precision as actual_net,
-        ${processedOrders.profit}::double precision as actual_profit,
-        (${processedOrders.netRevenue} + ${processedOrders.totalFees})::double precision
-          as canonical_collected,
-        coalesce(
-          ${ecotrackOrderStates.deliveryTariff}::double precision,
-          ${ecotrackOrderStates.estimatedFee}::double precision
-        ) as automated_fee,
-        line_economics.product_cost
-      from ${processedOrders}
-      inner join ${orders}
-        on ${orders.ecotrackTrackingNumber} = ${processedOrders.tracking}
-      inner join ${ecotrackOrderStates}
-        on ${ecotrackOrderStates.orderId} = ${orders.id}
-        and ${ecotrackOrderStates.deletedAt} is null
-      inner join line_economics
-        on line_economics.order_id = ${orders.id}
-        and line_economics.cost_complete
-      where coalesce(
-          ${ecotrackOrderStates.deliveryTariff},
-          ${ecotrackOrderStates.estimatedFee}
-        ) is not null
-        and ${datePredicate(
-          sql`(coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt}) at time zone 'Africa/Algiers')::date`,
-          filters.startDate,
-          filters.endDate,
-        )}
-    ), comparison as (
-      select *,
-        canonical_collected - automated_fee as automated_net,
-        canonical_collected - automated_fee - product_cost as automated_profit
-      from overlap
-    )
-    select count(*)::int as orders,
-      coalesce(sum(actual_fee), 0)::double precision as actual_fee,
-      coalesce(sum(automated_fee), 0)::double precision as automated_fee,
-      coalesce(sum(actual_net), 0)::double precision as actual_net,
-      coalesce(sum(automated_net), 0)::double precision as automated_net,
-      coalesce(sum(actual_profit), 0)::double precision as actual_profit,
-      coalesce(sum(automated_profit), 0)::double precision as automated_profit,
-      count(*) filter (where abs(actual_profit - automated_profit) <= 1)::int as exact_profit_orders,
-      percentile_cont(0.95) within group (order by abs(actual_profit - automated_profit))
-        ::double precision as p95_profit_error_dzd,
-      avg(abs(actual_profit - automated_profit))::double precision as mean_profit_error_dzd
-    from comparison
-  `);
-  const row = (result.rows[0] ?? {}) as Record<string, unknown>;
-  const actualFee = numeric(row.actual_fee);
-  const automatedFee = numeric(row.automated_fee);
-  const actualNet = numeric(row.actual_net);
-  const automatedNet = numeric(row.automated_net);
-  const actualProfit = numeric(row.actual_profit);
-  const automatedProfit = numeric(row.automated_profit);
-  const ordersCount = numeric(row.orders);
-  return {
-    orders: ordersCount,
-    fees: {
-      actualDzd: actualFee,
-      automatedDzd: automatedFee,
-      differenceDzd: automatedFee - actualFee,
-      differencePct: actualFee ? ((automatedFee - actualFee) / actualFee) * 100 : null,
-    },
-    netRecovered: {
-      actualDzd: actualNet,
-      automatedDzd: automatedNet,
-      differenceDzd: automatedNet - actualNet,
-      differencePct: actualNet ? ((automatedNet - actualNet) / actualNet) * 100 : null,
-    },
-    profit: {
-      actualDzd: actualProfit,
-      automatedDzd: automatedProfit,
-      differenceDzd: automatedProfit - actualProfit,
-      differencePct: actualProfit ? ((automatedProfit - actualProfit) / actualProfit) * 100 : null,
-      exactOrders: numeric(row.exact_profit_orders),
-      exactPct: ordersCount ? (numeric(row.exact_profit_orders) / ordersCount) * 100 : null,
-      p95ErrorDzd: nullableNumeric(row.p95_profit_error_dzd),
-      meanErrorDzd: nullableNumeric(row.mean_profit_error_dzd),
-    },
+    rows,
   };
 }
 
@@ -3282,46 +4021,555 @@ function standardDeviation(values: number[], mean: number) {
   );
 }
 
-export function buildEconomicsForecast(report: EconomicsReport, today: string, horizonDays = 14) {
+export function materializedFactsAreUsable(input: {
+  requestedStartDate: string | null;
+  requestedEndDate: string;
+  earliestFactDay: string | null;
+  latestFactDay: string | null;
+  hasCompleteDateSpine: boolean;
+  semanticsVersions: number[];
+  oldestRefresh: string | null;
+  dependenciesUpdatedAt: string | null;
+  unresolvedFridayRollforward?: boolean;
+}) {
+  return Boolean(
+    input.earliestFactDay &&
+    input.latestFactDay &&
+    (!input.requestedStartDate || input.earliestFactDay === input.requestedStartDate) &&
+    input.latestFactDay >= input.requestedEndDate &&
+    input.hasCompleteDateSpine &&
+    input.semanticsVersions.length > 0 &&
+    input.semanticsVersions.every((version) => version === ANALYTICS2_FACT_SEMANTICS_VERSION) &&
+    input.oldestRefresh &&
+    (!input.dependenciesUpdatedAt || input.oldestRefresh >= input.dependenciesUpdatedAt) &&
+    !input.unresolvedFridayRollforward,
+  );
+}
+
+async function loadMaterializedEconomicsReport(
+  db: Database,
+  filters: Analytics2Filters,
+): Promise<EconomicsReport | null> {
+  const factWhere = datePredicate(
+    analyticsEconomicsDailyFacts.day,
+    filters.startDate,
+    filters.endDate,
+  );
+  const [factResult, dependencyResult, settings, costs] = await Promise.all([
+    db.execute(sql`
+      select ${analyticsEconomicsDailyFacts.day}::text as day,
+        ${analyticsEconomicsDailyFacts.postedOrders} as posted_orders,
+        ${analyticsEconomicsDailyFacts.paidOrders} as paid_orders,
+        ${analyticsEconomicsDailyFacts.costCompleteOrders} as cost_complete_orders,
+        ${analyticsEconomicsDailyFacts.paidProfitCompleteOrders} as paid_complete_orders,
+        ${analyticsEconomicsDailyFacts.grossProfitDzd}::double precision as gross_profit,
+        ${analyticsEconomicsDailyFacts.adjustedProfitDzd}::double precision as adjusted_profit,
+        ${analyticsEconomicsDailyFacts.adCostDzd}::double precision as ad_cost,
+        ${analyticsEconomicsDailyFacts.operatingCostDzd}::double precision as operating_cost,
+        ${analyticsEconomicsDailyFacts.netProfitDzd}::double precision as net_profit,
+        ${analyticsEconomicsDailyFacts.trueProfitDzd}::double precision as true_profit,
+        ${analyticsEconomicsDailyFacts.automaticPaidCodDzd}::double precision as paid_cod,
+        ${analyticsEconomicsDailyFacts.automaticPaidFeesDzd}::double precision as paid_fees,
+        ${analyticsEconomicsDailyFacts.automaticPaidProfitDzd}::double precision as paid_profit,
+        ${analyticsEconomicsDailyFacts.fxRateUsed}::double precision as fx_rate,
+        ${analyticsEconomicsDailyFacts.planningReturnRatePct}::double precision as return_rate,
+        ${analyticsEconomicsDailyFacts.semanticsVersion} as semantics_version,
+        ${analyticsEconomicsDailyFacts.refreshedAt} as refreshed_at
+      from ${analyticsEconomicsDailyFacts}
+      where ${factWhere}
+      order by ${analyticsEconomicsDailyFacts.day} asc
+    `),
+    db.execute(sql`
+      with first_posted as (
+        select distinct on (${orderStatusHistory.orderId})
+          ${orderStatusHistory.orderId} as order_id,
+          (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day
+        from ${orderStatusHistory}
+        where ${orderStatusHistory.status} = 11
+        order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
+      ), requested_cohort as (
+        select order_id from first_posted
+        where ${datePredicate(sql`first_posted.posted_day`, filters.startDate, filters.endDate)}
+      )
+      select greatest(
+        (select max(${orders.updatedAt}) from ${orders}
+          inner join requested_cohort on requested_cohort.order_id = ${orders.id}),
+        (select max(${orderLineItems.updatedAt}) from ${orderLineItems}
+          inner join requested_cohort on requested_cohort.order_id = ${orderLineItems.orderId}),
+        (select max(${orderStatusHistory.changedAt}) from ${orderStatusHistory}
+          inner join requested_cohort
+            on requested_cohort.order_id = ${orderStatusHistory.orderId}),
+        (select max(${ecotrackOrderStates.updatedAt}) from ${ecotrackOrderStates}
+          inner join requested_cohort
+            on requested_cohort.order_id = ${ecotrackOrderStates.orderId}),
+        (select max(${ecotrackOrderTrackingEvents.updatedAt})
+          from ${ecotrackOrderTrackingEvents}
+          inner join requested_cohort
+            on requested_cohort.order_id = ${ecotrackOrderTrackingEvents.orderId}),
+        (select max(${metaAdsDailyInsights.updatedAt}) from ${metaAdsDailyInsights}
+          where ${datePredicate(metaAdsDailyInsights.day, filters.startDate, filters.endDate)}),
+        (select max(${profitTrackerDays.updatedAt}) from ${profitTrackerDays}
+          where ${datePredicate(profitTrackerDays.day, filters.startDate, filters.endDate)}),
+        (select max(${profitTrackerOperatingCosts.updatedAt})
+          from ${profitTrackerOperatingCosts}),
+        (select max(${profitTrackerSettings.updatedAt}) from ${profitTrackerSettings})
+      ) as dependencies_updated_at,
+      to_char(least(
+        (select min((${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date)
+          from ${orderStatusHistory} where ${orderStatusHistory.status} = 11),
+        (select min(${metaAdsDailyInsights.day}) from ${metaAdsDailyInsights}),
+        (select min(${profitTrackerDays.day}) from ${profitTrackerDays})
+      ), 'YYYY-MM-DD') as required_start_date
+    `),
+    getProfitTrackerSettings(db),
+    listProfitTrackerCosts(db),
+  ]);
+  const rows = factResult.rows as Array<Record<string, unknown>>;
+  if (!rows.length) return null;
+  const dependencyUpdatedAt = isoValue(
+    (dependencyResult.rows[0] as Record<string, unknown> | undefined)?.dependencies_updated_at,
+  );
+  const dependencyRow = dependencyResult.rows[0] as Record<string, unknown> | undefined;
+  const requiredStartDate =
+    filters.startDate ??
+    (typeof dependencyRow?.required_start_date === 'string'
+      ? dependencyRow.required_start_date
+      : null);
+  const oldestRefresh = rows
+    .map((row) => isoValue(row.refreshed_at))
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(0);
+  const earliestFactDay = String(rows.at(0)?.day ?? '');
+  const latestFactDay = String(rows.at(-1)?.day ?? '');
+  const hasCompleteDateSpine = Boolean(
+    requiredStartDate &&
+    earliestFactDay &&
+    latestFactDay &&
+    rows.length === inclusiveDays(requiredStartDate, filters.endDate),
+  );
+  const latestRow = rows.at(-1);
+  const unresolvedFridayRollforward = Boolean(
+    settings.restFrom &&
+    filters.endDate >= settings.restFrom &&
+    new Date(`${filters.endDate}T00:00:00.000Z`).getUTCDay() === 5 &&
+    numeric(latestRow?.posted_orders) === 0 &&
+    latestRow?.gross_profit == null &&
+    numeric(latestRow?.ad_cost) > 0,
+  );
+  const factsAreUsable = materializedFactsAreUsable({
+    requestedStartDate: requiredStartDate,
+    requestedEndDate: filters.endDate,
+    earliestFactDay: earliestFactDay || null,
+    latestFactDay: latestFactDay || null,
+    hasCompleteDateSpine,
+    semanticsVersions: rows.map((row) => numeric(row.semantics_version)),
+    oldestRefresh: oldestRefresh ?? null,
+    dependenciesUpdatedAt: dependencyUpdatedAt,
+    unresolvedFridayRollforward,
+  });
+  if (!factsAreUsable) return null;
+
+  let cumulativeNetDzd = 0;
+  let cumulativeNetBeforeReturnsDzd = 0;
+  let cumulativeTrueProfitDzd = 0;
+  const ascendingDays = rows.map((row) => {
+    const date = String(row.day);
+    const grossProfitDzd = nullableNumeric(row.gross_profit);
+    const adjustedProfitDzd = nullableNumeric(row.adjusted_profit);
+    const adCostDzd = nullableNumeric(row.ad_cost);
+    const netProfitDzd = nullableNumeric(row.net_profit);
+    const trueProfitDzd = nullableNumeric(row.true_profit);
+    const fxRateUsed = numeric(row.fx_rate) || settings.fxRate;
+    const postedOrders = numeric(row.posted_orders);
+    const costCompleteOrders = numeric(row.cost_complete_orders);
+    const isRestDay = Boolean(
+      settings.restFrom &&
+      date >= settings.restFrom &&
+      new Date(`${date}T00:00:00.000Z`).getUTCDay() === 5 &&
+      postedOrders === 0 &&
+      grossProfitDzd == null,
+    );
+    cumulativeNetDzd += netProfitDzd ?? 0;
+    cumulativeNetBeforeReturnsDzd +=
+      grossProfitDzd != null && adCostDzd != null ? grossProfitDzd - adCostDzd : 0;
+    cumulativeTrueProfitDzd += trueProfitDzd ?? 0;
+    return {
+      date,
+      spendEur: adCostDzd == null ? null : adCostDzd / fxRateUsed,
+      impressions: null,
+      fbPurchases: null,
+      cpm: null,
+      ctr: null,
+      linkClicks: null,
+      landingPageViews: null,
+      grossProfitDzd,
+      returnRatePct: nullableNumeric(row.return_rate),
+      confirmedOrders: postedOrders,
+      note: null,
+      fxRateUsed,
+      metaSyncedAt: oldestRefresh ?? null,
+      grossProfitSource: grossProfitDzd == null ? 'missing' : 'automatic',
+      returnRateSource: grossProfitDzd == null ? 'missing' : 'default',
+      confirmedOrdersSource: 'automatic',
+      postedOrders,
+      costCompleteOrders,
+      projectedCoveragePct: ratio(costCompleteOrders, postedOrders),
+      metrics: {
+        adCostDzd,
+        adjustedProfitDzd,
+        netProfitDzd,
+        profitX:
+          adjustedProfitDzd != null && adCostDzd != null && adCostDzd > 0
+            ? adjustedProfitDzd / adCostDzd
+            : null,
+        netProfitBeforeReturnsDzd:
+          grossProfitDzd != null && adCostDzd != null ? grossProfitDzd - adCostDzd : null,
+        profitXBeforeReturns:
+          grossProfitDzd != null && adCostDzd != null && adCostDzd > 0
+            ? grossProfitDzd / adCostDzd
+            : null,
+        costPerConfirmedDzd:
+          adCostDzd != null && postedOrders > 0 ? adCostDzd / postedOrders : null,
+        confirmationRatePct: null,
+        clickToPageRatePct: null,
+      },
+      isRestDay,
+      rolledInDzd: 0,
+      rolledOutDzd: 0,
+      operatingCostDzd: numeric(row.operating_cost),
+      trueProfitDzd,
+      cumulativeNetDzd,
+      cumulativeNetBeforeReturnsDzd,
+      cumulativeTrueProfitDzd,
+    };
+  });
+  const grossProfitDzd = ascendingDays.reduce((sum, day) => sum + (day.grossProfitDzd ?? 0), 0);
+  const adjustedProfitDzd = ascendingDays.reduce(
+    (sum, day) => sum + (day.metrics.adjustedProfitDzd ?? 0),
+    0,
+  );
+  const ratioAdCostDzd = ascendingDays.reduce((sum, day) => sum + (day.metrics.adCostDzd ?? 0), 0);
+  const operatingCostDzd = ascendingDays.reduce((sum, day) => sum + day.operatingCostDzd, 0);
+  const postedOrders = ascendingDays.reduce((sum, day) => sum + day.postedOrders, 0);
+  const costCompleteOrders = ascendingDays.reduce((sum, day) => sum + day.costCompleteOrders, 0);
+  const netProfitDzd = adjustedProfitDzd - ratioAdCostDzd;
+  const weekGroups = new Map<
+    string,
+    {
+      weekStart: string;
+      trackedDays: number;
+      spendEur: number;
+      adCostDzd: number;
+      adjustedProfitDzd: number;
+      operatingCostDzd: number;
+    }
+  >();
+  for (const day of ascendingDays) {
+    const weekStart = fridayWeekStart(day.date);
+    const current = weekGroups.get(weekStart) ?? {
+      weekStart,
+      trackedDays: 0,
+      spendEur: 0,
+      adCostDzd: 0,
+      adjustedProfitDzd: 0,
+      operatingCostDzd: 0,
+    };
+    current.trackedDays += 1;
+    current.spendEur += day.spendEur ?? 0;
+    current.adCostDzd += day.metrics.adCostDzd ?? 0;
+    current.adjustedProfitDzd += day.metrics.adjustedProfitDzd ?? 0;
+    current.operatingCostDzd += day.operatingCostDzd;
+    weekGroups.set(weekStart, current);
+  }
+  const weeks = [...weekGroups.values()]
+    .map((week) => {
+      const weekNetProfitDzd = week.adjustedProfitDzd - week.adCostDzd;
+      return {
+        ...week,
+        netProfitDzd: weekNetProfitDzd,
+        trueProfitDzd: weekNetProfitDzd - week.operatingCostDzd,
+        profitX: week.adCostDzd > 0 ? week.adjustedProfitDzd / week.adCostDzd : null,
+      };
+    })
+    .sort((left, right) => right.weekStart.localeCompare(left.weekStart));
+  const projectedCoveragePct = ratio(costCompleteOrders, postedOrders);
+  return {
+    materializedFacts: true,
+    filters: {
+      range: filters.range,
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+    },
+    settings,
+    summary: {
+      spendEur: ascendingDays.reduce((sum, day) => sum + (day.spendEur ?? 0), 0),
+      impressions: 0,
+      rawAdCostDzd: ratioAdCostDzd,
+      ratioAdCostDzd,
+      grossProfitDzd,
+      adjustedProfitDzd,
+      netProfitDzd,
+      operatingCostDzd,
+      trueProfitDzd: netProfitDzd - operatingCostDzd,
+      profitX: ratioAdCostDzd > 0 ? adjustedProfitDzd / ratioAdCostDzd : null,
+      profitXBeforeReturns: ratioAdCostDzd > 0 ? grossProfitDzd / ratioAdCostDzd : null,
+      confirmedOrders: postedOrders,
+      fbPurchases: 0,
+      costPerConfirmedDzd: postedOrders > 0 ? ratioAdCostDzd / postedOrders : null,
+      confirmationRatePct: null,
+      clickToPageRatePct: null,
+      postedOrders,
+      costCompleteOrders,
+      projectedCoveragePct,
+    },
+    days: [...ascendingDays].reverse(),
+    weeks,
+    costs,
+    adsets: [],
+    adsetDailySpend: [],
+    realized: {
+      summary: {
+        settledOrders: 0,
+        amountCollectedDzd: 0,
+        netRevenueDzd: 0,
+        feesDzd: 0,
+        realizedProfitDzd: 0,
+        knownMetaAdCostDzd: 0,
+        realizedProfitAfterAdsDzd: 0,
+        metaCoveredDays: 0,
+        postedOrders,
+        settlementCoveragePct: null,
+      },
+      days: [],
+      reportThroughDate: null,
+    },
+    coverage: {
+      projectedOrders: postedOrders,
+      costCompleteOrders,
+      projectedCoveragePct,
+      settledOrders: 0,
+      settlementCoveragePct: null,
+      metaDays: ascendingDays.length,
+      pendingRollforwardDzd: 0,
+    },
+    warnings:
+      projectedCoveragePct != null && projectedCoveragePct < 95
+        ? [
+            'Some posted orders use the 30% fallback product margin because purchase-cost snapshots are incomplete.',
+          ]
+        : [],
+    freshness: {
+      metaSyncedAt: oldestRefresh ?? null,
+      settledReportThroughDate: null,
+    },
+  } as unknown as EconomicsReport;
+}
+
+export function buildEconomicsForecast(
+  report: EconomicsReport,
+  today: string,
+  horizonDays = 14,
+  leading?: Analytics2LeadingOrderForecast,
+) {
   const completed = [...report.days]
-    .filter((day) => day.date < today && day.trueProfitDzd != null)
+    .flatMap((day) => {
+      if (day.date >= today || day.isRestDay) return [];
+      const adjustedProfitDzd =
+        day.metrics?.adjustedProfitDzd ??
+        (day.postedOrders === 0 && day.metrics?.adCostDzd != null ? 0 : null);
+      const correctedTrueProfitDzd =
+        adjustedProfitDzd != null && day.metrics?.adCostDzd != null
+          ? adjustedProfitDzd - day.metrics.adCostDzd - (day.operatingCostDzd ?? 0)
+          : day.trueProfitDzd;
+      return correctedTrueProfitDzd == null
+        ? []
+        : [
+            {
+              date: day.date,
+              trueProfitDzd: correctedTrueProfitDzd,
+              postedOrders: day.postedOrders ?? 0,
+              grossProfitDzd: day.grossProfitDzd ?? null,
+              adjustedProfitDzd,
+              adCostDzd: day.metrics?.adCostDzd ?? null,
+            },
+          ];
+    })
     .reverse()
     .slice(-56);
   if (completed.length < 7) return [];
   const fallback = completed.slice(-14);
 
+  const weightedMetric = <T>(sample: T[], read: (value: T) => number | null) =>
+    weightedAverage(
+      sample.flatMap((value) => {
+        const metricValue = read(value);
+        return metricValue == null ? [] : [metricValue];
+      }),
+    );
+
+  const leadingByDate = new Map(leading?.days.map((day) => [day.date, day]) ?? []);
   return Array.from({ length: horizonDays }, (_, index) => {
     const date = addDays(today, index + 1);
     const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
+    const isConfiguredRestDay = Boolean(
+      report.settings?.restFrom && date >= report.settings.restFrom && weekday === 5,
+    );
+    if (isConfiguredRestDay) {
+      const operatingCostDzd = operatingCostForDay(date, report.costs ?? []);
+      const forecastTrueProfitDzd = operatingCostDzd === 0 ? 0 : -operatingCostDzd;
+      return {
+        date,
+        forecastGrossProfitDzd: 0,
+        forecastAdjustedProfitDzd: 0,
+        forecastAdCostDzd: 0,
+        forecastNetProfitDzd: 0,
+        forecastOperatingCostDzd: operatingCostDzd,
+        forecastTrueProfitDzd,
+        lowerTrueProfitDzd: forecastTrueProfitDzd,
+        upperTrueProfitDzd: forecastTrueProfitDzd,
+        forecastPostedOrders: 0,
+        samples: 0,
+        method: 'configured-rest-day',
+      } as const;
+    }
     const sameWeekday = completed
       .filter((day) => new Date(`${day.date}T00:00:00.000Z`).getUTCDay() === weekday)
       .slice(-8);
     const sample = sameWeekday.length >= 2 ? sameWeekday : fallback;
     const profits = sample.map((day) => day.trueProfitDzd as number);
     const orderCounts = sample.map((day) => day.postedOrders ?? 0);
-    const forecastTrueProfitDzd = weightedAverage(profits) ?? 0;
+    const baselineGrossProfitDzd = weightedMetric(sample, (day) => day.grossProfitDzd);
+    const baselineAdjustedProfitDzd = weightedMetric(sample, (day) => day.adjustedProfitDzd);
+    const baselinePostedOrders = weightedAverage(orderCounts) ?? 0;
+    const leadingDay = leadingByDate.get(date);
+    const forecastGrossProfitDzd =
+      baselineGrossProfitDzd == null
+        ? (leadingDay?.expectedGrossProfitDzd ?? null)
+        : Math.max(baselineGrossProfitDzd, leadingDay?.expectedGrossProfitDzd ?? 0);
+    const forecastAdjustedProfitDzd =
+      baselineAdjustedProfitDzd == null
+        ? (leadingDay?.expectedAdjustedProfitDzd ?? null)
+        : Math.max(baselineAdjustedProfitDzd, leadingDay?.expectedAdjustedProfitDzd ?? 0);
+    const forecastAdCostDzd = weightedMetric(sample, (day) => day.adCostDzd);
+    const forecastOperatingCostDzd = operatingCostForDay(date, report.costs ?? []);
+    const forecastNetProfitDzd =
+      forecastAdjustedProfitDzd != null && forecastAdCostDzd != null
+        ? forecastAdjustedProfitDzd - forecastAdCostDzd
+        : null;
+    const forecastTrueProfitDzd =
+      forecastNetProfitDzd != null
+        ? forecastNetProfitDzd - forecastOperatingCostDzd
+        : (weightedAverage(profits) ?? 0);
     const spread = standardDeviation(profits, forecastTrueProfitDzd);
     return {
       date,
+      forecastGrossProfitDzd,
+      forecastAdjustedProfitDzd,
+      forecastAdCostDzd,
+      forecastNetProfitDzd,
+      forecastOperatingCostDzd,
       forecastTrueProfitDzd,
       lowerTrueProfitDzd: forecastTrueProfitDzd - 1.28 * spread,
       upperTrueProfitDzd: forecastTrueProfitDzd + 1.28 * spread,
-      forecastPostedOrders: weightedAverage(orderCounts) ?? 0,
+      forecastPostedOrders: Math.max(baselinePostedOrders, leadingDay?.expectedPostedOrders ?? 0),
+      knownPipelinePostedOrders: leadingDay?.expectedPostedOrders ?? 0,
+      knownPipelineGrossProfitDzd: leadingDay?.expectedGrossProfitDzd ?? 0,
+      knownPipelineAdjustedProfitDzd: leadingDay?.expectedAdjustedProfitDzd ?? 0,
       samples: sample.length,
-      method: sameWeekday.length >= 2 ? 'weekday-weighted' : 'recent-weighted',
+      method: leadingDay
+        ? 'historical-baseline-with-pipeline-floor'
+        : sameWeekday.length >= 2
+          ? 'weekday-weighted'
+          : 'recent-weighted',
     } as const;
   });
 }
 
-async function loadEconomicsPair(db: Database, filters: Analytics2Filters) {
-  const previousInput = previousEconomicsInput(filters);
-  const [current, previous] = await Promise.all([
-    getProfitTrackerReport(economicsInput(filters.startDate, filters.endDate), { db }),
-    previousInput
-      ? getProfitTrackerReport(previousInput, { db })
+type EconomicsForecastPoint = ReturnType<typeof buildEconomicsForecast>[number];
+
+function sumForecastMetric(
+  rows: EconomicsForecastPoint[],
+  read: (row: EconomicsForecastPoint) => number | null,
+) {
+  const values = rows.map(read);
+  return values.some((value) => value == null)
+    ? null
+    : values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+}
+
+/**
+ * Replaces the misleading raw partial-bucket endpoint with a forecast of the
+ * completed bucket. Canonical actuals remain unchanged on the point itself;
+ * chart consumers opt into the `*Projected` fields for the dotted segment.
+ */
+export function projectOpenEconomicsSeries(
+  points: Analytics2EconomicsPoint[],
+  forecast: EconomicsForecastPoint[],
+  grain: Analytics2ResolvedGrain,
+) {
+  return points.map((point) => {
+    if (!point.isPartial) return point;
+    const remaining = forecast.filter((row) => bucketFor(row.date, grain) === point.bucket);
+    if (!remaining.length) return point;
+
+    const grossRemainder = sumForecastMetric(remaining, (row) => row.forecastGrossProfitDzd);
+    const adjustedRemainder = sumForecastMetric(remaining, (row) => row.forecastAdjustedProfitDzd);
+    const adCostRemainder = sumForecastMetric(remaining, (row) => row.forecastAdCostDzd);
+    const netRemainder = sumForecastMetric(remaining, (row) => row.forecastNetProfitDzd);
+    const trueProfitRemainder = sumForecastMetric(remaining, (row) => row.forecastTrueProfitDzd);
+    const add = (actual: number | null, remainder: number | null) =>
+      actual == null || remainder == null ? null : actual + remainder;
+    const grossProfitDzdProjected = add(point.grossProfitDzd, grossRemainder);
+    const adjustedProfitDzdProjected = add(point.adjustedProfitDzd, adjustedRemainder);
+    const adCostDzdProjected = add(point.adCostDzd, adCostRemainder);
+    const netProfitDzdProjected = add(point.netProfitDzd, netRemainder);
+    const trueProfitDzdProjected = add(point.trueProfitDzd, trueProfitRemainder);
+
+    return {
+      ...point,
+      grossProfitDzdProjected,
+      adjustedProfitDzdProjected,
+      adCostDzdProjected,
+      netProfitDzdProjected,
+      trueProfitDzdProjected,
+      profitXProjected:
+        adjustedProfitDzdProjected != null && adCostDzdProjected != null && adCostDzdProjected > 0
+          ? adjustedProfitDzdProjected / adCostDzdProjected
+          : null,
+      profitXBeforeReturnsProjected:
+        grossProfitDzdProjected != null && adCostDzdProjected != null && adCostDzdProjected > 0
+          ? grossProfitDzdProjected / adCostDzdProjected
+          : null,
+      cumulativeNetProfitDzdProjected: add(point.cumulativeNetProfitDzd, netRemainder),
+      cumulativeTrueProfitDzdProjected: add(point.cumulativeTrueProfitDzd, trueProfitRemainder),
+      projectionDays: remaining.length,
+    };
+  });
+}
+
+async function loadEconomicsPair(
+  db: Database,
+  filters: Analytics2Filters,
+  ...sourceStarts: Array<string | null>
+) {
+  const previousFiltersValue = previousFiltersWithCoverage(filters, ...sourceStarts);
+  const previousInput = previousFiltersValue
+    ? economicsInput(previousFiltersValue.startDate, previousFiltersValue.endDate)
+    : null;
+  const [current, previousReport] = await Promise.all([
+    loadMaterializedEconomicsReport(db, filters).then(
+      (report) =>
+        report ??
+        getProfitTrackerReport(economicsInput(filters.startDate, filters.endDate), { db }),
+    ),
+    previousInput && previousFiltersValue
+      ? loadMaterializedEconomicsReport(db, previousFiltersValue).then(
+          (report) => report ?? getProfitTrackerReport(previousInput, { db }),
+        )
       : Promise.resolve<EconomicsReport | null>(null),
   ]);
-  return { current, previous };
+  return { current, previous: previousReport };
 }
 
 function economicsMetrics(current: EconomicsReport, previous: EconomicsReport | null) {
@@ -3339,7 +4587,13 @@ function economicsMetrics(current: EconomicsReport, previous: EconomicsReport | 
       previous?.summary.adjustedProfitDzd ?? null,
       'dzd',
     ),
-    metric('adCost', current.summary.rawAdCostDzd, previous?.summary.rawAdCostDzd ?? null, 'dzd'),
+    metric(
+      'adCost',
+      current.summary.rawAdCostDzd,
+      previous?.summary.rawAdCostDzd ?? null,
+      'dzd',
+      'neutral',
+    ),
     metric(
       'postedOrders',
       current.summary.postedOrders,
@@ -3355,6 +4609,7 @@ function economicsMetrics(current: EconomicsReport, previous: EconomicsReport | 
         ? previous.summary.ratioAdCostDzd / previous.summary.postedOrders
         : null,
       'dzd',
+      'down',
     ),
   ];
 }
@@ -3431,6 +4686,16 @@ function previousFilters(filters: Analytics2Filters): Analytics2Filters | null {
   };
 }
 
+function previousFiltersWithCoverage(
+  filters: Analytics2Filters,
+  ...sourceStarts: Array<string | null>
+): Analytics2Filters | null {
+  const previous = previousFilters(filters);
+  if (!previous || !previous.startDate || sourceStarts.some((date) => date == null)) return null;
+  const coverageStart = [...(sourceStarts as string[])].sort().at(-1);
+  return coverageStart && previous.startDate >= coverageStart ? previous : null;
+}
+
 function sourceWarnings(sources: Analytics2Source[]) {
   return sources
     .filter((source) => source.state === 'missing' || source.state === 'partial')
@@ -3443,7 +4708,7 @@ function sourceWarnings(sources: Analytics2Source[]) {
 
 function economicsWarnings(report: EconomicsReport) {
   const warnings: Array<{ key: string; value?: number | null }> = [];
-  if (report.coverage.projectedCoveragePct != null && report.coverage.projectedCoveragePct < 100) {
+  if (report.coverage.projectedCoveragePct != null && report.coverage.projectedCoveragePct < 95) {
     warnings.push({ key: 'projectedCostCoverage', value: report.coverage.projectedCoveragePct });
   }
   if (report.coverage.pendingRollforwardDzd > 0) {
@@ -3455,8 +4720,38 @@ function economicsWarnings(report: EconomicsReport) {
   return warnings;
 }
 
-async function loadCommandView(db: Database, filters: Analytics2Filters, today: string) {
-  const prior = previousFilters(filters);
+async function loadCommandView(
+  db: Database,
+  filters: Analytics2Filters,
+  cutoffs: Analytics2CanonicalCutoffs,
+) {
+  const economicsFilters = clipAnalytics2Filters(
+    filters,
+    commonCutoff(cutoffs.posted, cutoffs.meta),
+    commonCoverageStart(cutoffs.postedFrom, cutoffs.metaFrom),
+  );
+  const fulfillmentFilters = clipAnalytics2Filters(
+    filters,
+    commonCutoff(cutoffs.posted, cutoffs.ecotrack),
+    commonCoverageStart(cutoffs.postedFrom, cutoffs.ecotrackFrom),
+  );
+  const storefrontFilters = clipAnalytics2Filters(
+    filters,
+    commonCutoff(cutoffs.orders, cutoffs.storefront),
+    commonCoverageStart(cutoffs.ordersFrom, cutoffs.storefrontFrom),
+  );
+  const priorFulfillment = previousFiltersWithCoverage(
+    fulfillmentFilters,
+    cutoffs.postedFrom,
+    cutoffs.ecotrackFrom,
+  );
+  const priorPaid = previousFiltersWithCoverage(fulfillmentFilters, cutoffs.paidFrom);
+  const priorStorefront = previousFiltersWithCoverage(
+    storefrontFilters,
+    cutoffs.ordersFrom,
+    cutoffs.storefrontFrom,
+  );
+  const settingsPromise = getProfitTrackerSettings(db);
   const [
     economicsPair,
     overview,
@@ -3466,30 +4761,35 @@ async function loadCommandView(db: Database, filters: Analytics2Filters, today: 
     automaticPaid,
     previousAutomaticPaid,
     cashPipeline,
+    leadingForecast,
   ] = await Promise.all([
-    loadEconomicsPair(db, filters),
-    statsDashboard(statsInput(filters.startDate, filters.endDate)),
-    prior ? statsDashboard(statsInput(prior.startDate, prior.endDate)) : Promise.resolve(null),
-    loadFulfillmentSummary(db, filters.startDate, filters.endDate),
-    prior ? loadFulfillmentSummary(db, prior.startDate, prior.endDate) : Promise.resolve(null),
-    loadAutomaticPaidEconomics(db, filters),
-    prior ? loadAutomaticPaidEconomics(db, prior) : Promise.resolve(null),
-    loadCashPipeline(db, filters),
+    loadEconomicsPair(db, economicsFilters, cutoffs.postedFrom, cutoffs.metaFrom),
+    loadStorefrontOrderConversion(db, storefrontFilters),
+    priorStorefront ? loadStorefrontOrderConversion(db, priorStorefront) : Promise.resolve(null),
+    loadFulfillmentSummary(db, fulfillmentFilters.startDate, fulfillmentFilters.endDate),
+    priorFulfillment
+      ? loadFulfillmentSummary(db, priorFulfillment.startDate, priorFulfillment.endDate)
+      : Promise.resolve(null),
+    loadAutomaticPaidEconomics(db, fulfillmentFilters),
+    priorPaid ? loadAutomaticPaidEconomics(db, priorPaid) : Promise.resolve(null),
+    loadCashPipeline(db, fulfillmentFilters),
+    settingsPromise.then((settings) => loadLeadingOrderForecast(db, fulfillmentFilters, settings)),
   ]);
   const { current, previous } = economicsPair;
   const [returns, sources] = await Promise.all([
-    loadReturnObservation(db, filters, current.settings.defaultReturnRate),
+    loadReturnObservation(db, fulfillmentFilters, current.settings.defaultReturnRate),
     loadSourceHealth(db, filters, current),
   ]);
-  const forecast = buildEconomicsForecast(current, today, 14);
+  const forecast = buildEconomicsForecast(current, economicsFilters.endDate, 14, leadingForecast);
   const forecastTrueProfitDzd = forecast
     .slice(0, 7)
     .reduce((sum, point) => sum + point.forecastTrueProfitDzd, 0);
   const paidByBucket = new Map(
-    aggregateAutomaticPaidSeries(automaticPaid, filters.resolvedGrain).map((row) => [
-      row.bucket,
-      row.profitDzd,
-    ]),
+    aggregateAutomaticPaidSeries(
+      automaticPaid,
+      filters.resolvedGrain,
+      fulfillmentFilters.endDate,
+    ).map((row) => [row.bucket, row.profitDzd]),
   );
 
   return {
@@ -3508,6 +4808,7 @@ async function loadCommandView(db: Database, filters: Analytics2Filters, today: 
           fulfillment.postedOrders,
           previousFulfillment?.postedOrders ?? null,
           'number',
+          'neutral',
         ),
         metric(
           'paidOrders',
@@ -3517,8 +4818,8 @@ async function loadCommandView(db: Database, filters: Analytics2Filters, today: 
         ),
         metric(
           'storefrontConversion',
-          overview.website.sessionConversionRate,
-          previousOverview?.website.sessionConversionRate ?? null,
+          overview.conversionRatePct,
+          previousOverview?.conversionRatePct ?? null,
           'percent',
         ),
       ],
@@ -3528,13 +4829,17 @@ async function loadCommandView(db: Database, filters: Analytics2Filters, today: 
         coverage: current.coverage,
         automaticPaid,
       },
-      trajectory: aggregateEconomicsSeries(current, filters.resolvedGrain, today).map((point) => ({
+      trajectory: projectOpenEconomicsSeries(
+        aggregateEconomicsSeries(current, filters.resolvedGrain, economicsFilters.endDate),
+        forecast,
+        filters.resolvedGrain,
+      ).map((point) => ({
         ...point,
         automaticPaidProfitDzd: paidByBucket.get(point.bucket) ?? null,
       })),
       fulfillment: {
         summary: fulfillment,
-        cashPipeline,
+        cashPipeline: withLeadingCashStages(cashPipeline, leadingForecast),
         funnel: [
           { key: 'submitted', value: fulfillment.submittedOrders },
           { key: 'confirmed', value: fulfillment.confirmedOrders },
@@ -3543,17 +4848,11 @@ async function loadCommandView(db: Database, filters: Analytics2Filters, today: 
           { key: 'paid', value: fulfillment.paidOrders },
         ],
       },
-      storefront: {
-        sessions: overview.website.sessions,
-        engagedSessions: overview.website.engagedSessions,
-        purchases: overview.website.purchases,
-        conversionRate: overview.website.sessionConversionRate,
-        trend: overview.website.trend,
-      },
       returns,
       forecast: {
         days: forecast.slice(0, 7),
         nextSevenDayTrueProfitDzd: forecastTrueProfitDzd,
+        leading: leadingForecast,
       },
       signals: buildSignals(current, returns, fulfillment),
     },
@@ -3562,21 +4861,42 @@ async function loadCommandView(db: Database, filters: Analytics2Filters, today: 
   };
 }
 
-async function loadMoneyView(db: Database, filters: Analytics2Filters, today: string) {
-  const prior = previousFilters(filters);
-  const { current, previous } = await loadEconomicsPair(db, filters);
-  const [returns, sources, automaticPaid, previousAutomaticPaid, cohorts] = await Promise.all([
-    loadReturnObservation(db, filters, current.settings.defaultReturnRate),
-    loadSourceHealth(db, filters, current),
-    loadAutomaticPaidEconomics(db, filters),
-    prior ? loadAutomaticPaidEconomics(db, prior) : Promise.resolve(null),
-    loadFulfillmentCohorts(
-      db,
-      filters.startDate,
-      filters.endDate,
-      current.settings.defaultReturnRate,
-    ),
-  ]);
+async function loadMoneyView(
+  db: Database,
+  filters: Analytics2Filters,
+  cutoffs: Analytics2CanonicalCutoffs,
+) {
+  const economicsFilters = clipAnalytics2Filters(
+    filters,
+    commonCutoff(cutoffs.posted, cutoffs.meta),
+    commonCoverageStart(cutoffs.postedFrom, cutoffs.metaFrom),
+  );
+  const fulfillmentFilters = clipAnalytics2Filters(
+    filters,
+    commonCutoff(cutoffs.posted, cutoffs.ecotrack),
+    commonCoverageStart(cutoffs.postedFrom, cutoffs.ecotrackFrom),
+  );
+  const priorFulfillment = previousFiltersWithCoverage(
+    fulfillmentFilters,
+    cutoffs.postedFrom,
+    cutoffs.ecotrackFrom,
+    cutoffs.paidFrom,
+  );
+  const { current, previous } = await loadEconomicsPair(
+    db,
+    economicsFilters,
+    cutoffs.postedFrom,
+    cutoffs.metaFrom,
+  );
+  const [sources, automaticPaid, previousAutomaticPaid, cohorts, leadingForecast] =
+    await Promise.all([
+      loadSourceHealth(db, filters, current),
+      loadAutomaticPaidEconomics(db, fulfillmentFilters),
+      priorFulfillment ? loadAutomaticPaidEconomics(db, priorFulfillment) : Promise.resolve(null),
+      loadFulfillmentCohorts(db, fulfillmentFilters.startDate, fulfillmentFilters.endDate, current),
+      loadLeadingOrderForecast(db, economicsFilters, current.settings),
+    ]);
+  const forecast = buildEconomicsForecast(current, economicsFilters.endDate, 14, leadingForecast);
   return {
     data: {
       kind: 'money' as const,
@@ -3591,19 +4911,23 @@ async function loadMoneyView(db: Database, filters: Analytics2Filters, today: st
         economicsMetrics(current, previous)[3],
         metric('paidProfitCoverage', automaticPaid.summary.profitCoveragePct, null, 'percent'),
       ],
-      summary: current.summary,
-      realized: current.realized,
-      coverage: current.coverage,
-      freshness: current.freshness,
-      settings: current.settings,
-      returns,
-      series: aggregateEconomicsSeries(current, filters.resolvedGrain, today),
+      series: projectOpenEconomicsSeries(
+        aggregateEconomicsSeries(current, filters.resolvedGrain, economicsFilters.endDate),
+        forecast,
+        filters.resolvedGrain,
+      ),
       automaticPaid,
-      paidSeries: aggregateAutomaticPaidSeries(automaticPaid, filters.resolvedGrain),
+      paidSeries: aggregateAutomaticPaidSeries(
+        automaticPaid,
+        filters.resolvedGrain,
+        fulfillmentFilters.endDate,
+      ),
       cohorts,
-      forecast: buildEconomicsForecast(current, today),
-      weeks: current.weeks,
-      days: current.days,
+      forecast,
+      weeks: current.weeks.map((week) => ({
+        ...week,
+        isPartial: economicsFilters.endDate < addDays(week.weekStart, 6),
+      })),
     },
     sources,
     warnings: [...economicsWarnings(current), ...sourceWarnings(sources)],
@@ -3657,48 +4981,99 @@ function aggregateMetaDaily(
     }));
 }
 
-async function loadAcquisitionView(db: Database, filters: Analytics2Filters, today: string) {
-  const prior = previousFilters(filters);
-  const { current, previous } = await loadEconomicsPair(db, filters);
-  const [performance, previousPerformance, diagnostics, sources, breakdowns] = await Promise.all([
-    loadMetaPerformance(db, filters, current),
-    prior && previous ? loadMetaPerformance(db, prior, previous) : Promise.resolve(null),
-    getStatsDashboardSection(statsInput(filters.startDate, filters.endDate), 'metaAds'),
-    loadSourceHealth(db, filters, current),
-    loadMetaBreakdowns(db, filters, current),
-  ]);
+async function loadAcquisitionView(
+  db: Database,
+  filters: Analytics2Filters,
+  cutoffs: Analytics2CanonicalCutoffs,
+) {
+  const performanceFilters = clipAnalytics2Filters(
+    filters,
+    commonCutoff(cutoffs.meta, cutoffs.orders, cutoffs.ecotrack),
+    commonCoverageStart(cutoffs.metaFrom, cutoffs.ordersFrom, cutoffs.ecotrackFrom),
+  );
+  const prior = previousFiltersWithCoverage(
+    performanceFilters,
+    cutoffs.metaFrom,
+    cutoffs.ordersFrom,
+    cutoffs.ecotrackFrom,
+  );
+  const { current, previous } = await loadEconomicsPair(
+    db,
+    performanceFilters,
+    cutoffs.postedFrom,
+    cutoffs.metaFrom,
+  );
+  const [performance, previousPerformance, diagnostics, sources, breakdowns, leadingForecast] =
+    await Promise.all([
+      loadMetaPerformance(db, performanceFilters, current),
+      prior && previous ? loadMetaPerformance(db, prior, previous) : Promise.resolve(null),
+      getStatsDashboardSection(
+        statsInput(performanceFilters.startDate, performanceFilters.endDate),
+        'metaAds',
+      ),
+      loadSourceHealth(db, filters, current),
+      loadMetaBreakdowns(db, performanceFilters, current),
+      loadLeadingOrderForecast(db, performanceFilters, current.settings),
+    ]);
   const summary = performance.summary;
   const old = previousPerformance?.summary;
+  const forecast = buildEconomicsForecast(current, performanceFilters.endDate, 14, leadingForecast);
+  const profitSeries = projectOpenEconomicsSeries(
+    aggregateEconomicsSeries(current, filters.resolvedGrain, performanceFilters.endDate),
+    forecast,
+    filters.resolvedGrain,
+  );
   return {
     data: {
       kind: 'acquisition' as const,
       metrics: [
-        metric('adCost', summary.adCostDzd, old?.adCostDzd ?? null, 'dzd'),
+        metric('adCost', summary.adCostDzd, old?.adCostDzd ?? null, 'dzd', 'neutral'),
         metric('profitX', current.summary.profitX, previous?.summary.profitX ?? null, 'ratio'),
-        metric('impressions', summary.impressions, old?.impressions ?? null, 'number'),
-        metric('outboundClicks', summary.outboundClicks, old?.outboundClicks ?? null, 'number'),
+        metric('impressions', summary.impressions, old?.impressions ?? null, 'number', 'neutral'),
+        metric(
+          'outboundClicks',
+          summary.outboundClicks,
+          old?.outboundClicks ?? null,
+          'number',
+          'neutral',
+        ),
         metric('postedOrders', summary.postedOrders, old?.postedOrders ?? null, 'number'),
-        metric('costPerPosted', summary.costPerPostedDzd, old?.costPerPostedDzd ?? null, 'dzd'),
+        metric(
+          'costPerPosted',
+          summary.costPerPostedDzd,
+          old?.costPerPostedDzd ?? null,
+          'dzd',
+          'down',
+        ),
         metric(
           'costPerDelivered',
           summary.costPerDeliveredDzd,
           old?.costPerDeliveredDzd ?? null,
           'dzd',
+          'down',
         ),
-        metric('costPerPaid', summary.costPerPaidDzd, old?.costPerPaidDzd ?? null, 'dzd'),
       ],
       summary,
-      entities: performance.entities,
+      entities: {
+        campaigns: performance.entities.campaigns.map(publicMetaEntity),
+        adsets: performance.entities.adsets.map(publicMetaEntity),
+        ads: performance.entities.ads.map(publicMetaEntity),
+      },
       entityDaily: performance.daily,
-      breakdowns,
-      daily: aggregateMetaDaily(performance.daily.ads),
-      profitSeries: aggregateEconomicsSeries(current, filters.resolvedGrain, today).map(
-        (point) => ({
-          bucket: point.bucket,
-          profitX: point.profitX,
-          profitXBeforeReturns: point.profitXBeforeReturns,
-        }),
-      ),
+      breakdowns: { maturation: breakdowns.maturation },
+      daily: performance.summaryDaily.map((day) => ({
+        day: day.day,
+        cpmEur: day.cpmEur,
+        outboundCtrPct: day.outboundCtrPct,
+      })),
+      profitSeries: profitSeries.map((point) => ({
+        bucket: point.bucket,
+        profitX: point.profitX,
+        profitXBeforeReturns: point.profitXBeforeReturns,
+        profitXProjected: point.profitXProjected,
+        profitXBeforeReturnsProjected: point.profitXBeforeReturnsProjected,
+        isPartial: point.isPartial,
+      })),
       funnel: [
         { key: 'impressions', value: summary.impressions },
         { key: 'outboundClicks', value: summary.outboundClicks },
@@ -3720,9 +5095,6 @@ async function loadAcquisitionView(db: Database, filters: Analytics2Filters, tod
       },
       trackingHealth: {
         events: diagnostics.metaAds.events,
-        health: diagnostics.metaAds.health ?? null,
-        recentPayloads: diagnostics.metaAds.recentPayloads,
-        paidAttribution: diagnostics.metaAds.paidAttribution,
       },
       sync: {
         canSyncActiveRange:
@@ -3735,18 +5107,33 @@ async function loadAcquisitionView(db: Database, filters: Analytics2Filters, tod
   };
 }
 
-async function loadFulfillmentView(db: Database, filters: Analytics2Filters) {
-  const prior = previousFilters(filters);
-  const economics = await getProfitTrackerReport(
-    economicsInput(filters.startDate, filters.endDate),
-    { db },
+async function loadFulfillmentView(
+  db: Database,
+  filters: Analytics2Filters,
+  cutoffs: Analytics2CanonicalCutoffs,
+) {
+  const operationalFilters = clipAnalytics2Filters(
+    filters,
+    commonCutoff(cutoffs.posted, cutoffs.ecotrack),
+    commonCoverageStart(cutoffs.postedFrom, cutoffs.ecotrackFrom),
   );
+  const prior = previousFiltersWithCoverage(
+    operationalFilters,
+    cutoffs.postedFrom,
+    cutoffs.ecotrackFrom,
+  );
+  const economics =
+    (await loadMaterializedEconomicsReport(db, operationalFilters)) ??
+    (await getProfitTrackerReport(
+      economicsInput(operationalFilters.startDate, operationalFilters.endDate),
+      { db },
+    ));
   const [fulfillment, previousSummary] = await Promise.all([
-    loadFulfillmentData(db, filters, economics.settings.defaultReturnRate),
+    loadFulfillmentData(db, operationalFilters, economics),
     prior ? loadFulfillmentSummary(db, prior.startDate, prior.endDate) : Promise.resolve(null),
   ]);
   const [returns, sources] = await Promise.all([
-    loadReturnObservation(db, filters, economics.settings.defaultReturnRate),
+    loadReturnObservation(db, operationalFilters, economics.settings.defaultReturnRate),
     loadSourceHealth(db, filters, economics),
   ]);
   return {
@@ -3764,6 +5151,7 @@ async function loadFulfillmentView(db: Database, filters: Analytics2Filters) {
           fulfillment.summary.activeShipments,
           previousSummary?.activeShipments ?? null,
           'number',
+          'neutral',
         ),
         metric(
           'paidOrders',
@@ -3771,7 +5159,6 @@ async function loadFulfillmentView(db: Database, filters: Analytics2Filters) {
           previousSummary?.paidOrders ?? null,
           'number',
         ),
-        metric('observedReturnRate', returns.mature.ratePct, null, 'percent'),
       ],
       ...fulfillment,
       returns,
@@ -3782,12 +5169,29 @@ async function loadFulfillmentView(db: Database, filters: Analytics2Filters) {
   };
 }
 
-async function loadStorefrontView(db: Database, filters: Analytics2Filters, now: Date) {
-  const prior = previousStatsInput(filters);
-  const [dashboard, previous, paths, sources] = await Promise.all([
-    statsDashboard(statsInput(filters.startDate, filters.endDate)),
-    prior ? statsDashboard(prior) : Promise.resolve(null),
-    loadStorefrontPaths(db, filters, now),
+async function loadStorefrontView(
+  db: Database,
+  filters: Analytics2Filters,
+  now: Date,
+  cutoffs: Analytics2CanonicalCutoffs,
+) {
+  const storefrontFilters = clipAnalytics2Filters(
+    filters,
+    commonCutoff(cutoffs.orders, cutoffs.storefront),
+    commonCoverageStart(cutoffs.ordersFrom, cutoffs.storefrontFrom),
+  );
+  const priorFilters = previousFiltersWithCoverage(
+    storefrontFilters,
+    cutoffs.ordersFrom,
+    cutoffs.storefrontFrom,
+  );
+  const prior = priorFilters ? statsInput(priorFilters.startDate, priorFilters.endDate) : null;
+  const pathCoverage = storefrontPathCoverage(storefrontFilters, now);
+  const [dashboard, previous, sources] = await Promise.all([
+    getLiveStorefrontAnalytics(statsInput(storefrontFilters.startDate, storefrontFilters.endDate), {
+      includeExperience: false,
+    }),
+    prior ? getLiveStorefrontAnalytics(prior, { includeExperience: false }) : Promise.resolve(null),
     loadSourceHealth(db, filters),
   ]);
   const website = dashboard.website;
@@ -3796,8 +5200,8 @@ async function loadStorefrontView(db: Database, filters: Analytics2Filters, now:
     data: {
       kind: 'storefront' as const,
       metrics: [
-        metric('sessions', website.sessions, old?.sessions ?? null, 'number'),
-        metric('engagementRate', website.engagementRate, old?.engagementRate ?? null, 'percent'),
+        metric('sessions', website.sessions, old?.sessions ?? null, 'number', 'neutral'),
+        metric('engagementRate', null, null, 'percent'),
         metric('purchases', website.purchases, old?.purchases ?? null, 'number'),
         metric(
           'conversionRate',
@@ -3805,13 +5209,8 @@ async function loadStorefrontView(db: Database, filters: Analytics2Filters, now:
           old?.sessionConversionRate ?? null,
           'percent',
         ),
-        metric('errorRate', website.errorRate, old?.errorRate ?? null, 'percent'),
-        metric(
-          'returningJourneys',
-          website.returningJourneys,
-          old?.returningJourneys ?? null,
-          'number',
-        ),
+        metric('errorRate', null, null, 'percent', 'down'),
+        metric('returningJourneys', null, null, 'number', 'neutral'),
       ],
       summary: {
         sessions: website.sessions,
@@ -3827,39 +5226,190 @@ async function loadStorefrontView(db: Database, filters: Analytics2Filters, now:
         returningJourneys: website.returningJourneys,
         errorEvents: website.errorEvents,
       },
-      funnel: website.funnel,
-      trend: website.trend,
+      funnel: [],
+      trend: [],
       searches: website.topSearches,
       productInterest: website.topProducts,
-      pageTypes: website.pageTypes,
       acquisitionSources: website.acquisitionSources,
-      locales: website.locales,
-      devices: website.devices,
       vitals: website.vitals,
-      paths,
-      landingPages: dashboard.landingPages,
-      aiAssistant: dashboard.aiAssistants.storefront,
+      paths: { ...pathCoverage, rows: [] },
+      landingPages: {
+        summary: dashboard.landingPages.summary,
+        pages: dashboard.landingPages.pages.slice(0, 50),
+      },
+      aiAssistant: {
+        opens: dashboard.aiAssistants.storefront.opens,
+        messages: dashboard.aiAssistants.storefront.messages,
+        resultClicks: dashboard.aiAssistants.storefront.resultClicks,
+        influencedOrders: dashboard.aiAssistants.storefront.influencedOrders,
+        confirmedOrders: dashboard.aiAssistants.storefront.confirmedOrders,
+        paidOrders: dashboard.aiAssistants.storefront.paidOrders,
+      },
     },
     sources,
-    warnings: [
-      ...(paths.coverageIsPartial
-        ? [{ key: 'pathRetentionPartial', value: paths.coverageStartDate }]
-        : []),
-      ...sourceWarnings(sources),
-    ],
+    warnings: [],
   };
 }
 
-async function loadCatalogView(db: Database, filters: Analytics2Filters) {
-  const prior = previousStatsInput(filters);
-  const previousAnalytics = previousFilters(filters);
-  const economics = await getProfitTrackerReport(
-    economicsInput(filters.startDate, filters.endDate),
-    { db },
+export type Analytics2StorefrontDetails = {
+  metrics: Analytics2Metric[];
+  funnel: Array<{ name: string; value: number }>;
+  paths: Awaited<ReturnType<typeof loadStorefrontPaths>>;
+  trend: Awaited<ReturnType<typeof getLiveStorefrontAnalytics>>['website']['trend'];
+  acquisitionSources: Awaited<
+    ReturnType<typeof getLiveStorefrontAnalytics>
+  >['website']['acquisitionSources'];
+  vitals: Awaited<ReturnType<typeof getLiveStorefrontAnalytics>>['website']['vitals'];
+  landingPages: {
+    summary: Awaited<ReturnType<typeof getLiveStorefrontAnalytics>>['landingPages']['summary'];
+    pages: Awaited<ReturnType<typeof getLiveStorefrontAnalytics>>['landingPages']['pages'];
+  };
+  aiAssistant: Pick<
+    Awaited<ReturnType<typeof getLiveStorefrontAnalytics>>['aiAssistants']['storefront'],
+    'opens' | 'messages' | 'resultClicks' | 'influencedOrders' | 'confirmedOrders' | 'paidOrders'
+  >;
+};
+
+function storefrontDetails(
+  dashboard: Awaited<ReturnType<typeof getLiveStorefrontAnalytics>>,
+  filters: Analytics2Filters,
+  paths: Awaited<ReturnType<typeof loadStorefrontPaths>>,
+  funnel: Array<{ name: string; value: number }>,
+): Analytics2StorefrontDetails {
+  const rawExperienceCovered =
+    filters.startDate != null && inclusiveDays(filters.startDate, filters.endDate) <= 7;
+  return {
+    metrics: [
+      metric(
+        'engagementRate',
+        rawExperienceCovered ? dashboard.website.engagementRate : null,
+        null,
+        'percent',
+      ),
+      metric(
+        'errorRate',
+        rawExperienceCovered ? dashboard.website.errorRate : null,
+        null,
+        'percent',
+        'down',
+      ),
+      metric(
+        'returningJourneys',
+        rawExperienceCovered ? dashboard.website.returningJourneys : null,
+        null,
+        'number',
+        'neutral',
+      ),
+    ],
+    funnel,
+    paths,
+    trend: dashboard.website.trend,
+    acquisitionSources: dashboard.website.acquisitionSources,
+    vitals: dashboard.website.vitals,
+    landingPages: {
+      summary: dashboard.landingPages.summary,
+      pages: dashboard.landingPages.pages.slice(0, 50),
+    },
+    aiAssistant: {
+      opens: dashboard.aiAssistants.storefront.opens,
+      messages: dashboard.aiAssistants.storefront.messages,
+      resultClicks: dashboard.aiAssistants.storefront.resultClicks,
+      influencedOrders: dashboard.aiAssistants.storefront.influencedOrders,
+      confirmedOrders: dashboard.aiAssistants.storefront.confirmedOrders,
+      paidOrders: dashboard.aiAssistants.storefront.paidOrders,
+    },
+  };
+}
+
+export async function getAnalytics2StorefrontDetails(
+  query: Analytics2Query,
+  options: { db?: Database; now?: Date } = {},
+) {
+  const db = options.db ?? getDb();
+  const wallNow = options.now ?? new Date();
+  const reviewSetting = options.now ? undefined : process.env.STATS_REVIEW_CLOCK;
+  const cutoffDate = reviewSetting ? await loadDatasetCutoffDate(db) : null;
+  const clock = resolveAnalytics2ReferenceNow(reviewSetting, cutoffDate, wallNow);
+  const effectiveQuery = clock.reviewClock
+    ? clampQueryToReference({ ...query, view: 'storefront' }, clock.referenceDate)
+    : { ...query, view: 'storefront' as const };
+  const filters = resolveAnalytics2Filters(effectiveQuery, clock.now);
+  const cutoffs = await loadCanonicalCutoffs(db);
+  const storefrontFilters = clipAnalytics2Filters(
+    filters,
+    commonCutoff(cutoffs.orders, cutoffs.storefront),
+    commonCoverageStart(cutoffs.ordersFrom, cutoffs.storefrontFrom),
+  );
+  const pathCoverage = storefrontPathCoverage(storefrontFilters, clock.now);
+  const [dashboard, paths, funnel] = await Promise.all([
+    getLiveStorefrontAnalytics(statsInput(storefrontFilters.startDate, storefrontFilters.endDate)),
+    loadStorefrontPaths(db, storefrontFilters, clock.now),
+    pathCoverage.coverageStartDate <= pathCoverage.coverageEndDate
+      ? loadStorefrontSessionFunnel(
+          db,
+          pathCoverage.coverageStartDate,
+          pathCoverage.coverageEndDate,
+        )
+      : Promise.resolve([]),
+  ]);
+  return {
+    data: storefrontDetails(dashboard, storefrontFilters, paths, funnel),
+    generatedAt: clock.now.toISOString(),
+  };
+}
+
+async function loadCatalogOperationalSummary(db: Database, filters: Analytics2Filters) {
+  const result = await db.execute(sql`
+    with first_posted as (
+      select distinct on (${orderStatusHistory.orderId})
+        ${orderStatusHistory.orderId} as order_id,
+        (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day
+      from ${orderStatusHistory}
+      where ${orderStatusHistory.status} = 11
+      order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
+    )
+    select coalesce(sum(${orderLineItems.quantity}), 0)::int as posted_units,
+      coalesce(sum(${orderLineItems.quantity}) filter (
+        where ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
+      ), 0)::int as paid_units
+    from first_posted
+    inner join ${orderLineItems} on ${orderLineItems.orderId} = first_posted.order_id
+    left join ${ecotrackOrderStates}
+      on ${ecotrackOrderStates.orderId} = first_posted.order_id
+      and ${ecotrackOrderStates.deletedAt} is null
+    where ${datePredicate(sql`first_posted.posted_day`, filters.startDate, filters.endDate)}
+  `);
+  const row = (result.rows[0] ?? {}) as Record<string, unknown>;
+  return { postedUnits: numeric(row.posted_units), paidUnits: numeric(row.paid_units) };
+}
+
+async function loadCatalogView(
+  db: Database,
+  filters: Analytics2Filters,
+  cutoffs: Analytics2CanonicalCutoffs,
+) {
+  const catalogFilters = clipAnalytics2Filters(
+    filters,
+    commonCutoff(cutoffs.posted, cutoffs.ecotrack),
+    commonCoverageStart(cutoffs.postedFrom, cutoffs.ecotrackFrom),
+  );
+  const storefrontFilters = clipAnalytics2Filters(
+    filters,
+    commonCutoff(cutoffs.orders, cutoffs.storefront),
+    commonCoverageStart(cutoffs.ordersFrom, cutoffs.storefrontFrom),
+  );
+  const previousAnalytics = previousFiltersWithCoverage(
+    catalogFilters,
+    cutoffs.postedFrom,
+    cutoffs.ecotrackFrom,
+  );
+  const { current: economics, previous: previousEconomics } = await loadEconomicsPair(
+    db,
+    catalogFilters,
+    cutoffs.postedFrom,
   );
   const [
-    dashboard,
-    previous,
+    websiteProducts,
     basketPairs,
     sources,
     operationalProducts,
@@ -3868,50 +5418,37 @@ async function loadCatalogView(db: Database, filters: Analytics2Filters) {
     operationalCommunes,
     productMetaAssociations,
     customerEconomics,
+    previousCustomerEconomics,
     metaRegions,
+    operationalSummary,
+    previousOperationalSummary,
   ] = await Promise.all([
-    statsDashboard(statsInput(filters.startDate, filters.endDate)),
-    prior ? statsDashboard(prior) : Promise.resolve(null),
-    loadBasketPairs(db, filters),
+    getLiveWebsiteProductMetrics(
+      statsInput(storefrontFilters.startDate, storefrontFilters.endDate),
+    ),
+    loadBasketPairs(db, catalogFilters),
     loadSourceHealth(db, filters),
-    loadOperationalProducts(db, filters, economics.settings.defaultReturnRate),
+    loadOperationalProducts(db, catalogFilters, economics.settings.defaultReturnRate),
     previousAnalytics
       ? loadOperationalProducts(db, previousAnalytics, economics.settings.defaultReturnRate)
       : Promise.resolve([] as OperationalProductRow[]),
-    loadOperationalGeography(db, filters),
-    loadOperationalCommunes(db, filters),
-    loadProductMetaAssociations(db, filters),
-    loadCustomerEconomics(db, filters, economics.settings.fxRate),
-    loadMetaRegions(db, filters),
+    loadOperationalGeography(db, catalogFilters),
+    loadOperationalCommunes(db, catalogFilters),
+    loadProductMetaAssociations(db, catalogFilters),
+    loadCustomerEconomics(db, catalogFilters, economics.settings.fxRate),
+    previousAnalytics
+      ? loadCustomerEconomics(db, previousAnalytics, economics.settings.fxRate)
+      : Promise.resolve(null),
+    loadMetaRegions(db, catalogFilters),
+    loadCatalogOperationalSummary(db, catalogFilters),
+    previousAnalytics
+      ? loadCatalogOperationalSummary(db, previousAnalytics)
+      : Promise.resolve(null),
   ]);
-  type CatalogProduct = {
-    id: string;
-    title: string;
-    unitsSold: number;
-    revenue: number;
-    cost: number;
-    profit: number;
-    margin: number;
-    sku: string | null;
-    categoryName: string | null;
-    brandName: string | null;
-    totalOrderCount?: number;
-    confirmedOrderCount?: number;
-    confirmationRate?: number | null;
-    viewCount?: number;
-    addToCartCount?: number;
-    checkoutCount?: number;
-    websitePurchaseCount?: number;
-    popularityScore?: number;
-    websiteConversionRate?: number;
-  };
-  const currentProducts = dashboard.allProducts as CatalogProduct[];
-  const oldProducts = (previous?.allProducts ?? []) as CatalogProduct[];
+  const currentWebsiteProducts = websiteProducts as LiveWebsiteProductMetric[];
   const currentOperationalProducts = operationalProducts as OperationalProductRow[];
   const oldOperationalProducts = previousOperationalProducts as OperationalProductRow[];
-  const currentOperationalGeography = operationalGeography as OperationalGeographyRow[];
-  const settledProducts = new Map(currentProducts.map((row) => [row.id, row]));
-  const oldSettledProducts = new Map(oldProducts.map((row) => [row.id, row]));
+  const websiteByProduct = new Map(currentWebsiteProducts.map((row) => [String(row.id), row]));
   const previousOperational = new Map<string, OperationalProductRow>(
     oldOperationalProducts.map((row) => [row.id, row]),
   );
@@ -3921,8 +5458,8 @@ async function loadCatalogView(db: Database, filters: Analytics2Filters) {
     if (rows.length < 5) rows.push(association);
     metaByProduct.set(association.productId, rows);
   }
-  const fallbackOperational: OperationalProductRow[] = currentProducts.map((row) => ({
-    id: row.id,
+  const fallbackOperational: OperationalProductRow[] = currentWebsiteProducts.map((row) => ({
+    id: String(row.id),
     title: row.title,
     sku: row.sku,
     categoryName: row.categoryName,
@@ -3945,121 +5482,75 @@ async function loadCatalogView(db: Database, filters: Analytics2Filters) {
   )
     .slice(0, 100)
     .map((operational) => {
-      const settled = settledProducts.get(operational.id);
+      const website = websiteByProduct.get(operational.id);
       const oldOperational = previousOperational.get(operational.id);
-      const oldSettled = oldSettledProducts.get(operational.id);
       return {
         id: operational.id,
         title: operational.title,
-        sku: operational.sku ?? settled?.sku ?? null,
-        categoryName: operational.categoryName ?? settled?.categoryName ?? null,
-        brandName: operational.brandName ?? settled?.brandName ?? null,
+        sku: operational.sku ?? website?.sku ?? null,
+        categoryName: operational.categoryName ?? website?.categoryName ?? null,
+        brandName: operational.brandName ?? website?.brandName ?? null,
         postedOrders: operational.postedOrders,
         postedUnits: operational.postedUnits,
         paidOrders: operational.paidOrders,
-        paidUnits: operational.paidUnits,
         returnedOrders: operational.returnedOrders,
         activeOrders: operational.activeOrders,
         terminalPaidRatePct: operational.terminalPaidRatePct,
         costCoveragePct: operational.costCoveragePct,
         projectedContributionDzd: operational.projectedContributionDzd,
         deliveryMedianHours: operational.deliveryMedianHours,
-        paymentMedianHours: operational.paymentMedianHours,
-        deliverySamples: operational.deliverySamples,
         metaAssociations: metaByProduct.get(operational.id) ?? [],
-        unitsSold: settled?.unitsSold ?? 0,
-        revenue: settled?.revenue ?? 0,
-        cost: settled?.cost ?? 0,
-        profit: settled?.profit ?? 0,
-        settledProfitDzd: settled?.profit ?? null,
-        margin: settled?.margin ?? null,
-        confirmationRate: settled?.confirmationRate ?? null,
-        viewCount: settled?.viewCount ?? 0,
-        addToCartCount: settled?.addToCartCount ?? 0,
-        checkoutCount: settled?.checkoutCount ?? 0,
-        websitePurchaseCount: settled?.websitePurchaseCount ?? 0,
-        popularityScore: settled?.popularityScore ?? 0,
-        websiteConversionRate: settled?.websiteConversionRate ?? 0,
+        viewCount: website?.viewCount ?? 0,
+        websiteConversionRate: website?.websiteConversionRate ?? 0,
         changes: {
           unitsPct: metricChange(operational.postedUnits, oldOperational?.postedUnits ?? null),
-          profitPct: metricChange(settled?.profit ?? null, oldSettled?.profit ?? null),
-          conversionPct: metricChange(
-            settled?.websiteConversionRate ?? null,
-            oldSettled?.websiteConversionRate ?? null,
-          ),
         },
       };
     });
-  const settledGeography = new Map(
-    dashboard.wilayaDetails.map((row: { name: string }) => [row.name, row]),
-  );
-  const geography = currentOperationalGeography.map((row) => {
-    const settled = settledGeography.get(row.name) as
-      { orders?: number; profit?: number; revenue?: number; avgOrder?: number } | undefined;
-    return {
-      ...row,
-      orders: row.postedOrders,
-      profit: settled?.profit ?? null,
-      settledOrders: settled?.orders ?? 0,
-      settledRevenueDzd: settled?.revenue ?? null,
-      avgOrder: settled?.avgOrder ?? null,
-    };
-  });
+  const geography = operationalGeography as OperationalGeographyRow[];
   return {
     data: {
       kind: 'catalog' as const,
       metrics: [
         metric(
           'postedUnits',
-          currentOperationalProducts.reduce((sum, row) => sum + row.postedUnits, 0),
-          previousAnalytics
-            ? oldOperationalProducts.reduce((sum, row) => sum + row.postedUnits, 0)
-            : null,
+          operationalSummary.postedUnits,
+          previousOperationalSummary?.postedUnits ?? null,
           'number',
         ),
         metric(
           'paidUnits',
-          currentOperationalProducts.reduce((sum, row) => sum + row.paidUnits, 0),
-          previousAnalytics
-            ? oldOperationalProducts.reduce((sum, row) => sum + row.paidUnits, 0)
-            : null,
+          operationalSummary.paidUnits,
+          previousOperationalSummary?.paidUnits ?? null,
           'number',
         ),
         metric(
-          'productProfit',
-          products.reduce((sum, row) => sum + (row.settledProfitDzd ?? 0), 0),
-          previous ? oldProducts.reduce((sum, row) => sum + row.profit, 0) : null,
+          'adjustedProfit',
+          economics.summary.adjustedProfitDzd,
+          previousEconomics?.summary.adjustedProfitDzd ?? null,
           'dzd',
         ),
         metric(
           'customers',
           customerEconomics.summary.customers,
-          previous?.customers.summary.customers ?? null,
+          previousCustomerEconomics?.summary.customers ?? null,
           'number',
         ),
         metric(
           'repeatRate',
           customerEconomics.summary.repeatRate,
-          previous?.customers.summary.repeatRate ?? null,
+          previousCustomerEconomics?.summary.repeatRate ?? null,
           'percent',
         ),
       ],
       products,
-      categories: dashboard.topCategories,
-      brands: dashboard.topBrands,
       basketPairs,
       geography: {
         wilayas: geography,
         communes: operationalCommunes,
         metaRegions,
-        deliveries: dashboard.deliveries,
       },
       customers: customerEconomics,
-      sourceSemantics: {
-        financials: 'settlement reference',
-        demand: 'storefront',
-        orders: 'posted cohort',
-      },
     },
     sources,
     warnings: [...sourceWarnings(sources)],
@@ -4070,25 +5561,33 @@ function costIsActiveOn(cost: EconomicsReport['costs'][number], date: string) {
   return cost.startDate <= date && (!cost.endDate || cost.endDate >= date);
 }
 
-async function loadAssumptionsView(db: Database, filters: Analytics2Filters) {
+async function loadAssumptionsView(
+  db: Database,
+  filters: Analytics2Filters,
+  cutoffs: Analytics2CanonicalCutoffs,
+) {
+  const economicsFilters = clipAnalytics2Filters(
+    filters,
+    commonCutoff(cutoffs.posted, cutoffs.meta),
+    commonCoverageStart(cutoffs.postedFrom, cutoffs.metaFrom),
+  );
   const economics = await getProfitTrackerReport(
-    economicsInput(filters.startDate, filters.endDate),
+    economicsInput(economicsFilters.startDate, economicsFilters.endDate),
     { db },
   );
-  const [returns, delta, sources] = await Promise.all([
-    loadReturnObservation(db, filters, economics.settings.defaultReturnRate),
-    loadAutomationDelta(db, filters),
+  const [returns, sources] = await Promise.all([
+    loadReturnObservation(db, economicsFilters, economics.settings.defaultReturnRate),
     loadSourceHealth(db, filters, economics),
   ]);
   const activeMonthlyBurnDzd = economics.costs
-    .filter((cost) => cost.period === 'monthly' && costIsActiveOn(cost, filters.endDate))
+    .filter((cost) => cost.period === 'monthly' && costIsActiveOn(cost, economicsFilters.endDate))
     .reduce((sum, cost) => sum + cost.amountDzd, 0);
   const oneTimeCostsDzd = economics.costs
     .filter(
       (cost) =>
         cost.period === 'once' &&
-        (!filters.startDate || cost.startDate >= filters.startDate) &&
-        cost.startDate <= filters.endDate,
+        (!economicsFilters.startDate || cost.startDate >= economicsFilters.startDate) &&
+        cost.startDate <= economicsFilters.endDate,
     )
     .reduce((sum, cost) => sum + cost.amountDzd, 0);
   return {
@@ -4114,7 +5613,6 @@ async function loadAssumptionsView(db: Database, filters: Analytics2Filters) {
         oneTimeCostsDzd,
       },
       days: economics.days,
-      automationDelta: delta,
       formula: {
         adCost: 'metaSpendEur * fxRateUsed',
         adjustedProfit: 'grossProfitDzd * (1 - returnRatePct / 100)',
@@ -4128,8 +5626,37 @@ async function loadAssumptionsView(db: Database, filters: Analytics2Filters) {
   };
 }
 
+export function finalizeSearchFilters(
+  filters: Analytics2Filters,
+  availableThroughDate: string | null,
+): Analytics2Filters {
+  const finalizedEndDate =
+    availableThroughDate && availableThroughDate < filters.endDate
+      ? availableThroughDate
+      : filters.endDate;
+  const hasFinalizedWindow = !filters.startDate || filters.startDate <= finalizedEndDate;
+  const finalizedDays =
+    filters.startDate && hasFinalizedWindow
+      ? inclusiveDays(filters.startDate, finalizedEndDate)
+      : null;
+  const finalizedComparisonEndDate =
+    filters.startDate && hasFinalizedWindow ? addDays(filters.startDate, -1) : null;
+  const finalizedComparisonStartDate =
+    finalizedDays && finalizedComparisonEndDate
+      ? addDays(finalizedComparisonEndDate, -(finalizedDays - 1))
+      : null;
+  return {
+    ...filters,
+    endDate: finalizedEndDate,
+    comparisonStartDate: finalizedComparisonStartDate,
+    comparisonEndDate: finalizedComparisonEndDate,
+  };
+}
+
 async function loadSearchView(db: Database, filters: Analytics2Filters) {
-  const search = await loadSearchAnalytics(db, filters);
+  const availableThroughDate = await loadSearchThroughDate(db, filters.endDate);
+  const searchFilters = finalizeSearchFilters(filters, availableThroughDate);
+  const search = await loadSearchAnalytics(db, searchFilters);
   const previous = search.metrics.previous;
   const throughDate = search.source.throughDate;
   const lagDays = throughDate
@@ -4229,41 +5756,41 @@ export async function getAnalytics2Data(
   const startedAt = performance.now();
   const db = options.db ?? getDb();
   const wallNow = options.now ?? new Date();
-  const reviewSetting = options.now ? undefined : process.env.ANALYTICS2_REVIEW_CLOCK;
-  const cutoffDate = reviewSetting
-    ? await loadDatasetCutoffDate(db, query.view ?? 'command')
-    : null;
+  const reviewSetting = options.now ? undefined : process.env.STATS_REVIEW_CLOCK;
+  const cutoffDate = reviewSetting ? await loadDatasetCutoffDate(db) : null;
   const clock = resolveAnalytics2ReferenceNow(reviewSetting, cutoffDate, wallNow);
   const now = clock.now;
-  const effectiveQuery = clock.reviewClock ? clampQueryToReference(query, clock.referenceDate) : query;
+  const effectiveQuery = clock.reviewClock
+    ? clampQueryToReference(query, clock.referenceDate)
+    : query;
   const filters = resolveAnalytics2Filters(effectiveQuery, now);
-  const today = dayInTimezone(now);
+  const cutoffs = filters.view === 'search' ? null : await loadCanonicalCutoffs(db);
   let loaded: LoadedAnalytics2Section;
 
   switch (filters.view) {
     case 'money':
-      loaded = await loadMoneyView(db, filters, today);
+      loaded = await loadMoneyView(db, filters, cutoffs!);
       break;
     case 'acquisition':
-      loaded = await loadAcquisitionView(db, filters, today);
+      loaded = await loadAcquisitionView(db, filters, cutoffs!);
       break;
     case 'fulfillment':
-      loaded = await loadFulfillmentView(db, filters);
+      loaded = await loadFulfillmentView(db, filters, cutoffs!);
       break;
     case 'storefront':
-      loaded = await loadStorefrontView(db, filters, now);
+      loaded = await loadStorefrontView(db, filters, now, cutoffs!);
       break;
     case 'search':
       loaded = await loadSearchView(db, filters);
       break;
     case 'catalog':
-      loaded = await loadCatalogView(db, filters);
+      loaded = await loadCatalogView(db, filters, cutoffs!);
       break;
     case 'assumptions':
-      loaded = await loadAssumptionsView(db, filters);
+      loaded = await loadAssumptionsView(db, filters, cutoffs!);
       break;
     case 'command':
-      loaded = await loadCommandView(db, filters, today);
+      loaded = await loadCommandView(db, filters, cutoffs!);
       break;
   }
 
@@ -4274,8 +5801,18 @@ export async function getAnalytics2Data(
     referenceDate: clock.referenceDate,
     reviewClock: clock.reviewClock,
     data: loaded.data,
-    sources: loaded.sources,
-    warnings: loaded.warnings,
+    sources: clock.reviewClock
+      ? loaded.sources.map((source: Analytics2Source) => ({
+          ...source,
+          state:
+            source.state === 'manual' || source.state === 'missing'
+              ? source.state
+              : ('current' as const),
+        }))
+      : loaded.sources,
+    warnings: clock.reviewClock
+      ? loaded.warnings.filter((warning) => warning.key !== 'sourcePartial')
+      : loaded.warnings,
     diagnostics: {
       queryDurationMs: Math.round(performance.now() - startedAt),
       responseSizeBytes: 0,

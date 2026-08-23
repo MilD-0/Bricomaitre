@@ -20,6 +20,7 @@ import {
   startProductCatalogFeedRefreshJob,
   startProductExportJob,
 } from './background-jobs';
+import { hasPermission, type PermissionKey } from './permissions';
 
 export const ADMIN_BACKGROUND_JOB_TYPES = [
   'ai_categorization',
@@ -48,6 +49,20 @@ export const STARTABLE_ADMIN_BACKGROUND_JOB_TYPES = [
 
 export type StartableAdminBackgroundJobType = (typeof STARTABLE_ADMIN_BACKGROUND_JOB_TYPES)[number];
 
+export const ADMIN_BACKGROUND_JOB_PERMISSION: Record<AdminBackgroundJobType, PermissionKey> = {
+  ai_categorization: 'products_write',
+  ai_content: 'products_write',
+  product_export: 'products_write',
+  catalog_feed_refresh: 'products_write',
+  order_export: 'orders_write',
+  order_ecotrack: 'orders_write',
+  stats_import: 'analytics_manage',
+  ad_cost_import: 'analytics_manage',
+  reporting_refresh: 'analytics_manage',
+  ecotrack_catalog_sync: 'ops_view',
+  ecotrack_shipment_sync: 'ops_view',
+};
+
 const CANCELLABLE_ADMIN_BACKGROUND_JOB_TYPES = [
   'ai_categorization',
   'ai_content',
@@ -71,20 +86,35 @@ const queueByType: Record<AdminBackgroundJobType, string> = {
   ecotrack_shipment_sync: ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE,
 };
 
-const allAdminQueues = [...new Set(Object.values(queueByType))];
 const cancellableTypes = new Set<AdminBackgroundJobType>(CANCELLABLE_ADMIN_BACKGROUND_JOB_TYPES);
 const typeByQueue = new Map(
   Object.entries(queueByType).map(([type, queue]) => [queue, type as AdminBackgroundJobType]),
 );
 
-export async function listAdminBackgroundJobs(limit = 30) {
-  return (await listRecentBackgroundJobs(allAdminQueues, limit)).map((job) => {
+export function allowedAdminBackgroundJobTypes(permissions: readonly PermissionKey[]) {
+  return ADMIN_BACKGROUND_JOB_TYPES.filter((type) =>
+    hasPermission(permissions, ADMIN_BACKGROUND_JOB_PERMISSION[type]),
+  );
+}
+
+export function allowedStartableAdminBackgroundJobTypes(permissions: readonly PermissionKey[]) {
+  const allowed = new Set(allowedAdminBackgroundJobTypes(permissions));
+  return STARTABLE_ADMIN_BACKGROUND_JOB_TYPES.filter((type) => allowed.has(type));
+}
+
+export async function listAdminBackgroundJobs(
+  limit = 30,
+  types: readonly AdminBackgroundJobType[] = ADMIN_BACKGROUND_JOB_TYPES,
+) {
+  const allowedTypes = new Set(types);
+  const queues = [...new Set(types.map((type) => queueByType[type]))];
+  if (queues.length === 0) return [];
+
+  return (await listRecentBackgroundJobs(queues, limit)).flatMap((job) => {
     const type = typeByQueue.get(job.queue);
-    return {
-      ...job,
-      type,
-      cancellable: type ? cancellableTypes.has(type) : false,
-    };
+    return type && allowedTypes.has(type)
+      ? [{ ...job, type, cancellable: cancellableTypes.has(type) }]
+      : [];
   });
 }
 

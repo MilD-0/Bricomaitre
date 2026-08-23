@@ -40,6 +40,7 @@ const navigationEventNameSchema = z.enum([
   'ai_assistant_open',
   'ai_assistant_message',
   'ai_assistant_result_click',
+  'ai_assistant_feedback',
   'ai_assistant_error',
 ]);
 
@@ -110,56 +111,48 @@ const catalogEventInputSchema = z.object({
   metadata: productEventInputSchema.shape.metadata,
 });
 
-const navigationEventInputSchema = z
-  .object({
-    eventName: navigationEventNameSchema,
-    locale: z.enum(['fr', 'ar']),
-    productId: z.number().int().positive().nullable().default(null),
-    productSlug: z.string().trim().min(1).max(180).nullable().default(null),
-    categoryId: z.number().int().positive().nullable().default(null),
-    brandId: z.number().int().positive().nullable().default(null),
-    searchTerm: z.string().trim().max(80).nullable().default(null),
-    quantity: z.number().int().positive().nullable().default(null),
-    value: z.number().min(0).nullable().default(null),
-    metadata: z
-      .object({
-        surface: z.enum([
-          'header',
-          'mobile_drawer',
-          'global_search',
-          'cart_drawer',
-          'product_detail',
-          'checkout',
-          'thank_you',
-          'ai_assistant',
-        ]),
-        target: z.string().trim().min(1).max(120).optional(),
-        resultsCount: z.number().int().min(0).optional(),
-        position: z.number().int().positive().optional(),
-        intent: z
-          .enum([
-            'product_search',
-            'product_comparison',
-            'compatibility',
-            'price',
-            'availability',
-            'how_to',
-            'recommendation',
-            'other',
-          ])
-          .optional(),
-      })
-      .strict(),
-  })
-  .superRefine((input, context) => {
-    if (input.eventName.startsWith('ai_assistant_') && input.searchTerm !== null) {
-      context.addIssue({
-        code: 'custom',
-        path: ['searchTerm'],
-        message: 'Assistant conversation text must not be collected',
-      });
-    }
-  });
+const navigationEventInputSchema = z.object({
+  eventName: navigationEventNameSchema,
+  locale: z.enum(['fr', 'ar']),
+  productId: z.number().int().positive().nullable().default(null),
+  productSlug: z.string().trim().min(1).max(180).nullable().default(null),
+  categoryId: z.number().int().positive().nullable().default(null),
+  brandId: z.number().int().positive().nullable().default(null),
+  searchTerm: z.string().trim().max(1_500).nullable().default(null),
+  quantity: z.number().int().positive().nullable().default(null),
+  value: z.number().min(0).nullable().default(null),
+  metadata: z
+    .object({
+      surface: z.enum([
+        'header',
+        'mobile_drawer',
+        'global_search',
+        'cart_drawer',
+        'product_detail',
+        'checkout',
+        'thank_you',
+        'ai_assistant',
+      ]),
+      target: z.string().trim().min(1).max(120).optional(),
+      resultsCount: z.number().int().min(0).optional(),
+      position: z.number().int().positive().optional(),
+      intent: z
+        .enum([
+          'product_search',
+          'product_comparison',
+          'compatibility',
+          'price',
+          'availability',
+          'how_to',
+          'recommendation',
+          'other',
+        ])
+        .optional(),
+      messageId: z.string().trim().min(1).max(120).optional(),
+      rating: z.enum(['helpful', 'not_helpful']).optional(),
+    })
+    .strict(),
+});
 
 const checkoutEventInputSchema = z.object({
   eventId: z.string().trim().min(1).max(120).optional(),

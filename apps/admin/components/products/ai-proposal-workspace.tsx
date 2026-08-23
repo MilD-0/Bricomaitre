@@ -11,6 +11,7 @@ import { humanizeProposalToken, proposalPreview } from '../../lib/ai-proposal-pr
 import { toast } from '../../lib/toast';
 import { cn } from '../../lib/utils';
 import { TablePaginationControls } from '../table-pagination-controls';
+import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import {
@@ -129,6 +130,21 @@ export function AiProposalWorkspace({
   const [removedIds, setRemovedIds] = React.useState<Set<number>>(new Set());
   const [pending, setPending] = React.useState(false);
   const nowMs = Date.parse(now);
+  useAdminAiSurfaceDetails({
+    filters: {
+      proposalType: initialData.query.proposalType,
+      entityType: initialData.query.entityType,
+      model: initialData.query.model,
+      expiry: initialData.query.expiry,
+      evidence: initialData.query.evidence,
+      page: initialData.query.page,
+    },
+    selection: {
+      entityType: 'proposal',
+      ids: [...selectedIds],
+      focusedId: selectedId,
+    },
+  });
 
   const proposals = initialData.items.filter((proposal) => !removedIds.has(proposal.id));
   const remainingTotal = Math.max(0, initialData.pagination.total - removedIds.size);

@@ -129,20 +129,23 @@ describe('live admin AI stats', () => {
   it('maps current run telemetry independently from a stale reporting snapshot', () => {
     const stats = mapLiveAdminAiStats({
       summary: {
-        runs: 4,
+        runs: 5,
         completed: 4,
         failed: 0,
+        cancelled: 1,
+        helpful: 3,
+        notHelpful: 1,
         inputTokens: 800,
         outputTokens: 200,
         totalTokens: 1_000,
         averageDurationMs: 1_250,
         activeUsers: 1,
       },
-      tasks: [{ name: 'admin_chat', runs: 4, completed: 4, tokens: 1_000 }],
+      tasks: [{ name: 'admin_chat', runs: 5, completed: 4, cancelled: 1, tokens: 1_000 }],
       models: [
         {
           name: 'deepseek/deepseek-v4-flash',
-          runs: 4,
+          runs: 5,
           tokens: 1_000,
           inputTokens: 800,
           outputTokens: 200,
@@ -159,9 +162,13 @@ describe('live admin AI stats', () => {
 
     expect(stats).toEqual(
       expect.objectContaining({
-        runs: 4,
+        runs: 5,
         completed: 4,
+        cancelled: 1,
         successRate: 100,
+        helpful: 3,
+        notHelpful: 1,
+        helpfulRate: 75,
         conversations: 2,
         totalTokens: 1_000,
         toolCalls: 3,
@@ -169,6 +176,6 @@ describe('live admin AI stats', () => {
         appliedProposals: 1,
       }),
     );
-    expect(stats.models).toEqual([{ name: 'deepseek/deepseek-v4-flash', runs: 4, tokens: 1_000 }]);
+    expect(stats.models).toEqual([{ name: 'deepseek/deepseek-v4-flash', runs: 5, tokens: 1_000 }]);
   });
 });

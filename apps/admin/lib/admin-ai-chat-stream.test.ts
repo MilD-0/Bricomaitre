@@ -21,7 +21,7 @@ describe('admin AI chat response stream', () => {
           );
           controller.enqueue(
             encoder.encode(
-              `${JSON.stringify({ type: 'text-delta', delta: 'answer.' })}\n${JSON.stringify({ type: 'result', toolResults: [], conversation })}\n`,
+              `${JSON.stringify({ type: 'text-delta', delta: 'answer.' })}\n${JSON.stringify({ type: 'result', toolResults: [], conversation, messageId: 91 })}\n`,
             ),
           );
           controller.close();
@@ -38,7 +38,7 @@ describe('admin AI chat response stream', () => {
     });
 
     expect(deltas).toEqual(['First ', 'answer.']);
-    expect(onResult).toHaveBeenCalledWith({ toolResults: [], conversation });
+    expect(onResult).toHaveBeenCalledWith({ toolResults: [], conversation, messageId: 91 });
   });
 
   it('accepts the previous JSON payload during rollout', async () => {
@@ -49,6 +49,6 @@ describe('admin AI chat response stream', () => {
       { onTextDelta, onResult },
     );
     expect(onTextDelta).toHaveBeenCalledWith('Done');
-    expect(onResult).toHaveBeenCalledWith({ toolResults: [], conversation });
+    expect(onResult).toHaveBeenCalledWith({ toolResults: [], conversation, messageId: null });
   });
 });

@@ -31,8 +31,10 @@ import {
   parseBulletinTags,
 } from '../lib/bulletin';
 import { requestJson as request } from '../lib/admin-api';
+import { bulletinAiSurfaceDetails } from '../lib/admin-ai-live-surface-details';
 import { toast } from '../lib/toast';
 import { Badge } from './ui/badge';
+import { useAdminAiSurfaceDetails } from './admin-ai-surface-context';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import { CompactMenu, CompactMenuItem } from './ui/compact-menu';
@@ -687,6 +689,18 @@ export function BulletinBoard() {
   const pagePosts = sortedPosts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const pinnedPosts = pagePosts.filter((post) => post.pinned);
   const recentPosts = pagePosts.filter((post) => !post.pinned);
+  useAdminAiSurfaceDetails(
+    bulletinAiSurfaceDetails({
+      activeTag,
+      sort,
+      page: currentPage,
+      visibleCount: pagePosts.length,
+      totalPosts: boardQuery.data.posts.length,
+      composerOpen,
+      focusedPostId: editingPost?.id ?? deletePost?.id ?? null,
+      fetching: boardQuery.isFetching,
+    }),
+  );
 
   const onSubmit = form.handleSubmit(async (values) => {
     const payload = {

@@ -26,6 +26,9 @@ const labels: ShoppingAssistantLabels = {
   placeholder: 'Votre question',
   inputLabel: 'Question produit',
   send: 'Envoyer',
+  stop: 'Arrêter',
+  stopped: 'Réponse arrêtée',
+  retry: 'Réessayer',
   thinking: 'Recherche…',
   error: 'Indisponible',
   rateLimited: 'Patientez',
@@ -36,6 +39,8 @@ const labels: ShoppingAssistantLabels = {
   viewProduct: 'Voir',
   addToCart: 'Ajouter au panier',
   addedToCart: 'Ajouté',
+  helpful: 'Réponse utile',
+  notHelpful: 'Réponse à améliorer',
   quickPrompts: ['Une perceuse', 'Comparer', 'Disponible'],
 };
 
@@ -66,6 +71,9 @@ describe('ShoppingAssistantPanel', () => {
               titleAr: 'مثقاب خرسانة',
               description: null,
               descriptionAr: null,
+              sku: 'PB-1',
+              characteristics: ['Mandrin 13 mm'],
+              characteristicsAr: ['ظرف 13 مم'],
               price: '12500.00',
               oldPrice: null,
               inStock: true,
@@ -97,6 +105,12 @@ describe('ShoppingAssistantPanel', () => {
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(body).toEqual({
       locale: 'fr',
+      context: {
+        pathname: '/',
+        currentProductToken: null,
+        catalogQuery: null,
+        cartItems: [],
+      },
       telemetry: {
         journeyId: 'journey-1',
         sessionId: 'session-1',
@@ -108,11 +122,25 @@ describe('ShoppingAssistantPanel', () => {
     expect(behavior.analytics).toHaveBeenCalledWith(
       expect.objectContaining({
         eventName: 'ai_assistant_message',
+        searchTerm: 'Une perceuse pour le béton',
         metadata: { surface: 'ai_assistant', target: 'submitted', intent: 'other' },
       }),
     );
-    expect(JSON.stringify(behavior.analytics.mock.calls)).not.toContain(
-      'Une perceuse pour le béton',
+    fireEvent.click(screen.getByRole('button', { name: labels.helpful }));
+    expect(behavior.analytics).toHaveBeenCalledWith({
+      eventName: 'ai_assistant_feedback',
+      locale: 'fr',
+      searchTerm: 'Voici une **option** du catalogue.\n\n- Adaptée au béton\n- Disponible en stock',
+      metadata: {
+        surface: 'ai_assistant',
+        target: 'assistant_response',
+        messageId: expect.any(String),
+        rating: 'helpful',
+      },
+    });
+    expect(screen.getByRole('button', { name: labels.helpful })).toHaveAttribute(
+      'aria-pressed',
+      'true',
     );
     await waitFor(() =>
       expect(
@@ -161,6 +189,34 @@ describe('ShoppingAssistantPanel', () => {
     await waitFor(() => expect(screen.getByLabelText(labels.inputLabel)).not.toBeDisabled());
   });
 
+  it('carries thirty recent turns into the next answer', async () => {
+    localStorage.setItem(
+      'bricomaitre-shopping-assistant-chat-v1:fr',
+      JSON.stringify(
+        Array.from({ length: 35 }, (_, index) => ({
+          id: `saved-${index + 1}`,
+          role: index % 2 === 0 ? 'user' : 'assistant',
+          content: `history-${index + 1}`,
+        })),
+      ),
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(Response.json({ mode: 'ai', message: 'Réponse continue', products: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ShoppingAssistantPanel locale="fr" labels={labels} onClose={vi.fn()} />);
+
+    expect(await screen.findByText('history-35')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(labels.inputLabel), { target: { value: 'continue' } });
+    fireEvent.click(screen.getByRole('button', { name: labels.send }));
+    await screen.findByText('Réponse continue');
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body.messages).toHaveLength(30);
+    expect(body.messages[0]).toMatchObject({ content: 'history-7' });
+    expect(body.messages.at(-1)).toMatchObject({ role: 'user', content: 'continue' });
+  });
+
   it('restores local history and starts a new chat on request', async () => {
     localStorage.setItem(
       'bricomaitre-shopping-assistant-chat-v1:fr',
@@ -183,16 +239,55 @@ describe('ShoppingAssistantPanel', () => {
     );
   });
 
-  it('shows a recoverable localized rate-limit state without losing the question', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 429 })));
+  it('retries a rate-limited question without duplicating it in the conversation', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('{}', { status: 429 }))
+      .mockResolvedValueOnce(
+        Response.json({ mode: 'ai', message: 'La réponse relancée', products: [] }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
     render(<ShoppingAssistantPanel locale="fr" labels={labels} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Une perceuse' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(labels.rateLimited);
     expect(screen.getByText('Une perceuse')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: labels.retry }));
+    expect(await screen.findByText('La réponse relancée')).toBeInTheDocument();
+    expect(screen.getAllByText('Une perceuse')).toHaveLength(1);
+    const retryBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
+    expect(retryBody.messages).toEqual([
+      expect.objectContaining({ role: 'user', content: 'Une perceuse' }),
+    ]);
     expect(behavior.analytics).toHaveBeenCalledWith(
       expect.objectContaining({ eventName: 'ai_assistant_error' }),
     );
+    expect(behavior.analytics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'ai_assistant_message',
+        metadata: expect.objectContaining({ target: 'retry' }),
+      }),
+    );
+  });
+
+  it('lets the shopper stop an in-progress response and keep the question for retry', async () => {
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('Aborted', 'AbortError'));
+        });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ShoppingAssistantPanel locale="fr" labels={labels} onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Une perceuse' }));
+    const stop = await screen.findByRole('button', { name: labels.stop });
+    fireEvent.click(stop);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(labels.stopped);
+    expect(screen.getByText('Une perceuse')).toBeInTheDocument();
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toMatchObject({ aborted: true });
   });
 
   it('renders the Arabic surface and keeps the sheet keyboard accessible', async () => {

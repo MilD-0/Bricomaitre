@@ -6,6 +6,7 @@ import {
   adCosts,
   adminReportingSnapshotRuns,
   adminReportingSnapshots,
+  analyticsAcquisitionDailyRollups,
   analyticsDailyRollups,
   analyticsDistinctDailyMembers,
   analyticsEvents,
@@ -373,6 +374,8 @@ async function getWebsiteAnalyticsData(
   analyticsWhere: ReturnType<typeof buildAnalyticsWhere>,
   rollupWhere: ReturnType<typeof buildAnalyticsRollupWhere>,
   filters: Required<StatsFilters>,
+  includeProductMetrics = true,
+  identityMode: 'rollup-members' | 'sessions' | 'daily-rollups' = 'rollup-members',
 ) {
   const unrolledAnalyticsWhere = and(
     analyticsWhere,
@@ -421,7 +424,9 @@ async function getWebsiteAnalyticsData(
       .groupBy(sql`1`)
       .orderBy(sql`2 desc`)
       .limit(8),
-    db.execute(buildWebsiteProductMetricsQuery(filters)),
+    includeProductMetrics
+      ? db.execute(buildWebsiteProductMetricsQuery(filters))
+      : Promise.resolve({ rows: [] }),
     db
       .select({
         sessions: sql<number>`coalesce(sum(${analyticsDailyRollups.sessions}), 0)::int`,
@@ -450,24 +455,28 @@ async function getWebsiteAnalyticsData(
         ),
       )
       .groupBy(analyticsDailyRollups.dimensionKey),
-    db.execute(sql`
-      select metric, dimension_key, count(distinct member_id)::int as members
-      from (
-        select metric, dimension_key, member_id
-        from ${analyticsDistinctDailyMembers}
-        where ${filters.startDate ? sql`${analyticsDistinctDailyMembers.day} >= ${filters.startDate}::date` : sql`true`}
-          and ${filters.endDate ? sql`${analyticsDistinctDailyMembers.day} <= ${filters.endDate}::date` : sql`true`}
-        union all
-        select 'journey', '', ${analyticsEvents.journeyId}
-        from ${analyticsEvents}
-        where ${unrolledAnalyticsWhere ?? sql`true`}
-        union all
-        select 'session', '', ${analyticsEvents.sessionId}
-        from ${analyticsEvents}
-        where ${unrolledAnalyticsWhere ?? sql`true`} and ${analyticsEvents.eventName} = 'page_view'
-      ) identities
-      group by metric, dimension_key
-    `),
+    identityMode === 'daily-rollups'
+      ? Promise.resolve({ rows: [] })
+      : identityMode === 'sessions'
+        ? db.execute(buildCanonicalStorefrontSessionsQuery(filters))
+        : db.execute(sql`
+          select metric, dimension_key, count(distinct member_id)::int as members
+          from (
+            select metric, dimension_key, member_id
+            from ${analyticsDistinctDailyMembers}
+            where ${filters.startDate ? sql`${analyticsDistinctDailyMembers.day} >= ${filters.startDate}::date` : sql`true`}
+              and ${filters.endDate ? sql`${analyticsDistinctDailyMembers.day} <= ${filters.endDate}::date` : sql`true`}
+            union all
+            select 'journey', '', ${analyticsEvents.journeyId}
+            from ${analyticsEvents}
+            where ${unrolledAnalyticsWhere ?? sql`true`}
+            union all
+            select 'session', '', ${analyticsEvents.sessionId}
+            from ${analyticsEvents}
+            where ${unrolledAnalyticsWhere ?? sql`true`} and ${analyticsEvents.eventName} = 'page_view'
+          ) identities
+          group by metric, dimension_key
+        `),
   ]);
 
   const rawSummary = websiteSummaryRows[0] as WebsiteSummaryRow | undefined;
@@ -488,17 +497,24 @@ async function getWebsiteAnalyticsData(
       numberOrZero(rawSummary?.[key]) + numberOrZero(rollupSummary?.[key]),
     ]),
   ) as WebsiteSummaryRow;
-  const exactIdentityRows = exactIdentityResult.rows as Array<{
-    metric: string;
-    dimension_key: string;
-    members: number | string;
-  }>;
-  mergedSummary.sessions = numberOrZero(
-    exactIdentityRows.find((row) => row.metric === 'session' && row.dimension_key === '')?.members,
-  );
-  mergedSummary.journeys = numberOrZero(
-    exactIdentityRows.find((row) => row.metric === 'journey' && row.dimension_key === '')?.members,
-  );
+  if (identityMode === 'sessions') {
+    const identity = exactIdentityResult.rows[0] as Record<string, unknown> | undefined;
+    mergedSummary.sessions = numberOrZero(identity?.sessions);
+  } else if (identityMode === 'rollup-members') {
+    const exactIdentityRows = exactIdentityResult.rows as Array<{
+      metric: string;
+      dimension_key: string;
+      members: number | string;
+    }>;
+    mergedSummary.sessions = numberOrZero(
+      exactIdentityRows.find((row) => row.metric === 'session' && row.dimension_key === '')
+        ?.members,
+    );
+    mergedSummary.journeys = numberOrZero(
+      exactIdentityRows.find((row) => row.metric === 'journey' && row.dimension_key === '')
+        ?.members,
+    );
+  }
 
   const searchMap = new Map<string, WebsiteSearchRow>();
   for (const row of [...websiteSearchRows, ...rollupSearchRows] as WebsiteSearchRow[]) {
@@ -991,9 +1007,11 @@ function getSnapshotKey(filters: Required<StatsFilters>) {
   return `storefront-history-v4:${filters.range}:${filters.startDate || '*'}:${filters.endDate || '*'}`;
 }
 
-function getReportThroughDate(data: StatsDashboardData) {
+export function getReportThroughDate(data: StatsDashboardData) {
   const candidates = [
-    ...data.trends.daily.map((point) => point.bucket),
+    ...data.trends.daily
+      .filter((point) => point.revenue !== 0 || point.profit !== 0 || point.fees !== 0)
+      .map((point) => point.bucket),
     ...data.trends.imports.map((point) => point.bucket),
   ].filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value));
 
@@ -1086,6 +1104,77 @@ export function buildAnalyticsWhere(filters: StatsFilters | Required<StatsFilter
   }
 
   return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
+export function buildCanonicalStorefrontSessionsQuery(filters: Required<StatsFilters>) {
+  return sql`
+    select (
+      coalesce((select sum(sessions)::int from (
+        select ${analyticsAcquisitionDailyRollups.day} as day,
+          sum(${analyticsAcquisitionDailyRollups.sessions})::int as sessions
+        from ${analyticsAcquisitionDailyRollups}
+        where ${
+          filters.startDate
+            ? sql`${analyticsAcquisitionDailyRollups.day} >= ${filters.startDate}::date`
+            : sql`true`
+        }
+          and ${
+            filters.endDate
+              ? sql`${analyticsAcquisitionDailyRollups.day} <= ${filters.endDate}::date`
+              : sql`true`
+          }
+        group by ${analyticsAcquisitionDailyRollups.day}
+        union all
+        select ${analyticsDailyRollups.day}, ${analyticsDailyRollups.sessions}
+        from ${analyticsDailyRollups}
+        where ${analyticsDailyRollups.dimension} = 'overall'
+          and ${analyticsDailyRollups.dimensionKey} = ''
+          and ${
+            filters.startDate
+              ? sql`${analyticsDailyRollups.day} >= ${filters.startDate}::date`
+              : sql`true`
+          }
+          and ${
+            filters.endDate
+              ? sql`${analyticsDailyRollups.day} <= ${filters.endDate}::date`
+              : sql`true`
+          }
+          and not exists (
+            select 1 from ${analyticsAcquisitionDailyRollups} acquisition
+            where acquisition.day = ${analyticsDailyRollups.day}
+          )
+      ) rolled), 0)
+      + coalesce((select count(distinct ${analyticsEvents.sessionId})::int
+        from ${analyticsEvents}
+        where ${
+          filters.startDate
+            ? sql`${analyticsEvents.occurredAt} >= ${filters.startDate}::date`
+            : sql`true`
+        }
+          and ${
+            filters.endDate
+              ? sql`${analyticsEvents.occurredAt} < (${filters.endDate}::date + interval '1 day')`
+              : sql`true`
+          }
+          and ${analyticsEvents.eventName} = 'page_view'
+          and not exists (
+            select 1 from ${analyticsDailyRollups} rollup
+            where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+              and rollup.dimension = 'overall'
+              and rollup.dimension_key = ''
+          )
+          and not exists (
+            select 1 from ${analyticsAcquisitionDailyRollups} acquisition
+            where acquisition.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+          )), 0)
+    )::int as sessions
+  `;
+}
+
+export async function getCanonicalStorefrontSessionCount(input: StatsFilters) {
+  const filters = buildResolvedFilters(statsQuerySchema.parse(input));
+  const result = await getDb().execute(buildCanonicalStorefrontSessionsQuery(filters));
+  return numberOrZero((result.rows[0] as Record<string, unknown> | undefined)?.sessions);
 }
 
 function buildLiveOrderWhere(filters: Required<StatsFilters>) {
@@ -1324,6 +1413,41 @@ export function buildWebsiteProductMetricsQuery(filters: Required<StatsFilters>)
     left join ${brands} brand on brand.id = product.brand_id
     order by popularity_score desc, metrics.view_count desc
   `;
+}
+
+export type LiveWebsiteProductMetric = {
+  id: number;
+  title: string;
+  sku: string | null;
+  categoryName: string | null;
+  brandName: string | null;
+  viewCount: number;
+  addToCartCount: number;
+  checkoutCount: number;
+  websitePurchaseCount: number;
+  popularityScore: number;
+  websiteConversionRate: number;
+};
+
+export async function getLiveWebsiteProductMetrics(
+  input: StatsFilters,
+): Promise<LiveWebsiteProductMetric[]> {
+  const filters = buildResolvedFilters(statsQuerySchema.parse(input));
+  const result = await getDb().execute(buildWebsiteProductMetricsQuery(filters));
+
+  return (result.rows as Array<Record<string, unknown>>).map((row): LiveWebsiteProductMetric => ({
+    id: numberOrZero(row.id),
+    title: String(row.title ?? ''),
+    sku: row.sku == null ? null : String(row.sku),
+    categoryName: row.category_name == null ? null : String(row.category_name),
+    brandName: row.brand_name == null ? null : String(row.brand_name),
+    viewCount: numberOrZero(row.view_count),
+    addToCartCount: numberOrZero(row.add_to_cart_count),
+    checkoutCount: numberOrZero(row.checkout_count),
+    websitePurchaseCount: numberOrZero(row.website_purchase_count),
+    popularityScore: round(numberOrZero(row.popularity_score)),
+    websiteConversionRate: round(numberOrZero(row.website_conversion_rate) * 100),
+  }));
 }
 
 function emptyDashboard(filters: Required<StatsFilters>): StatsDashboardData {
@@ -2193,9 +2317,80 @@ export async function getStatsDashboardSection(
   } satisfies StatsDashboardData;
 }
 
+export async function getLiveStorefrontAnalytics(
+  input: StatsFilters,
+  options: { includeExperience?: boolean } = {},
+) {
+  const filters = buildResolvedFilters(statsQuerySchema.parse(input));
+  const db = getDb();
+  const analyticsWhere = buildAnalyticsWhere(filters);
+  const rollupWhere = buildAnalyticsRollupWhere(filters);
+  const includeExperience = options.includeExperience !== false;
+  const [websiteData, experience, liveOrders] = await Promise.all([
+    getWebsiteAnalyticsData(db, analyticsWhere, rollupWhere, filters, false, 'sessions'),
+    includeExperience
+      ? getExperienceStats(db, filters, { scope: 'storefront' })
+      : Promise.resolve(emptyExperienceStats()),
+    getLiveOrderAnalytics(db, filters),
+  ]);
+  const summary = websiteData.websiteSummaryRows[0];
+  const website = mergeCanonicalWebsitePurchases(
+    {
+      sessions: summary?.sessions ?? 0,
+      journeys: summary?.journeys ?? 0,
+      pageViews: summary?.pageViews ?? 0,
+      productViews: summary?.productViews ?? 0,
+      addToCarts: summary?.addToCarts ?? 0,
+      checkoutStarts: summary?.checkoutStarts ?? 0,
+      purchases: 0,
+      searches: summary?.searches ?? 0,
+      zeroResultSearches: summary?.zeroResultSearches ?? 0,
+      sessionConversionRate: 0,
+      viewToCartRate: summary?.productViews
+        ? round(((summary?.addToCarts ?? 0) / summary.productViews) * 100)
+        : 0,
+      cartToPurchaseRate: 0,
+      checkoutToPurchaseRate: 0,
+      topSearches: websiteData.websiteSearchRows.map((row) => ({
+        term: row.term,
+        searches: row.searches,
+        zeroResults: row.zeroResults,
+      })),
+      funnel: [],
+      topProducts: websiteData.websiteTopProductRows.map((row) => ({
+        id: String(row.id),
+        title: row.title,
+        unitsSold: 0,
+        revenue: 0,
+        cost: 0,
+        profit: 0,
+        margin: 0,
+        sku: row.sku,
+        categoryName: row.categoryName,
+        brandName: row.brandName,
+        viewCount: row.viewCount,
+        addToCartCount: row.addToCartCount,
+        checkoutCount: row.checkoutCount,
+        websitePurchaseCount: row.websitePurchaseCount,
+        popularityScore: round(numberOrZero(row.popularityScore)),
+        websiteConversionRate: round(numberOrZero(row.websiteConversionRate) * 100),
+      })),
+      ...experience.website,
+    },
+    liveOrders.totalOrders,
+    liveOrders.trends.daily,
+  );
+
+  return {
+    website,
+    landingPages: experience.landingPages,
+    aiAssistants: experience.aiAssistants,
+  };
+}
+
 export async function getStatsDashboard(input: StatsFilters) {
   const snapshot = await readLatestStatsSnapshot(input);
-  if (snapshot) {
+  if (isStatsSnapshotUsable(snapshot)) {
     return withLiveOperationalAnalytics(snapshot, input);
   }
 
@@ -2209,6 +2404,12 @@ export async function getStatsDashboard(input: StatsFilters) {
     readLatestStatsSnapshot(input).then((latest) => latest ?? data),
     input,
   );
+}
+
+export function isStatsSnapshotUsable(
+  snapshot: StatsDashboardData | null,
+): snapshot is StatsDashboardData {
+  return Boolean(snapshot && !snapshot.snapshot?.isStale);
 }
 
 export async function refreshStatsDashboard(input: StatsFilters, trigger = 'manual-refresh') {

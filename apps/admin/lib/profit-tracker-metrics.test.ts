@@ -143,6 +143,29 @@ describe('profit tracker operating costs and rollups', () => {
     expect(summary.trueProfitDzd).toBe(56_000);
   });
 
+  it('keeps spend-only days in period ad cost, net profit, and Profit ×', () => {
+    const days = applyProfitTrackerRollforward(
+      [
+        {
+          ...baseDay,
+          date: '2026-08-13',
+          grossProfitDzd: null,
+          returnRatePct: null,
+          confirmedOrders: null,
+        },
+        { ...baseDay, date: '2026-08-15' },
+      ],
+      { fxRate: 280, restFrom: null },
+    );
+    const summary = summarizeProfitTracker(days, [], '2026-08-13', '2026-08-15');
+
+    expect(summary.ratioAdCostDzd).toBe(56_000);
+    expect(summary.adjustedProfitDzd).toBe(90_000);
+    expect(summary.netProfitDzd).toBe(34_000);
+    expect(summary.trueProfitDzd).toBe(34_000);
+    expect(summary.profitX).toBe(90_000 / 56_000);
+  });
+
   it('reports incomplete purchase-cost coverage without pricing from the current catalog', () => {
     const days = applyProfitTrackerRollforward(
       [{ ...baseDay, postedOrders: 10, costCompleteOrders: 8 }],

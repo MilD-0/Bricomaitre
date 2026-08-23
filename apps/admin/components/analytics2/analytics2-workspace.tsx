@@ -32,6 +32,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  ZAxis,
 } from 'recharts';
 
 import type {
@@ -42,10 +43,13 @@ import type {
   Analytics2Range,
   Analytics2View,
 } from '../../lib/analytics2';
+import { statsPath } from '../../lib/analytics2-routes';
 import { requestJson as request } from '../../lib/admin-api';
+import { analyticsAiSurfaceDetails } from '../../lib/admin-ai-live-surface-details';
 import { toast } from '../../lib/toast';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
+import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Input } from '../ui/input';
 import { NativeSelect, NativeSelectOption } from '../ui/native-select';
 import { SidePanel } from '../ui/side-panel';
@@ -79,7 +83,7 @@ function formatMoney(locale: string, value: number | null | undefined, compact =
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: 'DZD',
-    maximumFractionDigits: 0,
+    maximumFractionDigits: compact ? 1 : 0,
     notation: compact ? 'compact' : 'standard',
   }).format(value);
 }
@@ -239,6 +243,61 @@ function ChartFrame({
   return <div className={cn('min-w-0 overflow-hidden', className)}>{children}</div>;
 }
 
+export function splitPartialSeries(
+  rows: Array<Record<string, string | number | boolean | null>>,
+  keys: string[],
+) {
+  return rows.map((row, index) => {
+    const partial = row.isPartial === true;
+    const nextIsPartial = rows[index + 1]?.isPartial === true;
+    const result = { ...row };
+    for (const key of keys) {
+      const projected = row[`${key}Projected`];
+      const projectedValue = typeof projected === 'number' ? projected : null;
+      result[`${key}Actual`] = row[key];
+      result[`${key}Open`] = partial ? projectedValue : nextIsPartial ? row[key] : null;
+      result[`${key}Display`] = partial ? projectedValue : row[key];
+    }
+    return result;
+  });
+}
+
+function ActualOpenLine({
+  dataKey,
+  name,
+  stroke,
+  strokeWidth,
+}: {
+  dataKey: string;
+  name: string;
+  stroke: string;
+  strokeWidth: number;
+}) {
+  return (
+    <>
+      <Line
+        type="monotone"
+        dataKey={`${dataKey}Actual`}
+        name={name}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        dot={false}
+        connectNulls={false}
+      />
+      <Line
+        type="monotone"
+        dataKey={`${dataKey}Open`}
+        name={`${name} · Forecast`}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        strokeDasharray="5 4"
+        dot={false}
+        connectNulls={false}
+      />
+    </>
+  );
+}
+
 function chartTooltip(
   locale: string,
   kind: 'money' | 'number' | 'ratio' | 'percent' | 'eur' = 'number',
@@ -300,29 +359,35 @@ function SourceRail({
         </span>
         {payload.sources
           .filter((source) => source.key !== 'settlements')
-          .map((source) => (
-            <div key={source.key} className="flex items-center gap-1.5 text-xs">
-              <span
-                className={cn(
-                  'size-1.5 rounded-full',
-                  source.state === 'live' || source.state === 'current'
-                    ? 'bg-emerald-500'
-                    : source.state === 'manual'
-                      ? 'bg-violet-500'
-                      : source.state === 'lagged'
-                        ? 'bg-amber-500'
-                        : 'bg-rose-500',
-                )}
-              />
-              <span className="font-medium">{copy.sources[source.key]}</span>
-              <span className="text-muted-foreground">{copy.sourceStates[source.state]}</span>
-              {source.coveragePct != null ? (
-                <span className="tabular-nums text-muted-foreground">
-                  {formatPercent(locale, source.coveragePct)}
-                </span>
-              ) : null}
-            </div>
-          ))}
+          .map((source) => {
+            const state =
+              payload.reviewClock && source.state !== 'manual' && source.state !== 'missing'
+                ? 'current'
+                : source.state;
+            return (
+              <div key={source.key} className="flex items-center gap-1.5 text-xs">
+                <span
+                  className={cn(
+                    'size-1.5 rounded-full',
+                    state === 'live' || state === 'current'
+                      ? 'bg-emerald-500'
+                      : state === 'manual'
+                        ? 'bg-violet-500'
+                        : state === 'lagged'
+                          ? 'bg-amber-500'
+                          : 'bg-rose-500',
+                  )}
+                />
+                <span className="font-medium">{copy.sources[source.key]}</span>
+                <span className="text-muted-foreground">{copy.sourceStates[state]}</span>
+                {source.coveragePct != null ? (
+                  <span className="tabular-nums text-muted-foreground">
+                    {formatPercent(locale, source.coveragePct)}
+                  </span>
+                ) : null}
+              </div>
+            );
+          })}
       </div>
     </div>
   );
@@ -343,6 +408,7 @@ function WarningRail({
       : payload.warnings.filter((warning) => {
           const detail = warning as { key: string; source?: string; value?: number | null };
           if (detail.source === 'settlements') return false;
+          if (payload.reviewClock && detail.key === 'sourcePartial') return false;
           return !(detail.key === 'projectedCostCoverage' && (detail.value ?? 0) >= 95);
         });
 
@@ -429,11 +495,11 @@ function CashPipeline({
   if (!visibleRows.length) return null;
 
   return (
-    <div className="grid snap-x snap-mandatory grid-flow-col auto-cols-[minmax(14rem,80vw)] overflow-x-auto border-y border-border/60 sm:snap-none sm:grid-flow-row sm:auto-cols-auto sm:grid-cols-2 sm:overflow-visible xl:grid-cols-5">
+    <div className="grid snap-x snap-mandatory grid-flow-col auto-cols-[minmax(14rem,80vw)] overflow-x-auto border-y border-border/60 sm:snap-none sm:grid-flow-row sm:auto-cols-auto sm:grid-cols-2 sm:overflow-visible xl:flex">
       {visibleRows.map((row) => (
         <div
           key={row.key}
-          className="min-w-0 snap-start border-e border-border/45 px-4 py-4 last:border-e-0 sm:border-b xl:border-b-0"
+          className="min-w-0 snap-start border-e border-border/45 px-4 py-4 last:border-e-0 sm:border-b xl:flex-1 xl:border-b-0"
         >
           <p className="min-h-8 text-xs font-medium leading-4 text-muted-foreground">
             {copy.cashStages[row.key]}
@@ -443,15 +509,16 @@ function CashPipeline({
           </p>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
             <span>{formatNumber(locale, row.orders)} orders</span>
-            {row.staleOrders > 0 ? (
-              <span className="text-amber-700 dark:text-amber-400">
-                {formatNumber(locale, row.staleOrders)} stale
-              </span>
-            ) : null}
           </div>
-          <p className="mt-1 text-[10px] text-muted-foreground/75">
-            {formatPercent(locale, row.providerAmountCoveragePct)} provider COD
-          </p>
+          {row.confidencePct != null ? (
+            <p className="mt-1 text-[10px] text-muted-foreground/75">
+              {formatPercent(locale, row.confidencePct)} {copy.expectedToPost}
+            </p>
+          ) : row.providerAmountCoveragePct != null ? (
+            <p className="mt-1 text-[10px] text-muted-foreground/75">
+              {formatPercent(locale, row.providerAmountCoveragePct)} provider COD
+            </p>
+          ) : null}
         </div>
       ))}
     </div>
@@ -475,6 +542,10 @@ function CommandView({
   locale: string;
   onNavigate: (view: Analytics2View) => void;
 }) {
+  const trajectory = splitPartialSeries(
+    data.trajectory as Array<Record<string, string | number | boolean | null>>,
+    ['trueProfitDzd', 'automaticPaidProfitDzd'],
+  );
   return (
     <>
       <MetricStrip metrics={data.metrics} copy={copy} locale={locale} />
@@ -482,10 +553,7 @@ function CommandView({
         <Section title={copy.sections.trajectory}>
           <ChartFrame className="h-[23rem]">
             <ResponsiveChart width="100%" height="100%">
-              <ComposedChart
-                data={data.trajectory}
-                margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
-              >
+              <ComposedChart data={trajectory} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <defs>
                   <linearGradient id="commandTrueProfit" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#7c3aed" stopOpacity={0.28} />
@@ -511,31 +579,23 @@ function CommandView({
                 <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeDasharray="4 4" />
                 <Area
                   type="monotone"
-                  dataKey="trueProfitDzd"
+                  dataKey="trueProfitDzdActual"
                   name={copy.metrics.trueProfit}
                   fill="url(#commandTrueProfit)"
-                  stroke="#7c3aed"
-                  strokeWidth={2.2}
+                  stroke="none"
                   connectNulls={false}
                 />
-                <Line
-                  type="monotone"
+                <ActualOpenLine
+                  dataKey="trueProfitDzd"
+                  name={copy.metrics.trueProfit}
+                  stroke="#7c3aed"
+                  strokeWidth={2.2}
+                />
+                <ActualOpenLine
                   dataKey="automaticPaidProfitDzd"
                   name={copy.metrics.automaticPaidProfit}
                   stroke="#0f766e"
                   strokeWidth={2.2}
-                  dot={false}
-                  connectNulls={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="realizedProfitDzd"
-                  name={copy.sections.reconciliation}
-                  stroke="#64748b"
-                  strokeWidth={1.4}
-                  strokeDasharray="5 4"
-                  dot={false}
-                  connectNulls={false}
                 />
               </ComposedChart>
             </ResponsiveChart>
@@ -558,12 +618,6 @@ function CommandView({
                 {formatMoney(locale, data.economics.automaticPaid.summary.profitDzd)}
               </b>{' '}
               automatic paid profit
-            </span>
-            <span>
-              <b className="text-foreground">
-                {formatMoney(locale, data.economics.realized.realizedProfitDzd)}
-              </b>{' '}
-              imported reference
             </span>
           </div>
         </Section>
@@ -611,10 +665,7 @@ function CommandView({
           </Section>
         </div>
       </div>
-      <Section
-        title={copy.sections.cashPipeline}
-        description="A current balance by EcoTrack stage. Provider COD coverage is explicit; local submitted value is the fallback."
-      >
+      <Section title={copy.sections.cashPipeline}>
         <CashPipeline rows={data.fulfillment.cashPipeline} copy={copy} locale={locale} />
       </Section>
     </>
@@ -631,9 +682,17 @@ function MoneyView({
   locale: string;
 }) {
   const [mode, setMode] = useState<'projected' | 'realized' | 'cumulative'>('projected');
-  const chartData = (mode === 'realized' ? data.paidSeries : data.series) as Array<
+  const sourceRows = (mode === 'realized' ? data.paidSeries : data.series) as Array<
     Record<string, string | number | boolean | null>
   >;
+  const chartData = splitPartialSeries(
+    sourceRows,
+    mode === 'realized'
+      ? ['codDzd', 'profitDzd']
+      : mode === 'cumulative'
+        ? ['cumulativeNetProfitDzd', 'cumulativeTrueProfitDzd']
+        : ['grossProfitDzd', 'adjustedProfitDzd', 'netProfitDzd', 'trueProfitDzd'],
+  );
   return (
     <>
       <MetricStrip metrics={data.metrics} copy={copy} locale={locale} />
@@ -682,100 +741,67 @@ function MoneyView({
               {mode === 'projected' ? (
                 <>
                   <Bar
-                    dataKey="adCostDzd"
+                    dataKey="adCostDzdDisplay"
                     name={copy.columns.adCost}
                     fill="#d97706"
                     opacity={0.45}
                   />
-                  <Line
-                    type="monotone"
+                  <ActualOpenLine
                     dataKey="grossProfitDzd"
                     name={copy.columns.grossProfit}
                     stroke="#64748b"
-                    dot={false}
                     strokeWidth={1.5}
-                    connectNulls={false}
                   />
-                  <Line
-                    type="monotone"
+                  <ActualOpenLine
                     dataKey="adjustedProfitDzd"
                     name={copy.columns.adjustedProfit}
                     stroke="#2563eb"
-                    dot={false}
                     strokeWidth={1.8}
-                    connectNulls={false}
                   />
-                  <Line
-                    type="monotone"
+                  <ActualOpenLine
                     dataKey="netProfitDzd"
                     name={copy.columns.netProfit}
                     stroke="#7c3aed"
-                    dot={false}
                     strokeWidth={2}
-                    connectNulls={false}
                   />
-                  <Line
-                    type="monotone"
+                  <ActualOpenLine
                     dataKey="trueProfitDzd"
                     name={copy.columns.trueProfit}
                     stroke="#0f766e"
-                    dot={false}
                     strokeWidth={2.4}
-                    connectNulls={false}
                   />
                 </>
               ) : null}
               {mode === 'realized' ? (
                 <>
                   <Bar dataKey="feesDzd" name="EcoTrack fee" fill="#d97706" opacity={0.45} />
-                  <Line
-                    type="monotone"
+                  <ActualOpenLine
                     dataKey="codDzd"
                     name="Paid COD"
                     stroke="#2563eb"
-                    dot={false}
                     strokeWidth={1.6}
-                    connectNulls={false}
                   />
-                  <Line
-                    type="monotone"
+                  <ActualOpenLine
                     dataKey="profitDzd"
                     name={copy.metrics.automaticPaidProfit}
                     stroke="#0f766e"
-                    dot={false}
                     strokeWidth={2.4}
-                    connectNulls={false}
                   />
                 </>
               ) : null}
               {mode === 'cumulative' ? (
                 <>
-                  <Line
-                    type="monotone"
+                  <ActualOpenLine
                     dataKey="cumulativeNetProfitDzd"
                     name={copy.columns.netProfit}
                     stroke="#7c3aed"
-                    dot={false}
                     strokeWidth={2}
-                    connectNulls={false}
                   />
-                  <Line
-                    type="monotone"
+                  <ActualOpenLine
                     dataKey="cumulativeTrueProfitDzd"
                     name={copy.columns.trueProfit}
                     stroke="#0f766e"
-                    dot={false}
                     strokeWidth={2.4}
-                    connectNulls={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="cumulativeRealizedProfitDzd"
-                    name={copy.modes.realized}
-                    stroke="#64748b"
-                    dot={false}
-                    strokeWidth={1.8}
-                    connectNulls={false}
                   />
                 </>
               ) : null}
@@ -794,7 +820,7 @@ function MoneyView({
               formatMoney(locale, data.automaticPaid.summary.profitDzd),
             ],
             [
-              'Complete economics',
+              'Exact cost coverage',
               formatPercent(locale, data.automaticPaid.summary.profitCoveragePct),
             ],
           ].map(([label, value]) => (
@@ -853,17 +879,8 @@ function MoneyView({
               ))}
           </tbody>
         </DenseTable>
-        {data.automaticPaid.summary.legacyFallbackOrders > 0 ||
-        data.automaticPaid.summary.submittedFallbackOrders > 0 ? (
-          <p className="mt-3 text-xs text-muted-foreground">
-            {formatNumber(locale, data.automaticPaid.summary.legacyFallbackOrders)} historical rows
-            use the read-only settlement amount ·{' '}
-            {formatNumber(locale, data.automaticPaid.summary.submittedFallbackOrders)} use submitted
-            COD until a provider snapshot exists.
-          </p>
-        ) : null}
       </Section>
-      <Section title="Cohort profit bridge">
+      <Section title="Profit maturation">
         <ChartFrame className="h-[22rem]">
           <ResponsiveChart width="100%" height="100%">
             <ComposedChart
@@ -887,18 +904,18 @@ function MoneyView({
               />
               <Tooltip {...chartTooltip(locale, 'money')} />
               <Bar
-                dataKey="projectedContributionDzd"
-                name="Projected contribution"
+                dataKey="projectedTrueProfitDzd"
+                name="Projected true profit"
                 fill="#7c3aed"
                 opacity={0.32}
               />
               <Bar
-                dataKey="deliveredContributionDzd"
-                name="Delivered contribution"
+                dataKey="deliveredTrueProfitDzd"
+                name="Delivered true profit"
                 fill="#2563eb"
                 opacity={0.5}
               />
-              <Bar dataKey="paidAutomaticProfitDzd" name="Paid automatic profit" fill="#0f766e" />
+              <Bar dataKey="paidTrueProfitDzd" name="Paid true profit" fill="#0f766e" />
             </ComposedChart>
           </ResponsiveChart>
         </ChartFrame>
@@ -934,15 +951,15 @@ function MoneyView({
                   {formatNumber(locale, cohort.paid)}
                 </td>
                 <td className="px-3 py-2.5 text-end tabular-nums">
-                  {formatMoney(locale, cohort.projectedContributionDzd)}
+                  {formatMoney(locale, cohort.projectedTrueProfitDzd)}
                 </td>
                 <td className="px-3 py-2.5 text-end tabular-nums">
-                  {formatMoney(locale, cohort.paidAutomaticProfitDzd)}
+                  {formatMoney(locale, cohort.paidTrueProfitDzd)}
                 </td>
                 <td
                   className={cn(
                     'px-3 py-2.5 text-end font-medium tabular-nums',
-                    cohort.varianceDzd < 0 && 'text-rose-600',
+                    cohort.varianceDzd != null && cohort.varianceDzd < 0 && 'text-rose-600',
                   )}
                 >
                   {formatMoney(locale, cohort.varianceDzd)}
@@ -976,6 +993,9 @@ function MoneyView({
                 <tr key={week.weekStart}>
                   <td className="px-3 py-2.5 font-medium">
                     {formatDate(locale, week.weekStart, false)}
+                    {week.isPartial ? (
+                      <span className="ms-2 text-[10px] text-amber-700">{copy.partialPeriod}</span>
+                    ) : null}
                   </td>
                   <td className="px-3 py-2.5 text-end tabular-nums">
                     {formatMoney(locale, week.adCostDzd)}
@@ -1035,6 +1055,7 @@ function MoneyView({
                   name={copy.metrics.trueProfit}
                   stroke="#7c3aed"
                   strokeWidth={2.2}
+                  strokeDasharray="5 4"
                   dot={false}
                 />
               </ComposedChart>
@@ -1161,6 +1182,10 @@ function AcquisitionView({
       ]),
     ),
   }));
+  const profitSeries = splitPartialSeries(
+    data.profitSeries as Array<Record<string, string | number | boolean | null>>,
+    ['profitXBeforeReturns', 'profitX'],
+  );
 
   const syncMutation = useMutation({
     mutationFn: () =>
@@ -1170,7 +1195,7 @@ function AcquisitionView({
       }),
     onSuccess: async () => {
       toast.success('Meta insights synchronized.');
-      await queryClient.invalidateQueries({ queryKey: ['analytics2'] });
+      await queryClient.invalidateQueries({ queryKey: ['stats-workspace'] });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -1182,7 +1207,7 @@ function AcquisitionView({
         <Section title={copy.sections.profitEfficiency}>
           <ChartFrame>
             <ResponsiveChart width="100%" height="100%">
-              <ComposedChart data={data.profitSeries}>
+              <ComposedChart data={profitSeries}>
                 <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.5} />
                 <XAxis
                   dataKey="bucket"
@@ -1200,23 +1225,17 @@ function AcquisitionView({
                 />
                 <Tooltip {...chartTooltip(locale, 'ratio')} />
                 <ReferenceLine y={1} stroke="#e11d48" strokeDasharray="5 4" />
-                <Line
-                  type="monotone"
+                <ActualOpenLine
                   dataKey="profitXBeforeReturns"
                   name="Before returns"
                   stroke="#64748b"
                   strokeWidth={1.7}
-                  dot={false}
-                  connectNulls={false}
                 />
-                <Line
-                  type="monotone"
+                <ActualOpenLine
                   dataKey="profitX"
                   name="After returns"
                   stroke="#7c3aed"
                   strokeWidth={2.4}
-                  dot={false}
-                  connectNulls={false}
                 />
               </ComposedChart>
             </ResponsiveChart>
@@ -1551,6 +1570,11 @@ function AcquisitionView({
                   </td>
                   <td className="px-3 py-2.5 text-end tabular-nums">
                     {formatMoney(locale, entity.adCostDzd)}
+                    {entity.outcomeSpendCoveragePct != null ? (
+                      <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                        {formatPercent(locale, entity.outcomeSpendCoveragePct)} outcome window
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-3 py-2.5 text-end tabular-nums">
                     {formatPercent(locale, entity.outboundCtrPct)}
@@ -1613,6 +1637,8 @@ function AcquisitionView({
             {[
               ['Meta spend', formatEur(locale, inspected.spendEur)],
               ['Ad cost DZD', formatMoney(locale, inspected.adCostDzd)],
+              ['Outcome-window cost', formatMoney(locale, inspected.attributedAdCostDzd)],
+              ['Outcome spend coverage', formatPercent(locale, inspected.outcomeSpendCoveragePct)],
               ['Impressions', formatNumber(locale, inspected.impressions)],
               ['Outbound clicks', formatNumber(locale, inspected.outboundClicks)],
               ['Unique outbound', formatNumber(locale, inspected.uniqueOutboundClicks)],
@@ -1640,6 +1666,9 @@ function AcquisitionView({
               ['Cost / posted', formatMoney(locale, inspected.costPerPostedDzd)],
               ['Cost / delivered', formatMoney(locale, inspected.costPerDeliveredDzd)],
               ['Cost / paid', formatMoney(locale, inspected.costPerPaidDzd)],
+              ['Projected Profit ×', formatRatio(locale, inspected.projectedProfitX)],
+              ['Paid Profit ×', formatRatio(locale, inspected.paidProfitX)],
+              ['Profit coverage', formatPercent(locale, inspected.profitCoveragePct)],
             ].map(([label, value]) => (
               <div
                 key={label}
@@ -1680,9 +1709,16 @@ function ReturnEvidence({
           {formatPercent(locale, returns.mature.ratePct)}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          {formatNumber(locale, returns.mature.terminal)} terminal · cutoff{' '}
-          {formatDate(locale, returns.mature.cutoffDate)}
+          {formatNumber(locale, returns.mature.terminal)} terminal /{' '}
+          {formatNumber(locale, returns.mature.eligibleOrders)} eligible ·{' '}
+          {formatPercent(locale, returns.mature.terminalCoveragePct)} resolved
         </p>
+        {returns.mature.cohortStartDate && returns.mature.cohortEndDate ? (
+          <p className="mt-1 text-[11px] text-muted-foreground/75">
+            {formatDate(locale, returns.mature.cohortStartDate)}–
+            {formatDate(locale, returns.mature.cohortEndDate)} posting cohorts
+          </p>
+        ) : null}
       </div>
       <div className="px-4 py-4">
         <p className="text-xs text-muted-foreground">{copy.returnCopy.terminal}</p>
@@ -1713,19 +1749,12 @@ function FulfillmentView({
     sharePct: number;
     staleOrders: number;
   };
-  type CycleRow = {
-    key: string;
-    medianHours: number | null;
-    p75Hours: number | null;
-    p90Hours: number | null;
-    samples: number;
-  };
   type AttemptRow = { band: string; outcome: string; orders: number };
   const phases = useMemo(() => {
     const result = new Map<string, number>();
-    data.states.forEach((row: StateRow) =>
-      result.set(row.phase, (result.get(row.phase) ?? 0) + row.orders),
-    );
+    data.states
+      .filter((row: StateRow) => row.phase !== 'untracked')
+      .forEach((row: StateRow) => result.set(row.phase, (result.get(row.phase) ?? 0) + row.orders));
     return [...result.entries()].map(([key, value]) => ({ key, value }));
   }, [data.states]);
   return (
@@ -1740,7 +1769,7 @@ function FulfillmentView({
       <Section title={copy.sections.cashPipeline}>
         <CashPipeline rows={data.cashPipeline} copy={copy} locale={locale} />
       </Section>
-      <div className="grid xl:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.8fr)]">
+      <div>
         <Section title={copy.sections.shipmentStates}>
           <DenseTable>
             <TableHead>
@@ -1776,43 +1805,6 @@ function FulfillmentView({
               ))}
             </tbody>
           </DenseTable>
-        </Section>
-        <Section title={copy.sections.cycleTime}>
-          <div className="divide-y divide-border/50 border-y border-border/60">
-            {data.cycleTimes
-              .filter((row: CycleRow) => row.key !== 'deliveryToPayment')
-              .map((row: CycleRow) => (
-                <div key={row.key} className="py-4">
-                  <p className="text-sm font-medium">{row.key.replace(/([A-Z])/g, ' $1')}</p>
-                  <div className="mt-3 grid grid-cols-4 gap-3">
-                    <div>
-                      <p className="text-[10px] uppercase text-muted-foreground">
-                        {copy.columns.p50}
-                      </p>
-                      <p className="mt-1 font-semibold">{formatHours(locale, row.medianHours)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase text-muted-foreground">
-                        {copy.columns.p75}
-                      </p>
-                      <p className="mt-1 font-semibold">{formatHours(locale, row.p75Hours)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase text-muted-foreground">
-                        {copy.columns.p90}
-                      </p>
-                      <p className="mt-1 font-semibold">{formatHours(locale, row.p90Hours)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase text-muted-foreground">
-                        {copy.columns.sample}
-                      </p>
-                      <p className="mt-1 font-semibold">{formatNumber(locale, row.samples)}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-          </div>
         </Section>
       </div>
       <div className="grid xl:grid-cols-2">
@@ -1853,7 +1845,7 @@ function FulfillmentView({
             <ResponsiveChart width="100%" height="100%">
               <ComposedChart
                 data={['0', '1', '2', '3', '4+'].map((band) => ({
-                  band,
+                  band: band === '0' ? 'No event' : band,
                   paid:
                     data.attempts.find(
                       (row: AttemptRow) => row.band === band && row.outcome === 'paid',
@@ -1881,21 +1873,65 @@ function FulfillmentView({
 
 function StorefrontView({
   data,
+  filters,
   copy,
   locale,
 }: {
   data: DataOf<'storefront'>;
+  filters: Analytics2Payload['filters'];
   copy: Analytics2Copy;
   locale: string;
 }) {
+  const detailParams = useMemo(() => {
+    const params = new URLSearchParams({ range: filters.range, grain: filters.grain });
+    if (filters.range === 'custom' && filters.startDate) params.set('startDate', filters.startDate);
+    if (filters.range === 'custom') params.set('endDate', filters.endDate);
+    return params;
+  }, [filters.endDate, filters.grain, filters.range, filters.startDate]);
+  const detailsQuery = useQuery({
+    queryKey: [
+      'stats-storefront-details',
+      filters.range,
+      filters.startDate,
+      filters.endDate,
+      filters.grain,
+    ],
+    queryFn: ({ signal }) =>
+      request<{
+        data: Pick<
+          DataOf<'storefront'>,
+          | 'metrics'
+          | 'funnel'
+          | 'paths'
+          | 'trend'
+          | 'acquisitionSources'
+          | 'vitals'
+          | 'landingPages'
+          | 'aiAssistant'
+        >;
+      }>(`/api/stats/storefront-details?${detailParams.toString()}`, { signal }),
+    staleTime: 30_000,
+  });
+  const viewData = { ...data, ...(detailsQuery.data?.data ?? {}) };
+  const detailedMetrics = new Map(
+    detailsQuery.data?.data.metrics.map((item) => [item.key, item]) ?? [],
+  );
+  const metrics = data.metrics.map((item) => detailedMetrics.get(item.key) ?? item);
+  const funnelValues = new Map(
+    viewData.funnel.map((row: { name: string; value: number }) => [row.name, row.value]),
+  );
+  const productSessions = funnelValues.get('Product-view sessions') ?? 0;
+  const cartSessions = funnelValues.get('Cart sessions') ?? 0;
+  const checkoutSessions = funnelValues.get('Checkout sessions') ?? 0;
+  const submittedSessions = funnelValues.get('Submitted-order sessions') ?? 0;
   return (
     <>
-      <MetricStrip metrics={data.metrics} copy={copy} locale={locale} />
+      <MetricStrip metrics={metrics} copy={copy} locale={locale} />
       <div className="grid xl:grid-cols-[minmax(0,1.6fr)_minmax(19rem,0.8fr)]">
         <Section title={copy.sections.siteTrend}>
           <ChartFrame className="h-[23rem]">
             <ResponsiveChart width="100%" height="100%">
-              <ComposedChart data={data.trend}>
+              <ComposedChart data={viewData.trend}>
                 <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.5} />
                 <XAxis
                   dataKey="bucket"
@@ -1954,29 +1990,25 @@ function StorefrontView({
         </Section>
         <Section title={copy.sections.siteFunnel}>
           <Funnel
-            rows={data.funnel.map((row: { name: string; value: number }) => row)}
+            rows={viewData.funnel.map((row: { name: string; value: number }) => row)}
             locale={locale}
           />
           <div className="mt-6 grid grid-cols-2 gap-4 border-t border-border/50 pt-4 text-sm">
             <div>
-              <p className="text-muted-foreground">Product → cart</p>
+              <p className="text-muted-foreground">Product-view → cart sessions</p>
               <p className="mt-1 text-lg font-semibold">
                 {formatPercent(
                   locale,
-                  data.summary.productViews
-                    ? (data.summary.addToCarts / data.summary.productViews) * 100
-                    : null,
+                  productSessions ? (cartSessions / productSessions) * 100 : null,
                 )}
               </p>
             </div>
             <div>
-              <p className="text-muted-foreground">Checkout → purchase</p>
+              <p className="text-muted-foreground">Checkout → submitted order</p>
               <p className="mt-1 text-lg font-semibold">
                 {formatPercent(
                   locale,
-                  data.summary.checkoutStarts
-                    ? (data.summary.purchases / data.summary.checkoutStarts) * 100
-                    : null,
+                  checkoutSessions ? (submittedSessions / checkoutSessions) * 100 : null,
                 )}
               </p>
             </div>
@@ -1986,7 +2018,7 @@ function StorefrontView({
       <div className="grid xl:grid-cols-2">
         <Section
           title={copy.sections.paths}
-          description={`${formatDate(locale, data.paths.coverageStartDate, false)} – ${formatDate(locale, data.paths.coverageEndDate, false)} raw-event window`}
+          description={`${formatDate(locale, viewData.paths.coverageStartDate, false)} – ${formatDate(locale, viewData.paths.coverageEndDate, false)} raw-event window`}
         >
           <DenseTable>
             <TableHead>
@@ -1997,7 +2029,7 @@ function StorefrontView({
               </tr>
             </TableHead>
             <tbody className="divide-y divide-border/45">
-              {data.paths.rows.map((row: { from: string; to: string; sessions: number }) => (
+              {viewData.paths.rows.map((row: { from: string; to: string; sessions: number }) => (
                 <tr key={`${row.from}-${row.to}`}>
                   <td className="max-w-52 truncate px-3 py-2.5 font-medium">{row.from}</td>
                   <td className="max-w-52 truncate px-3 py-2.5 text-muted-foreground">{row.to}</td>
@@ -2011,7 +2043,7 @@ function StorefrontView({
         </Section>
         <Section title={copy.sections.searches}>
           <div className="divide-y divide-border/50 border-y border-border/60">
-            {data.searches
+            {viewData.searches
               .slice(0, 20)
               .map((row: { term: string; searches: number; zeroResults: number }) => (
                 <div
@@ -2049,7 +2081,7 @@ function StorefrontView({
             </tr>
           </TableHead>
           <tbody className="divide-y divide-border/45">
-            {data.landingPages.pages
+            {viewData.landingPages.pages
               .slice(0, 50)
               .map(
                 (page: {
@@ -2096,7 +2128,7 @@ function StorefrontView({
       <div className="grid xl:grid-cols-3">
         <Section title={copy.sections.experience} className="xl:col-span-2">
           <div className="grid divide-y divide-border/50 border-y border-border/60 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
-            {data.vitals.map(
+            {viewData.vitals.map(
               (vital: {
                 name: string;
                 samples: number;
@@ -2119,7 +2151,7 @@ function StorefrontView({
             )}
           </div>
           <div className="mt-5 divide-y divide-border/45">
-            {data.acquisitionSources
+            {viewData.acquisitionSources
               .slice(0, 10)
               .map(
                 (source: {
@@ -2148,12 +2180,12 @@ function StorefrontView({
         <Section title="AI-assisted shopping">
           <dl className="divide-y divide-border/50 border-y border-border/60 text-sm">
             {[
-              ['Opens', data.aiAssistant.opens],
-              ['Messages', data.aiAssistant.messages],
-              ['Result clicks', data.aiAssistant.resultClicks],
-              ['Influenced orders', data.aiAssistant.influencedOrders],
-              ['Confirmed', data.aiAssistant.confirmedOrders],
-              ['Paid', data.aiAssistant.paidOrders],
+              ['Opens', viewData.aiAssistant.opens],
+              ['Messages', viewData.aiAssistant.messages],
+              ['Result clicks', viewData.aiAssistant.resultClicks],
+              ['Influenced orders', viewData.aiAssistant.influencedOrders],
+              ['Confirmed', viewData.aiAssistant.confirmedOrders],
+              ['Paid', viewData.aiAssistant.paidOrders],
             ].map(([label, value]) => (
               <div key={String(label)} className="flex items-center justify-between py-2.5">
                 <dt className="text-muted-foreground">{label}</dt>
@@ -2190,14 +2222,14 @@ function SearchVisibilityView({
   const [selectedPage, setSelectedPage] = useState<SearchPage | null>(null);
   const sync = useMutation({
     mutationFn: () =>
-      request<{ result: { since: string; until: string } }>('/api/analytics2/search-console/sync', {
+      request<{ result: { since: string; until: string } }>('/api/stats/search-console/sync', {
         method: 'POST',
         ...(reviewClock && filters.startDate
           ? { body: JSON.stringify({ since: filters.startDate, until: filters.endDate }) }
           : {}),
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['analytics2', 'search'] });
+      await queryClient.invalidateQueries({ queryKey: ['stats-workspace', 'search'] });
       toast.success('Google Search data synchronized');
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : 'Sync failed'),
@@ -2606,6 +2638,50 @@ function SearchVisibilityView({
 
 type CatalogProduct = DataOf<'catalog'>['products'][number];
 type CatalogCustomer = DataOf<'catalog'>['customers']['rows'][number];
+type ProductScatterPoint = CatalogProduct & {
+  x: number;
+  y: number;
+  z: number;
+  resolvedOrders: number;
+  outcomeCoveragePct: number;
+};
+
+function ProductScatterTooltip({
+  active,
+  payload,
+  locale,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: ProductScatterPoint }>;
+  locale: string;
+}) {
+  const product = payload?.[0]?.payload;
+  if (!active || !product) return null;
+  return (
+    <div className="min-w-56 border border-border/70 bg-background/95 p-3 text-xs shadow-lg">
+      <p className="max-w-72 font-semibold leading-5">{product.title}</p>
+      <div className="mt-2 grid grid-cols-2 gap-x-5 gap-y-1.5 text-muted-foreground">
+        <span>Product views</span>
+        <strong className="text-end text-foreground tabular-nums">
+          {formatNumber(locale, product.viewCount)}
+        </strong>
+        <span>Terminal paid</span>
+        <strong className="text-end text-foreground tabular-nums">
+          {formatPercent(locale, product.terminalPaidRatePct)}
+        </strong>
+        <span>Paid / returned</span>
+        <strong className="text-end text-foreground tabular-nums">
+          {formatNumber(locale, product.paidOrders)} /{' '}
+          {formatNumber(locale, product.returnedOrders)}
+        </strong>
+        <span>Still active</span>
+        <strong className="text-end text-foreground tabular-nums">
+          {formatNumber(locale, product.activeOrders)}
+        </strong>
+      </div>
+    </div>
+  );
+}
 
 function CatalogView({
   data,
@@ -2629,18 +2705,62 @@ function CatalogView({
   }, [data.products, locale, search]);
   const selected =
     data.products.find((product: CatalogProduct) => product.id === selectedId) ?? null;
-  const scatter = data.products
+  const scatter = filtered
+    .map((product: CatalogProduct): ProductScatterPoint => {
+      const resolvedOrders = product.paidOrders + product.returnedOrders;
+      const measuredOrders = resolvedOrders + product.activeOrders;
+      return {
+        ...product,
+        x: product.viewCount ?? 0,
+        y: product.terminalPaidRatePct ?? 0,
+        z: resolvedOrders,
+        resolvedOrders,
+        outcomeCoveragePct: measuredOrders > 0 ? (resolvedOrders / measuredOrders) * 100 : 0,
+      };
+    })
     .filter(
-      (product: CatalogProduct) =>
-        (product.viewCount ?? 0) > 0 && product.terminalPaidRatePct != null,
+      (product: ProductScatterPoint) =>
+        product.x > 0 &&
+        product.terminalPaidRatePct != null &&
+        product.resolvedOrders >= 10 &&
+        product.outcomeCoveragePct >= 50,
     )
-    .slice(0, 80)
-    .map((product: CatalogProduct) => ({
-      ...product,
-      x: product.viewCount ?? 0,
-      y: product.terminalPaidRatePct ?? 0,
-      z: Math.max(12, product.postedUnits * 3),
-    }));
+    .sort(
+      (left: ProductScatterPoint, right: ProductScatterPoint) =>
+        right.resolvedOrders - left.resolvedOrders,
+    )
+    .slice(0, 80);
+  const resolvedPaidOrders = scatter.reduce(
+    (sum: number, product: ProductScatterPoint) => sum + product.paidOrders,
+    0,
+  );
+  const resolvedOrders = scatter.reduce(
+    (sum: number, product: ProductScatterPoint) => sum + product.resolvedOrders,
+    0,
+  );
+  const portfolioPaidRatePct =
+    resolvedOrders > 0 ? (resolvedPaidOrders / resolvedOrders) * 100 : null;
+  const minimumPaidRatePct = scatter.length
+    ? Math.min(...scatter.map((product: ProductScatterPoint) => product.y))
+    : 0;
+  const paidRateDomainMinimum = Math.max(0, Math.floor(minimumPaidRatePct / 10) * 10 - 10);
+  const paidRateTicks = Array.from(
+    new Set(
+      [paidRateDomainMinimum, 50, 75, 100].filter(
+        (value) => value >= paidRateDomainMinimum && value <= 100,
+      ),
+    ),
+  );
+  const minimumViews = scatter.length
+    ? Math.min(...scatter.map((product: ProductScatterPoint) => product.x))
+    : 1;
+  const maximumViews = scatter.length
+    ? Math.max(...scatter.map((product: ProductScatterPoint) => product.x))
+    : 1;
+  const viewDomain: [number, number] = [
+    Math.max(1, minimumViews * 0.8),
+    Math.max(maximumViews * 1.2, minimumViews + 1),
+  ];
   return (
     <>
       <MetricStrip metrics={data.metrics} copy={copy} locale={locale} />
@@ -2659,41 +2779,85 @@ function CatalogView({
           </label>
         }
       >
-        <div className="mb-5">
-          <ChartFrame className="h-[18rem]">
-            <ResponsiveChart width="100%" height="100%">
-              <ScatterChart margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
-                <CartesianGrid stroke="var(--border)" strokeOpacity={0.45} />
-                <XAxis
-                  type="number"
-                  dataKey="x"
-                  name={copy.columns.views}
-                  tickLine={false}
-                  axisLine={false}
-                  fontSize={11}
-                />
-                <YAxis
-                  type="number"
-                  dataKey="y"
-                  name="Terminal paid rate"
-                  tickFormatter={(value) => `${value}%`}
-                  tickLine={false}
-                  axisLine={false}
-                  width={42}
-                  fontSize={11}
-                />
-                <Tooltip cursor={{ strokeDasharray: '3 3' }} {...chartTooltip(locale)} />
-                <Scatter data={scatter} fill="#7c3aed">
-                  {scatter.map((row: CatalogProduct) => (
-                    <Cell
-                      key={row.id}
-                      fill={(row.terminalPaidRatePct ?? 0) >= 70 ? '#0f766e' : '#d97706'}
+        <div className="mb-5" data-product-outcome-plot>
+          <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-2 px-2 text-[11px] text-muted-foreground sm:px-3">
+            <span>Views →</span>
+            <span>Paid outcome ↑</span>
+            <span>Bubble · resolved orders</span>
+            {portfolioPaidRatePct != null ? (
+              <>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-teal-700" /> Above{' '}
+                  {formatPercent(locale, portfolioPaidRatePct)}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-amber-600" /> Below{' '}
+                  {formatPercent(locale, portfolioPaidRatePct)}
+                </span>
+              </>
+            ) : null}
+          </div>
+          {scatter.length ? (
+            <ChartFrame className="h-[20rem]">
+              <ResponsiveChart width="100%" height="100%">
+                <ScatterChart margin={{ top: 16, right: 34, bottom: 12, left: 8 }}>
+                  <CartesianGrid stroke="var(--border)" strokeOpacity={0.45} />
+                  <XAxis
+                    type="number"
+                    dataKey="x"
+                    name={copy.columns.views}
+                    scale="log"
+                    domain={viewDomain}
+                    tickFormatter={(value) => formatNumber(locale, Number(value), true)}
+                    tickLine={false}
+                    axisLine={false}
+                    fontSize={11}
+                  />
+                  <YAxis
+                    type="number"
+                    dataKey="y"
+                    name="Terminal paid rate"
+                    domain={[paidRateDomainMinimum, 105]}
+                    ticks={paidRateTicks}
+                    tickFormatter={(value) => `${value}%`}
+                    tickLine={false}
+                    axisLine={false}
+                    width={42}
+                    fontSize={11}
+                  />
+                  <ZAxis type="number" dataKey="z" range={[42, 300]} />
+                  {portfolioPaidRatePct != null ? (
+                    <ReferenceLine
+                      y={portfolioPaidRatePct}
+                      stroke="var(--muted-foreground)"
+                      strokeDasharray="4 4"
+                      strokeOpacity={0.65}
                     />
-                  ))}
-                </Scatter>
-              </ScatterChart>
-            </ResponsiveChart>
-          </ChartFrame>
+                  ) : null}
+                  <Tooltip
+                    cursor={{ strokeDasharray: '3 3' }}
+                    content={<ProductScatterTooltip locale={locale} />}
+                  />
+                  <Scatter data={scatter} fill="#7c3aed">
+                    {scatter.map((row: ProductScatterPoint) => (
+                      <Cell
+                        key={row.id}
+                        fill={
+                          portfolioPaidRatePct != null && row.y >= portfolioPaidRatePct
+                            ? '#0f766e'
+                            : '#d97706'
+                        }
+                      />
+                    ))}
+                  </Scatter>
+                </ScatterChart>
+              </ResponsiveChart>
+            </ChartFrame>
+          ) : (
+            <div className="flex h-48 items-center justify-center border-y border-border/50 text-sm text-muted-foreground">
+              Not enough resolved product outcomes for a reliable comparison.
+            </div>
+          )}
         </div>
         <div className="divide-y divide-border/50 border-y border-border/60 sm:hidden">
           {filtered.slice(0, 12).map((product: CatalogProduct) => (
@@ -2821,6 +2985,11 @@ function CatalogView({
                   <td className="px-3 py-2.5 font-medium">{wilaya.name}</td>
                   <td className="px-3 py-2.5 text-end tabular-nums">
                     {formatNumber(locale, wilaya.postedOrders)}
+                    {wilaya.untrackedOrders > 0 ? (
+                      <span className="mt-0.5 block text-[10px] text-amber-700 dark:text-amber-400">
+                        {formatNumber(locale, wilaya.untrackedOrders)} untracked
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-3 py-2.5 text-end tabular-nums">
                     {formatPercent(locale, wilaya.terminalPaidRatePct)}
@@ -2833,6 +3002,11 @@ function CatalogView({
                   </td>
                   <td className="px-3 py-2.5 text-end font-medium tabular-nums">
                     {formatMoney(locale, wilaya.pipelineCodDzd)}
+                    {wilaya.pipelineCodDzd > 0 ? (
+                      <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">
+                        {formatPercent(locale, wilaya.providerAmountValueCoveragePct)} provider
+                      </span>
+                    ) : null}
                   </td>
                 </tr>
               ))}
@@ -2915,9 +3089,11 @@ function CatalogView({
               <tr>
                 <th className="px-3 py-2 text-start">Customer</th>
                 <th className="px-3 py-2 text-start">City</th>
-                <th className="px-3 py-2 text-end">Orders</th>
-                <th className="px-3 py-2 text-end">Order value</th>
-                <th className="px-3 py-2 text-end">Paid profit</th>
+                <th className="px-3 py-2 text-end">Submitted</th>
+                <th className="px-3 py-2 text-end">Paid</th>
+                <th className="px-3 py-2 text-end">Paid revenue</th>
+                <th className="px-3 py-2 text-end">Contribution</th>
+                <th className="px-3 py-2 text-end">Margin</th>
               </tr>
             </TableHead>
             <tbody className="divide-y divide-border/45">
@@ -2938,10 +3114,16 @@ function CatalogView({
                       {formatNumber(locale, customer.orders)}
                     </td>
                     <td className="px-3 py-2.5 text-end tabular-nums">
-                      {formatMoney(locale, customer.totalValue)}
+                      {formatNumber(locale, customer.paidOrders)}
+                    </td>
+                    <td className="px-3 py-2.5 text-end tabular-nums">
+                      {formatMoney(locale, customer.paidValueDzd)}
                     </td>
                     <td className="px-3 py-2.5 text-end font-medium tabular-nums">
                       {formatMoney(locale, customer.contributionLtvDzd)}
+                    </td>
+                    <td className="px-3 py-2.5 text-end tabular-nums">
+                      {formatPercent(locale, customer.paidContributionMarginPct)}
                     </td>
                   </tr>
                 ))}
@@ -2973,7 +3155,6 @@ function CatalogView({
                 ['Terminal paid rate', formatPercent(locale, selected.terminalPaidRatePct)],
                 ['Cost coverage', formatPercent(locale, selected.costCoveragePct)],
                 ['Projected contribution', formatMoney(locale, selected.projectedContributionDzd)],
-                ['Settlement profit', formatMoney(locale, selected.settledProfitDzd)],
                 ['Median delivery', formatHours(locale, selected.deliveryMedianHours)],
                 [copy.columns.conversion, formatPercent(locale, selected.websiteConversionRate)],
               ].map(([label, value]) => (
@@ -3024,23 +3205,11 @@ function CatalogView({
               <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                 Period change
               </p>
-              <div className="mt-3 grid grid-cols-3 gap-4">
+              <div className="mt-3">
                 <div>
                   <p className="text-xs text-muted-foreground">Units</p>
                   <p className="mt-1 font-semibold">
                     {formatPercent(locale, selected.changes.unitsPct)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Profit</p>
-                  <p className="mt-1 font-semibold">
-                    {formatPercent(locale, selected.changes.profitPct)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Conversion</p>
-                  <p className="mt-1 font-semibold">
-                    {formatPercent(locale, selected.changes.conversionPct)}
                   </p>
                 </div>
               </div>
@@ -3146,7 +3315,7 @@ function AssumptionsView({
   }
 
   async function invalidate() {
-    await queryClient.invalidateQueries({ queryKey: ['analytics2'] });
+    await queryClient.invalidateQueries({ queryKey: ['stats-workspace'] });
   }
 
   const settingsMutation = useMutation({
@@ -3237,20 +3406,6 @@ function AssumptionsView({
   });
   const exportParams = new URLSearchParams({ range: filters.range, endDate: filters.endDate });
   if (filters.startDate) exportParams.set('startDate', filters.startDate);
-  const deltaRows: Array<{
-    label: string;
-    row: {
-      actualDzd: number;
-      automatedDzd: number;
-      differenceDzd: number;
-      differencePct: number | null;
-    };
-  }> = [
-    { label: 'Fees', row: data.automationDelta.fees },
-    { label: 'Net recovered', row: data.automationDelta.netRecovered },
-    { label: 'Profit', row: data.automationDelta.profit },
-  ];
-
   return (
     <>
       <MetricStrip metrics={data.metrics} copy={copy} locale={locale} />
@@ -3554,51 +3709,16 @@ function AssumptionsView({
           </tbody>
         </DenseTable>
       </Section>
-      <div className="grid xl:grid-cols-2">
-        <Section title={copy.sections.automationEvidence}>
-          <DenseTable>
-            <TableHead>
-              <tr>
-                <th className="px-3 py-2 text-start">Measure</th>
-                <th className="px-3 py-2 text-end">Settlement</th>
-                <th className="px-3 py-2 text-end">Automated</th>
-                <th className="px-3 py-2 text-end">Delta</th>
-              </tr>
-            </TableHead>
-            <tbody className="divide-y divide-border/45">
-              {deltaRows.map(({ label, row }) => (
-                <tr key={label}>
-                  <td className="px-3 py-2.5 font-medium">{label}</td>
-                  <td className="px-3 py-2.5 text-end tabular-nums">
-                    {formatMoney(locale, row.actualDzd)}
-                  </td>
-                  <td className="px-3 py-2.5 text-end tabular-nums">
-                    {formatMoney(locale, row.automatedDzd)}
-                  </td>
-                  <td className="px-3 py-2.5 text-end tabular-nums">
-                    {formatPercent(locale, row.differencePct)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </DenseTable>
-          <p className="mt-3 text-xs text-muted-foreground">
-            {formatNumber(locale, data.automationDelta.orders)} overlapping orders ·{' '}
-            {formatPercent(locale, data.automationDelta.profit.exactPct)} exact profit · p95 error{' '}
-            {formatMoney(locale, data.automationDelta.profit.p95ErrorDzd)}
-          </p>
-        </Section>
-        <Section title={copy.sections.formula}>
-          <div className="divide-y divide-border/50 border-y border-border/60 font-mono text-xs">
-            {Object.entries(data.formula).map(([key, value]) => (
-              <div key={key} className="grid gap-1 py-3 sm:grid-cols-[9rem_1fr]">
-                <span className="font-sans font-medium text-foreground">{key}</span>
-                <code className="overflow-x-auto text-muted-foreground">{value}</code>
-              </div>
-            ))}
-          </div>
-        </Section>
-      </div>
+      <Section title={copy.sections.formula}>
+        <div className="divide-y divide-border/50 border-y border-border/60 font-mono text-xs">
+          {Object.entries(data.formula).map(([key, value]) => (
+            <div key={key} className="grid gap-1 py-3 sm:grid-cols-[9rem_1fr]">
+              <span className="font-sans font-medium text-foreground">{key}</span>
+              <code className="overflow-x-auto text-muted-foreground">{value}</code>
+            </div>
+          ))}
+        </div>
+      </Section>
       <SidePanel
         open={Boolean(selectedDay)}
         onOpenChange={(open) => {
@@ -3690,7 +3810,7 @@ function AssumptionsView({
   );
 }
 
-export function Analytics2Workspace({ initialData }: { initialData: Analytics2Payload }) {
+export function StatsWorkspace({ initialData }: { initialData: Analytics2Payload }) {
   const locale = useLocale();
   const t = useTranslations();
   const copy = getAnalytics2Copy(locale);
@@ -3709,9 +3829,8 @@ export function Analytics2Workspace({ initialData }: { initialData: Analytics2Pa
   );
   const [customEnd, setCustomEnd] = useState(initialData.filters.endDate);
 
-  const searchParams = useMemo(() => {
+  const routeSearchParams = useMemo(() => {
     const params = new URLSearchParams({
-      view: filters.view,
       range: filters.range,
       grain: filters.grain,
     });
@@ -3719,6 +3838,11 @@ export function Analytics2Workspace({ initialData }: { initialData: Analytics2Pa
     if (filters.range === 'custom' && filters.endDate) params.set('endDate', filters.endDate);
     return params;
   }, [filters]);
+  const apiSearchParams = useMemo(() => {
+    const params = new URLSearchParams(routeSearchParams);
+    params.set('view', filters.view);
+    return params;
+  }, [filters.view, routeSearchParams]);
   const matchesInitialQuery =
     filters.view === initialData.filters.view &&
     filters.range === initialData.filters.range &&
@@ -3728,12 +3852,12 @@ export function Analytics2Workspace({ initialData }: { initialData: Analytics2Pa
         filters.endDate === initialData.filters.endDate));
 
   useEffect(() => {
-    router.replace(`${pathname}?${searchParams.toString()}`, { scroll: false });
-  }, [pathname, router, searchParams]);
+    router.replace(`${pathname}?${routeSearchParams.toString()}`, { scroll: false });
+  }, [pathname, routeSearchParams, router]);
 
   const analyticsQuery = useQuery({
     queryKey: [
-      'analytics2',
+      'stats-workspace',
       filters.view,
       filters.range,
       filters.range === 'custom' ? filters.startDate : null,
@@ -3741,7 +3865,7 @@ export function Analytics2Workspace({ initialData }: { initialData: Analytics2Pa
       filters.grain,
     ],
     queryFn: ({ signal }) =>
-      request<{ data: Analytics2Payload }>(`/api/analytics2?${searchParams.toString()}`, {
+      request<{ data: Analytics2Payload }>(`/api/stats/workspace?${apiSearchParams.toString()}`, {
         signal,
       }).then((response) => response.data),
     initialData: matchesInitialQuery ? initialData : undefined,
@@ -3764,6 +3888,22 @@ export function Analytics2Workspace({ initialData }: { initialData: Analytics2Pa
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(payload.generatedAt))}`;
+  useAdminAiSurfaceDetails(
+    analyticsAiSurfaceDetails({
+      view: payload.filters.view,
+      range: payload.filters.range,
+      startDate: payload.filters.startDate,
+      endDate: payload.filters.endDate,
+      grain: payload.filters.grain,
+      referenceDate: payload.referenceDate,
+      reviewClock: payload.reviewClock,
+      queryDurationMs: payload.diagnostics.queryDurationMs,
+      responseSizeBytes: payload.diagnostics.responseSizeBytes,
+      sources: payload.sources,
+      warnings: payload.warnings,
+      fetching: analyticsQuery.isFetching,
+    }),
+  );
 
   function selectRange(range: Analytics2Range) {
     setRangeChoice(range);
@@ -3780,7 +3920,9 @@ export function Analytics2Workspace({ initialData }: { initialData: Analytics2Pa
             data={data}
             copy={copy}
             locale={locale}
-            onNavigate={(view) => setFilters((current) => ({ ...current, view }))}
+            onNavigate={(view) =>
+              router.push(`/${locale}${statsPath(view)}?${routeSearchParams.toString()}`)
+            }
           />
         );
       case 'money':
@@ -3792,7 +3934,7 @@ export function Analytics2Workspace({ initialData }: { initialData: Analytics2Pa
       case 'fulfillment':
         return <FulfillmentView data={data} copy={copy} locale={locale} />;
       case 'storefront':
-        return <StorefrontView data={data} copy={copy} locale={locale} />;
+        return <StorefrontView data={data} filters={payload.filters} copy={copy} locale={locale} />;
       case 'search':
         return (
           <SearchVisibilityView

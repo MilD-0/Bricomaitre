@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { deleteDayMock, requireMutationMock } = vi.hoisted(() => ({
+const { deleteDayMock, refreshFactsMock, requireMutationMock } = vi.hoisted(() => ({
   deleteDayMock: vi.fn(),
+  refreshFactsMock: vi.fn(),
   requireMutationMock: vi.fn(),
+}));
+
+vi.mock('../../../../../../lib/analytics2-facts', () => ({
+  refreshAnalytics2FactsAfterMutation: refreshFactsMock,
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: () => true }));
@@ -19,6 +24,7 @@ describe('profit tracker day detail route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireMutationMock.mockResolvedValue(null);
+    refreshFactsMock.mockResolvedValue(true);
     deleteDayMock.mockImplementation(async (date: string) => {
       if (date === 'today') throw new Error('Invalid calendar date');
       return date;
@@ -35,6 +41,7 @@ describe('profit tracker day detail route', () => {
 
     expect(response.status).toBe(200);
     expect(deleteDayMock).toHaveBeenCalledWith('2026-08-18');
+    expect(refreshFactsMock).toHaveBeenCalledOnce();
   });
 
   it('rejects malformed dates', async () => {

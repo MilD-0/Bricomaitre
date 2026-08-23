@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   rateLimit: vi.fn(),
   catalog: vi.fn(),
   meta: vi.fn(),
+  cartValidation: vi.fn(),
+  assets: vi.fn(),
   detail: vi.fn(),
   settings: vi.fn(),
   recordRun: vi.fn(),
@@ -31,6 +33,8 @@ vi.mock('@/lib/shopping-assistant-rate-limit', () => ({
 vi.mock('@/lib/storefront-api', () => ({
   fetchStorefrontCatalog: mocks.catalog,
   fetchStorefrontCatalogMeta: mocks.meta,
+  fetchStorefrontCartValidation: mocks.cartValidation,
+  fetchStorefrontAssets: mocks.assets,
   fetchStorefrontProductDetail: mocks.detail,
   getStorefrontSettings: mocks.settings,
   recordStorefrontAssistantRun: mocks.recordRun,
@@ -89,12 +93,33 @@ describe('POST /api/ai/chat', () => {
     mocks.getConfig.mockReturnValue({ requestTimeoutMs: 5_000, maxRetries: 1 });
     mocks.resolveModel.mockReturnValue('storefront-model-id');
     mocks.createModel.mockReturnValue('storefront-model');
-    mocks.catalog.mockResolvedValue({ items: [catalogProduct], total: 1 });
+    mocks.catalog.mockResolvedValue({ items: [catalogProduct], total: 1_043 });
     mocks.meta.mockResolvedValue({
       brands: [{ id: 2, name: 'Bric Pro' }],
       categories: [{ id: 3, name: 'Perçage' }],
     });
     mocks.settings.mockResolvedValue({ aiAssistantEnabled: true });
+    mocks.cartValidation.mockResolvedValue({ items: [catalogProduct] });
+    mocks.assets.mockResolvedValue({
+      banners: [],
+      featuredGroups: [],
+      productCards: [
+        {
+          id: 5,
+          productId: 12,
+          titleAr: 'مثقاب خرسانة احترافي',
+          titleFr: 'Perceuse béton Pro',
+          descriptionAr: 'لأعمال الخرسانة',
+          descriptionFr: 'Conçue pour les travaux de maçonnerie',
+          characteristicsAr: ['ظرف 13 مم'],
+          characteristicsFr: ['Mandrin 13 mm', 'Poignée auxiliaire'],
+          sortOrder: 1,
+          active: true,
+          createdAt: '2026-07-01T00:00:00.000Z',
+          updatedAt: '2026-07-01T00:00:00.000Z',
+        },
+      ],
+    });
     mocks.recordRun.mockResolvedValue(undefined);
   });
 
@@ -130,28 +155,33 @@ describe('POST /api/ai/chat', () => {
   });
 
   it('grounds AI output in products returned by the canonical catalog tool', async () => {
-    mocks.catalog
-      .mockResolvedValueOnce({ items: [], total: 0 })
-      .mockResolvedValue({ items: [catalogProduct], total: 1 });
+    let catalogToolResult: unknown;
     mocks.streamText.mockImplementation(
       (options: {
         tools: {
           search_catalog: {
             execute: (input: {
-              query: string;
-              inStockOnly: boolean;
+              search: string;
+              stock: 'all' | 'in' | 'out';
+              page: number;
               limit: number;
             }) => Promise<unknown>;
+          };
+          present_products: {
+            execute: (input: { productIds: number[] }) => Promise<unknown>;
           };
         };
       }) => ({
         stream: (async function* () {
-          await options.tools.search_catalog.execute({
-            query: 'perceuse béton',
-            inStockOnly: true,
-            limit: 3,
+          catalogToolResult = await options.tools.search_catalog.execute({
+            search: 'perceuse béton',
+            stock: 'in',
+            page: 42,
+            limit: 24,
           });
-          yield { type: 'tool-call' };
+          await options.tools.present_products.execute({ productIds: [12] });
+          yield { type: 'tool-call', toolName: 'search_catalog' };
+          yield { type: 'tool-result', toolName: 'search_catalog' };
           yield { type: 'text-delta', text: 'Cette perceuse est disponible ' };
           yield { type: 'text-delta', text: 'et correspond à votre recherche.' };
           yield {
@@ -178,6 +208,12 @@ describe('POST /api/ai/chat', () => {
     expect(response.headers.get('content-type')).toContain('application/x-ndjson');
     const events = await streamEvents(response);
     expect(events[0]).toEqual({ type: 'status', status: 'thinking' });
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { type: 'tool', name: 'search_catalog', status: 'started' },
+        { type: 'tool', name: 'search_catalog', status: 'completed' },
+      ]),
+    );
     expect(
       events
         .filter((event) => event.type === 'text-delta')
@@ -193,8 +229,22 @@ describe('POST /api/ai/chat', () => {
       model: 'storefront-model-id',
     });
     expect(mocks.catalog).toHaveBeenCalledWith(
-      expect.objectContaining({ search: 'perceuse béton' }),
+      expect.objectContaining({ search: 'perceuse béton', stock: 'in', page: 42, limit: 24 }),
     );
+    expect(catalogToolResult).toMatchObject({
+      total: 1_043,
+      page: 42,
+      limit: 24,
+      hasMore: true,
+      products: [
+        expect.objectContaining({
+          title: 'Perceuse béton Pro',
+          sku: 'PB-1',
+          description: 'Conçue pour les travaux de maçonnerie',
+          characteristics: ['Mandrin 13 mm', 'Poignée auxiliaire'],
+        }),
+      ],
+    });
     expect(mocks.recordRun).toHaveBeenCalledWith(
       expect.objectContaining({
         telemetry: {
@@ -211,12 +261,14 @@ describe('POST /api/ai/chat', () => {
         totalTokens: 15,
         toolCalls: 2,
         resultsCount: 1,
+        conversation: [{ role: 'user', content: 'Une perceuse pour le béton' }],
+        response: 'Cette perceuse est disponible et correspond à votre recherche.',
+        promptVersion: 'storefront-shopping-v2',
       }),
     );
-    expect(JSON.stringify(mocks.recordRun.mock.calls)).not.toContain('Une perceuse pour le béton');
   });
 
-  it('skips the model planning round when a direct grounded catalog search succeeds', async () => {
+  it('keeps full catalog tools available when current page context is already grounded', async () => {
     mocks.streamText.mockImplementation(() => ({
       stream: (async function* () {
         yield { type: 'text-delta', text: 'Voici une option disponible.' };
@@ -227,6 +279,24 @@ describe('POST /api/ai/chat', () => {
     const response = await POST(
       request({
         locale: 'fr',
+        context: {
+          pathname: '/fr/products',
+          currentProductToken: null,
+          cartItems: [],
+          catalogQuery: {
+            search: 'lampe',
+            brandId: null,
+            categoryId: null,
+            discounted: false,
+            stock: 'all',
+            minPrice: null,
+            maxPrice: null,
+            sortKey: 'recommended',
+            sortDirection: 'desc',
+            page: 1,
+            limit: 24,
+          },
+        },
         messages: [{ role: 'user', content: 'Une perceuse pour le béton' }],
       }),
     );
@@ -234,10 +304,63 @@ describe('POST /api/ai/chat', () => {
     const modelOptions = mocks.streamText.mock.calls[0]?.[0] as Record<string, unknown>;
 
     expect(events.at(-1)).toMatchObject({ type: 'result', mode: 'ai', products: [{ id: 12 }] });
-    expect(modelOptions).not.toHaveProperty('tools');
-    expect(modelOptions.prompt).toContain('The application already searched the live catalog');
+    expect(modelOptions).toHaveProperty('tools.search_catalog');
+    expect(modelOptions).toHaveProperty('tools.inspect_products');
+    expect(modelOptions).toHaveProperty('tools.present_products');
+    expect(modelOptions.prompt).toContain('complete public catalog');
+    expect(modelOptions.prompt).toContain('"total":1043');
     expect(modelOptions.prompt).toContain('Perceuse béton');
     expect(mocks.catalog).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels provider generation and records the interrupted run when the shopper stops', async () => {
+    let providerSignal: AbortSignal | undefined;
+    mocks.streamText.mockImplementation((options: { abortSignal: AbortSignal }) => {
+      providerSignal = options.abortSignal;
+      return {
+        stream: (async function* () {
+          await new Promise<void>((_resolve, reject) => {
+            if (options.abortSignal.aborted) {
+              reject(new DOMException('Aborted', 'AbortError'));
+              return;
+            }
+            options.abortSignal.addEventListener(
+              'abort',
+              () => reject(new DOMException('Aborted', 'AbortError')),
+              { once: true },
+            );
+          });
+          yield { type: 'text-delta', text: 'unreachable' };
+        })(),
+      };
+    });
+
+    const response = await POST(
+      request({
+        locale: 'fr',
+        telemetry: {
+          journeyId: 'journey-1',
+          sessionId: 'session-1',
+          pagePath: '/fr/products',
+          intent: 'product_search',
+        },
+        messages: [{ role: 'user', content: 'Une perceuse' }],
+      }),
+    );
+    const reader = response.body?.getReader();
+    expect(reader).toBeDefined();
+    await reader?.read();
+    await reader?.cancel();
+
+    await vi.waitFor(() => expect(providerSignal?.aborted).toBe(true));
+    await vi.waitFor(() =>
+      expect(mocks.recordRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'cancelled',
+          conversation: [{ role: 'user', content: 'Une perceuse' }],
+        }),
+      ),
+    );
   });
 
   it('degrades to localized, deterministic catalog results when AI is unavailable', async () => {

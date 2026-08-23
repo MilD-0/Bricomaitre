@@ -285,6 +285,7 @@ export async function runAiContentJob(
     processed: 0,
     proposed: 0,
     applied: 0,
+    autoApplyFailed: 0,
     skipped: 0,
     alreadyProposed: 0,
     failed: 0,
@@ -315,6 +316,7 @@ export async function runAiContentJob(
             counters.applied += 1;
           } catch {
             counters.proposed += 1;
+            counters.autoApplyFailed += 1;
           }
         } else {
           counters.proposed += 1;
@@ -525,6 +527,7 @@ export async function runAiCategorizationJob(
     processed: 0,
     proposed: 0,
     applied: 0,
+    autoApplyFailed: 0,
     unchanged: 0,
     ambiguous: 0,
     alreadyProposed: 0,
@@ -585,6 +588,7 @@ export async function runAiCategorizationJob(
                 counters.applied += 1;
               } catch {
                 counters.proposed += 1;
+                counters.autoApplyFailed += 1;
               }
             } else {
               counters.proposed += 1;
@@ -1312,6 +1316,7 @@ export async function runAdminReportingRefreshJob(payload: ReportingRefreshPaylo
     .limit(1);
 
   if (!run?.pendingRefresh) {
+    await refreshAnalytics2Facts({ db });
     return result;
   }
 
@@ -1325,11 +1330,13 @@ export async function runAdminReportingRefreshJob(payload: ReportingRefreshPaylo
     })
     .where(eq(adminReportingSnapshotRuns.runId, payload.__jobMeta.id));
 
-  return refreshAdminReportingSnapshots({
+  const refreshed = await refreshAdminReportingSnapshots({
     runId: payload.__jobMeta.id,
     trigger: pendingTrigger,
     sourceImportBatchId: payload.sourceImportBatchId ?? null,
   });
+  await refreshAnalytics2Facts({ db });
+  return refreshed;
 }
 
 export async function runAdCostsImportJob(

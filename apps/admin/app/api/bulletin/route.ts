@@ -1,22 +1,12 @@
-import { desc, eq } from 'drizzle-orm';
 import type { InferInsertModel } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import {
-  bulletinPostAttachments,
-  bulletinPostReactions,
-  bulletinPostTags,
-  bulletinPosts,
-  bulletinReplies,
-  bulletinReplyReactions,
-  bulletinTags,
-} from '@bric/db/schema';
+import { bulletinPosts } from '@bric/db/schema';
 import { bulletinPostSchema, canModerateBulletin } from '../../../lib/bulletin';
 import {
   getBulletinViewer,
-  loadBulletinTagNames,
-  mapBulletinPosts,
+  loadBulletinData,
   requireBulletinSession,
   syncBulletinPostAttachments,
   syncBulletinPostTags,
@@ -38,76 +28,11 @@ export async function GET() {
     });
   }
 
-  const db = getDb();
   const viewer = getBulletinViewer(session);
-  const [posts, tagRows, attachmentRows, replyRows, postReactionRows, replyReactionRows, tags] =
-    await Promise.all([
-      db
-        .select()
-        .from(bulletinPosts)
-        .orderBy(desc(bulletinPosts.pinned), desc(bulletinPosts.updatedAt)),
-      db
-        .select({
-          postId: bulletinPostTags.postId,
-          tagName: bulletinTags.name,
-        })
-        .from(bulletinPostTags)
-        .innerJoin(bulletinTags, eq(bulletinTags.id, bulletinPostTags.tagId)),
-      db
-        .select({
-          postId: bulletinPostAttachments.postId,
-          fileName: bulletinPostAttachments.fileName,
-          fileUrl: bulletinPostAttachments.fileUrl,
-          fileKey: bulletinPostAttachments.fileKey,
-          contentType: bulletinPostAttachments.contentType,
-          size: bulletinPostAttachments.size,
-        })
-        .from(bulletinPostAttachments),
-      db
-        .select({
-          id: bulletinReplies.id,
-          postId: bulletinReplies.postId,
-          body: bulletinReplies.body,
-          createdAt: bulletinReplies.createdAt,
-          updatedAt: bulletinReplies.updatedAt,
-          authorId: bulletinReplies.authorId,
-          authorName: bulletinReplies.authorName,
-          authorEmail: bulletinReplies.authorEmail,
-        })
-        .from(bulletinReplies)
-        .orderBy(bulletinReplies.createdAt),
-      db
-        .select({
-          postId: bulletinPostReactions.postId,
-          emoji: bulletinPostReactions.emoji,
-          userId: bulletinPostReactions.userId,
-          userName: bulletinPostReactions.userName,
-          userEmail: bulletinPostReactions.userEmail,
-        })
-        .from(bulletinPostReactions),
-      db
-        .select({
-          replyId: bulletinReplyReactions.replyId,
-          emoji: bulletinReplyReactions.emoji,
-          userId: bulletinReplyReactions.userId,
-          userName: bulletinReplyReactions.userName,
-          userEmail: bulletinReplyReactions.userEmail,
-        })
-        .from(bulletinReplyReactions),
-      loadBulletinTagNames(),
-    ]);
+  const data = await loadBulletinData(viewer);
 
   return NextResponse.json({
-    posts: mapBulletinPosts(
-      posts,
-      tagRows,
-      attachmentRows,
-      replyRows,
-      postReactionRows,
-      replyReactionRows,
-      viewer,
-    ),
-    availableTags: tags,
+    ...data,
     currentUserId: session.user.id ?? null,
     permissions: {
       canModerate: canModerateBulletin(viewer.permissions),

@@ -79,6 +79,7 @@ import {
 import { OrdersWorkflows } from './orders-workflows';
 import { OrderSalesDesk } from './order-sales-desk';
 import { ReturningCustomerIndicator } from './returning-customer-indicator';
+import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 
 const statusOptions: OrderStatus[] = [0, 1, 2, 11, 3, 7, 4, 10, 5, 6, 8, 9];
 
@@ -1184,6 +1185,18 @@ export function OrdersWorkspace({
     Partial<Record<ProfitProjectionBasis, DailyOrderStatusOverview>>
   >(() => (initialOverview ? { confirmed: initialOverview } : {}));
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  useAdminAiSurfaceDetails({
+    filters: {
+      page,
+      status: statusFilter,
+      projectionBasis,
+    },
+    selection: {
+      entityType: 'order',
+      ids: selectedIds,
+      focusedId: activeOrderId,
+    },
+  });
   const ordersQuery = useQuery({
     queryKey: ['orders-workspace', page, deferredSearch, statusFilter],
     queryFn: () => {

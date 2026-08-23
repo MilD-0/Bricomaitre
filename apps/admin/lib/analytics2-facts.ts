@@ -1,15 +1,24 @@
 import { sql } from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
-import { analyticsEconomicsDailyFacts } from '@bric/db/schema';
+import {
+  analyticsEconomicsDailyFacts,
+  metaAdsDailyInsights,
+  orderStatusHistory,
+} from '@bric/db/schema';
 
 import { loadAutomaticPaidEconomics, resolveAnalytics2Filters } from './analytics2';
+import {
+  ANALYTICS2_FACT_SEMANTICS_VERSION,
+  ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE,
+} from './analytics2-fact-contract';
+import { effectiveEcotrackStatusSql } from './ecotrack-status-policy';
 import { getProfitTrackerReport } from './profit-tracker';
 
 type Database = ReturnType<typeof getDb>;
 
 function decimal(value: number | null) {
-  return value == null ? null : value.toFixed(2);
+  return value == null ? null : value.toFixed(6);
 }
 
 function dayInAlgiers(now: Date) {
@@ -24,6 +33,20 @@ function dayInAlgiers(now: Date) {
 type EconomicsReport = Awaited<ReturnType<typeof getProfitTrackerReport>>;
 type AutomaticPaidEconomics = Awaited<ReturnType<typeof loadAutomaticPaidEconomics>>;
 
+export function resolveAnalyticsFactRefreshFilters(
+  options: { startDate?: string | null; endDate?: string },
+  now: Date,
+) {
+  const endDate = options.endDate ?? dayInAlgiers(now);
+  const resolved = resolveAnalytics2Filters(
+    options.startDate
+      ? { view: 'money', range: 'custom', startDate: options.startDate, endDate }
+      : { view: 'money', range: 'all' },
+    now,
+  );
+  return options.endDate ? { ...resolved, endDate: options.endDate } : resolved;
+}
+
 export function buildAnalyticsEconomicsDailyFactRows(
   report: EconomicsReport,
   automaticPaid: AutomaticPaidEconomics,
@@ -32,6 +55,14 @@ export function buildAnalyticsEconomicsDailyFactRows(
   const paidByDay = new Map(automaticPaid.days.map((day) => [day.date, day]));
   return report.days.map((day) => {
     const paid = paidByDay.get(day.date);
+    const adjustedProfitDzd =
+      day.metrics.adjustedProfitDzd ??
+      (day.postedOrders === 0 && day.metrics.adCostDzd != null ? 0 : null);
+    const netProfitDzd =
+      adjustedProfitDzd == null || day.metrics.adCostDzd == null
+        ? null
+        : adjustedProfitDzd - day.metrics.adCostDzd;
+    const trueProfitDzd = netProfitDzd == null ? null : netProfitDzd - (day.operatingCostDzd ?? 0);
     return {
       day: day.date,
       postedOrders: day.postedOrders,
@@ -39,17 +70,17 @@ export function buildAnalyticsEconomicsDailyFactRows(
       costCompleteOrders: day.costCompleteOrders,
       paidProfitCompleteOrders: paid?.completeOrders ?? 0,
       grossProfitDzd: decimal(day.grossProfitDzd),
-      adjustedProfitDzd: decimal(day.metrics.adjustedProfitDzd),
-      adCostDzd: decimal(day.metrics.adCostDzd) ?? '0.00',
-      operatingCostDzd: decimal(day.operatingCostDzd) ?? '0.00',
-      netProfitDzd: decimal(day.metrics.netProfitDzd),
-      trueProfitDzd: decimal(day.trueProfitDzd),
-      automaticPaidCodDzd: decimal(paid?.codDzd ?? 0) ?? '0.00',
-      automaticPaidFeesDzd: decimal(paid?.feesDzd ?? 0) ?? '0.00',
+      adjustedProfitDzd: decimal(adjustedProfitDzd),
+      adCostDzd: decimal(day.metrics.adCostDzd) ?? '0.000000',
+      operatingCostDzd: decimal(day.operatingCostDzd) ?? '0.000000',
+      netProfitDzd: decimal(netProfitDzd),
+      trueProfitDzd: decimal(trueProfitDzd),
+      automaticPaidCodDzd: decimal(paid?.codDzd ?? 0) ?? '0.000000',
+      automaticPaidFeesDzd: decimal(paid?.feesDzd ?? 0) ?? '0.000000',
       automaticPaidProfitDzd: paid ? decimal(paid.profitDzd) : null,
       fxRateUsed: (day.fxRateUsed || report.settings.fxRate).toFixed(4),
       planningReturnRatePct: (day.returnRatePct ?? report.settings.defaultReturnRate).toFixed(4),
-      semanticsVersion: 1,
+      semanticsVersion: ANALYTICS2_FACT_SEMANTICS_VERSION,
       refreshedAt: now,
     };
   });
@@ -65,11 +96,23 @@ export async function refreshAnalytics2Facts(
 ) {
   const db = options.db ?? getDb();
   const now = options.now ?? new Date();
-  const endDate = options.endDate ?? dayInAlgiers(now);
-  const filters = resolveAnalytics2Filters(
-    options.startDate
-      ? { view: 'money', range: 'custom', startDate: options.startDate, endDate }
-      : { view: 'money', range: 'all', endDate },
+  const sourceCutoffResult = options.endDate
+    ? null
+    : await db.execute(sql`
+        select to_char(least(
+          (select max((${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date)
+            from ${orderStatusHistory} where ${orderStatusHistory.status} = 11),
+          (select max(${metaAdsDailyInsights.day}) from ${metaAdsDailyInsights})
+        ), 'YYYY-MM-DD') as end_date
+      `);
+  const sourceCutoff = sourceCutoffResult
+    ? (sourceCutoffResult.rows[0] as { end_date?: unknown } | undefined)?.end_date
+    : null;
+  const filters = resolveAnalyticsFactRefreshFilters(
+    {
+      ...options,
+      endDate: options.endDate ?? (typeof sourceCutoff === 'string' ? sourceCutoff : undefined),
+    },
     now,
   );
   const [report, automaticPaid] = await Promise.all([
@@ -125,7 +168,8 @@ export async function refreshAnalytics2Facts(
       with first_posted as (
         select distinct on (order_id)
           order_id,
-          (changed_at at time zone 'Africa/Algiers')::date as posted_day
+          (changed_at at time zone 'Africa/Algiers')::date as posted_day,
+          changed_at at time zone 'Africa/Algiers' as posted_at
         from order_status_history
         where status = 11
         order by order_id, changed_at asc
@@ -135,6 +179,7 @@ export async function refreshAnalytics2Facts(
             filter (where status = 'livred') as delivered_at,
           min(event_date::timestamp + nullif(event_time, '')::time)
             filter (where status = 'payed') as paid_at,
+          max(event_date::timestamp + nullif(event_time, '')::time) as latest_activity_at,
           count(*) filter (where status = 'attempt_delivery')::int as attempts
         from admin.ecotrack_order_tracking_events
         group by order_id
@@ -142,9 +187,14 @@ export async function refreshAnalytics2Facts(
         select order_id,
           bool_and(unit_purchase_price_snapshot is not null and line_total is not null)
             as cost_complete,
+          sum(line_total)::double precision as product_revenue,
           sum(unit_purchase_price_snapshot * quantity)::double precision as product_cost,
-          sum(line_total - unit_purchase_price_snapshot * quantity)::double precision
-            as gross_profit
+          sum(
+            line_total - coalesce(
+              unit_purchase_price_snapshot * quantity,
+              line_total * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
+            )
+          )::double precision as gross_profit
         from order_line_items
         group by order_id
       )
@@ -152,19 +202,32 @@ export async function refreshAnalytics2Facts(
         first_posted.posted_day,
         lifecycle.delivered_at,
         lifecycle.paid_at,
-        coalesce(state.current_status, 'untracked'),
+        ${effectiveEcotrackStatusSql({
+          localStatus: sql`orders.confirmed`,
+          providerStatus: sql`state.current_status`,
+          latestActivityAt: sql`lifecycle.latest_activity_at`,
+          fallbackActivityAt: sql`coalesce(
+            state.provider_created_at at time zone 'Africa/Algiers',
+            first_posted.posted_at
+          )`,
+          referenceAt: sql`${filters.endDate}::date + interval '1 day'`,
+        })},
         orders.total_amount,
         state.current_amount,
         coalesce(state.delivery_tariff, state.estimated_fee),
-        line_economics.product_cost,
+        case when line_economics.cost_complete then line_economics.product_cost end,
         line_economics.gross_profit,
-        case when state.current_status = 'paye_et_archive'
-          and line_economics.cost_complete
+        case when state.current_status in ('paye_et_archive', 'payed')
           and coalesce(state.current_amount, orders.total_amount) is not null
           and coalesce(state.delivery_tariff, state.estimated_fee) is not null
         then coalesce(state.current_amount, orders.total_amount)
           - coalesce(state.delivery_tariff, state.estimated_fee)
-          - line_economics.product_cost
+          - case when line_economics.cost_complete then line_economics.product_cost
+            else coalesce(
+              line_economics.product_revenue * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE},
+              coalesce(state.current_amount, orders.total_amount)
+                * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
+            ) end
         end,
         coalesce(line_economics.cost_complete, false),
         orders.state,
@@ -174,7 +237,7 @@ export async function refreshAnalytics2Facts(
         attribution.meta_campaign_id,
         attribution.meta_adset_id,
         attribution.meta_ad_id,
-        1,
+        ${ANALYTICS2_FACT_SEMANTICS_VERSION},
         ${now}
       from first_posted
       inner join orders on orders.id = first_posted.order_id
@@ -214,4 +277,14 @@ export async function refreshAnalytics2Facts(
   });
 
   return { dailyFacts: dailyRows.length, cohortThrough: filters.endDate };
+}
+
+export async function refreshAnalytics2FactsAfterMutation() {
+  try {
+    await refreshAnalytics2Facts();
+    return true;
+  } catch (error) {
+    console.error('Stats fact refresh failed after an economics mutation.', error);
+    return false;
+  }
 }

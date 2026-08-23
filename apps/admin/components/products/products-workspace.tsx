@@ -44,6 +44,7 @@ import { cn } from '../../lib/utils';
 import { useAppStore } from '../../store/app-store';
 import { ImageUploadField } from '../image-upload-field';
 import { MultiSortHeader } from '../multi-sort-header';
+import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import {
   MetaCatalogExportDialog,
   type MetaCatalogExportPreviewState,
@@ -893,6 +894,21 @@ export function ProductsWorkspace({
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [metaCatalogExportState, setMetaCatalogExportState] =
     useState<MetaCatalogExportPreviewState>(null);
+  useAdminAiSurfaceDetails({
+    filters: {
+      page,
+      search: deferredSearch,
+      state: filter,
+      brandId: selectedBrandId,
+      categoryId: selectedCategoryId,
+      sort: sortRules.map((rule) => `${rule.key}:${rule.direction}`).join(','),
+    },
+    selection: {
+      entityType: 'product',
+      ids: selectedIds,
+      focusedId: editorState?.mode === 'edit' ? editorState.product.id : null,
+    },
+  });
   const productsQuery = useQuery({
     queryKey: [
       'products-workspace',

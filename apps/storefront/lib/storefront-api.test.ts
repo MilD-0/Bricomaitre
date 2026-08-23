@@ -5,6 +5,7 @@ import { unstable_cache } from 'next/cache';
 import {
   fetchStorefrontCatalog,
   fetchStorefrontCatalogMeta,
+  fetchStorefrontAssets,
   fetchStorefrontHomepage,
   fetchStorefrontHomepageFeaturedGroupProducts,
   fetchStorefrontOrder,
@@ -199,6 +200,17 @@ describe('storefront API client', () => {
     );
   });
 
+  it('fetches the managed public assets used by product surfaces', async () => {
+    const assets = { banners: [], featuredGroups: [], productCards: [] };
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(assets), { status: 200 }));
+
+    await expect(fetchStorefrontAssets()).resolves.toEqual(assets);
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:3001/storefront/assets',
+      expect.any(Object),
+    );
+  });
+
   it('fetches the next bounded page of a featured group on demand', async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(JSON.stringify({ items: [], total: 24 }), { status: 200 }),
@@ -349,7 +361,7 @@ describe('storefront API client', () => {
     });
   });
 
-  it('records privacy-safe assistant usage through the canonical analytics endpoint', async () => {
+  it('records the complete assistant conversation through the canonical analytics endpoint', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 202 }));
 
     await recordStorefrontAssistantRun({
@@ -369,6 +381,9 @@ describe('storefront API client', () => {
       durationMs: 420,
       toolCalls: 1,
       resultsCount: 2,
+      promptVersion: 'storefront-shopping-v2',
+      conversation: [{ role: 'user', content: 'Find a drill' }],
+      response: 'These drills match your request.',
     });
 
     const [url, options] = vi.mocked(fetch).mock.calls[0] ?? [];
@@ -385,10 +400,11 @@ describe('storefront API client', () => {
         totalTokens: 15,
         durationMs: 420,
         toolCalls: 1,
+        promptVersion: 'storefront-shopping-v2',
+        conversation: [{ role: 'user', content: 'Find a drill' }],
+        response: 'These drills match your request.',
       },
     });
-    expect(JSON.stringify(payload)).not.toContain('messages');
-    expect(JSON.stringify(payload)).not.toContain('content');
   });
 
   it('server-renders a token-verified order without caching the customer response', async () => {

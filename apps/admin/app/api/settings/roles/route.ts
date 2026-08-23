@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { asc, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { roleDefinitionPermissions, roleDefinitions } from '@bric/db/schema';
+import { loadAdministrationRoles } from '../../../../lib/admin-administration-data';
 import { auth } from '../../../../lib/auth';
 import { mutateEntityWithHistory } from '../../../../lib/action-history';
-import {
-  permissionCatalog,
-  roleDefinitionFormSchema,
-  type PermissionKey,
-} from '../../../../lib/permissions';
+import { roleDefinitionFormSchema } from '../../../../lib/permissions';
 import { requireSettingsAccess } from '../../../../lib/rbac';
 
 function slugifyRoleName(name: string) {
@@ -18,21 +15,6 @@ function slugifyRoleName(name: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-}
-
-async function loadRoles() {
-  const db = getDb();
-  const [roles, permissions] = await Promise.all([
-    db.select().from(roleDefinitions).orderBy(asc(roleDefinitions.name)),
-    db.select().from(roleDefinitionPermissions).orderBy(asc(roleDefinitionPermissions.roleId)),
-  ]);
-
-  return roles.map((role) => ({
-    ...role,
-    permissions: permissions
-      .filter((permission) => permission.roleId === role.id)
-      .map((permission) => permission.permission) as PermissionKey[],
-  }));
 }
 
 export async function GET() {
@@ -45,10 +27,7 @@ export async function GET() {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
 
-  return NextResponse.json({
-    items: await loadRoles(),
-    availablePermissions: permissionCatalog,
-  });
+  return NextResponse.json(await loadAdministrationRoles());
 }
 
 export async function POST(req: NextRequest) {

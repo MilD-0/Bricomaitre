@@ -139,7 +139,7 @@ describe('storefront analytics v1 contract', () => {
     },
   );
 
-  it('accepts privacy-safe storefront assistant telemetry', () => {
+  it('accepts full-fidelity storefront assistant run telemetry', () => {
     expect(
       storefrontAnalyticsEventSchema.parse({
         ...baseEvent,
