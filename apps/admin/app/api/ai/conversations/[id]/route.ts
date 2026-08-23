@@ -1,10 +1,11 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { aiConversations, aiMessages } from '@bric/db/schema';
 import { auth } from '../../../../../lib/auth';
+import { ADMIN_AI_CONTEXT_QUERY_LIMIT } from '../../../../../lib/admin-ai-conversation-context';
 import { requireAppAccess } from '../../../../../lib/rbac';
 
 const paramsSchema = z.object({ id: z.coerce.number().int().positive() });
@@ -70,9 +71,9 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     .select({ id: aiMessages.id, role: aiMessages.role, content: aiMessages.content })
     .from(aiMessages)
     .where(eq(aiMessages.conversationId, conversation.id))
-    .orderBy(asc(aiMessages.createdAt))
-    .limit(200);
-  const messages = rows.flatMap((row) => {
+    .orderBy(desc(aiMessages.createdAt))
+    .limit(ADMIN_AI_CONTEXT_QUERY_LIMIT);
+  const messages = rows.reverse().flatMap((row) => {
     const content = messageContent(row.content);
     return content && (row.role === 'user' || row.role === 'assistant')
       ? [

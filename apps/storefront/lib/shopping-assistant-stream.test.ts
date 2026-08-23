@@ -29,7 +29,7 @@ describe('shopping assistant response stream', () => {
         start(controller) {
           controller.enqueue(
             encoder.encode(
-              '{"type":"status","status":"thinking"}\n{"type":"text-delta","delta":"Voici "}\n',
+              '{"type":"status","status":"thinking"}\n{"type":"tool","name":"search_catalog","status":"started"}\n{"type":"tool","name":"search_catalog","status":"completed"}\n{"type":"text-delta","delta":"Voici "}\n',
             ),
           );
           controller.enqueue(
@@ -43,13 +43,20 @@ describe('shopping assistant response stream', () => {
       { headers: { 'content-type': 'application/x-ndjson' } },
     );
     const deltas: string[] = [];
+    const activities: unknown[] = [];
     const onResult = vi.fn();
 
     await consumeShoppingAssistantResponse(response, {
+      onActivity: (activity) => activities.push(activity),
       onTextDelta: (delta) => deltas.push(delta),
       onResult,
     });
 
+    expect(activities).toEqual([
+      { type: 'status', status: 'thinking' },
+      { type: 'tool', name: 'search_catalog', status: 'started' },
+      { type: 'tool', name: 'search_catalog', status: 'completed' },
+    ]);
     expect(deltas).toEqual(['Voici ', 'une option.']);
     expect(onResult).toHaveBeenCalledWith({ mode: 'ai', products: [product] });
   });
@@ -63,5 +70,25 @@ describe('shopping assistant response stream', () => {
 
     expect(onTextDelta).toHaveBeenCalledWith('Résultat');
     expect(onResult).toHaveBeenCalledWith({ mode: 'fallback', products: [] });
+  });
+
+  it('exposes grounded products before rejecting an interrupted response', async () => {
+    const onError = vi.fn();
+    const response = new Response(
+      `${JSON.stringify({ type: 'text-delta', delta: 'Voici une option' })}\n${JSON.stringify({ type: 'error', code: 'assistant_unavailable', products: [product] })}\n`,
+      { headers: { 'content-type': 'application/x-ndjson' } },
+    );
+
+    await expect(
+      consumeShoppingAssistantResponse(response, {
+        onTextDelta: vi.fn(),
+        onResult: vi.fn(),
+        onError,
+      }),
+    ).rejects.toThrow('assistant_unavailable');
+    expect(onError).toHaveBeenCalledWith({
+      code: 'assistant_unavailable',
+      products: [product],
+    });
   });
 });

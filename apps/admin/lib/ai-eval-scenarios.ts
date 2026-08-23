@@ -31,6 +31,11 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['inspect_orders', 'update_order_status'],
       exactToolCounts: { update_order_status: 1 },
+      requiredToolInputs: {
+        update_order_status: { items: [{ orderId: 91, status: 'confirmed' }] },
+      },
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -47,6 +52,23 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['inspect_orders', 'update_order_details'],
       exactToolCounts: { update_order_details: 1 },
+      requiredToolInputs: {
+        update_order_details: {
+          items: [
+            {
+              orderId: 91,
+              changes: {
+                delivery: 'home',
+                wilayaId: 16,
+                commune: 'Bab Ezzouar',
+                homeAddress: '12 rue des Outils',
+              },
+            },
+          ],
+        },
+      },
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -69,6 +91,12 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['inspect_inventory', 'adjust_inventory'],
       exactToolCounts: { adjust_inventory: 1 },
+      requiredToolInputs: {
+        adjust_inventory: { mode: 'increase', items: [{ productId: 12, quantity: 6 }] },
+      },
+      requiredTerms: ['2', '8'],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -95,6 +123,13 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['inspect_assets', 'update_asset_state'],
       exactToolCounts: { update_asset_state: 1 },
+      requiredToolInputs: {
+        update_asset_state: {
+          items: [{ kind: 'featured-group', id: 7, active: true, showAtTopOfProductsPage: true }],
+        },
+      },
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -111,7 +146,23 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['inspect_assets', 'manage_assets'],
       exactToolCounts: { manage_assets: 1 },
+      requiredToolInputs: {
+        manage_assets: {
+          operation: 'create',
+          asset: {
+            kind: 'featured-group',
+            data: {
+              name: 'Sélection atelier',
+              nameAr: 'اختيار الورشة',
+              productIds: [12, 18],
+              active: false,
+            },
+          },
+        },
+      },
       forbiddenTools: ['suggest_featured_products'],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -128,7 +179,13 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['find_products', 'create_landing_page'],
       exactToolCounts: { create_landing_page: 1 },
+      requiredToolInputs: {
+        create_landing_page: { productId: 12, locale: 'fr', active: false },
+      },
       forbiddenTools: ['suggest_landing_page'],
+      requiredTerms: ['51', 'brouillon'],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -145,7 +202,13 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['inspect_landing_pages', 'edit_landing_page'],
       exactToolCounts: { edit_landing_page: 1 },
+      requiredToolInputs: {
+        edit_landing_page: { landingPageId: 41, expectedRevision: 3 },
+      },
       forbiddenTools: ['suggest_landing_page'],
+      requiredTerms: ['41'],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -172,6 +235,12 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['inspect_ai_proposals', 'review_ai_proposals'],
       exactToolCounts: { review_ai_proposals: 1 },
+      requiredToolInputs: {
+        review_ai_proposals: { proposalIds: [44], action: 'approve' },
+      },
+      requiredTerms: ['44'],
+      requiredAnyTerms: [['appliquée', 'appliqué', 'approuvée', 'approuvé']],
+      passThreshold: 1,
     },
   },
   {
@@ -197,6 +266,12 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['inspect_administration', 'set_access_grant'],
       exactToolCounts: { set_access_grant: 1 },
+      requiredToolInputs: {
+        set_access_grant: { email: 'operator@example.com', role: 'employee' },
+      },
+      requiredTerms: ['operator@example.com', 'employé'],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -212,6 +287,20 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['inspect_administration', 'set_role_definition'],
       exactToolCounts: { set_role_definition: 1 },
+      requiredToolInputs: {
+        set_role_definition: {
+          roleDefinitionId: null,
+          name: 'Support',
+          permissions: ['orders_write', 'ops_view'],
+        },
+      },
+      requiredTerms: ['Support'],
+      requiredAnyTerms: [
+        ['commandes', 'orders'],
+        ['opérations', 'operations'],
+      ],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -237,6 +326,15 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['inspect_bulletin', 'reply_bulletin_post'],
       exactToolCounts: { reply_bulletin_post: 1 },
+      requiredToolInputs: {
+        reply_bulletin_post: {
+          postId: 7,
+          body: 'Je terminerai les vérifications cet après-midi.',
+        },
+      },
+      requiredTerms: ['7'],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -248,6 +346,9 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['inspect_bulletin', 'update_bulletin_post'],
       exactToolCounts: { update_bulletin_post: 1 },
+      requiredToolInputs: { update_bulletin_post: { postId: 7, pinned: true } },
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -259,6 +360,9 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['inspect_bulletin', 'delete_bulletin_content'],
       exactToolCounts: { delete_bulletin_content: 1 },
+      requiredToolInputs: { delete_bulletin_content: { kind: 'reply', replyId: 9 } },
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -726,7 +830,15 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['inspect_products', 'update_products'],
       exactToolCounts: { update_products: 1 },
+      requiredToolInputs: {
+        update_products: {
+          items: [{ productId: 12, changes: { price: 14_900, purchasePrice: 9_000 } }],
+        },
+      },
       forbiddenTools: ['propose_product_edit', 'suggest_discount'],
+      requiredTerms: ['14 900', '9 000'],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -743,7 +855,24 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['inspect_products', 'create_product'],
       exactToolCounts: { create_product: 1 },
+      requiredToolInputs: {
+        create_product: {
+          product: {
+            title: 'Perceuse compacte 12 V',
+            price: 12_900,
+            purchasePrice: 8_000,
+            inventoryQuantity: 5,
+            brandId: 2,
+            categoryId: 3,
+            active: true,
+            inStock: true,
+          },
+        },
+      },
       forbiddenTools: ['propose_product_edit'],
+      requiredTerms: ['21', 'perceuse-compacte-12-v'],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -756,6 +885,10 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['inspect_products', 'archive_products'],
       exactToolCounts: { archive_products: 1 },
+      requiredToolInputs: { archive_products: { productIds: [12] } },
+      requiredTerms: ['12'],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -767,7 +900,16 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['find_brands', 'manage_taxonomy'],
       exactToolCounts: { manage_taxonomy: 1 },
+      requiredToolInputs: {
+        manage_taxonomy: {
+          operation: 'create',
+          entity: { kind: 'brand', data: { name: 'Atelier Pro' } },
+        },
+      },
       forbiddenTools: ['propose_brand_create'],
+      requiredTerms: ['6', 'atelier-pro'],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -782,6 +924,14 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['find_categories', 'manage_taxonomy'],
       exactToolCounts: { manage_taxonomy: 1 },
+      requiredToolInputs: {
+        manage_taxonomy: {
+          operation: 'update',
+          entity: { kind: 'category', id: 7, changes: { parentId: 3 } },
+        },
+      },
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
     },
   },
   {
@@ -806,6 +956,17 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: {
       requiredTools: ['inspect_storefront_configuration', 'update_storefront_announcement'],
       exactToolCounts: { update_storefront_announcement: 1 },
+      requiredToolInputs: {
+        update_storefront_announcement: {
+          messageFr: 'Livraison offerte ce week-end',
+          messageAr: 'توصيل مجاني نهاية هذا الأسبوع',
+          active: true,
+        },
+      },
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      // The response must repeat the requested Arabic copy. Do not penalize that
+      // grounded content as a French-language failure.
+      passThreshold: 0.95,
     },
   },
 ];

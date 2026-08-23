@@ -421,6 +421,71 @@ describe('AdminAiChat', () => {
     expect(await screen.findByText('Fast partial response.')).toBeInTheDocument();
   });
 
+  it('shows localized live tool activity until the assistant starts answering', async () => {
+    const encoder = new TextEncoder();
+    let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/ai/conversations')
+        return new Response(JSON.stringify({ conversations: [] }), { status: 200 });
+      if (url === '/api/ai/chat')
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(streamController) {
+              controller = streamController;
+              streamController.enqueue(
+                encoder.encode(
+                  '{"type":"status","status":"thinking"}\n{"type":"status","status":"working","toolName":"create_landing_page","phase":"running"}\n',
+                ),
+              );
+            },
+          }),
+          { headers: { 'content-type': 'application/x-ndjson' } },
+        );
+      return new Response('{}', { status: 200 });
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await user.type(
+      await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
+      'Create a launch landing page',
+    );
+    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+
+    const running = await screen.findByText('aiChat.toolActivity.running');
+    expect(running.closest('[data-slot="admin-ai-activity"]')).toHaveAttribute(
+      'data-phase',
+      'running',
+    );
+
+    await act(async () => {
+      controller!.enqueue(
+        encoder.encode(
+          '{"type":"status","status":"working","toolName":"create_landing_page","phase":"completed"}\n',
+        ),
+      );
+    });
+    const completed = await screen.findByText('aiChat.toolActivity.completed');
+    expect(completed.closest('[data-slot="admin-ai-activity"]')).toHaveAttribute(
+      'data-phase',
+      'completed',
+    );
+
+    await act(async () => {
+      controller!.enqueue(
+        encoder.encode(
+          '{"type":"text-delta","delta":"Landing page ready."}\n{"type":"result","toolResults":[],"conversation":{"id":23,"sessionKey":"e7249553-56ac-49f5-9e9c-dd8d724a6fac","title":"Launch landing page"}}\n',
+        ),
+      );
+      controller!.close();
+    });
+    expect(await screen.findByText('Landing page ready.')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(document.querySelector('[data-slot="admin-ai-activity"]')).not.toBeInTheDocument(),
+    );
+  });
+
   it('renders canonical Analytics2 metrics, source health, and data notes', async () => {
     vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
       const url = String(input);
@@ -564,6 +629,27 @@ describe('AdminAiChat', () => {
     render(<AdminAiChat />);
 
     await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.querySelector('[data-slot="admin-ai-workspace"]')).toHaveClass(
+      'isolate',
+      'min-w-0',
+      'w-full',
+      'overflow-hidden',
+    );
+    expect(dialog.querySelector('[data-slot="admin-ai-conversation"]')).toHaveClass(
+      'isolate',
+      'min-w-0',
+      'overflow-hidden',
+    );
+    expect(dialog.querySelector('[data-slot="admin-ai-sidebar"]')).toHaveClass('min-w-0');
+    const conversationTab = screen.getByRole('button', { name: 'aiChat.conversationTab' });
+    const chatsTab = screen.getByRole('button', { name: 'aiChat.chats' });
+    expect(conversationTab).toHaveAttribute('aria-pressed', 'true');
+    expect(chatsTab).toHaveAttribute('aria-pressed', 'false');
+    await user.click(chatsTab);
+    expect(dialog.querySelector('[data-slot="admin-ai-conversation"]')).toHaveClass('hidden');
+    expect(dialog.querySelector('[data-slot="admin-ai-sidebar"]')).not.toHaveClass('hidden');
+    await user.click(conversationTab);
     await user.type(
       await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
       'Create a landing page for the drill',
@@ -616,6 +702,51 @@ describe('AdminAiChat', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'aiChat.send' })).toBeInTheDocument(),
     );
+    expect(screen.queryByText('aiChat.error')).not.toBeInTheDocument();
+  });
+
+  it('marks partial provider output as interrupted instead of presenting it as complete', async () => {
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/ai/conversations')
+        return new Response(JSON.stringify({ conversations: [] }), { status: 200 });
+      if (url === '/api/ai/history')
+        return new Response(JSON.stringify({ proposals: [], jobs: [] }), { status: 200 });
+      if (url === '/api/ai/chat')
+        return new Response(
+          [
+            JSON.stringify({ type: 'status', status: 'thinking' }),
+            JSON.stringify({ type: 'text-delta', delta: 'The order was' }),
+            JSON.stringify({
+              type: 'error',
+              code: 'admin_ai_failed',
+              toolResults: [
+                {
+                  type: 'tool-result',
+                  toolName: 'update_order_status',
+                  output: { items: [{ orderId: 91, statusLabel: 'confirmed' }] },
+                },
+              ],
+            }),
+            '',
+          ].join('\n'),
+          { headers: { 'content-type': 'application/x-ndjson' } },
+        );
+      return new Response('{}', { status: 200 });
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await user.type(
+      await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
+      'Update the order',
+    );
+    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+
+    expect(await screen.findByText('The order was')).toBeInTheDocument();
+    expect(await screen.findByText('aiChat.interrupted')).toBeInTheDocument();
+    expect(await screen.findByText('aiChat.toolLabels.ordersUpdated')).toBeInTheDocument();
     expect(screen.queryByText('aiChat.error')).not.toBeInTheDocument();
   });
 

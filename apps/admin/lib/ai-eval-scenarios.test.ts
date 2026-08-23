@@ -59,4 +59,22 @@ describe('admin AI commercialization eval scenarios', () => {
       ).toBe(true);
     }
   });
+
+  it('requires exact persisted landing-page inputs and rejects proposal language', () => {
+    const create = ADMIN_AI_EVAL_SCENARIOS.find(
+      (scenario) => scenario.id === 'admin-landing-page-create',
+    )!;
+    const edit = ADMIN_AI_EVAL_SCENARIOS.find(
+      (scenario) => scenario.id === 'admin-landing-page-edit',
+    )!;
+
+    expect(create.expectations.requiredToolInputs).toEqual({
+      create_landing_page: { productId: 12, locale: 'fr', active: false },
+    });
+    expect(edit.expectations.requiredToolInputs).toEqual({
+      edit_landing_page: { landingPageId: 41, expectedRevision: 3 },
+    });
+    expect(create.expectations.forbiddenTerms).toContain('proposition');
+    expect(edit.expectations.passThreshold).toBe(1);
+  });
 });

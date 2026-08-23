@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { productListQuerySchema, productPatchSchema, productPayloadSchema } from './products';
+import {
+  productListQuerySchema,
+  productPatchSchema,
+  productPayloadSchema,
+  productPromoCodePayloadSchema,
+} from './products';
 
 describe('productPayloadSchema', () => {
   it('accepts a valid minimal payload and applies defaults', () => {
@@ -50,6 +55,21 @@ describe('productPayloadSchema', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it('normalizes omitted and blank promotion dates without explicit undefined schema members', () => {
+    expect(productPromoCodePayloadSchema.parse({ code: 'SAVE10', promoPrice: 90 })).toMatchObject({
+      startsAt: null,
+      endsAt: null,
+    });
+    expect(
+      productPromoCodePayloadSchema.parse({
+        code: 'SAVE20',
+        promoPrice: 80,
+        startsAt: '   ',
+        endsAt: null,
+      }),
+    ).toMatchObject({ startsAt: null, endsAt: null });
   });
 
   it('validates partial product toggle updates', () => {

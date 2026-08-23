@@ -37,7 +37,10 @@ export const roleDefinitionFormSchema = z.object({
 
 export const userAccessGrantFormSchema = z
   .object({
-    email: z.string().trim().email(),
+    email: z
+      .string()
+      .trim()
+      .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Enter a valid email address.'),
     role: z.enum(['viewer', 'employee']).optional().nullable(),
     roleDefinitionId: z.number().int().positive().optional().nullable(),
   })

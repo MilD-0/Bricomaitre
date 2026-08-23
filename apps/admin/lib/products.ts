@@ -10,14 +10,17 @@ const nullableIdentifier = z
   .nullable()
   .transform((value) => value || null);
 const nullableNumber = z.coerce.number().min(0).optional().nullable();
-const nullableDateText = z.union([z.string(), z.null(), z.undefined()]).transform((value) => {
-  if (value == null) {
-    return null;
-  }
+const nullableDateText = z
+  .string()
+  .nullish()
+  .transform((value) => {
+    if (value == null) {
+      return null;
+    }
 
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-});
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  });
 
 export function normalizePromoCode(value: string) {
   return value.trim().toLowerCase();

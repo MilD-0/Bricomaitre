@@ -34,6 +34,35 @@ import {
   adminAiMutationTool,
   adminAiStepPlan,
 } from '../lib/admin-ai-tool-plan';
+import {
+  adminAiLandingPageCreateSchema,
+  adminAiLandingPageEditSchema,
+} from '../lib/admin-ai-landing-pages';
+import {
+  adminAiOrderDetailsMutationSchema,
+  adminAiOrderStatusMutationSchema,
+} from '../lib/admin-ai-orders';
+import { adminAiInventoryAdjustmentSchema } from '../lib/admin-ai-inventory';
+import { adminAiAssetCrudSchema } from '../lib/admin-ai-assets';
+import { adminAssetStateMutationSchema } from '../lib/asset-mutations';
+import { adminAiProposalReviewSchema } from '../lib/admin-ai-proposal-review';
+import {
+  adminAiAccessGrantSchema,
+  adminAiRoleDefinitionSchema,
+} from '../lib/admin-ai-administration';
+import { storefrontAnnouncementMutationSchema } from '../lib/admin-ai-storefront';
+import {
+  adminAiBulletinDeleteSchema,
+  adminAiBulletinPostSchema,
+  adminAiBulletinPostUpdateSchema,
+  adminAiBulletinReplySchema,
+} from '../lib/admin-ai-bulletin';
+import {
+  adminAiProductArchiveSchema,
+  adminAiProductCreateSchema,
+  adminAiProductUpdateSchema,
+} from '../lib/admin-ai-products';
+import { adminAiTaxonomyMutationSchema } from '../lib/admin-ai-taxonomy';
 import { permissionCatalog } from '../lib/permissions';
 import type { AiEvalScenario } from '@bric/ai-core/evals';
 
@@ -124,7 +153,42 @@ const fixtureByTool: Record<string, unknown> = {
     total: 1,
   },
   inspect_orders: { orders: [{ id: 91, customer: { name: 'Client Exemple' }, status: 'pending' }] },
+  update_order_status: {
+    ok: true,
+    items: [
+      {
+        orderId: 91,
+        previousStatus: 0,
+        status: 2,
+        statusLabel: 'confirmed',
+        noAnswerCount: 0,
+      },
+    ],
+    skipped: [],
+  },
+  update_order_details: {
+    ok: true,
+    updatedCount: 1,
+    items: [
+      {
+        id: 91,
+        delivery: 1,
+        state: 16,
+        city: 'Bab Ezzouar',
+        homeAddress: '12 rue des Outils',
+        subtotal: 15_000,
+        deliveryFee: 600,
+        totalAmount: 15_600,
+      },
+    ],
+    failed: [],
+  },
   inspect_inventory: { lowStock: [{ productId: 12, quantity: 2 }] },
+  adjust_inventory: {
+    ok: true,
+    items: [{ productId: 12, previousQuantity: 2, nextQuantity: 8 }],
+    skipped: [],
+  },
   inspect_assets: {
     featuredGroups: [
       {
@@ -160,8 +224,109 @@ const fixtureByTool: Record<string, unknown> = {
       },
     ],
   },
+  create_landing_page: {
+    id: 51,
+    productId: 12,
+    locale: 'fr',
+    slug: 'perceuse-bosch-18-v-51',
+    active: false,
+    currentRevision: 1,
+    generation: {
+      model: 'openai/gpt-5.6-luna',
+      reasoning: 'Mobile-first campaign for professional tradespeople.',
+      groundingNotes: ['Product 12', 'French storefront catalog content'],
+      stages: {
+        status: 'completed',
+        plannedSections: 3,
+        generatedSections: 3,
+        preservedSections: 0,
+        fallbackSections: 0,
+        skippedSections: 0,
+        retryCount: 0,
+        failures: [],
+      },
+    },
+  },
+  edit_landing_page: {
+    id: 41,
+    slug: 'perceuse-bosch-18-v-41',
+    productId: 12,
+    locale: 'fr',
+    active: false,
+    currentRevision: 4,
+    changed: true,
+    generation: {
+      model: 'openai/gpt-5.6-luna',
+      reasoning: 'Rewrote only the requested hero for mobile tradespeople.',
+      groundingNotes: ['Existing revision 3', 'All non-hero blocks preserved'],
+      stages: {
+        status: 'completed',
+        plannedSections: 1,
+        generatedSections: 1,
+        preservedSections: 2,
+        fallbackSections: 0,
+        skippedSections: 0,
+        retryCount: 0,
+        failures: [],
+      },
+    },
+  },
+  update_asset_state: {
+    ok: true,
+    updatedCount: 1,
+    items: [
+      {
+        kind: 'featured-group',
+        id: 7,
+        active: true,
+        showAtTopOfProductsPage: true,
+      },
+    ],
+  },
+  manage_assets: {
+    ok: true,
+    operation: 'create',
+    kind: 'featured-group',
+    id: 8,
+    sortOrder: 2,
+    data: {
+      name: 'Sélection atelier',
+      nameAr: 'اختيار الورشة',
+      productIds: [12, 18],
+      brandIds: [],
+      categoryIds: [],
+      showAtTopOfProductsPage: false,
+      active: false,
+    },
+  },
   inspect_ai_proposals: { proposals: [{ id: 44, status: 'proposed' }] },
+  review_ai_proposals: {
+    action: 'approve',
+    requestedCount: 1,
+    reviewedCount: 1,
+    appliedCount: 1,
+    rejectedCount: 0,
+    reviewed: [{ proposalId: 44, resource: 'products', result: { status: 'applied' } }],
+    failed: [],
+  },
   inspect_administration: { accessGrants: [{ email: 'operator@example.com', role: 'orders' }] },
+  set_access_grant: {
+    ok: true,
+    action: 'updated',
+    id: 9,
+    email: 'operator@example.com',
+    role: 'employee',
+    roleDefinitionId: null,
+  },
+  set_role_definition: {
+    ok: true,
+    action: 'created',
+    id: 14,
+    name: 'Support',
+    slug: 'support',
+    description: null,
+    permissions: ['orders_write', 'ops_view'],
+  },
   inspect_storefront_configuration: {
     settings: { aiAssistantEnabled: true, aiModel: 'openai/gpt-5.6-luna' },
     announcement: { messageFr: '', messageAr: '', active: false },
@@ -176,6 +341,63 @@ const fixtureByTool: Record<string, unknown> = {
         replies: [{ id: 9, body: 'Ancienne réponse', permissions: { canDelete: true } }],
       },
     ],
+  },
+  create_bulletin_post: {
+    ok: true,
+    id: 10,
+    title: 'Suivi',
+    tags: ['suivi'],
+    pinned: false,
+  },
+  reply_bulletin_post: { ok: true, id: 11, postId: 7 },
+  update_bulletin_post: { ok: true, id: 7, pinned: true },
+  delete_bulletin_content: { ok: true, kind: 'reply', id: 9 },
+  create_product: {
+    ok: true,
+    id: 21,
+    slug: 'perceuse-compacte-12-v',
+    inventoryQuantity: 5,
+    active: true,
+    inStock: true,
+    availabilityStatus: 'in_stock',
+    catalogFeedRefresh: 'queued',
+  },
+  update_products: {
+    ok: true,
+    updatedCount: 1,
+    items: [{ productId: 12, price: 14_900, purchasePrice: 9_000 }],
+    failed: [],
+    catalogFeedRefresh: 'queued',
+  },
+  archive_products: {
+    ok: true,
+    archivedCount: 1,
+    items: [{ productId: 12, archived: true, active: false, inStock: false }],
+    missing: [],
+  },
+  manage_taxonomy: {
+    ok: true,
+    operation: 'create',
+    result: {
+      kind: 'brand',
+      id: 6,
+      name: 'Atelier Pro',
+      slug: 'atelier-pro',
+      status: 'active',
+    },
+  },
+  manage_taxonomy_reparent: {
+    ok: true,
+    operation: 'update',
+    result: { kind: 'category', id: 7, changes: { parentId: 3 } },
+  },
+  update_storefront_announcement: {
+    ok: true,
+    announcement: {
+      messageFr: 'Livraison offerte ce week-end',
+      messageAr: 'توصيل مجاني نهاية هذا الأسبوع',
+      active: true,
+    },
   },
   list_background_jobs: {
     jobs: [{ id: 5, type: 'product_export', status: 'running', progress: 60 }],
@@ -622,29 +844,140 @@ function toolsForScenario(
   analyticsPlan: AdminAiAnalyticsQueryPlan | null,
 ) {
   let analyticsQueryExecutionCount = 0;
+  const schemaBackedFixtureTools = {
+    update_order_status: tool({
+      description: descriptions.update_order_status,
+      inputSchema: adminAiOrderStatusMutationSchema,
+      execute: async () => fixtureByTool.update_order_status,
+    }),
+    update_order_details: tool({
+      description: descriptions.update_order_details,
+      inputSchema: adminAiOrderDetailsMutationSchema,
+      execute: async () => fixtureByTool.update_order_details,
+    }),
+    adjust_inventory: tool({
+      description: descriptions.adjust_inventory,
+      inputSchema: adminAiInventoryAdjustmentSchema,
+      execute: async () => fixtureByTool.adjust_inventory,
+    }),
+    create_landing_page: tool({
+      description: descriptions.create_landing_page,
+      inputSchema: adminAiLandingPageCreateSchema,
+      execute: async () => fixtureByTool.create_landing_page,
+    }),
+    edit_landing_page: tool({
+      description: descriptions.edit_landing_page,
+      inputSchema: adminAiLandingPageEditSchema,
+      execute: async () => fixtureByTool.edit_landing_page,
+    }),
+    update_asset_state: tool({
+      description: descriptions.update_asset_state,
+      inputSchema: adminAssetStateMutationSchema,
+      execute: async () => fixtureByTool.update_asset_state,
+    }),
+    manage_assets: tool({
+      description: descriptions.manage_assets,
+      inputSchema: adminAiAssetCrudSchema,
+      execute: async () => fixtureByTool.manage_assets,
+    }),
+    review_ai_proposals: tool({
+      description: descriptions.review_ai_proposals,
+      inputSchema: adminAiProposalReviewSchema,
+      execute: async () => fixtureByTool.review_ai_proposals,
+    }),
+    set_access_grant: tool({
+      description: descriptions.set_access_grant,
+      inputSchema: adminAiAccessGrantSchema,
+      execute: async () => fixtureByTool.set_access_grant,
+    }),
+    set_role_definition: tool({
+      description: descriptions.set_role_definition,
+      inputSchema: adminAiRoleDefinitionSchema,
+      execute: async () => fixtureByTool.set_role_definition,
+    }),
+    update_storefront_announcement: tool({
+      description: descriptions.update_storefront_announcement,
+      inputSchema: storefrontAnnouncementMutationSchema,
+      execute: async () => fixtureByTool.update_storefront_announcement,
+    }),
+    create_bulletin_post: tool({
+      description: descriptions.create_bulletin_post,
+      inputSchema: adminAiBulletinPostSchema,
+      execute: async () => fixtureByTool.create_bulletin_post,
+    }),
+    reply_bulletin_post: tool({
+      description: descriptions.reply_bulletin_post,
+      inputSchema: adminAiBulletinReplySchema,
+      execute: async () => fixtureByTool.reply_bulletin_post,
+    }),
+    update_bulletin_post: tool({
+      description: descriptions.update_bulletin_post,
+      inputSchema: adminAiBulletinPostUpdateSchema,
+      execute: async () => fixtureByTool.update_bulletin_post,
+    }),
+    delete_bulletin_content: tool({
+      description: descriptions.delete_bulletin_content,
+      inputSchema: adminAiBulletinDeleteSchema,
+      execute: async () => fixtureByTool.delete_bulletin_content,
+    }),
+    create_product: tool({
+      description: descriptions.create_product,
+      inputSchema: adminAiProductCreateSchema,
+      execute: async () => fixtureByTool.create_product,
+    }),
+    update_products: tool({
+      description: descriptions.update_products,
+      inputSchema: adminAiProductUpdateSchema,
+      execute: async () => fixtureByTool.update_products,
+    }),
+    archive_products: tool({
+      description: descriptions.archive_products,
+      inputSchema: adminAiProductArchiveSchema,
+      execute: async () => fixtureByTool.archive_products,
+    }),
+    manage_taxonomy: tool({
+      description: descriptions.manage_taxonomy,
+      inputSchema: adminAiTaxonomyMutationSchema,
+      execute: async () =>
+        scenario.id === 'admin-taxonomy-reparent'
+          ? fixtureByTool.manage_taxonomy_reparent
+          : fixtureByTool.manage_taxonomy,
+    }),
+  };
   return Object.fromEntries(
-    Object.entries(descriptions).map(([name, description]) => [
-      name,
-      tool({
-        description,
-        inputSchema: name === 'query_analytics' ? adminAiAnalyticsQuerySchema : genericInputSchema,
-        execute: async (input) =>
-          name === 'query_analytics'
-            ? analyticsFixtureForScenario(
+    Object.entries(descriptions).map(([name, description]) => {
+      if (name === 'query_analytics')
+        return [
+          name,
+          tool({
+            description,
+            inputSchema: adminAiAnalyticsQuerySchema,
+            execute: async (input) =>
+              analyticsFixtureForScenario(
                 scenario,
                 adminAiAnalyticsQuerySchema.parse(
                   analyticsPlan && analyticsQueryExecutionCount++ === 0
                     ? applyAdminAiAnalyticsQueryPlan(input, analyticsPlan)
                     : input,
                 ),
-              )
-            : (fixtureByTool[name] ?? { status: 'proposed', id: 100 }),
-      }),
-    ]),
+              ),
+          }),
+        ];
+      if (name in schemaBackedFixtureTools)
+        return [name, schemaBackedFixtureTools[name as keyof typeof schemaBackedFixtureTools]];
+      return [
+        name,
+        tool({
+          description,
+          inputSchema: genericInputSchema,
+          execute: async () => fixtureByTool[name] ?? { status: 'proposed', id: 100 },
+        }),
+      ];
+    }),
   );
 }
 
-async function executeScenario(
+async function executeScenarioUnsafe(
   scenario: AiEvalScenario<AdminAiEvalInput>,
 ): Promise<AiEvalTranscript> {
   const config = getAiConfig();
@@ -746,6 +1079,36 @@ async function executeScenario(
     );
   }
   return transcript;
+}
+
+async function executeScenario(
+  scenario: AiEvalScenario<AdminAiEvalInput>,
+): Promise<AiEvalTranscript> {
+  try {
+    return await executeScenarioUnsafe(scenario);
+  } catch (error) {
+    if (process.env.AI_EVAL_TRACE === 'true') {
+      const details = recordValue(error);
+      const cause = recordValue(details.cause);
+      console.error(
+        JSON.stringify(
+          {
+            scenarioId: scenario.id,
+            error: {
+              name: error instanceof Error ? error.name : 'UnknownError',
+              message: error instanceof Error ? error.message : String(error),
+              statusCode: details.statusCode ?? cause.statusCode ?? null,
+              responseBody: details.responseBody ?? cause.responseBody ?? null,
+              cause: cause.message ?? null,
+            },
+          },
+          null,
+          2,
+        ),
+      );
+    }
+    throw error;
+  }
 }
 
 async function main() {

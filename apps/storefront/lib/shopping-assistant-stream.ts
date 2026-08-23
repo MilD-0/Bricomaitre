@@ -1,14 +1,26 @@
 import {
   shoppingAssistantResponseSchema,
   shoppingAssistantStreamEventSchema,
+  type ShoppingAssistantProduct,
   type ShoppingAssistantResponse,
+  type ShoppingAssistantStreamEvent,
 } from '@bric/storefront-core/shopping-assistant-contracts';
+
+export type ShoppingAssistantActivity = Extract<
+  ShoppingAssistantStreamEvent,
+  { type: 'status' | 'tool' }
+>;
 
 export async function consumeShoppingAssistantResponse(
   response: Response,
   handlers: {
+    onActivity?: (activity: ShoppingAssistantActivity) => void;
     onTextDelta: (delta: string) => void;
     onResult: (result: Omit<ShoppingAssistantResponse, 'message'>) => void;
+    onError?: (error: {
+      code: 'assistant_unavailable';
+      products?: ShoppingAssistantProduct[];
+    }) => void;
   },
 ) {
   const contentType = response.headers.get('content-type') ?? '';
@@ -30,12 +42,16 @@ export async function consumeShoppingAssistantResponse(
   const consumeLine = (line: string) => {
     if (!line.trim()) return;
     const event = shoppingAssistantStreamEventSchema.parse(JSON.parse(line));
+    if (event.type === 'status' || event.type === 'tool') handlers.onActivity?.(event);
     if (event.type === 'text-delta') handlers.onTextDelta(event.delta);
     if (event.type === 'result') {
       completed = true;
       handlers.onResult({ mode: event.mode, products: event.products });
     }
-    if (event.type === 'error') throw new Error(event.code);
+    if (event.type === 'error') {
+      handlers.onError?.({ code: event.code, products: event.products });
+      throw new Error(event.code);
+    }
   };
 
   while (true) {

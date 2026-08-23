@@ -30,6 +30,7 @@
     "test:contract": "vitest run --project route-contract-node",
     "test:integration": "pnpm test:contract",
     "test:services": "vitest run --project service-integration-node",
+    "test:browser": "playwright test",
     "eval:ai:live": "node --env-file=.env --import tsx scripts/run-ai-evals.ts"
   },
   "dependencies": {
@@ -73,6 +74,8 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.62.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/typography": "^0.5.20",
     "@testing-library/jest-dom": "^6.9.1",

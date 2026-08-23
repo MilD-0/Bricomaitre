@@ -30,11 +30,11 @@ import {
   YAxis,
 } from 'recharts';
 
-import { consumeAdminAiChatResponse } from '../lib/admin-ai-chat-stream';
+import { consumeAdminAiChatResponse, type AdminAiChatStatus } from '../lib/admin-ai-chat-stream';
 import { localizedStatsUrl } from '../lib/analytics2-routes';
 import type { Analytics2View } from '../lib/analytics2';
 import { suggestionKeysForAdminAi } from '../lib/admin-ai-capabilities';
-import { adminAiToolPresentation } from '../lib/admin-ai-tool-presentation';
+import { adminAiToolActivityKey, adminAiToolPresentation } from '../lib/admin-ai-tool-presentation';
 import {
   adminAiMetricsFromUnknown,
   adminAiResultTables,
@@ -432,6 +432,42 @@ function adminAiNoticeText(value: unknown) {
   if (isAdminAiScalar(value)) return queryLabel(String(value ?? ''));
   const entries = adminAiScalarEntries(value, 5);
   return entries.map(([key, child]) => `${queryLabel(key)}: ${String(child ?? '—')}`).join(' · ');
+}
+
+function AdminAiActivity({ status }: { status: AdminAiChatStatus | null }) {
+  const t = useTranslations();
+  const phase = status?.phase ?? 'running';
+  const toolName = status?.toolName;
+
+  if (!toolName) {
+    return (
+      <span
+        role="status"
+        aria-live="polite"
+        data-slot="admin-ai-activity"
+        className="flex min-w-0 items-center gap-2 rounded-full bg-card px-3 py-2 shadow-[var(--shadow-vapor)]"
+      >
+        <Spinner className="size-3.5 shrink-0" />
+        <span className="truncate">{t('aiChat.thinking')}</span>
+      </span>
+    );
+  }
+
+  const tool = t(`aiChat.toolActivity.labels.${adminAiToolActivityKey(toolName)}`);
+  return (
+    <span
+      role="status"
+      aria-live="polite"
+      data-slot="admin-ai-activity"
+      data-phase={phase}
+      className="flex min-w-0 items-center gap-2 rounded-full bg-card px-3 py-2 shadow-[var(--shadow-vapor)]"
+    >
+      {phase === 'running' ? <Spinner className="size-3.5 shrink-0" /> : null}
+      {phase === 'completed' ? <Check className="size-3.5 shrink-0 text-emerald-600" /> : null}
+      {phase === 'failed' ? <X className="size-3.5 shrink-0 text-destructive" /> : null}
+      <span className="truncate">{t(`aiChat.toolActivity.${phase}`, { tool })}</span>
+    </span>
+  );
 }
 
 function AnalyticsCard({
@@ -913,6 +949,7 @@ function StructuredToolResultCard({
 }
 
 function ChatSidebar({
+  mobileVisible,
   conversations,
   selectedConversationId,
   loading,
@@ -926,6 +963,7 @@ function ChatSidebar({
   onDeleteConversation,
   onCancelJob,
 }: {
+  mobileVisible: boolean;
   conversations: ConversationSummary[];
   selectedConversationId: number | null;
   loading: boolean;
@@ -948,7 +986,8 @@ function ChatSidebar({
 
   return (
     <aside
-      className="flex min-h-0 flex-col border-t border-border/60 bg-secondary/20 lg:border-s lg:border-t-0"
+      data-slot="admin-ai-sidebar"
+      className={`${mobileVisible ? 'flex' : 'hidden'} col-start-1 row-start-2 min-h-0 min-w-0 w-full flex-col bg-secondary/20 lg:col-auto lg:row-auto lg:flex lg:border-s`}
       aria-label={t('aiChat.chats')}
     >
       <div className="flex items-center justify-between border-b border-border/60 px-4 py-4 sm:px-5">
@@ -1223,10 +1262,12 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
     [permissions, surfaceContext],
   );
   const [open, setOpen] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState<'conversation' | 'chats'>('conversation');
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pending, setPending] = useState(false);
   const [receivingText, setReceivingText] = useState(false);
+  const [activity, setActivity] = useState<AdminAiChatStatus | null>(null);
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [autoAcceptProposals, setAutoAcceptProposals] = useState(false);
@@ -1509,10 +1550,12 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
     setInput('');
     setPending(true);
     setReceivingText(false);
+    setActivity(null);
     const assistantId = crypto.randomUUID();
     const abortController = new AbortController();
     responseAbortRef.current = abortController;
     let receivedText = false;
+    let failedToolResults: unknown;
     try {
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
@@ -1528,6 +1571,9 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
         signal: abortController.signal,
       });
       await consumeAdminAiChatResponse(response, {
+        onStatus(status) {
+          setActivity(status);
+        },
         onTextDelta(delta) {
           receivedText = true;
           setReceivingText(true);
@@ -1569,20 +1615,44 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
             void autoApproveNewProposals(assistantId, proposals);
           }
         },
+        onError(error) {
+          failedToolResults = error.toolResults;
+        },
       });
       await loadConversations();
       await loadAiHistory();
     } catch {
-      if (!abortController.signal.aborted && !receivedText) {
-        setMessages((items) => [
-          ...items,
-          { id: assistantId, role: 'assistant', content: t('aiChat.error') },
-        ]);
+      if (!abortController.signal.aborted) {
+        const presentation = presentationFromUnknown(failedToolResults);
+        if (receivedText) {
+          setMessages((items) =>
+            items.map((item) =>
+              item.id === assistantId
+                ? {
+                    ...item,
+                    content: `${item.content}\n\n${t('aiChat.interrupted')}`,
+                    ...presentation,
+                  }
+                : item,
+            ),
+          );
+        } else {
+          setMessages((items) => [
+            ...items,
+            {
+              id: assistantId,
+              role: 'assistant',
+              content: t('aiChat.error'),
+              ...presentation,
+            },
+          ]);
+        }
       }
     } finally {
       if (responseAbortRef.current === abortController) responseAbortRef.current = null;
       setPending(false);
       setReceivingText(false);
+      setActivity(null);
     }
   }
 
@@ -1707,13 +1777,40 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
             </Button>
           </DialogHeader>
 
-          <div className="grid min-h-0 flex-1 grid-rows-[minmax(25rem,1fr)_minmax(14rem,0.55fr)] lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-1">
+          <div
+            data-slot="admin-ai-workspace"
+            className="isolate grid min-h-0 min-w-0 w-full flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-1"
+          >
+            <div
+              className="col-start-1 row-start-1 grid grid-cols-2 gap-1 border-b border-border/60 bg-card/70 p-2 lg:hidden"
+              aria-label={t('aiChat.mobilePanels')}
+            >
+              <Button
+                type="button"
+                size="sm"
+                variant={mobilePanel === 'conversation' ? 'outline' : 'ghost'}
+                aria-pressed={mobilePanel === 'conversation'}
+                onClick={() => setMobilePanel('conversation')}
+              >
+                {t('aiChat.conversationTab')}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={mobilePanel === 'chats' ? 'outline' : 'ghost'}
+                aria-pressed={mobilePanel === 'chats'}
+                onClick={() => setMobilePanel('chats')}
+              >
+                {t('aiChat.chats')}
+              </Button>
+            </div>
             <section
-              className="flex min-h-0 flex-col bg-background/45"
+              data-slot="admin-ai-conversation"
+              className={`${mobilePanel === 'conversation' ? 'flex' : 'hidden'} isolate col-start-1 row-start-2 min-h-0 min-w-0 overflow-hidden flex-col bg-background/45 lg:col-auto lg:row-auto lg:flex`}
               aria-label={t('aiChat.conversation')}
             >
               <div
-                className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5"
+                className="relative z-0 min-h-0 flex-1 overscroll-contain overflow-y-auto px-3 py-4 sm:px-5 sm:py-5"
                 aria-live="polite"
               >
                 {loadingConversation ? (
@@ -1905,10 +2002,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
                         <span className="grid size-8 place-items-center rounded-[0.8rem] bg-primary/10 text-primary">
                           <Bot className="size-4" />
                         </span>
-                        <span className="flex items-center gap-2 rounded-full bg-card px-3 py-2 shadow-[var(--shadow-vapor)]">
-                          <Spinner className="size-3.5" />
-                          {t('aiChat.thinking')}
-                        </span>
+                        <AdminAiActivity status={activity} />
                       </div>
                     ) : null}
                     <div ref={messagesEndRef} />
@@ -1916,8 +2010,8 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
                 )}
               </div>
 
-              <div className="shrink-0 border-t border-border/60 bg-card/80 p-3 backdrop-blur-xl sm:p-4">
-                <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-[1.15rem] border border-border/70 bg-background p-2 shadow-[var(--shadow-vapor)] focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/10">
+              <div className="relative z-20 min-w-0 w-full shrink-0 border-t border-border/60 bg-card/80 p-3 backdrop-blur-xl sm:p-4">
+                <div className="mx-auto flex min-w-0 w-full max-w-3xl items-end gap-2 overflow-hidden rounded-[1.15rem] border border-border/70 bg-background p-2 shadow-[var(--shadow-vapor)] focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/10">
                   <Textarea
                     value={input}
                     onChange={(event) => setInput(event.target.value)}
@@ -1929,13 +2023,13 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
                     }}
                     placeholder={t(`aiChat.surfacePlaceholders.${surfaceContext.surface}`)}
                     aria-label={t('aiChat.placeholder')}
-                    className="min-h-12 max-h-32 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:bg-transparent focus-visible:ring-0"
+                    className="min-h-12 min-w-0 w-auto max-h-32 flex-1 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:bg-transparent focus-visible:ring-0"
                   />
                   {pending ? (
                     <Button
                       type="button"
                       variant="destructive"
-                      className="size-10 shrink-0 rounded-[0.85rem] p-0"
+                      className="relative z-10 size-10 shrink-0 rounded-[0.85rem] p-0"
                       onClick={cancelResponse}
                       aria-label={t('aiChat.stopResponse')}
                     >
@@ -1944,7 +2038,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
                   ) : (
                     <Button
                       type="button"
-                      className="size-10 shrink-0 rounded-[0.85rem] p-0"
+                      className="relative z-10 size-10 shrink-0 rounded-[0.85rem] p-0"
                       disabled={loadingConversation || !input.trim()}
                       onClick={() => void send()}
                       aria-label={t('aiChat.send')}
@@ -1957,15 +2051,22 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
             </section>
 
             <ChatSidebar
+              mobileVisible={mobilePanel === 'chats'}
               conversations={conversations}
               selectedConversationId={selectedConversationId}
               loading={loadingConversations}
               jobs={jobs}
               cancellingJobId={cancellingJobId}
               search={conversationSearch}
-              onNewChat={newChat}
+              onNewChat={() => {
+                newChat();
+                setMobilePanel('conversation');
+              }}
               onSearchChange={setConversationSearch}
-              onSelectConversation={(conversation) => void selectConversation(conversation)}
+              onSelectConversation={(conversation) => {
+                setMobilePanel('conversation');
+                void selectConversation(conversation);
+              }}
               onRenameConversation={renameConversation}
               onDeleteConversation={(conversation) => void deleteConversation(conversation)}
               onCancelJob={(job) => void cancelJob(job)}
