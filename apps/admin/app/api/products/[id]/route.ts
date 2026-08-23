@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { landingPages, productPromoCodes, productSlugHistory, products } from '@bric/db/schema';
+import { productPromoCodes, products } from '@bric/db/schema';
 import { mutateEntityWithHistory } from '../../../../lib/action-history';
 import { auth } from '../../../../lib/auth';
 import { startProductCatalogFeedRefreshJob } from '../../../../lib/background-jobs';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { productPatchSchema, productPayloadSchema } from '../../../../lib/products';
-import { toProductMutationValues, toProductPromoRows } from '../../../../lib/product-mutations';
 import {
-  assertUniqueProductIdentifiers,
   ProductIntegrityConflictError,
-} from '../../../../lib/product-integrity';
+  replaceProductThroughCanonicalWorkflow,
+} from '../../../../lib/product-update-workflow';
+import { assertUniqueProductIdentifiers } from '../../../../lib/product-integrity';
 import { requireAppAccess, requireMutationAccess } from '../../../../lib/rbac';
 import { captureAdminException, getRequestId } from '../../../../lib/sentry';
 import { CACHE_TAGS, revalidateServerTags } from '../../../../lib/server-cache';
@@ -88,61 +88,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const data = parsed.data;
   const db = getDb();
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
-  const values = await toProductMutationValues(data, numericId);
 
   try {
-    await mutateEntityWithHistory(db, {
-      entityType: 'products',
-      entityId: numericId,
-      operation: 'update',
-      actor,
-      execute: async (tx) => {
-        await assertUniqueProductIdentifiers(tx, values, numericId);
-        const updatedAt = new Date();
-        const [current] = await tx
-          .select({ slug: products.slug })
-          .from(products)
-          .where(eq(products.id, numericId))
-          .limit(1);
-        if (!current) return;
-        if (current.slug !== values.slug) {
-          await tx
-            .delete(productSlugHistory)
-            .where(
-              and(
-                eq(productSlugHistory.productId, numericId),
-                eq(productSlugHistory.slug, values.slug),
-              ),
-            );
-          await tx
-            .insert(productSlugHistory)
-            .values({ productId: numericId, slug: current.slug })
-            .onConflictDoNothing();
-        }
-        await tx
-          .update(products)
-          .set({
-            ...values,
-            updatedAt,
-          })
-          .where(eq(products.id, numericId));
-        await tx
-          .update(landingPages)
-          .set({ slug: values.slug, updatedAt, updatedBy: actor.email })
-          .where(eq(landingPages.productId, numericId));
-        if (Array.isArray(data.promoCodes)) {
-          await tx.delete(productPromoCodes).where(eq(productPromoCodes.productId, numericId));
-          const promoRows = toProductPromoRows(numericId, data.promoCodes);
-          if (promoRows.length > 0) {
-            await tx.insert(productPromoCodes).values(promoRows);
-          }
-        }
-      },
-    });
+    await replaceProductThroughCanonicalWorkflow(db, numericId, parsed.data, actor);
   } catch (error) {
     if (error instanceof ProductIntegrityConflictError) {
       return NextResponse.json({ error: error.message }, { status: 409 });

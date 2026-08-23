@@ -2,10 +2,14 @@ import { createAiLanguageModel, getAiConfig, resolveAiModel, type AiConfig } fro
 import {
   landingPageBenefitsBlockSchema,
   landingPageBlockSchema,
+  landingPageBlockIdSchema,
   landingPageCommercePanelBlockSchema,
+  landingPageComparisonBlockSchema,
   landingPageDocumentSchema,
   landingPageEditorialIntroBlockSchema,
   landingPageFaqBlockSchema,
+  landingPageFinalCtaBlockSchema,
+  landingPageHeroBlockSchema,
   landingPageImageGalleryBlockSchema,
   landingPageMediaFeatureBlockSchema,
   landingPageProcessBlockSchema,
@@ -69,6 +73,22 @@ const plannedSectionTypeSchema = z.enum([
   'process',
   'trust-band',
   'commerce-panel',
+]);
+
+const editableBlockTypeSchema = z.enum([
+  'product-hero',
+  'benefit-grid',
+  'media-feature',
+  'specifications',
+  'faq',
+  'editorial-intro',
+  'image-gallery',
+  'use-cases',
+  'comparison',
+  'process',
+  'trust-band',
+  'commerce-panel',
+  'final-cta',
 ]);
 
 const plannedSectionSchema = z.object({
@@ -168,6 +188,72 @@ export interface LandingPageStageRunner {
   }): Promise<{ block: LandingPageBlock; usage: TokenUsage }>;
 }
 
+const landingPageEditSlotSchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('preserve'),
+    blockId: landingPageBlockIdSchema,
+  }),
+  z.object({
+    mode: z.literal('generate'),
+    blockId: landingPageBlockIdSchema.nullable().default(null),
+    type: editableBlockTypeSchema,
+    purpose: z.string().trim().min(1).max(600),
+    surface: z.enum(['plain', 'white', 'soft', 'dark', 'accent']),
+    width: z.enum(['narrow', 'wide', 'full']),
+  }),
+]);
+
+const landingPageEditPlanSchema = z.object({
+  theme: z.object({
+    accent: z.enum(['orange', 'teal', 'graphite']),
+    density: z.enum(['compact', 'comfortable', 'spacious']),
+    shell: z.literal('campaign').default('campaign'),
+  }),
+  seo: z.object({
+    title: z.string().trim().min(1).max(70),
+    description: z.string().trim().min(1).max(170),
+  }),
+  blocks: z.array(landingPageEditSlotSchema).min(2).max(20),
+  reasoning: z.string().trim().min(1).max(2_000),
+  groundingNotes: z.array(z.string().trim().min(1).max(500)).max(20).default([]),
+});
+
+export type LandingPageEditInput = LandingPageGenerationInput & {
+  instruction: string;
+  currentDocument: LandingPageDocument;
+};
+
+const landingPageEditInputSchema = landingPageGenerationInputSchema.extend({
+  instruction: z.string().trim().min(1).max(4_000),
+  currentDocument: landingPageDocumentSchema,
+});
+
+type LandingPageEditPlan = z.infer<typeof landingPageEditPlanSchema>;
+type LandingPageEditSlot = z.infer<typeof landingPageEditSlotSchema>;
+
+export interface LandingPageEditStageRunner {
+  generatePlan(
+    input: LandingPageEditInput,
+  ): Promise<{ plan: LandingPageEditPlan; usage: TokenUsage }>;
+  generateBlock(input: {
+    editInput: LandingPageEditInput;
+    slot: Extract<LandingPageEditSlot, { mode: 'generate' }>;
+    existingBlock: LandingPageBlock | null;
+    index: number;
+  }): Promise<{ block: LandingPageBlock; usage: TokenUsage }>;
+}
+
+export interface LandingPageEditResult extends LandingPageGenerationResult {
+  stages: LandingPageGenerationStages & {
+    preservedSections: number;
+    failures: Array<{
+      blockId: string | null;
+      type: LandingPageBlock['type'];
+      action: 'preserved-existing' | 'skipped-new';
+    }>;
+  };
+}
+
 export async function generateLandingPageDraft(input: {
   generator: LandingPageGenerator;
   generationInput: LandingPageGenerationInput;
@@ -232,8 +318,10 @@ export function normalizeGeneratedLandingPage(
   });
 }
 
-function blockSchemaFor(type: PlannedSection['type']): z.ZodTypeAny {
+function blockSchemaFor(type: LandingPageBlock['type']): z.ZodTypeAny {
   switch (type) {
+    case 'product-hero':
+      return landingPageHeroBlockSchema;
     case 'benefit-grid':
       return landingPageBenefitsBlockSchema;
     case 'media-feature':
@@ -248,12 +336,16 @@ function blockSchemaFor(type: PlannedSection['type']): z.ZodTypeAny {
       return landingPageImageGalleryBlockSchema;
     case 'use-cases':
       return landingPageUseCasesBlockSchema;
+    case 'comparison':
+      return landingPageComparisonBlockSchema;
     case 'process':
       return landingPageProcessBlockSchema;
     case 'trust-band':
       return landingPageTrustBandBlockSchema;
     case 'commerce-panel':
       return landingPageCommercePanelBlockSchema;
+    case 'final-cta':
+      return landingPageFinalCtaBlockSchema;
   }
 }
 
@@ -433,6 +525,216 @@ export function createLandingPageGenerator(
           generatedSections: generatedBlocks.length,
           fallbackSections: fallbackBlocks.length,
           skippedSections,
+        },
+      };
+    },
+  };
+}
+
+function validateLandingPageEditPlan(
+  plan: LandingPageEditPlan,
+  currentDocument: LandingPageDocument,
+) {
+  const currentById = new Map(currentDocument.blocks.map((block) => [block.id, block]));
+  const referencedIds = new Set<string>();
+  const resolvedTypes: LandingPageBlock['type'][] = [];
+
+  for (const [index, slot] of plan.blocks.entries()) {
+    const blockId = slot.blockId;
+    if (blockId != null) {
+      const existing = currentById.get(blockId);
+      if (!existing)
+        throw new Error(`Landing-page edit plan references unknown block "${blockId}".`);
+      if (referencedIds.has(blockId))
+        throw new Error(`Landing-page edit plan references block "${blockId}" more than once.`);
+      referencedIds.add(blockId);
+      resolvedTypes.push(slot.mode === 'preserve' ? existing.type : slot.type);
+      continue;
+    }
+    if (slot.mode === 'preserve')
+      throw new Error(`Landing-page edit slot ${index + 1} must reference an existing block.`);
+    resolvedTypes.push(slot.type);
+  }
+
+  if (resolvedTypes.filter((type) => type === 'product-hero').length !== 1)
+    throw new Error('Landing-page edit plan must contain exactly one product hero.');
+  if (resolvedTypes.filter((type) => type === 'final-cta').length !== 1)
+    throw new Error('Landing-page edit plan must contain exactly one final CTA.');
+}
+
+function generatedLandingPageBlockId(
+  slot: Extract<LandingPageEditSlot, { mode: 'generate' }>,
+  index: number,
+  usedIds: Set<string>,
+) {
+  if (slot.blockId) return slot.blockId;
+  const base = `ai-${index + 1}-${slot.type}`.slice(0, 76).replace(/-+$/, '');
+  let candidate = base;
+  let suffix = 2;
+  while (usedIds.has(candidate)) {
+    candidate = `${base.slice(0, 76 - String(suffix).length)}-${suffix}`;
+    suffix += 1;
+  }
+  usedIds.add(candidate);
+  return landingPageBlockIdSchema.parse(candidate);
+}
+
+function createModelEditStageRunner(config: AiConfig): LandingPageEditStageRunner {
+  const model = createAiLanguageModel(config, 'content');
+  return {
+    async generatePlan(input) {
+      const result = await generateText({
+        model,
+        instructions: `${LANDING_PAGE_GENERATION_INSTRUCTIONS} You are editing an existing validated landing page. Return a compact edit plan, not the rewritten document. The blocks array is the exact final order. Preserve every block that is not affected by the operator instruction. Use mode preserve with its exact blockId for unchanged blocks. Use mode generate with the existing blockId to rewrite a block, or null to add a new block. Omitting an existing block deletes it, so omit only when explicitly requested. Keep exactly one product-hero and one final-cta. Keep the current theme and SEO values unless the instruction changes them.`,
+        prompt: JSON.stringify({
+          product: input.product,
+          locale: input.locale,
+          instruction: input.instruction,
+          currentDocument: input.currentDocument,
+        }),
+        output: Output.object({
+          schema: landingPageEditPlanSchema,
+          name: 'storefront_landing_page_edit_plan',
+        }),
+        maxRetries: config.maxRetries,
+        timeout: config.requestTimeoutMs,
+      });
+      return { plan: landingPageEditPlanSchema.parse(await result.output), usage: result.usage };
+    },
+    async generateBlock({ editInput, slot, existingBlock, index }) {
+      const schema = blockSchemaFor(slot.type);
+      const result = await generateText({
+        model,
+        instructions: `${LANDING_PAGE_GENERATION_INSTRUCTIONS} Write exactly one ${slot.type} block for an existing landing-page edit. Apply only the supplied purpose. Return the block only; its type must be ${slot.type}. Preserve useful verified copy from the existing block when it remains relevant.`,
+        prompt: JSON.stringify({
+          product: editInput.product,
+          locale: editInput.locale,
+          operatorInstruction: editInput.instruction,
+          blockPurpose: slot.purpose,
+          existingBlock,
+        }),
+        output: Output.object({
+          schema,
+          name: `storefront_landing_page_edit_${slot.type.replaceAll('-', '_')}`,
+        }),
+        maxRetries: config.maxRetries,
+        timeout: config.requestTimeoutMs,
+      });
+      const rawBlock = schema.parse(await result.output) as Record<string, unknown>;
+      return {
+        block: landingPageBlockSchema.parse({
+          ...rawBlock,
+          id: slot.blockId ?? `generated-${index + 1}-${slot.type}`,
+          type: slot.type,
+          surface: slot.surface,
+          width: slot.width,
+        }),
+        usage: result.usage,
+      };
+    },
+  };
+}
+
+export function createLandingPageEditor(
+  config: AiConfig = getAiConfig(),
+  stageRunner?: LandingPageEditStageRunner,
+) {
+  const runner = stageRunner ?? createModelEditStageRunner(config);
+  return {
+    async edit(rawInput: LandingPageEditInput): Promise<LandingPageEditResult> {
+      const input = landingPageEditInputSchema.parse(rawInput);
+      const { plan, usage: planUsage } = await runner.generatePlan(input);
+      validateLandingPageEditPlan(plan, input.currentDocument);
+
+      const currentById = new Map(input.currentDocument.blocks.map((block) => [block.id, block]));
+      const usedIds = new Set(input.currentDocument.blocks.map((block) => block.id));
+      const usage: TokenUsage = {};
+      addUsage(usage, planUsage);
+      const settledByIndex = new Map<
+        number,
+        PromiseSettledResult<{ block: LandingPageBlock; usage: TokenUsage }>
+      >();
+
+      const generatedSlots = plan.blocks.flatMap((slot, index) =>
+        slot.mode === 'generate' ? [{ slot, index }] : [],
+      );
+      for (let offset = 0; offset < generatedSlots.length; offset += 2) {
+        const batch = generatedSlots.slice(offset, offset + 2);
+        const settled = await Promise.allSettled(
+          batch.map(({ slot, index }) =>
+            runner.generateBlock({
+              editInput: input,
+              slot,
+              existingBlock: slot.blockId ? (currentById.get(slot.blockId) ?? null) : null,
+              index,
+            }),
+          ),
+        );
+        settled.forEach((result, index) => {
+          settledByIndex.set(batch[index]!.index, result);
+        });
+      }
+
+      const blocks: LandingPageBlock[] = [];
+      const failures: LandingPageEditResult['stages']['failures'] = [];
+      let generatedSections = 0;
+      let preservedSections = 0;
+      let fallbackSections = 0;
+      let skippedSections = 0;
+
+      for (const [index, slot] of plan.blocks.entries()) {
+        if (slot.mode === 'preserve') {
+          blocks.push(currentById.get(slot.blockId)!);
+          preservedSections += 1;
+          continue;
+        }
+        const result = settledByIndex.get(index);
+        if (result?.status === 'fulfilled') {
+          const id = generatedLandingPageBlockId(slot, index, usedIds);
+          blocks.push(landingPageBlockSchema.parse({ ...result.value.block, id }));
+          addUsage(usage, result.value.usage);
+          generatedSections += 1;
+          continue;
+        }
+        const existing = slot.blockId ? currentById.get(slot.blockId) : null;
+        if (existing) {
+          blocks.push(existing);
+          fallbackSections += 1;
+          failures.push({
+            blockId: existing.id,
+            type: slot.type,
+            action: 'preserved-existing',
+          });
+        } else {
+          skippedSections += 1;
+          failures.push({ blockId: null, type: slot.type, action: 'skipped-new' });
+        }
+      }
+
+      const document = normalizeGeneratedLandingPage(
+        {
+          schemaVersion: 2,
+          theme: plan.theme,
+          seo: { ...plan.seo, indexable: false },
+          blocks,
+        },
+        input.product.images,
+      );
+
+      return {
+        document,
+        reasoning: plan.reasoning,
+        groundingNotes: plan.groundingNotes,
+        usage,
+        model: resolveAiModel(config, 'content'),
+        stages: {
+          status: failures.length ? 'partial-fallback' : 'completed',
+          plannedSections: plan.blocks.length,
+          generatedSections,
+          preservedSections,
+          fallbackSections,
+          skippedSections,
+          failures,
         },
       };
     },

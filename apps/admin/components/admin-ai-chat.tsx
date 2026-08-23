@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  ArrowUpRight,
   Bot,
   Check,
   ChevronLeft,
@@ -15,6 +16,7 @@ import {
   ThumbsUp,
   X,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -30,6 +32,7 @@ import {
 
 import { consumeAdminAiChatResponse } from '../lib/admin-ai-chat-stream';
 import { suggestionKeysForAdminAi } from '../lib/admin-ai-capabilities';
+import { adminAiToolPresentation } from '../lib/admin-ai-tool-presentation';
 import {
   adminAiMetricsFromUnknown,
   adminAiResultTables,
@@ -230,22 +233,6 @@ function hydrateChatMessage(
     feedback: message.feedback,
     ...presentationFromUnknown(message.toolResults),
   };
-}
-
-function toolResultLabelKey(toolName: string) {
-  if (['find_products'].includes(toolName)) return 'catalog';
-  if (['find_brands', 'find_categories'].includes(toolName)) return 'taxonomy';
-  if (toolName === 'inspect_orders') return 'orders';
-  if (toolName === 'inspect_inventory') return 'inventory';
-  if (toolName === 'inspect_assets') return 'assets';
-  if (toolName === 'inspect_ai_proposals' || toolName.startsWith('propose_')) return 'proposals';
-  if (toolName === 'inspect_bulletin') return 'bulletin';
-  if (toolName === 'inspect_administration') return 'administration';
-  if (toolName.includes('background_job')) return 'background';
-  if (toolName.includes('content')) return 'content';
-  if (toolName.includes('categor')) return 'categorization';
-  if (toolName.startsWith('suggest_')) return 'proposals';
-  return 'result';
 }
 
 function displayAdminAiValue(
@@ -478,9 +465,16 @@ function AnalyticsCard({ result }: { result: AnalyticsResult }) {
   );
 }
 
-function StructuredToolResultCard({ result }: { result: AdminAiToolResult }) {
+function StructuredToolResultCard({
+  result,
+  onNavigate,
+}: {
+  result: AdminAiToolResult;
+  onNavigate: () => void;
+}) {
   const t = useTranslations();
   const locale = useLocale();
+  const presentation = adminAiToolPresentation(result.toolName, result.output, locale);
   const displayValue = (value: unknown) =>
     displayAdminAiValue(value, locale, t('aiChat.yes'), t('aiChat.no'));
   const summary = adminAiScalarEntries(result.output, 10);
@@ -496,7 +490,7 @@ function StructuredToolResultCard({ result }: { result: AdminAiToolResult }) {
     <section className="mt-4 overflow-hidden rounded-[1.15rem] border border-border/60 bg-card shadow-[var(--shadow-vapor)]">
       <div className="border-b border-border/60 bg-secondary/35 px-4 py-3">
         <p className="text-xs font-semibold text-foreground">
-          {t(`aiChat.toolLabels.${toolResultLabelKey(result.toolName)}`)}
+          {t(`aiChat.toolLabels.${presentation.labelKey}`)}
         </p>
         <p className="mt-0.5 text-[0.65rem] capitalize text-muted-foreground">
           {queryLabel(result.toolName)}
@@ -563,6 +557,18 @@ function StructuredToolResultCard({ result }: { result: AdminAiToolResult }) {
       ))}
       {!error && summary.length === 0 && tables.length === 0 ? (
         <p className="px-4 py-3 text-xs text-muted-foreground">{t('aiChat.noToolData')}</p>
+      ) : null}
+      {presentation.href && presentation.destinationKey ? (
+        <div className="border-t border-border/50 px-3 py-2.5">
+          <Link
+            href={presentation.href}
+            onClick={onNavigate}
+            className="inline-flex min-h-8 items-center gap-1.5 rounded-[0.75rem] px-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+          >
+            {t(`aiChat.toolDestinations.${presentation.destinationKey}`)}
+            <ArrowUpRight className="size-3.5 rtl:-scale-x-100" />
+          </Link>
+        </div>
       ) : null}
     </section>
   );
@@ -1456,6 +1462,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
                                 <StructuredToolResultCard
                                   key={`${result.toolName}-${resultIndex}`}
                                   result={result}
+                                  onNavigate={() => setOpen(false)}
                                 />
                               ))
                             : null}

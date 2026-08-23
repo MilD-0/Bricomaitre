@@ -216,6 +216,7 @@ describe('app/api/products/[id]/route', () => {
         brandId: null,
         categoryId: null,
         images: [],
+        promoCodes: [],
       },
     } as never);
 
@@ -248,6 +249,8 @@ describe('app/api/products/[id]/route', () => {
     const whereMock = vi.fn().mockResolvedValue(undefined);
     const setMock = vi.fn().mockReturnValue({ where: whereMock });
     const updateMock = vi.fn().mockReturnValue({ set: setMock });
+    const deleteWhereMock = vi.fn().mockResolvedValue(undefined);
+    const deleteMock = vi.fn().mockReturnValue({ where: deleteWhereMock });
     await execute({
       select: vi.fn(() => ({
         from: vi.fn(() => ({
@@ -257,6 +260,7 @@ describe('app/api/products/[id]/route', () => {
         })),
       })),
       update: updateMock,
+      delete: deleteMock,
     });
 
     expect(setMock).toHaveBeenCalledWith(
@@ -278,6 +282,7 @@ describe('app/api/products/[id]/route', () => {
       }),
     );
     expect(updateMock).toHaveBeenCalledTimes(2);
+    expect(deleteMock).toHaveBeenCalledOnce();
     expect(startProductCatalogFeedRefreshJobMock).toHaveBeenCalledWith(
       'product:update',
       'request-2',

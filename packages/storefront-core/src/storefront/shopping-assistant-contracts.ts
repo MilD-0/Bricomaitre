@@ -120,6 +120,8 @@ export const shoppingAssistantToolNameSchema = z.enum([
   'search_catalog',
   'inspect_products',
   'inspect_order',
+  'inspect_delivery_support',
+  'inspect_promotion',
   'present_products',
 ]);
 
@@ -150,6 +152,19 @@ export const shoppingAssistantProductLookupSchema = z
   .strict();
 
 export const shoppingAssistantOrderLookupSchema = z.object({}).strict();
+
+export const shoppingAssistantDeliverySupportLookupSchema = z
+  .object({
+    query: z.string().trim().max(120).default(''),
+  })
+  .strict();
+
+export const shoppingAssistantPromotionLookupSchema = z
+  .object({
+    productIds: z.array(z.number().int().positive()).min(1).max(4),
+    code: z.string().trim().min(1).max(120),
+  })
+  .strict();
 
 export const shoppingAssistantProductSelectionSchema = z
   .object({

@@ -9,7 +9,9 @@ import { loadOrderDetail, loadOrdersPageData } from './admin-orders-data';
 import { loadAiProposalAssistantItems, type AiProposalAssistantScope } from './ai-proposal-inbox';
 import { readBrandsPage, readCategoriesPage } from './brands-categories-api';
 import { loadBulletinData } from './bulletin-server';
+import { listLandingPages } from './landing-pages';
 import type { PermissionKey } from './permissions';
+import { readProductMutationPayload } from './product-update-workflow';
 
 export async function findAdminProducts(input: {
   query?: string;
@@ -23,6 +25,23 @@ export async function findAdminProducts(input: {
     page: input.page ?? 1,
     limit: input.limit ?? 10,
   });
+}
+
+export async function inspectAdminProducts(input: {
+  query?: string;
+  productIds?: number[];
+  page?: number;
+  limit?: number;
+}) {
+  const matches = await findAdminProducts(input);
+  const db = getDb();
+  const inspected = await Promise.all(
+    matches.items.map(async (match) => ({
+      id: match.id,
+      ...(await readProductMutationPayload(db, match.id)),
+    })),
+  );
+  return { ...matches, items: inspected };
 }
 
 export async function findAdminBrands(input: { query: string; limit?: number }) {
@@ -174,6 +193,9 @@ export async function inspectAdminAssets(input: {
   kind?: 'all' | 'banners' | 'featuredGroups' | 'productCards';
   ids?: number[];
   limit?: number;
+  productQuery?: string;
+  brandQuery?: string;
+  categoryQuery?: string;
 }) {
   const data = await loadAssetsData();
   const ids = new Set(input.ids ?? []);
@@ -181,6 +203,17 @@ export async function inspectAdminAssets(input: {
   const selected = <T extends { id: number }>(items: T[]) =>
     items.filter((item) => ids.size === 0 || ids.has(item.id)).slice(0, limit);
   const kind = input.kind ?? 'all';
+  const [productMatches, brandMatches, categoryMatches] = await Promise.all([
+    input.productQuery?.trim()
+      ? findAdminProducts({ query: input.productQuery, limit })
+      : Promise.resolve(null),
+    input.brandQuery?.trim()
+      ? findAdminBrands({ query: input.brandQuery, limit })
+      : Promise.resolve(null),
+    input.categoryQuery?.trim()
+      ? findAdminCategories({ query: input.categoryQuery, limit })
+      : Promise.resolve(null),
+  ]);
 
   return {
     ...(kind === 'all' || kind === 'banners' ? { banners: selected(data.banners) } : {}),
@@ -195,6 +228,40 @@ export async function inspectAdminAssets(input: {
       featuredGroups: data.featuredGroups.length,
       productCards: data.productCards.length,
     },
+    matches: {
+      products: productMatches,
+      brands: brandMatches,
+      categories: categoryMatches,
+    },
+  };
+}
+
+export async function inspectAdminLandingPages(input: {
+  landingPageIds?: number[];
+  productIds?: number[];
+  query?: string;
+  limit?: number;
+}) {
+  const landingPageIds = new Set(input.landingPageIds ?? []);
+  const productIds = new Set(input.productIds ?? []);
+  const query = input.query?.trim().toLocaleLowerCase() ?? '';
+  const pages = (await listLandingPages())
+    .filter(
+      (page) =>
+        (landingPageIds.size === 0 || landingPageIds.has(page.id)) &&
+        (productIds.size === 0 || productIds.has(page.productId)) &&
+        (!query ||
+          page.productTitle.toLocaleLowerCase().includes(query) ||
+          page.slug.toLocaleLowerCase().includes(query)),
+    )
+    .slice(0, input.limit ?? 10);
+
+  return {
+    items: pages,
+    requestedLandingPageIds: [...landingPageIds],
+    missingLandingPageIds: [...landingPageIds].filter(
+      (id) => !pages.some((page) => page.id === id),
+    ),
   };
 }
 

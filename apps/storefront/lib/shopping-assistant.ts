@@ -1,7 +1,9 @@
 import type {
   StorefrontAssetsResponse,
+  StorefrontEcotrackCatalogResponse,
   StorefrontProductDetailResponse,
   StorefrontProductsResponse,
+  StorefrontSettingsResponse,
 } from '@bric/storefront-core/contracts';
 import {
   shoppingAssistantPageContextSchema,
@@ -28,7 +30,13 @@ export type ShoppingAssistantIntent =
   | 'other';
 
 export type ShoppingAssistantToolPlan = {
-  groundingTool: 'search_catalog' | 'inspect_products' | 'inspect_order' | null;
+  groundingTool:
+    | 'search_catalog'
+    | 'inspect_products'
+    | 'inspect_order'
+    | 'inspect_delivery_support'
+    | 'inspect_promotion'
+    | null;
   presentProducts: boolean;
 };
 
@@ -198,6 +206,56 @@ export function shoppingAssistantToolPlan(
   if (context.hasOrder && asksAboutOrder) {
     return { groundingTool: 'inspect_order', presentProducts: false };
   }
+  const asksAboutPromotion = [
+    'promo',
+    'promotion',
+    'code',
+    'coupon',
+    'remise',
+    'réduction',
+    'reduction',
+    'تخفيض',
+    'خصم',
+    'كود',
+    'قسيمة',
+  ].some((term) => normalized.includes(term));
+  if (asksAboutPromotion) {
+    return {
+      groundingTool: context.hasInspectableProducts ? 'inspect_promotion' : 'search_catalog',
+      presentProducts: false,
+    };
+  }
+  const asksAboutDeliveryOrSupport = [
+    'frais de livraison',
+    'tarif de livraison',
+    'livrez',
+    'wilaya',
+    'commune',
+    'bureau',
+    'stop desk',
+    'contact',
+    'téléphone',
+    'telephone',
+    'email',
+    'adresse',
+    'facebook',
+    'delivery fee',
+    'deliver to',
+    'phone',
+    'توصيل إلى',
+    'سعر التوصيل',
+    'تكلفة التوصيل',
+    'الولاية',
+    'البلدية',
+    'المكتب',
+    'اتصل',
+    'الهاتف',
+    'البريد',
+    'العنوان',
+  ].some((term) => normalized.includes(term));
+  if (asksAboutDeliveryOrSupport) {
+    return { groundingTool: 'inspect_delivery_support', presentProducts: false };
+  }
   const intent = classifyShoppingAssistantIntent(value);
 
   if (intent === 'product_search' || intent === 'availability' || intent === 'recommendation') {
@@ -222,6 +280,83 @@ export function shoppingAssistantToolPlan(
     };
   }
   return { groundingTool: null, presentProducts: false };
+}
+
+function normalizeDeliveryQuery(value: string) {
+  return value.normalize('NFKD').replace(/\p{M}/gu, '').toLocaleLowerCase().trim();
+}
+
+export function storefrontDeliverySupportEvidence(
+  catalog: StorefrontEcotrackCatalogResponse,
+  settings: StorefrontSettingsResponse,
+  rawQuery: string,
+) {
+  const query = normalizeDeliveryQuery(rawQuery);
+  const matchingCommunes = query
+    ? catalog.communes.filter((commune) =>
+        [commune.name, commune.postalCode ?? ''].some((value) =>
+          normalizeDeliveryQuery(value).includes(query),
+        ),
+      )
+    : [];
+  const matchingCommuneWilayaIds = new Set(matchingCommunes.map((commune) => commune.wilayaId));
+  const matchingWilayas = catalog.wilayas.filter(
+    (wilaya) =>
+      !query ||
+      String(wilaya.wilayaId) === query ||
+      normalizeDeliveryQuery(wilaya.name).includes(query) ||
+      matchingCommuneWilayaIds.has(wilaya.wilayaId),
+  );
+
+  return {
+    contact: {
+      phone: settings.phoneEnabled
+        ? { display: settings.phoneDisplay, href: settings.phoneHref }
+        : null,
+      email: settings.contactEmail,
+      address: settings.address,
+      mapUrl: settings.mapUrl,
+      facebookUrl: settings.facebookUrl,
+    },
+    query: rawQuery.trim(),
+    matchedWilayas: matchingWilayas.slice(0, 8).map((wilaya) => {
+      const wilayaCommunes = catalog.communes.filter(
+        (commune) => commune.wilayaId === wilaya.wilayaId,
+      );
+      const wilayaNameMatches =
+        !query ||
+        String(wilaya.wilayaId) === query ||
+        normalizeDeliveryQuery(wilaya.name).includes(query);
+      const relevantCommunes = query && !wilayaNameMatches ? matchingCommunes : wilayaCommunes;
+      const fee = catalog.serviceFees.find(
+        (candidate) =>
+          candidate.serviceType === 'livraison' && candidate.wilayaId === wilaya.wilayaId,
+      );
+      return {
+        wilayaId: wilaya.wilayaId,
+        name: wilaya.name,
+        fees: fee ? { homeDeliveryDzd: fee.homeFee, stopDeskDzd: fee.stopDeskFee } : null,
+        communeCount: wilayaCommunes.length,
+        stopDeskCommuneCount: wilayaCommunes.filter((commune) => commune.hasStopDesk).length,
+        communes: relevantCommunes.slice(0, 100).map((commune) => ({
+          name: commune.name,
+          postalCode: commune.postalCode,
+          hasStopDesk: commune.hasStopDesk,
+        })),
+        communesTruncated: relevantCommunes.length > 100,
+      };
+    }),
+    matchedWilayaCount: matchingWilayas.length,
+    deliveryWeightSurcharges: catalog.weightFees
+      .filter((fee) => fee.serviceType === 'livraison')
+      .map((fee) => ({
+        startsAtKg: fee.startsAtKg,
+        homeSurchargeDzd: fee.homeSurcharge,
+        stopDeskSurchargeDzd: fee.stopDeskSurcharge,
+        perAdditionalKgDzd: fee.perAdditionalKg,
+      })),
+    lastSync: catalog.lastSync,
+  };
 }
 
 export function buildShoppingAssistantPageContext(
@@ -375,6 +510,8 @@ export function shoppingAssistantInstructions(locale: Locale) {
     'For an Arabic catalog search with no relevant match, retry once with a concise French product-type term while preserving any brand or model token.',
     'Clearly identify unavailable products. Do not claim to add anything to cart or place an order.',
     'On a verified order confirmation page, use inspect_order before answering tracking, delivery, or order-status questions. Explain the latest recorded state and timestamp without inventing an ETA.',
+    'Use inspect_delivery_support for delivery coverage, exact home and stop-desk fees, commune availability, or contact details. State DZD fees exactly as returned and distinguish home delivery from stop-desk delivery.',
+    'Use inspect_promotion to validate a customer promotion code against each relevant product. A code is valid only when that tool returns an active promotion; explain the exact original price, promotional price, and discount.',
     'The response is rendered inside a narrow mobile shopping drawer. Never use Markdown tables or wide comparison layouts. Use short headings and compact stacked bullets instead.',
     'Keep responses concise. Show at most three strong recommendations and briefly explain the catalog evidence for each.',
     `Answer in ${locale === 'ar' ? 'Arabic' : 'French'} unless the customer clearly uses another language.`,
