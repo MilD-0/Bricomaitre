@@ -7,6 +7,7 @@ import {
 } from '@bric/ai-core';
 import {
   shoppingAssistantCatalogSearchSchema,
+  shoppingAssistantOrderLookupSchema,
   shoppingAssistantProductLookupSchema,
   shoppingAssistantProductSelectionSchema,
 } from '@bric/storefront-core/shopping-assistant-contracts';
@@ -57,20 +58,37 @@ const products = [
   },
 ];
 
-function createTools(onGroundingResult: (productCount: number) => void) {
+function createTools(
+  onGroundingResult: (productCount: number) => void,
+  options: { noCatalogMatch: boolean },
+) {
   return {
     search_catalog: tool({
       description: 'Search and paginate the complete live public catalog with its full filters.',
       inputSchema: shoppingAssistantCatalogSearchSchema,
       execute: async (input) => {
-        onGroundingResult(products.length);
+        const matches = options.noCatalogMatch ? [] : products;
+        onGroundingResult(matches.length);
         return {
-          products,
-          total: products.length,
+          products: matches,
+          total: matches.length,
           page: input.page,
           hasMore: false,
         };
       },
+    }),
+    inspect_order: tool({
+      description: 'Refresh the order linked to the current confirmation journey.',
+      inputSchema: shoppingAssistantOrderLookupSchema,
+      execute: async () => ({
+        id: 84,
+        status: 7,
+        statusLabel: 'قيد التوصيل',
+        updatedAt: '2026-08-23T12:00:00.000Z',
+        city: 'Alger',
+        totalAmount: 18_000,
+        products: [{ title: 'Perceuse Bosch 18 V', quantity: 1 }],
+      }),
     }),
     inspect_products: tool({
       description: 'Inspect public product details before comparisons or detailed answers.',
@@ -91,6 +109,22 @@ function createTools(onGroundingResult: (productCount: number) => void) {
 function contextFor(kind: ShoppingAssistantEvalInput['context']) {
   if (kind === 'product')
     return { pathname: '/fr/products/perceuse-bosch-18v', currentProduct: products[0] };
+  if (kind === 'landing')
+    return {
+      pathname: '/fr/landing/perceuse-bosch-18v',
+      currentProduct: products[0],
+      campaign: { heading: 'Percez le béton efficacement', benefits: ['18 V', 'Sans fil'] },
+    };
+  if (kind === 'thank-you')
+    return {
+      pathname: '/ar/thank-you',
+      currentOrder: {
+        id: 84,
+        status: 7,
+        statusLabel: 'قيد التوصيل',
+        updatedAt: '2026-08-23T12:00:00.000Z',
+      },
+    };
   if (kind === 'cart' || kind === 'checkout')
     return { pathname: `/${kind}`, cart: products.map((product) => ({ quantity: 1, product })) };
   return { pathname: '/fr/products', currentCatalogPage: { products, total: 1043, hasMore: true } };
@@ -110,6 +144,7 @@ async function executeScenario(
     .filter((model, index, candidates) => candidates.indexOf(model) === index);
   const toolPlan = shoppingAssistantToolPlan(scenario.input.message, {
     hasInspectableProducts: scenario.input.context !== 'catalog',
+    hasOrder: scenario.input.context === 'thank-you',
   });
   const failures: string[] = [];
 
@@ -120,9 +155,12 @@ async function executeScenario(
         model: createAiLanguageModel(config, 'storefront', { model }),
         instructions: shoppingAssistantInstructions(scenario.locale),
         prompt: `${scenario.input.message}\n\nVerified application context:\n${JSON.stringify(contextFor(scenario.input.context))}`,
-        tools: createTools((productCount) => {
-          groundingResultCount = productCount;
-        }),
+        tools: createTools(
+          (productCount) => {
+            groundingResultCount = productCount;
+          },
+          { noCatalogMatch: scenario.id === 'storefront-ar-no-match' },
+        ),
         prepareStep: ({ stepNumber }) => {
           if (stepNumber === 0 && toolPlan.groundingTool) {
             return {

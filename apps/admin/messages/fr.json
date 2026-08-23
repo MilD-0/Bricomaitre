@@ -1524,6 +1524,7 @@
       "improveTaxonomy": "Examinez la structure actuelle des marques et des catégories.",
       "inspectBackgroundWork": "Affichez l’état réel des tâches en arrière-plan.",
       "inspectAdministration": "Affiche les accès, rôles et permissions actuels de l’équipe.",
+      "inspectStorefrontConfiguration": "Vérifie les contacts, modèles IA et annonce actuels de la vitrine.",
       "summarizeBulletin": "Résume les sujets ouverts et les suivis de la vue Bulletin actuelle."
     },
     "placeholder": "Écrire à l’assistant IA",

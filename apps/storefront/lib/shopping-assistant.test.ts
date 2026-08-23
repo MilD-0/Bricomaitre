@@ -144,6 +144,12 @@ describe('storefront shopping assistant', () => {
       groundingTool: null,
       presentProducts: false,
     });
+    expect(
+      shoppingAssistantToolPlan('Où en est la livraison de ma commande ?', {
+        hasInspectableProducts: false,
+        hasOrder: true,
+      }),
+    ).toEqual({ groundingTool: 'inspect_order', presentProducts: false });
   });
 
   it('retires the legacy Mini model aliases from storefront execution', () => {
@@ -200,6 +206,20 @@ describe('storefront shopping assistant', () => {
     );
     expect(product.currentProductToken).toBe('perceuse pro');
     expect(product.catalogQuery).toBeNull();
+
+    const campaign = buildShoppingAssistantPageContext(
+      '/fr/landing/perceuse-pro',
+      new URLSearchParams(),
+      [],
+    );
+    expect(campaign.currentLandingPageSlug).toBe('perceuse-pro');
+
+    const confirmation = buildShoppingAssistantPageContext(
+      '/ar/thank-you',
+      new URLSearchParams(`orderId=42&token=${'t'.repeat(32)}`),
+      [],
+    );
+    expect(confirmation.currentOrderToken).toBe('t'.repeat(32));
   });
 
   it('enforces bounded public-only chat contracts at the app boundary', () => {

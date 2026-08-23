@@ -56,6 +56,18 @@ describe('admin AI capability registry', () => {
     ]);
   });
 
+  it('offers complete storefront configuration operations on the storefront administration view', () => {
+    const context = resolveAdminAiSurfaceContext('/en/administration/storefront');
+    expect(capabilitiesForAdminAi(context, ['settings_manage']).map((item) => item.id)).toEqual(
+      expect.arrayContaining(['administration_inspection', 'storefront_configuration']),
+    );
+    expect(suggestionKeysForAdminAi(context, ['settings_manage'])).toEqual([
+      'inspectStorefrontConfiguration',
+      'inspectAdministration',
+      'helpCurrentSurface',
+    ]);
+  });
+
   it('offers a native Bulletin summary instead of generic surface help alone', () => {
     const context = resolveAdminAiSurfaceContext('/en/bulletin');
     expect(suggestionKeysForAdminAi(context, [])).toEqual([

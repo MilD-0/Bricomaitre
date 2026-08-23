@@ -25,14 +25,14 @@ export const adminAiCapabilities: AdminAiCapability[] = [
   {
     id: 'order_inspection',
     description:
-      'Inspect selected or filtered orders with complete customer, delivery, payment, product, promotion, and staff-handled status history.',
+      'Inspect selected or filtered orders with complete operational history and explicitly update exact order statuses through the canonical workflow.',
     surfaces: ['orders'],
     permission: 'orders_write',
   },
   {
     id: 'inventory_inspection',
     description:
-      'Inspect current inventory quantities and availability by selection, barcode, SKU, or title.',
+      'Inspect current inventory by selection, barcode, SKU, or title and explicitly increase or decrease exact quantities with action history.',
     surfaces: ['inventory', 'products'],
     permission: 'products_write',
   },
@@ -53,6 +53,13 @@ export const adminAiCapabilities: AdminAiCapability[] = [
     id: 'administration_inspection',
     description:
       'Inspect complete staff access grants, identities, roles, and permission configuration.',
+    surfaces: ['administration'],
+    permission: 'settings_manage',
+  },
+  {
+    id: 'storefront_configuration',
+    description:
+      'Inspect and directly update storefront contact details, assistant configuration, model selection, and localized announcement content.',
     surfaces: ['administration'],
     permission: 'settings_manage',
   },
@@ -123,6 +130,7 @@ export type AdminAiSuggestionKey =
   | 'improveTaxonomy'
   | 'inspectBackgroundWork'
   | 'inspectAdministration'
+  | 'inspectStorefrontConfiguration'
   | 'summarizeBulletin';
 
 function hasCapabilityPermission(
@@ -192,6 +200,9 @@ export function suggestionKeysForAdminAi(
         : ['helpCurrentSurface'];
     case 'administration':
       return [
+        ...(context.section === 'storefront' && permissions.includes('settings_manage')
+          ? (['inspectStorefrontConfiguration'] as const)
+          : []),
         ...(permissions.includes('settings_manage') ? (['inspectAdministration'] as const) : []),
         ...(canInspectBackgroundWork ? (['inspectBackgroundWork'] as const) : []),
         'helpCurrentSurface',

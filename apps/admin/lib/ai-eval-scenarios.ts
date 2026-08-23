@@ -19,12 +19,41 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: { requiredTools: ['inspect_orders'], minimumAnswerCharacters: 40 },
   },
   {
+    id: 'admin-order-status-update',
+    description:
+      'Inspects an exact order before executing one explicitly requested canonical status update.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Confirme la commande 91.',
+      surface: 'orders',
+    },
+    expectations: {
+      requiredTools: ['inspect_orders', 'update_order_status'],
+      exactToolCounts: { update_order_status: 1 },
+    },
+  },
+  {
     id: 'admin-inventory-low-stock',
     description: 'Routes low-stock diagnosis to live inventory data.',
     surface: 'admin',
     locale: 'fr',
     input: { message: 'Montre-moi les références presque épuisées.', surface: 'inventory' },
     expectations: { requiredTools: ['inspect_inventory'] },
+  },
+  {
+    id: 'admin-inventory-adjustment',
+    description: 'Resolves an exact SKU before applying an explicitly requested inventory delta.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Ajoute 6 unités au stock de la référence PB-1.',
+      surface: 'inventory',
+    },
+    expectations: {
+      requiredTools: ['inspect_inventory', 'adjust_inventory'],
+      exactToolCounts: { adjust_inventory: 1 },
+    },
   },
   {
     id: 'admin-assets-performance',
@@ -128,5 +157,21 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     locale: 'fr',
     input: { message: 'Où en est mon dernier export produits ?', surface: 'products' },
     expectations: { requiredTools: ['list_background_jobs'] },
+  },
+  {
+    id: 'admin-storefront-announcement',
+    description:
+      'Reads the current storefront configuration before applying an explicitly requested bilingual announcement.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Active l’annonce « Livraison offerte ce week-end » / « توصيل مجاني نهاية هذا الأسبوع ».',
+      surface: 'administration/storefront',
+    },
+    expectations: {
+      requiredTools: ['inspect_storefront_configuration', 'update_storefront_announcement'],
+      exactToolCounts: { update_storefront_announcement: 1 },
+    },
   },
 ];

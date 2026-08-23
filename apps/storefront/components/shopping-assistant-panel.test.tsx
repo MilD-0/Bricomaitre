@@ -108,6 +108,8 @@ describe('ShoppingAssistantPanel', () => {
       context: {
         pathname: '/',
         currentProductToken: null,
+        currentLandingPageSlug: null,
+        currentOrderToken: null,
         catalogQuery: null,
         cartItems: [],
       },

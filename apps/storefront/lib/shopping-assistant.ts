@@ -28,7 +28,7 @@ export type ShoppingAssistantIntent =
   | 'other';
 
 export type ShoppingAssistantToolPlan = {
-  groundingTool: 'search_catalog' | 'inspect_products' | null;
+  groundingTool: 'search_catalog' | 'inspect_products' | 'inspect_order' | null;
   presentProducts: boolean;
 };
 
@@ -179,8 +179,25 @@ function asksForProductEvidence(value: string) {
 
 export function shoppingAssistantToolPlan(
   value: string,
-  context: { hasInspectableProducts: boolean },
+  context: { hasInspectableProducts: boolean; hasOrder?: boolean },
 ): ShoppingAssistantToolPlan {
+  const normalized = value.toLocaleLowerCase().normalize('NFKC');
+  const asksAboutOrder = [
+    'commande',
+    'order',
+    'livraison',
+    'delivery',
+    'suivi',
+    'tracking',
+    'طلب',
+    'طلبي',
+    'التوصيل',
+    'توصيل',
+    'الشحنة',
+  ].some((term) => normalized.includes(term));
+  if (context.hasOrder && asksAboutOrder) {
+    return { groundingTool: 'inspect_order', presentProducts: false };
+  }
   const intent = classifyShoppingAssistantIntent(value);
 
   if (intent === 'product_search' || intent === 'availability' || intent === 'recommendation') {
@@ -223,6 +240,18 @@ export function buildShoppingAssistantPageContext(
   }
 
   const isCatalog = /\/(?:fr|ar)\/products\/?$/.test(pathname);
+  const landingMatch = pathname.match(/\/(?:fr|ar)\/landing\/([^/]+)\/?$/);
+  let currentLandingPageSlug: string | null = null;
+  if (landingMatch?.[1]) {
+    try {
+      currentLandingPageSlug = decodeURIComponent(landingMatch[1]);
+    } catch {
+      currentLandingPageSlug = landingMatch[1];
+    }
+  }
+  const isThankYou = /\/(?:fr|ar)\/thank-you\/?$/.test(pathname);
+  const orderToken = isThankYou ? searchParams.get('token')?.trim() : null;
+  const currentOrderToken = orderToken && orderToken.length >= 20 ? orderToken : null;
   const catalogQuery = isCatalog
     ? toStorefrontCatalogQuery(
         parseCatalogPageQuery({
@@ -242,6 +271,8 @@ export function buildShoppingAssistantPageContext(
   return shoppingAssistantPageContextSchema.parse({
     pathname,
     currentProductToken,
+    currentLandingPageSlug,
+    currentOrderToken,
     catalogQuery: catalogQuery
       ? {
           search: catalogQuery.search,
@@ -333,7 +364,7 @@ export function shoppingAssistantInstructions(locale: Locale) {
   return [
     'You are the Bricomaitre customer product advisor.',
     'Help customers discover and compare tools using only products returned by the catalog tools.',
-    'Use the current page, filters, product, cart, and prior recommendation context when it is supplied.',
+    'Use the current page, filters, campaign content, product, cart, linked order, and prior recommendation context when it is supplied.',
     'Search before making any new product recommendation or claim. The search tool covers the full catalog through filters, total counts, and pagination; use another page or narrower filters when needed.',
     'Use product lookup before detailed comparisons. Call present_products with only the product IDs that should appear as recommendation cards.',
     'Keep answers customer-facing and focused on choosing products from the public Bricomaitre catalog.',
@@ -343,6 +374,7 @@ export function shoppingAssistantInstructions(locale: Locale) {
     'If managed catalog information is incomplete, say exactly what is missing and suggest opening the product page or contacting Bricomaitre. Do not offer to compare a specification unless it was returned by a catalog tool.',
     'For an Arabic catalog search with no relevant match, retry once with a concise French product-type term while preserving any brand or model token.',
     'Clearly identify unavailable products. Do not claim to add anything to cart or place an order.',
+    'On a verified order confirmation page, use inspect_order before answering tracking, delivery, or order-status questions. Explain the latest recorded state and timestamp without inventing an ETA.',
     'The response is rendered inside a narrow mobile shopping drawer. Never use Markdown tables or wide comparison layouts. Use short headings and compact stacked bullets instead.',
     'Keep responses concise. Show at most three strong recommendations and briefly explain the catalog evidence for each.',
     `Answer in ${locale === 'ar' ? 'Arabic' : 'French'} unless the customer clearly uses another language.`,
