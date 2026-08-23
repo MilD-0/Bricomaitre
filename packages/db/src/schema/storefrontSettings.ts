@@ -9,7 +9,7 @@ export const storefrontSettings = pgTable('storefront_settings', {
   mapUrl: text('map_url'),
   facebookUrl: text('facebook_url'),
   aiAssistantEnabled: boolean('ai_assistant_enabled').notNull().default(true),
-  aiModel: text('ai_model').notNull().default('gpt-5-mini'),
+  aiModel: text('ai_model').notNull().default('openai/gpt-5.6-luna'),
   aiFallbackModel: text('ai_fallback_model'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

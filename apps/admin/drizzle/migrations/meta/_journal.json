@@ -610,6 +610,13 @@
       "when": 1787469066621,
       "tag": "0086_misty_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1787476667014,
+      "tag": "0087_colorful_king_bedlam",
+      "breakpoints": true
     }
   ]
 }

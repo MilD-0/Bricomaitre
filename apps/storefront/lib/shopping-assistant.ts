@@ -27,6 +27,18 @@ export type ShoppingAssistantIntent =
   | 'recommendation'
   | 'other';
 
+export type ShoppingAssistantToolPlan = {
+  groundingTool: 'search_catalog' | 'inspect_products' | null;
+  presentProducts: boolean;
+};
+
+export const STOREFRONT_AI_CAPABILITY_FALLBACK_MODEL = 'openai/gpt-5.6-luna';
+export const STOREFRONT_AI_MAX_OUTPUT_TOKENS = 900;
+
+export function isRetiredStorefrontAiModel(model: string) {
+  return model === 'gpt-5-mini' || model === 'openai/gpt-5-mini';
+}
+
 const catalogSearchStopWords = new Set([
   'a',
   'ai',
@@ -104,15 +116,95 @@ export function classifyShoppingAssistantIntent(value: string): ShoppingAssistan
     return 'product_comparison';
   if (includesAny('compatible', 'compatib', 'fit ', 'works with', 'يركب', 'متوافق', 'يناسب'))
     return 'compatibility';
-  if (includesAny('price', 'prix', 'coût', 'combien', 'سعر', 'ثمن', 'بكم')) return 'price';
   if (includesAny('stock', 'available', 'disponib', 'متوفر', 'موجود')) return 'availability';
+  if (
+    includesAny(
+      'recommend',
+      'conseil',
+      'meilleur',
+      'choisir',
+      'alternative',
+      'propose',
+      'اقترح',
+      'بديل',
+      'أفضل',
+      'أنصح',
+    )
+  )
+    return 'recommendation';
+  if (
+    includesAny(
+      'price',
+      'prix',
+      'coût',
+      'combien',
+      'moins cher',
+      'moins chère',
+      'سعر',
+      'ثمن',
+      'بكم',
+    )
+  )
+    return 'price';
   if (includesAny('how to', 'comment', 'utiliser', 'usage', 'طريقة', 'كيف', 'استعمال'))
     return 'how_to';
-  if (includesAny('recommend', 'conseil', 'meilleur', 'choisir', 'اقترح', 'أفضل', 'أنصح'))
-    return 'recommendation';
-  if (includesAny('find', 'search', 'cherche', 'besoin', 'أبحث', 'ابحث', 'أريد'))
+  if (includesAny('find', 'search', 'cherche', 'besoin', 'أبحث', 'ابحث', 'أريد', 'أحتاج'))
     return 'product_search';
   return 'other';
+}
+
+function asksForProductEvidence(value: string) {
+  const text = value.toLocaleLowerCase().normalize('NFKC');
+  return [
+    'caractér',
+    'caracter',
+    'détail',
+    'detail',
+    'explique',
+    'puissance',
+    'voltage',
+    'dimension',
+    'matière',
+    'spec',
+    'ce produit',
+    'cet article',
+    'المواصفات',
+    'خصائص',
+    'اشرح',
+    'القدرة',
+    'فولت',
+    'هذا المنتج',
+  ].some((term) => text.includes(term));
+}
+
+export function shoppingAssistantToolPlan(
+  value: string,
+  context: { hasInspectableProducts: boolean },
+): ShoppingAssistantToolPlan {
+  const intent = classifyShoppingAssistantIntent(value);
+
+  if (intent === 'product_search' || intent === 'availability' || intent === 'recommendation') {
+    return { groundingTool: 'search_catalog', presentProducts: true };
+  }
+  if (intent === 'product_comparison') {
+    return {
+      groundingTool: context.hasInspectableProducts ? 'inspect_products' : 'search_catalog',
+      presentProducts: true,
+    };
+  }
+  if (intent === 'compatibility' || intent === 'price') {
+    return {
+      groundingTool: context.hasInspectableProducts ? 'inspect_products' : 'search_catalog',
+      presentProducts: false,
+    };
+  }
+  if (intent === 'how_to' || asksForProductEvidence(value)) {
+    return {
+      groundingTool: context.hasInspectableProducts ? 'inspect_products' : null,
+      presentProducts: false,
+    };
+  }
+  return { groundingTool: null, presentProducts: false };
 }
 
 export function buildShoppingAssistantPageContext(

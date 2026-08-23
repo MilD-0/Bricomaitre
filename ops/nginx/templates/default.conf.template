@@ -3,7 +3,11 @@ map $http_upgrade $connection_upgrade {
   '' close;
 }
 
-resolver 127.0.0.11 ipv6=off valid=30s;
+# Docker can assign a new address whenever an application container restarts.
+# Variable-based proxy targets make Nginx use this resolver at request time;
+# static proxy_pass hostnames are otherwise resolved only when Nginx loads.
+resolver 127.0.0.11 ipv6=off valid=5s;
+resolver_timeout 2s;
 
 server {
   listen 80 default_server;
@@ -46,6 +50,7 @@ server {
 
   client_max_body_size 1m;
   add_header X-Request-ID $request_id always;
+  set $storefront_api_upstream storefront-api-${BRIC_ACTIVE_SLOT}:3001;
 
   # The public API defines route handlers, not Server Actions. Reject probes
   # before Next.js attempts to resolve attacker-controlled action identifiers.
@@ -58,7 +63,8 @@ server {
     # public response has one edge-owned request identifier.
     proxy_hide_header X-Request-ID;
     proxy_next_upstream error timeout http_502 http_503 http_504;
-    proxy_pass http://storefront-api-${BRIC_ACTIVE_SLOT}:3001;
+    proxy_connect_timeout 2s;
+    proxy_pass http://$storefront_api_upstream;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
@@ -80,13 +86,15 @@ server {
 
   client_max_body_size 50m;
   add_header X-Request-ID $request_id always;
+  set $admin_upstream admin-${BRIC_ACTIVE_SLOT}:3000;
 
   location / {
     # Keep response-header ownership explicit at the proxying context. This
     # avoids duplicate IDs when the application echoes the incoming value.
     proxy_hide_header X-Request-ID;
     proxy_next_upstream error timeout http_502 http_503 http_504;
-    proxy_pass http://admin-${BRIC_ACTIVE_SLOT}:3000;
+    proxy_connect_timeout 2s;
+    proxy_pass http://$admin_upstream;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
@@ -108,6 +116,7 @@ server {
 
   client_max_body_size 1m;
   add_header X-Request-ID $request_id always;
+  set $storefront_upstream storefront-${BRIC_ACTIVE_SLOT}:3002;
 
   # The storefront defines route handlers, not Server Actions. Admin is the
   # only application allowed to receive legitimate Next-Action requests.
@@ -118,7 +127,8 @@ server {
   location / {
     proxy_hide_header X-Request-ID;
     proxy_next_upstream error timeout http_502 http_503 http_504;
-    proxy_pass http://storefront-${BRIC_ACTIVE_SLOT}:3002;
+    proxy_connect_timeout 2s;
+    proxy_pass http://$storefront_upstream;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;

@@ -1,7 +1,7 @@
 'use client';
 
 import { Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 
 import { StorefrontImage } from '@/components/storefront-image';

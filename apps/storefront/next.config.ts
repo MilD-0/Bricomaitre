@@ -38,8 +38,19 @@ const nextConfig: NextConfig = {
   typedRoutes: true,
   transpilePackages: ['@bric/ai-core', '@bric/runtime', '@bric/storefront-core'],
   allowedDevOrigins: getAllowedDevOrigins(),
+  experimental: {
+    // Product imagery is optimized inside the public web process. Bound
+    // libvips work and avoid retaining its operation cache so native memory
+    // cannot crowd the request-serving heap under a cold-cache image burst.
+    imgOptConcurrency: 1,
+    imgOptOperationCache: false,
+    imgOptSequentialRead: true,
+  },
   images: {
-    formats: ['image/avif', 'image/webp'],
+    // Next recommends WebP for most self-hosted deployments. AVIF encoding is
+    // materially more CPU intensive and its codec can create threads outside
+    // Sharp's concurrency control, which is a poor fit for this shared VPS.
+    formats: ['image/webp'],
     qualities: [60, 75],
     // Next otherwise claims half of the available filesystem for optimized
     // images. Each blue/green slot has its own persistent cache, so bound each

@@ -1,0 +1,1 @@
+ALTER TABLE "storefront_settings" ALTER COLUMN "ai_model" SET DEFAULT 'openai/gpt-5.6-luna';
