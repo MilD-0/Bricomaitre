@@ -7,7 +7,9 @@ import {
 } from '@bric/ai-core';
 import {
   shoppingAssistantCatalogSearchSchema,
+  shoppingAssistantDeliverySupportLookupSchema,
   shoppingAssistantOrderLookupSchema,
+  shoppingAssistantPromotionLookupSchema,
   shoppingAssistantProductLookupSchema,
   shoppingAssistantProductSelectionSchema,
 } from '@bric/storefront-core/shopping-assistant-contracts';
@@ -88,6 +90,44 @@ function createTools(
         city: 'Alger',
         totalAmount: 18_000,
         products: [{ title: 'Perceuse Bosch 18 V', quantity: 1 }],
+      }),
+    }),
+    inspect_delivery_support: tool({
+      description: 'Inspect current delivery coverage, fees, communes, and public contact details.',
+      inputSchema: shoppingAssistantDeliverySupportLookupSchema,
+      execute: async () => ({
+        contact: { phone: '0795 34 28 26', email: 'bricomaitre@gmail.com' },
+        matchedWilayas: [
+          {
+            wilayaId: 16,
+            name: 'Alger',
+            fees: { homeDeliveryDzd: '600.00', stopDeskDzd: '450.00' },
+            communes: [{ name: 'Bab Ezzouar', hasStopDesk: true }],
+          },
+        ],
+      }),
+    }),
+    inspect_promotion: tool({
+      description: 'Validate a promotion code against grounded products.',
+      inputSchema: shoppingAssistantPromotionLookupSchema,
+      execute: async ({ productIds, code }) => ({
+        code,
+        checks: productIds.map((productId) => ({
+          productId,
+          result: {
+            ok: productId === 12 && code.toLocaleUpperCase() === 'SAVE10',
+            promo:
+              productId === 12 && code.toLocaleUpperCase() === 'SAVE10'
+                ? {
+                    code: 'SAVE10',
+                    productId: 12,
+                    originalPrice: 15_000,
+                    promoPrice: 13_500,
+                    discountAmount: 1_500,
+                  }
+                : null,
+          },
+        })),
       }),
     }),
     inspect_products: tool({

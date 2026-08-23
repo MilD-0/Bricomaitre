@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   bulletinComposerFormSchema,
+  bulletinPostPatchSchema,
   bulletinPostSchema,
   canDeleteBulletinPost,
   canModerateBulletin,
@@ -32,6 +33,12 @@ describe('bulletin schemas', () => {
 
     expect(parseBulletinTags('ops, qa, ops')).toEqual(['ops', 'qa']);
     expect(formatBulletinTags(['ops', 'qa'])).toBe('ops, qa');
+  });
+
+  it('does not materialize omitted post fields in a partial update', () => {
+    expect(bulletinPostPatchSchema.parse({ title: 'Updated handoff' })).toEqual({
+      title: 'Updated handoff',
+    });
   });
 
   it('rejects bulletin posts whose attachments exceed the aggregate limit', () => {

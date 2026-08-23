@@ -1,15 +1,6 @@
-import { eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import {
-  assetBanners,
-  featuredProductGroupBrands,
-  featuredProductGroupCategories,
-  featuredProductGroupProducts,
-  featuredProductGroups,
-  productCards,
-} from '@bric/db/schema';
 import {
   assetActiveToggleSchema,
   assetBannerSchema,
@@ -18,48 +9,14 @@ import {
   featuredProductGroupSchema,
   productCardSchema,
 } from '../../../../../lib/assets';
-import { mutateEntityWithHistory } from '../../../../../lib/action-history';
 import { auth } from '../../../../../lib/auth';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { requireMutationAccess } from '../../../../../lib/rbac';
-import { revalidateStorefrontAssets } from '../../../../../lib/storefront-revalidate';
-
-type Database = ReturnType<typeof getDb>;
-type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
-
-async function syncFeaturedGroupSelections(
-  tx: Transaction,
-  groupId: number,
-  value: ReturnType<typeof featuredProductGroupSchema.parse>,
-) {
-  await Promise.all([
-    tx
-      .delete(featuredProductGroupProducts)
-      .where(eq(featuredProductGroupProducts.groupId, groupId)),
-    tx.delete(featuredProductGroupBrands).where(eq(featuredProductGroupBrands.groupId, groupId)),
-    tx
-      .delete(featuredProductGroupCategories)
-      .where(eq(featuredProductGroupCategories.groupId, groupId)),
-  ]);
-
-  if (value.productIds.length > 0) {
-    await tx
-      .insert(featuredProductGroupProducts)
-      .values(value.productIds.map((productId) => ({ groupId, productId })));
-  }
-
-  if (value.brandIds.length > 0) {
-    await tx
-      .insert(featuredProductGroupBrands)
-      .values(value.brandIds.map((brandId) => ({ groupId, brandId })));
-  }
-
-  if (value.categoryIds.length > 0) {
-    await tx
-      .insert(featuredProductGroupCategories)
-      .values(value.categoryIds.map((categoryId) => ({ groupId, categoryId })));
-  }
-}
+import {
+  deleteAdminAsset,
+  replaceAdminAsset,
+  updateAdminAssetStates,
+} from '../../../../../lib/asset-mutations';
 
 export async function PATCH(
   req: NextRequest,
@@ -94,18 +51,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid toggle payload' }, { status: 400 });
     }
 
-    await mutateEntityWithHistory(db, {
-      entityType: 'assetBanners',
-      entityId: numericId,
-      operation: 'update',
+    await updateAdminAssetStates(
+      db,
+      {
+        items: [{ kind: 'banner', id: numericId, ...parsed.data }],
+      },
       actor,
-      execute: (tx) =>
-        tx
-          .update(assetBanners)
-          .set({ ...parsed.data, updatedAt: new Date() })
-          .where(eq(assetBanners.id, numericId)),
-    });
-    await revalidateStorefrontAssets();
+    );
     return NextResponse.json({ ok: true });
   }
 
@@ -115,18 +67,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid toggle payload' }, { status: 400 });
     }
 
-    await mutateEntityWithHistory(db, {
-      entityType: 'featuredProductGroups',
-      entityId: numericId,
-      operation: 'update',
+    await updateAdminAssetStates(
+      db,
+      {
+        items: [{ kind: 'featured-group', id: numericId, ...parsed.data }],
+      },
       actor,
-      execute: (tx) =>
-        tx
-          .update(featuredProductGroups)
-          .set({ ...parsed.data, updatedAt: new Date() })
-          .where(eq(featuredProductGroups.id, numericId)),
-    });
-    await revalidateStorefrontAssets();
+    );
     return NextResponse.json({ ok: true });
   }
 
@@ -136,18 +83,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid toggle payload' }, { status: 400 });
     }
 
-    await mutateEntityWithHistory(db, {
-      entityType: 'productCards',
-      entityId: numericId,
-      operation: 'update',
+    await updateAdminAssetStates(
+      db,
+      {
+        items: [{ kind: 'product-card', id: numericId, ...parsed.data }],
+      },
       actor,
-      execute: (tx) =>
-        tx
-          .update(productCards)
-          .set({ ...parsed.data, updatedAt: new Date() })
-          .where(eq(productCards.id, numericId)),
-    });
-    await revalidateStorefrontAssets();
+    );
     return NextResponse.json({ ok: true });
   }
 
@@ -186,18 +128,7 @@ export async function PUT(
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    await mutateEntityWithHistory(db, {
-      entityType: 'assetBanners',
-      entityId: numericId,
-      operation: 'update',
-      actor,
-      execute: (tx) =>
-        tx
-          .update(assetBanners)
-          .set({ ...parsed.data, updatedAt: new Date() })
-          .where(eq(assetBanners.id, numericId)),
-    });
-    await revalidateStorefrontAssets();
+    await replaceAdminAsset(db, 'banner', numericId, parsed.data, actor);
     return NextResponse.json({ ok: true });
   }
 
@@ -207,31 +138,7 @@ export async function PUT(
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    await mutateEntityWithHistory(db, {
-      entityType: 'featuredProductGroups',
-      entityId: numericId,
-      operation: 'update',
-      actor,
-      execute: async (tx) => {
-        await tx
-          .update(featuredProductGroups)
-          .set({
-            name: parsed.data.name,
-            nameAr: parsed.data.nameAr,
-            cta: parsed.data.cta,
-            ctaAr: parsed.data.ctaAr,
-            link: parsed.data.link,
-            active: parsed.data.active,
-            showAtTopOfProductsPage: parsed.data.showAtTopOfProductsPage,
-            updatedAt: new Date(),
-          })
-          .where(eq(featuredProductGroups.id, numericId));
-
-        await syncFeaturedGroupSelections(tx, numericId, parsed.data);
-      },
-    });
-
-    await revalidateStorefrontAssets();
+    await replaceAdminAsset(db, 'featured-group', numericId, parsed.data, actor);
     return NextResponse.json({ ok: true });
   }
 
@@ -241,18 +148,7 @@ export async function PUT(
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    await mutateEntityWithHistory(db, {
-      entityType: 'productCards',
-      entityId: numericId,
-      operation: 'update',
-      actor,
-      execute: (tx) =>
-        tx
-          .update(productCards)
-          .set({ ...parsed.data, updatedAt: new Date() })
-          .where(eq(productCards.id, numericId)),
-    });
-    await revalidateStorefrontAssets();
+    await replaceAdminAsset(db, 'product-card', numericId, parsed.data, actor);
     return NextResponse.json({ ok: true });
   }
 
@@ -282,52 +178,17 @@ export async function DELETE(
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
   if (kind === 'banner') {
-    await mutateEntityWithHistory(db, {
-      entityType: 'assetBanners',
-      entityId: numericId,
-      operation: 'delete',
-      actor,
-      execute: (tx) => tx.delete(assetBanners).where(eq(assetBanners.id, numericId)),
-    });
-    await revalidateStorefrontAssets();
+    await deleteAdminAsset(db, 'banner', numericId, actor);
     return NextResponse.json({ ok: true });
   }
 
   if (kind === 'featured-group') {
-    await mutateEntityWithHistory(db, {
-      entityType: 'featuredProductGroups',
-      entityId: numericId,
-      operation: 'delete',
-      actor,
-      execute: async (tx) => {
-        await Promise.all([
-          tx
-            .delete(featuredProductGroupProducts)
-            .where(eq(featuredProductGroupProducts.groupId, numericId)),
-          tx
-            .delete(featuredProductGroupBrands)
-            .where(eq(featuredProductGroupBrands.groupId, numericId)),
-          tx
-            .delete(featuredProductGroupCategories)
-            .where(eq(featuredProductGroupCategories.groupId, numericId)),
-        ]);
-
-        await tx.delete(featuredProductGroups).where(eq(featuredProductGroups.id, numericId));
-      },
-    });
-    await revalidateStorefrontAssets();
+    await deleteAdminAsset(db, 'featured-group', numericId, actor);
     return NextResponse.json({ ok: true });
   }
 
   if (kind === 'product-card') {
-    await mutateEntityWithHistory(db, {
-      entityType: 'productCards',
-      entityId: numericId,
-      operation: 'delete',
-      actor,
-      execute: (tx) => tx.delete(productCards).where(eq(productCards.id, numericId)),
-    });
-    await revalidateStorefrontAssets();
+    await deleteAdminAsset(db, 'product-card', numericId, actor);
     return NextResponse.json({ ok: true });
   }
 

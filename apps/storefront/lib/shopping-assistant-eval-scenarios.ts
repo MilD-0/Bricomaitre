@@ -121,4 +121,34 @@ export const SHOPPING_ASSISTANT_EVAL_SCENARIOS: AiEvalScenario<ShoppingAssistant
       minimumAnswerCharacters: 30,
     },
   },
+  {
+    id: 'storefront-fr-delivery-fee',
+    description: 'Reads exact current home and stop-desk delivery fees for a commune.',
+    surface: 'storefront',
+    locale: 'fr',
+    input: {
+      message: 'Quels sont les frais de livraison à Bab Ezzouar, à domicile et au bureau ?',
+      context: 'checkout',
+    },
+    expectations: {
+      requiredTools: ['inspect_delivery_support'],
+      requiredTerms: ['600', '450'],
+      minimumAnswerCharacters: 30,
+    },
+  },
+  {
+    id: 'storefront-fr-promotion-check',
+    description: 'Validates a promotion code against the current cart product.',
+    surface: 'storefront',
+    locale: 'fr',
+    input: {
+      message: 'Est-ce que le code SAVE10 fonctionne sur cette perceuse ?',
+      context: 'cart',
+    },
+    expectations: {
+      requiredTools: ['inspect_promotion'],
+      requiredTerms: ['SAVE10', '1 500'],
+      minimumAnswerCharacters: 30,
+    },
+  },
 ];

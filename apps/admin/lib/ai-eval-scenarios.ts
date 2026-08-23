@@ -34,6 +34,22 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     },
   },
   {
+    id: 'admin-order-detail-correction',
+    description:
+      'Inspects an exact order before correcting delivery and address data through the canonical order workflow.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Corrige la commande 91 : livraison à domicile à Bab Ezzouar, wilaya 16, adresse 12 rue des Outils.',
+      surface: 'orders',
+    },
+    expectations: {
+      requiredTools: ['inspect_orders', 'update_order_details'],
+      exactToolCounts: { update_order_details: 1 },
+    },
+  },
+  {
     id: 'admin-inventory-low-stock',
     description: 'Routes low-stock diagnosis to live inventory data.',
     surface: 'admin',
@@ -67,6 +83,72 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: { requiredTools: ['inspect_assets'] },
   },
   {
+    id: 'admin-asset-activation',
+    description:
+      'Inspects the exact featured group before activating it and placing it at the top of products.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Active le groupe vedette 7 et affiche-le en haut de la page produits.',
+      surface: 'assets',
+    },
+    expectations: {
+      requiredTools: ['inspect_assets', 'update_asset_state'],
+      exactToolCounts: { update_asset_state: 1 },
+    },
+  },
+  {
+    id: 'admin-asset-featured-group-create',
+    description:
+      'Inspects current merchandising before directly creating one bilingual featured group with exact product IDs.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Crée un groupe vedette « Sélection atelier » / « اختيار الورشة » avec les produits 12 et 18, inactif pour le moment.',
+      surface: 'assets',
+    },
+    expectations: {
+      requiredTools: ['inspect_assets', 'manage_assets'],
+      exactToolCounts: { manage_assets: 1 },
+      forbiddenTools: ['suggest_featured_products'],
+    },
+  },
+  {
+    id: 'admin-landing-page-create',
+    description:
+      'Resolves the exact product before directly generating and persisting one validated landing-page draft.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Crée une landing page française pour le produit 12, pensée pour les artisans mobiles. Garde-la en brouillon.',
+      surface: 'assets/landingPages',
+    },
+    expectations: {
+      requiredTools: ['find_products', 'create_landing_page'],
+      exactToolCounts: { create_landing_page: 1 },
+      forbiddenTools: ['suggest_landing_page'],
+    },
+  },
+  {
+    id: 'admin-landing-page-edit',
+    description:
+      'Reads the complete current landing-page revision before a staged, revision-safe content edit.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Réécris uniquement le hero de la landing page 41 pour les artisans mobiles et préserve le reste.',
+      surface: 'assets/landingPages',
+    },
+    expectations: {
+      requiredTools: ['inspect_landing_pages', 'edit_landing_page'],
+      exactToolCounts: { edit_landing_page: 1 },
+      forbiddenTools: ['suggest_landing_page'],
+    },
+  },
+  {
     id: 'admin-proposal-backlog',
     description: 'Reads the proposal inbox with its active filters.',
     surface: 'admin',
@@ -76,6 +158,21 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
       surface: 'ai_proposals',
     },
     expectations: { requiredTools: ['inspect_ai_proposals'] },
+  },
+  {
+    id: 'admin-proposal-approval',
+    description:
+      'Inspects an exact pending proposal before applying the operator’s explicit approval.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Vérifie puis approuve la proposition 44.',
+      surface: 'ai_proposals',
+    },
+    expectations: {
+      requiredTools: ['inspect_ai_proposals', 'review_ai_proposals'],
+      exactToolCounts: { review_ai_proposals: 1 },
+    },
   },
   {
     id: 'admin-staff-access',
@@ -89,6 +186,35 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: { requiredTools: ['inspect_administration'] },
   },
   {
+    id: 'admin-staff-access-assignment',
+    description: 'Reads live roles and grants before assigning one exact staff account.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Donne le rôle employé à operator@example.com.',
+      surface: 'administration',
+    },
+    expectations: {
+      requiredTools: ['inspect_administration', 'set_access_grant'],
+      exactToolCounts: { set_access_grant: 1 },
+    },
+  },
+  {
+    id: 'admin-custom-role-create',
+    description:
+      'Reads live roles and the permission catalog before creating one complete custom role.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Crée le rôle Support avec accès aux commandes et aux opérations.',
+      surface: 'administration',
+    },
+    expectations: {
+      requiredTools: ['inspect_administration', 'set_role_definition'],
+      exactToolCounts: { set_role_definition: 1 },
+    },
+  },
+  {
     id: 'admin-bulletin-follow-up',
     description: 'Reads the full Bulletin thread before summarizing open follow-ups.',
     surface: 'admin',
@@ -98,6 +224,42 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
       surface: 'bulletin',
     },
     expectations: { requiredTools: ['inspect_bulletin'] },
+  },
+  {
+    id: 'admin-bulletin-reply',
+    description: 'Reads the exact shared thread before posting an explicitly requested reply.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Réponds au sujet 7 que je terminerai les vérifications cet après-midi.',
+      surface: 'bulletin',
+    },
+    expectations: {
+      requiredTools: ['inspect_bulletin', 'reply_bulletin_post'],
+      exactToolCounts: { reply_bulletin_post: 1 },
+    },
+  },
+  {
+    id: 'admin-bulletin-pin',
+    description: 'Inspects the exact Bulletin post before explicitly pinning it.',
+    surface: 'admin',
+    locale: 'fr',
+    input: { message: 'Épingle le sujet 7.', surface: 'bulletin' },
+    expectations: {
+      requiredTools: ['inspect_bulletin', 'update_bulletin_post'],
+      exactToolCounts: { update_bulletin_post: 1 },
+    },
+  },
+  {
+    id: 'admin-bulletin-reply-delete',
+    description: 'Inspects the complete thread before deleting one exact permitted reply.',
+    surface: 'admin',
+    locale: 'fr',
+    input: { message: 'Supprime la réponse 9 du sujet 7.', surface: 'bulletin' },
+    expectations: {
+      requiredTools: ['inspect_bulletin', 'delete_bulletin_content'],
+      exactToolCounts: { delete_bulletin_content: 1 },
+    },
   },
   {
     id: 'admin-analytics-acquisition',
@@ -141,6 +303,22 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     locale: 'fr',
     input: { message: 'Propose 10 % de remise sur la perceuse Bosch 18 V.', surface: 'products' },
     expectations: { requiredTools: ['find_products', 'suggest_discount'] },
+  },
+  {
+    id: 'admin-product-commercial-update',
+    description:
+      'Reads the complete current product before directly changing exact selling and purchase prices.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Change le prix du produit 12 à 14 900 DZD et son coût d’achat à 9 000 DZD.',
+      surface: 'products',
+    },
+    expectations: {
+      requiredTools: ['inspect_products', 'update_products'],
+      exactToolCounts: { update_products: 1 },
+      forbiddenTools: ['propose_product_edit', 'suggest_discount'],
+    },
   },
   {
     id: 'admin-taxonomy-create',

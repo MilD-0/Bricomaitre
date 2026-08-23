@@ -1,11 +1,12 @@
-import { eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { bulletinReplies } from '@bric/db/schema';
-import { canDeleteBulletinReply } from '../../../../../lib/bulletin';
 import { getBulletinViewer, requireBulletinSession } from '../../../../../lib/bulletin-server';
-import { mutateEntityWithHistory } from '../../../../../lib/action-history';
+import {
+  BulletinMutationForbiddenError,
+  BulletinReplyNotFoundError,
+  deleteBulletinReply,
+} from '../../../../../lib/bulletin-mutations';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ replyId: string }> }) {
@@ -23,35 +24,23 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ rep
   if (numericReplyId === null) {
     return NextResponse.json({ error: 'Invalid bulletin reply id' }, { status: 400 });
   }
-  const db = getDb();
-  const reply = await db.query.bulletinReplies.findFirst({
-    where: eq(bulletinReplies.id, numericReplyId),
-  });
-
-  if (!reply) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-
   const viewer = getBulletinViewer(session);
-  if (
-    !canDeleteBulletinReply({
-      replyAuthorId: reply.authorId,
-      userId: session.user.id,
+  try {
+    await deleteBulletinReply(getDb(), numericReplyId, {
+      id: session.user.id,
+      email: session.user.email,
+      name: session.user.name,
       permissions: viewer.permissions,
-    })
-  ) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof BulletinReplyNotFoundError)
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (error instanceof BulletinMutationForbiddenError)
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unable to delete Bulletin reply.' },
+      { status: 500 },
+    );
   }
-
-  await mutateEntityWithHistory(db, {
-    entityType: 'bulletinReplies',
-    entityId: numericReplyId,
-    operation: 'delete',
-    actor: { email: session.user.email, name: session.user.name },
-    execute: async (tx) => {
-      await tx.delete(bulletinReplies).where(eq(bulletinReplies.id, numericReplyId));
-    },
-  });
-
-  return NextResponse.json({ ok: true });
 }

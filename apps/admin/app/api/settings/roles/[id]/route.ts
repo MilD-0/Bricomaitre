@@ -1,21 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
-
 import { getDb, hasDb } from '@bric/db/client';
-import { roleDefinitionPermissions, roleDefinitions } from '@bric/db/schema';
-import { mutateEntityWithHistory } from '../../../../../lib/action-history';
 import { auth } from '../../../../../lib/auth';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { roleDefinitionFormSchema } from '../../../../../lib/permissions';
 import { requireSettingsAccess } from '../../../../../lib/rbac';
-
-function slugifyRoleName(name: string) {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
+import {
+  AdministrationRoleNotFoundError,
+  updateAdministrationRoleDefinition,
+} from '../../../../../lib/administration-mutations';
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await requireSettingsAccess();
@@ -37,48 +29,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (roleId === null) {
     return NextResponse.json({ error: 'Invalid role id' }, { status: 400 });
   }
-  const data = parsed.data;
-  const description = data.description?.trim() ? data.description.trim() : null;
-  const slug = slugifyRoleName(data.name);
   const db = getDb();
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
-  const existing = await db.query.roleDefinitions.findFirst({
-    where: eq(roleDefinitions.id, roleId),
-  });
-
-  if (!existing) {
-    return NextResponse.json({ error: 'Role not found' }, { status: 404 });
+  try {
+    await updateAdministrationRoleDefinition(db, roleId, parsed.data, actor);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof AdministrationRoleNotFoundError) {
+      return NextResponse.json({ error: 'Role not found' }, { status: 404 });
+    }
+    throw error;
   }
-
-  await mutateEntityWithHistory(db, {
-    entityType: 'roleDefinitions',
-    entityId: roleId,
-    operation: 'update',
-    actor,
-    execute: async (tx) => {
-      await tx
-        .update(roleDefinitions)
-        .set({
-          name: data.name.trim(),
-          slug,
-          description,
-          updatedAt: new Date(),
-        })
-        .where(eq(roleDefinitions.id, roleId));
-
-      await tx
-        .delete(roleDefinitionPermissions)
-        .where(eq(roleDefinitionPermissions.roleId, roleId));
-      await tx.insert(roleDefinitionPermissions).values(
-        data.permissions.map((permission) => ({
-          roleId,
-          permission,
-        })),
-      );
-    },
-  });
-
-  return NextResponse.json({ ok: true });
 }

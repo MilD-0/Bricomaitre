@@ -389,11 +389,10 @@ export async function proposeFeaturedProducts(input: {
   });
 }
 
-export async function proposeLandingPage(input: {
+export async function generateLandingPageForProduct(input: {
   productId: number;
   locale: 'fr' | 'ar';
   campaignAngle?: string;
-  actorId?: string | null;
   generator?: LandingPageGenerator;
 }) {
   const db = getDb();
@@ -446,6 +445,21 @@ export async function proposeLandingPage(input: {
       },
     },
   });
+  return {
+    product,
+    slug: landingPageSlugFromProduct(product),
+    generation,
+  };
+}
+
+export async function proposeLandingPage(input: {
+  productId: number;
+  locale: 'fr' | 'ar';
+  campaignAngle?: string;
+  actorId?: string | null;
+  generator?: LandingPageGenerator;
+}) {
+  const { product, slug, generation } = await generateLandingPageForProduct(input);
   return createProposal({
     task: 'landing_page_generation',
     type: 'landing_page',
@@ -460,7 +474,7 @@ export async function proposeLandingPage(input: {
     payload: {
       productId: product.id,
       locale: input.locale,
-      slug: landingPageSlugFromProduct(product),
+      slug,
       document: generation.document,
       generation: {
         model: generation.model,

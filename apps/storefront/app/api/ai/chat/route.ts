@@ -4,7 +4,9 @@ import { getOrderStatusLabelKey } from '@bric/storefront-core/order-domain';
 import {
   shoppingAssistantCatalogSearchResultSchema,
   shoppingAssistantCatalogSearchSchema,
+  shoppingAssistantDeliverySupportLookupSchema,
   shoppingAssistantOrderLookupSchema,
+  shoppingAssistantPromotionLookupSchema,
   shoppingAssistantProductLookupSchema,
   shoppingAssistantProductSelectionSchema,
   shoppingAssistantRequestSchema,
@@ -25,6 +27,7 @@ import {
   isRetiredStorefrontAiModel,
   shoppingAssistantInstructions,
   shoppingAssistantToolPlan,
+  storefrontDeliverySupportEvidence,
   STOREFRONT_AI_CAPABILITY_FALLBACK_MODEL,
   STOREFRONT_AI_MAX_OUTPUT_TOKENS,
   toAssistantCatalogProduct,
@@ -40,14 +43,16 @@ import {
   fetchStorefrontCatalog,
   fetchStorefrontCatalogMeta,
   fetchStorefrontProductDetail,
+  fetchStorefrontProductPromo,
   fetchStorefrontOrderByToken,
+  getStorefrontEcotrackCatalog,
   getStorefrontLandingPage,
   getStorefrontSettings,
   recordStorefrontAssistantRun,
 } from '@/lib/storefront-api';
 
 const CATALOG_CACHE_SECONDS = 300;
-const STOREFRONT_AI_PROMPT_VERSION = 'storefront-shopping-v2';
+const STOREFRONT_AI_PROMPT_VERSION = 'storefront-shopping-v3';
 const catalogSearchCache = new Map<
   string,
   {
@@ -512,6 +517,31 @@ export async function POST(request: NextRequest) {
                         })),
                         statusHistory: order.statusHistory,
                       };
+                    },
+                  }),
+                  inspect_delivery_support: tool({
+                    description:
+                      'Inspect live delivery coverage and exact home/stop-desk fees for a wilaya or commune, plus current public Bricomaitre contact details. Use an empty query to list wilayas.',
+                    inputSchema: shoppingAssistantDeliverySupportLookupSchema,
+                    execute: async ({ query }) => {
+                      toolCallCount += 1;
+                      const catalog = await getStorefrontEcotrackCatalog();
+                      return storefrontDeliverySupportEvidence(catalog, settings, query);
+                    },
+                  }),
+                  inspect_promotion: tool({
+                    description:
+                      'Validate a customer promotion code against up to four grounded public products using the live checkout promotion rules.',
+                    inputSchema: shoppingAssistantPromotionLookupSchema,
+                    execute: async ({ productIds, code }) => {
+                      toolCallCount += 1;
+                      const checks = await Promise.all(
+                        [...new Set(productIds)].map(async (productId) => ({
+                          productId,
+                          result: await fetchStorefrontProductPromo(productId, code),
+                        })),
+                      );
+                      return { code, checks };
                     },
                   }),
                   present_products: tool({
