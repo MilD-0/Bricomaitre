@@ -8,6 +8,7 @@ import {
   fetchStorefrontAssets,
   fetchStorefrontHomepage,
   fetchStorefrontHomepageFeaturedGroupProducts,
+  fetchStorefrontProductPromo,
   fetchStorefrontOrder,
   fetchStorefrontOrderByToken,
   fetchStorefrontSitemapProducts,
@@ -512,6 +513,36 @@ describe('storefront API client', () => {
       expect.any(Object),
     );
     expect(unstable_cache).not.toHaveBeenCalled();
+  });
+
+  it('validates a promotion through the canonical live checkout endpoint', async () => {
+    const response = {
+      ok: true,
+      promo: {
+        code: 'SAVE10',
+        productId: 12,
+        originalPrice: 5_000,
+        promoPrice: 4_500,
+        discountAmount: 500,
+      },
+    };
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(response), { status: 200 }));
+
+    await expect(fetchStorefrontProductPromo(12, ' SAVE10 ')).resolves.toEqual(response);
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:3001/storefront/products/12/promo?code=SAVE10',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+  });
+
+  it('rejects malformed promotion lookups before requesting the API', async () => {
+    await expect(fetchStorefrontProductPromo(0, 'SAVE10')).rejects.toMatchObject({
+      code: 'invalid_token',
+    });
+    await expect(fetchStorefrontProductPromo(12, '   ')).rejects.toMatchObject({
+      code: 'invalid_token',
+    });
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('distinguishes invalid tokens, upstream failures, and invalid contracts', async () => {

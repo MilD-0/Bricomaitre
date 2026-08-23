@@ -63,6 +63,39 @@ export const adminAiOrderStatusMutationSchema = z
     });
   });
 
+const adminAiOrderDetailsChangesSchema = z
+  .object({
+    firstName: z.string().trim().max(80).nullable().optional(),
+    lastName: z.string().trim().max(80).nullable().optional(),
+    phoneNumber: z.string().trim().min(1).max(50).optional(),
+    note: z.string().trim().max(500).nullable().optional(),
+    delivery: z.enum(['home', 'stop_desk']).optional(),
+    wilayaId: z.number().int().min(1).max(58).nullable().optional(),
+    commune: z.string().trim().max(120).nullable().optional(),
+    homeAddress: z.string().trim().max(300).nullable().optional(),
+    cartProductTokens: z.array(z.string().trim().min(1).max(160)).max(50).optional(),
+  })
+  .strict()
+  .refine((changes) => Object.values(changes).some((value) => value !== undefined), {
+    message: 'At least one order detail must be changed.',
+  });
+
+export const adminAiOrderDetailsMutationSchema = z
+  .object({
+    items: z
+      .array(
+        z
+          .object({
+            orderId: z.number().int().positive(),
+            changes: adminAiOrderDetailsChangesSchema,
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(20),
+  })
+  .strict();
+
 export async function updateAdminOrderStatuses(
   input: z.input<typeof adminAiOrderStatusMutationSchema>,
   actor?: ActionActor,
@@ -125,4 +158,50 @@ export async function updateAdminOrderStatuses(
   }
 
   return { ok: skipped.length === 0, items, skipped };
+}
+
+export async function updateAdminOrderDetails(
+  input: z.input<typeof adminAiOrderDetailsMutationSchema>,
+  actor?: ActionActor,
+) {
+  const values = adminAiOrderDetailsMutationSchema.parse(input);
+  const db = getDb();
+  const items = [];
+  const failed: Array<{ orderId: number; error: string }> = [];
+
+  for (const item of values.items) {
+    const changes = item.changes;
+    try {
+      const updated = await updateAdminOrder(
+        db,
+        item.orderId,
+        {
+          firstName: changes.firstName,
+          lastName: changes.lastName,
+          phoneNumber1: changes.phoneNumber,
+          note: changes.note,
+          delivery:
+            changes.delivery === undefined ? undefined : changes.delivery === 'home' ? 0 : 1,
+          state: changes.wilayaId,
+          city: changes.commune,
+          homeAddress: changes.homeAddress,
+          cartProducts: changes.cartProductTokens,
+        },
+        actor,
+      );
+      items.push(updated);
+    } catch (error) {
+      failed.push({
+        orderId: item.orderId,
+        error: error instanceof Error ? error.message : 'Order update failed.',
+      });
+    }
+  }
+
+  return {
+    ok: failed.length === 0,
+    updatedCount: items.length,
+    items,
+    failed,
+  };
 }

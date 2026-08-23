@@ -33,9 +33,42 @@ import {
   adminAiInventoryAdjustmentSchema,
 } from '../../../../lib/admin-ai-inventory';
 import {
+  adminAiBulletinPostSchema,
+  adminAiBulletinPostUpdateSchema,
+  adminAiBulletinDeleteSchema,
+  adminAiBulletinReplySchema,
+  createAdminAiBulletinPost,
+  deleteAdminAiBulletinContent,
+  replyToAdminAiBulletinPost,
+  updateAdminAiBulletinPost,
+} from '../../../../lib/admin-ai-bulletin';
+import {
+  adminAiAccessGrantSchema,
+  adminAiRoleDefinitionSchema,
+  setAdminAiAccessGrant,
+  setAdminAiRoleDefinition,
+} from '../../../../lib/admin-ai-administration';
+import {
+  adminAiOrderDetailsMutationSchema,
   adminAiOrderStatusMutationSchema,
+  updateAdminOrderDetails,
   updateAdminOrderStatuses,
 } from '../../../../lib/admin-ai-orders';
+import {
+  adminAiProductUpdateSchema,
+  updateAdminAiProducts,
+} from '../../../../lib/admin-ai-products';
+import { adminAiAssetCrudSchema, manageAdminAiAsset } from '../../../../lib/admin-ai-assets';
+import {
+  adminAiLandingPageCreateSchema,
+  adminAiLandingPageEditSchema,
+  createAdminAiLandingPage,
+  editAdminAiLandingPage,
+} from '../../../../lib/admin-ai-landing-pages';
+import {
+  adminAiProposalReviewSchema,
+  reviewAdminAiProposals,
+} from '../../../../lib/admin-ai-proposal-review';
 import {
   inspectAdminStorefrontConfiguration,
   storefrontAnnouncementMutationSchema,
@@ -51,7 +84,9 @@ import {
   inspectAdminAssets,
   inspectAdminBulletin,
   inspectAdminInventory,
+  inspectAdminLandingPages,
   inspectAdminOrders,
+  inspectAdminProducts,
   inspectAdminProposals,
 } from '../../../../lib/admin-ai-domain';
 import {
@@ -60,6 +95,12 @@ import {
 } from '../../../../lib/admin-ai-capabilities';
 import { adminAiSurfaceContextSchema } from '../../../../lib/admin-ai-context';
 import { analytics2QuerySchema } from '../../../../lib/analytics2';
+import {
+  adminAssetStateMutationSchema,
+  reorderAdminAssets,
+  updateAdminAssetStates,
+} from '../../../../lib/asset-mutations';
+import { assetReorderSchema } from '../../../../lib/assets';
 import {
   ADMIN_AI_CATEGORIZATION_QUEUE,
   ADMIN_AI_CONTENT_QUEUE,
@@ -87,7 +128,7 @@ import {
   resolveAdminAiModel,
   supportsAdminAiReasoningEffort,
 } from '../../../../lib/admin-ai-models';
-import { adminAiGroundingTool } from '../../../../lib/admin-ai-tool-plan';
+import { adminAiGroundingTool, adminAiMutationTool } from '../../../../lib/admin-ai-tool-plan';
 
 const requestSchema = z
   .object({
@@ -113,7 +154,7 @@ const requestSchema = z
     reasoningEffort: input.reasoningEffort ?? getDefaultAdminAiReasoningEffort(input.model),
   }));
 
-export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-v5';
+export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-v16';
 export const ADMIN_AI_INLINE_PRODUCT_LIMIT = 20;
 
 const productLookupPermissions: PermissionKey[] = [
@@ -293,6 +334,12 @@ export async function POST(request: NextRequest) {
       section: parsed.data.context?.section,
       permissions,
     });
+    const mutationTool = adminAiMutationTool({
+      message: parsed.data.message,
+      surface: parsed.data.context?.surface,
+      section: parsed.data.context?.section,
+      permissions,
+    });
     const result = streamText({
       model: createAiLanguageModel(config, 'admin', {
         model: selectedModel.model,
@@ -317,13 +364,21 @@ export async function POST(request: NextRequest) {
       maxRetries: config.maxRetries,
       maxOutputTokens: ADMIN_AI_MAX_OUTPUT_TOKENS,
       stopWhen: stepCountIs(8),
-      prepareStep: ({ stepNumber }) =>
-        stepNumber === 0 && groundingTool
-          ? {
-              activeTools: [groundingTool],
-              toolChoice: { type: 'tool', toolName: groundingTool },
-            }
-          : undefined,
+      prepareStep: ({ stepNumber }) => {
+        if (stepNumber === 0 && groundingTool) {
+          return {
+            activeTools: [groundingTool],
+            toolChoice: { type: 'tool', toolName: groundingTool },
+          };
+        }
+        if (mutationTool && stepNumber === (groundingTool ? 1 : 0)) {
+          return {
+            activeTools: [mutationTool],
+            toolChoice: { type: 'tool', toolName: mutationTool },
+          };
+        }
+        return undefined;
+      },
       tools: {
         ...(hasAnyPermission(permissions, productLookupPermissions)
           ? {
@@ -341,6 +396,31 @@ export async function POST(request: NextRequest) {
                     message: 'Provide a search query or at least one product ID.',
                   }),
                 execute: findAdminProducts,
+              }),
+            }
+          : {}),
+        ...(hasPermission(permissions, 'products_write')
+          ? {
+              inspect_products: tool({
+                description:
+                  'Read complete current product records through canonical product mutation inputs, including content, identifiers, prices, exact purchase cost, activation, availability, inventory quantity, taxonomy IDs, images, and complete promo-code rules. Resolve exact IDs or search across the full unarchived catalog.',
+                inputSchema: z
+                  .object({
+                    query: z.string().trim().max(200).default(''),
+                    productIds: z.array(z.number().int().positive()).max(20).default([]),
+                    page: z.number().int().positive().default(1),
+                    limit: z.number().int().min(1).max(20).default(10),
+                  })
+                  .refine((input) => input.query.length > 0 || input.productIds.length > 0, {
+                    message: 'Provide a search query or at least one product ID.',
+                  }),
+                execute: inspectAdminProducts,
+              }),
+              update_products: tool({
+                description:
+                  'Directly update up to 20 exact inspected products through the same complete replacement workflow as the Product editor. Supports content, identifiers, selling/purchase/old prices, activation, availability, taxonomy, images, and complete promo-code rules; inventory quantity remains owned by adjust_inventory. Preserves omitted fields, validates merged records and promo economics, keeps slug history and landing pages aligned, refreshes storefront caches once, queues the catalog feed once, and reports partial failures.',
+                inputSchema: adminAiProductUpdateSchema,
+                execute: (input) => updateAdminAiProducts(input, actor),
               }),
             }
           : {}),
@@ -385,6 +465,12 @@ export async function POST(request: NextRequest) {
                 inputSchema: adminAiOrderStatusMutationSchema,
                 execute: (input) => updateAdminOrderStatuses(input, actor),
               }),
+              update_order_details: tool({
+                description:
+                  'Correct exact inspected order customer names, phone, note, home/stop-desk delivery, wilaya, commune, address, or product lines after an explicit operator request. cartProductTokens contains one canonical product ID/slug token per unit. Uses the same commercial recalculation, delivery catalog, degraded-capture handling, action history, and reporting refresh as the Orders UI, and reports partial failures.',
+                inputSchema: adminAiOrderDetailsMutationSchema,
+                execute: (input) => updateAdminOrderDetails(input, actor),
+              }),
             }
           : {}),
         ...(hasPermission(permissions, 'products_write')
@@ -412,13 +498,57 @@ export async function POST(request: NextRequest) {
           ? {
               inspect_assets: tool({
                 description:
-                  'Read current banners, featured groups, and product cards through the canonical Assets service before suggesting merchandising changes.',
+                  'Read current banners, featured groups, and product cards through the canonical Assets service before merchandising changes. For asset creation, also resolve any referenced product, brand, or category names in the same read by supplying the matching query fields.',
                 inputSchema: z.object({
                   kind: z.enum(['all', 'banners', 'featuredGroups', 'productCards']).default('all'),
                   ids: z.array(z.number().int().positive()).max(100).default([]),
                   limit: z.number().int().min(1).max(50).default(20),
+                  productQuery: z.string().trim().max(200).default(''),
+                  brandQuery: z.string().trim().max(200).default(''),
+                  categoryQuery: z.string().trim().max(200).default(''),
                 }),
                 execute: inspectAdminAssets,
+              }),
+              inspect_landing_pages: tool({
+                description:
+                  'Read complete current landing-page documents, revisions, publication state, product identity, locale, slug, theme, SEO, and ordered blocks. Use exact IDs or product IDs when available so edits are grounded in the complete current document.',
+                inputSchema: z.object({
+                  landingPageIds: z.array(z.number().int().positive()).max(20).default([]),
+                  productIds: z.array(z.number().int().positive()).max(20).default([]),
+                  query: z.string().trim().max(200).default(''),
+                  limit: z.number().int().min(1).max(20).default(10),
+                }),
+                execute: inspectAdminLandingPages,
+              }),
+              create_landing_page: tool({
+                description:
+                  'Generate and persist a complete validated landing page for one resolved active product. The backend uses a staged creative plan and independently validated blocks, protects catalog facts and image URLs, and always returns the exact generation/fallback status. Creates an inactive draft unless active is explicitly true.',
+                inputSchema: adminAiLandingPageCreateSchema,
+                execute: (input) => createAdminAiLandingPage(input, actor),
+              }),
+              edit_landing_page: tool({
+                description:
+                  'Edit one exact inspected landing page through a validated staged edit plan. Unaffected blocks are preserved verbatim, changed/new blocks are generated independently, ordering and IDs are validated, stale revisions are rejected, and per-block fallbacks are returned. active null preserves publication state; set it only when explicitly requested.',
+                inputSchema: adminAiLandingPageEditSchema,
+                execute: (input) => editAdminAiLandingPage(input, actor),
+              }),
+              update_asset_state: tool({
+                description:
+                  'Activate or deactivate exact inspected banners, featured groups, or product cards, and control featured-group top-of-products placement after an explicit operator request. Uses the same action history and storefront revalidation as the Assets UI.',
+                inputSchema: adminAssetStateMutationSchema,
+                execute: (input) => updateAdminAssetStates(getDb(), input, actor),
+              }),
+              reorder_assets: tool({
+                description:
+                  'Persist an explicit complete ordering for one inspected asset kind (banner, featured-group, or product-card) using the same transaction and storefront revalidation as the Assets UI.',
+                inputSchema: assetReorderSchema,
+                execute: (input) => reorderAdminAssets(getDb(), input),
+              }),
+              manage_assets: tool({
+                description:
+                  'Create, completely replace, or delete one exact banner, featured group, or product card through the same canonical mutation, selection-sync, action-history, ordering, and storefront-revalidation workflows as the Assets UI. Resolve product, brand, and category IDs first. Replacement data is complete, so preserve every inspected field the operator did not ask to change.',
+                inputSchema: adminAiAssetCrudSchema,
+                execute: (input) => manageAdminAiAsset(input, actor),
               }),
             }
           : {}),
@@ -440,6 +570,12 @@ export async function POST(request: NextRequest) {
                     limit,
                   }),
               }),
+              review_ai_proposals: tool({
+                description:
+                  'Approve or reject exact proposals only after inspecting them and receiving an explicit operator decision. Each proposal is re-authorized against its product, taxonomy, or asset domain; approvals use the same conflict checks, verified writes, cache refresh, and storefront refresh as the proposal inbox.',
+                inputSchema: adminAiProposalReviewSchema,
+                execute: (input) => reviewAdminAiProposals(input, actor, permissions),
+              }),
             }
           : {}),
         inspect_bulletin: tool({
@@ -459,6 +595,54 @@ export async function POST(request: NextRequest) {
               },
             }),
         }),
+        create_bulletin_post: tool({
+          description:
+            'Create a text post in the canonical shared Bulletin after an explicit operator request. Uses the current operator as author, records normal action history, normalizes tags, and permits pinning only when their live permissions allow it.',
+          inputSchema: adminAiBulletinPostSchema,
+          execute: (input) =>
+            createAdminAiBulletinPost(input, {
+              id: session?.user?.id,
+              email: actorId,
+              name: actor.name?.trim() || actorId,
+              permissions,
+            }),
+        }),
+        reply_bulletin_post: tool({
+          description:
+            'Reply to one exact inspected Bulletin post after an explicit operator request. Uses the current operator as author and records normal action history.',
+          inputSchema: adminAiBulletinReplySchema,
+          execute: (input) =>
+            replyToAdminAiBulletinPost(input, {
+              id: session?.user?.id,
+              email: actorId,
+              name: actor.name?.trim() || actorId,
+              permissions,
+            }),
+        }),
+        update_bulletin_post: tool({
+          description:
+            'Edit or pin/unpin one exact inspected Bulletin post after an explicit operator request. Omitted title, body, tags, and pinned fields are preserved; ownership and bulletin_moderate permissions, tag normalization, attachment preservation, and action history match the Bulletin UI.',
+          inputSchema: adminAiBulletinPostUpdateSchema,
+          execute: (input) =>
+            updateAdminAiBulletinPost(input, {
+              id: session?.user?.id,
+              email: actorId,
+              name: actor.name?.trim() || actorId,
+              permissions,
+            }),
+        }),
+        delete_bulletin_content: tool({
+          description:
+            'Delete one exact inspected Bulletin post or reply only after an explicit operator request. Uses the same ownership or bulletin_moderate authorization, dependent cleanup, and action history as the Bulletin UI.',
+          inputSchema: adminAiBulletinDeleteSchema,
+          execute: (input) =>
+            deleteAdminAiBulletinContent(input, {
+              id: session?.user?.id,
+              email: actorId,
+              name: actor.name?.trim() || actorId,
+              permissions,
+            }),
+        }),
         ...(hasPermission(permissions, 'settings_manage')
           ? {
               inspect_administration: tool({
@@ -466,6 +650,18 @@ export async function POST(request: NextRequest) {
                   'Read the canonical role and access configuration with complete staff identities, emails, roles, permissions, and access grants.',
                 inputSchema: z.object({}),
                 execute: inspectAdminAdministration,
+              }),
+              set_access_grant: tool({
+                description:
+                  'Create or update one exact staff access grant after an explicit operator request. Assign either built-in viewer/employee access or one custom roleDefinitionId resolved from inspect_administration; canonical privileged bootstrap accounts remain code-managed.',
+                inputSchema: adminAiAccessGrantSchema,
+                execute: (input) => setAdminAiAccessGrant(input, actor),
+              }),
+              set_role_definition: tool({
+                description:
+                  'Create a custom role or update one exact roleDefinitionId after inspecting administration. Requires the complete name, optional description, and permission set, and uses the same slug normalization, uniqueness checks, permission replacement, and action history as the Administration UI.',
+                inputSchema: adminAiRoleDefinitionSchema,
+                execute: (input) => setAdminAiRoleDefinition(input, actor),
               }),
               inspect_storefront_configuration: tool({
                 description:

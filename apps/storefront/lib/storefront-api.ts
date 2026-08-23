@@ -8,6 +8,7 @@ import {
   storefrontHomepageFeaturedGroupProductsQuerySchema,
   storefrontHomepageFeaturedGroupProductsResponseSchema,
   storefrontProductDetailResponseSchema,
+  storefrontProductPromoResponseSchema,
   storefrontReadOrderResponseSchema,
   storefrontProductListQuerySchema,
   storefrontProductsResponseSchema,
@@ -224,6 +225,29 @@ export async function fetchStorefrontCartValidation(productIds: number[]) {
     }),
     pathname,
     storefrontCartValidationResponseSchema,
+  );
+}
+
+export async function fetchStorefrontProductPromo(productId: number, code: string) {
+  if (!Number.isInteger(productId) || productId <= 0) {
+    throw new StorefrontUpstreamError('Invalid product id.', {
+      code: 'invalid_token',
+      pathname: '/storefront/products/:id/promo',
+    });
+  }
+  const normalizedCode = code.trim();
+  if (!normalizedCode || normalizedCode.length > 120) {
+    throw new StorefrontUpstreamError('Invalid promotion code.', {
+      code: 'invalid_token',
+      pathname: `/storefront/products/${productId}/promo`,
+    });
+  }
+
+  const pathname = `/storefront/products/${productId}/promo?code=${encodeURIComponent(normalizedCode)}`;
+  return parseUpstreamJson(
+    await fetchStorefrontUpstream(pathname, { cache: 'no-store' }),
+    pathname,
+    storefrontProductPromoResponseSchema,
   );
 }
 

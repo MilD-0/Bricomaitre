@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   assets: vi.fn(),
   detail: vi.fn(),
   orderByToken: vi.fn(),
+  ecotrackCatalog: vi.fn(),
+  productPromo: vi.fn(),
   landingPage: vi.fn(),
   settings: vi.fn(),
   recordRun: vi.fn(),
@@ -39,6 +41,8 @@ vi.mock('@/lib/storefront-api', () => ({
   fetchStorefrontAssets: mocks.assets,
   fetchStorefrontProductDetail: mocks.detail,
   fetchStorefrontOrderByToken: mocks.orderByToken,
+  getStorefrontEcotrackCatalog: mocks.ecotrackCatalog,
+  fetchStorefrontProductPromo: mocks.productPromo,
   getStorefrontLandingPage: mocks.landingPage,
   getStorefrontSettings: mocks.settings,
   recordStorefrontAssistantRun: mocks.recordRun,
@@ -109,6 +113,38 @@ describe('POST /api/ai/chat', () => {
     });
     mocks.cartValidation.mockResolvedValue({ items: [catalogProduct] });
     mocks.orderByToken.mockResolvedValue(null);
+    mocks.ecotrackCatalog.mockResolvedValue({
+      wilayas: [{ wilayaId: 16, name: 'Alger' }],
+      communes: [
+        {
+          communeId: 1,
+          wilayaId: 16,
+          name: 'Bab Ezzouar',
+          postalCode: '16042',
+          hasStopDesk: true,
+        },
+      ],
+      serviceFees: [
+        {
+          serviceType: 'livraison',
+          wilayaId: 16,
+          homeFee: '600.00',
+          stopDeskFee: '450.00',
+        },
+      ],
+      weightFees: [],
+      lastSync: null,
+    });
+    mocks.productPromo.mockResolvedValue({
+      ok: true,
+      promo: {
+        code: 'SAVE10',
+        productId: 12,
+        originalPrice: 12_500,
+        promoPrice: 11_000,
+        discountAmount: 1_500,
+      },
+    });
     mocks.landingPage.mockResolvedValue(null);
     mocks.assets.mockResolvedValue({
       banners: [],
@@ -273,7 +309,7 @@ describe('POST /api/ai/chat', () => {
         resultsCount: 1,
         conversation: [{ role: 'user', content: 'Une perceuse pour le béton' }],
         response: 'Cette perceuse est disponible et correspond à votre recherche.',
-        promptVersion: 'storefront-shopping-v2',
+        promptVersion: 'storefront-shopping-v3',
       }),
     );
   });
@@ -317,6 +353,8 @@ describe('POST /api/ai/chat', () => {
     expect(modelOptions).toHaveProperty('tools.search_catalog');
     expect(modelOptions).toHaveProperty('tools.inspect_products');
     expect(modelOptions).toHaveProperty('tools.inspect_order');
+    expect(modelOptions).toHaveProperty('tools.inspect_delivery_support');
+    expect(modelOptions).toHaveProperty('tools.inspect_promotion');
     expect(modelOptions).toHaveProperty('tools.present_products');
     expect(modelOptions.maxOutputTokens).toBe(900);
     expect(
@@ -329,6 +367,124 @@ describe('POST /api/ai/chat', () => {
     expect(modelOptions.prompt).toContain('"total":1043');
     expect(modelOptions.prompt).toContain('Perceuse béton');
     expect(mocks.catalog).toHaveBeenCalledTimes(1);
+  });
+
+  it('grounds delivery fees, commune coverage, and contact help in current public data', async () => {
+    mocks.settings.mockResolvedValue({
+      aiAssistantEnabled: true,
+      aiModel: 'storefront-model-id',
+      aiFallbackModel: null,
+      phoneDisplay: '0795 34 28 26',
+      phoneHref: 'tel:+213795342826',
+      phoneEnabled: true,
+      contactEmail: 'support@example.com',
+      address: 'Bab Ezzouar, Alger',
+      mapUrl: 'https://maps.example.com/shop',
+      facebookUrl: 'https://facebook.com/shop',
+    });
+    let inspected: unknown;
+    mocks.streamText.mockImplementation(
+      (options: {
+        tools: {
+          inspect_delivery_support: { execute: (input: { query: string }) => Promise<unknown> };
+        };
+      }) => ({
+        stream: (async function* () {
+          inspected = await options.tools.inspect_delivery_support.execute({
+            query: 'Bab Ezzouar',
+          });
+          yield { type: 'tool-call', toolName: 'inspect_delivery_support' };
+          yield { type: 'tool-result', toolName: 'inspect_delivery_support' };
+          yield { type: 'text-delta', text: 'Livraison à domicile : 600 DZD.' };
+          yield { type: 'finish', totalUsage: {} };
+        })(),
+      }),
+    );
+
+    const response = await POST(
+      request({
+        locale: 'fr',
+        messages: [{ role: 'user', content: 'Quels sont les frais de livraison à Bab Ezzouar ?' }],
+      }),
+    );
+    const events = await streamEvents(response);
+    const modelOptions = mocks.streamText.mock.calls[0]?.[0] as Record<string, unknown>;
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { type: 'tool', name: 'inspect_delivery_support', status: 'started' },
+        { type: 'tool', name: 'inspect_delivery_support', status: 'completed' },
+      ]),
+    );
+    expect(
+      (modelOptions.prepareStep as (input: { stepNumber: number }) => unknown)({ stepNumber: 0 }),
+    ).toEqual({
+      activeTools: ['inspect_delivery_support'],
+      toolChoice: { type: 'tool', toolName: 'inspect_delivery_support' },
+    });
+    expect(inspected).toMatchObject({
+      contact: { email: 'support@example.com' },
+      matchedWilayas: [
+        {
+          name: 'Alger',
+          fees: { homeDeliveryDzd: '600.00', stopDeskDzd: '450.00' },
+          communes: [{ name: 'Bab Ezzouar', hasStopDesk: true }],
+        },
+      ],
+    });
+    expect(mocks.ecotrackCatalog).toHaveBeenCalledTimes(1);
+  });
+
+  it('validates promotion codes against every grounded product requested by the model', async () => {
+    let inspected: unknown;
+    mocks.streamText.mockImplementation(
+      (options: {
+        tools: {
+          inspect_promotion: {
+            execute: (input: { productIds: number[]; code: string }) => Promise<unknown>;
+          };
+        };
+      }) => ({
+        stream: (async function* () {
+          inspected = await options.tools.inspect_promotion.execute({
+            productIds: [12],
+            code: 'SAVE10',
+          });
+          yield { type: 'tool-call', toolName: 'inspect_promotion' };
+          yield { type: 'tool-result', toolName: 'inspect_promotion' };
+          yield { type: 'text-delta', text: 'Le code réduit ce produit de 1 500 DZD.' };
+          yield { type: 'finish', totalUsage: {} };
+        })(),
+      }),
+    );
+
+    const response = await POST(
+      request({
+        locale: 'fr',
+        context: { pathname: '/fr/cart', cartItems: [{ productId: 12, quantity: 1 }] },
+        messages: [{ role: 'user', content: 'Le code SAVE10 marche-t-il sur cet article ?' }],
+      }),
+    );
+    const events = await streamEvents(response);
+    const modelOptions = mocks.streamText.mock.calls[0]?.[0] as Record<string, unknown>;
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { type: 'tool', name: 'inspect_promotion', status: 'started' },
+        { type: 'tool', name: 'inspect_promotion', status: 'completed' },
+      ]),
+    );
+    expect(
+      (modelOptions.prepareStep as (input: { stepNumber: number }) => unknown)({ stepNumber: 0 }),
+    ).toEqual({
+      activeTools: ['inspect_promotion'],
+      toolChoice: { type: 'tool', toolName: 'inspect_promotion' },
+    });
+    expect(mocks.productPromo).toHaveBeenCalledWith(12, 'SAVE10');
+    expect(inspected).toMatchObject({
+      code: 'SAVE10',
+      checks: [{ productId: 12, result: { ok: true, promo: { discountAmount: 1_500 } } }],
+    });
   });
 
   it('refreshes the linked order and forces order grounding on the confirmation journey', async () => {

@@ -1,11 +1,12 @@
-import { eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { bulletinPosts, bulletinReplies } from '@bric/db/schema';
 import { bulletinReplySchema } from '../../../../../lib/bulletin';
 import { requireBulletinSession } from '../../../../../lib/bulletin-server';
-import { mutateEntityWithHistory } from '../../../../../lib/action-history';
+import {
+  BulletinPostNotFoundError,
+  createBulletinReply,
+} from '../../../../../lib/bulletin-mutations';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -29,37 +30,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const db = getDb();
-  const post = await db.query.bulletinPosts.findFirst({
-    where: eq(bulletinPosts.id, postId),
-  });
-
-  if (!post) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-
   const userEmail = session.user.email ?? 'unknown@example.com';
   const userName = session.user.name?.trim() || userEmail;
-
-  await mutateEntityWithHistory(db, {
-    entityType: 'bulletinReplies',
-    entityId: postId,
-    operation: 'create',
-    actor: { email: userEmail, name: userName },
-    execute: async (tx) => {
-      await tx.insert(bulletinReplies).values({
-        postId,
-        authorId: session.user.id ?? null,
-        authorName: userName,
-        authorEmail: userEmail,
-        body: parsed.data.body,
-      });
-
-      await tx
-        .update(bulletinPosts)
-        .set({ updatedAt: new Date() })
-        .where(eq(bulletinPosts.id, postId));
-    },
-  });
+  try {
+    await createBulletinReply(db, postId, parsed.data, {
+      id: session.user.id,
+      email: userEmail,
+      name: userName,
+    });
+  } catch (error) {
+    if (error instanceof BulletinPostNotFoundError) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    throw error;
+  }
 
   return NextResponse.json({ ok: true });
 }

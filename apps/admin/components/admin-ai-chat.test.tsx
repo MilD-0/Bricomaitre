@@ -482,6 +482,52 @@ describe('AdminAiChat', () => {
     expect(screen.getByText(/aiChat.analyticsWarning/)).toBeInTheDocument();
   });
 
+  it('presents persisted tool actions with a human outcome and exact workspace handoff', async () => {
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/ai/conversations')
+        return new Response(JSON.stringify({ conversations: [] }), { status: 200 });
+      if (url === '/api/ai/chat')
+        return Response.json({
+          message: 'The landing page was created as a draft.',
+          toolResults: [
+            {
+              type: 'tool-result',
+              toolName: 'create_landing_page',
+              output: {
+                id: 91,
+                productId: 12,
+                locale: 'fr',
+                active: false,
+                currentRevision: 1,
+              },
+            },
+          ],
+          conversation: {
+            id: 31,
+            sessionKey: '182ffc13-33e5-43b7-a064-e4c437b0ea67',
+            title: 'Create drill landing page',
+          },
+        });
+      return new Response('{}', { status: 200 });
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await user.type(
+      await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
+      'Create a landing page for the drill',
+    );
+    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+
+    expect(await screen.findByText('aiChat.toolLabels.landingPageCreated')).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'aiChat.toolDestinations.landingPages' }),
+    ).toHaveAttribute('href', '/en/assets/landing-pages/91');
+    expect(screen.getByText('create landing page')).toBeInTheDocument();
+  });
+
   it('lets the user abort an in-flight assistant response without showing a failure', async () => {
     let capturedSignal: AbortSignal | null = null;
     vi.mocked(fetch).mockImplementation(

@@ -25,7 +25,7 @@ export const adminAiCapabilities: AdminAiCapability[] = [
   {
     id: 'order_inspection',
     description:
-      'Inspect selected or filtered orders with complete operational history and explicitly update exact order statuses through the canonical workflow.',
+      'Inspect selected or filtered orders with complete operational history and explicitly update exact order statuses, customer details, delivery, notes, and product lines through the canonical workflow.',
     surfaces: ['orders'],
     permission: 'orders_write',
   },
@@ -37,22 +37,30 @@ export const adminAiCapabilities: AdminAiCapability[] = [
     permission: 'products_write',
   },
   {
+    id: 'product_operations',
+    description:
+      'Inspect complete product records and directly update exact content, identifiers, selling and purchase prices, activation, availability, taxonomy, images, and promotion rules with canonical validation and partial-failure reporting.',
+    surfaces: ['products'],
+    permission: 'products_write',
+  },
+  {
     id: 'proposal_inbox',
     description:
-      'Inspect pending proposals, restricted to the product, taxonomy, and asset domains available to the operator.',
+      'Inspect pending proposals and explicitly approve or reject exact reviewed proposals, restricted to the product, taxonomy, and asset domains available to the operator.',
     surfaces: ['aiProposals'],
     anyPermissions: ['products_write', 'assets_write', 'brands_categories_write'],
   },
   {
     id: 'asset_inspection',
-    description: 'Inspect the current banners, featured groups, and product cards.',
+    description:
+      'Inspect current banners, featured groups, product cards, and complete landing-page documents; create, replace, delete, reorder, or control merchandising state and directly create or stage-edit validated landing pages through canonical asset workflows.',
     surfaces: ['assets'],
     permission: 'assets_write',
   },
   {
     id: 'administration_inspection',
     description:
-      'Inspect complete staff access grants, identities, roles, and permission configuration.',
+      'Inspect complete staff access grants, identities, roles, and permissions, explicitly create or update exact access assignments, and create or revise custom role definitions.',
     surfaces: ['administration'],
     permission: 'settings_manage',
   },
@@ -66,7 +74,7 @@ export const adminAiCapabilities: AdminAiCapability[] = [
   {
     id: 'bulletin_inspection',
     description:
-      'Read and summarize complete Bulletin posts, authors, attachments, replies, and reactions.',
+      'Read complete Bulletin threads and explicitly create, reply, edit, pin or unpin, and delete permitted posts or replies through canonical ownership and moderation workflows.',
     surfaces: ['bulletin'],
   },
   {

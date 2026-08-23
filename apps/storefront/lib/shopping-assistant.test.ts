@@ -12,6 +12,7 @@ import {
   isRetiredStorefrontAiModel,
   shoppingAssistantToolPlan,
   shoppingAssistantInstructions,
+  storefrontDeliverySupportEvidence,
   toAssistantCatalogProduct,
 } from './shopping-assistant';
 
@@ -150,6 +151,103 @@ describe('storefront shopping assistant', () => {
         hasOrder: true,
       }),
     ).toEqual({ groundingTool: 'inspect_order', presentProducts: false });
+    expect(
+      shoppingAssistantToolPlan('Quels sont les frais de livraison à Béchar ?', {
+        hasInspectableProducts: false,
+      }),
+    ).toEqual({ groundingTool: 'inspect_delivery_support', presentProducts: false });
+    expect(
+      shoppingAssistantToolPlan('كم سعر التوصيل إلى بلدية باب الزوار؟', {
+        hasInspectableProducts: false,
+      }),
+    ).toEqual({ groundingTool: 'inspect_delivery_support', presentProducts: false });
+    expect(
+      shoppingAssistantToolPlan('Le code SAVE10 marche-t-il sur ce produit ?', {
+        hasInspectableProducts: true,
+      }),
+    ).toEqual({ groundingTool: 'inspect_promotion', presentProducts: false });
+  });
+
+  it('returns exact delivery, commune, and public contact evidence from live contracts', () => {
+    const evidence = storefrontDeliverySupportEvidence(
+      {
+        wilayas: [
+          { wilayaId: 8, name: 'Béchar' },
+          { wilayaId: 16, name: 'Alger' },
+        ],
+        communes: [
+          {
+            communeId: 1,
+            wilayaId: 8,
+            name: 'Abadla',
+            postalCode: '08010',
+            hasStopDesk: false,
+          },
+          {
+            communeId: 2,
+            wilayaId: 16,
+            name: 'Bab Ezzouar',
+            postalCode: '16042',
+            hasStopDesk: true,
+          },
+        ],
+        serviceFees: [
+          {
+            serviceType: 'livraison',
+            wilayaId: 16,
+            homeFee: '600.00',
+            stopDeskFee: '450.00',
+          },
+        ],
+        weightFees: [
+          {
+            serviceType: 'livraison',
+            startsAtKg: '5.00',
+            homeSurcharge: '100.00',
+            stopDeskSurcharge: '80.00',
+            perAdditionalKg: '20.00',
+          },
+        ],
+        lastSync: null,
+      },
+      {
+        phoneDisplay: '0795 34 28 26',
+        phoneHref: 'tel:+213795342826',
+        phoneEnabled: true,
+        aiAssistantEnabled: true,
+        contactEmail: 'support@example.com',
+        address: 'Bab Ezzouar, Alger',
+        mapUrl: 'https://maps.example.com/shop',
+        facebookUrl: 'https://facebook.com/shop',
+        aiModel: 'openai/gpt-5.6-luna',
+        aiFallbackModel: null,
+      },
+      'Bab Ezzouar',
+    );
+
+    expect(evidence).toMatchObject({
+      contact: {
+        phone: { display: '0795 34 28 26', href: 'tel:+213795342826' },
+        email: 'support@example.com',
+      },
+      matchedWilayaCount: 1,
+      matchedWilayas: [
+        {
+          wilayaId: 16,
+          name: 'Alger',
+          fees: { homeDeliveryDzd: '600.00', stopDeskDzd: '450.00' },
+          communes: [{ name: 'Bab Ezzouar', postalCode: '16042', hasStopDesk: true }],
+        },
+      ],
+      deliveryWeightSurcharges: [
+        {
+          startsAtKg: '5.00',
+          homeSurchargeDzd: '100.00',
+          stopDeskSurchargeDzd: '80.00',
+          perAdditionalKgDzd: '20.00',
+        },
+      ],
+    });
   });
 
   it('retires the legacy Mini model aliases from storefront execution', () => {

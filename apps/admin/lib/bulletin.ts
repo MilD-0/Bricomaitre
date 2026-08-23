@@ -25,20 +25,24 @@ const bulletinAttachmentsSchema = z
     { message: 'Attachments must be 40 MB or smaller combined' },
   );
 
-export const bulletinPostSchema = z.object({
-  title: z.string().trim().min(3).max(120),
-  body: z.string().trim().min(10).max(5000),
-  tags: z
-    .array(z.string().trim().min(1).max(24))
-    .max(8)
-    .transform((tags) => {
-      const normalized = tags
-        .map((tag) => tag.replace(/\s+/g, ' ').trim())
-        .filter(Boolean)
-        .map((tag) => tag.toLowerCase());
+const bulletinTitleSchema = z.string().trim().min(3).max(120);
+const bulletinBodySchema = z.string().trim().min(10).max(5000);
+const bulletinTagsSchema = z
+  .array(z.string().trim().min(1).max(24))
+  .max(8)
+  .transform((tags) => {
+    const normalized = tags
+      .map((tag) => tag.replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .map((tag) => tag.toLowerCase());
 
-      return Array.from(new Set(normalized));
-    }),
+    return Array.from(new Set(normalized));
+  });
+
+export const bulletinPostSchema = z.object({
+  title: bulletinTitleSchema,
+  body: bulletinBodySchema,
+  tags: bulletinTagsSchema,
   pinned: z.boolean().optional().default(false),
   attachments: bulletinAttachmentsSchema.default([]),
 });
@@ -59,8 +63,15 @@ export const bulletinComposerFormSchema = z.object({
   attachments: bulletinAttachmentsSchema,
 });
 
-export const bulletinPostPatchSchema = bulletinPostSchema
-  .partial()
+export const bulletinPostPatchSchema = z
+  .object({
+    title: bulletinTitleSchema.optional(),
+    body: bulletinBodySchema.optional(),
+    tags: bulletinTagsSchema.optional(),
+    pinned: z.boolean().optional(),
+    attachments: bulletinAttachmentsSchema.optional(),
+  })
+  .strict()
   .refine(
     (value) =>
       value.title !== undefined ||

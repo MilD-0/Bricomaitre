@@ -23,7 +23,7 @@ export function normalizePromoCode(value: string) {
   return value.trim().toLowerCase();
 }
 
-const productPromoCodePayloadSchema = z.object({
+export const productPromoCodePayloadSchema = z.object({
   code: z.string().trim().min(1).max(120),
   promoPrice: z.coerce.number().min(0),
   active: z.boolean().default(true),

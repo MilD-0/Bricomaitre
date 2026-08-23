@@ -77,7 +77,7 @@ describe('AI proposal review route', () => {
     });
     mocks.proposalRow
       .mockReset()
-      .mockResolvedValue([{ type: 'product_content', entityType: 'products' }]);
+      .mockResolvedValue([{ proposalType: 'product_content', entityType: 'products' }]);
     mocks.deleteRows.mockReset().mockResolvedValue([{ id: 4 }]);
     mocks.revalidateTags.mockReset();
     mocks.revalidateProducts.mockReset().mockResolvedValue(undefined);
@@ -86,7 +86,7 @@ describe('AI proposal review route', () => {
 
   it('uses asset access for a featured-products proposal', async () => {
     mocks.proposalRow.mockResolvedValue([
-      { type: 'featured_products', entityType: 'featured_product_groups' },
+      { proposalType: 'featured_products', entityType: 'featured_product_groups' },
     ]);
     const response = await PATCH(request('approve'), { params: Promise.resolve({ id: '4' }) });
     expect(response.status).toBe(200);
@@ -95,14 +95,18 @@ describe('AI proposal review route', () => {
   });
 
   it('derives discount review access from product management', async () => {
-    mocks.proposalRow.mockResolvedValue([{ type: 'product_discount', entityType: 'products' }]);
+    mocks.proposalRow.mockResolvedValue([
+      { proposalType: 'product_discount', entityType: 'products' },
+    ]);
     const response = await PATCH(request('approve'), { params: Promise.resolve({ id: '4' }) });
     expect(response.status).toBe(200);
     expect(mocks.mutationAccess).toHaveBeenCalledWith('products');
   });
 
   it('uses brands and categories access for taxonomy creation', async () => {
-    mocks.proposalRow.mockResolvedValue([{ type: 'entity_create', entityType: 'categories' }]);
+    mocks.proposalRow.mockResolvedValue([
+      { proposalType: 'entity_create', entityType: 'categories' },
+    ]);
     const response = await PATCH(request('approve'), { params: Promise.resolve({ id: '4' }) });
     expect(response.status).toBe(200);
     expect(mocks.mutationAccess).toHaveBeenCalledWith('brandsCategories');

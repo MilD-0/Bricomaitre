@@ -34,11 +34,13 @@ const mocks = vi.hoisted(() => ({
   queryAnalytics: vi.fn(),
   createLanguageModel: vi.fn(),
   findProducts: vi.fn(),
+  inspectProducts: vi.fn(),
   findBrands: vi.fn(),
   findCategories: vi.fn(),
   inspectOrders: vi.fn(),
   inspectInventory: vi.fn(),
   inspectAssets: vi.fn(),
+  inspectLandingPages: vi.fn(),
   inspectProposals: vi.fn(),
   inspectBulletin: vi.fn(),
   inspectAdministration: vi.fn(),
@@ -47,6 +49,20 @@ const mocks = vi.hoisted(() => ({
   updateStorefrontAnnouncement: vi.fn(),
   adjustInventory: vi.fn(),
   updateOrderStatuses: vi.fn(),
+  updateOrderDetails: vi.fn(),
+  createBulletinPost: vi.fn(),
+  replyBulletinPost: vi.fn(),
+  updateBulletinPost: vi.fn(),
+  deleteBulletinContent: vi.fn(),
+  updateProducts: vi.fn(),
+  setAccessGrant: vi.fn(),
+  setRoleDefinition: vi.fn(),
+  reviewProposals: vi.fn(),
+  updateAssetStates: vi.fn(),
+  reorderAssets: vi.fn(),
+  manageAsset: vi.fn(),
+  createLandingPage: vi.fn(),
+  editLandingPage: vi.fn(),
 }));
 
 vi.mock('@bric/ai-core', async (importOriginal) => ({
@@ -133,14 +149,51 @@ vi.mock('../../../../lib/admin-ai-inventory', async (importOriginal) => ({
 vi.mock('../../../../lib/admin-ai-orders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../../lib/admin-ai-orders')>()),
   updateAdminOrderStatuses: mocks.updateOrderStatuses,
+  updateAdminOrderDetails: mocks.updateOrderDetails,
+}));
+vi.mock('../../../../lib/admin-ai-products', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../lib/admin-ai-products')>()),
+  updateAdminAiProducts: mocks.updateProducts,
+}));
+vi.mock('../../../../lib/admin-ai-landing-pages', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../lib/admin-ai-landing-pages')>()),
+  createAdminAiLandingPage: mocks.createLandingPage,
+  editAdminAiLandingPage: mocks.editLandingPage,
+}));
+vi.mock('../../../../lib/admin-ai-bulletin', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../lib/admin-ai-bulletin')>()),
+  createAdminAiBulletinPost: mocks.createBulletinPost,
+  replyToAdminAiBulletinPost: mocks.replyBulletinPost,
+  updateAdminAiBulletinPost: mocks.updateBulletinPost,
+  deleteAdminAiBulletinContent: mocks.deleteBulletinContent,
+}));
+vi.mock('../../../../lib/admin-ai-administration', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../lib/admin-ai-administration')>()),
+  setAdminAiAccessGrant: mocks.setAccessGrant,
+  setAdminAiRoleDefinition: mocks.setRoleDefinition,
+}));
+vi.mock('../../../../lib/admin-ai-proposal-review', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../lib/admin-ai-proposal-review')>()),
+  reviewAdminAiProposals: mocks.reviewProposals,
+}));
+vi.mock('../../../../lib/asset-mutations', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../lib/asset-mutations')>()),
+  updateAdminAssetStates: mocks.updateAssetStates,
+  reorderAdminAssets: mocks.reorderAssets,
+}));
+vi.mock('../../../../lib/admin-ai-assets', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../lib/admin-ai-assets')>()),
+  manageAdminAiAsset: mocks.manageAsset,
 }));
 vi.mock('../../../../lib/admin-ai-domain', () => ({
   findAdminProducts: mocks.findProducts,
+  inspectAdminProducts: mocks.inspectProducts,
   findAdminBrands: mocks.findBrands,
   findAdminCategories: mocks.findCategories,
   inspectAdminOrders: mocks.inspectOrders,
   inspectAdminInventory: mocks.inspectInventory,
   inspectAdminAssets: mocks.inspectAssets,
+  inspectAdminLandingPages: mocks.inspectLandingPages,
   inspectAdminProposals: mocks.inspectProposals,
   inspectAdminBulletin: mocks.inspectBulletin,
   inspectAdminAdministration: mocks.inspectAdministration,
@@ -292,11 +345,13 @@ describe('POST /api/ai/chat telemetry', () => {
     });
     for (const domainMock of [
       mocks.findProducts,
+      mocks.inspectProducts,
       mocks.findBrands,
       mocks.findCategories,
       mocks.inspectOrders,
       mocks.inspectInventory,
       mocks.inspectAssets,
+      mocks.inspectLandingPages,
       mocks.inspectProposals,
       mocks.inspectBulletin,
       mocks.inspectAdministration,
@@ -304,6 +359,38 @@ describe('POST /api/ai/chat telemetry', () => {
       domainMock.mockReset().mockResolvedValue({ items: [] });
     }
     mocks.createLanguageModel.mockReset().mockReturnValue('openrouter-model');
+    mocks.reviewProposals.mockReset().mockResolvedValue({
+      action: 'approve',
+      requestedCount: 1,
+      reviewedCount: 1,
+      appliedCount: 1,
+      rejectedCount: 0,
+      reviewed: [{ proposalId: 13, resource: 'products', result: { status: 'applied' } }],
+      failed: [],
+    });
+    mocks.updateOrderDetails.mockReset().mockResolvedValue({
+      ok: true,
+      updatedCount: 1,
+      items: [{ id: 21, city: 'Bab Ezzouar', delivery: 0 }],
+      failed: [],
+    });
+    mocks.updateAssetStates.mockReset().mockResolvedValue({ ok: true, updatedCount: 1 });
+    mocks.reorderAssets.mockReset().mockResolvedValue({ ok: true, kind: 'featured-group' });
+    mocks.createLandingPage.mockReset().mockResolvedValue({ id: 41, active: false });
+    mocks.editLandingPage.mockReset().mockResolvedValue({
+      id: 41,
+      active: false,
+      currentRevision: 4,
+      changed: true,
+    });
+    mocks.setRoleDefinition.mockReset().mockResolvedValue({
+      ok: true,
+      action: 'created',
+      id: 14,
+      name: 'Support',
+      slug: 'support',
+      permissions: ['orders_write', 'ops_view'],
+    });
   });
 
   it('records a bounded Luna chat run, token usage, conversation, and tool calls', async () => {
@@ -335,7 +422,7 @@ describe('POST /api/ai/chat telemetry', () => {
         task: 'admin_chat',
         status: 'running',
         model: 'openai/gpt-5.6-luna',
-        promptVersion: 'admin-chat-v5',
+        promptVersion: 'admin-chat-v16',
       }),
     );
     expect(mocks.updatedValues).toContainEqual(
@@ -494,6 +581,8 @@ describe('POST /api/ai/chat telemetry', () => {
         'find_products',
         'find_brands',
         'find_categories',
+        'inspect_products',
+        'update_products',
         'categorize_catalog',
         'get_catalog_categorization_status',
         'get_product_content_job_status',
@@ -530,7 +619,13 @@ describe('POST /api/ai/chat telemetry', () => {
   it.each([
     {
       permissions: [] as string[],
-      present: ['inspect_bulletin'],
+      present: [
+        'inspect_bulletin',
+        'create_bulletin_post',
+        'reply_bulletin_post',
+        'update_bulletin_post',
+        'delete_bulletin_content',
+      ],
       absent: [
         'find_products',
         'find_brands',
@@ -549,6 +644,7 @@ describe('POST /api/ai/chat telemetry', () => {
         'inspect_inventory',
         'adjust_inventory',
         'inspect_ai_proposals',
+        'review_ai_proposals',
         'generate_product_content',
         'categorize_catalog',
         'suggest_discount',
@@ -563,6 +659,7 @@ describe('POST /api/ai/chat telemetry', () => {
         'find_brands',
         'find_categories',
         'inspect_ai_proposals',
+        'review_ai_proposals',
         'propose_brand_edit',
         'propose_category_create',
       ],
@@ -575,7 +672,14 @@ describe('POST /api/ai/chat telemetry', () => {
         'find_brands',
         'find_categories',
         'inspect_assets',
+        'inspect_landing_pages',
+        'update_asset_state',
+        'reorder_assets',
+        'manage_assets',
+        'create_landing_page',
+        'edit_landing_page',
         'inspect_ai_proposals',
+        'review_ai_proposals',
         'suggest_featured_products',
         'suggest_landing_page',
       ],
@@ -592,6 +696,7 @@ describe('POST /api/ai/chat telemetry', () => {
         'find_products',
         'inspect_orders',
         'update_order_status',
+        'update_order_details',
         'list_background_jobs',
         'start_background_job',
       ],
@@ -601,6 +706,8 @@ describe('POST /api/ai/chat telemetry', () => {
       permissions: ['settings_manage'],
       present: [
         'inspect_administration',
+        'set_access_grant',
+        'set_role_definition',
         'inspect_storefront_configuration',
         'update_storefront_settings',
         'update_storefront_announcement',
@@ -638,11 +745,33 @@ describe('POST /api/ai/chat telemetry', () => {
     await mocks.streamOptions?.tools?.update_order_status?.execute?.({
       items: [{ orderId: 21, status: 'confirmed' }],
     });
+    await mocks.streamOptions?.tools?.update_order_details?.execute?.({
+      items: [
+        {
+          orderId: 21,
+          changes: {
+            delivery: 'home',
+            wilayaId: 16,
+            commune: 'Bab Ezzouar',
+            homeAddress: '12 rue des Outils',
+          },
+        },
+      ],
+    });
     await mocks.streamOptions?.tools?.inspect_inventory?.execute?.({
       productIds: [8],
       query: '',
       page: 1,
       limit: 20,
+    });
+    await mocks.streamOptions?.tools?.inspect_products?.execute?.({
+      productIds: [8],
+      query: '',
+      page: 1,
+      limit: 10,
+    });
+    await mocks.streamOptions?.tools?.update_products?.execute?.({
+      items: [{ productId: 8, changes: { price: 14_900, purchasePrice: 9_000 } }],
     });
     await mocks.streamOptions?.tools?.adjust_inventory?.execute?.({
       mode: 'increase',
@@ -653,13 +782,81 @@ describe('POST /api/ai/chat telemetry', () => {
       ids: [3],
       limit: 20,
     });
+    await mocks.streamOptions?.tools?.inspect_landing_pages?.execute?.({
+      landingPageIds: [41],
+      productIds: [],
+      query: '',
+      limit: 10,
+    });
+    await mocks.streamOptions?.tools?.create_landing_page?.execute?.({
+      productId: 8,
+      locale: 'fr',
+      creativeBrief: 'Pour les artisans mobiles.',
+      active: false,
+    });
+    await mocks.streamOptions?.tools?.edit_landing_page?.execute?.({
+      landingPageId: 41,
+      expectedRevision: 3,
+      instruction: 'Réécris uniquement le hero.',
+      active: null,
+    });
+    await mocks.streamOptions?.tools?.update_asset_state?.execute?.({
+      items: [
+        {
+          kind: 'featured-group',
+          id: 3,
+          active: true,
+          showAtTopOfProductsPage: true,
+        },
+      ],
+    });
+    await mocks.streamOptions?.tools?.reorder_assets?.execute?.({
+      kind: 'featured-group',
+      items: [{ id: 3, sortOrder: 0 }],
+    });
+    await mocks.streamOptions?.tools?.manage_assets?.execute?.({
+      operation: 'delete',
+      asset: { kind: 'product-card', id: 9 },
+    });
     await mocks.streamOptions?.tools?.inspect_ai_proposals?.execute?.({
       proposalIds: [13],
       query: '',
       limit: 20,
     });
+    await mocks.streamOptions?.tools?.review_ai_proposals?.execute?.({
+      proposalIds: [13],
+      action: 'approve',
+    });
     await mocks.streamOptions?.tools?.inspect_bulletin?.execute?.({ query: 'launch', limit: 10 });
+    await mocks.streamOptions?.tools?.create_bulletin_post?.execute?.({
+      title: 'Launch follow-up',
+      body: 'Please finish the remaining launch checks today.',
+      tags: ['launch'],
+      pinned: false,
+    });
+    await mocks.streamOptions?.tools?.reply_bulletin_post?.execute?.({
+      postId: 7,
+      body: 'I will finish the checks this afternoon.',
+    });
+    await mocks.streamOptions?.tools?.update_bulletin_post?.execute?.({
+      postId: 7,
+      pinned: true,
+    });
+    await mocks.streamOptions?.tools?.delete_bulletin_content?.execute?.({
+      kind: 'reply',
+      replyId: 9,
+    });
     await mocks.streamOptions?.tools?.inspect_administration?.execute?.({});
+    await mocks.streamOptions?.tools?.set_access_grant?.execute?.({
+      email: 'operator@example.com',
+      role: 'employee',
+    });
+    await mocks.streamOptions?.tools?.set_role_definition?.execute?.({
+      roleDefinitionId: null,
+      name: 'Support',
+      description: 'Customer support and operations',
+      permissions: ['orders_write', 'ops_view'],
+    });
     await mocks.streamOptions?.tools?.inspect_storefront_configuration?.execute?.({});
     await mocks.streamOptions?.tools?.update_storefront_settings?.execute?.({
       contactEmail: 'sales@bricomaitre.com',
@@ -675,12 +872,38 @@ describe('POST /api/ai/chat telemetry', () => {
       { items: [{ orderId: 21, status: 'confirmed' }] },
       { email: 'admin@bricomaitre.com', name: 'Admin' },
     );
+    expect(mocks.updateOrderDetails).toHaveBeenCalledWith(
+      {
+        items: [
+          {
+            orderId: 21,
+            changes: {
+              delivery: 'home',
+              wilayaId: 16,
+              commune: 'Bab Ezzouar',
+              homeAddress: '12 rue des Outils',
+            },
+          },
+        ],
+      },
+      { email: 'admin@bricomaitre.com', name: 'Admin' },
+    );
     expect(mocks.inspectInventory).toHaveBeenCalledWith({
       productIds: [8],
       query: '',
       page: 1,
       limit: 20,
     });
+    expect(mocks.inspectProducts).toHaveBeenCalledWith({
+      productIds: [8],
+      query: '',
+      page: 1,
+      limit: 10,
+    });
+    expect(mocks.updateProducts).toHaveBeenCalledWith(
+      { items: [{ productId: 8, changes: { price: 14_900, purchasePrice: 9_000 } }] },
+      { email: 'admin@bricomaitre.com', name: 'Admin' },
+    );
     expect(mocks.adjustInventory).toHaveBeenCalledWith(
       { mode: 'increase', items: [{ productId: 8, quantity: 6 }] },
       { email: 'admin@bricomaitre.com', name: 'Admin' },
@@ -690,18 +913,123 @@ describe('POST /api/ai/chat telemetry', () => {
       ids: [3],
       limit: 20,
     });
+    expect(mocks.inspectLandingPages).toHaveBeenCalledWith({
+      landingPageIds: [41],
+      productIds: [],
+      query: '',
+      limit: 10,
+    });
+    expect(mocks.createLandingPage).toHaveBeenCalledWith(
+      {
+        productId: 8,
+        locale: 'fr',
+        creativeBrief: 'Pour les artisans mobiles.',
+        active: false,
+      },
+      { email: 'admin@bricomaitre.com', name: 'Admin' },
+    );
+    expect(mocks.editLandingPage).toHaveBeenCalledWith(
+      {
+        landingPageId: 41,
+        expectedRevision: 3,
+        instruction: 'Réécris uniquement le hero.',
+        active: null,
+      },
+      { email: 'admin@bricomaitre.com', name: 'Admin' },
+    );
+    expect(mocks.updateAssetStates).toHaveBeenCalledWith(
+      expect.anything(),
+      {
+        items: [
+          {
+            kind: 'featured-group',
+            id: 3,
+            active: true,
+            showAtTopOfProductsPage: true,
+          },
+        ],
+      },
+      { email: 'admin@bricomaitre.com', name: 'Admin' },
+    );
+    expect(mocks.reorderAssets).toHaveBeenCalledWith(expect.anything(), {
+      kind: 'featured-group',
+      items: [{ id: 3, sortOrder: 0 }],
+    });
+    expect(mocks.manageAsset).toHaveBeenCalledWith(
+      { operation: 'delete', asset: { kind: 'product-card', id: 9 } },
+      { email: 'admin@bricomaitre.com', name: 'Admin' },
+    );
     expect(mocks.inspectProposals).toHaveBeenCalledWith({
       scopes: ['products', 'taxonomy', 'assets'],
       proposalIds: [13],
       query: '',
       limit: 20,
     });
+    expect(mocks.reviewProposals).toHaveBeenCalledWith(
+      { proposalIds: [13], action: 'approve' },
+      { email: 'admin@bricomaitre.com', name: 'Admin' },
+      mocks.permissions,
+    );
     expect(mocks.inspectBulletin).toHaveBeenCalledWith({
       query: 'launch',
       limit: 10,
       viewer: { userId: null, permissions: mocks.permissions },
     });
+    expect(mocks.createBulletinPost).toHaveBeenCalledWith(
+      {
+        title: 'Launch follow-up',
+        body: 'Please finish the remaining launch checks today.',
+        tags: ['launch'],
+        pinned: false,
+      },
+      {
+        id: undefined,
+        email: 'admin@bricomaitre.com',
+        name: 'Admin',
+        permissions: mocks.permissions,
+      },
+    );
+    expect(mocks.replyBulletinPost).toHaveBeenCalledWith(
+      { postId: 7, body: 'I will finish the checks this afternoon.' },
+      {
+        id: undefined,
+        email: 'admin@bricomaitre.com',
+        name: 'Admin',
+        permissions: mocks.permissions,
+      },
+    );
+    expect(mocks.updateBulletinPost).toHaveBeenCalledWith(
+      { postId: 7, pinned: true },
+      {
+        id: undefined,
+        email: 'admin@bricomaitre.com',
+        name: 'Admin',
+        permissions: mocks.permissions,
+      },
+    );
+    expect(mocks.deleteBulletinContent).toHaveBeenCalledWith(
+      { kind: 'reply', replyId: 9 },
+      {
+        id: undefined,
+        email: 'admin@bricomaitre.com',
+        name: 'Admin',
+        permissions: mocks.permissions,
+      },
+    );
     expect(mocks.inspectAdministration).toHaveBeenCalledOnce();
+    expect(mocks.setAccessGrant).toHaveBeenCalledWith(
+      { email: 'operator@example.com', role: 'employee' },
+      { email: 'admin@bricomaitre.com', name: 'Admin' },
+    );
+    expect(mocks.setRoleDefinition).toHaveBeenCalledWith(
+      {
+        roleDefinitionId: null,
+        name: 'Support',
+        description: 'Customer support and operations',
+        permissions: ['orders_write', 'ops_view'],
+      },
+      { email: 'admin@bricomaitre.com', name: 'Admin' },
+    );
     expect(mocks.inspectStorefront).toHaveBeenCalledOnce();
     expect(mocks.updateStorefrontSettings).toHaveBeenCalledWith({
       contactEmail: 'sales@bricomaitre.com',
@@ -770,6 +1098,41 @@ describe('POST /api/ai/chat telemetry', () => {
       toolChoice: { type: 'tool', toolName: 'query_analytics' },
     });
     expect(mocks.streamOptions?.prepareStep?.({ stepNumber: 1 })).toBeUndefined();
+  });
+
+  it('forces one explicit mutation only after its canonical grounding step', async () => {
+    mocks.permissions = ['products_write'];
+    mocks.streamText.mockImplementation((options) => {
+      mocks.streamOptions = options as typeof mocks.streamOptions;
+      return streamedResult({ text: 'Stock updated' });
+    });
+
+    await events(
+      await POST(
+        request({
+          message: 'Ajoute 6 unités au stock de la référence PB-1.',
+          context: {
+            locale: 'fr',
+            surface: 'inventory',
+            section: null,
+            pathname: '/fr/inventory',
+            hash: null,
+            filters: {},
+            selection: null,
+          },
+        }),
+      ),
+    );
+
+    expect(mocks.streamOptions?.prepareStep?.({ stepNumber: 0 })).toEqual({
+      activeTools: ['inspect_inventory'],
+      toolChoice: { type: 'tool', toolName: 'inspect_inventory' },
+    });
+    expect(mocks.streamOptions?.prepareStep?.({ stepNumber: 1 })).toEqual({
+      activeTools: ['adjust_inventory'],
+      toolChoice: { type: 'tool', toolName: 'adjust_inventory' },
+    });
+    expect(mocks.streamOptions?.prepareStep?.({ stepNumber: 2 })).toBeUndefined();
   });
 
   it('passes batch auto-apply when the requester can manage products', async () => {

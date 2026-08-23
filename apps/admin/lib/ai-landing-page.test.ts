@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createLandingPageGenerator,
+  createLandingPageEditor,
   generateLandingPageDraft,
   LANDING_PAGE_GENERATION_INSTRUCTIONS,
   normalizeGeneratedLandingPage,
   type LandingPageGenerationInput,
+  type LandingPageEditStageRunner,
   type LandingPageStageRunner,
 } from './ai-landing-page';
 
@@ -184,6 +186,58 @@ function generatedDocument() {
   };
 }
 
+function editRunner(options?: {
+  unknownBlock?: boolean;
+  failGeneratedBlock?: boolean;
+}): LandingPageEditStageRunner {
+  return {
+    generatePlan: async (input) => ({
+      plan: {
+        theme: input.currentDocument.theme,
+        seo: {
+          title: 'Clé à cliquet — campagne mobile',
+          description: input.currentDocument.seo.description,
+        },
+        blocks: [
+          {
+            mode: 'generate',
+            blockId: options?.unknownBlock ? 'missing-hero' : 'hero',
+            type: 'product-hero',
+            purpose: 'Rewrite the hero for mobile mechanics.',
+            surface: 'dark',
+            width: 'full',
+          },
+          { mode: 'preserve', blockId: 'benefits' },
+          { mode: 'preserve', blockId: 'feature' },
+          { mode: 'preserve', blockId: 'final' },
+        ],
+        reasoning: 'Only the hero needs to change for the supplied brief.',
+        groundingNotes: ['The revised hero uses the verified product title.'],
+      },
+      usage: { inputTokens: 11, outputTokens: 12, totalTokens: 23 },
+    }),
+    generateBlock: async ({ slot }) => {
+      if (options?.failGeneratedBlock) throw new Error('invalid generated hero');
+      return {
+        block: {
+          id: slot.blockId!,
+          type: 'product-hero',
+          variant: 'product-stage',
+          surface: slot.surface,
+          width: slot.width,
+          heading: 'La clé des mécaniciens mobiles',
+          subheading: 'Une clé sans fil.',
+          imageUrl: verifiedImage,
+          imageAlt: 'Clé à cliquet',
+          primaryCtaLabel: 'Commander',
+          showAddToCart: true,
+        },
+        usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
+      };
+    },
+  };
+}
+
 describe('AI landing-page output guardrails', () => {
   it('teaches the model the full expanded composition vocabulary and evidence boundaries', () => {
     for (const blockType of [
@@ -250,6 +304,66 @@ describe('AI landing-page output guardrails', () => {
     document.blocks = document.blocks.filter((block) => block.type !== 'final-cta');
 
     expect(() => normalizeGeneratedLandingPage(document, [verifiedImage])).toThrow();
+  });
+
+  it('edits only planned blocks while preserving exact IDs, content, and ordering elsewhere', async () => {
+    const currentDocument = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
+    const result = await createLandingPageEditor(testConfig, editRunner()).edit({
+      ...generationInput,
+      instruction: 'Réécris uniquement le hero pour les mécaniciens mobiles.',
+      currentDocument,
+    });
+
+    expect(result.document.blocks.map((block) => block.id)).toEqual([
+      'hero',
+      'benefits',
+      'feature',
+      'final',
+    ]);
+    expect(result.document.blocks[0]).toMatchObject({
+      type: 'product-hero',
+      heading: 'La clé des mécaniciens mobiles',
+      surface: 'dark',
+      width: 'full',
+    });
+    expect(result.document.blocks.slice(1)).toEqual(currentDocument.blocks.slice(1));
+    expect(result.stages).toMatchObject({
+      status: 'completed',
+      generatedSections: 1,
+      preservedSections: 3,
+      fallbackSections: 0,
+      skippedSections: 0,
+    });
+  });
+
+  it('preserves an existing block and reports it when one edit stage fails', async () => {
+    const currentDocument = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
+    const result = await createLandingPageEditor(
+      testConfig,
+      editRunner({ failGeneratedBlock: true }),
+    ).edit({
+      ...generationInput,
+      instruction: 'Réécris le hero.',
+      currentDocument,
+    });
+
+    expect(result.document.blocks).toEqual(currentDocument.blocks);
+    expect(result.stages).toMatchObject({
+      status: 'partial-fallback',
+      fallbackSections: 1,
+      failures: [{ blockId: 'hero', type: 'product-hero', action: 'preserved-existing' }],
+    });
+  });
+
+  it('rejects semantically invalid edit plans before generating any block', async () => {
+    const currentDocument = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
+    await expect(
+      createLandingPageEditor(testConfig, editRunner({ unknownBlock: true })).edit({
+        ...generationInput,
+        instruction: 'Réécris le hero.',
+        currentDocument,
+      }),
+    ).rejects.toThrow('unknown block "missing-hero"');
   });
 
   it('falls back to the catalog-derived document when generation fails', async () => {
