@@ -1484,6 +1484,8 @@
     "close": "Close AI assistant",
     "title": "Admin AI assistant",
     "conversation": "AI assistant conversation",
+    "conversationTab": "Conversation",
+    "mobilePanels": "Assistant workspace panels",
     "emptyTitle": "How can I help in this workspace?",
     "currentSurface": "Current workspace: {surface}",
     "surfaceLabels": {
@@ -1530,8 +1532,28 @@
     "placeholder": "Message the AI assistant",
     "send": "Send",
     "thinking": "Working…",
+    "toolActivity": {
+      "running": "Working with {tool}…",
+      "completed": "Finished {tool}",
+      "failed": "Could not finish {tool}",
+      "labels": {
+        "products": "catalog and product records",
+        "taxonomy": "brands and categories",
+        "orders": "orders",
+        "inventory": "inventory",
+        "assets": "storefront assets and landing pages",
+        "proposals": "AI proposals",
+        "bulletin": "Bulletin",
+        "administration": "staff access and roles",
+        "storefront": "storefront configuration",
+        "background": "background work",
+        "analytics": "canonical analytics",
+        "result": "assistant tools"
+      }
+    },
     "completed": "The assistant returned the requested results.",
     "error": "The AI assistant request failed.",
+    "interrupted": "The response was interrupted. Verify any affected record before retrying.",
     "stopResponse": "Stop response",
     "newChat": "New chat",
     "chats": "Your chats",

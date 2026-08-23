@@ -16,7 +16,7 @@ describe('admin AI chat response stream', () => {
         start(controller) {
           controller.enqueue(
             encoder.encode(
-              '{"type":"status","status":"thinking"}\n{"type":"text-delta","delta":"First "}\n',
+              '{"type":"status","status":"thinking"}\n{"type":"status","status":"working","toolName":"find_products","phase":"running"}\n{"type":"text-delta","delta":"First "}\n',
             ),
           );
           controller.enqueue(
@@ -30,13 +30,24 @@ describe('admin AI chat response stream', () => {
       { headers: { 'content-type': 'application/x-ndjson' } },
     );
     const deltas: string[] = [];
+    const statuses: unknown[] = [];
     const onResult = vi.fn();
 
     await consumeAdminAiChatResponse(response, {
+      onStatus: (status) => statuses.push(status),
       onTextDelta: (delta) => deltas.push(delta),
       onResult,
     });
 
+    expect(statuses).toEqual([
+      { type: 'status', status: 'thinking' },
+      {
+        type: 'status',
+        status: 'working',
+        toolName: 'find_products',
+        phase: 'running',
+      },
+    ]);
     expect(deltas).toEqual(['First ', 'answer.']);
     expect(onResult).toHaveBeenCalledWith({ toolResults: [], conversation, messageId: 91 });
   });
@@ -50,5 +61,29 @@ describe('admin AI chat response stream', () => {
     );
     expect(onTextDelta).toHaveBeenCalledWith('Done');
     expect(onResult).toHaveBeenCalledWith({ toolResults: [], conversation, messageId: null });
+  });
+
+  it('exposes completed tool evidence before rejecting an interrupted stream', async () => {
+    const toolResults = [
+      {
+        type: 'tool-result',
+        toolName: 'update_order_status',
+        output: { items: [{ orderId: 91, statusLabel: 'confirmed' }] },
+      },
+    ];
+    const onError = vi.fn();
+    const response = new Response(
+      `${JSON.stringify({ type: 'text-delta', delta: 'Order updated.' })}\n${JSON.stringify({ type: 'error', code: 'admin_ai_failed', toolResults })}\n`,
+      { headers: { 'content-type': 'application/x-ndjson' } },
+    );
+
+    await expect(
+      consumeAdminAiChatResponse(response, {
+        onTextDelta: vi.fn(),
+        onResult: vi.fn(),
+        onError,
+      }),
+    ).rejects.toThrow('admin_ai_failed');
+    expect(onError).toHaveBeenCalledWith({ code: 'admin_ai_failed', toolResults });
   });
 });

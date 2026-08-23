@@ -205,7 +205,7 @@ async function loadRequestGrounding(input: ShoppingAssistantRequest): Promise<Re
 
   const referencedIds = [
     ...context.cartItems.map((item) => item.productId),
-    ...input.messages.flatMap((message) => message.productIds ?? []),
+    ...[...input.messages].reverse().flatMap((message) => message.productIds ?? []),
   ];
   const uniqueIds = [...new Set(referencedIds)].slice(0, 50);
   const [productCards, currentDetail, landingPage, currentOrder, referencedItems, catalogPage] =
@@ -663,6 +663,7 @@ export async function POST(request: NextRequest) {
             return;
           }
           if (emittedText) {
+            const interruptedProducts = selectedProducts(knownProducts, selectedIds);
             void recordStorefrontAssistantRun({
               telemetry: parsed.data.telemetry,
               locale: parsed.data.locale,
@@ -672,12 +673,16 @@ export async function POST(request: NextRequest) {
               ...usage,
               durationMs: Date.now() - startedAt,
               toolCalls: toolCallCount,
-              resultsCount: 0,
+              resultsCount: interruptedProducts.length,
               conversation: parsed.data.messages,
               response: emittedText,
               promptVersion: STOREFRONT_AI_PROMPT_VERSION,
             }).catch(() => {});
-            write({ type: 'error', code: 'assistant_unavailable' });
+            write({
+              type: 'error',
+              code: 'assistant_unavailable',
+              products: interruptedProducts,
+            });
             return;
           }
           const fallback = await deterministicFallback(

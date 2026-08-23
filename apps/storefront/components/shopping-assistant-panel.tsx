@@ -3,6 +3,7 @@
 import type {
   ShoppingAssistantProduct,
   ShoppingAssistantResponse,
+  ShoppingAssistantToolName,
 } from '@bric/storefront-core/shopping-assistant-contracts';
 import {
   ArrowUp,
@@ -35,7 +36,10 @@ import {
   buildShoppingAssistantPageContext,
   classifyShoppingAssistantIntent,
 } from '@/lib/shopping-assistant';
-import { consumeShoppingAssistantResponse } from '@/lib/shopping-assistant-stream';
+import {
+  consumeShoppingAssistantResponse,
+  type ShoppingAssistantActivity,
+} from '@/lib/shopping-assistant-stream';
 
 export type ShoppingAssistantLabels = {
   open: string;
@@ -51,7 +55,10 @@ export type ShoppingAssistantLabels = {
   stopped: string;
   retry: string;
   thinking: string;
+  toolActivity: Record<ShoppingAssistantToolName, string>;
+  toolRetrying: string;
   error: string;
+  interrupted: string;
   rateLimited: string;
   fallback: string;
   inStock: string;
@@ -73,6 +80,7 @@ type ChatEntry = {
   products?: ShoppingAssistantProduct[];
   mode?: ShoppingAssistantResponse['mode'];
   feedback?: 'helpful' | 'not_helpful';
+  interrupted?: boolean;
 };
 
 const chatStoragePrefix = 'bricomaitre-shopping-assistant-chat-v1';
@@ -121,6 +129,7 @@ function storedEntries(value: unknown): ChatEntry[] {
       (candidate.feedback !== undefined &&
         candidate.feedback !== 'helpful' &&
         candidate.feedback !== 'not_helpful') ||
+      (candidate.interrupted !== undefined && typeof candidate.interrupted !== 'boolean') ||
       (candidate.mode !== undefined && candidate.mode !== 'ai' && candidate.mode !== 'fallback') ||
       (candidate.products !== undefined &&
         (!Array.isArray(candidate.products) || !candidate.products.every(isStoredProduct)))
@@ -255,6 +264,7 @@ export function ShoppingAssistantPanel({
   const [draft, setDraft] = useState('');
   const [pending, setPending] = useState(false);
   const [receivingText, setReceivingText] = useState(false);
+  const [activity, setActivity] = useState<ShoppingAssistantActivity | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [storageReady, setStorageReady] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
@@ -316,6 +326,7 @@ export function ShoppingAssistantPanel({
     setError(null);
     setPending(true);
     setReceivingText(false);
+    setActivity(null);
     void triggerHaptic('primary');
     recordAssistantEngagement(getAnalyticsIdentity());
     void trackNavigationEvent({
@@ -329,6 +340,9 @@ export function ShoppingAssistantPanel({
       },
     });
 
+    const assistantId = crypto.randomUUID();
+    let receivedText = false;
+    let interruptedProducts: ShoppingAssistantProduct[] | undefined;
     try {
       const identity = getAnalyticsIdentity();
       const intent = classifyShoppingAssistantIntent(normalized);
@@ -352,20 +366,26 @@ export function ShoppingAssistantPanel({
                   intent,
                 }
               : undefined,
-          messages: nextMessages.slice(-30).map(({ role, content: message, products }) => ({
-            role,
-            content: message.slice(0, 1_500),
-            productIds: products?.map((product) => product.id),
-          })),
+          messages: nextMessages
+            .filter((message) => !message.interrupted)
+            .slice(-40)
+            .map(({ role, content: message, products }) => ({
+              role,
+              content: message.slice(0, 1_500),
+              productIds: products?.map((product) => product.id),
+            })),
         }),
       });
       if (!response.ok) {
         const code = response.status === 429 ? 'rate_limited' : 'unavailable';
         throw new Error(code);
       }
-      const assistantId = crypto.randomUUID();
       await consumeShoppingAssistantResponse(response, {
+        onActivity(nextActivity) {
+          setActivity(nextActivity);
+        },
         onTextDelta(delta) {
+          receivedText = true;
           setReceivingText(true);
           setMessages((current) => {
             const existing = current.findIndex((message) => message.id === assistantId);
@@ -385,6 +405,9 @@ export function ShoppingAssistantPanel({
             ),
           );
         },
+        onError(error) {
+          interruptedProducts = error.products;
+        },
       });
     } catch (cause) {
       if (controller.signal.aborted) {
@@ -395,6 +418,19 @@ export function ShoppingAssistantPanel({
       }
       const code =
         cause instanceof Error && cause.message === 'rate_limited' ? 'rate_limited' : 'unavailable';
+      if (receivedText) {
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === assistantId
+              ? {
+                  ...message,
+                  interrupted: true,
+                  ...(interruptedProducts?.length ? { products: interruptedProducts } : {}),
+                }
+              : message,
+          ),
+        );
+      }
       setError(code === 'rate_limited' ? labels.rateLimited : labels.error);
       void trackNavigationEvent({
         eventName: 'ai_assistant_error',
@@ -405,6 +441,7 @@ export function ShoppingAssistantPanel({
       if (activeRequestRef.current === controller) activeRequestRef.current = null;
       setPending(false);
       setReceivingText(false);
+      setActivity(null);
     }
   }
 
@@ -541,6 +578,11 @@ export function ShoppingAssistantPanel({
                 ) : (
                   <p>{message.content}</p>
                 )}
+                {message.interrupted ? (
+                  <small className="shopping-assistant-interrupted" role="status">
+                    {labels.interrupted}
+                  </small>
+                ) : null}
                 {message.products?.length ? (
                   <div className="shopping-assistant-results">
                     {message.products.map((product, index) => (
@@ -556,6 +598,7 @@ export function ShoppingAssistantPanel({
                 ) : null}
                 {message.role === 'assistant' &&
                 message.content &&
+                !message.interrupted &&
                 (!pending || message.id !== messages.at(-1)?.id) ? (
                   <div className="shopping-assistant-feedback">
                     <button
@@ -580,11 +623,31 @@ export function ShoppingAssistantPanel({
             </article>
           ))}
           {pending && !receivingText ? (
-            <div className="shopping-assistant-thinking" role="status">
-              <span />
-              <span />
-              <span />
-              <em>{labels.thinking}</em>
+            <div
+              className="shopping-assistant-thinking"
+              role="status"
+              aria-live="polite"
+              data-activity={activity?.type === 'tool' ? activity.name : 'thinking'}
+              data-phase={activity?.type === 'tool' ? activity.status : 'started'}
+            >
+              {activity?.type === 'tool' && activity.status === 'completed' ? (
+                <Check aria-hidden="true" size={14} />
+              ) : activity?.type === 'tool' && activity.status === 'failed' ? (
+                <RotateCcw aria-hidden="true" size={14} />
+              ) : (
+                <span className="shopping-assistant-thinking-dots" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              )}
+              <em>
+                {activity?.type === 'tool'
+                  ? activity.status === 'failed'
+                    ? labels.toolRetrying
+                    : labels.toolActivity[activity.name]
+                  : labels.thinking}
+              </em>
             </div>
           ) : null}
           {error ? (

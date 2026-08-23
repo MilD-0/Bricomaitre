@@ -2,6 +2,11 @@ import { z } from 'zod';
 
 export const DEFAULT_STOREFRONT_CONTACT_PHONE = '0795342826';
 
+const providerCompatibleEmailSchema = z
+  .string()
+  .trim()
+  .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Enter a valid email address.');
+
 export function normalizeAlgerianPhoneNumber(value: string) {
   const digits = value.replace(/\D/g, '');
 
@@ -34,7 +39,7 @@ export const storefrontSettingsInputSchema = z.object({
   contactPhone: algerianPhoneNumberSchema,
   phoneEnabled: z.boolean(),
   contactEmail: z
-    .union([z.email(), z.literal(''), z.null()])
+    .union([providerCompatibleEmailSchema, z.literal(''), z.null()])
     .default(null)
     .transform((value) => value || null),
   address: nullableText(500),

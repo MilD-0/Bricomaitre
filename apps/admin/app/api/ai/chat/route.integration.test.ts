@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { zodSchema } from 'ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -8,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   returningCount: 0,
   failTelemetry: false,
   permissions: [] as string[],
+  selectResults: [] as unknown[][],
   streamOptions: null as null | {
     tools?: Record<
       string,
@@ -83,7 +85,8 @@ vi.mock('@bric/ai-core', async (importOriginal) => ({
   resolveAiModel: () => 'deepseek/deepseek-v4-flash',
 }));
 
-vi.mock('ai', () => ({
+vi.mock('ai', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('ai')>()),
   streamText: mocks.streamText,
   stepCountIs: () => 'stop-condition',
   tool: (definition: unknown) => definition,
@@ -92,14 +95,17 @@ vi.mock('ai', () => ({
 vi.mock('@bric/db/client', () => ({
   hasDb: () => true,
   getDb: () => ({
-    select: () => ({
-      from: () => ({
-        where: () => ({
-          limit: async () => [],
-          orderBy: () => ({ limit: async () => [] }),
+    select: () => {
+      const rows = mocks.selectResults.shift() ?? [];
+      return {
+        from: () => ({
+          where: () => ({
+            limit: async () => rows,
+            orderBy: () => ({ limit: async () => rows }),
+          }),
         }),
-      }),
-    }),
+      };
+    },
     insert: () => ({
       values: (values: unknown) => {
         mocks.insertedValues.push(values);
@@ -320,6 +326,7 @@ describe('POST /api/ai/chat telemetry', () => {
     mocks.returningCount = 0;
     mocks.failTelemetry = false;
     mocks.permissions = [];
+    mocks.selectResults.length = 0;
     mocks.streamOptions = null;
     mocks.startCategorization
       .mockReset()
@@ -414,6 +421,18 @@ describe('POST /api/ai/chat telemetry', () => {
 
     expect(response.status).toBe(200);
     expect(frames[0]).toEqual({ type: 'status', status: 'thinking' });
+    expect(frames).toContainEqual({
+      type: 'status',
+      status: 'working',
+      toolName: 'find_products',
+      phase: 'running',
+    });
+    expect(frames).toContainEqual({
+      type: 'status',
+      status: 'working',
+      toolName: 'find_products',
+      phase: 'completed',
+    });
     expect(frames).toContainEqual({ type: 'text-delta', delta: 'Done' });
     expect(frames.at(-1)).toMatchObject({
       type: 'result',
@@ -435,7 +454,7 @@ describe('POST /api/ai/chat telemetry', () => {
         task: 'admin_chat',
         status: 'running',
         model: 'openai/gpt-5.6-luna',
-        promptVersion: 'admin-chat-v21',
+        promptVersion: 'admin-chat-v22',
       }),
     );
     expect(mocks.updatedValues).toContainEqual(
@@ -482,6 +501,47 @@ describe('POST /api/ai/chat telemetry', () => {
         maxOutputTokens: 1_600,
       }),
     );
+  });
+
+  it('restores long conversation history and exact saved tool evidence for follow-ups', async () => {
+    const previousRows = Array.from({ length: 24 }, (_, index) => ({
+      role: index % 2 === 0 ? 'assistant' : 'user',
+      content:
+        index === 0
+          ? {
+              text: 'The third match is the impact drill.',
+              toolResults: [
+                {
+                  type: 'tool-result',
+                  toolName: 'find_products',
+                  output: [{ id: 481, title: 'Professional impact drill' }],
+                },
+              ],
+            }
+          : { text: `Historical message ${24 - index}` },
+    }));
+    mocks.selectResults.push([{ id: 77, title: 'Ongoing catalog work' }], previousRows);
+    mocks.streamText.mockImplementation((options) => {
+      mocks.streamOptions = options as typeof mocks.streamOptions;
+      return streamedResult({ text: 'I retained the exact product reference.' });
+    });
+
+    const response = await POST(request({ message: 'Now inspect that exact product again.' }));
+    await events(response);
+
+    expect(mocks.streamOptions?.messages).toHaveLength(25);
+    expect(mocks.streamOptions?.messages?.[0]).toEqual({
+      role: 'user',
+      content: 'Historical message 1',
+    });
+    expect(mocks.streamOptions?.messages?.at(-2)?.content).toContain(
+      'Saved canonical tool evidence',
+    );
+    expect(mocks.streamOptions?.messages?.at(-2)?.content).toContain('"id":481');
+    expect(mocks.streamOptions?.messages?.at(-1)).toEqual({
+      role: 'user',
+      content: 'Now inspect that exact product again.',
+    });
   });
 
   it('pins the fast DeepSeek choice to the Baidu FP8 endpoint and records that route', async () => {
@@ -533,17 +593,34 @@ describe('POST /api/ai/chat telemetry', () => {
     expect(mocks.streamText).not.toHaveBeenCalled();
   });
 
-  it('marks a started run as failed when generation fails', async () => {
-    mocks.streamText.mockReturnValue({
+  it('retries one empty interrupted response and completes on the same model', async () => {
+    mocks.streamText.mockImplementationOnce(() => ({
+      stream: (async function* () {
+        throw new Error('terminated');
+      })(),
+    }));
+    mocks.streamText.mockReturnValueOnce(streamedResult({ text: 'Recovered response' }));
+
+    const frames = await events(await POST(request()));
+
+    expect(mocks.streamText).toHaveBeenCalledTimes(2);
+    expect(frames).toContainEqual({ type: 'text-delta', delta: 'Recovered response' });
+    expect(frames.at(-1)).toMatchObject({ type: 'result' });
+    expect(mocks.updatedValues).toContainEqual(expect.objectContaining({ status: 'completed' }));
+  });
+
+  it('marks a started run as failed after the one empty-stream retry is exhausted', async () => {
+    mocks.streamText.mockImplementation(() => ({
       stream: (async function* () {
         throw new Error('OpenRouter request failed');
       })(),
-    });
+    }));
 
     const response = await POST(request());
     const frames = await events(response);
 
     expect(response.status).toBe(200);
+    expect(mocks.streamText).toHaveBeenCalledTimes(2);
     expect(frames.at(-1)).toEqual({ type: 'error', code: 'admin_ai_failed' });
     expect(mocks.updatedValues).toContainEqual(
       expect.objectContaining({
@@ -551,6 +628,50 @@ describe('POST /api/ai/chat telemetry', () => {
         errorCode: 'Error',
       }),
     );
+  });
+
+  it('never retries a completed mutation and returns its evidence with the failure', async () => {
+    mocks.permissions = ['orders_write'];
+    mocks.streamText.mockImplementation(() => ({
+      stream: (async function* () {
+        yield {
+          type: 'tool-call',
+          toolCallId: 'mutation-1',
+          toolName: 'update_order_status',
+          input: { items: [{ orderId: 91, status: 'confirmed' }] },
+        };
+        yield {
+          type: 'tool-result',
+          toolCallId: 'mutation-1',
+          toolName: 'update_order_status',
+          input: { items: [{ orderId: 91, status: 'confirmed' }] },
+          output: { items: [{ orderId: 91, statusLabel: 'confirmed' }] },
+        };
+        throw new Error('terminated after mutation dispatch');
+      })(),
+    }));
+
+    const frames = await events(await POST(request({ message: 'Confirme la commande 91.' })));
+
+    expect(mocks.streamText).toHaveBeenCalledTimes(1);
+    expect(frames.at(-1)).toEqual({
+      type: 'error',
+      code: 'admin_ai_failed',
+      toolResults: [
+        expect.objectContaining({
+          type: 'tool-result',
+          toolName: 'update_order_status',
+          output: { items: [{ orderId: 91, statusLabel: 'confirmed' }] },
+        }),
+      ],
+    });
+    expect(mocks.insertedValues).toContainEqual([
+      expect.objectContaining({
+        toolName: 'update_order_status',
+        status: 'completed',
+        output: { items: [{ orderId: 91, statusLabel: 'confirmed' }] },
+      }),
+    ]);
   });
 
   it('still returns the assistant response when telemetry storage fails', async () => {
@@ -741,6 +862,34 @@ describe('POST /api/ai/chat telemetry', () => {
     const tools = mocks.streamOptions?.tools ?? {};
     for (const name of present) expect(tools).toHaveProperty(name);
     for (const name of absent) expect(tools).not.toHaveProperty(name);
+  });
+
+  it('serializes every permission-visible production tool for the model provider', async () => {
+    mocks.permissions = [
+      'products_write',
+      'orders_write',
+      'assets_write',
+      'brands_categories_write',
+      'settings_manage',
+      'analytics_manage',
+      'ops_view',
+      'bulletin_moderate',
+    ];
+    mocks.streamText.mockImplementation((options) => {
+      mocks.streamOptions = options as typeof mocks.streamOptions;
+      return streamedResult({ text: 'Schemas accepted' });
+    });
+
+    await events(await POST(request()));
+    const tools = mocks.streamOptions?.tools ?? {};
+    expect(Object.keys(tools).length).toBeGreaterThan(35);
+    for (const [name, definition] of Object.entries(tools)) {
+      expect(() => zodSchema(definition.inputSchema as never).jsonSchema, name).not.toThrow();
+      expect(
+        JSON.stringify(zodSchema(definition.inputSchema as never).jsonSchema),
+        name,
+      ).not.toContain('(?');
+    }
   });
 
   it('routes surface reads through domain adapters with server-owned proposal scope', async () => {

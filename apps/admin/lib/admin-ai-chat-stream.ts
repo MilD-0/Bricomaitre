@@ -9,7 +9,14 @@ const adminAiConversationSchema = z
   .strict();
 
 export const adminAiChatStreamEventSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('status'), status: z.enum(['thinking', 'working']) }).strict(),
+  z
+    .object({
+      type: z.literal('status'),
+      status: z.enum(['thinking', 'working']),
+      toolName: z.string().trim().min(1).max(100).optional(),
+      phase: z.enum(['running', 'completed', 'failed']).optional(),
+    })
+    .strict(),
   z.object({ type: z.literal('text-delta'), delta: z.string().min(1).max(4_000) }).strict(),
   z
     .object({
@@ -19,21 +26,30 @@ export const adminAiChatStreamEventSchema = z.discriminatedUnion('type', [
       messageId: z.number().int().positive().nullable().default(null),
     })
     .strict(),
-  z.object({ type: z.literal('error'), code: z.literal('admin_ai_failed') }).strict(),
+  z
+    .object({
+      type: z.literal('error'),
+      code: z.literal('admin_ai_failed'),
+      toolResults: z.unknown().optional(),
+    })
+    .strict(),
 ]);
 
 export type AdminAiConversation = z.infer<typeof adminAiConversationSchema>;
 export type AdminAiChatStreamEvent = z.infer<typeof adminAiChatStreamEventSchema>;
+export type AdminAiChatStatus = Extract<AdminAiChatStreamEvent, { type: 'status' }>;
 
 export async function consumeAdminAiChatResponse(
   response: Response,
   handlers: {
+    onStatus?: (status: AdminAiChatStatus) => void;
     onTextDelta: (delta: string) => void;
     onResult: (result: {
       toolResults: unknown;
       conversation: AdminAiConversation;
       messageId: number | null;
     }) => void;
+    onError?: (error: { code: 'admin_ai_failed'; toolResults?: unknown }) => void;
   },
 ) {
   const contentType = response.headers.get('content-type') ?? '';
@@ -67,6 +83,7 @@ export async function consumeAdminAiChatResponse(
   const consumeLine = (line: string) => {
     if (!line.trim()) return;
     const event = adminAiChatStreamEventSchema.parse(JSON.parse(line));
+    if (event.type === 'status') handlers.onStatus?.(event);
     if (event.type === 'text-delta') handlers.onTextDelta(event.delta);
     if (event.type === 'result') {
       completed = true;
@@ -76,7 +93,10 @@ export async function consumeAdminAiChatResponse(
         messageId: event.messageId,
       });
     }
-    if (event.type === 'error') throw new Error(event.code);
+    if (event.type === 'error') {
+      handlers.onError?.({ code: event.code, toolResults: event.toolResults });
+      throw new Error(event.code);
+    }
   };
 
   while (true) {

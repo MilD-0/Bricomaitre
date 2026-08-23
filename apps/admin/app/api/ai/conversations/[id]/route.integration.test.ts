@@ -64,7 +64,7 @@ describe('GET /api/ai/conversations/:id', () => {
       },
     ];
     mocks.messageRows = [
-      { id: 70, role: 'user', content: { text: 'Saved question' } },
+      { id: 72, role: 'tool', content: { result: true } },
       {
         id: 71,
         role: 'assistant',
@@ -76,7 +76,7 @@ describe('GET /api/ai/conversations/:id', () => {
           ],
         },
       },
-      { id: 72, role: 'tool', content: { result: true } },
+      { id: 70, role: 'user', content: { text: 'Saved question' } },
     ];
 
     const response = await GET(new NextRequest('http://localhost/api/ai/conversations/8'), {

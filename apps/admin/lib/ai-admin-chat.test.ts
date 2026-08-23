@@ -63,5 +63,8 @@ describe('admin AI chat instructions', () => {
     expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('complete operational records');
     expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('customer and staff identity');
     expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('exact domain permissions');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('saved canonical tool evidence');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('retain exact IDs');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('saved record may have changed');
   });
 });

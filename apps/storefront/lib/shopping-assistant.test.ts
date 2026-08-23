@@ -324,7 +324,7 @@ describe('storefront shopping assistant', () => {
     expect(
       shoppingAssistantRequestSchema.safeParse({
         locale: 'fr',
-        messages: Array.from({ length: 31 }, () => ({ role: 'user', content: 'outil' })),
+        messages: Array.from({ length: 41 }, () => ({ role: 'user', content: 'outil' })),
       }).success,
     ).toBe(false);
     expect(
