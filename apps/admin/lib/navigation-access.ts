@@ -1,4 +1,10 @@
-import { canManageAnalytics, canManageSettings, hasPermission, type PermissionKey, type Role } from './permissions';
+import {
+  canManageAnalytics,
+  canManageSettings,
+  hasPermission,
+  type PermissionKey,
+  type Role,
+} from './permissions';
 import type { NavigationKey } from './navigation';
 
 export function canAccessNavigationItem(access: {
@@ -40,7 +46,7 @@ export function canAccessNavigationItem(access: {
     return hasPermission(permissions, 'brands_categories_write');
   }
 
-  if (key === 'stats' || key === 'analytics2') {
+  if (key === 'stats') {
     return canManageAnalytics(permissions);
   }
 
@@ -74,7 +80,6 @@ export function getDefaultAuthorizedHref({
     'inventory',
     'assets',
     'brandsCategories',
-    'analytics2',
     'stats',
     'bulletin',
   ];
@@ -86,7 +91,6 @@ export function getDefaultAuthorizedHref({
     inventory: '/inventory',
     assets: '/assets',
     brandsCategories: '/brands',
-    analytics2: '/analytics2',
     stats: '/stats',
     bulletin: '/bulletin',
   };

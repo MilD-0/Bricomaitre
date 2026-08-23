@@ -12,6 +12,7 @@ import {
 import { resolveUniqueSlug } from './slug';
 
 type PaginationQuery = ReturnType<typeof paginationQuerySchema.parse>;
+type TaxonomyQueryClient = Pick<ReturnType<typeof getDb>, 'select'>;
 
 type BrandRecord = typeof brands.$inferSelect;
 type CategoryRecord = typeof categories.$inferSelect;
@@ -24,6 +25,7 @@ function toBrandRow(row: BrandRecord, productCount = 0): BrandRow {
     slug: row.slug,
     image: row.image ?? null,
     isActive: row.isActive,
+    featured: row.featured,
     status: row.isActive ? 'active' : 'draft',
     productCount,
     createdAt: row.createdAt.toISOString(),
@@ -47,6 +49,7 @@ function toCategoryRow(
     nameAr: row.nameAr ?? null,
     image: row.image ?? null,
     isActive: row.isActive,
+    featured: row.featured,
     status: row.isActive ? 'active' : 'draft',
     parentId: row.parentId ? String(row.parentId) : null,
     parentName,
@@ -64,12 +67,12 @@ async function resolveTaxonomySlug(
   entityType: 'brands' | 'categories',
   value: string,
   currentId?: number,
+  database: TaxonomyQueryClient = getDb(),
 ) {
-  const db = getDb();
   const table = entityType === 'brands' ? brands : categories;
 
   return resolveUniqueSlug(value, async (slug) => {
-    const [existing] = await db
+    const [existing] = await database
       .select({ id: table.id })
       .from(table)
       .where(
@@ -83,12 +86,20 @@ async function resolveTaxonomySlug(
   });
 }
 
-export function resolveBrandSlug(value: string, currentId?: number) {
-  return resolveTaxonomySlug('brands', value, currentId);
+export function resolveBrandSlug(
+  value: string,
+  currentId?: number,
+  database?: TaxonomyQueryClient,
+) {
+  return resolveTaxonomySlug('brands', value, currentId, database);
 }
 
-export function resolveCategorySlug(value: string, currentId?: number) {
-  return resolveTaxonomySlug('categories', value, currentId);
+export function resolveCategorySlug(
+  value: string,
+  currentId?: number,
+  database?: TaxonomyQueryClient,
+) {
+  return resolveTaxonomySlug('categories', value, currentId, database);
 }
 
 export async function readBrandsPage(

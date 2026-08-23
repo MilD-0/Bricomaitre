@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { deleteCostMock, updateCostMock, requireMutationMock } = vi.hoisted(() => ({
+const { deleteCostMock, updateCostMock, refreshFactsMock, requireMutationMock } = vi.hoisted(() => ({
   deleteCostMock: vi.fn(),
   updateCostMock: vi.fn(),
+  refreshFactsMock: vi.fn(),
   requireMutationMock: vi.fn(),
+}));
+
+vi.mock('../../../../../../lib/analytics2-facts', () => ({
+  refreshAnalytics2FactsAfterMutation: refreshFactsMock,
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: () => true }));
@@ -38,6 +43,7 @@ describe('profit tracker cost detail route', () => {
     requireMutationMock.mockResolvedValue(null);
     updateCostMock.mockResolvedValue({ id: 12, ...cost });
     deleteCostMock.mockResolvedValue(12);
+    refreshFactsMock.mockResolvedValue(true);
   });
 
   it('updates an operating cost', async () => {
@@ -51,6 +57,7 @@ describe('profit tracker cost detail route', () => {
 
     expect(response.status).toBe(200);
     expect(updateCostMock).toHaveBeenCalledWith(12, cost);
+    expect(refreshFactsMock).toHaveBeenCalledOnce();
   });
 
   it('deletes an operating cost', async () => {
@@ -61,6 +68,7 @@ describe('profit tracker cost detail route', () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ data: { id: 12 } });
+    expect(refreshFactsMock).toHaveBeenCalledOnce();
   });
 
   it('rejects a non-positive id', async () => {

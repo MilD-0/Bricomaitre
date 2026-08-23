@@ -1,13 +1,21 @@
 import type {
+  StorefrontAssetsResponse,
   StorefrontProductDetailResponse,
   StorefrontProductsResponse,
 } from '@bric/storefront-core/contracts';
-import type { ShoppingAssistantProduct } from '@bric/storefront-core/shopping-assistant-contracts';
+import {
+  shoppingAssistantPageContextSchema,
+  type ShoppingAssistantPageContext,
+  type ShoppingAssistantProduct,
+} from '@bric/storefront-core/shopping-assistant-contracts';
 
 import type { Locale } from '@/i18n/config';
+import { parseCatalogPageQuery, toStorefrontCatalogQuery } from '@/lib/catalog-query';
+import type { CartItem } from '@/lib/cart';
 
 type CatalogProduct = StorefrontProductsResponse['items'][number];
 type ProductDetail = StorefrontProductDetailResponse['item'];
+type ProductCard = StorefrontAssetsResponse['productCards'][number];
 
 export type ShoppingAssistantIntent =
   | 'product_search'
@@ -107,6 +115,60 @@ export function classifyShoppingAssistantIntent(value: string): ShoppingAssistan
   return 'other';
 }
 
+export function buildShoppingAssistantPageContext(
+  pathname: string,
+  searchParams: URLSearchParams,
+  cart: CartItem[],
+): ShoppingAssistantPageContext {
+  const productMatch = pathname.match(/\/(?:fr|ar)\/products\/([^/]+)\/?$/);
+  let currentProductToken: string | null = null;
+  if (productMatch?.[1]) {
+    try {
+      currentProductToken = decodeURIComponent(productMatch[1]);
+    } catch {
+      currentProductToken = productMatch[1];
+    }
+  }
+
+  const isCatalog = /\/(?:fr|ar)\/products\/?$/.test(pathname);
+  const catalogQuery = isCatalog
+    ? toStorefrontCatalogQuery(
+        parseCatalogPageQuery({
+          q: searchParams.get('q') ?? undefined,
+          category: searchParams.get('category') ?? undefined,
+          brand: searchParams.get('brand') ?? undefined,
+          discounted: searchParams.get('discounted') ?? undefined,
+          stock: searchParams.get('stock') ?? undefined,
+          minPrice: searchParams.get('minPrice') ?? undefined,
+          maxPrice: searchParams.get('maxPrice') ?? undefined,
+          sort: searchParams.get('sort') ?? undefined,
+          page: searchParams.get('page') ?? undefined,
+        }),
+      )
+    : null;
+
+  return shoppingAssistantPageContextSchema.parse({
+    pathname,
+    currentProductToken,
+    catalogQuery: catalogQuery
+      ? {
+          search: catalogQuery.search,
+          brandId: catalogQuery.brandId,
+          categoryId: catalogQuery.categoryId,
+          discounted: catalogQuery.discounted,
+          stock: catalogQuery.stock,
+          minPrice: catalogQuery.minPrice,
+          maxPrice: catalogQuery.maxPrice,
+          sortKey: catalogQuery.sortKey,
+          sortDirection: catalogQuery.sortDirection,
+          page: catalogQuery.page,
+          limit: catalogQuery.limit,
+        }
+      : null,
+    cartItems: cart.map(({ productId, quantity }) => ({ productId, quantity })),
+  });
+}
+
 function compact(value: string | null, limit = 500) {
   if (!value) return null;
   const normalized = value.trim().replace(/\s+/g, ' ');
@@ -117,17 +179,30 @@ function normalizedAvailabilityStatus(inStock: boolean) {
   return inStock ? 'in_stock' : 'out_of_stock';
 }
 
+function characteristics(values: string[] | undefined) {
+  return (values ?? [])
+    .flatMap((value) => {
+      const normalized = compact(value, 300);
+      return normalized ? [normalized] : [];
+    })
+    .slice(0, 16);
+}
+
 export function toAssistantCatalogProduct(
   product: CatalogProduct,
   meta?: { brand?: string | null; category?: string | null },
+  card?: ProductCard,
 ): ShoppingAssistantProduct {
   return {
     id: product.id,
     token: product.slug || product.mongoId || String(product.id),
-    title: product.title,
-    titleAr: product.titleAr,
-    description: compact(product.description),
-    descriptionAr: compact(product.descriptionAr),
+    title: card?.titleFr.trim() || product.title,
+    titleAr: card?.titleAr.trim() || product.titleAr,
+    description: compact(card?.descriptionFr || product.description),
+    descriptionAr: compact(card?.descriptionAr || product.descriptionAr),
+    sku: compact(product.sku, 120),
+    characteristics: characteristics(card?.characteristicsFr),
+    characteristicsAr: characteristics(card?.characteristicsAr),
     price: product.price,
     oldPrice: product.oldPrice,
     inStock: product.inStock,
@@ -138,14 +213,20 @@ export function toAssistantCatalogProduct(
   };
 }
 
-export function toAssistantDetailProduct(product: ProductDetail): ShoppingAssistantProduct {
+export function toAssistantDetailProduct(
+  product: ProductDetail,
+  card?: ProductCard,
+): ShoppingAssistantProduct {
   return {
     id: product.id,
     token: product.canonicalToken,
-    title: product.title,
-    titleAr: product.titleAr,
-    description: compact(product.description),
-    descriptionAr: compact(product.descriptionAr),
+    title: card?.titleFr.trim() || product.title,
+    titleAr: card?.titleAr.trim() || product.titleAr,
+    description: compact(card?.descriptionFr || product.description),
+    descriptionAr: compact(card?.descriptionAr || product.descriptionAr),
+    sku: compact(product.sku, 120),
+    characteristics: characteristics(card?.characteristicsFr),
+    characteristicsAr: characteristics(card?.characteristicsAr),
     price: product.price,
     oldPrice: product.oldPrice,
     inStock: product.availability.inStock,
@@ -160,8 +241,10 @@ export function shoppingAssistantInstructions(locale: Locale) {
   return [
     'You are the Bricomaitre customer product advisor.',
     'Help customers discover and compare tools using only products returned by the catalog tools.',
-    'Search before making any product recommendation or claim. Use product lookup before detailed comparisons.',
-    'Never mention internal systems, administration, analytics, margins, purchase cost, or private data.',
+    'Use the current page, filters, product, cart, and prior recommendation context when it is supplied.',
+    'Search before making any new product recommendation or claim. The search tool covers the full catalog through filters, total counts, and pagination; use another page or narrower filters when needed.',
+    'Use product lookup before detailed comparisons. Call present_products with only the product IDs that should appear as recommendation cards.',
+    'Keep answers customer-facing and focused on choosing products from the public Bricomaitre catalog.',
     'All numeric catalog prices are Algerian dinars. Render them as DZD in French or دج in Arabic; never label them Dhs, MAD, dollars, or another currency.',
     'Treat inStock as the authoritative customer-facing availability fact and never mention internal field names or conflicting raw status fields.',
     'Never invent specifications, compatibility, availability, delivery promises, warranty, discounts, promotions, or safety claims.',

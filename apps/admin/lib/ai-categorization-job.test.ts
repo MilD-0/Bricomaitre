@@ -260,8 +260,56 @@ describe('catalog categorization background job', () => {
     ).resolves.toMatchObject({
       proposed: 0,
       applied: 1,
+      autoApplyFailed: 0,
       complete: true,
     });
     expect(applyProposal).toHaveBeenCalledWith(77, { email: 'admin@example.com', name: 'Admin' });
+  });
+
+  it('reports an auto-apply conflict while leaving the verified proposal pending', async () => {
+    const dependencies: AiCategorizationDependencies = {
+      classifier: {
+        classify: vi.fn(async () => ({
+          decision: {
+            categoryId: 10,
+            confidence: 0.95,
+            ambiguous: false,
+            reasoning: 'Clear drill match.',
+          },
+          usage: {},
+          model: 'test-model',
+        })),
+      },
+      listCategories: async () => categories,
+      countProducts: async () => 1,
+      listProductsAfter: async (_scope, lastId) =>
+        lastId === 0
+          ? [
+              {
+                id: 1,
+                title: 'Drill',
+                description: null,
+                sku: null,
+                brand: null,
+                categoryId: null,
+                category: null,
+              },
+            ]
+          : [],
+      listPendingProductIds: async () => new Set(),
+      proposeCategory: vi.fn(async () => ({ id: 77 })),
+      applyProposal: vi.fn(async () => {
+        throw new Error('category changed');
+      }),
+    };
+
+    await expect(
+      runAiCategorizationJob(payload({ autoApply: true }), helpers(), dependencies),
+    ).resolves.toMatchObject({
+      proposed: 1,
+      applied: 0,
+      autoApplyFailed: 1,
+      complete: true,
+    });
   });
 });

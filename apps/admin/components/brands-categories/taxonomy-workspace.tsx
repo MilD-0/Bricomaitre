@@ -7,6 +7,7 @@ import { useLocale } from 'next-intl';
 import * as React from 'react';
 
 import { requestJson } from '../../lib/admin-api';
+import { taxonomyAiSurfaceDetails } from '../../lib/admin-ai-live-surface-details';
 import {
   type BrandRow,
   type BrandsListResponse,
@@ -17,6 +18,7 @@ import {
 } from '../../lib/brands-categories';
 import { toast } from '../../lib/toast';
 import { Button } from '../ui/button';
+import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Checkbox } from '../ui/checkbox';
 import { CompactMenu, CompactMenuItem } from '../ui/compact-menu';
 import { Input } from '../ui/input';
@@ -143,6 +145,20 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
   const parentOptions = 'parentOptions' in data ? data.parentOptions : [];
   const viewTitle = view === 'brands' ? t.brands : t.categories;
   const singular = view === 'brands' ? t.brand : t.category;
+  const focusedTaxonomyId = editor?.mode === 'edit' ? Number(editor.item.id) : null;
+  useAdminAiSurfaceDetails(
+    taxonomyAiSurfaceDetails({
+      view,
+      page,
+      search: deferredSearch,
+      sort,
+      visibleCount: items.length,
+      totalItems: data.pagination.totalItems,
+      selectedIds: selected.map(Number),
+      focusedId: focusedTaxonomyId,
+      loading,
+    }),
+  );
 
   const perform = async ({
     optimistic,

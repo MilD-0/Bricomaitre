@@ -10,8 +10,12 @@ import {
   Check,
   MessageSquarePlus,
   PackageSearch,
+  RotateCcw,
   ShoppingCart,
   Sparkles,
+  Square,
+  ThumbsDown,
+  ThumbsUp,
 } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 
@@ -27,7 +31,10 @@ import {
 import { triggerHaptic } from '@/lib/haptics';
 import { formatProductPrice } from '@/lib/product-presentation';
 import { addCartItem, readCart, writeCart } from '@/lib/cart';
-import { classifyShoppingAssistantIntent } from '@/lib/shopping-assistant';
+import {
+  buildShoppingAssistantPageContext,
+  classifyShoppingAssistantIntent,
+} from '@/lib/shopping-assistant';
 import { consumeShoppingAssistantResponse } from '@/lib/shopping-assistant-stream';
 
 export type ShoppingAssistantLabels = {
@@ -40,6 +47,9 @@ export type ShoppingAssistantLabels = {
   welcomeDescription: string;
   placeholder: string;
   send: string;
+  stop: string;
+  stopped: string;
+  retry: string;
   thinking: string;
   error: string;
   rateLimited: string;
@@ -50,6 +60,8 @@ export type ShoppingAssistantLabels = {
   viewProduct: string;
   addToCart?: string;
   addedToCart?: string;
+  helpful: string;
+  notHelpful: string;
   inputLabel: string;
   quickPrompts: string[];
 };
@@ -60,6 +72,7 @@ type ChatEntry = {
   content: string;
   products?: ShoppingAssistantProduct[];
   mode?: ShoppingAssistantResponse['mode'];
+  feedback?: 'helpful' | 'not_helpful';
 };
 
 const chatStoragePrefix = 'bricomaitre-shopping-assistant-chat-v1';
@@ -77,6 +90,13 @@ function isStoredProduct(value: unknown): value is ShoppingAssistantProduct {
     nullableString(product.titleAr) &&
     nullableString(product.description) &&
     nullableString(product.descriptionAr) &&
+    (product.sku === undefined || nullableString(product.sku)) &&
+    (product.characteristics === undefined ||
+      (Array.isArray(product.characteristics) &&
+        product.characteristics.every((value) => typeof value === 'string'))) &&
+    (product.characteristicsAr === undefined ||
+      (Array.isArray(product.characteristicsAr) &&
+        product.characteristicsAr.every((value) => typeof value === 'string'))) &&
     nullableString(product.price) &&
     nullableString(product.oldPrice) &&
     typeof product.inStock === 'boolean' &&
@@ -89,7 +109,7 @@ function isStoredProduct(value: unknown): value is ShoppingAssistantProduct {
 
 function storedEntries(value: unknown): ChatEntry[] {
   if (!Array.isArray(value)) return [];
-  return value.slice(-20).flatMap((entry): ChatEntry[] => {
+  return value.slice(-40).flatMap((entry): ChatEntry[] => {
     if (!entry || typeof entry !== 'object') return [];
     const candidate = entry as Partial<ChatEntry>;
     if (
@@ -98,12 +118,25 @@ function storedEntries(value: unknown): ChatEntry[] {
       typeof candidate.content !== 'string' ||
       candidate.content.length === 0 ||
       candidate.content.length > 4_000 ||
+      (candidate.feedback !== undefined &&
+        candidate.feedback !== 'helpful' &&
+        candidate.feedback !== 'not_helpful') ||
       (candidate.mode !== undefined && candidate.mode !== 'ai' && candidate.mode !== 'fallback') ||
       (candidate.products !== undefined &&
         (!Array.isArray(candidate.products) || !candidate.products.every(isStoredProduct)))
     )
       return [];
-    return [candidate as ChatEntry];
+    return [
+      {
+        ...candidate,
+        products: candidate.products?.map((product) => ({
+          ...product,
+          sku: product.sku ?? null,
+          characteristics: product.characteristics ?? [],
+          characteristicsAr: product.characteristicsAr ?? [],
+        })),
+      } as ChatEntry,
+    ];
   });
 }
 
@@ -209,10 +242,12 @@ function ProductResult({
 export function ShoppingAssistantPanel({
   locale,
   labels,
+  pathname,
   onClose,
 }: {
   locale: Locale;
   labels: ShoppingAssistantLabels;
+  pathname?: string;
   onClose: () => void;
 }) {
   const inputId = useId();
@@ -223,6 +258,8 @@ export function ShoppingAssistantPanel({
   const [error, setError] = useState<string | null>(null);
   const [storageReady, setStorageReady] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const activeRequestRef = useRef<AbortController | null>(null);
+  const silentAbortRef = useRef(false);
 
   useEffect(() => {
     const storageKey = `${chatStoragePrefix}:${locale}`;
@@ -243,7 +280,7 @@ export function ShoppingAssistantPanel({
     const storageKey = `${chatStoragePrefix}:${locale}`;
     try {
       if (messages.length > 0)
-        localStorage.setItem(storageKey, JSON.stringify(messages.slice(-20)));
+        localStorage.setItem(storageKey, JSON.stringify(messages.slice(-40)));
       else localStorage.removeItem(storageKey);
     } catch {
       // Browser storage is optional; the assistant must remain usable without it.
@@ -254,11 +291,26 @@ export function ShoppingAssistantPanel({
     endRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [messages, pending]);
 
-  async function sendMessage(content: string) {
+  useEffect(
+    () => () => {
+      silentAbortRef.current = true;
+      activeRequestRef.current?.abort();
+    },
+    [],
+  );
+
+  async function sendMessage(
+    content: string,
+    history = messages,
+    analyticsTarget: 'submitted' | 'retry' = 'submitted',
+  ) {
     const normalized = content.trim();
     if (!normalized || pending) return;
     const userEntry: ChatEntry = { id: crypto.randomUUID(), role: 'user', content: normalized };
-    const nextMessages = [...messages, userEntry];
+    const nextMessages = [...history, userEntry];
+    const controller = new AbortController();
+    silentAbortRef.current = false;
+    activeRequestRef.current = controller;
     setMessages(nextMessages);
     setDraft('');
     setError(null);
@@ -269,9 +321,10 @@ export function ShoppingAssistantPanel({
     void trackNavigationEvent({
       eventName: 'ai_assistant_message',
       locale,
+      searchTerm: normalized,
       metadata: {
         surface: 'ai_assistant',
-        target: 'submitted',
+        target: analyticsTarget,
         intent: classifyShoppingAssistantIntent(normalized),
       },
     });
@@ -281,21 +334,28 @@ export function ShoppingAssistantPanel({
       const intent = classifyShoppingAssistantIntent(normalized);
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
+        signal: controller.signal,
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           locale,
+          context: buildShoppingAssistantPageContext(
+            pathname ?? window.location.pathname,
+            new URLSearchParams(window.location.search),
+            readCart(window.localStorage),
+          ),
           telemetry:
             identity.journeyId && identity.sessionId
               ? {
                   journeyId: identity.journeyId,
                   sessionId: identity.sessionId,
-                  pagePath: window.location.pathname,
+                  pagePath: pathname ?? window.location.pathname,
                   intent,
                 }
               : undefined,
-          messages: nextMessages.slice(-8).map(({ role, content: message }) => ({
+          messages: nextMessages.slice(-30).map(({ role, content: message, products }) => ({
             role,
             content: message.slice(0, 1_500),
+            productIds: products?.map((product) => product.id),
           })),
         }),
       });
@@ -327,6 +387,12 @@ export function ShoppingAssistantPanel({
         },
       });
     } catch (cause) {
+      if (controller.signal.aborted) {
+        if (!silentAbortRef.current) {
+          setError(labels.stopped);
+        }
+        return;
+      }
       const code =
         cause instanceof Error && cause.message === 'rate_limited' ? 'rate_limited' : 'unavailable';
       setError(code === 'rate_limited' ? labels.rateLimited : labels.error);
@@ -336,6 +402,7 @@ export function ShoppingAssistantPanel({
         metadata: { surface: 'ai_assistant', target: code },
       });
     } finally {
+      if (activeRequestRef.current === controller) activeRequestRef.current = null;
       setPending(false);
       setReceivingText(false);
     }
@@ -350,6 +417,42 @@ export function ShoppingAssistantPanel({
     setMessages([]);
     setDraft('');
     setError(null);
+  }
+
+  function stopGeneration() {
+    activeRequestRef.current?.abort();
+  }
+
+  function retryLastMessage() {
+    let userIndex = -1;
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index]?.role === 'user') {
+        userIndex = index;
+        break;
+      }
+    }
+    const userMessage = messages[userIndex];
+    if (!userMessage) return;
+    setError(null);
+    void sendMessage(userMessage.content, messages.slice(0, userIndex), 'retry');
+  }
+
+  function rateMessage(message: ChatEntry, rating: 'helpful' | 'not_helpful') {
+    setMessages((current) =>
+      current.map((entry) => (entry.id === message.id ? { ...entry, feedback: rating } : entry)),
+    );
+    void triggerHaptic('control');
+    void trackNavigationEvent({
+      eventName: 'ai_assistant_feedback',
+      locale,
+      searchTerm: message.content,
+      metadata: {
+        surface: 'ai_assistant',
+        target: 'assistant_response',
+        messageId: message.id,
+        rating,
+      },
+    });
   }
 
   return (
@@ -390,9 +493,15 @@ export function ShoppingAssistantPanel({
             disabled={pending}
             autoComplete="off"
           />
-          <button type="submit" aria-label={labels.send} disabled={pending || !draft.trim()}>
-            <ArrowUp aria-hidden="true" size={19} />
-          </button>
+          {pending ? (
+            <button type="button" aria-label={labels.stop} onClick={stopGeneration}>
+              <Square aria-hidden="true" size={15} fill="currentColor" />
+            </button>
+          ) : (
+            <button type="submit" aria-label={labels.send} disabled={!draft.trim()}>
+              <ArrowUp aria-hidden="true" size={19} />
+            </button>
+          )}
         </form>
       }
     >
@@ -445,6 +554,28 @@ export function ShoppingAssistantPanel({
                     ))}
                   </div>
                 ) : null}
+                {message.role === 'assistant' &&
+                message.content &&
+                (!pending || message.id !== messages.at(-1)?.id) ? (
+                  <div className="shopping-assistant-feedback">
+                    <button
+                      type="button"
+                      aria-label={labels.helpful}
+                      aria-pressed={message.feedback === 'helpful'}
+                      onClick={() => rateMessage(message, 'helpful')}
+                    >
+                      <ThumbsUp aria-hidden="true" size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={labels.notHelpful}
+                      aria-pressed={message.feedback === 'not_helpful'}
+                      onClick={() => rateMessage(message, 'not_helpful')}
+                    >
+                      <ThumbsDown aria-hidden="true" size={13} />
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </article>
           ))}
@@ -457,9 +588,13 @@ export function ShoppingAssistantPanel({
             </div>
           ) : null}
           {error ? (
-            <p className="shopping-assistant-error" role="alert">
-              {error}
-            </p>
+            <div className="shopping-assistant-error" role="alert">
+              <p>{error}</p>
+              <button type="button" onClick={retryLastMessage}>
+                <RotateCcw aria-hidden="true" size={13} />
+                {labels.retry}
+              </button>
+            </div>
           ) : null}
           <div ref={endRef} />
         </div>

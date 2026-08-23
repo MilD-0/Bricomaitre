@@ -45,6 +45,7 @@ import { Spinner } from '../ui/spinner';
 import { Switch } from '../ui/switch';
 import { ThemeToggle } from '../theme-toggle';
 import { AdminAiChat } from '../admin-ai-chat';
+import { AdminAiSurfaceProvider } from '../admin-ai-surface-context';
 
 function getRoleDisplayLabel(
   role: Role,
@@ -289,7 +290,7 @@ export function AppShell({
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <AdminAiSurfaceProvider className="min-h-screen bg-background text-foreground">
       <AnimatePresence>
         {sidebarOpen ? (
           <motion.button
@@ -552,8 +553,8 @@ export function AppShell({
           </div>
         </DialogContent>
       </Dialog>
-      {initialIsAllowed ? <AdminAiChat /> : null}
-    </div>
+      {initialIsAllowed ? <AdminAiChat permissions={permissions} /> : null}
+    </AdminAiSurfaceProvider>
   );
 }
 

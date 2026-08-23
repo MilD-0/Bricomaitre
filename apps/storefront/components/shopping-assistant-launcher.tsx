@@ -27,7 +27,6 @@ export function ShoppingAssistantLauncher({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  if (/\/(checkout|thank-you)(?:\/|$)/.test(pathname)) return null;
   const isProductDetail = /\/products\/[^/]+\/?$/.test(pathname);
 
   function showAssistant() {
@@ -60,7 +59,12 @@ export function ShoppingAssistantLauncher({
           <span>{labels.open}</span>
         </button>
       ) : (
-        <ShoppingAssistantPanel locale={locale} labels={labels} onClose={() => setOpen(false)} />
+        <ShoppingAssistantPanel
+          locale={locale}
+          labels={labels}
+          pathname={pathname}
+          onClose={() => setOpen(false)}
+        />
       )}
     </>
   );

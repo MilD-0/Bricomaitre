@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
 
-import { analytics2QuerySchema, getAnalytics2Data } from '../../../lib/analytics2';
-import { requireAnalyticsAccess } from '../../../lib/rbac';
+import { analytics2QuerySchema, getAnalytics2StorefrontDetails } from '../../../../lib/analytics2';
+import { requireAnalyticsAccess } from '../../../../lib/rbac';
 
 export async function GET(request: NextRequest) {
   const denied = await requireAnalyticsAccess();
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   }
 
   const parsed = analytics2QuerySchema.safeParse({
-    view: request.nextUrl.searchParams.get('view') ?? undefined,
+    view: 'storefront',
     range: request.nextUrl.searchParams.get('range') ?? undefined,
     startDate: request.nextUrl.searchParams.get('startDate') ?? undefined,
     endDate: request.nextUrl.searchParams.get('endDate') ?? undefined,
@@ -24,15 +24,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const data = await getAnalytics2Data(parsed.data);
-  return NextResponse.json(
-    { data },
-    {
-      headers: {
-        'Cache-Control': 'private, max-age=30, stale-while-revalidate=120',
-        'Server-Timing': `analytics2;dur=${data.diagnostics.queryDurationMs}`,
-        'X-Analytics-Coverage': data.warnings.length ? 'partial' : 'complete',
-      },
-    },
-  );
+  const details = await getAnalytics2StorefrontDetails(parsed.data);
+  return NextResponse.json(details, {
+    headers: { 'Cache-Control': 'private, no-cache, must-revalidate' },
+  });
 }

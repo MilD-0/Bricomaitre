@@ -266,7 +266,7 @@ export function summarizeProfitTracker(
     (total, day) => total + (day.spendEur || 0) * (day.fxRateUsed || 0),
     0,
   );
-  const ratioAdCostDzd = completeDays.reduce(
+  const ratioAdCostDzd = days.reduce(
     (total, day) => total + (day.metrics.adCostDzd || 0),
     0,
   );
@@ -275,17 +275,14 @@ export function summarizeProfitTracker(
     (total, day) => total + (day.metrics.adjustedProfitDzd || 0),
     0,
   );
-  const netProfitDzd = completeDays.reduce(
-    (total, day) => total + (day.metrics.netProfitDzd || 0),
-    0,
-  );
-  const confirmedOrders = completeDays.reduce(
+  const netProfitDzd = adjustedProfitDzd - ratioAdCostDzd;
+  const confirmedOrders = days.reduce(
     (total, day) => total + (day.confirmedOrders || 0),
     0,
   );
-  const fbPurchases = completeDays.reduce((total, day) => total + (day.fbPurchases || 0), 0);
-  const linkClicks = completeDays.reduce((total, day) => total + (day.linkClicks || 0), 0);
-  const landingPageViews = completeDays.reduce(
+  const fbPurchases = days.reduce((total, day) => total + (day.fbPurchases || 0), 0);
+  const linkClicks = days.reduce((total, day) => total + (day.linkClicks || 0), 0);
+  const landingPageViews = days.reduce(
     (total, day) => total + (day.landingPageViews || 0),
     0,
   );

@@ -9,6 +9,7 @@ const summaryKeys = [
   'processed',
   'total',
   'applied',
+  'autoApplyFailed',
   'proposed',
   'unchanged',
   'skipped',
@@ -54,6 +55,11 @@ export function formatAiTaskTerminalMessage(input: {
   if (typeof summary.proposed === 'number' && summary.proposed > 0) {
     lines.push(
       `${summary.proposed} proposal${summary.proposed === 1 ? ' is' : 's are'} awaiting review and ${summary.proposed === 1 ? 'has' : 'have'} not been applied.`,
+    );
+  }
+  if (typeof summary.autoApplyFailed === 'number' && summary.autoApplyFailed > 0) {
+    lines.push(
+      `${summary.autoApplyFailed} automatic application attempt${summary.autoApplyFailed === 1 ? '' : 's'} encountered a live-record conflict or verification failure; the proposal${summary.autoApplyFailed === 1 ? ' remains' : 's remain'} pending for review.`,
     );
   }
   if (input.status === 'completed' && summary.complete !== true && 'complete' in summary) {

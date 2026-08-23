@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { asc, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { roleDefinitions, userAccessGrants } from '@bric/db/schema';
+import { userAccessGrants } from '@bric/db/schema';
 import { mutateEntityWithHistory } from '../../../../lib/action-history';
+import { loadAdministrationAccessGrants } from '../../../../lib/admin-administration-data';
 import { auth } from '../../../../lib/auth';
 import { userAccessGrantFormSchema } from '../../../../lib/permissions';
 import { isConfiguredPrivilegedEmail } from '../../../../lib/role-config';
@@ -17,28 +18,6 @@ function isReservedPrivilegedEmail(email: string) {
   return isConfiguredPrivilegedEmail(normalizeEmail(email));
 }
 
-async function loadAccessGrants() {
-  const db = getDb();
-  const [grants, customRoles] = await Promise.all([
-    db.select().from(userAccessGrants).orderBy(asc(userAccessGrants.email)),
-    db
-      .select({ id: roleDefinitions.id, name: roleDefinitions.name })
-      .from(roleDefinitions)
-      .orderBy(asc(roleDefinitions.name)),
-  ]);
-
-  return {
-    items: grants.map((grant) => ({
-      ...grant,
-      roleLabel: grant.roleDefinitionId
-        ? (customRoles.find((role) => role.id === grant.roleDefinitionId)?.name ?? null)
-        : null,
-    })),
-    availableBuiltInRoles: ['viewer', 'employee'] as const,
-    availableCustomRoles: customRoles,
-  };
-}
-
 export async function GET() {
   const denied = await requireSettingsAccess();
   if (denied) {
@@ -49,7 +28,7 @@ export async function GET() {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
 
-  return NextResponse.json(await loadAccessGrants());
+  return NextResponse.json(await loadAdministrationAccessGrants());
 }
 
 export async function POST(req: NextRequest) {

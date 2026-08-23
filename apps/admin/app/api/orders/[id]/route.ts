@@ -35,6 +35,7 @@ import {
   orderPatchSchema,
 } from '../../../../lib/orders';
 import { requireMutationAccess } from '../../../../lib/rbac';
+import { triggerAdminReportingRefresh } from '../../../../lib/reporting-refresh-trigger';
 import { getOrderProductLookup, toOrderRecord } from '../route-shared';
 
 function isBlank(value: string | null | undefined) {
@@ -342,6 +343,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   }
   const productLookup = await getOrderProductLookup(db, [updated]);
+  await triggerAdminReportingRefresh('order-update');
 
   return NextResponse.json({
     ok: true,
@@ -390,6 +392,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     actor,
     execute: (tx) => tx.delete(orders).where(eq(orders.id, numericId)),
   });
+  await triggerAdminReportingRefresh('order-delete');
 
   return NextResponse.json({ ok: true });
 }

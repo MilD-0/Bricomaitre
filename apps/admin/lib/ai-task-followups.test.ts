@@ -47,4 +47,22 @@ describe('AI task terminal follow-ups', () => {
       }),
     ).toContain('Error: Provider unavailable');
   });
+
+  it('makes automatic application conflicts visible while keeping proposals pending', () => {
+    const message = formatAiTaskTerminalMessage({
+      jobId: 'job-4',
+      kind: 'ai-product-categorization',
+      status: 'completed',
+      summary: {
+        applied: 8,
+        proposed: 2,
+        autoApplyFailed: 2,
+        complete: true,
+      },
+    });
+
+    expect(message).toContain('autoApplyFailed: 2');
+    expect(message).toContain('encountered a live-record conflict or verification failure');
+    expect(message).toContain('proposals remain pending for review');
+  });
 });

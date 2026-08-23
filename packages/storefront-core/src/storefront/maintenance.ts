@@ -107,7 +107,7 @@ export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Da
           and occurred_at < ((${day}::date + 1)::timestamp at time zone 'UTC')
           and event_name in (
             'ai_assistant_open', 'ai_assistant_message', 'ai_assistant_result_click',
-            'ai_assistant_error', 'ai_assistant_run'
+            'ai_assistant_feedback', 'ai_assistant_error', 'ai_assistant_run'
           )
       ) members
       on conflict (day, metric, dimension_key, member_id) do nothing
@@ -206,7 +206,8 @@ export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Da
     await tx.execute(sql`
       insert into ${analyticsAiDailyRollups} (
         day, dimension, dimension_key, opens, messages, result_clicks, errors,
-        runs, completed, failed, input_tokens, output_tokens, total_tokens,
+        runs, completed, failed, cancelled, helpful, not_helpful,
+        input_tokens, output_tokens, total_tokens,
         duration_ms_total, duration_samples, tool_calls, updated_at
       )
       select ${day}::date, 'overall', '',
@@ -217,6 +218,9 @@ export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Da
         count(*) filter (where event_name = 'ai_assistant_run')::int,
         count(*) filter (where event_name = 'ai_assistant_run' and metadata->>'status' = 'completed')::int,
         count(*) filter (where event_name = 'ai_assistant_run' and metadata->>'status' = 'failed')::int,
+        count(*) filter (where event_name = 'ai_assistant_run' and metadata->>'status' = 'cancelled')::int,
+        count(*) filter (where event_name = 'ai_assistant_feedback' and metadata->>'rating' = 'helpful')::int,
+        count(*) filter (where event_name = 'ai_assistant_feedback' and metadata->>'rating' = 'not_helpful')::int,
         coalesce(sum(case when event_name = 'ai_assistant_run' and metadata->>'inputTokens' ~ '^[0-9]+$' then (metadata->>'inputTokens')::int else 0 end), 0)::int,
         coalesce(sum(case when event_name = 'ai_assistant_run' and metadata->>'outputTokens' ~ '^[0-9]+$' then (metadata->>'outputTokens')::int else 0 end), 0)::int,
         coalesce(sum(case when event_name = 'ai_assistant_run' and metadata->>'totalTokens' ~ '^[0-9]+$' then (metadata->>'totalTokens')::int else 0 end), 0)::int,
@@ -229,14 +233,14 @@ export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Da
         and occurred_at < ((${day}::date + 1)::timestamp at time zone 'UTC')
         and event_name in (
           'ai_assistant_open', 'ai_assistant_message', 'ai_assistant_result_click',
-          'ai_assistant_error', 'ai_assistant_run'
+          'ai_assistant_feedback', 'ai_assistant_error', 'ai_assistant_run'
         )
       on conflict (day, dimension, dimension_key) do nothing
     `);
 
     await tx.execute(sql`
       insert into ${analyticsAiDailyRollups} (
-        day, dimension, dimension_key, messages, runs, completed, failed,
+        day, dimension, dimension_key, messages, runs, completed, failed, cancelled,
         input_tokens, output_tokens, total_tokens, duration_ms_total,
         duration_samples, tool_calls, updated_at
       )
@@ -245,6 +249,7 @@ export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Da
         count(*) filter (where event_name = 'ai_assistant_run')::int,
         count(*) filter (where event_name = 'ai_assistant_run' and metadata->>'status' = 'completed')::int,
         count(*) filter (where event_name = 'ai_assistant_run' and metadata->>'status' = 'failed')::int,
+        count(*) filter (where event_name = 'ai_assistant_run' and metadata->>'status' = 'cancelled')::int,
         coalesce(sum(case when metadata->>'inputTokens' ~ '^[0-9]+$' then (metadata->>'inputTokens')::int else 0 end), 0)::int,
         coalesce(sum(case when metadata->>'outputTokens' ~ '^[0-9]+$' then (metadata->>'outputTokens')::int else 0 end), 0)::int,
         coalesce(sum(case when metadata->>'totalTokens' ~ '^[0-9]+$' then (metadata->>'totalTokens')::int else 0 end), 0)::int,
@@ -262,13 +267,14 @@ export async function rollUpNextExpiredAnalyticsDay(db: Database, { now = new Da
 
     await tx.execute(sql`
       insert into ${analyticsAiDailyRollups} (
-        day, dimension, dimension_key, runs, completed, failed, input_tokens,
+        day, dimension, dimension_key, runs, completed, failed, cancelled, input_tokens,
         output_tokens, total_tokens, duration_ms_total, duration_samples, tool_calls, updated_at
       )
       select ${day}::date, 'model', coalesce(nullif(metadata->>'model', ''), 'unknown'),
         count(*)::int,
         count(*) filter (where metadata->>'status' = 'completed')::int,
         count(*) filter (where metadata->>'status' = 'failed')::int,
+        count(*) filter (where metadata->>'status' = 'cancelled')::int,
         coalesce(sum(case when metadata->>'inputTokens' ~ '^[0-9]+$' then (metadata->>'inputTokens')::int else 0 end), 0)::int,
         coalesce(sum(case when metadata->>'outputTokens' ~ '^[0-9]+$' then (metadata->>'outputTokens')::int else 0 end), 0)::int,
         coalesce(sum(case when metadata->>'totalTokens' ~ '^[0-9]+$' then (metadata->>'totalTokens')::int else 0 end), 0)::int,
@@ -791,6 +797,10 @@ export async function deleteExpiredAnalyticsEventsBatch(
             then ${errorCutoff}::timestamptz
           else ${cutoff}::timestamptz
         end
+        and ${analyticsEvents.eventName} not in (
+          'ai_assistant_open', 'ai_assistant_message', 'ai_assistant_result_click',
+          'ai_assistant_feedback', 'ai_assistant_error', 'ai_assistant_run'
+        )
         and exists (
           select 1 from ${analyticsDailyRollups} rollup
           where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
@@ -819,6 +829,14 @@ export async function deleteExpiredAnalyticsSessionsBatch(
       select ${analyticsSessions.id}
       from ${analyticsSessions}
       where ${analyticsSessions.lastSeenAt} < ${cutoff}
+        and not exists (
+          select 1 from ${analyticsEvents}
+          where ${analyticsEvents.sessionId} = ${analyticsSessions.id}
+            and ${analyticsEvents.eventName} in (
+              'ai_assistant_open', 'ai_assistant_message', 'ai_assistant_result_click',
+              'ai_assistant_feedback', 'ai_assistant_error', 'ai_assistant_run'
+            )
+        )
         and exists (
           select 1 from ${analyticsAcquisitionDailyRollups} rollup
           where rollup.day = (${analyticsSessions.startedAt} at time zone 'UTC')::date

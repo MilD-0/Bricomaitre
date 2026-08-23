@@ -314,8 +314,6 @@ describe('Meta Ads Insights ingestion', () => {
     expect(updateWhere).toHaveBeenCalledOnce();
     expect(refreshAnalytics2FactsMock).toHaveBeenCalledWith({
       db,
-      startDate: '2026-08-16',
-      endDate: '2026-08-17',
       now: new Date('2026-08-17T00:00:00.000Z'),
     });
   });

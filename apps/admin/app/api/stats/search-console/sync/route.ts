@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     const result = await syncSearchConsole({
       since: parsed.data.since,
       until: parsed.data.until,
-      trigger: 'analytics2',
+      trigger: 'stats',
       inspectionLimit: 10,
     });
     return NextResponse.json({ result });

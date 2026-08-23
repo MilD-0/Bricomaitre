@@ -1,14 +1,19 @@
 import { NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getSettingsMock, updateSettingsMock, requireOpsMock, requireMutationMock } = vi.hoisted(
+const { getSettingsMock, updateSettingsMock, refreshFactsMock, requireOpsMock, requireMutationMock } = vi.hoisted(
   () => ({
     getSettingsMock: vi.fn(),
     updateSettingsMock: vi.fn(),
+    refreshFactsMock: vi.fn(),
     requireOpsMock: vi.fn(),
     requireMutationMock: vi.fn(),
   }),
 );
+
+vi.mock('../../../../../lib/analytics2-facts', () => ({
+  refreshAnalytics2FactsAfterMutation: refreshFactsMock,
+}));
 
 vi.mock('@bric/db/client', () => ({ hasDb: () => true }));
 vi.mock('../../../../../lib/rbac', () => ({
@@ -35,6 +40,7 @@ describe('profit tracker settings route', () => {
     requireMutationMock.mockResolvedValue(null);
     getSettingsMock.mockResolvedValue({ fxRate: 280, defaultReturnRate: 10, restFrom: null });
     updateSettingsMock.mockImplementation(async (value) => value);
+    refreshFactsMock.mockResolvedValue(true);
   });
 
   it('reads settings with operations access', async () => {
@@ -56,6 +62,7 @@ describe('profit tracker settings route', () => {
     expect(response.status).toBe(200);
     expect(requireMutationMock).toHaveBeenCalledWith('stats');
     expect(updateSettingsMock).toHaveBeenCalledWith(input);
+    expect(refreshFactsMock).toHaveBeenCalledOnce();
   });
 
   it('rejects an invalid FX rate', async () => {

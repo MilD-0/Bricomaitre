@@ -109,6 +109,7 @@ export const storefrontAnalyticsEventNameSchema = z.enum([
   'ai_assistant_open',
   'ai_assistant_message',
   'ai_assistant_result_click',
+  'ai_assistant_feedback',
   'ai_assistant_error',
   'ai_assistant_run',
 ]);
@@ -138,7 +139,7 @@ export const storefrontAnalyticsEventSchema = z.object({
   brandId: nullablePositiveInt,
   brandSlug: nullableTrimmedString(180),
   orderId: nullablePositiveInt,
-  searchTerm: nullableTrimmedString(250),
+  searchTerm: nullableTrimmedString(1500),
   quantity: nullablePositiveInt,
   value: nullablePositiveNumber,
   currency: z.string().trim().min(1).max(12).default('DZD'),
