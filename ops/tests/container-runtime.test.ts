@@ -387,6 +387,23 @@ describe('production packaging and release runtime', () => {
     expect(storefrontStart).toBeGreaterThan(storefrontPull);
   });
 
+  it('rebuilds persisted reporting with the candidate artifact before cutover', () => {
+    const deploy = readFileSync(resolve(workspaceRoot, 'ops/scripts/deploy.sh'), 'utf8');
+    const migrationImage = readFileSync(
+      resolve(workspaceRoot, 'ops/docker/Dockerfile.admin'),
+      'utf8',
+    );
+    const workerHealth = deploy.indexOf('wait-for-health.sh" "$worker_service"');
+    const refresh = deploy.indexOf('refresh-release-reporting.sh" "$target_slot"');
+    const routing = deploy.indexOf('routing_changed=true');
+
+    expect(migrationImage).toContain('refresh-release-reporting.cjs');
+    expect(migrationImage).toContain('refresh-reporting) node');
+    expect(workerHealth).toBeGreaterThan(-1);
+    expect(refresh).toBeGreaterThan(workerHealth);
+    expect(refresh).toBeLessThan(routing);
+  });
+
   it('restores failed candidates and rolls back to an explicit verified release', () => {
     const deploy = readFileSync(resolve(workspaceRoot, 'ops/scripts/deploy.sh'), 'utf8');
     const rollback = readFileSync(resolve(workspaceRoot, 'ops/scripts/rollback.sh'), 'utf8');

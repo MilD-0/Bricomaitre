@@ -29,7 +29,7 @@ describe('storefront Next configuration', () => {
         formats: ['image/webp'],
         qualities: [60, 75],
         maximumDiskCacheSize: 512_000_000,
-        maximumResponseBody: 10_000_000,
+        maximumResponseBody: 10 * 1024 * 1024,
         maximumRedirects: 0,
         remotePatterns: [expect.objectContaining({ hostname: 'cdn.example.com' })],
       },

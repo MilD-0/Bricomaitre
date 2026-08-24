@@ -399,7 +399,6 @@ describe('real PostgreSQL and Redis contracts', () => {
           paidOrders: 0,
           submittedValueDzd: 8000,
         },
-        sync: null,
       });
 
       const afterRetention = new Date(capturedAt.getTime() + 8 * 24 * 60 * 60 * 1_000);

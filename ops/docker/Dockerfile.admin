@@ -156,11 +156,13 @@ COPY --chown=bric:bric ops/ownership/NOTICE ./NOTICE
 COPY --chown=bric:bric ops/ownership/SECURITY.md ./SECURITY.md
 COPY --from=build --chown=bric:bric /workspace/apps/admin/dist/run-db-migrations.cjs ./apps/admin/dist/run-db-migrations.cjs
 COPY --from=build --chown=bric:bric /workspace/apps/admin/dist/verify-db-migrations.cjs ./apps/admin/dist/verify-db-migrations.cjs
+COPY --from=build --chown=bric:bric /workspace/apps/admin/dist/refresh-release-reporting.cjs ./apps/admin/dist/refresh-release-reporting.cjs
 COPY --from=build --chown=bric:bric /workspace/apps/admin/drizzle ./drizzle
 RUN node --check apps/admin/dist/run-db-migrations.cjs \
   && node --check apps/admin/dist/verify-db-migrations.cjs \
+  && node --check apps/admin/dist/refresh-release-reporting.cjs \
   && find /app -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.ts' -o -name '*.tsx' \) -delete
 
 USER bric
 
-CMD ["sh", "-lc", "case \"${ADMIN_DB_TASK:-verify}\" in verify) node apps/admin/dist/verify-db-migrations.cjs ;; migrate) node apps/admin/dist/run-db-migrations.cjs ;; *) echo \"unsupported ADMIN_DB_TASK: ${ADMIN_DB_TASK}\" >&2; exit 1 ;; esac"]
+CMD ["sh", "-lc", "case \"${ADMIN_DB_TASK:-verify}\" in verify) node apps/admin/dist/verify-db-migrations.cjs ;; migrate) node apps/admin/dist/run-db-migrations.cjs ;; refresh-reporting) node apps/admin/dist/refresh-release-reporting.cjs ;; *) echo \"unsupported ADMIN_DB_TASK: ${ADMIN_DB_TASK}\" >&2; exit 1 ;; esac"]

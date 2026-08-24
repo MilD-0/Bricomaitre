@@ -9,6 +9,7 @@ import {
   getAiUsagePricing,
   estimateAdminAiModelCost,
   mapLiveAdminAiStats,
+  resolveRawWebsiteFilters,
 } from './stats-experience';
 
 describe('experience stats SQL', () => {
@@ -55,6 +56,26 @@ describe('experience stats SQL', () => {
       expect(query.params).toEqual(expect.arrayContaining([...CUSTOMER_SUCCESSFUL_ORDER_STATUSES]));
       expect(query.params).not.toEqual(expect.arrayContaining([6, 8, 9]));
     }
+  });
+});
+
+describe('experience stats raw-event window', () => {
+  it('uses the latest seven reporting days for an open all-time range', () => {
+    expect(
+      resolveRawWebsiteFilters(
+        { startDate: '', endDate: '' },
+        new Date('2026-08-24T23:30:00.000Z'),
+      ),
+    ).toEqual({ startDate: '2026-08-19', endDate: '' });
+  });
+
+  it('does not widen an explicitly narrower range', () => {
+    expect(
+      resolveRawWebsiteFilters(
+        { startDate: '2026-08-22', endDate: '2026-08-24' },
+        new Date('2026-08-24T12:00:00.000Z'),
+      ),
+    ).toEqual({ startDate: '2026-08-22', endDate: '2026-08-24' });
   });
 });
 
