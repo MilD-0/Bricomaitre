@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, lte } from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
 import { aiProposals } from '@bric/db/schema';
@@ -18,6 +18,7 @@ export type AiProposalReviewTarget = {
 };
 
 export class AiProposalReviewNotFoundError extends Error {}
+export class AiProposalExpiredDeletionConflictError extends Error {}
 
 export function aiProposalReviewResource(target: AiProposalReviewTarget): AiProposalReviewResource {
   if (target.proposalType === 'featured_products' || target.proposalType === 'landing_page') {
@@ -70,6 +71,25 @@ export async function executeAiProposalReview(input: {
     actorId: input.actor.email,
     actorName: input.actor.name,
   });
+}
+
+export async function deleteExpiredAiProposal(proposalId: number, now = new Date()) {
+  const [deleted] = await getDb()
+    .delete(aiProposals)
+    .where(
+      and(
+        eq(aiProposals.id, proposalId),
+        eq(aiProposals.status, 'proposed'),
+        lte(aiProposals.expiresAt, now),
+      ),
+    )
+    .returning({ id: aiProposals.id });
+  if (!deleted) {
+    throw new AiProposalExpiredDeletionConflictError(
+      'Only expired pending proposals can be deleted.',
+    );
+  }
+  return deleted;
 }
 
 export async function refreshAppliedAiProposalConsumers(trigger = 'ai-product-content:apply') {

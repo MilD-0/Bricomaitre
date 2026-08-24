@@ -17,6 +17,7 @@ import {
   categoriesListResponseSchema,
 } from '../../lib/brands-categories';
 import { toast } from '../../lib/toast';
+import { AdminAiAskButton } from '../admin-ai-ask-button';
 import { Button } from '../ui/button';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Checkbox } from '../ui/checkbox';
@@ -318,6 +319,7 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
       <WorkspaceHeader>
         <WorkspaceHeading title={viewTitle} meta={data.pagination.totalItems} />
         <WorkspaceActions>
+          <AdminAiAskButton />
           <Button
             type="button"
             disabled={!data.writable || pending}

@@ -648,6 +648,7 @@ describe('lib/ecotrack', () => {
     );
 
     expect(summary).toMatchObject({
+      provider: 'delivro',
       totalRequested: 1,
       eligible: 1,
       created: 1,

@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { getDb, hasDb } from '@bric/db/client';
+import { hasDb } from '@bric/db/client';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { aiProposals } from '@bric/db/schema';
-import { and, eq, lte } from 'drizzle-orm';
 import { AiAdminCapabilityError } from '../../../../../lib/ai-admin-capabilities';
 import {
   AiContentNotFoundError,
@@ -19,7 +17,9 @@ import { auth } from '../../../../../lib/auth';
 import { requireAppAccess, requireMutationAccess } from '../../../../../lib/rbac';
 import {
   AiProposalReviewNotFoundError,
+  AiProposalExpiredDeletionConflictError,
   aiProposalReviewResource,
+  deleteExpiredAiProposal,
   executeAiProposalReview,
   readAiProposalReviewTarget,
   refreshAppliedAiProposalConsumers,
@@ -80,7 +80,6 @@ export async function DELETE(
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
 
-  const db = getDb();
   let proposal;
   try {
     proposal = await readAiProposalReviewTarget(proposalId);
@@ -94,21 +93,10 @@ export async function DELETE(
   const mutationDenied = await requireMutationAccess(resource);
   if (mutationDenied) return mutationDenied;
 
-  const [deleted] = await db
-    .delete(aiProposals)
-    .where(
-      and(
-        eq(aiProposals.id, proposalId),
-        eq(aiProposals.status, 'proposed'),
-        lte(aiProposals.expiresAt, new Date()),
-      ),
-    )
-    .returning({ id: aiProposals.id });
-  if (!deleted) {
-    return NextResponse.json(
-      { error: 'Only expired pending proposals can be deleted.' },
-      { status: 409 },
-    );
+  try {
+    return NextResponse.json({ deleted: await deleteExpiredAiProposal(proposalId) });
+  } catch (error) {
+    if (!(error instanceof AiProposalExpiredDeletionConflictError)) throw error;
+    return NextResponse.json({ error: error.message }, { status: 409 });
   }
-  return NextResponse.json({ deleted });
 }

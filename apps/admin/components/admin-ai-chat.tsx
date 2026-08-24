@@ -34,7 +34,11 @@ import { consumeAdminAiChatResponse, type AdminAiChatStatus } from '../lib/admin
 import { localizedStatsUrl } from '../lib/analytics2-routes';
 import type { Analytics2View } from '../lib/analytics2';
 import { suggestionKeysForAdminAi } from '../lib/admin-ai-capabilities';
-import { adminAiToolActivityKey, adminAiToolPresentation } from '../lib/admin-ai-tool-presentation';
+import {
+  adminAiToolActivityKey,
+  adminAiToolMutatesApplication,
+  adminAiToolPresentation,
+} from '../lib/admin-ai-tool-presentation';
 import {
   adminAiMetricsFromUnknown,
   adminAiResultTables,
@@ -64,7 +68,7 @@ import { Spinner } from './ui/spinner';
 import { Switch } from './ui/switch';
 import { Textarea } from './ui/textarea';
 import { useAdminAiSurfaceContext } from './admin-ai-surface-context';
-import { ADMIN_AI_OPEN_EVENT } from '../lib/admin-ai-events';
+import { ADMIN_AI_OPEN_EVENT, notifyAdminAiMutation } from '../lib/admin-ai-events';
 
 type AnalyticsMetricResult = {
   key: string;
@@ -147,6 +151,8 @@ type ChatMessage = {
   analytics?: AnalyticsResult[];
   proposals?: Proposal[];
   results?: AdminAiToolResult[];
+  terminal?: boolean;
+  jobId?: string;
 };
 type ConversationSummary = {
   id: number;
@@ -165,6 +171,7 @@ type AiJob = {
   progress: { phase: string; current: number; total: number; percentage: number };
   errorMessage: string | null;
   resultSummary: Record<string, unknown> | null;
+  downloadPath: string | null;
 };
 type LandingPageGenerationPresentation = {
   status: 'completed' | 'partial-fallback' | 'full-fallback';
@@ -173,6 +180,7 @@ type LandingPageGenerationPresentation = {
   preservedSections: number;
   fallbackSections: number;
   skippedSections: number;
+  deletedSections: number;
   retryCount: number;
   reasoning: string | null;
   failures: Array<{ type: string | null; reason: string }>;
@@ -376,6 +384,11 @@ function queryLabel(value: string | undefined) {
   );
 }
 
+function safeAdminAiDownloadPath(value: string | null | undefined) {
+  if (!value) return null;
+  return value.startsWith('/') || /^https?:\/\//i.test(value) ? value : null;
+}
+
 function presentationFromUnknown(value: unknown) {
   return {
     analytics: resultFromUnknown(value),
@@ -386,6 +399,12 @@ function presentationFromUnknown(value: unknown) {
       (result) => result.toolName !== 'query_analytics',
     ),
   };
+}
+
+function notifyAdminAiToolMutations(results: readonly AdminAiToolResult[]) {
+  notifyAdminAiMutation(
+    results.map((result) => result.toolName).filter(adminAiToolMutatesApplication),
+  );
 }
 
 function hydrateChatMessage(
@@ -399,6 +418,8 @@ function hydrateChatMessage(
     role: message.role,
     content: message.content,
     feedback: message.feedback,
+    terminal: message.terminal,
+    jobId: message.jobId,
     ...presentationFromUnknown(message.toolResults),
   };
 }
@@ -470,9 +491,69 @@ function landingPageGenerationPresentation(
     preservedSections: count(stages.preservedSections),
     fallbackSections: count(stages.fallbackSections),
     skippedSections: count(stages.skippedSections),
+    deletedSections: count(stages.deletedSections),
     retryCount: count(stages.retryCount),
     reasoning: typeof generation?.reasoning === 'string' ? generation.reasoning : null,
     failures,
+  };
+}
+
+type EcotrackTerminalRow = {
+  orderId: number | null;
+  reference: string | null;
+  tracking: string | null;
+  message: string;
+};
+
+type EcotrackTerminalPresentation = {
+  provider: string | null;
+  attemptNumber: number;
+  retryCount: number;
+  successes: EcotrackTerminalRow[];
+  validationFailures: EcotrackTerminalRow[];
+  providerRejections: EcotrackTerminalRow[];
+  alreadyPosted: EcotrackTerminalRow[];
+  repairableOrderIds: number[];
+  retryableOrderIds: number[];
+};
+
+function ecotrackTerminalPresentation(
+  toolName: string,
+  output: unknown,
+): EcotrackTerminalPresentation | null {
+  if (toolName !== 'ecotrack_posting_terminal') return null;
+  const record = objectValue(output);
+  if (record?.kind !== 'ecotrack_posting_terminal') return null;
+  const rows = (value: unknown) =>
+    Array.isArray(value)
+      ? value.flatMap((item) => {
+          const row = objectValue(item);
+          if (!row || typeof row.message !== 'string') return [];
+          return [
+            {
+              orderId: typeof row.orderId === 'number' ? row.orderId : null,
+              reference: typeof row.reference === 'string' ? row.reference : null,
+              tracking: typeof row.tracking === 'string' ? row.tracking : null,
+              message: row.message,
+            },
+          ];
+        })
+      : [];
+  const orderIds = (value: unknown) =>
+    Array.isArray(value)
+      ? value.filter((item): item is number => Number.isSafeInteger(item) && Number(item) > 0)
+      : [];
+
+  return {
+    provider: typeof record.provider === 'string' ? record.provider : null,
+    attemptNumber: typeof record.attemptNumber === 'number' ? record.attemptNumber : 1,
+    retryCount: typeof record.retryCount === 'number' ? record.retryCount : 0,
+    successes: rows(record.successes),
+    validationFailures: rows(record.validationFailures),
+    providerRejections: rows(record.providerRejections),
+    alreadyPosted: rows(record.alreadyPosted),
+    repairableOrderIds: orderIds(record.repairableOrderIds),
+    retryableOrderIds: orderIds(record.retryableOrderIds),
   };
 }
 
@@ -861,9 +942,11 @@ function AnalyticsCard({
 function StructuredToolResultCard({
   result,
   onNavigate,
+  onPrompt,
 }: {
   result: AdminAiToolResult;
   onNavigate: () => void;
+  onPrompt: (prompt: string) => void;
 }) {
   const t = useTranslations();
   const locale = useLocale();
@@ -871,8 +954,10 @@ function StructuredToolResultCard({
   const displayValue = (value: unknown) =>
     displayAdminAiValue(value, locale, t('aiChat.yes'), t('aiChat.no'));
   const landingGeneration = landingPageGenerationPresentation(result.toolName, result.output);
-  const summary = landingGeneration ? [] : adminAiScalarEntries(result.output, 10);
-  const tables = landingGeneration ? [] : adminAiResultTables(result.output);
+  const ecotrackTerminal = ecotrackTerminalPresentation(result.toolName, result.output);
+  const summary =
+    landingGeneration || ecotrackTerminal ? [] : adminAiScalarEntries(result.output, 10);
+  const tables = landingGeneration || ecotrackTerminal ? [] : adminAiResultTables(result.output);
   const error =
     result.output &&
     typeof result.output === 'object' &&
@@ -914,6 +999,9 @@ function StructuredToolResultCard({
               ['preserved', landingGeneration.preservedSections],
               ['fallback', landingGeneration.fallbackSections],
               ['skipped', landingGeneration.skippedSections],
+              ...(landingGeneration.deletedSections > 0
+                ? ([['deleted', landingGeneration.deletedSections]] as const)
+                : []),
               ['retries', landingGeneration.retryCount],
             ].map(([key, value]) => (
               <div key={key} className="rounded-xl bg-secondary/45 px-3 py-2.5">
@@ -937,6 +1025,85 @@ function StructuredToolResultCard({
                   </li>
                 ))}
               </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {ecotrackTerminal ? (
+        <div className="space-y-3 px-4 py-4">
+          <p className="text-[0.68rem] text-muted-foreground">
+            {t('aiChat.ecotrackTerminal.attempts', {
+              attempt: ecotrackTerminal.attemptNumber,
+              retries: ecotrackTerminal.retryCount,
+            })}
+          </p>
+          {(
+            [
+              ['successes', ecotrackTerminal.successes, 'text-emerald-700 dark:text-emerald-300'],
+              [
+                'validationFailures',
+                ecotrackTerminal.validationFailures,
+                'text-amber-700 dark:text-amber-300',
+              ],
+              ['providerRejections', ecotrackTerminal.providerRejections, 'text-destructive'],
+              ['alreadyPosted', ecotrackTerminal.alreadyPosted, 'text-muted-foreground'],
+            ] as const
+          ).map(([key, rows, tone]) =>
+            rows.length ? (
+              <section key={key} className="rounded-xl border border-border/55 px-3 py-2.5">
+                <p className={`text-[0.68rem] font-semibold ${tone}`}>
+                  {t(`aiChat.ecotrackTerminal.${key}`, { count: rows.length })}
+                </p>
+                <ul className="mt-1.5 space-y-1 text-[0.68rem] leading-5 text-foreground">
+                  {rows.map((row, index) => (
+                    <li key={`${row.orderId ?? row.reference ?? 'order'}-${index}`}>
+                      <span className="font-semibold">
+                        {row.orderId ? `#${row.orderId}` : (row.reference ?? t('aiChat.orders'))}
+                      </span>
+                      {row.tracking ? ` · ${row.tracking}` : ''} · {row.message}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null,
+          )}
+          {ecotrackTerminal.repairableOrderIds.length ||
+          ecotrackTerminal.retryableOrderIds.length ? (
+            <div className="flex flex-wrap gap-2 border-t border-border/50 pt-3">
+              {ecotrackTerminal.repairableOrderIds.length ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    onPrompt(
+                      t('aiChat.ecotrackTerminal.repairPrompt', {
+                        ids: ecotrackTerminal.repairableOrderIds.join(', '),
+                        provider: ecotrackTerminal.provider ?? 'EcoTrack',
+                      }),
+                    )
+                  }
+                >
+                  <Pencil className="size-3.5" />
+                  {t('aiChat.ecotrackTerminal.repair')}
+                </Button>
+              ) : null}
+              {ecotrackTerminal.retryableOrderIds.length && ecotrackTerminal.provider ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() =>
+                    onPrompt(
+                      t('aiChat.ecotrackTerminal.retryPrompt', {
+                        ids: ecotrackTerminal.retryableOrderIds.join(', '),
+                        provider: ecotrackTerminal.provider ?? 'EcoTrack',
+                      }),
+                    )
+                  }
+                >
+                  {t('aiChat.ecotrackTerminal.retry')}
+                </Button>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -995,7 +1162,11 @@ function StructuredToolResultCard({
           </table>
         </div>
       ))}
-      {!error && !landingGeneration && summary.length === 0 && tables.length === 0 ? (
+      {!error &&
+      !landingGeneration &&
+      !ecotrackTerminal &&
+      summary.length === 0 &&
+      tables.length === 0 ? (
         <p className="px-4 py-3 text-xs text-muted-foreground">{t('aiChat.noToolData')}</p>
       ) : null}
       {presentation.href && presentation.destinationKey ? (
@@ -1221,6 +1392,7 @@ function ChatSidebar({
             ? (() => {
                 const job = selectedJob;
                 const active = job.status === 'queued' || job.status === 'running';
+                const downloadPath = safeAdminAiDownloadPath(job.downloadPath);
                 const summary = job.resultSummary ?? {};
                 const summaryEntries = Object.entries(summary)
                   .filter((entry): entry is [string, string | number | boolean | null] =>
@@ -1309,6 +1481,17 @@ function ChatSidebar({
                       {job.errorMessage ? (
                         <p className="mt-2 text-[0.68rem] text-destructive">{job.errorMessage}</p>
                       ) : null}
+                      {job.status === 'completed' && downloadPath ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="mt-3"
+                          onClick={() => window.open(downloadPath, '_blank', 'noopener,noreferrer')}
+                        >
+                          {t('aiChat.downloadArtifact')}
+                        </Button>
+                      ) : null}
                     </section>
                   </div>
                 );
@@ -1353,12 +1536,14 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
   const [jobs, setJobs] = useState<AiJob[]>([]);
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
+  const hasActiveJobs = jobs.some((job) => job.status === 'queued' || job.status === 'running');
   const conversationKeyRef = useRef<string | null>(null);
   const activeConversationRef = useRef<ConversationSummary | null>(null);
   const conversationRequestRef = useRef(0);
   const autoAcceptProposalsRef = useRef(false);
   const responseAbortRef = useRef<AbortController | null>(null);
   const terminalJobIdsRef = useRef(new Set<string>());
+  const refreshedTerminalJobIdsRef = useRef(new Set<string>());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -1395,6 +1580,41 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
       if (requestId === conversationRequestRef.current) setLoadingConversation(false);
     }
   }, []);
+  const reconcileTerminalJobs = useCallback(
+    async (conversation: ConversationSummary, terminalJobIds: string[]) => {
+      const delays = [0, 250, 500, 1_000, 2_000];
+      for (const delay of delays) {
+        if (delay > 0) await new Promise((resolve) => window.setTimeout(resolve, delay));
+        if (activeConversationRef.current?.id !== conversation.id) return;
+        const response = await fetch(`/api/ai/conversations/${conversation.id}`, {
+          cache: 'no-store',
+        });
+        if (!response.ok || activeConversationRef.current?.id !== conversation.id) continue;
+        const data = (await response.json()) as {
+          messages: Array<ChatMessage & { toolResults?: unknown }>;
+        };
+        const hydrated = data.messages.map(hydrateChatMessage);
+        setMessages(hydrated);
+        const terminalMessages = new Map(
+          hydrated.flatMap((message) =>
+            message.terminal && message.jobId ? [[message.jobId, message] as const] : [],
+          ),
+        );
+        for (const jobId of terminalJobIds) {
+          const message = terminalMessages.get(jobId);
+          if (
+            message?.results?.some((result) => result.toolName === 'ecotrack_posting_terminal') &&
+            !refreshedTerminalJobIdsRef.current.has(jobId)
+          ) {
+            refreshedTerminalJobIdsRef.current.add(jobId);
+            notifyAdminAiMutation(['post_orders_to_ecotrack']);
+          }
+        }
+        if (terminalJobIds.every((jobId) => terminalMessages.has(jobId))) return;
+      }
+    },
+    [],
+  );
   const loadConversations = useCallback(
     async (selectLatest = false) => {
       setLoadingConversations(true);
@@ -1424,16 +1644,15 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
     const terminalJobs = nextJobs.filter((job) =>
       ['completed', 'cancelled', 'failed'].includes(job.status),
     );
-    const hasNewTerminalJob = terminalJobs.some((job) => !terminalJobIdsRef.current.has(job.id));
+    const newTerminalJobIds = terminalJobs
+      .filter((job) => !terminalJobIdsRef.current.has(job.id))
+      .map((job) => job.id);
     terminalJobIdsRef.current = new Set(terminalJobs.map((job) => job.id));
     const activeConversation = activeConversationRef.current;
-    if (hasNewTerminalJob && activeConversation) {
-      window.setTimeout(() => {
-        if (activeConversationRef.current?.id === activeConversation.id)
-          void selectConversation(activeConversation);
-      }, 750);
+    if (newTerminalJobIds.length > 0 && activeConversation) {
+      void reconcileTerminalJobs(activeConversation, newTerminalJobIds);
     }
-  }, [selectConversation]);
+  }, [reconcileTerminalJobs]);
 
   useEffect(() => {
     const enabled = window.localStorage.getItem(ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY) === 'true';
@@ -1462,10 +1681,17 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
     void loadConversations(
       activeConversationRef.current === null && deferredConversationSearch.length === 0,
     );
-    void loadAiHistory();
+  }, [deferredConversationSearch, open, loadConversations, selectConversation]);
+
+  useEffect(() => {
+    if (!open && !hasActiveJobs) return;
+    const initial = window.setTimeout(() => void loadAiHistory(), 0);
     const interval = window.setInterval(() => void loadAiHistory(), 2_500);
-    return () => window.clearInterval(interval);
-  }, [deferredConversationSearch, open, loadAiHistory, loadConversations, selectConversation]);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(interval);
+    };
+  }, [hasActiveJobs, loadAiHistory, open]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -1603,6 +1829,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
             : message,
         ),
       );
+      notifyAdminAiMutation(['review_ai_proposals']);
       return true;
     } catch (error) {
       setProposalReviewError({
@@ -1669,6 +1896,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
         onResult(data) {
           const presentation = presentationFromUnknown(data.toolResults);
           const { proposals } = presentation;
+          notifyAdminAiToolMutations(presentation.results);
           setMessages((items) => {
             const existing = items.findIndex((item) => item.id === assistantId);
             if (existing < 0)
@@ -1697,6 +1925,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
         },
         onError(error) {
           failedToolResults = error.toolResults;
+          notifyAdminAiToolMutations(presentationFromUnknown(error.toolResults).results);
         },
       });
       await loadConversations();
@@ -1979,6 +2208,12 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
                                   key={`${result.toolName}-${resultIndex}`}
                                   result={result}
                                   onNavigate={() => setOpen(false)}
+                                  onPrompt={(prompt) => {
+                                    setInput(prompt);
+                                    window.requestAnimationFrame(() =>
+                                      composerRef.current?.focus(),
+                                    );
+                                  }}
                                 />
                               ))
                             : null}

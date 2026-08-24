@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import {
   aiProposalReviewResource,
+  deleteExpiredAiProposal,
   executeAiProposalReview,
   readAiProposalReviewTarget,
   refreshAppliedAiProposalConsumers,
@@ -17,6 +18,10 @@ export const adminAiProposalReviewSchema = z
   })
   .strict();
 
+export const adminAiExpiredProposalDeletionSchema = z
+  .object({ proposalIds: z.array(z.number().int().positive()).min(1).max(50) })
+  .strict();
+
 type ReviewDependencies = {
   readTarget: (proposalId: number) => Promise<AiProposalReviewTarget>;
   executeReview: typeof executeAiProposalReview;
@@ -27,6 +32,16 @@ const defaultDependencies: ReviewDependencies = {
   readTarget: readAiProposalReviewTarget,
   executeReview: executeAiProposalReview,
   refreshAppliedConsumers: refreshAppliedAiProposalConsumers,
+};
+
+type ExpiredDeletionDependencies = {
+  readTarget: (proposalId: number) => Promise<AiProposalReviewTarget>;
+  deleteExpired: (proposalId: number) => Promise<{ id: number }>;
+};
+
+const defaultExpiredDeletionDependencies: ExpiredDeletionDependencies = {
+  readTarget: readAiProposalReviewTarget,
+  deleteExpired: deleteExpiredAiProposal,
 };
 
 const resourcePermission: Record<AiProposalReviewResource, PermissionKey> = {
@@ -82,6 +97,42 @@ export async function reviewAdminAiProposals(
     appliedCount,
     rejectedCount: reviewed.filter(({ result }) => result.status === 'rejected').length,
     reviewed,
+    failed,
+  };
+}
+
+export async function deleteExpiredAdminAiProposals(
+  input: z.infer<typeof adminAiExpiredProposalDeletionSchema>,
+  permissions: readonly PermissionKey[],
+  dependencies: ExpiredDeletionDependencies = defaultExpiredDeletionDependencies,
+) {
+  const parsed = adminAiExpiredProposalDeletionSchema.parse(input);
+  const deleted: Array<{ proposalId: number; resource: AiProposalReviewResource }> = [];
+  const failed: Array<{ proposalId: number; error: string }> = [];
+
+  for (const proposalId of [...new Set(parsed.proposalIds)]) {
+    try {
+      const target = await dependencies.readTarget(proposalId);
+      const resource = aiProposalReviewResource(target);
+      if (!permissions.includes(resourcePermission[resource])) {
+        failed.push({ proposalId, error: `Missing permission for ${resource}.` });
+        continue;
+      }
+      await dependencies.deleteExpired(proposalId);
+      deleted.push({ proposalId, resource });
+    } catch (error) {
+      failed.push({
+        proposalId,
+        error: error instanceof Error ? error.message : 'Expired proposal deletion failed.',
+      });
+    }
+  }
+
+  return {
+    requestedCount: new Set(parsed.proposalIds).size,
+    deletedCount: deleted.length,
+    failedCount: failed.length,
+    deleted,
     failed,
   };
 }

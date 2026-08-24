@@ -11,7 +11,11 @@ import {
   selectAnalyticsChartMetric,
 } from './admin-ai-chat';
 import { AdminAiSurfaceProvider } from './admin-ai-surface-context';
-import { ADMIN_AI_OPEN_EVENT } from '../lib/admin-ai-events';
+import {
+  ADMIN_AI_MUTATION_EVENT,
+  ADMIN_AI_OPEN_EVENT,
+  type AdminAiMutationEventDetail,
+} from '../lib/admin-ai-events';
 
 const navigation = vi.hoisted(() => ({ pathname: '/en/stats/website' }));
 
@@ -90,6 +94,50 @@ describe('AdminAiChat', () => {
     expect(await screen.findByRole('dialog', { name: 'aiChat.title' })).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByRole('textbox', { name: 'aiChat.placeholder' })).toHaveFocus(),
+    );
+  });
+
+  it('keeps completed background artifacts downloadable inside the assistant', async () => {
+    const open = vi.fn();
+    vi.stubGlobal('open', open);
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/ai/conversations') {
+        return new Response(JSON.stringify({ conversations: [] }), { status: 200 });
+      }
+      if (url === '/api/ai/history') {
+        return new Response(
+          JSON.stringify({
+            jobs: [
+              {
+                id: 'export-job-1',
+                queue: 'admin-product-export',
+                kind: 'product-export',
+                type: 'product_export',
+                cancellable: true,
+                status: 'completed',
+                progress: { phase: 'completed', current: 1_402, total: 1_402, percentage: 100 },
+                errorMessage: null,
+                resultSummary: { fileName: 'meta-catalog.xlsx', totalProducts: 1_402 },
+                downloadPath: 'https://files.example.test/meta-catalog.xlsx',
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response('{}', { status: 200 });
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat permissions={['products_write']} />);
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await user.click(await screen.findByRole('button', { name: 'aiChat.downloadArtifact' }));
+
+    expect(open).toHaveBeenCalledWith(
+      'https://files.example.test/meta-catalog.xlsx',
+      '_blank',
+      'noopener,noreferrer',
     );
   });
 
@@ -606,6 +654,8 @@ describe('AdminAiChat', () => {
   });
 
   it('presents persisted tool actions with a human outcome and exact workspace handoff', async () => {
+    const mutationListener = vi.fn();
+    window.addEventListener(ADMIN_AI_MUTATION_EVENT, mutationListener);
     vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
       const url = String(input);
       if (url === '/api/ai/conversations')
@@ -688,6 +738,134 @@ describe('AdminAiChat', () => {
     expect(screen.getByText('aiChat.landingGeneration.generated')).toBeInTheDocument();
     expect(screen.getByText('aiChat.landingGeneration.retries')).toBeInTheDocument();
     expect(screen.getByText('A mobile-first product campaign.')).toBeInTheDocument();
+    expect(mutationListener).toHaveBeenCalledOnce();
+    expect(
+      (mutationListener.mock.calls[0]?.[0] as CustomEvent<AdminAiMutationEventDetail>).detail,
+    ).toEqual({ toolNames: ['create_landing_page'] });
+    window.removeEventListener(ADMIN_AI_MUTATION_EVENT, mutationListener);
+  });
+
+  it('reconciles terminal EcoTrack jobs into the same chat and offers repair and retry drafts', async () => {
+    let chatCompleted = false;
+    const mutationListener = vi.fn();
+    window.addEventListener(ADMIN_AI_MUTATION_EVENT, mutationListener);
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/ai/conversations') {
+        return Response.json({ conversations: [] });
+      }
+      if (url === '/api/ai/chat') {
+        chatCompleted = true;
+        return Response.json({
+          message: 'The EcoTrack job is queued.',
+          toolResults: [],
+          conversation: {
+            id: 52,
+            sessionKey: '0d88ac77-a633-4fab-a216-73cb83682b78',
+            title: 'Post confirmed orders',
+          },
+        });
+      }
+      if (url === '/api/ai/history') {
+        return Response.json({
+          jobs: chatCompleted
+            ? [
+                {
+                  id: 'ecotrack-52',
+                  queue: 'admin-order-ecotrack',
+                  kind: 'order-ecotrack:selected',
+                  status: 'completed',
+                  progress: { phase: 'completed', current: 3, total: 3, percentage: 100 },
+                  errorMessage: null,
+                  resultSummary: { created: 1, invalid: 1, failed: 1 },
+                },
+              ]
+            : [],
+        });
+      }
+      if (url === '/api/ai/conversations/52') {
+        return Response.json({
+          messages: [
+            { role: 'user', content: 'Post orders 11, 12 and 13 via Emir.' },
+            {
+              role: 'assistant',
+              content: 'Terminal EcoTrack result.',
+              terminal: true,
+              jobId: 'ecotrack-52',
+              toolResults: [
+                {
+                  type: 'tool-result',
+                  toolName: 'ecotrack_posting_terminal',
+                  output: {
+                    kind: 'ecotrack_posting_terminal',
+                    provider: 'emir',
+                    attemptNumber: 2,
+                    retryCount: 1,
+                    successes: [
+                      {
+                        orderId: 11,
+                        reference: '11',
+                        tracking: 'EM-11',
+                        message: 'Created successfully.',
+                      },
+                    ],
+                    validationFailures: [
+                      {
+                        orderId: 12,
+                        reference: '12',
+                        tracking: null,
+                        message: 'Commune is missing.',
+                      },
+                    ],
+                    providerRejections: [
+                      {
+                        orderId: 13,
+                        reference: '13',
+                        tracking: null,
+                        message: 'Telephone rejected.',
+                      },
+                    ],
+                    alreadyPosted: [],
+                    repairableOrderIds: [12, 13],
+                    retryableOrderIds: [13],
+                  },
+                },
+              ],
+            },
+          ],
+        });
+      }
+      return new Response('{}', { status: 200 });
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat permissions={['orders_write']} />);
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await user.type(
+      await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
+      'Post orders 11, 12 and 13 via Emir.',
+    );
+    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+
+    expect(await screen.findByText('Terminal EcoTrack result.')).toBeInTheDocument();
+    expect(screen.getByText('aiChat.ecotrackTerminal.successes')).toBeInTheDocument();
+    expect(screen.getByText('EM-11', { exact: false })).toBeInTheDocument();
+    expect(screen.getByText('Commune is missing.', { exact: false })).toBeInTheDocument();
+    expect(screen.getByText('Telephone rejected.', { exact: false })).toBeInTheDocument();
+    expect(mutationListener).toHaveBeenCalledOnce();
+    expect(
+      (mutationListener.mock.calls[0]?.[0] as CustomEvent<AdminAiMutationEventDetail>).detail,
+    ).toEqual({ toolNames: ['post_orders_to_ecotrack'] });
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.ecotrackTerminal.repair' }));
+    expect(screen.getByRole('textbox', { name: 'aiChat.placeholder' })).toHaveValue(
+      'aiChat.ecotrackTerminal.repairPrompt',
+    );
+    await user.click(screen.getByRole('button', { name: 'aiChat.ecotrackTerminal.retry' }));
+    expect(screen.getByRole('textbox', { name: 'aiChat.placeholder' })).toHaveValue(
+      'aiChat.ecotrackTerminal.retryPrompt',
+    );
+    window.removeEventListener(ADMIN_AI_MUTATION_EVENT, mutationListener);
   });
 
   it('lets the user abort an in-flight assistant response without showing a failure', async () => {
@@ -729,6 +907,8 @@ describe('AdminAiChat', () => {
   });
 
   it('marks partial provider output as interrupted instead of presenting it as complete', async () => {
+    const mutationListener = vi.fn();
+    window.addEventListener(ADMIN_AI_MUTATION_EVENT, mutationListener);
     vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
       const url = String(input);
       if (url === '/api/ai/conversations')
@@ -771,6 +951,11 @@ describe('AdminAiChat', () => {
     expect(await screen.findByText('aiChat.interrupted')).toBeInTheDocument();
     expect(await screen.findByText('aiChat.toolLabels.ordersUpdated')).toBeInTheDocument();
     expect(screen.queryByText('aiChat.error')).not.toBeInTheDocument();
+    expect(mutationListener).toHaveBeenCalledOnce();
+    expect(
+      (mutationListener.mock.calls[0]?.[0] as CustomEvent<AdminAiMutationEventDetail>).detail,
+    ).toEqual({ toolNames: ['update_order_status'] });
+    window.removeEventListener(ADMIN_AI_MUTATION_EVENT, mutationListener);
   });
 
   it('renders assistant Markdown using the bulletin post formatting', async () => {

@@ -115,5 +115,8 @@ describe('admin AI capability registry', () => {
       'product_content_proposals',
     );
     expect(adminAiCapabilityInstructions(context, [])).not.toContain('product_content_proposals');
+    expect(capabilitiesForAdminAi(context, ['assets_write']).map((item) => item.id)).toEqual(
+      expect.arrayContaining(['catalog_lookup', 'asset_inspection']),
+    );
   });
 });

@@ -1,7 +1,7 @@
 import 'dotenv/config';
 
 import * as Sentry from '@sentry/node';
-import { createQueueWorker, isFinalJobAttempt } from '@bric/runtime/jobs';
+import { createQueueWorker } from '@bric/runtime/jobs';
 import { writeWorkerHeartbeat } from '@bric/runtime/worker-heartbeat';
 import cron from 'node-cron';
 
@@ -32,7 +32,11 @@ import {
   runAiCategorizationJob,
   getBackgroundJob,
 } from '../lib/background-jobs';
-import { publishAiTaskTerminalMessage, type AiTaskTerminalStatus } from '../lib/ai-task-followups';
+import { publishAiTaskTerminalMessage } from '../lib/ai-task-followups';
+import {
+  attachAiTaskTerminalFollowups,
+  type AiTaskLifecycleWorker,
+} from '../lib/ai-task-terminal-lifecycle';
 import { runDatabaseMaintenance } from '../lib/database-maintenance';
 import { startEcotrackScheduler, stopEcotrackScheduler } from '../lib/ecotrack-scheduler';
 import { startMetaAdsScheduler, stopMetaAdsScheduler } from '../lib/meta-ads-scheduler';
@@ -109,60 +113,15 @@ const heartbeatTimer = setInterval(() => {
 heartbeatTimer.unref();
 void refreshWorkerHeartbeat();
 
-type TaskLifecycleJob = {
-  id?: string;
-  name: string;
-  data: { conversationId?: number };
-  attemptsMade: number;
-  opts: { attempts?: number };
-};
-
-type TaskLifecycleWorker = {
-  name: string;
-  on: {
-    (event: 'completed', listener: (job: TaskLifecycleJob) => void): unknown;
-    (event: 'failed', listener: (job: TaskLifecycleJob | undefined, error: Error) => void): unknown;
-  };
-};
-
-async function publishTaskTerminalState(
-  worker: TaskLifecycleWorker,
-  job: TaskLifecycleJob,
-  status: AiTaskTerminalStatus,
-  errorMessage?: string,
-) {
-  if (!job.id || !job.data.conversationId) return;
-  const snapshot = await getBackgroundJob(worker.name, job.id);
-  await publishAiTaskTerminalMessage({
-    conversationId: job.data.conversationId,
-    jobId: job.id,
-    kind: job.name,
-    status,
-    progress: snapshot?.progress ?? null,
-    summary: snapshot?.resultSummary ?? null,
-    errorMessage: errorMessage ?? snapshot?.errorMessage ?? null,
-  });
-}
-
 for (const rawWorker of workers) {
-  const worker = rawWorker as unknown as TaskLifecycleWorker;
-  worker.on('completed', (job) => {
-    void (async () => {
-      const snapshot = job.id ? await getBackgroundJob(worker.name, job.id) : null;
-      const status = snapshot?.status === 'cancelled' ? 'cancelled' : 'completed';
-      await publishTaskTerminalState(worker, job, status);
-    })().catch((error) => {
+  const worker = rawWorker as unknown as AiTaskLifecycleWorker;
+  attachAiTaskTerminalFollowups(worker, {
+    getSnapshot: getBackgroundJob,
+    publish: publishAiTaskTerminalMessage,
+    onError: (error, event) => {
       Sentry.captureException(error);
-      console.error('[worker] failed to publish AI task completion', error);
-    });
-  });
-  worker.on('failed', (job, error) => {
-    if (!job || !isFinalJobAttempt(job)) return;
-    const status = error.message === 'Job cancelled.' ? 'cancelled' : 'failed';
-    void publishTaskTerminalState(worker, job, status, error.message).catch((publishError) => {
-      Sentry.captureException(publishError);
-      console.error('[worker] failed to publish AI task failure', publishError);
-    });
+      console.error(`[worker] failed to publish AI task ${event}`, error);
+    },
   });
 }
 

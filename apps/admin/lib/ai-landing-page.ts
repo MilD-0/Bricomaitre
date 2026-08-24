@@ -228,6 +228,7 @@ const landingPageEditPlanSchema = z.object({
     description: z.string().trim().min(1).max(170),
   }),
   blocks: z.array(landingPageEditSlotSchema).min(2).max(20),
+  deletedBlockIds: z.array(landingPageBlockIdSchema).max(18).default([]),
   reasoning: z.string().trim().min(1).max(2_000),
   groundingNotes: z.array(z.string().trim().min(1).max(500)).max(20).default([]),
 });
@@ -260,6 +261,7 @@ export interface LandingPageEditStageRunner {
 export interface LandingPageEditResult extends LandingPageGenerationResult {
   stages: LandingPageGenerationStages & {
     preservedSections: number;
+    deletedSections: number;
     failures: Array<{
       blockId: string | null;
       type: LandingPageBlock['type'];
@@ -623,11 +625,74 @@ export function createLandingPageGenerator(
   };
 }
 
+function requestsLandingPageBlockDeletion(instruction: string) {
+  const normalized = instruction.toLocaleLowerCase().normalize('NFKC');
+  return (
+    /\b(?:delete|remove)\b[^.!?]{0,50}\b(?:section|block|hero|faq|gallery|cta|panel)\b/u.test(
+      normalized,
+    ) ||
+    /\b(?:supprime|retire|enlève|enleve)\b[^.!?]{0,50}\b(?:section|bloc|hero|faq|galerie|cta|panneau)\b/u.test(
+      normalized,
+    ) ||
+    /(?:احذف|أزل)[^.!?؟]{0,50}(?:قسم|كتلة|واجهة|أسئلة|معرض|دعوة)/u.test(normalized)
+  );
+}
+
+function completeLandingPageEditPlan(
+  plan: LandingPageEditPlan,
+  currentDocument: LandingPageDocument,
+  instruction: string,
+) {
+  const currentById = new Map(currentDocument.blocks.map((block) => [block.id, block]));
+  const currentIndexById = new Map(
+    currentDocument.blocks.map((block, index) => [block.id, index] as const),
+  );
+  const deletedIds = new Set(plan.deletedBlockIds);
+  if (deletedIds.size !== plan.deletedBlockIds.length) {
+    throw new Error('Landing-page edit plan contains duplicate deleted block IDs.');
+  }
+  if (deletedIds.size > 0 && !requestsLandingPageBlockDeletion(instruction)) {
+    throw new Error(
+      'Landing-page edit plan deletes blocks that the operator did not ask to delete.',
+    );
+  }
+  for (const blockId of deletedIds) {
+    if (!currentById.has(blockId)) {
+      throw new Error(`Landing-page edit plan deletes unknown block "${blockId}".`);
+    }
+  }
+
+  const blocks = [...plan.blocks];
+  const referencedIds = new Set(
+    blocks.flatMap((slot) => (slot.blockId == null ? [] : [slot.blockId])),
+  );
+  for (const block of currentDocument.blocks) {
+    if (referencedIds.has(block.id) || deletedIds.has(block.id)) continue;
+    const currentIndex = currentIndexById.get(block.id)!;
+    const nextReferencedIndex = blocks.findIndex((slot) => {
+      if (slot.blockId == null) return false;
+      const candidateIndex = currentIndexById.get(slot.blockId);
+      return candidateIndex !== undefined && candidateIndex > currentIndex;
+    });
+    blocks.splice(nextReferencedIndex < 0 ? blocks.length : nextReferencedIndex, 0, {
+      mode: 'preserve',
+      blockId: block.id,
+    });
+    referencedIds.add(block.id);
+  }
+  if (blocks.length > 20) {
+    throw new Error('Landing-page edit plan exceeds the maximum of 20 retained and new blocks.');
+  }
+
+  return { ...plan, blocks };
+}
+
 function validateLandingPageEditPlan(
   plan: LandingPageEditPlan,
   currentDocument: LandingPageDocument,
 ) {
   const currentById = new Map(currentDocument.blocks.map((block) => [block.id, block]));
+  const deletedIds = new Set(plan.deletedBlockIds);
   const referencedIds = new Set<string>();
   const resolvedTypes: LandingPageBlock['type'][] = [];
 
@@ -637,6 +702,8 @@ function validateLandingPageEditPlan(
       const existing = currentById.get(blockId);
       if (!existing)
         throw new Error(`Landing-page edit plan references unknown block "${blockId}".`);
+      if (deletedIds.has(blockId))
+        throw new Error(`Landing-page edit plan both keeps and deletes block "${blockId}".`);
       if (referencedIds.has(blockId))
         throw new Error(`Landing-page edit plan references block "${blockId}" more than once.`);
       referencedIds.add(blockId);
@@ -677,7 +744,7 @@ function createModelEditStageRunner(config: AiConfig): LandingPageEditStageRunne
     async generatePlan(input) {
       const result = await generateText({
         model,
-        instructions: `${LANDING_PAGE_GENERATION_INSTRUCTIONS} You are editing an existing validated landing page. Return a compact edit plan, not the rewritten document. The blocks array is the exact final order. Preserve every block that is not affected by the operator instruction. Use mode preserve with its exact blockId for unchanged blocks. Use mode generate with the existing blockId to rewrite a block, or null to add a new block. Omitting an existing block deletes it, so omit only when explicitly requested. Keep exactly one product-hero and one final-cta. Keep the current theme and SEO values unless the instruction changes them.`,
+        instructions: `${LANDING_PAGE_GENERATION_INSTRUCTIONS} You are editing an existing validated landing page. Return a compact edit plan, not the rewritten document. The blocks array is the exact final order. Preserve every block that is not affected by the operator instruction. Use mode preserve with its exact blockId for unchanged blocks. Use mode generate with the existing blockId to rewrite a block, or null to add a new block. Put an existing ID in deletedBlockIds only when the operator explicitly asks to delete that exact section; omission alone never deletes a block. Keep exactly one product-hero and one final-cta. Keep the current theme and SEO values unless the instruction changes them.`,
         prompt: JSON.stringify({
           product: input.product,
           locale: input.locale,
@@ -737,8 +804,13 @@ export function createLandingPageEditor(
       const input = landingPageEditInputSchema.parse(rawInput);
       const planned = await attemptLandingPageStage(async () => {
         const result = await runner.generatePlan(input);
-        validateLandingPageEditPlan(result.plan, input.currentDocument);
-        return result;
+        const plan = completeLandingPageEditPlan(
+          result.plan,
+          input.currentDocument,
+          input.instruction,
+        );
+        validateLandingPageEditPlan(plan, input.currentDocument);
+        return { ...result, plan };
       });
       if (planned.status === 'rejected') throw planned.reason;
       const { plan, usage: planUsage } = planned.value;
@@ -839,6 +911,7 @@ export function createLandingPageEditor(
           plannedSections: plan.blocks.length,
           generatedSections,
           preservedSections,
+          deletedSections: plan.deletedBlockIds.length,
           fallbackSections,
           skippedSections,
           retryCount,

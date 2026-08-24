@@ -132,3 +132,18 @@ export function getBullRedisConnection(name: string) {
     maxRetriesPerRequest: null,
   });
 }
+
+export async function closeRedisConnections() {
+  const clients = [...getGlobalClients().values()];
+  getGlobalClients().clear();
+  await Promise.allSettled(
+    clients.map(async (client) => {
+      if (client.status === 'end') return;
+      if (client.status === 'ready' || client.status === 'connect') {
+        await client.quit();
+        return;
+      }
+      client.disconnect();
+    }),
+  );
+}
