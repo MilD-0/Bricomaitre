@@ -1,4 +1,4 @@
-export const ANALYTICS2_FACT_SEMANTICS_VERSION = 4;
+export const ANALYTICS2_FACT_SEMANTICS_VERSION = 5;
 
 /**
  * Used only when immutable line-item purchase cost is unavailable. Exact

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
-const { getDbMock, hasDbMock } = vi.hoisted(() => ({
+const { getCanonicalOrderProjectionDaysMock, getDbMock, hasDbMock } = vi.hoisted(() => ({
+  getCanonicalOrderProjectionDaysMock: vi.fn(),
   getDbMock: vi.fn(),
   hasDbMock: vi.fn(),
 }));
@@ -11,12 +12,17 @@ vi.mock('@bric/db/client', () => ({
   hasDb: hasDbMock,
 }));
 
+vi.mock('./profit-tracker', () => ({
+  getCanonicalOrderProjectionDays: getCanonicalOrderProjectionDaysMock,
+}));
+
 import { loadDailyOrderStatusOverview } from './admin-orders-data';
 
 describe('loadDailyOrderStatusOverview', () => {
   beforeEach(() => {
     hasDbMock.mockReset();
     getDbMock.mockReset();
+    getCanonicalOrderProjectionDaysMock.mockReset();
     hasDbMock.mockReturnValue(true);
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-02T10:00:00.000Z'));
@@ -127,33 +133,32 @@ describe('loadDailyOrderStatusOverview', () => {
     );
   });
 
-  it('uses posted status transitions for both daily and previous-month projection cohorts', async () => {
-    const dialect = new PgDialect();
-    const projectionPredicates: Parameters<PgDialect['sqlToQuery']>[0][] = [];
-    let selectIndex = 0;
-    const selectMock = vi.fn(() => {
-      const currentSelectIndex = selectIndex++;
-      const builder = {
-        from: vi.fn(() => builder),
-        innerJoin: vi.fn(() => builder),
-        where: vi.fn((predicate: Parameters<PgDialect['sqlToQuery']>[0]) => {
-          if (currentSelectIndex % 3 !== 1) {
-            projectionPredicates.push(predicate);
-          }
-
-          return Promise.resolve(currentSelectIndex % 3 === 1 ? [{ spend: 0 }] : []);
-        }),
-      };
-
-      return builder;
-    });
+  it('loads the selected cohort through one canonical analytics economics range', async () => {
     const executeMock = vi.fn().mockResolvedValue({ rows: [{ value: 0 }] });
-
-    getDbMock.mockReturnValue({
-      execute: executeMock,
-      select: selectMock,
-      selectDistinct: selectMock,
-    });
+    const db = { execute: executeMock };
+    getDbMock.mockReturnValue(db);
+    getCanonicalOrderProjectionDaysMock.mockResolvedValue([
+      {
+        basis: 'posted',
+        reportDay: '2026-07-02',
+        grossProfit: 12_000,
+        adSpend: 2_000,
+        estimatedReturnRate: 10,
+        estimatedReturnedOrders: 1,
+        estimatedReturnLoss: 1_200,
+        projectedProfit: 8_800,
+      },
+      {
+        basis: 'posted',
+        reportDay: '2026-07-01',
+        grossProfit: null,
+        adSpend: null,
+        estimatedReturnRate: 10,
+        estimatedReturnedOrders: 0,
+        estimatedReturnLoss: null,
+        projectedProfit: null,
+      },
+    ]);
 
     const overview = await loadDailyOrderStatusOverview({
       includeProfitProjection: true,
@@ -167,36 +172,17 @@ describe('loadDailyOrderStatusOverview', () => {
         expect.objectContaining({ profitProjection: expect.objectContaining({ basis: 'posted' }) }),
       ],
     });
-    expect(projectionPredicates).toHaveLength(4);
-
-    const builtPredicates = projectionPredicates.map((predicate) => dialect.sqlToQuery(predicate));
-    expect(builtPredicates.every((built) => built.params.includes(11))).toBe(true);
-    expect(builtPredicates.filter((built) => built.params.includes('2026-07-02'))).toHaveLength(1);
-    expect(builtPredicates.filter((built) => built.params.includes('2026-07-01'))).toHaveLength(1);
-    expect(
-      builtPredicates.filter(
-        (built) => built.params.includes('2026-06-01') && built.params.includes('2026-06-30'),
-      ),
-    ).toHaveLength(2);
-
-    projectionPredicates.length = 0;
-    selectIndex = 0;
-
-    const confirmedOverview = await loadDailyOrderStatusOverview({ includeProfitProjection: true });
-    expect(confirmedOverview).toMatchObject({
-      available: true,
-      reports: [
-        expect.objectContaining({
-          profitProjection: expect.objectContaining({ basis: 'confirmed' }),
-        }),
-        expect.objectContaining({
-          profitProjection: expect.objectContaining({ basis: 'confirmed' }),
-        }),
-      ],
+    expect(getCanonicalOrderProjectionDaysMock).toHaveBeenCalledOnce();
+    expect(getCanonicalOrderProjectionDaysMock).toHaveBeenCalledWith(
+      {
+        startDate: '2026-07-01',
+        endDate: '2026-07-02',
+        basis: 'posted',
+      },
+      { db },
+    );
+    expect(overview.reports[0]?.profitProjection).toMatchObject({
+      projectedProfit: 8_800,
     });
-    expect(projectionPredicates).toHaveLength(4);
-    expect(
-      projectionPredicates.every((predicate) => dialect.sqlToQuery(predicate).params.includes(2)),
-    ).toBe(true);
   });
 });

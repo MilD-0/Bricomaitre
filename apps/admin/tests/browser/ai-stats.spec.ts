@@ -12,19 +12,9 @@ test.beforeAll(() => {
   ).toBe(true);
 });
 
-test.beforeEach(async ({ context }) => {
-  await context.addCookies([
-    {
-      name: 'bric-admin-legacy-ui',
-      value: '0',
-      domain: 'localhost',
-      path: '/',
-      sameSite: 'Lax',
-    },
-  ]);
-});
-
-test('AI stats use focused pages and preserve the active range', async ({ page }, testInfo) => {
+test('AI operations stats use focused pages and preserve the active range', async ({
+  page,
+}, testInfo) => {
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
   const failedRequests: string[] = [];

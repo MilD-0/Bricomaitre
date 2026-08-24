@@ -33,7 +33,6 @@ import {
 import { requestJson as request } from '../lib/admin-api';
 import { bulletinAiSurfaceDetails } from '../lib/admin-ai-live-surface-details';
 import { toast } from '../lib/toast';
-import { AdminAiAskButton } from './admin-ai-ask-button';
 import { Badge } from './ui/badge';
 import { useAdminAiSurfaceDetails } from './admin-ai-surface-context';
 import { Button } from './ui/button';
@@ -766,7 +765,6 @@ export function BulletinBoard() {
           }
         />
         <WorkspaceActions>
-          <AdminAiAskButton />
           <Button
             type="button"
             variant="outline"

@@ -25,6 +25,13 @@ export type ProfitTrackerDayInput = {
   postedOrders?: number;
   costCompleteOrders?: number;
   projectedCoveragePct?: number | null;
+  /**
+   * State-aware contribution supplied by the canonical order cohort. Paid and
+   * delivered orders retain their full gross contribution, known unsuccessful
+   * outcomes contribute zero, and only unresolved orders carry planning risk.
+   */
+  stateAdjustedProfitDzd?: number | null;
+  returnExposedOrders?: number;
 };
 
 export type ProfitTrackerMetrics = {
@@ -135,6 +142,7 @@ export function computeProfitTrackerMetrics(
   extraAdCostDzd = 0,
 ): ProfitTrackerMetrics {
   const fxRate = day.fxRateUsed || fallbackFxRate;
+  const profitsSuppressed = day.returnRatePct === 100;
   let adCostDzd: number | null;
 
   if (isNumber(day.spendEur)) {
@@ -145,17 +153,33 @@ export function computeProfitTrackerMetrics(
     adCostDzd = null;
   }
 
-  const adjustedProfitDzd =
-    isNumber(day.grossProfitDzd) && isNumber(day.returnRatePct)
-      ? day.grossProfitDzd * (1 - day.returnRatePct / 100)
+  const adjustedProfitDzd = profitsSuppressed
+    ? 0
+    : isNumber(day.stateAdjustedProfitDzd)
+      ? day.stateAdjustedProfitDzd
+      : isNumber(day.grossProfitDzd) && isNumber(day.returnRatePct)
+        ? day.grossProfitDzd * (1 - day.returnRatePct / 100)
+        : null;
+  const netProfitDzd = profitsSuppressed
+    ? 0
+    : adjustedProfitDzd !== null && adCostDzd !== null
+      ? adjustedProfitDzd - adCostDzd
       : null;
-  const netProfitDzd =
-    adjustedProfitDzd !== null && adCostDzd !== null ? adjustedProfitDzd - adCostDzd : null;
-  const profitX = adjustedProfitDzd !== null && adCostDzd ? adjustedProfitDzd / adCostDzd : null;
-  const netProfitBeforeReturnsDzd =
-    isNumber(day.grossProfitDzd) && adCostDzd !== null ? day.grossProfitDzd - adCostDzd : null;
-  const profitXBeforeReturns =
-    isNumber(day.grossProfitDzd) && adCostDzd ? day.grossProfitDzd / adCostDzd : null;
+  const profitX = profitsSuppressed
+    ? 0
+    : adjustedProfitDzd !== null && adCostDzd
+      ? adjustedProfitDzd / adCostDzd
+      : null;
+  const netProfitBeforeReturnsDzd = profitsSuppressed
+    ? 0
+    : isNumber(day.grossProfitDzd) && adCostDzd !== null
+      ? day.grossProfitDzd - adCostDzd
+      : null;
+  const profitXBeforeReturns = profitsSuppressed
+    ? 0
+    : isNumber(day.grossProfitDzd) && adCostDzd
+      ? day.grossProfitDzd / adCostDzd
+      : null;
   const costPerConfirmedDzd =
     adCostDzd !== null && day.confirmedOrders ? adCostDzd / day.confirmedOrders : null;
   const confirmationRatePct =
@@ -258,6 +282,7 @@ export function summarizeProfitTracker(
   costs: readonly ProfitTrackerOperatingCost[],
   startDate: string | null,
   endDate: string | null,
+  profitsSuppressed = false,
 ): ProfitTrackerSummary {
   const completeDays = days.filter((day) => day.metrics.adjustedProfitDzd !== null);
   const spendEur = days.reduce((total, day) => total + (day.spendEur || 0), 0);
@@ -272,7 +297,7 @@ export function summarizeProfitTracker(
     (total, day) => total + (day.metrics.adjustedProfitDzd || 0),
     0,
   );
-  const netProfitDzd = adjustedProfitDzd - ratioAdCostDzd;
+  const netProfitDzd = profitsSuppressed ? 0 : adjustedProfitDzd - ratioAdCostDzd;
   const confirmedOrders = days.reduce((total, day) => total + (day.confirmedOrders || 0), 0);
   const fbPurchases = days.reduce((total, day) => total + (day.fbPurchases || 0), 0);
   const linkClicks = days.reduce((total, day) => total + (day.linkClicks || 0), 0);
@@ -292,9 +317,9 @@ export function summarizeProfitTracker(
     adjustedProfitDzd,
     netProfitDzd,
     operatingCostDzd,
-    trueProfitDzd: netProfitDzd - operatingCostDzd,
-    profitX: ratioAdCostDzd > 0 ? adjustedProfitDzd / ratioAdCostDzd : null,
-    profitXBeforeReturns: beforeReturnsProfitX,
+    trueProfitDzd: profitsSuppressed ? 0 : netProfitDzd - operatingCostDzd,
+    profitX: profitsSuppressed ? 0 : ratioAdCostDzd > 0 ? adjustedProfitDzd / ratioAdCostDzd : null,
+    profitXBeforeReturns: profitsSuppressed ? 0 : beforeReturnsProfitX,
     confirmedOrders,
     fbPurchases,
     costPerConfirmedDzd:
@@ -311,6 +336,7 @@ export function buildProfitTrackerWeeks(
   days: readonly ProfitTrackerDay[],
   costs: readonly ProfitTrackerOperatingCost[],
   capDate?: string,
+  profitsSuppressed = false,
 ): ProfitTrackerWeek[] {
   const weeks = new Map<
     string,
@@ -339,13 +365,17 @@ export function buildProfitTrackerWeeks(
       const weekEnd = addDays(week.weekStart, 6);
       const costEnd = capDate && capDate < weekEnd ? capDate : weekEnd;
       const operatingCostDzd = operatingCostBetween(week.weekStart, costEnd, costs);
-      const netProfitDzd = week.adjustedProfitDzd - week.adCostDzd;
+      const netProfitDzd = profitsSuppressed ? 0 : week.adjustedProfitDzd - week.adCostDzd;
       return {
         ...week,
         operatingCostDzd,
         netProfitDzd,
-        trueProfitDzd: netProfitDzd - operatingCostDzd,
-        profitX: week.adCostDzd > 0 ? week.adjustedProfitDzd / week.adCostDzd : null,
+        trueProfitDzd: profitsSuppressed ? 0 : netProfitDzd - operatingCostDzd,
+        profitX: profitsSuppressed
+          ? 0
+          : week.adCostDzd > 0
+            ? week.adjustedProfitDzd / week.adCostDzd
+            : null,
       };
     })
     .sort((left, right) => right.weekStart.localeCompare(left.weekStart));

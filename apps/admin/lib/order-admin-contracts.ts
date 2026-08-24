@@ -12,16 +12,12 @@ export type ProfitProjectionBasis = 'confirmed' | 'posted';
 export type DailyProfitProjection = {
   basis: ProfitProjectionBasis;
   reportDay: string;
-  grossProfit: number;
-  adSpend: number;
+  grossProfit: number | null;
+  adSpend: number | null;
   estimatedReturnRate: number;
   estimatedReturnedOrders: number;
-  estimatedReturnLoss: number;
-  projectedProfit: number;
-  previousMonthStart: string;
-  previousMonthEnd: string;
-  previousMonthOrders: number;
-  previousMonthNegativeOutcomeOrders: number;
+  estimatedReturnLoss: number | null;
+  projectedProfit: number | null;
 };
 
 export type DailyOrderStatusReport = {
@@ -55,5 +51,3 @@ export type DailyOrderStatusOverview =
       reportDay: string | null;
       timezone: string;
     };
-
-export type DailyOrderStatusOverviewResponse = { overview: DailyOrderStatusOverview };

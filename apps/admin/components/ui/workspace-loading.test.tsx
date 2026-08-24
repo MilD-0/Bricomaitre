@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import AssetsLoading from '../../app/[locale]/(app)/assets/loading';
 import StatsLoading from '../../app/[locale]/(app)/stats/loading';
 
-describe('modern workspace loading chrome', () => {
+describe('workspace loading chrome', () => {
   afterEach(cleanup);
 
   it.each([

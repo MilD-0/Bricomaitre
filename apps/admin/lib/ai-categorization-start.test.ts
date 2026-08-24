@@ -31,6 +31,7 @@ describe('catalog categorization job start', () => {
       confidenceThreshold: 0.75,
       batchSize: 25,
       autoApply: false,
+      conversationId: 42,
       actor: { email: 'admin@example.com', name: 'Admin' },
     });
 
@@ -39,6 +40,7 @@ describe('catalog categorization job start', () => {
         queueName: ADMIN_AI_CATEGORIZATION_QUEUE,
         kind: 'ai-product-categorization',
         activeScope: 'global',
+        origin: 'admin-ai-assistant',
       }),
     );
   });

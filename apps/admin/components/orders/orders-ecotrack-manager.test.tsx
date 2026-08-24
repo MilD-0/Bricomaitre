@@ -36,10 +36,8 @@ vi.mock('../admin-ai-surface-context', () => ({
 
 function renderOrdersEcotrackManager({
   initialOrders,
-  presentation,
 }: {
   initialOrders?: Parameters<typeof OrdersEcotrackManager>[0]['initialOrders'];
-  presentation?: Parameters<typeof OrdersEcotrackManager>[0]['presentation'];
 } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -64,7 +62,6 @@ function renderOrdersEcotrackManager({
           lastSync: null,
         }}
         initialOrders={initialOrders ?? buildInitialOrders()}
-        presentation={presentation}
       />
     </QueryClientProvider>,
   );
@@ -181,7 +178,6 @@ describe('OrdersEcotrackManager', () => {
   it('publishes the live shipment filters and selection to the admin assistant', () => {
     renderOrdersEcotrackManager({
       initialOrders: buildInitialOrders(2),
-      presentation: 3,
     });
 
     expect(surfaceDetailsMock).toHaveBeenLastCalledWith({
@@ -209,13 +205,14 @@ describe('OrdersEcotrackManager', () => {
     expect(screen.getByText('nav.ecotrackShipments')).toBeInTheDocument();
     expect(screen.queryByText('ordersEcotrackManager.description')).not.toBeInTheDocument();
     expect(screen.getByText('ordersEcotrackManager.columns.trackingNumber')).toBeInTheDocument();
-    expect(screen.getAllByText('ordersEcotrackManager.columns.client').length).toBeGreaterThan(0);
     expect(screen.getAllByText('ordersEcotrackManager.columns.address').length).toBeGreaterThan(0);
     expect(screen.getAllByText('ordersEcotrackManager.columns.products').length).toBeGreaterThan(0);
     expect(screen.getAllByText('ordersEcotrackManager.columns.amount').length).toBeGreaterThan(0);
     expect(screen.getAllByText('ordersEcotrackManager.columns.status').length).toBeGreaterThan(0);
     expect(screen.getAllByText('TRK-11').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /TRK-11 Ada Lovelace/ }).length).toBeGreaterThan(
+      0,
+    );
     expect(
       screen.getByLabelText('ordersEcotrackManager.fields.scanTrackingNumber'),
     ).toBeInTheDocument();
@@ -226,8 +223,8 @@ describe('OrdersEcotrackManager', () => {
       screen.getByRole('button', { name: 'ordersEcotrackManager.actions.dispatchReady' }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'ordersEcotrackManager.actions.showHistorySelected' }),
-    ).toBeInTheDocument();
+      screen.queryByRole('button', { name: 'ordersEcotrackManager.actions.showHistorySelected' }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'ordersEcotrackManager.actions.label' }),
     ).not.toBeInTheDocument();
@@ -236,41 +233,30 @@ describe('OrdersEcotrackManager', () => {
     ).not.toBeInTheDocument();
   });
 
-  it.each([2, 3, 4] as const)(
-    'renders functional ECOTRACK presentation %s without changing the controller contract',
-    (presentation) => {
-      const view = renderOrdersEcotrackManager({
-        initialOrders: buildInitialOrders(2),
-        presentation,
-      });
+  it('renders the canonical ECOTRACK workspace', () => {
+    const view = renderOrdersEcotrackManager({ initialOrders: buildInitialOrders(2) });
 
-      expect(
-        view.container.querySelector(`[data-ecotrack-variant="${presentation}"]`),
-      ).toBeInTheDocument();
-      expect(screen.getByRole('heading', { level: 1, name: 'nav.ecotrackShipments' })).toHaveClass(
-        'sr-only',
-        'lg:not-sr-only',
-      );
-      expect(view.container.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
-      expect(view.container.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
-      expect(view.container.querySelectorAll('[data-workspace-toolbar]')).toHaveLength(1);
-      expect(
-        screen.getByLabelText('ordersEcotrackManager.fields.scanTrackingNumber'),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole('button', {
-          name: 'ordersEcotrackManager.actions.refreshVisible',
-        }),
-      ).toBeInTheDocument();
-      expect(screen.getAllByText('TRK-11').length).toBeGreaterThan(0);
-      if (presentation === 2) {
-        expect(screen.getByRole('region', { name: 'nav.ecotrackShipments' })).toHaveAttribute(
-          'tabindex',
-          '0',
-        );
-      }
-    },
-  );
+    expect(screen.getByRole('heading', { level: 1, name: 'nav.ecotrackShipments' })).toHaveClass(
+      'sr-only',
+      'lg:not-sr-only',
+    );
+    expect(view.container.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
+    expect(view.container.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
+    expect(view.container.querySelectorAll('[data-workspace-toolbar]')).toHaveLength(1);
+    expect(
+      screen.getByLabelText('ordersEcotrackManager.fields.scanTrackingNumber'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'ordersEcotrackManager.actions.refreshVisible',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('TRK-11').length).toBeGreaterThan(0);
+    expect(screen.getByRole('region', { name: 'nav.ecotrackShipments' })).toHaveAttribute(
+      'tabindex',
+      '0',
+    );
+  });
 
   it('opens the flat shipment inspector from the refined ledger', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -288,7 +274,6 @@ describe('OrdersEcotrackManager', () => {
 
     renderOrdersEcotrackManager({
       initialOrders: buildInitialOrders(2),
-      presentation: 2,
     });
     fireEvent.click(screen.getAllByRole('button', { name: /TRK-11/ })[0]!);
 
@@ -300,10 +285,9 @@ describe('OrdersEcotrackManager', () => {
     ).toBeGreaterThan(0);
   }, 15_000);
 
-  it('closes the modern filter disclosure on outside interaction', () => {
+  it('closes the filter disclosure on outside interaction', () => {
     const view = renderOrdersEcotrackManager({
       initialOrders: buildInitialOrders(2),
-      presentation: 2,
     });
     expect(view.container.querySelector('[data-mobile-ecotrack-controls]')).toHaveClass(
       'grid-cols-[minmax(0,1fr)_auto]',
@@ -323,11 +307,10 @@ describe('OrdersEcotrackManager', () => {
     expect(filters).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('reveals complete bulk operations only after selecting a modern-workspace row', async () => {
+  it('reveals complete bulk operations only after selecting a shipment row', async () => {
     const user = userEvent.setup();
     renderOrdersEcotrackManager({
       initialOrders: buildDispatchableOrders(2),
-      presentation: 3,
     });
 
     expect(
@@ -544,7 +527,12 @@ describe('OrdersEcotrackManager', () => {
     await user.click(checkboxes[1]!);
     await user.click(checkboxes[2]!);
     await user.click(
-      screen.getByRole('button', { name: 'ordersEcotrackManager.actions.printSelected' }),
+      screen.getByRole('button', {
+        name: 'ordersEcotrackManager.actions.dispatchSelected menu',
+      }),
+    );
+    await user.click(
+      screen.getByRole('menuitem', { name: 'ordersEcotrackManager.actions.printSelected' }),
     );
 
     await waitFor(() => {

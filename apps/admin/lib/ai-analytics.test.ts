@@ -103,7 +103,7 @@ describe('admin assistant Analytics2 adapter', () => {
       warnings: [{ key: 'projectedCostCoverage', value: 92 }],
     });
     expect(result.semanticContract).toMatchObject({
-      semanticsVersion: 4,
+      semanticsVersion: 5,
       timezone: 'Africa/Algiers',
       lifecycle: { submitted: expect.stringContaining('never call it a completed sale') },
       materializedFacts: expect.stringContaining('performance cache'),

@@ -12,10 +12,7 @@ import {
   type ShoppingListDraftResponse,
   type ShoppingListSourceMode,
 } from '../../lib/shopping-list-drafts';
-import {
-  groupShoppingListGenerations,
-  type ShoppingListState,
-} from './orders-shopping-list-dialog';
+import { groupShoppingListGenerations, type ShoppingListState } from './orders-workflow-model';
 
 type ShoppingListDraftSaveResponse = { ok: true; draft: ShoppingListDraftRecord };
 

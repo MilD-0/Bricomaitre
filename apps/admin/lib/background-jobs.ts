@@ -85,11 +85,18 @@ export type AiTaskContext = {
   conversationId?: number;
 };
 
+export const ADMIN_AI_ASSISTANT_JOB_ORIGIN = 'admin-ai-assistant';
+
+function assistantJobOrigin(taskContext: AiTaskContext) {
+  return taskContext.conversationId ? ADMIN_AI_ASSISTANT_JOB_ORIGIN : undefined;
+}
+
 export type ExportJobResponse = {
   job: {
     id: string;
     queue: string;
     kind: string;
+    origin: string | null;
     status: JobSnapshot['status'];
     fileName: string | null;
     progress: JobSnapshot['progress'];
@@ -185,6 +192,7 @@ export async function startAiContentJob(
     queueName: ADMIN_AI_CONTENT_QUEUE,
     kind: 'ai-product-content',
     ownerKey,
+    origin: assistantJobOrigin(payload),
     requestId,
     data: payload as AiContentPayload,
   });
@@ -365,6 +373,7 @@ export async function startAiCategorizationJob(
     queueName: ADMIN_AI_CATEGORIZATION_QUEUE,
     kind: 'ai-product-categorization',
     ownerKey,
+    origin: assistantJobOrigin(payload),
     requestId,
     activeScope: 'global',
     data: payload as AiCategorizationPayload,
@@ -656,6 +665,7 @@ function toClientJob(
     id: snapshot.id,
     queue: snapshot.queue,
     kind: snapshot.kind,
+    origin: snapshot.origin ?? null,
     status: snapshot.status,
     fileName: summaryFileName ?? null,
     progress: snapshot.progress,
@@ -677,8 +687,12 @@ export async function getBackgroundJob(queueName: string, jobId: string) {
   return toClientJob(await getJobSnapshot(queueName, jobId));
 }
 
-export async function listRecentBackgroundJobs(queueNames: readonly string[], limit = 50) {
-  return (await listRecentJobSnapshots(queueNames, limit)).map((snapshot) =>
+export async function listRecentBackgroundJobs(
+  queueNames: readonly string[],
+  limit = 50,
+  filters: { origin?: string } = {},
+) {
+  return (await listRecentJobSnapshots(queueNames, limit, filters)).map((snapshot) =>
     toClientJob(snapshot)!,
   );
 }
@@ -696,6 +710,7 @@ export async function startProductExportJob(
     queueName: ADMIN_PRODUCT_EXPORT_QUEUE,
     kind: 'product-export',
     ownerKey,
+    origin: assistantJobOrigin(taskContext),
     requestId,
     data: { ...taskContext } as ProductExportPayload,
     activeScope: 'global',
@@ -742,6 +757,7 @@ export async function startProductCatalogFeedRefreshJob(
     queueName: ADMIN_PRODUCT_CATALOG_FEED_QUEUE,
     kind: 'product-catalog-feed-refresh',
     ownerKey: PRODUCT_CATALOG_FEED_OWNER_KEY,
+    origin: assistantJobOrigin(taskContext),
     requestId,
     data: { trigger, ...taskContext } as ProductCatalogFeedPayload,
     activeScope: 'global',
@@ -763,6 +779,7 @@ export async function startOrderExportJob(
     queueName: ADMIN_ORDER_EXPORT_QUEUE,
     kind: `order-export:${payload.mode}`,
     ownerKey,
+    origin: assistantJobOrigin(taskContext),
     requestId,
     data: { ...payload, ...taskContext } as OrderExportPayload,
   });
@@ -788,6 +805,7 @@ export async function startOrderEcotrackJob(
     queueName: ADMIN_ORDER_ECOTRACK_QUEUE,
     kind: `order-ecotrack:${payload.mode}`,
     ownerKey,
+    origin: assistantJobOrigin(taskContext),
     requestId,
     data: { ...payload, ...taskContext } as OrderEcotrackPayload,
     activeScope: 'global',
@@ -856,6 +874,7 @@ export async function startAdminReportingRefreshJob(
     queueName: ADMIN_REPORTING_REFRESH_QUEUE,
     kind: 'admin-reporting-refresh',
     ownerKey: 'admin-reporting',
+    origin: assistantJobOrigin(taskContext),
     requestId,
     activeScope: 'global',
     data: {
@@ -893,6 +912,7 @@ export async function startEcotrackSyncJob(
     queueName: ADMIN_ECOTRACK_SYNC_QUEUE,
     kind: 'ecotrack-sync',
     ownerKey,
+    origin: assistantJobOrigin(taskContext),
     requestId,
     data: { trigger, actor, ...taskContext } as EcotrackSyncPayload,
     activeScope: 'global',
@@ -910,6 +930,7 @@ export async function startEcotrackShipmentSyncJob(
     queueName: ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE,
     kind: 'ecotrack-shipment-sync',
     ownerKey,
+    origin: assistantJobOrigin(taskContext),
     requestId,
     data: { trigger, actor, ...taskContext } as EcotrackShipmentSyncPayload,
     activeScope: 'global',

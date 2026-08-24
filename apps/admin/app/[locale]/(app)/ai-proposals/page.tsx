@@ -1,6 +1,5 @@
 import { getDb, hasDb } from '@bric/db/client';
 
-import { AiProposalInbox } from '../../../../components/products/ai-proposal-inbox';
 import { AiProposalWorkspace } from '../../../../components/products/ai-proposal-workspace';
 import {
   aiProposalInboxQuerySchema,
@@ -8,9 +7,8 @@ import {
   parseAiProposalInboxQuery,
 } from '../../../../lib/ai-proposal-inbox';
 import { requireAiProposalPageAccess } from '../../../../lib/page-access';
-import { readLegacyUiPreference } from '../../../../lib/admin-ui-preference.server';
 
-export default async function AiProposalInboxPage({
+export default async function AiProposalsPage({
   params,
   searchParams,
 }: {
@@ -29,11 +27,7 @@ export default async function AiProposalInboxPage({
   const data = hasDb()
     ? await loadAiProposalInbox(getDb(), query)
     : { ...emptyData, query: aiProposalInboxQuerySchema.parse(query) };
-  const legacyUi = await readLegacyUiPreference();
-
-  return legacyUi ? (
-    <AiProposalInbox initialData={data} />
-  ) : (
+  return (
     <AiProposalWorkspace
       key={JSON.stringify(data.query)}
       initialData={data}

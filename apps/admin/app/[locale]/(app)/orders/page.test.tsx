@@ -1,122 +1,54 @@
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const {
-  loadDailyOrderStatusOverviewMock,
-  loadOrdersPageDataMock,
-  readEcotrackCatalogMock,
-  getDbMock,
-  hasDbMock,
-  requireOrdersPageAccessMock,
-  cookiesMock,
-} = vi.hoisted(() => ({
-  loadDailyOrderStatusOverviewMock: vi.fn(),
-  loadOrdersPageDataMock: vi.fn(),
-  readEcotrackCatalogMock: vi.fn(),
-  getDbMock: vi.fn(),
-  hasDbMock: vi.fn(),
-  requireOrdersPageAccessMock: vi.fn(),
-  cookiesMock: vi.fn(),
-}));
-
-vi.mock('../../../../components/orders/orders-manager', () => ({
-  OrdersManager: () => <div>OrdersManager</div>,
+const { loadOverview, loadOrders, readCatalog, requireAccess } = vi.hoisted(() => ({
+  loadOverview: vi.fn(),
+  loadOrders: vi.fn(),
+  readCatalog: vi.fn(),
+  requireAccess: vi.fn(),
 }));
 
 vi.mock('../../../../components/orders/orders-workspace', () => ({
-  OrdersWorkspace: () => <div>OrdersWorkspace</div>,
+  OrdersWorkspace: () => <div>Orders workspace</div>,
 }));
-
-vi.mock('next/headers', () => ({
-  cookies: cookiesMock,
-}));
-
 vi.mock('../../../../lib/admin-orders-data', () => ({
-  loadDailyOrderStatusOverview: loadDailyOrderStatusOverviewMock,
-  loadOrdersPageData: loadOrdersPageDataMock,
+  loadDailyOrderStatusOverview: loadOverview,
+  loadOrdersPageData: loadOrders,
 }));
-
-vi.mock('../../../../lib/ecotrack', () => ({
-  readEcotrackCatalog: readEcotrackCatalogMock,
-}));
-
-vi.mock('@bric/db/client', () => ({
-  getDb: getDbMock,
-  hasDb: hasDbMock,
-}));
-
-vi.mock('../../../../lib/page-access', () => ({
-  requireOrdersPageAccess: requireOrdersPageAccessMock,
-}));
+vi.mock('../../../../lib/ecotrack', () => ({ readEcotrackCatalog: readCatalog }));
+vi.mock('@bric/db/client', () => ({ getDb: () => ({}), hasDb: () => true }));
+vi.mock('../../../../lib/page-access', () => ({ requireOrdersPageAccess: requireAccess }));
 
 import OrdersPage from './page';
 
 describe('OrdersPage', () => {
-  afterEach(() => cleanup());
-
   beforeEach(() => {
     vi.clearAllMocks();
-    requireOrdersPageAccessMock.mockResolvedValue({
-      user: {
-        role: 'employee',
-      },
-    });
-    hasDbMock.mockReturnValue(true);
-    getDbMock.mockReturnValue({});
-    loadOrdersPageDataMock.mockResolvedValue({
-      writable: true,
-      items: [],
-      pagination: {
-        page: 1,
-        limit: 25,
-        totalItems: 0,
-        totalPages: 1,
-        hasNextPage: false,
-        hasPreviousPage: false,
-      },
-    });
-    loadDailyOrderStatusOverviewMock.mockResolvedValue({
-      available: false,
-      reportDay: null,
-      timezone: 'Africa/Algiers',
-    });
-    readEcotrackCatalogMock.mockResolvedValue({
+    requireAccess.mockResolvedValue({ user: { permissions: [] } });
+    loadOrders.mockResolvedValue({ items: [] });
+    loadOverview.mockResolvedValue({ available: false });
+    readCatalog.mockResolvedValue({
       wilayas: [],
       communes: [],
       serviceFees: [],
       weightFees: [],
       lastSync: null,
     });
-    cookiesMock.mockResolvedValue({ get: vi.fn().mockReturnValue(undefined) });
   });
 
-  it('defaults to the legacy orders manager', async () => {
-    const ui = await OrdersPage({ params: Promise.resolve({ locale: 'en' }) });
-    render(ui);
+  it('always renders the canonical orders workspace with its seven-day overview', async () => {
+    render(await OrdersPage({ params: Promise.resolve({ locale: 'en' }) }));
 
-    expect(screen.getByText('OrdersManager')).toBeInTheDocument();
-    expect(requireOrdersPageAccessMock).toHaveBeenCalledWith('en');
-    expect(loadOrdersPageDataMock).toHaveBeenCalledWith(
+    expect(requireAccess).toHaveBeenCalledWith('en');
+    expect(loadOrders).toHaveBeenCalledWith(
       { page: 1, limit: 25, search: '', sortKey: 'createdAt', sortDirection: 'desc' },
       true,
     );
-    expect(loadDailyOrderStatusOverviewMock).toHaveBeenCalledWith({
-      includeProfitProjection: false,
-      profitProjectionBasis: 'confirmed',
-    });
-  });
-
-  it('renders the integrated orders workspace with its seven-day overview', async () => {
-    cookiesMock.mockResolvedValue({ get: vi.fn().mockReturnValue({ value: '0' }) });
-
-    render(await OrdersPage({ params: Promise.resolve({ locale: 'en' }) }));
-
-    expect(screen.getByText('OrdersWorkspace')).toBeInTheDocument();
-    expect(screen.queryByText('OrdersManager')).not.toBeInTheDocument();
-    expect(loadDailyOrderStatusOverviewMock).toHaveBeenCalledWith({
+    expect(loadOverview).toHaveBeenCalledWith({
       includeProfitProjection: false,
       profitProjectionBasis: 'confirmed',
       reportDays: 7,
     });
+    expect(screen.getByText('Orders workspace')).toBeInTheDocument();
   });
 });

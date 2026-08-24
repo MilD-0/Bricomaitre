@@ -3,7 +3,6 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Analytics2Payload } from '../../lib/analytics2';
-import { ADMIN_AI_OPEN_EVENT } from '../../lib/admin-ai-events';
 import { AdminAiSurfaceProvider, useAdminAiSurfaceContext } from '../admin-ai-surface-context';
 import { splitPartialSeries, StatsWorkspace } from './analytics2-workspace';
 
@@ -290,7 +289,8 @@ function assumptionsPayload(): Analytics2Payload {
       },
       formula: {
         adCost: 'metaSpendEur * fxRateUsed',
-        adjustedProfit: 'grossProfitDzd * (1 - returnRatePct / 100)',
+        adjustedProfit:
+          'realizedEligibleProfitDzd + unresolvedProfitDzd * (1 - returnRatePct / 100)',
         netProfit: 'adjustedProfitDzd - adCostDzd',
         profitX: 'adjustedProfitDzd / adCostDzd',
         trueProfit: 'netProfitDzd - operatingCostDzd',
@@ -583,25 +583,20 @@ describe('StatsWorkspace', () => {
     expect(screen.queryByText('next 7-day model')).not.toBeInTheDocument();
   });
 
-  it('opens the assistant with the exact active analytics section', () => {
-    const open = vi.fn();
-    window.addEventListener(ADMIN_AI_OPEN_EVENT, open);
+  it('keeps analytics context without adding generic assistant controls', () => {
     const { container } = renderWorkspaceWithContext();
 
     const cashSection = screen.getByText('Cash pipeline').closest('section');
     expect(cashSection).not.toBeNull();
-    fireEvent.click(within(cashSection as HTMLElement).getByRole('button', { name: 'Ask AI' }));
-
-    expect(open).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('button', { name: 'Ask AI' })).not.toBeInTheDocument();
     expect(cashSection).toHaveAttribute('data-analytics-ai-focus', 'cash_pipeline');
-    expect(cashSection).toHaveAttribute('data-analytics-ai-active', 'true');
+    expect(cashSection).not.toHaveAttribute('data-analytics-ai-active');
     expect(
       container.querySelector('[data-analytics-ai-focus="economics_timeline"]'),
-    ).not.toHaveAttribute('data-analytics-ai-active');
+    ).toHaveAttribute('data-analytics-ai-active', 'true');
     expect(screen.getByTestId('surface-context')).toHaveTextContent(
-      '"analyticsFocus":"cash_pipeline"',
+      '"analyticsFocus":"economics_timeline"',
     );
-    window.removeEventListener(ADMIN_AI_OPEN_EVENT, open);
   });
 
   it('presents Search Console as a focused opportunity workspace', () => {

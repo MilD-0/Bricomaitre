@@ -19,9 +19,10 @@ import type {
   EcotrackPostingPreviewState,
   EcotrackPostingSummary,
   EcotrackPreviewResponse,
-} from './orders-ecotrack-posting-dialog';
-import type { ExportProgressState } from './orders-export-dialog';
-import type { ShoppingListSaveStatus, ShoppingListState } from './orders-shopping-list-dialog';
+  ExportProgressState,
+  ShoppingListSaveStatus,
+  ShoppingListState,
+} from './orders-workflow-model';
 import {
   buildInventoryPreview,
   buildMergedShoppingListState,

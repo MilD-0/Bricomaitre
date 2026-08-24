@@ -301,7 +301,7 @@ function destinationHref(
       ? `/${locale}/archive`
       : `/${locale}/products`;
   }
-  if (destinationKey === 'taxonomy') return `/${locale}/brands-categories`;
+  if (destinationKey === 'taxonomy') return `/${locale}/brands`;
   if (destinationKey === 'orders') return `/${locale}/orders`;
   if (destinationKey === 'ecotrack') return `/${locale}/orders/ecotrack`;
   if (destinationKey === 'inventory') return `/${locale}/inventory`;

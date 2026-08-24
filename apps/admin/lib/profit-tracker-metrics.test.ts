@@ -52,6 +52,29 @@ describe('profit tracker economics contract', () => {
     expect(metrics.costPerConfirmedDzd).toBe(0);
   });
 
+  it('uses 100% as a global profit-suppression mode without hiding costs or activity', () => {
+    expect(
+      computeProfitTrackerMetrics(
+        {
+          ...baseDay,
+          returnRatePct: 100,
+          stateAdjustedProfitDzd: 80_000,
+        },
+        280,
+      ),
+    ).toEqual({
+      adCostDzd: 28_000,
+      adjustedProfitDzd: 0,
+      netProfitDzd: 0,
+      profitX: 0,
+      netProfitBeforeReturnsDzd: 0,
+      profitXBeforeReturns: 0,
+      costPerConfirmedDzd: 28_000 / 15,
+      confirmationRatePct: 75,
+      clickToPageRatePct: 80,
+    });
+  });
+
   it('rolls a data-empty Friday into Saturday using Friday FX', () => {
     const days = applyProfitTrackerRollforward(
       [
@@ -141,6 +164,34 @@ describe('profit tracker operating costs and rollups', () => {
     expect(summary.netProfitDzd).toBe(62_000);
     expect(summary.operatingCostDzd).toBe(6_000);
     expect(summary.trueProfitDzd).toBe(56_000);
+  });
+
+  it('keeps activity and cost facts while suppressing every rolled-up profit at 100%', () => {
+    const days = applyProfitTrackerRollforward([{ ...baseDay, returnRatePct: 100 }], {
+      fxRate: 280,
+      restFrom: null,
+    });
+    const summary = summarizeProfitTracker(days, costs, '2026-08-15', '2026-08-15', true);
+    const [week] = buildProfitTrackerWeeks(days, costs, '2026-08-15', true);
+
+    expect(summary).toMatchObject({
+      grossProfitDzd: 100_000,
+      ratioAdCostDzd: 28_000,
+      operatingCostDzd: 6_000,
+      adjustedProfitDzd: 0,
+      netProfitDzd: 0,
+      trueProfitDzd: 0,
+      profitX: 0,
+      profitXBeforeReturns: 0,
+    });
+    expect(week).toMatchObject({
+      adCostDzd: 28_000,
+      operatingCostDzd: 7_000,
+      adjustedProfitDzd: 0,
+      netProfitDzd: 0,
+      trueProfitDzd: 0,
+      profitX: 0,
+    });
   });
 
   it('keeps spend-only days in period ad cost, net profit, and Profit ×', () => {

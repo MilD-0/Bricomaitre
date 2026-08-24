@@ -19,7 +19,7 @@ export type AnalyticsSection =
   | 'time'
   | 'metaAds';
 
-export type EconomicsReport = Awaited<ReturnType<typeof getProfitTrackerReport>>;
+type EconomicsReport = Awaited<ReturnType<typeof getProfitTrackerReport>>;
 
 export type AnalyticsSectionPayload = StatsDashboardData & {
   economics?: EconomicsReport;

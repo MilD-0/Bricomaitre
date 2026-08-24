@@ -27,7 +27,7 @@ export type NavigationItem = {
   subItems?: NavigationSubItem[];
 };
 
-const navigationItems: NavigationItem[] = [
+export const navigationItems: NavigationItem[] = [
   {
     key: 'administration',
     href: '/administration',
@@ -60,14 +60,22 @@ const navigationItems: NavigationItem[] = [
     key: 'assets',
     href: '/assets',
     subItems: [
-      { key: 'banners', href: '/assets#banners', translationKey: 'assetsManager.bannersTitle' },
+      { key: 'banners', href: '/assets', translationKey: 'assetsManager.bannersTitle' },
       {
         key: 'productGroups',
-        href: '/assets#featured-groups',
+        href: '/assets/featured-groups',
         translationKey: 'assetsManager.groupsTitle',
       },
-      { key: 'cards', href: '/assets#product-cards', translationKey: 'assetsManager.cardsTitle' },
-      { key: 'landingPages', href: '/landing-pages', translationKey: 'nav.landingPages' },
+      {
+        key: 'cards',
+        href: '/assets/product-cards',
+        translationKey: 'assetsManager.cardsTitle',
+      },
+      {
+        key: 'landingPages',
+        href: '/assets/landing-pages',
+        translationKey: 'nav.landingPages',
+      },
     ],
   },
   {
@@ -82,46 +90,24 @@ const navigationItems: NavigationItem[] = [
     key: 'stats',
     href: '/stats',
     subItems: [
-      { key: 'overview', href: '/stats', translationKey: 'statsDashboard.tabs.overview' },
-      { key: 'website', href: '/stats/website', translationKey: 'statsDashboard.tabs.website' },
+      { key: 'overview', href: '/stats', translationKey: 'nav.statsOverview' },
+      { key: 'money', href: '/stats/time', translationKey: 'nav.statsMoney' },
+      { key: 'acquisition', href: '/stats/meta-ads', translationKey: 'nav.statsAcquisition' },
+      { key: 'fulfillment', href: '/stats/fulfillment', translationKey: 'nav.statsFulfillment' },
+      { key: 'storefront', href: '/stats/website', translationKey: 'nav.statsStorefront' },
       {
-        key: 'landingPages',
-        href: '/stats/landing-pages',
-        translationKey: 'statsDashboard.tabs.landingPages',
-      },
-      {
-        key: 'aiAssistants',
+        key: 'aiOperations',
         href: '/stats/ai-assistants',
-        translationKey: 'statsDashboard.tabs.aiAssistants',
+        translationKey: 'nav.statsAiOperations',
       },
       {
-        key: 'customers',
-        href: '/stats/customers',
-        translationKey: 'statsDashboard.tabs.customers',
+        key: 'shoppingAssistant',
+        href: '/stats/shopping-assistant',
+        translationKey: 'nav.statsShoppingAssistant',
       },
-      { key: 'products', href: '/stats/products', translationKey: 'statsDashboard.tabs.products' },
-      {
-        key: 'geography',
-        href: '/stats/geography',
-        translationKey: 'statsDashboard.tabs.geography',
-      },
-      { key: 'time', href: '/stats/time', translationKey: 'statsDashboard.tabs.time' },
-      {
-        key: 'profitTracker',
-        href: '/stats/costs',
-        translationKey: 'statsDashboard.tabs.costs',
-      },
-      { key: 'metaAds', href: '/stats/meta-ads', translationKey: 'statsDashboard.tabs.metaAds' },
-      {
-        key: 'manualOrders',
-        href: '/stats/manual-orders',
-        translationKey: 'statsDashboard.manualOrders.sectionTitle',
-      },
-      {
-        key: 'imports',
-        href: '/stats/import-history',
-        translationKey: 'statsDashboard.imports.title',
-      },
+      { key: 'search', href: '/stats/search', translationKey: 'nav.statsSearch' },
+      { key: 'catalog', href: '/stats/products', translationKey: 'nav.statsCatalog' },
+      { key: 'assumptions', href: '/stats/costs', translationKey: 'nav.statsAssumptions' },
     ],
   },
   {
@@ -129,44 +115,3 @@ const navigationItems: NavigationItem[] = [
     href: '/bulletin',
   },
 ];
-
-const modernAssetSubItems: NavigationSubItem[] = [
-  { key: 'banners', href: '/assets', translationKey: 'assetsManager.bannersTitle' },
-  {
-    key: 'productGroups',
-    href: '/assets/featured-groups',
-    translationKey: 'assetsManager.groupsTitle',
-  },
-  { key: 'cards', href: '/assets/product-cards', translationKey: 'assetsManager.cardsTitle' },
-  {
-    key: 'landingPages',
-    href: '/assets/landing-pages',
-    translationKey: 'nav.landingPages',
-  },
-];
-
-const modernStatsSubItems: NavigationSubItem[] = [
-  { key: 'overview', href: '/stats', translationKey: 'nav.statsOverview' },
-  { key: 'money', href: '/stats/time', translationKey: 'nav.statsMoney' },
-  { key: 'acquisition', href: '/stats/meta-ads', translationKey: 'nav.statsAcquisition' },
-  { key: 'fulfillment', href: '/stats/fulfillment', translationKey: 'nav.statsFulfillment' },
-  { key: 'storefront', href: '/stats/website', translationKey: 'nav.statsStorefront' },
-  { key: 'aiOperations', href: '/stats/ai-assistants', translationKey: 'nav.statsAiOperations' },
-  {
-    key: 'shoppingAssistant',
-    href: '/stats/shopping-assistant',
-    translationKey: 'nav.statsShoppingAssistant',
-  },
-  { key: 'search', href: '/stats/search', translationKey: 'nav.statsSearch' },
-  { key: 'catalog', href: '/stats/products', translationKey: 'nav.statsCatalog' },
-  { key: 'assumptions', href: '/stats/costs', translationKey: 'nav.statsAssumptions' },
-];
-
-export function navigationItemsForUi(legacyUi: boolean): NavigationItem[] {
-  if (legacyUi) return navigationItems;
-  return navigationItems.map((item) => {
-    if (item.key === 'assets') return { ...item, subItems: modernAssetSubItems };
-    if (item.key === 'stats') return { ...item, subItems: modernStatsSubItems };
-    return item;
-  });
-}

@@ -202,11 +202,8 @@ export const assetProductOptionQuerySchema = z
   })
   .strict();
 
-export type AssetBannerInput = z.input<typeof assetBannerSchema>;
 export type AssetBannerPayload = z.output<typeof assetBannerSchema>;
-export type FeaturedProductGroupInput = z.input<typeof featuredProductGroupSchema>;
 export type FeaturedProductGroupPayload = z.output<typeof featuredProductGroupSchema>;
-export type ProductCardInput = z.input<typeof productCardSchema>;
 export type ProductCardPayload = z.output<typeof productCardSchema>;
 
 export type AssetMetaProduct = {
