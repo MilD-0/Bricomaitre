@@ -271,13 +271,17 @@
 .global-search form > button:active {
   transform: scale(0.94);
 }
-.global-search form > button:hover svg {
-  transform: scale(1.06);
+.global-search form > button:hover .global-search-submit-icon {
+  transform: translate(-0.06rem, -0.06rem) scale(1.06);
 }
 .global-search form > button svg {
   display: block;
   flex: 0 0 auto;
   transition: transform 160ms ease;
+}
+.global-search-submit-icon {
+  /* The magnifier handle makes the glyph optically heavy at the lower end. */
+  transform: translate(-0.06rem, -0.06rem);
 }
 .global-search-fallback {
   height: 3rem;

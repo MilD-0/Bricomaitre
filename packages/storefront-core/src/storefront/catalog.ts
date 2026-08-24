@@ -635,7 +635,7 @@ export async function readStorefrontCategories(db: Database) {
 }
 
 export async function readStorefrontCatalogCounts(db: Database) {
-  const productWhereClause = and(eq(products.active, true), isNull(products.archivedAt));
+  const productWhereClause = buildCatalogCountProductVisibilityCondition();
   const brandWhereClause = eq(brands.isActive, true);
   const categoryWhereClause = eq(categories.isActive, true);
 
@@ -650,4 +650,18 @@ export async function readStorefrontCatalogCounts(db: Database) {
     brandCount: Number(brandRows[0]?.count ?? 0),
     categoryCount: Number(categoryRows[0]?.count ?? 0),
   };
+}
+
+/**
+ * The release preflight starts the candidate API before applying pending
+ * migrations. Read the archive marker through the row JSON so this one probe
+ * works both before migration 0071 creates products.archived_at and after the
+ * modern catalog starts using it. Missing and null archive markers are both
+ * visible; archived products remain excluded once the column exists.
+ */
+export function buildCatalogCountProductVisibilityCondition() {
+  return and(
+    eq(products.active, true),
+    sql<boolean>`(to_jsonb(${products}) ->> 'archived_at') is null`,
+  );
 }

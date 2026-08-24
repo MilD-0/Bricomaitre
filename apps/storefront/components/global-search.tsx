@@ -172,7 +172,12 @@ export function GlobalSearch({
           }}
         />
         <button type="submit" aria-label={labels.label}>
-          <Search aria-hidden="true" size={18} strokeWidth={2} />
+          <Search
+            className="global-search-submit-icon"
+            aria-hidden="true"
+            size={18}
+            strokeWidth={2}
+          />
         </button>
       </form>
 

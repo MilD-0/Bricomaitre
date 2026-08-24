@@ -237,6 +237,54 @@ describe('Meta Ads Insights ingestion', () => {
     expect(wait).toHaveBeenCalledWith(1_000);
   });
 
+  it('retries an empty successful response before accepting provider data', async () => {
+    const wait = vi.fn().mockResolvedValue(undefined);
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('', { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ id: 'act_123456789', currency: 'EUR', timezone_name: 'Africa/Algiers' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      )
+      .mockImplementation(() => Promise.resolve(emptyMetaPage()));
+
+    await expect(
+      fetchMetaAdsInsightRows({
+        config: readMetaAdsConfig({
+          META_ADS_ACCESS_TOKEN: 'token',
+          META_AD_ACCOUNT_ID: '123456789',
+        }),
+        fetchImpl: fetchMock,
+        now: new Date('2026-08-17T00:00:00.000Z'),
+        lookbackDays: 1,
+        wait,
+      }),
+    ).resolves.toMatchObject({ pagesFetched: 5, rows: [], breakdownRows: [] });
+    expect(wait).toHaveBeenCalledWith(500);
+  });
+
+  it('reports repeated malformed success payloads as a stable provider error', async () => {
+    const wait = vi.fn().mockResolvedValue(undefined);
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response('', { status: 200 }));
+
+    await expect(
+      fetchMetaAdsInsightRows({
+        config: readMetaAdsConfig({
+          META_ADS_ACCESS_TOKEN: 'token',
+          META_AD_ACCOUNT_ID: '123456789',
+        }),
+        fetchImpl: fetchMock,
+        now: new Date('2026-08-17T00:00:00.000Z'),
+        lookbackDays: 1,
+        wait,
+      }),
+    ).rejects.toMatchObject({ code: 'meta_ads_invalid_response', status: 200 });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(wait).toHaveBeenCalledTimes(2);
+  });
+
   it('rejects impossible calendar dates before requesting Insights', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
@@ -316,5 +364,64 @@ describe('Meta Ads Insights ingestion', () => {
       db,
       now: new Date('2026-08-17T00:00:00.000Z'),
     });
+  });
+
+  it('persists large breakdown results in bounded database batches', async () => {
+    const runReturning = vi.fn().mockResolvedValue([{ id: 42 }]);
+    const deleteWhere = vi.fn().mockResolvedValue(undefined);
+    const insertValues = vi.fn().mockResolvedValue(undefined);
+    const insert = vi.fn(() => ({ values: insertValues }));
+    const updateWhere = vi.fn().mockResolvedValue(undefined);
+    const transaction = vi.fn(async (callback: (tx: unknown) => Promise<void>) =>
+      callback({
+        delete: vi.fn(() => ({ where: deleteWhere })),
+        insert,
+      }),
+    );
+    const db = {
+      insert: vi.fn(() => ({ values: vi.fn(() => ({ returning: runReturning })) })),
+      transaction,
+      update: vi.fn(() => ({ set: vi.fn(() => ({ where: updateWhere })) })),
+    };
+    const breakdownRows = Array.from({ length: 600 }, (_, index) => ({
+      date_start: '2026-08-17',
+      account_id: '123456789',
+      campaign_id: 'campaign-1',
+      adset_id: 'adset-1',
+      ad_id: `ad-${index + 1}`,
+      publisher_platform: 'facebook',
+      platform_position: 'feed',
+      impression_device: 'mobile_app',
+      spend: '1.00',
+    }));
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ id: 'act_123456789', currency: 'EUR', timezone_name: 'Africa/Algiers' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(emptyMetaPage())
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: breakdownRows }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockImplementation(() => Promise.resolve(emptyMetaPage()));
+
+    await expect(
+      syncMetaAdsInsights({
+        db: db as never,
+        env: { META_ADS_ACCESS_TOKEN: 'token', META_AD_ACCOUNT_ID: '123456789' },
+        fetchImpl: fetchMock,
+        now: new Date('2026-08-17T00:00:00.000Z'),
+        lookbackDays: 1,
+      }),
+    ).resolves.toMatchObject({ breakdownRows: 600 });
+
+    expect(insert).toHaveBeenCalledTimes(3);
+    expect(insertValues.mock.calls.map(([rows]) => rows.length)).toEqual([250, 250, 100]);
   });
 });

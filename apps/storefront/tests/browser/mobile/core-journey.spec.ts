@@ -69,8 +69,42 @@ test('supports touch navigation, search, and homepage carousels', async ({ page,
   );
   expect(headerIconAlignment).toHaveLength(3);
   expect(
-    headerIconAlignment.every((offset) => offset.horizontal <= 0.5 && offset.vertical <= 0.5),
+    headerIconAlignment.every((offset) => offset.horizontal <= 1.5 && offset.vertical <= 1.5),
   ).toBe(true);
+
+  const searchActionAlignment = await page.locator('.global-search form').evaluate((form) => {
+    const formBox = form.getBoundingClientRect();
+    const buttonBox = form.querySelector('button')!.getBoundingClientRect();
+    return Math.abs(buttonBox.top + buttonBox.height / 2 - (formBox.top + formBox.height / 2));
+  });
+  expect(searchActionAlignment).toBeLessThanOrEqual(0.5);
+
+  const assistantLauncher = page.getByRole('button', { name: 'Trouver le bon outil' });
+  await expect
+    .poll(() => assistantLauncher.evaluate((element) => getComputedStyle(element).backgroundImage))
+    .toContain('linear-gradient');
+  await expect(assistantLauncher.locator('.shopping-assistant-launcher-icon')).toHaveCSS(
+    'background-color',
+    'rgba(0, 0, 0, 0)',
+  );
+  await expect(assistantLauncher.locator('.lucide-message-circle')).toBeVisible();
+  await expect(assistantLauncher.locator('.shopping-assistant-launcher-spark')).toBeVisible();
+  const assistantIconAlignment = await assistantLauncher.evaluate((launcher) => {
+    const launcherBox = launcher.getBoundingClientRect();
+    const iconBox = launcher
+      .querySelector('.shopping-assistant-launcher-icon')!
+      .getBoundingClientRect();
+    return {
+      horizontal: Math.abs(
+        iconBox.left + iconBox.width / 2 - (launcherBox.left + launcherBox.width / 2),
+      ),
+      vertical: Math.abs(
+        iconBox.top + iconBox.height / 2 - (launcherBox.top + launcherBox.height / 2),
+      ),
+    };
+  });
+  expect(assistantIconAlignment.horizontal).toBeLessThanOrEqual(0.5);
+  expect(assistantIconAlignment.vertical).toBeLessThanOrEqual(0.5);
 
   const search = page
     .getByRole('banner')

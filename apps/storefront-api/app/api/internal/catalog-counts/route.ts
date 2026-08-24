@@ -20,5 +20,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ productCount: 0, brandCount: 0, categoryCount: 0 });
   }
 
-  return NextResponse.json(await readStorefrontCatalogCounts(getDb()));
+  try {
+    return NextResponse.json(await readStorefrontCatalogCounts(getDb()));
+  } catch (error) {
+    console.error('Unable to read deployment catalog counts.', error);
+    return NextResponse.json({ error: 'catalog counts are unavailable' }, { status: 503 });
+  }
 }

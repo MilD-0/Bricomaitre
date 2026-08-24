@@ -19,6 +19,7 @@ const META_GRAPH_HOST = 'graph.facebook.com';
 const META_PAGE_LIMIT = 500;
 const MAX_PAGES = 300;
 const MAX_INSIGHTS_DAYS_PER_REQUEST = 30;
+const META_INSERT_BATCH_SIZE = 250;
 
 type Database = ReturnType<typeof getDb>;
 type MetaAdsEnvironment = Record<string, string | undefined> &
@@ -30,6 +31,7 @@ type MetaAdsEnvironment = Record<string, string | undefined> &
   >;
 
 type FetchLike = typeof fetch;
+type MetaRequestResult<T> = { body: T; usage: ReturnType<typeof responseUsage> };
 
 const accountResponseSchema = z
   .object({
@@ -334,12 +336,14 @@ function responseUsage(response: Response) {
   };
 }
 
-async function metaRequest(
+async function metaRequest<T>(
   url: URL,
   config: ReturnType<typeof readMetaAdsConfig>,
   fetchImpl: FetchLike,
   wait: (milliseconds: number) => Promise<void>,
-) {
+  schema: z.ZodType<T>,
+  responseName: string,
+): Promise<MetaRequestResult<T>> {
   if (url.hostname !== META_GRAPH_HOST || url.protocol !== 'https:') {
     throw new MetaAdsSyncError(
       'Meta returned an invalid pagination URL.',
@@ -368,7 +372,27 @@ async function metaRequest(
       error?: { code?: number; message?: string };
     } | null;
 
-    if (response.ok) return { body, usage: responseUsage(response) };
+    if (response.ok) {
+      let parsed: ReturnType<typeof schema.safeParse> | null = null;
+      try {
+        parsed = schema.safeParse(body);
+      } catch {
+        // Treat parser exhaustion from an unexpectedly large or malformed
+        // provider response like any other invalid upstream payload.
+      }
+      if (parsed?.success) {
+        return { body: parsed.data, usage: responseUsage(response) };
+      }
+      if (attempt < 2) {
+        await wait(attempt === 0 ? 500 : 2_000);
+        continue;
+      }
+      throw new MetaAdsSyncError(
+        `Meta returned an invalid ${responseName} response.`,
+        'meta_ads_invalid_response',
+        response.status,
+      );
+    }
 
     if ((response.status === 429 || response.status >= 500) && attempt < 2) {
       const retryAfterSeconds = Number.parseInt(response.headers.get('retry-after') ?? '', 10);
@@ -454,8 +478,15 @@ export async function fetchMetaAdsInsightRows(input: {
     `https://${META_GRAPH_HOST}/${input.config.apiVersion}/act_${input.config.accountId}`,
   );
   accountUrl.searchParams.set('fields', 'id,currency,timezone_name');
-  const accountResult = await metaRequest(accountUrl, input.config, input.fetchImpl, wait);
-  const accountBody = accountResponseSchema.parse(accountResult.body);
+  const accountResult = await metaRequest<z.infer<typeof accountResponseSchema>>(
+    accountUrl,
+    input.config,
+    input.fetchImpl,
+    wait,
+    accountResponseSchema,
+    'ad account',
+  );
+  const accountBody = accountResult.body;
   const until = dateOnly(
     explicitUntil ?? dayInTimezone(input.now, accountBody.timezone_name),
     'until',
@@ -555,8 +586,15 @@ export async function fetchMetaAdsInsightRows(input: {
       if (pagesFetched >= MAX_PAGES) {
         throw new MetaAdsSyncError('Meta Ads pagination exceeded the safety limit.', 'page_limit');
       }
-      const result = await metaRequest(next, input.config, input.fetchImpl, wait);
-      const page = insightsPageSchema.parse(result.body);
+      const result: MetaRequestResult<z.infer<typeof insightsPageSchema>> = await metaRequest(
+        next,
+        input.config,
+        input.fetchImpl,
+        wait,
+        insightsPageSchema,
+        'Insights page',
+      );
+      const page: z.infer<typeof insightsPageSchema> = result.body;
       rows.push(
         ...page.data.map((row) =>
           mapMetaAdsInsightRow(
@@ -595,8 +633,16 @@ export async function fetchMetaAdsInsightRows(input: {
             'page_limit',
           );
         }
-        const result = await metaRequest(next, input.config, input.fetchImpl, wait);
-        const page = breakdownInsightsPageSchema.parse(result.body);
+        const result: MetaRequestResult<z.infer<typeof breakdownInsightsPageSchema>> =
+          await metaRequest(
+            next,
+            input.config,
+            input.fetchImpl,
+            wait,
+            breakdownInsightsPageSchema,
+            `${breakdown.kind} breakdown page`,
+          );
+        const page: z.infer<typeof breakdownInsightsPageSchema> = result.body;
         breakdownRows.push(
           ...page.data.map((row) => mapMetaAdsBreakdownRow(row, breakdown.kind, input.now)),
         );
@@ -643,8 +689,16 @@ export async function fetchMetaAdsInsightRows(input: {
       if (pagesFetched >= MAX_PAGES) {
         throw new MetaAdsSyncError('Meta Ads pagination exceeded the safety limit.', 'page_limit');
       }
-      const result = await metaRequest(next, input.config, input.fetchImpl, wait);
-      const page = deliveryEntitiesPageSchema.parse(result.body);
+      const result: MetaRequestResult<z.infer<typeof deliveryEntitiesPageSchema>> =
+        await metaRequest(
+          next,
+          input.config,
+          input.fetchImpl,
+          wait,
+          deliveryEntitiesPageSchema,
+          `${entityType} page`,
+        );
+      const page: z.infer<typeof deliveryEntitiesPageSchema> = result.body;
       entityRows.push(...page.data);
       pagesFetched += 1;
       pageIndex += 1;
@@ -781,14 +835,24 @@ export async function syncMetaAdsInsights(
         .delete(metaAdsDeliveryEntities)
         .where(eq(metaAdsDeliveryEntities.accountId, loaded.account.id));
 
-      if (loaded.rows.length > 0) {
-        await tx.insert(metaAdsDailyInsights).values(loaded.rows);
+      for (let offset = 0; offset < loaded.rows.length; offset += META_INSERT_BATCH_SIZE) {
+        await tx
+          .insert(metaAdsDailyInsights)
+          .values(loaded.rows.slice(offset, offset + META_INSERT_BATCH_SIZE));
       }
-      if (loaded.breakdownRows.length > 0) {
-        await tx.insert(metaAdsBreakdownDailyInsights).values(loaded.breakdownRows);
+      for (let offset = 0; offset < loaded.breakdownRows.length; offset += META_INSERT_BATCH_SIZE) {
+        await tx
+          .insert(metaAdsBreakdownDailyInsights)
+          .values(loaded.breakdownRows.slice(offset, offset + META_INSERT_BATCH_SIZE));
       }
-      if (loaded.deliveryEntities.length > 0) {
-        await tx.insert(metaAdsDeliveryEntities).values(loaded.deliveryEntities);
+      for (
+        let offset = 0;
+        offset < loaded.deliveryEntities.length;
+        offset += META_INSERT_BATCH_SIZE
+      ) {
+        await tx
+          .insert(metaAdsDeliveryEntities)
+          .values(loaded.deliveryEntities.slice(offset, offset + META_INSERT_BATCH_SIZE));
       }
     });
 
@@ -803,6 +867,7 @@ export async function syncMetaAdsInsights(
       now,
     });
 
+    const completedAt = options.now ? now : new Date();
     await db
       .update(metaAdsSyncRuns)
       .set({
@@ -818,8 +883,8 @@ export async function syncMetaAdsInsights(
         rowsUpserted:
           loaded.rows.length + loaded.breakdownRows.length + loaded.deliveryEntities.length,
         usage: loaded.usage,
-        completedAt: now,
-        updatedAt: now,
+        completedAt,
+        updatedAt: completedAt,
       })
       .where(eq(metaAdsSyncRuns.id, run.id));
 
@@ -841,14 +906,15 @@ export async function syncMetaAdsInsights(
             error instanceof Error ? error.message : 'Unknown Meta Ads synchronization failure.',
             'meta_ads_sync_failed',
           );
+    const completedAt = options.now ? now : new Date();
     await db
       .update(metaAdsSyncRuns)
       .set({
         status: 'failed',
         errorCode: failure.code,
         errorMessage: failure.message.slice(0, 1000),
-        completedAt: now,
-        updatedAt: now,
+        completedAt,
+        updatedAt: completedAt,
       })
       .where(eq(metaAdsSyncRuns.id, run.id));
     throw failure;

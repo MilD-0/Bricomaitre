@@ -879,7 +879,18 @@
     grid-row: 2;
   }
   .site-header-search .global-search form {
+    position: relative;
     height: 2.75rem;
+    grid-template-columns: auto minmax(0, 1fr);
+    padding-inline-start: 1rem;
+    padding-inline-end: 3rem;
+  }
+  .site-header-search .global-search form > button {
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-end: 0.3rem;
+    margin: 0;
+    translate: 0 -50%;
   }
   .site-header-primary {
     padding-block: 0.15rem;
