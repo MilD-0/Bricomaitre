@@ -171,10 +171,6 @@
       "error": "The status correction could not be recorded."
     }
   },
-  "profile": {
-    "legacyUi": "Legacy UI",
-    "legacyUiDescription": "Use the original Products, Orders, Assets, Landing Pages, and Stats interfaces."
-  },
   "adminWorkspace": {
     "common": {
       "search": "Search",
@@ -228,7 +224,6 @@
       "payloadDetails": "Payload details",
       "searchPlaceholder": "Search customer, phone, city, or product",
       "queue": "Order queue",
-      "weekOverview": "Seven-day outlook",
       "days": "Projection days",
       "previousDay": "Previous projection day",
       "nextDay": "Next projection day",
@@ -1484,7 +1479,6 @@
   },
   "aiChat": {
     "open": "AI assistant",
-    "ask": "Ask AI",
     "close": "Close AI assistant",
     "title": "Admin AI assistant",
     "conversation": "AI assistant conversation",

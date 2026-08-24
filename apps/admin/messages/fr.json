@@ -171,10 +171,6 @@
       "error": "La correction de statut n’a pas pu être enregistrée."
     }
   },
-  "profile": {
-    "legacyUi": "Interface classique",
-    "legacyUiDescription": "Utiliser les interfaces d’origine pour les Produits, Commandes, Ressources, Pages d’atterrissage et Statistiques."
-  },
   "adminWorkspace": {
     "common": {
       "search": "Rechercher",
@@ -228,7 +224,6 @@
       "payloadDetails": "Détails des données",
       "searchPlaceholder": "Rechercher client, téléphone, ville ou produit",
       "queue": "File des commandes",
-      "weekOverview": "Aperçu sur sept jours",
       "days": "Jours de projection",
       "previousDay": "Jour de projection précédent",
       "nextDay": "Jour de projection suivant",
@@ -1484,7 +1479,6 @@
   },
   "aiChat": {
     "open": "Assistant IA",
-    "ask": "Demander à l’IA",
     "close": "Fermer l’assistant IA",
     "title": "Assistant IA administrateur",
     "conversation": "Conversation avec l’assistant IA",

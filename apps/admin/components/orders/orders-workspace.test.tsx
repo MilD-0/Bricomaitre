@@ -101,10 +101,6 @@ function makeOverview(reportCount = 7): DailyOrderStatusOverview {
         estimatedReturnedOrders: 1,
         estimatedReturnLoss: 5_000,
         projectedProfit: 35_000 - index * 1000,
-        previousMonthStart: '2026-07-01',
-        previousMonthEnd: '2026-07-31',
-        previousMonthOrders: 100,
-        previousMonthNegativeOutcomeOrders: 10,
       },
     };
   });
@@ -175,9 +171,9 @@ describe('OrdersWorkspace', () => {
     expect(screen.getByRole('button', { name: 'Phone order' })).toBeInTheDocument();
     expect(screen.getAllByText('Projected profit').length).toBeGreaterThan(0);
     expect(container.querySelector('[data-workspace-header]')?.nextElementSibling).toHaveAttribute(
-      'aria-label',
-      'Seven-day outlook',
+      'data-orders-pulse',
     );
+    expect(screen.queryByText('Seven-day outlook')).not.toBeInTheDocument();
   });
 
   it('keeps the complete status filter behind one deliberate phone control', async () => {
@@ -193,18 +189,24 @@ describe('OrdersWorkspace', () => {
   it('presents seven projections as a compact stacked deck', async () => {
     const user = userEvent.setup();
     const { container } = renderWorkspace();
-    const outlook = screen.getByLabelText('Seven-day outlook');
+    const outlook = container.querySelector('[data-orders-pulse]');
 
     expect(outlook).toBeInTheDocument();
-    expect(within(outlook).getAllByRole('article')).toHaveLength(1);
+    expect(within(outlook as HTMLElement).getAllByRole('article')).toHaveLength(1);
     expect(container.querySelectorAll('[data-projection-stack-layer]')).toHaveLength(2);
-    expect(within(outlook).getByText('Tuesday, Aug 18')).toBeInTheDocument();
-    expect(within(outlook).getAllByText('Updates').length).toBeGreaterThan(0);
-    expect(within(outlook).getAllByText(/9 confirmation · 4 shipment/).length).toBeGreaterThan(0);
-    expect(within(outlook).getAllByText('Cancelled').length).toBeGreaterThan(0);
-    expect(within(outlook).getAllByText(/0 admin · 1 carrier/).length).toBeGreaterThan(0);
-    expect(within(outlook).getByText(/Gross DZD/)).toBeInTheDocument();
-    expect(within(outlook).getAllByText('Estimated return loss').length).toBeGreaterThan(0);
+    expect(within(outlook as HTMLElement).getByText('Tuesday, Aug 18')).toBeInTheDocument();
+    expect(within(outlook as HTMLElement).getAllByText('Updates').length).toBeGreaterThan(0);
+    expect(
+      within(outlook as HTMLElement).getAllByText(/9 confirmation · 4 shipment/).length,
+    ).toBeGreaterThan(0);
+    expect(within(outlook as HTMLElement).getAllByText('Cancelled').length).toBeGreaterThan(0);
+    expect(
+      within(outlook as HTMLElement).getAllByText(/0 admin · 1 carrier/).length,
+    ).toBeGreaterThan(0);
+    expect(within(outlook as HTMLElement).getByText(/Gross DZD/)).toBeInTheDocument();
+    expect(
+      within(outlook as HTMLElement).getAllByText('Estimated return loss').length,
+    ).toBeGreaterThan(0);
     expect(container.querySelector('[data-projection-summary-grid]')?.children).toHaveLength(6);
     const desktopSummary = container.querySelector('[data-projection-summary-grid]');
     expect(desktopSummary).not.toBeNull();
@@ -507,7 +509,7 @@ describe('OrdersWorkspace', () => {
     await user.click(actions);
     expect(screen.getByRole('menuitem', { name: 'Copy tracking link' })).toBeInTheDocument();
 
-    await user.click(screen.getByText('Seven-day outlook'));
+    await user.click(screen.getByText('Tuesday, Aug 18'));
     expect(screen.queryByRole('menuitem', { name: 'Copy tracking link' })).not.toBeInTheDocument();
 
     await user.click(actions);

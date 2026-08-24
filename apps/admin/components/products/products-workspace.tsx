@@ -68,7 +68,6 @@ import {
   WorkspaceHeading,
   WorkspaceToolbar,
 } from '../ui/workspace';
-import { AdminAiAskButton } from '../admin-ai-ask-button';
 
 type ProductsResponse = { items: ProductRecord[]; pagination: PaginationMeta };
 type CatalogOption = { id: number; name: string };
@@ -983,7 +982,6 @@ export function ProductsWorkspace({
             }
           />
           <WorkspaceActions>
-            <AdminAiAskButton />
             {canExportEntireCatalog ? (
               <CompactMenu label={t('labels.actions')}>
                 <CompactMenuItem

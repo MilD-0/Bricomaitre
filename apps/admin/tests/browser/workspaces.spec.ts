@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
-const modernRoutes = [
+const workspaceRoutes = [
   '/en/administration',
   '/en/administration/roles',
   '/en/administration/storefront',
@@ -52,7 +52,19 @@ const screenshotRoutes = new Set([
   '/en/stats/shopping-assistant',
 ]);
 
-async function openModernWorkspace(page: Page, path: string) {
+const retiredUiRoutes = [
+  '/en/landing-pages',
+  '/en/brands-categories',
+  '/en/storefront-settings',
+  '/en/stats/customers',
+  '/en/stats/geography',
+  '/en/stats/import-history',
+  '/en/stats/landing-pages',
+  '/en/stats/manual-orders',
+  '/en/stats/profit-tracker',
+] as const;
+
+async function openWorkspace(page: Page, path: string) {
   await page.goto(path, { waitUntil: 'load', timeout: 120_000 });
   await expect(page).toHaveURL(new RegExp(`${path.replaceAll('/', '\\/')}$`));
   await expect(page.locator('[data-workspace-frame]')).toHaveCount(1, { timeout: 30_000 });
@@ -60,24 +72,16 @@ async function openModernWorkspace(page: Page, path: string) {
   await expect(page.locator('h1')).toHaveCount(1);
 }
 
-test.beforeEach(async ({ context, isMobile, page }) => {
-  await context.addCookies([
-    {
-      name: 'bric-admin-legacy-ui',
-      value: '0',
-      url: 'http://localhost:3000',
-      sameSite: 'Lax',
-    },
-  ]);
+test.beforeEach(async ({ isMobile, page }) => {
   if (isMobile) await page.setViewportSize({ width: 360, height: 800 });
 });
 
-test('keeps every modern workspace structurally clean and within the viewport', async ({
+test('keeps every workspace structurally clean and within the viewport', async ({
   page,
 }, testInfo) => {
   test.setTimeout(6 * 60_000);
 
-  for (const path of modernRoutes) {
+  for (const path of workspaceRoutes) {
     const browserErrors: string[] = [];
     const failedResponses: string[] = [];
     const onConsole = (message: { type(): string; text(): string }) => {
@@ -92,7 +96,7 @@ test('keeps every modern workspace structurally clean and within the viewport', 
     page.on('response', onResponse);
 
     await test.step(path, async () => {
-      await openModernWorkspace(page, path);
+      await openWorkspace(page, path);
       await page.waitForTimeout(350);
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -114,12 +118,12 @@ test('keeps every modern workspace structurally clean and within the viewport', 
   }
 });
 
-test('keeps representative modern workspaces at WCAG A and AA', async ({ page }) => {
+test('keeps representative workspaces at WCAG A and AA', async ({ page }) => {
   test.setTimeout(4 * 60_000);
 
   for (const path of accessibilityRoutes) {
     await test.step(path, async () => {
-      await openModernWorkspace(page, path);
+      await openWorkspace(page, path);
       await page.waitForTimeout(350);
       const results = await new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -142,6 +146,14 @@ test('keeps default Stats routes canonical without hydration navigation', async 
     await page.goto(path, { waitUntil: 'load' });
     await expect(page.locator('[data-workspace-frame]')).toHaveCount(1, { timeout: 30_000 });
     await page.waitForTimeout(500);
+    await expect(page).toHaveURL(`http://localhost:3000${path}`);
+  }
+});
+
+test('does not retain compatibility routes for the retired admin UI', async ({ page }) => {
+  for (const path of retiredUiRoutes) {
+    const response = await page.goto(path, { waitUntil: 'load' });
+    expect(response?.status(), `${path} should be removed`).toBe(404);
     await expect(page).toHaveURL(`http://localhost:3000${path}`);
   }
 });

@@ -114,5 +114,5 @@ export const orderListQuerySchema = z
     };
   });
 
-export type OrderSortKey = z.infer<typeof orderListQuerySchema>['sortKey'];
+type OrderSortKey = z.infer<typeof orderListQuerySchema>['sortKey'];
 export type OrderSortRule = SortRule<OrderSortKey>;

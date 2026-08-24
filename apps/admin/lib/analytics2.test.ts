@@ -9,6 +9,7 @@ import {
   clipAnalytics2Filters,
   finalizeSearchFilters,
   freshnessState,
+  loadAutomaticPaidEconomics,
   materializedFactsAreUsable,
   metricChange,
   projectOpenEconomicsSeries,
@@ -439,6 +440,44 @@ describe('analytics2 economics aggregation', () => {
 });
 
 describe('automatic paid economics', () => {
+  it('suppresses paid profit at the explicit 100% operator setting without hiding cash facts', async () => {
+    const db = {
+      execute: async () => ({
+        rows: [
+          {
+            day: '2026-08-15',
+            paid_orders: 2,
+            cod: 20_000,
+            fees: 800,
+            net_recovered: 19_200,
+            product_cost: 10_000,
+            profit: 9_200,
+            complete_orders: 2,
+            provider_amount_orders: 2,
+            legacy_amount_orders: 0,
+            submitted_amount_orders: 0,
+          },
+        ],
+      }),
+    };
+    const filters = resolveAnalytics2Filters(
+      { view: 'money', range: 'custom', startDate: '2026-08-15', endDate: '2026-08-15' },
+      new Date('2026-08-15T12:00:00.000Z'),
+    );
+
+    const result = await loadAutomaticPaidEconomics(db as never, filters, true);
+
+    expect(result.days[0]).toMatchObject({
+      paidOrders: 2,
+      codDzd: 20_000,
+      feesDzd: 800,
+      netRecoveredDzd: 19_200,
+      productCostDzd: 10_000,
+      profitDzd: 0,
+    });
+    expect(result.summary.profitDzd).toBe(0);
+  });
+
   it('aggregates paid COD, fees and profit without applying the planning return rate again', () => {
     const series = aggregateAutomaticPaidSeries(
       {

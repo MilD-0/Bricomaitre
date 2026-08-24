@@ -5,11 +5,6 @@ export type AdminAiMutationEventDetail = {
   toolNames: string[];
 };
 
-export function openAdminAi() {
-  if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(ADMIN_AI_OPEN_EVENT));
-}
-
 export function notifyAdminAiMutation(toolNames: readonly string[]) {
   if (typeof window === 'undefined') return;
   const uniqueToolNames = [...new Set(toolNames.filter(Boolean))];

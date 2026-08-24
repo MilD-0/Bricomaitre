@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../../../lib/ai-background-jobs', () => ({
+  ADMIN_AI_ASSISTANT_JOB_ORIGIN: 'admin-ai-assistant',
   allowedAdminBackgroundJobTypes: (permissions: string[]) => [
     ...(permissions.includes('products_write')
       ? ['ai_categorization', 'ai_content', 'product_export', 'catalog_feed_refresh']
@@ -47,7 +48,7 @@ describe('GET /api/ai/history jobs', () => {
     ]);
   });
 
-  it('returns all background work allowed by the admin domain permissions', async () => {
+  it('returns only assistant-originated background work allowed by domain permissions', async () => {
     const response = await GET();
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
@@ -56,12 +57,11 @@ describe('GET /api/ai/history jobs', () => {
         { id: 'feed-job', type: 'catalog_feed_refresh' },
       ],
     });
-    expect(mocks.jobs).toHaveBeenCalledWith(30, [
-      'ai_categorization',
-      'ai_content',
-      'product_export',
-      'catalog_feed_refresh',
-    ]);
+    expect(mocks.jobs).toHaveBeenCalledWith(
+      30,
+      ['ai_categorization', 'ai_content', 'product_export', 'catalog_feed_refresh'],
+      { origin: 'admin-ai-assistant' },
+    );
   });
 
   it('does not expose background work to settings-only admins', async () => {
@@ -72,6 +72,6 @@ describe('GET /api/ai/history jobs', () => {
     await expect(response.json()).resolves.toMatchObject({
       jobs: [],
     });
-    expect(mocks.jobs).toHaveBeenCalledWith(30, []);
+    expect(mocks.jobs).toHaveBeenCalledWith(30, [], { origin: 'admin-ai-assistant' });
   });
 });

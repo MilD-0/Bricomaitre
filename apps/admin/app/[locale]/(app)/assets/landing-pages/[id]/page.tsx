@@ -1,7 +1,6 @@
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 
 import { LandingPageBuilder } from '../../../../../../components/assets/landing-page-builder';
-import { readLegacyUiPreference } from '../../../../../../lib/admin-ui-preference.server';
 import {
   getLandingPageDetail,
   LandingPageNotFoundError,
@@ -15,7 +14,6 @@ export default async function LandingPageBuilderPage({
   params: Promise<{ locale: string; id: string }>;
 }) {
   const { locale, id } = await params;
-  if (await readLegacyUiPreference()) redirect(`/${locale}/landing-pages`);
   await requireAssetsPageAccess(locale);
   const numericId = Number(id);
   if (!Number.isSafeInteger(numericId) || numericId <= 0) notFound();

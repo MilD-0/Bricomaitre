@@ -140,6 +140,10 @@ describe('admin assistant tool presentation', () => {
     );
   });
 
+  it('links taxonomy changes to the canonical Brands workspace', () => {
+    expect(adminAiToolPresentation('manage_taxonomy', {}, 'fr').href).toBe('/fr/brands');
+  });
+
   it('links ECOTRACK workflows to the native shipment workspace', () => {
     for (const toolName of [
       'preview_ecotrack_posting',

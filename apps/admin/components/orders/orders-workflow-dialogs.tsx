@@ -16,16 +16,14 @@ import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import type { ProductSearchItem, ProductSearchResponse } from './order-products-editor';
-import type {
-  EcotrackPostingPreviewState,
-  EcotrackPostingSummary,
-} from './orders-ecotrack-posting-dialog';
-import type { ExportProgressState } from './orders-export-dialog';
 import {
   groupShoppingListGenerations,
+  type EcotrackPostingPreviewState,
+  type EcotrackPostingSummary,
+  type ExportProgressState,
   type ShoppingListSaveStatus,
   type ShoppingListState,
-} from './orders-shopping-list-dialog';
+} from './orders-workflow-model';
 
 function formatMoney(locale: string, value: number) {
   return new Intl.NumberFormat(locale, {

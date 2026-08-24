@@ -1,31 +1,18 @@
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { accessMock, hasDbMock, legacyUiMock, loadMock, parseMock } = vi.hoisted(() => ({
-  accessMock: vi.fn(),
-  hasDbMock: vi.fn(),
-  legacyUiMock: vi.fn(),
-  loadMock: vi.fn(),
-  parseMock: vi.fn(),
+const { access, load, parse } = vi.hoisted(() => ({
+  access: vi.fn(),
+  load: vi.fn(),
+  parse: vi.fn(),
 }));
 
-vi.mock('@bric/db/client', () => ({
-  getDb: () => ({ kind: 'db' }),
-  hasDb: hasDbMock,
-}));
-vi.mock('../../../../lib/page-access', () => ({
-  requireAiProposalPageAccess: accessMock,
-}));
-vi.mock('../../../../lib/admin-ui-preference.server', () => ({
-  readLegacyUiPreference: legacyUiMock,
-}));
+vi.mock('@bric/db/client', () => ({ getDb: () => ({ kind: 'db' }), hasDb: () => true }));
+vi.mock('../../../../lib/page-access', () => ({ requireAiProposalPageAccess: access }));
 vi.mock('../../../../lib/ai-proposal-inbox', () => ({
   aiProposalInboxQuerySchema: { parse: (value: unknown) => value },
-  loadAiProposalInbox: loadMock,
-  parseAiProposalInboxQuery: parseMock,
-}));
-vi.mock('../../../../components/products/ai-proposal-inbox', () => ({
-  AiProposalInbox: () => <div>Legacy proposal inbox</div>,
+  loadAiProposalInbox: load,
+  parseAiProposalInboxQuery: parse,
 }));
 vi.mock('../../../../components/products/ai-proposal-workspace', () => ({
   AiProposalWorkspace: () => <div>Proposal review workspace</div>,
@@ -34,10 +21,10 @@ vi.mock('../../../../components/products/ai-proposal-workspace', () => ({
 import AiProposalPage from './page';
 
 const query = {
-  page: 2,
+  page: 1,
   pageSize: 20,
   sort: 'newest',
-  q: 'drill',
+  q: '',
   proposalType: null,
   entityType: null,
   model: null,
@@ -45,46 +32,27 @@ const query = {
   evidence: 'all',
 };
 
-describe('AI proposal page', () => {
-  afterEach(() => cleanup());
-
+describe('AiProposalPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    parseMock.mockReturnValue(query);
-    hasDbMock.mockReturnValue(true);
-    loadMock.mockResolvedValue({
+    parse.mockReturnValue(query);
+    load.mockResolvedValue({
       items: [],
       query,
-      pagination: { page: 2, pageSize: 20, total: 21, totalPages: 2 },
+      pagination: { page: 1, pageSize: 20, total: 0, totalPages: 1 },
       facets: { proposalTypes: [], entityTypes: [], models: [] },
     });
-    legacyUiMock.mockResolvedValue(true);
   });
 
-  it('keeps the original inbox when legacy UI is enabled', async () => {
-    render(
-      await AiProposalPage({
-        params: Promise.resolve({ locale: 'en' }),
-        searchParams: Promise.resolve({ page: '2', q: 'drill' }),
-      }),
-    );
-
-    expect(screen.getByText('Legacy proposal inbox')).toBeInTheDocument();
-    expect(accessMock).toHaveBeenCalledWith('en');
-    expect(loadMock).toHaveBeenCalledWith({ kind: 'db' }, query);
-  });
-
-  it('uses the accepted workspace when legacy UI is disabled', async () => {
-    legacyUiMock.mockResolvedValue(false);
-
+  it('always renders the canonical proposal review workspace', async () => {
     render(
       await AiProposalPage({
         params: Promise.resolve({ locale: 'en' }),
         searchParams: Promise.resolve({}),
       }),
     );
-
+    expect(access).toHaveBeenCalledWith('en');
+    expect(load).toHaveBeenCalledWith({ kind: 'db' }, query);
     expect(screen.getByText('Proposal review workspace')).toBeInTheDocument();
-    expect(screen.queryByText('Legacy proposal inbox')).not.toBeInTheDocument();
   });
 });

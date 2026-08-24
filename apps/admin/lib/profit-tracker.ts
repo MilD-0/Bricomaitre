@@ -3,8 +3,11 @@ import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
 import {
+  ecotrackOrderStates,
+  ecotrackOrderTrackingEvents,
   metaAdsDailyInsights,
   orderLineItems,
+  orders,
   orderStatusHistory,
   processedOrders,
   profitTrackerDays,
@@ -13,6 +16,7 @@ import {
 } from '@bric/db/schema';
 
 import { ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE } from './analytics2-fact-contract';
+import { effectiveEcotrackStatusSql } from './ecotrack-status-policy';
 import {
   applyProfitTrackerRollforward,
   buildProfitTrackerWeeks,
@@ -168,6 +172,32 @@ type AutomaticDayEconomics = {
   postedOrders: number;
   costCompleteOrders: number;
   grossProfitDzd: number | null;
+  realizedGrossProfitDzd: number;
+  returnExposedGrossProfitDzd: number;
+  returnExposedOrders: number;
+};
+
+type OrderCohortDayEconomics = {
+  date: string;
+  orderCount: number;
+  costCompleteOrders: number;
+  grossProfitDzd: number | null;
+  realizedGrossProfitDzd: number;
+  returnExposedGrossProfitDzd: number;
+  returnExposedOrders: number;
+};
+
+export type CanonicalOrderProjectionBasis = 'confirmed' | 'posted';
+
+export type CanonicalOrderProjectionDay = {
+  basis: CanonicalOrderProjectionBasis;
+  reportDay: string;
+  grossProfit: number | null;
+  adSpend: number | null;
+  estimatedReturnRate: number;
+  estimatedReturnedOrders: number;
+  estimatedReturnLoss: number | null;
+  projectedProfit: number | null;
 };
 
 type MetaDayEconomics = {
@@ -211,6 +241,14 @@ export function resolveProfitTrackerDaySources({
     grossProfitDzd == null ? null : (manual?.returnRatePct ?? settings.defaultReturnRate);
   const postedOrders = automatic?.postedOrders ?? 0;
   const costCompleteOrders = automatic?.costCompleteOrders ?? 0;
+  const stateAdjustedProfitDzd =
+    manual?.grossProfitDzd != null || grossProfitDzd == null || returnRatePct == null || !automatic
+      ? undefined
+      : stateAwareProjectedContribution({
+          realizedGrossProfitDzd: automatic.realizedGrossProfitDzd,
+          returnExposedGrossProfitDzd: automatic.returnExposedGrossProfitDzd,
+          planningReturnRatePct: returnRatePct,
+        });
 
   return {
     date,
@@ -240,18 +278,50 @@ export function resolveProfitTrackerDaySources({
     postedOrders,
     costCompleteOrders,
     projectedCoveragePct: postedOrders > 0 ? (costCompleteOrders / postedOrders) * 100 : null,
+    stateAdjustedProfitDzd,
+    returnExposedOrders: automatic?.returnExposedOrders ?? postedOrders,
   };
 }
 
-async function loadAutomaticDayEconomics(db: Database, startDate: string | null, endDate: string) {
+export function stateAwareProjectedContribution({
+  realizedGrossProfitDzd,
+  returnExposedGrossProfitDzd,
+  planningReturnRatePct,
+}: {
+  realizedGrossProfitDzd: number;
+  returnExposedGrossProfitDzd: number;
+  planningReturnRatePct: number;
+}) {
+  if (planningReturnRatePct === 100) return 0;
+  return realizedGrossProfitDzd + returnExposedGrossProfitDzd * (1 - planningReturnRatePct / 100);
+}
+
+async function loadOrderCohortDayEconomics(
+  db: Database,
+  startDate: string | null,
+  endDate: string,
+  status: number,
+) {
   const result = await db.execute(sql`
-    with first_posted as (
+    with first_status as (
       select distinct on (${orderStatusHistory.orderId})
         ${orderStatusHistory.orderId} as order_id,
         (${orderStatusHistory.changedAt} at time zone ${ANALYTICS_TIMEZONE})::date as day
       from ${orderStatusHistory}
-      where ${orderStatusHistory.status} = ${POSTED_ORDER_STATUS}
+      where ${orderStatusHistory.status} = ${status}
       order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
+    ), lifecycle as (
+      select ${ecotrackOrderTrackingEvents.orderId} as order_id,
+        min(
+          ${ecotrackOrderTrackingEvents.eventDate}::timestamp
+          + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
+        ) filter (where ${ecotrackOrderTrackingEvents.status} = 'livred') as delivered_at,
+        max(
+          ${ecotrackOrderTrackingEvents.eventDate}::timestamp
+          + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
+        ) as latest_activity_at
+      from ${ecotrackOrderTrackingEvents}
+      group by ${ecotrackOrderTrackingEvents.orderId}
     ), line_economics as (
       select ${orderLineItems.orderId} as order_id,
         bool_and(
@@ -267,27 +337,84 @@ async function loadAutomaticDayEconomics(db: Database, startDate: string | null,
         )::double precision as gross_profit
       from ${orderLineItems}
       group by ${orderLineItems.orderId}
+    ), classified as (
+      select first_status.day,
+        line_economics.cost_complete,
+        line_economics.gross_profit,
+        case
+          when ${effectiveEcotrackStatusSql({
+            localStatus: orders.confirmed,
+            providerStatus: ecotrackOrderStates.currentStatus,
+            latestActivityAt: sql`lifecycle.latest_activity_at`,
+            fallbackActivityAt: sql`coalesce(
+              ${ecotrackOrderStates.providerCreatedAt} at time zone ${ANALYTICS_TIMEZONE},
+              first_status.day::timestamp
+            )`,
+            referenceAt: sql`${endDate}::date + interval '1 day'`,
+          })} in ('retour_archive', 'annule', 'failed') then 'lost'
+          when ${effectiveEcotrackStatusSql({
+            localStatus: orders.confirmed,
+            providerStatus: ecotrackOrderStates.currentStatus,
+            latestActivityAt: sql`lifecycle.latest_activity_at`,
+            fallbackActivityAt: sql`coalesce(
+              ${ecotrackOrderStates.providerCreatedAt} at time zone ${ANALYTICS_TIMEZONE},
+              first_status.day::timestamp
+            )`,
+            referenceAt: sql`${endDate}::date + interval '1 day'`,
+          })} in ('paye_et_archive', 'payed', 'manual_completed')
+            or lifecycle.delivered_at is not null then 'realized'
+          else 'exposed'
+        end as contribution_state
+      from first_status
+      inner join ${orders} on ${orders.id} = first_status.order_id
+      left join ${ecotrackOrderStates}
+        on ${ecotrackOrderStates.orderId} = first_status.order_id
+        and ${ecotrackOrderStates.deletedAt} is null
+      left join lifecycle on lifecycle.order_id = first_status.order_id
+      left join line_economics on line_economics.order_id = first_status.order_id
+      where ${startDate ? sql`first_status.day >= ${startDate}::date` : sql`true`}
+        and first_status.day <= ${endDate}::date
     )
-    select first_posted.day::text as date,
-      count(*)::int as posted_orders,
-      count(*) filter (where line_economics.cost_complete)::int as cost_complete_orders,
-      case when count(*) filter (where line_economics.gross_profit is not null) = 0 then null
-        else coalesce(sum(line_economics.gross_profit)
-          filter (where line_economics.gross_profit is not null), 0)::double precision
-        end as gross_profit_dzd
-    from first_posted
-    left join line_economics on line_economics.order_id = first_posted.order_id
-    where ${startDate ? sql`first_posted.day >= ${startDate}::date` : sql`true`}
-      and first_posted.day <= ${endDate}::date
-    group by first_posted.day
-    order by first_posted.day
+    select classified.day::text as date,
+      count(*)::int as cohort_orders,
+      count(*) filter (where classified.cost_complete)::int as cost_complete_orders,
+      count(*) filter (where contribution_state = 'exposed')::int as return_exposed_orders,
+      case when count(*) filter (where classified.gross_profit is not null) = 0 then null
+        else coalesce(sum(classified.gross_profit)
+          filter (where classified.gross_profit is not null), 0)::double precision
+        end as gross_profit_dzd,
+      coalesce(sum(classified.gross_profit)
+        filter (where contribution_state = 'realized'), 0)::double precision
+        as realized_gross_profit_dzd,
+      coalesce(sum(classified.gross_profit)
+        filter (where contribution_state = 'exposed'), 0)::double precision
+        as return_exposed_gross_profit_dzd
+    from classified
+    group by classified.day
+    order by classified.day
   `);
 
-  return (result.rows as Array<Record<string, unknown>>).map((row): AutomaticDayEconomics => ({
+  return (result.rows as Array<Record<string, unknown>>).map((row): OrderCohortDayEconomics => ({
     date: String(row.date),
-    postedOrders: numeric(row.posted_orders),
+    orderCount: numeric(row.cohort_orders),
     costCompleteOrders: numeric(row.cost_complete_orders),
     grossProfitDzd: row.gross_profit_dzd == null ? null : numeric(row.gross_profit_dzd),
+    realizedGrossProfitDzd: numeric(row.realized_gross_profit_dzd),
+    returnExposedGrossProfitDzd: numeric(row.return_exposed_gross_profit_dzd),
+    returnExposedOrders: numeric(row.return_exposed_orders),
+  }));
+}
+
+async function loadAutomaticDayEconomics(db: Database, startDate: string | null, endDate: string) {
+  const rows = await loadOrderCohortDayEconomics(db, startDate, endDate, POSTED_ORDER_STATUS);
+  return rows.map((row): AutomaticDayEconomics => ({
+    date: row.date,
+    postedOrders: row.orderCount,
+    costCompleteOrders: row.costCompleteOrders,
+    grossProfitDzd: row.grossProfitDzd,
+    realizedGrossProfitDzd: row.realizedGrossProfitDzd,
+    returnExposedGrossProfitDzd: row.returnExposedGrossProfitDzd,
+    returnExposedOrders: row.returnExposedOrders,
   }));
 }
 
@@ -852,19 +979,24 @@ export async function getProfitTrackerReport(
   );
   const effectiveStartDate = filters.startDate ?? selected.at(-1)?.date ?? null;
   const effectiveEndDate = selected[0]?.date ?? filters.endDate;
+  const profitsSuppressed = settings.defaultReturnRate === 100;
   const summary = summarizeProfitTracker(
     selected,
     costs,
     effectiveStartDate,
     effectiveStartDate ? effectiveEndDate : null,
+    profitsSuppressed,
   );
   let cumulativeNetDzd = 0;
   let cumulativeNetBeforeReturnsDzd = 0;
   let cumulativeTrueProfitDzd = 0;
   const enrichedAscending = [...selected].reverse().map((day) => {
     const operatingCostDzd = operatingCostForDay(day.date, costs);
-    const trueProfitDzd =
-      day.metrics.netProfitDzd == null ? null : day.metrics.netProfitDzd - operatingCostDzd;
+    const trueProfitDzd = profitsSuppressed
+      ? 0
+      : day.metrics.netProfitDzd == null
+        ? null
+        : day.metrics.netProfitDzd - operatingCostDzd;
     cumulativeNetDzd += day.metrics.netProfitDzd || 0;
     cumulativeNetBeforeReturnsDzd += day.metrics.netProfitBeforeReturnsDzd || 0;
     cumulativeTrueProfitDzd += trueProfitDzd || 0;
@@ -895,9 +1027,13 @@ export async function getProfitTrackerReport(
       const knownMetaAdCostDzd = dayByDate.get(day.date)?.metrics.adCostDzd ?? null;
       return {
         ...day,
+        realizedProfitDzd: profitsSuppressed ? 0 : day.realizedProfitDzd,
         knownMetaAdCostDzd,
-        realizedProfitAfterAdsDzd:
-          knownMetaAdCostDzd == null ? null : day.realizedProfitDzd - knownMetaAdCostDzd,
+        realizedProfitAfterAdsDzd: profitsSuppressed
+          ? 0
+          : knownMetaAdCostDzd == null
+            ? null
+            : day.realizedProfitDzd - knownMetaAdCostDzd,
       };
     });
   const realizedSummary = realizedSelected.reduce(
@@ -928,8 +1064,9 @@ export async function getProfitTrackerReport(
   const periodMetaDays = selected.filter((day) => day.metrics.adCostDzd != null);
   const periodKnownMetaAdCostDzd = summary.ratioAdCostDzd;
   realizedSummary.knownMetaAdCostDzd = periodKnownMetaAdCostDzd;
-  realizedSummary.realizedProfitAfterAdsDzd =
-    realizedSummary.realizedProfitDzd - periodKnownMetaAdCostDzd;
+  realizedSummary.realizedProfitAfterAdsDzd = profitsSuppressed
+    ? 0
+    : realizedSummary.realizedProfitDzd - periodKnownMetaAdCostDzd;
   realizedSummary.metaCoveredDays = periodMetaDays.length;
   const reportThroughDate = realizedSelected[0]?.date ?? null;
   const settlementCoveragePct =
@@ -945,7 +1082,7 @@ export async function getProfitTrackerReport(
     settings,
     summary,
     days,
-    weeks: buildProfitTrackerWeeks(selected, costs, filters.endDate),
+    weeks: buildProfitTrackerWeeks(selected, costs, filters.endDate, profitsSuppressed),
     costs,
     adsets: adsetPerformance.summary,
     adsetDailySpend: adsetPerformance.daily,
@@ -990,6 +1127,142 @@ export async function getProfitTrackerReport(
       settledReportThroughDate: reportThroughDate,
     },
   };
+}
+
+function inclusiveDateRange(startDate: string, endDate: string) {
+  const dates: string[] = [];
+  for (let date = startDate; date <= endDate; date = addDays(date, 1)) dates.push(date);
+  return dates;
+}
+
+export function toCanonicalOrderProjectionDay({
+  basis,
+  reportDay,
+  day,
+  defaultReturnRate,
+}: {
+  basis: CanonicalOrderProjectionBasis;
+  reportDay: string;
+  day?: ReturnType<typeof applyProfitTrackerRollforward>[number];
+  defaultReturnRate: number;
+}): CanonicalOrderProjectionDay {
+  const grossProfit = day?.grossProfitDzd ?? null;
+  const adSpend = day?.metrics.adCostDzd ?? null;
+  const estimatedReturnRate = day?.returnRatePct ?? defaultReturnRate;
+  const cohortOrders = day?.postedOrders ?? 0;
+  const returnExposedOrders = day?.returnExposedOrders ?? day?.postedOrders ?? 0;
+  const adjustedProfit =
+    day?.metrics.adjustedProfitDzd ?? (cohortOrders === 0 && adSpend !== null ? 0 : null);
+
+  return {
+    basis,
+    reportDay,
+    grossProfit,
+    adSpend,
+    estimatedReturnRate,
+    estimatedReturnedOrders: returnExposedOrders * (estimatedReturnRate / 100),
+    estimatedReturnLoss:
+      grossProfit !== null && adjustedProfit !== null
+        ? Math.max(0, grossProfit - adjustedProfit)
+        : null,
+    projectedProfit:
+      estimatedReturnRate === 100
+        ? 0
+        : adjustedProfit !== null && adSpend !== null
+          ? adjustedProfit - adSpend
+          : null,
+  };
+}
+
+export async function getCanonicalOrderProjectionDays(
+  input: {
+    startDate: string;
+    endDate: string;
+    basis: CanonicalOrderProjectionBasis;
+  },
+  options: { db?: Database; now?: Date } = {},
+): Promise<CanonicalOrderProjectionDay[]> {
+  const db = options.db ?? getDb();
+  const dates = inclusiveDateRange(input.startDate, input.endDate);
+
+  if (input.basis === 'posted') {
+    const report = await getProfitTrackerReport(
+      {
+        range: 'custom',
+        startDate: input.startDate,
+        endDate: input.endDate,
+      },
+      { db, ...(options.now ? { now: options.now } : {}) },
+    );
+    const byDate = new Map(report.days.map((day) => [day.date, day]));
+    return dates.map((reportDay) =>
+      toCanonicalOrderProjectionDay({
+        basis: input.basis,
+        reportDay,
+        day: byDate.get(reportDay),
+        defaultReturnRate: report.settings.defaultReturnRate,
+      }),
+    );
+  }
+
+  const queryStartDate = addDays(input.startDate, -7);
+  const calculationDates = inclusiveDateRange(queryStartDate, input.endDate);
+  const [settings, manualRows, cohortDays, metaDays] = await Promise.all([
+    getProfitTrackerSettings(db),
+    db
+      .select()
+      .from(profitTrackerDays)
+      .where(
+        and(gte(profitTrackerDays.day, queryStartDate), lte(profitTrackerDays.day, input.endDate)),
+      )
+      .orderBy(asc(profitTrackerDays.day)),
+    loadOrderCohortDayEconomics(db, queryStartDate, input.endDate, 2),
+    loadMetaDayEconomics(db, queryStartDate, input.endDate),
+  ]);
+  const manualByDate = new Map(manualRows.map((row) => [row.day, mapDay(row)]));
+  const cohortByDate = new Map(cohortDays.map((day) => [day.date, day]));
+  const metaByDate = new Map(metaDays.map((day) => [day.date, day]));
+  const inputs = calculationDates.map((date) => {
+    const manual = manualByDate.get(date);
+    const cohort = cohortByDate.get(date);
+    return resolveProfitTrackerDaySources({
+      date,
+      manual: manual
+        ? {
+            ...manual,
+            // Daily gross-profit/count overrides belong to the posted-order accounting cohort.
+            // Confirmed projections share only its planning return and FX assumptions.
+            grossProfitDzd: null,
+            confirmedOrders: null,
+          }
+        : undefined,
+      automatic: cohort
+        ? {
+            date,
+            postedOrders: cohort.orderCount,
+            costCompleteOrders: cohort.costCompleteOrders,
+            grossProfitDzd: cohort.grossProfitDzd,
+            realizedGrossProfitDzd: cohort.realizedGrossProfitDzd,
+            returnExposedGrossProfitDzd: cohort.returnExposedGrossProfitDzd,
+            returnExposedOrders: cohort.returnExposedOrders,
+          }
+        : undefined,
+      meta: metaByDate.get(date),
+      settings,
+    });
+  });
+  const byDate = new Map(
+    applyProfitTrackerRollforward(inputs, settings).map((day) => [day.date, day]),
+  );
+
+  return dates.map((reportDay) =>
+    toCanonicalOrderProjectionDay({
+      basis: input.basis,
+      reportDay,
+      day: byDate.get(reportDay),
+      defaultReturnRate: settings.defaultReturnRate,
+    }),
+  );
 }
 
 function csvCell(value: unknown) {

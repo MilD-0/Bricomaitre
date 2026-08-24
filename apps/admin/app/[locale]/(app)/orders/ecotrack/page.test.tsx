@@ -1,65 +1,29 @@
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const {
-  getDbMock,
-  hasDbMock,
-  loadEcotrackOrdersPageDataMock,
-  readEcotrackCatalogMock,
-  readLegacyUiPreferenceMock,
-  requireOrdersPageAccessMock,
-} = vi.hoisted(() => ({
-  getDbMock: vi.fn(),
-  hasDbMock: vi.fn(),
-  loadEcotrackOrdersPageDataMock: vi.fn(),
-  readEcotrackCatalogMock: vi.fn(),
-  readLegacyUiPreferenceMock: vi.fn(),
-  requireOrdersPageAccessMock: vi.fn(),
+const { loadOrders, readCatalog, requireAccess } = vi.hoisted(() => ({
+  loadOrders: vi.fn(),
+  readCatalog: vi.fn(),
+  requireAccess: vi.fn(),
 }));
 
-vi.mock('@bric/db/client', () => ({ getDb: getDbMock, hasDb: hasDbMock }));
+vi.mock('@bric/db/client', () => ({ getDb: () => ({}), hasDb: () => true }));
 vi.mock('../../../../../lib/admin-ecotrack-orders-data', () => ({
-  loadEcotrackOrdersPageData: loadEcotrackOrdersPageDataMock,
+  loadEcotrackOrdersPageData: loadOrders,
 }));
-vi.mock('../../../../../lib/admin-ui-preference.server', () => ({
-  readLegacyUiPreference: readLegacyUiPreferenceMock,
-}));
-vi.mock('../../../../../lib/ecotrack', () => ({
-  readEcotrackCatalog: readEcotrackCatalogMock,
-}));
-vi.mock('../../../../../lib/page-access', () => ({
-  requireOrdersPageAccess: requireOrdersPageAccessMock,
-}));
+vi.mock('../../../../../lib/ecotrack', () => ({ readEcotrackCatalog: readCatalog }));
+vi.mock('../../../../../lib/page-access', () => ({ requireOrdersPageAccess: requireAccess }));
 vi.mock('../../../../../components/orders/orders-ecotrack-manager', () => ({
-  OrdersEcotrackManager: ({ presentation }: { presentation?: number }) => (
-    <div>{presentation === 2 ? 'Refined ECOTRACK workspace' : 'Legacy ECOTRACK workspace'}</div>
-  ),
+  OrdersEcotrackManager: () => <div>ECOTRACK manager</div>,
 }));
 
 import OrdersEcotrackPage from './page';
 
 describe('OrdersEcotrackPage', () => {
-  afterEach(() => cleanup());
-
   beforeEach(() => {
     vi.clearAllMocks();
-    hasDbMock.mockReturnValue(true);
-    getDbMock.mockReturnValue({});
-    requireOrdersPageAccessMock.mockResolvedValue({ user: { role: 'employee' } });
-    readLegacyUiPreferenceMock.mockResolvedValue(true);
-    loadEcotrackOrdersPageDataMock.mockResolvedValue({
-      writable: true,
-      items: [],
-      pagination: {
-        page: 1,
-        limit: 25,
-        totalItems: 0,
-        totalPages: 1,
-        hasNextPage: false,
-        hasPreviousPage: false,
-      },
-    });
-    readEcotrackCatalogMock.mockResolvedValue({
+    loadOrders.mockResolvedValue({ items: [] });
+    readCatalog.mockResolvedValue({
       wilayas: [],
       communes: [],
       serviceFees: [],
@@ -68,20 +32,9 @@ describe('OrdersEcotrackPage', () => {
     });
   });
 
-  it('preserves the original ECOTRACK manager when Legacy UI is enabled', async () => {
+  it('always renders the canonical ECOTRACK workspace', async () => {
     render(await OrdersEcotrackPage({ params: Promise.resolve({ locale: 'en' }) }));
-
-    expect(screen.getByText('Legacy ECOTRACK workspace')).toBeInTheDocument();
-    expect(requireOrdersPageAccessMock).toHaveBeenCalledWith('en');
-    expect(loadEcotrackOrdersPageDataMock).toHaveBeenCalled();
-  });
-
-  it('promotes the accepted refined workspace when Legacy UI is disabled', async () => {
-    readLegacyUiPreferenceMock.mockResolvedValue(false);
-
-    render(await OrdersEcotrackPage({ params: Promise.resolve({ locale: 'en' }) }));
-
-    expect(screen.getByText('Refined ECOTRACK workspace')).toBeInTheDocument();
-    expect(screen.queryByText('Legacy ECOTRACK workspace')).not.toBeInTheDocument();
+    expect(requireAccess).toHaveBeenCalledWith('en');
+    expect(screen.getByText('ECOTRACK manager')).toBeInTheDocument();
   });
 });

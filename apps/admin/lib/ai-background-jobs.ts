@@ -22,6 +22,8 @@ import {
 } from './background-jobs';
 import { hasPermission, type PermissionKey } from './permissions';
 
+export { ADMIN_AI_ASSISTANT_JOB_ORIGIN } from './background-jobs';
+
 export const ADMIN_BACKGROUND_JOB_TYPES = [
   'ai_categorization',
   'ai_content',
@@ -105,17 +107,20 @@ export function allowedStartableAdminBackgroundJobTypes(permissions: readonly Pe
 export async function listAdminBackgroundJobs(
   limit = 30,
   types: readonly AdminBackgroundJobType[] = ADMIN_BACKGROUND_JOB_TYPES,
+  filters: { origin?: string } = {},
 ) {
   const allowedTypes = new Set(types);
   const queues = [...new Set(types.map((type) => queueByType[type]))];
   if (queues.length === 0) return [];
 
-  return (await listRecentBackgroundJobs(queues, limit)).flatMap((job) => {
-    const type = typeByQueue.get(job.queue);
-    return type && allowedTypes.has(type)
-      ? [{ ...job, type, cancellable: cancellableTypes.has(type) }]
-      : [];
-  });
+  return (await listRecentBackgroundJobs(queues, limit, filters))
+    .flatMap((job) => {
+      const type = typeByQueue.get(job.queue);
+      return type && allowedTypes.has(type) && (!filters.origin || job.origin === filters.origin)
+        ? [{ ...job, type, cancellable: cancellableTypes.has(type) }]
+        : [];
+    })
+    .slice(0, limit);
 }
 
 export async function getAdminBackgroundJob(type: AdminBackgroundJobType, jobId: string) {

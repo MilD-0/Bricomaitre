@@ -457,11 +457,12 @@ export const ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT = {
   },
   profit: {
     grossProfit: 'Order value minus product cost before return assumptions and advertising.',
-    adjustedProfit: 'Gross profit after the manual planning return rate.',
+    adjustedProfit:
+      'Realized eligible contribution plus unresolved contribution after the manual planning return rate.',
     netProfit: 'Adjusted profit minus Meta cost.',
     trueProfit: 'Net profit minus operating costs.',
     projectedContribution:
-      'Expected contribution for submitted, confirmed, or posted demand using the planning return rate.',
+      'State-aware expected contribution: delivered and paid contribution is retained, known unsuccessful outcomes contribute zero, and only unresolved demand uses the planning return rate.',
     deliveredContribution: 'Contribution attached to delivered orders; not received cash.',
     automaticPaidContribution:
       'EcoTrack COD minus estimated tariff and product cost for payed/paye_et_archive outcomes.',
@@ -470,14 +471,15 @@ export const ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT = {
     profitX: 'Adjusted profit divided by Meta ad cost; unavailable when ad cost is zero.',
     formulas: [
       'ad cost DZD = Meta spend EUR × snapshotted manual FX rate',
-      'adjusted profit = gross profit × (1 − planning return rate ÷ 100)',
+      'adjusted profit = realized eligible contribution + unresolved contribution × (1 − planning return rate ÷ 100)',
       'net profit = adjusted profit − ad cost',
       'Profit × = adjusted profit ÷ ad cost',
       'true profit = net profit − operating costs',
     ],
   },
   returnPolicy: {
-    planning: 'Manual rate used by every projection.',
+    planning:
+      'Manual rate used only for unresolved demand; exactly 100% is the operator profit-suppression mode.',
     observed:
       'Returned divided by paid plus returned in a mature terminal cohort; excludes active, unresolved, failed, and cancelled orders.',
     adoption:
@@ -510,7 +512,7 @@ export const ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT = {
   interpretation:
     'Customer identity is normalized primarily by phone. Product scatter and tables are filtered decision views; use headline aggregates for totals. Delivery speed is elapsed calendar time. Meta regions and customer wilayas are separate aggregates. Search Console is aggregate and row-limited, lower average position is better, and it does not provide deterministic order attribution. GA4 is not canonical or required.',
   materializedFacts:
-    'Facts are a performance cache, not alternative semantics. Use requires a complete date spine, semantics version 4, fresh dependencies and assumptions, and no unresolved Friday roll-forward; otherwise canonical tables are computed live.',
+    'Facts are a performance cache, not alternative semantics. Use requires a complete date spine, semantics version 5, fresh dependencies and assumptions, and no unresolved Friday roll-forward; otherwise canonical tables are computed live.',
   hardRules: [
     'Never call submitted orders completed sales.',
     'Never blend projected, delivered, paid, and true profit.',

@@ -1,19 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { authMock, hasDbMock, getDbMock, appShellMock, redirectMock, connectionMock, cookiesMock } =
-  vi.hoisted(() => ({
+const { authMock, hasDbMock, getDbMock, appShellMock, redirectMock, connectionMock } = vi.hoisted(
+  () => ({
     authMock: vi.fn(),
     hasDbMock: vi.fn(),
     getDbMock: vi.fn(),
     appShellMock: vi.fn(({ children }: { children: React.ReactNode }) => <div>{children}</div>),
     redirectMock: vi.fn(),
     connectionMock: vi.fn(),
-    cookiesMock: vi.fn(),
-  }));
-
-vi.mock('next/headers', () => ({
-  cookies: cookiesMock,
-}));
+  }),
+);
 
 vi.mock('../../../lib/auth', () => ({
   auth: authMock,
@@ -67,7 +63,6 @@ describe('app/[locale]/(app)/layout', () => {
         },
       },
     });
-    cookiesMock.mockResolvedValue({ get: vi.fn().mockReturnValue(undefined) });
   });
 
   it('prefers the users table image for the sidebar avatar', async () => {
@@ -79,18 +74,6 @@ describe('app/[locale]/(app)/layout', () => {
     expect(ui.props.initialUserEmail).toBe('ada@example.com');
     expect(ui.props.initialUserName).toBe('Ada Lovelace');
     expect(ui.props.initialUserImage).toBe('https://db.example.com/avatar.png');
-    expect(ui.props.initialLegacyUi).toBe(true);
-  });
-
-  it('passes the modern UI preference through to the app shell', async () => {
-    cookiesMock.mockResolvedValue({ get: vi.fn().mockReturnValue({ value: '0' }) });
-
-    const ui = await ProtectedLayout({
-      children: <div>content</div>,
-      params: Promise.resolve({ locale: 'en' }),
-    });
-
-    expect(ui.props.initialLegacyUi).toBe(false);
   });
 
   it('falls back to the session image when the user row is unavailable', async () => {

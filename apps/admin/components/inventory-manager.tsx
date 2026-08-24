@@ -50,11 +50,9 @@ import { Skeleton } from './ui/skeleton';
 import { ScrollableRegion } from './ui/scrollable-region';
 import { Switch } from './ui/switch';
 import { SearchField } from './search-field';
-import { AdminAiAskButton } from './admin-ai-ask-button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { WorkspacePagination } from './ui/workspace-pagination';
 import {
-  WorkspaceActions,
   WorkspaceFrame,
   WorkspaceHeader,
   WorkspaceHeading,
@@ -767,9 +765,6 @@ export function InventoryManager({ title }: { title: string }) {
               />
             }
           />
-          <WorkspaceActions>
-            <AdminAiAskButton />
-          </WorkspaceActions>
         </WorkspaceHeader>
 
         <WorkspaceToolbar className="grid gap-3 lg:grid-cols-[minmax(20rem,0.8fr)_minmax(18rem,1.2fr)]">

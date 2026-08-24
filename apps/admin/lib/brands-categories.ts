@@ -107,11 +107,5 @@ export const categoriesListResponseSchema = z.object({
 
 export type BrandRow = z.infer<typeof brandRowSchema>;
 export type CategoryRow = z.infer<typeof categoryRowSchema>;
-export type BrandFormValues = z.infer<typeof brandFormSchema>;
-export type CategoryFormValues = z.infer<typeof categoryFormSchema>;
-export type BrandFormInput = z.input<typeof brandFormSchema>;
-export type CategoryFormInput = z.input<typeof categoryFormSchema>;
-export type BrandUpdateValues = z.infer<typeof brandUpdateSchema>;
-export type CategoryUpdateValues = z.infer<typeof categoryUpdateSchema>;
 export type BrandsListResponse = z.infer<typeof brandsListResponseSchema>;
 export type CategoriesListResponse = z.infer<typeof categoriesListResponseSchema>;

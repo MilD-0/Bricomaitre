@@ -409,6 +409,23 @@ const resolvedShipmentStatusesSql = sql.join(
   sql`, `,
 );
 
+function stateAwareContributionSql(input: {
+  grossProfit: SQLWrapper;
+  currentStatus: SQLWrapper;
+  deliveredAt: SQLWrapper;
+  planningReturnRatePct: SQLWrapper;
+}) {
+  return sql<number | null>`case
+    when ${input.grossProfit} is null then null
+    when ${input.planningReturnRatePct}::double precision = 100 then 0
+    when ${input.currentStatus} in ('retour_archive', 'annule', 'failed') then 0
+    when ${input.currentStatus} in ('paye_et_archive', 'payed', 'manual_completed')
+      or ${input.deliveredAt} is not null then ${input.grossProfit}::double precision
+    else ${input.grossProfit}::double precision
+      * (1 - ${input.planningReturnRatePct}::double precision / 100)
+  end`;
+}
+
 async function loadFulfillmentSummary(
   db: Database,
   startDate: string | null,
@@ -604,6 +621,7 @@ async function loadReturnObservation(
 export async function loadAutomaticPaidEconomics(
   db: Database,
   filters: Analytics2Filters,
+  profitsSuppressed = false,
 ): Promise<Analytics2AutomaticPaidEconomics> {
   const result = await db.execute(sql`
     with paid_events as (
@@ -740,7 +758,7 @@ export async function loadAutomaticPaidEconomics(
         feesDzd: numeric(row.fees),
         netRecoveredDzd: numeric(row.net_recovered),
         productCostDzd: numeric(row.product_cost),
-        profitDzd: numeric(row.profit),
+        profitDzd: profitsSuppressed ? 0 : numeric(row.profit),
         completeOrders: numeric(row.complete_orders),
         providerAmountOrders: numeric(row.provider_amount_orders),
         legacyAmountOrders: numeric(row.legacy_amount_orders),
@@ -1284,6 +1302,16 @@ async function loadFulfillmentCohorts(
   const planningReturnRatePct = economics.settings.defaultReturnRate;
   const economicsByWeek = new Map(economics.weeks.map((week) => [week.weekStart, week]));
   const matureCutoffDate = addDays(endDate, -21);
+  const effectiveCohortStatus = effectiveEcotrackStatusSql({
+    localStatus: orders.confirmed,
+    providerStatus: ecotrackOrderStates.currentStatus,
+    latestActivityAt: sql`lifecycle.latest_activity_at`,
+    fallbackActivityAt: sql`coalesce(
+      ${ecotrackOrderStates.providerCreatedAt} at time zone 'Africa/Algiers',
+      first_posted.posted_at
+    )`,
+    referenceAt: sql`${endDate}::date + interval '1 day'`,
+  });
   const result = (economics as EconomicsReport & { materializedFacts?: boolean }).materializedFacts
     ? await db.execute(sql`
     with cohort as (
@@ -1295,10 +1323,12 @@ async function loadFulfillmentCohorts(
         ${analyticsOrderCohortFacts.outcome} as current_status,
         ${analyticsOrderCohortFacts.deliveredAt} as delivered_at,
         ${analyticsOrderCohortFacts.costComplete} as cost_complete,
-        case when ${analyticsOrderCohortFacts.grossProfitDzd} is not null then
-          ${analyticsOrderCohortFacts.grossProfitDzd}::double precision
-          * (1 - ${planningReturnRatePct}::double precision / 100)
-        end as projected_contribution,
+        ${stateAwareContributionSql({
+          grossProfit: analyticsOrderCohortFacts.grossProfitDzd,
+          currentStatus: analyticsOrderCohortFacts.outcome,
+          deliveredAt: analyticsOrderCohortFacts.deliveredAt,
+          planningReturnRatePct: sql`${planningReturnRatePct}`,
+        })} as projected_contribution,
         case when ${analyticsOrderCohortFacts.grossProfitDzd} is not null then
           ${analyticsOrderCohortFacts.grossProfitDzd}::double precision
         end as comparable_gross_profit
@@ -1317,12 +1347,14 @@ async function loadFulfillmentCohorts(
           and current_status not in (${resolvedShipmentStatusesSql})
       )::int as active,
       coalesce(sum(projected_contribution), 0)::double precision as projected_contribution,
-      coalesce(sum(comparable_gross_profit) filter (
-        where delivered_at is not null and current_status <> 'retour_archive'
-      ), 0)::double precision as delivered_contribution,
-      coalesce(sum(comparable_gross_profit) filter (
-        where current_status in ('paye_et_archive', 'payed')
-      ), 0)::double precision as paid_contribution,
+      case when ${planningReturnRatePct}::double precision = 100 then 0 else
+        coalesce(sum(comparable_gross_profit) filter (
+          where delivered_at is not null and current_status <> 'retour_archive'
+        ), 0)::double precision end as delivered_contribution,
+      case when ${planningReturnRatePct}::double precision = 100 then 0 else
+        coalesce(sum(comparable_gross_profit) filter (
+          where current_status in ('paye_et_archive', 'payed')
+        ), 0)::double precision end as paid_contribution,
       count(*) filter (where cost_complete)::int as cost_complete_orders,
       bool_and(posted_day <= ${matureCutoffDate}::date)
         and count(*) filter (
@@ -1376,22 +1408,16 @@ async function loadFulfillmentCohorts(
           - (((extract(dow from first_posted.posted_day)::int - 5 + 7) % 7))::int
         )::date as week_start,
         first_posted.posted_day,
-        ${effectiveEcotrackStatusSql({
-          localStatus: orders.confirmed,
-          providerStatus: ecotrackOrderStates.currentStatus,
-          latestActivityAt: sql`lifecycle.latest_activity_at`,
-          fallbackActivityAt: sql`coalesce(
-            ${ecotrackOrderStates.providerCreatedAt} at time zone 'Africa/Algiers',
-            first_posted.posted_at
-          )`,
-          referenceAt: sql`${endDate}::date + interval '1 day'`,
-        })} as current_status,
+        ${effectiveCohortStatus} as current_status,
         lifecycle.delivered_at,
         line_economics.cost_complete,
-        case when line_economics.product_revenue is not null then
-          (line_economics.product_revenue - line_economics.estimated_product_cost)
-          * (1 - ${planningReturnRatePct}::double precision / 100)
-        end as projected_contribution,
+        ${stateAwareContributionSql({
+          grossProfit: sql`line_economics.product_revenue
+            - line_economics.estimated_product_cost`,
+          currentStatus: effectiveCohortStatus,
+          deliveredAt: sql`lifecycle.delivered_at`,
+          planningReturnRatePct: sql`${planningReturnRatePct}`,
+        })} as projected_contribution,
         case when line_economics.product_revenue is not null then
           line_economics.product_revenue - line_economics.estimated_product_cost
         end as comparable_gross_profit
@@ -1414,12 +1440,14 @@ async function loadFulfillmentCohorts(
           and current_status not in (${resolvedShipmentStatusesSql})
       )::int as active,
       coalesce(sum(projected_contribution), 0)::double precision as projected_contribution,
-      coalesce(sum(comparable_gross_profit) filter (
-        where delivered_at is not null and current_status <> 'retour_archive'
-      ), 0)::double precision as delivered_contribution,
-      coalesce(sum(comparable_gross_profit) filter (
-        where current_status in ('paye_et_archive', 'payed')
-      ), 0)::double precision as paid_contribution,
+      case when ${planningReturnRatePct}::double precision = 100 then 0 else
+        coalesce(sum(comparable_gross_profit) filter (
+          where delivered_at is not null and current_status <> 'retour_archive'
+        ), 0)::double precision end as delivered_contribution,
+      case when ${planningReturnRatePct}::double precision = 100 then 0 else
+        coalesce(sum(comparable_gross_profit) filter (
+          where current_status in ('paye_et_archive', 'payed')
+        ), 0)::double precision end as paid_contribution,
       count(*) filter (where cost_complete)::int as cost_complete_orders,
       bool_and(posted_day <= ${matureCutoffDate}::date)
         and count(*) filter (
@@ -1437,11 +1465,16 @@ async function loadFulfillmentCohorts(
     const weekEconomics = economicsByWeek.get(weekStart);
     const adCostDzd = weekEconomics?.adCostDzd ?? 0;
     const operatingCostDzd = weekEconomics?.operatingCostDzd ?? 0;
-    const projectedTrueProfitDzd =
-      numeric(row.projected_contribution) - adCostDzd - operatingCostDzd;
-    const deliveredTrueProfitDzd =
-      numeric(row.delivered_contribution) - adCostDzd - operatingCostDzd;
-    const paidTrueProfitDzd = numeric(row.paid_contribution) - adCostDzd - operatingCostDzd;
+    const profitsSuppressed = planningReturnRatePct === 100;
+    const projectedTrueProfitDzd = profitsSuppressed
+      ? 0
+      : numeric(row.projected_contribution) - adCostDzd - operatingCostDzd;
+    const deliveredTrueProfitDzd = profitsSuppressed
+      ? 0
+      : numeric(row.delivered_contribution) - adCostDzd - operatingCostDzd;
+    const paidTrueProfitDzd = profitsSuppressed
+      ? 0
+      : numeric(row.paid_contribution) - adCostDzd - operatingCostDzd;
     const paid = numeric(row.paid);
     const returned = numeric(row.returned);
     const mature = Boolean(row.mature);
@@ -1912,16 +1945,19 @@ async function loadMetaPerformance(
             )::int as returned_orders,
             min((${orderAcquisitionAttribution.capturedAt}
               at time zone 'Africa/Algiers')::date)::text as attribution_start_date,
-            coalesce(sum(
-              ${analyticsOrderCohortFacts.grossProfitDzd}::double precision
-              * (1 - ${economics.settings.defaultReturnRate}::double precision / 100)
-            ) filter (
+            coalesce(sum(${stateAwareContributionSql({
+              grossProfit: analyticsOrderCohortFacts.grossProfitDzd,
+              currentStatus: analyticsOrderCohortFacts.outcome,
+              deliveredAt: analyticsOrderCohortFacts.deliveredAt,
+              planningReturnRatePct: sql`${economics.settings.defaultReturnRate}`,
+            })}) filter (
               where ${analyticsOrderCohortFacts.grossProfitDzd} is not null
             ), 0)::double precision
               as projected_adjusted_profit,
-            coalesce(sum(
-              ${analyticsOrderCohortFacts.automaticPaidProfitDzd}::double precision
-            ), 0)::double precision as automatic_paid_profit,
+            case when ${economics.settings.defaultReturnRate}::double precision = 100 then 0 else
+              coalesce(sum(
+                ${analyticsOrderCohortFacts.automaticPaidProfitDzd}::double precision
+              ), 0)::double precision end as automatic_paid_profit,
             count(*) filter (where ${analyticsOrderCohortFacts.costComplete})::int
               as profit_complete_orders
           from ${orderAcquisitionAttribution}
@@ -1985,14 +2021,18 @@ async function loadMetaPerformance(
           as returned_orders,
         min((${orderAcquisitionAttribution.capturedAt}
           at time zone 'Africa/Algiers')::date)::text as attribution_start_date,
-        coalesce(sum(
-          (line_economics.product_revenue - line_economics.estimated_product_cost)
-          * (1 - ${economics.settings.defaultReturnRate}::double precision / 100)
-        ) filter (
+        coalesce(sum(${stateAwareContributionSql({
+          grossProfit: sql`line_economics.product_revenue
+            - line_economics.estimated_product_cost`,
+          currentStatus: ecotrackOrderStates.currentStatus,
+          deliveredAt: sql`delivered.order_id`,
+          planningReturnRatePct: sql`${economics.settings.defaultReturnRate}`,
+        })}) filter (
           where first_posted.order_id is not null
             and line_economics.product_revenue is not null
         ), 0)::double precision as projected_adjusted_profit,
-        coalesce(sum(
+        case when ${economics.settings.defaultReturnRate}::double precision = 100 then 0 else
+          coalesce(sum(
           coalesce(
             ${ecotrackOrderStates.currentAmount}::double precision,
             ${orders.totalAmount}::double precision
@@ -2010,13 +2050,13 @@ async function loadMetaPerformance(
               ${orders.totalAmount}::double precision
             ) * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
           ) end
-        ) filter (
+          ) filter (
           where ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
             and coalesce(
               ${ecotrackOrderStates.deliveryTariff},
               ${ecotrackOrderStates.estimatedFee}
             ) is not null
-        ), 0)::double precision as automatic_paid_profit,
+          ), 0)::double precision end as automatic_paid_profit,
         count(*) filter (
           where first_posted.order_id is not null and line_economics.cost_complete
         )::int as profit_complete_orders
@@ -2799,17 +2839,18 @@ async function loadOperationalProducts(
       count(distinct ${orderLineItems.orderId}) filter (
         where ${orderLineItems.unitPurchasePriceSnapshot} is not null
       )::int as cost_complete_orders,
-      sum(
-        (${orderLineItems.lineTotal} - (
-          coalesce(
-            ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity},
-            ${orderLineItems.lineTotal} * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
-          )
-        )) * (1 - coalesce(
+      sum(${stateAwareContributionSql({
+        grossProfit: sql`${orderLineItems.lineTotal} - coalesce(
+          ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity},
+          ${orderLineItems.lineTotal} * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
+        )`,
+        currentStatus: effectiveStatus,
+        deliveredAt: sql`lifecycle.delivered_at`,
+        planningReturnRatePct: sql`coalesce(
           ${profitTrackerDays.returnRatePct}::double precision,
           ${planningReturnRatePct}::double precision
-        ) / 100)
-      ) filter (
+        )`,
+      })}) filter (
         where ${orderLineItems.lineTotal} is not null
       )::double precision as projected_contribution,
       percentile_cont(0.5) within group (order by
@@ -3169,6 +3210,7 @@ async function loadCustomerEconomics(
   db: Database,
   filters: Analytics2Filters,
   fallbackFxRate: number,
+  profitsSuppressed = false,
 ) {
   const result = await db.execute(sql`
     with line_economics as (
@@ -3239,7 +3281,7 @@ async function loadCustomerEconomics(
             ${ecotrackOrderStates.deliveryTariff}::double precision,
             ${ecotrackOrderStates.estimatedFee}::double precision
           ) is not null
-        then coalesce(
+        then case when ${profitsSuppressed} then 0 else coalesce(
             ${ecotrackOrderStates.currentAmount}::double precision,
             ${orders.totalAmount}::double precision
           ) - coalesce(
@@ -3254,7 +3296,7 @@ async function loadCustomerEconomics(
               ${orders.totalAmount}::double precision
             ) * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
           ) end
-        end as paid_contribution,
+        end end as paid_contribution,
         case when ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
           and not coalesce(line_economics.cost_complete, false)
         then 1 else 0 end as paid_contribution_uses_fallback,
@@ -3620,7 +3662,8 @@ async function loadMaterializedEconomicsReport(
   const operatingCostDzd = ascendingDays.reduce((sum, day) => sum + day.operatingCostDzd, 0);
   const postedOrders = ascendingDays.reduce((sum, day) => sum + day.postedOrders, 0);
   const costCompleteOrders = ascendingDays.reduce((sum, day) => sum + day.costCompleteOrders, 0);
-  const netProfitDzd = adjustedProfitDzd - ratioAdCostDzd;
+  const profitsSuppressed = settings.defaultReturnRate === 100;
+  const netProfitDzd = profitsSuppressed ? 0 : adjustedProfitDzd - ratioAdCostDzd;
   const weekGroups = new Map<
     string,
     {
@@ -3651,12 +3694,16 @@ async function loadMaterializedEconomicsReport(
   }
   const weeks = [...weekGroups.values()]
     .map((week) => {
-      const weekNetProfitDzd = week.adjustedProfitDzd - week.adCostDzd;
+      const weekNetProfitDzd = profitsSuppressed ? 0 : week.adjustedProfitDzd - week.adCostDzd;
       return {
         ...week,
         netProfitDzd: weekNetProfitDzd,
-        trueProfitDzd: weekNetProfitDzd - week.operatingCostDzd,
-        profitX: week.adCostDzd > 0 ? week.adjustedProfitDzd / week.adCostDzd : null,
+        trueProfitDzd: profitsSuppressed ? 0 : weekNetProfitDzd - week.operatingCostDzd,
+        profitX: profitsSuppressed
+          ? 0
+          : week.adCostDzd > 0
+            ? week.adjustedProfitDzd / week.adCostDzd
+            : null,
       };
     })
     .sort((left, right) => right.weekStart.localeCompare(left.weekStart));
@@ -3678,9 +3725,17 @@ async function loadMaterializedEconomicsReport(
       adjustedProfitDzd,
       netProfitDzd,
       operatingCostDzd,
-      trueProfitDzd: netProfitDzd - operatingCostDzd,
-      profitX: ratioAdCostDzd > 0 ? adjustedProfitDzd / ratioAdCostDzd : null,
-      profitXBeforeReturns: ratioAdCostDzd > 0 ? grossProfitDzd / ratioAdCostDzd : null,
+      trueProfitDzd: profitsSuppressed ? 0 : netProfitDzd - operatingCostDzd,
+      profitX: profitsSuppressed
+        ? 0
+        : ratioAdCostDzd > 0
+          ? adjustedProfitDzd / ratioAdCostDzd
+          : null,
+      profitXBeforeReturns: profitsSuppressed
+        ? 0
+        : ratioAdCostDzd > 0
+          ? grossProfitDzd / ratioAdCostDzd
+          : null,
       confirmedOrders: postedOrders,
       fbPurchases: 0,
       costPerConfirmedDzd: postedOrders > 0 ? ratioAdCostDzd / postedOrders : null,
@@ -3955,8 +4010,14 @@ async function loadCommandView(
     priorFulfillment
       ? loadFulfillmentSummary(db, priorFulfillment.startDate, priorFulfillment.endDate)
       : Promise.resolve(null),
-    loadAutomaticPaidEconomics(db, fulfillmentFilters),
-    priorPaid ? loadAutomaticPaidEconomics(db, priorPaid) : Promise.resolve(null),
+    settingsPromise.then((settings) =>
+      loadAutomaticPaidEconomics(db, fulfillmentFilters, settings.defaultReturnRate === 100),
+    ),
+    priorPaid
+      ? settingsPromise.then((settings) =>
+          loadAutomaticPaidEconomics(db, priorPaid, settings.defaultReturnRate === 100),
+        )
+      : Promise.resolve(null),
     loadCashPipeline(db, fulfillmentFilters),
     settingsPromise.then((settings) => loadLeadingOrderForecast(db, fulfillmentFilters, settings)),
   ]);
@@ -4081,8 +4142,18 @@ async function loadMoneyView(
   const [sources, automaticPaid, previousAutomaticPaid, cohorts, leadingForecast] =
     await Promise.all([
       loadSourceHealth(db, filters, current),
-      loadAutomaticPaidEconomics(db, fulfillmentFilters),
-      priorFulfillment ? loadAutomaticPaidEconomics(db, priorFulfillment) : Promise.resolve(null),
+      loadAutomaticPaidEconomics(
+        db,
+        fulfillmentFilters,
+        current.settings.defaultReturnRate === 100,
+      ),
+      priorFulfillment
+        ? loadAutomaticPaidEconomics(
+            db,
+            priorFulfillment,
+            current.settings.defaultReturnRate === 100,
+          )
+        : Promise.resolve(null),
       loadFulfillmentCohorts(db, fulfillmentFilters.startDate, fulfillmentFilters.endDate, current),
       loadLeadingOrderForecast(db, economicsFilters, current.settings),
     ]);
@@ -4690,9 +4761,19 @@ async function loadCatalogView(
     loadOperationalGeography(db, catalogFilters),
     loadOperationalCommunes(db, catalogFilters),
     loadProductMetaAssociations(db, catalogFilters),
-    loadCustomerEconomics(db, catalogFilters, economics.settings.fxRate),
+    loadCustomerEconomics(
+      db,
+      catalogFilters,
+      economics.settings.fxRate,
+      economics.settings.defaultReturnRate === 100,
+    ),
     previousAnalytics
-      ? loadCustomerEconomics(db, previousAnalytics, economics.settings.fxRate)
+      ? loadCustomerEconomics(
+          db,
+          previousAnalytics,
+          economics.settings.fxRate,
+          economics.settings.defaultReturnRate === 100,
+        )
       : Promise.resolve(null),
     loadMetaRegions(db, catalogFilters),
     loadCatalogOperationalSummary(db, catalogFilters),
@@ -4875,7 +4956,8 @@ async function loadAssumptionsView(
       days: economics.days,
       formula: {
         adCost: 'metaSpendEur * fxRateUsed',
-        adjustedProfit: 'grossProfitDzd * (1 - returnRatePct / 100)',
+        adjustedProfit:
+          'realizedEligibleProfitDzd + unresolvedProfitDzd * (1 - returnRatePct / 100)',
         netProfit: 'adjustedProfitDzd - adCostDzd',
         profitX: 'adjustedProfitDzd / adCostDzd',
         trueProfit: 'netProfitDzd - operatingCostDzd',

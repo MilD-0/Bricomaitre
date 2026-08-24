@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import {
+  ADMIN_AI_ASSISTANT_JOB_ORIGIN,
   allowedAdminBackgroundJobTypes,
   listAdminBackgroundJobs,
 } from '../../../../lib/ai-background-jobs';
@@ -15,6 +16,8 @@ export async function GET() {
   const allowedJobTypes = allowedAdminBackgroundJobTypes(
     normalizePermissions(session?.user?.permissions),
   );
-  const jobs = await listAdminBackgroundJobs(30, allowedJobTypes);
+  const jobs = await listAdminBackgroundJobs(30, allowedJobTypes, {
+    origin: ADMIN_AI_ASSISTANT_JOB_ORIGIN,
+  });
   return NextResponse.json({ jobs });
 }

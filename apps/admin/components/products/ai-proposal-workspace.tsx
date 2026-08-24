@@ -11,7 +11,6 @@ import { humanizeProposalToken, proposalPreview } from '../../lib/ai-proposal-pr
 import { formatRelativeTime } from '../../lib/date-format';
 import { toast } from '../../lib/toast';
 import { cn } from '../../lib/utils';
-import { AdminAiAskButton } from '../admin-ai-ask-button';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
@@ -274,7 +273,6 @@ export function AiProposalWorkspace({
           }
         />
         <WorkspaceActions>
-          <AdminAiAskButton />
           {expiredCount > 0 ? (
             <Button
               type="button"

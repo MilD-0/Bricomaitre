@@ -1,12 +1,10 @@
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
 import { connection } from 'next/server';
 import { AppShell } from '../../../components/layout/app-shell';
 import { getDb, hasDb } from '@bric/db/client';
 import { users } from '@bric/db/schema';
 import { auth } from '../../../lib/auth';
 import { eq } from 'drizzle-orm';
-import { ADMIN_LEGACY_UI_COOKIE, parseLegacyUiPreference } from '../../../lib/admin-ui-preference';
 
 export default async function ProtectedLayout({
   children,
@@ -17,7 +15,6 @@ export default async function ProtectedLayout({
 }) {
   await connection();
   const { locale } = await params;
-  const cookieStore = await cookies();
   const session = await auth();
   if (!session?.user?.isAllowed) {
     redirect(`/${locale}`);
@@ -42,7 +39,6 @@ export default async function ProtectedLayout({
       initialUserEmail={session?.user?.email ?? null}
       initialUserImage={persistedUser?.image ?? session?.user?.image ?? null}
       initialUserName={session?.user?.name ?? null}
-      initialLegacyUi={parseLegacyUiPreference(cookieStore.get(ADMIN_LEGACY_UI_COOKIE)?.value)}
     >
       {children}
     </AppShell>

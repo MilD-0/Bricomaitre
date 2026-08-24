@@ -74,6 +74,7 @@ describe('admin AI background job control', () => {
         'admin-reporting-refresh',
       ]),
       25,
+      {},
     );
   });
 
@@ -89,7 +90,35 @@ describe('admin AI background job control', () => {
 
     mocks.list.mockResolvedValue([{ id: 'job-2', queue: 'admin-order-export', status: 'queued' }]);
     await listAdminBackgroundJobs(10, ['order_export', 'order_ecotrack']);
-    expect(mocks.list).toHaveBeenCalledWith(['admin-order-export', 'admin-order-ecotrack'], 10);
+    expect(mocks.list).toHaveBeenCalledWith(['admin-order-export', 'admin-order-ecotrack'], 10, {});
+  });
+
+  it('filters sidebar history to assistant-originated snapshots before applying the limit', async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: 'scheduled-refresh',
+        queue: 'admin-reporting-refresh',
+        origin: null,
+        status: 'completed',
+      },
+      {
+        id: 'assistant-refresh',
+        queue: 'admin-reporting-refresh',
+        origin: 'admin-ai-assistant',
+        status: 'completed',
+      },
+    ]);
+
+    await expect(
+      listAdminBackgroundJobs(30, ['reporting_refresh'], {
+        origin: 'admin-ai-assistant',
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ id: 'assistant-refresh', type: 'reporting_refresh' }),
+    ]);
+    expect(mocks.list).toHaveBeenCalledWith(['admin-reporting-refresh'], 30, {
+      origin: 'admin-ai-assistant',
+    });
   });
 
   it('retrieves and cancels an exact cooperatively cancellable job', async () => {

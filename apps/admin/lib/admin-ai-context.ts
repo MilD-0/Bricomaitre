@@ -97,7 +97,7 @@ function surfaceFromSegment(segment: string): NavigationKey | 'unknown' {
   if (segment === 'orders') return 'orders';
   if (segment === 'inventory') return 'inventory';
   if (segment === 'assets' || segment === 'landing-pages') return 'assets';
-  if (segment === 'brands' || segment === 'categories' || segment === 'brands-categories') {
+  if (segment === 'brands' || segment === 'categories') {
     return 'brandsCategories';
   }
   if (segment === 'stats') return 'stats';

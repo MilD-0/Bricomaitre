@@ -115,15 +115,17 @@ export async function refreshAnalytics2Facts(
     },
     now,
   );
-  const [report, automaticPaid] = await Promise.all([
-    getProfitTrackerReport(
-      filters.startDate
-        ? { range: 'custom', startDate: filters.startDate, endDate: filters.endDate }
-        : { range: 'all', endDate: filters.endDate },
-      { db },
-    ),
-    loadAutomaticPaidEconomics(db, filters),
-  ]);
+  const report = await getProfitTrackerReport(
+    filters.startDate
+      ? { range: 'custom', startDate: filters.startDate, endDate: filters.endDate }
+      : { range: 'all', endDate: filters.endDate },
+    { db },
+  );
+  const automaticPaid = await loadAutomaticPaidEconomics(
+    db,
+    filters,
+    report.settings.defaultReturnRate === 100,
+  );
   const dailyRows = buildAnalyticsEconomicsDailyFactRows(report, automaticPaid, now);
 
   await db.transaction(async (tx) => {

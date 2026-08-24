@@ -1,9 +1,4 @@
-import { getTranslations } from 'next-intl/server';
-
 import { StatsRoutePage } from '../../../../../components/analytics2/analytics2-route-page';
-import { StatsDashboard } from '../../../../../components/stats/stats-dashboard';
-import { readLegacyUiPreference } from '../../../../../lib/admin-ui-preference.server';
-import { requireStatsPageAccess } from '../../../../../lib/page-access';
 
 export default async function StatsWebsitePage({
   params,
@@ -13,16 +8,5 @@ export default async function StatsWebsitePage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { locale } = await params;
-  if (!(await readLegacyUiPreference())) {
-    return <StatsRoutePage locale={locale} searchParams={searchParams} view="storefront" />;
-  }
-  await requireStatsPageAccess(locale);
-  const t = await getTranslations();
-  return (
-    <StatsDashboard
-      title={t('statsDashboard.tabs.website')}
-      description={t('pages.stats')}
-      section="website"
-    />
-  );
+  return <StatsRoutePage locale={locale} searchParams={searchParams} view="storefront" />;
 }
