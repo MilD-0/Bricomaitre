@@ -18,6 +18,8 @@
     "statsAcquisition": "الاكتساب",
     "statsFulfillment": "التوصيل",
     "statsStorefront": "المتجر",
+    "statsAiOperations": "عمليات الذكاء الاصطناعي",
+    "statsShoppingAssistant": "مساعد التسوق",
     "statsSearch": "الظهور في البحث",
     "statsCatalog": "الكتالوج",
     "statsAssumptions": "التكاليف والافتراضات",
@@ -364,6 +366,7 @@
     "edit": "تعديل",
     "modify": "تعديل",
     "cancel": "إلغاء",
+    "close": "إغلاق",
     "save": "حفظ",
     "go": "انتقال",
     "first": "الأولى",
@@ -2118,6 +2121,7 @@
     "unconfirmedDate": "لا يوجد وقت تأكيد"
   },
   "ordersEcotrackManager": {
+    "resultCount": "{count} شحنات",
     "searchPlaceholder": "ابحث برقم التتبع او العميل او الهاتف او العنوان او البلدية او الولاية او المنتج او الحالة",
     "filters": {
       "statusLabel": "تصفية حسب حالة ECOTRACK",

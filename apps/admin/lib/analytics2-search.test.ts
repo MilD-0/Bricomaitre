@@ -4,6 +4,7 @@ import {
   buildSearchOpportunities,
   canonicalSearchPath,
   isBrandedSearchQuery,
+  searchPageLabel,
 } from './analytics2-search';
 
 describe('Analytics2 Search intelligence', () => {
@@ -12,6 +13,10 @@ describe('Analytics2 Search intelligence', () => {
       '/products/perceuse',
     );
     expect(canonicalSearchPath('https://bricomaitre.com/ar')).toBe('/');
+    expect(searchPageLabel('https://bricomaitre.com/fr/products/perceuse')).toBe(
+      '/products/perceuse · FR',
+    );
+    expect(searchPageLabel('https://bricomaitre.com/ar')).toBe('/ · AR');
   });
 
   it('keeps branded demand separate across common spellings', () => {

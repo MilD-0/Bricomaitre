@@ -47,11 +47,12 @@ import { Field, FieldError, FieldGroup, FieldLabel } from './ui/field';
 import { Input } from './ui/input';
 import { PendingInline, sectionTransitionProps, SurfacePendingOverlay } from './ui/motion';
 import { Skeleton } from './ui/skeleton';
+import { ScrollableRegion } from './ui/scrollable-region';
 import { Switch } from './ui/switch';
-import { TablePaginationControls } from './table-pagination-controls';
 import { SearchField } from './search-field';
 import { AdminAiAskButton } from './admin-ai-ask-button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { WorkspacePagination } from './ui/workspace-pagination';
 import {
   WorkspaceActions,
   WorkspaceFrame,
@@ -822,7 +823,7 @@ export function InventoryManager({ title }: { title: string }) {
                 : 'transition-opacity duration-200'
             }
           >
-            <div className="hidden overflow-x-auto md:block">
+            <ScrollableRegion label={t('nav.inventory')} className="hidden md:block">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -935,7 +936,7 @@ export function InventoryManager({ title }: { title: string }) {
                     : null}
                 </TableBody>
               </Table>
-            </div>
+            </ScrollableRegion>
 
             <div
               className="divide-y divide-border/60 border-b border-border/60 md:hidden"
@@ -1022,9 +1023,10 @@ export function InventoryManager({ title }: { title: string }) {
                 : null}
             </div>
 
-            <TablePaginationControls
+            <WorkspacePagination
               currentPage={query.data?.pagination.page ?? page}
               totalPages={query.data?.pagination.totalPages ?? 1}
+              pending={query.isFetching}
               onPageChange={(nextPage) => startFilterTransition(() => setPage(nextPage))}
             />
           </div>

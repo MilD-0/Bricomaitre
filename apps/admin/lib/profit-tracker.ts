@@ -699,39 +699,6 @@ export async function syncProfitTrackerMetaRows(
   return [...byDay.keys()].sort();
 }
 
-export async function reconcileProfitTrackerFxSnapshots(
-  input: { since: string; until: string },
-  db: Database = getDb(),
-) {
-  const since = dateOnlySchema.parse(input.since);
-  const until = dateOnlySchema.parse(input.until);
-  if (since > until) throw new Error('since must not follow until.');
-  const [settings, metaDays] = await Promise.all([
-    getProfitTrackerSettings(db),
-    loadMetaDayEconomics(db, since, until),
-  ]);
-  if (metaDays.length === 0) return [];
-  const inserted = await db
-    .insert(profitTrackerDays)
-    .values(
-      metaDays.map((day) => ({
-        day: day.date,
-        spendEur: decimal(day.spendEur),
-        fbPurchases: decimal(day.fbPurchases),
-        cpm: decimal(day.cpm),
-        ctr: decimal(day.ctr),
-        linkClicks: day.linkClicks,
-        landingPageViews: decimal(day.landingPageViews),
-        rawMetaJson: { source: 'meta_ads_daily_insights', currency: 'EUR' },
-        fxRateUsed: decimal(settings.fxRate),
-        metaSyncedAt: day.metaSyncedAt ? new Date(day.metaSyncedAt) : null,
-      })),
-    )
-    .onConflictDoNothing({ target: profitTrackerDays.day })
-    .returning({ day: profitTrackerDays.day });
-  return inserted.map((row) => row.day).sort();
-}
-
 async function listAdsetPerformance(
   startDate: string | null,
   endDate: string,

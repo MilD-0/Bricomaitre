@@ -26,6 +26,10 @@ function validate(root: string) {
   return spawnSync('node', [validator, '--root', root, 'README.md'], { encoding: 'utf8' });
 }
 
+function validateTrackedFiles(root: string) {
+  return spawnSync('node', [validator, '--root', root], { encoding: 'utf8' });
+}
+
 describe('local Markdown link validation', () => {
   it('accepts files, directories, anchors, external URLs, and examples in code', () => {
     const root = makeFixture(`
@@ -63,5 +67,19 @@ describe('local Markdown link validation', () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('README.md: ../private.md escapes the workspace');
+  });
+
+  it('ignores tracked Markdown files deleted in the current worktree', () => {
+    const root = makeFixture('[Architecture](./docs/architecture.md)\n');
+    const deletedDocument = join(root, 'docs', 'deleted.md');
+    writeFileSync(deletedDocument, '# Deleted soon\n');
+    spawnSync('git', ['init', '--quiet'], { cwd: root });
+    spawnSync('git', ['add', 'README.md', 'docs'], { cwd: root });
+    rmSync(deletedDocument);
+
+    const result = validateTrackedFiles(root);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Validated local links in 2 Markdown files.');
   });
 });

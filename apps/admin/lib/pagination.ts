@@ -16,3 +16,25 @@ export const paginationMetaSchema = z.object({
 });
 
 export type PaginationMeta = z.infer<typeof paginationMetaSchema>;
+
+export type PaginationItem = number | `ellipsis-${number}`;
+
+export function getPaginationItems(currentPage: number, totalPages: number): PaginationItem[] {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
+
+  const visiblePages =
+    currentPage <= 4
+      ? [1, 2, 3, 4, 5, totalPages]
+      : currentPage >= totalPages - 3
+        ? [1, totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages]
+        : [1, currentPage - 1, currentPage, currentPage + 1, totalPages];
+  const items: PaginationItem[] = [];
+
+  visiblePages.forEach((page, index) => {
+    const previousPage = visiblePages[index - 1];
+    if (previousPage && page - previousPage > 1) items.push(`ellipsis-${previousPage}`);
+    items.push(page);
+  });
+
+  return items;
+}

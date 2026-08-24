@@ -228,9 +228,11 @@ describe('BulletinBoard', () => {
       'sr-only',
       'lg:not-sr-only',
     );
-    expect(screen.getByText('22')).toHaveClass('tabular-nums');
+    expect(view.container.querySelector('[data-workspace-heading] span')).toHaveTextContent(
+      '22 visible',
+    );
     expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
-    expect(view.container.querySelector('[data-bulletin-post="1"]')).toBeInTheDocument();
+    expect(view.container.querySelector('[data-bulletin-post="1"]')).toHaveClass('max-w-5xl');
     expect(screen.queryByPlaceholderText('Post title')).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'New post' }));

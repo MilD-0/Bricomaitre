@@ -170,7 +170,7 @@ export function classifyShoppingAssistantIntent(value: string): ShoppingAssistan
   return 'other';
 }
 
-export function shoppingAssistantCartRequest(value: string) {
+function shoppingAssistantCartRequest(value: string) {
   const text = value.toLocaleLowerCase().normalize('NFKC');
   const asksHow = ['comment ', 'how ', 'كيف '].some((term) => text.trimStart().startsWith(term));
   const includesAny = (...terms: string[]) => terms.some((term) => text.includes(term));

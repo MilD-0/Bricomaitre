@@ -2,8 +2,8 @@ import { z } from 'zod';
 
 import { navigationKeys, type NavigationKey } from './navigation';
 
-export const adminAiSurfaceValues = [...navigationKeys, 'unknown'] as const;
-export const adminAiEntityTypeValues = [
+const adminAiSurfaceValues = [...navigationKeys, 'unknown'] as const;
+const adminAiEntityTypeValues = [
   'product',
   'order',
   'proposal',
@@ -48,7 +48,7 @@ export const adminAiSurfaceContextSchema = z
 
 export type AdminAiSurfaceContext = z.infer<typeof adminAiSurfaceContextSchema>;
 export type AdminAiSurface = AdminAiSurfaceContext['surface'];
-export type AdminAiEntityType = (typeof adminAiEntityTypeValues)[number];
+type AdminAiEntityType = (typeof adminAiEntityTypeValues)[number];
 export type AdminAiSurfaceDetails = {
   filters?: Record<string, string | number | boolean | null>;
   selection?: {

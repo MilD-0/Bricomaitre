@@ -36,6 +36,12 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: 'standalone',
   typedRoutes: true,
+  // The storefront owns both logical bottom corners: the advisor follows the
+  // reading direction and commerce actions may occupy the opposite edge.
+  // Next's floating development tool intercepts those controls in shared
+  // previews, so keep development feedback in the terminal and browser
+  // console instead of placing another fixed control over the interface.
+  devIndicators: false,
   transpilePackages: ['@bric/ai-core', '@bric/runtime', '@bric/storefront-core'],
   allowedDevOrigins: getAllowedDevOrigins(),
   experimental: {

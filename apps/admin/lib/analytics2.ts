@@ -1,5 +1,4 @@
 import { sql, type SQLWrapper } from 'drizzle-orm';
-import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
 import {
@@ -42,7 +41,6 @@ import {
   ANALYTICS_RESOLVED_SHIPMENT_STATUSES,
   effectiveEcotrackStatusSql,
 } from './ecotrack-status-policy';
-import { operatingCostForDay } from './profit-tracker-metrics';
 import {
   getCanonicalStorefrontSessionCount,
   getLiveStorefrontAnalytics,
@@ -52,149 +50,76 @@ import {
   type StatsFilters,
 } from './stats';
 import { loadSearchAnalytics, loadSearchThroughDate } from './analytics2-search';
+import {
+  ISO_DATE_PATTERN,
+  type Analytics2AutomaticPaidDay,
+  type Analytics2AutomaticPaidEconomics,
+  type Analytics2CashStage,
+  type Analytics2EffectiveRange,
+  type Analytics2EntityLevel,
+  type Analytics2Filters,
+  type Analytics2LeadingOrderForecast,
+  type Analytics2Metric,
+  type Analytics2Query,
+  type Analytics2Source,
+  type Analytics2View,
+} from './analytics2/contract';
+import {
+  addDays,
+  clampQueryToReference,
+  clipAnalytics2Filters,
+  dayInTimezone,
+  inclusiveDays,
+  resolveAnalytics2Filters,
+  resolveAnalytics2ReferenceNow,
+} from './analytics2/date-range';
+import {
+  aggregateAutomaticPaidSeries,
+  aggregateEconomicsSeries,
+  fridayWeekStart,
+} from './analytics2/economics-series';
+import {
+  buildEconomicsForecast,
+  buildLeadingOrderForecast,
+  projectOpenEconomicsSeries,
+} from './analytics2/forecast';
+import { metricChange, ratio, returnRate } from './analytics2/metrics';
+
+export { analytics2QuerySchema } from './analytics2/contract';
+export type {
+  Analytics2AutomaticPaidEconomics,
+  Analytics2CashStage,
+  Analytics2EffectiveRange,
+  Analytics2EntityLevel,
+  Analytics2Filters,
+  Analytics2Grain,
+  Analytics2Metric,
+  Analytics2Query,
+  Analytics2Range,
+  Analytics2ResolvedGrain,
+  Analytics2Source,
+  Analytics2View,
+} from './analytics2/contract';
+export {
+  clipAnalytics2Filters,
+  resolveAnalytics2Filters,
+  resolveAnalytics2ReferenceNow,
+} from './analytics2/date-range';
+export {
+  aggregateAutomaticPaidSeries,
+  aggregateEconomicsSeries,
+} from './analytics2/economics-series';
+export {
+  buildEconomicsForecast,
+  buildLeadingOrderForecast,
+  projectOpenEconomicsSeries,
+} from './analytics2/forecast';
+export { metricChange } from './analytics2/metrics';
 
 type Database = ReturnType<typeof getDb>;
 type EconomicsReport = Awaited<ReturnType<typeof getProfitTrackerReport>>;
 
-export const analytics2Views = [
-  'command',
-  'money',
-  'acquisition',
-  'fulfillment',
-  'storefront',
-  'search',
-  'catalog',
-  'assumptions',
-] as const;
-
-export type Analytics2View = (typeof analytics2Views)[number];
-export type Analytics2Grain = 'auto' | 'day' | 'week' | 'month';
-export type Analytics2ResolvedGrain = Exclude<Analytics2Grain, 'auto'>;
-export type Analytics2Range = '7d' | '14d' | '30d' | '90d' | 'year' | 'all' | 'custom';
-
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const dateOnlySchema = z
-  .string()
-  .regex(ISO_DATE_PATTERN)
-  .refine((value) => {
-    const parsed = new Date(`${value}T00:00:00.000Z`);
-    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-  }, 'Invalid calendar date');
-
-export const analytics2QuerySchema = z
-  .object({
-    view: z
-      .enum(analytics2Views)
-      .default('command')
-      .describe(
-        'Choose exactly one canonical workspace: command for executive cross-section summaries and signals; money for profit meanings, paid contribution, Profit ×, economics timelines, forecasts, posting cohorts, and Friday accounting; acquisition for Meta spend, campaigns, ad sets, ads, attribution, and paid-acquisition efficiency; fulfillment for submitted/confirmed/posted/active/delivered/paid/returned lifecycle, shipments, delivery attempts, and operational forecasts; storefront for first-party sessions, funnel, landing pages, onsite searches, products, and web vitals; search for Search Console; catalog for products, baskets, customers, and geography; assumptions for planning versus observed returns, FX, operating costs, and manual calculator inputs.',
-      ),
-    range: z
-      .enum(['7d', '14d', '30d', '90d', 'year', 'all', 'custom'])
-      .default('30d')
-      .describe(
-        'Use custom whenever the operator supplies explicit start and end dates, and then pass both startDate and endDate exactly. Use a preset only when the operator requests that preset or supplies no exact dates.',
-      ),
-    startDate: dateOnlySchema
-      .optional()
-      .describe('Inclusive YYYY-MM-DD start date; required when range is custom.'),
-    endDate: dateOnlySchema
-      .optional()
-      .describe('Inclusive YYYY-MM-DD end date; required when range is custom.'),
-    grain: z
-      .enum(['auto', 'day', 'week', 'month'])
-      .default('auto')
-      .describe('Time-series grain. Keep auto unless the operator requests a specific grain.'),
-  })
-  .strict()
-  .superRefine((value, context) => {
-    if (value.range === 'custom' && (!value.startDate || !value.endDate)) {
-      context.addIssue({
-        code: 'custom',
-        message: 'Custom ranges require startDate and endDate.',
-        path: ['startDate'],
-      });
-    }
-    if (value.startDate && value.endDate && value.startDate > value.endDate) {
-      context.addIssue({
-        code: 'custom',
-        message: 'startDate must not follow endDate.',
-        path: ['startDate'],
-      });
-    }
-  });
-
-export type Analytics2Query = z.input<typeof analytics2QuerySchema>;
-
-export type Analytics2Filters = {
-  view: Analytics2View;
-  range: Analytics2Range;
-  startDate: string | null;
-  endDate: string;
-  grain: Analytics2Grain;
-  resolvedGrain: Analytics2ResolvedGrain;
-  comparisonStartDate: string | null;
-  comparisonEndDate: string | null;
-};
-
-export type Analytics2Metric = {
-  key: string;
-  value: number | null;
-  previous: number | null;
-  changePct: number | null;
-  unit: 'dzd' | 'eur' | 'number' | 'percent' | 'ratio' | 'hours';
-  goodWhen?: 'up' | 'down' | 'neutral';
-};
-
-export type Analytics2Source = {
-  key:
-    'orders' | 'ecotrack' | 'meta' | 'storefront' | 'searchConsole' | 'settlements' | 'assumptions';
-  state: 'live' | 'current' | 'lagged' | 'manual' | 'partial' | 'missing';
-  updatedAt: string | null;
-  throughDate: string | null;
-  records: number;
-  coveragePct: number | null;
-};
-
-export type Analytics2EffectiveRange = {
-  key: string;
-  startDate: string | null;
-  endDate: string;
-  sources: Analytics2Source['key'][];
-};
-
-export type Analytics2EconomicsPoint = {
-  bucket: string;
-  label: string;
-  grossProfitDzd: number | null;
-  adjustedProfitDzd: number | null;
-  adCostDzd: number | null;
-  netProfitDzd: number | null;
-  trueProfitDzd: number | null;
-  realizedProfitDzd: number | null;
-  realizedProfitAfterAdsDzd: number | null;
-  postedOrders: number;
-  settledOrders: number;
-  profitX: number | null;
-  profitXBeforeReturns: number | null;
-  projectedCoveragePct: number | null;
-  cumulativeNetProfitDzd: number | null;
-  cumulativeTrueProfitDzd: number | null;
-  cumulativeRealizedProfitDzd: number | null;
-  isPartial: boolean;
-  grossProfitDzdProjected: number | null;
-  adjustedProfitDzdProjected: number | null;
-  adCostDzdProjected: number | null;
-  netProfitDzdProjected: number | null;
-  trueProfitDzdProjected: number | null;
-  profitXProjected: number | null;
-  profitXBeforeReturnsProjected: number | null;
-  cumulativeNetProfitDzdProjected: number | null;
-  cumulativeTrueProfitDzdProjected: number | null;
-  projectionDays: number;
-};
-
-export type Analytics2ReturnObservation = {
+type Analytics2ReturnObservation = {
   planningRatePct: number;
   mature: {
     ratePct: number | null;
@@ -215,7 +140,7 @@ export type Analytics2ReturnObservation = {
   };
 };
 
-export type Analytics2FulfillmentSummary = {
+type Analytics2FulfillmentSummary = {
   submittedOrders: number;
   confirmedOrders: number;
   postedOrders: number;
@@ -230,40 +155,7 @@ export type Analytics2FulfillmentSummary = {
   matureObservedReturnRatePct: number | null;
 };
 
-export type Analytics2AutomaticPaidDay = {
-  date: string;
-  paidOrders: number;
-  codDzd: number;
-  feesDzd: number;
-  netRecoveredDzd: number;
-  productCostDzd: number;
-  profitDzd: number;
-  completeOrders: number;
-  providerAmountOrders: number;
-  legacyAmountOrders: number;
-  submittedAmountOrders: number;
-};
-
-export type Analytics2AutomaticPaidEconomics = {
-  summary: {
-    paidOrders: number;
-    codDzd: number;
-    feesDzd: number;
-    netRecoveredDzd: number;
-    productCostDzd: number;
-    profitDzd: number;
-    completeOrders: number;
-    profitCoveragePct: number | null;
-    providerAmountCoveragePct: number | null;
-    legacyFallbackOrders: number;
-    submittedFallbackOrders: number;
-  };
-  days: Analytics2AutomaticPaidDay[];
-};
-
-export type Analytics2EntityLevel = 'campaign' | 'adset' | 'ad';
-
-export type Analytics2MetaEntity = {
+type Analytics2MetaEntity = {
   id: string;
   name: string;
   campaignId: string | null;
@@ -334,53 +226,6 @@ function isoValue(value: unknown) {
   if (!value) return null;
   const parsed = value instanceof Date ? value : new Date(String(value));
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
-}
-
-function addDays(date: string, amount: number) {
-  const value = new Date(`${date}T00:00:00.000Z`);
-  value.setUTCDate(value.getUTCDate() + amount);
-  return value.toISOString().slice(0, 10);
-}
-
-function inclusiveDays(startDate: string, endDate: string) {
-  return (
-    Math.floor(
-      (Date.parse(`${endDate}T00:00:00.000Z`) - Date.parse(`${startDate}T00:00:00.000Z`)) /
-        86_400_000,
-    ) + 1
-  );
-}
-
-function dayInTimezone(now: Date, timezone = 'Africa/Algiers') {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(now);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-
-export function resolveAnalytics2ReferenceNow(
-  setting: string | undefined,
-  cutoffDate: string | null,
-  wallNow = new Date(),
-) {
-  const normalized = setting?.trim().toLowerCase();
-  const referenceDate = ISO_DATE_PATTERN.test(normalized ?? '')
-    ? normalized!
-    : normalized === 'dataset'
-      ? cutoffDate
-      : null;
-  if (!referenceDate) {
-    return { now: wallNow, referenceDate: dayInTimezone(wallNow), reviewClock: false };
-  }
-  return {
-    now: new Date(`${referenceDate}T12:00:00.000Z`),
-    referenceDate,
-    reviewClock: true,
-  };
 }
 
 async function loadDatasetCutoffDate(db: Database) {
@@ -499,96 +344,6 @@ function commonCoverageStart(...dates: Array<string | null>) {
   return [...(dates as string[])].sort().at(-1) ?? null;
 }
 
-export function clipAnalytics2Filters(
-  filters: Analytics2Filters,
-  throughDate: string | null,
-  coverageStartDate: string | null = null,
-): Analytics2Filters {
-  const startDate =
-    coverageStartDate && (!filters.startDate || coverageStartDate > filters.startDate)
-      ? coverageStartDate
-      : filters.startDate;
-  const endDate = throughDate && throughDate < filters.endDate ? throughDate : filters.endDate;
-  const startWasClipped = startDate !== filters.startDate;
-  if (startDate && endDate < startDate) {
-    return { ...filters, startDate, endDate, comparisonStartDate: null, comparisonEndDate: null };
-  }
-  if (!startWasClipped && endDate === filters.endDate) return filters;
-  const elapsedDays = startDate ? inclusiveDays(startDate, endDate) : null;
-  const comparisonEndDate = startWasClipped || !startDate ? null : addDays(startDate, -1);
-  const comparisonStartDate =
-    elapsedDays && comparisonEndDate ? addDays(comparisonEndDate, -(elapsedDays - 1)) : null;
-  return { ...filters, startDate, endDate, comparisonStartDate, comparisonEndDate };
-}
-
-function clampQueryToReference(query: Analytics2Query, referenceDate: string) {
-  if (query.range !== 'custom' || !query.startDate || !query.endDate) return query;
-  const endDate = query.endDate > referenceDate ? referenceDate : query.endDate;
-  return {
-    ...query,
-    startDate: query.startDate > endDate ? endDate : query.startDate,
-    endDate,
-  };
-}
-
-function autoGrain(startDate: string | null, endDate: string): Analytics2ResolvedGrain {
-  if (!startDate) return 'month';
-  const days = inclusiveDays(startDate, endDate);
-  if (days <= 45) return 'day';
-  if (days <= 240) return 'week';
-  return 'month';
-}
-
-export function resolveAnalytics2Filters(
-  raw: Analytics2Query,
-  now = new Date(),
-): Analytics2Filters {
-  const parsed = analytics2QuerySchema.parse(raw);
-  const endDate = parsed.range === 'custom' ? parsed.endDate! : dayInTimezone(now);
-  let startDate: string | null;
-
-  switch (parsed.range) {
-    case '7d':
-      startDate = addDays(endDate, -6);
-      break;
-    case '14d':
-      startDate = addDays(endDate, -13);
-      break;
-    case '30d':
-      startDate = addDays(endDate, -29);
-      break;
-    case '90d':
-      startDate = addDays(endDate, -89);
-      break;
-    case 'year':
-      startDate = `${endDate.slice(0, 4)}-01-01`;
-      break;
-    case 'custom':
-      startDate = parsed.startDate!;
-      break;
-    case 'all':
-      startDate = null;
-      break;
-  }
-
-  const comparisonEndDate = startDate ? addDays(startDate, -1) : null;
-  const comparisonStartDate =
-    startDate && comparisonEndDate
-      ? addDays(comparisonEndDate, -(inclusiveDays(startDate, endDate) - 1))
-      : null;
-
-  return {
-    view: parsed.view,
-    range: parsed.range,
-    startDate,
-    endDate,
-    grain: parsed.grain,
-    resolvedGrain: parsed.grain === 'auto' ? autoGrain(startDate, endDate) : parsed.grain,
-    comparisonStartDate,
-    comparisonEndDate,
-  };
-}
-
 function statsInput(startDate: string | null, endDate: string): StatsFilters {
   return startDate ? { range: 'custom', startDate, endDate } : { range: 'all', endDate };
 }
@@ -603,11 +358,6 @@ function effectiveRange(
   sources: Analytics2Source['key'][],
 ): Analytics2EffectiveRange {
   return { key, startDate: filters.startDate, endDate: filters.endDate, sources };
-}
-
-export function metricChange(current: number | null, previous: number | null) {
-  if (current == null || previous == null || previous === 0) return null;
-  return ((current - previous) / Math.abs(previous)) * 100;
 }
 
 function metric(
@@ -628,230 +378,6 @@ function datePredicate(column: SQLWrapper, startDate: string | null, endDate: st
 function timestampPredicate(column: SQLWrapper, startDate: string | null, endDate: string) {
   return sql`${startDate ? sql`(${column} at time zone 'Africa/Algiers')::date >= ${startDate}::date` : sql`true`}
     and (${column} at time zone 'Africa/Algiers')::date <= ${endDate}::date`;
-}
-
-function fridayWeekStart(date: string) {
-  const value = new Date(`${date}T00:00:00.000Z`);
-  const offset = (value.getUTCDay() - 5 + 7) % 7;
-  value.setUTCDate(value.getUTCDate() - offset);
-  return value.toISOString().slice(0, 10);
-}
-
-function bucketFor(date: string, grain: Analytics2ResolvedGrain) {
-  if (grain === 'day') return date;
-  if (grain === 'week') return fridayWeekStart(date);
-  return `${date.slice(0, 7)}-01`;
-}
-
-function bucketEnd(bucket: string, grain: Analytics2ResolvedGrain) {
-  if (grain === 'day') return bucket;
-  if (grain === 'week') return addDays(bucket, 6);
-  const monthAfter = new Date(`${bucket}T00:00:00.000Z`);
-  monthAfter.setUTCMonth(monthAfter.getUTCMonth() + 1);
-  return addDays(monthAfter.toISOString().slice(0, 10), -1);
-}
-
-export function aggregateEconomicsSeries(
-  report: EconomicsReport,
-  grain: Analytics2ResolvedGrain,
-  today: string,
-): Analytics2EconomicsPoint[] {
-  const realizedByDate = new Map(report.realized.days.map((day) => [day.date, day]));
-  type Accumulator = {
-    bucket: string;
-    grossProfitDzd: number;
-    grossSamples: number;
-    adjustedProfitDzd: number;
-    adjustedSamples: number;
-    adCostDzd: number;
-    adSamples: number;
-    operatingCostDzd: number;
-    realizedProfitDzd: number;
-    realizedSamples: number;
-    realizedProfitAfterAdsDzd: number;
-    realizedAfterAdsSamples: number;
-    postedOrders: number;
-    settledOrders: number;
-    costCompleteOrders: number;
-    days: string[];
-  };
-  const groups = new Map<string, Accumulator>();
-
-  for (const day of [...report.days].reverse()) {
-    const bucket = bucketFor(day.date, grain);
-    const current = groups.get(bucket) ?? {
-      bucket,
-      grossProfitDzd: 0,
-      grossSamples: 0,
-      adjustedProfitDzd: 0,
-      adjustedSamples: 0,
-      adCostDzd: 0,
-      adSamples: 0,
-      operatingCostDzd: 0,
-      realizedProfitDzd: 0,
-      realizedSamples: 0,
-      realizedProfitAfterAdsDzd: 0,
-      realizedAfterAdsSamples: 0,
-      postedOrders: 0,
-      settledOrders: 0,
-      costCompleteOrders: 0,
-      days: [],
-    };
-    const realized = realizedByDate.get(day.date);
-    current.days.push(day.date);
-    current.postedOrders += day.postedOrders ?? 0;
-    current.costCompleteOrders += day.costCompleteOrders ?? 0;
-    current.settledOrders += realized?.settledOrders ?? 0;
-    current.operatingCostDzd += day.operatingCostDzd ?? 0;
-    if (day.grossProfitDzd != null) {
-      current.grossProfitDzd += day.grossProfitDzd;
-      current.grossSamples += 1;
-    }
-    if (day.metrics.adjustedProfitDzd != null) {
-      current.adjustedProfitDzd += day.metrics.adjustedProfitDzd;
-      current.adjustedSamples += 1;
-    }
-    if (day.metrics.adCostDzd != null) {
-      current.adCostDzd += day.metrics.adCostDzd;
-      current.adSamples += 1;
-    }
-    if (realized) {
-      current.realizedProfitDzd += realized.realizedProfitDzd;
-      current.realizedSamples += 1;
-      if (realized.realizedProfitAfterAdsDzd != null) {
-        current.realizedProfitAfterAdsDzd += realized.realizedProfitAfterAdsDzd;
-        current.realizedAfterAdsSamples += 1;
-      }
-    }
-    groups.set(bucket, current);
-  }
-
-  let cumulativeAdjustedProfitDzd = 0;
-  let cumulativeAdCostDzd = 0;
-  let cumulativeOperatingCostDzd = 0;
-  let cumulativeRealizedProfitDzd = 0;
-  const latestTrackedDate = [...groups.values()]
-    .flatMap((group) => group.days)
-    .sort()
-    .at(-1);
-  return [...groups.values()]
-    .sort((left, right) => left.bucket.localeCompare(right.bucket))
-    .map((group) => {
-      const grossProfitDzd = group.grossSamples ? group.grossProfitDzd : null;
-      const adjustedProfitDzd = group.adjustedSamples ? group.adjustedProfitDzd : null;
-      const adCostDzd = group.adSamples ? group.adCostDzd : null;
-      const netProfitDzd =
-        adjustedProfitDzd != null && adCostDzd != null ? adjustedProfitDzd - adCostDzd : null;
-      const trueProfitDzd = netProfitDzd == null ? null : netProfitDzd - group.operatingCostDzd;
-      const realizedProfitDzd = group.realizedSamples ? group.realizedProfitDzd : null;
-      if (adjustedProfitDzd != null) cumulativeAdjustedProfitDzd += adjustedProfitDzd;
-      if (adCostDzd != null) cumulativeAdCostDzd += adCostDzd;
-      cumulativeOperatingCostDzd += group.operatingCostDzd;
-      if (realizedProfitDzd != null) cumulativeRealizedProfitDzd += realizedProfitDzd;
-      return {
-        bucket: group.bucket,
-        label: group.bucket,
-        grossProfitDzd,
-        adjustedProfitDzd,
-        adCostDzd,
-        netProfitDzd,
-        trueProfitDzd,
-        realizedProfitDzd,
-        realizedProfitAfterAdsDzd:
-          realizedProfitDzd != null && adCostDzd != null ? realizedProfitDzd - adCostDzd : null,
-        postedOrders: group.postedOrders,
-        settledOrders: group.settledOrders,
-        profitX:
-          adjustedProfitDzd != null && adCostDzd != null && adCostDzd > 0
-            ? adjustedProfitDzd / adCostDzd
-            : null,
-        profitXBeforeReturns:
-          grossProfitDzd != null && adCostDzd != null && adCostDzd > 0
-            ? grossProfitDzd / adCostDzd
-            : null,
-        projectedCoveragePct:
-          group.postedOrders > 0 ? (group.costCompleteOrders / group.postedOrders) * 100 : null,
-        cumulativeNetProfitDzd:
-          cumulativeAdjustedProfitDzd || cumulativeAdCostDzd
-            ? cumulativeAdjustedProfitDzd - cumulativeAdCostDzd
-            : null,
-        cumulativeTrueProfitDzd:
-          cumulativeAdjustedProfitDzd || cumulativeAdCostDzd
-            ? cumulativeAdjustedProfitDzd - cumulativeAdCostDzd - cumulativeOperatingCostDzd
-            : null,
-        cumulativeRealizedProfitDzd: group.realizedSamples ? cumulativeRealizedProfitDzd : null,
-        isPartial:
-          group.days.includes(today) ||
-          (group.days.includes(latestTrackedDate ?? '') &&
-            (latestTrackedDate ?? group.bucket) < bucketEnd(group.bucket, grain)),
-        grossProfitDzdProjected: null,
-        adjustedProfitDzdProjected: null,
-        adCostDzdProjected: null,
-        netProfitDzdProjected: null,
-        trueProfitDzdProjected: null,
-        profitXProjected: null,
-        profitXBeforeReturnsProjected: null,
-        cumulativeNetProfitDzdProjected: null,
-        cumulativeTrueProfitDzdProjected: null,
-        projectionDays: 0,
-      };
-    });
-}
-
-export function aggregateAutomaticPaidSeries(
-  report: Analytics2AutomaticPaidEconomics,
-  grain: Analytics2ResolvedGrain,
-  cutoffDate?: string,
-) {
-  const groups = new Map<string, Omit<Analytics2AutomaticPaidDay, 'date'> & { bucket: string }>();
-  for (const day of report.days) {
-    const bucket = bucketFor(day.date, grain);
-    const current = groups.get(bucket) ?? {
-      bucket,
-      paidOrders: 0,
-      codDzd: 0,
-      feesDzd: 0,
-      netRecoveredDzd: 0,
-      productCostDzd: 0,
-      profitDzd: 0,
-      completeOrders: 0,
-      providerAmountOrders: 0,
-      legacyAmountOrders: 0,
-      submittedAmountOrders: 0,
-    };
-    current.paidOrders += day.paidOrders;
-    current.codDzd += day.codDzd;
-    current.feesDzd += day.feesDzd;
-    current.netRecoveredDzd += day.netRecoveredDzd;
-    current.productCostDzd += day.productCostDzd;
-    current.profitDzd += day.profitDzd;
-    current.completeOrders += day.completeOrders;
-    current.providerAmountOrders += day.providerAmountOrders;
-    current.legacyAmountOrders += day.legacyAmountOrders;
-    current.submittedAmountOrders += day.submittedAmountOrders;
-    groups.set(bucket, current);
-  }
-  const sorted = [...groups.values()].sort((left, right) =>
-    left.bucket.localeCompare(right.bucket),
-  );
-  const lastBucket = sorted.at(-1)?.bucket;
-  return sorted.map((row) => ({
-    ...row,
-    label: row.bucket,
-    profitCoveragePct: ratio(row.completeOrders, row.paidOrders),
-    providerAmountCoveragePct: ratio(row.providerAmountOrders, row.paidOrders),
-    isPartial: Boolean(
-      cutoffDate && row.bucket === lastBucket && cutoffDate < bucketEnd(row.bucket, grain),
-    ),
-  }));
-}
-
-function ratio(numerator: number, denominator: number) {
-  return denominator > 0 ? (numerator / denominator) * 100 : null;
-}
-
-function returnRate(returned: number, paid: number) {
-  return ratio(returned, returned + paid);
 }
 
 function fulfillmentPhase(status: string) {
@@ -1260,184 +786,6 @@ export async function loadAutomaticPaidEconomics(
       providerAmountCoveragePct: ratio(providerAmountOrders, summary.paidOrders),
     },
     days,
-  };
-}
-
-export type Analytics2CashStage = {
-  key:
-    | 'submitted'
-    | 'confirmed'
-    | 'inTransit'
-    | 'deliveredAwaitingCollection'
-    | 'collectedAwaitingPayout'
-    | 'paymentReady'
-    | 'paid';
-  orders: number;
-  amountDzd: number;
-  providerAmountCoveragePct: number | null;
-  medianAgeHours: number | null;
-  oldestAgeHours: number | null;
-  staleOrders: number;
-  confidencePct?: number | null;
-};
-
-export type Analytics2LeadingOrderForecast = {
-  asOfDate: string;
-  historicalWindow: {
-    startDate: string;
-    endDate: string;
-    submittedOrders: number;
-    confirmedOrders: number;
-    postedOrders: number;
-  };
-  rates: {
-    submittedToConfirmedPct: number | null;
-    confirmedToPostedPct: number | null;
-    submittedToPostedPct: number | null;
-  };
-  stages: {
-    submitted: {
-      orders: number;
-      codDzd: number;
-      grossProfitDzd: number;
-      expectedPostedOrders: number;
-      expectedGrossProfitDzd: number;
-      expectedAdjustedProfitDzd: number;
-      confidencePct: number | null;
-      expectedPostingDate: string;
-    };
-    confirmed: {
-      orders: number;
-      codDzd: number;
-      grossProfitDzd: number;
-      expectedPostedOrders: number;
-      expectedGrossProfitDzd: number;
-      expectedAdjustedProfitDzd: number;
-      confidencePct: number | null;
-      expectedPostingDate: string;
-    };
-  };
-  days: Array<{
-    date: string;
-    expectedPostedOrders: number;
-    expectedGrossProfitDzd: number;
-    expectedAdjustedProfitDzd: number;
-  }>;
-  expectedPostedOrders: number;
-  expectedGrossProfitDzd: number;
-  expectedAdjustedProfitDzd: number;
-};
-
-function nextForecastWorkingDate(date: string, restFrom: string | null) {
-  if (restFrom && date >= restFrom && new Date(`${date}T00:00:00.000Z`).getUTCDay() === 5) {
-    return addDays(date, 1);
-  }
-  return date;
-}
-
-export function buildLeadingOrderForecast(input: {
-  asOfDate: string;
-  historicalStartDate: string;
-  historicalEndDate: string;
-  historicalSubmittedOrders: number;
-  historicalConfirmedOrders: number;
-  historicalPostedOrders: number;
-  submittedOrders: number;
-  submittedCodDzd: number;
-  submittedGrossProfitDzd: number;
-  confirmedOrders: number;
-  confirmedCodDzd: number;
-  confirmedGrossProfitDzd: number;
-  medianSubmittedToPostedHours: number | null;
-  medianConfirmedToPostedHours: number | null;
-  planningReturnRatePct: number;
-  restFrom: string | null;
-}): Analytics2LeadingOrderForecast {
-  const submittedToConfirmedRate =
-    input.historicalSubmittedOrders > 0
-      ? input.historicalConfirmedOrders / input.historicalSubmittedOrders
-      : null;
-  const confirmedToPostedRate =
-    input.historicalConfirmedOrders > 0
-      ? input.historicalPostedOrders / input.historicalConfirmedOrders
-      : null;
-  const submittedToPostedRate =
-    submittedToConfirmedRate == null || confirmedToPostedRate == null
-      ? null
-      : submittedToConfirmedRate * confirmedToPostedRate;
-  const returnMultiplier = 1 - input.planningReturnRatePct / 100;
-  const dueDate = (hours: number | null) =>
-    nextForecastWorkingDate(
-      addDays(input.asOfDate, Math.max(1, Math.ceil((hours ?? 24) / 24))),
-      input.restFrom,
-    );
-  const submittedConfidence = submittedToPostedRate;
-  const confirmedConfidence = confirmedToPostedRate;
-  const submitted = {
-    orders: input.submittedOrders,
-    codDzd: input.submittedCodDzd,
-    grossProfitDzd: input.submittedGrossProfitDzd,
-    expectedPostedOrders: input.submittedOrders * (submittedConfidence ?? 0),
-    expectedGrossProfitDzd: input.submittedGrossProfitDzd * (submittedConfidence ?? 0),
-    expectedAdjustedProfitDzd:
-      input.submittedGrossProfitDzd * (submittedConfidence ?? 0) * returnMultiplier,
-    confidencePct: submittedConfidence == null ? null : submittedConfidence * 100,
-    expectedPostingDate: dueDate(input.medianSubmittedToPostedHours),
-  };
-  const confirmed = {
-    orders: input.confirmedOrders,
-    codDzd: input.confirmedCodDzd,
-    grossProfitDzd: input.confirmedGrossProfitDzd,
-    expectedPostedOrders: input.confirmedOrders * (confirmedConfidence ?? 0),
-    expectedGrossProfitDzd: input.confirmedGrossProfitDzd * (confirmedConfidence ?? 0),
-    expectedAdjustedProfitDzd:
-      input.confirmedGrossProfitDzd * (confirmedConfidence ?? 0) * returnMultiplier,
-    confidencePct: confirmedConfidence == null ? null : confirmedConfidence * 100,
-    expectedPostingDate: dueDate(input.medianConfirmedToPostedHours),
-  };
-  const byDay = new Map<
-    string,
-    {
-      date: string;
-      expectedPostedOrders: number;
-      expectedGrossProfitDzd: number;
-      expectedAdjustedProfitDzd: number;
-    }
-  >();
-  for (const stage of [submitted, confirmed]) {
-    const current = byDay.get(stage.expectedPostingDate) ?? {
-      date: stage.expectedPostingDate,
-      expectedPostedOrders: 0,
-      expectedGrossProfitDzd: 0,
-      expectedAdjustedProfitDzd: 0,
-    };
-    current.expectedPostedOrders += stage.expectedPostedOrders;
-    current.expectedGrossProfitDzd += stage.expectedGrossProfitDzd;
-    current.expectedAdjustedProfitDzd += stage.expectedAdjustedProfitDzd;
-    byDay.set(stage.expectedPostingDate, current);
-  }
-  const days = [...byDay.values()].sort((left, right) => left.date.localeCompare(right.date));
-  return {
-    asOfDate: input.asOfDate,
-    historicalWindow: {
-      startDate: input.historicalStartDate,
-      endDate: input.historicalEndDate,
-      submittedOrders: input.historicalSubmittedOrders,
-      confirmedOrders: input.historicalConfirmedOrders,
-      postedOrders: input.historicalPostedOrders,
-    },
-    rates: {
-      submittedToConfirmedPct:
-        submittedToConfirmedRate == null ? null : submittedToConfirmedRate * 100,
-      confirmedToPostedPct: confirmedToPostedRate == null ? null : confirmedToPostedRate * 100,
-      submittedToPostedPct: submittedToPostedRate == null ? null : submittedToPostedRate * 100,
-    },
-    stages: { submitted, confirmed },
-    days,
-    expectedPostedOrders: submitted.expectedPostedOrders + confirmed.expectedPostedOrders,
-    expectedGrossProfitDzd: submitted.expectedGrossProfitDzd + confirmed.expectedGrossProfitDzd,
-    expectedAdjustedProfitDzd:
-      submitted.expectedAdjustedProfitDzd + confirmed.expectedAdjustedProfitDzd,
   };
 }
 
@@ -3224,12 +2572,12 @@ async function loadSourceHealth(
             day.returnRateSource === 'manual' ||
             day.confirmedOrdersSource === 'manual',
         ).length ?? 0,
-      coveragePct: economics?.coverage.projectedCoveragePct ?? null,
+      coveragePct: null,
     },
   ];
 }
 
-function storefrontPathCoverage(filters: Analytics2Filters, now = new Date()) {
+export function storefrontPathCoverage(filters: Analytics2Filters, now = new Date()) {
   const retainedFrom = addDays(dayInTimezone(now), -6);
   const coverageStartDate =
     filters.startDate && filters.startDate > retainedFrom ? filters.startDate : retainedFrom;
@@ -4040,19 +3388,6 @@ async function loadCustomerEconomics(
   };
 }
 
-function weightedAverage(values: number[]) {
-  if (!values.length) return null;
-  const denominator = values.reduce((sum, _value, index) => sum + index + 1, 0);
-  return values.reduce((sum, value, index) => sum + value * (index + 1), 0) / denominator;
-}
-
-function standardDeviation(values: number[], mean: number) {
-  if (values.length < 2) return 0;
-  return Math.sqrt(
-    values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1),
-  );
-}
-
 export function materializedFactsAreUsable(input: {
   requestedStartDate: string | null;
   requestedEndDate: string;
@@ -4396,188 +3731,6 @@ async function loadMaterializedEconomicsReport(
       settledReportThroughDate: null,
     },
   } as unknown as EconomicsReport;
-}
-
-export function buildEconomicsForecast(
-  report: EconomicsReport,
-  today: string,
-  horizonDays = 14,
-  leading?: Analytics2LeadingOrderForecast,
-) {
-  const completed = [...report.days]
-    .flatMap((day) => {
-      if (day.date >= today || day.isRestDay) return [];
-      const adjustedProfitDzd =
-        day.metrics?.adjustedProfitDzd ??
-        (day.postedOrders === 0 && day.metrics?.adCostDzd != null ? 0 : null);
-      const correctedTrueProfitDzd =
-        adjustedProfitDzd != null && day.metrics?.adCostDzd != null
-          ? adjustedProfitDzd - day.metrics.adCostDzd - (day.operatingCostDzd ?? 0)
-          : day.trueProfitDzd;
-      return correctedTrueProfitDzd == null
-        ? []
-        : [
-            {
-              date: day.date,
-              trueProfitDzd: correctedTrueProfitDzd,
-              postedOrders: day.postedOrders ?? 0,
-              grossProfitDzd: day.grossProfitDzd ?? null,
-              adjustedProfitDzd,
-              adCostDzd: day.metrics?.adCostDzd ?? null,
-            },
-          ];
-    })
-    .reverse()
-    .slice(-56);
-  if (completed.length < 7) return [];
-  const fallback = completed.slice(-14);
-
-  const weightedMetric = <T>(sample: T[], read: (value: T) => number | null) =>
-    weightedAverage(
-      sample.flatMap((value) => {
-        const metricValue = read(value);
-        return metricValue == null ? [] : [metricValue];
-      }),
-    );
-
-  const leadingByDate = new Map(leading?.days.map((day) => [day.date, day]) ?? []);
-  return Array.from({ length: horizonDays }, (_, index) => {
-    const date = addDays(today, index + 1);
-    const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
-    const isConfiguredRestDay = Boolean(
-      report.settings?.restFrom && date >= report.settings.restFrom && weekday === 5,
-    );
-    if (isConfiguredRestDay) {
-      const operatingCostDzd = operatingCostForDay(date, report.costs ?? []);
-      const forecastTrueProfitDzd = operatingCostDzd === 0 ? 0 : -operatingCostDzd;
-      return {
-        date,
-        forecastGrossProfitDzd: 0,
-        forecastAdjustedProfitDzd: 0,
-        forecastAdCostDzd: 0,
-        forecastNetProfitDzd: 0,
-        forecastOperatingCostDzd: operatingCostDzd,
-        forecastTrueProfitDzd,
-        lowerTrueProfitDzd: forecastTrueProfitDzd,
-        upperTrueProfitDzd: forecastTrueProfitDzd,
-        forecastPostedOrders: 0,
-        samples: 0,
-        method: 'configured-rest-day',
-      } as const;
-    }
-    const sameWeekday = completed
-      .filter((day) => new Date(`${day.date}T00:00:00.000Z`).getUTCDay() === weekday)
-      .slice(-8);
-    const sample = sameWeekday.length >= 2 ? sameWeekday : fallback;
-    const profits = sample.map((day) => day.trueProfitDzd as number);
-    const orderCounts = sample.map((day) => day.postedOrders ?? 0);
-    const baselineGrossProfitDzd = weightedMetric(sample, (day) => day.grossProfitDzd);
-    const baselineAdjustedProfitDzd = weightedMetric(sample, (day) => day.adjustedProfitDzd);
-    const baselinePostedOrders = weightedAverage(orderCounts) ?? 0;
-    const leadingDay = leadingByDate.get(date);
-    const forecastGrossProfitDzd =
-      baselineGrossProfitDzd == null
-        ? (leadingDay?.expectedGrossProfitDzd ?? null)
-        : Math.max(baselineGrossProfitDzd, leadingDay?.expectedGrossProfitDzd ?? 0);
-    const forecastAdjustedProfitDzd =
-      baselineAdjustedProfitDzd == null
-        ? (leadingDay?.expectedAdjustedProfitDzd ?? null)
-        : Math.max(baselineAdjustedProfitDzd, leadingDay?.expectedAdjustedProfitDzd ?? 0);
-    const forecastAdCostDzd = weightedMetric(sample, (day) => day.adCostDzd);
-    const forecastOperatingCostDzd = operatingCostForDay(date, report.costs ?? []);
-    const forecastNetProfitDzd =
-      forecastAdjustedProfitDzd != null && forecastAdCostDzd != null
-        ? forecastAdjustedProfitDzd - forecastAdCostDzd
-        : null;
-    const forecastTrueProfitDzd =
-      forecastNetProfitDzd != null
-        ? forecastNetProfitDzd - forecastOperatingCostDzd
-        : (weightedAverage(profits) ?? 0);
-    const spread = standardDeviation(profits, forecastTrueProfitDzd);
-    return {
-      date,
-      forecastGrossProfitDzd,
-      forecastAdjustedProfitDzd,
-      forecastAdCostDzd,
-      forecastNetProfitDzd,
-      forecastOperatingCostDzd,
-      forecastTrueProfitDzd,
-      lowerTrueProfitDzd: forecastTrueProfitDzd - 1.28 * spread,
-      upperTrueProfitDzd: forecastTrueProfitDzd + 1.28 * spread,
-      forecastPostedOrders: Math.max(baselinePostedOrders, leadingDay?.expectedPostedOrders ?? 0),
-      knownPipelinePostedOrders: leadingDay?.expectedPostedOrders ?? 0,
-      knownPipelineGrossProfitDzd: leadingDay?.expectedGrossProfitDzd ?? 0,
-      knownPipelineAdjustedProfitDzd: leadingDay?.expectedAdjustedProfitDzd ?? 0,
-      samples: sample.length,
-      method: leadingDay
-        ? 'historical-baseline-with-pipeline-floor'
-        : sameWeekday.length >= 2
-          ? 'weekday-weighted'
-          : 'recent-weighted',
-    } as const;
-  });
-}
-
-type EconomicsForecastPoint = ReturnType<typeof buildEconomicsForecast>[number];
-
-function sumForecastMetric(
-  rows: EconomicsForecastPoint[],
-  read: (row: EconomicsForecastPoint) => number | null,
-) {
-  const values = rows.map(read);
-  return values.some((value) => value == null)
-    ? null
-    : values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
-}
-
-/**
- * Replaces the misleading raw partial-bucket endpoint with a forecast of the
- * completed bucket. Canonical actuals remain unchanged on the point itself;
- * chart consumers opt into the `*Projected` fields for the dotted segment.
- */
-export function projectOpenEconomicsSeries(
-  points: Analytics2EconomicsPoint[],
-  forecast: EconomicsForecastPoint[],
-  grain: Analytics2ResolvedGrain,
-) {
-  return points.map((point) => {
-    if (!point.isPartial) return point;
-    const remaining = forecast.filter((row) => bucketFor(row.date, grain) === point.bucket);
-    if (!remaining.length) return point;
-
-    const grossRemainder = sumForecastMetric(remaining, (row) => row.forecastGrossProfitDzd);
-    const adjustedRemainder = sumForecastMetric(remaining, (row) => row.forecastAdjustedProfitDzd);
-    const adCostRemainder = sumForecastMetric(remaining, (row) => row.forecastAdCostDzd);
-    const netRemainder = sumForecastMetric(remaining, (row) => row.forecastNetProfitDzd);
-    const trueProfitRemainder = sumForecastMetric(remaining, (row) => row.forecastTrueProfitDzd);
-    const add = (actual: number | null, remainder: number | null) =>
-      actual == null || remainder == null ? null : actual + remainder;
-    const grossProfitDzdProjected = add(point.grossProfitDzd, grossRemainder);
-    const adjustedProfitDzdProjected = add(point.adjustedProfitDzd, adjustedRemainder);
-    const adCostDzdProjected = add(point.adCostDzd, adCostRemainder);
-    const netProfitDzdProjected = add(point.netProfitDzd, netRemainder);
-    const trueProfitDzdProjected = add(point.trueProfitDzd, trueProfitRemainder);
-
-    return {
-      ...point,
-      grossProfitDzdProjected,
-      adjustedProfitDzdProjected,
-      adCostDzdProjected,
-      netProfitDzdProjected,
-      trueProfitDzdProjected,
-      profitXProjected:
-        adjustedProfitDzdProjected != null && adCostDzdProjected != null && adCostDzdProjected > 0
-          ? adjustedProfitDzdProjected / adCostDzdProjected
-          : null,
-      profitXBeforeReturnsProjected:
-        grossProfitDzdProjected != null && adCostDzdProjected != null && adCostDzdProjected > 0
-          ? grossProfitDzdProjected / adCostDzdProjected
-          : null,
-      cumulativeNetProfitDzdProjected: add(point.cumulativeNetProfitDzd, netRemainder),
-      cumulativeTrueProfitDzdProjected: add(point.cumulativeTrueProfitDzd, trueProfitRemainder),
-      projectionDays: remaining.length,
-    };
-  });
 }
 
 async function loadEconomicsPair(
@@ -5137,6 +4290,7 @@ async function loadAcquisitionView(
         metaToBricPurchaseDelta: summary.metaPurchases - summary.bricOrders,
       },
       trackingHealth: {
+        available: diagnostics.metaAds.trackingAvailable !== false,
         events: diagnostics.metaAds.events,
       },
       sync: {
@@ -5294,6 +4448,11 @@ async function loadStorefrontView(
         errorEvents: website.errorEvents,
       },
       funnel: [],
+      funnelRange: {
+        startDate: pathCoverage.coverageStartDate,
+        endDate: pathCoverage.coverageEndDate,
+        isPartial: pathCoverage.coverageIsPartial,
+      },
       trend: [],
       searches: website.topSearches,
       productInterest: website.topProducts,
@@ -5324,7 +4483,18 @@ async function loadStorefrontView(
           }
         : {}),
     },
-    effectiveRanges: [effectiveRange('storefront', storefrontFilters, ['orders', 'storefront'])],
+    effectiveRanges: [
+      effectiveRange('storefront', storefrontFilters, ['orders', 'storefront']),
+      effectiveRange(
+        'storefront_funnel',
+        {
+          ...storefrontFilters,
+          startDate: pathCoverage.coverageStartDate,
+          endDate: pathCoverage.coverageEndDate,
+        },
+        ['orders', 'storefront'],
+      ),
+    ],
     sources,
     warnings: [],
   };
@@ -5333,6 +4503,7 @@ async function loadStorefrontView(
 export type Analytics2StorefrontDetails = {
   metrics: Analytics2Metric[];
   funnel: Array<{ name: string; value: number }>;
+  funnelRange: { startDate: string; endDate: string; isPartial: boolean };
   paths: Awaited<ReturnType<typeof loadStorefrontPaths>>;
   trend: Awaited<ReturnType<typeof getLiveStorefrontAnalytics>>['website']['trend'];
   acquisitionSources: Awaited<
@@ -5381,6 +4552,11 @@ function storefrontDetails(
       ),
     ],
     funnel,
+    funnelRange: {
+      startDate: paths.coverageStartDate,
+      endDate: paths.coverageEndDate,
+      isPartial: paths.coverageIsPartial,
+    },
     paths,
     trend: dashboard.website.trend,
     acquisitionSources: dashboard.website.acquisitionSources,

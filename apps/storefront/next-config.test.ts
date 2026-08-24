@@ -17,6 +17,7 @@ describe('storefront Next configuration', () => {
     expect(config).toMatchObject({
       output: 'standalone',
       typedRoutes: true,
+      devIndicators: false,
       transpilePackages: ['@bric/ai-core', '@bric/runtime', '@bric/storefront-core'],
       allowedDevOrigins: expect.arrayContaining(['127.0.0.1']),
       experimental: {

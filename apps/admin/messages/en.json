@@ -18,6 +18,8 @@
     "statsAcquisition": "Acquisition",
     "statsFulfillment": "Fulfillment",
     "statsStorefront": "Storefront",
+    "statsAiOperations": "AI operations",
+    "statsShoppingAssistant": "Shopping assistant",
     "statsSearch": "Search visibility",
     "statsCatalog": "Catalog",
     "statsAssumptions": "Costs & assumptions",
@@ -364,6 +366,7 @@
     "edit": "Edit",
     "modify": "Modify",
     "cancel": "Cancel",
+    "close": "Close",
     "save": "Save",
     "go": "Go",
     "first": "First",
@@ -2118,6 +2121,7 @@
     "unconfirmedDate": "No confirmation timestamp"
   },
   "ordersEcotrackManager": {
+    "resultCount": "{count} shipments",
     "searchPlaceholder": "Search by tracking, client, phone, address, commune, wilaya, product, or status",
     "filters": {
       "statusLabel": "Filter by ECOTRACK status",
@@ -2140,7 +2144,7 @@
       "client": "Client name and phone",
       "address": "Address, commune, wilaya, delivery type",
       "products": "Products",
-      "amount": "Montant",
+      "amount": "Amount",
       "status": "ECOTRACK status"
     },
     "reference": "Reference",
@@ -2153,7 +2157,7 @@
     "deskAddress": "Desk address",
     "lastSync": "Last status sync",
     "lastTrackingSync": "Last tracking sync",
-    "lastMajSync": "Last mise a jour sync",
+    "lastMajSync": "Last update sync",
     "neverSynced": "Never synced",
     "summaryTitle": "Shipment summary",
     "amounts": {
@@ -2163,7 +2167,7 @@
     },
     "history": {
       "title": "Order history",
-      "majTitle": "Mises a jour",
+      "majTitle": "Shipment updates",
       "timelineTitle": "Tracking timeline",
       "empty": "No history available yet.",
       "emptyMaj": "No mises a jour cached yet.",
@@ -2175,7 +2179,7 @@
       "refreshSelected": "Refresh selected",
       "clearSelection": "Clear selection",
       "refreshVisible": "Refresh visible",
-      "dispatchReady": "Dispatch prete a expedier",
+      "dispatchReady": "Dispatch ready",
       "dispatchSelected": "Dispatch selected",
       "showHistorySelected": "Show history for selected",
       "showHistoryVisible": "Show history for visible",
@@ -2185,7 +2189,7 @@
       "saveOnly": "Save only",
       "saveAndDispatch": "Save and dispatch",
       "editAndRecreate": "Edit and recreate",
-      "maj": "Add mise a jour",
+      "maj": "Add update",
       "return": "Request return",
       "showHistory": "Show history",
       "hideHistory": "Hide history"

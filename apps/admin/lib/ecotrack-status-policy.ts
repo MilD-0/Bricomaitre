@@ -1,10 +1,10 @@
 import { sql, type SQLWrapper } from 'drizzle-orm';
 
-export const ECOTRACK_FAILED_STATUS_MAX_AGE_DAYS = 7;
+const ECOTRACK_FAILED_STATUS_MAX_AGE_DAYS = 7;
 export const ECOTRACK_FAILED_STATUS_MAX_AGE_MS =
   ECOTRACK_FAILED_STATUS_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
 
-export const CASH_PIPELINE_EXCLUDED_LOCAL_STATUSES = [6, 8, 9, 10] as const;
+const CASH_PIPELINE_EXCLUDED_LOCAL_STATUSES = [6, 8, 9, 10] as const;
 
 export function localOrderCanRemainInCashPipeline(status: number) {
   return !CASH_PIPELINE_EXCLUDED_LOCAL_STATUSES.some((terminal) => terminal === status);

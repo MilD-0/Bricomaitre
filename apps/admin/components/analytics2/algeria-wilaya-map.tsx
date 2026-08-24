@@ -179,7 +179,11 @@ export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale
   const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });
   const percent = (value: number | null) => (value == null ? '—' : `${number.format(value)}%`);
   const duration = (value: number | null) =>
-    value == null ? '—' : value < 48 ? `${number.format(value)} h` : `${number.format(value / 24)} d`;
+    value == null
+      ? '—'
+      : value < 48
+        ? `${number.format(value)} h`
+        : `${number.format(value / 24)} d`;
   const resolvedSelectedName =
     selectedName && byName.has(normalizeWilayaName(selectedName))
       ? selectedName
@@ -207,11 +211,7 @@ export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale
     });
   }
 
-  function handlePointer(
-    name: string,
-    layer: MapLayer,
-    event: PointerEvent<SVGPathElement>,
-  ) {
+  function handlePointer(name: string, layer: MapLayer, event: PointerEvent<SVGPathElement>) {
     setHoveredName(name);
     positionTooltip(name, layer, event.currentTarget, { x: event.clientX, y: event.clientY });
   }
@@ -289,10 +289,7 @@ export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale
 
   return (
     <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(20rem,1.2fr)_minmax(18rem,0.8fr)]">
-      <div
-        data-map-frame
-        className="relative min-w-0 border-y border-border/60 bg-muted/10 py-3"
-      >
+      <div data-map-frame className="relative min-w-0 border-y border-border/60 bg-muted/10 py-3">
         <svg
           viewBox={`0 0 ${countryWidth} ${countryHeight}`}
           role="img"

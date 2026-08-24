@@ -100,12 +100,8 @@ export type ActionHistoryChange = {
   after: unknown;
 };
 
-export type ActionHistoryRecoveryReason =
-  | 'non_reversible'
-  | 'newer_action'
-  | 'redo_order'
-  | 'history_out_of_sync'
-  | 'permission_required';
+type ActionHistoryRecoveryReason =
+  'non_reversible' | 'newer_action' | 'redo_order' | 'history_out_of_sync' | 'permission_required';
 
 export type ActionHistoryRecovery = {
   nextAction: 'undo' | 'redo' | null;
@@ -679,17 +675,15 @@ export function resolveActionHistoryRecovery(
 }
 
 export async function loadActionHistoryDetail(db: Database, actionLogId: number) {
-  const [entry] = await db
-    .select()
-    .from(actionLogs)
-    .where(eq(actionLogs.id, actionLogId))
-    .limit(1);
+  const [entry] = await db.select().from(actionLogs).where(eq(actionLogs.id, actionLogId)).limit(1);
   if (!entry) return null;
 
   const entityHistory = await db
     .select({ id: actionLogs.id, isUndone: actionLogs.isUndone })
     .from(actionLogs)
-    .where(and(eq(actionLogs.entityType, entry.entityType), eq(actionLogs.entityId, entry.entityId)))
+    .where(
+      and(eq(actionLogs.entityType, entry.entityType), eq(actionLogs.entityId, entry.entityId)),
+    )
     .orderBy(asc(actionLogs.createdAt), asc(actionLogs.id));
 
   return {
@@ -1108,9 +1102,7 @@ export function toActionHistoryItem(entry: ActionLogEntry) {
 export function toActionHistoryListItem(entry: ActionLogEntry) {
   const changes = getActionHistoryChanges(entry);
   const preview =
-    entry.operation === 'update'
-      ? buildActionHistoryPreview(changes)
-      : { items: [], total: 0 };
+    entry.operation === 'update' ? buildActionHistoryPreview(changes) : { items: [], total: 0 };
   return {
     id: entry.id,
     resource: entry.resource,

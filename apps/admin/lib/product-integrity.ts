@@ -13,7 +13,7 @@ export class ProductIntegrityConflictError extends Error {
   }
 }
 
-export async function lockProductIdentifierWrites(tx: Transaction) {
+async function lockProductIdentifierWrites(tx: Transaction) {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext('product-identifiers'))`);
 }
 

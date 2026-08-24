@@ -14,6 +14,7 @@ import {
   projectOpenEconomicsSeries,
   resolveAnalytics2ReferenceNow,
   resolveAnalytics2Filters,
+  storefrontPathCoverage,
 } from './analytics2';
 import { ANALYTICS2_FACT_SEMANTICS_VERSION } from './analytics2-fact-contract';
 
@@ -138,6 +139,19 @@ describe('analytics2 filter model', () => {
       endDate: '2026-08-17',
       comparisonStartDate: null,
       comparisonEndDate: null,
+    });
+  });
+
+  it('declares the retained detailed Storefront window separately from a broad range', () => {
+    const filters = resolveAnalytics2Filters(
+      { view: 'storefront', range: '90d', grain: 'week' },
+      new Date('2026-08-19T12:00:00.000Z'),
+    );
+
+    expect(storefrontPathCoverage(filters, new Date('2026-08-19T12:00:00.000Z'))).toEqual({
+      coverageStartDate: '2026-08-13',
+      coverageEndDate: '2026-08-19',
+      coverageIsPartial: true,
     });
   });
 });

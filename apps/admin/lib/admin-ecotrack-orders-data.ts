@@ -748,7 +748,9 @@ export function parseEcotrackProviderTimestamp(value: string | null | undefined)
 function providerBoolean(value: boolean | string | number | null | undefined) {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'number') return value === 1;
-  const normalized = String(value ?? '').trim().toLowerCase();
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase();
   if (['1', 'true', 'yes'].includes(normalized)) return true;
   if (['0', 'false', 'no'].includes(normalized)) return false;
   return null;
@@ -793,10 +795,11 @@ async function persistStatusEvidence(
     observedAt: Date;
   },
 ) {
-  const latestActivityAt = input.statusItem.activity
-    .map((entry) => readEcotrackActivityTimestamp(entry))
-    .filter((value): value is Date => value !== null)
-    .sort((left, right) => right.getTime() - left.getTime())[0] ?? null;
+  const latestActivityAt =
+    input.statusItem.activity
+      .map((entry) => readEcotrackActivityTimestamp(entry))
+      .filter((value): value is Date => value !== null)
+      .sort((left, right) => right.getTime() - left.getTime())[0] ?? null;
   const effectiveAt =
     parseEcotrackProviderTimestamp(input.orderInfo?.last_updated_at) ?? latestActivityAt;
   const statusSourceKey = sourceKey([
@@ -1298,9 +1301,7 @@ async function upsertShipmentState(
     : null;
   const statusCandidate = payload.trackingInfo?.status ?? possibleOrderInfoStatus;
   const orderInfoStatus =
-    typeof statusCandidate === 'string' && statusCandidate.trim()
-      ? statusCandidate.trim()
-      : null;
+    typeof statusCandidate === 'string' && statusCandidate.trim() ? statusCandidate.trim() : null;
   const statusItem =
     payload.statusItem ??
     (orderInfoStatus
@@ -2653,10 +2654,7 @@ export async function syncEcotrackShipmentStates(
       // continue to request MAJ data through their on-demand paths.
       if (options.includeMaj === true) {
         try {
-          const majResponse = await getEcotrackMaj(
-            row.trackingNumber,
-            providerRequestOptions(row),
-          );
+          const majResponse = await getEcotrackMaj(row.trackingNumber, providerRequestOptions(row));
           majEntries = majResponse.data;
           rawMajEntries = majResponse.payload;
         } catch {

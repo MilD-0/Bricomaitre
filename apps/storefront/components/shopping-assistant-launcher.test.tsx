@@ -59,7 +59,22 @@ describe('ShoppingAssistantLauncher', () => {
   it('moves above the mobile product purchase bar', () => {
     state.pathname = '/fr/products/desk-lamp';
     render(<ShoppingAssistantLauncher locale="fr" labels={labels} />);
-    expect(screen.getByRole('button', { name: labels.open })).toHaveClass('is-product-detail');
+    expect(screen.getByRole('button', { name: labels.open })).toHaveClass(
+      'is-product-detail',
+      'is-sticky-commerce',
+    );
+  });
+
+  it('also clears the sticky campaign action without changing its accessible name', () => {
+    state.pathname = '/fr/landing/desk-lamp';
+    render(<ShoppingAssistantLauncher locale="fr" labels={labels} />);
+
+    const launcher = screen.getByRole('button', { name: labels.open });
+    expect(launcher).toHaveClass('is-sticky-commerce');
+    expect(launcher).not.toHaveClass('is-product-detail');
+    expect(launcher.querySelector('.shopping-assistant-launcher-label')).toHaveTextContent(
+      labels.open,
+    );
   });
 
   it('resets browser pinch zoom before opening', () => {

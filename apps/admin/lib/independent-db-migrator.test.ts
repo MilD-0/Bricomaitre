@@ -18,7 +18,7 @@ describe('independent Postgres migration runner', () => {
   it('commits each pending migration independently and preserves the Drizzle ledger', async () => {
     readMigrationFilesMock.mockReturnValue([
       { folderMillis: 100, hash: 'old', sql: ['select 0'], bps: true },
-      { folderMillis: 200, hash: 'enum', sql: ['alter type example add value \'new\''], bps: true },
+      { folderMillis: 200, hash: 'enum', sql: ["alter type example add value 'new'"], bps: true },
       { folderMillis: 300, hash: 'use-enum', sql: ["select 'new'::example"], bps: true },
     ]);
     const transactionExecutions: Array<ReturnType<typeof vi.fn>> = [];
@@ -28,11 +28,13 @@ describe('independent Postgres migration runner', () => {
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [{ createdAt: 100 }] }),
-      transaction: vi.fn(async (callback: (tx: { execute: ReturnType<typeof vi.fn> }) => unknown) => {
-        const execute = vi.fn().mockResolvedValue({ rows: [] });
-        transactionExecutions.push(execute);
-        return callback({ execute });
-      }),
+      transaction: vi.fn(
+        async (callback: (tx: { execute: ReturnType<typeof vi.fn> }) => unknown) => {
+          const execute = vi.fn().mockResolvedValue({ rows: [] });
+          transactionExecutions.push(execute);
+          return callback({ execute });
+        },
+      ),
     };
 
     await expect(

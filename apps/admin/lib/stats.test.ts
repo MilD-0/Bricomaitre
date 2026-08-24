@@ -13,6 +13,7 @@ import {
   mergeCanonicalWebsitePurchases,
   mergeLiveOrderTrend,
   normalizeStatsDashboardData,
+  optionalAnalyticsDiagnostic,
   statsQuerySchema,
 } from './stats';
 import { CUSTOMER_SUCCESSFUL_ORDER_STATUSES } from './stats-experience';
@@ -54,6 +55,18 @@ describe('normalizeStatsDashboardData', () => {
   });
 });
 
+describe('optional analytics diagnostics', () => {
+  it('keeps business analytics available when a secondary diagnostic fails', async () => {
+    await expect(optionalAnalyticsDiagnostic(Promise.resolve({ events: 4 }))).resolves.toEqual({
+      available: true,
+      data: { events: 4 },
+    });
+    await expect(
+      optionalAnalyticsDiagnostic(Promise.reject(new Error('diagnostic unavailable'))),
+    ).resolves.toEqual({ available: false, data: null });
+  });
+});
+
 describe('reporting snapshot correctness', () => {
   it('does not certify financial freshness from an order-only trend tail', () => {
     const data = normalizeStatsDashboardData(
@@ -89,9 +102,9 @@ describe('reporting snapshot correctness', () => {
       },
     };
     expect(isStatsSnapshotUsable(data)).toBe(false);
-    expect(isStatsSnapshotUsable({ ...data, snapshot: { ...data.snapshot!, isStale: false } })).toBe(
-      true,
-    );
+    expect(
+      isStatsSnapshotUsable({ ...data, snapshot: { ...data.snapshot!, isStale: false } }),
+    ).toBe(true);
   });
 });
 

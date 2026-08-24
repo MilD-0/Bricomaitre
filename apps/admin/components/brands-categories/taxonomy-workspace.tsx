@@ -34,7 +34,7 @@ import {
   WorkspaceNavigationLink,
   WorkspaceToolbar,
 } from '../ui/workspace';
-import { TablePaginationControls } from '../table-pagination-controls';
+import { WorkspacePagination } from '../ui/workspace-pagination';
 
 import { DeleteDialog } from './manager-shared';
 import {
@@ -536,9 +536,10 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
         ) : null}
       </div>
 
-      <TablePaginationControls
+      <WorkspacePagination
         currentPage={data.pagination.page}
         totalPages={data.pagination.totalPages}
+        pending={loading}
         onPageChange={(nextPage) => {
           setPage(nextPage);
           setSelected([]);

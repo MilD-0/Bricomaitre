@@ -28,6 +28,7 @@ export function ShoppingAssistantLauncher({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const isProductDetail = /\/products\/[^/]+\/?$/.test(pathname);
+  const hasStickyCommerceAction = isProductDetail || /\/landing\/[^/]+\/?$/.test(pathname);
 
   function showAssistant() {
     resetMobilePageZoom();
@@ -45,7 +46,7 @@ export function ShoppingAssistantLauncher({
     <>
       {!open ? (
         <button
-          className={`shopping-assistant-launcher${isProductDetail ? ' is-product-detail' : ''}`}
+          className={`shopping-assistant-launcher${isProductDetail ? ' is-product-detail' : ''}${hasStickyCommerceAction ? ' is-sticky-commerce' : ''}`}
           type="button"
           onPointerEnter={() => void prepareHaptics()}
           onFocus={() => void prepareHaptics()}
@@ -56,7 +57,7 @@ export function ShoppingAssistantLauncher({
             <MessageCircle aria-hidden="true" size={22} />
             <Sparkles className="shopping-assistant-launcher-spark" aria-hidden="true" size={11} />
           </span>
-          <span>{labels.open}</span>
+          <span className="shopping-assistant-launcher-label">{labels.open}</span>
         </button>
       ) : (
         <ShoppingAssistantPanel

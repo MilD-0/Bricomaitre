@@ -19,6 +19,7 @@ export function SplitActionButton({
   onPrimaryClick,
   variant = 'outline',
   size = 'default',
+  compactOnMobile = false,
   primaryDisabled = false,
   options,
 }: {
@@ -27,6 +28,7 @@ export function SplitActionButton({
   onPrimaryClick: () => void | Promise<void>;
   variant?: 'default' | 'outline';
   size?: 'default' | 'sm';
+  compactOnMobile?: boolean;
   primaryDisabled?: boolean;
   options: SplitActionOption[];
 }) {
@@ -59,10 +61,12 @@ export function SplitActionButton({
         size={size}
         variant={variant}
         disabled={primaryDisabled}
+        aria-label={label}
+        className={compactOnMobile ? 'max-sm:size-10 max-sm:px-0' : undefined}
         onClick={() => void onPrimaryClick()}
       >
         {icon}
-        {label}
+        <span className={compactOnMobile ? 'max-sm:sr-only' : undefined}>{label}</span>
       </Button>
     );
   }
@@ -74,11 +78,15 @@ export function SplitActionButton({
         size={size}
         variant={variant}
         disabled={primaryDisabled}
-        className="rounded-r-none border-r border-border/70"
+        aria-label={label}
+        className={cn(
+          'rounded-e-none border-e border-border/70',
+          compactOnMobile && 'max-sm:size-10 max-sm:px-0',
+        )}
         onClick={() => void onPrimaryClick()}
       >
         {icon}
-        {label}
+        <span className={compactOnMobile ? 'max-sm:sr-only' : undefined}>{label}</span>
       </Button>
       <Button
         type="button"
@@ -87,7 +95,7 @@ export function SplitActionButton({
         aria-label={`${label} menu`}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="rounded-l-none px-3"
+        className="rounded-s-none px-3 max-sm:size-10 max-sm:px-0"
         onClick={() => setOpen((current) => !current)}
       >
         <ChevronDown className="size-4" />
@@ -95,7 +103,7 @@ export function SplitActionButton({
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 top-full z-20 mt-2 min-w-48 rounded-2xl border border-border/70 bg-background p-1 shadow-[var(--shadow-vapor)]"
+          className="absolute end-0 top-full z-20 mt-2 min-w-48 rounded-2xl border border-border/70 bg-background p-1 shadow-[var(--shadow-vapor)]"
         >
           {options.map((option) => (
             <button
@@ -104,7 +112,7 @@ export function SplitActionButton({
               role="menuitem"
               disabled={option.disabled}
               className={cn(
-                'flex w-full rounded-xl px-3 py-2 text-left text-sm transition-colors',
+                'flex w-full rounded-xl px-3 py-2 text-start text-sm transition-colors',
                 option.disabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-muted/60',
               )}
               onClick={() => {

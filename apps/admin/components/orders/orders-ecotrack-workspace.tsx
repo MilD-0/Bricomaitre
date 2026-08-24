@@ -25,7 +25,6 @@ import { cn } from '../../lib/utils';
 import { AdminAiAskButton } from '../admin-ai-ask-button';
 import { SearchField } from '../search-field';
 import { SplitActionButton, type SplitActionOption } from '../split-action-button';
-import { TablePaginationControls } from '../table-pagination-controls';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
@@ -33,9 +32,11 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '../ui/empty';
 import { Input } from '../ui/input';
 import { PendingInline } from '../ui/motion';
 import { NativeSelect, NativeSelectOption } from '../ui/native-select';
+import { ScrollableRegion } from '../ui/scrollable-region';
 import { Skeleton } from '../ui/skeleton';
 import { Switch } from '../ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { WorkspacePagination } from '../ui/workspace-pagination';
 import {
   WorkspaceActions,
   WorkspaceFrame,
@@ -156,6 +157,7 @@ function ShipmentAction({ model, disabled }: { model: RowActionModel; disabled: 
   return (
     <SplitActionButton
       size="sm"
+      compactOnMobile
       label={model.primary.label}
       icon={model.primary.icon}
       primaryDisabled={disabled}
@@ -391,7 +393,7 @@ function EcotrackWorkspaceChrome(props: OrdersEcotrackWorkspaceProps) {
       <WorkspaceHeader>
         <WorkspaceHeading
           title={t('nav.ecotrackShipments')}
-          meta={props.pagination.total}
+          meta={t('ordersEcotrackManager.resultCount', { count: props.pagination.total })}
           description={<PendingInline active={props.isRefreshing} label={t('labels.loading')} />}
         />
         <WorkspaceActions>
@@ -405,7 +407,7 @@ function EcotrackWorkspaceChrome(props: OrdersEcotrackWorkspaceProps) {
             disabled={!props.items.length}
           >
             <RefreshCw data-icon="inline-start" />
-            <span className="hidden sm:inline">
+            <span className="hidden whitespace-nowrap sm:inline">
               {t('ordersEcotrackManager.actions.refreshVisible')}
             </span>
           </Button>
@@ -515,6 +517,7 @@ function EcotrackWorkspaceChrome(props: OrdersEcotrackWorkspaceProps) {
         <Button
           type="submit"
           variant="outline"
+          aria-label={t('ordersEcotrackManager.actions.scanTrackingNumber')}
           disabled={!props.scanQuery.trim() || props.scanPending || !props.writable}
         >
           <Search data-icon="inline-start" />
@@ -572,7 +575,7 @@ function RefinedLedger(props: OrdersEcotrackWorkspaceProps) {
 
   return (
     <>
-      <div className="hidden overflow-x-auto lg:block">
+      <ScrollableRegion label={t('nav.ecotrackShipments')} className="hidden lg:block">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -661,14 +664,14 @@ function RefinedLedger(props: OrdersEcotrackWorkspaceProps) {
             })}
           </TableBody>
         </Table>
-      </div>
+      </ScrollableRegion>
       <div className="divide-y divide-border lg:hidden">
         {props.items.map((item) => {
           const expanded = props.inspectedIds.includes(item.orderId);
           const action = props.buildRowActionModel(item, expanded);
           return (
             <div key={item.orderId}>
-              <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 py-4">
+              <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 px-3 py-4 sm:gap-3 sm:px-4">
                 <Checkbox
                   aria-label={t('labels.selectRow', { name: item.fullName })}
                   checked={props.selectedIds.includes(item.orderId)}
@@ -680,8 +683,12 @@ function RefinedLedger(props: OrdersEcotrackWorkspaceProps) {
                   onClick={() => props.onInspect(item.orderId)}
                 >
                   <ShipmentIdentity item={item} locale={props.locale} />
-                  <div className="mt-2 flex items-center gap-2">
-                    <Badge variant="outline">
+                  <div className="mt-2 flex min-w-0 flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+                    <Badge
+                      variant="outline"
+                      className="max-w-full truncate whitespace-nowrap normal-case tracking-normal"
+                      title={t(`ordersEcotrackManager.statuses.${item.status.currentStatus}`)}
+                    >
                       {t(`ordersEcotrackManager.statuses.${item.status.currentStatus}`)}
                     </Badge>
                     <span className="text-sm font-semibold">
@@ -986,9 +993,10 @@ export function OrdersEcotrackWorkspace(props: OrdersEcotrackWorkspaceProps) {
         </div>
       ) : null}
       {props.items.length ? (
-        <TablePaginationControls
+        <WorkspacePagination
           currentPage={props.pagination.page}
           totalPages={props.pagination.totalPages}
+          pending={props.isRefreshing}
           onPageChange={props.onPageChange}
         />
       ) : null}

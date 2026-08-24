@@ -14,7 +14,7 @@ import {
 
 type Database = ReturnType<typeof getDb>;
 
-export function serializeShoppingListDraft(row: typeof shoppingListDrafts.$inferSelect) {
+function serializeShoppingListDraft(row: typeof shoppingListDrafts.$inferSelect) {
   const payload = shoppingListDraftPayloadSchema.parse({
     sourceMode: row.sourceMode,
     orderIds: row.orderIds,

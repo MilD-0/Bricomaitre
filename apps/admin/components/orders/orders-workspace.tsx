@@ -22,7 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
-import { useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 
 import { requestJson as request } from '../../lib/admin-api';
 import type { EcotrackCatalogResponse } from '../../lib/ecotrack-admin-contracts';
@@ -63,12 +63,15 @@ import {
 } from './order-products-editor';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
+import { CompactMenu, CompactMenuItem } from '../ui/compact-menu';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
+import { FormSection } from '../ui/form-section';
 import { NativeSelect, NativeSelectOption } from '../ui/native-select';
 import { Spinner } from '../ui/spinner';
 import { Switch } from '../ui/switch';
 import { Textarea } from '../ui/textarea';
+import { WorkspacePagination } from '../ui/workspace-pagination';
 import {
   WorkspaceActions,
   WorkspaceFrame,
@@ -81,13 +84,13 @@ import { OrderSalesDesk } from './order-sales-desk';
 import { ReturningCustomerIndicator } from './returning-customer-indicator';
 import { AdminAiAskButton } from '../admin-ai-ask-button';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
+import { SearchField } from '../search-field';
 
 const statusOptions: OrderStatus[] = [0, 1, 2, 11, 3, 7, 4, 10, 5, 6, 8, 9];
 
 type OrderDetailResponse = { ok: true; item: OrderRecord };
 type TrackingTokenResponse = { ok: true; publicToken: string };
 type DeleteTarget = { id: number; label: string };
-type PaginationItem = number | `ellipsis-${number}`;
 type OrderEditorDraft = {
   fullName: string;
   phoneNumber1: string;
@@ -131,109 +134,6 @@ function productSummary(order: OrderRecord) {
   if (!first) return '—';
   const additional = order.orderProducts.length - 1;
   return `${first.title}${additional > 0 ? ` +${additional}` : ''}`;
-}
-
-function getPaginationItems(currentPage: number, totalPages: number): PaginationItem[] {
-  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
-
-  const visiblePages =
-    currentPage <= 4
-      ? [1, 2, 3, 4, 5, totalPages]
-      : currentPage >= totalPages - 3
-        ? [1, totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages]
-        : [1, currentPage - 1, currentPage, currentPage + 1, totalPages];
-  const items: PaginationItem[] = [];
-
-  visiblePages.forEach((page, index) => {
-    const previousPage = visiblePages[index - 1];
-    if (previousPage && page - previousPage > 1) items.push(`ellipsis-${previousPage}`);
-    items.push(page);
-  });
-
-  return items;
-}
-
-function CompactActionsMenu({ label, children }: { label: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-
-    const closeFromOutside = (event: PointerEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const closeFromKeyboard = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      setOpen(false);
-      triggerRef.current?.focus();
-    };
-
-    document.addEventListener('pointerdown', closeFromOutside);
-    document.addEventListener('keydown', closeFromKeyboard);
-    return () => {
-      document.removeEventListener('pointerdown', closeFromOutside);
-      document.removeEventListener('keydown', closeFromKeyboard);
-    };
-  }, [open]);
-
-  return (
-    <div ref={containerRef} className="relative">
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-label={label}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        className="grid size-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-        onClick={() => setOpen((current) => !current)}
-      >
-        <MoreHorizontal className="size-4" aria-hidden="true" />
-      </button>
-      {open ? (
-        <div
-          id={menuId}
-          role="menu"
-          className="absolute end-0 top-full z-30 mt-1.5 min-w-48 overflow-hidden rounded-md border border-border/70 bg-popover py-1 text-popover-foreground shadow-lg"
-          onClick={(event) => {
-            if ((event.target as HTMLElement).closest('[role="menuitem"]')) setOpen(false);
-          }}
-        >
-          {children}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ActionMenuButton({
-  children,
-  destructive = false,
-  disabled = false,
-  onClick,
-}: {
-  children: React.ReactNode;
-  destructive?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      disabled={disabled}
-      className={cn(
-        'flex w-full items-center gap-2 px-3 py-2 text-start text-sm transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none disabled:pointer-events-none disabled:opacity-45',
-        destructive && 'text-destructive',
-      )}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
 }
 
 function buildDraft(order: OrderRecord, catalog?: EcotrackCatalogResponse): OrderEditorDraft {
@@ -290,28 +190,6 @@ function buildPatch(
   catalog?: EcotrackCatalogResponse,
 ): OrderPatch {
   return orderPatchSchema.parse(buildOrderChanges(order, draft, catalog));
-}
-
-function EditorSection({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="border-b border-border/60 px-4 py-5 sm:px-5">
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        {description ? (
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
-        ) : null}
-      </div>
-      {children}
-    </section>
-  );
 }
 
 function OrderProductThumbnail({
@@ -428,7 +306,7 @@ function OrderEditorBody({
         if (dirty && valid && writable) void onSave(order, buildPatch(order, draft, catalog));
       }}
     >
-      <EditorSection title={t('adminWorkspace.orders.customerDetails')}>
+      <FormSection title={t('adminWorkspace.orders.customerDetails')}>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
             {t('ordersManager.name.label')}
@@ -469,9 +347,9 @@ function OrderEditorBody({
           </p>
         ) : null}
         <ReturningCustomerIndicator orderId={order.id} />
-      </EditorSection>
+      </FormSection>
 
-      <EditorSection title={t('adminWorkspace.orders.statusAndOwnership')}>
+      <FormSection title={t('adminWorkspace.orders.statusAndOwnership')}>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
             {t('adminWorkspace.orders.status')}
@@ -540,9 +418,9 @@ function OrderEditorBody({
             </div>
           )}
         </div>
-      </EditorSection>
+      </FormSection>
 
-      <EditorSection
+      <FormSection
         title={t('adminWorkspace.orders.fulfillment')}
         description={formatOrderRegionLabel(
           catalog,
@@ -623,9 +501,9 @@ function OrderEditorBody({
             </label>
           ) : null}
         </div>
-      </EditorSection>
+      </FormSection>
 
-      <EditorSection title={t('adminWorkspace.orders.orderContents')}>
+      <FormSection title={t('adminWorkspace.orders.orderContents')}>
         <div className="relative">
           <Search className="pointer-events-none absolute start-3 top-3 size-4 text-muted-foreground" />
           <Input
@@ -769,9 +647,9 @@ function OrderEditorBody({
             {formatMoney(locale, total)}
           </dd>
         </dl>
-      </EditorSection>
+      </FormSection>
 
-      <EditorSection title={t('adminWorkspace.orders.notes')}>
+      <FormSection title={t('adminWorkspace.orders.notes')}>
         <Textarea
           value={draft.note}
           disabled={!writable}
@@ -783,7 +661,7 @@ function OrderEditorBody({
         <p className="mt-1 text-end text-xs text-muted-foreground tabular-nums">
           {draft.note.length}/500
         </p>
-      </EditorSection>
+      </FormSection>
 
       <div className="sticky bottom-0 flex items-center gap-3 bg-background/88 px-4 py-3 backdrop-blur-xl sm:px-5">
         <p className="me-auto text-xs text-muted-foreground">
@@ -1388,22 +1266,18 @@ export function OrdersWorkspace({
           onProjectionBasisChange={changeProjectionBasis}
         />
         <WorkspaceToolbar className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
-          <label className="relative w-full min-w-0 flex-1 sm:w-auto">
-            <span className="sr-only">{t('adminWorkspace.common.search')}</span>
-            <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="search"
-              value={search}
-              className="ps-9"
-              placeholder={t('adminWorkspace.orders.searchPlaceholder')}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setPage(1);
-                setSelectedIds([]);
-                setActiveOrderId(null);
-              }}
-            />
-          </label>
+          <SearchField
+            value={search}
+            label={t('adminWorkspace.common.search')}
+            placeholder={t('adminWorkspace.orders.searchPlaceholder')}
+            className="flex-1"
+            onChange={(value) => {
+              setSearch(value);
+              setPage(1);
+              setSelectedIds([]);
+              setActiveOrderId(null);
+            }}
+          />
           <NativeSelect
             value={statusFilter}
             className={cn(
@@ -1609,25 +1483,25 @@ export function OrdersWorkspace({
                           </span>
                         </a>
                       ) : null}
-                      <CompactActionsMenu label={`${t('labels.actions')} · ${order.fullName}`}>
-                        <ActionMenuButton onClick={() => setActiveOrderId(order.id)}>
+                      <CompactMenu label={`${t('labels.actions')} · ${order.fullName}`}>
+                        <CompactMenuItem onClick={() => setActiveOrderId(order.id)}>
                           <ChevronRight className="size-4 rtl:hidden" aria-hidden="true" />
                           <ChevronLeft className="hidden size-4 rtl:block" aria-hidden="true" />
                           {t('actions.edit')}
-                        </ActionMenuButton>
-                        <ActionMenuButton onClick={() => void copyTrackingLink(order)}>
+                        </CompactMenuItem>
+                        <CompactMenuItem onClick={() => void copyTrackingLink(order)}>
                           <Copy className="size-4" aria-hidden="true" />
                           {t('ordersManager.tracking.copy')}
-                        </ActionMenuButton>
-                        <ActionMenuButton
+                        </CompactMenuItem>
+                        <CompactMenuItem
                           destructive
                           disabled={!writable}
                           onClick={() => setDeleteTarget({ id: order.id, label: order.fullName })}
                         >
                           <Trash2 className="size-4" aria-hidden="true" />
                           {t('actions.delete')}
-                        </ActionMenuButton>
-                      </CompactActionsMenu>
+                        </CompactMenuItem>
+                      </CompactMenu>
                     </div>
                   </div>
                 );
@@ -1643,74 +1517,13 @@ export function OrdersWorkspace({
                 {t('adminWorkspace.common.noResults')}
               </div>
             ) : null}
-            {pagination && pagination.totalPages > 1 ? (
-              <div className="flex flex-col gap-3 border-t border-border/60 bg-card/35 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-muted-foreground">
-                  {t('labels.pageOfTotal', {
-                    page: pagination.page,
-                    total: pagination.totalPages,
-                  })}
-                </p>
-                <nav
-                  aria-label={t('labels.goToPageInput')}
-                  className="flex items-center justify-center gap-1"
-                >
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="size-9 px-0"
-                    aria-label={t('actions.previous')}
-                    disabled={!pagination.hasPreviousPage}
-                    onClick={() => changePage(Math.max(1, pagination.page - 1))}
-                  >
-                    <ChevronLeft className="size-4 rtl:hidden" aria-hidden="true" />
-                    <ChevronRight className="hidden size-4 rtl:block" aria-hidden="true" />
-                  </Button>
-                  {getPaginationItems(pagination.page, pagination.totalPages).map((item) =>
-                    typeof item === 'number' ? (
-                      <Button
-                        key={item}
-                        type="button"
-                        size="sm"
-                        variant={item === pagination.page ? 'default' : 'ghost'}
-                        className={cn(
-                          'size-9 px-0 tabular-nums',
-                          item !== 1 &&
-                            item !== pagination.totalPages &&
-                            Math.abs(item - pagination.page) > 1 &&
-                            'hidden sm:inline-flex',
-                        )}
-                        aria-label={t('labels.goToPage', { page: item })}
-                        aria-current={item === pagination.page ? 'page' : undefined}
-                        onClick={() => changePage(item)}
-                      >
-                        {item}
-                      </Button>
-                    ) : (
-                      <span
-                        key={item}
-                        aria-hidden="true"
-                        className="hidden size-7 place-items-center text-sm text-muted-foreground sm:grid"
-                      >
-                        …
-                      </span>
-                    ),
-                  )}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="size-9 px-0"
-                    aria-label={t('actions.next')}
-                    disabled={!pagination.hasNextPage}
-                    onClick={() => changePage(Math.min(pagination.totalPages, pagination.page + 1))}
-                  >
-                    <ChevronRight className="size-4 rtl:hidden" aria-hidden="true" />
-                    <ChevronLeft className="hidden size-4 rtl:block" aria-hidden="true" />
-                  </Button>
-                </nav>
-              </div>
+            {pagination ? (
+              <WorkspacePagination
+                currentPage={pagination.page}
+                totalPages={pagination.totalPages}
+                pending={ordersQuery.isFetching}
+                onPageChange={changePage}
+              />
             ) : null}
           </section>
 

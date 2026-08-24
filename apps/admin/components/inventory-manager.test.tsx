@@ -190,6 +190,7 @@ describe('InventoryManager', () => {
       'sr-only',
       'lg:not-sr-only',
     );
+    expect(screen.getByRole('region', { name: 'Inventory' })).toHaveAttribute('tabindex', '0');
     expect(screen.getByText('1')).toHaveClass('tabular-nums');
     expect(view.container.querySelector('[data-mobile-inventory-list]')).toBeInTheDocument();
   });

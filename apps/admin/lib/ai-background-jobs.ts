@@ -38,7 +38,7 @@ export const ADMIN_BACKGROUND_JOB_TYPES = [
 
 export type AdminBackgroundJobType = (typeof ADMIN_BACKGROUND_JOB_TYPES)[number];
 
-export const STARTABLE_ADMIN_BACKGROUND_JOB_TYPES = [
+const STARTABLE_ADMIN_BACKGROUND_JOB_TYPES = [
   'product_export',
   'catalog_feed_refresh',
   'order_export',
@@ -49,7 +49,7 @@ export const STARTABLE_ADMIN_BACKGROUND_JOB_TYPES = [
 
 export type StartableAdminBackgroundJobType = (typeof STARTABLE_ADMIN_BACKGROUND_JOB_TYPES)[number];
 
-export const ADMIN_BACKGROUND_JOB_PERMISSION: Record<AdminBackgroundJobType, PermissionKey> = {
+const ADMIN_BACKGROUND_JOB_PERMISSION: Record<AdminBackgroundJobType, PermissionKey> = {
   ai_categorization: 'products_write',
   ai_content: 'products_write',
   product_export: 'products_write',
