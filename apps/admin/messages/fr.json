@@ -1481,6 +1481,7 @@
   },
   "aiChat": {
     "open": "Assistant IA",
+    "ask": "Demander à l’IA",
     "close": "Fermer l’assistant IA",
     "title": "Assistant IA administrateur",
     "conversation": "Conversation avec l’assistant IA",
@@ -1601,6 +1602,7 @@
       "preserved": "Sections préservées",
       "fallback": "Sections de repli",
       "skipped": "Sections ignorées",
+      "deleted": "Sections supprimées",
       "retries": "Relances récupérées",
       "fallbackDetails": "Sections ayant nécessité un repli",
       "reasons": {
@@ -1609,6 +1611,17 @@
         "provider-error": "Le fournisseur n’a pas terminé cette section",
         "insufficient-assets": "Cette section nécessitait davantage de ressources produit vérifiées"
       }
+    },
+    "ecotrackTerminal": {
+      "attempts": "Tentative du worker {attempt} · {retries} relance(s)",
+      "successes": "Envois réussis ({count})",
+      "validationFailures": "Échecs de validation — non envoyés au fournisseur ({count})",
+      "providerRejections": "Rejets du fournisseur ({count})",
+      "alreadyPosted": "Déjà envoyées ({count})",
+      "repair": "Corriger les commandes en échec",
+      "retry": "Réessayer les rejets fournisseur",
+      "repairPrompt": "Pour les commandes EcoTrack {ids} avec le fournisseur {provider}, charge les exigences EcoTrack actuelles et les données exactes des commandes, puis explique les corrections concrètes que je peux approuver.",
+      "retryPrompt": "Réessaie l’envoi EcoTrack pour les identifiants exacts {ids} via {provider}. Prévisualise d’abord ces identifiants exacts et n’envoie que les lignes éligibles."
     },
     "toolLabels": {
       "catalog": "Résultats du catalogue",
@@ -1711,6 +1724,7 @@
     },
     "categorizationSummary": "{applied} appliquées · {proposed} à valider · {unchanged} inchangées · {ambiguous} ambiguës · {failed} échouées",
     "autoApplyFailed": "Conflits d’application automatique : {count}. Les propositions concernées restent en attente de validation manuelle.",
+    "downloadArtifact": "Télécharger le fichier terminé",
     "cancel": "Annuler",
     "previous": "Précédent",
     "yes": "Oui",

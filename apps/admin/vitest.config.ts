@@ -47,6 +47,7 @@ export default defineConfig({
             'test/services.test.ts',
             '**/*.integration.test.ts',
             '**/*.integration.test.tsx',
+            '**/*.redis.test.ts',
             'store/app-store.test.ts',
             '**/node_modules/**',
             '**/.next/**',
@@ -76,6 +77,14 @@ export default defineConfig({
           setupFiles: ['./test/setup/node.ts'],
           include: ['**/*.integration.test.ts', '**/*.integration.test.tsx'],
           exclude: ['**/node_modules/**', '**/.next/**', '**/dist/**'],
+        },
+      },
+      {
+        test: {
+          name: 'redis-integration-node',
+          environment: 'node',
+          setupFiles: ['./test/setup/node.ts'],
+          include: ['**/*.redis.test.ts'],
         },
       },
       {

@@ -10,6 +10,7 @@ import type { AiProposalInboxData, AiProposalInboxItem } from '../../lib/ai-prop
 import { humanizeProposalToken, proposalPreview } from '../../lib/ai-proposal-presentation';
 import { toast } from '../../lib/toast';
 import { cn } from '../../lib/utils';
+import { AdminAiAskButton } from '../admin-ai-ask-button';
 import { TablePaginationControls } from '../table-pagination-controls';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Button } from '../ui/button';
@@ -294,6 +295,7 @@ export function AiProposalWorkspace({
           }
         />
         <WorkspaceActions>
+          <AdminAiAskButton />
           {expiredCount > 0 ? (
             <Button
               type="button"

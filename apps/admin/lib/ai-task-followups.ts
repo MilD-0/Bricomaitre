@@ -25,21 +25,144 @@ const summaryKeys = [
   'complete',
 ] as const;
 
-function ecotrackResultLines(summary: Record<string, unknown>) {
-  if (!Array.isArray(summary.results)) return [];
-  const rows = summary.results.flatMap((value) => {
-    if (!value || typeof value !== 'object') return [];
-    const row = value as Record<string, unknown>;
-    if (row.status !== 'invalid' && row.status !== 'failed' && row.status !== 'skipped') return [];
-    const orderId = typeof row.orderId === 'number' ? row.orderId : null;
-    const reference = typeof row.reference === 'string' ? row.reference : null;
-    const message = typeof row.message === 'string' ? row.message.trim() : '';
-    const identity =
-      orderId !== null ? `Order #${orderId}` : reference ? `Order ${reference}` : 'Order';
-    const outcome = row.status === 'skipped' ? 'already posted' : row.status;
-    return [`- ${identity} · ${outcome}: ${message || 'No provider explanation was returned.'}`];
-  });
-  return rows.length > 0 ? ['Orders requiring attention:', ...rows] : [];
+type EcotrackTerminalRow = {
+  orderId: number | null;
+  reference: string | null;
+  tracking: string | null;
+  message: string;
+};
+
+type EcotrackTerminalOutput = {
+  kind: 'ecotrack_posting_terminal';
+  jobId: string;
+  status: AiTaskTerminalStatus;
+  provider: string | null;
+  attemptNumber: number;
+  retryCount: number;
+  counts: {
+    requested: number;
+    eligible: number;
+    succeeded: number;
+    validationFailed: number;
+    providerRejected: number;
+    alreadyPosted: number;
+  };
+  successes: EcotrackTerminalRow[];
+  validationFailures: EcotrackTerminalRow[];
+  providerRejections: EcotrackTerminalRow[];
+  alreadyPosted: EcotrackTerminalRow[];
+  repairableOrderIds: number[];
+  retryableOrderIds: number[];
+};
+
+function numberValue(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function ecotrackTerminalRow(value: unknown): (EcotrackTerminalRow & { status: string }) | null {
+  if (!value || typeof value !== 'object') return null;
+  const row = value as Record<string, unknown>;
+  if (!['created', 'invalid', 'failed', 'skipped'].includes(String(row.status))) return null;
+  return {
+    orderId: typeof row.orderId === 'number' ? row.orderId : null,
+    reference: typeof row.reference === 'string' ? row.reference : null,
+    tracking: typeof row.tracking === 'string' ? row.tracking : null,
+    status: String(row.status),
+    message:
+      typeof row.message === 'string' && row.message.trim()
+        ? row.message.trim()
+        : 'No provider explanation was returned.',
+  };
+}
+
+export function buildEcotrackTerminalOutput(input: {
+  jobId: string;
+  status: AiTaskTerminalStatus;
+  summary: Record<string, unknown>;
+  attemptsMade?: number;
+}): EcotrackTerminalOutput {
+  const rows = Array.isArray(input.summary.results)
+    ? input.summary.results.flatMap((value) => {
+        const row = ecotrackTerminalRow(value);
+        return row ? [row] : [];
+      })
+    : [];
+  const rowsWithStatus = (status: string) =>
+    rows
+      .filter((row) => row.status === status)
+      .map((row) => ({
+        orderId: row.orderId,
+        reference: row.reference,
+        tracking: row.tracking,
+        message: row.message,
+      }));
+  const successes = rowsWithStatus('created');
+  const validationFailures = rowsWithStatus('invalid');
+  const providerRejections = rowsWithStatus('failed');
+  const alreadyPosted = rowsWithStatus('skipped');
+  const orderIds = (selected: EcotrackTerminalRow[]) =>
+    selected.flatMap((row) => (row.orderId === null ? [] : [row.orderId]));
+  const attemptNumber = Math.max(1, Math.trunc(input.attemptsMade ?? 1));
+  const retryCount = attemptNumber - 1;
+
+  return {
+    kind: 'ecotrack_posting_terminal',
+    jobId: input.jobId,
+    status: input.status,
+    provider:
+      typeof input.summary.provider === 'string' && input.summary.provider.trim()
+        ? input.summary.provider
+        : null,
+    attemptNumber,
+    retryCount,
+    counts: {
+      requested: numberValue(input.summary.totalRequested),
+      eligible: numberValue(input.summary.eligible),
+      succeeded: numberValue(input.summary.created),
+      validationFailed: numberValue(input.summary.invalid),
+      providerRejected: numberValue(input.summary.failed),
+      alreadyPosted: numberValue(input.summary.skippedAlreadyPosted),
+    },
+    successes,
+    validationFailures,
+    providerRejections,
+    alreadyPosted,
+    repairableOrderIds: [...new Set(orderIds([...validationFailures, ...providerRejections]))],
+    retryableOrderIds: [...new Set(orderIds(providerRejections))],
+  };
+}
+
+function ecotrackResultLines(output: EcotrackTerminalOutput) {
+  const identity = (row: EcotrackTerminalRow) =>
+    row.orderId !== null
+      ? `Order #${row.orderId}`
+      : row.reference
+        ? `Order ${row.reference}`
+        : 'Order';
+  const section = (
+    heading: string,
+    rows: EcotrackTerminalRow[],
+    detail: (row: EcotrackTerminalRow) => string,
+  ) =>
+    rows.length > 0
+      ? ['', heading, ...rows.map((row) => `- ${identity(row)} · ${detail(row)}`)]
+      : [];
+
+  return [
+    `Worker attempt: ${output.attemptNumber} · retries: ${output.retryCount}`,
+    ...section(
+      'Posted successfully:',
+      output.successes,
+      (row) => `${row.tracking ? `tracking ${row.tracking} · ` : ''}${row.message}`,
+    ),
+    ...section(
+      'Validation failures (not sent to the provider):',
+      output.validationFailures,
+      (row) => row.message,
+    ),
+    ...section('Provider rejections:', output.providerRejections, (row) => row.message),
+    ...section('Already posted:', output.alreadyPosted, (row) => row.message),
+  ];
 }
 
 export function formatAiTaskTerminalMessage(input: {
@@ -49,6 +172,8 @@ export function formatAiTaskTerminalMessage(input: {
   progress?: { current?: number; total?: number; phase?: string } | null;
   summary?: Record<string, unknown> | null;
   errorMessage?: string | null;
+  downloadPath?: string | null;
+  attemptsMade?: number;
 }) {
   const heading =
     input.status === 'completed'
@@ -73,7 +198,18 @@ export function formatAiTaskTerminalMessage(input: {
     key in summary ? [`${key}: ${String(summary[key])}`] : [],
   );
   if (summaryParts.length > 0) lines.push(`Reconciled result: ${summaryParts.join(' · ')}`);
-  lines.push(...ecotrackResultLines(summary));
+  if (input.kind.startsWith('order-ecotrack:')) {
+    lines.push(
+      ...ecotrackResultLines(
+        buildEcotrackTerminalOutput({
+          jobId: input.jobId,
+          status: input.status,
+          summary,
+          attemptsMade: input.attemptsMade,
+        }),
+      ),
+    );
+  }
   if (input.errorMessage) lines.push(`Error: ${input.errorMessage}`);
   if (typeof summary.proposed === 'number' && summary.proposed > 0) {
     lines.push(
@@ -90,6 +226,13 @@ export function formatAiTaskTerminalMessage(input: {
       'The task is not being reported as fully reconciled because the server did not confirm complete: true.',
     );
   }
+  if (
+    input.status === 'completed' &&
+    input.downloadPath &&
+    (input.downloadPath.startsWith('/') || /^https?:\/\//i.test(input.downloadPath))
+  ) {
+    lines.push(`Download: [Open the completed file](${input.downloadPath})`);
+  }
   return lines.join('\n');
 }
 
@@ -101,6 +244,8 @@ export async function publishAiTaskTerminalMessage(input: {
   progress?: { current?: number; total?: number; phase?: string } | null;
   summary?: Record<string, unknown> | null;
   errorMessage?: string | null;
+  downloadPath?: string | null;
+  attemptsMade?: number;
 }) {
   if (!input.conversationId) return { kind: 'not-linked' as const };
   const db = getDb();
@@ -118,6 +263,18 @@ export async function publishAiTaskTerminalMessage(input: {
   if (existing) return { kind: 'existing' as const, messageId: existing.id };
 
   const text = formatAiTaskTerminalMessage(input);
+  const terminalToolResult = input.kind.startsWith('order-ecotrack:')
+    ? {
+        type: 'tool-result' as const,
+        toolName: 'ecotrack_posting_terminal',
+        output: buildEcotrackTerminalOutput({
+          jobId: input.jobId,
+          status: input.status,
+          summary: input.summary ?? {},
+          attemptsMade: input.attemptsMade,
+        }),
+      }
+    : null;
   const [message] = await db
     .insert(aiMessages)
     .values({
@@ -129,6 +286,8 @@ export async function publishAiTaskTerminalMessage(input: {
         jobKind: input.kind,
         jobStatus: input.status,
         terminal: true,
+        ...(input.downloadPath ? { downloadPath: input.downloadPath } : {}),
+        ...(terminalToolResult ? { toolResults: [terminalToolResult] } : {}),
       },
     })
     .returning({ id: aiMessages.id });

@@ -94,6 +94,7 @@ const mocks = vi.hoisted(() => ({
   revokeAccessGrants: vi.fn(),
   setRoleDefinition: vi.fn(),
   reviewProposals: vi.fn(),
+  deleteExpiredProposals: vi.fn(),
   updateAssetStates: vi.fn(),
   reorderAssets: vi.fn(),
   manageAsset: vi.fn(),
@@ -270,6 +271,7 @@ vi.mock('../../../../lib/admin-ai-action-history', async (importOriginal) => ({
 vi.mock('../../../../lib/admin-ai-proposal-review', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../../lib/admin-ai-proposal-review')>()),
   reviewAdminAiProposals: mocks.reviewProposals,
+  deleteExpiredAdminAiProposals: mocks.deleteExpiredProposals,
 }));
 vi.mock('../../../../lib/asset-mutations', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../../lib/asset-mutations')>()),
@@ -591,6 +593,13 @@ describe('POST /api/ai/chat telemetry', () => {
       appliedCount: 1,
       rejectedCount: 0,
       reviewed: [{ proposalId: 13, resource: 'products', result: { status: 'applied' } }],
+      failed: [],
+    });
+    mocks.deleteExpiredProposals.mockReset().mockResolvedValue({
+      requestedCount: 1,
+      deletedCount: 1,
+      failedCount: 0,
+      deleted: [{ proposalId: 13, resource: 'products' }],
       failed: [],
     });
     mocks.updateOrderDetails.mockReset().mockResolvedValue({
@@ -1088,6 +1097,7 @@ describe('POST /api/ai/chat telemetry', () => {
         'update_inventory_state',
         'inspect_ai_proposals',
         'review_ai_proposals',
+        'delete_expired_ai_proposals',
         'generate_product_content',
         'categorize_catalog',
         'suggest_discount',
@@ -1103,6 +1113,7 @@ describe('POST /api/ai/chat telemetry', () => {
         'find_categories',
         'inspect_ai_proposals',
         'review_ai_proposals',
+        'delete_expired_ai_proposals',
         'propose_brand_edit',
         'propose_category_create',
       ],
@@ -1123,6 +1134,7 @@ describe('POST /api/ai/chat telemetry', () => {
         'edit_landing_page',
         'inspect_ai_proposals',
         'review_ai_proposals',
+        'delete_expired_ai_proposals',
         'suggest_featured_products',
         'suggest_landing_page',
       ],
@@ -1417,6 +1429,9 @@ describe('POST /api/ai/chat telemetry', () => {
       proposalIds: [13],
       action: 'approve',
     });
+    await mocks.streamOptions?.tools?.delete_expired_ai_proposals?.execute?.({
+      proposalIds: [13],
+    });
     await mocks.streamOptions?.tools?.inspect_bulletin?.execute?.({ query: 'launch', limit: 10 });
     await mocks.streamOptions?.tools?.create_bulletin_post?.execute?.({
       title: 'Launch follow-up',
@@ -1691,6 +1706,10 @@ describe('POST /api/ai/chat telemetry', () => {
     expect(mocks.reviewProposals).toHaveBeenCalledWith(
       { proposalIds: [13], action: 'approve' },
       { email: 'admin@bricomaitre.com', name: 'Admin' },
+      mocks.permissions,
+    );
+    expect(mocks.deleteExpiredProposals).toHaveBeenCalledWith(
+      { proposalIds: [13] },
       mocks.permissions,
     );
     expect(mocks.inspectBulletin).toHaveBeenCalledWith({

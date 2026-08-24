@@ -8,6 +8,7 @@ import * as React from 'react';
 
 import { requestJson } from '../../lib/admin-api';
 import { toast } from '../../lib/toast';
+import { AdminAiAskButton } from '../admin-ai-ask-button';
 import { Button } from '../ui/button';
 import {
   Dialog,
@@ -120,6 +121,7 @@ export function LandingPageIndex({
       <WorkspaceHeader>
         <WorkspaceHeading title={assetsCopy.title} meta={`${t.landingPages} · ${items.length}`} />
         <WorkspaceActions>
+          <AdminAiAskButton />
           <Button onClick={() => setCreating(true)}>
             <Plus className="size-4" aria-hidden="true" />
             {t.create}

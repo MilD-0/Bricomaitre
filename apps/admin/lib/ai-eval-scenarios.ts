@@ -662,6 +662,50 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     },
   },
   {
+    id: 'admin-landing-page-create-from-product-workspace',
+    description:
+      'Treats explicit landing-page creation as a first-class product-workspace action instead of requiring navigation to Assets.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Conçois une landing page française pour le produit sélectionné 12, orientée artisans mobiles, et garde-la en brouillon.',
+      surface: 'products',
+    },
+    expectations: {
+      requiredTools: ['find_products', 'create_landing_page'],
+      exactToolCounts: { create_landing_page: 1 },
+      requiredToolInputs: {
+        create_landing_page: { productId: 12, locale: 'fr', active: false },
+      },
+      forbiddenTools: ['suggest_landing_page'],
+      requiredTerms: ['51', 'brouillon'],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-landing-page-edit-from-product-workspace',
+    description:
+      'Inspects and improves an exact landing-page revision from another relevant workspace while preserving unaffected sections.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Améliore uniquement le hero de la landing page 41 pour mobile et préserve toutes les autres sections exactement.',
+      surface: 'products',
+    },
+    expectations: {
+      requiredTools: ['inspect_landing_pages', 'edit_landing_page'],
+      exactToolCounts: { edit_landing_page: 1 },
+      requiredToolInputs: {
+        edit_landing_page: { landingPageId: 41, expectedRevision: 3 },
+      },
+      forbiddenTools: ['suggest_landing_page'],
+      requiredTerms: ['41'],
+      passThreshold: 1,
+    },
+  },
+  {
     id: 'admin-proposal-backlog',
     description: 'Reads the proposal inbox with its active filters.',
     surface: 'admin',
@@ -690,6 +734,26 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
       },
       requiredTerms: ['44'],
       requiredAnyTerms: [['appliquée', 'appliqué', 'approuvée', 'approuvé']],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-proposal-expired-cleanup',
+    description:
+      'Inspects the proposal inbox before deleting only exact expired pending proposals.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Supprime les propositions expirées, dont la proposition 44.',
+      surface: 'ai_proposals',
+    },
+    expectations: {
+      requiredTools: ['inspect_ai_proposals', 'delete_expired_ai_proposals'],
+      exactToolCounts: { delete_expired_ai_proposals: 1 },
+      requiredToolInputs: { delete_expired_ai_proposals: { proposalIds: [44] } },
+      forbiddenTools: ['review_ai_proposals'],
+      requiredTerms: ['44'],
+      requiredAnyTerms: [['supprimée', 'supprimé']],
       passThreshold: 1,
     },
   },
@@ -1917,6 +1981,22 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     locale: 'fr',
     input: { message: 'Où en est mon dernier export produits ?', surface: 'products' },
     expectations: { requiredTools: ['list_background_jobs'] },
+  },
+  {
+    id: 'admin-background-product-export-start',
+    description:
+      'Reads current product background work before starting one server-owned full-catalog export.',
+    surface: 'admin',
+    locale: 'fr',
+    input: { message: 'Exporte tous les produits.', surface: 'products' },
+    expectations: {
+      requiredTools: ['list_background_jobs', 'start_background_job'],
+      exactToolCounts: { start_background_job: 1 },
+      requiredToolInputs: { start_background_job: { type: 'product_export' } },
+      requiredAnyTerms: [['en attente', 'lancé', 'démarré', 'queued']],
+      forbiddenTerms: ['déjà terminé', 'fichier est prêt', 'export terminé.'],
+      passThreshold: 1,
+    },
   },
   {
     id: 'admin-storefront-configuration',

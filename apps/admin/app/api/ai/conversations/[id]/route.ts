@@ -22,6 +22,8 @@ function messageContent(content: unknown) {
       text: string;
       toolResults?: unknown;
       feedback?: 'helpful' | 'not_helpful';
+      terminal?: boolean;
+      jobId?: string;
     };
     return {
       text: saved.text,
@@ -29,6 +31,8 @@ function messageContent(content: unknown) {
       ...(saved.feedback === 'helpful' || saved.feedback === 'not_helpful'
         ? { feedback: saved.feedback }
         : {}),
+      ...(saved.terminal === true ? { terminal: true } : {}),
+      ...(typeof saved.jobId === 'string' ? { jobId: saved.jobId } : {}),
     };
   }
   return null;
@@ -87,6 +91,10 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
             ...(row.role === 'assistant' && 'feedback' in content
               ? { feedback: content.feedback }
               : {}),
+            ...(row.role === 'assistant' && 'terminal' in content
+              ? { terminal: content.terminal }
+              : {}),
+            ...(row.role === 'assistant' && 'jobId' in content ? { jobId: content.jobId } : {}),
           },
         ]
       : [];

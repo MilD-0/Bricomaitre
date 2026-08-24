@@ -71,6 +71,8 @@ describe('GET /api/ai/conversations/:id', () => {
         content: {
           text: 'Saved answer',
           feedback: 'helpful',
+          terminal: true,
+          jobId: 'ecotrack-8',
           toolResults: [
             { type: 'tool-result', toolName: 'inspect_inventory', output: { items: [] } },
           ],
@@ -94,6 +96,8 @@ describe('GET /api/ai/conversations/:id', () => {
             content: 'Saved answer',
             messageRecordId: 71,
             feedback: 'helpful',
+            terminal: true,
+            jobId: 'ecotrack-8',
             toolResults: [
               { type: 'tool-result', toolName: 'inspect_inventory', output: { items: [] } },
             ],

@@ -12,6 +12,7 @@ import * as React from 'react';
 
 import { AdminApiError, requestJson } from '../../lib/admin-api';
 import { cn } from '../../lib/utils';
+import { AdminAiAskButton } from '../admin-ai-ask-button';
 import { Button } from '../ui/button';
 import { CompactMenu, CompactMenuItem } from '../ui/compact-menu';
 import { FieldError } from '../ui/field';
@@ -414,6 +415,7 @@ export function LandingPageBuilder({
             />
           </div>
           <WorkspaceActions>
+            <AdminAiAskButton />
             {active ? (
               <a
                 href={`${storefrontBaseUrl}/${page.locale}/landing/${encodeURIComponent(page.slug)}`}

@@ -3,9 +3,11 @@
 import { useTranslations } from 'next-intl';
 
 import { administrationAiSurfaceDetails } from '../../lib/admin-ai-live-surface-details';
+import { AdminAiAskButton } from '../admin-ai-ask-button';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { NativeSelect, NativeSelectOption } from '../ui/native-select';
 import {
+  WorkspaceActions,
   WorkspaceFrame,
   WorkspaceHeader,
   WorkspaceHeading,
@@ -41,6 +43,9 @@ export function AdministrationShell({
     <WorkspaceFrame data-admin-workspace="administration">
       <WorkspaceHeader>
         <WorkspaceHeading title={t('nav.administration')} />
+        <WorkspaceActions>
+          <AdminAiAskButton />
+        </WorkspaceActions>
       </WorkspaceHeader>
       <div className="border-b border-border/60 px-3 py-2 sm:hidden">
         <NativeSelect

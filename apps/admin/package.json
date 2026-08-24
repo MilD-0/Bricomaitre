@@ -30,6 +30,7 @@
     "test:contract": "vitest run --project route-contract-node",
     "test:integration": "pnpm test:contract",
     "test:services": "vitest run --project service-integration-node",
+    "test:redis:ai": "vitest run --project redis-integration-node --maxWorkers=1",
     "test:browser": "playwright test",
     "eval:ai:live": "node --env-file=.env --import tsx scripts/run-ai-evals.ts"
   },

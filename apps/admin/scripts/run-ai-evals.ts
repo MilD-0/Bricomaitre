@@ -78,7 +78,10 @@ import {
 } from '../lib/admin-ai-inventory';
 import { adminAiAssetCrudSchema } from '../lib/admin-ai-assets';
 import { adminAssetStateMutationSchema } from '../lib/asset-mutations';
-import { adminAiProposalReviewSchema } from '../lib/admin-ai-proposal-review';
+import {
+  adminAiExpiredProposalDeletionSchema,
+  adminAiProposalReviewSchema,
+} from '../lib/admin-ai-proposal-review';
 import {
   adminAiAccessGrantSchema,
   adminAiAccessRevocationSchema,
@@ -168,6 +171,8 @@ const descriptions: Record<string, string> = {
     'Create, completely replace, or delete one exact banner, featured group, or product card.',
   inspect_ai_proposals: 'Read the current AI proposal review inbox.',
   review_ai_proposals: 'Approve or reject exact inspected proposals through canonical workflows.',
+  delete_expired_ai_proposals:
+    'Delete exact inspected proposals only when they remain pending and expired.',
   inspect_administration: 'Read staff accounts, exact permissions, roles, and access grants.',
   set_access_grant: 'Create or update one exact canonical staff access grant.',
   revoke_access_grants:
@@ -222,6 +227,10 @@ const descriptions: Record<string, string> = {
     'Directly create, update, activate, reparent, or delete one exact brand or category.',
   propose_brand_create: 'Create one reviewable inactive brand proposal.',
   list_background_jobs: 'Read current server-owned background job queues and progress.',
+  start_background_job:
+    'Start one explicitly requested permitted operational background job. Starting is not completion.',
+  stop_background_job:
+    'Request cooperative cancellation of one exact permitted running background job.',
   propose_product_edit: 'Create one reviewable product edit proposal.',
 };
 
@@ -732,7 +741,9 @@ const fixtureByTool: Record<string, unknown> = {
       active: false,
     },
   },
-  inspect_ai_proposals: { proposals: [{ id: 44, status: 'proposed' }] },
+  inspect_ai_proposals: {
+    proposals: [{ id: 44, status: 'proposed', expiresAt: '2026-08-20T00:00:00.000Z' }],
+  },
   review_ai_proposals: {
     action: 'approve',
     requestedCount: 1,
@@ -740,6 +751,13 @@ const fixtureByTool: Record<string, unknown> = {
     appliedCount: 1,
     rejectedCount: 0,
     reviewed: [{ proposalId: 44, resource: 'products', result: { status: 'applied' } }],
+    failed: [],
+  },
+  delete_expired_ai_proposals: {
+    requestedCount: 1,
+    deletedCount: 1,
+    failedCount: 0,
+    deleted: [{ proposalId: 44, resource: 'products' }],
     failed: [],
   },
   inspect_administration: {
@@ -1004,6 +1022,22 @@ const fixtureByTool: Record<string, unknown> = {
   },
   list_background_jobs: {
     jobs: [{ id: 5, type: 'product_export', status: 'running', progress: 60 }],
+  },
+  start_background_job: {
+    kind: 'started',
+    job: {
+      id: '8efb1775-81ef-4f70-a516-79bbc99308d1',
+      type: 'product_export',
+      status: 'queued',
+    },
+  },
+  stop_background_job: {
+    job: {
+      id: '8efb1775-81ef-4f70-a516-79bbc99308d1',
+      type: 'product_export',
+      status: 'running',
+      cancelRequested: true,
+    },
   },
 };
 
@@ -1881,6 +1915,46 @@ function toolsForScenario(
       description: descriptions.review_ai_proposals,
       inputSchema: adminAiProposalReviewSchema,
       execute: async () => fixtureByTool.review_ai_proposals,
+    }),
+    delete_expired_ai_proposals: tool({
+      description: descriptions.delete_expired_ai_proposals,
+      inputSchema: adminAiExpiredProposalDeletionSchema,
+      execute: async () => fixtureByTool.delete_expired_ai_proposals,
+    }),
+    start_background_job: tool({
+      description: descriptions.start_background_job,
+      inputSchema: z
+        .object({
+          type: z.enum([
+            'product_export',
+            'catalog_feed_refresh',
+            'order_export',
+            'reporting_refresh',
+            'ecotrack_catalog_sync',
+            'ecotrack_shipment_sync',
+          ]),
+          orderMode: z.enum(['selected', 'confirmed']).optional(),
+          orderIds: z.array(z.number().int().positive()).max(500).optional(),
+        })
+        .strict(),
+      execute: async () => fixtureByTool.start_background_job,
+    }),
+    stop_background_job: tool({
+      description: descriptions.stop_background_job,
+      inputSchema: z
+        .object({
+          type: z.enum([
+            'ai_categorization',
+            'ai_content',
+            'product_export',
+            'catalog_feed_refresh',
+            'order_export',
+            'order_ecotrack',
+          ]),
+          jobId: z.string().uuid(),
+        })
+        .strict(),
+      execute: async () => fixtureByTool.stop_background_job,
     }),
     set_access_grant: tool({
       description: descriptions.set_access_grant,

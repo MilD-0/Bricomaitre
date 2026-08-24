@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ADMIN_AI_LANDING_PAGE_OPERATION_TIMEOUT_MS,
   ADMIN_AI_LONG_OPERATION_TIMEOUT_MS,
   adminAiGroundingTool,
   adminAiMutationTool,
@@ -12,10 +13,10 @@ describe('admin AI model-loop planning', () => {
   it('keeps ordinary requests bounded while allowing staged landing-page work to finish', () => {
     expect(adminAiRequestTimeoutMs(30_000, 'update_order_status')).toBe(30_000);
     expect(adminAiRequestTimeoutMs(30_000, 'create_landing_page')).toBe(
-      ADMIN_AI_LONG_OPERATION_TIMEOUT_MS,
+      ADMIN_AI_LANDING_PAGE_OPERATION_TIMEOUT_MS,
     );
     expect(adminAiRequestTimeoutMs(30_000, 'edit_landing_page')).toBe(
-      ADMIN_AI_LONG_OPERATION_TIMEOUT_MS,
+      ADMIN_AI_LANDING_PAGE_OPERATION_TIMEOUT_MS,
     );
     expect(adminAiRequestTimeoutMs(30_000, 'sync_analytics_source')).toBe(
       ADMIN_AI_LONG_OPERATION_TIMEOUT_MS,
@@ -196,6 +197,20 @@ describe('admin AI first-step grounding', () => {
       adminAiGroundingTool({
         surface: 'orders',
         message: 'Corrige les commandes rejetées par Delivro.',
+        permissions: ['orders_write'],
+      }),
+    ).toBe('load_ecotrack_requirements');
+    expect(
+      adminAiGroundingTool({
+        surface: 'products',
+        message: 'Retry EcoTrack posting for exact order IDs 92 and 93 via Emir.',
+        permissions: ['orders_write'],
+      }),
+    ).toBe('preview_ecotrack_posting');
+    expect(
+      adminAiGroundingTool({
+        surface: 'inventory',
+        message: 'Fix the EcoTrack validation errors for order IDs 92 and 93.',
         permissions: ['orders_write'],
       }),
     ).toBe('load_ecotrack_requirements');
@@ -447,6 +462,20 @@ describe('admin AI first-step grounding', () => {
         permissions: ['assets_write'],
       }),
     ).toBe('inspect_landing_pages');
+    expect(
+      adminAiGroundingTool({
+        surface: 'products',
+        message: 'Design a French landing page for the selected drill.',
+        permissions: ['assets_write'],
+      }),
+    ).toBe('find_products');
+    expect(
+      adminAiGroundingTool({
+        surface: 'inventory',
+        message: 'Improve landing page 41 but preserve its current sections.',
+        permissions: ['assets_write'],
+      }),
+    ).toBe('inspect_landing_pages');
   });
 
   it('routes background progress ahead of the current product surface', () => {
@@ -457,6 +486,61 @@ describe('admin AI first-step grounding', () => {
         permissions: ['products_write'],
       }),
     ).toBe('list_background_jobs');
+  });
+
+  it('deterministically starts and stops explicitly requested operational jobs', () => {
+    expect(
+      adminAiMutationTool({
+        surface: 'products',
+        message: 'Exporte tous les produits.',
+        permissions: ['products_write'],
+      }),
+    ).toBe('start_background_job');
+    expect(
+      adminAiMutationTool({
+        surface: 'administration',
+        message: 'Synchronise le catalogue Ecotrack.',
+        permissions: ['ops_view'],
+      }),
+    ).toBe('start_background_job');
+    expect(
+      adminAiMutationTool({
+        surface: 'products',
+        message: 'Annule cet export job.',
+        permissions: ['products_write'],
+      }),
+    ).toBe('stop_background_job');
+    expect(
+      adminAiMutationTool({
+        surface: 'products',
+        message: 'Où en est mon dernier export produits ?',
+        permissions: ['products_write'],
+      }),
+    ).toBeNull();
+  });
+
+  it('inspects the proposal inbox before deleting only explicitly named expired proposals', () => {
+    expect(
+      adminAiGroundingTool({
+        surface: 'aiProposals',
+        message: 'Supprime les propositions expirées.',
+        permissions: ['products_write'],
+      }),
+    ).toBe('inspect_ai_proposals');
+    expect(
+      adminAiMutationTool({
+        surface: 'aiProposals',
+        message: 'Supprime les propositions expirées.',
+        permissions: ['products_write'],
+      }),
+    ).toBe('delete_expired_ai_proposals');
+    expect(
+      adminAiMutationTool({
+        surface: 'aiProposals',
+        message: 'Quelles propositions expirent bientôt ?',
+        permissions: ['products_write'],
+      }),
+    ).toBeNull();
   });
 
   it.each([
@@ -690,6 +774,13 @@ describe('admin AI explicit mutation planning', () => {
         permissions: ['orders_write'],
       }),
     ).toBe('post_orders_to_ecotrack');
+    expect(
+      adminAiMutationTool({
+        surface: 'products',
+        message: 'Retry EcoTrack posting for exact order IDs 92 and 93 via Emir.',
+        permissions: ['orders_write'],
+      }),
+    ).toBe('post_orders_to_ecotrack');
   });
 
   it('plans canonical ECOTRACK shipment actions ahead of generic order status updates', () => {
@@ -777,6 +868,28 @@ describe('admin AI explicit mutation planning', () => {
         permissions: ['assets_write'],
       }),
     ).toBe('edit_landing_page');
+    expect(
+      adminAiMutationTool({
+        surface: 'products',
+        message: 'Build a French landing page for selected product 12.',
+        permissions: ['assets_write'],
+      }),
+    ).toBe('create_landing_page');
+    expect(
+      adminAiMutationTool({
+        surface: 'inventory',
+        message: 'Improve landing page 41 for mobile visitors.',
+        permissions: ['assets_write'],
+      }),
+    ).toBe('edit_landing_page');
+    expect(
+      adminAiMutationTool({
+        surface: 'assets',
+        section: 'landingPages',
+        message: 'Is landing page 41 active?',
+        permissions: ['assets_write'],
+      }),
+    ).toBeNull();
   });
 
   it('does not turn informational or unauthorized questions into writes', () => {

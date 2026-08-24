@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ADMIN_AI_MUTATING_TOOL_NAMES,
   ADMIN_AI_PRESENTED_TOOL_NAMES,
   adminAiToolActivityKey,
+  adminAiToolMutatesApplication,
   adminAiToolPresentation,
 } from './admin-ai-tool-presentation';
 
@@ -31,6 +33,7 @@ describe('admin assistant tool presentation', () => {
       'preview_ecotrack_posting',
       'load_ecotrack_requirements',
       'post_orders_to_ecotrack',
+      'ecotrack_posting_terminal',
       'inspect_ecotrack_shipments',
       'manage_ecotrack_shipments',
       'change_ecotrack_shipments',
@@ -50,6 +53,7 @@ describe('admin assistant tool presentation', () => {
       'manage_assets',
       'inspect_ai_proposals',
       'review_ai_proposals',
+      'delete_expired_ai_proposals',
       'inspect_bulletin',
       'create_bulletin_post',
       'reply_bulletin_post',
@@ -94,6 +98,23 @@ describe('admin assistant tool presentation', () => {
     }
     expect(adminAiToolActivityKey('query_analytics')).toBe('analytics');
     expect(adminAiToolActivityKey('update_analytics_settings')).toBe('analytics');
+  });
+
+  it('distinguishes application mutations from reads and previews', () => {
+    for (const toolName of ADMIN_AI_MUTATING_TOOL_NAMES) {
+      expect(adminAiToolMutatesApplication(toolName)).toBe(true);
+    }
+    for (const toolName of [
+      'inspect_orders',
+      'preview_ecotrack_posting',
+      'load_ecotrack_requirements',
+      'ecotrack_posting_terminal',
+      'inspect_ecotrack_shipments',
+      'query_analytics',
+      'list_background_jobs',
+    ]) {
+      expect(adminAiToolMutatesApplication(toolName)).toBe(false);
+    }
   });
 
   it('links Analytics actions to the exact owning workspace', () => {
