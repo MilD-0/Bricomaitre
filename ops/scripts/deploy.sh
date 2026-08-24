@@ -142,7 +142,11 @@ begin_image_state_transaction
 begin_nginx_main_config_transaction "$nginx_main_fallback"
 apply_release_images "$target_slot" "$release_images_file"
 
-compose up -d postgres redis
+printf 'reconciling persistent services serially\n'
+compose up -d postgres
+bash "$script_dir/wait-for-health.sh" postgres
+compose up -d redis
+bash "$script_dir/wait-for-health.sh" redis
 
 set -a
 # shellcheck disable=SC1091
