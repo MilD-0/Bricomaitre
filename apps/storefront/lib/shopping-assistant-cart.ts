@@ -3,7 +3,7 @@ import type { ShoppingAssistantCartMutation } from '@bric/storefront-core/shoppi
 import type { Locale } from '@/i18n/config';
 import { addCartItem, removeCartItem, updateCartItemQuantity, type CartItem } from '@/lib/cart';
 
-export type ShoppingAssistantCartChange = {
+type ShoppingAssistantCartChange = {
   mutation: ShoppingAssistantCartMutation;
   previousQuantity: number;
   resultingQuantity: number;

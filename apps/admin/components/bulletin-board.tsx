@@ -39,6 +39,7 @@ import { useAdminAiSurfaceDetails } from './admin-ai-surface-context';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import { CompactMenu, CompactMenuItem } from './ui/compact-menu';
+import { WorkspacePagination } from './ui/workspace-pagination';
 import {
   Dialog,
   DialogContent,
@@ -754,7 +755,7 @@ export function BulletinBoard() {
       <WorkspaceHeader>
         <WorkspaceHeading
           title={t('title')}
-          meta={boardQuery.data.posts.length}
+          meta={t('sections.visibleCount', { count: boardQuery.data.posts.length })}
           description={
             boardQuery.isFetching ? (
               <span className="inline-flex items-center gap-1">
@@ -813,6 +814,7 @@ export function BulletinBoard() {
         </div>
 
         <NativeSelect
+          className="lg:w-56 lg:shrink-0"
           aria-label={t('filters.sortLabel')}
           value={sort}
           onChange={(event) => {
@@ -1164,33 +1166,12 @@ export function BulletinBoard() {
           </div>
         </section>
 
-        {sortedPosts.length > pageSize ? (
-          <div className="flex flex-col gap-3 border-t border-border/60 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 lg:px-5">
-            <p className="text-sm text-muted-foreground">
-              {t('pagination.page', { page: currentPage, total: totalPages })}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={currentPage <= 1}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
-              >
-                {t('pagination.previous')}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={currentPage >= totalPages}
-                onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
-              >
-                {t('pagination.next')}
-              </Button>
-            </div>
-          </div>
-        ) : null}
+        <WorkspacePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pending={boardQuery.isFetching}
+          onPageChange={setPage}
+        />
       </div>
 
       <Dialog
@@ -1341,7 +1322,7 @@ function BulletinPostCard({
 
   return (
     <article
-      className={`px-3 py-5 sm:px-4 lg:px-5 ${post.pinned ? 'bg-amber-500/[0.035]' : ''}`}
+      className={`mx-auto w-full max-w-5xl px-3 py-5 sm:px-4 lg:px-5 ${post.pinned ? 'bg-amber-500/[0.035]' : ''}`}
       data-bulletin-post={post.id}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

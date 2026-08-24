@@ -4,20 +4,9 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ChevronLeft,
-  ChevronRight,
-  Copy,
-  MoreHorizontal,
-  PackageOpen,
-  Plus,
-  Search,
-  SlidersHorizontal,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { Copy, PackageOpen, Plus, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
-import { useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 
 import { requestJson as request } from '../../lib/admin-api';
@@ -44,6 +33,7 @@ import { cn } from '../../lib/utils';
 import { useAppStore } from '../../store/app-store';
 import { ImageUploadField } from '../image-upload-field';
 import { MultiSortHeader } from '../multi-sort-header';
+import { SearchField } from '../search-field';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import {
   MetaCatalogExportDialog,
@@ -53,6 +43,7 @@ import {
 import { buildDraftPromoHref, buildStorefrontProductHref } from './storefront-links';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
+import { CompactMenu, CompactMenuItem } from '../ui/compact-menu';
 import {
   Dialog,
   DialogContent,
@@ -62,12 +53,14 @@ import {
   DialogTitle,
 } from '../ui/dialog';
 import { Field, FieldError, FieldLabel } from '../ui/field';
+import { FormSection } from '../ui/form-section';
 import { Input } from '../ui/input';
 import { NativeSelect, NativeSelectOption } from '../ui/native-select';
 import { SidePanel } from '../ui/side-panel';
 import { Spinner } from '../ui/spinner';
 import { Switch } from '../ui/switch';
 import { Textarea } from '../ui/textarea';
+import { WorkspacePagination } from '../ui/workspace-pagination';
 import {
   WorkspaceActions,
   WorkspaceFrame,
@@ -83,7 +76,6 @@ type ProductsMetaResponse = { brands: CatalogOption[]; categories: CatalogOption
 type ProductDetailResponse = { item: ProductRecord };
 type EditorState = { mode: 'create'; product: null } | { mode: 'edit'; product: ProductRecord };
 type DeleteTarget = { ids: number[]; label: string };
-type PaginationItem = number | `ellipsis-${number}`;
 
 const emptyProduct: ProductPayloadInput = {
   title: '',
@@ -124,26 +116,6 @@ function formatDate(locale: string, value: string) {
   return Number.isNaN(date.getTime())
     ? value
     : new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date);
-}
-
-function getPaginationItems(currentPage: number, totalPages: number): PaginationItem[] {
-  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
-
-  const visiblePages =
-    currentPage <= 4
-      ? [1, 2, 3, 4, 5, totalPages]
-      : currentPage >= totalPages - 3
-        ? [1, totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages]
-        : [1, currentPage - 1, currentPage, currentPage + 1, totalPages];
-  const items: PaginationItem[] = [];
-
-  visiblePages.forEach((page, index) => {
-    const previousPage = visiblePages[index - 1];
-    if (previousPage && page - previousPage > 1) items.push(`ellipsis-${previousPage}`);
-    items.push(page);
-  });
-
-  return items;
 }
 
 function toDateTimeInput(value: string | null | undefined) {
@@ -189,15 +161,6 @@ function ProductThumbnail({ product }: { product: ProductRecord }) {
     <span className="grid size-10 shrink-0 place-items-center rounded-[0.7rem] bg-muted text-muted-foreground">
       <PackageOpen className="size-4" aria-hidden="true" />
     </span>
-  );
-}
-
-function EditorSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="border-b border-border/60 px-4 py-5 sm:px-6">
-      <h3 className="mb-4 text-sm font-semibold">{title}</h3>
-      <div className="min-w-0">{children}</div>
-    </section>
   );
 }
 
@@ -370,7 +333,7 @@ function ProductEditorPanel({
             void submit();
           }}
         >
-          <EditorSection title={t('adminWorkspace.products.identity')}>
+          <FormSection title={t('adminWorkspace.products.identity')}>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field>
                 <FieldLabel htmlFor="selected-product-title">{t('labels.productName')}</FieldLabel>
@@ -392,9 +355,9 @@ function ProductEditorPanel({
                 <Input id="selected-product-barcode" {...form.register('barcode')} />
               </Field>
             </div>
-          </EditorSection>
+          </FormSection>
 
-          <EditorSection title={t('adminWorkspace.products.commercial')}>
+          <FormSection title={t('adminWorkspace.products.commercial')}>
             <div className="grid gap-4 sm:grid-cols-3">
               <Field>
                 <FieldLabel htmlFor="selected-product-price">{t('labels.price')}</FieldLabel>
@@ -517,9 +480,9 @@ function ProductEditorPanel({
                 />
               </label>
             </div>
-          </EditorSection>
+          </FormSection>
 
-          <EditorSection title={t('adminWorkspace.products.content')}>
+          <FormSection title={t('adminWorkspace.products.content')}>
             <div className="grid gap-4">
               <Field>
                 <FieldLabel htmlFor="selected-product-description">
@@ -542,9 +505,9 @@ function ProductEditorPanel({
                 />
               </Field>
             </div>
-          </EditorSection>
+          </FormSection>
 
-          <EditorSection title={t('products.promos.title')}>
+          <FormSection title={t('products.promos.title')}>
             <div className="space-y-3">
               {promoFields.fields.map((field, index) => {
                 const code = draftValues.promoCodes?.[index]?.code?.trim() ?? '';
@@ -664,9 +627,9 @@ function ProductEditorPanel({
                 {t('products.promos.add')}
               </Button>
             </div>
-          </EditorSection>
+          </FormSection>
 
-          <EditorSection title={t('labels.images')}>
+          <FormSection title={t('labels.images')}>
             <ImageUploadField
               uploadUrl="/api/uploads/products"
               label={t('labels.images')}
@@ -676,107 +639,13 @@ function ProductEditorPanel({
                 form.setValue('images', urls, { shouldDirty: true, shouldValidate: true })
               }
             />
-          </EditorSection>
+          </FormSection>
           <button type="submit" className="sr-only">
             {t('actions.save')}
           </button>
         </form>
       )}
     </SidePanel>
-  );
-}
-
-function CompactActionsMenu({
-  label,
-  children,
-  side = 'bottom',
-}: {
-  label: string;
-  children: React.ReactNode;
-  side?: 'top' | 'bottom';
-}) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-
-    const closeFromOutside = (event: PointerEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const closeFromKeyboard = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      setOpen(false);
-      triggerRef.current?.focus();
-    };
-
-    document.addEventListener('pointerdown', closeFromOutside);
-    document.addEventListener('keydown', closeFromKeyboard);
-    return () => {
-      document.removeEventListener('pointerdown', closeFromOutside);
-      document.removeEventListener('keydown', closeFromKeyboard);
-    };
-  }, [open]);
-
-  return (
-    <div ref={containerRef} className="relative">
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-label={label}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        className="grid size-9 place-items-center rounded-md border border-border/70 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-        onClick={() => setOpen((current) => !current)}
-      >
-        <MoreHorizontal className="size-4" aria-hidden="true" />
-      </button>
-      {open ? (
-        <div
-          id={menuId}
-          role="menu"
-          className={cn(
-            'absolute end-0 z-30 min-w-52 overflow-hidden rounded-md border border-border/70 bg-popover py-1 text-popover-foreground shadow-lg',
-            side === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5',
-          )}
-          onClick={(event) => {
-            if ((event.target as HTMLElement).closest('[role="menuitem"]')) setOpen(false);
-          }}
-        >
-          {children}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ActionMenuButton({
-  children,
-  destructive = false,
-  disabled = false,
-  onClick,
-}: {
-  children: React.ReactNode;
-  destructive?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      disabled={disabled}
-      className={cn(
-        'block w-full px-3 py-2 text-start text-sm transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none disabled:pointer-events-none disabled:opacity-45',
-        destructive && 'text-destructive',
-      )}
-      onClick={onClick}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -1105,17 +974,19 @@ export function ProductsWorkspace({
                 t('adminWorkspace.products.resultCount', { count: pagination.totalItems })
               ) : (
                 <span
+                  role="status"
                   className="inline-block h-4 w-20 animate-pulse rounded bg-muted"
-                  aria-label={t('labels.loading')}
-                />
+                >
+                  <span className="sr-only">{t('labels.loading')}</span>
+                </span>
               )
             }
           />
           <WorkspaceActions>
             <AdminAiAskButton />
             {canExportEntireCatalog ? (
-              <CompactActionsMenu label={t('labels.actions')}>
-                <ActionMenuButton
+              <CompactMenu label={t('labels.actions')}>
+                <CompactMenuItem
                   disabled={
                     startExportAllMutation.isPending ||
                     exportJobQuery.data.job?.status === 'running'
@@ -1127,8 +998,8 @@ export function ProductsWorkspace({
                       ? 'products.exportAll.runningAction'
                       : 'products.exportAll.action',
                   )}
-                </ActionMenuButton>
-              </CompactActionsMenu>
+                </CompactMenuItem>
+              </CompactMenu>
             ) : null}
             <Button type="button" onClick={() => setEditorState({ mode: 'create', product: null })}>
               <Plus className="size-4" aria-hidden="true" />
@@ -1138,20 +1009,16 @@ export function ProductsWorkspace({
         </WorkspaceHeader>
         <WorkspaceToolbar>
           <div className="flex flex-wrap items-center gap-2">
-            <label className="relative w-full min-w-0 flex-1 sm:w-auto sm:min-w-[16rem]">
-              <span className="sr-only">{t('adminWorkspace.common.search')}</span>
-              <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setPage(1);
-                }}
-                className="ps-9"
-                placeholder={t('adminWorkspace.products.searchPlaceholder')}
-              />
-            </label>
+            <SearchField
+              value={search}
+              label={t('adminWorkspace.common.search')}
+              placeholder={t('adminWorkspace.products.searchPlaceholder')}
+              className="flex-1 sm:min-w-[16rem]"
+              onChange={(value) => {
+                setSearch(value);
+                setPage(1);
+              }}
+            />
             <Button
               type="button"
               size="sm"
@@ -1232,43 +1099,43 @@ export function ProductsWorkspace({
             <span className="me-auto text-sm font-semibold">
               {t('adminWorkspace.common.selected', { count: selectedIds.length })}
             </span>
-            <CompactActionsMenu label={t('labels.actions')}>
-              <ActionMenuButton
+            <CompactMenu label={t('labels.actions')}>
+              <CompactMenuItem
                 disabled={patchSelectedMutation.isPending}
                 onClick={() => patchSelectedMutation.mutate({ active: true })}
               >
                 {t('actions.activateSelected')}
-              </ActionMenuButton>
-              <ActionMenuButton
+              </CompactMenuItem>
+              <CompactMenuItem
                 disabled={patchSelectedMutation.isPending}
                 onClick={() => patchSelectedMutation.mutate({ active: false })}
               >
                 {t('actions.deactivateSelected')}
-              </ActionMenuButton>
-              <ActionMenuButton
+              </CompactMenuItem>
+              <CompactMenuItem
                 disabled={patchSelectedMutation.isPending}
                 onClick={() => patchSelectedMutation.mutate({ inStock: true })}
               >
                 {t('actions.markInStock')}
-              </ActionMenuButton>
-              <ActionMenuButton
+              </CompactMenuItem>
+              <CompactMenuItem
                 disabled={patchSelectedMutation.isPending}
                 onClick={() => patchSelectedMutation.mutate({ inStock: false })}
               >
                 {t('actions.markOutOfStock')}
-              </ActionMenuButton>
+              </CompactMenuItem>
               <div className="my-1 border-t border-border/60" />
-              <ActionMenuButton onClick={() => void copySelectedProductIds()}>
+              <CompactMenuItem onClick={() => void copySelectedProductIds()}>
                 {t('products.copy.action')}
-              </ActionMenuButton>
-              <ActionMenuButton
+              </CompactMenuItem>
+              <CompactMenuItem
                 disabled={selectedProducts.length === 0}
                 onClick={openMetaCatalogExportPreview}
               >
                 {t('products.export.action')}
-              </ActionMenuButton>
+              </CompactMenuItem>
               <div className="my-1 border-t border-border/60" />
-              <ActionMenuButton
+              <CompactMenuItem
                 destructive
                 onClick={() =>
                   setDeleteTarget({
@@ -1278,8 +1145,8 @@ export function ProductsWorkspace({
                 }
               >
                 {t('adminWorkspace.products.archiveSelected')}
-              </ActionMenuButton>
-            </CompactActionsMenu>
+              </CompactMenuItem>
+            </CompactMenu>
             <Button
               type="button"
               size="sm"
@@ -1311,7 +1178,7 @@ export function ProductsWorkspace({
           </p>
         ) : null}
 
-        <div className="divide-y divide-border/55 md:hidden">
+        <div className="divide-y divide-border/55 lg:hidden">
           {visibleProducts.map((product) => (
             <div
               key={product.id}
@@ -1355,22 +1222,27 @@ export function ProductsWorkspace({
                   </span>
                 </span>
               </div>
-              <CompactActionsMenu label={`${t('labels.actions')} · ${product.title}`}>
-                <ActionMenuButton onClick={() => setEditorState({ mode: 'edit', product })}>
+              <CompactMenu label={`${t('labels.actions')} · ${product.title}`}>
+                <CompactMenuItem onClick={() => setEditorState({ mode: 'edit', product })}>
                   {t('actions.edit')}
-                </ActionMenuButton>
-                <ActionMenuButton
+                </CompactMenuItem>
+                <CompactMenuItem
                   destructive
                   onClick={() => setDeleteTarget({ ids: [product.id], label: product.title })}
                 >
                   {t('adminWorkspace.products.archive')}
-                </ActionMenuButton>
-              </CompactActionsMenu>
+                </CompactMenuItem>
+              </CompactMenu>
             </div>
           ))}
         </div>
 
-        <div className="hidden overflow-x-auto md:block">
+        <div
+          className="hidden overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/30 lg:block"
+          role="region"
+          aria-label={t('nav.products')}
+          tabIndex={0}
+        >
           <table className="w-full min-w-[1160px] border-collapse text-sm">
             <thead className="bg-muted/30 text-xs uppercase tracking-[0.08em] text-muted-foreground">
               <tr className="border-b border-border/60">
@@ -1432,7 +1304,7 @@ export function ProductsWorkspace({
                     onClick={() => toggleSort('updatedAt')}
                   />
                 </th>
-                <th className="w-12 px-3 py-3" />
+                <th className="sticky end-0 z-10 w-12 bg-muted px-3 py-3" />
               </tr>
             </thead>
             <tbody>
@@ -1508,21 +1380,21 @@ export function ProductsWorkspace({
                   <td className="px-3 py-3 text-xs text-muted-foreground">
                     {formatDate(locale, product.updatedAt)}
                   </td>
-                  <td className="px-3 py-3">
-                    <CompactActionsMenu
+                  <td className="sticky end-0 z-10 bg-background px-3 py-3 shadow-[-10px_0_14px_-16px_rgba(0,0,0,0.65)] rtl:shadow-[10px_0_14px_-16px_rgba(0,0,0,0.65)]">
+                    <CompactMenu
                       label={`${t('labels.actions')} · ${product.title}`}
                       side={index >= visibleProducts.length - 2 ? 'top' : 'bottom'}
                     >
-                      <ActionMenuButton onClick={() => setEditorState({ mode: 'edit', product })}>
+                      <CompactMenuItem onClick={() => setEditorState({ mode: 'edit', product })}>
                         {t('actions.edit')}
-                      </ActionMenuButton>
-                      <ActionMenuButton
+                      </CompactMenuItem>
+                      <CompactMenuItem
                         destructive
                         onClick={() => setDeleteTarget({ ids: [product.id], label: product.title })}
                       >
                         {t('adminWorkspace.products.archive')}
-                      </ActionMenuButton>
-                    </CompactActionsMenu>
+                      </CompactMenuItem>
+                    </CompactMenu>
                   </td>
                 </tr>
               ))}
@@ -1541,71 +1413,13 @@ export function ProductsWorkspace({
           </div>
         ) : null}
 
-        {pagination && pagination.totalPages > 1 ? (
-          <div className="flex flex-col gap-3 border-t border-border/60 bg-card/35 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-muted-foreground">
-              {t('labels.pageOfTotal', { page: pagination.page, total: pagination.totalPages })}
-            </p>
-            <nav
-              aria-label={t('labels.goToPageInput')}
-              className="flex items-center justify-center gap-1"
-            >
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="size-9 px-0"
-                aria-label={t('actions.previous')}
-                disabled={!pagination.hasPreviousPage}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-              >
-                <ChevronLeft className="size-4 rtl:hidden" aria-hidden="true" />
-                <ChevronRight className="hidden size-4 rtl:block" aria-hidden="true" />
-              </Button>
-              {getPaginationItems(pagination.page, pagination.totalPages).map((item) =>
-                typeof item === 'number' ? (
-                  <Button
-                    key={item}
-                    type="button"
-                    size="sm"
-                    variant={item === pagination.page ? 'default' : 'ghost'}
-                    className={cn(
-                      'size-9 px-0 tabular-nums',
-                      item !== 1 &&
-                        item !== pagination.totalPages &&
-                        Math.abs(item - pagination.page) > 1 &&
-                        'hidden sm:inline-flex',
-                    )}
-                    aria-label={t('labels.goToPage', { page: item })}
-                    aria-current={item === pagination.page ? 'page' : undefined}
-                    onClick={() => setPage(item)}
-                  >
-                    {item}
-                  </Button>
-                ) : (
-                  <span
-                    key={item}
-                    aria-hidden="true"
-                    className="hidden size-7 place-items-center text-sm text-muted-foreground sm:grid"
-                  >
-                    …
-                  </span>
-                ),
-              )}
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="size-9 px-0"
-                aria-label={t('actions.next')}
-                disabled={!pagination.hasNextPage}
-                onClick={() => setPage((current) => Math.min(pagination.totalPages, current + 1))}
-              >
-                <ChevronRight className="size-4 rtl:hidden" aria-hidden="true" />
-                <ChevronLeft className="hidden size-4 rtl:block" aria-hidden="true" />
-              </Button>
-            </nav>
-          </div>
+        {pagination ? (
+          <WorkspacePagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            pending={productsQuery.isFetching}
+            onPageChange={setPage}
+          />
         ) : null}
       </WorkspaceFrame>
 

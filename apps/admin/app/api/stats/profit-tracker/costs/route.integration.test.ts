@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { listCostsMock, createCostMock, refreshFactsMock, requireOpsMock, requireMutationMock } = vi.hoisted(() => ({
-  listCostsMock: vi.fn(),
-  createCostMock: vi.fn(),
-  refreshFactsMock: vi.fn(),
-  requireOpsMock: vi.fn(),
-  requireMutationMock: vi.fn(),
-}));
+const { listCostsMock, createCostMock, refreshFactsMock, requireOpsMock, requireMutationMock } =
+  vi.hoisted(() => ({
+    listCostsMock: vi.fn(),
+    createCostMock: vi.fn(),
+    refreshFactsMock: vi.fn(),
+    requireOpsMock: vi.fn(),
+    requireMutationMock: vi.fn(),
+  }));
 
 vi.mock('../../../../../lib/analytics2-facts', () => ({
   refreshAnalytics2FactsAfterMutation: refreshFactsMock,

@@ -4,14 +4,9 @@ import {
   ArrowUpRight,
   Bot,
   Check,
-  ChevronLeft,
-  ChevronRight,
-  MessageSquarePlus,
   Pencil,
-  Search,
   Send,
   Sparkles,
-  Trash2,
   ThumbsDown,
   ThumbsUp,
   X,
@@ -63,12 +58,14 @@ import {
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Markdown } from './ui/markdown';
-import { Input } from './ui/input';
 import { Spinner } from './ui/spinner';
 import { Switch } from './ui/switch';
 import { Textarea } from './ui/textarea';
 import { useAdminAiSurfaceContext } from './admin-ai-surface-context';
 import { ADMIN_AI_OPEN_EVENT, notifyAdminAiMutation } from '../lib/admin-ai-events';
+import { ChatSidebar } from './admin-ai-chat/chat-sidebar';
+import { AdminAiResultTable } from './admin-ai-chat/result-table';
+import type { AiJob, ConversationSummary } from './admin-ai-chat/types';
 
 type AnalyticsMetricResult = {
   key: string;
@@ -154,25 +151,6 @@ type ChatMessage = {
   terminal?: boolean;
   jobId?: string;
 };
-type ConversationSummary = {
-  id: number;
-  sessionKey: string;
-  title: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-};
-type AiJob = {
-  id: string;
-  queue: string;
-  kind: string;
-  type?: string;
-  cancellable?: boolean;
-  status: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed';
-  progress: { phase: string; current: number; total: number; percentage: number };
-  errorMessage: string | null;
-  resultSummary: Record<string, unknown> | null;
-  downloadPath: string | null;
-};
 type LandingPageGenerationPresentation = {
   status: 'completed' | 'partial-fallback' | 'full-fallback';
   generatedSections: number;
@@ -187,21 +165,6 @@ type LandingPageGenerationPresentation = {
 };
 type ProposalNextAction = 'refresh' | 'regenerate' | 'review' | 'retry';
 
-const ADMIN_AI_JOB_LABEL_KEYS: Record<string, string> = {
-  ai_categorization: 'ai_categorization',
-  ai_content: 'ai_content',
-  product_export: 'product_export',
-  catalog_feed_refresh: 'catalog_feed_refresh',
-  order_export: 'order_export',
-  order_ecotrack: 'order_ecotrack',
-  stats_import: 'stats_import',
-  ad_cost_import: 'ad_cost_import',
-  reporting_refresh: 'reporting_refresh',
-  ecotrack_catalog_sync: 'ecotrack_catalog_sync',
-  ecotrack_shipment_sync: 'ecotrack_shipment_sync',
-  'ai-product-categorization': 'ai_categorization',
-  'ai-product-content': 'ai_content',
-};
 export const ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY = 'bricomaitre:admin-ai:auto-accept';
 export const ADMIN_AI_MODEL_STORAGE_KEY = 'bricomaitre:admin-ai:model';
 export const ADMIN_AI_REASONING_EFFORT_STORAGE_KEY = 'bricomaitre:admin-ai:reasoning-effort';
@@ -382,11 +345,6 @@ function queryLabel(value: string | undefined) {
       .replace(/([a-z\d])([A-Z])/g, '$1 $2')
       .toLowerCase() ?? ''
   );
-}
-
-function safeAdminAiDownloadPath(value: string | null | undefined) {
-  if (!value) return null;
-  return value.startsWith('/') || /^https?:\/\//i.test(value) ? value : null;
 }
 
 function presentationFromUnknown(value: unknown) {
@@ -839,41 +797,13 @@ function AnalyticsCard({
         </p>
       ) : null}
       {analyticsTables.map((table) => (
-        <div key={table.path} className="overflow-x-auto border-t border-border/50 px-3 pb-3">
-          <div className="flex items-center justify-between gap-3 px-2 pb-1 pt-3 text-[0.68rem] text-muted-foreground">
-            <p className="font-medium capitalize">{queryLabel(table.path)}</p>
-            {table.available > table.rows.length ? (
-              <p>
-                {t('aiChat.showingRows', {
-                  shown: table.rows.length,
-                  available: table.available,
-                })}
-              </p>
-            ) : null}
-          </div>
-          <table className="w-full min-w-[28rem] text-start text-xs">
-            <thead>
-              <tr className="text-muted-foreground">
-                {table.columns.map((column) => (
-                  <th key={column} className="border-b px-2 py-2 font-medium capitalize">
-                    {queryLabel(column)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {table.rows.map((row, index) => (
-                <tr key={index}>
-                  {table.columns.map((column) => (
-                    <td key={column} className="border-b border-border/45 px-2 py-2">
-                      {displayValue(row[column])}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <AdminAiResultTable
+          key={table.path}
+          table={table}
+          formatLabel={queryLabel}
+          formatValue={displayValue}
+          showingRows={(shown, available) => t('aiChat.showingRows', { shown, available })}
+        />
       ))}
       {result.caveats?.length ? (
         <p className="border-t border-border/50 px-4 py-3 text-[0.68rem] leading-5 text-muted-foreground">
@@ -1123,44 +1053,13 @@ function StructuredToolResultCard({
         </div>
       ) : null}
       {tables.map((table) => (
-        <div key={table.path} className="overflow-x-auto border-t border-border/50 px-3 pb-3">
-          <div className="flex items-center justify-between gap-3 px-2 pb-1 pt-3 text-[0.68rem] text-muted-foreground">
-            <p className="font-medium capitalize">{queryLabel(table.path)}</p>
-            {table.available > table.rows.length ? (
-              <p>
-                {t('aiChat.showingRows', {
-                  shown: table.rows.length,
-                  available: table.available,
-                })}
-              </p>
-            ) : null}
-          </div>
-          <table className="w-full min-w-[28rem] text-start text-xs">
-            <thead>
-              <tr className="text-muted-foreground">
-                {table.columns.map((column) => (
-                  <th key={column} className="border-b px-2 py-2 font-medium capitalize">
-                    {queryLabel(column)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {table.rows.map((row, index) => (
-                <tr key={index}>
-                  {table.columns.map((column) => (
-                    <td
-                      key={column}
-                      className="max-w-48 border-b border-border/45 px-2 py-2 [overflow-wrap:anywhere]"
-                    >
-                      {displayValue(row[column])}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <AdminAiResultTable
+          key={table.path}
+          table={table}
+          formatLabel={queryLabel}
+          formatValue={displayValue}
+          showingRows={(shown, available) => t('aiChat.showingRows', { shown, available })}
+        />
       ))}
       {!error &&
       !landingGeneration &&
@@ -1182,324 +1081,6 @@ function StructuredToolResultCard({
         </div>
       ) : null}
     </section>
-  );
-}
-
-function ChatSidebar({
-  mobileVisible,
-  conversations,
-  selectedConversationId,
-  loading,
-  jobs,
-  cancellingJobId,
-  search,
-  onNewChat,
-  onSearchChange,
-  onSelectConversation,
-  onRenameConversation,
-  onDeleteConversation,
-  onCancelJob,
-}: {
-  mobileVisible: boolean;
-  conversations: ConversationSummary[];
-  selectedConversationId: number | null;
-  loading: boolean;
-  jobs: AiJob[];
-  cancellingJobId: string | null;
-  search: string;
-  onNewChat: () => void;
-  onSearchChange: (value: string) => void;
-  onSelectConversation: (conversation: ConversationSummary) => void;
-  onRenameConversation: (conversation: ConversationSummary, title: string) => Promise<boolean>;
-  onDeleteConversation: (conversation: ConversationSummary) => void;
-  onCancelJob: (job: AiJob) => void;
-}) {
-  const t = useTranslations();
-  const [jobIndex, setJobIndex] = useState(0);
-  const [editingConversationId, setEditingConversationId] = useState<number | null>(null);
-  const [titleDraft, setTitleDraft] = useState('');
-  const boundedJobIndex = Math.min(jobIndex, Math.max(0, jobs.length - 1));
-  const selectedJob = jobs[boundedJobIndex];
-
-  return (
-    <aside
-      data-slot="admin-ai-sidebar"
-      className={`${mobileVisible ? 'flex' : 'hidden'} col-start-1 row-start-2 min-h-0 min-w-0 w-full flex-col bg-secondary/20 lg:col-auto lg:row-auto lg:flex lg:border-s`}
-      aria-label={t('aiChat.chats')}
-    >
-      <div className="flex items-center justify-between border-b border-border/60 px-4 py-4 sm:px-5">
-        <h3 className="text-sm font-semibold">{t('aiChat.chats')}</h3>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="shrink-0 normal-case tracking-normal"
-          onClick={onNewChat}
-        >
-          <MessageSquarePlus className="size-3.5" />
-          {t('aiChat.newChat')}
-        </Button>
-      </div>
-      <div className="relative border-b border-border/60 px-3 py-2 sm:px-4">
-        <Search className="pointer-events-none absolute start-6 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground sm:start-7" />
-        <Input
-          value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
-          className="h-9 ps-8 text-xs"
-          aria-label={t('aiChat.searchChats')}
-          placeholder={t('aiChat.searchChats')}
-        />
-      </div>
-      <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-3 sm:p-4">
-        {loading ? (
-          <div
-            className="flex items-center gap-2 rounded-lg bg-card px-3 py-3 text-xs text-muted-foreground"
-            role="status"
-          >
-            <Spinner className="size-3.5" />
-            {t('aiChat.loadingChats')}
-          </div>
-        ) : (
-          <>
-            {conversations.map((conversation) => {
-              const title = conversation.title || t('aiChat.untitledChat');
-              if (editingConversationId === conversation.id)
-                return (
-                  <form
-                    key={conversation.id}
-                    className="flex items-center gap-1 rounded-lg bg-card p-1"
-                    onSubmit={async (event) => {
-                      event.preventDefault();
-                      if (await onRenameConversation(conversation, titleDraft))
-                        setEditingConversationId(null);
-                    }}
-                  >
-                    <Input
-                      autoFocus
-                      value={titleDraft}
-                      onChange={(event) => setTitleDraft(event.target.value)}
-                      maxLength={80}
-                      className="h-8 min-w-0 flex-1 text-xs"
-                      aria-label={t('aiChat.renameChat')}
-                    />
-                    <Button
-                      type="submit"
-                      size="sm"
-                      variant="ghost"
-                      className="size-8 p-0"
-                      disabled={!titleDraft.trim()}
-                      aria-label={t('aiChat.saveChatTitle')}
-                    >
-                      <Check className="size-3.5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="size-8 p-0"
-                      onClick={() => setEditingConversationId(null)}
-                      aria-label={t('aiChat.cancelChatRename')}
-                    >
-                      <X className="size-3.5" />
-                    </Button>
-                  </form>
-                );
-              return (
-                <div
-                  key={conversation.id}
-                  className={
-                    selectedConversationId === conversation.id
-                      ? 'group flex items-center rounded-lg bg-primary text-primary-foreground'
-                      : 'group flex items-center rounded-lg bg-card text-foreground hover:bg-secondary'
-                  }
-                >
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 truncate px-3 py-2 text-start text-xs font-medium"
-                    onClick={() => onSelectConversation(conversation)}
-                  >
-                    {title}
-                  </button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="size-8 shrink-0 p-0 opacity-70 hover:opacity-100"
-                    onClick={() => {
-                      setTitleDraft(title);
-                      setEditingConversationId(conversation.id);
-                    }}
-                    aria-label={`${t('aiChat.renameChat')} ${title}`}
-                  >
-                    <Pencil className="size-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="me-1 size-8 shrink-0 p-0 opacity-70 hover:opacity-100"
-                    onClick={() => onDeleteConversation(conversation)}
-                    aria-label={`${t('aiChat.deleteChat')} ${title}`}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-              );
-            })}
-            {conversations.length === 0 ? (
-              <p className="px-1 py-2 text-xs text-muted-foreground">
-                {search ? t('aiChat.noMatchingChats') : t('aiChat.noChats')}
-              </p>
-            ) : null}
-          </>
-        )}
-      </div>
-      {jobs.length > 0 ? (
-        <div className="border-t border-border/60 p-3 sm:p-4">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-xs font-semibold text-foreground">{t('aiChat.backgroundJobs')}</p>
-            {jobs.length > 1 ? (
-              <div className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="size-7 p-0"
-                  onClick={() =>
-                    setJobIndex((current) => (current - 1 + jobs.length) % jobs.length)
-                  }
-                  aria-label={t('aiChat.previousJob')}
-                >
-                  <ChevronLeft className="size-3.5 rtl:rotate-180" />
-                </Button>
-                <span className="min-w-8 text-center text-[0.68rem] tabular-nums text-muted-foreground">
-                  {boundedJobIndex + 1}/{jobs.length}
-                </span>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="size-7 p-0"
-                  onClick={() => setJobIndex((current) => (current + 1) % jobs.length)}
-                  aria-label={t('aiChat.nextJob')}
-                >
-                  <ChevronRight className="size-3.5 rtl:rotate-180" />
-                </Button>
-              </div>
-            ) : null}
-          </div>
-          {selectedJob
-            ? (() => {
-                const job = selectedJob;
-                const active = job.status === 'queued' || job.status === 'running';
-                const downloadPath = safeAdminAiDownloadPath(job.downloadPath);
-                const summary = job.resultSummary ?? {};
-                const summaryEntries = Object.entries(summary)
-                  .filter((entry): entry is [string, string | number | boolean | null] =>
-                    isAdminAiScalar(entry[1]),
-                  )
-                  .slice(0, 6);
-                const labelKey = ADMIN_AI_JOB_LABEL_KEYS[job.type ?? job.kind];
-                return (
-                  <div className="relative pb-2">
-                    {jobs.length > 2 ? (
-                      <div
-                        className="absolute inset-x-4 bottom-0 top-4 rounded-xl border border-border/30 bg-card/35"
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                    {jobs.length > 1 ? (
-                      <div
-                        className="absolute inset-x-2 bottom-1 top-2 rounded-xl border border-border/45 bg-card/65"
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                    <section
-                      key={`${job.queue}:${job.id}`}
-                      className="relative rounded-xl border border-border/60 bg-card p-3 shadow-[var(--shadow-vapor)]"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-medium">
-                            {labelKey ? t(`aiChat.jobLabels.${labelKey}`) : queryLabel(job.kind)}
-                          </p>
-                          <p className="mt-0.5 text-[0.68rem] text-muted-foreground">
-                            {t(`aiChat.jobStatus.${job.status}`)}
-                          </p>
-                        </div>
-                        {active && job.cancellable !== false ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={cancellingJobId !== null}
-                            onClick={() => onCancelJob(job)}
-                          >
-                            {cancellingJobId === job.id ? <Spinner className="size-3.5" /> : null}
-                            {t('aiChat.cancel')}
-                          </Button>
-                        ) : null}
-                      </div>
-                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-secondary">
-                        <div
-                          className="h-full rounded-full bg-primary transition-[width]"
-                          style={{
-                            width: `${Math.max(0, Math.min(job.progress.percentage, 100))}%`,
-                          }}
-                        />
-                      </div>
-                      <p className="mt-1.5 text-[0.68rem] text-muted-foreground">
-                        {job.progress.current}/{job.progress.total || '—'} ·{' '}
-                        {job.progress.phase.replaceAll('-', ' ')}
-                      </p>
-                      {job.kind === 'ai-product-categorization' &&
-                      Object.keys(summary).length > 0 ? (
-                        <p className="mt-2 text-[0.68rem] leading-5 text-muted-foreground">
-                          {t('aiChat.categorizationSummary', {
-                            proposed: Number(summary.proposed ?? 0),
-                            applied: Number(summary.applied ?? 0),
-                            unchanged: Number(summary.unchanged ?? 0),
-                            ambiguous: Number(summary.ambiguous ?? 0),
-                            failed: Number(summary.failed ?? 0),
-                          })}
-                        </p>
-                      ) : null}
-                      {job.kind !== 'ai-product-categorization' && summaryEntries.length > 0 ? (
-                        <p className="mt-2 text-[0.68rem] leading-5 text-muted-foreground">
-                          {summaryEntries
-                            .map(([key, value]) => `${queryLabel(key)}: ${String(value ?? '—')}`)
-                            .join(' · ')}
-                        </p>
-                      ) : null}
-                      {Number(summary.autoApplyFailed ?? 0) > 0 ? (
-                        <p className="mt-2 text-[0.68rem] leading-5 text-amber-700 dark:text-amber-300">
-                          {t('aiChat.autoApplyFailed', {
-                            count: Number(summary.autoApplyFailed),
-                          })}
-                        </p>
-                      ) : null}
-                      {job.errorMessage ? (
-                        <p className="mt-2 text-[0.68rem] text-destructive">{job.errorMessage}</p>
-                      ) : null}
-                      {job.status === 'completed' && downloadPath ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="mt-3"
-                          onClick={() => window.open(downloadPath, '_blank', 'noopener,noreferrer')}
-                        >
-                          {t('aiChat.downloadArtifact')}
-                        </Button>
-                      ) : null}
-                    </section>
-                  </div>
-                );
-              })()
-            : null}
-        </div>
-      ) : null}
-    </aside>
   );
 }
 
@@ -2386,6 +1967,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
               onRenameConversation={renameConversation}
               onDeleteConversation={(conversation) => void deleteConversation(conversation)}
               onCancelJob={(job) => void cancelJob(job)}
+              labelize={queryLabel}
             />
           </div>
         </DialogContent>

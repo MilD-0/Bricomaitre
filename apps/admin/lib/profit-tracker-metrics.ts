@@ -266,26 +266,17 @@ export function summarizeProfitTracker(
     (total, day) => total + (day.spendEur || 0) * (day.fxRateUsed || 0),
     0,
   );
-  const ratioAdCostDzd = days.reduce(
-    (total, day) => total + (day.metrics.adCostDzd || 0),
-    0,
-  );
+  const ratioAdCostDzd = days.reduce((total, day) => total + (day.metrics.adCostDzd || 0), 0);
   const grossProfitDzd = completeDays.reduce((total, day) => total + (day.grossProfitDzd || 0), 0);
   const adjustedProfitDzd = completeDays.reduce(
     (total, day) => total + (day.metrics.adjustedProfitDzd || 0),
     0,
   );
   const netProfitDzd = adjustedProfitDzd - ratioAdCostDzd;
-  const confirmedOrders = days.reduce(
-    (total, day) => total + (day.confirmedOrders || 0),
-    0,
-  );
+  const confirmedOrders = days.reduce((total, day) => total + (day.confirmedOrders || 0), 0);
   const fbPurchases = days.reduce((total, day) => total + (day.fbPurchases || 0), 0);
   const linkClicks = days.reduce((total, day) => total + (day.linkClicks || 0), 0);
-  const landingPageViews = days.reduce(
-    (total, day) => total + (day.landingPageViews || 0),
-    0,
-  );
+  const landingPageViews = days.reduce((total, day) => total + (day.landingPageViews || 0), 0);
   const operatingCostDzd =
     startDate && endDate ? operatingCostBetween(startDate, endDate, costs) : 0;
   const beforeReturnsProfitX = ratioAdCostDzd > 0 ? grossProfitDzd / ratioAdCostDzd : null;

@@ -98,6 +98,17 @@ export function canonicalSearchPath(value: string) {
   }
 }
 
+export function searchPageLabel(value: string) {
+  try {
+    const pathname = new URL(value, 'https://bricomaitre.com').pathname;
+    const locale = pathname.match(/^\/(fr|ar|en)(?=\/|$)/)?.[1];
+    const path = canonicalSearchPath(value);
+    return locale ? `${path} · ${locale.toUpperCase()}` : path;
+  } catch {
+    return value;
+  }
+}
+
 export function isBrandedSearchQuery(query: string) {
   return /(?:brico\s*ma[iî]tre|bricomaitre|بريكو\s*ماستر)/iu.test(query);
 }
@@ -485,6 +496,7 @@ export async function loadSearchAnalytics(db: Database, filters: SearchAnalytics
   const pages = pageRows.map((row) => ({
     page: row.key,
     path: canonicalSearchPath(row.key),
+    label: searchPageLabel(row.key),
     clicks: row.clicks,
     impressions: row.impressions,
     ctrPct: ratio(row.clicks, row.impressions),

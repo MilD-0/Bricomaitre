@@ -1,15 +1,19 @@
 import { NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getSettingsMock, updateSettingsMock, refreshFactsMock, requireOpsMock, requireMutationMock } = vi.hoisted(
-  () => ({
-    getSettingsMock: vi.fn(),
-    updateSettingsMock: vi.fn(),
-    refreshFactsMock: vi.fn(),
-    requireOpsMock: vi.fn(),
-    requireMutationMock: vi.fn(),
-  }),
-);
+const {
+  getSettingsMock,
+  updateSettingsMock,
+  refreshFactsMock,
+  requireOpsMock,
+  requireMutationMock,
+} = vi.hoisted(() => ({
+  getSettingsMock: vi.fn(),
+  updateSettingsMock: vi.fn(),
+  refreshFactsMock: vi.fn(),
+  requireOpsMock: vi.fn(),
+  requireMutationMock: vi.fn(),
+}));
 
 vi.mock('../../../../../lib/analytics2-facts', () => ({
   refreshAnalytics2FactsAfterMutation: refreshFactsMock,

@@ -1,6 +1,6 @@
 import type { Analytics2View } from './analytics2';
 
-export const statsPaths: Record<Analytics2View, string> = {
+const statsPaths: Record<Analytics2View, string> = {
   command: '/stats',
   money: '/stats/time',
   acquisition: '/stats/meta-ads',
@@ -15,7 +15,7 @@ export function statsPath(view: Analytics2View) {
   return statsPaths[view];
 }
 
-export function statsRouteQuery(source: Record<string, string | string[] | undefined>) {
+function statsRouteQuery(source: Record<string, string | string[] | undefined>) {
   const target = new URLSearchParams();
   const range = source.range;
   if (typeof range === 'string') target.set('range', range);

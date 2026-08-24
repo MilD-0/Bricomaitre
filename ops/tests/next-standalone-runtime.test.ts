@@ -53,9 +53,7 @@ describe('Next standalone dependency hydration', () => {
         readFileSync(join(workspaceRoot, 'apps', app, 'package.json'), 'utf8'),
       ) as { scripts?: { start?: string } };
 
-      expect(packageJson.scripts?.start).toContain(
-        `hydrate-next-standalone.sh apps/${app}`,
-      );
+      expect(packageJson.scripts?.start).toContain(`hydrate-next-standalone.sh apps/${app}`);
       expect(packageJson.scripts?.start).toContain('start-next-standalone.mjs');
     },
   );

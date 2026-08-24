@@ -2,6 +2,14 @@ import { and, asc, count, desc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { getDb } from '@bric/db/client';
+import {
+  EcotrackRateLimitError,
+  requestEcotrack as requestSharedEcotrack,
+  type EcotrackExtendedRateLimitSnapshot,
+  type EcotrackRateLimitSnapshot,
+  type EcotrackRequestOptions,
+  type EcotrackRequestResult,
+} from '@bric/storefront-core/ecotrack-client';
 import { updateCanonicalOrder } from '@bric/storefront-core/order-write';
 import {
   ecotrackCommunes,
@@ -195,26 +203,6 @@ const ECOTRACK_PLACEHOLDER_ADDRESS = 'Adresse non renseignee';
 export type EcotrackServiceType = (typeof ecotrackServiceTypes)[number];
 type EcotrackWeightServiceType = (typeof ecotrackWeightServiceTypes)[number];
 
-type EcotrackRateLimitSnapshot = {
-  path: string;
-  limit: number | null;
-  remaining: number | null;
-  reset: number | null;
-};
-
-export type EcotrackExtendedRateLimitSnapshot = EcotrackRateLimitSnapshot & {
-  minuteLimit: number | null;
-  minuteRemaining: number | null;
-  minuteReset: number | null;
-  hourLimit: number | null;
-  hourRemaining: number | null;
-  hourReset: number | null;
-  dayLimit: number | null;
-  dayRemaining: number | null;
-  dayReset: number | null;
-  retryAfterSeconds: number | null;
-};
-
 export type EcotrackCatalogSnapshot = {
   wilayas: Array<{
     wilayaId: number;
@@ -349,33 +337,6 @@ type EcotrackPreviewResult = {
   invalid: EcotrackOrderInvalidItem[];
 };
 
-type EcotrackRequestResult = {
-  payload: unknown;
-  text: string;
-  rateLimit: EcotrackExtendedRateLimitSnapshot;
-};
-
-type EcotrackRequestOptions = {
-  path: string;
-  method?: 'GET' | 'POST';
-  query?: Record<string, string | number | null | undefined>;
-  json?: unknown;
-  fetchImpl: typeof fetch;
-  env: NodeJS.ProcessEnv;
-};
-
-class EcotrackRateLimitError extends Error {
-  status: number;
-  rateLimit: EcotrackExtendedRateLimitSnapshot;
-
-  constructor(message: string, rateLimit: EcotrackExtendedRateLimitSnapshot, status = 429) {
-    super(message);
-    this.name = 'EcotrackRateLimitError';
-    this.status = status;
-    this.rateLimit = rateLimit;
-  }
-}
-
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -388,60 +349,11 @@ function chunkArray<T>(items: T[], size: number) {
   return chunks;
 }
 
-export function cleanEcotrackEnvValue(value: string | undefined | null) {
-  return String(value ?? '')
-    .trim()
-    .replace(/^['"\s]+/, '')
-    .replace(/['",\s]+$/, '');
-}
-
-export function getEcotrackConfig(env: NodeJS.ProcessEnv = process.env) {
-  const baseUrl = cleanEcotrackEnvValue(env.ECOTRACK_BASE_URL).replace(/\/$/, '');
-  const token = cleanEcotrackEnvValue(env.ECOTRACK_TOKEN);
-
-  if (!baseUrl) {
-    throw new Error('ECOTRACK_BASE_URL is not configured.');
-  }
-
-  if (!token) {
-    throw new Error('ECOTRACK_TOKEN is not configured.');
-  }
-
-  return { baseUrl, token };
-}
-
-function parseRateLimit(headers: Headers, path: string): EcotrackExtendedRateLimitSnapshot {
-  const readNumber = (headerName: string) => {
-    const value = headers.get(headerName);
-    if (!value) return null;
-    const parsed = Number.parseInt(value, 10);
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
-  const minuteLimit = readNumber('x-ratelimit-limit') ?? readNumber('x-ratelimit-limit-minute');
-  const minuteRemaining =
-    readNumber('x-ratelimit-remaining') ??
-    readNumber('x-ratelimit-remaining-minute') ??
-    readNumber('x-ratelimit-limit-remaining');
-  const minuteReset = readNumber('x-ratelimit-reset') ?? readNumber('x-ratelimit-reset-minute');
-
-  return {
-    path,
-    limit: minuteLimit,
-    remaining: minuteRemaining,
-    reset: minuteReset,
-    minuteLimit,
-    minuteRemaining,
-    minuteReset,
-    hourLimit: readNumber('x-ratelimit-limit-hour'),
-    hourRemaining: readNumber('x-ratelimit-remaining-hour'),
-    hourReset: readNumber('x-ratelimit-reset-hour'),
-    dayLimit: readNumber('x-ratelimit-limit-day'),
-    dayRemaining: readNumber('x-ratelimit-remaining-day'),
-    dayReset: readNumber('x-ratelimit-reset-day'),
-    retryAfterSeconds: readNumber('retry-after'),
-  };
-}
+export {
+  cleanEcotrackEnvValue,
+  getEcotrackConfig,
+  type EcotrackExtendedRateLimitSnapshot,
+} from '@bric/storefront-core/ecotrack-client';
 
 function normalizeEcotrackText(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
@@ -554,59 +466,9 @@ async function applyEcotrackRateLimitBackoff(rateLimit: EcotrackExtendedRateLimi
 }
 
 async function requestEcotrack(options: EcotrackRequestOptions): Promise<EcotrackRequestResult> {
-  const { baseUrl, token } = getEcotrackConfig(options.env);
-  const url = new URL(`${baseUrl}${options.path}`);
-  url.searchParams.set('api_token', token);
-
-  for (const [key, value] of Object.entries(options.query ?? {})) {
-    if (value !== null && value !== undefined && String(value).trim() !== '') {
-      url.searchParams.set(key, String(value));
-    }
-  }
-
-  const headers: HeadersInit = {
-    Accept: 'application/json, text/plain;q=0.9',
-  };
-  let body: string | undefined;
-
-  if (options.json !== undefined) {
-    headers['Content-Type'] = 'application/json';
-    body = JSON.stringify(options.json);
-  }
-
-  const response = await options.fetchImpl(url, {
-    method: options.method ?? 'GET',
-    headers,
-    body,
-  });
-  const text = await response.text();
-  const rateLimit = parseRateLimit(response.headers, options.path);
-
-  if (response.status === 429) {
-    throw new EcotrackRateLimitError(
-      `ECOTRACK rate limit exceeded for ${options.path}.`,
-      rateLimit,
-      429,
-    );
-  }
-
-  let payload: unknown = text;
-
-  try {
-    payload = text ? JSON.parse(text) : null;
-  } catch {
-    payload = text;
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      `ECOTRACK request failed for ${options.path}: ${response.status} ${text.slice(0, 200)}`,
-    );
-  }
-
-  await applyEcotrackRateLimitBackoff(rateLimit);
-
-  return { payload, text, rateLimit };
+  const result = await requestSharedEcotrack({ ...options, respectGlobalLimiter: false });
+  await applyEcotrackRateLimitBackoff(result.rateLimit);
+  return result;
 }
 
 async function requestEcotrackJson<T>(
@@ -615,35 +477,20 @@ async function requestEcotrackJson<T>(
   fetchImpl: typeof fetch,
   env: NodeJS.ProcessEnv,
 ) {
-  const { baseUrl, token } = getEcotrackConfig(env);
-  const url = new URL(`${baseUrl}${path}`);
-  url.searchParams.set('api_token', token);
-
-  const response = await fetchImpl(url, {
-    headers: {
-      Accept: 'application/json',
-    },
+  const result = await requestSharedEcotrack({
+    path,
+    fetchImpl,
+    env,
+    accept: 'application/json',
+    respectGlobalLimiter: false,
   });
-
-  const text = await response.text();
-
-  if (!response.ok) {
-    throw new Error(
-      `ECOTRACK request failed for ${path}: ${response.status} ${text.slice(0, 200)}`,
-    );
-  }
-
-  let payload: unknown;
-
-  try {
-    payload = JSON.parse(text);
-  } catch {
+  if (typeof result.payload === 'string') {
     throw new Error(`ECOTRACK request returned invalid JSON for ${path}.`);
   }
 
   return {
-    data: schema.parse(payload),
-    rateLimit: parseRateLimit(response.headers, path),
+    data: schema.parse(result.payload),
+    rateLimit: result.rateLimit,
   };
 }
 

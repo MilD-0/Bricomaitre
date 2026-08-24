@@ -6,10 +6,6 @@ import { Card } from '../ui/card';
 import type { ChartConfig } from '../ui/chart';
 import { Skeleton } from '../ui/skeleton';
 
-export const revenueBreakdownConfig = {
-  value: { label: 'Value', color: 'hsl(var(--chart-1))' },
-} satisfies ChartConfig;
-
 export const feeBreakdownConfig = {
   livraison: { label: 'Delivery', color: 'hsl(var(--chart-1))' },
   commission: { label: 'Commission', color: 'hsl(var(--chart-2))' },
@@ -44,19 +40,6 @@ export const geographyAverageConfig = {
 
 export const timeOrdersConfig = {
   orders: { label: 'Orders', color: 'hsl(var(--chart-1))' },
-} satisfies ChartConfig;
-
-export const timeRevenueConfig = {
-  revenue: { label: 'Revenue', color: 'hsl(var(--chart-1))' },
-  profit: { label: 'Profit', color: 'hsl(var(--chart-2))' },
-  fees: { label: 'Fees', color: 'hsl(var(--chart-4))' },
-} satisfies ChartConfig;
-
-export const importTrendConfig = {
-  revenue: { label: 'Revenue', color: 'hsl(var(--chart-1))' },
-  profit: { label: 'Profit', color: 'hsl(var(--chart-2))' },
-  fees: { label: 'Fees', color: 'hsl(var(--chart-4))' },
-  orders: { label: 'Orders', color: 'hsl(var(--chart-5))' },
 } satisfies ChartConfig;
 
 export function formatCurrency(locale: string, value: number) {

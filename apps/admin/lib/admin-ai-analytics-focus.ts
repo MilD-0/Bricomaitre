@@ -7,7 +7,7 @@ import type {
   Analytics2View,
 } from './analytics2';
 
-export const adminAiAnalyticsFocusDimensions = [
+const adminAiAnalyticsFocusDimensions = [
   'economics_timeline',
   'paid_timeline',
   'cash_pipeline',
@@ -259,6 +259,7 @@ const fieldDefinitions: Record<string, string> = {
   profitCoveragePct: 'Share of contribution rows backed by sufficient exact cost inputs.',
   projectedCoveragePct:
     'Share of projected economics backed by exact immutable purchase-cost snapshots.',
+  p75: '75th-percentile field measurement; this is not an arithmetic average.',
   providerAmountCoveragePct: 'Share of orders whose amount comes directly from EcoTrack.',
   providerAmountValueCoveragePct:
     'Share of DZD value sourced directly from EcoTrack rather than a fallback.',
@@ -821,7 +822,7 @@ export const adminAiAnalyticsDatasetSpecs: Record<AdminAiAnalyticsFocusDimension
   storefront_funnel: {
     views: ['storefront'],
     paths: { storefront: ['funnel'] },
-    effectiveRangeKey: 'storefront',
+    effectiveRangeKey: 'storefront_funnel',
     definition:
       'Distinct-session Storefront funnel from sessions through submitted-order sessions.',
     dateBasis: 'First-party Storefront session date over the retained detailed-telemetry range.',

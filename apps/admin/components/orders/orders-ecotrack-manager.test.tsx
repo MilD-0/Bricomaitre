@@ -263,6 +263,12 @@ describe('OrdersEcotrackManager', () => {
         }),
       ).toBeInTheDocument();
       expect(screen.getAllByText('TRK-11').length).toBeGreaterThan(0);
+      if (presentation === 2) {
+        expect(screen.getByRole('region', { name: 'nav.ecotrackShipments' })).toHaveAttribute(
+          'tabindex',
+          '0',
+        );
+      }
     },
   );
 
@@ -302,6 +308,11 @@ describe('OrdersEcotrackManager', () => {
     expect(view.container.querySelector('[data-mobile-ecotrack-controls]')).toHaveClass(
       'grid-cols-[minmax(0,1fr)_auto]',
     );
+    expect(
+      screen.getByRole('button', {
+        name: 'ordersEcotrackManager.actions.scanTrackingNumber',
+      }),
+    ).toBeInTheDocument();
     const filters = screen.getByRole('button', {
       name: 'ordersEcotrackManager.filters.sortKeyLabel',
     });

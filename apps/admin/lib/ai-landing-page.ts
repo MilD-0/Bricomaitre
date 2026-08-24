@@ -31,7 +31,7 @@ import { z } from 'zod';
 import { buildDefaultLandingPageDocument } from './landing-pages';
 
 export const LANDING_PAGE_PROMPT_VERSION = 'landing-page-v3-staged';
-export const LANDING_PAGE_MODEL_TIMEOUT_MS = 120_000;
+const LANDING_PAGE_MODEL_TIMEOUT_MS = 120_000;
 const LANDING_PAGE_STAGE_ATTEMPTS = 2;
 
 export const LANDING_PAGE_GENERATION_INSTRUCTIONS = [

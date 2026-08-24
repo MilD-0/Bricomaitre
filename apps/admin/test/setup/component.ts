@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { configure } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, vi } from 'vitest';
 
 import { server } from '../mocks/server';
@@ -37,6 +37,10 @@ Object.defineProperty(globalThis, 'localStorage', {
   configurable: true,
   value: storage,
 });
+Object.defineProperty(window, 'scrollTo', {
+  configurable: true,
+  value: vi.fn(),
+});
 
 if (!window.matchMedia) {
   Object.defineProperty(window, 'matchMedia', {
@@ -59,6 +63,7 @@ beforeAll(() => {
 });
 
 afterEach(() => {
+  cleanup();
   server.resetHandlers();
   vi.restoreAllMocks();
 });

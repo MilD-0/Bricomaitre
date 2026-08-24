@@ -1,6 +1,6 @@
 'use client';
 
-import { ExternalLink, Plus, Search } from 'lucide-react';
+import { ExternalLink, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
@@ -10,6 +10,7 @@ import { requestJson } from '../../lib/admin-api';
 import { toast } from '../../lib/toast';
 import { AdminAiAskButton } from '../admin-ai-ask-button';
 import { Button } from '../ui/button';
+import { SearchField } from '../search-field';
 import {
   Dialog,
   DialogContent,
@@ -18,7 +19,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
-import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
 import {
   WorkspaceActions,
@@ -141,16 +141,13 @@ export function LandingPageIndex({
       </WorkspaceNavigation>
 
       <WorkspaceToolbar>
-        <div className="relative max-w-xl">
-          <Search className="pointer-events-none absolute start-3 top-3 size-4 text-muted-foreground" />
-          <Input
-            aria-label={t.search}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={t.search}
-            className="ps-9"
-          />
-        </div>
+        <SearchField
+          value={query}
+          label={t.search}
+          placeholder={t.search}
+          className="max-w-xl"
+          onChange={setQuery}
+        />
       </WorkspaceToolbar>
 
       <div className="divide-y divide-border/60 border-b border-border/60">
@@ -162,7 +159,7 @@ export function LandingPageIndex({
             <div className="min-w-0">
               <Link
                 href={`/${adminLocale}/assets/landing-pages/${item.id}`}
-                className="truncate text-sm font-medium hover:text-primary sm:text-base"
+                className="block max-w-full truncate text-sm font-medium hover:text-primary sm:text-base"
               >
                 {item.productTitle}
               </Link>

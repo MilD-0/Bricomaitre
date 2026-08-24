@@ -35,9 +35,13 @@ vi.mock('next/link', () => ({
     },
   ) => {
     const { children, href, className, prefetch, ...props } = linkProps;
-    void prefetch;
     return (
-      <a href={href} className={className} {...props}>
+      <a
+        href={href}
+        className={className}
+        data-prefetch={prefetch === false ? 'false' : 'true'}
+        {...props}
+      >
         {children}
       </a>
     );
@@ -122,6 +126,8 @@ describe('AppShell', () => {
       if (key === 'nav.statsAcquisition') return 'Acquisition';
       if (key === 'nav.statsFulfillment') return 'Fulfillment';
       if (key === 'nav.statsStorefront') return 'Storefront';
+      if (key === 'nav.statsAiOperations') return 'AI operations';
+      if (key === 'nav.statsShoppingAssistant') return 'Shopping assistant';
       if (key === 'nav.statsSearch') return 'Search visibility';
       if (key === 'nav.statsCatalog') return 'Catalog';
       if (key === 'nav.statsAssumptions') return 'Costs & assumptions';
@@ -144,10 +150,12 @@ describe('AppShell', () => {
         <div>child</div>
       </AppShell>,
     );
-    expect(screen.getByRole('link', { name: 'Acquisition' })).toHaveAttribute(
+    const acquisitionLink = screen.getByRole('link', { name: 'Acquisition' });
+    expect(acquisitionLink).toHaveAttribute(
       'href',
       '/en/stats/meta-ads?range=custom&startDate=2026-08-01&endDate=2026-08-15&grain=week',
     );
+    expect(acquisitionLink).toHaveAttribute('data-prefetch', 'false');
   });
 
   it('uses a flat desktop navigation rail with a compact collapsed state', async () => {
@@ -338,6 +346,14 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: 'Fulfillment' })).toHaveAttribute(
       'href',
       '/en/stats/fulfillment',
+    );
+    expect(screen.getByRole('link', { name: 'AI operations' })).toHaveAttribute(
+      'href',
+      '/en/stats/ai-assistants',
+    );
+    expect(screen.getByRole('link', { name: 'Shopping assistant' })).toHaveAttribute(
+      'href',
+      '/en/stats/shopping-assistant',
     );
     expect(screen.getByRole('link', { name: 'Search visibility' })).toHaveAttribute(
       'href',

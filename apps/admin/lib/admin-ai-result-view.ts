@@ -25,7 +25,7 @@ export function isAdminAiScalar(value: unknown): value is string | number | bool
   return value === null || ['string', 'number', 'boolean'].includes(typeof value);
 }
 
-export function isAdminAiDisplayValue(value: unknown): value is AdminAiDisplayValue {
+function isAdminAiDisplayValue(value: unknown): value is AdminAiDisplayValue {
   return isAdminAiScalar(value) || (Array.isArray(value) && value.every(isAdminAiScalar));
 }
 

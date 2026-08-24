@@ -230,6 +230,7 @@ export type StatsDashboardData = {
   metaAds: {
     events: MetaTrackedEventSummary[];
     recentPayloads: MetaTrackedEventLog[];
+    trackingAvailable?: boolean;
     paidAttribution: MetaPaidAttributionStats;
     commerce: MetaCommerceReport;
     health?: {
@@ -1501,6 +1502,7 @@ function emptyDashboard(filters: Required<StatsFilters>): StatsDashboardData {
     metaAds: {
       events: [],
       recentPayloads: [],
+      trackingAvailable: false,
       paidAttribution: experience.metaPaidAttribution,
       commerce: emptyMetaCommerceReport(),
     },
@@ -1538,6 +1540,14 @@ function emptyDashboard(filters: Required<StatsFilters>): StatsDashboardData {
     aiAssistants: experience.aiAssistants,
     customers: experience.customers,
   };
+}
+
+export async function optionalAnalyticsDiagnostic<T>(promise: Promise<T>) {
+  try {
+    return { available: true as const, data: await promise };
+  } catch {
+    return { available: false as const, data: null };
+  }
 }
 
 export function normalizeStatsDashboardData(
@@ -1622,7 +1632,7 @@ async function computeStatsDashboard(input: StatsFilters) {
     analyticsRollupWhere,
     filters,
   );
-  const metaAdsTrackingPromise = getMetaAdsTrackingData(db, filters);
+  const metaAdsTrackingPromise = optionalAnalyticsDiagnostic(getMetaAdsTrackingData(db, filters));
   const experienceStatsPromise = getExperienceStats(db, filters);
 
   const [
@@ -1768,11 +1778,10 @@ async function computeStatsDashboard(input: StatsFilters) {
   ]);
   const { websiteSummaryRows, websiteSearchRows, websiteTopProductRows, websiteMetricRows } =
     await websiteAnalyticsPromise;
-  const {
-    eventRows: metaEventRows,
-    payloadRows: metaPayloadRows,
-    health: metaHealth,
-  } = await metaAdsTrackingPromise;
+  const metaTrackingResult = await metaAdsTrackingPromise;
+  const metaEventRows = metaTrackingResult.data?.eventRows ?? [];
+  const metaPayloadRows = metaTrackingResult.data?.payloadRows ?? [];
+  const metaHealth = metaTrackingResult.data?.health;
   const experience = await experienceStatsPromise;
 
   const summaryRow = summaryRows[0];
@@ -1845,6 +1854,7 @@ async function computeStatsDashboard(input: StatsFilters) {
     totalOrders,
   );
   const metaAds = {
+    trackingAvailable: metaTrackingResult.available,
     events: metaEventRows.map((row) => ({
       name: row.name,
       total: row.total,
@@ -2281,8 +2291,8 @@ export async function getStatsDashboardSection(
     } satisfies StatsDashboardData;
   }
 
-  const [tracking, paidAttribution, commerce] = await Promise.all([
-    getMetaAdsTrackingData(db, filters),
+  const [trackingResult, paidAttribution, commerce] = await Promise.all([
+    optionalAnalyticsDiagnostic(getMetaAdsTrackingData(db, filters)),
     getMetaPaidAttributionData(db, filters),
     getMetaCommerceReport(db, filters, false),
   ]);
@@ -2290,7 +2300,8 @@ export async function getStatsDashboardSection(
   return {
     ...dashboard,
     metaAds: {
-      events: tracking.eventRows.map((row) => ({
+      trackingAvailable: trackingResult.available,
+      events: (trackingResult.data?.eventRows ?? []).map((row) => ({
         name: row.name,
         total: row.total,
         pixelFired: row.pixelFired,
@@ -2299,7 +2310,7 @@ export async function getStatsDashboardSection(
         capiFailed: row.capiFailed,
         lastOccurredAt: toIsoDateString(row.lastOccurredAt),
       })),
-      recentPayloads: tracking.payloadRows.map((row) => ({
+      recentPayloads: (trackingResult.data?.payloadRows ?? []).map((row) => ({
         eventId: row.eventId,
         analyticsEventName: row.analyticsEventName,
         metaEventName: row.metaEventName,
@@ -2310,7 +2321,7 @@ export async function getStatsDashboardSection(
         capiStatus: row.capiStatus,
         capiOk: row.capiOk,
       })),
-      health: tracking.health,
+      health: trackingResult.data?.health,
       paidAttribution,
       commerce,
     },

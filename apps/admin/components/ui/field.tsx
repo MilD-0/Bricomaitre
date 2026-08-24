@@ -6,13 +6,6 @@ export function FieldGroup({ className, ...props }: React.HTMLAttributes<HTMLDiv
   return <div className={cn('flex flex-col gap-4', className)} {...props} />;
 }
 
-export function FieldSet({
-  className,
-  ...props
-}: React.FieldsetHTMLAttributes<HTMLFieldSetElement>) {
-  return <fieldset className={cn('flex flex-col gap-4', className)} {...props} />;
-}
-
 export function Field({
   className,
   orientation = 'vertical',
@@ -52,18 +45,6 @@ export function FieldDescription({
 
 export function FieldError({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
   return <p className={cn('text-xs text-destructive', className)} {...props} />;
-}
-
-export function FieldLegend({ className, ...props }: React.HTMLAttributes<HTMLElement>) {
-  return (
-    <legend
-      className={cn(
-        'text-[0.75rem] font-semibold uppercase tracking-[0.05em] text-muted-foreground',
-        className,
-      )}
-      {...props}
-    />
-  );
 }
 
 export function FieldContent({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {

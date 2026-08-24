@@ -27,7 +27,10 @@ describe('workspace chrome', () => {
     );
 
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole('heading', { name: 'Products' })).toHaveClass('sr-only', 'lg:not-sr-only');
+    expect(screen.getByRole('heading', { name: 'Products' })).toHaveClass(
+      'sr-only',
+      'lg:not-sr-only',
+    );
     expect(screen.getByText('24')).toHaveClass('tabular-nums');
     expect(screen.getByText('Catalog records')).toHaveClass('text-muted-foreground');
 
@@ -64,10 +67,11 @@ describe('workspace chrome', () => {
     );
 
     const actions = screen.getByText('Secondary').closest('[data-workspace-actions]');
-    expect(within(actions as HTMLElement).getAllByRole('button').map((button) => button.textContent)).toEqual([
-      'Secondary',
-      'Primary',
-    ]);
+    expect(
+      within(actions as HTMLElement)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['Secondary', 'Primary']);
 
     const navigation = screen.getByRole('navigation', { name: 'Workspace views' });
     expect(navigation).toHaveClass('overflow-x-auto', 'logical-nav');

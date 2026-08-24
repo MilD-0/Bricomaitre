@@ -264,8 +264,6 @@ export function adminAiAnalyticsQuerySchemaForPlan(plan: AdminAiAnalyticsQueryPl
     .strict();
 }
 
-export type AdminAiAnalyticsQuery = z.input<typeof adminAiAnalyticsQuerySchema>;
-
 export async function queryAdminAnalytics(raw: unknown) {
   const { focus, ...rawQuery } = adminAiAnalyticsQuerySchema.parse(raw);
   const query = analytics2QuerySchema.parse(rawQuery) as Analytics2Query;

@@ -1,7 +1,8 @@
 import { getTranslations } from 'next-intl/server';
 
+import { AiStatsRoutePage } from '../../../../../components/analytics2/ai-stats-route-page';
 import { StatsDashboard } from '../../../../../components/stats/stats-dashboard';
-import { redirectModernStatsAlias } from '../../../../../lib/analytics2-routes.server';
+import { readLegacyUiPreference } from '../../../../../lib/admin-ui-preference.server';
 
 export default async function StatsAiAssistantsPage({
   params,
@@ -11,7 +12,9 @@ export default async function StatsAiAssistantsPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { locale } = await params;
-  await redirectModernStatsAlias({ locale, searchParams, view: 'storefront' });
+  if (!(await readLegacyUiPreference())) {
+    return <AiStatsRoutePage locale={locale} searchParams={searchParams} surface="operations" />;
+  }
   const t = await getTranslations();
   return (
     <StatsDashboard

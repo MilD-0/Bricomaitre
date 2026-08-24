@@ -9,7 +9,7 @@ type AdminAiCapability = {
   anyPermissions?: PermissionKey[];
 };
 
-export const adminAiCapabilities: AdminAiCapability[] = [
+const adminAiCapabilities: AdminAiCapability[] = [
   {
     id: 'surface_help',
     description: 'Explain the current admin surface and the assistant actions actually available.',

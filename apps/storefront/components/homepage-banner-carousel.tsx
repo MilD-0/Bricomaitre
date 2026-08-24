@@ -68,7 +68,7 @@ function ProgressiveBannerImage({
       <picture>
         <source
           media="(max-width: 620px)"
-          srcSet={portraitProps.srcSet}
+          srcSet={portraitProps.srcSet ?? portraitProps.src}
           sizes={portraitProps.sizes}
         />
         <img {...landscapeProps} alt={alt} ref={imageRef} onLoad={markReady} />

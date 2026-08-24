@@ -218,9 +218,9 @@ export const ecotrackOrderActivities = adminSchema.table(
   (t) => [
     uniqueIndex('ecotrack_order_activities_source_unique').on(t.orderId, t.sourceKey),
     index('idx_ecotrack_order_activities_order_time').on(t.orderId, t.effectiveAt.desc()),
-    index('idx_ecotrack_order_activities_postponed').on(t.postponedTo).where(
-      sql`${t.postponedTo} is not null`,
-    ),
+    index('idx_ecotrack_order_activities_postponed')
+      .on(t.postponedTo)
+      .where(sql`${t.postponedTo} is not null`),
   ],
 );
 

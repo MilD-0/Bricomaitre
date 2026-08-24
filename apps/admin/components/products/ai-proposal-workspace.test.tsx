@@ -148,7 +148,9 @@ describe('AI proposal review workspace preview', () => {
     expect(view.container.querySelectorAll('[data-workspace-toolbar]')).toHaveLength(1);
     expect(screen.getByText('42 proposals')).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Proposal type' })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    const filters = screen.getByRole('button', { name: 'Filters' });
+    expect(filters).toHaveAttribute('aria-label', 'Filters');
+    await userEvent.click(filters);
 
     expect(screen.getByRole('combobox', { name: 'Proposal type' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Entity type' })).toBeInTheDocument();
