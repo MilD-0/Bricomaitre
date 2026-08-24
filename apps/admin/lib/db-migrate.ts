@@ -118,11 +118,6 @@ export async function runDbMigrations(
   });
 
   const commercialBackfill = await backfillOrderCommercialSnapshots(db);
-  if (commercialBackfill.unresolvedOrderIds.length > 0) {
-    throw new Error(
-      `Order commercial snapshot backfill could not resolve every product for orders: ${commercialBackfill.unresolvedOrderIds.join(', ')}. Restore or correct those catalog references, then rerun migrations before deploying the application.`,
-    );
-  }
   const phoneBackfill = await backfillOrderNormalizedPhones(db);
 
   return {

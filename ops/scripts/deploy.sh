@@ -210,6 +210,11 @@ if ! bash "$script_dir/wait-for-health.sh" "$worker_service"; then
   exit 1
 fi
 
+# Rebuild all persisted reporting views with the candidate schema and code
+# before the release becomes visible. This keeps new fact tables and changed
+# semantics from serving an empty or stale first response after cutover.
+"$script_dir/refresh-release-reporting.sh" "$target_slot"
+
 routing_changed=true
 render_nginx_config "$target_slot"
 stage_nginx_main_config

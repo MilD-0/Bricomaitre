@@ -5,16 +5,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AiStatsPayload } from '../../lib/ai-stats';
 import { AiStatsWorkspace } from './ai-stats-workspace';
 
-const { replaceMock, requestMock } = vi.hoisted(() => ({
+const { replaceMock, requestMock, searchParamsState } = vi.hoisted(() => ({
   replaceMock: vi.fn(),
   requestMock: vi.fn(),
+  searchParamsState: { current: 'range=30d&grain=auto' },
 }));
 
 vi.mock('next-intl', () => ({ useLocale: () => 'en' }));
 vi.mock('next/navigation', () => ({
   usePathname: () => '/en/stats/ai-assistants',
   useRouter: () => ({ replace: replaceMock }),
-  useSearchParams: () => new URLSearchParams('range=30d&grain=auto'),
+  useSearchParams: () => new URLSearchParams(searchParamsState.current),
 }));
 vi.mock('../../lib/admin-api', () => ({ requestJson: requestMock }));
 
@@ -210,7 +211,16 @@ describe('AiStatsWorkspace', () => {
   afterEach(() => cleanup());
 
   beforeEach(() => {
+    searchParamsState.current = 'range=30d&grain=auto';
     vi.clearAllMocks();
+  });
+
+  it('keeps the clean default route without starting a duplicate server render', () => {
+    searchParamsState.current = '';
+    renderWorkspace(operationsPayload());
+
+    expect(requestMock).not.toHaveBeenCalled();
+    expect(replaceMock).not.toHaveBeenCalled();
   });
 
   it('separates interactive assistant work from batch work and leaves unrated quality unavailable', () => {

@@ -524,10 +524,13 @@ export function AiStatsWorkspace({ initialData }: { initialData: AiStatsPayload 
         filters.endDate === initialData.filters.endDate));
 
   useEffect(() => {
+    const currentQuery = searchParams.toString();
+    const usesDefaultFilters = filters.range === '30d' && filters.grain === 'auto';
+    if (!currentQuery && usesDefaultFilters) return;
     const normalized = routeSearchParams.toString();
-    if (searchParams.toString() === normalized) return;
+    if (currentQuery === normalized) return;
     router.replace(`${pathname}?${normalized}`, { scroll: false });
-  }, [pathname, routeSearchParams, router, searchParams]);
+  }, [filters.grain, filters.range, pathname, routeSearchParams, router, searchParams]);
 
   const query = useQuery({
     queryKey: [

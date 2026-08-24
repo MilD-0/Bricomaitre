@@ -62,7 +62,10 @@ const nextConfig: NextConfig = {
     // images. Each blue/green slot has its own persistent cache, so bound each
     // copy and let Next evict least-recently-used variants.
     maximumDiskCacheSize: 512_000_000,
-    maximumResponseBody: 10_000_000,
+    // Match the admin upload contract exactly. The previous decimal 10 MB
+    // ceiling rejected otherwise-valid uploads between 10,000,000 bytes and
+    // the documented 10 MiB per-file limit.
+    maximumResponseBody: 10 * 1024 * 1024,
     maximumRedirects: 0,
     remotePatterns: getStorefrontRemoteImagePatterns(),
   },

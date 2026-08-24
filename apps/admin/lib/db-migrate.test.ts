@@ -82,7 +82,7 @@ describe('lib/db-migrate', () => {
     expect(phoneBackfillMock).toHaveBeenCalledWith(db);
   });
 
-  it('stops release progression when a legacy order cannot be snapshotted completely', async () => {
+  it('preserves unresolved historical carts and continues independent legacy backfills', async () => {
     const db = {
       execute: vi
         .fn()
@@ -95,7 +95,15 @@ describe('lib/db-migrate', () => {
       unresolvedOrderIds: [44],
     });
 
-    await expect(runDbMigrations(db, { cwd: '/workspace/app' })).rejects.toThrow('orders: 44');
+    await expect(runDbMigrations(db, { cwd: '/workspace/app' })).resolves.toMatchObject({
+      commercialBackfill: {
+        scanned: 2,
+        backfilled: 1,
+        unresolvedOrderIds: [44],
+      },
+      phoneBackfill: { scanned: 0, backfilled: 0, invalidOrderIds: [] },
+    });
+    expect(phoneBackfillMock).toHaveBeenCalledWith(db);
   });
 
   it('normalizes duplicate identifier evidence from the existing catalog', async () => {
