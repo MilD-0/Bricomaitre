@@ -133,7 +133,7 @@ const productSortKeyValues = [
   'createdAt',
 ] as const;
 const sortDirectionValues = ['asc', 'desc'] as const;
-export const imageOriginFilterValues = ['all', 'external'] as const;
+const imageOriginFilterValues = ['all', 'external'] as const;
 const productStateFilterValues = ['all', 'active', 'inactive', 'out'] as const;
 
 const optionalNumericFilter = z

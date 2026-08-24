@@ -2,14 +2,11 @@ import { and, asc, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm'
 
 import { getDb, hasDb } from '@bric/db/client';
 import {
-  adCosts,
   ecotrackOrderMajEntries,
   ecotrackOrderStates,
   ecotrackOrderTrackingEvents,
-  orderLineItems,
   orderStatusHistory,
   orders,
-  products,
 } from '@bric/db/schema';
 import {
   coerceNoAnswerCount,
@@ -20,11 +17,7 @@ import {
   type OrderStatusHistoryRecord,
 } from './orders';
 import { getOrderProductLookup, toOrderRecord } from './order-records';
-import {
-  buildCartProductLookup,
-  collectCartProductReferenceBuckets,
-  getCartProductLookupKey,
-} from './order-product-references';
+import { getCanonicalOrderProjectionDays } from './profit-tracker';
 import type {
   DailyOrderStatusOverview,
   DailyOrderStatusReport,
@@ -44,26 +37,8 @@ type OrdersQueryInput = {
   sortDirection?: string | undefined;
 };
 
-type ProjectionOrderRow = {
-  id: number;
-  cartProducts: string[];
-};
-
-type ProjectionProductRow = {
-  id: number;
-  mongoId: string | null;
-  price: unknown;
-  purchasePrice: unknown;
-};
-
 const DAILY_ORDER_STATUS_TIMEZONE = 'Africa/Algiers';
 const ECOTRACK_SYNC_ACTOR_NAME = 'ECOTRACK sync';
-const NEGATIVE_OUTCOME_STATUSES = [8, 9] as const;
-
-const PROFIT_PROJECTION_STATUS: Record<ProfitProjectionBasis, number> = {
-  confirmed: 2,
-  posted: 11,
-};
 
 function getOrderBy(sortRules: OrderSortRule[]) {
   const orderBy = sortRules.flatMap((rule) => {
@@ -115,28 +90,6 @@ function shiftIsoDate(value: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
-function getPreviousMonthRange(reportDay: string) {
-  const [yearPart, monthPart] = reportDay.split('-');
-  const year = Number(yearPart);
-  const monthIndex = Number(monthPart) - 1;
-  const start = new Date(Date.UTC(year, monthIndex - 1, 1));
-  const end = new Date(Date.UTC(year, monthIndex, 0));
-
-  return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
-  };
-}
-
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
-function numberOrZero(value: unknown) {
-  const parsed = typeof value === 'number' ? value : Number(value ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 async function readCount(db: ReturnType<typeof getDb>, query: ReturnType<typeof sql<number>>) {
   const result = await db.execute(query);
   const row = (result.rows?.[0] ?? {}) as { value?: number | string | bigint };
@@ -149,160 +102,14 @@ function reportDayPredicate(timestampExpression: ReturnType<typeof sql>, reportD
     and ${timestampExpression} < ((((${reportDay}::date + 1))::timestamp) at time zone ${DAILY_ORDER_STATUS_TIMEZONE})`;
 }
 
-function reportDateRangePredicate(
-  timestampExpression: ReturnType<typeof sql>,
-  startDate: string,
-  endDate: string,
-) {
-  return sql`${timestampExpression} >= ((${startDate}::date)::timestamp at time zone ${DAILY_ORDER_STATUS_TIMEZONE})
-    and ${timestampExpression} < ((((${endDate}::date + 1))::timestamp) at time zone ${DAILY_ORDER_STATUS_TIMEZONE})`;
-}
-
 function activeOrdersJoinPredicate() {
   return sql`true`;
-}
-
-function calculateCartGrossProfit(
-  orderRows: ProjectionOrderRow[],
-  productRows: ProjectionProductRow[],
-) {
-  const productLookup = buildCartProductLookup(productRows);
-
-  return orderRows.reduce((sum, order) => {
-    const orderProfit = (order.cartProducts ?? []).reduce((orderSum, rawProduct) => {
-      const lookupKey = getCartProductLookupKey(rawProduct);
-      const product = lookupKey ? productLookup.get(lookupKey) : null;
-
-      return (
-        orderSum + (product ? numberOrZero(product.price) - numberOrZero(product.purchasePrice) : 0)
-      );
-    }, 0);
-
-    return sum + orderProfit;
-  }, 0);
-}
-
-async function loadProfitProjection(
-  db: ReturnType<typeof getDb>,
-  reportDay: string,
-  basis: ProfitProjectionBasis,
-): Promise<DailyProfitProjection> {
-  const previousMonth = getPreviousMonthRange(reportDay);
-  const projectionStatus = PROFIT_PROJECTION_STATUS[basis];
-  const [orderRows, adSpendRows, previousMonthRows] = await Promise.all([
-    db
-      .selectDistinct({
-        id: orders.id,
-        cartProducts: orders.cartProducts,
-      })
-      .from(orderStatusHistory)
-      .innerJoin(orders, eq(orders.id, orderStatusHistory.orderId))
-      .where(
-        and(
-          eq(orderStatusHistory.status, projectionStatus),
-          reportDayPredicate(sql`${orderStatusHistory.changedAt}`, reportDay),
-        ),
-      ),
-    db
-      .select({
-        spend: sql<number>`coalesce(sum(${adCosts.spend})::double precision, 0)`,
-      })
-      .from(adCosts)
-      .where(eq(adCosts.date, reportDay)),
-    db
-      .select({
-        totalOrders: sql<number>`count(distinct ${orders.id})::int`,
-        negativeOutcomeOrders: sql<number>`count(distinct ${orders.id}) filter (where ${inArray(orders.confirmed, [...NEGATIVE_OUTCOME_STATUSES])})::int`,
-      })
-      .from(orderStatusHistory)
-      .innerJoin(orders, eq(orders.id, orderStatusHistory.orderId))
-      .where(
-        and(
-          eq(orderStatusHistory.status, projectionStatus),
-          reportDateRangePredicate(
-            sql`${orderStatusHistory.changedAt}`,
-            previousMonth.start,
-            previousMonth.end,
-          ),
-        ),
-      ),
-  ]);
-
-  const cartProductReferences = collectCartProductReferenceBuckets(orderRows);
-  const productRows =
-    cartProductReferences.productIds.length === 0 && cartProductReferences.mongoIds.length === 0
-      ? []
-      : await db
-          .select({
-            id: products.id,
-            mongoId: products.mongoId,
-            price: products.price,
-            purchasePrice: products.purchasePrice,
-          })
-          .from(products)
-          .where(
-            or(
-              ...(cartProductReferences.productIds.length > 0
-                ? [inArray(products.id, cartProductReferences.productIds)]
-                : []),
-              ...(cartProductReferences.mongoIds.length > 0
-                ? [inArray(products.mongoId, cartProductReferences.mongoIds)]
-                : []),
-            ),
-          );
-  const snapshotProfitRows =
-    orderRows.length === 0
-      ? []
-      : await db
-          .select({
-            orderId: orderLineItems.orderId,
-            grossProfit: sql<number>`coalesce(sum(${orderLineItems.lineTotal} - coalesce(${orderLineItems.unitPurchasePriceSnapshot}, 0) * ${orderLineItems.quantity}), 0)::double precision`,
-          })
-          .from(orderLineItems)
-          .where(
-            inArray(
-              orderLineItems.orderId,
-              orderRows.map((order) => order.id),
-            ),
-          )
-          .groupBy(orderLineItems.orderId);
-  const snapshotProfitByOrder = new Map(
-    snapshotProfitRows.map((row) => [row.orderId, numberOrZero(row.grossProfit)]),
-  );
-  const legacyRows = orderRows.filter((order) => !snapshotProfitByOrder.has(order.id));
-  const grossProfit =
-    [...snapshotProfitByOrder.values()].reduce((sum, value) => sum + value, 0) +
-    calculateCartGrossProfit(legacyRows, productRows);
-  const previousMonthStats = previousMonthRows[0];
-  const previousMonthOrders = previousMonthStats?.totalOrders ?? 0;
-  const previousMonthNegativeOutcomeOrders = previousMonthStats?.negativeOutcomeOrders ?? 0;
-  const estimatedReturnRate =
-    previousMonthOrders > 0 ? previousMonthNegativeOutcomeOrders / previousMonthOrders : 0;
-  const estimatedReturnedOrders = orderRows.length * estimatedReturnRate;
-  const estimatedReturnLoss = Math.max(0, grossProfit) * estimatedReturnRate;
-  const adSpend = numberOrZero(adSpendRows[0]?.spend);
-
-  return {
-    basis,
-    reportDay,
-    grossProfit: roundMoney(grossProfit),
-    adSpend: roundMoney(adSpend),
-    estimatedReturnRate: roundMoney(estimatedReturnRate * 100),
-    estimatedReturnedOrders: roundMoney(estimatedReturnedOrders),
-    estimatedReturnLoss: roundMoney(estimatedReturnLoss),
-    projectedProfit: roundMoney(grossProfit - adSpend - estimatedReturnLoss),
-    previousMonthStart: previousMonth.start,
-    previousMonthEnd: previousMonth.end,
-    previousMonthOrders,
-    previousMonthNegativeOutcomeOrders,
-  };
 }
 
 async function loadDailyOrderStatusReport(
   db: ReturnType<typeof getDb>,
   reportDay: string,
-  includeProfitProjection: boolean,
-  profitProjectionBasis: ProfitProjectionBasis,
+  profitProjection?: DailyProfitProjection,
 ): Promise<DailyOrderStatusReport> {
   const reportDayWhere = (timestampExpression: ReturnType<typeof sql>) =>
     reportDayPredicate(timestampExpression, reportDay);
@@ -315,7 +122,6 @@ async function loadDailyOrderStatusReport(
     adminCancelled,
     carrierCancelled,
     shipmentUpdates,
-    profitProjection,
   ] = await Promise.all([
     readCount(
       db,
@@ -444,9 +250,6 @@ async function loadDailyOrderStatusReport(
       where ${reportDayWhere(sql`shipment_activity.activity_at`)}
     `,
     ),
-    includeProfitProjection
-      ? loadProfitProjection(db, reportDay, profitProjectionBasis)
-      : Promise.resolve(undefined),
   ]);
 
   return {
@@ -484,9 +287,22 @@ export async function loadDailyOrderStatusOverview(
   const requestedDays = Array.from({ length: reportDays }, (_, index) =>
     shiftIsoDate(reportDay, -index),
   );
+  const projections = options.includeProfitProjection
+    ? await getCanonicalOrderProjectionDays(
+        {
+          startDate: requestedDays.at(-1)!,
+          endDate: reportDay,
+          basis: profitProjectionBasis,
+        },
+        { db },
+      )
+    : [];
+  const projectionByDay = new Map(
+    projections.map((projection) => [projection.reportDay, projection]),
+  );
   const reports: DailyOrderStatusReport[] = [];
 
-  // Each daily projection performs several independent reads. Keeping the batch
+  // Each daily operational report performs several independent reads. Keeping the batch
   // small avoids turning the weekly admin view into a burst of dozens of
   // concurrent database queries while still loading materially faster than a
   // fully sequential report.
@@ -494,14 +310,7 @@ export async function loadDailyOrderStatusOverview(
     const batch = requestedDays.slice(index, index + 2);
     reports.push(
       ...(await Promise.all(
-        batch.map((day) =>
-          loadDailyOrderStatusReport(
-            db,
-            day,
-            Boolean(options.includeProfitProjection),
-            profitProjectionBasis,
-          ),
-        ),
+        batch.map((day) => loadDailyOrderStatusReport(db, day, projectionByDay.get(day))),
       )),
     );
   }

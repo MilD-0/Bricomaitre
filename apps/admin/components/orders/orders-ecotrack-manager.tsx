@@ -1,19 +1,7 @@
 'use client';
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  History,
-  MapPin,
-  MoreHorizontal,
-  Package,
-  Printer,
-  RefreshCw,
-  Save,
-  Search,
-  Send,
-  Trash2,
-} from 'lucide-react';
-import { motion } from 'motion/react';
+import { MoreHorizontal, Package, Save, Send, Trash2 } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Fragment, useDeferredValue, useEffect, useMemo, useState, useTransition } from 'react';
 
@@ -30,15 +18,10 @@ import type {
   EcotrackShipmentSortDirection,
   EcotrackShipmentSortKey,
 } from '../../lib/ecotrack-admin-contracts';
-import {
-  formatOrderPhoneForDisplay,
-  resolveEcotrackDeliveryFee,
-} from '../../lib/order-presentation';
+import { resolveEcotrackDeliveryFee } from '../../lib/order-presentation';
 import { parseNumericAmount } from '../../lib/orders';
-import { cn } from '../../lib/utils';
 import { toast } from '../../lib/toast';
-import { SearchField } from '../search-field';
-import { SplitActionButton, type SplitActionOption } from '../split-action-button';
+import type { SplitActionOption } from '../split-action-button';
 import {
   buildEditableProducts,
   OrderProductsEditor,
@@ -46,10 +29,7 @@ import {
   type EditableOrderProduct,
   type ProductSearchItem,
 } from './order-products-editor';
-import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Card } from '../ui/card';
-import { Checkbox } from '../ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -58,28 +38,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '../ui/empty';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '../ui/field';
 import { Input } from '../ui/input';
-import { PendingInline, sectionTransitionProps, SurfacePendingOverlay } from '../ui/motion';
 import { NativeSelect, NativeSelectOption } from '../ui/native-select';
 import { Switch } from '../ui/switch';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Textarea } from '../ui/textarea';
-import { TablePaginationControls } from '../table-pagination-controls';
 import {
   buildEcotrackFailureSummary as buildFailureSummary,
   formatEcotrackAmountInput as formatAmountInput,
-  formatEcotrackDateTime as formatDateTime,
   formatEcotrackMoney as formatMoney,
-  getEcotrackDeliveryLabelKey as getDeliveryLabelKey,
 } from './orders-ecotrack-presentation';
-import {
-  EcotrackShipmentHistoryPanel as ShipmentHistoryPanel,
-  EcotrackStatusBadge as StatusBadge,
-  OrdersEcotrackMobileSkeleton,
-  OrdersEcotrackTableSkeleton,
-} from './orders-ecotrack-status';
 import { OrdersEcotrackWorkspace } from './orders-ecotrack-workspace';
 
 type SortKey = EcotrackShipmentSortKey;
@@ -88,7 +56,6 @@ type SortDirection = EcotrackShipmentSortDirection;
 type OrdersEcotrackManagerProps = {
   initialOrders?: EcotrackShipmentsResponse;
   initialCatalog?: EcotrackCatalogResponse;
-  presentation?: 2 | 3 | 4;
 };
 
 type EditDialogState = {
@@ -180,7 +147,6 @@ function criticalEcotrackToast(message: string, toastId?: string | null) {
 export function OrdersEcotrackManager({
   initialOrders,
   initialCatalog,
-  presentation,
 }: OrdersEcotrackManagerProps) {
   const t = useTranslations();
   const locale = useLocale();
@@ -594,8 +560,6 @@ export function OrdersEcotrackManager({
       .map((orderId) => selectedShipmentById.get(orderId))
       .filter((item): item is EcotrackShipmentListItem => item !== undefined);
   })();
-  const allVisibleSelected =
-    items.length > 0 && items.every((item) => selectedIds.includes(item.orderId));
   const isInitialLoading = !shipmentsQuery.data && shipmentsQuery.isPending;
   const showRefreshingProgress = shipmentsQuery.isFetching && !isInitialLoading;
 
@@ -1019,722 +983,104 @@ export function OrdersEcotrackManager({
 
   return (
     <>
-      {presentation ? (
-        <OrdersEcotrackWorkspace
-          variant={presentation}
-          locale={locale}
-          items={items}
-          pagination={{
-            page: pagination.page,
-            totalPages: pagination.totalPages,
-            total: pagination.totalItems,
-          }}
-          writable={writable}
-          isInitialLoading={isInitialLoading}
-          isRefreshing={isFilterPending || showRefreshingProgress}
-          error={shipmentsQuery.isError ? shipmentsQuery.error.message : null}
-          search={search}
-          scanQuery={scanQuery}
-          statusFilter={statusFilter}
-          staleOnly={staleOnly}
-          sortKey={sortKey}
-          sortDirection={sortDirection}
-          statuses={ECOTRACK_STATUSES}
-          selectedIds={selectedIds}
-          inspectedIds={expandedIds}
-          scanPending={scanLookupMutation.isPending}
-          onSearchChange={(value) => {
-            startFilterTransition(() => {
-              setPage(1);
-              setSearch(value);
-            });
-          }}
-          onScanQueryChange={setScanQuery}
-          onScanSubmit={() => void handleScanSubmit()}
-          onStatusChange={(value) => {
-            startFilterTransition(() => {
-              setPage(1);
-              setStatusFilter(value);
-            });
-          }}
-          onStaleOnlyChange={(value) => {
-            startFilterTransition(() => {
-              setPage(1);
-              setStaleOnly(value);
-            });
-          }}
-          onSortKeyChange={(value) => {
-            startFilterTransition(() => {
-              setPage(1);
-              setSortKey(value);
-            });
-          }}
-          onSortDirectionChange={(value) => {
-            startFilterTransition(() => {
-              setPage(1);
-              setSortDirection(value);
-            });
-          }}
-          onPageChange={setPage}
-          onToggleSelected={(orderId, selected) => {
-            setSelectedIds((current) =>
-              selected
-                ? [...new Set([...current, orderId])]
-                : current.filter((id) => id !== orderId),
-            );
-          }}
-          onToggleVisible={(selected) => {
-            setSelectedIds((current) =>
-              selected
-                ? [...new Set([...current, ...items.map((item) => item.orderId)])]
-                : current.filter((id) => !items.some((item) => item.orderId === id)),
-            );
-          }}
-          onInspect={(orderId) => {
-            setExpandedIds((current) =>
-              current.includes(orderId)
-                ? current.filter((id) => id !== orderId)
-                : [...current.filter((id) => items.some((item) => item.orderId === id)), orderId],
-            );
-          }}
-          onRefreshVisible={() =>
-            refreshManyMutation.mutate({ orderIds: items.map((item) => item.orderId) })
-          }
-          onRefreshSelected={() => refreshManyMutation.mutate({ orderIds: selectedIds })}
-          onPrintSelected={() => void handleBulkLabels()}
-          onClearSelection={() => setSelectedIds([])}
-          onDispatchReady={() =>
-            openDispatchDialog(
-              dispatchableVisibleIds,
-              t('ordersEcotrackManager.actions.dispatchReady'),
-            )
-          }
-          onDispatchSelected={() =>
-            openDispatchDialog(
-              dispatchableSelectedIds,
-              t('ordersEcotrackManager.actions.dispatchSelected'),
-            )
-          }
-          onShowSelectedHistory={() => toggleHistoryForIds(selectedIds)}
-          buildRowActionModel={buildRowActionModel}
-        />
-      ) : (
-        <motion.section
-          id="orders-ecotrack"
-          className="scroll-mt-24 overflow-hidden rounded-[1.75rem] border border-border/70 bg-background/95 shadow-sm"
-          {...sectionTransitionProps}
-        >
-          <div className="border-b border-border/70 bg-linear-to-b from-background to-muted/20 px-4 py-4 sm:px-5">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <h2 className="text-lg font-semibold">{t('nav.ecotrackShipments')}</h2>
-                <PendingInline
-                  active={isFilterPending || shipmentsQuery.isFetching}
-                  label={t('labels.loading')}
-                />
-              </div>
-
-              <div className="rounded-[1.5rem] border border-border/70 bg-background/90 p-3">
-                <div className="flex flex-col gap-4">
-                  <form
-                    className="flex flex-col gap-3 xl:flex-row xl:items-end"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void handleScanSubmit();
-                    }}
-                  >
-                    <Field className="w-full xl:max-w-sm">
-                      <FieldLabel htmlFor="ecotrack-scan-tracking">
-                        {t('ordersEcotrackManager.fields.scanTrackingNumber')}
-                      </FieldLabel>
-                      <Input
-                        id="ecotrack-scan-tracking"
-                        value={scanQuery}
-                        disabled={!writable || scanLookupMutation.isPending}
-                        placeholder={t(
-                          'ordersEcotrackManager.fields.scanTrackingNumberPlaceholder',
-                        )}
-                        onChange={(event) => setScanQuery(event.target.value)}
-                      />
-                    </Field>
-                    <Button
-                      type="submit"
-                      disabled={
-                        !writable || scanLookupMutation.isPending || scanQuery.trim().length === 0
-                      }
-                    >
-                      <Search data-icon="inline-start" />
-                      {t('ordersEcotrackManager.actions.scanTrackingNumber')}
-                    </Button>
-                  </form>
-
-                  <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-                    <SearchField
-                      value={search}
-                      placeholder={t('ordersEcotrackManager.searchPlaceholder')}
-                      onChange={(value) => {
-                        startFilterTransition(() => {
-                          setPage(1);
-                          setSearch(value);
-                        });
-                      }}
-                    />
-                    <NativeSelect
-                      aria-label={t('ordersEcotrackManager.filters.statusLabel')}
-                      className="w-full xl:w-56"
-                      value={statusFilter}
-                      onChange={(event) => {
-                        startFilterTransition(() => {
-                          setPage(1);
-                          setStatusFilter(event.target.value);
-                        });
-                      }}
-                    >
-                      <NativeSelectOption value="all">
-                        {t('ordersEcotrackManager.filters.allStatuses')}
-                      </NativeSelectOption>
-                      {ECOTRACK_STATUSES.map((status) => (
-                        <NativeSelectOption key={status} value={status}>
-                          {t(`ordersEcotrackManager.statuses.${status}`)}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                    <NativeSelect
-                      aria-label={t('ordersEcotrackManager.filters.sortKeyLabel')}
-                      className="w-full xl:w-56"
-                      value={sortKey}
-                      onChange={(event) => {
-                        startFilterTransition(() => {
-                          setPage(1);
-                          setSortKey(event.target.value as SortKey);
-                        });
-                      }}
-                    >
-                      <NativeSelectOption value="createdAt">
-                        {t('ordersEcotrackManager.sort.createdAt')}
-                      </NativeSelectOption>
-                      <NativeSelectOption value="trackingNumber">
-                        {t('ordersEcotrackManager.sort.trackingNumber')}
-                      </NativeSelectOption>
-                      <NativeSelectOption value="clientName">
-                        {t('ordersEcotrackManager.sort.clientName')}
-                      </NativeSelectOption>
-                      <NativeSelectOption value="currentStatus">
-                        {t('ordersEcotrackManager.sort.currentStatus')}
-                      </NativeSelectOption>
-                      <NativeSelectOption value="lastStatusSyncedAt">
-                        {t('ordersEcotrackManager.sort.lastStatusSyncedAt')}
-                      </NativeSelectOption>
-                    </NativeSelect>
-                    <NativeSelect
-                      aria-label={t('ordersEcotrackManager.filters.sortDirectionLabel')}
-                      className="w-full xl:w-44"
-                      value={sortDirection}
-                      onChange={(event) => {
-                        startFilterTransition(() => {
-                          setPage(1);
-                          setSortDirection(event.target.value as SortDirection);
-                        });
-                      }}
-                    >
-                      <NativeSelectOption value="desc">
-                        {t('ordersEcotrackManager.sort.desc')}
-                      </NativeSelectOption>
-                      <NativeSelectOption value="asc">
-                        {t('ordersEcotrackManager.sort.asc')}
-                      </NativeSelectOption>
-                    </NativeSelect>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Badge variant="outline">
-                      {t('labels.bulkSelectionCount', { count: selectedIds.length })}
-                    </Badge>
-                    <Field orientation="horizontal" className="gap-3">
-                      <FieldLabel htmlFor="ecotrack-stale-only">
-                        {t('ordersEcotrackManager.filters.staleOnly')}
-                      </FieldLabel>
-                      <Switch
-                        id="ecotrack-stale-only"
-                        checked={staleOnly}
-                        onCheckedChange={(checked) => {
-                          startFilterTransition(() => {
-                            setPage(1);
-                            setStaleOnly(checked);
-                          });
-                        }}
-                      />
-                    </Field>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <SplitActionButton
-                      size="sm"
-                      label={t('ordersEcotrackManager.actions.refreshVisible')}
-                      icon={<RefreshCw data-icon="inline-start" />}
-                      primaryDisabled={items.length === 0}
-                      onPrimaryClick={() =>
-                        refreshManyMutation.mutate({ orderIds: items.map((item) => item.orderId) })
-                      }
-                      options={[
-                        {
-                          key: 'refresh-selected',
-                          label: t('ordersEcotrackManager.actions.refreshSelected'),
-                          disabled: selectedIds.length === 0,
-                          onSelect: () => refreshManyMutation.mutate({ orderIds: selectedIds }),
-                        },
-                      ]}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={selectedIds.length === 0}
-                      onClick={() => void handleBulkLabels()}
-                    >
-                      <Printer data-icon="inline-start" />
-                      {t('ordersEcotrackManager.actions.printSelected')}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={selectedIds.length === 0}
-                      onClick={() => setSelectedIds([])}
-                    >
-                      {t('ordersEcotrackManager.actions.clearSelection')}
-                    </Button>
-                    <SplitActionButton
-                      size="sm"
-                      label={t('ordersEcotrackManager.actions.dispatchReady')}
-                      icon={<Send data-icon="inline-start" />}
-                      primaryDisabled={dispatchableVisibleIds.length === 0 || !writable}
-                      onPrimaryClick={() =>
-                        openDispatchDialog(
-                          dispatchableVisibleIds,
-                          t('ordersEcotrackManager.actions.dispatchReady'),
-                        )
-                      }
-                      options={[
-                        {
-                          key: 'dispatch-selected',
-                          label: t('ordersEcotrackManager.actions.dispatchSelected'),
-                          disabled: dispatchableSelectedIds.length === 0 || !writable,
-                          onSelect: () =>
-                            openDispatchDialog(
-                              dispatchableSelectedIds,
-                              t('ordersEcotrackManager.actions.dispatchSelected'),
-                            ),
-                        },
-                      ]}
-                    />
-                    <SplitActionButton
-                      size="sm"
-                      label={t('ordersEcotrackManager.actions.showHistorySelected')}
-                      icon={<History data-icon="inline-start" />}
-                      primaryDisabled={selectedIds.length === 0}
-                      onPrimaryClick={() => toggleHistoryForIds(selectedIds)}
-                      options={[
-                        {
-                          key: 'history-visible',
-                          label: t('ordersEcotrackManager.actions.showHistoryVisible'),
-                          disabled: items.length === 0,
-                          onSelect: () => toggleHistoryForIds(items.map((item) => item.orderId)),
-                        },
-                      ]}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="relative" aria-busy={showRefreshingProgress}>
-            <div
-              className={cn(
-                'transition-[opacity,filter] duration-200',
-                showRefreshingProgress && 'opacity-70',
-              )}
-            >
-              {isInitialLoading ? (
-                <>
-                  <OrdersEcotrackTableSkeleton />
-                  <OrdersEcotrackMobileSkeleton />
-                </>
-              ) : null}
-
-              {!isInitialLoading ? (
-                <>
-                  {shipmentsQuery.isError ? (
-                    <div className="px-4 pb-4 sm:px-5">
-                      <Empty className="rounded-[1.5rem] border border-dashed border-border/70 bg-muted/20">
-                        <EmptyHeader>
-                          <EmptyTitle>{t('ordersEcotrackManager.empty.title')}</EmptyTitle>
-                          <EmptyDescription>{shipmentsQuery.error.message}</EmptyDescription>
-                        </EmptyHeader>
-                      </Empty>
-                    </div>
-                  ) : null}
-
-                  {!shipmentsQuery.isError && items.length === 0 ? (
-                    <div className="px-4 pb-4 sm:px-5">
-                      <Empty className="rounded-[1.5rem] border border-dashed border-border/70 bg-muted/20">
-                        <EmptyHeader>
-                          <EmptyTitle>{t('ordersEcotrackManager.empty.title')}</EmptyTitle>
-                          <EmptyDescription>
-                            {t('ordersEcotrackManager.empty.description')}
-                          </EmptyDescription>
-                        </EmptyHeader>
-                      </Empty>
-                    </div>
-                  ) : null}
-
-                  {items.length > 0 ? (
-                    <>
-                      <div className="hidden overflow-x-auto lg:block">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="hover:bg-transparent">
-                              <TableHead className="w-12">
-                                <Checkbox
-                                  aria-label={t('labels.selectAll')}
-                                  checked={allVisibleSelected}
-                                  onChange={(event) => {
-                                    setSelectedIds((current) =>
-                                      event.target.checked
-                                        ? [
-                                            ...new Set([
-                                              ...current,
-                                              ...items.map((item) => item.orderId),
-                                            ]),
-                                          ]
-                                        : current.filter(
-                                            (id) => !items.some((item) => item.orderId === id),
-                                          ),
-                                    );
-                                  }}
-                                />
-                              </TableHead>
-                              <TableHead className="min-w-44">
-                                {t('ordersEcotrackManager.columns.trackingNumber')}
-                              </TableHead>
-                              <TableHead className="min-w-60">
-                                {t('ordersEcotrackManager.columns.client')}
-                              </TableHead>
-                              <TableHead className="min-w-72">
-                                {t('ordersEcotrackManager.columns.address')}
-                              </TableHead>
-                              <TableHead className="min-w-72">
-                                {t('ordersEcotrackManager.columns.products')}
-                              </TableHead>
-                              <TableHead className="min-w-48">
-                                {t('ordersEcotrackManager.columns.amount')}
-                              </TableHead>
-                              <TableHead className="min-w-56">
-                                {t('ordersEcotrackManager.columns.status')}
-                              </TableHead>
-                              <TableHead className="min-w-80 text-center">
-                                {t('labels.actions')}
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {items.map((item) => {
-                              const expanded = expandedIds.includes(item.orderId);
-                              const rowActionModel = buildRowActionModel(item, expanded);
-                              const rowActionControl = (
-                                <SplitActionButton
-                                  size="sm"
-                                  label={rowActionModel.primary.label}
-                                  icon={rowActionModel.primary.icon}
-                                  primaryDisabled={
-                                    item.canDispatch || item.canAddMaj ? !writable : false
-                                  }
-                                  onPrimaryClick={rowActionModel.primary.onPrimaryClick}
-                                  options={rowActionModel.options}
-                                />
-                              );
-
-                              return (
-                                <Fragment key={item.orderId}>
-                                  <TableRow>
-                                    <TableCell className="align-top">
-                                      <Checkbox
-                                        aria-label={t('labels.selectRow', { name: item.fullName })}
-                                        checked={selectedIds.includes(item.orderId)}
-                                        onChange={(event) => {
-                                          setSelectedIds((current) =>
-                                            event.target.checked
-                                              ? [...new Set([...current, item.orderId])]
-                                              : current.filter((id) => id !== item.orderId),
-                                          );
-                                        }}
-                                      />
-                                    </TableCell>
-                                    <TableCell className="align-top">
-                                      <p className="font-semibold">{item.trackingNumber}</p>
-                                      <p className="mt-1 text-xs font-medium uppercase text-muted-foreground">
-                                        {item.provider}
-                                      </p>
-                                      <p className="mt-1 text-xs text-muted-foreground">
-                                        {t('ordersEcotrackManager.reference')}: {item.reference}
-                                      </p>
-                                      <p className="mt-1 text-xs text-muted-foreground">
-                                        {formatDateTime(locale, item.createdAt)}
-                                      </p>
-                                    </TableCell>
-                                    <TableCell className="align-top">
-                                      <p className="font-semibold">{item.fullName}</p>
-                                      <div className="mt-2 flex flex-col gap-1 text-sm text-muted-foreground">
-                                        <p>{formatOrderPhoneForDisplay(item.phoneNumber1)}</p>
-                                        {item.phoneNumber2 ? (
-                                          <p>{formatOrderPhoneForDisplay(item.phoneNumber2)}</p>
-                                        ) : null}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="align-top">
-                                      <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                                        <MapPin className="mt-0.5 shrink-0" />
-                                        <div className="flex flex-col gap-1">
-                                          <p className="font-medium text-foreground">
-                                            {item.homeAddress ||
-                                              t('ordersEcotrackManager.missingValue')}
-                                          </p>
-                                          <p>
-                                            {item.city || t('ordersEcotrackManager.missingValue')}
-                                          </p>
-                                          <p>
-                                            {item.stateName ||
-                                              item.state ||
-                                              t('ordersEcotrackManager.missingValue')}
-                                          </p>
-                                          <Badge variant="outline" className="w-fit">
-                                            {t(getDeliveryLabelKey(item.delivery))}
-                                          </Badge>
-                                        </div>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="align-top">
-                                      <div className="flex flex-col gap-2">
-                                        {item.orderProducts.length === 0 ? (
-                                          <p className="text-sm text-muted-foreground">
-                                            {t('ordersEcotrackManager.history.empty')}
-                                          </p>
-                                        ) : null}
-                                        {item.orderProducts.map((product, index) => (
-                                          <div
-                                            key={`${item.orderId}-${index}`}
-                                            className="flex items-center justify-between gap-3 text-sm"
-                                          >
-                                            <span className="text-foreground">{product.title}</span>
-                                            <Badge variant="outline">x{product.quantity}</Badge>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="align-top">
-                                      <div className="text-sm">
-                                        <p>
-                                          {t('ordersEcotrackManager.amounts.subtotal')}:{' '}
-                                          <span className="font-medium">
-                                            {formatMoney(locale, item.productSubtotal)}
-                                          </span>
-                                        </p>
-                                        <p className="mt-1">
-                                          {t('ordersEcotrackManager.amounts.deliveryFee')}:{' '}
-                                          <span className="font-medium">
-                                            {formatMoney(locale, item.deliveryFee)}
-                                          </span>
-                                        </p>
-                                        <p className="mt-2 font-semibold">
-                                          {t('ordersEcotrackManager.amounts.total')}:{' '}
-                                          {formatMoney(locale, item.totalAmount)}
-                                        </p>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="align-top">
-                                      <StatusBadge locale={locale} status={item.status} t={t} />
-                                    </TableCell>
-                                    <TableCell className="align-top">
-                                      <div className="flex justify-center">{rowActionControl}</div>
-                                    </TableCell>
-                                  </TableRow>
-
-                                  {expanded ? (
-                                    <TableRow className="bg-muted/10">
-                                      <TableCell colSpan={8}>
-                                        <ShipmentHistoryPanel
-                                          locale={locale}
-                                          orderId={item.orderId}
-                                          enabled={expanded}
-                                        />
-                                      </TableCell>
-                                    </TableRow>
-                                  ) : null}
-                                </Fragment>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </div>
-
-                      <div className="grid gap-4 p-4 lg:hidden">
-                        {items.map((item) => {
-                          const expanded = expandedIds.includes(item.orderId);
-                          const rowActionModel = buildRowActionModel(item, expanded);
-                          const mobileActionControl = (
-                            <SplitActionButton
-                              size="sm"
-                              label={rowActionModel.primary.label}
-                              icon={rowActionModel.primary.icon}
-                              primaryDisabled={
-                                item.canDispatch || item.canAddMaj ? !writable : false
-                              }
-                              onPrimaryClick={rowActionModel.primary.onPrimaryClick}
-                              options={rowActionModel.options}
-                            />
-                          );
-
-                          return (
-                            <Card
-                              key={item.orderId}
-                              className="border border-border/70 bg-background/90 shadow-none"
-                            >
-                              <div className="flex flex-col gap-4">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="flex flex-col gap-2">
-                                    <p className="font-semibold">{item.trackingNumber}</p>
-                                    <p className="text-xs font-medium uppercase text-muted-foreground">
-                                      {item.provider}
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">{item.fullName}</p>
-                                  </div>
-                                  <Checkbox
-                                    aria-label={t('labels.selectRow', { name: item.fullName })}
-                                    checked={selectedIds.includes(item.orderId)}
-                                    onChange={(event) => {
-                                      setSelectedIds((current) =>
-                                        event.target.checked
-                                          ? [...new Set([...current, item.orderId])]
-                                          : current.filter((id) => id !== item.orderId),
-                                      );
-                                    }}
-                                  />
-                                </div>
-
-                                <div className="grid gap-3 text-sm">
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground">
-                                      {t('ordersEcotrackManager.columns.client')}
-                                    </p>
-                                    <p className="mt-1">{item.fullName}</p>
-                                    <p className="text-muted-foreground">
-                                      {formatOrderPhoneForDisplay(item.phoneNumber1)}
-                                    </p>
-                                    {item.phoneNumber2 ? (
-                                      <p className="text-muted-foreground">
-                                        {formatOrderPhoneForDisplay(item.phoneNumber2)}
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground">
-                                      {t('ordersEcotrackManager.columns.address')}
-                                    </p>
-                                    <p className="mt-1">
-                                      {item.homeAddress || t('ordersEcotrackManager.missingValue')}
-                                    </p>
-                                    <p className="text-muted-foreground">
-                                      {[item.city, item.stateName ?? item.state]
-                                        .filter(Boolean)
-                                        .join(', ')}
-                                    </p>
-                                    <Badge variant="outline" className="mt-2">
-                                      {t(getDeliveryLabelKey(item.delivery))}
-                                    </Badge>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground">
-                                      {t('ordersEcotrackManager.columns.products')}
-                                    </p>
-                                    <div className="mt-1 flex flex-col gap-1">
-                                      {item.orderProducts.map((product, index) => (
-                                        <p
-                                          key={`${item.orderId}-mobile-${index}`}
-                                          className="text-muted-foreground"
-                                        >
-                                          {product.title} x{product.quantity}
-                                        </p>
-                                      ))}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground">
-                                      {t('ordersEcotrackManager.columns.amount')}
-                                    </p>
-                                    <p className="mt-1 text-muted-foreground">
-                                      {t('ordersEcotrackManager.amounts.subtotal')}:{' '}
-                                      {formatMoney(locale, item.productSubtotal)}
-                                    </p>
-                                    <p className="text-muted-foreground">
-                                      {t('ordersEcotrackManager.amounts.deliveryFee')}:{' '}
-                                      {formatMoney(locale, item.deliveryFee)}
-                                    </p>
-                                    <p className="font-semibold">
-                                      {t('ordersEcotrackManager.amounts.total')}:{' '}
-                                      {formatMoney(locale, item.totalAmount)}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground">
-                                      {t('ordersEcotrackManager.columns.status')}
-                                    </p>
-                                    <div className="mt-2">
-                                      <StatusBadge locale={locale} status={item.status} t={t} />
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="flex flex-wrap gap-2">{mobileActionControl}</div>
-
-                                {expanded ? (
-                                  <div className="rounded-[1rem] border border-border/70 bg-muted/10 p-3">
-                                    <ShipmentHistoryPanel
-                                      locale={locale}
-                                      orderId={item.orderId}
-                                      enabled={expanded}
-                                    />
-                                  </div>
-                                ) : null}
-                              </div>
-                            </Card>
-                          );
-                        })}
-                      </div>
-
-                      <TablePaginationControls
-                        currentPage={pagination.page}
-                        totalPages={pagination.totalPages}
-                        onPageChange={setPage}
-                      />
-                    </>
-                  ) : null}
-                </>
-              ) : null}
-            </div>
-            <SurfacePendingOverlay
-              active={showRefreshingProgress}
-              label={t('ordersEcotrackManager.loading.refreshing')}
-            />
-          </div>
-        </motion.section>
-      )}
+      <OrdersEcotrackWorkspace
+        locale={locale}
+        items={items}
+        pagination={{
+          page: pagination.page,
+          totalPages: pagination.totalPages,
+          total: pagination.totalItems,
+        }}
+        writable={writable}
+        isInitialLoading={isInitialLoading}
+        isRefreshing={isFilterPending || showRefreshingProgress}
+        error={shipmentsQuery.isError ? shipmentsQuery.error.message : null}
+        search={search}
+        scanQuery={scanQuery}
+        statusFilter={statusFilter}
+        staleOnly={staleOnly}
+        sortKey={sortKey}
+        sortDirection={sortDirection}
+        statuses={ECOTRACK_STATUSES}
+        selectedIds={selectedIds}
+        inspectedIds={expandedIds}
+        scanPending={scanLookupMutation.isPending}
+        onSearchChange={(value) => {
+          startFilterTransition(() => {
+            setPage(1);
+            setSearch(value);
+          });
+        }}
+        onScanQueryChange={setScanQuery}
+        onScanSubmit={() => void handleScanSubmit()}
+        onStatusChange={(value) => {
+          startFilterTransition(() => {
+            setPage(1);
+            setStatusFilter(value);
+          });
+        }}
+        onStaleOnlyChange={(value) => {
+          startFilterTransition(() => {
+            setPage(1);
+            setStaleOnly(value);
+          });
+        }}
+        onSortKeyChange={(value) => {
+          startFilterTransition(() => {
+            setPage(1);
+            setSortKey(value);
+          });
+        }}
+        onSortDirectionChange={(value) => {
+          startFilterTransition(() => {
+            setPage(1);
+            setSortDirection(value);
+          });
+        }}
+        onPageChange={setPage}
+        onToggleSelected={(orderId, selected) => {
+          setSelectedIds((current) =>
+            selected ? [...new Set([...current, orderId])] : current.filter((id) => id !== orderId),
+          );
+        }}
+        onToggleVisible={(selected) => {
+          setSelectedIds((current) =>
+            selected
+              ? [...new Set([...current, ...items.map((item) => item.orderId)])]
+              : current.filter((id) => !items.some((item) => item.orderId === id)),
+          );
+        }}
+        onInspect={(orderId) => {
+          setExpandedIds((current) =>
+            current.includes(orderId)
+              ? current.filter((id) => id !== orderId)
+              : [...current.filter((id) => items.some((item) => item.orderId === id)), orderId],
+          );
+        }}
+        onRefreshVisible={() =>
+          refreshManyMutation.mutate({ orderIds: items.map((item) => item.orderId) })
+        }
+        onRefreshSelected={() => refreshManyMutation.mutate({ orderIds: selectedIds })}
+        onPrintSelected={() => void handleBulkLabels()}
+        onClearSelection={() => setSelectedIds([])}
+        onDispatchReady={() =>
+          openDispatchDialog(
+            dispatchableVisibleIds,
+            t('ordersEcotrackManager.actions.dispatchReady'),
+          )
+        }
+        onDispatchSelected={() =>
+          openDispatchDialog(
+            dispatchableSelectedIds,
+            t('ordersEcotrackManager.actions.dispatchSelected'),
+          )
+        }
+        onShowSelectedHistory={() => toggleHistoryForIds(selectedIds)}
+        buildRowActionModel={buildRowActionModel}
+      />
 
       <Dialog open={editDialog !== null} onOpenChange={(open) => !open && setEditDialog(null)}>
-        <DialogContent
-          className={cn(
-            'max-h-[90vh] overflow-y-auto sm:max-w-5xl',
-            presentation && 'max-h-[calc(100vh-1rem)] rounded-xl sm:max-w-3xl',
-          )}
-        >
+        <DialogContent className="max-h-[calc(100vh-1rem)] overflow-y-auto rounded-xl sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>
               {editDialog?.mode === 'recreate'

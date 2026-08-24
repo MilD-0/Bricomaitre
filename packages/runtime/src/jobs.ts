@@ -13,6 +13,7 @@ export type JobSnapshot = {
   queue: string;
   kind: string;
   ownerKey: string;
+  origin?: string | null;
   status: JobState;
   progress: {
     phase: string;
@@ -38,6 +39,7 @@ type StartJobOptions<T> = {
   queueName: string;
   kind: string;
   ownerKey: string;
+  origin?: string;
   data: T;
   requestId?: string;
   activeScope?: 'owner' | 'global';
@@ -102,6 +104,11 @@ function getQueueIndexKey(queueName: string) {
   return `bric:jobs:${queueName}:index`;
 }
 
+function getQueueOriginIndexKey(queueName: string, origin: string) {
+  const originKey = crypto.createHash('sha256').update(origin).digest('hex');
+  return `bric:jobs:${queueName}:origin:${originKey}:index`;
+}
+
 async function releaseOwnedKey(redis: IORedis, key: string, expectedValue: string) {
   return Number(await redis.eval(RELEASE_OWNED_KEY_SCRIPT, 1, key, expectedValue)) === 1;
 }
@@ -120,27 +127,40 @@ function parseSnapshot(value: string | null): JobSnapshot | null {
 
 async function writeSnapshot(redis: IORedis, snapshot: JobSnapshot, ttlSeconds = JOB_TTL_SECONDS) {
   const indexKey = getQueueIndexKey(snapshot.queue);
-  await redis
+  const transaction = redis
     .multi()
     .set(getSnapshotKey(snapshot.queue, snapshot.id), serializeSnapshot(snapshot), 'EX', ttlSeconds)
     .set(getOwnerKey(snapshot.queue, snapshot.ownerKey), snapshot.id, 'EX', ttlSeconds)
     .zadd(indexKey, Date.parse(snapshot.createdAt), snapshot.id)
-    .expire(indexKey, ttlSeconds)
-    .exec();
+    .expire(indexKey, ttlSeconds);
+  if (snapshot.origin) {
+    const originIndexKey = getQueueOriginIndexKey(snapshot.queue, snapshot.origin);
+    transaction
+      .zadd(originIndexKey, Date.parse(snapshot.createdAt), snapshot.id)
+      .expire(originIndexKey, ttlSeconds);
+  }
+  await transaction.exec();
 }
 
 export async function getJobSnapshot(queueName: string, jobId: string) {
   return parseSnapshot(await getRedis().get(getSnapshotKey(queueName, jobId)));
 }
 
-export async function listRecentJobSnapshots(queueNames: readonly string[], limit = 50) {
+export async function listRecentJobSnapshots(
+  queueNames: readonly string[],
+  limit = 50,
+  filters: { origin?: string } = {},
+) {
   const safeLimit = Math.max(1, Math.min(Math.trunc(limit), 100));
   const redis = getRedis();
   const snapshots = (
     await Promise.all(
       queueNames.map(async (queueName) => {
-        let jobIds = await redis.zrevrange(getQueueIndexKey(queueName), 0, safeLimit - 1);
-        if (jobIds.length === 0) {
+        const indexKey = filters.origin
+          ? getQueueOriginIndexKey(queueName, filters.origin)
+          : getQueueIndexKey(queueName);
+        let jobIds = await redis.zrevrange(indexKey, 0, safeLimit - 1);
+        if (jobIds.length === 0 && !filters.origin) {
           const snapshotPrefix = `bric:jobs:${queueName}:`;
           let cursor = '0';
           let scanCount = 0;
@@ -162,7 +182,8 @@ export async function listRecentJobSnapshots(queueNames: readonly string[], limi
                 suffix !== 'index' &&
                 suffix !== 'active' &&
                 !suffix.startsWith('active:') &&
-                !suffix.startsWith('owner:')
+                !suffix.startsWith('owner:') &&
+                !suffix.startsWith('origin:')
               ) {
                 legacyIds.add(suffix);
               }
@@ -256,6 +277,7 @@ async function startOwnedJobInternal<T>(
     queue: options.queueName,
     kind: options.kind,
     ownerKey: options.ownerKey,
+    origin: options.origin ?? null,
     status: 'queued',
     progress: {
       phase: 'queued',

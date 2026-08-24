@@ -1,56 +1,22 @@
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
-const { getTranslationsMock, readLegacyUiPreferenceMock, requireBrandsCategoriesPageAccessMock } =
-  vi.hoisted(() => ({
-    getTranslationsMock: vi.fn(),
-    readLegacyUiPreferenceMock: vi.fn(),
-    requireBrandsCategoriesPageAccessMock: vi.fn(),
-  }));
+const { requireAccess } = vi.hoisted(() => ({ requireAccess: vi.fn() }));
 
-vi.mock('next-intl/server', () => ({
-  getTranslations: getTranslationsMock,
-}));
-
-vi.mock('../../../../components/brands-categories/brands-manager', () => ({
-  BrandsManager: () => <div>BrandsManager</div>,
-}));
+vi.mock('next-intl/server', () => ({ getTranslations: vi.fn() }));
 vi.mock('../../../../components/brands-categories/taxonomy-workspace', () => ({
-  TaxonomyWorkspace: ({ view }: { view: string }) => <div>TaxonomyWorkspace:{view}</div>,
+  TaxonomyWorkspace: ({ view }: { view: string }) => <div>{view}</div>,
 }));
-vi.mock('../../../../lib/admin-ui-preference.server', () => ({
-  readLegacyUiPreference: readLegacyUiPreferenceMock,
-}));
-
 vi.mock('../../../../lib/page-access', () => ({
-  requireBrandsCategoriesPageAccess: requireBrandsCategoriesPageAccessMock,
+  requireBrandsCategoriesPageAccess: requireAccess,
 }));
 
 import BrandsPage from './page';
 
 describe('BrandsPage', () => {
-  afterEach(() => cleanup());
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    getTranslationsMock.mockResolvedValue((key: string) => key);
-    readLegacyUiPreferenceMock.mockResolvedValue(true);
-  });
-
-  it('renders the dedicated brands manager page', async () => {
-    const ui = await BrandsPage({ params: Promise.resolve({ locale: 'en' }) });
-    render(ui);
-
-    expect(screen.getByText('BrandsManager')).toBeInTheDocument();
-    expect(requireBrandsCategoriesPageAccessMock).toHaveBeenCalledWith('en');
-  });
-
-  it('renders the accepted brands workspace when Legacy UI is disabled', async () => {
-    readLegacyUiPreferenceMock.mockResolvedValue(false);
-
+  it('always renders the canonical brands workspace after enforcing access', async () => {
     render(await BrandsPage({ params: Promise.resolve({ locale: 'en' }) }));
-
-    expect(screen.getByText('TaxonomyWorkspace:brands')).toBeInTheDocument();
-    expect(screen.queryByText('BrandsManager')).not.toBeInTheDocument();
+    expect(requireAccess).toHaveBeenCalledWith('en');
+    expect(screen.getByText('brands')).toBeInTheDocument();
   });
 });

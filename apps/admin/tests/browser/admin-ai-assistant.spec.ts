@@ -292,14 +292,6 @@ test('renders a grounded landing-page result without desktop or mobile overflow'
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
-  await page.context().addCookies([
-    {
-      name: 'bric-admin-legacy-ui',
-      value: '0',
-      url: 'http://localhost:3000',
-      sameSite: 'Lax',
-    },
-  ]);
   await page.route('**/api/ai/conversations**', async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({
@@ -445,14 +437,6 @@ test('keeps a terminal EcoTrack workflow actionable across close and reload', as
     sessionKey: '26c2b4c2-625b-44e4-a1c2-a255d07cbf80',
     title: 'Browser EcoTrack acceptance',
   };
-  await page.context().addCookies([
-    {
-      name: 'bric-admin-legacy-ui',
-      value: '0',
-      url: 'http://localhost:3000',
-      sameSite: 'Lax',
-    },
-  ]);
   await page.route('**/api/ai/conversations**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (route.request().method() !== 'GET') {

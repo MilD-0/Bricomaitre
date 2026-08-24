@@ -90,7 +90,7 @@ export function dismissToast(id: string) {
   emit();
 }
 
-export function clearToasts() {
+function clearToasts() {
   toasts = [];
   timeouts.forEach((timeout) => clearTimeout(timeout));
   timeouts.clear();

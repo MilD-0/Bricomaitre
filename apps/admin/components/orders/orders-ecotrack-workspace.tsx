@@ -1,15 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import {
-  ChevronRight,
-  History,
-  MoreHorizontal,
-  RefreshCw,
-  Search,
-  Send,
-  Truck,
-} from 'lucide-react';
+import { History, MoreHorizontal, RefreshCw, Search, Send, Truck } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 
@@ -22,7 +14,6 @@ import type {
 } from '../../lib/ecotrack-admin-contracts';
 import { formatOrderPhoneForDisplay } from '../../lib/order-presentation';
 import { cn } from '../../lib/utils';
-import { AdminAiAskButton } from '../admin-ai-ask-button';
 import { SearchField } from '../search-field';
 import { SplitActionButton, type SplitActionOption } from '../split-action-button';
 import { Badge } from '../ui/badge';
@@ -49,9 +40,7 @@ import {
   formatEcotrackMoney,
   getTrackingHistoryStatusKey,
 } from './orders-ecotrack-presentation';
-import { EcotrackStatusBadge } from './orders-ecotrack-status';
-
-type WorkspaceVariant = 2 | 3 | 4;
+import { EcotrackStatusBadge } from './ecotrack-status-badge';
 
 type RowActionModel = {
   primary: {
@@ -69,7 +58,6 @@ type Pagination = {
 };
 
 export type OrdersEcotrackWorkspaceProps = {
-  variant: WorkspaceVariant;
   locale: string;
   items: EcotrackShipmentListItem[];
   pagination: Pagination;
@@ -107,51 +95,6 @@ export type OrdersEcotrackWorkspaceProps = {
   onShowSelectedHistory: () => void;
   buildRowActionModel: (item: EcotrackShipmentListItem, expanded: boolean) => RowActionModel;
 };
-
-const stageDefinitions = [
-  {
-    key: 'ready',
-    labelStatus: 'prete_a_expedier',
-    statuses: new Set([
-      'prete_a_expedier',
-      'en_ramassage',
-      'en_preparation_stock',
-      'en_preparation',
-    ]),
-  },
-  {
-    key: 'transit',
-    labelStatus: 'vers_hub',
-    statuses: new Set(['vers_hub', 'en_hub', 'vers_wilaya']),
-  },
-  {
-    key: 'delivery',
-    labelStatus: 'en_livraison',
-    statuses: new Set(['en_livraison', 'suspendu']),
-  },
-  {
-    key: 'settlement',
-    labelStatus: 'livre_non_encaisse',
-    statuses: new Set([
-      'livre_non_encaisse',
-      'encaisse_non_paye',
-      'paiements_prets',
-      'paye_et_archive',
-    ]),
-  },
-  {
-    key: 'returns',
-    labelStatus: 'retour_chez_livreur',
-    statuses: new Set([
-      'retour_chez_livreur',
-      'retour_transit_entrepot',
-      'retour_en_traitement',
-      'retour_recu',
-      'retour_archive',
-      'annule',
-    ]),
-  },
-] as const;
 
 function ShipmentAction({ model, disabled }: { model: RowActionModel; disabled: boolean }) {
   return (
@@ -397,7 +340,6 @@ function EcotrackWorkspaceChrome(props: OrdersEcotrackWorkspaceProps) {
           description={<PendingInline active={props.isRefreshing} label={t('labels.loading')} />}
         />
         <WorkspaceActions>
-          <AdminAiAskButton />
           <Button
             type="button"
             variant="outline"
@@ -717,246 +659,11 @@ function RefinedLedger(props: OrdersEcotrackWorkspaceProps) {
   );
 }
 
-function SplitDesk(props: OrdersEcotrackWorkspaceProps) {
-  const t = useTranslations();
-  const activeId = props.inspectedIds.at(-1) ?? props.items[0]?.orderId;
-  const active = props.items.find((item) => item.orderId === activeId) ?? props.items[0];
-  const mobileActiveId = props.inspectedIds.at(-1);
-
-  return (
-    <>
-      <div className="hidden min-h-[38rem] xl:grid xl:grid-cols-[minmax(20rem,0.72fr)_minmax(0,1.28fr)]">
-        <div className="border-e border-border">
-          <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] border-b border-border px-3 py-2 text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
-            <Checkbox
-              aria-label={t('labels.selectAll')}
-              checked={
-                props.items.length > 0 &&
-                props.items.every((item) => props.selectedIds.includes(item.orderId))
-              }
-              onChange={(event) => props.onToggleVisible(event.target.checked)}
-            />
-            <span className="px-3">{t('ordersEcotrackManager.columns.trackingNumber')}</span>
-            <span>{t('ordersEcotrackManager.columns.amount')}</span>
-          </div>
-          <div className="divide-y divide-border">
-            {props.items.map((item) => {
-              const selected = active?.orderId === item.orderId;
-              return (
-                <div
-                  key={item.orderId}
-                  className={cn(
-                    'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3',
-                    selected && 'bg-primary/8',
-                  )}
-                >
-                  <Checkbox
-                    aria-label={t('labels.selectRow', { name: item.fullName })}
-                    checked={props.selectedIds.includes(item.orderId)}
-                    onChange={(event) => props.onToggleSelected(item.orderId, event.target.checked)}
-                  />
-                  <button
-                    type="button"
-                    className="min-w-0 text-start"
-                    onClick={() => props.onInspect(item.orderId)}
-                  >
-                    <ShipmentIdentity item={item} locale={props.locale} compact />
-                    <div className="mt-2 flex items-center gap-2">
-                      <Badge variant="outline">
-                        {t(`ordersEcotrackManager.statuses.${item.status.currentStatus}`)}
-                      </Badge>
-                      {item.status.isStatusStale ? (
-                        <Badge variant="outline">{t('ordersEcotrackManager.staleBadge')}</Badge>
-                      ) : null}
-                    </div>
-                  </button>
-                  <div className="text-end">
-                    <p className="text-sm font-semibold">
-                      {formatEcotrackMoney(props.locale, item.totalAmount)}
-                    </p>
-                    <ChevronRight className="ms-auto mt-2 size-4 text-muted-foreground" />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        <div className="min-w-0 bg-muted/5">
-          {active ? (
-            <ShipmentInspector
-              item={active}
-              locale={props.locale}
-              action={props.buildRowActionModel(active, true)}
-              writable={props.writable}
-            />
-          ) : null}
-        </div>
-      </div>
-
-      <div className="xl:hidden">
-        <div className="grid grid-cols-[auto_minmax(0,1fr)] border-b border-border px-3 py-2 text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
-          <Checkbox
-            aria-label={t('labels.selectAll')}
-            checked={
-              props.items.length > 0 &&
-              props.items.every((item) => props.selectedIds.includes(item.orderId))
-            }
-            onChange={(event) => props.onToggleVisible(event.target.checked)}
-          />
-          <span className="px-3">{t('ordersEcotrackManager.columns.trackingNumber')}</span>
-        </div>
-        <div className="divide-y divide-border">
-          {props.items.map((item) => {
-            const selected = mobileActiveId === item.orderId;
-            const action = props.buildRowActionModel(item, selected);
-            return (
-              <Fragment key={item.orderId}>
-                <div
-                  className={cn(
-                    'grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 px-3 py-3',
-                    selected && 'bg-primary/8',
-                  )}
-                >
-                  <Checkbox
-                    aria-label={t('labels.selectRow', { name: item.fullName })}
-                    checked={props.selectedIds.includes(item.orderId)}
-                    onChange={(event) => props.onToggleSelected(item.orderId, event.target.checked)}
-                  />
-                  <button
-                    type="button"
-                    className="min-w-0 text-start"
-                    onClick={() => props.onInspect(item.orderId)}
-                  >
-                    <ShipmentIdentity item={item} locale={props.locale} compact />
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">
-                        {t(`ordersEcotrackManager.statuses.${item.status.currentStatus}`)}
-                      </Badge>
-                      <span className="text-sm font-semibold">
-                        {formatEcotrackMoney(props.locale, item.totalAmount)}
-                      </span>
-                    </div>
-                  </button>
-                  <ShipmentAction
-                    model={action}
-                    disabled={(item.canDispatch || item.canAddMaj) && !props.writable}
-                  />
-                </div>
-                {selected ? (
-                  <ShipmentInspector
-                    item={item}
-                    locale={props.locale}
-                    action={action}
-                    writable={props.writable}
-                  />
-                ) : null}
-              </Fragment>
-            );
-          })}
-        </div>
-      </div>
-    </>
-  );
-}
-
-function StatusBoard(props: OrdersEcotrackWorkspaceProps) {
-  const t = useTranslations();
-  const activeId = props.inspectedIds.at(-1);
-  const active = props.items.find((item) => item.orderId === activeId);
-
-  return (
-    <>
-      <div className="grid divide-y divide-border xl:grid-cols-5 xl:divide-x xl:divide-y-0 rtl:xl:divide-x-reverse">
-        {stageDefinitions.map((stage) => {
-          const stageItems = props.items.filter((item) =>
-            stage.statuses.has(item.status.currentStatus as never),
-          );
-          return (
-            <section key={stage.key} className="min-w-0">
-              <header className="flex items-center justify-between border-b border-border px-3 py-3">
-                <h2 className="text-sm font-semibold">
-                  {t(`ordersEcotrackManager.statuses.${stage.labelStatus}`)}
-                </h2>
-                <Badge variant="outline">{stageItems.length}</Badge>
-              </header>
-              <div className="divide-y divide-border">
-                {stageItems.length === 0 ? (
-                  <p className="px-3 py-6 text-center text-xs text-muted-foreground">—</p>
-                ) : null}
-                {stageItems.map((item) => {
-                  const action = props.buildRowActionModel(item, activeId === item.orderId);
-                  return (
-                    <Fragment key={item.orderId}>
-                      <div
-                        className={cn(
-                          'group px-3 py-3',
-                          activeId === item.orderId && 'bg-primary/8',
-                        )}
-                      >
-                        <div className="flex items-start gap-2">
-                          <Checkbox
-                            aria-label={t('labels.selectRow', { name: item.fullName })}
-                            checked={props.selectedIds.includes(item.orderId)}
-                            onChange={(event) =>
-                              props.onToggleSelected(item.orderId, event.target.checked)
-                            }
-                          />
-                          <button
-                            type="button"
-                            className="min-w-0 flex-1 text-start"
-                            onClick={() => props.onInspect(item.orderId)}
-                          >
-                            <p className="truncate text-sm font-semibold">{item.fullName}</p>
-                            <p className="mt-1 truncate text-xs text-muted-foreground">
-                              {item.trackingNumber}
-                            </p>
-                            <p className="mt-2 text-sm font-medium">
-                              {formatEcotrackMoney(props.locale, item.totalAmount)}
-                            </p>
-                          </button>
-                          <ShipmentAction
-                            model={action}
-                            disabled={(item.canDispatch || item.canAddMaj) && !props.writable}
-                          />
-                        </div>
-                      </div>
-                      {activeId === item.orderId ? (
-                        <div className="xl:hidden">
-                          <ShipmentInspector
-                            item={item}
-                            locale={props.locale}
-                            action={action}
-                            writable={props.writable}
-                          />
-                        </div>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-              </div>
-            </section>
-          );
-        })}
-      </div>
-      {active ? (
-        <div className="hidden border-t border-border xl:block">
-          <ShipmentInspector
-            item={active}
-            locale={props.locale}
-            action={props.buildRowActionModel(active, true)}
-            writable={props.writable}
-          />
-        </div>
-      ) : null}
-    </>
-  );
-}
-
 export function OrdersEcotrackWorkspace(props: OrdersEcotrackWorkspaceProps) {
   const t = useTranslations();
 
   return (
-    <WorkspaceFrame data-ecotrack-variant={props.variant}>
+    <WorkspaceFrame>
       <EcotrackWorkspaceChrome {...props} />
       {props.isInitialLoading ? (
         <div className="grid gap-3 py-6">
@@ -983,13 +690,7 @@ export function OrdersEcotrackWorkspace(props: OrdersEcotrackWorkspaceProps) {
       ) : null}
       {props.items.length ? (
         <div className={cn('transition-opacity', props.isRefreshing && 'opacity-65')}>
-          {props.variant === 2 ? (
-            <RefinedLedger {...props} />
-          ) : props.variant === 3 ? (
-            <SplitDesk {...props} />
-          ) : (
-            <StatusBoard {...props} />
-          )}
+          <RefinedLedger {...props} />
         </div>
       ) : null}
       {props.items.length ? (

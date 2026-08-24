@@ -21,7 +21,6 @@ import type {
   ProductCardRecord,
 } from '../../lib/assets';
 import { toast } from '../../lib/toast';
-import { AdminAiAskButton } from '../admin-ai-ask-button';
 import { Button } from '../ui/button';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { CompactMenu, CompactMenuItem } from '../ui/compact-menu';
@@ -480,7 +479,6 @@ export function AssetsWorkspace({
       <WorkspaceHeader>
         <WorkspaceHeading title={t.title} meta={`${viewTitle} · ${items.length}`} />
         <WorkspaceActions>
-          <AdminAiAskButton />
           <Button onClick={createEditor}>
             <Plus className="size-4" aria-hidden="true" />
             {t.create}

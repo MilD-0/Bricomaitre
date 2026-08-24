@@ -17,7 +17,6 @@ import {
   categoriesListResponseSchema,
 } from '../../lib/brands-categories';
 import { toast } from '../../lib/toast';
-import { AdminAiAskButton } from '../admin-ai-ask-button';
 import { Button } from '../ui/button';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Checkbox } from '../ui/checkbox';
@@ -36,7 +35,7 @@ import {
 } from '../ui/workspace';
 import { WorkspacePagination } from '../ui/workspace-pagination';
 
-import { DeleteDialog } from './manager-shared';
+import { TaxonomyDeleteDialog } from './taxonomy-delete-dialog';
 import {
   TaxonomyEditorPanel,
   type TaxonomyEditorState,
@@ -319,7 +318,6 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
       <WorkspaceHeader>
         <WorkspaceHeading title={viewTitle} meta={data.pagination.totalItems} />
         <WorkspaceActions>
-          <AdminAiAskButton />
           <Button
             type="button"
             disabled={!data.writable || pending}
@@ -560,7 +558,7 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
         />
       ) : null}
 
-      <DeleteDialog
+      <TaxonomyDeleteDialog
         open={deleteIds.length > 0}
         onOpenChange={(open) => !open && setDeleteIds([])}
         title={t.delete}

@@ -1,12 +1,22 @@
-import { describe, expect, it } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import { describe, expect, it, vi } from 'vitest';
 
-import { resolveProfitTrackerDaySources } from './profit-tracker';
+import {
+  getCanonicalOrderProjectionDays,
+  resolveProfitTrackerDaySources,
+  stateAwareProjectedContribution,
+  toCanonicalOrderProjectionDay,
+} from './profit-tracker';
+import { applyProfitTrackerRollforward } from './profit-tracker-metrics';
 
 const automatic = {
   date: '2026-08-15',
   postedOrders: 10,
   costCompleteOrders: 8,
   grossProfitDzd: 80_000,
+  realizedGrossProfitDzd: 30_000,
+  returnExposedGrossProfitDzd: 40_000,
+  returnExposedOrders: 5,
 };
 
 describe('profit tracker source precedence', () => {
@@ -51,6 +61,7 @@ describe('profit tracker source precedence', () => {
     expect(day.returnRateSource).toBe('default');
     expect(day.spendEur).toBe(50);
     expect(day.projectedCoveragePct).toBe(80);
+    expect(day.stateAdjustedProfitDzd).toBeUndefined();
   });
 
   it('uses manual return and confirmed values without replacing automatic gross profit', () => {
@@ -80,5 +91,216 @@ describe('profit tracker source precedence', () => {
     expect(day.returnRateSource).toBe('manual');
     expect(day.confirmedOrders).toBe(7);
     expect(day.confirmedOrdersSource).toBe('manual');
+    expect(day.stateAdjustedProfitDzd).toBe(62_000);
+    expect(day.returnExposedOrders).toBe(5);
+  });
+
+  it('keeps realized contribution, removes known losses, and risks only unresolved orders', () => {
+    expect(
+      stateAwareProjectedContribution({
+        realizedGrossProfitDzd: 30_000,
+        returnExposedGrossProfitDzd: 40_000,
+        planningReturnRatePct: 10,
+      }),
+    ).toBe(66_000);
+  });
+
+  it('treats exactly 100% as the operator profit-suppression mode', () => {
+    expect(
+      stateAwareProjectedContribution({
+        realizedGrossProfitDzd: 30_000,
+        returnExposedGrossProfitDzd: 40_000,
+        planningReturnRatePct: 100,
+      }),
+    ).toBe(0);
+  });
+});
+
+describe('canonical order projection adapter', () => {
+  it('uses the analytics return, FX, ad-cost, and adjusted-profit semantics', () => {
+    const [day] = applyProfitTrackerRollforward(
+      [
+        {
+          date: '2026-08-15',
+          spendEur: 100,
+          fbPurchases: null,
+          cpm: null,
+          ctr: null,
+          linkClicks: null,
+          landingPageViews: null,
+          grossProfitDzd: 100_000,
+          returnRatePct: 10,
+          confirmedOrders: 10,
+          note: null,
+          fxRateUsed: 280,
+          postedOrders: 10,
+        },
+      ],
+      { fxRate: 300, restFrom: null },
+    );
+
+    expect(
+      toCanonicalOrderProjectionDay({
+        basis: 'posted',
+        reportDay: day.date,
+        day,
+        defaultReturnRate: 15,
+      }),
+    ).toEqual({
+      basis: 'posted',
+      reportDay: '2026-08-15',
+      grossProfit: 100_000,
+      adSpend: 28_000,
+      estimatedReturnRate: 10,
+      estimatedReturnedOrders: 1,
+      estimatedReturnLoss: 10_000,
+      projectedProfit: 62_000,
+    });
+  });
+
+  it('does not haircut delivered or paid contribution in a mixed current-state cohort', () => {
+    const [day] = applyProfitTrackerRollforward(
+      [
+        {
+          date: '2026-08-15',
+          spendEur: 100,
+          fbPurchases: null,
+          cpm: null,
+          ctr: null,
+          linkClicks: null,
+          landingPageViews: null,
+          grossProfitDzd: 100_000,
+          returnRatePct: 10,
+          confirmedOrders: 10,
+          note: null,
+          fxRateUsed: 280,
+          postedOrders: 10,
+          returnExposedOrders: 4,
+          stateAdjustedProfitDzd: 76_000,
+        },
+      ],
+      { fxRate: 280, restFrom: null },
+    );
+
+    expect(
+      toCanonicalOrderProjectionDay({
+        basis: 'posted',
+        reportDay: day.date,
+        day,
+        defaultReturnRate: 10,
+      }),
+    ).toEqual({
+      basis: 'posted',
+      reportDay: '2026-08-15',
+      grossProfit: 100_000,
+      adSpend: 28_000,
+      estimatedReturnRate: 10,
+      estimatedReturnedOrders: 0.4,
+      estimatedReturnLoss: 24_000,
+      projectedProfit: 48_000,
+    });
+  });
+
+  it('returns zero projected profit in operator suppression mode', () => {
+    const [day] = applyProfitTrackerRollforward(
+      [
+        {
+          date: '2026-08-15',
+          spendEur: 100,
+          fbPurchases: null,
+          cpm: null,
+          ctr: null,
+          linkClicks: null,
+          landingPageViews: null,
+          grossProfitDzd: 100_000,
+          returnRatePct: 100,
+          confirmedOrders: 10,
+          note: null,
+          fxRateUsed: 280,
+          postedOrders: 10,
+          stateAdjustedProfitDzd: 100_000,
+        },
+      ],
+      { fxRate: 280, restFrom: null },
+    );
+    expect(
+      toCanonicalOrderProjectionDay({
+        basis: 'posted',
+        reportDay: day.date,
+        day,
+        defaultReturnRate: 100,
+      }).projectedProfit,
+    ).toBe(0);
+  });
+
+  it('does not turn missing economics into a false zero', () => {
+    expect(
+      toCanonicalOrderProjectionDay({
+        basis: 'confirmed',
+        reportDay: '2026-08-15',
+        defaultReturnRate: 10,
+      }),
+    ).toEqual({
+      basis: 'confirmed',
+      reportDay: '2026-08-15',
+      grossProfit: null,
+      adSpend: null,
+      estimatedReturnRate: 10,
+      estimatedReturnedOrders: 0,
+      estimatedReturnLoss: null,
+      projectedProfit: null,
+    });
+  });
+
+  it('uses first-confirmed orders while retaining the canonical planning calculator', async () => {
+    const dialect = new PgDialect();
+    const execute = vi.fn(async (query) => {
+      const built = dialect.sqlToQuery(query);
+      expect(built.params).toContain(2);
+      expect(built.params).toContain('2026-08-08');
+      expect(built.params).toContain('2026-08-15');
+      return {
+        rows: [
+          {
+            date: '2026-08-15',
+            cohort_orders: 10,
+            cost_complete_orders: 10,
+            gross_profit_dzd: 100_000,
+            realized_gross_profit_dzd: 0,
+            return_exposed_gross_profit_dzd: 100_000,
+            return_exposed_orders: 10,
+          },
+        ],
+      };
+    });
+    const selection = {
+      from: vi.fn(() => selection),
+      where: vi.fn(() => selection),
+      groupBy: vi.fn(() => selection),
+      orderBy: vi.fn(async () => []),
+    };
+    const db = {
+      execute,
+      select: vi.fn(() => selection),
+      query: { profitTrackerSettings: { findFirst: vi.fn(async () => undefined) } },
+    };
+
+    const projections = await getCanonicalOrderProjectionDays(
+      { startDate: '2026-08-15', endDate: '2026-08-15', basis: 'confirmed' },
+      { db: db as never },
+    );
+
+    expect(projections).toEqual([
+      {
+        basis: 'confirmed',
+        reportDay: '2026-08-15',
+        grossProfit: 100_000,
+        adSpend: null,
+        estimatedReturnRate: 10,
+        estimatedReturnedOrders: 1,
+        estimatedReturnLoss: 10_000,
+        projectedProfit: null,
+      },
+    ]);
   });
 });

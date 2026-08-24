@@ -87,6 +87,7 @@ describe('runtime system-wide job access', () => {
       [
         'bric:jobs:admin-ai-categorization:owner:admin@example.com',
         'bric:jobs:admin-ai-categorization:active',
+        'bric:jobs:admin-ai-categorization:origin:hash:index',
         'bric:jobs:admin-ai-categorization:job-1',
       ],
     ]);
@@ -96,6 +97,26 @@ describe('runtime system-wide job access', () => {
       snapshot,
     ]);
     expect(mocks.redis.mget).toHaveBeenCalledWith(['bric:jobs:admin-ai-categorization:job-1']);
+  });
+
+  it('uses the exact durable origin index without falling back to unrelated snapshots', async () => {
+    mocks.redis.zrevrange.mockResolvedValue(['job-1']);
+    mocks.redis.mget.mockResolvedValue([
+      JSON.stringify({ ...snapshot, origin: 'admin-ai-assistant' }),
+    ]);
+
+    await expect(
+      listRecentJobSnapshots(['admin-ai-categorization'], 10, {
+        origin: 'admin-ai-assistant',
+      }),
+    ).resolves.toEqual([{ ...snapshot, origin: 'admin-ai-assistant' }]);
+
+    expect(mocks.redis.zrevrange).toHaveBeenCalledWith(
+      expect.stringMatching(/^bric:jobs:admin-ai-categorization:origin:[a-f0-9]{64}:index$/),
+      0,
+      9,
+    );
+    expect(mocks.redis.scan).not.toHaveBeenCalled();
   });
 
   it('requests cancellation by exact queue and job ID and refreshes its index', async () => {
@@ -139,6 +160,7 @@ describe('runtime system-wide job access', () => {
         queueName: 'admin-product-export',
         kind: 'product-export',
         ownerKey: 'admin@example.com',
+        origin: 'admin-ai-assistant',
         data: { format: 'xlsx' },
       }),
     ).rejects.toThrow('snapshot unavailable');
@@ -151,9 +173,14 @@ describe('runtime system-wide job access', () => {
     );
     expect(mocks.transaction.set).toHaveBeenCalledWith(
       expect.stringMatching(/^bric:jobs:admin-product-export:/),
-      expect.stringContaining('"status":"failed"'),
+      expect.stringMatching(/"origin":"admin-ai-assistant".*"status":"failed"/),
       'EX',
       86_400,
+    );
+    expect(mocks.transaction.zadd).toHaveBeenCalledWith(
+      expect.stringMatching(/^bric:jobs:admin-product-export:origin:[a-f0-9]{64}:index$/),
+      expect.any(Number),
+      expect.any(String),
     );
   });
 });

@@ -12,7 +12,6 @@ import {
   Plus,
   RefreshCw,
   Settings2,
-  Sparkles,
   Trash2,
 } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
@@ -44,7 +43,6 @@ import type {
 } from '../../lib/analytics2';
 import { statsPath } from '../../lib/analytics2-routes';
 import { requestJson as request } from '../../lib/admin-api';
-import { openAdminAi } from '../../lib/admin-ai-events';
 import {
   analyticsAiSurfaceDetails,
   analyticsFocusAiSurfaceDetails,
@@ -250,7 +248,6 @@ function Section({
   className?: string;
   analyticsFocus?: AnalyticsAssistantFocus;
 }) {
-  const locale = useLocale();
   const focusContext = useContext(AnalyticsAssistantFocusContext);
   const active = Boolean(
     analyticsFocus && focusContext?.active?.dimension === analyticsFocus.dimension,
@@ -270,31 +267,7 @@ function Section({
     <AnalyticsSection
       title={title}
       description={description}
-      action={
-        action || analyticsFocus ? (
-          <>
-            {action}
-            {analyticsFocus ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                aria-pressed={active}
-                className={cn(
-                  'h-7 px-2 text-[11px] text-muted-foreground',
-                  active && 'bg-primary/10 text-primary',
-                )}
-                onClick={() => {
-                  focusContext?.setActive(analyticsFocus);
-                  openAdminAi();
-                }}
-              >
-                <Sparkles className="size-3.5" />
-                {getAnalytics2Copy(locale).askAi}
-              </Button>
-            ) : null}
-          </>
-        ) : null
-      }
+      action={action}
       data-analytics-ai-focus={analyticsFocus?.dimension}
       data-analytics-ai-active={active || undefined}
       className={cn(active && 'bg-primary/[0.018]', className)}

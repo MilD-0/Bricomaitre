@@ -82,7 +82,6 @@ import {
 import { OrdersWorkflows } from './orders-workflows';
 import { OrderSalesDesk } from './order-sales-desk';
 import { ReturningCustomerIndicator } from './returning-customer-indicator';
-import { AdminAiAskButton } from '../admin-ai-ask-button';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { SearchField } from '../search-field';
 
@@ -793,23 +792,20 @@ function OrdersPulse({
       timeZone: overview.timezone,
     }).format(new Date(`${reportDay}T12:00:00Z`));
   const projection = activeReport.profitProjection;
+  const projectionMoney = (value: number | null | undefined) =>
+    value == null ? '—' : formatMoney(locale, value);
   const updates = activeReport.confirmationStatusChanges + activeReport.shipmentUpdates;
   const cancellations = activeReport.adminCancelled + activeReport.carrierCancelled;
 
   return (
-    <section aria-label={t('weekOverview')} className="border-b border-border/60 bg-card/30 p-2.5">
+    <section data-orders-pulse className="border-b border-border/60 bg-card/30 p-2.5">
       <div
         className="mb-1.5 flex flex-wrap items-center gap-2 px-0.5"
         data-mobile-projection-controls
       >
-        <div className="order-1 min-w-0">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-            {t('weekOverview')}
-          </h2>
-          <p className="mt-0.5 truncate text-xs font-medium capitalize">
-            {formatReportDay(activeReport.reportDay)}
-          </p>
-        </div>
+        <p className="order-1 min-w-0 truncate text-xs font-medium capitalize">
+          {formatReportDay(activeReport.reportDay)}
+        </p>
         <label className="order-3 flex w-full items-center justify-end gap-2 border-t border-border/50 pt-2 text-xs text-muted-foreground sm:order-2 sm:ms-auto sm:w-auto sm:border-0 sm:pt-0">
           <span>{overviewT('projection.confirmedBasis')}</span>
           <Switch
@@ -886,13 +882,13 @@ function OrdersPulse({
               <div className="min-w-0">
                 <p className="text-[0.68rem] text-muted-foreground">{t('projectedProfit')}</p>
                 <p className="mt-0.5 truncate text-xl font-semibold tracking-[-0.02em] tabular-nums">
-                  {projection ? formatMoney(locale, projection.projectedProfit) : '—'}
+                  {projectionMoney(projection?.projectedProfit)}
                 </p>
               </div>
               <p className="shrink-0 pb-0.5 text-xs text-muted-foreground">
                 {t('grossShort')}{' '}
                 <span className="font-medium text-foreground tabular-nums">
-                  {projection ? formatMoney(locale, projection.grossProfit) : '—'}
+                  {projectionMoney(projection?.grossProfit)}
                 </span>
               </p>
             </div>
@@ -914,7 +910,7 @@ function OrdersPulse({
                   {overviewT('projection.adSpend')} · {t('updates')}
                 </span>
                 <span className="ms-auto font-medium tabular-nums">
-                  {projection ? formatMoney(locale, projection.adSpend) : '—'} · {updates}
+                  {projectionMoney(projection?.adSpend)} · {updates}
                 </span>
                 <MoreHorizontal className="size-4 text-muted-foreground" aria-hidden="true" />
               </summary>
@@ -924,7 +920,7 @@ function OrdersPulse({
                     {overviewT('projection.adSpend')}
                   </dt>
                   <dd className="mt-0.5 text-sm font-semibold tabular-nums">
-                    {projection ? formatMoney(locale, projection.adSpend) : '—'}
+                    {projectionMoney(projection?.adSpend)}
                   </dd>
                 </div>
                 <div className="min-w-0 px-3.5 py-2.5">
@@ -932,7 +928,7 @@ function OrdersPulse({
                     {overviewT('projection.returnLoss')}
                   </dt>
                   <dd className="mt-0.5 text-sm font-semibold tabular-nums">
-                    {projection ? formatMoney(locale, projection.estimatedReturnLoss) : '—'}
+                    {projectionMoney(projection?.estimatedReturnLoss)}
                   </dd>
                 </div>
                 <div className="min-w-0 border-t border-border/55 px-3.5 py-2.5">
@@ -963,10 +959,10 @@ function OrdersPulse({
                 {t('projectedProfit')}
               </p>
               <p className="mt-0.5 truncate text-lg font-semibold tracking-[-0.02em] tabular-nums">
-                {projection ? formatMoney(locale, projection.projectedProfit) : '—'}
+                {projectionMoney(projection?.projectedProfit)}
               </p>
               <p className="truncate text-[0.65rem] text-muted-foreground">
-                {t('grossShort')} {projection ? formatMoney(locale, projection.grossProfit) : '—'}
+                {t('grossShort')} {projectionMoney(projection?.grossProfit)}
               </p>
             </div>
             <div className="min-w-0 bg-background px-3 py-2">
@@ -974,7 +970,7 @@ function OrdersPulse({
                 {overviewT('projection.adSpend')}
               </p>
               <p className="mt-0.5 truncate text-base font-semibold tabular-nums">
-                {projection ? formatMoney(locale, projection.adSpend) : '—'}
+                {projectionMoney(projection?.adSpend)}
               </p>
             </div>
             <div className="min-w-0 bg-background px-3 py-2">
@@ -982,7 +978,7 @@ function OrdersPulse({
                 {overviewT('projection.returnLoss')}
               </p>
               <p className="mt-0.5 truncate text-base font-semibold tabular-nums">
-                {projection ? formatMoney(locale, projection.estimatedReturnLoss) : '—'}
+                {projectionMoney(projection?.estimatedReturnLoss)}
               </p>
               {projection ? (
                 <p className="truncate text-[0.65rem] text-muted-foreground">
@@ -1246,7 +1242,6 @@ export function OrdersWorkspace({
             })}
           />
           <WorkspaceActions>
-            <AdminAiAskButton />
             <OrderSalesDesk
               catalog={initialCatalog}
               writable={writable}

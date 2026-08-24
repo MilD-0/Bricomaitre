@@ -24,13 +24,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
 import { cn } from '../../lib/utils';
-import { serializeLegacyUiPreference } from '../../lib/admin-ui-preference';
 import { authClient } from '../../lib/auth-client';
-import {
-  navigationItemsForUi,
-  type NavigationItem,
-  type NavigationKey,
-} from '../../lib/navigation';
+import { navigationItems, type NavigationItem, type NavigationKey } from '../../lib/navigation';
 import { canAccessNavigationItem } from '../../lib/navigation-access';
 import { isBuiltInRole, type PermissionKey, type Role } from '../../lib/permissions';
 import { localeLabels, locales } from '../../lib/i18n';
@@ -40,9 +35,7 @@ import { Button } from '../ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Dialog, DialogContent } from '../ui/dialog';
 import { PageTransition, PendingInline } from '../ui/motion';
-import { Separator } from '../ui/separator';
 import { Spinner } from '../ui/spinner';
-import { Switch } from '../ui/switch';
 import { useMediaQuery } from '../ui/use-media-query';
 import { ThemeToggle } from '../theme-toggle';
 import { AdminAiChat } from '../admin-ai-chat';
@@ -98,7 +91,6 @@ export function AppShell({
   initialUserEmail = null,
   initialUserImage = null,
   initialUserName = null,
-  initialLegacyUi = true,
 }: {
   children: React.ReactNode;
   initialPermissions: PermissionKey[];
@@ -108,7 +100,6 @@ export function AppShell({
   initialUserEmail?: string | null;
   initialUserImage?: string | null;
   initialUserName?: string | null;
-  initialLegacyUi?: boolean;
 }) {
   const t = useTranslations();
   const permissions = useAppStore((s) => s.permissions);
@@ -125,7 +116,6 @@ export function AppShell({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [currentHash, setCurrentHash] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
-  const [legacyUi, setLegacyUi] = useState(initialLegacyUi);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const sidebarTriggerRef = useRef<HTMLButtonElement>(null);
   const sidebarCloseRef = useRef<HTMLButtonElement>(null);
@@ -178,7 +168,7 @@ export function AppShell({
 
   const items = useMemo(
     () =>
-      navigationItemsForUi(legacyUi)
+      navigationItems
         .filter((item) =>
           canAccessNavigationItem({
             isAllowed: initialIsAllowed,
@@ -195,7 +185,7 @@ export function AppShell({
               subItem.requiredPermissions.every((permission) => permissions.includes(permission)),
           ),
         })),
-    [initialIsAllowed, legacyUi, permissions, role],
+    [initialIsAllowed, permissions, role],
   );
   const analyticsQuery = useMemo(() => {
     if (!pathname.startsWith(`/${locale}/stats`) && pathname !== `/${locale}/stats`) return '';
@@ -278,14 +268,6 @@ export function AppShell({
 
   const switchLocale = (nextLocale: string) => {
     navigate(pathname.replace(`/${locale}`, `/${nextLocale}`));
-  };
-
-  const updateLegacyUi = (checked: boolean) => {
-    setLegacyUi(checked);
-    document.cookie = serializeLegacyUiPreference(checked, window.location.protocol === 'https:');
-    startNavigationTransition(() => {
-      router.refresh();
-    });
   };
 
   return (
@@ -537,22 +519,6 @@ export function AppShell({
               <LogOut className="size-4" />
               <span>{t('auth.signOut')}</span>
             </Button>
-          </div>
-          <Separator />
-          <div className="flex items-center justify-between gap-4 rounded-xl bg-secondary/45 px-3 py-2.5">
-            <label htmlFor="legacy-ui-preference" className="min-w-0">
-              <span className="block text-sm font-medium">{t('profile.legacyUi')}</span>
-              <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
-                {t('profile.legacyUiDescription')}
-              </span>
-            </label>
-            <Switch
-              id="legacy-ui-preference"
-              checked={legacyUi}
-              disabled={isNavigating}
-              aria-label={t('profile.legacyUi')}
-              onCheckedChange={updateLegacyUi}
-            />
           </div>
         </DialogContent>
       </Dialog>

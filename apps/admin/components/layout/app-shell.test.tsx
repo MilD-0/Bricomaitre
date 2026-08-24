@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   signOutMock,
   pushMock,
-  refreshMock,
   usePathnameMock,
   useSearchParamsMock,
   useTranslationsMock,
@@ -14,7 +13,6 @@ const {
 } = vi.hoisted(() => ({
   signOutMock: vi.fn(),
   pushMock: vi.fn(),
-  refreshMock: vi.fn(),
   usePathnameMock: vi.fn(),
   useSearchParamsMock: vi.fn(),
   useTranslationsMock: vi.fn(),
@@ -50,7 +48,7 @@ vi.mock('next/link', () => ({
 
 vi.mock('next/navigation', () => ({
   usePathname: usePathnameMock,
-  useRouter: () => ({ push: pushMock, refresh: refreshMock }),
+  useRouter: () => ({ push: pushMock }),
   useSearchParams: useSearchParamsMock,
 }));
 
@@ -103,9 +101,6 @@ describe('AppShell', () => {
         return 'Admin and developer roles are code-managed by email.';
       if (key === 'labels.userProfile') return 'User profile';
       if (key === 'auth.signOut') return 'Sign out';
-      if (key === 'profile.legacyUi') return 'Legacy UI';
-      if (key === 'profile.legacyUiDescription')
-        return 'Use the original Products, Orders, Assets, Landing Pages, and Stats interfaces.';
       if (key === 'labels.opsAccess') return 'Ops controls and logs are available.';
       if (key === 'assetsManager.bannersTitle') return 'Banners';
       if (key === 'assetsManager.groupsTitle') return 'Featured product groups';
@@ -142,11 +137,7 @@ describe('AppShell', () => {
       new URLSearchParams('range=custom&startDate=2026-08-01&endDate=2026-08-15&grain=week'),
     );
     render(
-      <AppShell
-        initialPermissions={['analytics_manage']}
-        initialRole="employee"
-        initialLegacyUi={false}
-      >
+      <AppShell initialPermissions={['analytics_manage']} initialRole="employee">
         <div>child</div>
       </AppShell>,
     );
@@ -189,11 +180,7 @@ describe('AppShell', () => {
   it('associates the product archive with the Products navigation family', () => {
     usePathnameMock.mockReturnValue('/en/archive');
     const view = render(
-      <AppShell
-        initialPermissions={['products_write']}
-        initialRole="employee"
-        initialLegacyUi={false}
-      >
+      <AppShell initialPermissions={['products_write']} initialRole="employee">
         <div>archive</div>
       </AppShell>,
     );
@@ -265,71 +252,7 @@ describe('AppShell', () => {
       screen.getByRole('link', { name: 'nav.administration' }).querySelector('span'),
     ).toHaveClass('whitespace-normal');
     await userEvent.click(screen.getByRole('button', { name: 'Show nav.assets submenu' }));
-    expect(screen.getByRole('link', { name: 'Banners' })).toHaveAttribute(
-      'href',
-      '/en/assets#banners',
-    );
-    expect(screen.getByRole('link', { name: 'Landing pages' })).toHaveAttribute(
-      'href',
-      '/en/landing-pages',
-    );
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Show nav.brandsCategories submenu' }),
-    );
-    expect(screen.getByRole('link', { name: 'nav.brands' })).toHaveAttribute('href', '/en/brands');
-    expect(screen.getByRole('link', { name: 'nav.categories' })).toHaveAttribute(
-      'href',
-      '/en/categories',
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Show nav.stats submenu' }));
-    expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute('href', '/en/stats');
-    expect(screen.getByRole('link', { name: 'Products' })).toHaveAttribute(
-      'href',
-      '/en/stats/products',
-    );
-    expect(screen.getByRole('link', { name: 'Landing stats' })).toHaveAttribute(
-      'href',
-      '/en/stats/landing-pages',
-    );
-    expect(screen.getByRole('link', { name: 'AI assistants' })).toHaveAttribute(
-      'href',
-      '/en/stats/ai-assistants',
-    );
-    expect(screen.getByRole('link', { name: 'Customers' })).toHaveAttribute(
-      'href',
-      '/en/stats/customers',
-    );
-    expect(screen.queryByRole('link', { name: 'Paid clicks' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Manual orders' })).toHaveAttribute(
-      'href',
-      '/en/stats/manual-orders',
-    );
-    expect(screen.getByRole('link', { name: 'Import spreadsheet' })).toHaveAttribute(
-      'href',
-      '/en/stats/import-history',
-    );
-    expect(screen.queryByRole('link', { name: 'nav.dashboard' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'nav.aiProposals' })).toHaveAttribute(
-      'href',
-      '/en/ai-proposals',
-    );
-
-    await userEvent.click(screen.getByRole('button', { name: 'User profile' }));
-
-    const dialog = screen.getByRole('dialog');
-    expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByText('Admin')).toBeInTheDocument();
-    expect(screen.queryByText('Roles')).not.toBeInTheDocument();
-    expect(screen.queryByText('Ops controls and logs are available.')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
-    const legacyUiSwitch = within(dialog).getByRole('switch', { name: 'Legacy UI' });
-    expect(legacyUiSwitch).toBeChecked();
-
-    await userEvent.click(legacyUiSwitch);
-
-    expect(legacyUiSwitch).not.toBeChecked();
-    expect(document.cookie).toContain('bric-admin-legacy-ui=0');
-    expect(refreshMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('link', { name: 'Banners' })).toHaveAttribute('href', '/en/assets');
     expect(screen.getByRole('link', { name: 'Featured product groups' })).toHaveAttribute(
       'href',
       '/en/assets/featured-groups',
@@ -342,6 +265,16 @@ describe('AppShell', () => {
       'href',
       '/en/assets/landing-pages',
     );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Show nav.brandsCategories submenu' }),
+    );
+    expect(screen.getByRole('link', { name: 'nav.brands' })).toHaveAttribute('href', '/en/brands');
+    expect(screen.getByRole('link', { name: 'nav.categories' })).toHaveAttribute(
+      'href',
+      '/en/categories',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Show nav.stats submenu' }));
+    expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute('href', '/en/stats');
     expect(screen.getByRole('link', { name: 'Money' })).toHaveAttribute('href', '/en/stats/time');
     expect(screen.getByRole('link', { name: 'Fulfillment' })).toHaveAttribute(
       'href',
@@ -359,7 +292,25 @@ describe('AppShell', () => {
       'href',
       '/en/stats/search',
     );
-    expect(screen.queryByRole('link', { name: 'Import spreadsheet' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Catalog' })).toHaveAttribute(
+      'href',
+      '/en/stats/products',
+    );
+    expect(screen.queryByRole('link', { name: 'nav.dashboard' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'nav.aiProposals' })).toHaveAttribute(
+      'href',
+      '/en/ai-proposals',
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'User profile' }));
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText('Admin')).toBeInTheDocument();
+    expect(screen.queryByText('Roles')).not.toBeInTheDocument();
+    expect(screen.queryByText('Ops controls and logs are available.')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    expect(within(dialog).queryByRole('switch')).not.toBeInTheDocument();
   });
 
   it('derives AI proposal review from catalog permissions', async () => {
