@@ -3,10 +3,19 @@ export type AdminAiToolLabelKey =
   | 'productCreated'
   | 'catalogUpdated'
   | 'productsArchived'
+  | 'archivedProducts'
+  | 'productsRestored'
   | 'taxonomy'
   | 'taxonomyUpdated'
   | 'orders'
+  | 'orderCreated'
+  | 'ordersDeleted'
   | 'ordersUpdated'
+  | 'ecotrackPreview'
+  | 'ecotrackRequirements'
+  | 'ecotrackPosting'
+  | 'ecotrackShipments'
+  | 'ecotrackShipmentsUpdated'
   | 'inventory'
   | 'inventoryUpdated'
   | 'assets'
@@ -20,8 +29,11 @@ export type AdminAiToolLabelKey =
   | 'bulletinUpdated'
   | 'administration'
   | 'administrationUpdated'
+  | 'actionHistory'
+  | 'actionHistoryRecovered'
   | 'storefront'
   | 'storefrontUpdated'
+  | 'analyticsUpdated'
   | 'background'
   | 'content'
   | 'categorization'
@@ -31,13 +43,15 @@ export type AdminAiToolDestinationKey =
   | 'products'
   | 'taxonomy'
   | 'orders'
+  | 'ecotrack'
   | 'inventory'
   | 'assets'
   | 'landingPages'
   | 'proposals'
   | 'bulletin'
   | 'administration'
-  | 'storefront';
+  | 'storefront'
+  | 'analytics';
 
 export type AdminAiToolPresentation = {
   labelKey: AdminAiToolLabelKey;
@@ -65,14 +79,33 @@ const labelKeys: Record<string, AdminAiToolLabelKey> = {
   create_product: 'productCreated',
   update_products: 'catalogUpdated',
   archive_products: 'productsArchived',
+  inspect_archived_products: 'archivedProducts',
+  restore_products: 'productsRestored',
   find_brands: 'taxonomy',
   find_categories: 'taxonomy',
   manage_taxonomy: 'taxonomyUpdated',
   inspect_orders: 'orders',
+  create_order: 'orderCreated',
+  delete_orders: 'ordersDeleted',
+  preview_order_export: 'orders',
+  start_order_export: 'background',
+  get_order_tracking_links: 'ordersUpdated',
+  inspect_order_shopping_list: 'orders',
+  save_order_shopping_list: 'ordersUpdated',
+  apply_order_shopping_list_inventory: 'inventoryUpdated',
+  preview_ecotrack_posting: 'ecotrackPreview',
+  load_ecotrack_requirements: 'ecotrackRequirements',
+  post_orders_to_ecotrack: 'ecotrackPosting',
+  inspect_ecotrack_shipments: 'ecotrackShipments',
+  manage_ecotrack_shipments: 'ecotrackShipmentsUpdated',
+  change_ecotrack_shipments: 'ecotrackShipmentsUpdated',
   update_order_status: 'ordersUpdated',
   update_order_details: 'ordersUpdated',
   inspect_inventory: 'inventory',
+  scan_inventory: 'inventory',
   adjust_inventory: 'inventoryUpdated',
+  receive_inventory: 'inventoryUpdated',
+  update_inventory_state: 'inventoryUpdated',
   inspect_assets: 'assets',
   update_asset_state: 'assetsUpdated',
   reorder_assets: 'assetsUpdated',
@@ -85,14 +118,22 @@ const labelKeys: Record<string, AdminAiToolLabelKey> = {
   inspect_bulletin: 'bulletin',
   create_bulletin_post: 'bulletinUpdated',
   reply_bulletin_post: 'bulletinUpdated',
+  set_bulletin_reaction: 'bulletinUpdated',
   update_bulletin_post: 'bulletinUpdated',
   delete_bulletin_content: 'bulletinUpdated',
   inspect_administration: 'administration',
   set_access_grant: 'administrationUpdated',
+  revoke_access_grants: 'administrationUpdated',
   set_role_definition: 'administrationUpdated',
+  inspect_action_history: 'actionHistory',
+  recover_action_history: 'actionHistoryRecovered',
   inspect_storefront_configuration: 'storefront',
   update_storefront_settings: 'storefrontUpdated',
   update_storefront_announcement: 'storefrontUpdated',
+  update_analytics_settings: 'analyticsUpdated',
+  manage_analytics_costs: 'analyticsUpdated',
+  manage_analytics_day_overrides: 'analyticsUpdated',
+  sync_analytics_source: 'analyticsUpdated',
   generate_product_content: 'content',
   get_product_content_job_status: 'content',
   list_background_jobs: 'background',
@@ -117,14 +158,33 @@ const destinationKeys: Record<string, AdminAiToolDestinationKey> = {
   create_product: 'products',
   update_products: 'products',
   archive_products: 'products',
+  inspect_archived_products: 'products',
+  restore_products: 'products',
   find_brands: 'taxonomy',
   find_categories: 'taxonomy',
   manage_taxonomy: 'taxonomy',
   inspect_orders: 'orders',
+  create_order: 'orders',
+  delete_orders: 'orders',
+  preview_order_export: 'orders',
+  start_order_export: 'orders',
+  get_order_tracking_links: 'orders',
+  inspect_order_shopping_list: 'orders',
+  save_order_shopping_list: 'orders',
+  apply_order_shopping_list_inventory: 'inventory',
+  preview_ecotrack_posting: 'ecotrack',
+  load_ecotrack_requirements: 'ecotrack',
+  post_orders_to_ecotrack: 'ecotrack',
+  inspect_ecotrack_shipments: 'ecotrack',
+  manage_ecotrack_shipments: 'ecotrack',
+  change_ecotrack_shipments: 'ecotrack',
   update_order_status: 'orders',
   update_order_details: 'orders',
   inspect_inventory: 'inventory',
+  scan_inventory: 'inventory',
   adjust_inventory: 'inventory',
+  receive_inventory: 'inventory',
+  update_inventory_state: 'inventory',
   inspect_assets: 'assets',
   update_asset_state: 'assets',
   reorder_assets: 'assets',
@@ -137,14 +197,22 @@ const destinationKeys: Record<string, AdminAiToolDestinationKey> = {
   inspect_bulletin: 'bulletin',
   create_bulletin_post: 'bulletin',
   reply_bulletin_post: 'bulletin',
+  set_bulletin_reaction: 'bulletin',
   update_bulletin_post: 'bulletin',
   delete_bulletin_content: 'bulletin',
   inspect_administration: 'administration',
   set_access_grant: 'administration',
+  revoke_access_grants: 'administration',
   set_role_definition: 'administration',
+  inspect_action_history: 'administration',
+  recover_action_history: 'administration',
   inspect_storefront_configuration: 'storefront',
   update_storefront_settings: 'storefront',
   update_storefront_announcement: 'storefront',
+  update_analytics_settings: 'analytics',
+  manage_analytics_costs: 'analytics',
+  manage_analytics_day_overrides: 'analytics',
+  sync_analytics_source: 'analytics',
   generate_product_content: 'products',
   get_product_content_job_status: 'products',
   suggest_discount: 'proposals',
@@ -164,10 +232,19 @@ const activityKeysByLabel: Record<AdminAiToolLabelKey, AdminAiToolActivityKey> =
   productCreated: 'products',
   catalogUpdated: 'products',
   productsArchived: 'products',
+  archivedProducts: 'products',
+  productsRestored: 'products',
   taxonomy: 'taxonomy',
   taxonomyUpdated: 'taxonomy',
   orders: 'orders',
+  orderCreated: 'orders',
+  ordersDeleted: 'orders',
   ordersUpdated: 'orders',
+  ecotrackPreview: 'orders',
+  ecotrackRequirements: 'orders',
+  ecotrackPosting: 'orders',
+  ecotrackShipments: 'orders',
+  ecotrackShipmentsUpdated: 'orders',
   inventory: 'inventory',
   inventoryUpdated: 'inventory',
   assets: 'assets',
@@ -181,8 +258,11 @@ const activityKeysByLabel: Record<AdminAiToolLabelKey, AdminAiToolActivityKey> =
   bulletinUpdated: 'bulletin',
   administration: 'administration',
   administrationUpdated: 'administration',
+  actionHistory: 'administration',
+  actionHistoryRecovered: 'administration',
   storefront: 'storefront',
   storefrontUpdated: 'storefront',
+  analyticsUpdated: 'analytics',
   background: 'background',
   content: 'products',
   categorization: 'products',
@@ -212,15 +292,33 @@ function destinationHref(
   output: unknown,
   locale: string,
 ) {
-  if (destinationKey === 'products') return `/${locale}/products`;
+  if (destinationKey === 'products') {
+    return toolName === 'inspect_archived_products' || toolName === 'restore_products'
+      ? `/${locale}/archive`
+      : `/${locale}/products`;
+  }
   if (destinationKey === 'taxonomy') return `/${locale}/brands-categories`;
   if (destinationKey === 'orders') return `/${locale}/orders`;
+  if (destinationKey === 'ecotrack') return `/${locale}/orders/ecotrack`;
   if (destinationKey === 'inventory') return `/${locale}/inventory`;
   if (destinationKey === 'proposals') return `/${locale}/ai-proposals`;
   if (destinationKey === 'bulletin') return `/${locale}/bulletin`;
   if (destinationKey === 'storefront') return `/${locale}/administration/storefront`;
+  if (destinationKey === 'analytics') {
+    if (toolName === 'sync_analytics_source') {
+      return outputRecord(output)?.source === 'searchConsole'
+        ? `/${locale}/stats/search`
+        : `/${locale}/stats/meta-ads`;
+    }
+    return `/${locale}/stats/costs`;
+  }
   if (destinationKey === 'administration') {
-    if (toolName === 'set_access_grant') return `/${locale}/administration/users`;
+    if (toolName === 'inspect_action_history' || toolName === 'recover_action_history') {
+      return `/${locale}/administration/history`;
+    }
+    if (toolName === 'set_access_grant' || toolName === 'revoke_access_grants') {
+      return `/${locale}/administration/users`;
+    }
     if (toolName === 'set_role_definition') return `/${locale}/administration/roles`;
     return `/${locale}/administration`;
   }
@@ -247,7 +345,9 @@ export function adminAiToolPresentation(
 }
 
 export function adminAiToolActivityKey(toolName: string): AdminAiToolActivityKey {
-  if (toolName === 'query_analytics') return 'analytics';
+  if (toolName === 'query_analytics' || destinationKeys[toolName] === 'analytics') {
+    return 'analytics';
+  }
   return activityKeysByLabel[labelKeys[toolName] ?? 'result'];
 }
 

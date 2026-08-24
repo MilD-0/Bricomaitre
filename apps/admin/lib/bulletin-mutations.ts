@@ -1,18 +1,21 @@
 import type { InferInsertModel } from 'drizzle-orm';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
 import {
   bulletinPostAttachments,
+  bulletinPostReactions,
   bulletinPosts,
   bulletinPostTags,
   bulletinReplies,
+  bulletinReplyReactions,
 } from '@bric/db/schema';
 
 import { mutateEntityWithHistory } from './action-history';
 import {
   bulletinPostPatchSchema,
   bulletinPostSchema,
+  bulletinReactionSchema,
   bulletinReplySchema,
   canDeleteBulletinPost,
   canDeleteBulletinReply,
@@ -53,6 +56,98 @@ export class BulletinMutationForbiddenError extends Error {
     super(`You cannot change Bulletin ${resource} ${resourceId}.`);
     this.name = 'BulletinMutationForbiddenError';
   }
+}
+
+export async function setBulletinPostReaction(
+  db: Database,
+  postId: number,
+  emojiInput: string,
+  desired: 'add' | 'remove' | 'toggle',
+  actor: BulletinMutationActor,
+) {
+  const { emoji } = bulletinReactionSchema.parse({ emoji: emojiInput });
+  const post = await db.query.bulletinPosts.findFirst({
+    where: eq(bulletinPosts.id, postId),
+  });
+  if (!post) throw new BulletinPostNotFoundError(postId);
+  const existing = await db.query.bulletinPostReactions.findFirst({
+    where: and(
+      eq(bulletinPostReactions.postId, postId),
+      eq(bulletinPostReactions.userEmail, actor.email),
+      eq(bulletinPostReactions.emoji, emoji),
+    ),
+  });
+  const shouldReact = desired === 'toggle' ? !existing : desired === 'add';
+  if (Boolean(existing) === shouldReact) {
+    return { id: postId, emoji, reacted: shouldReact, changed: false };
+  }
+
+  await mutateEntityWithHistory(db, {
+    entityType: 'bulletinPostReactions',
+    entityId: existing?.id ?? postId,
+    operation: existing ? 'delete' : 'create',
+    actor,
+    execute: async (tx) => {
+      if (existing) {
+        await tx.delete(bulletinPostReactions).where(eq(bulletinPostReactions.id, existing.id));
+      } else {
+        await tx.insert(bulletinPostReactions).values({
+          postId,
+          userId: actor.id ?? null,
+          userName: actor.name,
+          userEmail: actor.email,
+          emoji,
+        });
+      }
+    },
+  });
+  return { id: postId, emoji, reacted: shouldReact, changed: true };
+}
+
+export async function setBulletinReplyReaction(
+  db: Database,
+  replyId: number,
+  emojiInput: string,
+  desired: 'add' | 'remove' | 'toggle',
+  actor: BulletinMutationActor,
+) {
+  const { emoji } = bulletinReactionSchema.parse({ emoji: emojiInput });
+  const reply = await db.query.bulletinReplies.findFirst({
+    where: eq(bulletinReplies.id, replyId),
+  });
+  if (!reply) throw new BulletinReplyNotFoundError(replyId);
+  const existing = await db.query.bulletinReplyReactions.findFirst({
+    where: and(
+      eq(bulletinReplyReactions.replyId, replyId),
+      eq(bulletinReplyReactions.userEmail, actor.email),
+      eq(bulletinReplyReactions.emoji, emoji),
+    ),
+  });
+  const shouldReact = desired === 'toggle' ? !existing : desired === 'add';
+  if (Boolean(existing) === shouldReact) {
+    return { id: replyId, postId: reply.postId, emoji, reacted: shouldReact, changed: false };
+  }
+
+  await mutateEntityWithHistory(db, {
+    entityType: 'bulletinReplyReactions',
+    entityId: existing?.id ?? replyId,
+    operation: existing ? 'delete' : 'create',
+    actor,
+    execute: async (tx) => {
+      if (existing) {
+        await tx.delete(bulletinReplyReactions).where(eq(bulletinReplyReactions.id, existing.id));
+      } else {
+        await tx.insert(bulletinReplyReactions).values({
+          replyId,
+          userId: actor.id ?? null,
+          userName: actor.name,
+          userEmail: actor.email,
+          emoji,
+        });
+      }
+    },
+  });
+  return { id: replyId, postId: reply.postId, emoji, reacted: shouldReact, changed: true };
 }
 
 export async function createBulletinPost(

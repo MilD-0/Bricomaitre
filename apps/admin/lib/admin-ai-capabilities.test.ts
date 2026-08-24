@@ -33,6 +33,13 @@ describe('admin AI capability registry', () => {
     expect(suggestionKeysForAdminAi(orderContext, [])).toEqual(['helpCurrentSurface']);
     expect(suggestionKeysForAdminAi(orderContext, ['orders_write'])).toEqual([
       'inspectSelectedOrders',
+      'postConfirmedOrders',
+      'helpCurrentSurface',
+    ]);
+    const shipmentContext = resolveAdminAiSurfaceContext('/en/orders/ecotrack');
+    expect(suggestionKeysForAdminAi(shipmentContext, ['orders_write'])).toEqual([
+      'manageEcotrackShipments',
+      'inspectSelectedOrders',
       'helpCurrentSurface',
     ]);
 
@@ -66,6 +73,24 @@ describe('admin AI capability registry', () => {
       'inspectAdministration',
       'helpCurrentSurface',
     ]);
+  });
+
+  it('offers the native archive lifecycle instead of live-catalog suggestions on archive', () => {
+    const context = resolveAdminAiSurfaceContext('/en/archive');
+    expect(suggestionKeysForAdminAi(context, ['products_write'])).toEqual([
+      'inspectArchivedProducts',
+      'helpCurrentSurface',
+    ]);
+  });
+
+  it('offers selected action inspection on the native administration history view', () => {
+    const context = resolveAdminAiSurfaceContext('/en/administration/history');
+    expect(suggestionKeysForAdminAi(context, ['settings_manage'])).toEqual([
+      'inspectActionHistory',
+      'inspectAdministration',
+      'helpCurrentSurface',
+    ]);
+    expect(suggestionKeysForAdminAi(context, [])).toEqual(['helpCurrentSurface']);
   });
 
   it('offers a native Bulletin summary instead of generic surface help alone', () => {

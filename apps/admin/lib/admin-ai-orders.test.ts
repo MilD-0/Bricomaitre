@@ -1,20 +1,35 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ update: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  create: vi.fn(),
+  delete: vi.fn(),
+  update: vi.fn(),
+}));
 
 vi.mock('@bric/db/client', () => ({ getDb: () => 'database' }));
 vi.mock('./admin-order-update', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./admin-order-update')>()),
   updateAdminOrder: mocks.update,
 }));
+vi.mock('./admin-order-lifecycle', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./admin-order-lifecycle')>()),
+  createAdminOrder: mocks.create,
+  deleteAdminOrder: mocks.delete,
+}));
 
 import {
   adminAiOrderDetailsMutationSchema,
+  adminAiOrderDetailsMutationFromTool,
+  adminAiOrderDetailsToolSchema,
   adminAiOrderStatusMutationSchema,
+  createAdminAiOrder,
+  deleteAdminAiOrders,
   updateAdminOrderDetails,
+  updateAdminOrderDetailsFromTool,
   updateAdminOrderStatuses,
 } from './admin-ai-orders';
 import { AdminOrderNotFoundError, AdminOrderStatusTransitionError } from './admin-order-update';
+import { AdminOrderLifecycleNotFoundError } from './admin-order-lifecycle';
 
 function order(confirmed: number, history: number[], noAnswerCount = 0) {
   return {
@@ -177,6 +192,173 @@ describe('admin AI order status updates', () => {
       updatedCount: 1,
       items: [{ id: 92, note: 'Verified' }],
       failed: [{ orderId: 91, error: 'Order 91 was not found.' }],
+    });
+  });
+
+  it('converts explicit field operations without exposing unrelated patch properties', () => {
+    expect(
+      adminAiOrderDetailsMutationFromTool({
+        items: [
+          {
+            orderId: 92,
+            operations: [
+              { field: 'wilayaId', value: 16 },
+              { field: 'commune', value: 'Bab Ezzouar' },
+            ],
+          },
+        ],
+      }),
+    ).toEqual({
+      items: [{ orderId: 92, changes: { wilayaId: 16, commune: 'Bab Ezzouar' } }],
+    });
+    expect(
+      adminAiOrderDetailsToolSchema.safeParse({
+        items: [
+          {
+            orderId: 92,
+            operations: [{ field: 'wilayaId', value: 16, phoneNumber: 'PRESERVE' }],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      adminAiOrderDetailsToolSchema.safeParse({
+        items: [
+          {
+            orderId: 92,
+            operations: [
+              { field: 'commune', value: 'Bab Ezzouar' },
+              { field: 'commune', value: 'Alger Centre' },
+            ],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('executes operation patches through the canonical order update workflow', async () => {
+    mocks.update.mockResolvedValueOnce({ ...order(2, [0, 2]), id: 92, city: 'Bab Ezzouar' });
+
+    await expect(
+      updateAdminOrderDetailsFromTool({
+        items: [
+          {
+            orderId: 92,
+            operations: [
+              { field: 'wilayaId', value: 16 },
+              { field: 'commune', value: 'Bab Ezzouar' },
+            ],
+          },
+        ],
+      }),
+    ).resolves.toMatchObject({ ok: true, updatedCount: 1, failed: [] });
+    expect(mocks.update).toHaveBeenCalledWith(
+      'database',
+      92,
+      {
+        firstName: undefined,
+        lastName: undefined,
+        phoneNumber1: undefined,
+        note: undefined,
+        delivery: undefined,
+        state: 16,
+        city: 'Bab Ezzouar',
+        homeAddress: undefined,
+        cartProducts: undefined,
+      },
+      undefined,
+    );
+  });
+});
+
+describe('admin AI order lifecycle', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('creates one canonical local order from exact product IDs without inventing optional fields', async () => {
+    mocks.create.mockResolvedValue({
+      item: { id: 91, variant: null, totalAmount: 15_500 },
+      duplicateCandidates: [{ id: 88, createdAt: '2026-08-24T07:00:00.000Z' }],
+    });
+    const actor = { email: 'admin@example.com', name: 'Admin' };
+    await expect(
+      createAdminAiOrder(
+        {
+          firstName: 'Ahmed',
+          lastName: null,
+          email: null,
+          phoneNumber1: '0550123456',
+          phoneNumber2: null,
+          productIds: [12, 12],
+          delivery: 'home',
+          wilayaId: 16,
+          commune: 'Bab Ezzouar',
+          homeAddress: '12 rue des Outils',
+          note: null,
+          promoCode: null,
+        },
+        actor,
+      ),
+    ).resolves.toMatchObject({ ok: true, item: { id: 91 }, duplicateCandidates: [{ id: 88 }] });
+    expect(mocks.create).toHaveBeenCalledWith(
+      'database',
+      {
+        firstName: 'Ahmed',
+        lastName: null,
+        email: null,
+        phoneNumber1: '0550123456',
+        phoneNumber2: null,
+        cartProducts: ['12', '12'],
+        delivery: 0,
+        state: 16,
+        city: 'Bab Ezzouar',
+        homeAddress: '12 rue des Outils',
+        note: null,
+        promoCode: null,
+        visitId: null,
+        journeyId: null,
+        sessionId: null,
+      },
+      actor,
+    );
+  });
+
+  it('does not create an assistant order without a resolved catalog product', async () => {
+    await expect(
+      createAdminAiOrder({
+        firstName: 'Ahmed',
+        lastName: null,
+        email: null,
+        phoneNumber1: '0550123456',
+        phoneNumber2: null,
+        productIds: [],
+        delivery: 'home',
+        wilayaId: null,
+        commune: null,
+        homeAddress: null,
+        note: null,
+        promoCode: null,
+      }),
+    ).rejects.toThrow();
+
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it('deletes exact local orders with partial failures and external-shipment disclosure', async () => {
+    mocks.delete
+      .mockResolvedValueOnce({
+        id: 91,
+        customerName: 'Ahmed Test',
+        status: 2,
+        ecotrackTrackingNumber: 'TRK-91',
+      })
+      .mockRejectedValueOnce(new AdminOrderLifecycleNotFoundError(99));
+
+    await expect(deleteAdminAiOrders({ orderIds: [91, 99] })).resolves.toMatchObject({
+      ok: false,
+      deletedCount: 1,
+      failedCount: 1,
+      deleted: [{ id: 91, externalShipmentMayRemain: true }],
+      failed: [{ orderId: 99, code: 'order_not_found' }],
     });
   });
 });

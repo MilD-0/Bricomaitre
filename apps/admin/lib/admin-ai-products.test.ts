@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   replace: vi.fn(),
   archive: vi.fn(),
+  restore: vi.fn(),
+  loadArchived: vi.fn(),
   revalidateTags: vi.fn(),
   revalidateProducts: vi.fn(),
   revalidateLandingPages: vi.fn(),
@@ -19,7 +21,9 @@ vi.mock('./product-update-workflow', async (importOriginal) => ({
   createProductThroughCanonicalWorkflow: mocks.create,
   replaceProductThroughCanonicalWorkflow: mocks.replace,
   archiveProductThroughCanonicalWorkflow: mocks.archive,
+  restoreProductThroughCanonicalWorkflow: mocks.restore,
 }));
+vi.mock('./product-archive', () => ({ loadArchivedProducts: mocks.loadArchived }));
 vi.mock('./server-cache', () => ({
   CACHE_TAGS: { products: 'products', productsMeta: 'products-meta' },
   revalidateServerTags: mocks.revalidateTags,
@@ -39,6 +43,8 @@ vi.mock('./sentry', () => ({
 import {
   archiveAdminAiProducts,
   createAdminAiProduct,
+  inspectAdminAiArchivedProducts,
+  restoreAdminAiProducts,
   updateAdminAiProducts,
 } from './admin-ai-products';
 import { ProductMutationNotFoundError } from './product-update-workflow';
@@ -102,6 +108,15 @@ describe('admin AI direct product updates', () => {
       promoCodeCount: 0,
     });
     mocks.archive.mockImplementation(async (_db, productId) => ({ productId, archived: true }));
+    mocks.restore.mockImplementation(async (_db, productId) => ({
+      id: productId,
+      title: `Product ${productId}`,
+      active: false,
+      inStock: false,
+      availabilityStatus: 'out_of_stock',
+      archived: false,
+    }));
+    mocks.loadArchived.mockResolvedValue([]);
   });
 
   it('creates one complete canonical product and refreshes the catalog once', async () => {
@@ -247,5 +262,81 @@ describe('admin AI direct product updates', () => {
     expect(mocks.revalidateProducts).toHaveBeenCalledOnce();
     expect(mocks.revalidateLandingPages).toHaveBeenCalledOnce();
     expect(mocks.startFeed).toHaveBeenCalledWith('product:ai-archive', 'request-1');
+  });
+
+  it('inspects exact archived IDs with explicit missing records', async () => {
+    mocks.loadArchived.mockResolvedValue([
+      {
+        id: 12,
+        title: 'Perceuse archivée',
+        sku: 'PB-1',
+        barcode: null,
+        archivedAt: '2026-08-20T10:00:00.000Z',
+      },
+    ]);
+
+    await expect(
+      inspectAdminAiArchivedProducts({ scope: 'exact', productIds: [12, 99, 12] }),
+    ).resolves.toMatchObject({
+      requestedCount: 2,
+      items: [{ id: 12, sku: 'PB-1' }],
+      missingProductIds: [99],
+    });
+  });
+
+  it('searches and paginates the complete archive instead of truncating it to a tiny sample', async () => {
+    mocks.loadArchived.mockResolvedValue(
+      Array.from({ length: 125 }, (_, index) => ({
+        id: index + 1,
+        title: `Perceuse ${index + 1}`,
+        sku: `PB-${index + 1}`,
+        barcode: null,
+        archivedAt: '2026-08-20T10:00:00.000Z',
+      })),
+    );
+
+    await expect(
+      inspectAdminAiArchivedProducts({
+        scope: 'filtered',
+        query: 'perceuse',
+        page: 2,
+        limit: 50,
+      }),
+    ).resolves.toMatchObject({
+      items: expect.arrayContaining([
+        expect.objectContaining({ id: 51 }),
+        expect.objectContaining({ id: 100 }),
+      ]),
+      pagination: { page: 2, limit: 50, totalItems: 125, totalPages: 3 },
+    });
+  });
+
+  it('restores exact archived products with partial results and one catalog refresh', async () => {
+    mocks.restore
+      .mockResolvedValueOnce({
+        id: 12,
+        title: 'Perceuse archivée',
+        active: false,
+        inStock: false,
+        availabilityStatus: 'out_of_stock',
+        archived: false,
+      })
+      .mockRejectedValueOnce(new ProductMutationNotFoundError(99));
+
+    await expect(
+      restoreAdminAiProducts(
+        { productIds: [12, 99] },
+        { email: 'admin@example.com', name: 'Admin' },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      restoredCount: 1,
+      failedCount: 1,
+      restored: [{ id: 12, active: false, inStock: false }],
+      failed: [{ productId: 99, code: 'archived_product_not_found' }],
+      catalogFeedRefresh: 'queued',
+    });
+    expect(mocks.startFeed).toHaveBeenCalledWith('product:ai-restore', 'request-1');
+    expect(mocks.revalidateLandingPages).toHaveBeenCalledOnce();
   });
 });

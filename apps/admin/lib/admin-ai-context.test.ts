@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 import { navigationKeys } from './navigation';
-import { adminAiSurfaceContextSchema, resolveAdminAiSurfaceContext } from './admin-ai-context';
+import {
+  adminAiSurfaceContextSchema,
+  mergeAdminAiSurfaceDetails,
+  resolveAdminAiSurfaceContext,
+} from './admin-ai-context';
 
 describe('admin AI surface context', () => {
   it.each([
     ['/en/administration/users', 'administration', 'users'],
-    ['/fr/products', 'products', null],
+    ['/fr/products', 'products', 'catalog'],
+    ['/en/archive', 'products', 'archive'],
     ['/ar/ai-proposals', 'aiProposals', null],
     ['/en/orders/ecotrack', 'orders', 'ecotrack'],
     ['/en/inventory', 'inventory', null],
@@ -90,5 +95,28 @@ describe('admin AI surface context', () => {
         },
       }).success,
     ).toBe(false);
+  });
+
+  it('merges nested live surface context without losing the parent analytics range', () => {
+    expect(
+      mergeAdminAiSurfaceDetails([
+        { filters: { view: 'acquisition', range: '90d', grain: 'week' }, selection: null },
+        {
+          filters: {
+            analyticsFocus: 'campaigns',
+            analyticsIdentifiers: 'cmp-1|cmp-2',
+          },
+        },
+      ]),
+    ).toEqual({
+      filters: {
+        view: 'acquisition',
+        range: '90d',
+        grain: 'week',
+        analyticsFocus: 'campaigns',
+        analyticsIdentifiers: 'cmp-1|cmp-2',
+      },
+      selection: null,
+    });
   });
 });

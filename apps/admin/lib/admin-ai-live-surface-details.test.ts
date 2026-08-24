@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   administrationAiSurfaceDetails,
   analyticsAiSurfaceDetails,
+  analyticsFocusAiSurfaceDetails,
   assetsAiSurfaceDetails,
   bulletinAiSurfaceDetails,
   taxonomyAiSurfaceDetails,
@@ -74,6 +75,22 @@ describe('admin AI live surface adapters', () => {
       effectiveRanges: 'acquisition:2026-07-24..2026-08-17',
       warnings: 'sourcePartial',
       queryDurationMs: 82,
+    });
+  });
+
+  it('exposes the exact visible analytics selection as model context', () => {
+    expect(
+      analyticsFocusAiSurfaceDetails({
+        dimension: 'campaigns',
+        search: 'Summer tools',
+        identifiers: ['cmp-2', 'cmp-2', 'cmp-7'],
+      }),
+    ).toEqual({
+      filters: {
+        analyticsFocus: 'campaigns',
+        analyticsSearch: 'Summer tools',
+        analyticsIdentifiers: 'cmp-2|cmp-7',
+      },
     });
   });
 

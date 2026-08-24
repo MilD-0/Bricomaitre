@@ -1,16 +1,23 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { GET } from '../route';
+import { GET, POST } from '../route';
 
-const { hasDbMock, getDbMock, authMock, canMutateResourceMock, requireMutationAccessMock } =
-  vi.hoisted(() => ({
-    hasDbMock: vi.fn(),
-    getDbMock: vi.fn(),
-    authMock: vi.fn(),
-    canMutateResourceMock: vi.fn(),
-    requireMutationAccessMock: vi.fn(),
-  }));
+const {
+  hasDbMock,
+  getDbMock,
+  authMock,
+  canMutateResourceMock,
+  requireMutationAccessMock,
+  createAdminOrderMock,
+} = vi.hoisted(() => ({
+  hasDbMock: vi.fn(),
+  getDbMock: vi.fn(),
+  authMock: vi.fn(),
+  canMutateResourceMock: vi.fn(),
+  requireMutationAccessMock: vi.fn(),
+  createAdminOrderMock: vi.fn(),
+}));
 
 vi.mock('@bric/db/client', () => ({
   hasDb: hasDbMock,
@@ -25,6 +32,9 @@ vi.mock('../../../../lib/rbac', () => ({
   canMutateResource: canMutateResourceMock,
   requireMutationAccess: requireMutationAccessMock,
 }));
+vi.mock('../../../../lib/admin-order-lifecycle', () => ({
+  createAdminOrder: createAdminOrderMock,
+}));
 
 describe('app/api/orders/route', () => {
   beforeEach(() => {
@@ -36,6 +46,10 @@ describe('app/api/orders/route', () => {
     canMutateResourceMock.mockReturnValue(true);
     requireMutationAccessMock.mockReset();
     requireMutationAccessMock.mockResolvedValue(null);
+    createAdminOrderMock.mockReset().mockResolvedValue({
+      item: { id: 91 },
+      duplicateCandidates: [],
+    });
   });
 
   it('returns an empty payload when DB is unavailable', async () => {
@@ -66,6 +80,51 @@ describe('app/api/orders/route', () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toHaveProperty('error');
     expect(getDbMock).not.toHaveBeenCalled();
+  });
+
+  it('creates through the shared canonical admin-order workflow', async () => {
+    hasDbMock.mockReturnValue(true);
+    const db = { marker: 'database' };
+    getDbMock.mockReturnValue(db);
+    authMock.mockResolvedValue({
+      user: { email: 'admin@example.com', name: 'Admin', permissions: ['orders_write'] },
+    });
+    const input = {
+      firstName: 'Ahmed',
+      lastName: null,
+      email: null,
+      phoneNumber1: '0550123456',
+      phoneNumber2: null,
+      cartProducts: ['12'],
+      delivery: 0,
+      state: 16,
+      city: 'Bab Ezzouar',
+      homeAddress: '12 rue des Outils',
+      note: null,
+      promoCode: null,
+      visitId: null,
+      journeyId: null,
+      sessionId: null,
+    };
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify(input),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(createAdminOrderMock).toHaveBeenCalledWith(db, input, {
+      email: 'admin@example.com',
+      name: 'Admin',
+    });
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      item: { id: 91 },
+      duplicateCandidates: [],
+    });
   });
 
   it('serializes orders with status history and amounts', async () => {

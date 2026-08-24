@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   updatePost: vi.fn(),
   deletePost: vi.fn(),
   deleteReply: vi.fn(),
+  setPostReaction: vi.fn(),
+  setReplyReaction: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', () => ({ getDb: () => 'database' }));
@@ -15,12 +17,15 @@ vi.mock('./bulletin-mutations', () => ({
   updateBulletinPost: mocks.updatePost,
   deleteBulletinPost: mocks.deletePost,
   deleteBulletinReply: mocks.deleteReply,
+  setBulletinPostReaction: mocks.setPostReaction,
+  setBulletinReplyReaction: mocks.setReplyReaction,
 }));
 
 import {
   createAdminAiBulletinPost,
   deleteAdminAiBulletinContent,
   replyToAdminAiBulletinPost,
+  setAdminAiBulletinReaction,
   updateAdminAiBulletinPost,
 } from './admin-ai-bulletin';
 
@@ -110,5 +115,48 @@ describe('admin AI Bulletin writes', () => {
     ).resolves.toEqual({ ok: true, kind: 'reply', id: 9, postId: 7, deleted: true });
     expect(mocks.deletePost).toHaveBeenCalledWith('database', 7, actor);
     expect(mocks.deleteReply).toHaveBeenCalledWith('database', 9, actor);
+  });
+
+  it('sets exact post and reply reaction states idempotently', async () => {
+    mocks.setPostReaction.mockResolvedValue({
+      id: 7,
+      emoji: '👍',
+      reacted: true,
+      changed: true,
+    });
+    mocks.setReplyReaction.mockResolvedValue({
+      id: 9,
+      postId: 7,
+      emoji: '🔥',
+      reacted: false,
+      changed: false,
+    });
+
+    await expect(
+      setAdminAiBulletinReaction({ kind: 'post', postId: 7, emoji: '👍', action: 'add' }, actor),
+    ).resolves.toEqual({
+      ok: true,
+      kind: 'post',
+      requestedAction: 'add',
+      id: 7,
+      emoji: '👍',
+      reacted: true,
+      changed: true,
+    });
+    await expect(
+      setAdminAiBulletinReaction(
+        { kind: 'reply', replyId: 9, emoji: '🔥', action: 'remove' },
+        actor,
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      kind: 'reply',
+      requestedAction: 'remove',
+      id: 9,
+      postId: 7,
+      emoji: '🔥',
+      reacted: false,
+      changed: false,
+    });
   });
 });

@@ -14,6 +14,9 @@ export const adminAiEntityTypeValues = [
   'landingPage',
   'backgroundJob',
   'bulletinPost',
+  'actionLog',
+  'accessGrant',
+  'roleDefinition',
 ] as const;
 
 const adminAiFilterValueSchema = z.union([
@@ -54,6 +57,16 @@ export type AdminAiSurfaceDetails = {
     focusedId?: number | null;
   } | null;
 };
+
+export function mergeAdminAiSurfaceDetails(details: readonly AdminAiSurfaceDetails[]) {
+  const filters: NonNullable<AdminAiSurfaceDetails['filters']> = {};
+  let selection: AdminAiSurfaceDetails['selection'] | undefined;
+  for (const detail of details) {
+    Object.assign(filters, detail.filters ?? {});
+    if (detail.selection !== undefined) selection = detail.selection;
+  }
+  return { filters, selection };
+}
 
 const analyticsSections: Record<string, string> = {
   '': 'command',
@@ -105,6 +118,7 @@ function routeSection(surface: AdminAiSurface, segments: string[], hash: string)
     return segments[0] === 'categories' ? 'categories' : 'brands';
   }
   if (surface === 'administration') return segments[1] ?? 'overview';
+  if (surface === 'products') return segments[0] === 'archive' ? 'archive' : 'catalog';
   return null;
 }
 

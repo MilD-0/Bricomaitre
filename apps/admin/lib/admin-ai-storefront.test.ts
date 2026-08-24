@@ -25,8 +25,10 @@ vi.mock('./storefront-revalidate', () => ({
 
 import {
   inspectAdminStorefrontConfiguration,
+  storefrontSettingsToolSchema,
   updateAdminStorefrontAnnouncement,
   updateAdminStorefrontSettings,
+  updateAdminStorefrontSettingsFromTool,
 } from './admin-ai-storefront';
 
 const settings = {
@@ -86,6 +88,40 @@ describe('admin AI storefront operations', () => {
     );
     expect(mocks.saveSettings).not.toHaveBeenCalled();
     expect(mocks.revalidate).not.toHaveBeenCalled();
+  });
+
+  it('applies only explicit model-facing field operations and supports nullable clears', async () => {
+    await expect(
+      updateAdminStorefrontSettingsFromTool({
+        operations: [
+          { field: 'address', value: '12 rue des Outils' },
+          { field: 'facebookUrl', value: null },
+          { field: 'aiAssistantEnabled', value: false },
+        ],
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      settings: {
+        address: '12 rue des Outils',
+        facebookUrl: null,
+        aiAssistantEnabled: false,
+        contactPhone: '0550000000',
+      },
+    });
+    expect(mocks.saveSettings).toHaveBeenCalledWith({
+      ...settings,
+      address: '12 rue des Outils',
+      facebookUrl: null,
+      aiAssistantEnabled: false,
+    });
+    expect(
+      storefrontSettingsToolSchema.safeParse({
+        operations: [
+          { field: 'address', value: 'One' },
+          { field: 'address', value: 'Two' },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it('updates both localized announcement messages and revalidates storefront content', async () => {

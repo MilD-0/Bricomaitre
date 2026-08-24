@@ -1,9 +1,11 @@
 'use client';
 
-import type {
-  ShoppingAssistantProduct,
-  ShoppingAssistantResponse,
-  ShoppingAssistantToolName,
+import {
+  shoppingAssistantCartMutationSchema,
+  type ShoppingAssistantCartMutation,
+  type ShoppingAssistantProduct,
+  type ShoppingAssistantResponse,
+  type ShoppingAssistantToolName,
 } from '@bric/storefront-core/shopping-assistant-contracts';
 import {
   ArrowUp,
@@ -32,6 +34,7 @@ import {
 import { triggerHaptic } from '@/lib/haptics';
 import { formatProductPrice } from '@/lib/product-presentation';
 import { addCartItem, readCart, writeCart } from '@/lib/cart';
+import { applyShoppingAssistantCartMutations } from '@/lib/shopping-assistant-cart';
 import {
   buildShoppingAssistantPageContext,
   classifyShoppingAssistantIntent,
@@ -67,6 +70,7 @@ export type ShoppingAssistantLabels = {
   viewProduct: string;
   addToCart?: string;
   addedToCart?: string;
+  cartUpdated: string;
   helpful: string;
   notHelpful: string;
   inputLabel: string;
@@ -79,6 +83,7 @@ type ChatEntry = {
   content: string;
   products?: ShoppingAssistantProduct[];
   mode?: ShoppingAssistantResponse['mode'];
+  cartMutations?: ShoppingAssistantCartMutation[];
   feedback?: 'helpful' | 'not_helpful';
   interrupted?: boolean;
 };
@@ -132,7 +137,12 @@ function storedEntries(value: unknown): ChatEntry[] {
       (candidate.interrupted !== undefined && typeof candidate.interrupted !== 'boolean') ||
       (candidate.mode !== undefined && candidate.mode !== 'ai' && candidate.mode !== 'fallback') ||
       (candidate.products !== undefined &&
-        (!Array.isArray(candidate.products) || !candidate.products.every(isStoredProduct)))
+        (!Array.isArray(candidate.products) || !candidate.products.every(isStoredProduct))) ||
+      (candidate.cartMutations !== undefined &&
+        (!Array.isArray(candidate.cartMutations) ||
+          !candidate.cartMutations.every(
+            (mutation) => shoppingAssistantCartMutationSchema.safeParse(mutation).success,
+          )))
     )
       return [];
     return [
@@ -144,6 +154,9 @@ function storedEntries(value: unknown): ChatEntry[] {
           characteristics: product.characteristics ?? [],
           characteristicsAr: product.characteristicsAr ?? [],
         })),
+        cartMutations: candidate.cartMutations?.map((mutation) =>
+          shoppingAssistantCartMutationSchema.parse(mutation),
+        ),
       } as ChatEntry,
     ];
   });
@@ -342,6 +355,7 @@ export function ShoppingAssistantPanel({
 
     const assistantId = crypto.randomUUID();
     let receivedText = false;
+    let resultHandled = false;
     let interruptedProducts: ShoppingAssistantProduct[] | undefined;
     try {
       const identity = getAnalyticsIdentity();
@@ -397,10 +411,59 @@ export function ShoppingAssistantPanel({
           });
         },
         onResult(result) {
+          if (resultHandled) return;
+          resultHandled = true;
+          let appliedMutations: ShoppingAssistantCartMutation[] = [];
+          if (result.cartMutations.length > 0) {
+            const applied = applyShoppingAssistantCartMutations(
+              readCart(window.localStorage),
+              result.cartMutations,
+              locale,
+            );
+            if (applied.changed) {
+              try {
+                writeCart(window.localStorage, applied.items);
+                window.dispatchEvent(new Event('bric:cart-updated'));
+                appliedMutations = applied.changes.map(({ mutation }) => mutation);
+                void triggerHaptic(
+                  applied.changes.every(({ resultingQuantity }) => resultingQuantity === 0)
+                    ? 'destructive'
+                    : 'success',
+                );
+                for (const change of applied.changes) {
+                  const delta = change.resultingQuantity - change.previousQuantity;
+                  const unitPrice = Number(change.mutation.product.price);
+                  void trackNavigationEvent({
+                    eventName: delta > 0 ? 'add_to_cart' : 'remove_from_cart',
+                    locale,
+                    productId: change.mutation.product.id,
+                    productSlug: change.mutation.product.token,
+                    quantity: Math.abs(delta),
+                    ...(change.mutation.product.price !== null &&
+                    Number.isFinite(unitPrice) &&
+                    unitPrice >= 0
+                      ? { value: Math.abs(delta) * unitPrice }
+                      : {}),
+                    metadata: {
+                      surface: 'ai_assistant',
+                      target: `cart_${change.mutation.action}`,
+                    },
+                  });
+                }
+              } catch {
+                appliedMutations = [];
+              }
+            }
+          }
           setMessages((current) =>
             current.map((message) =>
               message.id === assistantId
-                ? { ...message, products: result.products, mode: result.mode }
+                ? {
+                    ...message,
+                    products: result.products,
+                    mode: result.mode,
+                    cartMutations: appliedMutations,
+                  }
                 : message,
             ),
           );
@@ -581,6 +644,12 @@ export function ShoppingAssistantPanel({
                 {message.interrupted ? (
                   <small className="shopping-assistant-interrupted" role="status">
                     {labels.interrupted}
+                  </small>
+                ) : null}
+                {message.cartMutations?.length ? (
+                  <small className="shopping-assistant-cart-updated" role="status">
+                    <Check aria-hidden="true" size={13} />
+                    {labels.cartUpdated}
                   </small>
                 ) : null}
                 {message.products?.length ? (

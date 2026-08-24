@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  shoppingAssistantCartManagementSchema,
   shoppingAssistantCatalogSearchSchema,
   shoppingAssistantCatalogSearchResultSchema,
   shoppingAssistantRequestSchema,
@@ -142,6 +143,29 @@ describe('shopping assistant contracts', () => {
     expect(
       shoppingAssistantStreamEventSchema.safeParse({ type: 'error', code: 'provider_details' })
         .success,
+    ).toBe(false);
+    expect(
+      shoppingAssistantStreamEventSchema.parse({
+        type: 'result',
+        mode: 'ai',
+        products: [],
+      }),
+    ).toMatchObject({ cartMutations: [] });
+  });
+
+  it('defines bounded cart operations with explicit remove quantities', () => {
+    expect(
+      shoppingAssistantCartManagementSchema.parse({
+        operations: [
+          { action: 'add', productId: 12, quantity: 2 },
+          { action: 'remove', productId: 18, quantity: 0 },
+        ],
+      }).operations,
+    ).toHaveLength(2);
+    expect(
+      shoppingAssistantCartManagementSchema.safeParse({
+        operations: [{ action: 'add', productId: 12, quantity: 21 }],
+      }).success,
     ).toBe(false);
   });
 });

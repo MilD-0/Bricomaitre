@@ -11,15 +11,22 @@ describe('admin AI commercialization eval scenarios', () => {
     expect(new Set(ADMIN_AI_EVAL_SCENARIOS.map((scenario) => scenario.input.surface))).toEqual(
       new Set([
         'orders',
+        'orders/ecotrack',
         'inventory',
         'assets',
         'assets/landingPages',
         'ai_proposals',
         'administration',
+        'administration/history',
+        'administration/users',
         'administration/storefront',
         'bulletin',
         'analytics',
+        'stats/acquisition',
+        'stats/assumptions',
+        'stats/search',
         'products',
+        'products/archive',
         'brands_categories',
       ]),
     );

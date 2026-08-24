@@ -151,4 +151,64 @@ export const SHOPPING_ASSISTANT_EVAL_SCENARIOS: AiEvalScenario<ShoppingAssistant
       minimumAnswerCharacters: 30,
     },
   },
+  {
+    id: 'storefront-fr-cart-add-current-product',
+    description: 'Adds an exact quantity of the current grounded product to the native cart.',
+    surface: 'storefront',
+    locale: 'fr',
+    input: {
+      message: 'Ajoute 2 unités de cette perceuse au panier.',
+      context: 'product',
+    },
+    expectations: {
+      requiredTools: ['manage_cart'],
+      exactToolCounts: { manage_cart: 1 },
+      requiredToolInputs: {
+        manage_cart: {
+          operations: [{ action: 'add', productId: 12, quantity: 2 }],
+        },
+      },
+      minimumAnswerCharacters: 20,
+    },
+  },
+  {
+    id: 'storefront-fr-cart-search-then-add',
+    description: 'Searches the full catalog before adding a newly named product from the cart.',
+    surface: 'storefront',
+    locale: 'fr',
+    input: {
+      message: 'Ajoute une perceuse Bosch 18 V au panier.',
+      context: 'cart',
+    },
+    expectations: {
+      requiredTools: ['search_catalog', 'manage_cart'],
+      exactToolCounts: { search_catalog: 1, manage_cart: 1 },
+      requiredToolInputs: {
+        manage_cart: {
+          operations: [{ action: 'add', productId: 12, quantity: 1 }],
+        },
+      },
+      minimumAnswerCharacters: 20,
+    },
+  },
+  {
+    id: 'storefront-ar-cart-remove-product',
+    description: 'Removes the named grounded product from the existing cart in Arabic.',
+    surface: 'storefront',
+    locale: 'ar',
+    input: {
+      message: 'احذف المثقاب المدمج من السلة.',
+      context: 'cart',
+    },
+    expectations: {
+      requiredTools: ['manage_cart'],
+      exactToolCounts: { manage_cart: 1 },
+      requiredToolInputs: {
+        manage_cart: {
+          operations: [{ action: 'remove', productId: 18, quantity: 0 }],
+        },
+      },
+      minimumAnswerCharacters: 15,
+    },
+  },
 ];

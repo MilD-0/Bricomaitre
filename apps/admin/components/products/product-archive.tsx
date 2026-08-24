@@ -7,6 +7,7 @@ import { useLocale, useTranslations } from 'next-intl';
 
 import type { ArchivedProduct } from '../../lib/product-archive';
 import { toast } from '../../lib/toast';
+import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Button } from '../ui/button';
 import {
   WorkspaceActions,
@@ -21,6 +22,10 @@ export function ProductArchive({ initialProducts }: { initialProducts: ArchivedP
   const locale = useLocale();
   const [products, setProducts] = useState(initialProducts);
   const [restoringId, setRestoringId] = useState<number | null>(null);
+  useAdminAiSurfaceDetails({
+    filters: { state: 'archived', visibleCount: products.length },
+    selection: null,
+  });
 
   async function restore(productId: number) {
     setRestoringId(productId);

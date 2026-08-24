@@ -113,6 +113,83 @@ test('offers a grounded, fully observable product-advisor conversation in French
   expect(accessibility.violations).toEqual([]);
 });
 
+test('lets the advisor update the existing browser cart from natural language', async ({
+  page,
+}) => {
+  await page.route('**/api/ai/chat', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        mode: 'ai',
+        message: 'La quantité de la perceuse est maintenant de trois.',
+        products: [],
+        cartMutations: [
+          {
+            action: 'set_quantity',
+            quantity: 3,
+            product: {
+              id: 12,
+              token: 'perceuse-beton',
+              title: 'Perceuse béton',
+              titleAr: 'مثقاب خرسانة',
+              description: null,
+              descriptionAr: null,
+              sku: null,
+              characteristics: [],
+              characteristicsAr: [],
+              price: '12500.00',
+              oldPrice: null,
+              inStock: true,
+              availabilityStatus: 'in_stock',
+              imageUrl: null,
+              brand: null,
+              category: null,
+            },
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.goto('/fr/products');
+  await page.evaluate(() => {
+    localStorage.setItem(
+      'bric:cart:v1',
+      JSON.stringify([
+        {
+          productId: 12,
+          token: 'perceuse-beton',
+          title: 'Perceuse béton',
+          imageUrl: null,
+          unitPrice: 12_500,
+          quantity: 1,
+          availabilityStatus: 'in_stock',
+        },
+      ]),
+    );
+  });
+  await page.getByRole('button', { name: 'Trouver le bon outil' }).click();
+  const advisor = page.getByRole('dialog', { name: 'Conseiller produits' });
+  await advisor
+    .getByLabel('Votre question sur les produits')
+    .fill('Passe la quantité de cette perceuse à 3.');
+  await advisor.getByRole('button', { name: 'Envoyer la question' }).click();
+
+  await expect(advisor.getByText('Panier mis à jour')).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const cart = JSON.parse(localStorage.getItem('bric:cart:v1') ?? '[]') as Array<{
+          productId: number;
+          quantity: number;
+        }>;
+        return cart.find((item) => item.productId === 12)?.quantity;
+      }),
+    )
+    .toBe(3);
+});
+
 test('uses a real RTL mobile drawer across the shopping and checkout journey', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await page.goto('/ar');

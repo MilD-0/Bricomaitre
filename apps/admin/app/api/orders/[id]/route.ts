@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
-import { createPublicOrderToken } from '@bric/storefront-core/order-access';
-import {
-  CanonicalOrderNotFoundError,
-  ensureCanonicalOrderPublicToken,
-} from '@bric/storefront-core/order-write';
+import { CanonicalOrderNotFoundError } from '@bric/storefront-core/order-write';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { loadOrderDetail } from '../../../../lib/admin-orders-data';
-import { orders } from '@bric/db/schema';
-import { mutateEntityWithHistory } from '../../../../lib/action-history';
+import {
+  AdminOrderLifecycleNotFoundError,
+  deleteAdminOrder,
+} from '../../../../lib/admin-order-lifecycle';
 import { auth } from '../../../../lib/auth';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { orderPatchSchema } from '../../../../lib/orders';
@@ -18,8 +15,8 @@ import {
   AdminOrderStatusTransitionError,
   updateAdminOrder,
 } from '../../../../lib/admin-order-update';
+import { ensureAdminOrderPublicToken } from '../../../../lib/admin-order-tracking';
 import { requireMutationAccess } from '../../../../lib/rbac';
-import { triggerAdminReportingRefresh } from '../../../../lib/reporting-refresh-trigger';
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await requireMutationAccess('orders');
@@ -59,9 +56,7 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 
   const db = getDb();
   try {
-    const publicToken = await db.transaction((tx) =>
-      ensureCanonicalOrderPublicToken(tx, numericId, createPublicOrderToken()),
-    );
+    const publicToken = await ensureAdminOrderPublicToken(db, numericId);
     return NextResponse.json({ ok: true, publicToken });
   } catch (error) {
     if (error instanceof CanonicalOrderNotFoundError) {
@@ -136,14 +131,14 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
-  await mutateEntityWithHistory(db, {
-    entityType: 'orders',
-    entityId: numericId,
-    operation: 'delete',
-    actor,
-    execute: (tx) => tx.delete(orders).where(eq(orders.id, numericId)),
-  });
-  await triggerAdminReportingRefresh('order-delete');
+  try {
+    await deleteAdminOrder(db, numericId, actor);
+  } catch (error) {
+    if (error instanceof AdminOrderLifecycleNotFoundError) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    throw error;
+  }
 
   return NextResponse.json({ ok: true });
 }

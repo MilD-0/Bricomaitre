@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { products } from '@bric/db/schema';
-import { mutateEntityWithHistory } from '../../../../lib/action-history';
+import { updateAdminInventoryProduct } from '../../../../lib/admin-inventory-workflow';
 import { auth } from '../../../../lib/auth';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import {
   applyInventoryQuantityChange,
-  buildInventoryRowSelection,
   readInventoryProductById,
 } from '../../../../lib/inventory-actions';
 import { inventoryBarcodeSchema } from '../../../../lib/inventory';
@@ -70,25 +67,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         })
       : {
           kind: 'updated' as const,
-          item: (
-            await mutateEntityWithHistory(db, {
-              entityType: 'products',
-              entityId: numericId,
-              operation: 'update',
-              actor,
-              execute: (tx) =>
-                tx
-                  .update(products)
-                  .set({
-                    ...('inStock' in parsed.data
-                      ? { inStock: parsed.data.inStock }
-                      : { barcode: 'barcode' in parsed.data ? parsed.data.barcode : null }),
-                    updatedAt: new Date(),
-                  })
-                  .where(eq(products.id, numericId))
-                  .returning(buildInventoryRowSelection()),
-            })
-          )[0],
+          item: await updateAdminInventoryProduct(db, numericId, parsed.data, actor),
         };
 
   if (updated.kind !== 'updated') {
@@ -104,8 +83,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
-  await revalidateStorefrontProducts();
+  if ('delta' in parsed.data) {
+    revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
+    await revalidateStorefrontProducts();
+  }
 
   return NextResponse.json({ ok: true, item: updated.item });
 }

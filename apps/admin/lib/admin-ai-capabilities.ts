@@ -25,21 +25,21 @@ export const adminAiCapabilities: AdminAiCapability[] = [
   {
     id: 'order_inspection',
     description:
-      'Inspect selected or filtered orders with complete operational history and explicitly update exact order statuses, customer details, delivery, notes, and product lines through the canonical workflow.',
+      'Inspect selected or filtered orders with complete operational history; create canonical local orders; explicitly update or delete exact orders; issue customer tracking links; preview and run native selected or recent-confirmed Excel exports with terminal downloads; build, merge, and inspect native shared shopping lists with full-cohort inventory coverage; preview and post cohorts to Delivro or Emir; and operate the native ECOTRACK shipment ledger with fresh status/history, dispatch, MAJ, return, delete, carrier edit, recreation, partial-failure diagnosis, repair, and retry.',
     surfaces: ['orders'],
     permission: 'orders_write',
   },
   {
     id: 'inventory_inspection',
     description:
-      'Inspect current inventory by selection, barcode, SKU, or title and explicitly increase or decrease exact quantities with action history.',
+      'Inspect current inventory by selection, barcode, SKU, or title; increase or decrease exact quantities; apply eligible native order shopping-list lines with partial-result reporting; set or clear barcodes and sellability; and run the native order/barcode scan, preview, and stock-receipt workflow with action history.',
     surfaces: ['inventory', 'products'],
     permission: 'products_write',
   },
   {
     id: 'product_operations',
     description:
-      'Inspect complete product records; directly create, update, or archive exact products with canonical identifiers, commercial fields, inventory, taxonomy, images, promotion validation, history, and partial-failure reporting.',
+      'Inspect complete live and archived product records; directly create, update, archive, or restore exact products with canonical identifiers, commercial fields, inventory, taxonomy, images, promotion validation, history, and partial-failure reporting.',
     surfaces: ['products'],
     permission: 'products_write',
   },
@@ -60,7 +60,7 @@ export const adminAiCapabilities: AdminAiCapability[] = [
   {
     id: 'administration_inspection',
     description:
-      'Inspect complete staff access grants, identities, roles, and permissions, explicitly create or update exact access assignments, and create or revise custom role definitions.',
+      'Inspect complete staff access grants, identities, roles, and permissions; create, update, or revoke exact access grants; create or update role definitions; and operate filtered or exact action history with semantic changes plus permission- and order-aware undo/redo recovery.',
     surfaces: ['administration'],
     permission: 'settings_manage',
   },
@@ -74,7 +74,7 @@ export const adminAiCapabilities: AdminAiCapability[] = [
   {
     id: 'bulletin_inspection',
     description:
-      'Read complete Bulletin threads and explicitly create, reply, edit, pin or unpin, and delete permitted posts or replies through canonical ownership and moderation workflows.',
+      'Read complete Bulletin threads and explicitly create, reply, react or unreact idempotently, edit, pin or unpin, and delete permitted posts or replies through canonical identity, ownership, moderation, and action-history workflows.',
     surfaces: ['bulletin'],
   },
   {
@@ -112,8 +112,8 @@ export const adminAiCapabilities: AdminAiCapability[] = [
   {
     id: 'analytics_workspace',
     description:
-      'Read canonical command, money, acquisition, fulfillment, storefront, search, catalog, and assumptions analytics with versioned business semantics, source health, effective-range comparisons, and exact focused drill-downs across the workspace’s decision datasets.',
-    surfaces: ['stats'],
+      'Analyze the current or named entity through canonical command, money, acquisition, fulfillment, storefront, search, catalog, and assumptions data; explicitly update planning settings, costs, daily overrides, and source synchronization through the same canonical workflows.',
+    surfaces: 'all',
     permission: 'analytics_manage',
   },
   {
@@ -135,10 +135,14 @@ export type AdminAiSuggestionKey =
   | 'explainAnalyticsChange'
   | 'improveCurrentAssets'
   | 'inspectSelectedOrders'
+  | 'postConfirmedOrders'
+  | 'manageEcotrackShipments'
   | 'inspectInventory'
   | 'improveTaxonomy'
   | 'inspectBackgroundWork'
   | 'inspectAdministration'
+  | 'inspectActionHistory'
+  | 'inspectArchivedProducts'
   | 'inspectStorefrontConfiguration'
   | 'summarizeBulletin';
 
@@ -178,6 +182,7 @@ export function suggestionKeysForAdminAi(
   switch (context.surface) {
     case 'products':
       if (!permissions.includes('products_write')) return ['helpCurrentSurface'];
+      if (context.section === 'archive') return ['inspectArchivedProducts', 'helpCurrentSurface'];
       return [
         ...(selected ? (['improveSelectedProducts'] as const) : []),
         'auditCatalog',
@@ -197,7 +202,9 @@ export function suggestionKeysForAdminAi(
         : ['helpCurrentSurface'];
     case 'orders':
       return permissions.includes('orders_write')
-        ? ['inspectSelectedOrders', 'helpCurrentSurface']
+        ? context.section === 'ecotrack'
+          ? ['manageEcotrackShipments', 'inspectSelectedOrders', 'helpCurrentSurface']
+          : ['inspectSelectedOrders', 'postConfirmedOrders', 'helpCurrentSurface']
         : ['helpCurrentSurface'];
     case 'inventory':
       return permissions.includes('products_write')
@@ -209,6 +216,9 @@ export function suggestionKeysForAdminAi(
         : ['helpCurrentSurface'];
     case 'administration':
       return [
+        ...(context.section === 'history' && permissions.includes('settings_manage')
+          ? (['inspectActionHistory'] as const)
+          : []),
         ...(context.section === 'storefront' && permissions.includes('settings_manage')
           ? (['inspectStorefrontConfiguration'] as const)
           : []),

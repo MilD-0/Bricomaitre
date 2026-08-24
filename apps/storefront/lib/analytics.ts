@@ -145,6 +145,7 @@ const navigationEventInputSchema = z.object({
           'availability',
           'how_to',
           'recommendation',
+          'cart_management',
           'other',
         ])
         .optional(),

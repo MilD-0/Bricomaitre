@@ -203,3 +203,31 @@ export async function updateAdministrationAccessGrant(
   });
   return { id: grantId, email: values.email };
 }
+
+export async function deleteAdministrationAccessGrant(
+  db: Database,
+  grantId: number,
+  actor?: ActionActor,
+) {
+  const existing = await db.query.userAccessGrants.findFirst({
+    where: eq(userAccessGrants.id, grantId),
+  });
+  if (!existing) throw new AccessGrantNotFoundError(grantId);
+  if (isConfiguredPrivilegedEmail(existing.email)) {
+    throw new PrivilegedAccessManagedInCodeError(existing.email);
+  }
+
+  await mutateEntityWithHistory(db, {
+    entityType: 'userAccessGrants',
+    entityId: grantId,
+    operation: 'delete',
+    actor,
+    execute: (tx) => tx.delete(userAccessGrants).where(eq(userAccessGrants.id, grantId)),
+  });
+  return {
+    id: grantId,
+    email: existing.email,
+    role: existing.role,
+    roleDefinitionId: existing.roleDefinitionId,
+  };
+}

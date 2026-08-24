@@ -6,6 +6,11 @@ import { aiConversations, aiMessages } from '@bric/db/schema';
 export type AiTaskTerminalStatus = 'completed' | 'cancelled' | 'failed';
 
 const summaryKeys = [
+  'totalRequested',
+  'eligible',
+  'created',
+  'skippedAlreadyPosted',
+  'invalid',
   'processed',
   'total',
   'applied',
@@ -19,6 +24,23 @@ const summaryKeys = [
   'accounted',
   'complete',
 ] as const;
+
+function ecotrackResultLines(summary: Record<string, unknown>) {
+  if (!Array.isArray(summary.results)) return [];
+  const rows = summary.results.flatMap((value) => {
+    if (!value || typeof value !== 'object') return [];
+    const row = value as Record<string, unknown>;
+    if (row.status !== 'invalid' && row.status !== 'failed' && row.status !== 'skipped') return [];
+    const orderId = typeof row.orderId === 'number' ? row.orderId : null;
+    const reference = typeof row.reference === 'string' ? row.reference : null;
+    const message = typeof row.message === 'string' ? row.message.trim() : '';
+    const identity =
+      orderId !== null ? `Order #${orderId}` : reference ? `Order ${reference}` : 'Order';
+    const outcome = row.status === 'skipped' ? 'already posted' : row.status;
+    return [`- ${identity} · ${outcome}: ${message || 'No provider explanation was returned.'}`];
+  });
+  return rows.length > 0 ? ['Orders requiring attention:', ...rows] : [];
+}
 
 export function formatAiTaskTerminalMessage(input: {
   jobId: string;
@@ -51,6 +73,7 @@ export function formatAiTaskTerminalMessage(input: {
     key in summary ? [`${key}: ${String(summary[key])}`] : [],
   );
   if (summaryParts.length > 0) lines.push(`Reconciled result: ${summaryParts.join(' · ')}`);
+  lines.push(...ecotrackResultLines(summary));
   if (input.errorMessage) lines.push(`Error: ${input.errorMessage}`);
   if (typeof summary.proposed === 'number' && summary.proposed > 0) {
     lines.push(
