@@ -73,6 +73,7 @@ jobs:
           REDIS_URL: redis://127.0.0.1:6379/0
         run: |
           pnpm --filter @bric/admin db:migrate
+          pnpm --filter @bric/admin db:verify
           pnpm test:services
 
   tests:

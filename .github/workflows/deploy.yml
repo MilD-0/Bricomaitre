@@ -47,6 +47,41 @@ jobs:
             echo "current=false" >> "$GITHUB_OUTPUT"
             echo "Verified commit ${VERIFIED_SHA} was superseded by ${current_main}; image builds were skipped." >> "$GITHUB_STEP_SUMMARY"
           fi
+      - name: Validate release configuration before image builds
+        if: steps.release.outputs.current == 'true'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          AI_ADMIN_MODEL: ${{ vars.AI_ADMIN_MODEL || 'openai/gpt-5.6-luna' }}
+          AI_CONTENT_MODEL: ${{ vars.AI_CONTENT_MODEL || 'openai/gpt-5.6-luna' }}
+          AI_STOREFRONT_MODEL: ${{ vars.AI_STOREFRONT_MODEL || 'openai/gpt-5.6-luna' }}
+          AI_STOREFRONT_FALLBACK_MODEL: ${{ vars.AI_STOREFRONT_FALLBACK_MODEL || 'deepseek/deepseek-v4-flash' }}
+          AI_STOREFRONT_MODEL_OPTIONS: ${{ vars.AI_STOREFRONT_MODEL_OPTIONS || 'openai/gpt-5.6-luna,deepseek/deepseek-v4-flash' }}
+          ADMIN_META_ADS_SYNC_ENABLED: ${{ vars.ADMIN_META_ADS_SYNC_ENABLED || 'false' }}
+          META_AD_ACCOUNT_ID: ${{ secrets.META_AD_ACCOUNT_ID }}
+          META_ADS_ACCESS_TOKEN: ${{ secrets.META_ADS_ACCESS_TOKEN }}
+          ADMIN_SEARCH_CONSOLE_SYNC_ENABLED: ${{ vars.ADMIN_SEARCH_CONSOLE_SYNC_ENABLED || 'false' }}
+          GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$OPENROUTER_API_KEY"
+          test -n "$AI_ADMIN_MODEL"
+          test -n "$AI_CONTENT_MODEL"
+          test -n "$AI_STOREFRONT_MODEL"
+          test -n "$AI_STOREFRONT_FALLBACK_MODEL"
+          test -n "$AI_STOREFRONT_MODEL_OPTIONS"
+          case "$ADMIN_META_ADS_SYNC_ENABLED" in
+            true)
+              test -n "$META_AD_ACCOUNT_ID"
+              test -n "$META_ADS_ACCESS_TOKEN"
+              ;;
+            false) ;;
+            *) echo "ADMIN_META_ADS_SYNC_ENABLED must be true or false" >&2; exit 64 ;;
+          esac
+          case "$ADMIN_SEARCH_CONSOLE_SYNC_ENABLED" in
+            true) test -n "$GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64" ;;
+            false) ;;
+            *) echo "ADMIN_SEARCH_CONSOLE_SYNC_ENABLED must be true or false" >&2; exit 64 ;;
+          esac
 
   build-api-images:
     name: Build images / storefront API
@@ -302,8 +337,11 @@ jobs:
       ECOTRACK_EMIR_BASE_URL: ${{ secrets.ECOTRACK_EMIR_BASE_URL }}
       ECOTRACK_EMIR_TOKEN: ${{ secrets.ECOTRACK_EMIR_TOKEN }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      AI_ADMIN_MODEL: ${{ vars.AI_ADMIN_MODEL || 'openai/gpt-5.6-luna' }}
+      AI_CONTENT_MODEL: ${{ vars.AI_CONTENT_MODEL || 'openai/gpt-5.6-luna' }}
       AI_STOREFRONT_MODEL: ${{ vars.AI_STOREFRONT_MODEL || 'openai/gpt-5.6-luna' }}
       AI_STOREFRONT_FALLBACK_MODEL: ${{ vars.AI_STOREFRONT_FALLBACK_MODEL || 'deepseek/deepseek-v4-flash' }}
+      AI_STOREFRONT_MODEL_OPTIONS: ${{ vars.AI_STOREFRONT_MODEL_OPTIONS || 'openai/gpt-5.6-luna,deepseek/deepseek-v4-flash' }}
       ADMIN_META_ADS_SYNC_ENABLED: ${{ vars.ADMIN_META_ADS_SYNC_ENABLED || 'false' }}
       META_AD_ACCOUNT_ID: ${{ secrets.META_AD_ACCOUNT_ID }}
       META_ADS_ACCESS_TOKEN: ${{ secrets.META_ADS_ACCESS_TOKEN }}
@@ -417,26 +455,40 @@ jobs:
               printf "ECOTRACK_EMIR_BASE_URL=%s\nECOTRACK_EMIR_TOKEN=%s\n" "$emir_base_url" "$emir_token" >> "$tmp_file"
               mv "$tmp_file" "$env_file"
             '
-          printf '%s\n%s\n%s\n' \
+          printf '%s\n%s\n%s\n%s\n%s\n%s\n' \
             "$OPENROUTER_API_KEY" \
+            "$AI_ADMIN_MODEL" \
+            "$AI_CONTENT_MODEL" \
             "$AI_STOREFRONT_MODEL" \
-            "$AI_STOREFRONT_FALLBACK_MODEL" | \
+            "$AI_STOREFRONT_FALLBACK_MODEL" \
+            "$AI_STOREFRONT_MODEL_OPTIONS" | \
             ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
               set -euo pipefail
               IFS= read -r openrouter_api_key
+              IFS= read -r admin_model
+              IFS= read -r content_model
               IFS= read -r storefront_model
               IFS= read -r storefront_fallback_model
+              IFS= read -r storefront_model_options
               test -n "$openrouter_api_key"
+              test -n "$admin_model"
+              test -n "$content_model"
               test -n "$storefront_model"
               test -n "$storefront_fallback_model"
-              for env_file in /srv/bric/env/admin.env /srv/bric/env/storefront.env; do
-                umask 077
-                tmp_file="${env_file}.tmp.$$"
-                grep -v -E "^(OPENROUTER_API_KEY|AI_STOREFRONT_MODEL|AI_STOREFRONT_FALLBACK_MODEL)=" "$env_file" > "$tmp_file" || true
-                printf "OPENROUTER_API_KEY=%s\nAI_STOREFRONT_MODEL=%s\nAI_STOREFRONT_FALLBACK_MODEL=%s\n" \
-                  "$openrouter_api_key" "$storefront_model" "$storefront_fallback_model" >> "$tmp_file"
-                mv "$tmp_file" "$env_file"
-              done
+              test -n "$storefront_model_options"
+              umask 077
+              admin_env_file="/srv/bric/env/admin.env"
+              admin_tmp_file="${admin_env_file}.tmp.$$"
+              grep -v -E "^(OPENROUTER_API_KEY|AI_ADMIN_MODEL|AI_CONTENT_MODEL|AI_STOREFRONT_MODEL|AI_STOREFRONT_FALLBACK_MODEL|AI_STOREFRONT_MODEL_OPTIONS)=" "$admin_env_file" > "$admin_tmp_file" || true
+              printf "OPENROUTER_API_KEY=%s\nAI_ADMIN_MODEL=%s\nAI_CONTENT_MODEL=%s\nAI_STOREFRONT_MODEL=%s\nAI_STOREFRONT_FALLBACK_MODEL=%s\nAI_STOREFRONT_MODEL_OPTIONS=%s\n" \
+                "$openrouter_api_key" "$admin_model" "$content_model" "$storefront_model" "$storefront_fallback_model" "$storefront_model_options" >> "$admin_tmp_file"
+              mv "$admin_tmp_file" "$admin_env_file"
+              storefront_env_file="/srv/bric/env/storefront.env"
+              storefront_tmp_file="${storefront_env_file}.tmp.$$"
+              grep -v -E "^(OPENROUTER_API_KEY|AI_STOREFRONT_MODEL|AI_STOREFRONT_FALLBACK_MODEL)=" "$storefront_env_file" > "$storefront_tmp_file" || true
+              printf "OPENROUTER_API_KEY=%s\nAI_STOREFRONT_MODEL=%s\nAI_STOREFRONT_FALLBACK_MODEL=%s\n" \
+                "$openrouter_api_key" "$storefront_model" "$storefront_fallback_model" >> "$storefront_tmp_file"
+              mv "$storefront_tmp_file" "$storefront_env_file"
             '
           printf '%s\n%s\n%s\n%s\n' \
             "$ADMIN_META_ADS_SYNC_ENABLED" \

@@ -219,6 +219,28 @@ function addIsoDays(value: string, amount: number) {
   return date.toISOString().slice(0, 10);
 }
 
+function reportingDay(now: Date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: ADMIN_REPORTING_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
+export function resolveRawWebsiteFilters(
+  filters: ExperienceStatsFilters,
+  now = new Date(),
+): ExperienceStatsFilters {
+  const effectiveEndDate = filters.endDate || reportingDay(now);
+  const recentStartDate = addIsoDays(effectiveEndDate, -6);
+
+  return {
+    ...filters,
+    startDate: [filters.startDate, recentStartDate].filter(Boolean).sort().at(-1)!,
+  };
+}
+
 function inclusiveDateDays(filters: ExperienceStatsFilters) {
   return (
     Math.floor(
@@ -1034,10 +1056,7 @@ export async function getExperienceStats(
   const includeRawSessionStats = includeExtendedSurfaces || inclusiveDateDays(filters) <= 7;
   const empty = emptyExperienceStats();
   const websiteAnalyticsWhere = dateCondition(analyticsEvents.occurredAt, filters);
-  const rawWebsiteFilters = {
-    ...filters,
-    startDate: [filters.startDate, addIsoDays(filters.endDate, -6)].sort().at(-1)!,
-  };
+  const rawWebsiteFilters = resolveRawWebsiteFilters(filters);
   const rawWebsiteAnalyticsWhere = dateCondition(analyticsEvents.occurredAt, rawWebsiteFilters);
   const storefrontAnalyticsWhere = and(
     websiteAnalyticsWhere,

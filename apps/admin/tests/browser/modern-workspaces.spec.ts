@@ -137,10 +137,11 @@ test('keeps representative modern workspaces at WCAG A and AA', async ({ page })
   }
 });
 
-test('keeps the default Stats route canonical without a hydration navigation', async ({ page }) => {
-  await page.goto('/en/stats', { waitUntil: 'load' });
-  await expect(page.locator('[data-workspace-frame]')).toHaveCount(1, { timeout: 30_000 });
-  await page.waitForTimeout(1_000);
-
-  await expect(page).toHaveURL('http://localhost:3000/en/stats');
+test('keeps default Stats routes canonical without hydration navigation', async ({ page }) => {
+  for (const path of ['/en/stats', '/en/stats/ai-assistants', '/en/stats/shopping-assistant']) {
+    await page.goto(path, { waitUntil: 'load' });
+    await expect(page.locator('[data-workspace-frame]')).toHaveCount(1, { timeout: 30_000 });
+    await page.waitForTimeout(500);
+    await expect(page).toHaveURL(`http://localhost:3000${path}`);
+  }
 });
