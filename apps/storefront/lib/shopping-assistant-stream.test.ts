@@ -58,7 +58,11 @@ describe('shopping assistant response stream', () => {
       { type: 'tool', name: 'search_catalog', status: 'completed' },
     ]);
     expect(deltas).toEqual(['Voici ', 'une option.']);
-    expect(onResult).toHaveBeenCalledWith({ mode: 'ai', products: [product] });
+    expect(onResult).toHaveBeenCalledWith({
+      mode: 'ai',
+      products: [product],
+      cartMutations: [],
+    });
   });
 
   it('retains compatibility with the previous JSON response during rollout', async () => {
@@ -69,7 +73,31 @@ describe('shopping assistant response stream', () => {
     await consumeShoppingAssistantResponse(response, { onTextDelta, onResult });
 
     expect(onTextDelta).toHaveBeenCalledWith('Résultat');
-    expect(onResult).toHaveBeenCalledWith({ mode: 'fallback', products: [] });
+    expect(onResult).toHaveBeenCalledWith({
+      mode: 'fallback',
+      products: [],
+      cartMutations: [],
+    });
+  });
+
+  it('delivers grounded cart mutations only with the final result', async () => {
+    const onResult = vi.fn();
+    const cartMutation = { action: 'add', quantity: 2, product };
+    const response = new Response(
+      `${JSON.stringify({ type: 'text-delta', delta: 'Ajout effectué.' })}\n${JSON.stringify({ type: 'result', mode: 'ai', products: [], cartMutations: [cartMutation] })}\n`,
+      { headers: { 'content-type': 'application/x-ndjson' } },
+    );
+
+    await consumeShoppingAssistantResponse(response, {
+      onTextDelta: vi.fn(),
+      onResult,
+    });
+
+    expect(onResult).toHaveBeenCalledWith({
+      mode: 'ai',
+      products: [],
+      cartMutations: [cartMutation],
+    });
   });
 
   it('exposes grounded products before rejecting an interrupted response', async () => {

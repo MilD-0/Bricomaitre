@@ -1,4 +1,5 @@
 import { getDb } from '@bric/db/client';
+import { z } from 'zod';
 import {
   loadAdministrationAccessGrants,
   loadAdministrationRoles,
@@ -13,17 +14,49 @@ import { listLandingPages } from './landing-pages';
 import type { PermissionKey } from './permissions';
 import { readProductMutationPayload } from './product-update-workflow';
 
-export async function findAdminProducts(input: {
-  query?: string;
-  productIds?: number[];
-  page?: number;
-  limit?: number;
-}) {
+export const adminAiProductLookupSchema = z
+  .object({
+    query: z.string().trim().max(200).default(''),
+    productIds: z.array(z.number().int().positive()).max(100).default([]),
+    page: z.number().int().positive().default(1),
+    limit: z.number().int().min(1).max(50).default(10),
+  })
+  .refine((input) => input.query.length > 0 || input.productIds.length > 0, {
+    message: 'Provide a search query or at least one product ID.',
+  });
+
+export const adminAiInventoryInspectionSchema = z
+  .object({
+    scope: z.enum(['visible', 'exact', 'search']),
+    productIds: z.array(z.number().int().positive()).max(100).default([]),
+    query: z.string().trim().max(200).default(''),
+    page: z.number().int().positive().default(1),
+    limit: z.number().int().min(1).max(50).default(20),
+  })
+  .superRefine((input, context) => {
+    if (input.scope === 'exact' && input.productIds.length === 0) {
+      context.addIssue({
+        code: 'custom',
+        path: ['productIds'],
+        message: 'Exact inventory inspection requires at least one product ID.',
+      });
+    }
+    if (input.scope === 'search' && input.query.length === 0) {
+      context.addIssue({
+        code: 'custom',
+        path: ['query'],
+        message: 'Inventory search inspection requires a query.',
+      });
+    }
+  });
+
+export async function findAdminProducts(input: z.input<typeof adminAiProductLookupSchema>) {
+  const values = adminAiProductLookupSchema.parse(input);
   return searchAssetProductOptions({
-    search: input.query ?? '',
-    ids: input.productIds ?? [],
-    page: input.page ?? 1,
-    limit: input.limit ?? 10,
+    search: values.query,
+    ids: values.productIds,
+    page: values.page,
+    limit: values.limit,
   });
 }
 

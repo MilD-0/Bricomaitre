@@ -2,13 +2,14 @@ import { requestJson as request } from '../../lib/admin-api';
 import { parseNumericAmount, type OrderRecord } from '../../lib/orders';
 import {
   buildShoppingListScopeKey,
+  buildGeneratedShoppingListDraft,
+  buildShoppingListInventoryPreview,
   mergeShoppingListDraft,
   normalizeShoppingListOrderIds,
   type ShoppingListDraftItem,
   type ShoppingListDraftPayload,
   type ShoppingListDraftRecord,
   type ShoppingListDraftResponse,
-  type ShoppingListOrderGroup,
   type ShoppingListSourceMode,
 } from '../../lib/shopping-list-drafts';
 import {
@@ -126,15 +127,7 @@ async function fetchShoppingListProductDetails(
 }
 
 export function buildInventoryPreview(quantity: number, inventoryQuantity: number | null) {
-  const available = Math.max(inventoryQuantity ?? 0, 0);
-  const decreaseQuantity = Math.min(quantity, available);
-
-  return {
-    inventoryDecreaseQuantity: decreaseQuantity,
-    inventoryShortageQuantity: Math.max(quantity - decreaseQuantity, 0),
-    inventoryAppliedQuantity: 0,
-    inventoryActionEligible: inventoryQuantity != null && decreaseQuantity > 0,
-  };
+  return buildShoppingListInventoryPreview(quantity, inventoryQuantity);
 }
 
 export function recalculateShoppingListInventory(
@@ -163,98 +156,28 @@ async function buildShoppingListState(
   sourceMode: ShoppingListSourceMode,
   title: string,
 ) {
-  const orderIds = normalizeShoppingListOrderIds(orders.map((order) => order.id));
-  const generatedAt = new Date().toISOString();
   const brandCache = new Map<number, string>();
   const productDetailsCache = new Map<number, ProductLookupResponse['item']>();
-  const productMap = new Map<string, ShoppingListDraftItem>();
-
-  for (const order of orders) {
-    for (const product of order.orderProducts) {
-      const key = `${product.brandId ?? 'none'}:${product.productId ?? product.rawValue}`;
-      const existing = productMap.get(key);
-      const note = order.note?.trim();
-
-      if (existing) {
-        existing.quantity += product.quantity;
-        if (note && !existing.notes.includes(note)) {
-          existing.notes.push(note);
-        }
-        continue;
-      }
-
-      const productDetails = await fetchShoppingListProductDetails(
-        product.productId,
-        productDetailsCache,
-      );
-      const inventoryQuantity = productDetails?.inventoryQuantity ?? null;
-
-      productMap.set(key, {
-        draftId: key,
-        productId: product.productId ?? null,
-        brandId: product.brandId ?? null,
-        brandName: await fetchBrandName(product.brandId ?? null, brandCache),
-        title: product.title,
-        quantity: product.quantity,
-        unitPrice: product.unitPrice,
-        purchasePrice:
-          productDetails?.purchasePrice == null
-            ? null
-            : parseNumericAmount(productDetails.purchasePrice),
-        thumbnailUrl: product.thumbnailUrl,
-        inventoryQuantity,
-        ...buildInventoryPreview(product.quantity, inventoryQuantity),
-        notes: note ? [note] : [],
-        checked: false,
-        isCustom: false,
-        generatedAt,
-      });
-    }
-  }
-
-  const ordersPanel: ShoppingListOrderGroup[] = await Promise.all(
-    orders.map(async (order) => ({
-      orderId: order.id,
-      customerName: order.fullName,
-      note: order.note,
-      generatedAt,
-      products: await Promise.all(
-        order.orderProducts.map(async (product) => {
-          const productDetails = await fetchShoppingListProductDetails(
-            product.productId,
-            productDetailsCache,
-          );
-
-          return {
-            title: product.title,
-            quantity: product.quantity,
-            unitPrice: product.unitPrice,
+  const generated = await buildGeneratedShoppingListDraft({
+    orders,
+    sourceMode,
+    title,
+    resolveProductDetails: async (productId) => {
+      const product = await fetchShoppingListProductDetails(productId, productDetailsCache);
+      return product
+        ? {
+            inventoryQuantity: product.inventoryQuantity,
             purchasePrice:
-              productDetails?.purchasePrice == null
-                ? null
-                : parseNumericAmount(productDetails.purchasePrice),
-            brandId: product.brandId ?? null,
-            brandName: await fetchBrandName(product.brandId ?? null, brandCache),
-            thumbnailUrl: product.thumbnailUrl,
-          };
-        }),
-      ),
-    })),
-  );
-
-  const generatedItems = [...productMap.values()].sort((left, right) => {
-    const brandCompare = left.brandName.localeCompare(right.brandName);
-    return brandCompare !== 0 ? brandCompare : left.title.localeCompare(right.title);
+              product.purchasePrice == null ? null : parseNumericAmount(product.purchasePrice),
+          }
+        : null;
+    },
+    resolveBrandName: (brandId) => fetchBrandName(brandId, brandCache),
   });
 
   return {
-    sourceMode,
-    orderIds,
-    scopeKey: buildShoppingListScopeKey(sourceMode, orderIds),
-    title,
-    generatedItems,
-    draftItems: generatedItems.map((item) => ({ ...item, notes: [...item.notes] })),
-    orders: ordersPanel,
+    ...generated,
+    scopeKey: buildShoppingListScopeKey(sourceMode, generated.orderIds),
     search: '',
     updatedAt: null,
     updatedByName: null,

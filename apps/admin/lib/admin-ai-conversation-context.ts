@@ -7,6 +7,20 @@ export type AdminAiConversationContextMessage = {
   content: string;
 };
 
+export type AdminAiAnalyticsContinuation = {
+  view: string;
+  range: string;
+  startDate?: string;
+  endDate?: string;
+  grain?: string;
+  focus?: {
+    dimension: string;
+    search?: string;
+    identifiers?: string[];
+    limit?: number;
+  };
+};
+
 type StoredMessageRow = {
   role: unknown;
   content: unknown;
@@ -18,6 +32,62 @@ function storedMessage(content: unknown) {
   const saved = content as { text?: unknown; toolResults?: unknown };
   if (typeof saved.text !== 'string') return null;
   return { text: saved.text, toolResults: saved.toolResults };
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function analyticsContinuationFromToolResult(value: unknown): AdminAiAnalyticsContinuation | null {
+  const toolResult = record(value);
+  if (toolResult?.toolName !== 'query_analytics') return null;
+  const output = record(toolResult.output);
+  const input = record(toolResult.input);
+  const filters = record(output?.filters) ?? input;
+  const focus = record(output?.focus) ?? record(input?.focus);
+  const view = output?.view ?? filters?.view;
+  const range = filters?.range;
+  if (typeof view !== 'string' || typeof range !== 'string') return null;
+  const identifiers = Array.isArray(focus?.identifiers)
+    ? focus.identifiers.filter((item): item is string => typeof item === 'string').slice(0, 100)
+    : [];
+  return {
+    view,
+    range,
+    ...(typeof filters?.startDate === 'string' ? { startDate: filters.startDate } : {}),
+    ...(typeof filters?.endDate === 'string' ? { endDate: filters.endDate } : {}),
+    ...(typeof filters?.grain === 'string' ? { grain: filters.grain } : {}),
+    ...(typeof focus?.dimension === 'string'
+      ? {
+          focus: {
+            dimension: focus.dimension,
+            ...(typeof focus.search === 'string' ? { search: focus.search } : {}),
+            ...(identifiers.length ? { identifiers } : {}),
+            ...(typeof focus.limit === 'number' ? { limit: focus.limit } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+/**
+ * Returns the latest canonical Analytics query only when no newer tool-bearing
+ * turn changed the conversation's operational subject.
+ */
+export function latestAdminAiAnalyticsContinuation(newestFirstRows: readonly StoredMessageRow[]) {
+  for (const row of newestFirstRows) {
+    if (row.role !== 'assistant') continue;
+    const saved = storedMessage(row.content);
+    if (!Array.isArray(saved?.toolResults) || saved.toolResults.length === 0) continue;
+    for (const result of [...saved.toolResults].reverse()) {
+      const analytics = analyticsContinuationFromToolResult(result);
+      if (analytics) return analytics;
+    }
+    return null;
+  }
+  return null;
 }
 
 function boundedToolEvidence(value: unknown, characterBudget: number) {

@@ -27,6 +27,7 @@ export type ShoppingAssistantIntent =
   | 'availability'
   | 'how_to'
   | 'recommendation'
+  | 'cart_management'
   | 'other';
 
 export type ShoppingAssistantToolPlan = {
@@ -38,6 +39,7 @@ export type ShoppingAssistantToolPlan = {
     | 'inspect_promotion'
     | null;
   presentProducts: boolean;
+  manageCart: boolean;
 };
 
 export const STOREFRONT_AI_CAPABILITY_FALLBACK_MODEL = 'openai/gpt-5.6-luna';
@@ -53,6 +55,8 @@ const catalogSearchStopWords = new Set([
   'au',
   'aux',
   'avec',
+  'ajoute',
+  'ajouter',
   'ce',
   'cette',
   'ces',
@@ -92,12 +96,16 @@ const catalogSearchStopWords = new Set([
   'une',
   'outil',
   'outils',
+  'panier',
   'veux',
   'أبحث',
   'أريد',
+  'أضف',
+  'اضف',
   'اعرض',
   'الأداة',
   'الأدوات',
+  'السلة',
   'السعر',
   'عن',
   'في',
@@ -120,6 +128,7 @@ export function catalogSearchQuery(value: string) {
 export function classifyShoppingAssistantIntent(value: string): ShoppingAssistantIntent {
   const text = value.toLocaleLowerCase().normalize('NFKC');
   const includesAny = (...terms: string[]) => terms.some((term) => text.includes(term));
+  if (shoppingAssistantCartRequest(value).requested) return 'cart_management';
   if (includesAny('compare', 'compar', 'versus', 'vs', 'الفرق', 'قارن', 'مقارنة'))
     return 'product_comparison';
   if (includesAny('compatible', 'compatib', 'fit ', 'works with', 'يركب', 'متوافق', 'يناسب'))
@@ -161,6 +170,61 @@ export function classifyShoppingAssistantIntent(value: string): ShoppingAssistan
   return 'other';
 }
 
+export function shoppingAssistantCartRequest(value: string) {
+  const text = value.toLocaleLowerCase().normalize('NFKC');
+  const asksHow = ['comment ', 'how ', 'كيف '].some((term) => text.trimStart().startsWith(term));
+  const includesAny = (...terms: string[]) => terms.some((term) => text.includes(term));
+  if (asksHow) return { requested: false, includesAdd: false };
+
+  const remove = includesAny(
+    'retire',
+    'retirer',
+    'enlève',
+    'enlever',
+    'supprime',
+    'supprimer',
+    'remove',
+    'delete from cart',
+    'أزل',
+    'ازيل',
+    'احذف',
+    'نحي',
+    'شيل',
+  );
+  const setQuantity = includesAny(
+    'mets-en ',
+    'mettez-en ',
+    'passe la quantité',
+    'passe la quantite',
+    'change la quantité',
+    'change la quantite',
+    'modifie la quantité',
+    'modifie la quantite',
+    'fixe la quantité',
+    'fixe la quantite',
+    'set quantity',
+    'change quantity',
+    'غيّر العدد',
+    'غير العدد',
+    'خليها ',
+    'خليه ',
+  );
+  const add = includesAny(
+    'ajoute',
+    'ajouter',
+    'mets au panier',
+    'mettez au panier',
+    'add to cart',
+    'add it',
+    'أضف',
+    'اضف',
+    'ضيف',
+    'حط في السلة',
+    'حطه في السلة',
+  );
+  return { requested: remove || setQuantity || add, includesAdd: add };
+}
+
 function asksForProductEvidence(value: string) {
   const text = value.toLocaleLowerCase().normalize('NFKC');
   return [
@@ -187,9 +251,31 @@ function asksForProductEvidence(value: string) {
 
 export function shoppingAssistantToolPlan(
   value: string,
-  context: { hasInspectableProducts: boolean; hasOrder?: boolean },
+  context: {
+    hasInspectableProducts: boolean;
+    hasNonCartProducts?: boolean;
+    hasCartProducts?: boolean;
+    hasCurrentProduct?: boolean;
+    hasOrder?: boolean;
+  },
 ): ShoppingAssistantToolPlan {
   const normalized = value.toLocaleLowerCase().normalize('NFKC');
+  const cartRequest = shoppingAssistantCartRequest(value);
+  if (cartRequest.requested) {
+    const canResolveAddWithoutSearch =
+      Boolean(context.hasCurrentProduct) ||
+      Boolean(context.hasNonCartProducts) ||
+      (Boolean(context.hasCartProducts) &&
+        ['encore', 'de plus', 'another', 'more', 'زيادة', 'أخرى', 'اخرى'].some((term) =>
+          normalized.includes(term),
+        ));
+    return {
+      groundingTool:
+        cartRequest.includesAdd && !canResolveAddWithoutSearch ? 'search_catalog' : null,
+      presentProducts: false,
+      manageCart: true,
+    };
+  }
   const asksAboutOrder = [
     'commande',
     'order',
@@ -204,7 +290,7 @@ export function shoppingAssistantToolPlan(
     'الشحنة',
   ].some((term) => normalized.includes(term));
   if (context.hasOrder && asksAboutOrder) {
-    return { groundingTool: 'inspect_order', presentProducts: false };
+    return { groundingTool: 'inspect_order', presentProducts: false, manageCart: false };
   }
   const asksAboutPromotion = [
     'promo',
@@ -223,6 +309,7 @@ export function shoppingAssistantToolPlan(
     return {
       groundingTool: context.hasInspectableProducts ? 'inspect_promotion' : 'search_catalog',
       presentProducts: false,
+      manageCart: false,
     };
   }
   const asksAboutDeliveryOrSupport = [
@@ -254,32 +341,39 @@ export function shoppingAssistantToolPlan(
     'العنوان',
   ].some((term) => normalized.includes(term));
   if (asksAboutDeliveryOrSupport) {
-    return { groundingTool: 'inspect_delivery_support', presentProducts: false };
+    return {
+      groundingTool: 'inspect_delivery_support',
+      presentProducts: false,
+      manageCart: false,
+    };
   }
   const intent = classifyShoppingAssistantIntent(value);
 
   if (intent === 'product_search' || intent === 'availability' || intent === 'recommendation') {
-    return { groundingTool: 'search_catalog', presentProducts: true };
+    return { groundingTool: 'search_catalog', presentProducts: true, manageCart: false };
   }
   if (intent === 'product_comparison') {
     return {
       groundingTool: context.hasInspectableProducts ? 'inspect_products' : 'search_catalog',
       presentProducts: true,
+      manageCart: false,
     };
   }
   if (intent === 'compatibility' || intent === 'price') {
     return {
       groundingTool: context.hasInspectableProducts ? 'inspect_products' : 'search_catalog',
       presentProducts: false,
+      manageCart: false,
     };
   }
   if (intent === 'how_to' || asksForProductEvidence(value)) {
     return {
       groundingTool: context.hasInspectableProducts ? 'inspect_products' : null,
       presentProducts: false,
+      manageCart: false,
     };
   }
-  return { groundingTool: null, presentProducts: false };
+  return { groundingTool: null, presentProducts: false, manageCart: false };
 }
 
 function normalizeDeliveryQuery(value: string) {
@@ -502,13 +596,14 @@ export function shoppingAssistantInstructions(locale: Locale) {
     'Use the current page, filters, campaign content, product, cart, linked order, and prior recommendation context when it is supplied.',
     'Search before making any new product recommendation or claim. The search tool covers the full catalog through filters, total counts, and pagination; use another page or narrower filters when needed.',
     'Use product lookup before detailed comparisons. Call present_products with only the product IDs that should appear as recommendation cards.',
+    'When the customer explicitly asks to add, remove, or change the quantity of cart products, use manage_cart exactly once. For a new product, search first; for the current page, prior recommendations, or existing cart, use the verified context. Add means increment by the requested quantity, set_quantity means an exact final quantity, and remove uses quantity 0. Only say the cart changed for operations accepted by the tool.',
     'Keep answers customer-facing and focused on choosing products from the public Bricomaitre catalog.',
     'All numeric catalog prices are Algerian dinars. Render them as DZD in French or دج in Arabic; never label them Dhs, MAD, dollars, or another currency.',
     'Treat inStock as the authoritative customer-facing availability fact and never mention internal field names or conflicting raw status fields.',
     'Never invent specifications, compatibility, availability, delivery promises, warranty, discounts, promotions, or safety claims.',
     'If managed catalog information is incomplete, say exactly what is missing and suggest opening the product page or contacting Bricomaitre. Do not offer to compare a specification unless it was returned by a catalog tool.',
     'For an Arabic catalog search with no relevant match, retry once with a concise French product-type term while preserving any brand or model token.',
-    'Clearly identify unavailable products. Do not claim to add anything to cart or place an order.',
+    'Clearly identify unavailable products. Never place an order, submit checkout, or claim a rejected cart operation succeeded.',
     'On a verified order confirmation page, use inspect_order before answering tracking, delivery, or order-status questions. Explain the latest recorded state and timestamp without inventing an ETA.',
     'Use inspect_delivery_support for delivery coverage, exact home and stop-desk fees, commune availability, or contact details. State DZD fees exactly as returned and distinguish home delivery from stop-desk delivery.',
     'Use inspect_promotion to validate a customer promotion code against each relevant product. A code is valid only when that tool returns an active promotion; explain the exact original price, promotional price, and discount.',

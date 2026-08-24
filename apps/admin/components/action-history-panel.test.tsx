@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../test/mocks/server';
 import { ActionHistoryPanel } from './action-history-panel';
 
-const { toastMock } = vi.hoisted(() => ({
+const { surfaceDetailsMock, toastMock } = vi.hoisted(() => ({
+  surfaceDetailsMock: vi.fn(),
   toastMock: {
     loading: vi.fn(() => 'toast-id'),
     success: vi.fn(),
@@ -39,6 +40,9 @@ vi.mock('next-intl', () => ({
 }));
 
 vi.mock('../lib/toast', () => ({ toast: toastMock }));
+vi.mock('./admin-ai-surface-context', () => ({
+  useAdminAiSurfaceDetails: surfaceDetailsMock,
+}));
 
 const firstItem = {
   id: 12,
@@ -129,6 +133,18 @@ describe('ActionHistoryPanel', () => {
     expect(await screen.findByText('Confirmed')).toBeInTheDocument();
     expect(screen.getByText('Call first')).toBeInTheDocument();
     expect(screen.queryByText('history.state.applied')).not.toBeInTheDocument();
+    expect(surfaceDetailsMock).toHaveBeenCalledWith({
+      filters: {
+        page: 1,
+        search: '',
+        operation: 'all',
+        resource: 'all',
+        state: 'all',
+        includeEcotrackSync: false,
+        sortDirection: 'desc',
+      },
+      selection: { entityType: 'actionLog', ids: [12], focusedId: 12 },
+    });
   });
 
   it('keeps automatic syncs behind the compact filter control', async () => {

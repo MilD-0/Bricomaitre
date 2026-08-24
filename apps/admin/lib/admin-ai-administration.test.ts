@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   createRole: vi.fn(),
   updateRole: vi.fn(),
+  deleteAccess: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', () => ({
@@ -15,14 +16,21 @@ vi.mock('@bric/db/client', () => ({
     },
   }),
 }));
-vi.mock('./administration-mutations', () => ({
+vi.mock('./administration-mutations', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./administration-mutations')>()),
   createAdministrationAccessGrant: mocks.create,
   updateAdministrationAccessGrant: mocks.update,
   createAdministrationRoleDefinition: mocks.createRole,
   updateAdministrationRoleDefinition: mocks.updateRole,
+  deleteAdministrationAccessGrant: mocks.deleteAccess,
 }));
 
-import { setAdminAiAccessGrant, setAdminAiRoleDefinition } from './admin-ai-administration';
+import {
+  revokeAdminAiAccessGrants,
+  setAdminAiAccessGrant,
+  setAdminAiRoleDefinition,
+} from './admin-ai-administration';
+import { AccessGrantNotFoundError } from './administration-mutations';
 
 const actor = { email: 'admin@example.com', name: 'Admin' };
 
@@ -132,5 +140,28 @@ describe('admin AI access grants', () => {
       },
       actor,
     );
+  });
+
+  it('revokes exact grants with canonical partial-result evidence', async () => {
+    mocks.deleteAccess
+      .mockResolvedValueOnce({
+        id: 7,
+        email: 'operator@example.com',
+        role: 'employee',
+        roleDefinitionId: null,
+      })
+      .mockRejectedValueOnce(new AccessGrantNotFoundError(99));
+
+    await expect(
+      revokeAdminAiAccessGrants({ accessGrantIds: [7, 99] }, actor),
+    ).resolves.toMatchObject({
+      ok: false,
+      requestedCount: 2,
+      revokedCount: 1,
+      failedCount: 1,
+      revoked: [{ id: 7, email: 'operator@example.com' }],
+      failed: [{ accessGrantId: 99, code: 'AccessGrantNotFoundError' }],
+    });
+    expect(mocks.deleteAccess).toHaveBeenCalledWith(expect.anything(), 7, actor);
   });
 });

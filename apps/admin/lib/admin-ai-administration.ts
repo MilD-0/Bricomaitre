@@ -7,6 +7,7 @@ import { userAccessGrants } from '@bric/db/schema';
 import {
   createAdministrationRoleDefinition,
   createAdministrationAccessGrant,
+  deleteAdministrationAccessGrant,
   updateAdministrationRoleDefinition,
   updateAdministrationAccessGrant,
 } from './administration-mutations';
@@ -17,6 +18,9 @@ export const adminAiAccessGrantSchema = userAccessGrantFormSchema;
 export const adminAiRoleDefinitionSchema = roleDefinitionFormSchema.extend({
   roleDefinitionId: z.number().int().positive().nullable().default(null),
 });
+export const adminAiAccessRevocationSchema = z
+  .object({ accessGrantIds: z.array(z.number().int().positive()).min(1).max(20) })
+  .strict();
 
 export async function setAdminAiAccessGrant(input: unknown, actor?: ActionActor) {
   const values = adminAiAccessGrantSchema.parse(input);
@@ -48,5 +52,31 @@ export async function setAdminAiRoleDefinition(input: unknown, actor?: ActionAct
     ok: true,
     action: roleDefinitionId ? ('updated' as const) : ('created' as const),
     ...persisted,
+  };
+}
+
+export async function revokeAdminAiAccessGrants(input: unknown, actor?: ActionActor) {
+  const values = adminAiAccessRevocationSchema.parse(input);
+  const revoked = [];
+  const failed = [];
+  const db = getDb();
+  for (const accessGrantId of [...new Set(values.accessGrantIds)]) {
+    try {
+      revoked.push(await deleteAdministrationAccessGrant(db, accessGrantId, actor));
+    } catch (error) {
+      failed.push({
+        accessGrantId,
+        code: error instanceof Error ? error.name : 'AccessGrantRevocationError',
+        message: error instanceof Error ? error.message : 'Unable to revoke access.',
+      });
+    }
+  }
+  return {
+    ok: failed.length === 0,
+    requestedCount: values.accessGrantIds.length,
+    revokedCount: revoked.length,
+    failedCount: failed.length,
+    revoked,
+    failed,
   };
 }

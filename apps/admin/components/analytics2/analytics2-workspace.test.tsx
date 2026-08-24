@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Analytics2Payload } from '../../lib/analytics2';
+import { ADMIN_AI_OPEN_EVENT } from '../../lib/admin-ai-events';
+import { AdminAiSurfaceProvider, useAdminAiSurfaceContext } from '../admin-ai-surface-context';
 import { splitPartialSeries, StatsWorkspace } from './analytics2-workspace';
 
 const { pushMock, replaceMock } = vi.hoisted(() => ({
@@ -26,6 +28,7 @@ vi.mock('next-intl', () => ({
 }));
 vi.mock('next/navigation', () => ({
   usePathname: () => '/en/stats',
+  useSearchParams: () => new URLSearchParams('range=30d&grain=auto'),
   useRouter: () => ({ push: pushMock, replace: replaceMock }),
 }));
 
@@ -490,6 +493,23 @@ function renderWorkspace(payload = commandPayload()) {
   );
 }
 
+function SurfaceContextProbe() {
+  const context = useAdminAiSurfaceContext();
+  return <output data-testid="surface-context">{JSON.stringify(context)}</output>;
+}
+
+function renderWorkspaceWithContext(payload = commandPayload()) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <AdminAiSurfaceProvider>
+        <StatsWorkspace initialData={payload} />
+        <SurfaceContextProbe />
+      </AdminAiSurfaceProvider>
+    </QueryClientProvider>,
+  );
+}
+
 describe('StatsWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -527,6 +547,27 @@ describe('StatsWorkspace', () => {
     expect(screen.getByText('82% expected to post')).toBeInTheDocument();
     expect(screen.queryByText('Analytics · operational workspace')).not.toBeInTheDocument();
     expect(screen.queryByText('Query duration')).not.toBeInTheDocument();
+  });
+
+  it('opens the assistant with the exact active analytics section', () => {
+    const open = vi.fn();
+    window.addEventListener(ADMIN_AI_OPEN_EVENT, open);
+    const { container } = renderWorkspaceWithContext();
+
+    const cashSection = screen.getByText('Cash pipeline').closest('section');
+    expect(cashSection).not.toBeNull();
+    fireEvent.click(within(cashSection as HTMLElement).getByRole('button', { name: 'Ask AI' }));
+
+    expect(open).toHaveBeenCalledOnce();
+    expect(cashSection).toHaveAttribute('data-analytics-ai-focus', 'cash_pipeline');
+    expect(cashSection).toHaveAttribute('data-analytics-ai-active', 'true');
+    expect(
+      container.querySelector('[data-analytics-ai-focus="economics_timeline"]'),
+    ).not.toHaveAttribute('data-analytics-ai-active');
+    expect(screen.getByTestId('surface-context')).toHaveTextContent(
+      '"analyticsFocus":"cash_pipeline"',
+    );
+    window.removeEventListener(ADMIN_AI_OPEN_EVENT, open);
   });
 
   it('presents Search Console as a focused opportunity workspace', () => {

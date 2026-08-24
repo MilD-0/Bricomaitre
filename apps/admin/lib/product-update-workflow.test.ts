@@ -21,6 +21,7 @@ import {
   archiveProductThroughCanonicalWorkflow,
   createProductThroughCanonicalWorkflow,
   ProductMutationNotFoundError,
+  restoreProductThroughCanonicalWorkflow,
 } from './product-update-workflow';
 
 describe('canonical product lifecycle workflow', () => {
@@ -130,6 +131,47 @@ describe('canonical product lifecycle workflow', () => {
     mocks.mutate.mockResolvedValue([]);
     await expect(
       archiveProductThroughCanonicalWorkflow('database' as never, 404, {}),
+    ).rejects.toBeInstanceOf(ProductMutationNotFoundError);
+  });
+
+  it('restores only an archived product without silently making it sellable', async () => {
+    const returning = vi.fn().mockResolvedValue([
+      {
+        id: 21,
+        title: 'Perceuse compacte',
+        active: false,
+        inStock: false,
+        availabilityStatus: 'out_of_stock',
+      },
+    ]);
+    const where = vi.fn().mockReturnValue({ returning });
+    const set = vi.fn().mockReturnValue({ where });
+    const tx = { update: vi.fn().mockReturnValue({ set }) };
+    mocks.mutate.mockImplementation(async (_db, config) => config.execute(tx));
+
+    await expect(
+      restoreProductThroughCanonicalWorkflow('database' as never, 21, {
+        email: 'admin@example.com',
+      }),
+    ).resolves.toEqual({
+      id: 21,
+      title: 'Perceuse compacte',
+      active: false,
+      inStock: false,
+      availabilityStatus: 'out_of_stock',
+      archived: false,
+    });
+    expect(set).toHaveBeenCalledWith({ archivedAt: null, updatedAt: expect.any(Date) });
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      'database',
+      expect.objectContaining({ entityId: 21, operation: 'update' }),
+    );
+  });
+
+  it('reports a product that is missing or no longer archived during restore', async () => {
+    mocks.mutate.mockResolvedValue([]);
+    await expect(
+      restoreProductThroughCanonicalWorkflow('database' as never, 404, {}),
     ).rejects.toBeInstanceOf(ProductMutationNotFoundError);
   });
 });

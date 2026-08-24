@@ -6,6 +6,7 @@ import {
   type AiEvalTranscript,
 } from '@bric/ai-core';
 import {
+  shoppingAssistantCartManagementSchema,
   shoppingAssistantCatalogSearchSchema,
   shoppingAssistantDeliverySupportLookupSchema,
   shoppingAssistantOrderLookupSchema,
@@ -138,6 +139,25 @@ function createTools(
         return { products };
       },
     }),
+    manage_cart: tool({
+      description:
+        'Apply one explicit cart request using only grounded product IDs. Add increments quantity, set_quantity sets the exact final quantity, and remove uses quantity 0.',
+      inputSchema: shoppingAssistantCartManagementSchema,
+      execute: async ({ operations }) => ({
+        accepted: operations.map((operation) => ({
+          ...operation,
+          previousQuantity: operation.productId === 12 || operation.productId === 18 ? 1 : 0,
+          resultingQuantity:
+            operation.action === 'remove'
+              ? 0
+              : operation.action === 'set_quantity'
+                ? operation.quantity
+                : 1 + operation.quantity,
+        })),
+        rejected: [],
+        cartWillBeUpdated: operations.length > 0,
+      }),
+    }),
     present_products: tool({
       description: 'Select grounded products to render as recommendation cards.',
       inputSchema: shoppingAssistantProductSelectionSchema,
@@ -184,6 +204,10 @@ async function executeScenario(
     .filter((model, index, candidates) => candidates.indexOf(model) === index);
   const toolPlan = shoppingAssistantToolPlan(scenario.input.message, {
     hasInspectableProducts: scenario.input.context !== 'catalog',
+    hasNonCartProducts:
+      scenario.input.context === 'product' || scenario.input.context === 'landing',
+    hasCartProducts: scenario.input.context === 'cart' || scenario.input.context === 'checkout',
+    hasCurrentProduct: scenario.input.context === 'product' || scenario.input.context === 'landing',
     hasOrder: scenario.input.context === 'thank-you',
   });
   const failures: string[] = [];
@@ -206,6 +230,12 @@ async function executeScenario(
             return {
               activeTools: [toolPlan.groundingTool],
               toolChoice: { type: 'tool', toolName: toolPlan.groundingTool },
+            };
+          }
+          if (stepNumber === (toolPlan.groundingTool ? 1 : 0) && toolPlan.manageCart) {
+            return {
+              activeTools: ['manage_cart'],
+              toolChoice: { type: 'tool', toolName: 'manage_cart' },
             };
           }
           if (stepNumber === 1 && toolPlan.presentProducts && groundingResultCount > 0) {
@@ -231,7 +261,11 @@ async function executeScenario(
       return {
         status: 'completed',
         answer: await result.text,
-        toolCalls: toolCalls.map((call) => ({ name: call.toolName, status: 'completed' })),
+        toolCalls: toolCalls.map((call) => ({
+          name: call.toolName,
+          status: 'completed',
+          input: call.input,
+        })),
         renderedEntityIds,
       };
     } catch (error) {

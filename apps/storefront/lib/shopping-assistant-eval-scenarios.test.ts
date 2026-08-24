@@ -27,7 +27,10 @@ describe('shopping assistant commercialization eval scenarios', () => {
         evaluateAiTranscript(scenario, {
           status: 'completed',
           answer,
-          toolCalls: (scenario.expectations.requiredTools ?? []).map((name) => ({ name })),
+          toolCalls: (scenario.expectations.requiredTools ?? []).map((name) => ({
+            name,
+            input: scenario.expectations.requiredToolInputs?.[name],
+          })),
           renderedEntityIds:
             scenario.expectations.requiredRenderedEntityIds ??
             scenario.expectations.groundedEntityIds?.slice(0, 1),

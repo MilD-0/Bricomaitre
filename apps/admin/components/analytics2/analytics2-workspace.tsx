@@ -13,11 +13,12 @@ import {
   RefreshCw,
   Search,
   Settings2,
+  Sparkles,
   Trash2,
 } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
   Area,
   Bar,
@@ -45,7 +46,12 @@ import type {
 } from '../../lib/analytics2';
 import { statsPath } from '../../lib/analytics2-routes';
 import { requestJson as request } from '../../lib/admin-api';
-import { analyticsAiSurfaceDetails } from '../../lib/admin-ai-live-surface-details';
+import { openAdminAi } from '../../lib/admin-ai-events';
+import {
+  analyticsAiSurfaceDetails,
+  analyticsFocusAiSurfaceDetails,
+} from '../../lib/admin-ai-live-surface-details';
+import type { AdminAiAnalyticsFocusDimension } from '../../lib/admin-ai-analytics-focus';
 import { toast } from '../../lib/toast';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
@@ -77,6 +83,44 @@ const ResponsiveChart = ResponsiveContainer as React.ComponentType<{
   height: string;
   children: React.ReactNode;
 }>;
+
+type AnalyticsAssistantFocus = {
+  dimension: AdminAiAnalyticsFocusDimension;
+  search?: string | null;
+  identifiers?: string[];
+};
+
+const AnalyticsAssistantFocusContext = createContext<{
+  active: AnalyticsAssistantFocus | null;
+  setActive: (focus: AnalyticsAssistantFocus) => void;
+} | null>(null);
+
+const defaultAnalyticsAssistantFocus: Partial<
+  Record<Analytics2View, AdminAiAnalyticsFocusDimension>
+> = {
+  command: 'economics_timeline',
+  money: 'economics_timeline',
+  fulfillment: 'cash_pipeline',
+  storefront: 'storefront_trend',
+};
+
+function AnalyticsAssistantFocusProvider({
+  view,
+  children,
+}: {
+  view: Analytics2View;
+  children: React.ReactNode;
+}) {
+  const defaultDimension = defaultAnalyticsAssistantFocus[view];
+  const [active, setActive] = useState<AnalyticsAssistantFocus | null>(() =>
+    defaultDimension ? { dimension: defaultDimension } : null,
+  );
+  return (
+    <AnalyticsAssistantFocusContext.Provider value={{ active, setActive }}>
+      {children}
+    </AnalyticsAssistantFocusContext.Provider>
+  );
+}
 
 function formatMoney(locale: string, value: number | null | undefined, compact = false) {
   if (value == null) return '—';
@@ -210,15 +254,41 @@ function Section({
   action,
   children,
   className,
+  analyticsFocus,
 }: {
   title: React.ReactNode;
   description?: React.ReactNode;
   action?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  analyticsFocus?: AnalyticsAssistantFocus;
 }) {
+  const locale = useLocale();
+  const focusContext = useContext(AnalyticsAssistantFocusContext);
+  const active = Boolean(
+    analyticsFocus && focusContext?.active?.dimension === analyticsFocus.dimension,
+  );
+  useAdminAiSurfaceDetails(
+    analyticsFocusAiSurfaceDetails(
+      active && analyticsFocus
+        ? {
+            dimension: analyticsFocus.dimension,
+            search: analyticsFocus.search,
+            identifiers: analyticsFocus.identifiers,
+          }
+        : { dimension: null },
+    ),
+  );
   return (
-    <section className={cn('min-w-0 border-b border-border/60 px-4 py-6 sm:px-6', className)}>
+    <section
+      data-analytics-ai-focus={analyticsFocus?.dimension}
+      data-analytics-ai-active={active || undefined}
+      className={cn(
+        'min-w-0 border-b border-border/60 px-4 py-6 sm:px-6',
+        active && 'bg-primary/[0.018]',
+        className,
+      )}
+    >
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-semibold tracking-[-0.015em]">{title}</h2>
@@ -226,7 +296,29 @@ function Section({
             <p className="mt-1 max-w-3xl text-sm leading-5 text-muted-foreground">{description}</p>
           ) : null}
         </div>
-        {action}
+        {action || analyticsFocus ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {action}
+            {analyticsFocus ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-pressed={active}
+                className={cn(
+                  'h-7 px-2 text-[11px] text-muted-foreground',
+                  active && 'bg-primary/10 text-primary',
+                )}
+                onClick={() => {
+                  focusContext?.setActive(analyticsFocus);
+                  openAdminAi();
+                }}
+              >
+                <Sparkles className="size-3.5" />
+                {getAnalytics2Copy(locale).askAi}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </header>
       {children}
     </section>
@@ -550,7 +642,10 @@ function CommandView({
     <>
       <MetricStrip metrics={data.metrics} copy={copy} locale={locale} />
       <div className="grid xl:grid-cols-[minmax(0,2fr)_minmax(19rem,1fr)]">
-        <Section title={copy.sections.trajectory}>
+        <Section
+          title={copy.sections.trajectory}
+          analyticsFocus={{ dimension: 'economics_timeline' }}
+        >
           <ChartFrame className="h-[23rem]">
             <ResponsiveChart width="100%" height="100%">
               <ComposedChart data={trajectory} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
@@ -622,7 +717,7 @@ function CommandView({
           </div>
         </Section>
         <div className="border-s border-border/60">
-          <Section title={copy.sections.signals}>
+          <Section title={copy.sections.signals} analyticsFocus={{ dimension: 'signals' }}>
             <div className="divide-y divide-border/50 border-y border-border/60">
               {data.signals.map((signal) => (
                 <button
@@ -660,12 +755,15 @@ function CommandView({
               ) : null}
             </div>
           </Section>
-          <Section title={copy.sections.commerceFunnel}>
+          <Section
+            title={copy.sections.commerceFunnel}
+            analyticsFocus={{ dimension: 'cash_pipeline' }}
+          >
             <Funnel rows={data.fulfillment.funnel} locale={locale} />
           </Section>
         </div>
       </div>
-      <Section title={copy.sections.cashPipeline}>
+      <Section title={copy.sections.cashPipeline} analyticsFocus={{ dimension: 'cash_pipeline' }}>
         <CashPipeline rows={data.fulfillment.cashPipeline} copy={copy} locale={locale} />
       </Section>
     </>
@@ -682,6 +780,12 @@ function MoneyView({
   locale: string;
 }) {
   const [mode, setMode] = useState<'projected' | 'realized' | 'cumulative'>('projected');
+  const setActiveAssistantFocus = useContext(AnalyticsAssistantFocusContext)?.setActive;
+  useEffect(() => {
+    setActiveAssistantFocus?.({
+      dimension: mode === 'realized' ? 'paid_timeline' : 'economics_timeline',
+    });
+  }, [mode, setActiveAssistantFocus]);
   const sourceRows = (mode === 'realized' ? data.paidSeries : data.series) as Array<
     Record<string, string | number | boolean | null>
   >;
@@ -698,6 +802,9 @@ function MoneyView({
       <MetricStrip metrics={data.metrics} copy={copy} locale={locale} />
       <Section
         title={copy.sections.moneyPerformance}
+        analyticsFocus={{
+          dimension: mode === 'realized' ? 'paid_timeline' : 'economics_timeline',
+        }}
         action={
           <div className="flex rounded-lg bg-muted/55 p-1">
             {(['projected', 'realized', 'cumulative'] as const).map((key) => (
@@ -809,7 +916,7 @@ function MoneyView({
           </ResponsiveChart>
         </ChartFrame>
       </Section>
-      <Section title={copy.sections.paidEconomics}>
+      <Section title={copy.sections.paidEconomics} analyticsFocus={{ dimension: 'paid_timeline' }}>
         <div className="mb-4 grid grid-cols-2 border-y border-border/60 lg:grid-cols-5">
           {[
             ['Paid COD', formatMoney(locale, data.automaticPaid.summary.codDzd)],
@@ -880,7 +987,7 @@ function MoneyView({
           </tbody>
         </DenseTable>
       </Section>
-      <Section title="Profit maturation">
+      <Section title="Profit maturation" analyticsFocus={{ dimension: 'posting_cohorts' }}>
         <ChartFrame className="h-[22rem]">
           <ResponsiveChart width="100%" height="100%">
             <ComposedChart
@@ -978,7 +1085,10 @@ function MoneyView({
         </DenseTable>
       </Section>
       <div className="grid xl:grid-cols-2">
-        <Section title={copy.sections.weeklyEconomics}>
+        <Section
+          title={copy.sections.weeklyEconomics}
+          analyticsFocus={{ dimension: 'friday_weeks' }}
+        >
           <DenseTable>
             <TableHead>
               <tr>
@@ -1016,7 +1126,7 @@ function MoneyView({
             </tbody>
           </DenseTable>
         </Section>
-        <Section title={copy.sections.forecast}>
+        <Section title={copy.sections.forecast} analyticsFocus={{ dimension: 'forecast' }}>
           <ChartFrame>
             <ResponsiveChart width="100%" height="100%">
               <ComposedChart data={data.forecast}>
@@ -1063,7 +1173,10 @@ function MoneyView({
           </ChartFrame>
         </Section>
       </div>
-      <Section title={copy.sections.economicsLedger}>
+      <Section
+        title={copy.sections.economicsLedger}
+        analyticsFocus={{ dimension: 'economics_timeline' }}
+      >
         <DenseTable>
           <TableHead>
             <tr>
@@ -1151,6 +1264,22 @@ function AcquisitionView({
   const selectedIds = selectedForLevel.length
     ? selectedForLevel
     : entities.slice(0, 3).map((entity) => entity.id);
+  const selectedIdsKey = selectedIds.join('|');
+  const setActiveAssistantFocus = useContext(AnalyticsAssistantFocusContext)?.setActive;
+  useEffect(() => {
+    setActiveAssistantFocus?.({
+      dimension: entityKey,
+      search: inspected?.name ?? null,
+      identifiers: inspected ? [inspected.id] : selectedIdsKey.split('|').filter(Boolean),
+    });
+  }, [entityKey, inspected, selectedIdsKey, setActiveAssistantFocus]);
+  useAdminAiSurfaceDetails(
+    analyticsFocusAiSurfaceDetails({
+      dimension: entityKey,
+      search: inspected?.name ?? null,
+      identifiers: inspected ? [inspected.id] : selectedIds,
+    }),
+  );
 
   function setSelectedIds(update: (current: string[]) => string[]) {
     setSelectionByLevel((current) => ({ ...current, [level]: update(selectedIds) }));
@@ -1204,7 +1333,10 @@ function AcquisitionView({
     <>
       <MetricStrip metrics={data.metrics} copy={copy} locale={locale} />
       <div className="grid xl:grid-cols-2">
-        <Section title={copy.sections.profitEfficiency}>
+        <Section
+          title={copy.sections.profitEfficiency}
+          analyticsFocus={{ dimension: 'profit_efficiency' }}
+        >
           <ChartFrame>
             <ResponsiveChart width="100%" height="100%">
               <ComposedChart data={profitSeries}>
@@ -1241,7 +1373,7 @@ function AcquisitionView({
             </ResponsiveChart>
           </ChartFrame>
         </Section>
-        <Section title={copy.sections.creativeFatigue}>
+        <Section title={copy.sections.creativeFatigue} analyticsFocus={{ dimension: 'meta_daily' }}>
           <ChartFrame>
             <ResponsiveChart width="100%" height="100%">
               <ComposedChart data={data.daily}>
@@ -1281,7 +1413,10 @@ function AcquisitionView({
         </Section>
       </div>
       {data.summary.videoPlays > 0 ? (
-        <Section title={copy.sections.creativeResponse}>
+        <Section
+          title={copy.sections.creativeResponse}
+          analyticsFocus={{ dimension: 'meta_daily' }}
+        >
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(16rem,0.7fr)]">
             <Funnel
               rows={[
@@ -1322,7 +1457,7 @@ function AcquisitionView({
           </div>
         </Section>
       ) : null}
-      <Section title={copy.sections.paidFunnel}>
+      <Section title={copy.sections.paidFunnel} analyticsFocus={{ dimension: 'paid_funnel' }}>
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(16rem,0.7fr)]">
           <Funnel rows={data.funnel} locale={locale} />
           <dl className="grid grid-cols-2 gap-x-5 gap-y-4 border-t border-border/60 pt-6 text-sm lg:border-s lg:border-t-0 lg:ps-6 lg:pt-0">
@@ -1365,7 +1500,7 @@ function AcquisitionView({
           </dl>
         </div>
       </Section>
-      <Section title="Campaign maturation">
+      <Section title="Campaign maturation" analyticsFocus={{ dimension: 'attribution_maturation' }}>
         {maturationCampaigns.length ? (
           <>
             <div className="mb-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
@@ -1428,6 +1563,11 @@ function AcquisitionView({
       </Section>
       <Section
         title={copy.sections.hierarchy}
+        analyticsFocus={{
+          dimension: entityKey,
+          search: inspected?.name ?? null,
+          identifiers: inspected ? [inspected.id] : selectedIds,
+        }}
         action={
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-lg bg-muted/55 p-1">
@@ -1597,7 +1737,10 @@ function AcquisitionView({
           </tbody>
         </DenseTable>
       </Section>
-      <Section title={copy.sections.trackingHealth}>
+      <Section
+        title={copy.sections.trackingHealth}
+        analyticsFocus={{ dimension: 'tracking_events' }}
+      >
         <details className="border-y border-border/60 py-3">
           <summary className="cursor-pointer text-sm font-medium">
             {copy.sections.trackingHealth} ·{' '}
@@ -1760,17 +1903,23 @@ function FulfillmentView({
   return (
     <>
       <MetricStrip metrics={data.metrics} copy={copy} locale={locale} />
-      <Section title={copy.sections.deliveryPipeline}>
+      <Section
+        title={copy.sections.deliveryPipeline}
+        analyticsFocus={{ dimension: 'shipment_states' }}
+      >
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,1fr)]">
           <Funnel rows={phases} locale={locale} />
           <ReturnEvidence returns={data.returns} copy={copy} locale={locale} />
         </div>
       </Section>
-      <Section title={copy.sections.cashPipeline}>
+      <Section title={copy.sections.cashPipeline} analyticsFocus={{ dimension: 'cash_pipeline' }}>
         <CashPipeline rows={data.cashPipeline} copy={copy} locale={locale} />
       </Section>
       <div>
-        <Section title={copy.sections.shipmentStates}>
+        <Section
+          title={copy.sections.shipmentStates}
+          analyticsFocus={{ dimension: 'shipment_states' }}
+        >
           <DenseTable>
             <TableHead>
               <tr>
@@ -1808,7 +1957,7 @@ function FulfillmentView({
         </Section>
       </div>
       <div className="grid xl:grid-cols-2">
-        <Section title={copy.sections.cohorts}>
+        <Section title={copy.sections.cohorts} analyticsFocus={{ dimension: 'posting_cohorts' }}>
           <ChartFrame>
             <ResponsiveChart width="100%" height="100%">
               <ComposedChart data={[...data.cohorts].reverse()}>
@@ -1840,7 +1989,7 @@ function FulfillmentView({
             </ResponsiveChart>
           </ChartFrame>
         </Section>
-        <Section title={copy.sections.attempts}>
+        <Section title={copy.sections.attempts} analyticsFocus={{ dimension: 'attempt_outcomes' }}>
           <ChartFrame>
             <ResponsiveChart width="100%" height="100%">
               <ComposedChart
@@ -1928,7 +2077,7 @@ function StorefrontView({
     <>
       <MetricStrip metrics={metrics} copy={copy} locale={locale} />
       <div className="grid xl:grid-cols-[minmax(0,1.6fr)_minmax(19rem,0.8fr)]">
-        <Section title={copy.sections.siteTrend}>
+        <Section title={copy.sections.siteTrend} analyticsFocus={{ dimension: 'storefront_trend' }}>
           <ChartFrame className="h-[23rem]">
             <ResponsiveChart width="100%" height="100%">
               <ComposedChart data={viewData.trend}>
@@ -1988,7 +2137,10 @@ function StorefrontView({
             </ResponsiveChart>
           </ChartFrame>
         </Section>
-        <Section title={copy.sections.siteFunnel}>
+        <Section
+          title={copy.sections.siteFunnel}
+          analyticsFocus={{ dimension: 'storefront_funnel' }}
+        >
           <Funnel
             rows={viewData.funnel.map((row: { name: string; value: number }) => row)}
             locale={locale}
@@ -2018,6 +2170,7 @@ function StorefrontView({
       <div className="grid xl:grid-cols-2">
         <Section
           title={copy.sections.paths}
+          analyticsFocus={{ dimension: 'storefront_paths' }}
           description={`${formatDate(locale, viewData.paths.coverageStartDate, false)} – ${formatDate(locale, viewData.paths.coverageEndDate, false)} raw-event window`}
         >
           <DenseTable>
@@ -2041,7 +2194,10 @@ function StorefrontView({
             </tbody>
           </DenseTable>
         </Section>
-        <Section title={copy.sections.searches}>
+        <Section
+          title={copy.sections.searches}
+          analyticsFocus={{ dimension: 'storefront_searches' }}
+        >
           <div className="divide-y divide-border/50 border-y border-border/60">
             {viewData.searches
               .slice(0, 20)
@@ -2067,7 +2223,7 @@ function StorefrontView({
           </div>
         </Section>
       </div>
-      <Section title={copy.sections.landingPages}>
+      <Section title={copy.sections.landingPages} analyticsFocus={{ dimension: 'landing_pages' }}>
         <DenseTable>
           <TableHead>
             <tr>
@@ -2126,7 +2282,11 @@ function StorefrontView({
         </DenseTable>
       </Section>
       <div className="grid xl:grid-cols-3">
-        <Section title={copy.sections.experience} className="xl:col-span-2">
+        <Section
+          title={copy.sections.experience}
+          className="xl:col-span-2"
+          analyticsFocus={{ dimension: 'web_vitals' }}
+        >
           <div className="grid divide-y divide-border/50 border-y border-border/60 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
             {viewData.vitals.map(
               (vital: {
@@ -2177,7 +2337,10 @@ function StorefrontView({
               )}
           </div>
         </Section>
-        <Section title="AI-assisted shopping">
+        <Section
+          title="AI-assisted shopping"
+          analyticsFocus={{ dimension: 'storefront_assistant' }}
+        >
           <dl className="divide-y divide-border/50 border-y border-border/60 text-sm">
             {[
               ['Opens', viewData.aiAssistant.opens],
@@ -2220,6 +2383,23 @@ function SearchVisibilityView({
   const queryClient = useQueryClient();
   const [selectedQuery, setSelectedQuery] = useState<SearchOpportunity | null>(null);
   const [selectedPage, setSelectedPage] = useState<SearchPage | null>(null);
+  const setActiveAssistantFocus = useContext(AnalyticsAssistantFocusContext)?.setActive;
+  useEffect(() => {
+    if (selectedQuery) {
+      setActiveAssistantFocus?.({
+        dimension: 'search_opportunities',
+        search: selectedQuery.query,
+      });
+    } else if (selectedPage) {
+      setActiveAssistantFocus?.({ dimension: 'search_pages', search: selectedPage.path });
+    }
+  }, [selectedPage, selectedQuery, setActiveAssistantFocus]);
+  useAdminAiSurfaceDetails(
+    analyticsFocusAiSurfaceDetails({
+      dimension: selectedQuery ? 'search_opportunities' : selectedPage ? 'search_pages' : null,
+      search: selectedQuery?.query ?? selectedPage?.path ?? null,
+    }),
+  );
   const sync = useMutation({
     mutationFn: () =>
       request<{ result: { since: string; until: string } }>('/api/stats/search-console/sync', {
@@ -2240,6 +2420,7 @@ function SearchVisibilityView({
       <MetricStrip metrics={data.metrics} copy={copy} locale={locale} />
       <Section
         title={copy.sections.searchTrend}
+        analyticsFocus={{ dimension: 'search_trend' }}
         action={
           <Button
             size="sm"
@@ -2306,7 +2487,13 @@ function SearchVisibilityView({
         </div>
       </Section>
 
-      <Section title={copy.sections.searchOpportunities}>
+      <Section
+        title={copy.sections.searchOpportunities}
+        analyticsFocus={{
+          dimension: 'search_opportunities',
+          search: selectedQuery?.query ?? null,
+        }}
+      >
         {data.opportunities.length ? (
           <>
             <div className="divide-y divide-border/50 border-y border-border/60 md:hidden">
@@ -2389,6 +2576,10 @@ function SearchVisibilityView({
 
       <Section
         title={copy.sections.searchPages}
+        analyticsFocus={{
+          dimension: 'search_pages',
+          search: selectedPage?.path ?? null,
+        }}
         description="Landing pages as Google sees them. Select a row to inspect the queries creating its visibility."
       >
         <div className="divide-y divide-border/50 border-y border-border/60 md:hidden">
@@ -2501,7 +2692,10 @@ function SearchVisibilityView({
             </div>
           ) : null}
         </Section>
-        <Section title={copy.sections.indexHealth}>
+        <Section
+          title={copy.sections.indexHealth}
+          analyticsFocus={{ dimension: 'search_index_issues' }}
+        >
           <div className="divide-y divide-border/50 border-y border-border/60">
             {data.indexHealth.sitemaps.map((sitemap) => (
               <div key={sitemap.path} className="py-3 text-sm">
@@ -2705,6 +2899,21 @@ function CatalogView({
   }, [data.products, locale, search]);
   const selected =
     data.products.find((product: CatalogProduct) => product.id === selectedId) ?? null;
+  const setActiveAssistantFocus = useContext(AnalyticsAssistantFocusContext)?.setActive;
+  useEffect(() => {
+    setActiveAssistantFocus?.({
+      dimension: 'products',
+      search: selected?.title ?? search,
+      identifiers: selected ? [selected.id] : [],
+    });
+  }, [search, selected, setActiveAssistantFocus]);
+  useAdminAiSurfaceDetails(
+    analyticsFocusAiSurfaceDetails({
+      dimension: 'products',
+      search: selected?.title ?? search,
+      identifiers: selected ? [selected.id] : [],
+    }),
+  );
   const scatter = filtered
     .map((product: CatalogProduct): ProductScatterPoint => {
       const resolvedOrders = product.paidOrders + product.returnedOrders;
@@ -2766,6 +2975,11 @@ function CatalogView({
       <MetricStrip metrics={data.metrics} copy={copy} locale={locale} />
       <Section
         title={copy.sections.products}
+        analyticsFocus={{
+          dimension: 'products',
+          search: selected?.title ?? search,
+          identifiers: selected ? [selected.id] : [],
+        }}
         action={
           <label className="relative w-full sm:w-72">
             <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -3051,7 +3265,7 @@ function CatalogView({
         </div>
       </Section>
       <div className="grid xl:grid-cols-[minmax(16rem,0.45fr)_minmax(0,1.55fr)]">
-        <Section title={copy.sections.basketPairs}>
+        <Section title={copy.sections.basketPairs} analyticsFocus={{ dimension: 'basket_pairs' }}>
           <div className="divide-y divide-border/50 border-y border-border/60">
             {data.basketPairs.map((pair: { left: string; right: string; orders: number }) => (
               <div
@@ -3069,7 +3283,7 @@ function CatalogView({
             ))}
           </div>
         </Section>
-        <Section title={copy.sections.customerBase}>
+        <Section title={copy.sections.customerBase} analyticsFocus={{ dimension: 'customers' }}>
           <div className="grid grid-cols-2 border-y border-border/60">
             {[
               ['Customers', formatNumber(locale, data.customers.summary.customers)],
@@ -3256,6 +3470,12 @@ function AssumptionsView({
   });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const selectedDay = data.days.find((day) => day.date === selectedDate) ?? null;
+  useAdminAiSurfaceDetails(
+    analyticsFocusAiSurfaceDetails({
+      dimension: selectedDay ? 'daily_assumptions' : null,
+      identifiers: selectedDay ? [selectedDay.date] : [],
+    }),
+  );
   const selectedDayHasManualOverride = Boolean(
     selectedDay &&
     (selectedDay.grossProfitSource === 'manual' ||
@@ -3501,6 +3721,10 @@ function AssumptionsView({
         </Section>
         <Section
           title={copy.sections.operatingCosts}
+          analyticsFocus={{
+            dimension: 'operating_costs',
+            identifiers: editingCostId ? [String(editingCostId)] : [],
+          }}
           action={
             <Button size="sm" variant="outline" onClick={openNewCost}>
               <Plus className="size-3.5" />
@@ -3646,6 +3870,10 @@ function AssumptionsView({
       </div>
       <Section
         title={copy.sections.dailyOverrides}
+        analyticsFocus={{
+          dimension: 'daily_assumptions',
+          identifiers: selectedDay ? [selectedDay.date] : [],
+        }}
         action={
           <Button
             size="sm"
@@ -4086,7 +4314,9 @@ export function StatsWorkspace({ initialData }: { initialData: Analytics2Payload
           analyticsQuery.isPlaceholderData && 'opacity-65',
         )}
       >
-        {renderView()}
+        <AnalyticsAssistantFocusProvider key={payload.filters.view} view={payload.filters.view}>
+          {renderView()}
+        </AnalyticsAssistantFocusProvider>
       </main>
     </WorkspaceFrame>
   );

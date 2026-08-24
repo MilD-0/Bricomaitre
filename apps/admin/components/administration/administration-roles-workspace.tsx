@@ -15,6 +15,7 @@ import {
 } from '../../lib/permissions';
 import { requestJson as request } from '../../lib/admin-api';
 import { toast } from '../../lib/toast';
+import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
@@ -55,6 +56,12 @@ export function AdministrationRolesWorkspace() {
   const t = useTranslations();
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | 'new' | null>(null);
+  useAdminAiSurfaceDetails({
+    selection:
+      typeof selectedId === 'number'
+        ? { entityType: 'roleDefinition', ids: [selectedId], focusedId: selectedId }
+        : null,
+  });
 
   const query = useQuery({
     queryKey: ['settings', 'roles'],

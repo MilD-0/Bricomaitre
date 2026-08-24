@@ -8,8 +8,10 @@ import {
   ProductMutationNotFoundError,
   readProductMutationPayload,
   replaceProductThroughCanonicalWorkflow,
+  restoreProductThroughCanonicalWorkflow,
   type ProductMutationActor,
 } from './product-update-workflow';
+import { loadArchivedProducts } from './product-archive';
 import { productPayloadSchema, productPromoCodePayloadSchema } from './products';
 import { captureAdminException, getRequestId } from './sentry';
 import { CACHE_TAGS, revalidateServerTags } from './server-cache';
@@ -65,6 +67,27 @@ export const adminAiProductUpdateSchema = z.object({
 export const adminAiProductCreateSchema = z.object({ product: productPayloadSchema }).strict();
 
 export const adminAiProductArchiveSchema = z
+  .object({ productIds: z.array(z.number().int().positive()).min(1).max(20) })
+  .strict();
+
+export const adminAiArchivedProductInspectionSchema = z.discriminatedUnion('scope', [
+  z
+    .object({
+      scope: z.literal('exact'),
+      productIds: z.array(z.number().int().positive()).min(1).max(100),
+    })
+    .strict(),
+  z
+    .object({
+      scope: z.literal('filtered'),
+      query: z.string().trim().max(200).default(''),
+      page: z.number().int().positive().default(1),
+      limit: z.number().int().min(1).max(100).default(50),
+    })
+    .strict(),
+]);
+
+export const adminAiProductRestoreSchema = z
   .object({ productIds: z.array(z.number().int().positive()).min(1).max(20) })
   .strict();
 
@@ -170,6 +193,89 @@ export async function archiveAdminAiProducts(
     failedCount: failed.length,
     catalogFeedRefresh,
     archived,
+    failed,
+  };
+}
+
+export async function inspectAdminAiArchivedProducts(
+  rawInput: z.input<typeof adminAiArchivedProductInspectionSchema>,
+) {
+  const input = adminAiArchivedProductInspectionSchema.parse(rawInput);
+  const allItems = await loadArchivedProducts(getDb());
+  if (input.scope === 'exact') {
+    const requestedIds = [...new Set(input.productIds)];
+    const byId = new Map(allItems.map((item) => [item.id, item]));
+    return {
+      kind: 'archived_products' as const,
+      scope: input.scope,
+      requestedCount: requestedIds.length,
+      items: requestedIds.flatMap((productId) => {
+        const product = byId.get(productId);
+        return product ? [product] : [];
+      }),
+      missingProductIds: requestedIds.filter((productId) => !byId.has(productId)),
+    };
+  }
+
+  const query = input.query.toLocaleLowerCase();
+  const matched = query
+    ? allItems.filter((item) =>
+        [item.title, item.sku, item.barcode].some((value) =>
+          value?.toLocaleLowerCase().includes(query),
+        ),
+      )
+    : allItems;
+  const offset = (input.page - 1) * input.limit;
+  const totalPages = Math.max(1, Math.ceil(matched.length / input.limit));
+  return {
+    kind: 'archived_products' as const,
+    scope: input.scope,
+    query: input.query,
+    items: matched.slice(offset, offset + input.limit),
+    pagination: {
+      page: input.page,
+      limit: input.limit,
+      totalItems: matched.length,
+      totalPages,
+      hasNextPage: input.page < totalPages,
+      hasPreviousPage: input.page > 1,
+    },
+  };
+}
+
+export async function restoreAdminAiProducts(
+  rawInput: z.input<typeof adminAiProductRestoreSchema>,
+  actor: ProductMutationActor,
+) {
+  const input = adminAiProductRestoreSchema.parse(rawInput);
+  const restored = [];
+  const failed = [];
+  for (const productId of [...new Set(input.productIds)]) {
+    try {
+      restored.push(await restoreProductThroughCanonicalWorkflow(getDb(), productId, actor));
+    } catch (error) {
+      failed.push({
+        productId,
+        ...(error instanceof ProductMutationNotFoundError
+          ? { code: 'archived_product_not_found', message: error.message }
+          : failureDetails(error)),
+      });
+    }
+  }
+  const catalogFeedRefresh = restored.length
+    ? await refreshAdminAiProductSurfaces({
+        trigger: 'product:ai-restore',
+        productIds: restored.map((item) => item.id),
+        revalidateLandingPages: true,
+      })
+    : ('not-needed' as const);
+  return {
+    ok: failed.length === 0,
+    requestedCount: input.productIds.length,
+    restoredCount: restored.length,
+    failedCount: failed.length,
+    catalogFeedRefresh,
+    restored,
     failed,
   };
 }

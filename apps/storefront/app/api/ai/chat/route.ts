@@ -2,6 +2,8 @@ import { createAiLanguageModel, getAiConfig, resolveAiModel } from '@bric/ai-cor
 import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 import { getOrderStatusLabelKey } from '@bric/storefront-core/order-domain';
 import {
+  shoppingAssistantCartManagementSchema,
+  shoppingAssistantCartMutationSchema,
   shoppingAssistantCatalogSearchResultSchema,
   shoppingAssistantCatalogSearchSchema,
   shoppingAssistantDeliverySupportLookupSchema,
@@ -14,6 +16,7 @@ import {
   shoppingAssistantStreamEventSchema,
   shoppingAssistantToolNameSchema,
   type ShoppingAssistantCatalogSearch,
+  type ShoppingAssistantCartMutation,
   type ShoppingAssistantProduct,
   type ShoppingAssistantRequest,
   type ShoppingAssistantStreamEvent,
@@ -52,7 +55,7 @@ import {
 } from '@/lib/storefront-api';
 
 const CATALOG_CACHE_SECONDS = 300;
-const STOREFRONT_AI_PROMPT_VERSION = 'storefront-shopping-v3';
+const STOREFRONT_AI_PROMPT_VERSION = 'storefront-shopping-v4';
 const catalogSearchCache = new Map<
   string,
   {
@@ -379,6 +382,7 @@ export async function POST(request: NextRequest) {
 
   const knownProducts = new Map<number, ShoppingAssistantProduct>();
   const selectedIds: number[] = [];
+  const cartMutations: ShoppingAssistantCartMutation[] = [];
   const encoder = new TextEncoder();
   const generationAbort = new AbortController();
   const abortGeneration = () => generationAbort.abort();
@@ -419,7 +423,13 @@ export async function POST(request: NextRequest) {
             hasInspectableProducts:
               Boolean(grounding.currentProduct) ||
               grounding.cart.length > 0 ||
+              Boolean(grounding.catalogPage?.products.length) ||
               parsed.data.messages.some((message) => Boolean(message.productIds?.length)),
+            hasNonCartProducts:
+              Boolean(grounding.currentProduct) ||
+              parsed.data.messages.some((message) => Boolean(message.productIds?.length)),
+            hasCartProducts: grounding.cart.length > 0,
+            hasCurrentProduct: Boolean(grounding.currentProduct),
             hasOrder: Boolean(grounding.currentOrder),
           });
           const primaryModel = modelCandidates[0] ?? configuredModel;
@@ -430,7 +440,10 @@ export async function POST(request: NextRequest) {
             try {
               modelName = candidateModel;
               selectedIds.splice(0);
+              cartMutations.splice(0);
               let groundingResultCount = 0;
+              let cartMutationToolCalled = false;
+              const cartActionStep = toolPlan.groundingTool ? 1 : 0;
               const result = streamText({
                 model: createAiLanguageModel(config, 'storefront', { model: candidateModel }),
                 instructions: shoppingAssistantInstructions(parsed.data.locale),
@@ -447,6 +460,12 @@ export async function POST(request: NextRequest) {
                     return {
                       activeTools: [toolPlan.groundingTool],
                       toolChoice: { type: 'tool', toolName: toolPlan.groundingTool },
+                    };
+                  }
+                  if (stepNumber === cartActionStep && toolPlan.manageCart) {
+                    return {
+                      activeTools: ['manage_cart'],
+                      toolChoice: { type: 'tool', toolName: 'manage_cart' },
                     };
                   }
                   if (stepNumber === 1 && toolPlan.presentProducts && groundingResultCount > 0) {
@@ -544,6 +563,103 @@ export async function POST(request: NextRequest) {
                       return { code, checks };
                     },
                   }),
+                  manage_cart: tool({
+                    description:
+                      'Apply one explicit customer request to the browser cart. Send every requested add, exact quantity change, or removal together. Product IDs must come from verified page, cart, recommendation, or catalog-search evidence. Use quantity 0 for remove. Returns accepted operations with previous and resulting quantities plus any rejection reasons.',
+                    inputSchema: shoppingAssistantCartManagementSchema,
+                    execute: async ({ operations }) => {
+                      toolCallCount += 1;
+                      if (cartMutationToolCalled) {
+                        return {
+                          accepted: [],
+                          rejected: operations.map((operation) => ({
+                            ...operation,
+                            reason: 'cart_request_already_processed',
+                          })),
+                          cartWillBeUpdated: cartMutations.length > 0,
+                        };
+                      }
+                      cartMutationToolCalled = true;
+                      const quantities = new Map(
+                        grounding.cart.map(({ quantity, product }) => [product.id, quantity]),
+                      );
+                      const seen = new Set<number>();
+                      const accepted: Array<{
+                        action: ShoppingAssistantCartMutation['action'];
+                        productId: number;
+                        quantity: number;
+                        previousQuantity: number;
+                        resultingQuantity: number;
+                      }> = [];
+                      const rejected: Array<{
+                        action: ShoppingAssistantCartMutation['action'];
+                        productId: number;
+                        quantity: number;
+                        reason: string;
+                      }> = [];
+
+                      for (const operation of operations) {
+                        const product = knownProducts.get(operation.productId);
+                        const previousQuantity = quantities.get(operation.productId) ?? 0;
+                        let resultingQuantity = previousQuantity;
+                        let acceptedQuantity = operation.quantity;
+                        let reason: string | null = null;
+
+                        if (seen.has(operation.productId)) reason = 'duplicate_product_operation';
+                        else if (!product) reason = 'product_not_grounded';
+                        else if (operation.action === 'add') {
+                          const price = Number(product.price);
+                          if (operation.quantity < 1) reason = 'invalid_quantity';
+                          else if (!product.inStock) reason = 'product_unavailable';
+                          else if (product.price === null || !Number.isFinite(price) || price < 0)
+                            reason = 'price_unavailable';
+                          else {
+                            resultingQuantity = Math.min(20, previousQuantity + operation.quantity);
+                            acceptedQuantity = resultingQuantity - previousQuantity;
+                            if (acceptedQuantity < 1) reason = 'quantity_limit_reached';
+                          }
+                        } else if (operation.action === 'set_quantity') {
+                          if (operation.quantity < 1) reason = 'invalid_quantity';
+                          else if (previousQuantity < 1) reason = 'product_not_in_cart';
+                          else if (operation.quantity === previousQuantity)
+                            reason = 'quantity_already_set';
+                          else resultingQuantity = operation.quantity;
+                        } else if (operation.quantity !== 0)
+                          reason = 'remove_quantity_must_be_zero';
+                        else if (previousQuantity < 1) reason = 'product_not_in_cart';
+                        else resultingQuantity = 0;
+
+                        seen.add(operation.productId);
+                        if (reason || !product) {
+                          rejected.push({ ...operation, reason: reason ?? 'product_not_grounded' });
+                          continue;
+                        }
+
+                        const mutation = shoppingAssistantCartMutationSchema.parse({
+                          action: operation.action,
+                          quantity: acceptedQuantity,
+                          product,
+                        });
+                        cartMutations.push(mutation);
+                        if (resultingQuantity > 0)
+                          quantities.set(operation.productId, resultingQuantity);
+                        else quantities.delete(operation.productId);
+                        accepted.push({
+                          action: operation.action,
+                          productId: operation.productId,
+                          quantity: acceptedQuantity,
+                          previousQuantity,
+                          resultingQuantity,
+                        });
+                      }
+
+                      return {
+                        accepted,
+                        rejected,
+                        cartWillBeUpdated: accepted.length > 0,
+                      };
+                    },
+                  }),
                   present_products: tool({
                     description:
                       'Select only the grounded products that should be rendered as recommendation cards with this answer.',
@@ -605,7 +721,12 @@ export async function POST(request: NextRequest) {
               CATALOG_CACHE_SECONDS,
             );
             write({ type: 'text-delta', delta: fallback.message });
-            write({ type: 'result', mode: fallback.mode, products: fallback.products });
+            write({
+              type: 'result',
+              mode: fallback.mode,
+              products: fallback.products,
+              cartMutations: fallback.cartMutations,
+            });
             void recordStorefrontAssistantRun({
               telemetry: parsed.data.telemetry,
               locale: parsed.data.locale,
@@ -623,13 +744,19 @@ export async function POST(request: NextRequest) {
             return;
           }
 
-          const products = selectedProducts(knownProducts, selectedIds);
+          const products = toolPlan.manageCart ? [] : selectedProducts(knownProducts, selectedIds);
           const finalResult = shoppingAssistantResponseSchema.parse({
             mode: 'ai',
             message: emittedText,
             products,
+            cartMutations,
           });
-          write({ type: 'result', mode: finalResult.mode, products: finalResult.products });
+          write({
+            type: 'result',
+            mode: finalResult.mode,
+            products: finalResult.products,
+            cartMutations: finalResult.cartMutations,
+          });
           void recordStorefrontAssistantRun({
             telemetry: parsed.data.telemetry,
             locale: parsed.data.locale,
@@ -709,7 +836,12 @@ export async function POST(request: NextRequest) {
             return;
           }
           write({ type: 'text-delta', delta: fallback.message });
-          write({ type: 'result', mode: fallback.mode, products: fallback.products });
+          write({
+            type: 'result',
+            mode: fallback.mode,
+            products: fallback.products,
+            cartMutations: fallback.cartMutations,
+          });
         } finally {
           request.signal.removeEventListener('abort', abortGeneration);
           if (!generationAbort.signal.aborted) controller.close();

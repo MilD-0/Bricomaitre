@@ -79,6 +79,7 @@ export const shoppingAssistantRequestSchema = z
           'availability',
           'how_to',
           'recommendation',
+          'cart_management',
           'other',
         ]),
       })
@@ -108,10 +109,35 @@ export const shoppingAssistantProductSchema = z
   })
   .strict();
 
+export const shoppingAssistantCartActionSchema = z.enum(['add', 'set_quantity', 'remove']);
+
+export const shoppingAssistantCartOperationSchema = z
+  .object({
+    action: shoppingAssistantCartActionSchema,
+    productId: z.number().int().positive(),
+    quantity: z.number().int().min(0).max(20),
+  })
+  .strict();
+
+export const shoppingAssistantCartManagementSchema = z
+  .object({
+    operations: z.array(shoppingAssistantCartOperationSchema).min(1).max(8),
+  })
+  .strict();
+
+export const shoppingAssistantCartMutationSchema = z
+  .object({
+    action: shoppingAssistantCartActionSchema,
+    quantity: z.number().int().min(0).max(20),
+    product: shoppingAssistantProductSchema,
+  })
+  .strict();
+
 export const shoppingAssistantResponseSchema = z
   .object({
     message: z.string().trim().min(1).max(4_000),
     products: z.array(shoppingAssistantProductSchema).max(8),
+    cartMutations: z.array(shoppingAssistantCartMutationSchema).max(8).default([]),
     mode: z.enum(['ai', 'fallback']),
   })
   .strict();
@@ -122,6 +148,7 @@ export const shoppingAssistantToolNameSchema = z.enum([
   'inspect_order',
   'inspect_delivery_support',
   'inspect_promotion',
+  'manage_cart',
   'present_products',
 ]);
 
@@ -139,6 +166,7 @@ export const shoppingAssistantStreamEventSchema = z.discriminatedUnion('type', [
     .object({
       type: z.literal('result'),
       products: z.array(shoppingAssistantProductSchema).max(8),
+      cartMutations: z.array(shoppingAssistantCartMutationSchema).max(8).default([]),
       mode: z.enum(['ai', 'fallback']),
     })
     .strict(),
@@ -195,3 +223,6 @@ export type ShoppingAssistantPageContext = z.infer<typeof shoppingAssistantPageC
 export type ShoppingAssistantResponse = z.infer<typeof shoppingAssistantResponseSchema>;
 export type ShoppingAssistantStreamEvent = z.infer<typeof shoppingAssistantStreamEventSchema>;
 export type ShoppingAssistantToolName = z.infer<typeof shoppingAssistantToolNameSchema>;
+export type ShoppingAssistantCartAction = z.infer<typeof shoppingAssistantCartActionSchema>;
+export type ShoppingAssistantCartOperation = z.infer<typeof shoppingAssistantCartOperationSchema>;
+export type ShoppingAssistantCartMutation = z.infer<typeof shoppingAssistantCartMutationSchema>;
