@@ -1,11 +1,12 @@
-import { and, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { bulletinPostReactions, bulletinPosts } from '@bric/db/schema';
 import { bulletinReactionSchema } from '../../../../../lib/bulletin';
 import { requireBulletinSession } from '../../../../../lib/bulletin-server';
-import { mutateEntityWithHistory } from '../../../../../lib/action-history';
+import {
+  BulletinPostNotFoundError,
+  setBulletinPostReaction,
+} from '../../../../../lib/bulletin-mutations';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -28,45 +29,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const db = getDb();
-  const post = await db.query.bulletinPosts.findFirst({
-    where: eq(bulletinPosts.id, postId),
-  });
-
-  if (!post) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-
   const userEmail = session.user.email ?? 'unknown@example.com';
   const userName = session.user.name?.trim() || userEmail;
-  const existing = await db.query.bulletinPostReactions.findFirst({
-    where: and(
-      eq(bulletinPostReactions.postId, postId),
-      eq(bulletinPostReactions.userEmail, userEmail),
-      eq(bulletinPostReactions.emoji, parsed.data.emoji),
-    ),
-  });
-
-  await mutateEntityWithHistory(db, {
-    entityType: 'bulletinPostReactions',
-    entityId: existing?.id ?? postId,
-    operation: existing ? 'delete' : 'create',
-    actor: { email: userEmail, name: userName },
-    execute: async (tx) => {
-      if (existing) {
-        await tx.delete(bulletinPostReactions).where(eq(bulletinPostReactions.id, existing.id));
-        return;
-      }
-
-      await tx.insert(bulletinPostReactions).values({
-        postId,
-        userId: session.user.id ?? null,
-        userName,
-        userEmail,
-        emoji: parsed.data.emoji,
-      });
-    },
-  });
-
-  return NextResponse.json({ ok: true, reacted: !existing });
+  try {
+    const result = await setBulletinPostReaction(getDb(), postId, parsed.data.emoji, 'toggle', {
+      id: session.user.id,
+      email: userEmail,
+      name: userName,
+    });
+    return NextResponse.json({ ok: true, reacted: result.reacted });
+  } catch (error) {
+    if (error instanceof BulletinPostNotFoundError) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    throw error;
+  }
 }

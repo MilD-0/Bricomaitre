@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   deleteWhere: vi.fn(),
   post: vi.fn(),
   reply: vi.fn(),
+  postReaction: vi.fn(),
+  replyReaction: vi.fn(),
 }));
 
 vi.mock('./action-history', () => ({ mutateEntityWithHistory: mocks.mutate }));
@@ -20,6 +22,8 @@ import {
   BulletinMutationForbiddenError,
   deleteBulletinPost,
   deleteBulletinReply,
+  setBulletinPostReaction,
+  setBulletinReplyReaction,
   updateBulletinPost,
 } from './bulletin-mutations';
 
@@ -41,11 +45,14 @@ function database() {
       },
     })),
     delete: vi.fn(() => deleteChain),
+    insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue(undefined) })),
   };
   const db = {
     query: {
       bulletinPosts: { findFirst: mocks.post },
       bulletinReplies: { findFirst: mocks.reply },
+      bulletinPostReactions: { findFirst: mocks.postReaction },
+      bulletinReplyReactions: { findFirst: mocks.replyReaction },
     },
   };
   mocks.mutate.mockImplementation(async (_db, input) => input.execute(tx));
@@ -115,5 +122,38 @@ describe('canonical Bulletin mutations', () => {
       db,
       expect.objectContaining({ entityType: 'bulletinReplies', operation: 'delete', entityId: 9 }),
     );
+  });
+
+  it('adds, removes, and preserves exact desired reaction state', async () => {
+    const { db, tx } = database();
+    mocks.post.mockResolvedValue({ id: 7 });
+    mocks.reply.mockResolvedValue({ id: 9, postId: 7 });
+    mocks.postReaction.mockResolvedValue(null);
+    mocks.replyReaction.mockResolvedValue({ id: 21 });
+
+    await expect(setBulletinPostReaction(db as never, 7, '👍', 'add', actor)).resolves.toEqual({
+      id: 7,
+      emoji: '👍',
+      reacted: true,
+      changed: true,
+    });
+    await expect(setBulletinReplyReaction(db as never, 9, '🔥', 'remove', actor)).resolves.toEqual({
+      id: 9,
+      postId: 7,
+      emoji: '🔥',
+      reacted: false,
+      changed: true,
+    });
+    expect(tx.insert).toHaveBeenCalledTimes(1);
+    expect(tx.delete).toHaveBeenCalledTimes(1);
+
+    vi.clearAllMocks();
+    const unchanged = database();
+    mocks.post.mockResolvedValue({ id: 7 });
+    mocks.postReaction.mockResolvedValue({ id: 20 });
+    await expect(
+      setBulletinPostReaction(unchanged.db as never, 7, '👍', 'add', actor),
+    ).resolves.toEqual({ id: 7, emoji: '👍', reacted: true, changed: false });
+    expect(mocks.mutate).not.toHaveBeenCalled();
   });
 });

@@ -6,6 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useId, useMemo, useS
 
 import {
   adminAiSurfaceContextSchema,
+  mergeAdminAiSurfaceDetails,
   resolveAdminAiSurfaceContext,
   type AdminAiSurfaceContext,
   type AdminAiSurfaceDetails,
@@ -54,9 +55,9 @@ export function AdminAiSurfaceProvider({
       new URLSearchParams(searchParams.toString()),
       hash,
     );
-    const active = [...registrations.values()].at(-1);
+    const active = mergeAdminAiSurfaceDetails([...registrations.values()]);
     const activeFilters = Object.fromEntries(
-      Object.entries(active?.filters ?? {}).flatMap(([key, value]) => {
+      Object.entries(active.filters).flatMap(([key, value]) => {
         if (value === undefined) return [];
         return [[key, typeof value === 'string' ? value.slice(0, 200) : value]];
       }),
@@ -65,7 +66,7 @@ export function AdminAiSurfaceProvider({
       ...base,
       locale,
       filters: { ...base.filters, ...activeFilters },
-      selection: active?.selection === undefined ? base.selection : active.selection,
+      selection: active.selection === undefined ? base.selection : active.selection,
     });
   }, [hash, locale, pathname, registrations, searchParams]);
 

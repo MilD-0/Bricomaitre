@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { OrdersEcotrackManager } from './orders-ecotrack-manager';
 
-const { toastMock } = vi.hoisted(() => ({
+const { surfaceDetailsMock, toastMock } = vi.hoisted(() => ({
+  surfaceDetailsMock: vi.fn(),
   toastMock: {
     loading: vi.fn(() => 'toast-id'),
     success: vi.fn(),
@@ -27,6 +28,10 @@ vi.mock('next-intl', () => ({
 
 vi.mock('../../lib/toast', () => ({
   toast: toastMock,
+}));
+
+vi.mock('../admin-ai-surface-context', () => ({
+  useAdminAiSurfaceDetails: surfaceDetailsMock,
 }));
 
 function renderOrdersEcotrackManager({
@@ -170,6 +175,32 @@ describe('OrdersEcotrackManager', () => {
     toastMock.success.mockReset();
     toastMock.error.mockReset();
     toastMock.criticalError.mockReset();
+    surfaceDetailsMock.mockReset();
+  });
+
+  it('publishes the live shipment filters and selection to the admin assistant', () => {
+    renderOrdersEcotrackManager({
+      initialOrders: buildInitialOrders(2),
+      presentation: 3,
+    });
+
+    expect(surfaceDetailsMock).toHaveBeenLastCalledWith({
+      filters: {
+        page: 1,
+        search: '',
+        status: 'all',
+        staleOnly: false,
+        sortKey: 'createdAt',
+        sortDirection: 'desc',
+      },
+      selection: { entityType: 'order', ids: [], focusedId: null },
+    });
+    fireEvent.click(screen.getAllByRole('checkbox')[1]!);
+    expect(surfaceDetailsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        selection: { entityType: 'order', ids: [11], focusedId: null },
+      }),
+    );
   });
 
   it('renders the ECOTRACK shipments table with the requested columns', async () => {
@@ -216,9 +247,10 @@ describe('OrdersEcotrackManager', () => {
       expect(
         view.container.querySelector(`[data-ecotrack-variant="${presentation}"]`),
       ).toBeInTheDocument();
-      expect(
-        screen.getByRole('heading', { level: 1, name: 'nav.ecotrackShipments' }),
-      ).toHaveClass('sr-only', 'lg:not-sr-only');
+      expect(screen.getByRole('heading', { level: 1, name: 'nav.ecotrackShipments' })).toHaveClass(
+        'sr-only',
+        'lg:not-sr-only',
+      );
       expect(view.container.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
       expect(view.container.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
       expect(view.container.querySelectorAll('[data-workspace-toolbar]')).toHaveLength(1);

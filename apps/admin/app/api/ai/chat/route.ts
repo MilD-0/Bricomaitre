@@ -29,47 +29,115 @@ import {
 } from '../../../../lib/ai-admin-capabilities';
 import {
   ADMIN_AI_ANALYTICS_TOOL_DESCRIPTION,
-  adminAiAnalyticsQuerySchema,
+  adminAiAnalyticsQuerySchemaForPlan,
   queryAdminAnalytics,
+  queryAdminAnalyticsInvestigation,
 } from '../../../../lib/ai-analytics';
+import {
+  adminAiAnalyticsCostsMutationSchemaForMessage,
+  adminAiAnalyticsDayOverridesMutationSchemaForMessage,
+  adminAiAnalyticsSettingsPatchSchemaForMessage,
+  adminAiAnalyticsSyncSchemaForContext,
+  manageAdminAiAnalyticsCosts,
+  manageAdminAiAnalyticsDayOverrides,
+  syncAdminAiAnalyticsSource,
+  updateAdminAiAnalyticsSettings,
+} from '../../../../lib/admin-ai-analytics-actions';
 import { ADMIN_AI_ANALYTICS_INSTRUCTIONS } from '../../../../lib/admin-ai-analytics-contract';
 import {
+  adminAiAnalyticsQueriesForPlan,
   adminAiAnalyticsPlanMessage,
-  applyAdminAiAnalyticsQueryPlan,
+  isAdminAiAnalyticsContinuationMessage,
   planAdminAiAnalyticsQuery,
 } from '../../../../lib/admin-ai-analytics-plan';
 import {
   adjustAdminInventory,
   adminAiInventoryAdjustmentSchema,
+  adminAiInventoryReceiptSchema,
+  adminAiInventoryScanSchema,
+  adminAiInventoryStateSchema,
+  receiveAdminInventory,
+  scanAdminInventory,
+  updateAdminInventoryState,
 } from '../../../../lib/admin-ai-inventory';
 import {
   adminAiBulletinPostSchema,
   adminAiBulletinPostUpdateSchema,
+  adminAiBulletinReactionSchema,
   adminAiBulletinDeleteSchema,
   adminAiBulletinReplySchema,
   createAdminAiBulletinPost,
   deleteAdminAiBulletinContent,
   replyToAdminAiBulletinPost,
+  setAdminAiBulletinReaction,
   updateAdminAiBulletinPost,
 } from '../../../../lib/admin-ai-bulletin';
 import {
+  adminAiAccessRevocationSchema,
   adminAiAccessGrantSchema,
   adminAiRoleDefinitionSchema,
+  revokeAdminAiAccessGrants,
   setAdminAiAccessGrant,
   setAdminAiRoleDefinition,
 } from '../../../../lib/admin-ai-administration';
 import {
-  adminAiOrderDetailsMutationSchema,
+  adminAiActionHistoryInspectionSchema,
+  adminAiActionHistoryRecoverySchema,
+  inspectAdminAiActionHistory,
+  recoverAdminAiActionHistory,
+} from '../../../../lib/admin-ai-action-history';
+import {
+  adminAiOrderCreateSchema,
+  adminAiOrderDeleteSchema,
+  adminAiOrderDetailsToolSchema,
   adminAiOrderStatusMutationSchema,
-  updateAdminOrderDetails,
+  createAdminAiOrder,
+  deleteAdminAiOrders,
+  updateAdminOrderDetailsFromTool,
   updateAdminOrderStatuses,
 } from '../../../../lib/admin-ai-orders';
 import {
+  adminAiOrderExportScopeSchemaForMessage,
+  previewAdminAiOrderExport,
+  startAdminAiOrderExport,
+} from '../../../../lib/admin-ai-order-exports';
+import {
+  adminAiOrderTrackingLinksSchema,
+  issueAdminAiOrderTrackingLinks,
+} from '../../../../lib/admin-ai-order-tracking';
+import {
+  adminAiShoppingListApplySchema,
+  adminAiShoppingListScopeSchema,
+  applyAdminAiShoppingListInventory,
+  inspectAdminAiShoppingList,
+  saveAdminAiShoppingList,
+} from '../../../../lib/admin-ai-shopping-list';
+import {
+  adminAiEcotrackPostingPreviewSchema,
+  adminAiEcotrackPostingStartSchema,
+  adminAiEcotrackRequirementsSchema,
+  loadAdminAiEcotrackRequirements,
+  previewAdminAiEcotrackPosting,
+  startAdminAiEcotrackPosting,
+} from '../../../../lib/admin-ai-ecotrack';
+import {
+  adminAiEcotrackShipmentActionSchema,
+  adminAiEcotrackShipmentChangeSchema,
+  adminAiEcotrackShipmentInspectionSchema,
+  changeAdminAiEcotrackShipments,
+  inspectAdminAiEcotrackShipments,
+  manageAdminAiEcotrackShipments,
+} from '../../../../lib/admin-ai-ecotrack-shipments';
+import {
+  adminAiArchivedProductInspectionSchema,
   adminAiProductArchiveSchema,
   adminAiProductCreateSchema,
+  adminAiProductRestoreSchema,
   adminAiProductUpdateSchema,
   archiveAdminAiProducts,
   createAdminAiProduct,
+  inspectAdminAiArchivedProducts,
+  restoreAdminAiProducts,
   updateAdminAiProducts,
 } from '../../../../lib/admin-ai-products';
 import { adminAiAssetCrudSchema, manageAdminAiAsset } from '../../../../lib/admin-ai-assets';
@@ -90,11 +158,13 @@ import {
 import {
   inspectAdminStorefrontConfiguration,
   storefrontAnnouncementMutationSchema,
-  storefrontSettingsPatchSchema,
+  storefrontSettingsToolSchema,
   updateAdminStorefrontAnnouncement,
-  updateAdminStorefrontSettings,
+  updateAdminStorefrontSettingsFromTool,
 } from '../../../../lib/admin-ai-storefront';
 import {
+  adminAiInventoryInspectionSchema,
+  adminAiProductLookupSchema,
   findAdminBrands,
   findAdminCategories,
   findAdminProducts,
@@ -139,6 +209,7 @@ import {
 import {
   ADMIN_AI_CONTEXT_QUERY_LIMIT,
   buildAdminAiConversationContext,
+  latestAdminAiAnalyticsContinuation,
 } from '../../../../lib/admin-ai-conversation-context';
 import {
   ADMIN_AI_DEFAULT_MODEL,
@@ -180,7 +251,7 @@ const requestSchema = z
     reasoningEffort: input.reasoningEffort ?? getDefaultAdminAiReasoningEffort(input.model),
   }));
 
-export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-v22';
+export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-v36';
 export const ADMIN_AI_INLINE_PRODUCT_LIMIT = 20;
 
 const productLookupPermissions: PermissionKey[] = [
@@ -247,7 +318,9 @@ export async function POST(request: NextRequest) {
     if (!actorId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
     const permissions = normalizePermissions(session?.user?.permissions);
     const allowedJobTypes = allowedAdminBackgroundJobTypes(permissions);
-    const allowedStartableJobTypes = allowedStartableAdminBackgroundJobTypes(permissions);
+    const allowedStartableJobTypes = allowedStartableAdminBackgroundJobTypes(permissions).filter(
+      (type) => type !== 'order_export',
+    );
     const allowedJobTypeSchema =
       allowedJobTypes.length > 0
         ? z.enum(
@@ -311,6 +384,7 @@ export async function POST(request: NextRequest) {
       .orderBy(desc(aiMessages.createdAt))
       .limit(ADMIN_AI_CONTEXT_QUERY_LIMIT);
     const previousMessages = buildAdminAiConversationContext(previousRows);
+    const analyticsContinuation = latestAdminAiAnalyticsContinuation(previousRows);
     const effectiveTitle = previousMessages.length === 0 ? title : conversation.title || title;
     await Promise.all([
       db.insert(aiMessages).values({
@@ -341,12 +415,17 @@ export async function POST(request: NextRequest) {
     } catch {
       // AI telemetry must never prevent the assistant from answering.
     }
-    const groundingTool = adminAiGroundingTool({
-      message: parsed.data.message,
-      surface: parsed.data.context?.surface,
-      section: parsed.data.context?.section,
-      permissions,
-    });
+    const groundingTool =
+      analyticsContinuation &&
+      isAdminAiAnalyticsContinuationMessage(parsed.data.message) &&
+      hasPermission(permissions, 'analytics_manage')
+        ? ('query_analytics' as const)
+        : adminAiGroundingTool({
+            message: parsed.data.message,
+            surface: parsed.data.context?.surface,
+            section: parsed.data.context?.section,
+            permissions,
+          });
     const mutationTool = adminAiMutationTool({
       message: parsed.data.message,
       surface: parsed.data.context?.surface,
@@ -362,17 +441,17 @@ export async function POST(request: NextRequest) {
         ? planAdminAiAnalyticsQuery({
             message: parsed.data.message,
             context: parsed.data.context,
+            previous: analyticsContinuation,
           })
         : null;
-    let analyticsQueryExecutionCount = 0;
     const createResult = repeatableStreamText({
       model: createAiLanguageModel(config, 'admin', {
         model: selectedModel.model,
         openRouterRequestBody: selectedModel.openRouterRequestBody,
       }),
       instructions: parsed.data.context
-        ? `${ADMIN_AI_CHAT_INSTRUCTIONS} ${adminAiCapabilityInstructions(parsed.data.context, permissions)}${analyticsInstructions}`
-        : `${ADMIN_AI_CHAT_INSTRUCTIONS}${analyticsInstructions}`,
+        ? `${ADMIN_AI_CHAT_INSTRUCTIONS} ${adminAiCapabilityInstructions(parsed.data.context, permissions)}${analyticsInstructions}${analyticsPlan ? ` ${adminAiAnalyticsPlanMessage(analyticsPlan)}` : ''}`
+        : `${ADMIN_AI_CHAT_INSTRUCTIONS}${analyticsInstructions}${analyticsPlan ? ` ${adminAiAnalyticsPlanMessage(analyticsPlan)}` : ''}`,
       messages: [
         ...previousMessages,
         ...(parsed.data.context
@@ -383,19 +462,13 @@ export async function POST(request: NextRequest) {
               },
             ]
           : []),
-        ...(analyticsPlan
-          ? [
-              {
-                role: 'user' as const,
-                content: adminAiAnalyticsPlanMessage(analyticsPlan),
-              },
-            ]
-          : []),
         { role: 'user', content: parsed.data.message },
       ],
       abortSignal: AbortSignal.any([
         request.signal,
-        AbortSignal.timeout(adminAiRequestTimeoutMs(config.requestTimeoutMs, mutationTool)),
+        AbortSignal.timeout(
+          adminAiRequestTimeoutMs(config.requestTimeoutMs, mutationTool, groundingTool),
+        ),
       ]),
       maxRetries: config.maxRetries,
       maxOutputTokens: ADMIN_AI_MAX_OUTPUT_TOKENS,
@@ -431,16 +504,7 @@ export async function POST(request: NextRequest) {
               find_products: tool({
                 description:
                   'Read catalog products through the canonical product option service. Resolve either exact IDs from the current selection or a title, SKU, or barcode search; results include pagination totals and are not limited to an arbitrary catalog subset.',
-                inputSchema: z
-                  .object({
-                    query: z.string().trim().max(200).default(''),
-                    productIds: z.array(z.number().int().positive()).max(100).default([]),
-                    page: z.number().int().positive().default(1),
-                    limit: z.number().int().min(1).max(50).default(10),
-                  })
-                  .refine((input) => input.query.length > 0 || input.productIds.length > 0, {
-                    message: 'Provide a search query or at least one product ID.',
-                  }),
+                inputSchema: adminAiProductLookupSchema,
                 execute: findAdminProducts,
               }),
             }
@@ -490,6 +554,18 @@ export async function POST(request: NextRequest) {
                 inputSchema: adminAiProductArchiveSchema,
                 execute: (input) => archiveAdminAiProducts(input, actor),
               }),
+              inspect_archived_products: tool({
+                description:
+                  'Read the native product archive by exact archived product IDs or across the complete archived catalog with search and pagination. Returns archived timestamps and identifiers plus explicit missing IDs. This reader is distinct from inspect_products, which intentionally covers only the live catalog.',
+                inputSchema: adminAiArchivedProductInspectionSchema,
+                execute: inspectAdminAiArchivedProducts,
+              }),
+              restore_products: tool({
+                description:
+                  'Restore up to 20 exact inspected archived products through the canonical Product archive-recovery workflow after an explicit operator request. Restoring removes the archived state but preserves the product’s inactive and out-of-stock state until separately changed. Reports every restored and missing product and refreshes catalog consumers once.',
+                inputSchema: adminAiProductRestoreSchema,
+                execute: (input) => restoreAdminAiProducts(input, actor),
+              }),
             }
           : {}),
         ...(hasAnyPermission(permissions, taxonomyLookupPermissions)
@@ -537,17 +613,115 @@ export async function POST(request: NextRequest) {
                 }),
                 execute: inspectAdminOrders,
               }),
+              preview_order_export: tool({
+                description:
+                  'Preview the native Orders Excel export for exact selected orders or the complete recent confirmed cohort. The confirmed cohort uses the same seven-day created-date rule as the UI. Returns every resolved order ID, missing or stale exclusions, required-field gaps, a labeled row sample, the canonical filename, and the critical completion effect without starting work.',
+                inputSchema: adminAiOrderExportScopeSchemaForMessage(parsed.data.message),
+                execute: (input) => previewAdminAiOrderExport(input),
+              }),
+              start_order_export: tool({
+                description:
+                  'Start the native server-owned Orders Excel export only after preview and an explicit operator request. For confirmed mode, orderIds must remain [] and must not copy resolved preview IDs; the server reloads the complete recent-confirmed scope. Selected mode uses exact inspected IDs. A confirmed export transitions successfully exported orders to dispatched after file creation; a selected export leaves statuses unchanged. Queued or running is not complete, and the terminal conversation result provides the authenticated download when ready.',
+                inputSchema: adminAiOrderExportScopeSchemaForMessage(parsed.data.message),
+                execute: (input) =>
+                  startAdminAiOrderExport(input, {
+                    ownerKey: session?.user?.id ?? actorId,
+                    conversationId: conversation.id,
+                  }),
+              }),
+              get_order_tracking_links: tool({
+                description:
+                  'Issue missing opaque storefront tracking tokens and return canonical customer tracking links for up to 50 exact inspected orders after an explicit operator request. Existing tokens are reused, missing orders are reported, and link locale comes from the current admin conversation.',
+                inputSchema: adminAiOrderTrackingLinksSchema,
+                execute: (input) =>
+                  issueAdminAiOrderTrackingLinks(input, parsed.data.context?.locale ?? 'fr'),
+              }),
+              inspect_order_shopping_list: tool({
+                description:
+                  'Preview the native shared Orders shopping list for exact selected orders or the complete confirmed, dispatched, posted, or posted-and-confirmed cohort. Rebuilds canonical line aggregation from every in-scope order, live inventory and purchase cost, merges any persisted team draft, and returns order count, units, inventory coverage, shortages, unmatched lines, and exact draft IDs without writing.',
+                inputSchema: adminAiShoppingListScopeSchema,
+                execute: inspectAdminAiShoppingList,
+              }),
+              save_order_shopping_list: tool({
+                description:
+                  'Create, refresh, or merge one native shared Orders shopping-list draft only after preview and an explicit operator request. The server reloads the complete current cohort and canonical product/inventory data instead of trusting model-authored lines, preserves existing team draft edits, and reports missing selected orders, coverage, shortages, and unmatched lines.',
+                inputSchema: adminAiShoppingListScopeSchema,
+                execute: (input) => saveAdminAiShoppingList(input, actor),
+              }),
+              ...(hasPermission(permissions, 'products_write')
+                ? {
+                    apply_order_shopping_list_inventory: tool({
+                      description:
+                        'Apply all or exact inspected eligible shopping-list draft lines to Inventory after an explicit operator request. Use selection all and draftIds [] when the operator says all, every, toute, or the whole list; use exact only for a named subset. Uses the saved shared draft quantities, canonical inventory conflict handling and action history, marks successful lines applied, persists the revised draft, and reports every applied, inventory-rejected, missing, unmatched, already-applied, or uncovered requested row. applicationSummary.appliedUnits is the exact applied total; draft coverage is not an applied total. This decreases stock and requires inventory write access.',
+                      inputSchema: adminAiShoppingListApplySchema,
+                      execute: (input) => applyAdminAiShoppingListInventory(input, actor),
+                    }),
+                  }
+                : {}),
+              preview_ecotrack_posting: tool({
+                description:
+                  'Resolve and validate an exact selected, all-confirmed, confirmed-on-date, or today-confirmed order cohort before ECOTRACK posting. Today uses the Africa/Algiers order-created business date. Returns every eligible, already-posted, and invalid order without mutating anything. Always ask the operator to choose Delivro or Emir when the provider is not explicit.',
+                inputSchema: adminAiEcotrackPostingPreviewSchema,
+                execute: (input) => previewAdminAiEcotrackPosting(input),
+              }),
+              load_ecotrack_requirements: tool({
+                description:
+                  'Load the canonical ECOTRACK posting requirements, complete current order evidence, provider-payload field mappings, and typo-tolerant live wilaya/commune matches. Use after any local validation failure or provider rejection and before proposing or applying a repair; never invent a destination absent from the live catalog.',
+                inputSchema: adminAiEcotrackRequirementsSchema,
+                execute: loadAdminAiEcotrackRequirements,
+              }),
+              inspect_ecotrack_shipments: tool({
+                description:
+                  'Read the native ECOTRACK shipment ledger. Exact order IDs return fresh complete shipment records with provider, tracking number, customer, destination, products, amounts, current status, allowed actions, MAJ entries, and tracking history. Filtered reads use the same search, status, stale, pagination, and sort semantics as the ledger UI.',
+                inputSchema: adminAiEcotrackShipmentInspectionSchema,
+                execute: inspectAdminAiEcotrackShipments,
+              }),
+              post_orders_to_ecotrack: tool({
+                description:
+                  'Start one canonical server-owned ECOTRACK posting job for the exact previewed scope only after the operator explicitly chooses Delivro or Emir. The job attempts every eligible order, preserves per-order partial failures, posts a terminal result back into this conversation, and must not be described as complete while merely queued or running.',
+                inputSchema: adminAiEcotrackPostingStartSchema,
+                execute: (input) =>
+                  startAdminAiEcotrackPosting(input, {
+                    ownerKey: session?.user?.id ?? actorId,
+                    actor,
+                    conversationId: conversation.id,
+                  }),
+              }),
+              manage_ecotrack_shipments: tool({
+                description:
+                  'Run the native ECOTRACK refresh, dispatch, add-MAJ, return-request, label-preparation, or delete workflow for exact inspected shipments after an explicit operator request. Label preparation returns authenticated per-shipment download URLs and must not be described as already printed. The canonical service refreshes action eligibility, calls the correct Delivro or Emir account, preserves partial successes, synchronizes local order state, records action history, and returns every failure reason.',
+                inputSchema: adminAiEcotrackShipmentActionSchema,
+                execute: (input) => manageAdminAiEcotrackShipments(input, actor),
+              }),
+              change_ecotrack_shipments: tool({
+                description:
+                  'Apply explicit field/value operations to exact inspected posted shipments. Auto mode edits when ECOTRACK still allows direct editing and otherwise recreates only when the canonical action flags allow it. Unmentioned fields are loaded and preserved server-side; local commercial totals and the correct Delivro or Emir shipment are updated atomically or rolled back, with per-order failures returned.',
+                inputSchema: adminAiEcotrackShipmentChangeSchema,
+                execute: (input) => changeAdminAiEcotrackShipments(input, actor),
+              }),
               update_order_status: tool({
                 description:
                   'Update exact inspected orders through the canonical Orders workflow after an explicit operator request. Semantic statuses: not_contacted, no_answer, confirmed, dispatched, completed, delayed, cancelled, in_delivery, returned, failed, manual_completed, posted. This records history, validates transitions, queues normal lifecycle events, refreshes reporting, and reports partial failures.',
                 inputSchema: adminAiOrderStatusMutationSchema,
                 execute: (input) => updateAdminOrderStatuses(input, actor),
               }),
+              create_order: tool({
+                description:
+                  'Create one local admin order after resolving every named product to exact IDs. Uses canonical commercial pricing, immutable order-line snapshots, promotion validation, EcoTrack delivery-fee rules, duplicate-phone evidence, degraded-capture classification, public token generation, initial status history, action history, and reporting refresh. Null means the operator did not provide that optional customer field; never invent it.',
+                inputSchema: adminAiOrderCreateSchema,
+                execute: (input) => createAdminAiOrder(input, actor),
+              }),
+              delete_orders: tool({
+                description:
+                  'Delete up to 20 exact inspected local orders after an explicit operator request through canonical action history and reporting refresh. Reports every deleted and missing order and whether an already-posted external EcoTrack shipment may remain; local order deletion is not carrier shipment deletion.',
+                inputSchema: adminAiOrderDeleteSchema,
+                execute: (input) => deleteAdminAiOrders(input, actor),
+              }),
               update_order_details: tool({
                 description:
-                  'Correct exact inspected order customer names, phone, note, home/stop-desk delivery, wilaya, commune, address, or product lines after an explicit operator request. cartProductTokens contains one canonical product ID/slug token per unit. Uses the same commercial recalculation, delivery catalog, degraded-capture handling, action history, and reporting refresh as the Orders UI, and reports partial failures.',
-                inputSchema: adminAiOrderDetailsMutationSchema,
-                execute: (input) => updateAdminOrderDetails(input, actor),
+                  'Correct exact inspected order customer names, phone, note, home/stop-desk delivery, wilaya, commune, address, or product lines after an explicit operator request. Supply one explicit field/value operation per requested change and omit every unrelated field. cartProductTokens contains one canonical product ID/slug token per unit. Uses the same commercial recalculation, delivery catalog, degraded-capture handling, action history, and reporting refresh as the Orders UI, and reports partial failures.',
+                inputSchema: adminAiOrderDetailsToolSchema,
+                execute: (input) => updateAdminOrderDetailsFromTool(input, actor),
               }),
             }
           : {}),
@@ -555,20 +729,33 @@ export async function POST(request: NextRequest) {
           ? {
               inspect_inventory: tool({
                 description:
-                  'Read the canonical Inventory workspace by current product IDs, barcode, SKU, or title, including real quantities and availability state.',
-                inputSchema: z.object({
-                  productIds: z.array(z.number().int().positive()).max(100).default([]),
-                  query: z.string().trim().max(200).default(''),
-                  page: z.number().int().positive().default(1),
-                  limit: z.number().int().min(1).max(50).default(20),
-                }),
+                  'Read the canonical Inventory workspace using an explicit scope. Use exact with productIds for named/selected IDs, search with query for a barcode, SKU, or title, and visible only for the current general inventory view. Returns real quantities and availability state.',
+                inputSchema: adminAiInventoryInspectionSchema,
                 execute: inspectAdminInventory,
+              }),
+              scan_inventory: tool({
+                description:
+                  'Resolve one exact native Inventory scanner input before receiving stock. A numeric order ID returns every snapshotted order line, catalog match, quantity, current inventory, and selectability; otherwise an exact barcode returns its product. This is a read-only preview.',
+                inputSchema: adminAiInventoryScanSchema,
+                execute: scanAdminInventory,
               }),
               adjust_inventory: tool({
                 description:
                   'Increase or decrease exact resolved product inventory quantities after an explicit operator request. Returns every previous/next quantity and any missing or insufficient rows, and records normal action history.',
                 inputSchema: adminAiInventoryAdjustmentSchema,
                 execute: (input) => adjustAdminInventory(input, actor),
+              }),
+              receive_inventory: tool({
+                description:
+                  'Receive exact quantities from one completed scan preview. Use order_scan with the exact inspected orderId and selected catalog-matched lines, or barcode_scan with orderId null and the exact scanned product. Increases inventory through canonical action history and reports every resulting quantity or failure.',
+                inputSchema: adminAiInventoryReceiptSchema,
+                execute: (input) => receiveAdminInventory(input, actor),
+              }),
+              update_inventory_state: tool({
+                description:
+                  'Set or clear the barcode and set sellability for up to 50 exact inspected products. Supply only explicit field/value operations; null clears a barcode. Each product update is one canonical action-history mutation and partial failures remain visible.',
+                inputSchema: adminAiInventoryStateSchema,
+                execute: (input) => updateAdminInventoryState(input, actor),
               }),
             }
           : {}),
@@ -697,6 +884,18 @@ export async function POST(request: NextRequest) {
               permissions,
             }),
         }),
+        set_bulletin_reaction: tool({
+          description:
+            'Idempotently add or remove one native Bulletin reaction on an exact inspected post or reply after an explicit operator request. Uses the current operator identity, the same six UI emoji choices, and canonical action history. If the desired state already exists, it returns changed false instead of toggling to the opposite state.',
+          inputSchema: adminAiBulletinReactionSchema,
+          execute: (input) =>
+            setAdminAiBulletinReaction(input, {
+              id: session?.user?.id,
+              email: actorId,
+              name: actor.name?.trim() || actorId,
+              permissions,
+            }),
+        }),
         update_bulletin_post: tool({
           description:
             'Edit or pin/unpin one exact inspected Bulletin post after an explicit operator request. Omitted title, body, tags, and pinned fields are preserved; ownership and bulletin_moderate permissions, tag normalization, attachment preservation, and action history match the Bulletin UI.',
@@ -729,11 +928,29 @@ export async function POST(request: NextRequest) {
                 inputSchema: z.object({}),
                 execute: inspectAdminAdministration,
               }),
+              inspect_action_history: tool({
+                description:
+                  'Read the native Administration action-history ledger using its current filters or exact action-log IDs. Returns actors, resources, entities, operations, semantic field changes, applied/undone state, and the currently valid permission-aware undo/redo direction. Use this before any recovery and never infer reversibility from the operation name alone.',
+                inputSchema: adminAiActionHistoryInspectionSchema,
+                execute: (input) => inspectAdminAiActionHistory(input, permissions),
+              }),
+              recover_action_history: tool({
+                description:
+                  'Undo or redo exact inspected action-log IDs after an explicit operator request. Revalidates domain permission, reversibility, entity history ordering, and current state immediately before each recovery; uses the canonical transactional history engine; reloads persisted results; and preserves every per-action conflict or failure.',
+                inputSchema: adminAiActionHistoryRecoverySchema,
+                execute: (input) => recoverAdminAiActionHistory(input, { permissions, actor }),
+              }),
               set_access_grant: tool({
                 description:
                   'Create or update one exact staff access grant after an explicit operator request. Assign either built-in viewer/employee access or one custom roleDefinitionId resolved from inspect_administration; canonical privileged bootstrap accounts remain code-managed.',
                 inputSchema: adminAiAccessGrantSchema,
                 execute: (input) => setAdminAiAccessGrant(input, actor),
+              }),
+              revoke_access_grants: tool({
+                description:
+                  'Revoke up to 20 exact access-grant IDs only after inspecting Administration and receiving an explicit operator request. Uses the same canonical deletion and action-history workflow as the Users workspace; reports every revoked identity and every missing or code-managed privileged failure.',
+                inputSchema: adminAiAccessRevocationSchema,
+                execute: (input) => revokeAdminAiAccessGrants(input, actor),
               }),
               set_role_definition: tool({
                 description:
@@ -749,9 +966,9 @@ export async function POST(request: NextRequest) {
               }),
               update_storefront_settings: tool({
                 description:
-                  'Directly update one or more storefront contact or AI settings after an explicit operator request. Omitted settings are preserved and the public storefront is revalidated.',
-                inputSchema: storefrontSettingsPatchSchema,
-                execute: updateAdminStorefrontSettings,
+                  'Directly update explicit storefront contact phone/email, address, map URL, Facebook URL, assistant enabled state, primary model, or fallback model after inspection and an explicit operator request. Supply one field/value operation per requested setting; null clears nullable fields. Every omitted setting is preserved, model IDs are checked against configured choices, and the public storefront is revalidated.',
+                inputSchema: storefrontSettingsToolSchema,
+                execute: updateAdminStorefrontSettingsFromTool,
               }),
               update_storefront_announcement: tool({
                 description:
@@ -816,14 +1033,46 @@ export async function POST(request: NextRequest) {
           ? {
               query_analytics: tool({
                 description: ADMIN_AI_ANALYTICS_TOOL_DESCRIPTION,
-                inputSchema: adminAiAnalyticsQuerySchema,
-                execute: (input) => {
-                  const query =
-                    analyticsPlan && analyticsQueryExecutionCount++ === 0
-                      ? applyAdminAiAnalyticsQueryPlan(input, analyticsPlan)
-                      : input;
-                  return queryAdminAnalytics(query);
+                inputSchema: adminAiAnalyticsQuerySchemaForPlan(analyticsPlan),
+                execute: async (input) => {
+                  const queries = analyticsPlan
+                    ? adminAiAnalyticsQueriesForPlan(input, analyticsPlan)
+                    : [input];
+                  return queryAdminAnalyticsInvestigation(
+                    queries,
+                    analyticsPlan?.reason ?? 'Canonical Analytics query.',
+                    queryAdminAnalytics,
+                  );
                 },
+              }),
+              update_analytics_settings: tool({
+                description:
+                  'Persist explicit changes to the canonical Analytics planning return rate, DZD/EUR FX rate, or Friday-rest activation date. The server preserves every omitted setting and refreshes materialized facts. Use only after query_analytics has shown the current assumptions and only for an explicit operator request.',
+                inputSchema: adminAiAnalyticsSettingsPatchSchemaForMessage(parsed.data.message),
+                execute: (input) => updateAdminAiAnalyticsSettings(input),
+              }),
+              manage_analytics_costs: tool({
+                description:
+                  'Create, partially update, or delete exact canonical operating-cost records. Updates preserve omitted fields and every operation returns persisted or not-found evidence. Use IDs from the assumptions operating_costs query and only after an explicit operator request.',
+                inputSchema: adminAiAnalyticsCostsMutationSchemaForMessage(parsed.data.message),
+                execute: (input) => manageAdminAiAnalyticsCosts(input),
+              }),
+              manage_analytics_day_overrides: tool({
+                description:
+                  'Persist or reset exact calculator-day overrides for gross profit, planning return rate, confirmed orders, and operator note. Omitted fields stay unchanged; null clears an explicitly named manual value. Use only after an explicit operator request.',
+                inputSchema: adminAiAnalyticsDayOverridesMutationSchemaForMessage(
+                  parsed.data.message,
+                ),
+                execute: (input) => manageAdminAiAnalyticsDayOverrides(input),
+              }),
+              sync_analytics_source: tool({
+                description:
+                  'Synchronize an explicit Meta or Search Console date range through the same canonical integrations used by Analytics. Meta ranges are capped at 90 days. Starting this tool is the synchronous source operation itself; report its returned source result and never imply unavailable tails became zero.',
+                inputSchema: adminAiAnalyticsSyncSchemaForContext(
+                  parsed.data.message,
+                  parsed.data.context?.section,
+                ),
+                execute: (input) => syncAdminAiAnalyticsSource(input),
               }),
             }
           : {}),

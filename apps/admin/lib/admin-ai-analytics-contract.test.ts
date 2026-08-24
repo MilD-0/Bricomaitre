@@ -36,6 +36,9 @@ function moneyPayload(costCoveragePct: number): Analytics2Payload {
         },
       ],
       series: [],
+      coverage: {
+        projectedCoveragePct: costCoveragePct,
+      },
       automaticPaid: {
         summary: {
           paidOrders: 0,
@@ -88,7 +91,7 @@ function moneyPayload(costCoveragePct: number): Analytics2Payload {
         updatedAt: null,
         throughDate: null,
         records: 0,
-        coveragePct: costCoveragePct,
+        coveragePct: 100,
       },
     ],
     warnings: [],
@@ -113,6 +116,8 @@ describe('admin assistant analytics semantic contract', () => {
       'Never blend projected, delivered, paid, and true profit.',
     );
     expect(ADMIN_AI_ANALYTICS_INSTRUCTIONS).toContain('visible table');
+    expect(ADMIN_AI_ANALYTICS_INSTRUCTIONS).toContain('partly estimated');
+    expect(ADMIN_AI_ANALYTICS_INSTRUCTIONS).toContain('distinct sessions rather than raw events');
   });
 
   it('declares common effective coverage and estimation without warning at 95% coverage', () => {
@@ -125,6 +130,7 @@ describe('admin assistant analytics semantic contract', () => {
       coveragePct: 95,
       estimated: true,
       comparisonStatus: 'comparable',
+      comparisonReason: expect.stringContaining('Matched prior-period'),
     });
     expect(metric.assumptions).toContain(
       '30% fallback margin for missing immutable purchase costs',
@@ -138,5 +144,37 @@ describe('admin assistant analytics semantic contract', () => {
 
     expect(metric.warning).toContain('92.0%');
     expect(metric.warning).toContain('30% estimated margin');
+  });
+
+  it('does not mistake assumptions-source coverage for exact product-cost coverage', () => {
+    const payload = moneyPayload(88);
+    const assumptions = payload.sources.find((source) => source.key === 'assumptions');
+    if (assumptions) assumptions.coveragePct = 12;
+
+    const [metric] = analyticsMetricsForAssistant(payload);
+
+    expect(metric.coveragePct).toBe(88);
+  });
+
+  it('explains unavailable comparisons and zero-spend Profit X without inventing zeros', () => {
+    const payload = moneyPayload(100);
+    payload.data.metrics = [
+      {
+        key: 'profitX',
+        value: null,
+        previous: null,
+        changePct: null,
+        unit: 'ratio',
+      },
+      { key: 'adCost', value: 0, previous: null, changePct: null, unit: 'dzd' },
+    ];
+
+    const [metric] = analyticsMetricsForAssistant(payload);
+
+    expect(metric).toMatchObject({
+      comparisonStatus: 'unavailable',
+      comparisonReason: expect.stringContaining('must not be read as zero'),
+      warning: expect.stringContaining('neither zero nor infinity'),
+    });
   });
 });

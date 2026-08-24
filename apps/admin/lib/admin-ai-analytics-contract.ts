@@ -13,6 +13,7 @@ type MetricDefinition = {
   dateBasis: string;
   assumptions?: string[];
   maturity?: string;
+  comparison?: 'period' | 'not_applicable';
 };
 
 export type AdminAiAnalyticsMetric = Analytics2Metric & {
@@ -29,6 +30,7 @@ export type AdminAiAnalyticsMetric = Analytics2Metric & {
   assumptions: string[];
   attributionCoveragePct: number | null;
   comparisonStatus: 'comparable' | 'unavailable' | 'not_applicable';
+  comparisonReason: string;
   warning: string | null;
 };
 
@@ -175,21 +177,25 @@ const sharedMetricDefinitions: Record<string, MetricDefinition> = {
     definition: 'Sum of active manually configured monthly operating costs.',
     sources: ['assumptions'],
     dateBasis: 'Operating-cost effective dates.',
+    comparison: 'not_applicable',
   },
   periodOperatingCost: {
     definition: 'Operating costs allocated to the selected calculator accounting period.',
     sources: ['assumptions'],
     dateBasis: 'Calculator accounting date.',
+    comparison: 'not_applicable',
   },
   manualOverrideDays: {
     definition: 'Days in the range with a manual calculator source override.',
     sources: ['assumptions'],
     dateBasis: 'Calculator accounting date.',
+    comparison: 'not_applicable',
   },
   projectedCoverage: {
     definition: 'Share of projected economics backed by exact immutable purchase-cost snapshots.',
     sources: ['orders', 'assumptions'],
     dateBasis: 'First-posted date / calculator accounting date.',
+    comparison: 'not_applicable',
   },
   searchClicks: {
     definition: 'Finalized organic Google Search clicks reported by Search Console.',
@@ -273,7 +279,9 @@ function sourceAsOf(payload: Analytics2Payload, keys: Analytics2Source['key'][])
 
 function sourceWarning(payload: Analytics2Payload, keys: Analytics2Source['key'][]) {
   const source = payload.sources.find(
-    (item) => keys.includes(item.key) && (item.state === 'missing' || item.state === 'partial'),
+    (item) =>
+      keys.includes(item.key) &&
+      (item.state === 'missing' || item.state === 'partial' || item.state === 'lagged'),
   );
   return source
     ? `${source.key} is ${source.state}; values beyond its covered period are unavailable, not zero.`
@@ -295,7 +303,14 @@ function exactCostCoverage(payload: Analytics2Payload, key: string) {
     );
   }
   if (['trueProfit', 'profitX', 'adjustedProfit'].includes(key)) {
-    return payload.sources.find((source) => source.key === 'assumptions')?.coveragePct ?? null;
+    const paths: Partial<Record<Analytics2View, string[]>> = {
+      command: ['economics', 'coverage', 'projectedCoveragePct'],
+      money: ['coverage', 'projectedCoveragePct'],
+      acquisition: ['coverage', 'projectedCoveragePct'],
+      catalog: ['coverage', 'projectedCoveragePct'],
+    };
+    const path = paths[payload.view];
+    return path ? numberAt(payload.data, path) : null;
   }
   return null;
 }
@@ -316,12 +331,51 @@ function metricWarning(
   definition: MetricDefinition,
   coveragePct: number | null,
 ) {
+  if (metric.key === 'profitX' && metric.value == null) {
+    const metrics = record(payload.data)?.metrics;
+    const adCost = Array.isArray(metrics)
+      ? metrics.find((value) => record(value)?.key === 'adCost')
+      : null;
+    if (record(adCost)?.value === 0) {
+      return 'Unavailable because comparable Meta ad cost is zero; Profit × is neither zero nor infinity.';
+    }
+  }
   if (metric.value == null)
     return 'Unavailable for this effective range; do not interpret it as zero.';
   if (coveragePct != null && coveragePct < 95) {
     return `Exact purchase-cost coverage is ${coveragePct.toFixed(1)}%; uncovered economics use the canonical 30% estimated margin.`;
   }
   return sourceWarning(payload, definition.sources);
+}
+
+function metricComparison(
+  payload: Analytics2Payload,
+  metric: Analytics2Metric,
+  definition: MetricDefinition,
+): Pick<AdminAiAnalyticsMetric, 'comparisonStatus' | 'comparisonReason'> {
+  if (metric.previous != null) {
+    return {
+      comparisonStatus: 'comparable',
+      comparisonReason: 'Matched prior-period value is available over canonical source coverage.',
+    };
+  }
+  if (definition.comparison === 'not_applicable') {
+    return {
+      comparisonStatus: 'not_applicable',
+      comparisonReason: 'This metric is presented as current configuration or coverage evidence.',
+    };
+  }
+  if (!payload.filters.comparisonStartDate || !payload.filters.comparisonEndDate) {
+    return {
+      comparisonStatus: 'not_applicable',
+      comparisonReason: 'The requested range has no matched prior-period window.',
+    };
+  }
+  return {
+    comparisonStatus: 'unavailable',
+    comparisonReason:
+      'No comparable prior value is available; this can reflect source coverage, an unavailable denominator, or no prior population and must not be read as zero.',
+  };
 }
 
 function effectiveRangeFor(
@@ -351,6 +405,7 @@ export function analyticsMetricsForAssistant(payload: Analytics2Payload): AdminA
     const coveragePct = exactCostCoverage(payload, metric.key);
     const estimated = coveragePct != null && coveragePct < 100;
     const attributionCoveragePct = attributionCoverage(payload, metric.key);
+    const comparison = metricComparison(payload, metric, definition);
     return [
       {
         ...metric,
@@ -375,12 +430,7 @@ export function analyticsMetricsForAssistant(payload: Analytics2Payload): AdminA
           ...(estimated ? ['30% fallback margin for missing immutable purchase costs'] : []),
         ],
         attributionCoveragePct,
-        comparisonStatus:
-          metric.previous != null
-            ? 'comparable'
-            : metric.value == null
-              ? 'unavailable'
-              : 'not_applicable',
+        ...comparison,
         warning: metricWarning(payload, metric, definition, coveragePct),
       },
     ];
@@ -477,6 +527,10 @@ export const ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT = {
 
 export const ADMIN_AI_ANALYTICS_INSTRUCTIONS = [
   'For every analytics answer, treat the returned Bricomaitre semantic contract as authoritative and use the enriched metric metadata rather than inferring conventional ecommerce meanings.',
+  'Treat every item in the tool result’s answerRequirements array as a mandatory acceptance criterion. Before finalizing, check that the answer states each required distinction explicitly; do not rely on implication or omit one because another caveat seems similar.',
+  'For focused rows, interpret every column through focus.fieldContract (and related.fieldContract for a related series), then interpret each lifecycle or funnel row through focus.rowContract when present. Never infer a conventional meaning from a familiar field name. Field and row contracts mark modeled values, estimation, maturity, attribution boundaries, units, sources, date basis, and what null means.',
+  'When previous is unavailable, state comparisonReason instead of implying no change or zero prior performance.',
+  'An analytics_investigation bundle is application-planned evidence, not permission to issue more queries. Synthesize its results only when comparisonStatus is aligned, state commonEffectiveRange, and mention any shorter original source ranges. If comparisonStatus is unavailable, discuss each source separately and do not calculate a cross-workspace change, ratio, or cause.',
   'Success means answering the operator’s question with the smallest sufficient canonical view, naming the requested and effective ranges when they differ, preserving source cutoffs, date bases, maturity, estimation, and attribution coverage, and explaining material warnings in plain language.',
   'Answer semantic ambiguities directly before elaborating. If the operator says sales or revenue while the result is submitted demand, explicitly state that submitted orders are incoming demand rather than completed sales, then separately label any delivered and paid counts.',
   'When the question asks for exact campaigns, ads, products, customers, places, searches, cohorts, costs, or timeline rows, use the matching focus dimension in the first query with any known search or identifiers. Omit focus only for a cross-section summary. A zero-match focus means the entity is absent from the current ranked/filtered decision view, not necessarily from the business.',
@@ -484,4 +538,6 @@ export const ADMIN_AI_ANALYTICS_INSTRUCTIONS = [
   ...ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT.hardRules,
   'A visible table is a ranked or paginated decision view, not the population; never calculate a headline total by summing its visible rows.',
   'A sharp modeled or dotted decline is not an observed collapse, and an immature recent cohort is not evidence of poor delivery or high returns.',
+  'When an economics answer materially depends on exact-cost coverage below 100%, explicitly call the result partly estimated and state both the exact coverage and canonical 30% fallback. For a Storefront funnel, explicitly say every stage counts distinct sessions rather than raw events.',
+  'When the operator asks about a dotted or modeled decline, explicitly say it is not an observed result. When comparable Meta ad cost is zero, explicitly say Profit × is unavailable—neither zero nor infinity. When a Storefront funnel is mistaken for paid sales, explicitly say submitted-order sessions are demand, not paid sales. In a Friday accounting answer, explicitly say the actual Meta spend remains recorded on Friday and only its calculator-economic impact rolls forward.',
 ].join(' ');

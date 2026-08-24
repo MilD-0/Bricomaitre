@@ -1,4 +1,5 @@
 import type { AdminAiSurfaceDetails } from './admin-ai-context';
+import type { AdminAiAnalyticsFocusDimension } from './admin-ai-analytics-focus';
 
 function selection(
   entityType: NonNullable<AdminAiSurfaceDetails['selection']>['entityType'],
@@ -89,6 +90,22 @@ export function analyticsAiSurfaceDetails(input: {
       fetching: input.fetching,
     },
     selection: null,
+  };
+}
+
+export function analyticsFocusAiSurfaceDetails(input: {
+  dimension: AdminAiAnalyticsFocusDimension | null;
+  search?: string | null;
+  identifiers?: string[];
+}): AdminAiSurfaceDetails {
+  if (!input.dimension) return { filters: {} };
+  const identifiers = [...new Set(input.identifiers?.map(String).filter(Boolean) ?? [])];
+  return {
+    filters: {
+      analyticsFocus: input.dimension,
+      analyticsSearch: input.search?.trim().slice(0, 200) || null,
+      analyticsIdentifiers: identifiers.join('|').slice(0, 200),
+    },
   };
 }
 

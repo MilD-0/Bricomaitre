@@ -17,6 +17,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useDeferredValue, useMemo, useState, useSyncExternalStore } from 'react';
 
 import { requestJson as request } from '../lib/admin-api';
+import { useAdminAiSurfaceDetails } from './admin-ai-surface-context';
 import type { PaginationMeta } from '../lib/pagination';
 import { toast } from '../lib/toast';
 import { cn } from '../lib/utils';
@@ -379,7 +380,6 @@ export function ActionHistoryPanel({
     item: HistoryDetailItem;
   } | null>(null);
   const deferredSearch = useDeferredValue(search.trim());
-
   const historyQuery = useQuery({
     queryKey: [
       'action-history',
@@ -424,6 +424,20 @@ export function ActionHistoryPanel({
   const effectiveSelectedId = historyQuery.data.items.some((item) => item.id === selectedId)
     ? selectedId
     : (historyQuery.data.items[0]?.id ?? null);
+  useAdminAiSurfaceDetails({
+    filters: {
+      page,
+      search: deferredSearch,
+      operation,
+      resource,
+      state,
+      includeEcotrackSync,
+      sortDirection,
+    },
+    selection: effectiveSelectedId
+      ? { entityType: 'actionLog', ids: [effectiveSelectedId], focusedId: effectiveSelectedId }
+      : null,
+  });
   const detailQuery = useQuery({
     queryKey: ['action-history', 'detail', effectiveSelectedId],
     queryFn: () => request<HistoryDetailResponse>(`/api/action-history/${effectiveSelectedId}`),

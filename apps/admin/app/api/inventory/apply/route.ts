@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
+import { applyAdminInventoryBatch } from '../../../../lib/admin-inventory-workflow';
 import { auth } from '../../../../lib/auth';
-import { applyInventoryQuantityChange } from '../../../../lib/inventory-actions';
 import { inventoryApplyRequestSchema } from '../../../../lib/inventory';
 import { requireMutationAccess } from '../../../../lib/rbac';
-import { CACHE_TAGS, revalidateServerTags } from '../../../../lib/server-cache';
-import { revalidateStorefrontProducts } from '../../../../lib/storefront-revalidate';
 
 export async function POST(req: NextRequest) {
   const denied = await requireMutationAccess('products');
@@ -26,37 +24,14 @@ export async function POST(req: NextRequest) {
   const db = getDb();
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
-  const items: Array<{ productId: number; previousQuantity: number; nextQuantity: number }> = [];
-  const skipped: Array<{ productId: number; reason: string }> = [];
-
-  for (const item of parsed.data.items) {
-    const result = await applyInventoryQuantityChange(db, {
-      productId: item.productId,
-      mode: parsed.data.mode,
-      quantity: item.quantity,
-      actor,
-    });
-
-    if (result.kind !== 'updated') {
-      skipped.push({ productId: item.productId, reason: 'Product not found.' });
-      continue;
-    }
-
-    items.push({
-      productId: item.productId,
-      previousQuantity: result.previousQuantity,
-      nextQuantity: result.nextQuantity,
-    });
-  }
-
-  if (items.length > 0) {
-    revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
-    await revalidateStorefrontProducts();
-  }
-
+  const result = await applyAdminInventoryBatch(db, parsed.data, actor);
   return NextResponse.json({
     ok: true,
-    items,
-    skipped,
+    items: result.items,
+    skipped: result.skipped.map((item) => ({
+      productId: item.productId,
+      reason:
+        item.reason === 'insufficient' ? 'Insufficient inventory quantity.' : 'Product not found.',
+    })),
   });
 }

@@ -11,6 +11,7 @@ import {
   selectAnalyticsChartMetric,
 } from './admin-ai-chat';
 import { AdminAiSurfaceProvider } from './admin-ai-surface-context';
+import { ADMIN_AI_OPEN_EVENT } from '../lib/admin-ai-events';
 
 const navigation = vi.hoisted(() => ({ pathname: '/en/stats/website' }));
 
@@ -79,6 +80,17 @@ describe('AdminAiChat', () => {
     expect(within(dialog).queryByText('aiChat.description')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('aiChat.sendHint')).not.toBeInTheDocument();
     expect(within(dialog).getByRole('switch', { name: 'aiChat.autoAccept' })).not.toBeChecked();
+  });
+
+  it('opens from a contextual workspace event', async () => {
+    render(<AdminAiChat />);
+
+    act(() => window.dispatchEvent(new CustomEvent(ADMIN_AI_OPEN_EVENT)));
+
+    expect(await screen.findByRole('dialog', { name: 'aiChat.title' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'aiChat.placeholder' })).toHaveFocus(),
+    );
   });
 
   it('offers current-surface suggestions and sends the resolved context', async () => {
@@ -500,52 +512,61 @@ describe('AdminAiChat', () => {
                 type: 'tool-result',
                 toolName: 'query_analytics',
                 output: {
-                  kind: 'analytics2',
-                  query: 'catalog',
-                  view: 'catalog',
-                  filters: {
-                    range: 'custom',
-                    startDate: '2026-06-01',
-                    endDate: '2026-08-23',
-                    grain: 'week',
-                  },
-                  generatedAt: '2026-08-23T12:00:00.000Z',
-                  metrics: [
+                  kind: 'analytics_investigation',
+                  comparisonStatus: 'aligned',
+                  requestedRange: { startDate: '2026-06-01', endDate: '2026-08-23' },
+                  commonEffectiveRange: { startDate: '2026-06-10', endDate: '2026-08-19' },
+                  warning: 'Workspace values were recomputed over their shared effective range.',
+                  results: [
                     {
-                      key: 'paidUnits',
-                      name: 'paidUnits',
-                      value: 120,
-                      previous: 100,
-                      changePct: 20,
-                      unit: 'number',
-                      definition: 'Units attached to recognized paid outcomes.',
-                      requestedRange: { startDate: '2026-06-01', endDate: '2026-08-23' },
-                      effectiveRange: { startDate: '2026-06-10', endDate: '2026-08-19' },
-                      dateBasis: 'Original first-posted cohort.',
-                      asOf: '2026-08-19',
-                      coveragePct: 92,
-                      estimated: true,
-                      warning: 'Uncovered economics use the canonical fallback margin.',
+                      kind: 'analytics2',
+                      query: 'catalog',
+                      view: 'catalog',
+                      filters: {
+                        range: 'custom',
+                        startDate: '2026-06-10',
+                        endDate: '2026-08-19',
+                        grain: 'week',
+                      },
+                      generatedAt: '2026-08-23T12:00:00.000Z',
+                      metrics: [
+                        {
+                          key: 'paidUnits',
+                          name: 'paidUnits',
+                          value: 120,
+                          previous: 100,
+                          changePct: 20,
+                          unit: 'number',
+                          definition: 'Units attached to recognized paid outcomes.',
+                          requestedRange: { startDate: '2026-06-10', endDate: '2026-08-19' },
+                          effectiveRange: { startDate: '2026-06-10', endDate: '2026-08-19' },
+                          dateBasis: 'Original first-posted cohort.',
+                          asOf: '2026-08-19',
+                          coveragePct: 92,
+                          estimated: true,
+                          warning: 'Uncovered economics use the canonical fallback margin.',
+                        },
+                      ],
+                      focus: {
+                        dimension: 'products',
+                        definition: 'Canonical filtered product decision view.',
+                        requestedRange: { startDate: '2026-06-10', endDate: '2026-08-19' },
+                        effectiveRange: { startDate: '2026-06-10', endDate: '2026-08-19' },
+                        dateBasis: 'Original first-posted cohort.',
+                        totalSemantics: 'Do not sum visible rows into a headline total.',
+                        available: 75,
+                        matched: 1,
+                        included: 1,
+                        rows: [{ title: 'Hammer', paidUnits: 24 }],
+                      },
+                      data: {
+                        kind: 'catalog',
+                        metrics: [],
+                      },
+                      sources: [{ key: 'orders', state: 'current', coveragePct: 100 }],
+                      warnings: [{ key: 'projectedCostCoverage', value: 92 }],
                     },
                   ],
-                  focus: {
-                    dimension: 'products',
-                    definition: 'Canonical filtered product decision view.',
-                    requestedRange: { startDate: '2026-06-01', endDate: '2026-08-23' },
-                    effectiveRange: { startDate: '2026-06-10', endDate: '2026-08-19' },
-                    dateBasis: 'Original first-posted cohort.',
-                    totalSemantics: 'Do not sum visible rows into a headline total.',
-                    available: 75,
-                    matched: 1,
-                    included: 1,
-                    rows: [{ title: 'Hammer', paidUnits: 24 }],
-                  },
-                  data: {
-                    kind: 'catalog',
-                    metrics: [],
-                  },
-                  sources: [{ key: 'orders', state: 'current', coveragePct: 100 }],
-                  warnings: [{ key: 'projectedCostCoverage', value: 92 }],
                 },
               },
             ],
@@ -573,12 +594,14 @@ describe('AdminAiChat', () => {
     expect(screen.getByText('aiChat.sourceHealth')).toBeInTheDocument();
     expect(screen.getByText(/orders · current · 100%/)).toBeInTheDocument();
     expect(screen.getAllByText(/aiChat.analyticsWarning/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/aiChat.analyticsEffectiveRange/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/aiChat.analyticsSharedRange/)).toHaveTextContent(
+      '2026-06-10–2026-08-19',
+    );
     expect(screen.getByText('Canonical filtered product decision view.')).toBeInTheDocument();
     expect(screen.getByText(/aiChat.analyticsMatched/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /aiChat.openAnalytics/ })).toHaveAttribute(
       'href',
-      '/en/stats/products?range=custom&startDate=2026-06-01&endDate=2026-08-23&grain=week',
+      '/en/stats/products?range=custom&startDate=2026-06-10&endDate=2026-08-19&grain=week',
     );
   });
 

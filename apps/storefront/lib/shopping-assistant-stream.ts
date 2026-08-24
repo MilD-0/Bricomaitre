@@ -27,7 +27,11 @@ export async function consumeShoppingAssistantResponse(
   if (contentType.includes('application/json')) {
     const result = shoppingAssistantResponseSchema.parse(await response.json());
     handlers.onTextDelta(result.message);
-    handlers.onResult({ mode: result.mode, products: result.products });
+    handlers.onResult({
+      mode: result.mode,
+      products: result.products,
+      cartMutations: result.cartMutations,
+    });
     return;
   }
   if (!response.body || !contentType.includes('application/x-ndjson')) {
@@ -45,8 +49,13 @@ export async function consumeShoppingAssistantResponse(
     if (event.type === 'status' || event.type === 'tool') handlers.onActivity?.(event);
     if (event.type === 'text-delta') handlers.onTextDelta(event.delta);
     if (event.type === 'result') {
+      if (completed) throw new Error('duplicate_assistant_result');
       completed = true;
-      handlers.onResult({ mode: event.mode, products: event.products });
+      handlers.onResult({
+        mode: event.mode,
+        products: event.products,
+        cartMutations: event.cartMutations,
+      });
     }
     if (event.type === 'error') {
       handlers.onError?.({ code: event.code, products: event.products });

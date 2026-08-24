@@ -8,6 +8,8 @@ import { server } from '../../test/mocks/server';
 import { AdministrationRolesWorkspace } from './administration-roles-workspace';
 import { AdministrationUsersWorkspace } from './administration-users-workspace';
 
+const surfaceDetailsMock = vi.hoisted(() => vi.fn());
+
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string, values?: Record<string, string | number>) =>
     values?.count === undefined ? key : `${values.count} ${key}`,
@@ -15,6 +17,9 @@ vi.mock('next-intl', () => ({
 
 vi.mock('../../lib/toast', () => ({
   toast: { loading: vi.fn(() => 'toast'), success: vi.fn(), error: vi.fn() },
+}));
+vi.mock('../admin-ai-surface-context', () => ({
+  useAdminAiSurfaceDetails: surfaceDetailsMock,
 }));
 
 function renderWorkspace(node: React.ReactNode) {
@@ -52,6 +57,9 @@ describe('Administration workspaces', () => {
 
     renderWorkspace(<AdministrationUsersWorkspace />);
     await userEvent.click(await screen.findByRole('button', { name: /staff@example.com/i }));
+    expect(surfaceDetailsMock).toHaveBeenCalledWith({
+      selection: { entityType: 'accessGrant', ids: [4], focusedId: 4 },
+    });
     await userEvent.click(screen.getByRole('button', { name: 'actions.delete' }));
 
     expect(confirm).toHaveBeenCalledWith('settings.accessManager.deleteConfirmation');
@@ -77,5 +85,30 @@ describe('Administration workspaces', () => {
       await screen.findByText('settings.permissionLabels.analytics_manage'),
     ).toBeInTheDocument();
     expect(screen.getByText('settings.permissionLabels.settings_manage')).toBeInTheDocument();
+  });
+
+  it('publishes the exact selected role definition to the assistant', async () => {
+    server.use(
+      http.get('/api/settings/roles', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 7,
+              name: 'Support',
+              slug: 'support',
+              description: null,
+              permissions: ['orders_write'],
+            },
+          ],
+          availablePermissions: ['orders_write'],
+        }),
+      ),
+    );
+
+    renderWorkspace(<AdministrationRolesWorkspace />);
+    await userEvent.click(await screen.findByRole('button', { name: /Support/ }));
+    expect(surfaceDetailsMock).toHaveBeenCalledWith({
+      selection: { entityType: 'roleDefinition', ids: [7], focusedId: 7 },
+    });
   });
 });

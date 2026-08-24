@@ -1,18 +1,17 @@
-import { eq } from 'drizzle-orm';
-import type { InferInsertModel } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { shoppingListDrafts } from '@bric/db/schema';
 import { auth } from '../../../../lib/auth';
 import { requireMutationAccess } from '../../../../lib/rbac';
 import {
-  buildShoppingListScopeKey,
-  normalizeShoppingListOrderIds,
   shoppingListDraftPayloadSchema,
   shoppingListDraftQuerySchema,
-  type ShoppingListDraftPayload,
 } from '../../../../lib/shopping-list-drafts';
+import {
+  deleteAdminShoppingListDraft,
+  loadAdminShoppingListDraft,
+  saveAdminShoppingListDraft,
+} from '../../../../lib/shopping-list-drafts.server';
 
 function parseDraftQuery(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
@@ -20,37 +19,6 @@ function parseDraftQuery(req: NextRequest) {
     sourceMode: searchParams.get('sourceMode') ?? undefined,
     orderIds: searchParams.getAll('orderIds'),
   });
-}
-
-function serializeDraft(row: typeof shoppingListDrafts.$inferSelect) {
-  const payload = shoppingListDraftPayloadSchema.parse({
-    sourceMode: row.sourceMode,
-    orderIds: row.orderIds,
-    title: row.title,
-    draftItems: row.draftItems,
-    generatedItems: row.generatedItems,
-    orders: row.ordersSnapshot,
-  });
-
-  return {
-    scopeKey: row.scopeKey,
-    ...payload,
-    orderIds: normalizeShoppingListOrderIds(payload.orderIds),
-    updatedAt: row.updatedAt.toISOString(),
-    updatedByName: row.updatedByName,
-  };
-}
-
-async function findDraft(payload: Pick<ShoppingListDraftPayload, 'sourceMode' | 'orderIds'>) {
-  const scopeKey = buildShoppingListScopeKey(payload.sourceMode, payload.orderIds);
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(shoppingListDrafts)
-    .where(eq(shoppingListDrafts.scopeKey, scopeKey))
-    .limit(1);
-
-  return rows[0] ? serializeDraft(rows[0]) : null;
 }
 
 export async function GET(req: NextRequest) {
@@ -68,7 +36,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ draft: null });
   }
 
-  return NextResponse.json({ draft: await findDraft(parsed.data) });
+  return NextResponse.json({ draft: await loadAdminShoppingListDraft(getDb(), parsed.data) });
 }
 
 export async function PUT(req: NextRequest) {
@@ -87,48 +55,13 @@ export async function PUT(req: NextRequest) {
   }
 
   const session = await auth();
-  const userEmail = session?.user?.email ?? 'unknown@example.com';
-  const userName = session?.user?.name?.trim() || userEmail;
-  const now = new Date();
-  const orderIds = normalizeShoppingListOrderIds(parsed.data.orderIds);
-  const scopeKey = buildShoppingListScopeKey(parsed.data.sourceMode, orderIds);
-  const db = getDb();
-  const values: InferInsertModel<typeof shoppingListDrafts> = {
-    scopeKey,
-    sourceMode: parsed.data.sourceMode,
-    orderIds,
-    title: parsed.data.title,
-    draftItems: parsed.data.draftItems,
-    generatedItems: parsed.data.generatedItems,
-    ordersSnapshot: parsed.data.orders,
-    createdBy: userEmail,
-    createdByName: userName,
-    updatedBy: userEmail,
-    updatedByName: userName,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  const rows = await db
-    .insert(shoppingListDrafts)
-    .values(values)
-    .onConflictDoUpdate({
-      target: shoppingListDrafts.scopeKey,
-      set: {
-        sourceMode: parsed.data.sourceMode,
-        orderIds,
-        title: parsed.data.title,
-        draftItems: parsed.data.draftItems,
-        generatedItems: parsed.data.generatedItems,
-        ordersSnapshot: parsed.data.orders,
-        updatedBy: userEmail,
-        updatedByName: userName,
-        updatedAt: now,
-      },
-    })
-    .returning();
-
-  return NextResponse.json({ ok: true, draft: serializeDraft(rows[0]) });
+  return NextResponse.json({
+    ok: true,
+    draft: await saveAdminShoppingListDraft(getDb(), parsed.data, {
+      email: session?.user?.email,
+      name: session?.user?.name,
+    }),
+  });
 }
 
 export async function DELETE(req: NextRequest) {
@@ -146,8 +79,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
 
-  const scopeKey = buildShoppingListScopeKey(parsed.data.sourceMode, parsed.data.orderIds);
-  await getDb().delete(shoppingListDrafts).where(eq(shoppingListDrafts.scopeKey, scopeKey));
-
+  await deleteAdminShoppingListDraft(getDb(), parsed.data);
   return NextResponse.json({ ok: true });
 }

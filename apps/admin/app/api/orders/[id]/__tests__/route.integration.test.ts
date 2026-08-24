@@ -17,6 +17,7 @@ const {
   mutateEntityWithHistoryMock,
   readEcotrackCatalogMock,
   triggerAdminReportingRefreshMock,
+  deleteAdminOrderMock,
 } = vi.hoisted(() => ({
   ensureOrderConfirmedEventForOrderMock: vi.fn(),
   ensureOrderCompletedEventForOrderMock: vi.fn(),
@@ -30,6 +31,7 @@ const {
   mutateEntityWithHistoryMock: vi.fn(),
   readEcotrackCatalogMock: vi.fn(),
   triggerAdminReportingRefreshMock: vi.fn(),
+  deleteAdminOrderMock: vi.fn(),
 }));
 
 vi.mock('@bric/storefront-core/meta', () => ({
@@ -65,6 +67,10 @@ vi.mock('../../../../../lib/action-history', () => ({
 vi.mock('../../../../../lib/reporting-refresh-trigger', () => ({
   triggerAdminReportingRefresh: triggerAdminReportingRefreshMock,
 }));
+vi.mock('../../../../../lib/admin-order-lifecycle', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../../lib/admin-order-lifecycle')>()),
+  deleteAdminOrder: deleteAdminOrderMock,
+}));
 
 vi.mock('../../../../../lib/ecotrack', () => ({
   readEcotrackCatalog: readEcotrackCatalogMock,
@@ -97,6 +103,7 @@ describe('app/api/orders/[id]/route', () => {
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mutateEntityWithHistoryMock.mockReset();
     triggerAdminReportingRefreshMock.mockReset().mockResolvedValue({ kind: 'started' });
+    deleteAdminOrderMock.mockReset().mockResolvedValue({ id: 7 });
     readEcotrackCatalogMock.mockReset();
     ensureOrderConfirmedEventForOrderMock.mockReset();
     ensureOrderConfirmedEventForOrderMock.mockResolvedValue({ created: true });
@@ -1059,7 +1066,6 @@ describe('app/api/orders/[id]/route', () => {
     hasDbMock.mockReturnValue(true);
     const db = { marker: 'db' };
     getDbMock.mockReturnValue(db);
-    mutateEntityWithHistoryMock.mockResolvedValue(undefined);
 
     const response = await DELETE(
       new NextRequest('http://localhost/api/orders/7', { method: 'DELETE' }),
@@ -1069,15 +1075,10 @@ describe('app/api/orders/[id]/route', () => {
     );
 
     expect(requireMutationAccessMock).toHaveBeenCalledWith('orders');
-    expect(mutateEntityWithHistoryMock).toHaveBeenCalledWith(
-      db,
-      expect.objectContaining({
-        entityType: 'orders',
-        entityId: 7,
-        operation: 'delete',
-        actor: { email: 'admin@example.com', name: 'Admin' },
-      }),
-    );
+    expect(deleteAdminOrderMock).toHaveBeenCalledWith(db, 7, {
+      email: 'admin@example.com',
+      name: 'Admin',
+    });
     await expect(response.json()).resolves.toEqual({ ok: true });
   });
 });

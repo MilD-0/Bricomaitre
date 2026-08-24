@@ -311,7 +311,7 @@ describe('POST /api/ai/chat', () => {
         resultsCount: 1,
         conversation: [{ role: 'user', content: 'Une perceuse pour le béton' }],
         response: 'Cette perceuse est disponible et correspond à votre recherche.',
-        promptVersion: 'storefront-shopping-v3',
+        promptVersion: 'storefront-shopping-v4',
       }),
     );
   });
@@ -357,9 +357,10 @@ describe('POST /api/ai/chat', () => {
     expect(modelOptions).toHaveProperty('tools.inspect_order');
     expect(modelOptions).toHaveProperty('tools.inspect_delivery_support');
     expect(modelOptions).toHaveProperty('tools.inspect_promotion');
+    expect(modelOptions).toHaveProperty('tools.manage_cart');
     expect(modelOptions).toHaveProperty('tools.present_products');
     const registeredTools = modelOptions.tools as Record<string, { inputSchema: unknown }>;
-    expect(Object.keys(registeredTools)).toHaveLength(6);
+    expect(Object.keys(registeredTools)).toHaveLength(7);
     for (const [name, definition] of Object.entries(registeredTools)) {
       expect(() => zodSchema(definition.inputSchema as never).jsonSchema, name).not.toThrow();
       expect(
@@ -496,6 +497,139 @@ describe('POST /api/ai/chat', () => {
       code: 'SAVE10',
       checks: [{ productId: 12, result: { ok: true, promo: { discountAmount: 1_500 } } }],
     });
+  });
+
+  it('returns one grounded browser-cart mutation for an explicit quantity request', async () => {
+    let managed: unknown;
+    mocks.streamText.mockImplementation(
+      (options: {
+        tools: {
+          manage_cart: {
+            execute: (input: {
+              operations: Array<{
+                action: 'add' | 'set_quantity' | 'remove';
+                productId: number;
+                quantity: number;
+              }>;
+            }) => Promise<unknown>;
+          };
+        };
+      }) => ({
+        stream: (async function* () {
+          managed = await options.tools.manage_cart.execute({
+            operations: [{ action: 'set_quantity', productId: 12, quantity: 3 }],
+          });
+          yield { type: 'tool-call', toolName: 'manage_cart' };
+          yield { type: 'tool-result', toolName: 'manage_cart' };
+          yield { type: 'text-delta', text: 'La quantité est maintenant de trois.' };
+          yield { type: 'finish', totalUsage: {} };
+        })(),
+      }),
+    );
+
+    const response = await POST(
+      request({
+        locale: 'fr',
+        context: { pathname: '/fr/cart', cartItems: [{ productId: 12, quantity: 1 }] },
+        messages: [{ role: 'user', content: 'Passe la quantité de cette perceuse à 3.' }],
+      }),
+    );
+    const events = await streamEvents(response);
+    const modelOptions = mocks.streamText.mock.calls[0]?.[0] as Record<string, unknown>;
+
+    expect(
+      (modelOptions.prepareStep as (input: { stepNumber: number }) => unknown)({ stepNumber: 0 }),
+    ).toEqual({
+      activeTools: ['manage_cart'],
+      toolChoice: { type: 'tool', toolName: 'manage_cart' },
+    });
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { type: 'tool', name: 'manage_cart', status: 'started' },
+        { type: 'tool', name: 'manage_cart', status: 'completed' },
+      ]),
+    );
+    expect(managed).toEqual({
+      accepted: [
+        {
+          action: 'set_quantity',
+          productId: 12,
+          quantity: 3,
+          previousQuantity: 1,
+          resultingQuantity: 3,
+        },
+      ],
+      rejected: [],
+      cartWillBeUpdated: true,
+    });
+    expect(events.at(-1)).toMatchObject({
+      type: 'result',
+      mode: 'ai',
+      products: [],
+      cartMutations: [
+        {
+          action: 'set_quantity',
+          quantity: 3,
+          product: { id: 12, token: 'perceuse-beton' },
+        },
+      ],
+    });
+  });
+
+  it('does not emit a cart mutation when the requested product is not grounded', async () => {
+    let managed: unknown;
+    mocks.streamText.mockImplementation(
+      (options: {
+        tools: {
+          manage_cart: {
+            execute: (input: {
+              operations: Array<{
+                action: 'add' | 'set_quantity' | 'remove';
+                productId: number;
+                quantity: number;
+              }>;
+            }) => Promise<unknown>;
+          };
+        };
+      }) => ({
+        stream: (async function* () {
+          managed = await options.tools.manage_cart.execute({
+            operations: [{ action: 'add', productId: 999, quantity: 1 }],
+          });
+          yield { type: 'text-delta', text: 'Je ne peux pas identifier ce produit.' };
+          yield { type: 'finish', totalUsage: {} };
+        })(),
+      }),
+    );
+
+    const events = await streamEvents(
+      await POST(
+        request({
+          locale: 'fr',
+          messages: [{ role: 'user', content: 'Ajoute le produit introuvable au panier.' }],
+        }),
+      ),
+    );
+    const modelOptions = mocks.streamText.mock.calls[0]?.[0] as Record<string, unknown>;
+
+    expect(managed).toMatchObject({
+      accepted: [],
+      rejected: [{ productId: 999, reason: 'product_not_grounded' }],
+      cartWillBeUpdated: false,
+    });
+    expect(
+      (modelOptions.prepareStep as (input: { stepNumber: number }) => unknown)({ stepNumber: 0 }),
+    ).toEqual({
+      activeTools: ['search_catalog'],
+      toolChoice: { type: 'tool', toolName: 'search_catalog' },
+    });
+    expect(
+      (modelOptions.prepareStep as (input: { stepNumber: number }) => unknown)({ stepNumber: 1 }),
+    ).toEqual({
+      activeTools: ['manage_cart'],
+      toolChoice: { type: 'tool', toolName: 'manage_cart' },
+    });
+    expect(events.at(-1)).toMatchObject({ type: 'result', cartMutations: [] });
   });
 
   it('prioritizes cart and recent recommendation references when re-grounding long chats', async () => {

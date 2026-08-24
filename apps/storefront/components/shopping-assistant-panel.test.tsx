@@ -36,6 +36,7 @@ const labels: ShoppingAssistantLabels = {
     inspect_order: 'Vérification commande…',
     inspect_delivery_support: 'Vérification livraison…',
     inspect_promotion: 'Vérification promotion…',
+    manage_cart: 'Mise à jour panier…',
     present_products: 'Préparation options…',
   },
   toolRetrying: 'Nouvelle tentative…',
@@ -49,6 +50,7 @@ const labels: ShoppingAssistantLabels = {
   viewProduct: 'Voir',
   addToCart: 'Ajouter au panier',
   addedToCart: 'Ajouté',
+  cartUpdated: 'Panier mis à jour',
   helpful: 'Réponse utile',
   notHelpful: 'Réponse à améliorer',
   quickPrompts: ['Une perceuse', 'Comparer', 'Disponible'],
@@ -199,6 +201,87 @@ describe('ShoppingAssistantPanel', () => {
     });
     expect(await screen.findByText('Première réponse immédiate.')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText(labels.inputLabel)).not.toBeDisabled());
+  });
+
+  it('applies an assistant cart result once through the native local cart', async () => {
+    localStorage.setItem(
+      STOREFRONT_CART_KEY,
+      JSON.stringify([
+        {
+          productId: 12,
+          token: 'perceuse-beton',
+          title: 'Perceuse béton',
+          imageUrl: null,
+          unitPrice: 12_500,
+          quantity: 1,
+          availabilityStatus: 'in_stock',
+        },
+      ]),
+    );
+    const cartUpdated = vi.fn();
+    window.addEventListener('bric:cart-updated', cartUpdated);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        Response.json({
+          mode: 'ai',
+          message: 'La quantité est maintenant de trois.',
+          products: [],
+          cartMutations: [
+            {
+              action: 'set_quantity',
+              quantity: 3,
+              product: {
+                id: 12,
+                token: 'perceuse-beton',
+                title: 'Perceuse béton',
+                titleAr: 'مثقاب خرسانة',
+                description: null,
+                descriptionAr: null,
+                sku: null,
+                characteristics: [],
+                characteristicsAr: [],
+                price: '12500.00',
+                oldPrice: null,
+                inStock: true,
+                availabilityStatus: 'in_stock',
+                imageUrl: null,
+                brand: null,
+                category: null,
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    render(<ShoppingAssistantPanel locale="fr" labels={labels} onClose={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText(labels.inputLabel), {
+      target: { value: 'Passe la quantité de cette perceuse à 3.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: labels.send }));
+
+    expect(await screen.findByText(labels.cartUpdated)).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(STOREFRONT_CART_KEY) ?? '[]')).toEqual([
+      expect.objectContaining({ productId: 12, quantity: 3 }),
+    ]);
+    expect(cartUpdated).toHaveBeenCalledTimes(1);
+    expect(behavior.analytics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'ai_assistant_message',
+        metadata: expect.objectContaining({ intent: 'cart_management' }),
+      }),
+    );
+    expect(behavior.analytics).toHaveBeenCalledWith({
+      eventName: 'add_to_cart',
+      locale: 'fr',
+      productId: 12,
+      productSlug: 'perceuse-beton',
+      quantity: 2,
+      value: 25_000,
+      metadata: { surface: 'ai_assistant', target: 'cart_set_quantity' },
+    });
+    window.removeEventListener('bric:cart-updated', cartUpdated);
   });
 
   it('keeps interrupted partial text visibly incomplete and unavailable for feedback', async () => {

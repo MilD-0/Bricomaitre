@@ -7,6 +7,8 @@ import {
   createBulletinReply,
   deleteBulletinPost,
   deleteBulletinReply,
+  setBulletinPostReaction,
+  setBulletinReplyReaction,
   updateBulletinPost,
   type BulletinMutationActor,
 } from './bulletin-mutations';
@@ -42,6 +44,23 @@ export const adminAiBulletinPostUpdateSchema = z
 export const adminAiBulletinDeleteSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('post'), postId: z.number().int().positive() }),
   z.strictObject({ kind: z.literal('reply'), replyId: z.number().int().positive() }),
+]);
+
+const adminAiBulletinReactionActionSchema = z.enum(['add', 'remove']);
+const adminAiBulletinReactionEmojiSchema = z.enum(['👍', '❤️', '👏', '🎉', '🔥', '👀']);
+export const adminAiBulletinReactionSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('post'),
+    postId: z.number().int().positive(),
+    emoji: adminAiBulletinReactionEmojiSchema,
+    action: adminAiBulletinReactionActionSchema,
+  }),
+  z.strictObject({
+    kind: z.literal('reply'),
+    replyId: z.number().int().positive(),
+    emoji: adminAiBulletinReactionEmojiSchema,
+    action: adminAiBulletinReactionActionSchema,
+  }),
 ]);
 
 export async function createAdminAiBulletinPost(
@@ -81,4 +100,16 @@ export async function deleteAdminAiBulletinContent(
       ? await deleteBulletinPost(getDb(), target.postId, actor)
       : await deleteBulletinReply(getDb(), target.replyId, actor);
   return { ok: true, kind: target.kind, ...deleted };
+}
+
+export async function setAdminAiBulletinReaction(
+  input: z.input<typeof adminAiBulletinReactionSchema>,
+  actor: BulletinMutationActor,
+) {
+  const target = adminAiBulletinReactionSchema.parse(input);
+  const result =
+    target.kind === 'post'
+      ? await setBulletinPostReaction(getDb(), target.postId, target.emoji, target.action, actor)
+      : await setBulletinReplyReaction(getDb(), target.replyId, target.emoji, target.action, actor);
+  return { ok: true, kind: target.kind, requestedAction: target.action, ...result };
 }

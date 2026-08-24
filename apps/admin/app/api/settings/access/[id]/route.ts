@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
-
 import { getDb, hasDb } from '@bric/db/client';
-import { userAccessGrants } from '@bric/db/schema';
-import { mutateEntityWithHistory } from '../../../../../lib/action-history';
 import { auth } from '../../../../../lib/auth';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { userAccessGrantFormSchema } from '../../../../../lib/permissions';
 import { requireSettingsAccess } from '../../../../../lib/rbac';
 import {
   AccessGrantNotFoundError,
+  deleteAdministrationAccessGrant,
   PrivilegedAccessManagedInCodeError,
   updateAdministrationAccessGrant,
 } from '../../../../../lib/administration-mutations';
@@ -73,21 +70,20 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const db = getDb();
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
-  const existing = await db.query.userAccessGrants.findFirst({
-    where: eq(userAccessGrants.id, grantId),
-  });
-
-  if (!existing) {
-    return NextResponse.json({ error: 'Access grant not found' }, { status: 404 });
+  try {
+    await deleteAdministrationAccessGrant(db, grantId, actor);
+  } catch (error) {
+    if (error instanceof PrivilegedAccessManagedInCodeError) {
+      return NextResponse.json(
+        { error: 'Privileged bootstrap emails are managed in code.' },
+        { status: 409 },
+      );
+    }
+    if (error instanceof AccessGrantNotFoundError) {
+      return NextResponse.json({ error: 'Access grant not found' }, { status: 404 });
+    }
+    throw error;
   }
-
-  await mutateEntityWithHistory(db, {
-    entityType: 'userAccessGrants',
-    entityId: grantId,
-    operation: 'delete',
-    actor,
-    execute: (tx) => tx.delete(userAccessGrants).where(eq(userAccessGrants.id, grantId)),
-  });
 
   return NextResponse.json({ ok: true });
 }

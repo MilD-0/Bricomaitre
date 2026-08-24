@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
 import { landingPages, productPromoCodes, productSlugHistory, products } from '@bric/db/schema';
@@ -194,6 +194,34 @@ export async function archiveProductThroughCanonicalWorkflow(
   });
   if (!rows[0]?.id) throw new ProductMutationNotFoundError(productId);
   return { id: productId, archived: true as const };
+}
+
+export async function restoreProductThroughCanonicalWorkflow(
+  db: Database,
+  productId: number,
+  actor: ProductMutationActor,
+) {
+  const rows = await mutateEntityWithHistory(db, {
+    entityType: 'products',
+    entityId: productId,
+    operation: 'update',
+    actor,
+    execute: (tx) =>
+      tx
+        .update(products)
+        .set({ archivedAt: null, updatedAt: new Date() })
+        .where(and(eq(products.id, productId), isNotNull(products.archivedAt)))
+        .returning({
+          id: products.id,
+          title: products.title,
+          active: products.active,
+          inStock: products.inStock,
+          availabilityStatus: products.availabilityStatus,
+        }),
+  });
+  const restored = rows[0];
+  if (!restored?.id) throw new ProductMutationNotFoundError(productId);
+  return { ...restored, archived: false as const };
 }
 
 export { ProductIntegrityConflictError };

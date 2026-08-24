@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { products } from '@bric/db/schema';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
 import { auth } from '../../../../../lib/auth';
-import { mutateEntityWithHistory } from '../../../../../lib/action-history';
+import {
+  ProductMutationNotFoundError,
+  restoreProductThroughCanonicalWorkflow,
+} from '../../../../../lib/product-update-workflow';
 import { requireMutationAccess } from '../../../../../lib/rbac';
 import { CACHE_TAGS, revalidateServerTags } from '../../../../../lib/server-cache';
 import { revalidateStorefrontProducts } from '../../../../../lib/storefront-revalidate';
@@ -24,19 +25,17 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
 
   const db = getDb();
   const session = await auth();
-  const result = await mutateEntityWithHistory(db, {
-    entityType: 'products',
-    entityId: productId,
-    operation: 'update',
-    actor: { email: session?.user?.email, name: session?.user?.name },
-    execute: (tx) =>
-      tx
-        .update(products)
-        .set({ archivedAt: null, updatedAt: new Date() })
-        .where(eq(products.id, productId))
-        .returning({ id: products.id }),
-  });
-  if (result.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  try {
+    await restoreProductThroughCanonicalWorkflow(db, productId, {
+      email: session?.user?.email,
+      name: session?.user?.name,
+    });
+  } catch (error) {
+    if (error instanceof ProductMutationNotFoundError) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    throw error;
+  }
 
   revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
   await revalidateStorefrontProducts();

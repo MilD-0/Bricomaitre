@@ -4954,6 +4954,7 @@ async function loadMoneyView(
         filters.resolvedGrain,
       ),
       automaticPaid,
+      coverage: current.coverage,
       paidSeries: aggregateAutomaticPaidSeries(
         automaticPaid,
         filters.resolvedGrain,
@@ -5095,6 +5096,7 @@ async function loadAcquisitionView(
         ),
       ],
       summary,
+      coverage: current.coverage,
       entities: {
         campaigns: performance.entities.campaigns.map(publicMetaEntity),
         adsets: performance.entities.adsets.map(publicMetaEntity),
@@ -5224,6 +5226,7 @@ async function loadStorefrontView(
   filters: Analytics2Filters,
   now: Date,
   cutoffs: Analytics2CanonicalCutoffs,
+  includeDetails = false,
 ) {
   const storefrontFilters = clipAnalytics2Filters(
     filters,
@@ -5237,31 +5240,45 @@ async function loadStorefrontView(
   );
   const prior = priorFilters ? statsInput(priorFilters.startDate, priorFilters.endDate) : null;
   const pathCoverage = storefrontPathCoverage(storefrontFilters, now);
-  const [dashboard, previous, sources] = await Promise.all([
+  const [dashboard, previous, sources, paths, funnel] = await Promise.all([
     getLiveStorefrontAnalytics(statsInput(storefrontFilters.startDate, storefrontFilters.endDate), {
-      includeExperience: false,
+      includeExperience: includeDetails,
     }),
     prior ? getLiveStorefrontAnalytics(prior, { includeExperience: false }) : Promise.resolve(null),
     loadSourceHealth(db, filters),
+    includeDetails
+      ? loadStorefrontPaths(db, storefrontFilters, now)
+      : Promise.resolve<Awaited<ReturnType<typeof loadStorefrontPaths>> | null>(null),
+    includeDetails && pathCoverage.coverageStartDate <= pathCoverage.coverageEndDate
+      ? loadStorefrontSessionFunnel(
+          db,
+          pathCoverage.coverageStartDate,
+          pathCoverage.coverageEndDate,
+        )
+      : Promise.resolve<Array<{ name: string; value: number }>>([]),
   ]);
   const website = dashboard.website;
   const old = previous?.website;
+  const metrics = [
+    metric('sessions', website.sessions, old?.sessions ?? null, 'number', 'neutral'),
+    metric('engagementRate', null, null, 'percent'),
+    metric('purchases', website.purchases, old?.purchases ?? null, 'number'),
+    metric(
+      'conversionRate',
+      website.sessionConversionRate,
+      old?.sessionConversionRate ?? null,
+      'percent',
+    ),
+    metric('errorRate', null, null, 'percent', 'down'),
+    metric('returningJourneys', null, null, 'number', 'neutral'),
+  ];
+  const details =
+    includeDetails && paths ? storefrontDetails(dashboard, storefrontFilters, paths, funnel) : null;
+  const detailMetrics = new Map(details?.metrics.map((item) => [item.key, item]) ?? []);
   return {
     data: {
       kind: 'storefront' as const,
-      metrics: [
-        metric('sessions', website.sessions, old?.sessions ?? null, 'number', 'neutral'),
-        metric('engagementRate', null, null, 'percent'),
-        metric('purchases', website.purchases, old?.purchases ?? null, 'number'),
-        metric(
-          'conversionRate',
-          website.sessionConversionRate,
-          old?.sessionConversionRate ?? null,
-          'percent',
-        ),
-        metric('errorRate', null, null, 'percent', 'down'),
-        metric('returningJourneys', null, null, 'number', 'neutral'),
-      ],
+      metrics: metrics.map((item) => detailMetrics.get(item.key) ?? item),
       summary: {
         sessions: website.sessions,
         journeys: website.journeys,
@@ -5295,6 +5312,17 @@ async function loadStorefrontView(
         confirmedOrders: dashboard.aiAssistants.storefront.confirmedOrders,
         paidOrders: dashboard.aiAssistants.storefront.paidOrders,
       },
+      ...(details
+        ? {
+            funnel: details.funnel,
+            paths: details.paths,
+            trend: details.trend,
+            acquisitionSources: details.acquisitionSources,
+            vitals: details.vitals,
+            landingPages: details.landingPages,
+            aiAssistant: details.aiAssistant,
+          }
+        : {}),
     },
     effectiveRanges: [effectiveRange('storefront', storefrontFilters, ['orders', 'storefront'])],
     sources,
@@ -5595,6 +5623,7 @@ async function loadCatalogView(
         ),
       ],
       products,
+      coverage: economics.coverage,
       basketPairs,
       geography: {
         wilayas: geography,
@@ -5820,7 +5849,7 @@ export type Analytics2Payload = {
 
 export async function getAnalytics2Data(
   query: Analytics2Query,
-  options: { db?: Database; now?: Date } = {},
+  options: { db?: Database; now?: Date; includeStorefrontDetails?: boolean } = {},
 ): Promise<Analytics2Payload> {
   const startedAt = performance.now();
   const db = options.db ?? getDb();
@@ -5847,7 +5876,13 @@ export async function getAnalytics2Data(
       loaded = await loadFulfillmentView(db, filters, cutoffs!);
       break;
     case 'storefront':
-      loaded = await loadStorefrontView(db, filters, now, cutoffs!);
+      loaded = await loadStorefrontView(
+        db,
+        filters,
+        now,
+        cutoffs!,
+        options.includeStorefrontDetails,
+      );
       break;
     case 'search':
       loaded = await loadSearchView(db, filters);

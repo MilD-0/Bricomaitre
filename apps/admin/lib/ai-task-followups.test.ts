@@ -65,4 +65,56 @@ describe('AI task terminal follow-ups', () => {
     expect(message).toContain('encountered a live-record conflict or verification failure');
     expect(message).toContain('proposals remain pending for review');
   });
+
+  it('lists every invalid, rejected, and already-posted ECOTRACK order with its reason', () => {
+    const message = formatAiTaskTerminalMessage({
+      jobId: 'ecotrack-1',
+      kind: 'order-ecotrack:confirmed',
+      status: 'completed',
+      summary: {
+        totalRequested: 4,
+        eligible: 2,
+        created: 1,
+        invalid: 1,
+        failed: 1,
+        skippedAlreadyPosted: 1,
+        results: [
+          {
+            orderId: 12,
+            reference: '12',
+            status: 'invalid',
+            message: 'Commune is not active or could not be resolved.',
+          },
+          {
+            orderId: 13,
+            reference: '13',
+            status: 'failed',
+            message: 'telephone is invalid',
+          },
+          {
+            orderId: 14,
+            reference: '14',
+            status: 'skipped',
+            message: 'already_posted',
+          },
+          {
+            orderId: 11,
+            reference: '11',
+            status: 'created',
+            message: 'Created successfully.',
+          },
+        ],
+      },
+    });
+
+    expect(message).toContain(
+      'totalRequested: 4 · eligible: 2 · created: 1 · skippedAlreadyPosted: 1 · invalid: 1 · failed: 1',
+    );
+    expect(message).toContain(
+      'Order #12 · invalid: Commune is not active or could not be resolved.',
+    );
+    expect(message).toContain('Order #13 · failed: telephone is invalid');
+    expect(message).toContain('Order #14 · already posted: already_posted');
+    expect(message).not.toContain('Order #11');
+  });
 });

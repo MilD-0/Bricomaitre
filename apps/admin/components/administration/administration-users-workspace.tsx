@@ -14,6 +14,7 @@ import {
 } from '../../lib/permissions';
 import { requestJson as request } from '../../lib/admin-api';
 import { toast } from '../../lib/toast';
+import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -50,6 +51,12 @@ export function AdministrationUsersWorkspace() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | 'new' | null>(null);
   const [assignment, setAssignment] = useState('built-in:viewer');
+  useAdminAiSurfaceDetails({
+    selection:
+      typeof selectedId === 'number'
+        ? { entityType: 'accessGrant', ids: [selectedId], focusedId: selectedId }
+        : null,
+  });
 
   const query = useQuery({
     queryKey: ['settings', 'access-grants'],

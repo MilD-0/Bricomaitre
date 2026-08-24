@@ -64,6 +64,7 @@ import { Spinner } from './ui/spinner';
 import { Switch } from './ui/switch';
 import { Textarea } from './ui/textarea';
 import { useAdminAiSurfaceContext } from './admin-ai-surface-context';
+import { ADMIN_AI_OPEN_EVENT } from '../lib/admin-ai-events';
 
 type AnalyticsMetricResult = {
   key: string;
@@ -83,6 +84,7 @@ type AnalyticsMetricResult = {
   assumptions?: string[];
   attributionCoveragePct?: number | null;
   comparisonStatus?: string;
+  comparisonReason?: string;
   warning?: string | null;
 };
 type AnalyticsFocusResult = {
@@ -97,7 +99,22 @@ type AnalyticsFocusResult = {
   included?: number;
   truncated?: boolean;
   warning?: string | null;
+  fieldContract?: Array<{
+    field?: string;
+    definition?: string;
+    unit?: string;
+    modeled?: boolean;
+    estimation?: string | null;
+    maturity?: string | null;
+    attribution?: string | null;
+  }>;
   rows?: unknown[];
+};
+type AnalyticsInvestigation = {
+  comparisonStatus?: 'aligned' | 'unavailable';
+  requestedRange?: { startDate?: string | null; endDate?: string | null };
+  commonEffectiveRange?: { startDate?: string | null; endDate?: string | null } | null;
+  warning?: string | null;
 };
 type AnalyticsResult = {
   query?: string;
@@ -118,6 +135,7 @@ type AnalyticsResult = {
   sources?: Array<Record<string, unknown>>;
   warnings?: unknown[];
   truncations?: Array<{ path?: string; available?: number; included?: number }>;
+  investigation?: AnalyticsInvestigation;
 };
 type Proposal = { id: number; status: 'proposed' | 'applied' | 'rejected' };
 type ChatMessage = {
@@ -289,14 +307,44 @@ function analyticsRangesDiffer(metric: AnalyticsMetricResult) {
   );
 }
 
-function resultFromUnknown(value: unknown, depth = 0): AnalyticsResult[] {
+function resultFromUnknown(
+  value: unknown,
+  depth = 0,
+  investigation?: AnalyticsInvestigation,
+): AnalyticsResult[] {
   if (depth > 5 || value == null) return [];
-  if (Array.isArray(value)) return value.flatMap((item) => resultFromUnknown(item, depth + 1));
+  if (Array.isArray(value))
+    return value.flatMap((item) => resultFromUnknown(item, depth + 1, investigation));
   if (typeof value !== 'object') return [];
   const item = value as Record<string, unknown>;
+  const nextInvestigation: AnalyticsInvestigation | undefined =
+    item.kind === 'analytics_investigation'
+      ? {
+          comparisonStatus:
+            item.comparisonStatus === 'aligned' || item.comparisonStatus === 'unavailable'
+              ? (item.comparisonStatus as AnalyticsInvestigation['comparisonStatus'])
+              : undefined,
+          requestedRange:
+            item.requestedRange && typeof item.requestedRange === 'object'
+              ? (item.requestedRange as AnalyticsInvestigation['requestedRange'])
+              : undefined,
+          commonEffectiveRange:
+            item.commonEffectiveRange && typeof item.commonEffectiveRange === 'object'
+              ? (item.commonEffectiveRange as {
+                  startDate?: string | null;
+                  endDate?: string | null;
+                })
+              : null,
+          warning: typeof item.warning === 'string' ? item.warning : null,
+        }
+      : investigation;
   return [
-    ...(typeof item.query === 'string' && 'data' in item ? [item as AnalyticsResult] : []),
-    ...Object.values(item).flatMap((child) => resultFromUnknown(child, depth + 1)),
+    ...(typeof item.query === 'string' && 'data' in item
+      ? [{ ...(item as AnalyticsResult), investigation: nextInvestigation }]
+      : []),
+    ...Object.values(item).flatMap((child) =>
+      resultFromUnknown(child, depth + 1, nextInvestigation),
+    ),
   ];
 }
 
@@ -514,11 +562,16 @@ function AnalyticsCard({
   );
   const valueKey = selectAnalyticsChartMetric(rows, allColumns);
   const chartRows = analyticsChartRows(rows, valueKey);
-  const requestedRange = result.filters
-    ? { startDate: result.filters.startDate, endDate: result.filters.endDate }
-    : null;
+  const requestedRange =
+    result.investigation?.requestedRange ??
+    (result.filters
+      ? { startDate: result.filters.startDate, endDate: result.filters.endDate }
+      : null);
   const effectiveRange =
-    result.focus?.effectiveRange ?? metrics.find(analyticsRangesDiffer)?.effectiveRange ?? null;
+    result.investigation?.commonEffectiveRange ??
+    result.focus?.effectiveRange ??
+    metrics.find(analyticsRangesDiffer)?.effectiveRange ??
+    null;
   const metricWarnings = [
     ...new Set(
       metrics.map((metric) => metric.warning).filter((value): value is string => Boolean(value)),
@@ -547,12 +600,20 @@ function AnalyticsCard({
             {requestedRange.endDate ?? '…'}
           </p>
         ) : null}
-        {effectiveRange &&
-        (effectiveRange.startDate !== requestedRange?.startDate ||
-          effectiveRange.endDate !== requestedRange?.endDate) ? (
+        {result.investigation?.comparisonStatus === 'unavailable' ? (
           <p className="mt-1 text-[0.68rem] font-medium text-amber-700 dark:text-amber-300">
-            {t('aiChat.analyticsEffectiveRange')}: {effectiveRange.startDate ?? '…'}–
-            {effectiveRange.endDate ?? '…'}
+            {t('aiChat.analyticsComparisonUnavailable')}
+          </p>
+        ) : effectiveRange &&
+          (effectiveRange.startDate !== requestedRange?.startDate ||
+            effectiveRange.endDate !== requestedRange?.endDate) ? (
+          <p className="mt-1 text-[0.68rem] font-medium text-amber-700 dark:text-amber-300">
+            {t(
+              result.investigation
+                ? 'aiChat.analyticsSharedRange'
+                : 'aiChat.analyticsEffectiveRange',
+            )}
+            : {effectiveRange.startDate ?? '…'}–{effectiveRange.endDate ?? '…'}
           </p>
         ) : null}
         {(result.focus?.definition ?? result.definition) ? (
@@ -584,6 +645,11 @@ function AnalyticsCard({
                   {typeof metric.changePct === 'number'
                     ? ` · ${metric.changePct >= 0 ? '+' : ''}${metric.changePct.toFixed(1)}%`
                     : ''}
+                </p>
+              ) : null}
+              {metric.previous == null && metric.comparisonReason ? (
+                <p className="mt-1 text-[0.62rem] leading-4 text-muted-foreground">
+                  {metric.comparisonReason}
                 </p>
               ) : null}
               {metric.definition ? (
@@ -1294,6 +1360,20 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
   const responseAbortRef = useRef<AbortController | null>(null);
   const terminalJobIdsRef = useRef(new Set<string>());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const openAssistant = () => {
+      setMobilePanel('conversation');
+      setOpen(true);
+    };
+    window.addEventListener(ADMIN_AI_OPEN_EVENT, openAssistant);
+    return () => window.removeEventListener(ADMIN_AI_OPEN_EVENT, openAssistant);
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    const frame = window.requestAnimationFrame(() => composerRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [open]);
   const selectConversation = useCallback(async (conversation: ConversationSummary) => {
     const requestId = ++conversationRequestRef.current;
     activeConversationRef.current = conversation;
@@ -2013,6 +2093,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
               <div className="relative z-20 min-w-0 w-full shrink-0 border-t border-border/60 bg-card/80 p-3 backdrop-blur-xl sm:p-4">
                 <div className="mx-auto flex min-w-0 w-full max-w-3xl items-end gap-2 overflow-hidden rounded-[1.15rem] border border-border/70 bg-background p-2 shadow-[var(--shadow-vapor)] focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/10">
                   <Textarea
+                    ref={composerRef}
                     value={input}
                     onChange={(event) => setInput(event.target.value)}
                     onKeyDown={(event) => {

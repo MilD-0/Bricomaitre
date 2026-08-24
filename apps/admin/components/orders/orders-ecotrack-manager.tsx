@@ -18,6 +18,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { Fragment, useDeferredValue, useEffect, useMemo, useState, useTransition } from 'react';
 
 import { requestJson } from '../../lib/admin-api';
+import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import type {
   EcotrackCatalogResponse,
   EcotrackDispatchBatchResponse,
@@ -204,6 +205,21 @@ export function OrdersEcotrackManager({
   const deferredStaleOnly = useDeferredValue(staleOnly);
   const [initialOrdersUpdatedAt] = useState(() => (initialOrders ? Date.now() : 0));
   const [initialCatalogUpdatedAt] = useState(() => (initialCatalog ? Date.now() : 0));
+  useAdminAiSurfaceDetails({
+    filters: {
+      page,
+      search: deferredSearch,
+      status: deferredStatusFilter,
+      staleOnly: deferredStaleOnly,
+      sortKey,
+      sortDirection,
+    },
+    selection: {
+      entityType: 'order',
+      ids: selectedIds,
+      focusedId: editDialog?.orderId ?? expandedIds.at(-1) ?? null,
+    },
+  });
 
   const shipmentsQuery = useQuery({
     queryKey: [

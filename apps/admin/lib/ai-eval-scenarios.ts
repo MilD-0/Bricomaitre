@@ -4,6 +4,19 @@ export type AdminAiEvalInput = {
   message: string;
   surface: string;
   locale?: 'fr' | 'ar';
+  previousAnalytics?: {
+    view: string;
+    range: string;
+    startDate?: string;
+    endDate?: string;
+    grain?: string;
+    focus?: {
+      dimension: string;
+      search?: string;
+      identifiers?: string[];
+      limit?: number;
+    };
+  };
 };
 
 export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
@@ -57,17 +70,392 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
           items: [
             {
               orderId: 91,
-              changes: {
-                delivery: 'home',
-                wilayaId: 16,
-                commune: 'Bab Ezzouar',
-                homeAddress: '12 rue des Outils',
-              },
+              operations: [
+                { field: 'delivery', value: 'home' },
+                { field: 'wilayaId', value: 16 },
+                { field: 'commune', value: 'Bab Ezzouar' },
+                { field: 'homeAddress', value: '12 rue des Outils' },
+              ],
             },
           ],
         },
       },
       forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-order-create',
+    description:
+      'Resolves exact products before creating one canonical local order with complete supplied delivery data.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Crée une commande pour Ahmed Benali, téléphone 0550123456, avec 2 Perceuses Bosch 18 V, livraison à domicile à Bab Ezzouar, wilaya 16, adresse 12 rue des Outils.',
+      surface: 'orders',
+    },
+    expectations: {
+      requiredTools: ['find_products', 'create_order'],
+      exactToolCounts: { find_products: 1, create_order: 1 },
+      requiredToolInputs: {
+        create_order: {
+          firstName: 'Ahmed',
+          lastName: 'Benali',
+          email: null,
+          phoneNumber1: '0550123456',
+          phoneNumber2: null,
+          productIds: [12, 12],
+          delivery: 'home',
+          wilayaId: 16,
+          commune: 'Bab Ezzouar',
+          homeAddress: '12 rue des Outils',
+          note: null,
+          promoCode: null,
+        },
+      },
+      requiredTerms: ['95', '30 400'],
+      requiredAnyTerms: [['soumise', 'submitted', 'non confirmée', 'pas confirmée']],
+      // The model may correctly negate these outcomes (for example "pas une
+      // vente terminée"), so affirmative lifecycle correctness is enforced
+      // through the required submitted-demand wording above.
+      forbiddenTerms: [],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-order-delete',
+    description:
+      'Inspects an exact local order before deletion and discloses that its external shipment may remain.',
+    surface: 'admin',
+    locale: 'fr',
+    input: { message: 'Supprime la commande locale 91.', surface: 'orders' },
+    expectations: {
+      requiredTools: ['inspect_orders', 'delete_orders'],
+      forbiddenTools: ['manage_ecotrack_shipments'],
+      exactToolCounts: { inspect_orders: 1, delete_orders: 1 },
+      requiredToolInputs: { delete_orders: { orderIds: [91] } },
+      requiredTerms: ['91', 'TRK-91'],
+      requiredAnyTerms: [['peut rester', 'peut toujours exister', 'may remain']],
+      forbiddenTerms: ['shipment supprimé', 'expédition supprimée'],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-order-tracking-link',
+    description:
+      'Inspects the exact order then issues or reuses its canonical customer tracking link.',
+    surface: 'admin',
+    locale: 'fr',
+    input: { message: 'Donne-moi le lien de suivi de la commande 91.', surface: 'orders' },
+    expectations: {
+      requiredTools: ['inspect_orders', 'get_order_tracking_links'],
+      exactToolCounts: { inspect_orders: 1, get_order_tracking_links: 1 },
+      requiredToolInputs: {
+        inspect_orders: { orderIds: [91] },
+        get_order_tracking_links: { orderIds: [91] },
+      },
+      requiredTerms: ['91', 'https://bricomaitre.com/fr/thank-you?token=order-91-token'],
+      forbiddenTerms: ['copié dans le presse-papiers', 'envoyé au client'],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-order-export-confirmed',
+    description:
+      'Previews and starts the native complete recent-confirmed Excel export with its status effect disclosed.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Exporte toutes les commandes confirmées récentes en Excel.',
+      surface: 'orders',
+    },
+    expectations: {
+      requiredTools: ['preview_order_export', 'start_order_export'],
+      forbiddenTools: ['start_background_job'],
+      exactToolCounts: { preview_order_export: 1, start_order_export: 1 },
+      requiredToolInputs: {
+        preview_order_export: { mode: 'confirmed', orderIds: [] },
+        start_order_export: { mode: 'confirmed', orderIds: [] },
+      },
+      requiredTerms: ['3', '92', 'adresse'],
+      requiredAnyTerms: [
+        ['en file', 'mis en file', 'queued'],
+        ['expédi', 'dispatch'],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-order-shopping-list-save',
+    description:
+      'Builds and saves the native shared shopping list from the complete confirmed cohort without changing inventory.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Prépare la liste d’achat partagée des commandes confirmées.',
+      surface: 'orders',
+    },
+    expectations: {
+      requiredTools: ['inspect_order_shopping_list', 'save_order_shopping_list'],
+      exactToolCounts: { inspect_order_shopping_list: 1, save_order_shopping_list: 1 },
+      requiredToolInputs: {
+        inspect_order_shopping_list: {
+          sourceMode: 'confirmed',
+          orderIds: [],
+          title: null,
+        },
+        save_order_shopping_list: {
+          sourceMode: 'confirmed',
+          orderIds: [],
+          title: null,
+        },
+      },
+      requiredTerms: ['3', '4', '9', '7', '2'],
+      requiredAnyTerms: [
+        [
+          'non appariée',
+          'non apparié',
+          'non rapprochée',
+          'non rapproché',
+          'sans correspondance',
+          'unmatched',
+        ],
+        [
+          'stock n’a pas été déduit',
+          "stock n'a pas été déduit",
+          'aucune déduction de stock',
+          'aucune quantité de stock n’a été déduite',
+          "aucune quantité de stock n'a été déduite",
+          'aucun stock n’a été déduit',
+          "aucun stock n'a été déduit",
+          'aucune quantité d’inventaire n’a été déduite',
+          "aucune quantité d'inventaire n'a été déduite",
+          'inventaire non déduit',
+        ],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-order-shopping-list-apply',
+    description:
+      'Applies every eligible saved shopping-list line through inventory and reports exact before/after quantities plus partial failures.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Applique au stock toute la liste d’achat partagée des commandes confirmées.',
+      surface: 'orders',
+    },
+    expectations: {
+      requiredTools: ['inspect_order_shopping_list', 'apply_order_shopping_list_inventory'],
+      exactToolCounts: {
+        inspect_order_shopping_list: 1,
+        apply_order_shopping_list_inventory: 1,
+      },
+      requiredToolInputs: {
+        inspect_order_shopping_list: {
+          sourceMode: 'confirmed',
+          orderIds: [],
+          title: null,
+        },
+        apply_order_shopping_list_inventory: {
+          sourceMode: 'confirmed',
+          orderIds: [],
+          selection: 'all',
+          draftIds: [],
+        },
+      },
+      requiredTerms: ['Perceuse', '10', '6', 'Foret', '5', '3', 'Disque'],
+      requiredAnyTerms: [
+        ['insuffisant', 'insuffisante', 'insufficient'],
+        [
+          '6 unités appliquées',
+          '6 unités déduites',
+          '6 unités ont été appliquées',
+          '6 unités ont été déduites',
+          'total réellement déduit du stock : 6 unités',
+          'total déduit du stock : 6 unités',
+          'total appliqué : 6 unités',
+          'total réellement appliqué au stock : 6 unités',
+          'total appliqué au stock : 6 unités',
+        ],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-ecotrack-preview-provider-choice',
+    description:
+      'Previews today’s confirmed cohort but does not post before the operator chooses Delivro or Emir.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Poste les commandes confirmées aujourd’hui sur ECOTRACK.',
+      surface: 'orders',
+    },
+    expectations: {
+      requiredTools: ['preview_ecotrack_posting'],
+      forbiddenTools: ['post_orders_to_ecotrack'],
+      exactToolCounts: { preview_ecotrack_posting: 1 },
+      requiredToolInputs: {
+        preview_ecotrack_posting: {
+          scope: 'confirmed_today',
+          orderIds: [],
+          businessDate: null,
+        },
+      },
+      requiredTerms: ['Delivro', 'Emir'],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-ecotrack-post-emir',
+    description:
+      'Previews today’s confirmed cohort, then starts exactly one canonical Emir posting job.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Poste les commandes confirmées aujourd’hui sur ECOTRACK avec Emir.',
+      surface: 'orders',
+    },
+    expectations: {
+      requiredTools: ['preview_ecotrack_posting', 'post_orders_to_ecotrack'],
+      exactToolCounts: { post_orders_to_ecotrack: 1 },
+      requiredToolInputs: {
+        preview_ecotrack_posting: {
+          scope: 'confirmed_today',
+          orderIds: [],
+          businessDate: null,
+        },
+        post_orders_to_ecotrack: {
+          provider: 'emir',
+          scope: 'confirmed_today',
+          orderIds: [91, 92],
+          businessDate: '2026-08-23',
+        },
+      },
+      forbiddenTerms: ['posting est terminé', 'toutes créées'],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-ecotrack-repair-invalid-commune',
+    description:
+      'Loads canonical ECOTRACK requirements and live destination evidence before repairing an invalid commune.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Corrige l’erreur ECOTRACK de la commande 92 : la commune est Bab Ezzouar, wilaya 16.',
+      surface: 'orders',
+    },
+    expectations: {
+      requiredTools: ['load_ecotrack_requirements', 'update_order_details'],
+      exactToolCounts: { update_order_details: 1 },
+      requiredToolInputs: {
+        load_ecotrack_requirements: {
+          orderIds: [92],
+          provider: null,
+          wilayaId: 16,
+          communeQuery: 'Bab Ezzouar',
+        },
+        update_order_details: {
+          items: [
+            {
+              orderId: 92,
+              operations: [
+                { field: 'wilayaId', value: 16 },
+                { field: 'commune', value: 'Bab Ezzouar' },
+              ],
+            },
+          ],
+        },
+      },
+      forbiddenTerms: ['inventé', 'proposition'],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-ecotrack-shipment-history',
+    description:
+      'Reads fresh native shipment state and carrier history instead of generic local order data.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Montre le statut, les MAJ et le suivi du shipment ECOTRACK de la commande 91.',
+      surface: 'orders/ecotrack',
+    },
+    expectations: {
+      requiredTools: ['inspect_ecotrack_shipments'],
+      forbiddenTools: ['inspect_orders'],
+      requiredToolInputs: {
+        inspect_ecotrack_shipments: { scope: 'exact', orderIds: [91] },
+      },
+      requiredTerms: ['TRK-91', 'Client appelé'],
+      requiredAnyTerms: [['en_livraison', 'en livraison']],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-ecotrack-shipment-dispatch',
+    description:
+      'Inspects exact shipments before one native bulk dispatch and preserves partial failure evidence.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Expédie les shipments ECOTRACK des commandes 91 et 92 sans demander de ramassage.',
+      surface: 'orders/ecotrack',
+    },
+    expectations: {
+      requiredTools: ['inspect_ecotrack_shipments', 'manage_ecotrack_shipments'],
+      exactToolCounts: { manage_ecotrack_shipments: 1 },
+      requiredToolInputs: {
+        inspect_ecotrack_shipments: { scope: 'exact', orderIds: [91, 92] },
+        manage_ecotrack_shipments: {
+          action: 'dispatch',
+          orderIds: [91, 92],
+          askCollection: false,
+        },
+      },
+      requiredTerms: ['91', '92', 'plus dispatchable'],
+      forbiddenTerms: ['toutes expédiées', 'toutes réussies'],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-ecotrack-shipment-change',
+    description:
+      'Changes the posted carrier shipment with an explicit patch while preserving every unmentioned field.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Corrige le shipment ECOTRACK de la commande 91 : commune Bab Ezzouar et adresse 12 rue des Outils.',
+      surface: 'orders/ecotrack',
+    },
+    expectations: {
+      requiredTools: ['inspect_ecotrack_shipments', 'change_ecotrack_shipments'],
+      exactToolCounts: { change_ecotrack_shipments: 1 },
+      forbiddenTools: ['update_order_details'],
+      requiredToolInputs: {
+        inspect_ecotrack_shipments: { scope: 'exact', orderIds: [91] },
+        change_ecotrack_shipments: {
+          items: [
+            {
+              orderId: 91,
+              mode: 'auto',
+              operations: [
+                { field: 'commune', value: 'Bab Ezzouar' },
+                { field: 'homeAddress', value: '12 rue des Outils' },
+              ],
+            },
+          ],
+        },
+      },
+      requiredTerms: ['TRK-91'],
+      requiredAnyTerms: [['modifié', 'modifiée', 'corrigé', 'corrigée', 'mise à jour']],
+      forbiddenTerms: ['recréée'],
       passThreshold: 1,
     },
   },
@@ -92,9 +480,71 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
       requiredTools: ['inspect_inventory', 'adjust_inventory'],
       exactToolCounts: { adjust_inventory: 1 },
       requiredToolInputs: {
+        inspect_inventory: { scope: 'search', query: 'PB-1' },
         adjust_inventory: { mode: 'increase', items: [{ productId: 12, quantity: 6 }] },
       },
       requiredTerms: ['2', '8'],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-inventory-order-receipt',
+    description:
+      'Uses the native order scanner as a read-only preview before receiving every matched order line.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Scanne la commande 50 et remets tous ses produits correspondants en stock.',
+      surface: 'inventory',
+    },
+    expectations: {
+      requiredTools: ['scan_inventory', 'receive_inventory'],
+      exactToolCounts: { scan_inventory: 1, receive_inventory: 1 },
+      requiredToolInputs: {
+        scan_inventory: { query: '50' },
+        receive_inventory: {
+          source: 'order_scan',
+          orderId: 50,
+          items: [
+            { productId: 12, quantity: 2 },
+            { productId: 18, quantity: 1 },
+          ],
+        },
+      },
+      requiredTerms: ['50', 'Perceuse', 'Foret'],
+      requiredAnyTerms: [
+        ['6', 'six'],
+        ['3', 'trois'],
+      ],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-inventory-barcode-state',
+    description: 'Updates one exact inspected barcode through the native Inventory state workflow.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Pour le produit 12, remplace son code-barres par DRILL-2026.',
+      surface: 'inventory',
+    },
+    expectations: {
+      requiredTools: ['inspect_inventory', 'update_inventory_state'],
+      exactToolCounts: { inspect_inventory: 1, update_inventory_state: 1 },
+      requiredToolInputs: {
+        inspect_inventory: { scope: 'exact', productIds: [12] },
+        update_inventory_state: {
+          items: [
+            {
+              productId: 12,
+              operations: [{ field: 'barcode', value: 'DRILL-2026' }],
+            },
+          ],
+        },
+      },
+      requiredTerms: ['12', 'DRILL-2026'],
       forbiddenTerms: ['proposition', 'proposé', 'proposée'],
       passThreshold: 1,
     },
@@ -275,6 +725,26 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     },
   },
   {
+    id: 'admin-staff-access-revocation',
+    description:
+      'Resolves the exact staff access-grant ID before revoking the account through canonical history.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Révoque l’accès de operator@example.com.',
+      surface: 'administration/users',
+    },
+    expectations: {
+      requiredTools: ['inspect_administration', 'revoke_access_grants'],
+      forbiddenTools: ['set_access_grant'],
+      exactToolCounts: { inspect_administration: 1, revoke_access_grants: 1 },
+      requiredToolInputs: { revoke_access_grants: { accessGrantIds: [9] } },
+      requiredTerms: ['operator@example.com'],
+      requiredAnyTerms: [['révoqué', 'révoquée', 'supprimé', 'supprimée']],
+      passThreshold: 1,
+    },
+  },
+  {
     id: 'admin-custom-role-create',
     description:
       'Reads live roles and the permission catalog before creating one complete custom role.',
@@ -300,6 +770,51 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
         ['opérations', 'operations'],
       ],
       forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-action-history-inspect',
+    description:
+      'Reads one exact native action-log entry with semantic changes and current recovery state.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Explique l’action 44 sélectionnée et dis-moi si elle peut être annulée.',
+      surface: 'administration/history',
+    },
+    expectations: {
+      requiredTools: ['inspect_action_history'],
+      forbiddenTools: ['inspect_products', 'update_products', 'recover_action_history'],
+      exactToolCounts: { inspect_action_history: 1 },
+      requiredToolInputs: {
+        inspect_action_history: { scope: 'exact', actionLogIds: [44] },
+      },
+      requiredTerms: ['Editor', 'Perceuse Bosch 18 V', '15 000', '14 900'],
+      requiredAnyTerms: [['annulée', 'annuler', 'undo']],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-action-history-undo',
+    description:
+      'Inspects one exact action log before undoing it through canonical transactional recovery.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Annule l’action 44 du journal des actions.',
+      surface: 'administration/history',
+    },
+    expectations: {
+      requiredTools: ['inspect_action_history', 'recover_action_history'],
+      forbiddenTools: ['update_products'],
+      exactToolCounts: { inspect_action_history: 1, recover_action_history: 1 },
+      requiredToolInputs: {
+        inspect_action_history: { scope: 'exact', actionLogIds: [44] },
+        recover_action_history: { items: [{ actionLogId: 44, direction: 'undo' }] },
+      },
+      requiredTerms: ['44'],
+      requiredAnyTerms: [['annulée', 'annulé', 'restauré', 'undo']],
       passThreshold: 1,
     },
   },
@@ -334,6 +849,24 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
       },
       requiredTerms: ['7'],
       forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-bulletin-reaction',
+    description:
+      'Inspects the exact Bulletin thread before idempotently adding the requested native reaction.',
+    surface: 'admin',
+    locale: 'fr',
+    input: { message: 'Ajoute 👍 au post Bulletin 7.', surface: 'bulletin' },
+    expectations: {
+      requiredTools: ['inspect_bulletin', 'set_bulletin_reaction'],
+      exactToolCounts: { inspect_bulletin: 1, set_bulletin_reaction: 1 },
+      requiredToolInputs: {
+        set_bulletin_reaction: { kind: 'post', postId: 7, emoji: '👍', action: 'add' },
+      },
+      requiredTerms: ['7', '👍'],
+      requiredAnyTerms: [['ajoutée', 'ajouté', 'active', 'réagi', 'reacted']],
       passThreshold: 1,
     },
   },
@@ -377,6 +910,52 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     expectations: { requiredTools: ['query_analytics'], forbiddenTools: ['inspect_orders'] },
   },
   {
+    id: 'admin-analytics-conversation-follow-up',
+    description:
+      'Preserves the latest exact analytics entity, range, and workspace after navigation.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Pourquoi a-t-elle baissé ?',
+      surface: 'products',
+      previousAnalytics: {
+        view: 'acquisition',
+        range: 'custom',
+        startDate: '2026-08-01',
+        endDate: '2026-08-23',
+        grain: 'day',
+        focus: {
+          dimension: 'campaigns',
+          search: 'Alpha',
+          identifiers: ['campaign-alpha'],
+          limit: 20,
+        },
+      },
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      forbiddenTools: ['inspect_products'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: {
+        query_analytics: {
+          view: 'acquisition',
+          range: 'custom',
+          startDate: '2026-08-01',
+          endDate: '2026-08-23',
+          grain: 'day',
+          focus: {
+            dimension: 'campaigns',
+            search: 'Alpha',
+            identifiers: ['campaign-alpha'],
+            limit: 20,
+          },
+        },
+      },
+      requiredAnyTerms: [['alpha', 'campagne']],
+      passThreshold: 1,
+    },
+  },
+  {
     id: 'admin-analytics-product-focus',
     description:
       'Uses the canonical catalog product decision dataset instead of accepting the generic dashboard truncation.',
@@ -385,7 +964,7 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     input: {
       message:
         'Analyse précisément la performance opérationnelle du produit « Perceuse Bosch 18 V » sur les 90 derniers jours : unités postées, unités payées et contribution.',
-      surface: 'analytics',
+      surface: 'products',
     },
     expectations: {
       requiredTools: ['query_analytics'],
@@ -429,6 +1008,44 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
         ['commandes payées', 'payées'],
       ],
       requiredConcepts: [[['vente'], ['finalis', 'réalis', 'termin'], ['pas', 'non', 'ne ']]],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-paid-funnel-semantics',
+    description:
+      'Keeps Meta exposure, attributed submitted demand, and later EcoTrack paid outcomes distinct inside one paid funnel.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Explique l’entonnoir payant sur les 30 derniers jours, des impressions Meta aux commandes Bricomaitre puis payées. Ces étapes sont-elles directement interchangeables ?',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: {
+        query_analytics: {
+          view: 'acquisition',
+          range: '30d',
+          focus: { dimension: 'paid_funnel' },
+        },
+      },
+      requiredTerms: ['180', '90', '54'],
+      requiredAnyTerms: [
+        ['impressions meta', 'impressions rapportées par meta'],
+        ['commandes bricomaitre', 'demande soumise', 'commandes soumises'],
+        ['ecotrack', 'issues payées', 'commandes payées'],
+      ],
+      requiredConcepts: [
+        [
+          ['impression', 'exposition meta'],
+          ['commande', 'demande'],
+          ['payee', 'payée', 'paiement', 'ecotrack'],
+          ['non', 'different', 'différent', 'distinct', 'interchange', 'substitu', 'pas le meme'],
+        ],
+      ],
       passThreshold: 1,
     },
   },
@@ -492,6 +1109,44 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     },
   },
   {
+    id: 'admin-analytics-profit-investigation',
+    description:
+      'Diagnoses a profit decline from aligned Money, Acquisition, and Fulfillment evidence in one tool call.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Pourquoi notre vrai profit a-t-il chuté sur les 30 derniers jours ?',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: { query_analytics: { view: 'money', range: '30d' } },
+      requiredAnyTerms: [
+        ['profit vrai', 'vrai profit'],
+        ['meta', 'publicitaire', 'acquisition'],
+        ['livraison', 'expedition', 'expédition', 'fulfillment', 'payee', 'payée'],
+      ],
+      requiredConcepts: [
+        [
+          [
+            'periode commune',
+            'période commune',
+            'plage commune',
+            'couverture commune',
+            'perimetre commun',
+            'périmètre commun',
+            'periode comparable',
+            'période comparable',
+          ],
+          ['16 aout', '16 août', '2026-08-16'],
+        ],
+      ],
+      forbiddenTerms: ['prouve que', 'cause certaine', 'cause definitive', 'cause définitive'],
+      passThreshold: 1,
+    },
+  },
+  {
     id: 'admin-analytics-observed-return-is-not-planning',
     description:
       'Treats the mature observed return rate as evidence rather than silently changing projections.',
@@ -508,7 +1163,15 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
       requiredToolInputs: { query_analytics: { view: 'assumptions' } },
       requiredTerms: ['18', '24'],
       requiredAnyTerms: [
-        ['taux de planification', 'taux planifié', 'hypothèse de planification'],
+        [
+          'taux de planification',
+          'taux planifié',
+          'hypothèse de planification',
+          'hypothèse actuellement utilisée pour les projections',
+          'hypothèse de projection actuelle',
+          'hypothèse utilisée par les projections',
+          'taux de projection actuel',
+        ],
         ['taux observé', 'retour observé'],
         [
           'action explicite',
@@ -628,8 +1291,9 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
           "n'est pas observé",
           'pas un effondrement réellement observé',
           'pas de résultats comptables finalisés',
+          'ne permettent pas d’établir qu’un effondrement réel',
+          "ne permettent pas d'établir qu'un effondrement réel",
         ],
-        ['ligne pointillée', 'courbe pointillée', 'pointillés', 'valeurs pointillées'],
       ],
       passThreshold: 1,
     },
@@ -688,8 +1352,13 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
           "ni 0 ni l'infini",
           'non égal à zéro ou à l’infini',
           "non égal à zéro ou à l'infini",
+          'ni égal à zéro ni égal à l’infini',
+          "ni égal à zéro ni égal à l'infini",
+          'ni égal à zéro ni infini',
           'pas zéro',
           'pas infini',
+          'pas une valeur infinie',
+          'aucune valeur infinie',
         ],
       ],
       requiredConcepts: [
@@ -745,15 +1414,13 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
       requiredAnyTerms: [
         ['jour de repos', 'vendredi sans activité'],
         ['calculateur', 'comptabilité du calculateur'],
-        [
-          'horodatages réels ne changent pas',
-          'horodatages réels n’ont pas été déplacés',
-          "horodatages réels n'ont pas été déplacés",
-          'ne déplace pas les horodatages',
-        ],
       ],
       requiredConcepts: [
-        [['vendredi'], ['reste', 'conserv'], ['enregistr', 'date réelle', 'horodatage original']],
+        [
+          ['vendredi'],
+          ['reste', 'conserv', 'demeure'],
+          ['enregistr', 'date réelle', 'horodatage original', 'dépense réelle', 'depense reelle'],
+        ],
       ],
       passThreshold: 1,
     },
@@ -775,13 +1442,297 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
       requiredToolInputs: {
         query_analytics: { view: 'fulfillment', focus: { dimension: 'attempt_outcomes' } },
       },
-      requiredAnyTerms: [
-        ['télémétrie', 'données EcoTrack', 'données du transporteur'],
-        ['ne prouve pas', 'pas la preuve', 'ne signifie pas nécessairement', 'pas nécessairement'],
-      ],
+      requiredAnyTerms: [['télémétrie', 'données EcoTrack', 'données du transporteur']],
       requiredConcepts: [
         [['absent', 'manqu', 'indispon', 'non fourni', 'pas transmis', 'aucun détail']],
+        [
+          ['tentative'],
+          [
+            'ne prouve pas',
+            'pas la preuve',
+            'ne signifie pas',
+            'pas nécessairement',
+            'ne permet pas',
+            'on ne peut pas',
+            'impossible',
+            'n’indique pas',
+            "n'indique pas",
+            'pas qu’aucune',
+            "pas qu'aucune",
+          ],
+        ],
       ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-storefront-funnel',
+    description:
+      'Reads the complete deferred Storefront funnel as distinct sessions and keeps submitted demand separate from paid sales.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Analyse le funnel des sessions boutique sur 30 jours, de la vue produit à la commande soumise. Est-ce un funnel de ventes payées ?',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: {
+        query_analytics: { view: 'storefront', focus: { dimension: 'storefront_funnel' } },
+      },
+      requiredAnyTerms: [
+        ['1 000', '1000', '1 000'],
+        ['650'],
+        ['280'],
+        ['160'],
+        ['80'],
+        ['sessions distinctes', 'sessions uniques', 'sessions, pas'],
+        ['commandes soumises', 'commande soumise'],
+        [
+          'pas des ventes payées',
+          'ne sont pas des ventes payées',
+          'pas un funnel de ventes payées',
+          'commande soumise n’est pas une vente payée',
+          "commande soumise n'est pas une vente payee",
+          'pas d’un funnel de ventes encaissées',
+          "pas d'un funnel de ventes encaissees",
+          'demande soumise, pas d’un funnel de ventes encaissées',
+        ],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-search-index-health',
+    description: 'Uses the modern Search Console index-health dataset and does not infer traffic.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Montre les problèmes d’indexation Search Console. Ces URL prouvent-elles que leur trafic organique est nul ?',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: {
+        query_analytics: { view: 'search', focus: { dimension: 'search_index_issues' } },
+      },
+      requiredTerms: ['/products/drill-18v'],
+      requiredConcepts: [
+        [
+          ['indexation', 'inspection', 'index'],
+          ['trafic', 'clic', 'visibilite'],
+          ['pas', 'non', 'ne '],
+        ],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-creative-diagnostics',
+    description:
+      'Uses current Meta creative diagnostics without presenting correlation as causality.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Le CPM monte et le CTR sortant baisse. Analyse la fatigue créative Meta : est-ce la preuve certaine que la créa cause la baisse ?',
+      surface: 'analytics',
+    },
+    expectations: {
+      requiredTools: ['query_analytics'],
+      exactToolCounts: { query_analytics: 1 },
+      requiredToolInputs: {
+        query_analytics: { view: 'acquisition', focus: { dimension: 'meta_daily' } },
+      },
+      requiredAnyTerms: [
+        ['6,2', '6.2'],
+        ['9,1', '9.1'],
+        ['2,4', '2.4'],
+        ['1,3', '1.3'],
+        ['diagnostic', 'signal', 'indicateur'],
+        ['ne prouve pas', 'pas une preuve', 'ne permet pas d’établir', "ne permet pas d'établir"],
+        ['causalité', 'cause certaine', 'lien causal', 'créa cause la baisse', 'cause la baisse'],
+      ],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-adopt-planning-return',
+    description:
+      'Reads the current planning-versus-observed policy before explicitly adopting the observed mature rate.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Adopte le taux de retour observé mature de 24 % comme nouveau taux de planification.',
+      surface: 'stats/assumptions',
+    },
+    expectations: {
+      requiredTools: ['query_analytics', 'update_analytics_settings'],
+      exactToolCounts: { query_analytics: 1, update_analytics_settings: 1 },
+      requiredToolInputs: {
+        query_analytics: { view: 'assumptions' },
+        update_analytics_settings: { planningReturnRate: 24 },
+      },
+      requiredTerms: ['24'],
+      requiredAnyTerms: [
+        ['taux de planification', 'taux planifié', 'hypothèse de planification'],
+        ['enregistré', 'persisté', 'mis à jour', 'adopté'],
+      ],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-create-operating-cost',
+    description:
+      'Reads canonical operating costs before creating one exact persisted monthly cost.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Ajoute un coût opérationnel mensuel « Entrepôt » de 30 000 DZD à partir du 1er septembre 2026.',
+      surface: 'stats/assumptions',
+    },
+    expectations: {
+      requiredTools: ['query_analytics', 'manage_analytics_costs'],
+      exactToolCounts: { query_analytics: 1, manage_analytics_costs: 1 },
+      requiredToolInputs: {
+        query_analytics: { view: 'assumptions', focus: { dimension: 'operating_costs' } },
+        manage_analytics_costs: {
+          operations: [
+            {
+              action: 'create',
+              name: 'Entrepôt',
+              amountDzd: 30_000,
+              period: 'monthly',
+              startDate: '2026-09-01',
+              endDate: null,
+            },
+          ],
+        },
+      },
+      requiredTerms: ['Entrepôt'],
+      requiredAnyTerms: [
+        ['30 000', '30000', '30 000'],
+        ['mensuel', 'monthly', 'par mois', 'récurrent'],
+        ['créé', 'enregistré', 'persisté', 'ajouté'],
+      ],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-daily-override',
+    description:
+      'Reads the owning assumptions view before persisting only the explicitly named calculator-day overrides.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Pour le 21 août 2026, enregistre un override quotidien : taux de planification 21 % et note « Fermeture fournisseur ».',
+      surface: 'stats/assumptions',
+    },
+    expectations: {
+      requiredTools: ['query_analytics', 'manage_analytics_day_overrides'],
+      exactToolCounts: { query_analytics: 1, manage_analytics_day_overrides: 1 },
+      requiredToolInputs: {
+        query_analytics: { view: 'assumptions', focus: { dimension: 'daily_assumptions' } },
+        manage_analytics_day_overrides: {
+          operations: [
+            {
+              action: 'upsert',
+              date: '2026-08-21',
+              changes: {
+                planningReturnRate: 21,
+                note: 'Fermeture fournisseur',
+              },
+            },
+          ],
+        },
+      },
+      requiredTerms: ['21', 'Fermeture fournisseur'],
+      requiredAnyTerms: [
+        ['21 août', '2026-08-21'],
+        ['enregistré', 'persisté', 'sauvegardé'],
+      ],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-sync-meta',
+    description:
+      'Reads current acquisition coverage before synchronizing one exact Meta date range through the canonical integration.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Synchronise Meta du 1er au 23 août 2026 et rapporte le résultat exact.',
+      surface: 'stats/acquisition',
+    },
+    expectations: {
+      requiredTools: ['query_analytics', 'sync_analytics_source'],
+      exactToolCounts: { query_analytics: 1, sync_analytics_source: 1 },
+      requiredToolInputs: {
+        query_analytics: {
+          view: 'acquisition',
+          range: 'custom',
+          startDate: '2026-08-01',
+          endDate: '2026-08-23',
+        },
+        sync_analytics_source: {
+          source: 'meta',
+          since: '2026-08-01',
+          until: '2026-08-23',
+        },
+      },
+      requiredTerms: ['Meta', '23'],
+      requiredAnyTerms: [
+        ['1er août', '1 août', '1er au 23 août', '2026-08-01', '01/08/2026'],
+        ['23 août', '2026-08-23'],
+        ['terminée', 'terminé', 'synchronisé', 'completed'],
+      ],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
+    },
+  },
+  {
+    id: 'admin-analytics-sync-search',
+    description:
+      'Reads current organic coverage before synchronizing one exact Search Console range through the canonical integration.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message: 'Synchronise Search Console du 5 au 20 août 2026 et rapporte le résultat exact.',
+      surface: 'stats/search',
+    },
+    expectations: {
+      requiredTools: ['query_analytics', 'sync_analytics_source'],
+      exactToolCounts: { query_analytics: 1, sync_analytics_source: 1 },
+      requiredToolInputs: {
+        query_analytics: {
+          view: 'search',
+          range: 'custom',
+          startDate: '2026-08-05',
+          endDate: '2026-08-20',
+        },
+        sync_analytics_source: {
+          source: 'searchConsole',
+          since: '2026-08-05',
+          until: '2026-08-20',
+        },
+      },
+      requiredTerms: ['Search Console', '19'],
+      requiredAnyTerms: [
+        ['5 août', '5 au 20 août', '2026-08-05', '05/08/2026'],
+        ['20 août', '2026-08-20', '20/08/2026'],
+        ['terminée', 'terminé', 'synchronisé', 'completed'],
+      ],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
       passThreshold: 1,
     },
   },
@@ -892,6 +1843,31 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     },
   },
   {
+    id: 'admin-product-restore',
+    description:
+      'Inspects the native archived record before canonical restoration without claiming it becomes sellable.',
+    surface: 'admin',
+    locale: 'fr',
+    input: { message: 'Restaure le produit archivé 12.', surface: 'products/archive' },
+    expectations: {
+      requiredTools: ['inspect_archived_products', 'restore_products'],
+      forbiddenTools: ['inspect_products', 'archive_products', 'update_products'],
+      exactToolCounts: { inspect_archived_products: 1, restore_products: 1 },
+      requiredToolInputs: {
+        inspect_archived_products: { scope: 'exact', productIds: [12] },
+        restore_products: { productIds: [12] },
+      },
+      requiredTerms: ['12'],
+      requiredAnyTerms: [
+        ['restauré', 'restaurée'],
+        ['inactif', 'inactive', 'désactivé', 'désactivée', 'desactive'],
+        ['hors stock', 'pas en stock', 'indisponible', 'out_of_stock'],
+      ],
+      forbiddenTerms: ['actif et en stock', 'maintenant en vente'],
+      passThreshold: 1,
+    },
+  },
+  {
     id: 'admin-taxonomy-create',
     description: 'Checks taxonomy matches before directly creating the exact requested brand.',
     surface: 'admin',
@@ -941,6 +1917,35 @@ export const ADMIN_AI_EVAL_SCENARIOS: AiEvalScenario<AdminAiEvalInput>[] = [
     locale: 'fr',
     input: { message: 'Où en est mon dernier export produits ?', surface: 'products' },
     expectations: { requiredTools: ['list_background_jobs'] },
+  },
+  {
+    id: 'admin-storefront-configuration',
+    description:
+      'Reads complete storefront configuration then changes only explicitly named address, Facebook, and assistant fields.',
+    surface: 'admin',
+    locale: 'fr',
+    input: {
+      message:
+        'Remplace l’adresse de la boutique par « 12 rue des Outils, Alger », efface son lien Facebook et désactive son assistant.',
+      surface: 'administration/storefront',
+    },
+    expectations: {
+      requiredTools: ['inspect_storefront_configuration', 'update_storefront_settings'],
+      exactToolCounts: { inspect_storefront_configuration: 1, update_storefront_settings: 1 },
+      requiredToolInputs: {
+        update_storefront_settings: {
+          operations: [
+            { field: 'address', value: '12 rue des Outils, Alger' },
+            { field: 'facebookUrl', value: null },
+            { field: 'aiAssistantEnabled', value: false },
+          ],
+        },
+      },
+      requiredTerms: ['12 rue des Outils', 'Facebook'],
+      requiredAnyTerms: [['désactivé', 'désactivée', 'inactif', 'inactive']],
+      forbiddenTerms: ['proposition', 'proposé', 'proposée'],
+      passThreshold: 1,
+    },
   },
   {
     id: 'admin-storefront-announcement',

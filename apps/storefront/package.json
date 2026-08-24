@@ -14,7 +14,7 @@
     "test:integration": "pnpm test:contract && vitest run --project component-integration-jsdom",
     "test:browser": "playwright test --project=chromium --project=mobile-iphone --project=mobile-android",
     "test:performance": "BRIC_PLAYWRIGHT_SERVER=production playwright test --project=performance",
-    "eval:ai:live": "tsx scripts/run-ai-evals.ts"
+    "eval:ai:live": "tsx --env-file=.env scripts/run-ai-evals.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
