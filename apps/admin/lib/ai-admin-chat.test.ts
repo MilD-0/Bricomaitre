@@ -54,6 +54,14 @@ describe('admin AI chat instructions', () => {
     expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain(
       'Do not ask the user to prompt you to check later',
     );
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('expose its download directly in chat');
+  });
+
+  it('keeps expired proposal cleanup exact, explicit, and permission-scoped', () => {
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('delete_expired_ai_proposals');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('expiresAt is already in the past');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('must remain untouched');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('rejection and deletion are different actions');
   });
 
   it('uses surface selections and complete canonical operational records', () => {
@@ -75,6 +83,13 @@ describe('admin AI chat instructions', () => {
     expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('load_ecotrack_requirements');
     expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('never invent a carrier destination');
     expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('preview the repaired exact IDs again');
+  });
+
+  it('treats landing-page creation and exact preservation-safe edits as cross-workspace actions', () => {
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('product and asset conversations');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('Preserve every unaffected block exactly');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('explicitly requests that exact deletion');
+    expect(ADMIN_AI_CHAT_INSTRUCTIONS).toContain('omitted model-plan block is not deletion');
   });
 
   it('creates and deletes local orders through canonical lifecycle workflows', () => {

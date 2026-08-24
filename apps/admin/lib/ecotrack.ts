@@ -326,6 +326,7 @@ type EcotrackPostingResultItem = {
 };
 
 export type EcotrackPostingSummary = {
+  provider: EcotrackProvider;
   totalRequested: number;
   eligible: number;
   created: number;
@@ -1211,8 +1212,12 @@ export async function buildEcotrackPostingPreview(
   return classifyOrdersForEcotrackPosting(items, catalog);
 }
 
-function createPostingSummary(preview: EcotrackPreviewResult): EcotrackPostingSummary {
+function createPostingSummary(
+  preview: EcotrackPreviewResult,
+  provider: EcotrackProvider,
+): EcotrackPostingSummary {
   return {
+    provider,
     totalRequested: preview.totalRequested,
     eligible: preview.eligible.length,
     created: 0,
@@ -1288,7 +1293,7 @@ export async function postOrdersToEcotrack(
     0,
   );
   const preview = classifyOrdersForEcotrackPosting(items, catalog);
-  const summary = createPostingSummary(preview);
+  const summary = createPostingSummary(preview, provider);
   const inputById = new Map(items.map((item) => [item.row.id, item]));
 
   await flushPostingState(options, 'validating-token', 0, preview.eligible.length, summary);

@@ -74,6 +74,12 @@ describe('admin AI commercialization eval scenarios', () => {
     const edit = ADMIN_AI_EVAL_SCENARIOS.find(
       (scenario) => scenario.id === 'admin-landing-page-edit',
     )!;
+    const createFromProduct = ADMIN_AI_EVAL_SCENARIOS.find(
+      (scenario) => scenario.id === 'admin-landing-page-create-from-product-workspace',
+    )!;
+    const editFromProduct = ADMIN_AI_EVAL_SCENARIOS.find(
+      (scenario) => scenario.id === 'admin-landing-page-edit-from-product-workspace',
+    )!;
 
     expect(create.expectations.requiredToolInputs).toEqual({
       create_landing_page: { productId: 12, locale: 'fr', active: false },
@@ -83,5 +89,34 @@ describe('admin AI commercialization eval scenarios', () => {
     });
     expect(create.expectations.forbiddenTerms).toContain('proposition');
     expect(edit.expectations.passThreshold).toBe(1);
+    expect(createFromProduct.input.surface).toBe('products');
+    expect(createFromProduct.expectations.requiredTools).toEqual([
+      'find_products',
+      'create_landing_page',
+    ]);
+    expect(editFromProduct.input.surface).toBe('products');
+    expect(editFromProduct.expectations.requiredTools).toEqual([
+      'inspect_landing_pages',
+      'edit_landing_page',
+    ]);
+  });
+
+  it('gates conversational background exports and expired-proposal cleanup', () => {
+    const exportStart = ADMIN_AI_EVAL_SCENARIOS.find(
+      (scenario) => scenario.id === 'admin-background-product-export-start',
+    )!;
+    const expiredCleanup = ADMIN_AI_EVAL_SCENARIOS.find(
+      (scenario) => scenario.id === 'admin-proposal-expired-cleanup',
+    )!;
+
+    expect(exportStart.expectations.requiredToolInputs).toEqual({
+      start_background_job: { type: 'product_export' },
+    });
+    expect(exportStart.expectations.forbiddenTerms).toContain('déjà terminé');
+    expect(expiredCleanup.expectations.requiredTools).toEqual([
+      'inspect_ai_proposals',
+      'delete_expired_ai_proposals',
+    ]);
+    expect(expiredCleanup.expectations.forbiddenTools).toEqual(['review_ai_proposals']);
   });
 });

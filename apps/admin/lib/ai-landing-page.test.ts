@@ -210,6 +210,8 @@ function editRunner(options?: {
   unknownBlock?: boolean;
   failGeneratedBlock?: boolean;
   failGeneratedBlockOnce?: boolean;
+  omitUnmentionedBlocks?: boolean;
+  deleteBenefits?: boolean;
 }): LandingPageEditStageRunner {
   let generatedBlockCalls = 0;
   return {
@@ -232,7 +234,14 @@ function editRunner(options?: {
           { mode: 'preserve', blockId: 'benefits' },
           { mode: 'preserve', blockId: 'feature' },
           { mode: 'preserve', blockId: 'final' },
-        ],
+        ].filter((slot) =>
+          options?.omitUnmentionedBlocks
+            ? slot.blockId === 'hero' || slot.blockId === 'final'
+            : options?.deleteBenefits
+              ? slot.blockId !== 'benefits'
+              : true,
+        ),
+        deletedBlockIds: options?.deleteBenefits ? ['benefits'] : [],
         reasoning: 'Only the hero needs to change for the supplied brief.',
         groundingNotes: ['The revised hero uses the verified product title.'],
       },
@@ -382,6 +391,53 @@ describe('AI landing-page output guardrails', () => {
       failures: [{ blockId: 'hero', type: 'product-hero', action: 'preserved-existing' }],
       retryCount: 1,
     });
+  });
+
+  it('restores model-omitted blocks unless the operator explicitly requested deletion', async () => {
+    const currentDocument = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
+    const result = await createLandingPageEditor(
+      testConfig,
+      editRunner({ omitUnmentionedBlocks: true }),
+    ).edit({
+      ...generationInput,
+      instruction: 'Réécris uniquement le hero.',
+      currentDocument,
+    });
+
+    expect(result.document.blocks.map((block) => block.id)).toEqual([
+      'hero',
+      'benefits',
+      'feature',
+      'final',
+    ]);
+    expect(result.document.blocks.slice(1)).toEqual(currentDocument.blocks.slice(1));
+    expect(result.stages).toMatchObject({ preservedSections: 3, deletedSections: 0 });
+  });
+
+  it('deletes only exact model-declared blocks when the operator explicitly requested it', async () => {
+    const currentDocument = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
+    const result = await createLandingPageEditor(
+      testConfig,
+      editRunner({ deleteBenefits: true }),
+    ).edit({
+      ...generationInput,
+      instruction: 'Supprime la section benefits et préserve le reste.',
+      currentDocument,
+    });
+
+    expect(result.document.blocks.map((block) => block.id)).toEqual(['hero', 'feature', 'final']);
+    expect(result.stages).toMatchObject({ preservedSections: 2, deletedSections: 1 });
+  });
+
+  it('rejects model-declared deletion that the operator did not request', async () => {
+    const currentDocument = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
+    await expect(
+      createLandingPageEditor(testConfig, editRunner({ deleteBenefits: true })).edit({
+        ...generationInput,
+        instruction: 'Réécris uniquement le hero.',
+        currentDocument,
+      }),
+    ).rejects.toThrow('did not ask to delete');
   });
 
   it('rejects semantically invalid edit plans before generating any block', async () => {

@@ -22,6 +22,7 @@ import type {
 } from '../../lib/ecotrack-admin-contracts';
 import { formatOrderPhoneForDisplay } from '../../lib/order-presentation';
 import { cn } from '../../lib/utils';
+import { AdminAiAskButton } from '../admin-ai-ask-button';
 import { SearchField } from '../search-field';
 import { SplitActionButton, type SplitActionOption } from '../split-action-button';
 import { TablePaginationControls } from '../table-pagination-controls';
@@ -394,6 +395,7 @@ function EcotrackWorkspaceChrome(props: OrdersEcotrackWorkspaceProps) {
           description={<PendingInline active={props.isRefreshing} label={t('labels.loading')} />}
         />
         <WorkspaceActions>
+          <AdminAiAskButton />
           <Button
             type="button"
             variant="outline"

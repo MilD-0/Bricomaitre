@@ -46,7 +46,7 @@ export const adminAiCapabilities: AdminAiCapability[] = [
   {
     id: 'proposal_inbox',
     description:
-      'Inspect pending proposals and explicitly approve or reject exact reviewed proposals, restricted to the product, taxonomy, and asset domains available to the operator.',
+      'Inspect pending proposals; explicitly approve or reject exact reviewed proposals; and delete only exact expired pending proposals, restricted to the product, taxonomy, and asset domains available to the operator.',
     surfaces: ['aiProposals'],
     anyPermissions: ['products_write', 'assets_write', 'brands_categories_write'],
   },
@@ -54,7 +54,7 @@ export const adminAiCapabilities: AdminAiCapability[] = [
     id: 'asset_inspection',
     description:
       'Inspect current banners, featured groups, product cards, and complete landing-page documents; create, replace, delete, reorder, or control merchandising state and directly create or stage-edit validated landing pages through canonical asset workflows.',
-    surfaces: ['assets'],
+    surfaces: ['assets', 'products'],
     permission: 'assets_write',
   },
   {

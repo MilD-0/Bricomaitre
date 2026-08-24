@@ -152,7 +152,9 @@ import {
   editAdminAiLandingPage,
 } from '../../../../lib/admin-ai-landing-pages';
 import {
+  adminAiExpiredProposalDeletionSchema,
   adminAiProposalReviewSchema,
+  deleteExpiredAdminAiProposals,
   reviewAdminAiProposals,
 } from '../../../../lib/admin-ai-proposal-review';
 import {
@@ -793,7 +795,7 @@ export async function POST(request: NextRequest) {
               }),
               edit_landing_page: tool({
                 description:
-                  'Edit one exact inspected landing page through a validated staged edit plan. Unaffected blocks are preserved verbatim, changed/new blocks are generated independently, ordering and IDs are validated, stale revisions are rejected, and per-block fallbacks are returned. active null preserves publication state; set it only when explicitly requested.',
+                  'Edit one exact inspected landing page through a validated staged edit plan. Unaffected and accidentally omitted blocks are preserved verbatim, explicit deletion must name an existing block and match the operator request, changed/new blocks are generated independently, ordering and IDs are validated, stale revisions are rejected, and per-block fallbacks are returned. active null preserves publication state; set it only when explicitly requested.',
                 inputSchema: adminAiLandingPageEditSchema,
                 execute: (input) => editAdminAiLandingPage(input, actor),
               }),
@@ -840,6 +842,12 @@ export async function POST(request: NextRequest) {
                   'Approve or reject exact proposals only after inspecting them and receiving an explicit operator decision. Each proposal is re-authorized against its product, taxonomy, or asset domain; approvals use the same conflict checks, verified writes, cache refresh, and storefront refresh as the proposal inbox.',
                 inputSchema: adminAiProposalReviewSchema,
                 execute: (input) => reviewAdminAiProposals(input, actor, permissions),
+              }),
+              delete_expired_ai_proposals: tool({
+                description:
+                  'Delete exact inspected proposals only when each remains pending and expired, after an explicit operator request. Every proposal is re-authorized against its product, taxonomy, or asset domain immediately before deletion; active or already-reviewed proposals are preserved and reported as failures.',
+                inputSchema: adminAiExpiredProposalDeletionSchema,
+                execute: (input) => deleteExpiredAdminAiProposals(input, permissions),
               }),
             }
           : {}),

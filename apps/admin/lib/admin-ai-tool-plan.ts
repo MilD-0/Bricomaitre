@@ -47,6 +47,7 @@ export type AdminAiMutationTool =
   | 'create_landing_page'
   | 'edit_landing_page'
   | 'review_ai_proposals'
+  | 'delete_expired_ai_proposals'
   | 'set_access_grant'
   | 'revoke_access_grants'
   | 'set_role_definition'
@@ -68,6 +69,8 @@ export type AdminAiMutationTool =
   | 'manage_analytics_costs'
   | 'manage_analytics_day_overrides'
   | 'sync_analytics_source'
+  | 'start_background_job'
+  | 'stop_background_job'
   | 'suggest_discount'
   | 'propose_brand_create'
   | 'propose_category_create';
@@ -79,15 +82,17 @@ export type AdminAiStepPlan =
   | null;
 
 export const ADMIN_AI_LONG_OPERATION_TIMEOUT_MS = 120_000;
+export const ADMIN_AI_LANDING_PAGE_OPERATION_TIMEOUT_MS = 10 * 60_000;
 
 export function adminAiRequestTimeoutMs(
   configuredTimeoutMs: number,
   mutationTool: AdminAiMutationTool | null,
   groundingTool: AdminAiGroundingTool | null = null,
 ) {
-  return mutationTool === 'create_landing_page' ||
-    mutationTool === 'edit_landing_page' ||
-    mutationTool === 'sync_analytics_source' ||
+  if (mutationTool === 'create_landing_page' || mutationTool === 'edit_landing_page') {
+    return Math.max(configuredTimeoutMs, ADMIN_AI_LANDING_PAGE_OPERATION_TIMEOUT_MS);
+  }
+  return mutationTool === 'sync_analytics_source' ||
     mutationTool === 'manage_ecotrack_shipments' ||
     mutationTool === 'change_ecotrack_shipments' ||
     groundingTool === 'preview_ecotrack_posting' ||
@@ -166,6 +171,75 @@ function referencesLandingPages(message: string, section: string) {
       'صفحة هبوط',
     ])
   );
+}
+
+function requestsLandingPageCreation(message: string) {
+  return containsAny(message, [
+    'crée',
+    'cree',
+    'génère',
+    'genere',
+    'conçois une',
+    'concois une',
+    'compose une',
+    'fais une',
+    'create',
+    'generate',
+    'build a',
+    'design a',
+    'compose a',
+    'make a',
+    'draft a',
+    'أنشئ',
+    'صمّم',
+    'صمم',
+  ]);
+}
+
+function requestsLandingPageEdit(message: string) {
+  return containsAny(message, [
+    'modifie',
+    'édite',
+    'edite',
+    'réécris',
+    'reecris',
+    'améliore',
+    'ameliore',
+    'retravaille',
+    'corrige',
+    'change ',
+    'ajoute',
+    'supprime',
+    'déplace',
+    'deplace',
+    'réordonne',
+    'reordonne',
+    'publie ',
+    'active la',
+    'active le',
+    'désactive',
+    'desactive',
+    'edit',
+    'rewrite',
+    'improve',
+    'rework',
+    'fix ',
+    'change ',
+    'add ',
+    'remove',
+    'move ',
+    'reorder',
+    'publish',
+    'unpublish',
+    'activate ',
+    'deactivate',
+    'عدّل',
+    'حسّن',
+    'أضف',
+    'احذف',
+    'انقل',
+    'انشر',
+  ]);
 }
 
 function requestsEcotrackPosting(message: string) {
@@ -712,6 +786,52 @@ function requestsOrderTrackingLinks(message: string) {
   );
 }
 
+function requestsBackgroundJobStart(message: string) {
+  return containsAny(message, [
+    'exporte tous les produits',
+    'exporte tout le catalogue',
+    "lance l'export produits",
+    'lance l’export produits',
+    'start the product export',
+    'export all products',
+    'actualise le flux catalogue',
+    'rafraîchis le flux catalogue',
+    'rafraichis le flux catalogue',
+    'refresh the catalog feed',
+    'actualise le reporting',
+    'rafraîchis le reporting',
+    'rafraichis le reporting',
+    'refresh reporting',
+    'synchronise le catalogue ecotrack',
+    'sync the ecotrack catalog',
+    'synchronise les expéditions ecotrack',
+    'synchronise les expeditions ecotrack',
+    'sync ecotrack shipments',
+    'صدّر كل المنتجات',
+    'حدّث موجز الكتالوج',
+    'حدّث التقارير',
+    'زامن كتالوج ecotrack',
+    'زامن شحنات ecotrack',
+  ]);
+}
+
+function requestsBackgroundJobStop(message: string) {
+  return (
+    containsAny(message, ['arrête', 'arrete', 'annule', 'stop ', 'cancel ', 'أوقف', 'ألغ']) &&
+    containsAny(message, [
+      'tâche',
+      'tache',
+      'job',
+      'export',
+      'synchronisation',
+      'synchronization',
+      'مهمة',
+      'تصدير',
+      'مزامنة',
+    ])
+  );
+}
+
 /**
  * Chooses the one canonical read tool that must ground the first model step.
  * Mutating tools are planned separately so inspection always occurs first when
@@ -741,14 +861,20 @@ export function adminAiGroundingTool(input: {
     return 'inspect_action_history';
   }
 
-  if (surface === 'orders' && permissions.includes('orders_write')) {
-    if (requestsOrderExportStart(message)) return 'preview_order_export';
+  if (referencesLandingPages(message, section) && permissions.includes('assets_write')) {
+    return requestsLandingPageCreation(message) ? 'find_products' : 'inspect_landing_pages';
+  }
+
+  if (permissions.includes('orders_write')) {
+    if (surface === 'orders' && requestsOrderExportStart(message)) return 'preview_order_export';
     if (requestsEcotrackPosting(message)) return 'preview_ecotrack_posting';
-    if (ecotrackProviderChoice(message)) return null;
+    if (surface === 'orders' && ecotrackProviderChoice(message)) return null;
     if (requestsEcotrackFailureRepair(message) && !mentionsEcotrackShipment(message)) {
       return 'load_ecotrack_requirements';
     }
-    if (referencesEcotrackShipments(message, section)) return 'inspect_ecotrack_shipments';
+    if (surface === 'orders' && referencesEcotrackShipments(message, section)) {
+      return 'inspect_ecotrack_shipments';
+    }
     if (requestsEcotrackFailureRepair(message)) return 'load_ecotrack_requirements';
   }
 
@@ -794,14 +920,6 @@ export function adminAiGroundingTool(input: {
     return requestsInventoryScan(message) ? 'scan_inventory' : 'inspect_inventory';
   }
   if (surface === 'assets') {
-    if (referencesLandingPages(message, section) && permissions.includes('assets_write')) {
-      if (
-        containsAny(message, ['crée', 'cree', 'create', 'génère', 'genere', 'generate', 'أنشئ'])
-      ) {
-        return 'find_products';
-      }
-      return 'inspect_landing_pages';
-    }
     return permissions.includes('assets_write') ? 'inspect_assets' : null;
   }
   if (surface === 'aiproposals') {
@@ -905,25 +1023,47 @@ export function adminAiMutationTool(input: {
   if (asksForSurfaceHelp(message)) return null;
 
   if (
+    hasAnyPermission(permissions, [
+      'products_write',
+      'orders_write',
+      'analytics_manage',
+      'ops_view',
+    ])
+  ) {
+    if (requestsBackgroundJobStop(message)) return 'stop_background_job';
+    if (requestsBackgroundJobStart(message)) return 'start_background_job';
+  }
+
+  if (
     permissions.includes('settings_manage') &&
     requestsActionHistoryRecovery(message, surface, section)
   ) {
     return 'recover_action_history';
   }
 
-  if (surface === 'orders' && permissions.includes('orders_write')) {
-    if (requestsOrderExportStart(message)) return 'start_order_export';
-    if (requestsOrderTrackingLinks(message)) return 'get_order_tracking_links';
+  if (referencesLandingPages(message, section) && permissions.includes('assets_write')) {
+    if (requestsLandingPageCreation(message)) return 'create_landing_page';
+    if (requestsLandingPageEdit(message)) return 'edit_landing_page';
+  }
+
+  if (permissions.includes('orders_write')) {
+    if (surface === 'orders' && requestsOrderExportStart(message)) return 'start_order_export';
+    if (surface === 'orders' && requestsOrderTrackingLinks(message)) {
+      return 'get_order_tracking_links';
+    }
     const provider = ecotrackProviderChoice(message);
     if (provider) return 'post_orders_to_ecotrack';
     if (requestsEcotrackPosting(message)) return null;
     if (
+      surface === 'orders' &&
       requestsEcotrackShipmentChange(message, section) &&
       (!requestsEcotrackFailureRepair(message) || mentionsEcotrackShipment(message))
     ) {
       return 'change_ecotrack_shipments';
     }
-    if (requestsEcotrackShipmentAction(message, section)) return 'manage_ecotrack_shipments';
+    if (surface === 'orders' && requestsEcotrackShipmentAction(message, section)) {
+      return 'manage_ecotrack_shipments';
+    }
   }
 
   const explicitlyChanges = containsAny(message, [
@@ -1107,40 +1247,6 @@ export function adminAiMutationTool(input: {
   }
 
   if (surface === 'assets' && permissions.includes('assets_write')) {
-    if (referencesLandingPages(message, section)) {
-      if (
-        containsAny(message, ['crée', 'cree', 'create', 'génère', 'genere', 'generate', 'أنشئ'])
-      ) {
-        return 'create_landing_page';
-      }
-      if (
-        containsAny(message, [
-          'modifie',
-          'édite',
-          'edite',
-          'réécris',
-          'reecris',
-          'ajoute',
-          'supprime',
-          'déplace',
-          'deplace',
-          'publie',
-          'active',
-          'désactive',
-          'desactive',
-          'edit',
-          'rewrite',
-          'add ',
-          'remove',
-          'publish',
-          'unpublish',
-          'عدّل',
-          'انشر',
-        ])
-      ) {
-        return 'edit_landing_page';
-      }
-    }
     if (
       containsAny(message, [
         'crée',
@@ -1178,14 +1284,16 @@ export function adminAiMutationTool(input: {
     }
     if (
       containsAny(message, [
-        'active',
+        'active la',
+        'active le',
+        'active les',
         'désactive',
         'desactive',
-        'affiche',
+        'affiche ',
         'masque',
-        'place',
-        'activate',
-        'deactivate',
+        'place ',
+        'activate ',
+        'deactivate ',
         'show ',
         'hide ',
         'فعّل',
@@ -1195,6 +1303,21 @@ export function adminAiMutationTool(input: {
     ) {
       return 'update_asset_state';
     }
+  }
+
+  if (
+    surface === 'aiproposals' &&
+    hasAnyPermission(permissions, ['products_write', 'assets_write', 'brands_categories_write']) &&
+    containsAny(message, [
+      'supprime les propositions expirées',
+      'supprime les propositions expirees',
+      'efface les propositions expirées',
+      'delete expired proposals',
+      'remove expired proposals',
+      'احذف الاقتراحات منتهية الصلاحية',
+    ])
+  ) {
+    return 'delete_expired_ai_proposals';
   }
 
   if (

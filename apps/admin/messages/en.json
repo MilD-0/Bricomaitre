@@ -1481,6 +1481,7 @@
   },
   "aiChat": {
     "open": "AI assistant",
+    "ask": "Ask AI",
     "close": "Close AI assistant",
     "title": "Admin AI assistant",
     "conversation": "AI assistant conversation",
@@ -1601,6 +1602,7 @@
       "preserved": "Preserved sections",
       "fallback": "Fallback sections",
       "skipped": "Skipped sections",
+      "deleted": "Deleted sections",
       "retries": "Recovered retries",
       "fallbackDetails": "Sections requiring fallback",
       "reasons": {
@@ -1609,6 +1611,17 @@
         "provider-error": "The content provider did not complete this section",
         "insufficient-assets": "The section required more verified product assets"
       }
+    },
+    "ecotrackTerminal": {
+      "attempts": "Worker attempt {attempt} · {retries} retries",
+      "successes": "Posted successfully ({count})",
+      "validationFailures": "Validation failures — not sent to the provider ({count})",
+      "providerRejections": "Provider rejections ({count})",
+      "alreadyPosted": "Already posted ({count})",
+      "repair": "Repair failed orders",
+      "retry": "Retry provider rejections",
+      "repairPrompt": "For EcoTrack order IDs {ids} with provider {provider}, load the current EcoTrack requirements and exact order evidence, then explain the concrete fixes I can approve.",
+      "retryPrompt": "Retry EcoTrack posting for the exact order IDs {ids} via {provider}. Preview those exact IDs first and only post the eligible rows."
     },
     "toolLabels": {
       "catalog": "Catalog results",
@@ -1711,6 +1724,7 @@
     },
     "categorizationSummary": "{applied} applied · {proposed} awaiting review · {unchanged} unchanged · {ambiguous} ambiguous · {failed} failed",
     "autoApplyFailed": "Automatic application conflicts: {count}. The affected proposals remain pending for manual review.",
+    "downloadArtifact": "Download completed file",
     "cancel": "Cancel",
     "previous": "Previous",
     "yes": "Yes",

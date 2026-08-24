@@ -7,6 +7,7 @@ import { useLocale, useTranslations } from 'next-intl';
 
 import type { ArchivedProduct } from '../../lib/product-archive';
 import { toast } from '../../lib/toast';
+import { AdminAiAskButton } from '../admin-ai-ask-button';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Button } from '../ui/button';
 import {
@@ -53,6 +54,7 @@ export function ProductArchive({ initialProducts }: { initialProducts: ArchivedP
           showTitleOnMobile
         />
         <WorkspaceActions>
+          <AdminAiAskButton />
           <Link
             href={`/${locale}/products`}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-[0.75rem] bg-secondary px-4 text-sm font-semibold text-secondary-foreground hover:bg-accent"
