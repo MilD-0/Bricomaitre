@@ -60,6 +60,11 @@ describe('GlobalSearch', () => {
   it('debounces suggestions and records governed selection telemetry', async () => {
     render(<GlobalSearch locale="fr" labels={labels} />);
     const input = screen.getByRole('combobox', { name: labels.label });
+    expect(
+      screen
+        .getByRole('button', { name: labels.label })
+        .querySelector('.global-search-submit-icon'),
+    ).toBeInTheDocument();
 
     fireEvent.change(input, { target: { value: 'per' } });
     expect(fetch).not.toHaveBeenCalled();

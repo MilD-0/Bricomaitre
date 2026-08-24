@@ -387,6 +387,22 @@ describe('production packaging and release runtime', () => {
     expect(storefrontStart).toBeGreaterThan(storefrontPull);
   });
 
+  it('reconciles PostgreSQL and Redis serially before candidate services', () => {
+    const deploy = readFileSync(resolve(workspaceRoot, 'ops/scripts/deploy.sh'), 'utf8');
+    const postgresStart = deploy.indexOf('compose up -d postgres');
+    const postgresHealth = deploy.indexOf('wait-for-health.sh" postgres');
+    const redisStart = deploy.indexOf('compose up -d redis');
+    const redisHealth = deploy.indexOf('wait-for-health.sh" redis');
+    const apiStart = deploy.indexOf('compose up -d --force-recreate "$api_service"');
+
+    expect(postgresStart).toBeGreaterThan(-1);
+    expect(postgresHealth).toBeGreaterThan(postgresStart);
+    expect(redisStart).toBeGreaterThan(postgresHealth);
+    expect(redisHealth).toBeGreaterThan(redisStart);
+    expect(apiStart).toBeGreaterThan(redisHealth);
+    expect(deploy).not.toContain('compose up -d postgres redis');
+  });
+
   it('rebuilds persisted reporting with the candidate artifact before cutover', () => {
     const deploy = readFileSync(resolve(workspaceRoot, 'ops/scripts/deploy.sh'), 'utf8');
     const migrationImage = readFileSync(

@@ -102,4 +102,26 @@ describe('app/api/internal/catalog-counts/route', () => {
       categoryCount: 40,
     });
   });
+
+  it('returns a controlled dependency failure when catalog counts cannot be read', async () => {
+    const consoleErrorMock = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    isValidDeployTokenMock.mockReturnValue(true);
+    hasDbMock.mockReturnValue(true);
+    getDbMock.mockReturnValue({ tag: 'db' });
+    readStorefrontCatalogCountsMock.mockRejectedValue(new Error('schema unavailable'));
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/internal/catalog-counts', {
+        headers: { 'x-deploy-token': 'deploy-token' },
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ error: 'catalog counts are unavailable' });
+    expect(consoleErrorMock).toHaveBeenCalledWith(
+      'Unable to read deployment catalog counts.',
+      expect.any(Error),
+    );
+    consoleErrorMock.mockRestore();
+  });
 });
