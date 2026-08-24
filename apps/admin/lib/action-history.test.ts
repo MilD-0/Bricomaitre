@@ -555,19 +555,15 @@ describe('action-history helpers', () => {
       resolveActionHistoryRecovery({ id: 3, isReversible: true, isUndone: true }, undone),
     ).toEqual({ nextAction: null, blockedReason: 'redo_order' });
     expect(
-      resolveActionHistoryRecovery(
-        { id: 1, isReversible: false, isUndone: false },
-        [{ id: 1, isUndone: false }],
-      ),
+      resolveActionHistoryRecovery({ id: 1, isReversible: false, isUndone: false }, [
+        { id: 1, isUndone: false },
+      ]),
     ).toEqual({ nextAction: null, blockedReason: 'non_reversible' });
     expect(
-      resolveActionHistoryRecovery(
-        { id: 2, isReversible: true, isUndone: true },
-        [
-          { id: 1, isUndone: true },
-          { id: 2, isUndone: false },
-        ],
-      ),
+      resolveActionHistoryRecovery({ id: 2, isReversible: true, isUndone: true }, [
+        { id: 1, isUndone: true },
+        { id: 2, isUndone: false },
+      ]),
     ).toEqual({ nextAction: null, blockedReason: 'history_out_of_sync' });
   });
 });

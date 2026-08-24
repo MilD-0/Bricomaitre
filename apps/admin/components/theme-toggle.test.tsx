@@ -15,6 +15,8 @@ import { ThemeToggle } from './theme-toggle';
 
 describe('ThemeToggle', () => {
   it('renders an icon-only control and switches to the opposite theme', async () => {
+    document.documentElement.className = 'dark';
+    window.localStorage.removeItem('theme');
     render(<ThemeToggle />);
 
     const button = await screen.findByRole('button', { name: 'Switch to light mode' });
@@ -24,5 +26,8 @@ describe('ThemeToggle', () => {
     await userEvent.click(button);
 
     expect(setThemeMock).toHaveBeenCalledWith('light');
+    expect(document.documentElement).toHaveClass('light');
+    expect(window.localStorage.getItem('theme')).toBe('light');
+    expect(button).toHaveAccessibleName('Switch to dark mode');
   });
 });

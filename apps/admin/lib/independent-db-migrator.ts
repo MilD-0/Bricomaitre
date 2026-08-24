@@ -10,10 +10,7 @@ type Database = ReturnType<typeof getDb>;
  * PostgreSQL enum additions must commit before a later migration can use the new
  * value, so keep the same ledger format while making each file its own atomic unit.
  */
-export async function migrateInIndependentTransactions(
-  db: Database,
-  config: MigrationConfig,
-) {
+export async function migrateInIndependentTransactions(db: Database, config: MigrationConfig) {
   const migrationsTable = config.migrationsTable ?? '__drizzle_migrations';
   const migrationsSchema = config.migrationsSchema ?? 'drizzle';
   const schemaIdentifier = sql.identifier(migrationsSchema);

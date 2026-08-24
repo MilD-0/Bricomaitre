@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  getEcotrackOrder,
-  getEcotrackTrackingsInfo,
-  listEcotrackOrders,
-} from './ecotrack-client';
+import { getEcotrackOrder, getEcotrackTrackingsInfo, listEcotrackOrders } from './ecotrack-client';
 
 const env = {
   ECOTRACK_BASE_URL: 'https://ecotrack.example/api/v1',

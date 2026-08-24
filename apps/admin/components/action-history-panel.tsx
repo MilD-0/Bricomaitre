@@ -14,15 +14,15 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
-import { useDeferredValue, useMemo, useState, useSyncExternalStore } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 
 import { requestJson as request } from '../lib/admin-api';
+import { formatRelativeTime } from '../lib/date-format';
 import { useAdminAiSurfaceDetails } from './admin-ai-surface-context';
 import type { PaginationMeta } from '../lib/pagination';
 import { toast } from '../lib/toast';
 import { cn } from '../lib/utils';
 import { SearchField } from './search-field';
-import { TablePaginationControls } from './table-pagination-controls';
 import { Button } from './ui/button';
 import {
   Dialog,
@@ -36,6 +36,8 @@ import { SurfacePendingOverlay } from './ui/motion';
 import { NativeSelect, NativeSelectOption } from './ui/native-select';
 import { SidePanel } from './ui/side-panel';
 import { Switch } from './ui/switch';
+import { WorkspacePagination } from './ui/workspace-pagination';
+import { useMediaQuery } from './ui/use-media-query';
 
 type HistoryOperation = 'create' | 'update' | 'delete';
 type HistoryState = 'all' | 'applied' | 'undone';
@@ -85,29 +87,6 @@ type HistoryDetailResponse = {
 };
 
 const wideLayoutQuery = '(min-width: 1280px)';
-
-function useWideLayout() {
-  return useSyncExternalStore(
-    (onChange) => {
-      const query = window.matchMedia(wideLayoutQuery);
-      query.addEventListener('change', onChange);
-      return () => query.removeEventListener('change', onChange);
-    },
-    () => window.matchMedia(wideLayoutQuery).matches,
-    () => false,
-  );
-}
-
-function formatRelativeTime(value: string, locale: string) {
-  const seconds = Math.round((new Date(value).getTime() - Date.now()) / 1_000);
-  const formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
-  if (Math.abs(seconds) < 60) return formatter.format(seconds, 'second');
-  const minutes = Math.round(seconds / 60);
-  if (Math.abs(minutes) < 60) return formatter.format(minutes, 'minute');
-  const hours = Math.round(minutes / 60);
-  if (Math.abs(hours) < 24) return formatter.format(hours, 'hour');
-  return formatter.format(Math.round(hours / 24), 'day');
-}
 
 function dayKey(value: string) {
   const date = new Date(value);
@@ -364,7 +343,7 @@ export function ActionHistoryPanel({
   const t = useTranslations();
   const locale = useLocale();
   const queryClient = useQueryClient();
-  const isWideLayout = useWideLayout();
+  const isWideLayout = useMediaQuery(wideLayoutQuery);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [operation, setOperation] = useState<HistoryOperationFilter>('all');
@@ -750,9 +729,10 @@ export function ActionHistoryPanel({
                 </div>
               </section>
             ))}
-            <TablePaginationControls
+            <WorkspacePagination
               currentPage={historyQuery.data.pagination.page ?? page}
               totalPages={historyQuery.data.pagination.totalPages || 1}
+              pending={historyQuery.isFetching}
               onPageChange={(nextPage) => {
                 setPage(nextPage);
                 setMobileInspectorOpen(false);

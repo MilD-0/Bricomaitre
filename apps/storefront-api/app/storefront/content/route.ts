@@ -15,10 +15,7 @@ export async function GET(request: NextRequest) {
     .select({ message: storefrontAnnouncements.message })
     .from(storefrontAnnouncements)
     .where(
-      and(
-        eq(storefrontAnnouncements.locale, locale),
-        eq(storefrontAnnouncements.active, true),
-      ),
+      and(eq(storefrontAnnouncements.locale, locale), eq(storefrontAnnouncements.active, true)),
     )
     .limit(1);
   return NextResponse.json({ announcement: announcements[0] ?? null });

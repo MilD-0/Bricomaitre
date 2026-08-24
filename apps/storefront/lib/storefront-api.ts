@@ -324,9 +324,7 @@ export async function fetchStorefrontSettings(): Promise<StorefrontSettingsRespo
   return parseUpstreamJson(response, pathname, storefrontSettingsResponseSchema);
 }
 
-export async function fetchStorefrontContent(
-  locale: 'fr' | 'ar',
-): Promise<StorefrontContentResponse> {
+async function fetchStorefrontContent(locale: 'fr' | 'ar'): Promise<StorefrontContentResponse> {
   const pathname = `/storefront/content?locale=${locale}`;
   const response = await fetchStorefrontUpstream(pathname);
   if (response.status === 404) return { announcement: null };

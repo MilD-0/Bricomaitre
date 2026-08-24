@@ -10,7 +10,12 @@ vi.mock('embla-carousel-react', () => ({
 }));
 vi.mock('next/image', () => ({
   getImageProps: ({ src, alt, sizes }: Record<string, unknown>) => ({
-    props: { src, alt, sizes, srcSet: String(src) },
+    props: {
+      src,
+      alt,
+      sizes,
+      srcSet: String(src).endsWith('.svg') ? undefined : String(src),
+    },
   }),
 }));
 
@@ -77,6 +82,18 @@ describe('HomepageBannerCarousel', () => {
 
     expect(container.querySelector('.home-banner-viewport')).toBeInTheDocument();
     expect(mocks.scrollNext).not.toHaveBeenCalled();
+  });
+
+  it('keeps unoptimized portrait media selectable when Next does not return a srcSet', () => {
+    const svgBanners = banners.map((banner) => ({
+      ...banner,
+      imageUrlPortrait: banner.imageUrlPortrait.replace('.jpg', '.svg'),
+    }));
+    const { container } = render(<HomepageBannerCarousel banners={svgBanners} locale="fr" />);
+
+    expect(
+      container.querySelector('.home-banner-picture > picture:last-child source'),
+    ).toHaveAttribute('srcset', '/banner-1-portrait.svg');
   });
 
   it('keeps the carousel DOM direction aligned with the Arabic Embla direction', () => {

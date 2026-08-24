@@ -1,7 +1,7 @@
 import { createSign } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
-import { and, desc, eq, gte, lte, max, sql } from 'drizzle-orm';
+import { and, eq, gte, lte, max, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
@@ -755,13 +755,4 @@ export async function syncSearchConsole(
       .where(eq(searchConsoleSyncRuns.id, run.id));
     throw error;
   }
-}
-
-export async function latestSearchConsoleSync(db: Database = getDb()) {
-  const [row] = await db
-    .select()
-    .from(searchConsoleSyncRuns)
-    .orderBy(desc(searchConsoleSyncRuns.startedAt))
-    .limit(1);
-  return row ?? null;
 }

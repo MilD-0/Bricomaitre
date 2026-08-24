@@ -3,7 +3,7 @@ import cron from 'node-cron';
 
 import { readSearchConsoleConfig, syncSearchConsole } from './search-console';
 
-export const DEFAULT_SEARCH_CONSOLE_SYNC_CRON = '37 4 * * *';
+const DEFAULT_SEARCH_CONSOLE_SYNC_CRON = '37 4 * * *';
 const DEFAULT_SEARCH_CONSOLE_SYNC_TIMEZONE = 'Africa/Algiers';
 
 type SchedulerState = {

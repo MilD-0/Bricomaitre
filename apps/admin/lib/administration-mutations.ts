@@ -49,7 +49,7 @@ export class AdministrationRoleNotFoundError extends Error {
   }
 }
 
-export function slugifyAdministrationRoleName(name: string) {
+function slugifyAdministrationRoleName(name: string) {
   return name
     .trim()
     .toLowerCase()

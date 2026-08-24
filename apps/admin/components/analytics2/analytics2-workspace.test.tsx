@@ -7,13 +7,15 @@ import { ADMIN_AI_OPEN_EVENT } from '../../lib/admin-ai-events';
 import { AdminAiSurfaceProvider, useAdminAiSurfaceContext } from '../admin-ai-surface-context';
 import { splitPartialSeries, StatsWorkspace } from './analytics2-workspace';
 
-const { pushMock, replaceMock } = vi.hoisted(() => ({
+const { localeState, pushMock, replaceMock, searchParamsState } = vi.hoisted(() => ({
+  localeState: { current: 'en' },
   pushMock: vi.fn(),
   replaceMock: vi.fn(),
+  searchParamsState: { current: 'range=30d&grain=auto' },
 }));
 
 vi.mock('next-intl', () => ({
-  useLocale: () => 'en',
+  useLocale: () => localeState.current,
   useTranslations: () => (key: string) =>
     ({
       'nav.statsOverview': 'Overview',
@@ -28,7 +30,7 @@ vi.mock('next-intl', () => ({
 }));
 vi.mock('next/navigation', () => ({
   usePathname: () => '/en/stats',
-  useSearchParams: () => new URLSearchParams('range=30d&grain=auto'),
+  useSearchParams: () => new URLSearchParams(searchParamsState.current),
   useRouter: () => ({ push: pushMock, replace: replaceMock }),
 }));
 
@@ -365,6 +367,7 @@ function searchPayload(): Analytics2Payload {
         {
           page: 'https://bricomaitre.com/fr/products/perceuse',
           path: '/products/perceuse',
+          label: '/products/perceuse · FR',
           clicks: 20,
           impressions: 400,
           ctrPct: 5,
@@ -512,6 +515,8 @@ function renderWorkspaceWithContext(payload = commandPayload()) {
 
 describe('StatsWorkspace', () => {
   beforeEach(() => {
+    localeState.current = 'en';
+    searchParamsState.current = 'range=30d&grain=auto';
     vi.clearAllMocks();
     vi.stubGlobal(
       'fetch',
@@ -525,6 +530,21 @@ describe('StatsWorkspace', () => {
   });
 
   afterEach(() => cleanup());
+
+  it('reuses fresh server data without rewriting an already normalized URL', () => {
+    renderWorkspace();
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the clean default route without triggering a duplicate server render', () => {
+    searchParamsState.current = '';
+    renderWorkspace();
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
 
   it('renders a lean operational workspace with source health and operator signals', () => {
     const { container } = renderWorkspace();
@@ -543,10 +563,24 @@ describe('StatsWorkspace', () => {
     expect(screen.getByText('Profit')).toBeInTheDocument();
     expect(screen.getByText('Submitted · unconfirmed')).toBeInTheDocument();
     expect(screen.getByText('Confirmed · unposted')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Cash pipeline' })).toHaveAttribute('tabindex', '0');
     expect(screen.getByText('55% expected to post')).toBeInTheDocument();
     expect(screen.getByText('82% expected to post')).toBeInTheDocument();
+    expect(screen.getByText('True profit').parentElement?.querySelector('strong')).not.toHaveClass(
+      'truncate',
+    );
     expect(screen.queryByText('Analytics · operational workspace')).not.toBeInTheDocument();
     expect(screen.queryByText('Query duration')).not.toBeInTheDocument();
+  });
+
+  it('localizes report content and controls instead of only translating the shell', () => {
+    localeState.current = 'ar';
+    renderWorkspace();
+
+    expect(screen.getByText('نموذج الأيام السبعة القادمة')).toBeInTheDocument();
+    expect(screen.getByText('مرسلة')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'نطاق التحليلات' })).toBeInTheDocument();
+    expect(screen.queryByText('next 7-day model')).not.toBeInTheDocument();
   });
 
   it('opens the assistant with the exact active analytics section', () => {
@@ -576,6 +610,8 @@ describe('StatsWorkspace', () => {
     expect(screen.getByText('Google Search')).toBeInTheDocument();
     expect(screen.getAllByText('perceuse sans fil').length).toBeGreaterThan(0);
     expect(screen.getByText('3,521 URLs')).toBeInTheDocument();
+    expect(screen.getAllByText('/products/perceuse · FR')).toHaveLength(2);
+    expect(screen.getByText('No URLs inspected')).toBeInTheDocument();
     expect(screen.queryByText('Non-brand discovery')).not.toBeInTheDocument();
     expect(screen.queryByText('Query-detail coverage')).not.toBeInTheDocument();
     expect(
@@ -586,6 +622,11 @@ describe('StatsWorkspace', () => {
   it('makes product outcomes and customer paid contribution comparable', () => {
     renderWorkspace(catalogPayload());
 
+    expect(screen.getAllByRole('region', { name: 'Exact values' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('region', { name: 'Exact values' })[0]).toHaveAttribute(
+      'tabindex',
+      '0',
+    );
     expect(screen.getByText('Views →')).toBeInTheDocument();
     expect(screen.getByText('Paid outcome ↑')).toBeInTheDocument();
     expect(screen.getByText('Bubble · resolved orders')).toBeInTheDocument();
@@ -662,9 +703,7 @@ describe('StatsWorkspace', () => {
     await waitFor(() =>
       expect(pushMock).toHaveBeenCalledWith('/en/stats/time?range=30d&grain=auto'),
     );
-    expect(replaceMock).toHaveBeenCalledWith('/en/stats?range=30d&grain=auto', {
-      scroll: false,
-    });
+    expect(replaceMock).not.toHaveBeenCalled();
     expect(screen.queryByLabelText('Analytics view')).not.toBeInTheDocument();
   });
 
@@ -680,6 +719,10 @@ describe('StatsWorkspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    expect(replaceMock).toHaveBeenCalledWith(
+      '/en/stats?range=custom&grain=auto&startDate=2026-08-01&endDate=2026-08-10',
+      { scroll: false },
+    );
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('range=custom');
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('startDate=2026-08-01');
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('endDate=2026-08-10');

@@ -8,10 +8,10 @@ import * as React from 'react';
 
 import type { AiProposalInboxData, AiProposalInboxItem } from '../../lib/ai-proposal-inbox';
 import { humanizeProposalToken, proposalPreview } from '../../lib/ai-proposal-presentation';
+import { formatRelativeTime } from '../../lib/date-format';
 import { toast } from '../../lib/toast';
 import { cn } from '../../lib/utils';
 import { AdminAiAskButton } from '../admin-ai-ask-button';
-import { TablePaginationControls } from '../table-pagination-controls';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
@@ -26,6 +26,8 @@ import {
 import { Input } from '../ui/input';
 import { NativeSelect, NativeSelectOption } from '../ui/native-select';
 import { SidePanel } from '../ui/side-panel';
+import { WorkspacePagination } from '../ui/workspace-pagination';
+import { useMediaQuery } from '../ui/use-media-query';
 import {
   WorkspaceActions,
   WorkspaceFrame,
@@ -43,35 +45,12 @@ import {
 
 const wideLayoutQuery = '(min-width: 1280px)';
 
-function useWideLayout() {
-  return React.useSyncExternalStore(
-    (onChange) => {
-      const query = window.matchMedia(wideLayoutQuery);
-      query.addEventListener('change', onChange);
-      return () => query.removeEventListener('change', onChange);
-    },
-    () => window.matchMedia(wideLayoutQuery).matches,
-    () => false,
-  );
-}
-
 function pageHref(data: AiProposalInboxData, page: number) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries({ ...data.query, page })) {
     if (value !== null && value !== '' && value !== 'all') params.set(key, String(value));
   }
   return `?${params.toString()}`;
-}
-
-function relativeTime(value: string, locale: string) {
-  const seconds = Math.round((new Date(value).getTime() - Date.now()) / 1_000);
-  const formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
-  if (Math.abs(seconds) < 60) return formatter.format(seconds, 'second');
-  const minutes = Math.round(seconds / 60);
-  if (Math.abs(minutes) < 60) return formatter.format(minutes, 'minute');
-  const hours = Math.round(minutes / 60);
-  if (Math.abs(hours) < 24) return formatter.format(hours, 'hour');
-  return formatter.format(Math.round(hours / 24), 'day');
 }
 
 function previewText(item: AiProposalInboxItem, copy: ProposalReviewCopy) {
@@ -109,7 +88,7 @@ export function AiProposalWorkspace({
   const locale = localeValue === 'ar' || localeValue === 'fr' ? localeValue : 'en';
   const copy = getProposalReviewCopy(locale);
   const router = useRouter();
-  const isWideLayout = useWideLayout();
+  const isWideLayout = useMediaQuery(wideLayoutQuery);
   const [filtersOpen, setFiltersOpen] = React.useState(() =>
     Boolean(
       initialData.query.proposalType ||
@@ -342,6 +321,7 @@ export function AiProposalWorkspace({
               <Button
                 type="button"
                 variant={filtersOpen || activeFilterCount > 0 ? 'default' : 'outline'}
+                aria-label={copy.filters}
                 aria-expanded={filtersOpen}
                 onClick={() => setFiltersOpen((open) => !open)}
               >
@@ -547,7 +527,7 @@ export function AiProposalWorkspace({
                             dateTime={proposal.createdAt}
                             title={new Date(proposal.createdAt).toLocaleString(locale)}
                           >
-                            {relativeTime(proposal.createdAt, locale)}
+                            {formatRelativeTime(proposal.createdAt, locale)}
                           </time>
                         </span>
                       </button>
@@ -558,7 +538,7 @@ export function AiProposalWorkspace({
             </>
           )}
 
-          <TablePaginationControls
+          <WorkspacePagination
             currentPage={initialData.pagination.page}
             totalPages={remainingTotalPages}
             onPageChange={(page) => router.push(pageHref(initialData, page))}

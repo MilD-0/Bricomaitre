@@ -49,6 +49,7 @@ export type WebsiteExperienceStats = {
     name: string;
     samples: number;
     average: number;
+    p75?: number;
     good: number;
     needsImprovement: number;
     poor: number;
@@ -1139,6 +1140,7 @@ export async function getExperienceStats(
         name: sql<string>`coalesce(nullif(${analyticsEvents.metadata}->>'metricName', ''), 'unknown')`,
         samples: sql<number>`count(*)::int`,
         average: sql<number>`coalesce(avg(case when (${analyticsEvents.metadata}->>'metricValue') ~ '^-?[0-9]+(\\.[0-9]+)?$' then (${analyticsEvents.metadata}->>'metricValue')::double precision end), 0)`,
+        p75: sql<number>`coalesce(percentile_cont(0.75) within group (order by case when (${analyticsEvents.metadata}->>'metricValue') ~ '^-?[0-9]+(\\.[0-9]+)?$' then (${analyticsEvents.metadata}->>'metricValue')::double precision end), 0)::double precision`,
         good: sql<number>`count(*) filter (where ${analyticsEvents.metadata}->>'metricRating' = 'good')::int`,
         needsImprovement: sql<number>`count(*) filter (where ${analyticsEvents.metadata}->>'metricRating' = 'needs-improvement')::int`,
         poor: sql<number>`count(*) filter (where ${analyticsEvents.metadata}->>'metricRating' = 'poor')::int`,
@@ -1458,6 +1460,7 @@ export async function getExperienceStats(
           name: string;
           samples: unknown;
           average: unknown;
+          p75: unknown;
           good: unknown;
           needsImprovement: unknown;
           poor: unknown;
@@ -1466,6 +1469,7 @@ export async function getExperienceStats(
         name: row.name,
         samples: numberValue(row.samples),
         average: round(numberValue(row.average), row.name === 'CLS' ? 3 : 0),
+        p75: round(numberValue(row.p75), row.name === 'CLS' ? 3 : 0),
         good: numberValue(row.good),
         needsImprovement: numberValue(row.needsImprovement),
         poor: numberValue(row.poor),

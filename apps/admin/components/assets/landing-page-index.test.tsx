@@ -85,6 +85,7 @@ describe('LandingPageIndex', () => {
       'lg:not-sr-only',
     );
     expect(screen.getByText('Landing pages · 2')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Cordless drill' })).toHaveClass('block', 'truncate');
     expect(document.querySelectorAll('[data-workspace-frame]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-workspace-header]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-workspace-navigation]')).toHaveLength(1);
@@ -94,7 +95,7 @@ describe('LandingPageIndex', () => {
       'https://bricomaitre.com/fr/landing/cordless-drill-7',
     );
     expect(screen.getAllByRole('link', { name: /View live page/ })).toHaveLength(1);
-    await user.type(screen.getByRole('textbox', { name: 'Search landing pages' }), 'lamp');
+    await user.type(screen.getByRole('searchbox', { name: 'Search landing pages' }), 'lamp');
     expect(screen.queryByText('Cordless drill')).not.toBeInTheDocument();
     expect(screen.getByText('Workshop lamp')).toBeVisible();
   });

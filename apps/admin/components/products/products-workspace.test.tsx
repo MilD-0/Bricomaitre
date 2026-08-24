@@ -120,6 +120,7 @@ describe('ProductsWorkspace', () => {
     expect(screen.getByText('2 products')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New product' })).toBeInTheDocument();
     expect(workspace?.querySelector('[data-workspace-toolbar]')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Products' })).toHaveAttribute('tabindex', '0');
   });
 
   it('keeps secondary product filters behind a deliberate phone control', async () => {

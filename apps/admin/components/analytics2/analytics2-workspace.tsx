@@ -11,13 +11,12 @@ import {
   Loader2,
   Plus,
   RefreshCw,
-  Search,
   Settings2,
   Sparkles,
   Trash2,
 } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
   Area,
@@ -27,7 +26,6 @@ import {
   ComposedChart,
   Line,
   ReferenceLine,
-  ResponsiveContainer,
   Scatter,
   ScatterChart,
   Tooltip,
@@ -56,6 +54,7 @@ import { toast } from '../../lib/toast';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
+import { SearchField } from '../search-field';
 import { Input } from '../ui/input';
 import { NativeSelect, NativeSelectOption } from '../ui/native-select';
 import { SidePanel } from '../ui/side-panel';
@@ -66,6 +65,24 @@ import {
   WorkspaceHeading,
   WorkspaceToolbar,
 } from '../ui/workspace';
+import { AnalyticsRangeControls } from './analytics-range-controls';
+import {
+  AnalyticsChartFrame as ChartFrame,
+  AnalyticsDenseTable,
+  AnalyticsMetricCell,
+  AnalyticsMetricStrip,
+  AnalyticsResponsiveChart as ResponsiveChart,
+  AnalyticsSection,
+  AnalyticsTableHead as TableHead,
+} from './analytics-presentation';
+import {
+  formatDate,
+  formatDzd as formatMoney,
+  formatEur,
+  formatNumber,
+  formatPercent,
+  formatRatio,
+} from './analytics-format';
 import { getAnalytics2Copy, type Analytics2Copy } from './analytics2-copy';
 import { AlgeriaWilayaMap } from './algeria-wilaya-map';
 
@@ -75,14 +92,6 @@ type DataOf<Kind extends Analytics2Payload['data']['kind']> = Extract<
 >;
 
 const chartColors = ['#7c3aed', '#0f766e', '#e11d48', '#d97706', '#2563eb', '#64748b'];
-const rangeKeys: Analytics2Range[] = ['7d', '14d', '30d', '90d', 'year', 'all', 'custom'];
-const grainKeys = ['auto', 'day', 'week', 'month'] as const;
-
-const ResponsiveChart = ResponsiveContainer as React.ComponentType<{
-  width: string;
-  height: string;
-  children: React.ReactNode;
-}>;
 
 type AnalyticsAssistantFocus = {
   dimension: AdminAiAnalyticsFocusDimension;
@@ -122,46 +131,34 @@ function AnalyticsAssistantFocusProvider({
   );
 }
 
-function formatMoney(locale: string, value: number | null | undefined, compact = false) {
-  if (value == null) return '—';
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: 'DZD',
-    maximumFractionDigits: compact ? 1 : 0,
-    notation: compact ? 'compact' : 'standard',
-  }).format(value);
-}
-
-function formatEur(locale: string, value: number | null | undefined) {
-  if (value == null) return '—';
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: 'EUR',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function formatNumber(locale: string, value: number | null | undefined, compact = false) {
-  if (value == null) return '—';
-  return new Intl.NumberFormat(locale, {
-    maximumFractionDigits: 1,
-    notation: compact ? 'compact' : 'standard',
-  }).format(value);
-}
-
-function formatPercent(locale: string, value: number | null | undefined) {
-  if (value == null) return '—';
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value)}%`;
-}
-
-function formatRatio(locale: string, value: number | null | undefined) {
-  if (value == null) return '—';
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value)}×`;
-}
-
 function formatHours(locale: string, value: number | null | undefined) {
   if (value == null) return '—';
   return `${formatNumber(locale, value)} h`;
+}
+
+function funnelLabel(copy: Analytics2Copy, key: string) {
+  const labels: Record<string, string> = {
+    Sessions: copy.labels.sessions,
+    'Product-view sessions': copy.labels.productViewSessions,
+    'Cart sessions': copy.labels.cartSessions,
+    'Checkout sessions': copy.labels.checkoutSessions,
+    'Submitted-order sessions': copy.labels.submittedOrderSessions,
+    submitted: copy.labels.submitted,
+    confirmed: copy.labels.confirmed,
+    posted: copy.labels.posted,
+    delivered: copy.labels.delivered,
+    paid: copy.labels.paid,
+    impressions: copy.labels.impressions,
+    outboundClicks: copy.labels.outboundClicks,
+    landingViews: copy.labels.landingViews,
+    bricOrders: copy.labels.bricOrders,
+  };
+  return labels[key] ?? key.replaceAll('_', ' ');
+}
+
+function fulfillmentPhaseLabel(copy: Analytics2Copy, phase: string) {
+  const labels = copy.fulfillmentPhases as Record<string, string>;
+  return labels[phase] ?? phase.replaceAll('_', ' ');
 }
 
 function formatMetric(locale: string, metric: Pick<Analytics2Metric, 'value' | 'unit'>) {
@@ -181,16 +178,6 @@ function formatMetric(locale: string, metric: Pick<Analytics2Metric, 'value' | '
   }
 }
 
-function formatDate(locale: string, value: string | null | undefined, short = true) {
-  if (!value) return '—';
-  const date = new Date(`${value.slice(0, 10)}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(
-    locale,
-    short ? { month: 'short', day: 'numeric' } : { dateStyle: 'medium' },
-  ).format(date);
-}
-
 function MetricStrip({
   metrics,
   copy,
@@ -201,50 +188,50 @@ function MetricStrip({
   locale: string;
 }) {
   return (
-    <div className="grid grid-cols-2 border-b border-border/60 sm:[grid-template-columns:repeat(auto-fit,minmax(9rem,1fr))]">
+    <AnalyticsMetricStrip>
       {metrics.map((item) => {
         const rising = item.changePct != null && item.changePct >= 0;
         const positive =
           item.goodWhen === 'neutral' ? null : item.goodWhen === 'down' ? !rising : rising;
         return (
-          <div
+          <AnalyticsMetricCell
             key={item.key}
-            className="min-w-0 border-b border-border/45 px-4 py-4 sm:border-e lg:border-b-0"
-          >
-            <p className="truncate text-xs font-medium text-muted-foreground">
-              {copy.metrics[item.key as keyof typeof copy.metrics] ?? item.key}
-            </p>
-            <div className="mt-1.5 flex items-end gap-2">
-              <strong className="truncate text-xl font-semibold tracking-[-0.035em] sm:text-2xl">
-                {formatMetric(locale, item)}
-              </strong>
-              {item.changePct != null ? (
-                <span
-                  className={cn(
-                    'mb-0.5 inline-flex items-center text-xs font-medium tabular-nums',
-                    positive == null
-                      ? 'text-muted-foreground'
-                      : positive
-                        ? 'text-emerald-600 dark:text-emerald-400'
-                        : 'text-rose-600 dark:text-rose-400',
-                  )}
-                >
-                  {rising ? (
-                    <ArrowUpRight className="size-3" />
-                  ) : (
-                    <ArrowDownRight className="size-3" />
-                  )}
-                  {formatPercent(locale, Math.abs(item.changePct))}
-                </span>
-              ) : null}
-            </div>
-            <p className="mt-1 truncate text-[11px] text-muted-foreground/75">
-              {item.previous == null ? copy.noComparison : copy.previousPeriod}
-            </p>
-          </div>
+            label={copy.metrics[item.key as keyof typeof copy.metrics] ?? item.key}
+            value={
+              <div className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-end sm:gap-2">
+                <strong className="max-w-full whitespace-nowrap text-lg font-semibold tracking-[-0.035em] tabular-nums sm:text-2xl">
+                  {formatMetric(locale, item)}
+                </strong>
+                {item.changePct != null ? (
+                  <span
+                    className={cn(
+                      'mb-0.5 inline-flex items-center text-xs font-medium tabular-nums',
+                      positive == null
+                        ? 'text-muted-foreground'
+                        : positive
+                          ? 'text-emerald-700 dark:text-emerald-400'
+                          : 'text-rose-700 dark:text-rose-400',
+                    )}
+                  >
+                    {rising ? (
+                      <ArrowUpRight className="size-3" />
+                    ) : (
+                      <ArrowDownRight className="size-3" />
+                    )}
+                    {formatPercent(locale, Math.abs(item.changePct))}
+                  </span>
+                ) : null}
+              </div>
+            }
+            detail={
+              <p className="truncate text-muted-foreground/75">
+                {item.previous == null ? copy.noComparison : copy.previousPeriod}
+              </p>
+            }
+          />
         );
       })}
-    </div>
+    </AnalyticsMetricStrip>
   );
 }
 
@@ -280,24 +267,12 @@ function Section({
     ),
   );
   return (
-    <section
-      data-analytics-ai-focus={analyticsFocus?.dimension}
-      data-analytics-ai-active={active || undefined}
-      className={cn(
-        'min-w-0 border-b border-border/60 px-4 py-6 sm:px-6',
-        active && 'bg-primary/[0.018]',
-        className,
-      )}
-    >
-      <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold tracking-[-0.015em]">{title}</h2>
-          {description ? (
-            <p className="mt-1 max-w-3xl text-sm leading-5 text-muted-foreground">{description}</p>
-          ) : null}
-        </div>
-        {action || analyticsFocus ? (
-          <div className="flex flex-wrap items-center gap-2">
+    <AnalyticsSection
+      title={title}
+      description={description}
+      action={
+        action || analyticsFocus ? (
+          <>
             {action}
             {analyticsFocus ? (
               <Button
@@ -317,22 +292,16 @@ function Section({
                 {getAnalytics2Copy(locale).askAi}
               </Button>
             ) : null}
-          </div>
-        ) : null}
-      </header>
+          </>
+        ) : null
+      }
+      data-analytics-ai-focus={analyticsFocus?.dimension}
+      data-analytics-ai-active={active || undefined}
+      className={cn(active && 'bg-primary/[0.018]', className)}
+    >
       {children}
-    </section>
+    </AnalyticsSection>
   );
-}
-
-function ChartFrame({
-  children,
-  className = 'h-[19rem]',
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return <div className={cn('min-w-0 overflow-hidden', className)}>{children}</div>;
 }
 
 export function splitPartialSeries(
@@ -419,18 +388,11 @@ function chartTooltip(
 }
 
 function DenseTable({ children, className }: { children: React.ReactNode; className?: string }) {
+  const locale = useLocale();
   return (
-    <div className={cn('max-h-[34rem] min-w-0 overflow-auto', className)}>
-      <table className="w-full min-w-[46rem] border-collapse text-sm">{children}</table>
-    </div>
-  );
-}
-
-function TableHead({ children }: { children: React.ReactNode }) {
-  return (
-    <thead className="sticky top-0 z-10 border-y border-border/60 bg-background/95 text-start text-[11px] uppercase tracking-[0.08em] text-muted-foreground backdrop-blur">
+    <AnalyticsDenseTable label={getAnalytics2Copy(locale).exactRows} className={className}>
       {children}
-    </thead>
+    </AnalyticsDenseTable>
   );
 }
 
@@ -539,9 +501,11 @@ function WarningRail({
 
 function Funnel({
   rows,
+  copy,
   locale,
 }: {
   rows: Array<{ key?: string; name?: string; value: number }>;
+  copy: Analytics2Copy;
   locale: string;
 }) {
   const max = Math.max(1, ...rows.map((row) => row.value));
@@ -552,7 +516,9 @@ function Funnel({
           key={row.key ?? row.name ?? index}
           className="grid grid-cols-[7rem_1fr_auto] items-center gap-3 text-sm"
         >
-          <span className="truncate text-muted-foreground">{row.name ?? row.key}</span>
+          <span className="truncate text-muted-foreground">
+            {funnelLabel(copy, row.name ?? row.key ?? '')}
+          </span>
           <span className="h-2 overflow-hidden rounded-full bg-muted">
             <span
               className="block h-full rounded-full bg-primary/70"
@@ -587,7 +553,12 @@ function CashPipeline({
   if (!visibleRows.length) return null;
 
   return (
-    <div className="grid snap-x snap-mandatory grid-flow-col auto-cols-[minmax(14rem,80vw)] overflow-x-auto border-y border-border/60 sm:snap-none sm:grid-flow-row sm:auto-cols-auto sm:grid-cols-2 sm:overflow-visible xl:flex">
+    <div
+      role="region"
+      aria-label={copy.sections.cashPipeline}
+      tabIndex={0}
+      className="grid snap-x snap-mandatory grid-flow-col auto-cols-[minmax(14rem,80vw)] overflow-x-auto border-y border-border/60 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/30 sm:snap-none sm:grid-flow-row sm:auto-cols-auto sm:grid-cols-2 sm:overflow-visible xl:flex"
+    >
       {visibleRows.map((row) => (
         <div
           key={row.key}
@@ -700,19 +671,19 @@ function CommandView({
               <b className="text-foreground">
                 {formatMoney(locale, data.forecast.nextSevenDayTrueProfitDzd)}
               </b>{' '}
-              next 7-day model
+              {copy.labels.nextSevenDayModel}
             </span>
             <span>
               <b className="text-foreground">
                 {formatPercent(locale, data.economics.coverage.projectedCoveragePct)}
               </b>{' '}
-              purchase-cost coverage
+              {copy.metrics.paidProfitCoverage}
             </span>
             <span>
               <b className="text-foreground">
                 {formatMoney(locale, data.economics.automaticPaid.summary.profitDzd)}
               </b>{' '}
-              automatic paid profit
+              {copy.metrics.automaticPaidProfit}
             </span>
           </div>
         </Section>
@@ -759,7 +730,7 @@ function CommandView({
             title={copy.sections.commerceFunnel}
             analyticsFocus={{ dimension: 'cash_pipeline' }}
           >
-            <Funnel rows={data.fulfillment.funnel} locale={locale} />
+            <Funnel rows={data.fulfillment.funnel} copy={copy} locale={locale} />
           </Section>
         </div>
       </div>
@@ -881,10 +852,15 @@ function MoneyView({
               ) : null}
               {mode === 'realized' ? (
                 <>
-                  <Bar dataKey="feesDzd" name="EcoTrack fee" fill="#d97706" opacity={0.45} />
+                  <Bar
+                    dataKey="feesDzd"
+                    name={copy.labels.ecoTrackFee}
+                    fill="#d97706"
+                    opacity={0.45}
+                  />
                   <ActualOpenLine
                     dataKey="codDzd"
-                    name="Paid COD"
+                    name={copy.labels.paidCod}
                     stroke="#2563eb"
                     strokeWidth={1.6}
                   />
@@ -919,15 +895,18 @@ function MoneyView({
       <Section title={copy.sections.paidEconomics} analyticsFocus={{ dimension: 'paid_timeline' }}>
         <div className="mb-4 grid grid-cols-2 border-y border-border/60 lg:grid-cols-5">
           {[
-            ['Paid COD', formatMoney(locale, data.automaticPaid.summary.codDzd)],
-            ['Estimated fees', formatMoney(locale, data.automaticPaid.summary.feesDzd)],
-            ['Net recovered', formatMoney(locale, data.automaticPaid.summary.netRecoveredDzd)],
+            [copy.labels.paidCod, formatMoney(locale, data.automaticPaid.summary.codDzd)],
+            [copy.labels.estimatedFees, formatMoney(locale, data.automaticPaid.summary.feesDzd)],
+            [
+              copy.labels.netRecovered,
+              formatMoney(locale, data.automaticPaid.summary.netRecoveredDzd),
+            ],
             [
               copy.metrics.automaticPaidProfit,
               formatMoney(locale, data.automaticPaid.summary.profitDzd),
             ],
             [
-              'Exact cost coverage',
+              copy.metrics.paidProfitCoverage,
               formatPercent(locale, data.automaticPaid.summary.profitCoveragePct),
             ],
           ].map(([label, value]) => (
@@ -942,11 +921,11 @@ function MoneyView({
             <tr>
               <th className="px-3 py-2 text-start">{copy.columns.date}</th>
               <th className="px-3 py-2 text-end">{copy.columns.paid}</th>
-              <th className="px-3 py-2 text-end">COD</th>
-              <th className="px-3 py-2 text-end">Fees</th>
+              <th className="px-3 py-2 text-end">{copy.labels.cod}</th>
+              <th className="px-3 py-2 text-end">{copy.labels.fees}</th>
               <th className="px-3 py-2 text-end">{copy.columns.profit}</th>
               <th className="px-3 py-2 text-end">{copy.columns.coverage}</th>
-              <th className="px-3 py-2 text-end">Provider COD</th>
+              <th className="px-3 py-2 text-end">{copy.labels.providerCod}</th>
             </tr>
           </TableHead>
           <tbody className="divide-y divide-border/45">
@@ -957,7 +936,7 @@ function MoneyView({
               .map((row) => (
                 <tr key={row.bucket}>
                   <td className="px-3 py-2.5 font-medium">
-                    {formatDate(locale, row.bucket, false)}
+                    {formatDate(locale, row.bucket, { long: true })}
                   </td>
                   <td className="px-3 py-2.5 text-end tabular-nums">
                     {formatNumber(locale, row.paidOrders)}
@@ -987,7 +966,10 @@ function MoneyView({
           </tbody>
         </DenseTable>
       </Section>
-      <Section title="Profit maturation" analyticsFocus={{ dimension: 'posting_cohorts' }}>
+      <Section
+        title={copy.labels.profitMaturation}
+        analyticsFocus={{ dimension: 'posting_cohorts' }}
+      >
         <ChartFrame className="h-[22rem]">
           <ResponsiveChart width="100%" height="100%">
             <ComposedChart
@@ -1012,40 +994,40 @@ function MoneyView({
               <Tooltip {...chartTooltip(locale, 'money')} />
               <Bar
                 dataKey="projectedTrueProfitDzd"
-                name="Projected true profit"
+                name={copy.labels.projectedTrueProfit}
                 fill="#7c3aed"
                 opacity={0.32}
               />
               <Bar
                 dataKey="deliveredTrueProfitDzd"
-                name="Delivered true profit"
+                name={copy.labels.deliveredTrueProfit}
                 fill="#2563eb"
                 opacity={0.5}
               />
-              <Bar dataKey="paidTrueProfitDzd" name="Paid true profit" fill="#0f766e" />
+              <Bar dataKey="paidTrueProfitDzd" name={copy.labels.paidTrueProfit} fill="#0f766e" />
             </ComposedChart>
           </ResponsiveChart>
         </ChartFrame>
         <DenseTable className="mt-5">
           <TableHead>
             <tr>
-              <th className="px-3 py-2 text-start">Posting week</th>
-              <th className="px-3 py-2 text-end">Posted</th>
-              <th className="px-3 py-2 text-end">Delivered</th>
-              <th className="px-3 py-2 text-end">Paid</th>
-              <th className="px-3 py-2 text-end">Projected</th>
-              <th className="px-3 py-2 text-end">Paid profit</th>
-              <th className="px-3 py-2 text-end">Variance</th>
-              <th className="px-3 py-2 text-end">Maturity</th>
+              <th className="px-3 py-2 text-start">{copy.labels.postingWeek}</th>
+              <th className="px-3 py-2 text-end">{copy.labels.posted}</th>
+              <th className="px-3 py-2 text-end">{copy.labels.delivered}</th>
+              <th className="px-3 py-2 text-end">{copy.labels.paid}</th>
+              <th className="px-3 py-2 text-end">{copy.labels.projected}</th>
+              <th className="px-3 py-2 text-end">{copy.labels.paidProfit}</th>
+              <th className="px-3 py-2 text-end">{copy.labels.variance}</th>
+              <th className="px-3 py-2 text-end">{copy.labels.maturity}</th>
             </tr>
           </TableHead>
           <tbody className="divide-y divide-border/45">
             {data.cohorts.slice(0, 18).map((cohort: DataOf<'money'>['cohorts'][number]) => (
               <tr key={cohort.weekStart} className={!cohort.mature ? 'bg-amber-500/5' : undefined}>
                 <td className="px-3 py-2.5 font-medium">
-                  {formatDate(locale, cohort.weekStart, false)}
+                  {formatDate(locale, cohort.weekStart, { long: true })}
                   {!cohort.mature ? (
-                    <span className="ms-2 text-[10px] text-amber-700">Open</span>
+                    <span className="ms-2 text-[10px] text-amber-700">{copy.labels.open}</span>
                   ) : null}
                 </td>
                 <td className="px-3 py-2.5 text-end tabular-nums">
@@ -1102,7 +1084,7 @@ function MoneyView({
               {data.weeks.slice(0, 12).map((week) => (
                 <tr key={week.weekStart}>
                   <td className="px-3 py-2.5 font-medium">
-                    {formatDate(locale, week.weekStart, false)}
+                    {formatDate(locale, week.weekStart, { long: true })}
                     {week.isPartial ? (
                       <span className="ms-2 text-[10px] text-amber-700">{copy.partialPeriod}</span>
                     ) : null}
@@ -1148,14 +1130,14 @@ function MoneyView({
                 <Tooltip {...chartTooltip(locale, 'money')} />
                 <Area
                   dataKey="upperTrueProfitDzd"
-                  name="Upper"
+                  name={copy.labels.upper}
                   fill="#7c3aed"
                   fillOpacity={0.08}
                   stroke="none"
                 />
                 <Area
                   dataKey="lowerTrueProfitDzd"
-                  name="Lower"
+                  name={copy.labels.lower}
                   fill="var(--background)"
                   stroke="none"
                 />
@@ -1197,7 +1179,7 @@ function MoneyView({
               .map((row) => (
                 <tr key={row.bucket} className={row.isPartial ? 'bg-amber-500/5' : undefined}>
                   <td className="px-3 py-2.5 font-medium">
-                    {formatDate(locale, row.bucket, false)}
+                    {formatDate(locale, row.bucket, { long: true })}
                     {row.isPartial ? (
                       <span className="ms-2 text-[10px] text-amber-700">{copy.partialPeriod}</span>
                     ) : null}
@@ -1323,7 +1305,7 @@ function AcquisitionView({
         body: JSON.stringify({ since: filters.startDate, until: filters.endDate }),
       }),
     onSuccess: async () => {
-      toast.success('Meta insights synchronized.');
+      toast.success(copy.labels.metaInsightsSynchronized);
       await queryClient.invalidateQueries({ queryKey: ['stats-workspace'] });
     },
     onError: (error: Error) => toast.error(error.message),
@@ -1359,13 +1341,13 @@ function AcquisitionView({
                 <ReferenceLine y={1} stroke="#e11d48" strokeDasharray="5 4" />
                 <ActualOpenLine
                   dataKey="profitXBeforeReturns"
-                  name="Before returns"
+                  name={copy.labels.beforeReturns}
                   stroke="#64748b"
                   strokeWidth={1.7}
                 />
                 <ActualOpenLine
                   dataKey="profitX"
-                  name="After returns"
+                  name={copy.labels.afterReturns}
                   stroke="#7c3aed"
                   strokeWidth={2.4}
                 />
@@ -1396,7 +1378,13 @@ function AcquisitionView({
                   fontSize={11}
                 />
                 <Tooltip {...chartTooltip(locale)} />
-                <Bar yAxisId="cpm" dataKey="cpmEur" name="CPM EUR" fill="#d97706" opacity={0.45} />
+                <Bar
+                  yAxisId="cpm"
+                  dataKey="cpmEur"
+                  name={copy.labels.cpmEur}
+                  fill="#d97706"
+                  opacity={0.45}
+                />
                 <Line
                   yAxisId="ctr"
                   type="monotone"
@@ -1420,35 +1408,36 @@ function AcquisitionView({
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(16rem,0.7fr)]">
             <Funnel
               rows={[
-                { name: 'Played', value: data.summary.videoPlays },
+                { name: copy.labels.played, value: data.summary.videoPlays },
                 { name: '25%', value: data.summary.videoP25Watched },
                 { name: '50%', value: data.summary.videoP50Watched },
                 { name: '75%', value: data.summary.videoP75Watched },
-                { name: 'Completed', value: data.summary.videoP100Watched },
+                { name: copy.labels.completed, value: data.summary.videoP100Watched },
               ]}
+              copy={copy}
               locale={locale}
             />
             <dl className="grid grid-cols-2 gap-x-5 gap-y-4 border-t border-border/60 pt-6 text-sm lg:border-s lg:border-t-0 lg:ps-6 lg:pt-0">
               <div>
-                <dt className="text-muted-foreground">Play rate</dt>
+                <dt className="text-muted-foreground">{copy.labels.playRate}</dt>
                 <dd className="mt-1 text-lg font-semibold">
                   {formatPercent(locale, data.summary.videoPlayRatePct)}
                 </dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Completion</dt>
+                <dt className="text-muted-foreground">{copy.labels.completion}</dt>
                 <dd className="mt-1 text-lg font-semibold">
                   {formatPercent(locale, data.summary.videoCompletionRatePct)}
                 </dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Average watch</dt>
+                <dt className="text-muted-foreground">{copy.labels.averageWatch}</dt>
                 <dd className="mt-1 text-lg font-semibold">
                   {formatNumber(locale, data.summary.videoAverageWatchSeconds)} s
                 </dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Outbound CTR</dt>
+                <dt className="text-muted-foreground">{copy.labels.outboundCtr}</dt>
                 <dd className="mt-1 text-lg font-semibold">
                   {formatPercent(locale, data.summary.outboundCtrPct)}
                 </dd>
@@ -1459,40 +1448,40 @@ function AcquisitionView({
       ) : null}
       <Section title={copy.sections.paidFunnel} analyticsFocus={{ dimension: 'paid_funnel' }}>
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(16rem,0.7fr)]">
-          <Funnel rows={data.funnel} locale={locale} />
+          <Funnel rows={data.funnel} copy={copy} locale={locale} />
           <dl className="grid grid-cols-2 gap-x-5 gap-y-4 border-t border-border/60 pt-6 text-sm lg:border-s lg:border-t-0 lg:ps-6 lg:pt-0">
             <div>
-              <dt className="text-muted-foreground">Confirmation rate</dt>
+              <dt className="text-muted-foreground">{copy.labels.confirmationRate}</dt>
               <dd className="mt-1 text-lg font-semibold">
                 {formatPercent(locale, data.efficiency.confirmationRatePct)}
               </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Click → page</dt>
+              <dt className="text-muted-foreground">{copy.labels.clickToPage}</dt>
               <dd className="mt-1 text-lg font-semibold">
                 {formatPercent(locale, data.efficiency.clickToPageRatePct)}
               </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Meta purchases</dt>
+              <dt className="text-muted-foreground">{copy.labels.metaPurchases}</dt>
               <dd className="mt-1 text-lg font-semibold">
                 {formatNumber(locale, data.summary.metaPurchases)}
               </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">First-party orders</dt>
+              <dt className="text-muted-foreground">{copy.labels.firstPartyOrders}</dt>
               <dd className="mt-1 text-lg font-semibold">
                 {formatNumber(locale, data.summary.bricOrders)}
               </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Exact ad-ID coverage</dt>
+              <dt className="text-muted-foreground">{copy.labels.exactAdIdCoverage}</dt>
               <dd className="mt-1 text-lg font-semibold">
                 {formatPercent(locale, data.efficiency.exactAdAttributionCoveragePct)}
               </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Outcome maturity</dt>
+              <dt className="text-muted-foreground">{copy.labels.outcomeMaturity}</dt>
               <dd className="mt-1 text-lg font-semibold">
                 {formatPercent(locale, data.efficiency.outcomeMaturityPct)}
               </dd>
@@ -1500,7 +1489,10 @@ function AcquisitionView({
           </dl>
         </div>
       </Section>
-      <Section title="Campaign maturation" analyticsFocus={{ dimension: 'attribution_maturation' }}>
+      <Section
+        title={copy.labels.campaignMaturation}
+        analyticsFocus={{ dimension: 'attribution_maturation' }}
+      >
         {maturationCampaigns.length ? (
           <>
             <div className="mb-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
@@ -1662,9 +1654,9 @@ function AcquisitionView({
               <th className="px-3 py-2 text-end">{copy.columns.spend}</th>
               <th className="px-3 py-2 text-end">{copy.columns.outboundCtr}</th>
               <th className="px-3 py-2 text-end">{copy.columns.posted}</th>
-              <th className="px-3 py-2 text-end">Cost / posted</th>
-              <th className="px-3 py-2 text-end">Cost / delivered</th>
-              <th className="px-3 py-2 text-end">Cost / paid</th>
+              <th className="px-3 py-2 text-end">{copy.labels.costPerPosted}</th>
+              <th className="px-3 py-2 text-end">{copy.labels.costPerDelivered}</th>
+              <th className="px-3 py-2 text-end">{copy.labels.costPerPaid}</th>
             </tr>
           </TableHead>
           <tbody className="divide-y divide-border/45">
@@ -1712,7 +1704,8 @@ function AcquisitionView({
                     {formatMoney(locale, entity.adCostDzd)}
                     {entity.outcomeSpendCoveragePct != null ? (
                       <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                        {formatPercent(locale, entity.outcomeSpendCoveragePct)} outcome window
+                        {formatPercent(locale, entity.outcomeSpendCoveragePct)}{' '}
+                        {copy.labels.outcomeWindow}
                       </span>
                     ) : null}
                   </td>
@@ -1743,27 +1736,29 @@ function AcquisitionView({
       >
         <details className="border-y border-border/60 py-3">
           <summary className="cursor-pointer text-sm font-medium">
-            {copy.sections.trackingHealth} ·{' '}
-            {formatNumber(
-              locale,
-              data.trackingHealth.events.reduce((sum, row) => sum + row.total, 0),
-            )}{' '}
-            events
+            {data.trackingHealth.available
+              ? `${copy.sections.trackingHealth} · ${formatNumber(
+                  locale,
+                  data.trackingHealth.events.reduce((sum, row) => sum + row.total, 0),
+                )} ${copy.labels.events}`
+              : `${copy.sections.trackingHealth} · ${copy.labels.unavailable}`}
           </summary>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {data.trackingHealth.events.slice(0, 12).map((event) => (
-              <div key={event.name}>
-                <p className="text-xs text-muted-foreground">{event.name}</p>
-                <p className="mt-1 font-semibold tabular-nums">
-                  {formatNumber(locale, event.total)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  CAPI {formatNumber(locale, event.capiDelivered)} /{' '}
-                  {formatNumber(locale, event.capiFailed)} failed
-                </p>
-              </div>
-            ))}
-          </div>
+          {data.trackingHealth.available ? (
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {data.trackingHealth.events.slice(0, 12).map((event) => (
+                <div key={event.name}>
+                  <p className="text-xs text-muted-foreground">{event.name}</p>
+                  <p className="mt-1 font-semibold tabular-nums">
+                    {formatNumber(locale, event.total)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    CAPI {formatNumber(locale, event.capiDelivered)} /{' '}
+                    {formatNumber(locale, event.capiFailed)} {copy.labels.failed}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </details>
       </Section>
       <SidePanel
@@ -1778,40 +1773,46 @@ function AcquisitionView({
         {inspected ? (
           <div className="divide-y divide-border/60">
             {[
-              ['Meta spend', formatEur(locale, inspected.spendEur)],
-              ['Ad cost DZD', formatMoney(locale, inspected.adCostDzd)],
-              ['Outcome-window cost', formatMoney(locale, inspected.attributedAdCostDzd)],
-              ['Outcome spend coverage', formatPercent(locale, inspected.outcomeSpendCoveragePct)],
-              ['Impressions', formatNumber(locale, inspected.impressions)],
-              ['Outbound clicks', formatNumber(locale, inspected.outboundClicks)],
-              ['Unique outbound', formatNumber(locale, inspected.uniqueOutboundClicks)],
-              ['Outbound CTR', formatPercent(locale, inspected.outboundCtrPct)],
-              ['Landing views', formatNumber(locale, inspected.landingPageViews)],
-              ['Landing-view rate', formatPercent(locale, inspected.landingViewRatePct)],
-              ['Video plays', formatNumber(locale, inspected.videoPlays)],
-              ['Video completion', formatPercent(locale, inspected.videoCompletionRatePct)],
+              [copy.labels.metaSpend, formatEur(locale, inspected.spendEur)],
+              [copy.labels.adCostDzd, formatMoney(locale, inspected.adCostDzd)],
+              [copy.labels.outcomeWindowCost, formatMoney(locale, inspected.attributedAdCostDzd)],
               [
-                'Average watch',
+                copy.labels.outcomeSpendCoverage,
+                formatPercent(locale, inspected.outcomeSpendCoveragePct),
+              ],
+              [copy.labels.impressions, formatNumber(locale, inspected.impressions)],
+              [copy.labels.outboundClicks, formatNumber(locale, inspected.outboundClicks)],
+              [copy.labels.uniqueOutbound, formatNumber(locale, inspected.uniqueOutboundClicks)],
+              [copy.labels.outboundCtr, formatPercent(locale, inspected.outboundCtrPct)],
+              [copy.labels.landingViews, formatNumber(locale, inspected.landingPageViews)],
+              [copy.labels.landingViewRate, formatPercent(locale, inspected.landingViewRatePct)],
+              [copy.labels.videoPlays, formatNumber(locale, inspected.videoPlays)],
+              [
+                copy.labels.videoCompletion,
+                formatPercent(locale, inspected.videoCompletionRatePct),
+              ],
+              [
+                copy.labels.averageWatch,
                 inspected.videoAverageWatchSeconds == null
                   ? '—'
                   : `${formatNumber(locale, inspected.videoAverageWatchSeconds)} s`,
               ],
-              ['Quality ranking', inspected.qualityRanking ?? '—'],
-              ['Engagement ranking', inspected.engagementRateRanking ?? '—'],
-              ['Conversion ranking', inspected.conversionRateRanking ?? '—'],
-              ['Meta purchases', formatNumber(locale, inspected.metaPurchases)],
-              ['Bric orders', formatNumber(locale, inspected.bricOrders)],
-              ['Confirmed', formatNumber(locale, inspected.confirmedOrders)],
-              ['Posted', formatNumber(locale, inspected.postedOrders)],
-              ['Delivered', formatNumber(locale, inspected.deliveredOrders)],
-              ['Paid', formatNumber(locale, inspected.paidOrders)],
-              ['Returned', formatNumber(locale, inspected.returnedOrders)],
-              ['Cost / posted', formatMoney(locale, inspected.costPerPostedDzd)],
-              ['Cost / delivered', formatMoney(locale, inspected.costPerDeliveredDzd)],
-              ['Cost / paid', formatMoney(locale, inspected.costPerPaidDzd)],
-              ['Projected Profit ×', formatRatio(locale, inspected.projectedProfitX)],
-              ['Paid Profit ×', formatRatio(locale, inspected.paidProfitX)],
-              ['Profit coverage', formatPercent(locale, inspected.profitCoveragePct)],
+              [copy.labels.qualityRanking, inspected.qualityRanking ?? '—'],
+              [copy.labels.engagementRanking, inspected.engagementRateRanking ?? '—'],
+              [copy.labels.conversionRanking, inspected.conversionRateRanking ?? '—'],
+              [copy.labels.metaPurchases, formatNumber(locale, inspected.metaPurchases)],
+              [copy.labels.bricOrders, formatNumber(locale, inspected.bricOrders)],
+              [copy.labels.confirmed, formatNumber(locale, inspected.confirmedOrders)],
+              [copy.labels.posted, formatNumber(locale, inspected.postedOrders)],
+              [copy.labels.delivered, formatNumber(locale, inspected.deliveredOrders)],
+              [copy.labels.paid, formatNumber(locale, inspected.paidOrders)],
+              [copy.labels.returned, formatNumber(locale, inspected.returnedOrders)],
+              [copy.labels.costPerPosted, formatMoney(locale, inspected.costPerPostedDzd)],
+              [copy.labels.costPerDelivered, formatMoney(locale, inspected.costPerDeliveredDzd)],
+              [copy.labels.costPerPaid, formatMoney(locale, inspected.costPerPaidDzd)],
+              [copy.labels.projectedProfitX, formatRatio(locale, inspected.projectedProfitX)],
+              [copy.labels.paidProfitX, formatRatio(locale, inspected.paidProfitX)],
+              [copy.labels.profitCoverage, formatPercent(locale, inspected.profitCoveragePct)],
             ].map(([label, value]) => (
               <div
                 key={label}
@@ -1844,7 +1845,7 @@ function ReturnEvidence({
         <p className="mt-1 text-2xl font-semibold">
           {formatPercent(locale, returns.planningRatePct)}
         </p>
-        <p className="mt-1 text-xs text-muted-foreground">Manual model input</p>
+        <p className="mt-1 text-xs text-muted-foreground">{copy.labels.manualModelInput}</p>
       </div>
       <div className="px-4 py-4">
         <p className="text-xs text-muted-foreground">{copy.returnCopy.mature}</p>
@@ -1852,14 +1853,14 @@ function ReturnEvidence({
           {formatPercent(locale, returns.mature.ratePct)}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          {formatNumber(locale, returns.mature.terminal)} terminal /{' '}
-          {formatNumber(locale, returns.mature.eligibleOrders)} eligible ·{' '}
-          {formatPercent(locale, returns.mature.terminalCoveragePct)} resolved
+          {formatNumber(locale, returns.mature.terminal)} {copy.labels.terminal} /{' '}
+          {formatNumber(locale, returns.mature.eligibleOrders)} {copy.labels.eligible} ·{' '}
+          {formatPercent(locale, returns.mature.terminalCoveragePct)} {copy.labels.resolved}
         </p>
         {returns.mature.cohortStartDate && returns.mature.cohortEndDate ? (
           <p className="mt-1 text-[11px] text-muted-foreground/75">
             {formatDate(locale, returns.mature.cohortStartDate)}–
-            {formatDate(locale, returns.mature.cohortEndDate)} posting cohorts
+            {formatDate(locale, returns.mature.cohortEndDate)} {copy.labels.postingCohorts}
           </p>
         ) : null}
       </div>
@@ -1869,7 +1870,7 @@ function ReturnEvidence({
           {formatPercent(locale, returns.allTerminal.ratePct)}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          {formatNumber(locale, returns.allTerminal.terminal)} terminal orders
+          {formatNumber(locale, returns.allTerminal.terminal)} {copy.labels.terminalOrders}
         </p>
       </div>
     </div>
@@ -1908,7 +1909,7 @@ function FulfillmentView({
         analyticsFocus={{ dimension: 'shipment_states' }}
       >
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,1fr)]">
-          <Funnel rows={phases} locale={locale} />
+          <Funnel rows={phases} copy={copy} locale={locale} />
           <ReturnEvidence returns={data.returns} copy={copy} locale={locale} />
         </div>
       </Section>
@@ -1934,7 +1935,9 @@ function FulfillmentView({
                 <tr key={row.status}>
                   <td className="px-3 py-2.5">
                     <p className="font-medium">{row.status.replaceAll('_', ' ')}</p>
-                    <p className="text-xs capitalize text-muted-foreground">{row.phase}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {fulfillmentPhaseLabel(copy, row.phase)}
+                    </p>
                   </td>
                   <td className="px-3 py-2.5 text-end tabular-nums">
                     {formatNumber(locale, row.orders)}
@@ -1981,7 +1984,7 @@ function FulfillmentView({
                 <Bar
                   dataKey="active"
                   stackId="outcome"
-                  name="Active"
+                  name={copy.labels.active}
                   fill="#d97706"
                   opacity={0.65}
                 />
@@ -1994,7 +1997,7 @@ function FulfillmentView({
             <ResponsiveChart width="100%" height="100%">
               <ComposedChart
                 data={['0', '1', '2', '3', '4+'].map((band) => ({
-                  band: band === '0' ? 'No event' : band,
+                  band: band === '0' ? copy.labels.noEvent : band,
                   paid:
                     data.attempts.find(
                       (row: AttemptRow) => row.band === band && row.outcome === 'paid',
@@ -2051,6 +2054,7 @@ function StorefrontView({
           DataOf<'storefront'>,
           | 'metrics'
           | 'funnel'
+          | 'funnelRange'
           | 'paths'
           | 'trend'
           | 'acquisitionSources'
@@ -2128,7 +2132,7 @@ function StorefrontView({
                   yAxisId="outcome"
                   type="monotone"
                   dataKey="errors"
-                  name="Errors"
+                  name={copy.labels.errors}
                   stroke="#e11d48"
                   strokeWidth={1.6}
                   dot={false}
@@ -2139,15 +2143,13 @@ function StorefrontView({
         </Section>
         <Section
           title={copy.sections.siteFunnel}
+          description={`${formatDate(locale, viewData.funnelRange.startDate, { long: true })} – ${formatDate(locale, viewData.funnelRange.endDate, { long: true })}`}
           analyticsFocus={{ dimension: 'storefront_funnel' }}
         >
-          <Funnel
-            rows={viewData.funnel.map((row: { name: string; value: number }) => row)}
-            locale={locale}
-          />
+          <Funnel rows={viewData.funnel} copy={copy} locale={locale} />
           <div className="mt-6 grid grid-cols-2 gap-4 border-t border-border/50 pt-4 text-sm">
             <div>
-              <p className="text-muted-foreground">Product-view → cart sessions</p>
+              <p className="text-muted-foreground">{copy.labels.productViewToCartSessions}</p>
               <p className="mt-1 text-lg font-semibold">
                 {formatPercent(
                   locale,
@@ -2156,7 +2158,7 @@ function StorefrontView({
               </p>
             </div>
             <div>
-              <p className="text-muted-foreground">Checkout → submitted order</p>
+              <p className="text-muted-foreground">{copy.labels.checkoutToSubmittedOrder}</p>
               <p className="mt-1 text-lg font-semibold">
                 {formatPercent(
                   locale,
@@ -2171,13 +2173,13 @@ function StorefrontView({
         <Section
           title={copy.sections.paths}
           analyticsFocus={{ dimension: 'storefront_paths' }}
-          description={`${formatDate(locale, viewData.paths.coverageStartDate, false)} – ${formatDate(locale, viewData.paths.coverageEndDate, false)} raw-event window`}
+          description={`${formatDate(locale, viewData.paths.coverageStartDate, { long: true })} – ${formatDate(locale, viewData.paths.coverageEndDate, { long: true })} · ${copy.labels.rawEventWindow}`}
         >
           <DenseTable>
             <TableHead>
               <tr>
-                <th className="px-3 py-2 text-start">From</th>
-                <th className="px-3 py-2 text-start">To</th>
+                <th className="px-3 py-2 text-start">{copy.labels.from}</th>
+                <th className="px-3 py-2 text-start">{copy.labels.to}</th>
                 <th className="px-3 py-2 text-end">{copy.columns.sessions}</th>
               </tr>
             </TableHead>
@@ -2206,7 +2208,7 @@ function StorefrontView({
                   key={row.term}
                   className="grid grid-cols-[1fr_auto_auto] items-center gap-4 py-2.5 text-sm"
                 >
-                  <span className="truncate font-medium">{row.term || '(empty)'}</span>
+                  <span className="truncate font-medium">{row.term || copy.labels.empty}</span>
                   <span className="tabular-nums text-muted-foreground">
                     {formatNumber(locale, row.searches)}
                   </span>
@@ -2216,7 +2218,7 @@ function StorefrontView({
                       row.zeroResults > 0 && 'text-amber-700 dark:text-amber-400',
                     )}
                   >
-                    {formatNumber(locale, row.zeroResults)} zero
+                    {formatNumber(locale, row.zeroResults)} {copy.labels.zeroResultsShort}
                   </span>
                 </div>
               ))}
@@ -2293,6 +2295,7 @@ function StorefrontView({
                 name: string;
                 samples: number;
                 average: number;
+                p75?: number;
                 good: number;
                 needsImprovement: number;
                 poor: number;
@@ -2300,11 +2303,13 @@ function StorefrontView({
                 <div key={vital.name} className="px-4 py-4">
                   <p className="text-xs font-medium text-muted-foreground">{vital.name}</p>
                   <p className="mt-1 text-xl font-semibold">
-                    {formatNumber(locale, vital.average)}
+                    {vital.name === 'CLS'
+                      ? (vital.p75 ?? vital.average).toFixed(3)
+                      : `${formatNumber(locale, vital.p75 ?? vital.average)} ms`}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {formatNumber(locale, vital.samples)} samples ·{' '}
-                    {formatNumber(locale, vital.poor)} poor
+                    p75 · {formatNumber(locale, vital.samples)} {copy.labels.samples} ·{' '}
+                    {formatNumber(locale, vital.poor)} {copy.labels.poor}
                   </p>
                 </div>
               ),
@@ -2327,7 +2332,7 @@ function StorefrontView({
                   >
                     <span className="font-medium">{source.name}</span>
                     <span className="tabular-nums text-muted-foreground">
-                      {formatNumber(locale, source.sessions)} sessions
+                      {formatNumber(locale, source.sessions)} {copy.labels.sessions}
                     </span>
                     <span className="min-w-16 text-end font-medium tabular-nums">
                       {formatPercent(locale, source.conversionRate)}
@@ -2338,17 +2343,17 @@ function StorefrontView({
           </div>
         </Section>
         <Section
-          title="AI-assisted shopping"
+          title={copy.labels.aiAssistedShopping}
           analyticsFocus={{ dimension: 'storefront_assistant' }}
         >
           <dl className="divide-y divide-border/50 border-y border-border/60 text-sm">
             {[
-              ['Opens', viewData.aiAssistant.opens],
-              ['Messages', viewData.aiAssistant.messages],
-              ['Result clicks', viewData.aiAssistant.resultClicks],
-              ['Influenced orders', viewData.aiAssistant.influencedOrders],
-              ['Confirmed', viewData.aiAssistant.confirmedOrders],
-              ['Paid', viewData.aiAssistant.paidOrders],
+              [copy.labels.opens, viewData.aiAssistant.opens],
+              [copy.labels.messages, viewData.aiAssistant.messages],
+              [copy.labels.resultClicks, viewData.aiAssistant.resultClicks],
+              [copy.labels.influencedOrders, viewData.aiAssistant.influencedOrders],
+              [copy.labels.confirmed, viewData.aiAssistant.confirmedOrders],
+              [copy.labels.paid, viewData.aiAssistant.paidOrders],
             ].map(([label, value]) => (
               <div key={String(label)} className="flex items-center justify-between py-2.5">
                 <dt className="text-muted-foreground">{label}</dt>
@@ -2410,9 +2415,10 @@ function SearchVisibilityView({
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['stats-workspace', 'search'] });
-      toast.success('Google Search data synchronized');
+      toast.success(copy.labels.googleSearchSynchronized);
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Sync failed'),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : copy.labels.syncFailed),
   });
   const inspectionIssues = data.indexHealth.issues;
   return (
@@ -2433,7 +2439,7 @@ function SearchVisibilityView({
             ) : (
               <RefreshCw className="size-3.5" />
             )}
-            {sync.isPending ? copy.syncing : 'Sync Google'}
+            {sync.isPending ? copy.syncing : copy.labels.syncGoogle}
           </Button>
         }
       >
@@ -2506,10 +2512,14 @@ function SearchVisibilityView({
                 >
                   <span className="line-clamp-2 text-sm font-medium">{row.query}</span>
                   <span className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                    <span>{formatNumber(locale, row.impressions)} impressions</span>
-                    <span>position {formatNumber(locale, row.position)}</span>
+                    <span>
+                      {formatNumber(locale, row.impressions)} {copy.labels.impressions}
+                    </span>
+                    <span>
+                      {copy.labels.position} {formatNumber(locale, row.position)}
+                    </span>
                     <span className="font-medium text-foreground">
-                      +{formatNumber(locale, row.potentialClicks)} clicks
+                      +{formatNumber(locale, row.potentialClicks)} {copy.labels.clicks}
                     </span>
                   </span>
                 </button>
@@ -2519,7 +2529,7 @@ function SearchVisibilityView({
               <TableHead>
                 <tr>
                   <th className="px-3 py-2 text-start">{copy.columns.query}</th>
-                  <th className="px-3 py-2 text-start">Opportunity</th>
+                  <th className="px-3 py-2 text-start">{copy.labels.opportunity}</th>
                   <th className="px-3 py-2 text-end">{copy.columns.impressions}</th>
                   <th className="px-3 py-2 text-end">{copy.columns.clicks}</th>
                   <th className="px-3 py-2 text-end">{copy.columns.ctr}</th>
@@ -2537,15 +2547,16 @@ function SearchVisibilityView({
                     <td className="max-w-md px-3 py-2.5">
                       <p className="truncate font-medium">{row.query}</p>
                       <p className="text-xs text-muted-foreground">
-                        {row.pages} ranking pages · {row.branded ? 'brand' : 'discovery'}
+                        {formatNumber(locale, row.pages)} {copy.labels.rankingPages} ·{' '}
+                        {row.branded ? copy.labels.brand : copy.labels.discovery}
                       </p>
                     </td>
                     <td className="px-3 py-2.5 text-xs text-muted-foreground">
                       {row.opportunity === 'strikingDistance'
-                        ? 'Near page one'
+                        ? copy.labels.nearPageOne
                         : row.opportunity === 'ctrGap'
-                          ? 'CTR gap'
-                          : 'Content gap'}
+                          ? copy.labels.ctrGap
+                          : copy.labels.contentGap}
                     </td>
                     <td className="px-3 py-2.5 text-end tabular-nums">
                       {formatNumber(locale, row.impressions)}
@@ -2580,7 +2591,7 @@ function SearchVisibilityView({
           dimension: 'search_pages',
           search: selectedPage?.path ?? null,
         }}
-        description="Landing pages as Google sees them. Select a row to inspect the queries creating its visibility."
+        description={copy.labels.searchLandingPagesDescription}
       >
         <div className="divide-y divide-border/50 border-y border-border/60 md:hidden">
           {data.pages.slice(0, 40).map((row: SearchPage) => (
@@ -2590,11 +2601,17 @@ function SearchVisibilityView({
               className="block w-full py-3 text-start"
               onClick={() => setSelectedPage(row)}
             >
-              <span className="block truncate text-sm font-medium">{row.path}</span>
+              <span className="block truncate text-sm font-medium">{row.label}</span>
               <span className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span>{formatNumber(locale, row.clicks)} clicks</span>
-                <span>{formatNumber(locale, row.impressions)} impressions</span>
-                <span>position {formatNumber(locale, row.position)}</span>
+                <span>
+                  {formatNumber(locale, row.clicks)} {copy.labels.clicks}
+                </span>
+                <span>
+                  {formatNumber(locale, row.impressions)} {copy.labels.impressions}
+                </span>
+                <span>
+                  {copy.labels.position} {formatNumber(locale, row.position)}
+                </span>
               </span>
             </button>
           ))}
@@ -2607,7 +2624,7 @@ function SearchVisibilityView({
               <th className="px-3 py-2 text-end">{copy.columns.impressions}</th>
               <th className="px-3 py-2 text-end">{copy.columns.ctr}</th>
               <th className="px-3 py-2 text-end">{copy.columns.position}</th>
-              <th className="px-3 py-2 text-end">Queries</th>
+              <th className="px-3 py-2 text-end">{copy.labels.queries}</th>
             </tr>
           </TableHead>
           <tbody className="divide-y divide-border/45">
@@ -2618,7 +2635,7 @@ function SearchVisibilityView({
                 onClick={() => setSelectedPage(row)}
               >
                 <td className="max-w-lg px-3 py-2.5">
-                  <p className="truncate font-medium">{row.path}</p>
+                  <p className="truncate font-medium">{row.label}</p>
                 </td>
                 <td className="px-3 py-2.5 text-end tabular-nums">
                   {formatNumber(locale, row.clicks)}
@@ -2645,8 +2662,8 @@ function SearchVisibilityView({
         <Section title={copy.sections.searchMix}>
           <div className="grid gap-7 sm:grid-cols-2">
             {[
-              ['Devices', data.devices, 'device'],
-              ['Countries', data.countries.slice(0, 8), 'country'],
+              [copy.labels.devices, data.devices, 'device'],
+              [copy.labels.countries, data.countries.slice(0, 8), 'country'],
             ].map(([title, rows, field]) => (
               <div key={String(title)}>
                 <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
@@ -2676,15 +2693,15 @@ function SearchVisibilityView({
           {data.appearances.length ? (
             <div className="mt-7">
               <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                Search appearance
+                {copy.labels.searchAppearance}
               </p>
               <div className="mt-2 flex flex-wrap gap-x-6 gap-y-2 border-y border-border/60 py-3 text-sm">
                 {data.appearances.map((row) => (
                   <span key={row.appearance}>
                     <strong>{row.appearance.replaceAll('_', ' ')}</strong>{' '}
                     <span className="text-muted-foreground">
-                      {formatNumber(locale, row.clicks)} clicks ·{' '}
-                      {formatNumber(locale, row.impressions)} impressions
+                      {formatNumber(locale, row.clicks)} {copy.labels.clicks} ·{' '}
+                      {formatNumber(locale, row.impressions)} {copy.labels.impressions}
                     </span>
                   </span>
                 ))}
@@ -2700,13 +2717,15 @@ function SearchVisibilityView({
             {data.indexHealth.sitemaps.map((sitemap) => (
               <div key={sitemap.path} className="py-3 text-sm">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="truncate font-medium">Sitemap</span>
+                  <span className="truncate font-medium">{copy.labels.sitemap}</span>
                   <strong className="tabular-nums">
-                    {formatNumber(locale, sitemap.submittedUrls)} URLs
+                    {formatNumber(locale, sitemap.submittedUrls)} {copy.labels.urls}
                   </strong>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {sitemap.errors} errors · {sitemap.warnings} warnings · downloaded{' '}
+                  {formatNumber(locale, sitemap.errors)} {copy.labels.errors.toLowerCase()} ·{' '}
+                  {formatNumber(locale, sitemap.warnings)} {copy.labels.warnings} ·{' '}
+                  {copy.labels.downloaded}{' '}
                   {sitemap.lastDownloadedAt
                     ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(
                         new Date(sitemap.lastDownloadedAt),
@@ -2717,7 +2736,7 @@ function SearchVisibilityView({
             ))}
             <div className="py-3 text-sm">
               <div className="flex items-center justify-between gap-3">
-                <span className="font-medium">Inspected sample</span>
+                <span className="font-medium">{copy.labels.inspectedSample}</span>
                 <strong>{data.indexHealth.inspections.length}</strong>
               </div>
               <p
@@ -2728,9 +2747,11 @@ function SearchVisibilityView({
                     : 'text-muted-foreground',
                 )}
               >
-                {inspectionIssues.length
-                  ? `${inspectionIssues.length} pages need review`
-                  : 'No actionable issue in the current sample'}
+                {!data.indexHealth.inspections.length
+                  ? copy.labels.noUrlsInspected
+                  : inspectionIssues.length
+                    ? `${formatNumber(locale, inspectionIssues.length)} ${copy.labels.pagesNeedReview}`
+                    : copy.labels.noActionableIssue}
               </p>
             </div>
           </div>
@@ -2755,20 +2776,20 @@ function SearchVisibilityView({
           if (!open) setSelectedQuery(null);
         }}
         title={selectedQuery?.query ?? ''}
-        description="Search opportunity evidence"
+        description={copy.labels.searchOpportunityEvidence}
         closeLabel={copy.close}
       >
         {selectedQuery ? (
           <div className="space-y-6 px-5 py-5">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-xs text-muted-foreground">Current CTR</p>
+                <p className="text-xs text-muted-foreground">{copy.labels.currentCtr}</p>
                 <p className="mt-1 text-xl font-semibold">
                   {formatPercent(locale, selectedQuery.ctrPct)}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Comparable CTR</p>
+                <p className="text-xs text-muted-foreground">{copy.labels.comparableCtr}</p>
                 <p className="mt-1 text-xl font-semibold">
                   {formatPercent(locale, selectedQuery.benchmarkCtrPct)}
                 </p>
@@ -2776,15 +2797,15 @@ function SearchVisibilityView({
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                Ranking pages
+                {copy.labels.rankingPages}
               </p>
               <div className="mt-2 divide-y divide-border/50 border-y border-border/60">
                 {selectedQuery.topPages.map((page) => (
                   <div key={page.page} className="py-3">
                     <p className="break-all text-sm font-medium">{page.path}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {formatNumber(locale, page.clicks)} clicks ·{' '}
-                      {formatNumber(locale, page.impressions)} impressions
+                      {formatNumber(locale, page.clicks)} {copy.labels.clicks} ·{' '}
+                      {formatNumber(locale, page.impressions)} {copy.labels.impressions}
                     </p>
                   </div>
                 ))}
@@ -2799,7 +2820,7 @@ function SearchVisibilityView({
           if (!open) setSelectedPage(null);
         }}
         title={selectedPage?.path ?? ''}
-        description="Google landing-page evidence"
+        description={copy.labels.googleLandingPageEvidence}
         closeLabel={copy.close}
       >
         {selectedPage ? (
@@ -2810,15 +2831,15 @@ function SearchVisibilityView({
               rel="noreferrer"
               className="text-sm font-medium text-primary hover:underline"
             >
-              Open public page
+              {copy.labels.openPublicPage}
             </a>
             <div className="divide-y divide-border/50 border-y border-border/60">
               {selectedPage.topQueries.map((query) => (
                 <div key={query.query} className="py-3">
                   <p className="text-sm font-medium">{query.query}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {formatNumber(locale, query.clicks)} clicks ·{' '}
-                    {formatNumber(locale, query.impressions)} impressions
+                    {formatNumber(locale, query.clicks)} {copy.labels.clicks} ·{' '}
+                    {formatNumber(locale, query.impressions)} {copy.labels.impressions}
                   </p>
                 </div>
               ))}
@@ -2844,10 +2865,12 @@ function ProductScatterTooltip({
   active,
   payload,
   locale,
+  copy,
 }: {
   active?: boolean;
   payload?: Array<{ payload?: ProductScatterPoint }>;
   locale: string;
+  copy: Analytics2Copy;
 }) {
   const product = payload?.[0]?.payload;
   if (!active || !product) return null;
@@ -2855,20 +2878,20 @@ function ProductScatterTooltip({
     <div className="min-w-56 border border-border/70 bg-background/95 p-3 text-xs shadow-lg">
       <p className="max-w-72 font-semibold leading-5">{product.title}</p>
       <div className="mt-2 grid grid-cols-2 gap-x-5 gap-y-1.5 text-muted-foreground">
-        <span>Product views</span>
+        <span>{copy.labels.productViews}</span>
         <strong className="text-end text-foreground tabular-nums">
           {formatNumber(locale, product.viewCount)}
         </strong>
-        <span>Terminal paid</span>
+        <span>{copy.labels.terminalPaid}</span>
         <strong className="text-end text-foreground tabular-nums">
           {formatPercent(locale, product.terminalPaidRatePct)}
         </strong>
-        <span>Paid / returned</span>
+        <span>{copy.labels.paidReturned}</span>
         <strong className="text-end text-foreground tabular-nums">
           {formatNumber(locale, product.paidOrders)} /{' '}
           {formatNumber(locale, product.returnedOrders)}
         </strong>
-        <span>Still active</span>
+        <span>{copy.labels.stillActive}</span>
         <strong className="text-end text-foreground tabular-nums">
           {formatNumber(locale, product.activeOrders)}
         </strong>
@@ -2981,31 +3004,27 @@ function CatalogView({
           identifiers: selected ? [selected.id] : [],
         }}
         action={
-          <label className="relative w-full sm:w-72">
-            <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="ps-9"
-              placeholder="Search product, SKU or category"
-            />
-          </label>
+          <SearchField
+            value={search}
+            placeholder={copy.labels.searchProduct}
+            className="sm:w-72"
+            onChange={setSearch}
+          />
         }
       >
         <div className="mb-5" data-product-outcome-plot>
           <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-2 px-2 text-[11px] text-muted-foreground sm:px-3">
-            <span>Views →</span>
-            <span>Paid outcome ↑</span>
-            <span>Bubble · resolved orders</span>
+            <span>{copy.labels.scatterViews}</span>
+            <span>{copy.labels.scatterPaidOutcome}</span>
+            <span>{copy.labels.bubbleResolvedOrders}</span>
             {portfolioPaidRatePct != null ? (
               <>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="size-2 rounded-full bg-teal-700" /> Above{' '}
+                  <span className="size-2 rounded-full bg-teal-700" /> {copy.labels.above}{' '}
                   {formatPercent(locale, portfolioPaidRatePct)}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="size-2 rounded-full bg-amber-600" /> Below{' '}
+                  <span className="size-2 rounded-full bg-amber-600" /> {copy.labels.below}{' '}
                   {formatPercent(locale, portfolioPaidRatePct)}
                 </span>
               </>
@@ -3030,7 +3049,7 @@ function CatalogView({
                   <YAxis
                     type="number"
                     dataKey="y"
-                    name="Terminal paid rate"
+                    name={copy.labels.terminalPaidRate}
                     domain={[paidRateDomainMinimum, 105]}
                     ticks={paidRateTicks}
                     tickFormatter={(value) => `${value}%`}
@@ -3050,7 +3069,7 @@ function CatalogView({
                   ) : null}
                   <Tooltip
                     cursor={{ strokeDasharray: '3 3' }}
-                    content={<ProductScatterTooltip locale={locale} />}
+                    content={<ProductScatterTooltip locale={locale} copy={copy} />}
                   />
                   <Scatter data={scatter} fill="#7c3aed">
                     {scatter.map((row: ProductScatterPoint) => (
@@ -3069,7 +3088,7 @@ function CatalogView({
             </ChartFrame>
           ) : (
             <div className="flex h-48 items-center justify-center border-y border-border/50 text-sm text-muted-foreground">
-              Not enough resolved product outcomes for a reliable comparison.
+              {copy.labels.insufficientProductOutcomes}
             </div>
           )}
         </div>
@@ -3084,8 +3103,9 @@ function CatalogView({
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium">{product.title}</span>
                 <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                  {formatNumber(locale, product.postedUnits)} posted ·{' '}
-                  {formatPercent(locale, product.terminalPaidRatePct)} terminal paid
+                  {formatNumber(locale, product.postedUnits)} {copy.labels.posted.toLowerCase()} ·{' '}
+                  {formatPercent(locale, product.terminalPaidRatePct)}{' '}
+                  {copy.labels.terminalPaid.toLowerCase()}
                 </span>
               </span>
               <span className="text-end">
@@ -3104,11 +3124,11 @@ function CatalogView({
             <tr>
               <th className="px-3 py-2 text-start">{copy.columns.name}</th>
               <th className="px-3 py-2 text-end">{copy.columns.views}</th>
-              <th className="px-3 py-2 text-end">Posted units</th>
+              <th className="px-3 py-2 text-end">{copy.labels.postedUnits}</th>
               <th className="px-3 py-2 text-end">{copy.columns.paid}</th>
-              <th className="px-3 py-2 text-end">Terminal paid</th>
-              <th className="px-3 py-2 text-end">Projected contribution</th>
-              <th className="px-3 py-2 text-end">Delivery</th>
+              <th className="px-3 py-2 text-end">{copy.labels.terminalPaid}</th>
+              <th className="px-3 py-2 text-end">{copy.labels.projectedContribution}</th>
+              <th className="px-3 py-2 text-end">{copy.labels.delivery}</th>
             </tr>
           </TableHead>
           <tbody className="divide-y divide-border/45">
@@ -3121,7 +3141,8 @@ function CatalogView({
                 <td className="max-w-80 px-3 py-2.5">
                   <p className="truncate font-medium">{product.title}</p>
                   <p className="truncate text-xs text-muted-foreground">
-                    {product.sku ?? 'No SKU'} · {product.categoryName ?? 'Uncategorized'}
+                    {product.sku ?? copy.labels.noSku} ·{' '}
+                    {product.categoryName ?? copy.labels.uncategorized}
                   </p>
                 </td>
                 <td className="px-3 py-2.5 text-end tabular-nums">
@@ -3160,10 +3181,10 @@ function CatalogView({
           <div className="mt-6 border-y border-border/60">
             <div className="flex items-center justify-between py-3">
               <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                Meta-reported regions
+                {copy.labels.metaReportedRegions}
               </p>
               <p className="text-[11px] text-muted-foreground">
-                Aggregate media geography · not joined to customer wilayas
+                {copy.labels.aggregateMediaGeography}
               </p>
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4">
@@ -3174,7 +3195,7 @@ function CatalogView({
                     <p className="truncate text-sm font-medium">{region.name}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {formatEur(locale, region.spendEur)} ·{' '}
-                      {formatPercent(locale, region.outboundCtrPct)} outbound CTR
+                      {formatPercent(locale, region.outboundCtrPct)} {copy.labels.outboundCtr}
                     </p>
                   </div>
                 ))}
@@ -3185,12 +3206,12 @@ function CatalogView({
           <DenseTable>
             <TableHead>
               <tr>
-                <th className="px-3 py-2 text-start">Wilaya</th>
-                <th className="px-3 py-2 text-end">Posted</th>
-                <th className="px-3 py-2 text-end">Terminal paid</th>
-                <th className="px-3 py-2 text-end">Delivery</th>
-                <th className="px-3 py-2 text-end">Attempts</th>
-                <th className="px-3 py-2 text-end">Pipeline COD</th>
+                <th className="px-3 py-2 text-start">{copy.labels.wilaya}</th>
+                <th className="px-3 py-2 text-end">{copy.labels.posted}</th>
+                <th className="px-3 py-2 text-end">{copy.labels.terminalPaid}</th>
+                <th className="px-3 py-2 text-end">{copy.labels.delivery}</th>
+                <th className="px-3 py-2 text-end">{copy.labels.attempts}</th>
+                <th className="px-3 py-2 text-end">{copy.labels.pipelineCod}</th>
               </tr>
             </TableHead>
             <tbody className="divide-y divide-border/45">
@@ -3201,7 +3222,7 @@ function CatalogView({
                     {formatNumber(locale, wilaya.postedOrders)}
                     {wilaya.untrackedOrders > 0 ? (
                       <span className="mt-0.5 block text-[10px] text-amber-700 dark:text-amber-400">
-                        {formatNumber(locale, wilaya.untrackedOrders)} untracked
+                        {formatNumber(locale, wilaya.untrackedOrders)} {copy.labels.untracked}
                       </span>
                     ) : null}
                   </td>
@@ -3218,7 +3239,8 @@ function CatalogView({
                     {formatMoney(locale, wilaya.pipelineCodDzd)}
                     {wilaya.pipelineCodDzd > 0 ? (
                       <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">
-                        {formatPercent(locale, wilaya.providerAmountValueCoveragePct)} provider
+                        {formatPercent(locale, wilaya.providerAmountValueCoveragePct)}{' '}
+                        {copy.labels.provider}
                       </span>
                     ) : null}
                   </td>
@@ -3229,12 +3251,12 @@ function CatalogView({
           <DenseTable>
             <TableHead>
               <tr>
-                <th className="px-3 py-2 text-start">Commune</th>
-                <th className="px-3 py-2 text-start">Wilaya</th>
-                <th className="px-3 py-2 text-end">Posted</th>
-                <th className="px-3 py-2 text-end">Terminal paid</th>
-                <th className="px-3 py-2 text-end">Delivery</th>
-                <th className="px-3 py-2 text-end">Attempts</th>
+                <th className="px-3 py-2 text-start">{copy.labels.commune}</th>
+                <th className="px-3 py-2 text-start">{copy.labels.wilaya}</th>
+                <th className="px-3 py-2 text-end">{copy.labels.posted}</th>
+                <th className="px-3 py-2 text-end">{copy.labels.terminalPaid}</th>
+                <th className="px-3 py-2 text-end">{copy.labels.delivery}</th>
+                <th className="px-3 py-2 text-end">{copy.labels.attempts}</th>
               </tr>
             </TableHead>
             <tbody className="divide-y divide-border/45">
@@ -3286,9 +3308,9 @@ function CatalogView({
         <Section title={copy.sections.customerBase} analyticsFocus={{ dimension: 'customers' }}>
           <div className="grid grid-cols-2 border-y border-border/60">
             {[
-              ['Customers', formatNumber(locale, data.customers.summary.customers)],
+              [copy.labels.customers, formatNumber(locale, data.customers.summary.customers)],
               [
-                'Second-order conversion',
+                copy.labels.secondOrderConversion,
                 formatPercent(locale, data.customers.summary.secondOrderConversionPct),
               ],
             ].map(([label, value]) => (
@@ -3301,13 +3323,13 @@ function CatalogView({
           <DenseTable className="mt-5">
             <TableHead>
               <tr>
-                <th className="px-3 py-2 text-start">Customer</th>
-                <th className="px-3 py-2 text-start">City</th>
-                <th className="px-3 py-2 text-end">Submitted</th>
-                <th className="px-3 py-2 text-end">Paid</th>
-                <th className="px-3 py-2 text-end">Paid revenue</th>
-                <th className="px-3 py-2 text-end">Contribution</th>
-                <th className="px-3 py-2 text-end">Margin</th>
+                <th className="px-3 py-2 text-start">{copy.labels.customer}</th>
+                <th className="px-3 py-2 text-start">{copy.labels.city}</th>
+                <th className="px-3 py-2 text-end">{copy.labels.submitted}</th>
+                <th className="px-3 py-2 text-end">{copy.labels.paid}</th>
+                <th className="px-3 py-2 text-end">{copy.labels.paidRevenue}</th>
+                <th className="px-3 py-2 text-end">{copy.labels.contribution}</th>
+                <th className="px-3 py-2 text-end">{copy.labels.margin}</th>
               </tr>
             </TableHead>
             <tbody className="divide-y divide-border/45">
@@ -3361,15 +3383,18 @@ function CatalogView({
             <div className="grid grid-cols-2 gap-4 p-5">
               {[
                 [copy.columns.views, formatNumber(locale, selected.viewCount)],
-                ['Posted orders', formatNumber(locale, selected.postedOrders)],
-                ['Posted units', formatNumber(locale, selected.postedUnits)],
-                ['Paid orders', formatNumber(locale, selected.paidOrders)],
-                ['Returned orders', formatNumber(locale, selected.returnedOrders)],
-                ['Still active', formatNumber(locale, selected.activeOrders)],
-                ['Terminal paid rate', formatPercent(locale, selected.terminalPaidRatePct)],
-                ['Cost coverage', formatPercent(locale, selected.costCoveragePct)],
-                ['Projected contribution', formatMoney(locale, selected.projectedContributionDzd)],
-                ['Median delivery', formatHours(locale, selected.deliveryMedianHours)],
+                [copy.labels.postedOrders, formatNumber(locale, selected.postedOrders)],
+                [copy.labels.postedUnits, formatNumber(locale, selected.postedUnits)],
+                [copy.labels.paidOrders, formatNumber(locale, selected.paidOrders)],
+                [copy.labels.returnedOrders, formatNumber(locale, selected.returnedOrders)],
+                [copy.labels.stillActive, formatNumber(locale, selected.activeOrders)],
+                [copy.labels.terminalPaidRate, formatPercent(locale, selected.terminalPaidRatePct)],
+                [copy.labels.costCoverage, formatPercent(locale, selected.costCoveragePct)],
+                [
+                  copy.labels.projectedContribution,
+                  formatMoney(locale, selected.projectedContributionDzd),
+                ],
+                [copy.labels.medianDelivery, formatHours(locale, selected.deliveryMedianHours)],
                 [copy.columns.conversion, formatPercent(locale, selected.websiteConversionRate)],
               ].map(([label, value]) => (
                 <div key={label}>
@@ -3380,7 +3405,7 @@ function CatalogView({
             </div>
             <div className="p-5">
               <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                Exact Meta associations
+                {copy.labels.exactMetaAssociations}
               </p>
               {selected.metaAssociations.length ? (
                 <div className="mt-3 divide-y divide-border/50 border-y border-border/60">
@@ -3394,8 +3419,11 @@ function CatalogView({
                           {association.adName ?? association.adId}
                         </p>
                         <p className="truncate text-xs text-muted-foreground">
-                          {association.campaignName ?? association.campaignId ?? 'Unknown campaign'}{' '}
-                          · {association.adsetName ?? association.adsetId ?? 'Unknown ad set'}
+                          {association.campaignName ??
+                            association.campaignId ??
+                            copy.labels.unknownCampaign}{' '}
+                          ·{' '}
+                          {association.adsetName ?? association.adsetId ?? copy.labels.unknownAdSet}
                         </p>
                       </div>
                       <div className="text-end">
@@ -3403,7 +3431,8 @@ function CatalogView({
                           {formatNumber(locale, association.attributedOrders)}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {formatNumber(locale, association.paidOrders)} paid
+                          {formatNumber(locale, association.paidOrders)}{' '}
+                          {copy.labels.paid.toLowerCase()}
                         </p>
                       </div>
                     </div>
@@ -3411,17 +3440,17 @@ function CatalogView({
                 </div>
               ) : (
                 <p className="mt-3 text-sm text-muted-foreground">
-                  No exact ad-ID association in this range.
+                  {copy.labels.noExactAdAssociation}
                 </p>
               )}
             </div>
             <div className="p-5">
               <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                Period change
+                {copy.labels.periodChange}
               </p>
               <div className="mt-3">
                 <div>
-                  <p className="text-xs text-muted-foreground">Units</p>
+                  <p className="text-xs text-muted-foreground">{copy.labels.units}</p>
                   <p className="mt-1 font-semibold">
                     {formatPercent(locale, selected.changes.unitsPct)}
                   </p>
@@ -3439,6 +3468,13 @@ function nullableField(value: string) {
   if (!value.trim()) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function assumptionSourceLabel(copy: Analytics2Copy, value: string | null | undefined) {
+  if (value === 'automatic' || value === 'manual' || value === 'missing') {
+    return copy.assumptions[value];
+  }
+  return copy.assumptions.missing;
 }
 
 function AssumptionsView({
@@ -3549,7 +3585,7 @@ function AssumptionsView({
         }),
       }),
     onSuccess: async () => {
-      toast.success('Assumptions saved.');
+      toast.success(copy.labels.assumptionsSaved);
       await invalidate();
     },
     onError: (error: Error) => toast.error(error.message),
@@ -3572,7 +3608,9 @@ function AssumptionsView({
         },
       ),
     onSuccess: async () => {
-      toast.success(editingCostId ? 'Operating cost updated.' : 'Operating cost added.');
+      toast.success(
+        editingCostId ? copy.labels.operatingCostUpdated : copy.labels.operatingCostAdded,
+      );
       setShowCostForm(false);
       setEditingCostId(null);
       setCostDraft({
@@ -3590,7 +3628,7 @@ function AssumptionsView({
     mutationFn: (id: number) =>
       request(`/api/stats/profit-tracker/costs/${id}`, { method: 'DELETE' }),
     onSuccess: async () => {
-      toast.success('Operating cost removed.');
+      toast.success(copy.labels.operatingCostRemoved);
       await invalidate();
     },
     onError: (error: Error) => toast.error(error.message),
@@ -3608,7 +3646,7 @@ function AssumptionsView({
         }),
       }),
     onSuccess: async () => {
-      toast.success('Daily override saved.');
+      toast.success(copy.labels.dailyOverrideSaved);
       setSelectedDate(null);
       await invalidate();
     },
@@ -3618,7 +3656,7 @@ function AssumptionsView({
     mutationFn: () =>
       request(`/api/stats/profit-tracker/days/${selectedDate}`, { method: 'DELETE' }),
     onSuccess: async () => {
-      toast.success('Daily values returned to automatic sources.');
+      toast.success(copy.labels.dailyValuesReset);
       setSelectedDate(null);
       await invalidate();
     },
@@ -3663,7 +3701,7 @@ function AssumptionsView({
         </div>
       </Section>
       <div className="grid xl:grid-cols-[minmax(20rem,0.75fr)_minmax(0,1.25fr)]">
-        <Section title="Economic controls">
+        <Section title={copy.labels.economicControls}>
           <div className="space-y-4">
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
@@ -3759,7 +3797,9 @@ function AssumptionsView({
                 />
               </label>
               <label>
-                <span className="mb-1 block text-xs text-muted-foreground">Period</span>
+                <span className="mb-1 block text-xs text-muted-foreground">
+                  {copy.labels.period}
+                </span>
                 <NativeSelect
                   value={costDraft.period}
                   onChange={(event) =>
@@ -3824,7 +3864,7 @@ function AssumptionsView({
             <TableHead>
               <tr>
                 <th className="px-3 py-2 text-start">{copy.columns.name}</th>
-                <th className="px-3 py-2 text-start">Period</th>
+                <th className="px-3 py-2 text-start">{copy.labels.period}</th>
                 <th className="px-3 py-2 text-end">{copy.assumptions.amount}</th>
                 <th className="px-3 py-2 text-start">{copy.columns.date}</th>
                 <th className="w-12 px-3 py-2" />
@@ -3838,13 +3878,15 @@ function AssumptionsView({
                   onClick={() => openCost(cost)}
                 >
                   <td className="px-3 py-2.5 font-medium">{cost.name}</td>
-                  <td className="px-3 py-2.5 capitalize text-muted-foreground">{cost.period}</td>
+                  <td className="px-3 py-2.5 text-muted-foreground">
+                    {copy.assumptions[cost.period]}
+                  </td>
                   <td className="px-3 py-2.5 text-end tabular-nums">
                     {formatMoney(locale, cost.amountDzd)}
                   </td>
                   <td className="px-3 py-2.5">
-                    {formatDate(locale, cost.startDate, false)}
-                    {cost.endDate ? ` – ${formatDate(locale, cost.endDate, false)}` : ''}
+                    {formatDate(locale, cost.startDate, { long: true })}
+                    {cost.endDate ? ` – ${formatDate(locale, cost.endDate, { long: true })}` : ''}
                   </td>
                   <td className="px-3 py-2.5 text-end">
                     {cost.id ? (
@@ -3896,7 +3938,7 @@ function AssumptionsView({
               <th className="px-3 py-2 text-start">{copy.columns.date}</th>
               <th className="px-3 py-2 text-end">{copy.columns.grossProfit}</th>
               <th className="px-3 py-2 text-start">{copy.columns.source}</th>
-              <th className="px-3 py-2 text-end">Return %</th>
+              <th className="px-3 py-2 text-end">{copy.labels.returnPercent}</th>
               <th className="px-3 py-2 text-start">{copy.columns.source}</th>
               <th className="px-3 py-2 text-end">{copy.columns.confirmed}</th>
               <th className="px-3 py-2 text-start">{copy.columns.source}</th>
@@ -3910,24 +3952,26 @@ function AssumptionsView({
                 className="cursor-pointer hover:bg-muted/25"
                 onClick={() => openDayOverride(day)}
               >
-                <td className="px-3 py-2.5 font-medium">{formatDate(locale, day.date, false)}</td>
+                <td className="px-3 py-2.5 font-medium">
+                  {formatDate(locale, day.date, { long: true })}
+                </td>
                 <td className="px-3 py-2.5 text-end tabular-nums">
                   {formatMoney(locale, day.grossProfitDzd)}
                 </td>
                 <td className="px-3 py-2.5 text-xs capitalize text-muted-foreground">
-                  {day.grossProfitSource}
+                  {assumptionSourceLabel(copy, day.grossProfitSource)}
                 </td>
                 <td className="px-3 py-2.5 text-end tabular-nums">
                   {formatPercent(locale, day.returnRatePct)}
                 </td>
                 <td className="px-3 py-2.5 text-xs capitalize text-muted-foreground">
-                  {day.returnRateSource}
+                  {assumptionSourceLabel(copy, day.returnRateSource)}
                 </td>
                 <td className="px-3 py-2.5 text-end tabular-nums">
                   {formatNumber(locale, day.confirmedOrders)}
                 </td>
                 <td className="px-3 py-2.5 text-xs capitalize text-muted-foreground">
-                  {day.confirmedOrdersSource}
+                  {assumptionSourceLabel(copy, day.confirmedOrdersSource)}
                 </td>
                 <td className="max-w-56 truncate px-3 py-2.5 text-muted-foreground">
                   {day.note || '—'}
@@ -3941,7 +3985,17 @@ function AssumptionsView({
         <div className="divide-y divide-border/50 border-y border-border/60 font-mono text-xs">
           {Object.entries(data.formula).map(([key, value]) => (
             <div key={key} className="grid gap-1 py-3 sm:grid-cols-[9rem_1fr]">
-              <span className="font-sans font-medium text-foreground">{key}</span>
+              <span className="font-sans font-medium text-foreground">
+                {key === 'adCost'
+                  ? copy.columns.adCost
+                  : key === 'adjustedProfit'
+                    ? copy.columns.adjustedProfit
+                    : key === 'netProfit'
+                      ? copy.columns.netProfit
+                      : key === 'profitX'
+                        ? copy.columns.profitX
+                        : copy.columns.trueProfit}
+              </span>
               <code className="overflow-x-auto text-muted-foreground">{value}</code>
             </div>
           ))}
@@ -3952,8 +4006,8 @@ function AssumptionsView({
         onOpenChange={(open) => {
           if (!open) setSelectedDate(null);
         }}
-        title={`${copy.assumptions.newOverride} · ${formatDate(locale, selectedDate, false)}`}
-        description="Blank fields defer independently to the automatic source."
+        title={`${copy.assumptions.newOverride} · ${formatDate(locale, selectedDate, { long: true })}`}
+        description={copy.labels.blankFieldsDefer}
         closeLabel={copy.close}
         footer={
           <div className="flex w-full flex-wrap justify-between gap-2">
@@ -4044,6 +4098,8 @@ export function StatsWorkspace({ initialData }: { initialData: Analytics2Payload
   const copy = getAnalytics2Copy(locale);
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [initialDataReceivedAt] = useState(() => Date.now());
   const [filters, setFilters] = useState(() => ({
     view: initialData.filters.view,
     range: initialData.filters.range,
@@ -4080,8 +4136,16 @@ export function StatsWorkspace({ initialData }: { initialData: Analytics2Payload
         filters.endDate === initialData.filters.endDate));
 
   useEffect(() => {
-    router.replace(`${pathname}?${routeSearchParams.toString()}`, { scroll: false });
-  }, [pathname, routeSearchParams, router]);
+    const currentQuery = searchParams.toString();
+    const usesDefaultFilters = filters.range === '30d' && filters.grain === 'auto';
+    // Keep the clean route canonical for the default view. Replacing it with
+    // explicit defaults on hydration starts an otherwise identical RSC render
+    // and repeats the most expensive analytics query.
+    if (!currentQuery && usesDefaultFilters) return;
+    const normalizedQuery = routeSearchParams.toString();
+    if (currentQuery === normalizedQuery) return;
+    router.replace(`${pathname}?${normalizedQuery}`, { scroll: false });
+  }, [filters.grain, filters.range, pathname, routeSearchParams, router, searchParams]);
 
   const analyticsQuery = useQuery({
     queryKey: [
@@ -4097,7 +4161,7 @@ export function StatsWorkspace({ initialData }: { initialData: Analytics2Payload
         signal,
       }).then((response) => response.data),
     initialData: matchesInitialQuery ? initialData : undefined,
-    initialDataUpdatedAt: matchesInitialQuery ? Date.parse(initialData.generatedAt) : undefined,
+    initialDataUpdatedAt: matchesInitialQuery ? initialDataReceivedAt : undefined,
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
@@ -4204,94 +4268,35 @@ export function StatsWorkspace({ initialData }: { initialData: Analytics2Payload
         </WorkspaceActions>
       </WorkspaceHeader>
       <WorkspaceToolbar>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="hidden flex-wrap gap-1 lg:flex">
-            {rangeKeys.map((range) => (
-              <button
-                key={range}
-                type="button"
-                onClick={() => selectRange(range)}
-                className={cn(
-                  'rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-                  rangeChoice === range
-                    ? 'bg-foreground text-background'
-                    : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-                )}
-              >
-                {copy.ranges[range]}
-              </button>
-            ))}
-          </div>
-          <NativeSelect
-            aria-label="Analytics range"
-            name="analytics-range"
-            className="w-auto lg:hidden"
-            value={rangeChoice}
-            onChange={(event) => selectRange(event.target.value as Analytics2Range)}
-          >
-            {rangeKeys.map((range) => (
-              <NativeSelectOption key={range} value={range}>
-                {copy.ranges[range]}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-          {rangeChoice === 'custom' ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Input
-                aria-label="Start date"
-                name="analytics-start-date"
-                className="w-auto"
-                type="date"
-                value={customStart}
-                max={customEnd}
-                onChange={(event) => setCustomStart(event.target.value)}
-              />
-              <span className="text-muted-foreground">–</span>
-              <Input
-                aria-label="End date"
-                name="analytics-end-date"
-                className="w-auto"
-                type="date"
-                value={customEnd}
-                min={customStart}
-                max={payload.referenceDate}
-                onChange={(event) => setCustomEnd(event.target.value)}
-              />
-              <Button
-                size="sm"
-                disabled={!customStart || !customEnd || customStart > customEnd}
-                onClick={() =>
-                  setFilters((current) => ({
-                    ...current,
-                    range: 'custom',
-                    startDate: customStart,
-                    endDate: customEnd,
-                  }))
-                }
-              >
-                {copy.apply}
-              </Button>
-            </div>
-          ) : null}
-          <NativeSelect
-            aria-label="Analytics grain"
-            name="analytics-grain"
-            className="ms-auto w-auto"
-            value={filters.grain}
-            onChange={(event) =>
-              setFilters((current) => ({
-                ...current,
-                grain: event.target.value as typeof filters.grain,
-              }))
-            }
-          >
-            {grainKeys.map((grain) => (
-              <NativeSelectOption key={grain} value={grain}>
-                {copy.grains[grain]}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </div>
+        <AnalyticsRangeControls
+          range={rangeChoice}
+          grain={filters.grain}
+          customStart={customStart}
+          customEnd={customEnd}
+          maxEndDate={payload.referenceDate}
+          rangeLabels={copy.ranges}
+          grainLabels={copy.grains}
+          applyLabel={copy.apply}
+          ariaLabels={{
+            range: copy.labels.analyticsRange,
+            grain: copy.labels.analyticsGrain,
+            startDate: copy.labels.startDate,
+            endDate: copy.labels.endDate,
+          }}
+          namePrefix="analytics"
+          onRangeChange={selectRange}
+          onGrainChange={(grain) => setFilters((current) => ({ ...current, grain }))}
+          onCustomStartChange={setCustomStart}
+          onCustomEndChange={setCustomEnd}
+          onApplyCustom={() =>
+            setFilters((current) => ({
+              ...current,
+              range: 'custom',
+              startDate: customStart,
+              endDate: customEnd,
+            }))
+          }
+        />
       </WorkspaceToolbar>
       <SourceRail payload={payload} copy={copy} locale={locale} />
       <WarningRail payload={payload} copy={copy} locale={locale} />
@@ -4304,7 +4309,7 @@ export function StatsWorkspace({ initialData }: { initialData: Analytics2Payload
         <div className="border-b border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive sm:px-6">
           {analyticsQuery.error instanceof Error
             ? analyticsQuery.error.message
-            : 'Analytics request failed.'}
+            : copy.labels.analyticsRequestFailed}
         </div>
       ) : null}
       <main

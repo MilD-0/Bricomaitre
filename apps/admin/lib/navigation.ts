@@ -27,7 +27,7 @@ export type NavigationItem = {
   subItems?: NavigationSubItem[];
 };
 
-export const navigationItems: NavigationItem[] = [
+const navigationItems: NavigationItem[] = [
   {
     key: 'administration',
     href: '/administration',
@@ -151,6 +151,12 @@ const modernStatsSubItems: NavigationSubItem[] = [
   { key: 'acquisition', href: '/stats/meta-ads', translationKey: 'nav.statsAcquisition' },
   { key: 'fulfillment', href: '/stats/fulfillment', translationKey: 'nav.statsFulfillment' },
   { key: 'storefront', href: '/stats/website', translationKey: 'nav.statsStorefront' },
+  { key: 'aiOperations', href: '/stats/ai-assistants', translationKey: 'nav.statsAiOperations' },
+  {
+    key: 'shoppingAssistant',
+    href: '/stats/shopping-assistant',
+    translationKey: 'nav.statsShoppingAssistant',
+  },
   { key: 'search', href: '/stats/search', translationKey: 'nav.statsSearch' },
   { key: 'catalog', href: '/stats/products', translationKey: 'nav.statsCatalog' },
   { key: 'assumptions', href: '/stats/costs', translationKey: 'nav.statsAssumptions' },

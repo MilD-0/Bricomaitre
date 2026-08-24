@@ -18,6 +18,8 @@
     "statsAcquisition": "Acquisition",
     "statsFulfillment": "Livraison",
     "statsStorefront": "Boutique",
+    "statsAiOperations": "Opérations IA",
+    "statsShoppingAssistant": "Assistant d’achat",
     "statsSearch": "Visibilité Google",
     "statsCatalog": "Catalogue",
     "statsAssumptions": "Coûts et hypothèses",
@@ -364,6 +366,7 @@
     "edit": "Modifier",
     "modify": "Modifier",
     "cancel": "Annuler",
+    "close": "Fermer",
     "save": "Enregistrer",
     "go": "Aller",
     "first": "Première",
@@ -2118,6 +2121,7 @@
     "unconfirmedDate": "Aucun horodatage de confirmation"
   },
   "ordersEcotrackManager": {
+    "resultCount": "{count} expéditions",
     "searchPlaceholder": "Rechercher par tracking, client, telephone, adresse, commune, wilaya, produit ou statut",
     "filters": {
       "statusLabel": "Filtrer par statut ECOTRACK",

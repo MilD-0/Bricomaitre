@@ -1,14 +1,11 @@
-export const aiProposalReviewConflictCodes = [
-  'proposal_already_reviewed',
-  'proposal_stale',
-  'proposal_expired',
-  'proposal_dependency_changed',
-  'proposal_evidence_insufficient',
-  'proposal_verification_failed',
-  'proposal_conflict',
-] as const;
-
-export type AiProposalReviewConflictCode = (typeof aiProposalReviewConflictCodes)[number];
+export type AiProposalReviewConflictCode =
+  | 'proposal_already_reviewed'
+  | 'proposal_stale'
+  | 'proposal_expired'
+  | 'proposal_dependency_changed'
+  | 'proposal_evidence_insufficient'
+  | 'proposal_verification_failed'
+  | 'proposal_conflict';
 export type AiProposalReviewNextAction = 'refresh' | 'regenerate' | 'review' | 'retry';
 
 const nextActionByCode: Record<AiProposalReviewConflictCode, AiProposalReviewNextAction> = {

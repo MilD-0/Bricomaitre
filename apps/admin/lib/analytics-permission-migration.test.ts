@@ -22,7 +22,7 @@ describe('analytics permission migration', () => {
       resolve(cwd, 'drizzle/migrations/0077_backfill-analytics-manage.sql'),
       'utf8',
     );
-    expect(backfill).toContain("WHERE \"permission\" = 'ops_view'");
+    expect(backfill).toContain('WHERE "permission" = \'ops_view\'');
     expect(backfill).toContain('ON CONFLICT ("role_id", "permission") DO NOTHING');
   });
 

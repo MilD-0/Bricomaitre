@@ -21,7 +21,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useLocale, useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
 import { cn } from '../../lib/utils';
 import { serializeLegacyUiPreference } from '../../lib/admin-ui-preference';
@@ -43,6 +43,7 @@ import { PageTransition, PendingInline } from '../ui/motion';
 import { Separator } from '../ui/separator';
 import { Spinner } from '../ui/spinner';
 import { Switch } from '../ui/switch';
+import { useMediaQuery } from '../ui/use-media-query';
 import { ThemeToggle } from '../theme-toggle';
 import { AdminAiChat } from '../admin-ai-chat';
 import { AdminAiSurfaceProvider } from '../admin-ai-surface-context';
@@ -88,22 +89,6 @@ const navIcons: Record<NavigationKey, React.ComponentType<{ className?: string }
 
 const desktopMediaQuery = '(min-width: 1024px)';
 
-function useDesktopLayout() {
-  return useSyncExternalStore(
-    (onChange) => {
-      if (typeof window.matchMedia !== 'function') return () => {};
-      const query = window.matchMedia(desktopMediaQuery);
-      query.addEventListener('change', onChange);
-      return () => query.removeEventListener('change', onChange);
-    },
-    () =>
-      typeof window.matchMedia === 'function'
-        ? window.matchMedia(desktopMediaQuery).matches
-        : false,
-    () => false,
-  );
-}
-
 export function AppShell({
   children,
   initialPermissions,
@@ -134,7 +119,7 @@ export function AppShell({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const isDesktop = useDesktopLayout();
+  const isDesktop = useMediaQuery(desktopMediaQuery);
   const [isNavigating, startNavigationTransition] = useTransition();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -144,6 +129,7 @@ export function AppShell({
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const sidebarTriggerRef = useRef<HTMLButtonElement>(null);
   const sidebarCloseRef = useRef<HTMLButtonElement>(null);
+  const sidebarNavigationRef = useRef<HTMLElement>(null);
   const displayName = initialUserName?.trim() || initialUserEmail?.trim() || t('auth.unknownUser');
   const displayEmail = initialUserEmail?.trim() || t('settings.general.missingEmail');
   const avatarAlt = initialUserName?.trim() || initialUserEmail?.trim() || t('labels.userProfile');
@@ -160,6 +146,19 @@ export function AppShell({
   useEffect(() => {
     queueMicrotask(() => setSidebarOpen(false));
   }, [pathname]);
+
+  useEffect(() => {
+    if (!isDesktop && !sidebarOpen) return;
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      const currentNavigationItem = sidebarNavigationRef.current?.querySelector<HTMLElement>(
+        '[data-navigation-current="true"]',
+      );
+      currentNavigationItem?.scrollIntoView?.({ block: 'nearest' });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [isDesktop, pathname, sidebarOpen]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -373,7 +372,11 @@ export function AppShell({
             </div>
           </motion.div>
 
-          <nav data-desktop-navigation-list className="min-h-0 flex-1 overflow-y-auto p-3 lg:p-2.5">
+          <nav
+            ref={sidebarNavigationRef}
+            data-desktop-navigation-list
+            className="min-h-0 flex-1 overflow-y-auto p-3 lg:p-2.5"
+          >
             <div className="flex flex-col gap-1">
               {items.map((item) => (
                 <SidebarNavItem
@@ -604,7 +607,7 @@ function SidebarNavItem({
       <div className="flex items-center gap-1">
         <Link
           href={href}
-          prefetch
+          prefetch={item.key !== 'stats'}
           onClick={(event) => {
             if (
               event.defaultPrevented ||
@@ -673,7 +676,7 @@ function SidebarNavItem({
                   <Link
                     key={subItem.key}
                     href={subHref}
-                    prefetch
+                    prefetch={item.key !== 'stats'}
                     onClick={(event) => {
                       if (
                         event.defaultPrevented ||
@@ -697,6 +700,12 @@ function SidebarNavItem({
                         ? 'bg-muted font-medium text-foreground'
                         : '',
                     )}
+                    data-navigation-current={
+                      pathname === baseSubHref ||
+                      (pathname === `/${locale}${item.href}` && currentHash === subHash)
+                        ? 'true'
+                        : undefined
+                    }
                   >
                     {t(subItem.translationKey)}
                   </Link>

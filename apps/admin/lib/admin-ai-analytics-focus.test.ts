@@ -77,6 +77,49 @@ function catalogPayload(): Analytics2Payload {
 }
 
 describe('admin assistant analytics focus', () => {
+  it('reports the retained Storefront funnel window instead of the broad workspace range', () => {
+    const base = catalogPayload();
+    const payload = {
+      ...base,
+      view: 'storefront',
+      filters: { ...base.filters, view: 'storefront' },
+      data: {
+        kind: 'storefront',
+        funnel: [
+          { name: 'Sessions', value: 100 },
+          { name: 'Submitted-order sessions', value: 8 },
+        ],
+      },
+      effectiveRanges: [
+        {
+          key: 'storefront',
+          startDate: '2026-05-26',
+          endDate: '2026-08-19',
+          sources: ['orders', 'storefront'],
+        },
+        {
+          key: 'storefront_funnel',
+          startDate: '2026-08-13',
+          endDate: '2026-08-19',
+          sources: ['orders', 'storefront'],
+        },
+      ],
+    } as unknown as Analytics2Payload;
+
+    expect(
+      focusAnalytics2ForAssistant(payload, {
+        dimension: 'storefront_funnel',
+        identifiers: [],
+        limit: 20,
+      }),
+    ).toMatchObject({
+      effectiveRange: { startDate: '2026-08-13', endDate: '2026-08-19' },
+      effectiveRanges: [
+        { key: 'storefront_funnel', startDate: '2026-08-13', endDate: '2026-08-19' },
+      ],
+    });
+  });
+
   it('rejects a drill-down dimension that does not belong to the selected workspace', () => {
     expect(
       adminAiAnalyticsQuerySchema.safeParse({

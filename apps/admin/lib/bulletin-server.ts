@@ -166,7 +166,7 @@ function mapReactions(
   return grouped;
 }
 
-export function mapBulletinPosts(
+function mapBulletinPosts(
   posts: Array<{
     id: number;
     title: string;
@@ -321,7 +321,7 @@ export function getBulletinViewer(session: {
   };
 }
 
-export async function loadBulletinTagNames() {
+async function loadBulletinTagNames() {
   const tags = await getDb()
     .select({ name: bulletinTags.name })
     .from(bulletinTags)

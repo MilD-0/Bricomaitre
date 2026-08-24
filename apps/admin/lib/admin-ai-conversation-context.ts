@@ -1,8 +1,8 @@
 export const ADMIN_AI_CONTEXT_QUERY_LIMIT = 200;
-export const ADMIN_AI_CONTEXT_CHARACTER_BUDGET = 80_000;
-export const ADMIN_AI_TOOL_EVIDENCE_CHARACTER_BUDGET = 12_000;
+const ADMIN_AI_CONTEXT_CHARACTER_BUDGET = 80_000;
+const ADMIN_AI_TOOL_EVIDENCE_CHARACTER_BUDGET = 12_000;
 
-export type AdminAiConversationContextMessage = {
+type AdminAiConversationContextMessage = {
   role: 'user' | 'assistant';
   content: string;
 };
