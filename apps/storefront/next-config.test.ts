@@ -17,6 +17,8 @@ describe('storefront Next configuration', () => {
     expect(config).toMatchObject({
       output: 'standalone',
       typedRoutes: true,
+      compress: false,
+      cacheMaxMemorySize: 0,
       devIndicators: false,
       transpilePackages: ['@bric/ai-core', '@bric/runtime', '@bric/storefront-core'],
       allowedDevOrigins: expect.arrayContaining(['127.0.0.1']),
@@ -36,6 +38,10 @@ describe('storefront Next configuration', () => {
     });
     expect(config).not.toHaveProperty('cacheComponents');
     const headerRules = await config.headers?.();
+    const contentSecurityPolicy = headerRules?.[0]?.headers.find(
+      (header) => header.key === 'Content-Security-Policy',
+    )?.value;
+    expect(contentSecurityPolicy).not.toContain("'unsafe-eval'");
     expect(headerRules?.[0]?.headers).toEqual(
       expect.arrayContaining([
         { key: 'X-Content-Type-Options', value: 'nosniff' },

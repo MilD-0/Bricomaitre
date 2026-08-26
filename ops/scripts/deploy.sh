@@ -34,10 +34,16 @@ worker_service="$(service_name admin-worker "$target_slot")"
 storefront_service="$(service_name storefront "$target_slot")"
 api_host_port="$(slot_api_host_port "$target_slot")"
 release_images_file="$release_dir/$release_images_marker_name"
+migration_state_file="$release_dir/.bric-migrations.json"
 original_current_release="$(release_link_target "$current_link")"
 original_previous_release="$(release_link_target "$previous_link")"
 deployment_committed=false
 routing_changed=false
+
+if [[ ! -f "$migration_state_file" ]]; then
+  echo "release is missing migration state: $migration_state_file" >&2
+  exit 1
+fi
 
 nginx_main_fallback="$release_dir/ops/nginx/nginx.conf"
 if [[ -n "$original_current_release" ]]; then
@@ -176,7 +182,27 @@ printf 'storefront build input counts: products=%s brands=%s categories=%s\n' \
 append_summary "## Storefront build"
 append_summary "- Upstream counts: ${PRODUCT_COUNT} products, ${BRAND_COUNT} brands, ${CATEGORY_COUNT} categories"
 
+if [[ -n "$original_current_release" && "$original_current_release" != "$release_dir" ]]; then
+  python3 "$script_dir/verify-migration-rollback-safety.py" \
+    "$original_current_release" \
+    "$release_dir"
+fi
+
 "$script_dir/run-admin-migrations.sh" "$target_slot"
+
+if [[ -n "$previous_slot" ]]; then
+  previous_api_service="$(service_name storefront-api "$previous_slot")"
+  previous_admin_service="$(service_name admin "$previous_slot")"
+  previous_storefront_service="$(service_name storefront "$previous_slot")"
+  previous_worker_service="$(service_name admin-worker "$previous_slot")"
+
+  bash "$script_dir/wait-for-health.sh" "$previous_api_service"
+  bash "$script_dir/wait-for-health.sh" "$previous_admin_service"
+  bash "$script_dir/wait-for-health.sh" "$previous_storefront_service"
+  bash "$script_dir/wait-for-health.sh" "$previous_worker_service"
+  bash "$script_dir/smoke-check.sh"
+  append_summary "- ✅ Previous slot ${previous_slot} remained rollback-compatible after migrations"
+fi
 
 actual_static_pages="$BRIC_STOREFRONT_STATIC_PAGES"
 printf 'storefront build generated %s prerendered routes; remaining catalog routes use ISR\n' "$actual_static_pages"

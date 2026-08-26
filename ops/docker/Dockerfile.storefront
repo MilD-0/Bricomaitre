@@ -86,6 +86,8 @@ COPY --chown=bric:bric ops/ownership/BRICOMAITRE_AUTHORIZED_RELEASE.txt ./BRICOM
 COPY --chown=bric:bric ops/ownership/LICENSE ./LICENSE
 COPY --chown=bric:bric ops/ownership/NOTICE ./NOTICE
 COPY --chown=bric:bric ops/ownership/SECURITY.md ./SECURITY.md
+COPY --chown=bric:bric ops/scripts/prune-next-runtime-cache.mjs ./prune-next-runtime-cache.mjs
+COPY --chown=bric:bric ops/scripts/run-storefront-with-cache-pruning.mjs ./run-storefront-with-cache-pruning.mjs
 COPY --from=base --chown=bric:bric /workspace/apps/storefront/.next/standalone ./
 COPY --from=base --chown=bric:bric /workspace/apps/storefront/.next/static ./apps/storefront/.next/static
 COPY --from=base --chown=bric:bric /workspace/apps/storefront/public ./apps/storefront/public
@@ -98,4 +100,4 @@ RUN mkdir -p /app/apps/storefront/.next/cache \
 EXPOSE 3002
 USER bric
 
-CMD ["node", "apps/storefront/server.js"]
+CMD ["node", "/app/run-storefront-with-cache-pruning.mjs", "/app/apps/storefront/.next/cache", "node", "apps/storefront/server.js"]

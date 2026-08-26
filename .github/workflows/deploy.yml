@@ -22,6 +22,8 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
     outputs:
       sha: ${{ steps.release.outputs.sha }}
       created: ${{ steps.release.outputs.created }}
@@ -415,6 +417,8 @@ jobs:
             "$bundle_dir/ops/ownership"
           cp release-manifest/.bric-release.env "$bundle_dir/.bric-release.env"
           cp release-manifest/.bric-images.env "$bundle_dir/.bric-images.env"
+          python3 ops/scripts/verify-migration-rollback-safety.py \
+            --build-state "$PWD" "$RELEASE_SHA" "$bundle_dir/.bric-migrations.json"
           rsync -a ops/scripts/ "$bundle_dir/ops/scripts/"
           cp ops/docker/compose.prod.yml "$bundle_dir/ops/docker/compose.prod.yml"
           rsync -a ops/host/ "$bundle_dir/ops/host/"
