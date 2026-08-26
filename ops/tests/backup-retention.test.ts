@@ -11,6 +11,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -18,6 +19,7 @@ const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const backupScript = resolve(workspaceRoot, 'ops/scripts/backup-postgres.sh');
 const pruneScript = resolve(workspaceRoot, 'ops/scripts/prune-postgres-backups.sh');
 const privacyScript = resolve(workspaceRoot, 'ops/scripts/validate-s3-backup-privacy.sh');
+const restoreScript = resolve(workspaceRoot, 'ops/scripts/verify-postgres-backup-restore.sh');
 
 describe('production Postgres backup retention', () => {
   it('creates database dumps and their directory with owner-only permissions', () => {
@@ -47,6 +49,83 @@ describe('production Postgres backup retention', () => {
       expect(statSync(join(backupDir, backupName)).mode & 0o777).toBe(0o600);
     } finally {
       rmSync(backupDir, { recursive: true, force: true });
+      rmSync(fakeBin, { recursive: true, force: true });
+    }
+  });
+
+  it('does not publish a partial dump when pg_dump fails', () => {
+    const backupDir = mkdtempSync(join(tmpdir(), 'bric-failed-backup-'));
+    const fakeBin = mkdtempSync(join(tmpdir(), 'bric-failed-docker-'));
+    const fakeDocker = join(fakeBin, 'docker');
+    writeFileSync(
+      fakeDocker,
+      '#!/usr/bin/env bash\nif [[ "$1" == "ps" ]]; then\n  echo container-id\nelse\n  printf "%s\\n" "-- truncated SQL --"\n  exit 7\nfi\n',
+      { mode: 0o755 },
+    );
+
+    try {
+      const result = spawnSync('bash', [backupScript], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          BACKUP_DIR: backupDir,
+          PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
+        },
+      });
+
+      expect(result.status).not.toBe(0);
+      expect(readdirSync(backupDir)).toEqual([]);
+    } finally {
+      rmSync(backupDir, { recursive: true, force: true });
+      rmSync(fakeBin, { recursive: true, force: true });
+    }
+  });
+
+  it('restores a dump into an isolated disposable Postgres and checks core relations', () => {
+    const testDirectory = mkdtempSync(join(tmpdir(), 'bric-restore-proof-'));
+    const fakeBin = mkdtempSync(join(tmpdir(), 'bric-restore-docker-'));
+    const backup = join(testDirectory, 'postgres-20260826-031503.sql.gz');
+    const dockerLog = join(testDirectory, 'docker.log');
+    const dockerInput = join(testDirectory, 'docker-input.log');
+    const fakeDocker = join(fakeBin, 'docker');
+    writeFileSync(backup, gzipSync('CREATE TABLE restored_evidence (id integer);'));
+    writeFileSync(
+      fakeDocker,
+      [
+        '#!/usr/bin/env bash',
+        'printf \'%s\\n\' "$*" >>"$DOCKER_LOG"',
+        'if [[ "$1" == "exec" && "$*" == *"pg_isready"* ]]; then exit 0; fi',
+        'if [[ "$1" == "exec" && "$*" == *"psql"* ]]; then',
+        '  payload="$(cat)"',
+        '  printf \'%s\\n\' "$payload" >>"$DOCKER_INPUT"',
+        '  if [[ "$payload" == *"pg_database_size"* ]]; then printf \'DO\\n7654321\\n\'; fi',
+        'fi',
+        'exit 0',
+      ].join('\n'),
+      { mode: 0o755 },
+    );
+
+    try {
+      const result = spawnSync('bash', [restoreScript, backup], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          BRIC_INFRA_ENV_FILE: join(testDirectory, 'missing-infra.env'),
+          DOCKER_INPUT: dockerInput,
+          DOCKER_LOG: dockerLog,
+          PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
+        },
+      });
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('postgres backup restore verified');
+      expect(result.stdout).toContain('restored_bytes=7654321');
+      expect(readFileSync(dockerLog, 'utf8')).toContain('--network none');
+      expect(readFileSync(dockerLog, 'utf8')).toContain('volume rm');
+      expect(readFileSync(dockerInput, 'utf8')).toContain('CREATE TABLE restored_evidence');
+      expect(readFileSync(dockerInput, 'utf8')).toContain("to_regclass('public.products')");
+    } finally {
+      rmSync(testDirectory, { recursive: true, force: true });
       rmSync(fakeBin, { recursive: true, force: true });
     }
   });

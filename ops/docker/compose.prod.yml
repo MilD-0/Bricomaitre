@@ -235,6 +235,9 @@ x-storefront-blue: &storefront-blue
   environment:
     <<: *release-environment
     NODE_OPTIONS: ${BRIC_STOREFRONT_WEB_NODE_OPTIONS:---max-old-space-size=1024}
+    BRIC_NEXT_FETCH_CACHE_MAX_BYTES: ${BRIC_NEXT_FETCH_CACHE_MAX_BYTES:-268435456}
+    BRIC_NEXT_FETCH_CACHE_MAX_AGE_SECONDS: ${BRIC_NEXT_FETCH_CACHE_MAX_AGE_SECONDS:-604800}
+    BRIC_NEXT_FETCH_CACHE_PRUNE_INTERVAL_SECONDS: ${BRIC_NEXT_FETCH_CACHE_PRUNE_INTERVAL_SECONDS:-900}
     STOREFRONT_API_BASE_URL: http://storefront-api-blue:3001
   depends_on:
     storefront-api-blue:
@@ -372,6 +375,9 @@ services:
     environment:
       <<: *release-environment
       NODE_OPTIONS: ${BRIC_STOREFRONT_WEB_NODE_OPTIONS:---max-old-space-size=1024}
+      BRIC_NEXT_FETCH_CACHE_MAX_BYTES: ${BRIC_NEXT_FETCH_CACHE_MAX_BYTES:-268435456}
+      BRIC_NEXT_FETCH_CACHE_MAX_AGE_SECONDS: ${BRIC_NEXT_FETCH_CACHE_MAX_AGE_SECONDS:-604800}
+      BRIC_NEXT_FETCH_CACHE_PRUNE_INTERVAL_SECONDS: ${BRIC_NEXT_FETCH_CACHE_PRUNE_INTERVAL_SECONDS:-900}
       STOREFRONT_API_BASE_URL: http://storefront-api-green:3001
     depends_on:
       storefront-api-green:
@@ -392,7 +398,6 @@ services:
     security_opt:
       - no-new-privileges:true
     tmpfs:
-      - /var/cache/nginx:size=32m,mode=0755
       - /var/run:size=8m,mode=0755
     ports:
       - '80:80'
@@ -409,6 +414,7 @@ services:
       # keeps that replacement visible inside Nginx; a file bind would retain
       # the old inode and silently defeat a blue/green reload.
       - ${BRIC_RUNTIME_DIR:-/srv/bric/runtime}/nginx:/etc/nginx/conf.d:ro
+      - nginx-storefront-image-cache:/var/cache/nginx
     healthcheck:
       test:
         [
@@ -429,3 +435,4 @@ volumes:
   storefront-api-cache-green:
   storefront-cache-blue:
   storefront-cache-green:
+  nginx-storefront-image-cache:

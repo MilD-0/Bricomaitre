@@ -5,14 +5,33 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 host_config_dir="$(cd "$script_dir/../host" && pwd -P)"
 sysctl_target="/etc/sysctl.d/99-bricomaitre-redis.conf"
 thp_unit_target="/etc/systemd/system/bricomaitre-disable-thp.service"
+backup_cron_target="/etc/cron.d/bric-postgres-backup"
+operations_user="${BRIC_OPERATIONS_USER:-${SUDO_USER:-deploy}}"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "run this host configuration command as root" >&2
   exit 1
 fi
+if [[ ! "$operations_user" =~ ^[a-z_][a-z0-9_-]*\$?$ ]] || ! id "$operations_user" >/dev/null 2>&1; then
+  echo "BRIC_OPERATIONS_USER must identify an existing system user" >&2
+  exit 1
+fi
+operations_group="$(id -gn "$operations_user")"
 
 install -m 0644 "$host_config_dir/99-bricomaitre-redis.conf" "$sysctl_target"
 install -m 0644 "$host_config_dir/bricomaitre-disable-thp.service" "$thp_unit_target"
+rendered_backup_cron="$(mktemp)"
+trap 'rm -f -- "$rendered_backup_cron"' EXIT
+sed "s/{{OPERATIONS_USER}}/$operations_user/g" "$host_config_dir/bricomaitre-backups.cron" \
+  >"$rendered_backup_cron"
+install -m 0644 "$rendered_backup_cron" "$backup_cron_target"
+rm -f -- "$rendered_backup_cron"
+trap - EXIT
+touch /var/log/bric-postgres-backup.log /var/log/bric-postgres-restore.log
+chown "$operations_user:$operations_group" \
+  /var/log/bric-postgres-backup.log \
+  /var/log/bric-postgres-restore.log
+chmod 0640 /var/log/bric-postgres-backup.log /var/log/bric-postgres-restore.log
 
 sysctl -p "$sysctl_target"
 systemctl daemon-reload
@@ -27,4 +46,4 @@ if ! grep -q '\[never\]' /sys/kernel/mm/transparent_hugepage/enabled; then
   exit 1
 fi
 
-echo "Redis host memory settings are active and persistent."
+echo "Redis memory settings and bounded database backup drills are active and persistent."

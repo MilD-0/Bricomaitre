@@ -47,13 +47,23 @@ describe('production Nginx renderer', () => {
       expect(rendered).toContain('proxy_pass http://$storefront_api_upstream;');
       expect(rendered).toContain('proxy_pass http://$admin_upstream;');
       expect(rendered).toContain('proxy_pass http://$storefront_upstream;');
-      expect(rendered.match(/proxy_connect_timeout 2s;/g)).toHaveLength(3);
+      expect(rendered.match(/proxy_connect_timeout 2s;/g)).toHaveLength(4);
       expect(rendered.match(/client_max_body_size 1m;/g)).toHaveLength(2);
       expect(rendered).toContain('client_max_body_size 50m;');
       expect(rendered.match(/if \(\$http_next_action != ''\)/g)).toHaveLength(2);
-      expect(rendered.match(/proxy_set_header X-Request-ID \$request_id;/g)).toHaveLength(3);
-      expect(rendered.match(/proxy_hide_header X-Request-ID;/g)).toHaveLength(3);
-      expect(rendered.match(/add_header X-Request-ID \$request_id always;/g)).toHaveLength(3);
+      expect(rendered.match(/proxy_set_header X-Request-ID \$request_id;/g)).toHaveLength(4);
+      expect(rendered.match(/proxy_hide_header X-Request-ID;/g)).toHaveLength(4);
+      expect(rendered.match(/add_header X-Request-ID \$request_id always;/g)).toHaveLength(4);
+      expect(rendered).toContain('location = /_next/image {');
+      expect(rendered).toContain('proxy_cache storefront_images;');
+      expect(rendered).toContain('proxy_cache_key "$scheme$host$request_uri";');
+      expect(rendered).toContain('proxy_cache_lock on;');
+      expect(rendered).toContain('proxy_cache_use_stale updating error timeout');
+      expect(rendered).toContain("proxy_set_header Accept-Encoding '';");
+      expect(rendered).toMatch(
+        /location = \/_next\/image \{[\s\S]*?add_header X-Request-ID \$request_id always;/,
+      );
+      expect(rendered).toContain('add_header X-Bric-Image-Cache $upstream_cache_status always;');
       expect(rendered).not.toContain('location = /api/capi');
       expect(rendered).not.toContain('location = /api/meta/events');
     } finally {

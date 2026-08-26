@@ -17,7 +17,11 @@ export default defineConfig({
           name: 'unit-node',
           environment: 'node',
           alias: aliases,
-          include: ['lib/**/*.test.ts', 'next-config.test.ts'],
+          include: [
+            'lib/**/*.test.ts',
+            'next-config.test.ts',
+            'test/fixture-production-proxy.test.ts',
+          ],
           exclude: [
             'lib/analytics.test.ts',
             'lib/assistant-attribution.test.ts',

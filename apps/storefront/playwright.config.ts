@@ -4,6 +4,7 @@ const playwrightServerMode = process.env.BRIC_PLAYWRIGHT_SERVER;
 const useProductionServer =
   playwrightServerMode === 'production' || playwrightServerMode === 'prebuilt';
 const usePrebuiltProductionServer = playwrightServerMode === 'prebuilt';
+const nextServerPort = useProductionServer ? '3004' : '3003';
 
 export default defineConfig({
   testDir: './tests',
@@ -64,10 +65,11 @@ export default defineConfig({
         : useProductionServer
           ? 'NODE_OPTIONS=--max-old-space-size=2048 pnpm build && pnpm start'
           : 'pnpm dev',
-      url: 'http://127.0.0.1:3003/api/health',
+      url: `http://127.0.0.1:${nextServerPort}/api/health`,
       reuseExistingServer: false,
       timeout: useProductionServer ? 180_000 : 60_000,
       env: {
+        PORT: nextServerPort,
         STOREFRONT_API_BASE_URL: 'http://127.0.0.1:4311',
         NEXT_PUBLIC_SITE_URL: 'http://127.0.0.1:3003',
         NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS: 'http://127.0.0.1:3003,http://127.0.0.1:4311',
@@ -77,5 +79,19 @@ export default defineConfig({
         NEXT_PUBLIC_TIKTOK_PIXEL_ID: '',
       },
     },
+    ...(useProductionServer
+      ? [
+          {
+            // Production disables Next's in-process compression because Nginx
+            // owns that work. Keep the lab on the public port and reproduce
+            // the edge boundary so slow-network budgets measure deployed bytes.
+            command: 'node test/fixture-production-proxy.mjs',
+            url: 'http://127.0.0.1:3003/api/health',
+            reuseExistingServer: false,
+            timeout: 30_000,
+            env: { PORT: '3003', UPSTREAM_PORT: nextServerPort },
+          },
+        ]
+      : []),
   ],
 });

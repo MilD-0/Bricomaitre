@@ -94,6 +94,10 @@ describe('production packaging and release runtime', () => {
     );
     expect(release).toContain('workflow_run:');
     expect(release).toMatch(/workflow_run:[\s\S]*branches:\s+- main/);
+    expect(release).not.toContain('pull-requests: read');
+    expect(release).not.toContain('verify-release-pr.sh');
+    expect(release).toContain('--build-state "$PWD" "$RELEASE_SHA"');
+    expect(release).toContain('"$bundle_dir/.bric-migrations.json"');
     expect(release).toContain('group: bricomaitre-production');
     expect(release).toContain('cancel-in-progress: false');
     expect(release).toContain('Reject a superseded release');
@@ -211,11 +215,16 @@ describe('production packaging and release runtime', () => {
 
     expect(dockerfile).toContain('RUN pnpm --filter @bric/storefront build');
     expect(storefrontPackage.scripts.build).toBe('next build --webpack');
-    expect(dockerfile).toContain('CMD ["node", "apps/storefront/server.js"]');
+    expect(dockerfile).toContain(
+      '"/app/apps/storefront/.next/cache", "node", "apps/storefront/server.js"',
+    );
     expect(dockerfile).toContain('com.bricomaitre.release-surface="storefront"');
     expect(dockerfile).not.toMatch(/storefront-(?:new|old|v\d+)|storefront\d+/);
     expect(compose).toContain('storefront-cache-blue:/app/apps/storefront/.next/cache');
     expect(compose).toContain('storefront-cache-green:/app/apps/storefront/.next/cache');
+    expect(compose).toContain('BRIC_NEXT_FETCH_CACHE_MAX_BYTES:');
+    expect(compose).toContain('BRIC_NEXT_FETCH_CACHE_MAX_AGE_SECONDS:');
+    expect(compose).toContain('BRIC_NEXT_FETCH_CACHE_PRUNE_INTERVAL_SECONDS:');
 
     const installIndex = dockerfile.indexOf('pnpm install --frozen-lockfile');
     expect(dockerfile.indexOf('ARG NEXT_PUBLIC_RELEASE')).toBeGreaterThan(installIndex);
@@ -344,6 +353,10 @@ describe('production packaging and release runtime', () => {
       resolve(workspaceRoot, 'ops/scripts/configure-production-host.sh'),
       'utf8',
     );
+    const backupCron = readFileSync(
+      resolve(workspaceRoot, 'ops/host/bricomaitre-backups.cron'),
+      'utf8',
+    );
     const release = readFileSync(resolve(workspaceRoot, '.github/workflows/deploy.yml'), 'utf8');
 
     expect(sysctl).toContain('vm.overcommit_memory = 1');
@@ -351,6 +364,12 @@ describe('production packaging and release runtime', () => {
     expect(thpUnit).toContain('transparent_hugepage/enabled');
     expect(installer).toContain('systemctl enable --now bricomaitre-disable-thp.service');
     expect(installer).toContain('/proc/sys/vm/overcommit_memory');
+    expect(installer).toContain('bricomaitre-backups.cron');
+    expect(installer).toContain('/var/log/bric-postgres-restore.log');
+    expect(backupCron).toContain('backup-postgres-to-s3.sh');
+    expect(backupCron).toContain('verify-postgres-backup-restore.sh');
+    expect(backupCron).toContain('BRIC_POSTGRES_RESTORE_MEMORY=512m');
+    expect(backupCron).toContain('/usr/bin/flock -n');
     expect(release).toContain('rsync -a ops/host/ "$bundle_dir/ops/host/"');
   });
 
@@ -363,7 +382,9 @@ describe('production packaging and release runtime', () => {
     expect(compose).toContain('x-logging: &default-logging');
     expect(compose).toContain('max-size: ${BRIC_LOG_MAX_SIZE:-20m}');
     expect(compose.match(/logging: \*default-logging/g)).toHaveLength(9);
-    expect(compose).toContain('/var/cache/nginx:size=32m,mode=0755');
+    expect(compose).not.toContain('/var/cache/nginx:size=32m,mode=0755');
+    expect(compose).toContain('nginx-storefront-image-cache:/var/cache/nginx');
+    expect(compose).toContain('\n  nginx-storefront-image-cache:');
     expect(compose).toContain(
       'curl --fail --silent --show-error --insecure --resolve "${BRIC_API_DOMAIN:-api.example.com}:443:127.0.0.1"',
     );
@@ -372,6 +393,9 @@ describe('production packaging and release runtime', () => {
     );
     expect(nginx).toContain('$request_method $uri $server_protocol');
     expect(nginx).toContain('$request_id $remote_addr');
+    expect(nginx).toContain('proxy_cache_path /var/cache/nginx/storefront-images');
+    expect(nginx).toContain('max_size=384m');
+    expect(nginx).toContain('text/x-component');
     expect(nginx).not.toContain('"$request"');
     expect(nginx).not.toContain('$http_referer');
   });
@@ -418,6 +442,28 @@ describe('production packaging and release runtime', () => {
     expect(workerHealth).toBeGreaterThan(-1);
     expect(refresh).toBeGreaterThan(workerHealth);
     expect(refresh).toBeLessThan(routing);
+  });
+
+  it('proves migration rollback compatibility before candidate cutover', () => {
+    const deploy = readFileSync(resolve(workspaceRoot, 'ops/scripts/deploy.sh'), 'utf8');
+    const safetyGate = deploy.indexOf('verify-migration-rollback-safety.py');
+    const migration = deploy.indexOf('run-admin-migrations.sh" "$target_slot"');
+    const previousSmoke = deploy.indexOf(
+      'Previous slot ${previous_slot} remained rollback-compatible',
+    );
+    const candidateApps = deploy.indexOf(
+      'compose up -d --force-recreate "$admin_service" "$storefront_service"',
+    );
+
+    expect(safetyGate).toBeGreaterThan(-1);
+    expect(safetyGate).toBeLessThan(migration);
+    expect(deploy).toContain('release is missing migration state');
+    expect(deploy).toContain('wait-for-health.sh" "$previous_api_service"');
+    expect(deploy).toContain('wait-for-health.sh" "$previous_admin_service"');
+    expect(deploy).toContain('wait-for-health.sh" "$previous_storefront_service"');
+    expect(deploy).toContain('wait-for-health.sh" "$previous_worker_service"');
+    expect(previousSmoke).toBeGreaterThan(migration);
+    expect(previousSmoke).toBeLessThan(candidateApps);
   });
 
   it('restores failed candidates and rolls back to an explicit verified release', () => {
