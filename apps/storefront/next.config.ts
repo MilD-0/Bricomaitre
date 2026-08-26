@@ -27,7 +27,7 @@ const securityHeaders = [
       `img-src 'self' data: blob: https:${configuredImageSources ? ` ${configuredImageSources}` : ''}`,
       "font-src 'self' data: https:",
       "style-src 'self' 'unsafe-inline' https:",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:",
+      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''} https:`,
       "connect-src 'self' https: wss:",
     ].join('; '),
   },
@@ -36,6 +36,15 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: 'standalone',
   typedRoutes: true,
+  // Nginx owns public response compression. Keeping compression out of the
+  // App Router process avoids retaining per-request zlib/RSC state when a
+  // mobile client or crawler disconnects mid-response.
+  compress: false,
+  // This self-hosted deployment has a persistent filesystem cache. Do not
+  // duplicate generated page/data entries in Next's process-local LRU: under
+  // sustained catalog and ISR traffic retained request cache instances can
+  // otherwise multiply that memory well beyond the nominal per-cache limit.
+  cacheMaxMemorySize: 0,
   // The storefront owns both logical bottom corners: the advisor follows the
   // reading direction and commerce actions may occupy the opposite edge.
   // Next's floating development tool intercepts those controls in shared

@@ -124,6 +124,36 @@ server {
     return 400;
   }
 
+  location = /_next/image {
+    proxy_hide_header X-Request-ID;
+    proxy_next_upstream error timeout http_502 http_503 http_504;
+    proxy_connect_timeout 2s;
+    proxy_pass http://$storefront_upstream;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Request-ID $request_id;
+    # Nginx owns compression, so one uncompressed object can serve clients
+    # regardless of their Accept-Encoding negotiation.
+    proxy_set_header Accept-Encoding '';
+    proxy_set_header Connection '';
+
+    proxy_cache storefront_images;
+    proxy_cache_key "$scheme$host$request_uri";
+    proxy_cache_methods GET HEAD;
+    proxy_cache_lock on;
+    proxy_cache_lock_timeout 10s;
+    proxy_cache_revalidate on;
+    proxy_cache_background_update on;
+    proxy_cache_use_stale updating error timeout invalid_header http_500 http_502 http_503 http_504;
+    proxy_cache_valid 200 7d;
+    proxy_cache_valid 404 1m;
+    add_header X-Request-ID $request_id always;
+    add_header X-Bric-Image-Cache $upstream_cache_status always;
+  }
+
   location / {
     proxy_hide_header X-Request-ID;
     proxy_next_upstream error timeout http_502 http_503 http_504;
