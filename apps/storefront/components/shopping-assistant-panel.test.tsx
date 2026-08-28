@@ -125,19 +125,13 @@ describe('ShoppingAssistantPanel', () => {
         catalogQuery: null,
         cartItems: [],
       },
-      telemetry: {
-        journeyId: 'journey-1',
-        sessionId: 'session-1',
-        pagePath: '/',
-        intent: 'other',
-      },
       messages: [{ role: 'user', content: 'Une perceuse pour le béton' }],
     });
     expect(behavior.analytics).toHaveBeenCalledWith(
       expect.objectContaining({
         eventName: 'ai_assistant_message',
         searchTerm: 'Une perceuse pour le béton',
-        metadata: { surface: 'ai_assistant', target: 'submitted', intent: 'other' },
+        metadata: { surface: 'ai_assistant', target: 'submitted' },
       }),
     );
     fireEvent.click(screen.getByRole('button', { name: labels.helpful }));
@@ -266,12 +260,6 @@ describe('ShoppingAssistantPanel', () => {
       expect.objectContaining({ productId: 12, quantity: 3 }),
     ]);
     expect(cartUpdated).toHaveBeenCalledTimes(1);
-    expect(behavior.analytics).toHaveBeenCalledWith(
-      expect.objectContaining({
-        eventName: 'ai_assistant_message',
-        metadata: expect.objectContaining({ intent: 'cart_management' }),
-      }),
-    );
     expect(behavior.analytics).toHaveBeenCalledWith({
       eventName: 'add_to_cart',
       locale: 'fr',

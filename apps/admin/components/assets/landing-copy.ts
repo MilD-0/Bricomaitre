@@ -10,6 +10,7 @@ export type LandingWorkspaceCopy = {
   revision: string;
   modified: string;
   open: string;
+  preview: string;
   live: string;
   noPages: string;
   createTitle: string;
@@ -62,6 +63,7 @@ const copy: Record<'en' | 'fr' | 'ar', LandingWorkspaceCopy> = {
     revision: 'Revision',
     modified: 'Modified',
     open: 'Open',
+    preview: 'Preview saved page',
     live: 'View live page',
     noPages: 'No landing pages match this search.',
     createTitle: 'Create landing page',
@@ -112,6 +114,7 @@ const copy: Record<'en' | 'fr' | 'ar', LandingWorkspaceCopy> = {
     revision: 'Révision',
     modified: 'Modifié',
     open: 'Ouvrir',
+    preview: 'Aperçu de la version enregistrée',
     live: 'Voir la page active',
     noPages: 'Aucune page ne correspond à cette recherche.',
     createTitle: 'Créer une page d’atterrissage',
@@ -162,6 +165,7 @@ const copy: Record<'en' | 'fr' | 'ar', LandingWorkspaceCopy> = {
     revision: 'المراجعة',
     modified: 'آخر تعديل',
     open: 'فتح',
+    preview: 'معاينة النسخة المحفوظة',
     live: 'عرض الصفحة النشطة',
     noPages: 'لا توجد صفحات مطابقة للبحث.',
     createTitle: 'إنشاء صفحة هبوط',

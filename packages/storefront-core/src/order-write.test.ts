@@ -95,6 +95,30 @@ describe('canonical order updates', () => {
     expect(inserts).toEqual([]);
   });
 
+  it('records an explicitly authorized status correction', async () => {
+    const { tx, updates, inserts } = createTransaction(currentOrder(4));
+
+    await expect(
+      updateCanonicalOrder(tx as never, {
+        orderId: 7,
+        status: { value: 2 },
+        allowStatusCorrection: true,
+        actor: { email: 'ops@example.com', name: 'Ops' },
+      }),
+    ).resolves.toMatchObject({ statusChanged: true });
+    expect(updates[0]?.values).toMatchObject({ confirmed: 2 });
+    expect(inserts).toContainEqual(
+      expect.objectContaining({
+        table: orderStatusHistory,
+        values: expect.objectContaining({
+          orderId: 7,
+          status: 2,
+          changedBy: 'ops@example.com',
+        }),
+      }),
+    );
+  });
+
   it('regenerates commercial snapshots and persists canonical totals with an explicit override', async () => {
     const { tx, updates, inserts, deletes } = createTransaction(currentOrder());
     const line = {

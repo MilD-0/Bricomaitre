@@ -38,7 +38,7 @@ export const analytics2QuerySchema = z
       .enum(['7d', '14d', '30d', '90d', 'year', 'all', 'custom'])
       .default('30d')
       .describe(
-        'Use custom whenever the operator supplies explicit start and end dates, and then pass both startDate and endDate exactly. Use a preset only when the operator requests that preset or supplies no exact dates.',
+        'Use custom whenever the operator supplies explicit dates or a calendar period such as this month, last month, this week, or last week; resolve both boundaries from the supplied current application date. A calendar month is not a rolling 30-day preset. Use a preset only when the operator requests that rolling preset or supplies no date period.',
       ),
     startDate: dateOnlySchema
       .optional()
@@ -231,8 +231,10 @@ export type Analytics2LeadingOrderForecast = {
     expectedPostedOrders: number;
     expectedGrossProfitDzd: number;
     expectedAdjustedProfitDzd: number;
+    forecastPaidOrders: number | null;
   }>;
   expectedPostedOrders: number;
   expectedGrossProfitDzd: number;
   expectedAdjustedProfitDzd: number;
+  forecastPaidOrders: number | null;
 };

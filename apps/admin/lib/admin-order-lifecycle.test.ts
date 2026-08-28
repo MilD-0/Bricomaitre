@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  activeShipment: vi.fn(),
   commercial: vi.fn(),
   createToken: vi.fn(),
   insert: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock('./reporting-refresh-trigger', () => ({
 }));
 
 import {
+  AdminOrderHasActiveEcotrackShipmentError,
   AdminOrderLifecycleNotFoundError,
   createAdminOrder,
   deleteAdminOrder,
@@ -61,6 +63,7 @@ describe('canonical admin order lifecycle', () => {
       totalAmount: 15_500,
     });
     mocks.reporting.mockResolvedValue({ kind: 'started' });
+    mocks.activeShipment.mockResolvedValue(null);
   });
 
   it('creates canonical commercial snapshots and returns duplicate-phone evidence', async () => {
@@ -116,7 +119,9 @@ describe('canonical admin order lifecycle', () => {
   });
 
   it('deletes only an existing exact local order and refreshes reporting', async () => {
-    const db = { marker: 'database' };
+    const db = {
+      query: { ecotrackOrderStates: { findFirst: mocks.activeShipment } },
+    };
     await expect(deleteAdminOrder(db as never, 91, actor)).resolves.toMatchObject({
       id: 91,
       customerName: 'Ahmed Test',
@@ -124,7 +129,12 @@ describe('canonical admin order lifecycle', () => {
     });
     expect(mocks.mutate).toHaveBeenCalledWith(
       db,
-      expect.objectContaining({ entityId: 91, operation: 'delete', actor }),
+      expect.objectContaining({
+        entityId: 91,
+        operation: 'delete',
+        actor,
+        isReversible: false,
+      }),
     );
     expect(mocks.reporting).toHaveBeenCalledWith('order-delete');
 
@@ -132,5 +142,18 @@ describe('canonical admin order lifecycle', () => {
     await expect(deleteAdminOrder(db as never, 404, actor)).rejects.toBeInstanceOf(
       AdminOrderLifecycleNotFoundError,
     );
+  });
+
+  it('refuses permanent local deletion while an EcoTrack shipment is active', async () => {
+    const db = {
+      query: { ecotrackOrderStates: { findFirst: mocks.activeShipment } },
+    };
+    mocks.activeShipment.mockResolvedValueOnce({ trackingNumber: 'TRK-91' });
+
+    await expect(deleteAdminOrder(db as never, 91, actor)).rejects.toBeInstanceOf(
+      AdminOrderHasActiveEcotrackShipmentError,
+    );
+    expect(mocks.mutate).not.toHaveBeenCalled();
+    expect(mocks.reporting).not.toHaveBeenCalled();
   });
 });

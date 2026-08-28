@@ -1,8 +1,12 @@
+import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 
 import type { Analytics2Payload } from './analytics2';
 import { compactAnalytics2ForAssistant, adminAiAnalyticsQuerySchema } from './ai-analytics';
-import { focusAnalytics2ForAssistant } from './admin-ai-analytics-focus';
+import {
+  adminAiAnalyticsFocusSchemaForView,
+  focusAnalytics2ForAssistant,
+} from './admin-ai-analytics-focus';
 
 function catalogPayload(): Analytics2Payload {
   return {
@@ -77,6 +81,23 @@ function catalogPayload(): Analytics2Payload {
 }
 
 describe('admin assistant analytics focus', () => {
+  it('keeps parsed fixed focus inputs valid when the query is normalized again', () => {
+    const parsed = adminAiAnalyticsQuerySchema.parse({
+      view: 'command',
+      date: { kind: 'rolling', period: '30d' },
+      focus: { dimension: 'signals', limit: 20 },
+    });
+
+    expect(adminAiAnalyticsQuerySchema.safeParse(parsed).success).toBe(true);
+    expect(
+      adminAiAnalyticsQuerySchema.safeParse({
+        view: 'command',
+        date: { kind: 'rolling', period: '30d' },
+        focus: { dimension: 'signals', search: 'EcoTrack', limit: 20 },
+      }).success,
+    ).toBe(false);
+  });
+
   it('reports the retained Storefront funnel window instead of the broad workspace range', () => {
     const base = catalogPayload();
     const payload = {
@@ -120,15 +141,85 @@ describe('admin assistant analytics focus', () => {
     });
   });
 
+  it('labels paid-outcome forecasts as modeled EcoTrack recognition-day evidence', () => {
+    const base = catalogPayload();
+    const payload = {
+      ...base,
+      view: 'fulfillment',
+      filters: { ...base.filters, view: 'fulfillment' },
+      data: {
+        kind: 'fulfillment',
+        leadingForecast: {
+          days: [
+            {
+              date: '2026-08-24',
+              expectedPostedOrders: 4,
+              forecastPaidOrders: 7.5,
+            },
+          ],
+        },
+      },
+      effectiveRanges: [
+        {
+          key: 'fulfillment',
+          startDate: '2026-06-01',
+          endDate: '2026-08-23',
+          sources: ['orders', 'ecotrack'],
+        },
+      ],
+    } as unknown as Analytics2Payload;
+
+    const focus = focusAnalytics2ForAssistant(payload, {
+      dimension: 'leading_forecast',
+      identifiers: [],
+      limit: 20,
+    });
+
+    expect(focus).toMatchObject({
+      fieldContract: expect.arrayContaining([
+        expect.objectContaining({
+          field: 'forecastPaidOrders',
+          modeled: true,
+          sources: ['orders', 'ecotrack'],
+          dateBasis: 'Future EcoTrack paid/archive recognition date.',
+          definition: expect.stringContaining('Modeled paid outcomes'),
+        }),
+      ]),
+    });
+  });
+
   it('rejects a drill-down dimension that does not belong to the selected workspace', () => {
     expect(
       adminAiAnalyticsQuerySchema.safeParse({
         view: 'money',
-        range: '30d',
+        date: { kind: 'rolling', period: '30d' },
         grain: 'day',
         focus: { dimension: 'products', search: 'hammer' },
-      }).error?.issues[0]?.message,
-    ).toContain('products is available in catalog, not money');
+      }).success,
+    ).toBe(false);
+    expect(
+      adminAiAnalyticsFocusSchemaForView('money').safeParse({
+        dimension: 'paid_funnel',
+        limit: 20,
+      }).success,
+    ).toBe(false);
+    expect(
+      adminAiAnalyticsFocusSchemaForView('acquisition').safeParse({
+        dimension: 'paid_funnel',
+        limit: 20,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('advertises focus dimensions only inside their valid workspace branch', () => {
+    const schema = z.toJSONSchema(adminAiAnalyticsQuerySchema) as {
+      oneOf: Array<{ properties: { view: { const: string }; focus: unknown } }>;
+    };
+    const branch = (view: string) =>
+      schema.oneOf.find((candidate) => candidate.properties.view.const === view);
+
+    expect(JSON.stringify(branch('money')?.properties.focus)).not.toContain('paid_funnel');
+    expect(JSON.stringify(branch('acquisition')?.properties.focus)).toContain('paid_funnel');
   });
 
   it('finds exact rows beyond the generic twenty-row compaction boundary', () => {
@@ -184,10 +275,7 @@ describe('admin assistant analytics focus', () => {
       ]),
       rows: [{ id: '50', title: 'Product 50' }],
     });
-    expect(result.data).toMatchObject({
-      kind: 'catalog',
-      focus: { rows: [{ id: '50' }] },
-    });
+    expect(result.data).toEqual({ kind: 'catalog', summary: null });
     expect((result.data as Record<string, unknown>).products).toBeUndefined();
     expect(result.truncations).toEqual([]);
   });

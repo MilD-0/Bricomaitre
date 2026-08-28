@@ -17,6 +17,34 @@ function nextForecastWorkingDate(date: string, restFrom: string | null) {
   return date;
 }
 
+function buildPaidOutcomeForecast(input: {
+  asOfDate: string;
+  historicalStartDate: string | null;
+  historicalDays: Array<{ date: string; paidOrders: number }>;
+  horizonDays: number;
+}) {
+  if (!input.historicalStartDate || input.historicalDays.length === 0) return [];
+  const observedByDate = new Map(input.historicalDays.map((day) => [day.date, day.paidOrders]));
+  const completed: Array<{ date: string; paidOrders: number }> = [];
+  for (let date = input.historicalStartDate; date < input.asOfDate; date = addDays(date, 1)) {
+    completed.push({ date, paidOrders: observedByDate.get(date) ?? 0 });
+  }
+  if (completed.length < 7) return [];
+  const fallback = completed.slice(-14);
+  return Array.from({ length: input.horizonDays }, (_, index) => {
+    const date = addDays(input.asOfDate, index + 1);
+    const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
+    const sameWeekday = completed
+      .filter((day) => new Date(`${day.date}T00:00:00.000Z`).getUTCDay() === weekday)
+      .slice(-8);
+    const sample = sameWeekday.length >= 2 ? sameWeekday : fallback;
+    return {
+      date,
+      forecastPaidOrders: weightedAverage(sample.map((day) => day.paidOrders)) ?? 0,
+    };
+  });
+}
+
 export function buildLeadingOrderForecast(input: {
   asOfDate: string;
   historicalStartDate: string;
@@ -24,6 +52,10 @@ export function buildLeadingOrderForecast(input: {
   historicalSubmittedOrders: number;
   historicalConfirmedOrders: number;
   historicalPostedOrders: number;
+  paidOutcomeHistory?: {
+    startDate: string;
+    days: Array<{ date: string; paidOrders: number }>;
+  };
   submittedOrders: number;
   submittedCodDzd: number;
   submittedGrossProfitDzd: number;
@@ -84,6 +116,7 @@ export function buildLeadingOrderForecast(input: {
       expectedPostedOrders: number;
       expectedGrossProfitDzd: number;
       expectedAdjustedProfitDzd: number;
+      forecastPaidOrders: number | null;
     }
   >();
   for (const stage of [submitted, confirmed]) {
@@ -92,11 +125,29 @@ export function buildLeadingOrderForecast(input: {
       expectedPostedOrders: 0,
       expectedGrossProfitDzd: 0,
       expectedAdjustedProfitDzd: 0,
+      forecastPaidOrders: null,
     };
     current.expectedPostedOrders += stage.expectedPostedOrders;
     current.expectedGrossProfitDzd += stage.expectedGrossProfitDzd;
     current.expectedAdjustedProfitDzd += stage.expectedAdjustedProfitDzd;
     byDay.set(stage.expectedPostingDate, current);
+  }
+  const paidOutcomeDays = buildPaidOutcomeForecast({
+    asOfDate: input.asOfDate,
+    historicalStartDate: input.paidOutcomeHistory?.startDate ?? null,
+    historicalDays: input.paidOutcomeHistory?.days ?? [],
+    horizonDays: 14,
+  });
+  for (const paidDay of paidOutcomeDays) {
+    const current = byDay.get(paidDay.date) ?? {
+      date: paidDay.date,
+      expectedPostedOrders: 0,
+      expectedGrossProfitDzd: 0,
+      expectedAdjustedProfitDzd: 0,
+      forecastPaidOrders: null,
+    };
+    current.forecastPaidOrders = paidDay.forecastPaidOrders;
+    byDay.set(paidDay.date, current);
   }
   const days = [...byDay.values()].sort((left, right) => left.date.localeCompare(right.date));
   return {
@@ -120,6 +171,10 @@ export function buildLeadingOrderForecast(input: {
     expectedGrossProfitDzd: submitted.expectedGrossProfitDzd + confirmed.expectedGrossProfitDzd,
     expectedAdjustedProfitDzd:
       submitted.expectedAdjustedProfitDzd + confirmed.expectedAdjustedProfitDzd,
+    forecastPaidOrders:
+      paidOutcomeDays.length > 0
+        ? paidOutcomeDays.reduce((sum, day) => sum + day.forecastPaidOrders, 0)
+        : null,
   };
 }
 
@@ -199,6 +254,7 @@ export function buildEconomicsForecast(
         lowerTrueProfitDzd: forecastTrueProfitDzd,
         upperTrueProfitDzd: forecastTrueProfitDzd,
         forecastPostedOrders: 0,
+        forecastPaidOrders: leadingByDate.get(date)?.forecastPaidOrders ?? null,
         samples: 0,
         method: 'configured-rest-day',
       } as const;
@@ -243,6 +299,7 @@ export function buildEconomicsForecast(
       lowerTrueProfitDzd: forecastTrueProfitDzd - 1.28 * spread,
       upperTrueProfitDzd: forecastTrueProfitDzd + 1.28 * spread,
       forecastPostedOrders: Math.max(baselinePostedOrders, leadingDay?.expectedPostedOrders ?? 0),
+      forecastPaidOrders: leadingDay?.forecastPaidOrders ?? null,
       knownPipelinePostedOrders: leadingDay?.expectedPostedOrders ?? 0,
       knownPipelineGrossProfitDzd: leadingDay?.expectedGrossProfitDzd ?? 0,
       knownPipelineAdjustedProfitDzd: leadingDay?.expectedAdjustedProfitDzd ?? 0,

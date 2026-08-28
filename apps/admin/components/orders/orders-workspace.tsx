@@ -22,7 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
-import { useDeferredValue, useMemo, useState } from 'react';
+import { useDeferredValue, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { requestJson as request } from '../../lib/admin-api';
 import type { EcotrackCatalogResponse } from '../../lib/ecotrack-admin-contracts';
@@ -1053,6 +1053,8 @@ export function OrdersWorkspace({
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
   const [openedOrder, setOpenedOrder] = useState<OrderRecord | null>(null);
+  const queueScrollTopRef = useRef(0);
+  const restoreQueueScrollRef = useRef(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [bulkStatus, setBulkStatus] = useState<OrderStatus>(2);
   const [projectionBasis, setProjectionBasis] = useState<ProfitProjectionBasis>('confirmed');
@@ -1060,6 +1062,20 @@ export function OrdersWorkspace({
     Partial<Record<ProfitProjectionBasis, DailyOrderStatusOverview>>
   >(() => (initialOverview ? { confirmed: initialOverview } : {}));
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const focusOrder = (orderId: number) => {
+    if (activeOrderId === null) queueScrollTopRef.current = window.scrollY;
+    restoreQueueScrollRef.current = false;
+    setActiveOrderId(orderId);
+  };
+  const returnToQueue = () => {
+    restoreQueueScrollRef.current = true;
+    setActiveOrderId(null);
+  };
+  useLayoutEffect(() => {
+    if (activeOrderId !== null || !restoreQueueScrollRef.current) return;
+    restoreQueueScrollRef.current = false;
+    window.scrollTo({ top: queueScrollTopRef.current, left: 0, behavior: 'auto' });
+  }, [activeOrderId]);
   useAdminAiSurfaceDetails({
     filters: {
       page,
@@ -1170,7 +1186,7 @@ export function OrdersWorkspace({
       toast.success(t('notifications.orders.delete.success', { target: target.label }));
       setDeleteTarget(null);
       setSelectedIds((current) => current.filter((id) => id !== target.id));
-      setActiveOrderId((current) => (current === target.id ? null : current));
+      if (activeOrderId === target.id) returnToQueue();
       await queryClient.invalidateQueries({ queryKey: ['orders-workspace'] });
     },
     onError: (_error, target) =>
@@ -1218,13 +1234,13 @@ export function OrdersWorkspace({
     const listed = orders.find((order) => order.id === orderId);
     if (listed) {
       setOpenedOrder(listed);
-      setActiveOrderId(orderId);
+      focusOrder(orderId);
       return;
     }
     try {
       const response = await request<OrderDetailResponse>(`/api/orders/${orderId}`);
       setOpenedOrder(response.item);
-      setActiveOrderId(response.item.id);
+      focusOrder(response.item.id);
       queryClient.setQueryData(['orders-workspace-detail', response.item.id], response);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('notifications.orders.load.error'));
@@ -1248,7 +1264,7 @@ export function OrdersWorkspace({
               onOpenOrder={(id) => void openOrderById(id)}
               onCreated={async (order) => {
                 setOpenedOrder(order);
-                setActiveOrderId(order.id);
+                focusOrder(order.id);
                 await queryClient.invalidateQueries({ queryKey: ['orders-workspace'] });
               }}
             />
@@ -1427,7 +1443,7 @@ export function OrdersWorkspace({
                     />
                     <button
                       type="button"
-                      onClick={() => setActiveOrderId(order.id)}
+                      onClick={() => focusOrder(order.id)}
                       className="min-w-0 rounded-sm text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
                     >
                       <span className="flex items-center gap-2">
@@ -1479,7 +1495,7 @@ export function OrdersWorkspace({
                         </a>
                       ) : null}
                       <CompactMenu label={`${t('labels.actions')} · ${order.fullName}`}>
-                        <CompactMenuItem onClick={() => setActiveOrderId(order.id)}>
+                        <CompactMenuItem onClick={() => focusOrder(order.id)}>
                           <ChevronRight className="size-4 rtl:hidden" aria-hidden="true" />
                           <ChevronLeft className="hidden size-4 rtl:block" aria-hidden="true" />
                           {t('actions.edit')}
@@ -1529,12 +1545,7 @@ export function OrdersWorkspace({
             )}
           >
             <div className="border-b border-border/60 px-3 py-2 lg:hidden">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setActiveOrderId(null)}
-              >
+              <Button type="button" size="sm" variant="outline" onClick={returnToQueue}>
                 <ChevronLeft className="size-4 rtl:hidden" aria-hidden="true" />
                 <ChevronRight className="hidden size-4 rtl:block" aria-hidden="true" />
                 {t('adminWorkspace.orders.queue')}

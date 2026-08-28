@@ -75,6 +75,7 @@ export type AdminAiToolActivityKey =
 
 const labelKeys: Record<string, AdminAiToolLabelKey> = {
   find_products: 'catalog',
+  query_products: 'catalog',
   inspect_products: 'catalog',
   create_product: 'productCreated',
   update_products: 'catalogUpdated',
@@ -84,6 +85,7 @@ const labelKeys: Record<string, AdminAiToolLabelKey> = {
   find_brands: 'taxonomy',
   find_categories: 'taxonomy',
   manage_taxonomy: 'taxonomyUpdated',
+  query_orders: 'orders',
   inspect_orders: 'orders',
   create_order: 'orderCreated',
   delete_orders: 'ordersDeleted',
@@ -156,6 +158,7 @@ const labelKeys: Record<string, AdminAiToolLabelKey> = {
 
 const destinationKeys: Record<string, AdminAiToolDestinationKey> = {
   find_products: 'products',
+  query_products: 'products',
   inspect_products: 'products',
   create_product: 'products',
   update_products: 'products',
@@ -165,6 +168,7 @@ const destinationKeys: Record<string, AdminAiToolDestinationKey> = {
   find_brands: 'taxonomy',
   find_categories: 'taxonomy',
   manage_taxonomy: 'taxonomy',
+  query_orders: 'orders',
   inspect_orders: 'orders',
   create_order: 'orders',
   delete_orders: 'orders',
@@ -217,6 +221,8 @@ const destinationKeys: Record<string, AdminAiToolDestinationKey> = {
   manage_analytics_costs: 'analytics',
   manage_analytics_day_overrides: 'analytics',
   sync_analytics_source: 'analytics',
+  query_analytics: 'analytics',
+  query_ai_stats: 'analytics',
   generate_product_content: 'products',
   get_product_content_job_status: 'products',
   suggest_discount: 'proposals',
@@ -309,6 +315,27 @@ function destinationHref(
   if (destinationKey === 'bulletin') return `/${locale}/bulletin`;
   if (destinationKey === 'storefront') return `/${locale}/administration/storefront`;
   if (destinationKey === 'analytics') {
+    if (toolName === 'query_ai_stats') {
+      return outputRecord(output)?.surface === 'shopping'
+        ? `/${locale}/stats/shopping-assistant`
+        : `/${locale}/stats/ai-assistants`;
+    }
+    if (toolName === 'query_analytics') {
+      const direct = outputRecord(output);
+      const firstResult = Array.isArray(direct?.results) ? outputRecord(direct.results[0]) : null;
+      const view = direct?.view ?? firstResult?.view;
+      const routes: Record<string, string> = {
+        command: '/stats',
+        money: '/stats/time',
+        acquisition: '/stats/meta-ads',
+        fulfillment: '/stats/fulfillment',
+        storefront: '/stats/website',
+        search: '/stats/search',
+        catalog: '/stats/products',
+        assumptions: '/stats/costs',
+      };
+      return `/${locale}${typeof view === 'string' ? (routes[view] ?? '/stats') : '/stats'}`;
+    }
     if (toolName === 'sync_analytics_source') {
       return outputRecord(output)?.source === 'searchConsole'
         ? `/${locale}/stats/search`
@@ -357,64 +384,7 @@ export function adminAiToolActivityKey(toolName: string): AdminAiToolActivityKey
 
 export const ADMIN_AI_PRESENTED_TOOL_NAMES = Object.freeze(Object.keys(labelKeys));
 
-export const ADMIN_AI_MUTATING_TOOL_NAMES = Object.freeze([
-  'create_product',
-  'update_products',
-  'archive_products',
-  'restore_products',
-  'manage_taxonomy',
-  'create_order',
-  'delete_orders',
-  'start_order_export',
-  'get_order_tracking_links',
-  'save_order_shopping_list',
-  'apply_order_shopping_list_inventory',
-  'post_orders_to_ecotrack',
-  'manage_ecotrack_shipments',
-  'change_ecotrack_shipments',
-  'update_order_status',
-  'update_order_details',
-  'adjust_inventory',
-  'receive_inventory',
-  'update_inventory_state',
-  'update_asset_state',
-  'reorder_assets',
-  'manage_assets',
-  'create_landing_page',
-  'edit_landing_page',
-  'review_ai_proposals',
-  'delete_expired_ai_proposals',
-  'create_bulletin_post',
-  'reply_bulletin_post',
-  'set_bulletin_reaction',
-  'update_bulletin_post',
-  'delete_bulletin_content',
-  'set_access_grant',
-  'revoke_access_grants',
-  'set_role_definition',
-  'recover_action_history',
-  'update_storefront_settings',
-  'update_storefront_announcement',
-  'update_analytics_settings',
-  'manage_analytics_costs',
-  'manage_analytics_day_overrides',
-  'sync_analytics_source',
-  'generate_product_content',
-  'stop_background_job',
-  'start_background_job',
-  'suggest_discount',
-  'suggest_featured_products',
-  'suggest_landing_page',
-  'categorize_catalog',
-  'propose_product_edit',
-  'propose_brand_edit',
-  'propose_category_edit',
-  'propose_brand_create',
-  'propose_category_create',
-] as const);
-
-const mutatingToolNames = new Set<string>(ADMIN_AI_MUTATING_TOOL_NAMES);
-
-export function adminAiToolMutatesApplication(toolName: string) {
-  return mutatingToolNames.has(toolName);
-}
+export {
+  ADMIN_AI_MUTATING_TOOL_NAMES,
+  adminAiToolMutatesApplication,
+} from './admin-ai-execution-capabilities';

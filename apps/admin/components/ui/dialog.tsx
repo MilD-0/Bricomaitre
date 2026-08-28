@@ -31,10 +31,12 @@ function getFocusableElements(container: HTMLElement | null) {
 export function Dialog({
   open,
   onOpenChange,
+  fullScreen = false,
   children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  fullScreen?: boolean;
   children: React.ReactNode;
 }) {
   const mounted = React.useSyncExternalStore(
@@ -125,7 +127,10 @@ export function Dialog({
       <AnimatePresence>
         {open ? (
           <motion.div
-            className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto p-4 sm:items-center"
+            className={cn(
+              'fixed inset-0 z-[100] flex justify-center overflow-y-auto',
+              fullScreen ? 'items-stretch p-0' : 'items-start p-4 sm:items-center',
+            )}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -143,7 +148,7 @@ export function Dialog({
               exit={{ opacity: 0 }}
             />
             <motion.div
-              className="relative z-10 flex w-full justify-center"
+              className={cn('relative z-10 flex w-full justify-center', fullScreen && 'h-full')}
               initial={{ opacity: 0, y: 20, scale: 0.98, filter: 'blur(8px)' }}
               animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
               exit={{ opacity: 0, y: 8, scale: 0.98, filter: 'blur(6px)' }}

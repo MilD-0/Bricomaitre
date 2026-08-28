@@ -853,6 +853,7 @@ async function loadShopping(db: Database, filters: AiStatsFilters): Promise<AiSh
   const failed = numberValue(summary.failed);
   const ratedAnswers = numberValue(summary.helpful) + numberValue(summary.not_helpful);
   const paidAssisted = numberValue(order.paid_assisted);
+  const contributionOrders = numberValue(order.contribution_orders);
   const storefrontPricing = getAiUsagePricing('storefront');
   const estimatedCostUsd = storefrontPricing
     ? (numberValue(summary.input_tokens) * storefrontPricing.input +
@@ -892,7 +893,13 @@ async function loadShopping(db: Database, filters: AiStatsFilters): Promise<AiSh
         key: 'paidContribution',
         value: numberValue(order.paid_contribution_dzd),
         unit: 'dzd',
-        sample: numberValue(order.contribution_orders),
+        sample: contributionOrders,
+      },
+      {
+        key: 'paidContributionCoverage',
+        value: aiRate(contributionOrders, paidAssisted),
+        unit: 'percent',
+        sample: paidAssisted,
       },
     ],
     summary: {
@@ -927,7 +934,7 @@ async function loadShopping(db: Database, filters: AiStatsFilters): Promise<AiSh
       confirmedAssisted: numberValue(order.confirmed_assisted),
       paidAssisted,
       paidContributionDzd: numberValue(order.paid_contribution_dzd),
-      contributionCoveragePct: aiRate(numberValue(order.contribution_orders), paidAssisted),
+      contributionCoveragePct: aiRate(contributionOrders, paidAssisted),
     },
     trend: foldShoppingTrend(rows(trendResult), filters.resolvedGrain),
     intents: rows(intentResult).map((row) => {

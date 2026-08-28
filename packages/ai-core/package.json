@@ -15,8 +15,7 @@
     "./product-content": "./src/product-content.ts",
     "./product-categorization": "./src/product-categorization.ts",
     "./testing": "./src/testing.ts",
-    "./pricing": "./src/pricing.ts",
-    "./evals": "./src/evals.ts"
+    "./pricing": "./src/pricing.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.42",

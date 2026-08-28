@@ -1,11 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  adminAiAnalyticsDayOverridesMutationSchemaForMessage,
-  adminAiAnalyticsCostsMutationSchemaForMessage,
-  adminAiAnalyticsSettingsPatchSchemaForMessage,
+  adminAiAnalyticsSettingsPatchSchema,
   adminAiAnalyticsSyncSchema,
-  adminAiAnalyticsSyncSchemaForContext,
   manageAdminAiAnalyticsCosts,
   manageAdminAiAnalyticsDayOverrides,
   syncAdminAiAnalyticsSource,
@@ -13,64 +10,7 @@ import {
 } from './admin-ai-analytics-actions';
 
 describe('admin AI analytics actions', () => {
-  it('exposes only the planning settings explicitly named by the operator', () => {
-    const schema = adminAiAnalyticsSettingsPatchSchemaForMessage(
-      'Adopte le taux de retour observé à 24 % comme taux de planification.',
-    );
-
-    expect(schema.safeParse({ planningReturnRate: 24 }).success).toBe(true);
-    expect(schema.safeParse({ planningReturnRate: 24, fxRate: 250 }).success).toBe(false);
-  });
-
-  it('exposes only explicitly named daily override fields', () => {
-    const schema = adminAiAnalyticsDayOverridesMutationSchemaForMessage(
-      'Enregistre un override quotidien avec un taux de planification et une note.',
-    );
-    const operation = {
-      operations: [
-        {
-          action: 'upsert',
-          date: '2026-08-21',
-          changes: { planningReturnRate: 21, note: 'Fermeture fournisseur' },
-        },
-      ],
-    };
-
-    expect(schema.safeParse(operation).success).toBe(true);
-    expect(
-      schema.safeParse({
-        operations: [
-          {
-            ...operation.operations[0],
-            changes: { ...operation.operations[0].changes, grossProfitDzd: null },
-          },
-        ],
-      }).success,
-    ).toBe(false);
-  });
-
-  it('exposes only explicitly named fields for partial cost updates', () => {
-    const schema = adminAiAnalyticsCostsMutationSchemaForMessage(
-      'Modifie le montant du coût 7 à 42 000 DZD.',
-    );
-    const operation = {
-      operations: [{ action: 'update', id: 7, changes: { amountDzd: 42_000 } }],
-    };
-
-    expect(schema.safeParse(operation).success).toBe(true);
-    expect(
-      schema.safeParse({
-        operations: [
-          {
-            ...operation.operations[0],
-            changes: { ...operation.operations[0].changes, name: 'Unexpected overwrite' },
-          },
-        ],
-      }).success,
-    ).toBe(false);
-  });
-
-  it('patches only explicitly requested planning settings and refreshes facts', async () => {
+  it('changes only the assistant-controlled planning return rate and refreshes facts', async () => {
     const updateSettings = vi.fn(async (input) => ({ ...input }));
     const refreshFacts = vi.fn(async () => undefined);
 
@@ -88,12 +28,25 @@ describe('admin AI analytics actions', () => {
       defaultReturnRate: 24,
       restFrom: null,
     });
-    expect(result).toMatchObject({
+    expect(result).toEqual({
+      kind: 'analytics_settings',
       previous: { planningReturnRate: 18 },
       current: { planningReturnRate: 24 },
       changedFields: ['planningReturnRate'],
     });
     expect(refreshFacts).toHaveBeenCalledOnce();
+  });
+
+  it('rejects operator-controlled Analytics settings', () => {
+    expect(() =>
+      adminAiAnalyticsSettingsPatchSchema.parse({ planningReturnRate: 24, fxRate: 1 }),
+    ).toThrow();
+    expect(() =>
+      adminAiAnalyticsSettingsPatchSchema.parse({
+        planningReturnRate: 24,
+        fridayRestFrom: null,
+      }),
+    ).toThrow();
   });
 
   it('merges cost edits with canonical records and reports partial batch outcomes', async () => {
@@ -191,20 +144,6 @@ describe('admin AI analytics actions', () => {
   });
 
   it('uses exact source ranges and enforces Meta’s existing 90-day cap', async () => {
-    expect(
-      adminAiAnalyticsSyncSchemaForContext('Synchronise cette période.', 'search').safeParse({
-        source: 'meta',
-        since: '2026-08-01',
-        until: '2026-08-23',
-      }).success,
-    ).toBe(false);
-    expect(
-      adminAiAnalyticsSyncSchemaForContext('Synchronise cette période.', 'search').safeParse({
-        source: 'searchConsole',
-        since: '2026-08-01',
-        until: '2026-08-23',
-      }).success,
-    ).toBe(true);
     expect(
       adminAiAnalyticsSyncSchema.safeParse({
         source: 'meta',

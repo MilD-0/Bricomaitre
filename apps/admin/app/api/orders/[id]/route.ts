@@ -4,17 +4,14 @@ import { CanonicalOrderNotFoundError } from '@bric/storefront-core/order-write';
 import { getDb, hasDb } from '@bric/db/client';
 import { loadOrderDetail } from '../../../../lib/admin-orders-data';
 import {
+  AdminOrderHasActiveEcotrackShipmentError,
   AdminOrderLifecycleNotFoundError,
   deleteAdminOrder,
 } from '../../../../lib/admin-order-lifecycle';
 import { auth } from '../../../../lib/auth';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { orderPatchSchema } from '../../../../lib/orders';
-import {
-  AdminOrderNotFoundError,
-  AdminOrderStatusTransitionError,
-  updateAdminOrder,
-} from '../../../../lib/admin-order-update';
+import { AdminOrderNotFoundError, updateAdminOrder } from '../../../../lib/admin-order-update';
 import { ensureAdminOrderPublicToken } from '../../../../lib/admin-order-tracking';
 import { requireMutationAccess } from '../../../../lib/rbac';
 
@@ -92,21 +89,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     return NextResponse.json({
       ok: true,
-      item: await updateAdminOrder(db, numericId, parsed.data, actor),
+      item: await updateAdminOrder(db, numericId, parsed.data, actor, {
+        allowStatusCorrection: parsed.data.confirmed !== undefined,
+      }),
     });
   } catch (error) {
     if (error instanceof AdminOrderNotFoundError) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    }
-    if (error instanceof AdminOrderStatusTransitionError) {
-      return NextResponse.json(
-        {
-          error: 'This status change requires an explicit correction.',
-          from: error.from,
-          to: error.to,
-        },
-        { status: 409 },
-      );
     }
     throw error;
   }
@@ -136,6 +125,15 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   } catch (error) {
     if (error instanceof AdminOrderLifecycleNotFoundError) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    if (error instanceof AdminOrderHasActiveEcotrackShipmentError) {
+      return NextResponse.json(
+        {
+          error: 'Delete the active EcoTrack shipment before permanently deleting this order.',
+          trackingNumber: error.trackingNumber,
+        },
+        { status: 409 },
+      );
     }
     throw error;
   }

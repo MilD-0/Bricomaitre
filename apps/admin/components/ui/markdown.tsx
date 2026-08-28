@@ -16,23 +16,20 @@ const markdownComponents: Components = {
   p: ({ className, ...props }) => (
     <p
       {...props}
-      className={cn(
-        'my-0 whitespace-pre-wrap leading-6 [overflow-wrap:anywhere] [&+*]:mt-4',
-        className,
-      )}
+      className={cn('my-0 leading-[1.65] [overflow-wrap:anywhere] [&+*]:mt-3', className)}
     />
   ),
   ul: ({ className, ...props }) => (
-    <ul {...props} className={cn('my-4 list-disc space-y-1 pl-6', className)} />
+    <ul {...props} className={cn('my-3 list-disc space-y-1.5 ps-5', className)} />
   ),
   ol: ({ className, ...props }) => (
-    <ol {...props} className={cn('my-4 list-decimal space-y-1 pl-6', className)} />
+    <ol {...props} className={cn('my-3 list-decimal space-y-1.5 ps-5', className)} />
   ),
   li: ({ className, ...props }) => (
     <li
       {...props}
       className={cn(
-        'whitespace-pre-wrap leading-6 [overflow-wrap:anywhere] marker:text-muted-foreground',
+        'leading-[1.65] [overflow-wrap:anywhere] marker:text-muted-foreground',
         className,
       )}
     />
@@ -41,30 +38,30 @@ const markdownComponents: Components = {
     <blockquote
       {...props}
       className={cn(
-        'my-4 border-l-2 border-border/80 pl-4 italic text-muted-foreground',
+        'my-3 border-s-2 border-border/80 ps-3 italic text-muted-foreground',
         className,
       )}
     />
   ),
   hr: ({ className, ...props }) => (
-    <hr {...props} className={cn('my-6 border-border/70', className)} />
+    <hr {...props} className={cn('my-4 border-border/70', className)} />
   ),
   h1: ({ className, ...props }) => (
     <h1
       {...props}
-      className={cn('mt-0 text-xl font-semibold tracking-tight [&+*]:mt-4', className)}
+      className={cn('mt-0 text-lg font-semibold tracking-tight [&+*]:mt-3', className)}
     />
   ),
   h2: ({ className, ...props }) => (
     <h2
       {...props}
-      className={cn('mt-0 text-lg font-semibold tracking-tight [&+*]:mt-4', className)}
+      className={cn('mt-0 text-base font-semibold tracking-tight [&+*]:mt-3', className)}
     />
   ),
   h3: ({ className, ...props }) => (
     <h3
       {...props}
-      className={cn('mt-0 text-base font-semibold tracking-tight [&+*]:mt-3', className)}
+      className={cn('mt-0 text-sm font-semibold tracking-tight [&+*]:mt-2', className)}
     />
   ),
   pre: ({ className, ...props }) => (
@@ -77,13 +74,15 @@ const markdownComponents: Components = {
     />
   ),
   table: ({ className, ...props }) => (
-    <table
-      {...props}
-      className={cn(
-        'my-4 w-full max-w-full table-fixed border-collapse text-start text-xs leading-5',
-        className,
-      )}
-    />
+    <div className="my-3 max-w-full overflow-x-auto rounded-lg border border-border/55">
+      <table
+        {...props}
+        className={cn(
+          'w-full min-w-[28rem] border-collapse text-start text-xs leading-5',
+          className,
+        )}
+      />
+    </div>
   ),
   th: ({ className, ...props }) => (
     <th
@@ -129,7 +128,7 @@ export function Markdown({ children, className }: { children: string; className?
   return (
     <div
       className={cn(
-        'min-w-0 max-w-full overflow-hidden text-sm text-foreground [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
+        'min-w-0 w-full max-w-[75ch] overflow-hidden text-sm text-foreground [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
         className,
       )}
     >

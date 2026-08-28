@@ -152,6 +152,7 @@ export async function updateAdminOrder(
   orderId: number,
   input: OrderPatchInput,
   actor?: ActionActor,
+  options: { allowStatusCorrection?: boolean } = {},
 ) {
   const changes = orderPatchSchema.parse(input);
   const existing = await db.query.orders.findFirst({ where: eq(orders.id, orderId) });
@@ -160,6 +161,7 @@ export async function updateAdminOrder(
   const currentStatus = coerceOrderStatus(existing.confirmed);
   if (
     changes.confirmed !== undefined &&
+    !options.allowStatusCorrection &&
     !canTransitionOrderStatus(currentStatus, changes.confirmed)
   ) {
     throw new AdminOrderStatusTransitionError(currentStatus, changes.confirmed);
@@ -259,6 +261,7 @@ export async function updateAdminOrder(
           changes.confirmed !== undefined || changes.noAnswerCount !== undefined
             ? { value: nextStatus, noAnswerCount: nextNoAnswerCount }
             : undefined,
+        allowStatusCorrection: options.allowStatusCorrection,
         actor,
         now,
       });

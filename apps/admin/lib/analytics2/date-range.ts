@@ -95,7 +95,15 @@ export function resolveAnalytics2Filters(
   now = new Date(),
 ): Analytics2Filters {
   const parsed = analytics2QuerySchema.parse(raw);
-  const endDate = parsed.range === 'custom' ? parsed.endDate! : dayInTimezone(now);
+  const referenceDate = dayInTimezone(now);
+  const endDate =
+    parsed.range === 'custom'
+      ? parsed.endDate!
+      : parsed.range === 'all' && parsed.endDate
+        ? parsed.endDate > referenceDate
+          ? referenceDate
+          : parsed.endDate
+        : referenceDate;
   let startDate: string | null;
 
   switch (parsed.range) {

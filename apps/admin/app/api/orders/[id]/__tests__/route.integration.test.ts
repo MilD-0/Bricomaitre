@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DELETE, GET, PATCH, POST } from '../route';
+import { AdminOrderHasActiveEcotrackShipmentError } from '../../../../../lib/admin-order-lifecycle';
 import { orderPatchSchema } from '../../../../../lib/orders';
 
 const {
@@ -1080,5 +1081,24 @@ describe('app/api/orders/[id]/route', () => {
       name: 'Admin',
     });
     await expect(response.json()).resolves.toEqual({ ok: true });
+  });
+
+  it('requires the active EcoTrack shipment to be deleted before permanent local deletion', async () => {
+    hasDbMock.mockReturnValue(true);
+    getDbMock.mockReturnValue({ marker: 'db' });
+    deleteAdminOrderMock.mockRejectedValueOnce(
+      new AdminOrderHasActiveEcotrackShipmentError(7, 'TRK-7'),
+    );
+
+    const response = await DELETE(
+      new NextRequest('http://localhost/api/orders/7', { method: 'DELETE' }),
+      { params: Promise.resolve({ id: '7' }) },
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Delete the active EcoTrack shipment before permanently deleting this order.',
+      trackingNumber: 'TRK-7',
+    });
   });
 });

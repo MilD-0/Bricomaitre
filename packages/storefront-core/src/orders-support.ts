@@ -351,7 +351,7 @@ const ALLOWED_ORDER_STATUS_TRANSITIONS: Record<OrderStatus, readonly OrderStatus
   4: [],
   5: [2, 3, 4, 6, 7, 8, 9, 10, 11],
   6: [],
-  7: [4, 5, 8, 9, 10],
+  7: [3, 4, 5, 8, 9, 10],
   8: [],
   9: [],
   10: [],

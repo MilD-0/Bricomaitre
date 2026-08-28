@@ -1,4 +1,4 @@
-import { and, asc, count, desc, ilike, inArray, isNull, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
 import {
@@ -12,6 +12,10 @@ import {
   productCards,
   products,
 } from '@bric/db/schema';
+import {
+  buildCatalogSearchCondition,
+  buildCatalogSearchRelevance,
+} from '@bric/storefront-core/catalog';
 import type {
   AssetBannerRecord,
   AssetMetaBrand,
@@ -170,6 +174,13 @@ export async function loadAssetsTaxonomyData(): Promise<{
   return { brands: brandRows, categories: categoryRows };
 }
 
+export function buildAssetProductSearch(value: string) {
+  return {
+    condition: buildCatalogSearchCondition(value),
+    relevance: buildCatalogSearchRelevance(value),
+  };
+}
+
 export async function searchAssetProductOptions(input: {
   search: string;
   ids: number[];
@@ -200,22 +211,27 @@ export async function searchAssetProductOptions(input: {
   }
 
   const query = input.search.trim();
-  const searchCondition = query
-    ? or(
-        ilike(products.title, `%${query}%`),
-        ilike(products.sku, `%${query}%`),
-        ilike(products.barcode, `%${query}%`),
-      )
-    : undefined;
-  const where = and(isNull(products.archivedAt), searchCondition);
+  const search = buildAssetProductSearch(query);
+  const where = and(isNull(products.archivedAt), search.condition);
   const offset = (input.page - 1) * input.limit;
   const [countRows, rows] = await Promise.all([
-    db.select({ value: count() }).from(products).where(where),
+    db
+      .select({ value: count() })
+      .from(products)
+      .leftJoin(brands, eq(products.brandId, brands.id))
+      .leftJoin(categories, eq(products.categoryId, categories.id))
+      .where(where),
     db
       .select(selection)
       .from(products)
+      .leftJoin(brands, eq(products.brandId, brands.id))
+      .leftJoin(categories, eq(products.categoryId, categories.id))
       .where(where)
-      .orderBy(asc(products.title), asc(products.id))
+      .orderBy(
+        ...(search.relevance ? [desc(search.relevance)] : []),
+        asc(products.title),
+        asc(products.id),
+      )
       .limit(input.limit)
       .offset(offset),
   ]);

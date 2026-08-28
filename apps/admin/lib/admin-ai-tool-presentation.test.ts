@@ -12,6 +12,7 @@ describe('admin assistant tool presentation', () => {
   it('gives every presented assistant action a specific human result label', () => {
     const toolNames = [
       'find_products',
+      'query_products',
       'inspect_products',
       'create_product',
       'update_products',
@@ -21,6 +22,7 @@ describe('admin assistant tool presentation', () => {
       'find_brands',
       'find_categories',
       'manage_taxonomy',
+      'query_orders',
       'inspect_orders',
       'create_order',
       'delete_orders',
@@ -97,6 +99,7 @@ describe('admin assistant tool presentation', () => {
       expect(adminAiToolActivityKey(toolName)).not.toBe('result');
     }
     expect(adminAiToolActivityKey('query_analytics')).toBe('analytics');
+    expect(adminAiToolActivityKey('query_ai_stats')).toBe('analytics');
     expect(adminAiToolActivityKey('update_analytics_settings')).toBe('analytics');
   });
 
@@ -105,12 +108,14 @@ describe('admin assistant tool presentation', () => {
       expect(adminAiToolMutatesApplication(toolName)).toBe(true);
     }
     for (const toolName of [
+      'query_orders',
       'inspect_orders',
       'preview_ecotrack_posting',
       'load_ecotrack_requirements',
       'ecotrack_posting_terminal',
       'inspect_ecotrack_shipments',
       'query_analytics',
+      'query_ai_stats',
       'list_background_jobs',
     ]) {
       expect(adminAiToolMutatesApplication(toolName)).toBe(false);
@@ -126,6 +131,22 @@ describe('admin assistant tool presentation', () => {
     ).toBe('/en/stats/search');
     expect(adminAiToolPresentation('sync_analytics_source', { source: 'meta' }, 'ar').href).toBe(
       '/ar/stats/meta-ads',
+    );
+    expect(adminAiToolPresentation('query_analytics', { view: 'fulfillment' }, 'en').href).toBe(
+      '/en/stats/fulfillment',
+    );
+    expect(
+      adminAiToolPresentation(
+        'query_analytics',
+        { kind: 'analytics_investigation', results: [{ view: 'search' }] },
+        'fr',
+      ).href,
+    ).toBe('/fr/stats/search');
+    expect(adminAiToolPresentation('query_ai_stats', { surface: 'operations' }, 'en').href).toBe(
+      '/en/stats/ai-assistants',
+    );
+    expect(adminAiToolPresentation('query_ai_stats', { surface: 'shopping' }, 'ar').href).toBe(
+      '/ar/stats/shopping-assistant',
     );
   });
 

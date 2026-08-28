@@ -70,6 +70,18 @@ describe('catalog query', () => {
     });
   });
 
+  it('preserves nullable price filters when a canonical query is parsed again on the client', () => {
+    const canonical = parseCatalogPageQuery();
+    const reparsed = parseCatalogPageQuery(canonical);
+
+    expect(reparsed).toMatchObject({ minPrice: null, maxPrice: null });
+    expect(parseCatalogPageQuery({ minPrice: '', maxPrice: null })).toMatchObject({
+      minPrice: null,
+      maxPrice: null,
+    });
+    expect(buildCatalogApiPath(reparsed, 2)).toBe('/api/catalog?page=2');
+  });
+
   it('builds stable localized links and omits default parameters', () => {
     const query = parseCatalogPageQuery({
       q: 'perceuse',

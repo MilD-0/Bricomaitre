@@ -4,6 +4,8 @@ import {
   ArrowUpRight,
   Bot,
   Check,
+  Maximize2,
+  Minimize2,
   Pencil,
   Send,
   Sparkles,
@@ -14,20 +16,13 @@ import {
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 
 import { consumeAdminAiChatResponse, type AdminAiChatStatus } from '../lib/admin-ai-chat-stream';
-import { localizedStatsUrl } from '../lib/analytics2-routes';
-import type { Analytics2View } from '../lib/analytics2';
+import {
+  adminAiEvidenceToolResults,
+  adminAiPresentationFromToolResults,
+  type AdminAiPresentationPlan,
+} from '../lib/admin-ai-presentation';
 import { suggestionKeysForAdminAi } from '../lib/admin-ai-capabilities';
 import {
   adminAiToolActivityKey,
@@ -35,14 +30,13 @@ import {
   adminAiToolPresentation,
 } from '../lib/admin-ai-tool-presentation';
 import {
-  adminAiMetricsFromUnknown,
   adminAiResultTables,
   adminAiScalarEntries,
-  adminAiToolResultsFromUnknown,
   isAdminAiScalar,
   type AdminAiToolResult,
 } from '../lib/admin-ai-result-view';
 import type { PermissionKey } from '../lib/permissions';
+import { cn } from '../lib/utils';
 import {
   ADMIN_AI_DEFAULT_MODEL,
   ADMIN_AI_DEFAULT_REASONING_EFFORT,
@@ -59,85 +53,14 @@ import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Markdown } from './ui/markdown';
 import { Spinner } from './ui/spinner';
-import { Switch } from './ui/switch';
 import { Textarea } from './ui/textarea';
 import { useAdminAiSurfaceContext } from './admin-ai-surface-context';
 import { ADMIN_AI_OPEN_EVENT, notifyAdminAiMutation } from '../lib/admin-ai-events';
 import { ChatSidebar } from './admin-ai-chat/chat-sidebar';
+import { AdminAiPresentationBlocks } from './admin-ai-chat/presentation-blocks';
 import { AdminAiResultTable } from './admin-ai-chat/result-table';
 import type { AiJob, ConversationSummary } from './admin-ai-chat/types';
 
-type AnalyticsMetricResult = {
-  key: string;
-  name?: string;
-  value: unknown;
-  previous?: unknown;
-  changePct?: number | null;
-  unit?: string;
-  definition?: string;
-  requestedRange?: { startDate?: string | null; endDate?: string | null };
-  effectiveRange?: { startDate?: string | null; endDate?: string | null };
-  dateBasis?: string;
-  asOf?: string | null;
-  coveragePct?: number | null;
-  maturity?: string;
-  estimated?: boolean;
-  assumptions?: string[];
-  attributionCoveragePct?: number | null;
-  comparisonStatus?: string;
-  comparisonReason?: string;
-  warning?: string | null;
-};
-type AnalyticsFocusResult = {
-  dimension?: string;
-  definition?: string;
-  dateBasis?: string;
-  totalSemantics?: string;
-  requestedRange?: { startDate?: string | null; endDate?: string | null };
-  effectiveRange?: { startDate?: string | null; endDate?: string | null };
-  available?: number;
-  matched?: number;
-  included?: number;
-  truncated?: boolean;
-  warning?: string | null;
-  fieldContract?: Array<{
-    field?: string;
-    definition?: string;
-    unit?: string;
-    modeled?: boolean;
-    estimation?: string | null;
-    maturity?: string | null;
-    attribution?: string | null;
-  }>;
-  rows?: unknown[];
-};
-type AnalyticsInvestigation = {
-  comparisonStatus?: 'aligned' | 'unavailable';
-  requestedRange?: { startDate?: string | null; endDate?: string | null };
-  commonEffectiveRange?: { startDate?: string | null; endDate?: string | null } | null;
-  warning?: string | null;
-};
-type AnalyticsResult = {
-  query?: string;
-  view?: string;
-  source?: string;
-  definition?: string;
-  metrics?: AnalyticsMetricResult[];
-  focus?: AnalyticsFocusResult | null;
-  data?: unknown;
-  caveats?: string[];
-  filters?: {
-    startDate?: string | null;
-    endDate?: string | null;
-    range?: string;
-    grain?: string;
-  };
-  generatedAt?: string;
-  sources?: Array<Record<string, unknown>>;
-  warnings?: unknown[];
-  truncations?: Array<{ path?: string; available?: number; included?: number }>;
-  investigation?: AnalyticsInvestigation;
-};
 type Proposal = { id: number; status: 'proposed' | 'applied' | 'rejected' };
 type ChatMessage = {
   id?: string;
@@ -145,9 +68,10 @@ type ChatMessage = {
   role: 'user' | 'assistant';
   content: string;
   feedback?: 'helpful' | 'not_helpful';
-  analytics?: AnalyticsResult[];
   proposals?: Proposal[];
   results?: AdminAiToolResult[];
+  evidence?: AdminAiToolResult[];
+  presentation?: AdminAiPresentationPlan | null;
   terminal?: boolean;
   jobId?: string;
 };
@@ -165,159 +89,8 @@ type LandingPageGenerationPresentation = {
 };
 type ProposalNextAction = 'refresh' | 'regenerate' | 'review' | 'retry';
 
-export const ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY = 'bricomaitre:admin-ai:auto-accept';
 export const ADMIN_AI_MODEL_STORAGE_KEY = 'bricomaitre:admin-ai:model';
 export const ADMIN_AI_REASONING_EFFORT_STORAGE_KEY = 'bricomaitre:admin-ai:reasoning-effort';
-
-const analyticsChartMetricKeys = [
-  'postedUnits',
-  'paidUnits',
-  'postedOrders',
-  'paidOrders',
-  'adCostDzd',
-  'spendEur',
-  'impressions',
-  'outboundClicks',
-  'clicks',
-  'purchases',
-  'unitsSold',
-  'orders',
-  'views',
-  'inventoryQuantity',
-  'discountAmount',
-  'revenue',
-  'profit',
-  'sessions',
-  'pageViews',
-  'count',
-  'totalValue',
-  'contributionLtvDzd',
-  'projectedContributionDzd',
-] as const;
-const analyticsChartPalette = [
-  'hsl(var(--chart-1))',
-  'hsl(var(--chart-2))',
-  'hsl(var(--chart-3))',
-  'hsl(var(--chart-4))',
-  'hsl(var(--chart-5))',
-] as const;
-
-function finiteNumber(value: unknown) {
-  const numeric =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string' && value.trim()
-        ? Number(value)
-        : Number.NaN;
-  return Number.isFinite(numeric) ? numeric : null;
-}
-
-export function selectAnalyticsChartMetric(rows: Record<string, unknown>[], columns: string[]) {
-  for (const key of analyticsChartMetricKeys) {
-    if (columns.includes(key) && rows.some((row) => Math.abs(finiteNumber(row[key]) ?? 0) > 0)) {
-      return key;
-    }
-  }
-  return null;
-}
-
-export function analyticsChartRows(rows: Record<string, unknown>[], valueKey: string | null) {
-  if (!valueKey) return [];
-  return rows.flatMap((row) => {
-    const value = finiteNumber(row[valueKey]);
-    return value == null ? [] : [{ ...row, __chartValue: value }];
-  });
-}
-
-const analyticsViews = new Set<Analytics2View>([
-  'command',
-  'money',
-  'acquisition',
-  'fulfillment',
-  'storefront',
-  'search',
-  'catalog',
-  'assumptions',
-]);
-
-function analyticsWorkspaceUrl(result: AnalyticsResult, locale: string) {
-  const view = result.view;
-  if (!view || !analyticsViews.has(view as Analytics2View)) return `/${locale}/stats`;
-  const source = Object.fromEntries(
-    Object.entries(result.filters ?? {}).flatMap(([key, value]) =>
-      typeof value === 'string' ? [[key, value]] : [],
-    ),
-  );
-  return localizedStatsUrl(locale, view as Analytics2View, source);
-}
-
-function analyticsFocusTable(focus: AnalyticsFocusResult | null | undefined) {
-  const rows = (focus?.rows ?? []).filter(
-    (row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object',
-  );
-  if (!rows.length) return null;
-  const columns = [...new Set(rows.flatMap((row) => Object.keys(row)))]
-    .filter((column) => rows.some((row) => isAdminAiScalar(row[column])))
-    .slice(0, 8);
-  return columns.length
-    ? {
-        path: focus?.dimension ?? 'focus',
-        rows: rows.slice(0, 20),
-        columns,
-        available: focus?.matched ?? rows.length,
-      }
-    : null;
-}
-
-function analyticsRangesDiffer(metric: AnalyticsMetricResult) {
-  return Boolean(
-    metric.requestedRange &&
-    metric.effectiveRange &&
-    (metric.requestedRange.startDate !== metric.effectiveRange.startDate ||
-      metric.requestedRange.endDate !== metric.effectiveRange.endDate),
-  );
-}
-
-function resultFromUnknown(
-  value: unknown,
-  depth = 0,
-  investigation?: AnalyticsInvestigation,
-): AnalyticsResult[] {
-  if (depth > 5 || value == null) return [];
-  if (Array.isArray(value))
-    return value.flatMap((item) => resultFromUnknown(item, depth + 1, investigation));
-  if (typeof value !== 'object') return [];
-  const item = value as Record<string, unknown>;
-  const nextInvestigation: AnalyticsInvestigation | undefined =
-    item.kind === 'analytics_investigation'
-      ? {
-          comparisonStatus:
-            item.comparisonStatus === 'aligned' || item.comparisonStatus === 'unavailable'
-              ? (item.comparisonStatus as AnalyticsInvestigation['comparisonStatus'])
-              : undefined,
-          requestedRange:
-            item.requestedRange && typeof item.requestedRange === 'object'
-              ? (item.requestedRange as AnalyticsInvestigation['requestedRange'])
-              : undefined,
-          commonEffectiveRange:
-            item.commonEffectiveRange && typeof item.commonEffectiveRange === 'object'
-              ? (item.commonEffectiveRange as {
-                  startDate?: string | null;
-                  endDate?: string | null;
-                })
-              : null,
-          warning: typeof item.warning === 'string' ? item.warning : null,
-        }
-      : investigation;
-  return [
-    ...(typeof item.query === 'string' && 'data' in item
-      ? [{ ...(item as AnalyticsResult), investigation: nextInvestigation }]
-      : []),
-    ...Object.values(item).flatMap((child) =>
-      resultFromUnknown(child, depth + 1, nextInvestigation),
-    ),
-  ];
-}
 
 function proposalsFromUnknown(value: unknown, depth = 0): Proposal[] {
   if (depth > 5 || value == null) return [];
@@ -348,13 +121,19 @@ function queryLabel(value: string | undefined) {
 }
 
 function presentationFromUnknown(value: unknown) {
+  const evidence = adminAiEvidenceToolResults(value);
   return {
-    analytics: resultFromUnknown(value),
     proposals: [
       ...new Map(proposalsFromUnknown(value).map((proposal) => [proposal.id, proposal])).values(),
     ],
-    results: adminAiToolResultsFromUnknown(value).filter(
-      (result) => result.toolName !== 'query_analytics',
+    evidence,
+    presentation: adminAiPresentationFromToolResults(value),
+    results: evidence.filter(
+      (result) =>
+        result.toolName !== 'query_analytics' &&
+        result.toolName !== 'query_ai_stats' &&
+        (adminAiToolMutatesApplication(result.toolName) ||
+          result.toolName === 'ecotrack_posting_terminal'),
     ),
   };
 }
@@ -515,12 +294,6 @@ function ecotrackTerminalPresentation(
   };
 }
 
-function adminAiNoticeText(value: unknown) {
-  if (isAdminAiScalar(value)) return queryLabel(String(value ?? ''));
-  const entries = adminAiScalarEntries(value, 5);
-  return entries.map(([key, child]) => `${queryLabel(key)}: ${String(child ?? '—')}`).join(' · ');
-}
-
 function AdminAiActivity({ status }: { status: AdminAiChatStatus | null }) {
   const t = useTranslations();
   const phase = status?.phase ?? 'running';
@@ -554,318 +327,6 @@ function AdminAiActivity({ status }: { status: AdminAiChatStatus | null }) {
       {phase === 'failed' ? <X className="size-3.5 shrink-0 text-destructive" /> : null}
       <span className="truncate">{t(`aiChat.toolActivity.${phase}`, { tool })}</span>
     </span>
-  );
-}
-
-function AnalyticsCard({
-  result,
-  onNavigate,
-}: {
-  result: AnalyticsResult;
-  onNavigate: () => void;
-}) {
-  const t = useTranslations();
-  const locale = useLocale();
-  const displayValue = (value: unknown, unit?: string) =>
-    displayAdminAiValue(value, locale, t('aiChat.yes'), t('aiChat.no'), unit);
-
-  const data = result.data;
-  const metrics = (result.metrics?.length ? result.metrics : adminAiMetricsFromUnknown(data)).slice(
-    0,
-    8,
-  ) as AnalyticsMetricResult[];
-  const focusTable = analyticsFocusTable(result.focus);
-  const analyticsTables = focusTable
-    ? [focusTable]
-    : adminAiResultTables(data).filter((table) => !table.path.endsWith('metrics'));
-  const [primaryTable] = analyticsTables;
-  const rows = primaryTable?.rows ?? [];
-  const summary = metrics.length === 0 ? adminAiScalarEntries(data, 8) : [];
-  const allColumns = primaryTable?.columns ?? [];
-  const labelKey = allColumns.find((key) =>
-    [
-      'title',
-      'name',
-      'promoCode',
-      'sku',
-      'risk',
-      'bucket',
-      'date',
-      'day',
-      'weekStart',
-      'status',
-      'key',
-      'query',
-      'city',
-    ].includes(key),
-  );
-  const valueKey = selectAnalyticsChartMetric(rows, allColumns);
-  const chartRows = analyticsChartRows(rows, valueKey);
-  const requestedRange =
-    result.investigation?.requestedRange ??
-    (result.filters
-      ? { startDate: result.filters.startDate, endDate: result.filters.endDate }
-      : null);
-  const effectiveRange =
-    result.investigation?.commonEffectiveRange ??
-    result.focus?.effectiveRange ??
-    metrics.find(analyticsRangesDiffer)?.effectiveRange ??
-    null;
-  const metricWarnings = [
-    ...new Set(
-      metrics.map((metric) => metric.warning).filter((value): value is string => Boolean(value)),
-    ),
-  ];
-
-  return (
-    <section className="mt-4 overflow-hidden rounded-[1.15rem] border border-border/60 bg-card shadow-[var(--shadow-vapor)]">
-      <div className="border-b border-border/60 bg-secondary/35 px-4 py-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold capitalize text-foreground">
-              {queryLabel(result.focus?.dimension ?? result.view ?? result.query)}
-            </p>
-            <p className="mt-0.5 text-[0.65rem] capitalize text-muted-foreground">
-              {queryLabel(result.view ?? result.query)}
-            </p>
-          </div>
-          <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-[0.62rem] font-semibold text-primary">
-            Analytics
-          </span>
-        </div>
-        {requestedRange?.startDate || requestedRange?.endDate ? (
-          <p className="mt-2 text-[0.68rem] text-muted-foreground">
-            {t('aiChat.analyticsRequestedRange')}: {requestedRange.startDate ?? '…'}–
-            {requestedRange.endDate ?? '…'}
-          </p>
-        ) : null}
-        {result.investigation?.comparisonStatus === 'unavailable' ? (
-          <p className="mt-1 text-[0.68rem] font-medium text-amber-700 dark:text-amber-300">
-            {t('aiChat.analyticsComparisonUnavailable')}
-          </p>
-        ) : effectiveRange &&
-          (effectiveRange.startDate !== requestedRange?.startDate ||
-            effectiveRange.endDate !== requestedRange?.endDate) ? (
-          <p className="mt-1 text-[0.68rem] font-medium text-amber-700 dark:text-amber-300">
-            {t(
-              result.investigation
-                ? 'aiChat.analyticsSharedRange'
-                : 'aiChat.analyticsEffectiveRange',
-            )}
-            : {effectiveRange.startDate ?? '…'}–{effectiveRange.endDate ?? '…'}
-          </p>
-        ) : null}
-        {(result.focus?.definition ?? result.definition) ? (
-          <p className="mt-2 text-[0.68rem] leading-5 text-muted-foreground">
-            {result.focus?.definition ?? result.definition}
-          </p>
-        ) : null}
-      </div>
-      {metrics.length ? (
-        <div className="grid grid-cols-1 gap-px bg-border/50 sm:grid-cols-2">
-          {metrics.map((metric) => (
-            <div key={metric.key} className="min-w-0 bg-card px-3 py-3">
-              <div className="flex items-start justify-between gap-2">
-                <p className="min-w-0 text-[0.66rem] font-medium capitalize text-muted-foreground">
-                  {queryLabel(metric.name ?? metric.key)}
-                </p>
-                {metric.estimated ? (
-                  <span className="shrink-0 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[0.58rem] font-semibold text-amber-700 dark:text-amber-300">
-                    {t('aiChat.analyticsEstimated')}
-                  </span>
-                ) : null}
-              </div>
-              <p className="mt-1 text-base font-semibold text-foreground">
-                {displayValue(metric.value, metric.unit)}
-              </p>
-              {'previous' in metric ? (
-                <p className="mt-0.5 text-[0.68rem] text-muted-foreground">
-                  {t('aiChat.previous')}: {displayValue(metric.previous, metric.unit)}
-                  {typeof metric.changePct === 'number'
-                    ? ` · ${metric.changePct >= 0 ? '+' : ''}${metric.changePct.toFixed(1)}%`
-                    : ''}
-                </p>
-              ) : null}
-              {metric.previous == null && metric.comparisonReason ? (
-                <p className="mt-1 text-[0.62rem] leading-4 text-muted-foreground">
-                  {metric.comparisonReason}
-                </p>
-              ) : null}
-              {metric.definition ? (
-                <p className="mt-2 text-[0.65rem] leading-4 text-muted-foreground">
-                  {metric.definition}
-                </p>
-              ) : null}
-              {metric.asOf || typeof metric.coveragePct === 'number' ? (
-                <p className="mt-1.5 text-[0.62rem] leading-4 text-muted-foreground">
-                  {metric.asOf ? `${t('aiChat.analyticsAsOf')}: ${metric.asOf}` : ''}
-                  {metric.asOf && typeof metric.coveragePct === 'number' ? ' · ' : ''}
-                  {typeof metric.coveragePct === 'number'
-                    ? `${t('aiChat.analyticsCoverage')}: ${displayValue(metric.coveragePct, 'percent')}`
-                    : ''}
-                </p>
-              ) : null}
-              {analyticsRangesDiffer(metric) ? (
-                <p className="mt-1 text-[0.62rem] text-amber-700 dark:text-amber-300">
-                  {t('aiChat.analyticsEffectiveRange')}: {metric.effectiveRange?.startDate ?? '…'}–
-                  {metric.effectiveRange?.endDate ?? '…'}
-                </p>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {result.focus ? (
-        <div className="border-t border-border/50 px-4 py-3 text-[0.68rem] leading-5 text-muted-foreground">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="font-semibold text-foreground">
-              {t('aiChat.analyticsMatched', {
-                matched: result.focus.matched ?? 0,
-                available: result.focus.available ?? 0,
-              })}
-            </span>
-            {result.focus.dateBasis ? (
-              <span>
-                {t('aiChat.analyticsDateBasis')}: {result.focus.dateBasis}
-              </span>
-            ) : null}
-          </div>
-          {result.focus.totalSemantics ? (
-            <p className="mt-1">{result.focus.totalSemantics}</p>
-          ) : null}
-          {result.focus.warning ? (
-            <p className="mt-1 font-medium text-amber-700 dark:text-amber-300">
-              {result.focus.warning}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-      {summary.length ? (
-        <div className="grid grid-cols-2 gap-px bg-border/50 sm:grid-cols-4">
-          {summary.map(([key, value]) => (
-            <div key={key} className="bg-card px-3 py-3">
-              <p className="truncate text-[0.66rem] capitalize text-muted-foreground">
-                {queryLabel(key)}
-              </p>
-              <p className="mt-1 text-sm font-semibold text-foreground">{displayValue(value)}</p>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {chartRows.length && labelKey && valueKey ? (
-        <div className="h-48 min-w-0 px-3 pb-2 pt-4">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-            <BarChart data={chartRows}>
-              <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey={labelKey}
-                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                tickLine={{ stroke: 'hsl(var(--border))' }}
-                axisLine={{ stroke: 'hsl(var(--border))' }}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                tickLine={{ stroke: 'hsl(var(--border))' }}
-                axisLine={{ stroke: 'hsl(var(--border))' }}
-                width={42}
-              />
-              <Tooltip
-                formatter={(value) => [displayValue(value), queryLabel(valueKey)]}
-                contentStyle={{
-                  borderRadius: '12px',
-                  borderColor: 'hsl(var(--border))',
-                  background: 'hsl(var(--popover))',
-                  color: 'hsl(var(--popover-foreground))',
-                }}
-              />
-              <Bar dataKey="__chartValue" radius={[6, 6, 0, 0]} isAnimationActive={false}>
-                {chartRows.map((_, index) => (
-                  <Cell
-                    key={index}
-                    fill={analyticsChartPalette[index % analyticsChartPalette.length]}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      ) : null}
-      {rows.length && labelKey && !valueKey ? (
-        <p className="border-b border-border/45 px-4 py-3 text-xs text-muted-foreground">
-          {t('aiChat.noChartData')}
-        </p>
-      ) : null}
-      {analyticsTables.map((table) => (
-        <AdminAiResultTable
-          key={table.path}
-          table={table}
-          formatLabel={queryLabel}
-          formatValue={displayValue}
-          showingRows={(shown, available) => t('aiChat.showingRows', { shown, available })}
-        />
-      ))}
-      {result.caveats?.length ? (
-        <p className="border-t border-border/50 px-4 py-3 text-[0.68rem] leading-5 text-muted-foreground">
-          {result.caveats[0]}
-        </p>
-      ) : null}
-      {result.sources?.length ? (
-        <div className="border-t border-border/50 px-4 py-3">
-          <p className="text-[0.68rem] font-semibold text-foreground">{t('aiChat.sourceHealth')}</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {result.sources.slice(0, 8).map((source, index) => (
-              <span
-                key={`${String(source.key)}-${index}`}
-                className="rounded-full bg-secondary px-2 py-1 text-[0.65rem] text-muted-foreground"
-              >
-                {queryLabel(String(source.key ?? ''))} · {queryLabel(String(source.state ?? ''))}
-                {typeof source.coveragePct === 'number' ? ` · ${source.coveragePct}%` : ''}
-                {typeof source.throughDate === 'string'
-                  ? ` · ${t('aiChat.analyticsAsOf')} ${source.throughDate}`
-                  : ''}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {metricWarnings.length || result.warnings?.length || result.truncations?.length ? (
-        <div className="space-y-1 border-t border-border/50 px-4 py-3 text-[0.68rem] leading-5 text-amber-700 dark:text-amber-300">
-          {metricWarnings.slice(0, 3).map((warning) => (
-            <p key={warning}>
-              {t('aiChat.analyticsWarning')}: {warning}
-            </p>
-          ))}
-          {result.warnings?.slice(0, 3).map((warning, index) => (
-            <p key={`warning-${index}`}>
-              {t('aiChat.analyticsWarning')}: {adminAiNoticeText(warning)}
-            </p>
-          ))}
-          {result.truncations?.slice(0, 3).map((truncation, index) => (
-            <p key={`truncation-${index}`}>
-              {t('aiChat.showingRows', {
-                shown: truncation.included ?? 0,
-                available: truncation.available ?? 0,
-              })}{' '}
-              ({queryLabel(truncation.path)})
-            </p>
-          ))}
-        </div>
-      ) : null}
-      <div className="flex items-center justify-between gap-3 border-t border-border/50 px-4 py-3">
-        <p className="text-[0.62rem] text-muted-foreground">
-          {result.generatedAt ? `${t('aiChat.analyticsGeneratedAt')}: ${result.generatedAt}` : ''}
-        </p>
-        <Link
-          href={analyticsWorkspaceUrl(result, locale)}
-          onClick={onNavigate}
-          className="inline-flex h-8 shrink-0 items-center justify-center rounded-full bg-secondary px-3 text-xs font-semibold text-secondary-foreground shadow-[var(--shadow-vapor)] transition-colors hover:bg-accent hover:text-accent-foreground"
-        >
-          {t('aiChat.openAnalytics')}
-          <ArrowUpRight className="ms-1.5 size-3.5" />
-        </Link>
-      </div>
-    </section>
   );
 }
 
@@ -1092,6 +553,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
     [permissions, surfaceContext],
   );
   const [open, setOpen] = useState(false);
+  const [fullScreen, setFullScreen] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<'conversation' | 'chats'>('conversation');
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -1100,7 +562,6 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
   const [activity, setActivity] = useState<AdminAiChatStatus | null>(null);
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(false);
-  const [autoAcceptProposals, setAutoAcceptProposals] = useState(false);
   const [model, setModel] = useState<AdminAiModelId>(ADMIN_AI_DEFAULT_MODEL);
   const [reasoningEffort, setReasoningEffort] = useState<AdminAiReasoningEffort>(
     ADMIN_AI_DEFAULT_REASONING_EFFORT,
@@ -1121,7 +582,6 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
   const conversationKeyRef = useRef<string | null>(null);
   const activeConversationRef = useRef<ConversationSummary | null>(null);
   const conversationRequestRef = useRef(0);
-  const autoAcceptProposalsRef = useRef(false);
   const responseAbortRef = useRef<AbortController | null>(null);
   const terminalJobIdsRef = useRef(new Set<string>());
   const refreshedTerminalJobIdsRef = useRef(new Set<string>());
@@ -1236,8 +696,6 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
   }, [reconcileTerminalJobs]);
 
   useEffect(() => {
-    const enabled = window.localStorage.getItem(ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY) === 'true';
-    autoAcceptProposalsRef.current = enabled;
     const storedModel = adminAiModelIdSchema.safeParse(
       window.localStorage.getItem(ADMIN_AI_MODEL_STORAGE_KEY),
     );
@@ -1250,7 +708,6 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
         ? storedEffort.data
         : getDefaultAdminAiReasoningEffort(nextModel);
     queueMicrotask(() => {
-      setAutoAcceptProposals(enabled);
       setModel(nextModel);
       setReasoningEffort(nextEffort);
     });
@@ -1344,12 +801,6 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
     }
   }
 
-  function updateAutoAcceptProposals(enabled: boolean) {
-    autoAcceptProposalsRef.current = enabled;
-    setAutoAcceptProposals(enabled);
-    window.localStorage.setItem(ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY, String(enabled));
-  }
-
   function updateModel(nextModel: AdminAiModelId) {
     const nextEffort = supportsAdminAiReasoningEffort(nextModel, reasoningEffort)
       ? reasoningEffort
@@ -1423,13 +874,6 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
     }
   }
 
-  async function autoApproveNewProposals(messageId: string, proposals: Proposal[]) {
-    for (const proposal of proposals) {
-      const applied = await submitProposalReview(messageId, proposal.id, 'approve');
-      if (!applied) break;
-    }
-  }
-
   async function send() {
     const message = input.trim();
     if (!message || pending || loadingConversation) return;
@@ -1444,6 +888,13 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
     responseAbortRef.current = abortController;
     let receivedText = false;
     let failedToolResults: unknown;
+    let persistedFailure:
+      | {
+          message: string;
+          conversation: ConversationSummary;
+          messageId: number | null;
+        }
+      | undefined;
     try {
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
@@ -1451,7 +902,6 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
         body: JSON.stringify({
           message,
           conversationKey: conversationKeyRef.current,
-          autoAcceptProposals: autoAcceptProposalsRef.current,
           model,
           reasoningEffort,
           context: surfaceContext.surface === 'unknown' ? undefined : surfaceContext,
@@ -1476,7 +926,6 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
         },
         onResult(data) {
           const presentation = presentationFromUnknown(data.toolResults);
-          const { proposals } = presentation;
           notifyAdminAiToolMutations(presentation.results);
           setMessages((items) => {
             const existing = items.findIndex((item) => item.id === assistantId);
@@ -1500,12 +949,14 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
           conversationKeyRef.current = data.conversation.sessionKey;
           activeConversationRef.current = data.conversation;
           setSelectedConversationId(data.conversation.id);
-          if (autoAcceptProposalsRef.current && proposals.length > 0) {
-            void autoApproveNewProposals(assistantId, proposals);
-          }
         },
         onError(error) {
           failedToolResults = error.toolResults;
+          persistedFailure = {
+            message: error.message,
+            conversation: error.conversation,
+            messageId: error.messageId,
+          };
           notifyAdminAiToolMutations(presentationFromUnknown(error.toolResults).results);
         },
       });
@@ -1514,7 +965,36 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
     } catch {
       if (!abortController.signal.aborted) {
         const presentation = presentationFromUnknown(failedToolResults);
-        if (receivedText) {
+        if (persistedFailure) {
+          const failure = persistedFailure;
+          setMessages((items) =>
+            items.some((item) => item.id === assistantId)
+              ? items.map((item) =>
+                  item.id === assistantId
+                    ? {
+                        ...item,
+                        messageRecordId: failure.messageId ?? undefined,
+                        content: failure.message,
+                        ...presentation,
+                      }
+                    : item,
+                )
+              : [
+                  ...items,
+                  {
+                    id: assistantId,
+                    messageRecordId: failure.messageId ?? undefined,
+                    role: 'assistant',
+                    content: failure.message,
+                    ...presentation,
+                  },
+                ],
+          );
+          conversationKeyRef.current = failure.conversation.sessionKey;
+          activeConversationRef.current = failure.conversation;
+          setSelectedConversationId(failure.conversation.id);
+          await loadConversations();
+        } else if (receivedText) {
           setMessages((items) =>
             items.map((item) =>
               item.id === assistantId
@@ -1593,9 +1073,15 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
         <span className="hidden sm:inline">{t('aiChat.open')}</span>
       </Button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="flex h-[min(52rem,calc(100dvh-1rem))] max-h-[calc(100dvh-1rem)] max-w-[76rem] flex-col overflow-hidden rounded-[1.75rem] border border-border/60 bg-[var(--glass-surface)] p-0 sm:h-[min(52rem,calc(100vh-2rem))] sm:max-h-[calc(100vh-2rem)]">
-          <DialogHeader className="relative shrink-0 border-b border-border/60 bg-card/75 px-4 py-4 pe-16 backdrop-blur-xl sm:px-6 sm:py-5 sm:pe-20">
+      <Dialog open={open} onOpenChange={setOpen} fullScreen={fullScreen}>
+        <DialogContent
+          data-full-screen={fullScreen}
+          className={cn(
+            'flex h-[min(52rem,calc(100dvh-1rem))] max-h-[calc(100dvh-1rem)] max-w-[76rem] flex-col overflow-hidden rounded-[1.75rem] border border-border/60 bg-[var(--glass-surface)] p-0 sm:h-[min(52rem,calc(100vh-2rem))] sm:max-h-[calc(100vh-2rem)]',
+            fullScreen && '!m-0 !h-dvh !max-h-dvh !max-w-none !rounded-none !border-0',
+          )}
+        >
+          <DialogHeader className="relative shrink-0 border-b border-border/60 bg-card/75 px-4 py-4 pe-28 backdrop-blur-xl sm:px-6 sm:py-5 sm:pe-32">
             <div className="flex items-start gap-3">
               <div className="grid size-11 shrink-0 place-items-center rounded-[1rem] bg-primary text-primary-foreground shadow-[var(--shadow-vapor)]">
                 <Bot className="size-5" />
@@ -1643,28 +1129,34 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
                       ))}
                     </select>
                   </label>
-                  <label className="flex h-9 cursor-pointer items-center gap-2.5">
-                    <Switch
-                      checked={autoAcceptProposals}
-                      onCheckedChange={updateAutoAcceptProposals}
-                      aria-label={t('aiChat.autoAccept')}
-                    />
-                    <span className="text-xs font-medium text-foreground">
-                      {t('aiChat.autoAccept')}
-                    </span>
-                  </label>
                 </div>
               </div>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              className="absolute end-3 top-3 size-10 rounded-[0.9rem] p-0 sm:end-5 sm:top-5"
-              onClick={() => setOpen(false)}
-              aria-label={t('aiChat.close')}
-            >
-              <X className="size-5" />
-            </Button>
+            <div className="absolute end-3 top-3 flex items-center gap-1 sm:end-5 sm:top-5">
+              <Button
+                type="button"
+                variant="ghost"
+                className="size-10 rounded-[0.9rem] p-0"
+                onClick={() => setFullScreen((value) => !value)}
+                aria-label={t(fullScreen ? 'aiChat.exitFullScreen' : 'aiChat.fullScreen')}
+                aria-pressed={fullScreen}
+              >
+                {fullScreen ? (
+                  <Minimize2 className="size-[1.125rem]" />
+                ) : (
+                  <Maximize2 className="size-[1.125rem]" />
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="size-10 rounded-[0.9rem] p-0"
+                onClick={() => setOpen(false)}
+                aria-label={t('aiChat.close')}
+              >
+                <X className="size-5" />
+              </Button>
+            </div>
           </DialogHeader>
 
           <div
@@ -1742,7 +1234,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
                     </div>
                   </div>
                 ) : (
-                  <div className="mx-auto max-w-3xl space-y-5">
+                  <div className="mx-auto w-full max-w-4xl space-y-6">
                     {messages.map((message, index) => (
                       <article
                         key={message.id ?? index}
@@ -1760,13 +1252,13 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
                         <div
                           data-slot={
                             message.role === 'assistant'
-                              ? 'admin-ai-assistant-bubble'
+                              ? 'admin-ai-assistant-message'
                               : 'admin-ai-user-bubble'
                           }
                           className={
                             message.role === 'user'
                               ? 'min-w-0 max-w-[88%] rounded-[1.2rem] rounded-ee-md bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground shadow-[var(--shadow-vapor)] [overflow-wrap:anywhere]'
-                              : 'min-w-0 w-full max-w-[42rem] overflow-hidden rounded-[1.2rem] rounded-es-md border border-border/55 bg-card px-4 py-3 text-sm leading-6 text-foreground shadow-[var(--shadow-vapor)]'
+                              : 'min-w-0 w-full flex-1 overflow-hidden py-0.5 text-sm leading-6 text-foreground'
                           }
                         >
                           {message.role === 'assistant' ? (
@@ -1774,15 +1266,13 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
                           ) : (
                             <p className="whitespace-pre-wrap break-words">{message.content}</p>
                           )}
-                          {message.role === 'assistant'
-                            ? message.analytics?.map((result, analyticsIndex) => (
-                                <AnalyticsCard
-                                  key={`${result.query}-${analyticsIndex}`}
-                                  result={result}
-                                  onNavigate={() => setOpen(false)}
-                                />
-                              ))
-                            : null}
+                          {message.role === 'assistant' ? (
+                            <AdminAiPresentationBlocks
+                              plan={message.presentation}
+                              evidence={message.evidence ?? []}
+                              onNavigate={() => setOpen(false)}
+                            />
+                          ) : null}
                           {message.role === 'assistant'
                             ? message.results?.map((result, resultIndex) => (
                                 <StructuredToolResultCard
@@ -1861,7 +1351,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
                             </div>
                           ) : null}
                           {message.role === 'assistant' && message.messageRecordId ? (
-                            <div className="mt-3 flex gap-1 border-t border-border/45 pt-2">
+                            <div className="mt-2 flex gap-1">
                               <Button
                                 type="button"
                                 size="sm"

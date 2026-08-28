@@ -35,10 +35,7 @@ import { triggerHaptic } from '@/lib/haptics';
 import { formatProductPrice } from '@/lib/product-presentation';
 import { addCartItem, readCart, writeCart } from '@/lib/cart';
 import { applyShoppingAssistantCartMutations } from '@/lib/shopping-assistant-cart';
-import {
-  buildShoppingAssistantPageContext,
-  classifyShoppingAssistantIntent,
-} from '@/lib/shopping-assistant';
+import { buildShoppingAssistantPageContext } from '@/lib/shopping-assistant';
 import {
   consumeShoppingAssistantResponse,
   type ShoppingAssistantActivity,
@@ -349,7 +346,6 @@ export function ShoppingAssistantPanel({
       metadata: {
         surface: 'ai_assistant',
         target: analyticsTarget,
-        intent: classifyShoppingAssistantIntent(normalized),
       },
     });
 
@@ -358,8 +354,6 @@ export function ShoppingAssistantPanel({
     let resultHandled = false;
     let interruptedProducts: ShoppingAssistantProduct[] | undefined;
     try {
-      const identity = getAnalyticsIdentity();
-      const intent = classifyShoppingAssistantIntent(normalized);
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         signal: controller.signal,
@@ -371,15 +365,6 @@ export function ShoppingAssistantPanel({
             new URLSearchParams(window.location.search),
             readCart(window.localStorage),
           ),
-          telemetry:
-            identity.journeyId && identity.sessionId
-              ? {
-                  journeyId: identity.journeyId,
-                  sessionId: identity.sessionId,
-                  pagePath: pathname ?? window.location.pathname,
-                  intent,
-                }
-              : undefined,
           messages: nextMessages
             .filter((message) => !message.interrupted)
             .slice(-40)

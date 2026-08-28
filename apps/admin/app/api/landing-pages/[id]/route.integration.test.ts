@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   saveActive: vi.fn(),
   setActive: vi.fn(),
   revalidate: vi.fn(),
+  previewUrl: vi.fn(),
   ConflictError: class extends Error {},
   NotFoundError: class extends Error {},
 }));
@@ -21,6 +22,7 @@ vi.mock('../../../../lib/landing-pages', () => ({
   setLandingPageActive: mocks.setActive,
 }));
 vi.mock('../../../../lib/storefront-revalidate', () => ({
+  buildStorefrontLandingPagePreviewUrl: mocks.previewUrl,
   revalidateStorefrontLandingPages: mocks.revalidate,
 }));
 
@@ -39,7 +41,16 @@ describe('admin landing-page revision route', () => {
     vi.clearAllMocks();
     mocks.access.mockResolvedValue(null);
     mocks.auth.mockResolvedValue({ user: { email: 'admin@example.com' } });
-    mocks.detail.mockResolvedValue({ id: 4, active: true, currentRevision: 3 });
+    mocks.detail.mockResolvedValue({
+      id: 4,
+      locale: 'fr',
+      slug: 'perceuse-20v',
+      active: true,
+      currentRevision: 3,
+    });
+    mocks.previewUrl.mockReturnValue(
+      'https://bricomaitre.com/fr/landing-preview/perceuse-20v?previewRevision=3&previewTimestamp=1787817600000&previewSignature=abc',
+    );
     mocks.saveActive.mockResolvedValue({ id: 4, active: true, currentRevision: 4 });
     mocks.setActive.mockResolvedValue({ id: 4, active: false, currentRevision: 3 });
   });
@@ -49,6 +60,25 @@ describe('admin landing-page revision route', () => {
     });
     expect(response.status).toBe(200);
     expect(mocks.detail).toHaveBeenCalledWith(4);
+  });
+
+  it('redirects an authorized operator to a no-store preview of the saved revision', async () => {
+    const response = await GET(
+      new NextRequest('http://localhost/api/landing-pages/4?view=preview'),
+      { params: Promise.resolve({ id: '4' }) },
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toContain(
+      'https://bricomaitre.com/fr/landing-preview/perceuse-20v?previewRevision=3',
+    );
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+    expect(mocks.previewUrl).toHaveBeenCalledWith({
+      locale: 'fr',
+      slug: 'perceuse-20v',
+      revision: 3,
+    });
   });
 
   it('saves content and active state behind expected-revision protection', async () => {

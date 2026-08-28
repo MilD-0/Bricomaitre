@@ -25,4 +25,26 @@ describe('AdminAiResultTable', () => {
     expect(screen.getByText('1 of 3')).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: 'completed' })).toBeInTheDocument();
   });
+
+  it('keeps the path accessible but removes it as a nested visual heading in compact blocks', () => {
+    render(
+      <AdminAiResultTable
+        table={{
+          path: 'sourceCoverage.missingOrders',
+          available: 1,
+          columns: ['orderId', 'gapReason'],
+          rows: [{ orderId: 42, gapReason: 'no_canonical_state' }],
+        }}
+        formatLabel={(value) => value}
+        formatValue={(value) => String(value)}
+        showingRows={(shown, available) => `${shown} of ${available}`}
+        compact
+      />,
+    );
+
+    expect(
+      screen.getByRole('region', { name: 'sourceCoverage.missingOrders' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('sourceCoverage.missingOrders')).not.toBeInTheDocument();
+  });
 });

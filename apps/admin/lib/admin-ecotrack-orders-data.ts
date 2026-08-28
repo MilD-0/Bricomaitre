@@ -1114,15 +1114,42 @@ async function softDeleteShipmentRow(
   options: {
     actor?: ActionActor | null;
     operation?: 'update' | 'delete';
+    restorePostedOrderToConfirmed?: boolean;
   } = {},
 ) {
   const now = new Date();
   const beforeOrderState = buildEcotrackOrderActionSnapshot(row.order);
   const beforeShipmentState = buildEcotrackShipmentActionSnapshot(row);
 
-  await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
+    const [deletedShipment] = await tx
+      .update(ecotrackOrderStates)
+      .set({
+        deletedAt: now,
+        lastActionAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(ecotrackOrderStates.id, row.id),
+          eq(ecotrackOrderStates.trackingNumber, row.trackingNumber),
+          isNull(ecotrackOrderStates.deletedAt),
+        ),
+      )
+      .returning({ id: ecotrackOrderStates.id });
+
+    if (!deletedShipment) {
+      return false;
+    }
+
     await updateCanonicalOrder(tx, {
       orderId: row.order.id,
+      status:
+        options.restorePostedOrderToConfirmed && coerceOrderStatus(row.order.confirmed) === 11
+          ? { value: 2, noAnswerCount: 0 }
+          : undefined,
+      allowStatusCorrection: options.restorePostedOrderToConfirmed,
+      actor: options.actor ?? undefined,
       values: {
         ecotrackStatus: null,
         ecotrackStatusLastUpdate: null,
@@ -1132,15 +1159,6 @@ async function softDeleteShipmentRow(
       },
       now,
     });
-
-    await tx
-      .update(ecotrackOrderStates)
-      .set({
-        deletedAt: now,
-        lastActionAt: now,
-        updatedAt: now,
-      })
-      .where(eq(ecotrackOrderStates.id, row.id));
 
     const afterOrderState = {
       ...beforeOrderState,
@@ -1167,6 +1185,8 @@ async function softDeleteShipmentRow(
       options.actor,
       options.operation ?? 'delete',
     );
+
+    return true;
   });
 }
 
@@ -1337,13 +1357,27 @@ async function upsertShipmentState(
     updates.lastMajSyncedAt = now;
   }
 
-  await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
     const beforeOrderState = buildEcotrackOrderActionSnapshot(row.order);
     const beforeShipmentState = buildEcotrackShipmentActionSnapshot(row);
     const beforeMajState = await loadMajSyncSummary(tx, row.order.id, row.trackingNumber);
     const beforeTrackingState = await loadTrackingSyncSummary(tx, row.order.id, row.trackingNumber);
 
-    await tx.update(ecotrackOrderStates).set(updates).where(eq(ecotrackOrderStates.id, row.id));
+    const [updatedShipment] = await tx
+      .update(ecotrackOrderStates)
+      .set(updates)
+      .where(
+        and(
+          eq(ecotrackOrderStates.id, row.id),
+          eq(ecotrackOrderStates.trackingNumber, row.trackingNumber),
+          isNull(ecotrackOrderStates.deletedAt),
+        ),
+      )
+      .returning({ id: ecotrackOrderStates.id });
+
+    if (!updatedShipment) {
+      return false;
+    }
 
     if (statusItem) {
       await persistStatusEvidence(tx, row, {
@@ -1456,6 +1490,8 @@ async function upsertShipmentState(
       afterTrackingState,
       actor,
     );
+
+    return true;
   });
 }
 
@@ -2251,9 +2287,18 @@ export async function deletePostedEcotrackOrder(
     }
   }
 
-  await softDeleteShipmentRow(db, row, { actor, operation: 'delete' });
+  const deleted = await softDeleteShipmentRow(db, row, {
+    actor,
+    operation: 'delete',
+    restorePostedOrderToConfirmed: true,
+  });
+  if (!deleted) {
+    throw new Error(
+      'The ECOTRACK shipment changed while deletion was in progress. Refresh and retry.',
+    );
+  }
 
-  return { ok: true };
+  return { ok: true, inHouseOrderStatus: 'confirmed' as const };
 }
 
 export async function dispatchPostedEcotrackOrder(
@@ -2594,6 +2639,7 @@ export async function syncEcotrackShipmentStates(
   let fallbackChecked = 0;
   let fallbackRecovered = 0;
   let fallbackDeferred = 0;
+  let superseded = 0;
   let failed = 0;
   let batchFailed = 0;
   let majFailed = 0;
@@ -2630,11 +2676,15 @@ export async function syncEcotrackShipmentStates(
             if (statusItem) {
               fallbackRecovered += 1;
             } else {
-              await softDeleteShipmentRow(db, row, {
+              const deleted = await softDeleteShipmentRow(db, row, {
                 actor: options.actor,
                 operation: 'delete',
               });
-              retired += 1;
+              if (deleted) {
+                retired += 1;
+              } else {
+                superseded += 1;
+              }
               continue;
             }
           } catch {
@@ -2665,7 +2715,7 @@ export async function syncEcotrackShipmentStates(
       }
 
       try {
-        await upsertShipmentState(
+        const applied = await upsertShipmentState(
           db,
           row,
           {
@@ -2680,6 +2730,10 @@ export async function syncEcotrackShipmentStates(
           },
           options.actor,
         );
+        if (!applied) {
+          superseded += 1;
+          continue;
+        }
         if (statusItem) {
           synced += 1;
         } else {
@@ -2703,6 +2757,7 @@ export async function syncEcotrackShipmentStates(
     fallbackChecked,
     fallbackRecovered,
     fallbackDeferred,
+    superseded,
     failed,
     batchFailed,
     majFailed,

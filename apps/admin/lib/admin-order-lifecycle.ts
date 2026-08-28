@@ -22,6 +22,16 @@ export class AdminOrderLifecycleNotFoundError extends Error {
   }
 }
 
+export class AdminOrderHasActiveEcotrackShipmentError extends Error {
+  constructor(
+    readonly orderId: number,
+    readonly trackingNumber: string,
+  ) {
+    super(`Order ${orderId} has an active EcoTrack shipment (${trackingNumber}).`);
+    this.name = 'AdminOrderHasActiveEcotrackShipmentError';
+  }
+}
+
 export async function createAdminOrder(
   db: Database,
   input: unknown,
@@ -104,11 +114,19 @@ export async function createAdminOrder(
 export async function deleteAdminOrder(db: Database, orderId: number, actor?: ActionActor) {
   const existing = await loadOrderDetail(orderId);
   if (!existing) throw new AdminOrderLifecycleNotFoundError(orderId);
+  const activeShipment = await db.query.ecotrackOrderStates.findFirst({
+    columns: { trackingNumber: true },
+    where: (state, { and, eq, isNull }) => and(eq(state.orderId, orderId), isNull(state.deletedAt)),
+  });
+  if (activeShipment) {
+    throw new AdminOrderHasActiveEcotrackShipmentError(orderId, activeShipment.trackingNumber);
+  }
   await mutateEntityWithHistory(db, {
     entityType: 'orders',
     entityId: orderId,
     operation: 'delete',
     actor,
+    isReversible: false,
     execute: (tx) => tx.delete(orders).where(eq(orders.id, orderId)),
   });
   await triggerAdminReportingRefresh('order-delete');
@@ -117,6 +135,5 @@ export async function deleteAdminOrder(db: Database, orderId: number, actor?: Ac
     customerName: existing.fullName,
     phoneNumber: existing.phoneNumber1,
     status: existing.confirmed,
-    ecotrackTrackingNumber: existing.ecotrackTrackingNumber,
   };
 }

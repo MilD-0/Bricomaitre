@@ -6,22 +6,35 @@ export function AdminAiResultTable({
   formatLabel,
   formatValue,
   showingRows,
+  compact = false,
 }: {
   table: AdminAiResultTable;
   formatLabel: (value: string) => string;
   formatValue: (value: unknown) => React.ReactNode;
   showingRows: (shown: number, available: number) => React.ReactNode;
+  compact?: boolean;
 }) {
   const label = formatLabel(table.path);
 
   return (
-    <ScrollableRegion label={label} className="border-t border-border/50 px-3 pb-3">
-      <div className="flex min-w-[28rem] items-center justify-between gap-3 px-2 pb-1 pt-3 text-[0.68rem] text-muted-foreground">
-        <p className="font-medium capitalize">{label}</p>
-        {table.available > table.rows.length ? (
-          <p>{showingRows(table.rows.length, table.available)}</p>
-        ) : null}
-      </div>
+    <ScrollableRegion
+      label={label}
+      className={compact ? 'px-1 pb-2' : 'border-t border-border/50 px-3 pb-3'}
+    >
+      {compact ? (
+        table.available > table.rows.length ? (
+          <p className="min-w-[28rem] px-2 pb-1 pt-2 text-end text-[0.68rem] text-muted-foreground">
+            {showingRows(table.rows.length, table.available)}
+          </p>
+        ) : null
+      ) : (
+        <div className="flex min-w-[28rem] items-center justify-between gap-3 px-2 pb-1 pt-2.5 text-[0.68rem] text-muted-foreground">
+          <p className="font-medium capitalize">{label}</p>
+          {table.available > table.rows.length ? (
+            <p>{showingRows(table.rows.length, table.available)}</p>
+          ) : null}
+        </div>
+      )}
       <table className="w-full min-w-[28rem] text-start text-xs">
         <thead>
           <tr className="text-muted-foreground">

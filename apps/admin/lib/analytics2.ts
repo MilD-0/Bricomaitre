@@ -33,6 +33,7 @@ import {
   listProfitTrackerCosts,
   type ProfitTrackerRangeInput,
 } from './profit-tracker';
+import type { ProfitTrackerSummary } from './profit-tracker-metrics';
 import {
   ANALYTICS2_FACT_SEMANTICS_VERSION,
   ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE,
@@ -807,6 +808,28 @@ export async function loadAutomaticPaidEconomics(
   };
 }
 
+async function loadPaidOutcomeForecastHistory(db: Database, asOfDate: string) {
+  const startDate = addDays(asOfDate, -56);
+  const endDate = addDays(asOfDate, -1);
+  const result = await db.execute(sql`
+    select ${analyticsEconomicsDailyFacts.day}::text as day,
+      ${analyticsEconomicsDailyFacts.paidOrders} as paid_orders
+    from ${analyticsEconomicsDailyFacts}
+    where ${analyticsEconomicsDailyFacts.day} between ${startDate}::date and ${endDate}::date
+      and ${analyticsEconomicsDailyFacts.semanticsVersion}
+        = ${ANALYTICS2_FACT_SEMANTICS_VERSION}
+    order by ${analyticsEconomicsDailyFacts.day}
+  `);
+  if (result.rows.length !== inclusiveDays(startDate, endDate)) return null;
+  return {
+    startDate,
+    days: result.rows.map((raw: unknown) => {
+      const row = raw as Record<string, unknown>;
+      return { date: String(row.day), paidOrders: numeric(row.paid_orders) };
+    }),
+  };
+}
+
 async function loadLeadingOrderForecast(
   db: Database,
   filters: Analytics2Filters,
@@ -823,7 +846,8 @@ async function loadLeadingOrderForecast(
     [...CONFIRMED_LIFECYCLE_ORDER_STATUSES].map((status) => sql`${status}`),
     sql`, `,
   );
-  const result = await db.execute(sql`
+  const [result, paidOutcomeHistory] = await Promise.all([
+    db.execute(sql`
     with lifecycle as (
       select ${orderStatusHistory.orderId} as order_id,
         min(${orderStatusHistory.changedAt}) filter (
@@ -943,7 +967,9 @@ async function loadLeadingOrderForecast(
       coalesce(sum(gross_profit_dzd) filter (where stage = 'confirmed'), 0)::double precision
         as confirmed_gross_profit_dzd
     from pending
-  `);
+    `),
+    loadPaidOutcomeForecastHistory(db, filters.endDate),
+  ]);
   const row = (result.rows[0] ?? {}) as Record<string, unknown>;
   return buildLeadingOrderForecast({
     asOfDate: filters.endDate,
@@ -952,6 +978,7 @@ async function loadLeadingOrderForecast(
     historicalSubmittedOrders: numeric(row.historical_submitted),
     historicalConfirmedOrders: numeric(row.historical_confirmed),
     historicalPostedOrders: numeric(row.historical_posted),
+    paidOutcomeHistory: paidOutcomeHistory ?? undefined,
     submittedOrders: numeric(row.submitted_orders),
     submittedCodDzd: numeric(row.submitted_cod_dzd),
     submittedGrossProfitDzd: numeric(row.submitted_gross_profit_dzd),
@@ -3812,46 +3839,31 @@ async function loadEconomicsPair(
   return { current, previous: previousReport };
 }
 
-function economicsMetrics(current: EconomicsReport, previous: EconomicsReport | null) {
+export function economicsSummaryMetrics(
+  current: ProfitTrackerSummary,
+  previous: ProfitTrackerSummary | null,
+) {
   return [
-    metric(
-      'trueProfit',
-      current.summary.trueProfitDzd,
-      previous?.summary.trueProfitDzd ?? null,
-      'dzd',
-    ),
-    metric('profitX', current.summary.profitX, previous?.summary.profitX ?? null, 'ratio'),
-    metric(
-      'adjustedProfit',
-      current.summary.adjustedProfitDzd,
-      previous?.summary.adjustedProfitDzd ?? null,
-      'dzd',
-    ),
-    metric(
-      'adCost',
-      current.summary.rawAdCostDzd,
-      previous?.summary.rawAdCostDzd ?? null,
-      'dzd',
-      'neutral',
-    ),
-    metric(
-      'postedOrders',
-      current.summary.postedOrders,
-      previous?.summary.postedOrders ?? null,
-      'number',
-    ),
+    metric('trueProfit', current.trueProfitDzd, previous?.trueProfitDzd ?? null, 'dzd'),
+    metric('profitX', current.profitX, previous?.profitX ?? null, 'ratio'),
+    metric('adjustedProfit', current.adjustedProfitDzd, previous?.adjustedProfitDzd ?? null, 'dzd'),
+    metric('grossProfit', current.grossProfitDzd, previous?.grossProfitDzd ?? null, 'dzd'),
+    metric('adCost', current.rawAdCostDzd, previous?.rawAdCostDzd ?? null, 'dzd', 'neutral'),
+    metric('postedOrders', current.postedOrders, previous?.postedOrders ?? null, 'number'),
     metric(
       'costPerPosted',
-      current.summary.postedOrders > 0
-        ? current.summary.ratioAdCostDzd / current.summary.postedOrders
-        : null,
-      previous && previous.summary.postedOrders > 0
-        ? previous.summary.ratioAdCostDzd / previous.summary.postedOrders
+      current.postedOrders > 0 ? current.ratioAdCostDzd / current.postedOrders : null,
+      previous && previous.postedOrders > 0
+        ? previous.ratioAdCostDzd / previous.postedOrders
         : null,
       'dzd',
       'down',
     ),
   ];
+}
+
+function economicsMetrics(current: EconomicsReport, previous: EconomicsReport | null) {
+  return economicsSummaryMetrics(current.summary, previous?.summary ?? null);
 }
 
 function buildSignals(
@@ -4158,18 +4170,19 @@ async function loadMoneyView(
       loadLeadingOrderForecast(db, economicsFilters, current.settings),
     ]);
   const forecast = buildEconomicsForecast(current, economicsFilters.endDate, 14, leadingForecast);
+  const headlineMetrics = economicsMetrics(current, previous);
   return {
     data: {
       kind: 'money' as const,
       metrics: [
-        ...economicsMetrics(current, previous).slice(0, 3),
+        ...headlineMetrics.slice(0, 4),
         metric(
           'automaticPaidProfit',
           automaticPaid.summary.profitDzd,
           previousAutomaticPaid?.summary.profitDzd ?? null,
           'dzd',
         ),
-        economicsMetrics(current, previous)[3],
+        headlineMetrics[4],
         metric('paidProfitCoverage', automaticPaid.summary.profitCoveragePct, null, 'percent'),
       ],
       series: projectOpenEconomicsSeries(

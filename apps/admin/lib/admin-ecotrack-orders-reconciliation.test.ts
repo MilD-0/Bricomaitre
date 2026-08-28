@@ -109,7 +109,7 @@ function createShipmentRow(orderId = 11) {
 
 function createDbMock(
   rows: Array<ReturnType<typeof createShipmentRow>>,
-  options?: { limitSequence?: number[] },
+  options?: { limitSequence?: number[]; rejectShipmentWrites?: boolean },
 ) {
   const updates: Array<{ target: unknown; values: Record<string, unknown> }> = [];
   const insertValues = vi.fn(() => ({
@@ -171,7 +171,13 @@ function createDbMock(
         where: vi.fn(() => {
           updates.push({ target: table, values });
           return {
-            returning: vi.fn(async () => (rows[0] ? [{ ...rows[0].order, ...values }] : [])),
+            returning: vi.fn(async () =>
+              table === ecotrackOrderStates && options?.rejectShipmentWrites
+                ? []
+                : rows[0]
+                  ? [{ ...rows[0].order, ...values }]
+                  : [],
+            ),
             then: (resolve: (value: unknown[]) => unknown) => Promise.resolve([]).then(resolve),
           };
         }),
@@ -225,6 +231,7 @@ describe('admin ecotrack shipment reconciliation', () => {
 
   it('soft-deletes the local row when upstream delete returns 400 but the tracking is already gone', async () => {
     const row = createShipmentRow();
+    row.order.confirmed = 11;
     const { db, updates } = createDbMock([row]);
     getDbMock.mockReturnValue(db);
     deleteEcotrackOrderMock.mockRejectedValue(
@@ -237,24 +244,37 @@ describe('admin ecotrack shipment reconciliation', () => {
       ),
     );
 
-    await expect(deletePostedEcotrackOrder(11, {})).resolves.toEqual({ ok: true });
+    await expect(deletePostedEcotrackOrder(11, {})).resolves.toEqual({
+      ok: true,
+      inHouseOrderStatus: 'confirmed',
+    });
 
     expect(deleteEcotrackOrderMock).toHaveBeenCalledWith('TRK-11');
     expect(getEcotrackOrdersStatusMock).toHaveBeenCalledWith(['TRK-11'], 'all');
     expect(getEcotrackTrackingsInfoMock).toHaveBeenCalledWith(['TRK-11']);
     expect(updates).toHaveLength(2);
-    expect(updates[0]).toMatchObject({
-      target: orders,
-      values: {
-        ecotrackStatus: null,
-        ecotrackStatusLastUpdate: null,
-        ecotrackStatusData: null,
-        ecotrackReference: null,
-        ecotrackTrackingNumber: null,
-      },
+    expect(updates.find((update) => update.target === orders)?.values).toMatchObject({
+      ecotrackStatus: null,
+      ecotrackStatusLastUpdate: null,
+      ecotrackStatusData: null,
+      ecotrackReference: null,
+      ecotrackTrackingNumber: null,
+      confirmed: 2,
     });
-    expect(updates[1].target).toBe(ecotrackOrderStates);
-    expect(updates[1]?.values.deletedAt).toBeInstanceOf(Date);
+    expect(
+      updates.find((update) => update.target === ecotrackOrderStates)?.values.deletedAt,
+    ).toBeInstanceOf(Date);
+  });
+
+  it('does not report deletion after the active local shipment was replaced', async () => {
+    const row = createShipmentRow();
+    const { db, updates } = createDbMock([row], { rejectShipmentWrites: true });
+    getDbMock.mockReturnValue(db);
+
+    await expect(deletePostedEcotrackOrder(11, {})).rejects.toThrow(
+      'The ECOTRACK shipment changed while deletion was in progress. Refresh and retry.',
+    );
+    expect(updates.filter((update) => update.target === orders)).toEqual([]);
   });
 
   it('removes missing upstream shipments from batch refreshes instead of throwing', async () => {
@@ -281,8 +301,8 @@ describe('admin ecotrack shipment reconciliation', () => {
     expect(getEcotrackTrackingsInfoMock).toHaveBeenCalledWith(['TRK-11']);
     expect(getEcotrackMajMock).not.toHaveBeenCalled();
     expect(updates).toHaveLength(2);
-    expect(updates[0]?.target).toBe(orders);
-    expect(updates[1]?.target).toBe(ecotrackOrderStates);
+    expect(updates.some((update) => update.target === orders)).toBe(true);
+    expect(updates.some((update) => update.target === ecotrackOrderStates)).toBe(true);
   });
 
   it('continues refreshing later rows when one row fails', async () => {
@@ -387,6 +407,7 @@ describe('admin ecotrack shipment reconciliation', () => {
       fallbackChecked: 0,
       fallbackRecovered: 0,
       fallbackDeferred: 0,
+      superseded: 0,
       failed: 0,
       batchFailed: 0,
       majFailed: 1,
@@ -416,11 +437,67 @@ describe('admin ecotrack shipment reconciliation', () => {
       fallbackChecked: 0,
       fallbackRecovered: 0,
       fallbackDeferred: 0,
+      superseded: 0,
       failed: 0,
       batchFailed: 0,
       majFailed: 0,
     });
     expect(getEcotrackMajMock).not.toHaveBeenCalled();
+  });
+
+  it('reconciles an in-delivery order when EcoTrack reports a dispatched-stage status', async () => {
+    const row = createShipmentRow(11);
+    row.order.confirmed = 7;
+    const { db, updates } = createDbMock([row]);
+    getDbMock.mockReturnValue(db);
+    getEcotrackOrdersStatusMock.mockResolvedValue({
+      data: new Map([['TRK-11', { status: 'en_ramassage', activity: [] }]]),
+    });
+    getEcotrackTrackingsInfoMock.mockResolvedValue({
+      data: new Map([['TRK-11', { activity: [] }]]),
+    });
+
+    await expect(syncEcotrackShipmentStates()).resolves.toMatchObject({
+      total: 1,
+      synced: 1,
+      failed: 0,
+    });
+    expect(updates).toContainEqual(
+      expect.objectContaining({
+        target: orders,
+        values: expect.objectContaining({
+          confirmed: 3,
+          ecotrackStatus: 'en_ramassage',
+        }),
+      }),
+    );
+  });
+
+  it('discards a stale EcoTrack response after the stored tracking number was replaced', async () => {
+    const row = createShipmentRow(11);
+    const { db, updates } = createDbMock([row], { rejectShipmentWrites: true });
+    getDbMock.mockReturnValue(db);
+    getEcotrackOrdersStatusMock.mockResolvedValue({
+      data: new Map([['TRK-11', { status: 'en_livraison', activity: [] }]]),
+    });
+    getEcotrackTrackingsInfoMock.mockResolvedValue({
+      data: new Map([['TRK-11', { activity: [] }]]),
+    });
+
+    await expect(syncEcotrackShipmentStates()).resolves.toEqual({
+      total: 1,
+      synced: 0,
+      missing: 0,
+      retired: 0,
+      fallbackChecked: 0,
+      fallbackRecovered: 0,
+      fallbackDeferred: 0,
+      superseded: 1,
+      failed: 0,
+      batchFailed: 0,
+      majFailed: 0,
+    });
+    expect(updates.filter((update) => update.target === orders)).toEqual([]);
   });
 
   it('reports a recent authoritative-status omission without claiming the row was synced', async () => {
@@ -440,6 +517,7 @@ describe('admin ecotrack shipment reconciliation', () => {
       fallbackChecked: 0,
       fallbackRecovered: 0,
       fallbackDeferred: 0,
+      superseded: 0,
       failed: 0,
       batchFailed: 0,
       majFailed: 0,
@@ -476,23 +554,22 @@ describe('admin ecotrack shipment reconciliation', () => {
       fallbackChecked: 1,
       fallbackRecovered: 0,
       fallbackDeferred: 0,
+      superseded: 0,
       failed: 0,
       batchFailed: 0,
       majFailed: 0,
     });
     expect(updates).toHaveLength(2);
-    expect(updates[0]).toMatchObject({
-      target: orders,
-      values: {
-        ecotrackStatus: null,
-        ecotrackStatusLastUpdate: null,
-        ecotrackStatusData: null,
-        ecotrackReference: null,
-        ecotrackTrackingNumber: null,
-      },
+    expect(updates.find((update) => update.target === orders)?.values).toMatchObject({
+      ecotrackStatus: null,
+      ecotrackStatusLastUpdate: null,
+      ecotrackStatusData: null,
+      ecotrackReference: null,
+      ecotrackTrackingNumber: null,
     });
-    expect(updates[1]).toMatchObject({ target: ecotrackOrderStates });
-    expect(updates[1]?.values.deletedAt).toBeInstanceOf(Date);
+    expect(
+      updates.find((update) => update.target === ecotrackOrderStates)?.values.deletedAt,
+    ).toBeInstanceOf(Date);
   });
 
   it('recovers an omitted bulk status from the documented current-order endpoint', async () => {
@@ -519,6 +596,7 @@ describe('admin ecotrack shipment reconciliation', () => {
       fallbackChecked: 1,
       fallbackRecovered: 1,
       fallbackDeferred: 0,
+      superseded: 0,
       failed: 0,
       batchFailed: 0,
       majFailed: 0,

@@ -15,6 +15,10 @@ describe('order status transitions', () => {
     expect(canTransitionOrderStatus(7, 4)).toBe(true);
   });
 
+  it('allows carrier reconciliation to return an in-delivery order to dispatched', () => {
+    expect(canTransitionOrderStatus(7, 3)).toBe(true);
+  });
+
   it('keeps terminal outcomes immutable without an explicit correction', () => {
     expect(() => assertOrderStatusTransition(4, 2)).toThrow(InvalidOrderStatusTransitionError);
     expect(() => assertOrderStatusTransition(8, 0)).toThrow('without a correction');
