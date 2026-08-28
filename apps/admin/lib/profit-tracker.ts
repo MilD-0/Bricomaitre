@@ -1149,10 +1149,8 @@ export function toCanonicalOrderProjectionDay({
   const grossProfit = day?.grossProfitDzd ?? null;
   const adSpend = day?.metrics.adCostDzd ?? null;
   const estimatedReturnRate = day?.returnRatePct ?? defaultReturnRate;
-  const cohortOrders = day?.postedOrders ?? 0;
   const returnExposedOrders = day?.returnExposedOrders ?? day?.postedOrders ?? 0;
-  const adjustedProfit =
-    day?.metrics.adjustedProfitDzd ?? (cohortOrders === 0 && adSpend !== null ? 0 : null);
+  const adjustedProfit = day?.metrics.adjustedProfitDzd ?? null;
 
   return {
     basis,

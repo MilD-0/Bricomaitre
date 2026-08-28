@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Analytics2Payload } from './analytics2';
 import {
-  ADMIN_AI_ANALYTICS_INSTRUCTIONS,
+  ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE,
   ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT,
   analyticsMetricsForAssistant,
 } from './admin-ai-analytics-contract';
@@ -100,27 +100,44 @@ function moneyPayload(costCoveragePct: number): Analytics2Payload {
 }
 
 describe('admin assistant analytics semantic contract', () => {
+  it('defines both EcoTrack paid outcomes without promising bank receipt', () => {
+    expect(ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT.lifecycle.payed).toContain(
+      'recognized paid outcome',
+    );
+    expect(ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT.lifecycle.payeEtArchive).toContain(
+      'paid processing/archive outcome',
+    );
+  });
+
   it('encodes the Bricomaitre meanings that conventional ecommerce assistants get wrong', () => {
     expect(ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT).toMatchObject({
       semanticsVersion: 5,
       lifecycle: {
         delivered: expect.stringContaining('not proof'),
-        payed: expect.stringContaining('legitimate paid outcome'),
+        payed: expect.stringContaining('recognized paid outcome'),
         untracked: expect.stringContaining('untracked'),
       },
       returnPolicy: { adoption: expect.stringContaining('explicit user action') },
       storefront: expect.stringContaining('distinct sessions'),
       metaAttribution: expect.stringContaining('2026-08-17'),
     });
-    expect(ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT.hardRules).toContain(
-      'Never blend projected, delivered, paid, and true profit.',
-    );
-    expect(ADMIN_AI_ANALYTICS_INSTRUCTIONS).toContain('visible table');
-    expect(ADMIN_AI_ANALYTICS_INSTRUCTIONS).toContain('partly estimated');
-    expect(ADMIN_AI_ANALYTICS_INSTRUCTIONS).toContain('distinct sessions rather than raw events');
+    expect(ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT).not.toHaveProperty('hardRules');
   });
 
-  it('declares common effective coverage and estimation without warning at 95% coverage', () => {
+  it('owns one state-aware profit explanation for metrics and conceptual answers', () => {
+    expect(ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT.profit).toBe(ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE);
+    expect(ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE.adjustedProfit).toContain(
+      'only to that unresolved/shipping portion',
+    );
+    expect(ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE.unresolvedContribution).toContain(
+      'local posted status 11',
+    );
+    expect(ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE.unresolvedContribution).toContain(
+      'Orders that never reached posted status 11 do not enter',
+    );
+  });
+
+  it('declares exact-cost coverage and assumptions without an ambiguous estimation flag', () => {
     const [metric] = analyticsMetricsForAssistant(moneyPayload(95));
 
     expect(metric).toMatchObject({
@@ -128,13 +145,13 @@ describe('admin assistant analytics semantic contract', () => {
       effectiveRange: { startDate: '2026-07-25', endDate: '2026-08-17' },
       asOf: '2026-08-17',
       coveragePct: 95,
-      estimated: true,
       comparisonStatus: 'comparable',
       comparisonReason: expect.stringContaining('Matched prior-period'),
     });
     expect(metric.assumptions).toContain(
       '30% fallback margin for missing immutable purchase costs',
     );
+    expect(metric).not.toHaveProperty('estimated');
     expect(metric.warning).toContain('meta is partial');
     expect(metric.warning).not.toContain('Exact purchase-cost coverage');
   });
@@ -144,6 +161,28 @@ describe('admin assistant analytics semantic contract', () => {
 
     expect(metric.warning).toContain('92.0%');
     expect(metric.warning).toContain('30% estimated margin');
+  });
+
+  it('explains a canonical gross-profit headline without return or ad assumptions', () => {
+    const payload = moneyPayload(100);
+    payload.data.metrics = [
+      {
+        key: 'grossProfit',
+        value: 180_000,
+        previous: 150_000,
+        changePct: 20,
+        unit: 'dzd',
+      },
+    ];
+
+    const [metric] = analyticsMetricsForAssistant(payload);
+
+    expect(metric).toMatchObject({
+      name: 'grossProfit',
+      definition: expect.stringContaining('before return assumptions and advertising'),
+      coveragePct: 100,
+      assumptions: [],
+    });
   });
 
   it('does not mistake assumptions-source coverage for exact product-cost coverage', () => {

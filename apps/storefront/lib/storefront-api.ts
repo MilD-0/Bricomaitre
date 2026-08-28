@@ -32,10 +32,12 @@ import {
 } from '@bric/storefront-core/contracts';
 import {
   landingPageLocaleSchema,
+  landingPagePreviewSchema,
   landingPageSlugSchema,
   storefrontLandingPageResponseSchema,
   storefrontLandingPageSitemapResponseSchema,
   type StorefrontLandingPageResponse,
+  type LandingPagePreview,
 } from '@bric/storefront-core/landing-pages';
 import { unstable_cache } from 'next/cache';
 
@@ -100,21 +102,45 @@ export async function recordStorefrontAssistantRun(input: {
   });
 }
 
+export function buildStorefrontLandingPagePath(
+  locale: string,
+  slug: string,
+  preview?: LandingPagePreview,
+) {
+  const parsedLocale = landingPageLocaleSchema.parse(locale);
+  const parsedSlug = landingPageSlugSchema.parse(slug);
+  const params = new URLSearchParams({ locale: parsedLocale });
+  if (preview) {
+    const parsedPreview = landingPagePreviewSchema.parse(preview);
+    params.set('previewRevision', String(parsedPreview.revision));
+    params.set('previewTimestamp', parsedPreview.timestamp);
+    params.set('previewSignature', parsedPreview.signature);
+  }
+  return `/storefront/landing-pages/${encodeURIComponent(parsedSlug)}?${params.toString()}`;
+}
+
 async function fetchStorefrontLandingPage(
   locale: string,
   slug: string,
+  preview?: LandingPagePreview,
 ): Promise<StorefrontLandingPageResponse | null> {
-  const parsedLocale = landingPageLocaleSchema.parse(locale);
-  const parsedSlug = landingPageSlugSchema.parse(slug);
-  const pathname = `/storefront/landing-pages/${encodeURIComponent(parsedSlug)}?locale=${parsedLocale}`;
-  const response = await fetchStorefrontUpstream(pathname);
+  const pathname = buildStorefrontLandingPagePath(locale, slug, preview);
+  const response = await fetchStorefrontUpstream(pathname, preview ? { cache: 'no-store' } : {});
   if (response.status === 404) return null;
   return parseUpstreamJson(response, pathname, storefrontLandingPageResponseSchema);
 }
 
-export async function getStorefrontLandingPage(locale: string, slug: string) {
+export async function getStorefrontLandingPage(
+  locale: string,
+  slug: string,
+  preview?: LandingPagePreview,
+) {
   const parsedLocale = landingPageLocaleSchema.parse(locale);
   const parsedSlug = landingPageSlugSchema.parse(slug);
+  if (preview) {
+    const parsedPreview = landingPagePreviewSchema.parse(preview);
+    return fetchStorefrontLandingPage(parsedLocale, parsedSlug, parsedPreview);
+  }
   return unstable_cache(
     () => fetchStorefrontLandingPage(parsedLocale, parsedSlug),
     ['storefront-landing-page', parsedLocale, parsedSlug],

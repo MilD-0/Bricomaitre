@@ -16,6 +16,25 @@ export const landingPageBlockIdSchema = z
   .max(80)
   .regex(/^[a-z0-9-]+$/);
 
+export const landingPageRevisionSchema = z.coerce.number().int().positive();
+
+export const landingPagePreviewSchema = z.strictObject({
+  revision: landingPageRevisionSchema,
+  timestamp: z.string().regex(/^\d{13}$/),
+  signature: z.string().regex(/^[a-f0-9]{64}$/),
+});
+
+export function buildLandingPagePreviewPayload(input: {
+  locale: string;
+  slug: string;
+  revision: number;
+}) {
+  const locale = landingPageLocaleSchema.parse(input.locale);
+  const slug = landingPageSlugSchema.parse(input.slug);
+  const revision = landingPageRevisionSchema.parse(input.revision);
+  return `landing-page-preview-v1:${locale}:${slug}:${revision}`;
+}
+
 const localizedTextSchema = z.string().trim().min(1).max(1_000);
 const optionalTextSchema = z.string().trim().max(4_000).default('');
 const imageUrlSchema = z.string().trim().url().max(2_000).nullable().default(null);
@@ -321,4 +340,5 @@ export type LandingPageBlock = z.infer<typeof landingPageBlockSchema>;
 export type LandingPageDocument = z.infer<typeof landingPageDocumentSchema>;
 export type LandingPageCreateInput = z.infer<typeof landingPageCreateSchema>;
 export type LandingPageRecord = z.infer<typeof landingPageRecordSchema>;
+export type LandingPagePreview = z.infer<typeof landingPagePreviewSchema>;
 export type StorefrontLandingPageResponse = z.infer<typeof storefrontLandingPageResponseSchema>;

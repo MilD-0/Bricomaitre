@@ -1480,6 +1480,8 @@
   "aiChat": {
     "open": "Assistant IA",
     "close": "Fermer l’assistant IA",
+    "fullScreen": "Ouvrir l’assistant en plein écran",
+    "exitFullScreen": "Quitter le plein écran",
     "title": "Assistant IA administrateur",
     "conversation": "Conversation avec l’assistant IA",
     "conversationTab": "Conversation",
@@ -1512,24 +1514,8 @@
     },
     "surfaceSuggestions": {
       "helpCurrentSurface": "Que pouvez-vous m’aider à faire sur cet écran ?",
-      "auditCatalog": "Auditez le catalogue actuel et indiquez ce qui mérite mon attention.",
-      "improveSelectedProducts": "Améliorez le contenu localisé des produits sélectionnés.",
-      "categorizeCatalog": "Trouvez les produits dont la catégorisation doit être revue.",
-      "reviewSelectedProposals": "Expliquez les preuves et les risques des propositions sélectionnées.",
       "summarizeCurrentAnalytics": "Résumez cette vue analytique avec ses filtres actuels.",
-      "explainAnalyticsChange": "Expliquez les évolutions les plus importantes par rapport à la période de comparaison.",
-      "improveCurrentAssets": "Proposez une amélioration avec les produits et la section de ressources affichés.",
-      "inspectSelectedOrders": "Que pouvez-vous vérifier sur les commandes sélectionnées dans cet écran ?",
-      "postConfirmedOrders": "Prévisualisez les commandes confirmées aujourd’hui avant leur envoi à EcoTrack.",
-      "manageEcotrackShipments": "Inspectez et gérez les expéditions EcoTrack sélectionnées.",
-      "inspectInventory": "Que pouvez-vous m’aider à vérifier dans cette vue d’inventaire ?",
-      "improveTaxonomy": "Examinez la structure actuelle des marques et des catégories.",
-      "inspectBackgroundWork": "Affichez l’état réel des tâches en arrière-plan.",
-      "inspectAdministration": "Affiche les accès, rôles et permissions actuels de l’équipe.",
-      "inspectActionHistory": "Explique l’action sélectionnée et indique si elle peut actuellement être annulée ou rétablie.",
-      "inspectArchivedProducts": "Examine les produits archivés et identifie ceux qui peuvent être restaurés.",
-      "inspectStorefrontConfiguration": "Vérifie les contacts, modèles IA et annonce actuels de la vitrine.",
-      "summarizeBulletin": "Résume les sujets ouverts et les suivis de la vue Bulletin actuelle."
+      "explainAnalyticsChange": "Expliquez les évolutions les plus importantes par rapport à la période de comparaison."
     },
     "placeholder": "Écrire à l’assistant IA",
     "send": "Envoyer",
@@ -1687,7 +1673,6 @@
       "review": "Vérifiez les preuves ou les données avant l’approbation.",
       "retry": "Aucune finalisation n’a été enregistrée ; vérifiez l’enregistrement actuel puis réessayez."
     },
-    "autoAccept": "Appliquer automatiquement les propositions vérifiées",
     "model": "Modèle",
     "reasoningEffort": "Effort de raisonnement",
     "reasoningLevels": {
@@ -1919,7 +1904,6 @@
       "fullPreview": "Aperçu taille réelle",
       "compactPreview": "Aperçu compact",
       "confirm": "Exporter en XLSX",
-      "confirmAndDispatch": "Exporter et marquer comme expédiées",
       "loading": "Préparation de l'aperçu d'export...",
       "ready": "L'aperçu d'export est prêt.",
       "success": "Commandes exportées.",
@@ -1927,8 +1911,7 @@
       "empty": "Sélectionnez au moins une commande à exporter.",
       "emptyConfirmed": "Aucune commande confirmée à exporter.",
       "progress": {
-        "exporting": "Génération du fichier",
-        "updating-statuses": "Mise à jour des statuts"
+        "exporting": "Génération du fichier"
       }
     },
     "ecotrack": {

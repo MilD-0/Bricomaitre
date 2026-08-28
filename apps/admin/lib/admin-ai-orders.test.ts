@@ -28,8 +28,11 @@ import {
   updateAdminOrderDetailsFromTool,
   updateAdminOrderStatuses,
 } from './admin-ai-orders';
-import { AdminOrderNotFoundError, AdminOrderStatusTransitionError } from './admin-order-update';
-import { AdminOrderLifecycleNotFoundError } from './admin-order-lifecycle';
+import { AdminOrderNotFoundError } from './admin-order-update';
+import {
+  AdminOrderHasActiveEcotrackShipmentError,
+  AdminOrderLifecycleNotFoundError,
+} from './admin-order-lifecycle';
 
 function order(confirmed: number, history: number[], noAnswerCount = 0) {
   return {
@@ -67,6 +70,7 @@ describe('admin AI order status updates', () => {
       91,
       { confirmed: 2 },
       { email: 'admin@example.com', name: 'Admin' },
+      { allowStatusCorrection: true },
     );
   });
 
@@ -83,11 +87,11 @@ describe('admin AI order status updates', () => {
     ).toBe(true);
   });
 
-  it('reports missing and invalid transitions without hiding successful rows', async () => {
+  it('reports missing rows without hiding successful explicit corrections', async () => {
     mocks.update
       .mockResolvedValueOnce(order(6, [0, 6]))
       .mockRejectedValueOnce(new AdminOrderNotFoundError(92))
-      .mockRejectedValueOnce(new AdminOrderStatusTransitionError(8, 2));
+      .mockResolvedValueOnce(order(2, [8, 2]));
     await expect(
       updateAdminOrderStatuses({
         items: [
@@ -106,11 +110,15 @@ describe('admin AI order status updates', () => {
           statusLabel: 'cancelled',
           noAnswerCount: 0,
         },
+        {
+          orderId: 93,
+          previousStatus: 8,
+          status: 2,
+          statusLabel: 'confirmed',
+          noAnswerCount: 0,
+        },
       ],
-      skipped: [
-        { orderId: 92, reason: 'missing' },
-        { orderId: 93, reason: 'invalid_transition', from: 8, to: 2 },
-      ],
+      skipped: [{ orderId: 92, reason: 'missing' }],
     });
   });
 
@@ -343,22 +351,25 @@ describe('admin AI order lifecycle', () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
-  it('deletes exact local orders with partial failures and external-shipment disclosure', async () => {
+  it('deletes only local orders without active EcoTrack shipments', async () => {
     mocks.delete
       .mockResolvedValueOnce({
         id: 91,
         customerName: 'Ahmed Test',
         status: 2,
-        ecotrackTrackingNumber: 'TRK-91',
       })
-      .mockRejectedValueOnce(new AdminOrderLifecycleNotFoundError(99));
+      .mockRejectedValueOnce(new AdminOrderLifecycleNotFoundError(99))
+      .mockRejectedValueOnce(new AdminOrderHasActiveEcotrackShipmentError(92, 'TRK-92'));
 
-    await expect(deleteAdminAiOrders({ orderIds: [91, 99] })).resolves.toMatchObject({
+    await expect(deleteAdminAiOrders({ orderIds: [91, 99, 92] })).resolves.toMatchObject({
       ok: false,
       deletedCount: 1,
-      failedCount: 1,
-      deleted: [{ id: 91, externalShipmentMayRemain: true }],
-      failed: [{ orderId: 99, code: 'order_not_found' }],
+      failedCount: 2,
+      deleted: [{ id: 91 }],
+      failed: [
+        { orderId: 99, code: 'order_not_found' },
+        { orderId: 92, code: 'active_ecotrack_shipment' },
+      ],
     });
   });
 });

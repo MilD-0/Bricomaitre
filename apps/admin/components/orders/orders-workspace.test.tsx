@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { NextIntlClientProvider } from 'next-intl';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import messages from '../../messages/en.json';
 import type { DailyOrderStatusOverview, OrdersResponse } from '../../lib/order-admin-contracts';
@@ -154,7 +154,11 @@ function renderWorkspace(
 }
 
 describe('OrdersWorkspace', () => {
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
+  });
 
   it('renders as the integrated orders workspace', () => {
     const { container } = renderWorkspace();
@@ -587,5 +591,18 @@ describe('OrdersWorkspace', () => {
 
     await user.click(screen.getByRole('button', { name: 'Order queue' }));
     expect(screen.getByRole('button', { name: /Customer One#1/i })).toBeInTheDocument();
+  });
+
+  it('restores the queue scroll position after closing an order on a narrow layout', async () => {
+    const user = userEvent.setup();
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 720 });
+    renderWorkspace();
+
+    await user.click(screen.getByRole('button', { name: /Customer Two#2/i }));
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
+    await user.click(screen.getByRole('button', { name: 'Order queue' }));
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 720, left: 0, behavior: 'auto' });
   });
 });

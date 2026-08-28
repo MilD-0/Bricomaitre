@@ -19,12 +19,6 @@ const dateSchema = z
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .describe('Exact Africa/Algiers business date in YYYY-MM-DD format.');
 
-const fxRateSchema = z
-  .number()
-  .finite()
-  .positive()
-  .max(100_000)
-  .describe('Manual DZD per EUR rate to use in future calculator snapshots.');
 const planningReturnRateSchema = z
   .number()
   .finite()
@@ -33,53 +27,11 @@ const planningReturnRateSchema = z
   .describe(
     'Manual planning return percentage used by projections; never substitute an observed rate unless the operator explicitly adopts it.',
   );
-const fridayRestFromSchema = dateSchema
-  .nullable()
-  .describe('Activation date for Friday calculator rest-day accounting, or null to disable it.');
-
 export const adminAiAnalyticsSettingsPatchSchema = z
   .object({
-    fxRate: fxRateSchema.optional(),
-    planningReturnRate: planningReturnRateSchema.optional(),
-    fridayRestFrom: fridayRestFromSchema.optional(),
+    planningReturnRate: planningReturnRateSchema,
   })
-  .strict()
-  .refine((value) => Object.keys(value).length > 0, 'Provide at least one settings change.');
-
-function normalizedActionMessage(value: string) {
-  return value.normalize('NFKD').replace(/\p{M}/gu, '').toLocaleLowerCase();
-}
-
-function includesAny(value: string, terms: readonly string[]) {
-  return terms.some((term) => value.includes(term));
-}
-
-/** Exposes only settings explicitly named by the operator. */
-export function adminAiAnalyticsSettingsPatchSchemaForMessage(
-  rawMessage: string,
-): typeof adminAiAnalyticsSettingsPatchSchema {
-  const message = normalizedActionMessage(rawMessage);
-  const shape: Record<string, z.ZodType> = {};
-  if (
-    includesAny(message, [
-      'taux de retour',
-      'taux de planification',
-      'planning return',
-      'return rate',
-      'معدل الإرجاع',
-    ])
-  ) {
-    shape.planningReturnRate = planningReturnRateSchema;
-  }
-  if (includesAny(message, ['taux de change', 'fx', 'eur vers dzd', 'eur to dzd', 'سعر الصرف'])) {
-    shape.fxRate = fxRateSchema;
-  }
-  if (includesAny(message, ['vendredi', 'friday', 'الجمعة'])) {
-    shape.fridayRestFrom = fridayRestFromSchema;
-  }
-  if (Object.keys(shape).length === 0) return adminAiAnalyticsSettingsPatchSchema;
-  return z.object(shape).strict() as unknown as typeof adminAiAnalyticsSettingsPatchSchema;
-}
+  .strict();
 
 type AnalyticsSettingsDependencies = {
   getSettings: typeof getProfitTrackerSettings;
@@ -100,24 +52,20 @@ export async function updateAdminAiAnalyticsSettings(
   const changes = adminAiAnalyticsSettingsPatchSchema.parse(raw);
   const previous = await dependencies.getSettings();
   const current = await dependencies.updateSettings({
-    fxRate: changes.fxRate ?? previous.fxRate,
-    defaultReturnRate: changes.planningReturnRate ?? previous.defaultReturnRate,
-    restFrom: changes.fridayRestFrom === undefined ? previous.restFrom : changes.fridayRestFrom,
+    fxRate: previous.fxRate,
+    defaultReturnRate: changes.planningReturnRate,
+    restFrom: previous.restFrom,
   });
   await dependencies.refreshFacts();
   return {
     kind: 'analytics_settings' as const,
     previous: {
-      fxRate: previous.fxRate,
       planningReturnRate: previous.defaultReturnRate,
-      fridayRestFrom: previous.restFrom,
     },
     current: {
-      fxRate: current.fxRate,
       planningReturnRate: current.defaultReturnRate,
-      fridayRestFrom: current.restFrom,
     },
-    changedFields: Object.keys(changes),
+    changedFields: ['planningReturnRate'],
   };
 }
 
@@ -157,70 +105,6 @@ const costOperationSchema = z.discriminatedUnion('action', [
 export const adminAiAnalyticsCostsMutationSchema = z
   .object({ operations: z.array(costOperationSchema).min(1).max(20) })
   .strict();
-
-/** Narrows cost mutations to the requested operation and explicitly named update fields. */
-export function adminAiAnalyticsCostsMutationSchemaForMessage(
-  rawMessage: string,
-): typeof adminAiAnalyticsCostsMutationSchema {
-  const message = normalizedActionMessage(rawMessage);
-  if (includesAny(message, ['supprime', 'delete', 'remove', 'احذف'])) {
-    return z
-      .object({
-        operations: z
-          .array(
-            z.object({ action: z.literal('delete'), id: z.number().int().positive() }).strict(),
-          )
-          .min(1)
-          .max(20),
-      })
-      .strict() as unknown as typeof adminAiAnalyticsCostsMutationSchema;
-  }
-  if (includesAny(message, ['ajoute', 'cree', 'create', 'add ', 'أضف'])) {
-    return z
-      .object({
-        operations: z
-          .array(costFieldsSchema.safeExtend({ action: z.literal('create') }))
-          .min(1)
-          .max(20),
-      })
-      .strict() as unknown as typeof adminAiAnalyticsCostsMutationSchema;
-  }
-
-  const changesShape: Record<string, z.ZodType> = {};
-  if (includesAny(message, ['nom', 'name', 'اسم']))
-    changesShape.name = costFieldsBaseSchema.shape.name;
-  if (includesAny(message, ['montant', 'amount', 'dzd', 'دج', 'المبلغ'])) {
-    changesShape.amountDzd = costFieldsBaseSchema.shape.amountDzd;
-  }
-  if (
-    includesAny(message, ['periode', 'period', 'mensuel', 'monthly', 'ponctuel', 'once', 'شهري'])
-  ) {
-    changesShape.period = costFieldsBaseSchema.shape.period;
-  }
-  if (includesAny(message, ['debut', 'start', 'a partir', 'ابتداء'])) {
-    changesShape.startDate = costFieldsBaseSchema.shape.startDate;
-  }
-  if (includesAny(message, ['fin', 'end', "jusqu'a", 'حتى'])) {
-    changesShape.endDate = costFieldsBaseSchema.shape.endDate;
-  }
-  if (Object.keys(changesShape).length === 0) return adminAiAnalyticsCostsMutationSchema;
-  return z
-    .object({
-      operations: z
-        .array(
-          z
-            .object({
-              action: z.literal('update'),
-              id: z.number().int().positive(),
-              changes: z.object(changesShape).strict(),
-            })
-            .strict(),
-        )
-        .min(1)
-        .max(20),
-    })
-    .strict() as unknown as typeof adminAiAnalyticsCostsMutationSchema;
-}
 
 type AnalyticsCostDependencies = {
   listCosts: typeof listProfitTrackerCosts;
@@ -359,64 +243,6 @@ export const adminAiAnalyticsDayOverridesMutationSchema = z
   .object({ operations: z.array(dayOperationSchema).min(1).max(20) })
   .strict();
 
-/** Restricts a daily write to reset or to the exact value kinds named by the operator. */
-export function adminAiAnalyticsDayOverridesMutationSchemaForMessage(
-  rawMessage: string,
-): typeof adminAiAnalyticsDayOverridesMutationSchema {
-  const message = normalizedActionMessage(rawMessage);
-  if (includesAny(message, ['reinitialise', 'reset', 'supprime', 'efface', 'إعادة تعيين'])) {
-    return z
-      .object({
-        operations: z
-          .array(z.object({ action: z.literal('reset'), date: dateSchema }).strict())
-          .min(1)
-          .max(20),
-      })
-      .strict() as unknown as typeof adminAiAnalyticsDayOverridesMutationSchema;
-  }
-
-  const changesShape: Record<string, z.ZodType> = {};
-  if (includesAny(message, ['profit brut', 'gross profit', 'الربح الإجمالي'])) {
-    changesShape.grossProfitDzd = z.number().finite().nullable();
-  }
-  if (
-    includesAny(message, [
-      'taux de retour',
-      'taux de planification',
-      'planning return',
-      'return rate',
-      'معدل الإرجاع',
-    ])
-  ) {
-    changesShape.planningReturnRate = z.number().finite().min(0).max(100).nullable();
-  }
-  if (includesAny(message, ['commandes confirmees', 'confirmed orders', 'الطلبات المؤكدة'])) {
-    changesShape.confirmedOrders = z.number().int().nonnegative().nullable();
-  }
-  if (includesAny(message, ['note', 'ملاحظة'])) {
-    changesShape.note = z.string().trim().max(500).nullable();
-  }
-  if (Object.keys(changesShape).length === 0) {
-    return adminAiAnalyticsDayOverridesMutationSchema;
-  }
-  return z
-    .object({
-      operations: z
-        .array(
-          z
-            .object({
-              action: z.literal('upsert'),
-              date: dateSchema,
-              changes: z.object(changesShape).strict(),
-            })
-            .strict(),
-        )
-        .min(1)
-        .max(20),
-    })
-    .strict() as unknown as typeof adminAiAnalyticsDayOverridesMutationSchema;
-}
-
 type AnalyticsDayDependencies = {
   upsertDay: typeof upsertProfitTrackerDay;
   deleteDay: typeof deleteProfitTrackerDay;
@@ -527,22 +353,6 @@ function analyticsSyncSchema(sourceSchema: z.ZodType<'meta' | 'searchConsole'>) 
 }
 
 export const adminAiAnalyticsSyncSchema = analyticsSyncSchema(z.enum(['meta', 'searchConsole']));
-
-/** Resolves deictic sync requests from the active canonical source workspace. */
-export function adminAiAnalyticsSyncSchemaForContext(
-  rawMessage: string,
-  rawSection?: string | null,
-) {
-  const message = normalizedActionMessage(rawMessage);
-  const section = normalizedActionMessage(rawSection ?? '').replace(/[-_]/g, '');
-  if (message.includes('search console') || section === 'search') {
-    return analyticsSyncSchema(z.literal('searchConsole'));
-  }
-  if (message.includes('meta') || section === 'acquisition') {
-    return analyticsSyncSchema(z.literal('meta'));
-  }
-  return adminAiAnalyticsSyncSchema;
-}
 
 type AnalyticsSyncDependencies = {
   syncMeta: typeof syncMetaAdsInsights;

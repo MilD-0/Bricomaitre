@@ -16,11 +16,7 @@ vi.mock('./admin-orders-data', () => ({
 vi.mock('./ecotrack', () => ({ readEcotrackCatalog: mocks.readCatalog }));
 vi.mock('./background-jobs', () => ({ startOrderExportJob: mocks.startExport }));
 
-import {
-  adminAiOrderExportScopeSchemaForMessage,
-  previewAdminAiOrderExport,
-  startAdminAiOrderExport,
-} from './admin-ai-order-exports';
+import { previewAdminAiOrderExport, startAdminAiOrderExport } from './admin-ai-order-exports';
 import type { OrderRecord } from './orders';
 
 function order(id: number, createdAt: string, overrides: Partial<OrderRecord> = {}) {
@@ -88,20 +84,6 @@ describe('admin AI order exports', () => {
     });
   });
 
-  it('makes explicit confirmed and selected scopes structural provider constraints', () => {
-    const confirmed = adminAiOrderExportScopeSchemaForMessage(
-      'Exporte toutes les commandes confirmées.',
-    );
-    expect(confirmed.safeParse({ mode: 'confirmed', orderIds: [] }).success).toBe(true);
-    expect(confirmed.safeParse({ mode: 'confirmed', orderIds: [31] }).success).toBe(false);
-
-    const selected = adminAiOrderExportScopeSchemaForMessage(
-      'Exporte les commandes sélectionnées.',
-    );
-    expect(selected.safeParse({ mode: 'selected', orderIds: [31] }).success).toBe(true);
-    expect(selected.safeParse({ mode: 'selected', orderIds: [] }).success).toBe(false);
-  });
-
   it('previews the complete recent-confirmed cohort and exposes stale exclusions', async () => {
     mocks.loadOrdersPageData.mockImplementation(async ({ page }) => ({
       items:
@@ -124,7 +106,7 @@ describe('admin AI order exports', () => {
       staleConfirmedOrderIds: [30],
       missingRequiredFields: [],
       previewRowsTruncated: false,
-      completionEffect: 'exported orders transition to dispatched after the file is created',
+      completionEffect: 'order statuses are unchanged',
     });
     expect(result.previewRows[0]).toMatchObject({
       reference: '31',
@@ -154,7 +136,7 @@ describe('admin AI order exports', () => {
       kind: 'order_export_started',
       resolvedOrderCount: 1,
       missingOrderIds: [404],
-      completionEffect: 'selected-order statuses are unchanged',
+      completionEffect: 'order statuses are unchanged',
       job: { status: 'queued', downloadPath: null },
     });
   });

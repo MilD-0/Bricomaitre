@@ -34,35 +34,6 @@ export const adminAiOrderExportScopeSchema = z
     }
   });
 
-export function adminAiOrderExportScopeSchemaForMessage(message: string) {
-  const normalized = message.toLocaleLowerCase().normalize('NFKC');
-  if (
-    ['confirmée', 'confirmé', 'confirmee', 'confirme', 'confirmed', 'المؤكدة', 'مؤكدة'].some(
-      (term) => normalized.includes(term),
-    )
-  ) {
-    return z
-      .object({
-        mode: z.literal('confirmed'),
-        orderIds: z.array(z.number().int().positive()).max(0),
-      })
-      .strict();
-  }
-  if (
-    ['sélectionnée', 'sélectionné', 'selectionnee', 'selectionne', 'selected', 'المحددة'].some(
-      (term) => normalized.includes(term),
-    )
-  ) {
-    return z
-      .object({
-        mode: z.literal('selected'),
-        orderIds: z.array(z.number().int().positive()).min(1).max(2_000),
-      })
-      .strict();
-  }
-  return adminAiOrderExportScopeSchema;
-}
-
 async function loadAllConfirmedOrders() {
   const items = [];
   let page = 1;
@@ -147,10 +118,7 @@ export async function previewAdminAiOrderExport(
     missingRequiredFields: missingRequiredExportFields(rows),
     previewRows: rows.slice(0, previewLimit),
     previewRowsTruncated: rows.length > previewLimit,
-    completionEffect:
-      values.mode === 'confirmed'
-        ? ('exported orders transition to dispatched after the file is created' as const)
-        : ('selected-order statuses are unchanged' as const),
+    completionEffect: 'order statuses are unchanged' as const,
   };
 }
 
@@ -184,10 +152,7 @@ export async function startAdminAiOrderExport(
     orderIds,
     missingOrderIds: resolved.missingOrderIds,
     staleConfirmedOrderIds: resolved.staleConfirmedOrderIds,
-    completionEffect:
-      values.mode === 'confirmed'
-        ? ('exported orders transition to dispatched after the file is created' as const)
-        : ('selected-order statuses are unchanged' as const),
+    completionEffect: 'order statuses are unchanged' as const,
     job: result.job,
     startDisposition: result.kind,
   };

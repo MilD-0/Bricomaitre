@@ -30,6 +30,9 @@ export const adminAiChatStreamEventSchema = z.discriminatedUnion('type', [
     .object({
       type: z.literal('error'),
       code: z.literal('admin_ai_failed'),
+      message: z.string(),
+      conversation: adminAiConversationSchema,
+      messageId: z.number().int().positive().nullable(),
       toolResults: z.unknown().optional(),
     })
     .strict(),
@@ -49,7 +52,13 @@ export async function consumeAdminAiChatResponse(
       conversation: AdminAiConversation;
       messageId: number | null;
     }) => void;
-    onError?: (error: { code: 'admin_ai_failed'; toolResults?: unknown }) => void;
+    onError?: (error: {
+      code: 'admin_ai_failed';
+      message: string;
+      conversation: AdminAiConversation;
+      messageId: number | null;
+      toolResults?: unknown;
+    }) => void;
   },
 ) {
   const contentType = response.headers.get('content-type') ?? '';
@@ -94,7 +103,13 @@ export async function consumeAdminAiChatResponse(
       });
     }
     if (event.type === 'error') {
-      handlers.onError?.({ code: event.code, toolResults: event.toolResults });
+      handlers.onError?.({
+        code: event.code,
+        message: event.message,
+        conversation: event.conversation,
+        messageId: event.messageId,
+        toolResults: event.toolResults,
+      });
       throw new Error(event.code);
     }
   };

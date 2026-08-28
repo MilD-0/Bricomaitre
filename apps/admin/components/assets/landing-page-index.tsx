@@ -1,6 +1,6 @@
 'use client';
 
-import { ExternalLink, Plus } from 'lucide-react';
+import { ExternalLink, Eye, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
@@ -179,6 +179,15 @@ export function LandingPageIndex({
               {new Date(item.updatedAt).toLocaleDateString(adminLocale)}
             </span>
             <div className="flex items-center gap-2">
+              <a
+                href={`/api/landing-pages/${item.id}?view=preview`}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`${t.preview} · ${item.productTitle}`}
+                className="grid size-9 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <Eye className="size-4" aria-hidden="true" />
+              </a>
               {item.active ? (
                 <a
                   href={`${storefrontBaseUrl}/${item.locale}/landing/${encodeURIComponent(item.slug)}`}

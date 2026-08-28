@@ -16,6 +16,36 @@ type MetricDefinition = {
   comparison?: 'period' | 'not_applicable';
 };
 
+/**
+ * One canonical explanation of the profit model. Metric enrichment, live tool
+ * results, and conceptual system-knowledge answers all reuse this object so a
+ * response cannot receive two different adjusted-profit formulas.
+ */
+export const ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE = {
+  grossProfit: 'Order value minus product cost before return assumptions and advertising.',
+  adjustedProfit:
+    'Realized gross profit plus unresolved/shipping gross profit after applying the manual planning return rate only to that unresolved/shipping portion.',
+  netProfit: 'Adjusted profit minus Meta ad cost.',
+  trueProfit: 'Net profit minus configured operating costs.',
+  unresolvedContribution:
+    'Gross contribution from orders that reached local posted status 11 but have neither a recognized successful outcome nor a recognized unsuccessful outcome. This includes active carrier states, untracked posted orders, and other pending posted outcomes. Delivered, payed, paye_et_archive, and manually completed orders are realized; archived returns, cancelled orders, and failed orders contribute zero. Orders that never reached posted status 11 do not enter this calculation.',
+  projectedContribution:
+    'State-aware expected contribution: delivered and paid contribution is retained, known unsuccessful outcomes contribute zero, and only unresolved posted demand uses the planning return rate.',
+  deliveredContribution: 'Contribution attached to delivered orders; not received cash.',
+  automaticPaidContribution:
+    'EcoTrack COD minus estimated tariff and product cost for payed/paye_et_archive outcomes.',
+  paidTrueProfit:
+    'Paid contribution minus comparable Meta and operating costs; do not call raw paid contribution whole-business profit.',
+  profitX: 'Adjusted profit divided by Meta ad cost; unavailable when ad cost is zero.',
+  formulas: [
+    'ad cost DZD = Meta spend EUR × snapshotted manual FX rate',
+    'adjusted profit = realized gross profit + unresolved/shipping gross profit × (1 − planning return rate ÷ 100)',
+    'net profit = adjusted profit − Meta ad cost',
+    'Profit × = adjusted profit ÷ Meta ad cost',
+    'true profit = net profit − configured operating costs',
+  ],
+} as const;
+
 export type AdminAiAnalyticsMetric = Analytics2Metric & {
   name: string;
   definition: string;
@@ -26,7 +56,6 @@ export type AdminAiAnalyticsMetric = Analytics2Metric & {
   asOf: string | null;
   coveragePct: number | null;
   maturity: string;
-  estimated: boolean;
   assumptions: string[];
   attributionCoveragePct: number | null;
   comparisonStatus: 'comparable' | 'unavailable' | 'not_applicable';
@@ -36,23 +65,27 @@ export type AdminAiAnalyticsMetric = Analytics2Metric & {
 
 const sharedMetricDefinitions: Record<string, MetricDefinition> = {
   trueProfit: {
-    definition:
-      'Adjusted profit minus Meta ad cost and operating costs. It is planning-based whole-business profit, not paid cash.',
+    definition: `${ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE.trueProfit} It is planning-based whole-business profit, not paid cash.`,
     sources: ['orders', 'meta', 'assumptions'],
     dateBasis: 'Calculator accounting date, led by first-posted order dates.',
     assumptions: ['Manual planning return rate', 'Snapshotted manual DZD/EUR FX rate'],
   },
   profitX: {
-    definition: 'Adjusted profit divided by Meta ad cost. It is unavailable when ad cost is zero.',
+    definition: ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE.profitX,
     sources: ['orders', 'meta', 'assumptions'],
     dateBasis: 'Calculator accounting date, led by first-posted order dates.',
     assumptions: ['Manual planning return rate', 'Snapshotted manual DZD/EUR FX rate'],
   },
   adjustedProfit: {
-    definition: 'Gross profit multiplied by one minus the manually selected planning return rate.',
+    definition: ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE.adjustedProfit,
     sources: ['orders', 'assumptions'],
     dateBasis: 'First-posted date / calculator accounting date.',
     assumptions: ['Manual planning return rate'],
+  },
+  grossProfit: {
+    definition: ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE.grossProfit,
+    sources: ['orders'],
+    dateBasis: 'First-posted date / calculator accounting date.',
   },
   automaticPaidProfit: {
     definition:
@@ -302,7 +335,7 @@ function exactCostCoverage(payload: Analytics2Payload, key: string) {
       numberAt(payload.data, ['economics', 'automaticPaid', 'summary', 'profitCoveragePct'])
     );
   }
-  if (['trueProfit', 'profitX', 'adjustedProfit'].includes(key)) {
+  if (['trueProfit', 'profitX', 'adjustedProfit', 'grossProfit'].includes(key)) {
     const paths: Partial<Record<Analytics2View, string[]>> = {
       command: ['economics', 'coverage', 'projectedCoveragePct'],
       money: ['coverage', 'projectedCoveragePct'],
@@ -403,7 +436,7 @@ export function analyticsMetricsForAssistant(payload: Analytics2Payload): AdminA
     const definition = definitionFor(payload.view, metric.key);
     const effectiveRange = effectiveRangeFor(payload, metric);
     const coveragePct = exactCostCoverage(payload, metric.key);
-    const estimated = coveragePct != null && coveragePct < 100;
+    const usesFallbackCost = coveragePct != null && coveragePct < 100;
     const attributionCoveragePct = attributionCoverage(payload, metric.key);
     const comparison = metricComparison(payload, metric, definition);
     return [
@@ -424,10 +457,9 @@ export function analyticsMetricsForAssistant(payload: Analytics2Payload): AdminA
         asOf: sourceAsOf(payload, definition.sources),
         coveragePct,
         maturity: definition.maturity ?? 'Observed over the declared effective range.',
-        estimated,
         assumptions: [
           ...(definition.assumptions ?? []),
-          ...(estimated ? ['30% fallback margin for missing immutable purchase costs'] : []),
+          ...(usesFallbackCost ? ['30% fallback margin for missing immutable purchase costs'] : []),
         ],
         attributionCoveragePct,
         ...comparison,
@@ -446,8 +478,10 @@ export const ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT = {
     posted: 'First local status 11; begins shipment economics.',
     inTransit: 'Active EcoTrack shipment after effective-status filtering.',
     delivered: 'EcoTrack delivery; not proof that COD was received.',
-    payed: 'EcoTrack indicates money will be received; it is a legitimate paid outcome.',
-    payeEtArchive: 'Later paid processing/archive stage; not the only legitimate paid outcome.',
+    payed:
+      'EcoTrack recognized paid outcome used by Analytics; it is settlement evidence, not bank-account reconciliation.',
+    payeEtArchive:
+      'Later EcoTrack paid processing/archive outcome; payed remains an equally valid paid outcome.',
     returned: 'Historical terminal outcome; never silently changes the planning return rate.',
     failed:
       'Local failure or prete_a_expedier with no progress for seven days; excluded from active shipment and cash totals.',
@@ -455,28 +489,7 @@ export const ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT = {
     deliveryAttempts:
       'A delivered order with zero recorded attempts means attempt telemetry is absent, not necessarily that no attempt happened.',
   },
-  profit: {
-    grossProfit: 'Order value minus product cost before return assumptions and advertising.',
-    adjustedProfit:
-      'Realized eligible contribution plus unresolved contribution after the manual planning return rate.',
-    netProfit: 'Adjusted profit minus Meta cost.',
-    trueProfit: 'Net profit minus operating costs.',
-    projectedContribution:
-      'State-aware expected contribution: delivered and paid contribution is retained, known unsuccessful outcomes contribute zero, and only unresolved demand uses the planning return rate.',
-    deliveredContribution: 'Contribution attached to delivered orders; not received cash.',
-    automaticPaidContribution:
-      'EcoTrack COD minus estimated tariff and product cost for payed/paye_et_archive outcomes.',
-    paidTrueProfit:
-      'Paid contribution minus comparable Meta and operating costs; do not call raw paid contribution whole-business profit.',
-    profitX: 'Adjusted profit divided by Meta ad cost; unavailable when ad cost is zero.',
-    formulas: [
-      'ad cost DZD = Meta spend EUR × snapshotted manual FX rate',
-      'adjusted profit = realized eligible contribution + unresolved contribution × (1 − planning return rate ÷ 100)',
-      'net profit = adjusted profit − ad cost',
-      'Profit × = adjusted profit ÷ ad cost',
-      'true profit = net profit − operating costs',
-    ],
-  },
+  profit: ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE,
   returnPolicy: {
     planning:
       'Manual rate used only for unresolved demand; exactly 100% is the operator profit-suppression mode.',
@@ -513,33 +526,4 @@ export const ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT = {
     'Customer identity is normalized primarily by phone. Product scatter and tables are filtered decision views; use headline aggregates for totals. Delivery speed is elapsed calendar time. Meta regions and customer wilayas are separate aggregates. Search Console is aggregate and row-limited, lower average position is better, and it does not provide deterministic order attribution. GA4 is not canonical or required.',
   materializedFacts:
     'Facts are a performance cache, not alternative semantics. Use requires a complete date spine, semantics version 5, fresh dependencies and assumptions, and no unresolved Friday roll-forward; otherwise canonical tables are computed live.',
-  hardRules: [
-    'Never call submitted orders completed sales.',
-    'Never blend projected, delivered, paid, and true profit.',
-    'Never substitute observed return rate into projections without explicit adoption.',
-    'Never turn null, missing, immature, or post-cutoff data into zero.',
-    'Compare sources only over their shared effective range.',
-    'State the date basis whenever it changes interpretation.',
-    'Label every projected or dotted value as modeled.',
-    'Qualify estimated economics with exact-cost coverage and the 30% fallback.',
-    'Never invent historical Meta entity attribution.',
-    'Prefer “the data cannot establish that” to causal claims from correlation.',
-  ],
 } as const;
-
-export const ADMIN_AI_ANALYTICS_INSTRUCTIONS = [
-  'For every analytics answer, treat the returned Bricomaitre semantic contract as authoritative and use the enriched metric metadata rather than inferring conventional ecommerce meanings.',
-  'Treat every item in the tool result’s answerRequirements array as a mandatory acceptance criterion. Before finalizing, check that the answer states each required distinction explicitly; do not rely on implication or omit one because another caveat seems similar.',
-  'For focused rows, interpret every column through focus.fieldContract (and related.fieldContract for a related series), then interpret each lifecycle or funnel row through focus.rowContract when present. Never infer a conventional meaning from a familiar field name. Field and row contracts mark modeled values, estimation, maturity, attribution boundaries, units, sources, date basis, and what null means.',
-  'When previous is unavailable, state comparisonReason instead of implying no change or zero prior performance.',
-  'An analytics_investigation bundle is application-planned evidence, not permission to issue more queries. Synthesize its results only when comparisonStatus is aligned, state commonEffectiveRange, and mention any shorter original source ranges. If comparisonStatus is unavailable, discuss each source separately and do not calculate a cross-workspace change, ratio, or cause.',
-  'Success means answering the operator’s question with the smallest sufficient canonical view, naming the requested and effective ranges when they differ, preserving source cutoffs, date bases, maturity, estimation, and attribution coverage, and explaining material warnings in plain language.',
-  'Answer semantic ambiguities directly before elaborating. If the operator says sales or revenue while the result is submitted demand, explicitly state that submitted orders are incoming demand rather than completed sales, then separately label any delivered and paid counts.',
-  'When the question asks for exact campaigns, ads, products, customers, places, searches, cohorts, costs, or timeline rows, use the matching focus dimension in the first query with any known search or identifiers. Omit focus only for a cross-section summary. A zero-match focus means the entity is absent from the current ranked/filtered decision view, not necessarily from the business.',
-  'Whenever a campaign, ad-set, or ad answer spans the historical attribution boundary, state both limits: reconstructed retained coverage begins around 2026-08-10 and immutable order-time capture begins 2026-08-17. A visible entity is never proof that no other entity ran outside exact coverage.',
-  ...ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT.hardRules,
-  'A visible table is a ranked or paginated decision view, not the population; never calculate a headline total by summing its visible rows.',
-  'A sharp modeled or dotted decline is not an observed collapse, and an immature recent cohort is not evidence of poor delivery or high returns.',
-  'When an economics answer materially depends on exact-cost coverage below 100%, explicitly call the result partly estimated and state both the exact coverage and canonical 30% fallback. For a Storefront funnel, explicitly say every stage counts distinct sessions rather than raw events.',
-  'When the operator asks about a dotted or modeled decline, explicitly say it is not an observed result. When comparable Meta ad cost is zero, explicitly say Profit × is unavailable—neither zero nor infinity. When a Storefront funnel is mistaken for paid sales, explicitly say submitted-order sessions are demand, not paid sales. In a Friday accounting answer, explicitly say the actual Meta spend remains recorded on Friday and only its calculator-economic impact rolls forward.',
-].join(' ');

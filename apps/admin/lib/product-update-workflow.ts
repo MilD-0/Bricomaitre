@@ -33,6 +33,14 @@ export async function readProductMutationPayload(
     where: eq(products.id, productId),
   });
   if (!product || product.archivedAt) throw new ProductMutationNotFoundError(productId);
+  return readProductPayload(db, productId, product);
+}
+
+async function readProductPayload(
+  db: Database,
+  productId: number,
+  product: typeof products.$inferSelect,
+): Promise<ProductPayload> {
   const promoCodes = await db
     .select()
     .from(productPromoCodes)
@@ -63,6 +71,17 @@ export async function readProductMutationPayload(
       endsAt: promoDate(promo.endsAt),
     })),
   });
+}
+
+export async function readArchivedProductMutationPayload(db: Database, productId: number) {
+  const product = await db.query.products.findFirst({
+    where: eq(products.id, productId),
+  });
+  if (!product?.archivedAt) throw new ProductMutationNotFoundError(productId);
+  return {
+    product: await readProductPayload(db, productId, product),
+    archivedAt: product.archivedAt.toISOString(),
+  };
 }
 
 export async function replaceProductThroughCanonicalWorkflow(

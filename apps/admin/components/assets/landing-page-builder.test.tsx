@@ -101,7 +101,12 @@ describe('LandingPageBuilder', () => {
       }),
     );
     renderBuilder();
+    expect(screen.getByRole('link', { name: 'Preview saved page' })).toHaveAttribute(
+      'href',
+      '/api/landing-pages/7?view=preview',
+    );
     await user.click(screen.getByRole('switch', { name: 'Status · Inactive' }));
+    expect(screen.queryByRole('link', { name: 'View live page' })).not.toBeInTheDocument();
     const title = screen.getByRole('textbox', { name: 'Browser and social title' });
     await user.clear(title);
     await user.type(title, 'Drill campaign');
@@ -114,6 +119,14 @@ describe('LandingPageBuilder', () => {
     });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
     expect(screen.getByText(/Revision 4/)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'View live page' })).toHaveAttribute(
+      'href',
+      'https://bricomaitre.com/fr/landing/cordless-drill-7',
+    );
+    expect(screen.getByRole('link', { name: 'Preview saved page' })).toHaveAttribute(
+      'href',
+      '/api/landing-pages/7?view=preview',
+    );
   });
 
   it('preserves unsaved work and offers reload after a stale revision conflict', async () => {

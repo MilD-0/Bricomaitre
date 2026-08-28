@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { landingPageDocumentSchema } from './landing-pages';
+import {
+  buildLandingPagePreviewPayload,
+  landingPageDocumentSchema,
+  landingPagePreviewSchema,
+} from './landing-pages';
 
 const validDocument = {
   schemaVersion: 1,
@@ -155,5 +159,31 @@ describe('landing page document contract', () => {
     expect(document.schemaVersion).toBe(2);
     expect(document.blocks.map((block) => block.type)).toContain('commerce-panel');
     expect(document.blocks[1]).toMatchObject({ surface: 'soft', width: 'narrow' });
+  });
+});
+
+describe('landing page preview contract', () => {
+  it('accepts only bounded signed preview query values', () => {
+    expect(
+      landingPagePreviewSchema.parse({
+        revision: '4',
+        timestamp: '1787817600000',
+        signature: 'a'.repeat(64),
+      }),
+    ).toEqual({ revision: 4, timestamp: '1787817600000', signature: 'a'.repeat(64) });
+
+    expect(
+      landingPagePreviewSchema.safeParse({
+        revision: '0',
+        timestamp: 'yesterday',
+        signature: 'not-a-signature',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('builds one canonical payload for admin signing and API verification', () => {
+    expect(
+      buildLandingPagePreviewPayload({ locale: 'fr', slug: 'perceuse-20v', revision: 4 }),
+    ).toBe('landing-page-preview-v1:fr:perceuse-20v:4');
   });
 });

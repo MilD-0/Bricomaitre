@@ -608,9 +608,10 @@ describe('lib/ecotrack', () => {
         returning: vi.fn().mockResolvedValue([{ ...orderInput.row, ...values }]),
       })),
     }));
+    const onConflictDoUpdateMock = vi.fn().mockResolvedValue(undefined);
     const upsertValuesMock = vi
       .fn()
-      .mockReturnValue({ onConflictDoUpdate: vi.fn().mockResolvedValue(undefined) });
+      .mockReturnValue({ onConflictDoUpdate: onConflictDoUpdateMock });
     const statusHistoryValuesMock = vi.fn().mockResolvedValue(undefined);
     const actionLogValuesMock = vi.fn().mockResolvedValue(undefined);
     const db = {
@@ -674,6 +675,22 @@ describe('lib/ecotrack', () => {
         noAnswerCount: 0,
         changedBy: 'ops@example.com',
         changedByName: 'Ops',
+      }),
+    );
+    expect(onConflictDoUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        set: expect.objectContaining({
+          trackingNumber: 'TRK-11',
+          currentStatus: 'prete_a_expedier',
+          deliveryTariff: null,
+          returnTariff: null,
+          paymentId: null,
+          rawLastTrackingPayload: null,
+          rawLastMajPayload: null,
+          lastStatusSyncedAt: null,
+          lastTrackingSyncedAt: null,
+          lastMajSyncedAt: null,
+        }),
       }),
     );
   });

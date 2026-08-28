@@ -20,7 +20,7 @@ describe('storefront Next configuration', () => {
       compress: false,
       cacheMaxMemorySize: 0,
       devIndicators: false,
-      transpilePackages: ['@bric/ai-core', '@bric/runtime', '@bric/storefront-core'],
+      transpilePackages: ['@bric/runtime', '@bric/storefront-core'],
       allowedDevOrigins: expect.arrayContaining(['127.0.0.1']),
       experimental: {
         imgOptConcurrency: 1,

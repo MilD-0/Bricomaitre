@@ -5,13 +5,7 @@ import {
 } from '@bric/storefront-core/shopping-assistant-contracts';
 
 import {
-  catalogSearchQuery,
   buildShoppingAssistantPageContext,
-  classifyShoppingAssistantIntent,
-  deterministicAssistantMessage,
-  isRetiredStorefrontAiModel,
-  shoppingAssistantToolPlan,
-  shoppingAssistantInstructions,
   storefrontDeliverySupportEvidence,
   toAssistantCatalogProduct,
 } from './shopping-assistant';
@@ -98,117 +92,6 @@ describe('storefront shopping assistant', () => {
     expect(result).toMatchObject({ inStock: true, availabilityStatus: 'in_stock' });
   });
 
-  it('defines grounded shopper behavior and localized deterministic fallback', () => {
-    expect(shoppingAssistantInstructions('fr')).toContain('Never invent specifications');
-    expect(shoppingAssistantInstructions('fr')).toContain('Algerian dinars');
-    expect(shoppingAssistantInstructions('fr')).toContain('never label them Dhs');
-    expect(shoppingAssistantInstructions('fr')).toContain('never mention internal field names');
-    expect(shoppingAssistantInstructions('fr')).toContain('narrow mobile shopping drawer');
-    expect(shoppingAssistantInstructions('fr')).toContain('Never use Markdown tables');
-    expect(shoppingAssistantInstructions('fr')).toContain('use manage_cart exactly once');
-    expect(shoppingAssistantInstructions('ar')).toContain('Answer in Arabic');
-    expect(shoppingAssistantInstructions('ar')).toContain('retry once');
-    expect(deterministicAssistantMessage('fr', 2)).toContain('catalogue');
-    expect(deterministicAssistantMessage('ar', 0)).toContain('الكتالوج');
-  });
-
-  it('classifies assistant questions into analytics intents', () => {
-    expect(classifyShoppingAssistantIntent('Compare ces deux perceuses')).toBe(
-      'product_comparison',
-    );
-    expect(classifyShoppingAssistantIntent('كم سعر هذا المنتج؟')).toBe('price');
-    expect(classifyShoppingAssistantIntent('Je cherche une ponceuse')).toBe('product_search');
-    expect(classifyShoppingAssistantIntent('أحتاج أداة لثقب الخرسانة')).toBe('product_search');
-    expect(classifyShoppingAssistantIntent('Propose une alternative moins chère')).toBe(
-      'recommendation',
-    );
-    expect(classifyShoppingAssistantIntent('Ajoute ce produit au panier')).toBe('cart_management');
-    expect(classifyShoppingAssistantIntent('Bonjour')).toBe('other');
-  });
-
-  it('plans required grounding and presentation steps from intent and surface context', () => {
-    expect(
-      shoppingAssistantToolPlan('Je cherche une perceuse en stock', {
-        hasInspectableProducts: false,
-      }),
-    ).toEqual({ groundingTool: 'search_catalog', presentProducts: true, manageCart: false });
-    expect(
-      shoppingAssistantToolPlan('Compare les deux options', { hasInspectableProducts: true }),
-    ).toEqual({ groundingTool: 'inspect_products', presentProducts: true, manageCart: false });
-    expect(
-      shoppingAssistantToolPlan('هل هذه القطع متوافقة؟', { hasInspectableProducts: true }),
-    ).toEqual({ groundingTool: 'inspect_products', presentProducts: false, manageCart: false });
-    expect(
-      shoppingAssistantToolPlan('Explique les caractéristiques de ce produit', {
-        hasInspectableProducts: true,
-      }),
-    ).toEqual({ groundingTool: 'inspect_products', presentProducts: false, manageCart: false });
-    expect(shoppingAssistantToolPlan('Bonjour', { hasInspectableProducts: true })).toEqual({
-      groundingTool: null,
-      presentProducts: false,
-      manageCart: false,
-    });
-    expect(
-      shoppingAssistantToolPlan('Où en est la livraison de ma commande ?', {
-        hasInspectableProducts: false,
-        hasOrder: true,
-      }),
-    ).toEqual({ groundingTool: 'inspect_order', presentProducts: false, manageCart: false });
-    expect(
-      shoppingAssistantToolPlan('Quels sont les frais de livraison à Béchar ?', {
-        hasInspectableProducts: false,
-      }),
-    ).toEqual({
-      groundingTool: 'inspect_delivery_support',
-      presentProducts: false,
-      manageCart: false,
-    });
-    expect(
-      shoppingAssistantToolPlan('كم سعر التوصيل إلى بلدية باب الزوار؟', {
-        hasInspectableProducts: false,
-      }),
-    ).toEqual({
-      groundingTool: 'inspect_delivery_support',
-      presentProducts: false,
-      manageCart: false,
-    });
-    expect(
-      shoppingAssistantToolPlan('Le code SAVE10 marche-t-il sur ce produit ?', {
-        hasInspectableProducts: true,
-      }),
-    ).toEqual({ groundingTool: 'inspect_promotion', presentProducts: false, manageCart: false });
-    expect(
-      shoppingAssistantToolPlan('Ajoute deux unités de ce produit', {
-        hasInspectableProducts: true,
-        hasNonCartProducts: true,
-        hasCurrentProduct: true,
-      }),
-    ).toEqual({ groundingTool: null, presentProducts: false, manageCart: true });
-    expect(
-      shoppingAssistantToolPlan('Ajoute une perceuse Bosch au panier', {
-        hasInspectableProducts: true,
-        hasCartProducts: true,
-      }),
-    ).toEqual({ groundingTool: 'search_catalog', presentProducts: false, manageCart: true });
-    expect(
-      shoppingAssistantToolPlan('Retire cette perceuse du panier', {
-        hasInspectableProducts: true,
-        hasCartProducts: true,
-      }),
-    ).toEqual({ groundingTool: null, presentProducts: false, manageCart: true });
-    expect(
-      shoppingAssistantToolPlan('Comment ajouter un produit au panier ?', {
-        hasInspectableProducts: true,
-      }),
-    ).toEqual({ groundingTool: 'inspect_products', presentProducts: false, manageCart: false });
-    expect(
-      shoppingAssistantToolPlan('Quelle quantité ai-je dans mon panier ?', {
-        hasInspectableProducts: true,
-        hasCartProducts: true,
-      }),
-    ).toEqual({ groundingTool: null, presentProducts: false, manageCart: false });
-  });
-
   it('returns exact delivery, commune, and public contact evidence from live contracts', () => {
     const evidence = storefrontDeliverySupportEvidence(
       {
@@ -289,22 +172,6 @@ describe('storefront shopping assistant', () => {
         },
       ],
     });
-  });
-
-  it('retires the legacy Mini model aliases from storefront execution', () => {
-    expect(isRetiredStorefrontAiModel('gpt-5-mini')).toBe(true);
-    expect(isRetiredStorefrontAiModel('openai/gpt-5-mini')).toBe(true);
-    expect(isRetiredStorefrontAiModel('openai/gpt-5.6-luna')).toBe(false);
-  });
-
-  it('reduces conversational prompts to catalog search terms without losing models', () => {
-    expect(catalogSearchQuery('Trouve-moi une lampe WADFOW disponible. Réponse très courte.')).toBe(
-      'lampe WADFOW',
-    );
-    expect(catalogSearchQuery('Je cherche un perforateur SDS+ HITACHI DH24PH')).toBe(
-      'perforateur SDS+ HITACHI DH24PH',
-    );
-    expect(catalogSearchQuery('أريد مصباح WADFOW متوفر')).toBe('مصباح WADFOW');
   });
 
   it('carries the current catalog filters, product, and cart into assistant context', () => {

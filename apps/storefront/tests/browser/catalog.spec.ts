@@ -117,6 +117,24 @@ test('returns a real permanent redirect for legacy taxonomy URLs', async ({ requ
   expect(response.headers().location).toBe('/fr/categories/lighting');
 });
 
+test('appends the second catalog page without inventing empty price filters', async ({ page }) => {
+  await page.goto('/fr/products');
+  const cards = page.locator('.catalog-grid > .catalog-card');
+  await expect(cards).toHaveCount(24);
+  const [catalogPageRequest] = await Promise.all([
+    page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return url.pathname === '/api/catalog' && url.searchParams.get('page') === '2';
+    }),
+    page.getByRole('button', { name: 'Afficher plus de produits' }).click(),
+  ]);
+  await expect.poll(() => cards.count()).toBe(39);
+
+  const requestUrl = new URL(catalogPageRequest.url());
+  expect(requestUrl.searchParams.has('minPrice')).toBe(false);
+  expect(requestUrl.searchParams.has('maxPrice')).toBe(false);
+});
+
 test('navigates from the cart to checkout and switches locale without losing the route', async ({
   page,
 }) => {
