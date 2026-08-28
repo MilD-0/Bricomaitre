@@ -1480,6 +1480,8 @@
   "aiChat": {
     "open": "AI assistant",
     "close": "Close AI assistant",
+    "fullScreen": "Open assistant full screen",
+    "exitFullScreen": "Exit full screen",
     "title": "Admin AI assistant",
     "conversation": "AI assistant conversation",
     "conversationTab": "Conversation",
@@ -1512,24 +1514,8 @@
     },
     "surfaceSuggestions": {
       "helpCurrentSurface": "What can you help me do on this screen?",
-      "auditCatalog": "Audit the current catalog and tell me what needs attention.",
-      "improveSelectedProducts": "Improve localized content for the selected products.",
-      "categorizeCatalog": "Find products whose categorization needs review.",
-      "reviewSelectedProposals": "Explain the evidence and risk for the selected proposals.",
       "summarizeCurrentAnalytics": "Summarize this analytics view using its current filters.",
-      "explainAnalyticsChange": "Explain the most important changes versus the comparison period.",
-      "improveCurrentAssets": "Suggest an improvement using the products and asset section I am viewing.",
-      "inspectSelectedOrders": "What can you verify about the selected orders on this screen?",
-      "postConfirmedOrders": "Preview today’s confirmed orders for posting to EcoTrack.",
-      "manageEcotrackShipments": "Inspect and operate the selected EcoTrack shipments.",
-      "inspectInventory": "What can you help me verify in the current inventory view?",
-      "improveTaxonomy": "Review the current brand and category structure.",
-      "inspectBackgroundWork": "Show me the real status of current background work.",
-      "inspectAdministration": "Show me the current staff access, roles, and permissions.",
-      "inspectActionHistory": "Explain the selected action and whether it can currently be undone or redone.",
-      "inspectArchivedProducts": "Review archived products and identify anything ready to restore.",
-      "inspectStorefrontConfiguration": "Review the current storefront contacts, AI models, and announcement bar.",
-      "summarizeBulletin": "Summarize the open topics and follow-ups in the current Bulletin view."
+      "explainAnalyticsChange": "Explain the most important changes versus the comparison period."
     },
     "placeholder": "Message the AI assistant",
     "send": "Send",
@@ -1687,7 +1673,6 @@
       "review": "Review the supporting evidence or inputs before approval.",
       "retry": "No completion was recorded; check the current record and retry."
     },
-    "autoAccept": "Auto-apply verified proposals",
     "model": "Model",
     "reasoningEffort": "Reasoning effort",
     "reasoningLevels": {
@@ -1919,7 +1904,6 @@
       "fullPreview": "Full-size preview",
       "compactPreview": "Compact preview",
       "confirm": "Export XLSX",
-      "confirmAndDispatch": "Export and mark as dispatched",
       "loading": "Preparing export preview...",
       "ready": "Export preview is ready.",
       "success": "Orders exported.",
@@ -1927,8 +1911,7 @@
       "empty": "Select at least one order to export.",
       "emptyConfirmed": "No confirmed orders are available to export.",
       "progress": {
-        "exporting": "Generating spreadsheet",
-        "updating-statuses": "Updating order statuses"
+        "exporting": "Generating spreadsheet"
       }
     },
     "ecotrack": {

@@ -14,10 +14,6 @@ import {
   type JobSnapshot,
 } from '@bric/runtime/jobs';
 import { getOrderProductLookup, toOrderRecord } from '@bric/storefront-core/order-records';
-import {
-  CanonicalOrderNotFoundError,
-  updateCanonicalOrder,
-} from '@bric/storefront-core/order-write';
 
 import { getDb } from '@bric/db/client';
 import {
@@ -1148,26 +1144,6 @@ async function loadOrdersForExport(mode: 'selected' | 'confirmed', orderIds: num
   return mode === 'confirmed' ? filterRecentConfirmedOrders(exportOrders) : exportOrders;
 }
 
-async function markOrdersAsDispatched(orderIds: number[]) {
-  const db = getDb();
-  const now = new Date();
-
-  for (const orderId of orderIds) {
-    try {
-      await db.transaction((tx) =>
-        updateCanonicalOrder(tx, {
-          orderId,
-          status: { value: 3, noAnswerCount: 0 },
-          now,
-        }),
-      );
-    } catch (error) {
-      if (error instanceof CanonicalOrderNotFoundError) continue;
-      throw error;
-    }
-  }
-}
-
 export async function runOrderExportJob(
   payload: OrderExportPayload,
   helpers: {
@@ -1203,23 +1179,6 @@ export async function runOrderExportJob(
 
   await helpers.setDownloadUrl(downloadUrl);
   await helpers.updateSummary({ fileName, mode: payload.mode, totalOrders: exportOrders.length });
-
-  if (payload.mode === 'confirmed') {
-    await helpers.updateProgress({
-      phase: 'updating-statuses',
-      current: 0,
-      total: exportOrders.length,
-    });
-    for (let index = 0; index < exportOrders.length; index += 1) {
-      await helpers.throwIfCancelled();
-      await markOrdersAsDispatched([exportOrders[index].id]);
-      await helpers.updateProgress({
-        phase: 'updating-statuses',
-        current: index + 1,
-        total: exportOrders.length,
-      });
-    }
-  }
 
   return {
     fileName,

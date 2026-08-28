@@ -51,7 +51,7 @@ const nextConfig: NextConfig = {
   // previews, so keep development feedback in the terminal and browser
   // console instead of placing another fixed control over the interface.
   devIndicators: false,
-  transpilePackages: ['@bric/ai-core', '@bric/runtime', '@bric/storefront-core'],
+  transpilePackages: ['@bric/runtime', '@bric/storefront-core'],
   allowedDevOrigins: getAllowedDevOrigins(),
   experimental: {
     // Product imagery is optimized inside the public web process. Bound

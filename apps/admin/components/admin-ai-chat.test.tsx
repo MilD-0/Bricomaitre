@@ -3,12 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY,
   ADMIN_AI_MODEL_STORAGE_KEY,
   ADMIN_AI_REASONING_EFFORT_STORAGE_KEY,
   AdminAiChat,
-  analyticsChartRows,
-  selectAnalyticsChartMetric,
 } from './admin-ai-chat';
 import { AdminAiSurfaceProvider } from './admin-ai-surface-context';
 import {
@@ -80,10 +77,17 @@ describe('AdminAiChat', () => {
     expect(dialog).toHaveClass('max-w-[76rem]', 'overflow-hidden');
     expect(within(dialog).getByRole('complementary', { name: 'aiChat.chats' })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'aiChat.close' })).toBeInTheDocument();
+    const fullScreen = within(dialog).getByRole('button', { name: 'aiChat.fullScreen' });
+    await user.click(fullScreen);
+    expect(dialog).toHaveAttribute('data-full-screen', 'true');
+    expect(dialog).toHaveClass('!h-dvh', '!max-h-dvh', '!max-w-none', '!rounded-none');
+    expect(dialog.parentElement).toHaveClass('h-full');
+    await user.click(within(dialog).getByRole('button', { name: 'aiChat.exitFullScreen' }));
+    expect(dialog).toHaveAttribute('data-full-screen', 'false');
     expect(within(dialog).queryByText('aiChat.reviewMode')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('aiChat.description')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('aiChat.sendHint')).not.toBeInTheDocument();
-    expect(within(dialog).getByRole('switch', { name: 'aiChat.autoAccept' })).not.toBeChecked();
+    expect(within(dialog).queryByText('aiChat.autoAccept')).not.toBeInTheDocument();
   });
 
   it('opens from a contextual workspace event', async () => {
@@ -188,7 +192,6 @@ describe('AdminAiChat', () => {
     expect(JSON.parse(String(chatCall?.[1]?.body))).toEqual({
       message: 'Find missing Arabic titles',
       conversationKey: expect.any(String),
-      autoAcceptProposals: false,
       model: 'gpt-5.6-luna',
       reasoningEffort: 'medium',
     });
@@ -293,107 +296,6 @@ describe('AdminAiChat', () => {
     expect(JSON.parse(String(reviewCall?.[1]?.body))).toEqual({ action: 'approve' });
     expect(await screen.findByText('aiChat.applied')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'aiChat.reject' })).not.toBeInTheDocument();
-  });
-
-  it('persists the auto-accept toggle and automatically applies new proposals', async () => {
-    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
-      const url = String(input);
-      if (url === '/api/ai/conversations')
-        return new Response(JSON.stringify({ conversations: [] }), { status: 200 });
-      if (url === '/api/ai/chat')
-        return new Response(
-          JSON.stringify({
-            message: 'A category proposal is ready.',
-            toolResults: [
-              {
-                type: 'tool-result',
-                output: { id: 91, type: 'entity_create', status: 'proposed' },
-              },
-            ],
-            conversation: {
-              id: 12,
-              sessionKey: 'e7249553-56ac-49f5-9e9c-dd8d724a6fac',
-              title: 'Create category',
-            },
-          }),
-          { status: 200 },
-        );
-      if (url === '/api/ai/proposals/91')
-        return new Response(
-          JSON.stringify({ proposal: { id: 91, status: 'applied', verified: true } }),
-          { status: 200 },
-        );
-      return new Response('{}', { status: 200 });
-    });
-    const user = userEvent.setup();
-    render(<AdminAiChat />);
-
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
-    const toggle = await screen.findByRole('switch', { name: 'aiChat.autoAccept' });
-    await user.click(toggle);
-    expect(toggle).toBeChecked();
-    expect(window.localStorage.getItem(ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY)).toBe('true');
-
-    await user.type(
-      screen.getByRole('textbox', { name: 'aiChat.placeholder' }),
-      'Create a category',
-    );
-    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
-
-    expect(await screen.findByText('aiChat.applied')).toBeInTheDocument();
-    const reviewCall = vi
-      .mocked(fetch)
-      .mock.calls.find(([url]) => String(url) === '/api/ai/proposals/91');
-    expect(JSON.parse(String(reviewCall?.[1]?.body))).toEqual({ action: 'approve' });
-  });
-
-  it('keeps a failed automatic approval available for manual review', async () => {
-    window.localStorage.setItem(ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY, 'true');
-    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
-      const url = String(input);
-      if (url === '/api/ai/conversations')
-        return new Response(JSON.stringify({ conversations: [] }), { status: 200 });
-      if (url === '/api/ai/chat')
-        return new Response(
-          JSON.stringify({
-            message: 'A proposal is ready.',
-            toolResults: [{ type: 'tool-result', output: { id: 92, status: 'proposed' } }],
-            conversation: {
-              id: 12,
-              sessionKey: 'e7249553-56ac-49f5-9e9c-dd8d724a6fac',
-              title: 'Protected proposal',
-            },
-          }),
-          { status: 200 },
-        );
-      if (url === '/api/ai/proposals/92')
-        return new Response(
-          JSON.stringify({
-            error: 'The source product changed after this proposal was generated.',
-            code: 'proposal_stale',
-            nextAction: 'regenerate',
-          }),
-          { status: 409 },
-        );
-      return new Response('{}', { status: 200 });
-    });
-    const user = userEvent.setup();
-    render(<AdminAiChat />);
-
-    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
-    expect(await screen.findByRole('switch', { name: 'aiChat.autoAccept' })).toBeChecked();
-    await user.type(
-      screen.getByRole('textbox', { name: 'aiChat.placeholder' }),
-      'Apply a protected proposal',
-    );
-    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
-
-    expect(
-      await screen.findByText('The source product changed after this proposal was generated.'),
-    ).toBeInTheDocument();
-    expect(screen.getByText('aiChat.proposalNextActions.regenerate')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'aiChat.approve' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'aiChat.reject' })).toBeInTheDocument();
   });
 
   it('does not show completion when an approval response lacks persistence verification', async () => {
@@ -617,6 +519,35 @@ describe('AdminAiChat', () => {
                   ],
                 },
               },
+              {
+                type: 'tool-result',
+                toolName: 'present_admin_ui',
+                output: {
+                  kind: 'admin_ui_blocks_v1',
+                  blocks: [
+                    {
+                      kind: 'metrics',
+                      toolName: 'query_analytics',
+                      occurrence: 0,
+                      keys: ['paidUnits'],
+                    },
+                    {
+                      kind: 'source_health',
+                      toolName: 'query_analytics',
+                      occurrence: 0,
+                      keys: ['orders'],
+                    },
+                    {
+                      kind: 'records',
+                      toolName: 'query_analytics',
+                      occurrence: 0,
+                      path: 'results[0].focus.rows',
+                      columns: ['title', 'paidUnits'],
+                      limit: 1,
+                    },
+                  ],
+                },
+              },
             ],
             conversation: {
               id: 30,
@@ -639,18 +570,121 @@ describe('AdminAiChat', () => {
     await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
 
     expect((await screen.findAllByText('paid units')).length).toBeGreaterThan(0);
-    expect(screen.getByText('aiChat.sourceHealth')).toBeInTheDocument();
-    expect(screen.getByText(/orders · current · 100%/)).toBeInTheDocument();
-    expect(screen.getAllByText(/aiChat.analyticsWarning/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/aiChat.analyticsSharedRange/)).toHaveTextContent(
-      '2026-06-10–2026-08-19',
+    expect(screen.getByText('orders').parentElement).toHaveTextContent('orders · current · 100%');
+    expect(screen.getByText('Hammer')).toBeInTheDocument();
+    expect(screen.queryByText('Canonical filtered product decision view.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/aiChat.analyticsWarning/)).not.toBeInTheDocument();
+  });
+
+  it('renders only model-selected AI Stats blocks and keeps the full payload internal', async () => {
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/ai/conversations') return Response.json({ conversations: [] });
+      if (url === '/api/ai/chat') {
+        return Response.json({
+          message: 'P95 latency is 950 ms for the selected period.',
+          toolResults: [
+            {
+              type: 'tool-result',
+              toolName: 'query_ai_stats',
+              output: {
+                kind: 'ai_stats',
+                surface: 'operations',
+                metrics: [
+                  {
+                    key: 'p95Latency',
+                    name: 'p95Latency',
+                    value: 950,
+                    unit: 'milliseconds',
+                  },
+                ],
+                data: {
+                  kind: 'operations',
+                  metrics: [],
+                  workflows: [{ task: 'SENSITIVE_FULL_PAYLOAD', runs: 12 }],
+                },
+              },
+            },
+            {
+              type: 'tool-result',
+              toolName: 'present_admin_ui',
+              output: {
+                kind: 'admin_ui_blocks_v1',
+                blocks: [
+                  {
+                    kind: 'metrics',
+                    toolName: 'query_ai_stats',
+                    occurrence: 0,
+                    keys: ['p95Latency'],
+                  },
+                ],
+              },
+            },
+          ],
+          conversation: {
+            id: 33,
+            sessionKey: '56678c51-b376-43f0-b43d-d5995dd6784a',
+            title: 'AI reliability',
+          },
+        });
+      }
+      return Response.json({});
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await user.type(
+      await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
+      'Show assistant P95 latency',
     );
-    expect(screen.getByText('Canonical filtered product decision view.')).toBeInTheDocument();
-    expect(screen.getByText(/aiChat.analyticsMatched/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /aiChat.openAnalytics/ })).toHaveAttribute(
-      'href',
-      '/en/stats/products?range=custom&startDate=2026-06-10&endDate=2026-08-19&grain=week',
+    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+
+    expect(await screen.findByText('950 ms')).toBeInTheDocument();
+    expect(screen.queryByText('SENSITIVE_FULL_PAYLOAD')).not.toBeInTheDocument();
+  });
+
+  it('keeps raw read evidence internal when the model did not select a UI block', async () => {
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/ai/conversations') return Response.json({ conversations: [] });
+      if (url === '/api/ai/chat') {
+        return Response.json({
+          message: 'Thirteen posted orders are missing a canonical EcoTrack state.',
+          toolResults: [
+            {
+              type: 'tool-result',
+              toolName: 'inspect_orders',
+              output: {
+                items: [{ id: 991, publicToken: 'RAW-READ-EVIDENCE' }],
+                pagination: { page: 1, totalItems: 808 },
+              },
+            },
+          ],
+          conversation: {
+            id: 31,
+            sessionKey: 'a55f9ee5-9a21-4ceb-ab29-25fce3740e5b',
+            title: 'EcoTrack coverage',
+          },
+        });
+      }
+      return Response.json({});
+    });
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await user.type(
+      await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
+      'Explain the EcoTrack coverage gap',
     );
+    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+
+    expect(
+      await screen.findByText('Thirteen posted orders are missing a canonical EcoTrack state.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('RAW-READ-EVIDENCE')).not.toBeInTheDocument();
+    expect(screen.queryByText('aiChat.toolLabels.orders')).not.toBeInTheDocument();
   });
 
   it('presents persisted tool actions with a human outcome and exact workspace handoff', async () => {
@@ -923,6 +957,13 @@ describe('AdminAiChat', () => {
             JSON.stringify({
               type: 'error',
               code: 'admin_ai_failed',
+              message: 'The order was\n\nThis response stopped before completion.',
+              conversation: {
+                id: 12,
+                sessionKey: 'e7249553-56ac-49f5-9e9c-dd8d724a6fac',
+                title: 'Update the order',
+              },
+              messageId: 72,
               toolResults: [
                 {
                   type: 'tool-result',
@@ -948,7 +989,7 @@ describe('AdminAiChat', () => {
     await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
 
     expect(await screen.findByText('The order was')).toBeInTheDocument();
-    expect(await screen.findByText('aiChat.interrupted')).toBeInTheDocument();
+    expect(await screen.findByText('This response stopped before completion.')).toBeInTheDocument();
     expect(await screen.findByText('aiChat.toolLabels.ordersUpdated')).toBeInTheDocument();
     expect(screen.queryByText('aiChat.error')).not.toBeInTheDocument();
     expect(mutationListener).toHaveBeenCalledOnce();
@@ -993,13 +1034,13 @@ describe('AdminAiChat', () => {
         (_, node) => node?.tagName === 'LI' && node.textContent === 'Product searches by title',
       ),
     ).toBeInTheDocument();
-    const bubble = screen
+    const message = screen
       .getByText('Product searches', { selector: 'strong' })
-      .closest('[data-slot="admin-ai-assistant-bubble"]');
-    expect(bubble).toHaveClass('min-w-0', 'w-full', 'max-w-[42rem]', 'overflow-hidden');
-    expect(bubble?.firstElementChild).toHaveClass(
+      .closest('[data-slot="admin-ai-assistant-message"]');
+    expect(message).toHaveClass('min-w-0', 'w-full', 'flex-1', 'overflow-hidden');
+    expect(message?.firstElementChild).toHaveClass(
       'min-w-0',
-      'max-w-full',
+      'max-w-[75ch]',
       'overflow-hidden',
       '[overflow-wrap:anywhere]',
     );
@@ -1035,7 +1076,8 @@ describe('AdminAiChat', () => {
     await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
 
     const table = await screen.findByRole('table');
-    expect(table).toHaveClass('w-full', 'max-w-full', 'table-fixed');
+    expect(table).toHaveClass('w-full', 'min-w-[28rem]');
+    expect(table.parentElement).toHaveClass('max-w-full', 'overflow-x-auto');
     expect(screen.getByText('Extraordinarily-long-unbroken-compatibility-reference')).toHaveClass(
       '[overflow-wrap:anywhere]',
     );
@@ -1078,6 +1120,23 @@ describe('AdminAiChat', () => {
                       items: [{ sku: 'SKU-1', title: 'Saved drill', quantity: 4 }],
                     },
                   },
+                  {
+                    type: 'tool-result',
+                    toolName: 'present_admin_ui',
+                    output: {
+                      kind: 'admin_ui_blocks_v1',
+                      blocks: [
+                        {
+                          kind: 'records',
+                          toolName: 'inspect_inventory',
+                          occurrence: 0,
+                          path: 'items',
+                          columns: ['sku', 'title', 'quantity'],
+                          limit: 5,
+                        },
+                      ],
+                    },
+                  },
                 ],
               },
             ],
@@ -1091,7 +1150,6 @@ describe('AdminAiChat', () => {
 
     await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
     expect(await screen.findByText('Saved answer')).toBeInTheDocument();
-    expect(screen.getByText('aiChat.toolLabels.inventory')).toBeInTheDocument();
     expect(screen.getByText('SKU-1')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'aiChat.helpful' })).toHaveAttribute(
       'aria-pressed',
@@ -1398,42 +1456,5 @@ describe('AdminAiChat', () => {
       type: 'ai_categorization',
       jobId: '3c2e0103-ce88-4b4b-b185-f46ed298fe27',
     });
-  });
-});
-
-describe('selectAnalyticsChartMetric', () => {
-  it('prefers a populated metric over an earlier all-zero metric', () => {
-    const rows = [
-      { name: 'A', purchases: 0, views: 12 },
-      { name: 'B', purchases: 0, views: 7 },
-    ];
-
-    expect(selectAnalyticsChartMetric(rows, ['name', 'purchases', 'views'])).toBe('views');
-  });
-
-  it('uses semantic priority instead of comparing magnitudes across different units', () => {
-    const rows = [{ name: 'A', purchases: 2, views: 500_000 }];
-
-    expect(selectAnalyticsChartMetric(rows, ['name', 'purchases', 'views'])).toBe('purchases');
-  });
-
-  it('does not render a misleading empty bar chart when every metric is zero', () => {
-    expect(selectAnalyticsChartMetric([{ title: 'A', orders: 0 }], ['title', 'orders'])).toBeNull();
-  });
-
-  it('omits unavailable chart points instead of converting them to zero', () => {
-    expect(
-      analyticsChartRows(
-        [
-          { title: 'Missing', orders: null },
-          { title: 'Observed zero', orders: 0 },
-          { title: 'Observed', orders: 4 },
-        ],
-        'orders',
-      ),
-    ).toEqual([
-      { title: 'Observed zero', orders: 0, __chartValue: 0 },
-      { title: 'Observed', orders: 4, __chartValue: 4 },
-    ]);
   });
 });

@@ -90,3 +90,20 @@ test('keeps the campaign usable in Arabic on a narrow phone', async ({ page }) =
   );
   expect(overflow).toBeLessThanOrEqual(1);
 });
+
+test('labels a signed saved-revision preview before rendering the campaign', async ({ page }) => {
+  const query = new URLSearchParams({
+    previewRevision: '2',
+    previewTimestamp: String(Date.now()),
+    previewSignature: 'a'.repeat(64),
+  });
+  await page.goto(`/fr/landing-preview/lampe-atelier?${query.toString()}`);
+
+  await expect(page.locator('.landing-preview-banner')).toContainText(
+    'Aperçu sécurisé de la version enregistrée',
+  );
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Éclairez chaque chantier' }),
+  ).toBeVisible();
+  await expect(page.getByRole('textbox', { name: /Numéro de téléphone/ })).toBeVisible();
+});

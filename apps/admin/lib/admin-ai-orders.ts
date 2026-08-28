@@ -2,46 +2,18 @@ import { getDb } from '@bric/db/client';
 import { z } from 'zod';
 
 import {
+  AdminOrderHasActiveEcotrackShipmentError,
   AdminOrderLifecycleNotFoundError,
   createAdminOrder,
   deleteAdminOrder,
 } from './admin-order-lifecycle';
-import {
-  AdminOrderNotFoundError,
-  AdminOrderStatusTransitionError,
-  updateAdminOrder,
-} from './admin-order-update';
+import { AdminOrderNotFoundError, updateAdminOrder } from './admin-order-update';
 import type { ActionActor } from './action-history';
-
-const semanticOrderStatusSchema = z.enum([
-  'not_contacted',
-  'no_answer',
-  'confirmed',
-  'dispatched',
-  'completed',
-  'delayed',
-  'cancelled',
-  'in_delivery',
-  'returned',
-  'failed',
-  'manual_completed',
-  'posted',
-]);
-
-const orderStatusValues = {
-  not_contacted: 0,
-  no_answer: 1,
-  confirmed: 2,
-  dispatched: 3,
-  completed: 4,
-  delayed: 5,
-  cancelled: 6,
-  in_delivery: 7,
-  returned: 8,
-  failed: 9,
-  manual_completed: 10,
-  posted: 11,
-} as const;
+import {
+  ADMIN_AI_IN_HOUSE_ORDER_STATUS_VALUES,
+  adminAiInHouseOrderStatusSchema,
+  type AdminAiInHouseOrderStatus,
+} from './admin-ai-order-status';
 
 export const adminAiOrderStatusMutationSchema = z
   .object({
@@ -49,7 +21,7 @@ export const adminAiOrderStatusMutationSchema = z
       .array(
         z.object({
           orderId: z.number().int().positive(),
-          status: semanticOrderStatusSchema,
+          status: adminAiInHouseOrderStatusSchema,
           noAnswerCount: z.number().int().min(1).max(99).optional(),
         }),
       )
@@ -217,18 +189,16 @@ export async function updateAdminOrderStatuses(
     orderId: number;
     previousStatus: number;
     status: number;
-    statusLabel: keyof typeof orderStatusValues;
+    statusLabel: AdminAiInHouseOrderStatus;
     noAnswerCount: number;
   }> = [];
   const skipped: Array<{
     orderId: number;
-    reason: 'missing' | 'invalid_transition';
-    from?: number;
-    to?: number;
+    reason: 'missing';
   }> = [];
 
   for (const item of values.items) {
-    const status = orderStatusValues[item.status];
+    const status = ADMIN_AI_IN_HOUSE_ORDER_STATUS_VALUES[item.status];
     try {
       const updated = await updateAdminOrder(
         db,
@@ -238,6 +208,7 @@ export async function updateAdminOrderStatuses(
           ...(item.status === 'no_answer' ? { noAnswerCount: item.noAnswerCount } : {}),
         },
         actor,
+        { allowStatusCorrection: true },
       );
       const previousStatus =
         updated.statusHistory.length > 1
@@ -253,15 +224,6 @@ export async function updateAdminOrderStatuses(
     } catch (error) {
       if (error instanceof AdminOrderNotFoundError) {
         skipped.push({ orderId: item.orderId, reason: 'missing' });
-        continue;
-      }
-      if (error instanceof AdminOrderStatusTransitionError) {
-        skipped.push({
-          orderId: item.orderId,
-          reason: 'invalid_transition',
-          from: error.from,
-          to: error.to,
-        });
         continue;
       }
       throw error;
@@ -311,19 +273,18 @@ export async function deleteAdminAiOrders(
   for (const orderId of [...new Set(values.orderIds)]) {
     try {
       const item = await deleteAdminOrder(db, orderId, actor);
-      deleted.push({
-        ...item,
-        externalShipmentMayRemain: Boolean(item.ecotrackTrackingNumber),
-      });
+      deleted.push(item);
     } catch (error) {
       failed.push({
         orderId,
         code:
           error instanceof AdminOrderLifecycleNotFoundError
             ? 'order_not_found'
-            : error instanceof Error
-              ? error.name
-              : 'OrderDeletionError',
+            : error instanceof AdminOrderHasActiveEcotrackShipmentError
+              ? 'active_ecotrack_shipment'
+              : error instanceof Error
+                ? error.name
+                : 'OrderDeletionError',
         message: error instanceof Error ? error.message : 'Unable to delete order.',
       });
     }

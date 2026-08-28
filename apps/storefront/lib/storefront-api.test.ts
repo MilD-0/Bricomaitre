@@ -17,6 +17,8 @@ import {
   getStorefrontEcotrackCatalog,
   fetchStorefrontProductDetail,
   getStorefrontProductDetail,
+  getStorefrontLandingPage,
+  buildStorefrontLandingPagePath,
   recordStorefrontAssistantRun,
 } from './storefront-api';
 import {
@@ -100,6 +102,47 @@ const validOrder = {
   statusHistory: [],
 };
 
+const validLandingPage = {
+  id: 4,
+  slug: 'lampe-atelier',
+  locale: 'fr',
+  revision: 3,
+  publishedAt: null,
+  document: {
+    schemaVersion: 1,
+    theme: { accent: 'orange', density: 'comfortable', shell: 'campaign' },
+    seo: {
+      title: 'Lampe atelier',
+      description: 'Une campagne pour la lampe atelier.',
+      indexable: false,
+    },
+    blocks: [
+      {
+        id: 'hero',
+        type: 'product-hero',
+        variant: 'media-left',
+        heading: 'Éclairez chaque chantier',
+        subheading: '',
+        imageUrl: null,
+        imageAlt: '',
+        primaryCtaLabel: 'Commander',
+        showAddToCart: true,
+      },
+      {
+        id: 'final',
+        type: 'final-cta',
+        variant: 'solid',
+        heading: 'Commandez maintenant',
+        body: '',
+        primaryCtaLabel: 'Commander',
+        imageUrl: null,
+        imageAlt: '',
+      },
+    ],
+  },
+  product: validProductResponse.item,
+};
+
 vi.mock('next/cache', () => ({
   unstable_cache: vi.fn((read: () => unknown) => read),
 }));
@@ -139,6 +182,33 @@ describe('storefront API client', () => {
         headers: expect.objectContaining({ accept: 'application/json' }),
         signal: expect.any(AbortSignal),
       }),
+    );
+  });
+
+  it('forwards signed landing-page previews without putting them in the shared cache', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(validLandingPage), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const preview = {
+      revision: 3,
+      timestamp: '1787817600000',
+      signature: 'a'.repeat(64),
+    };
+
+    expect(buildStorefrontLandingPagePath('fr', 'lampe-atelier', preview)).toBe(
+      `/storefront/landing-pages/lampe-atelier?locale=fr&previewRevision=3&previewTimestamp=1787817600000&previewSignature=${'a'.repeat(64)}`,
+    );
+    await expect(getStorefrontLandingPage('fr', 'lampe-atelier', preview)).resolves.toMatchObject({
+      revision: 3,
+      publishedAt: null,
+    });
+    expect(unstable_cache).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledWith(
+      `http://localhost:3001/storefront/landing-pages/lampe-atelier?locale=fr&previewRevision=3&previewTimestamp=1787817600000&previewSignature=${'a'.repeat(64)}`,
+      expect.objectContaining({ cache: 'no-store' }),
     );
   });
 

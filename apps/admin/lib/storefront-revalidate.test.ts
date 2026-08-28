@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { verifyInternalRequestSignature } from '@bric/runtime/internal-signing';
 
 import {
+  buildStorefrontLandingPagePreviewUrl,
   getStorefrontBaseUrl,
   revalidateStorefrontAssets,
   revalidateStorefrontProductMeta,
@@ -36,6 +37,32 @@ describe('storefront product revalidation', () => {
 
   it('uses the local storefront URL by default', () => {
     expect(getStorefrontBaseUrl()).toBe('http://localhost:3002');
+  });
+
+  it('builds a short-lived signed URL for the saved landing-page revision', () => {
+    process.env.STOREFRONT_BASE_URL = 'https://bricomaitre.com/';
+    process.env.STOREFRONT_REVALIDATE_SECRET = 'test-secret';
+
+    const previewUrl = new URL(
+      buildStorefrontLandingPagePreviewUrl(
+        { locale: 'fr', slug: 'perceuse-20v', revision: 4 },
+        { nowMs: 1_787_817_600_000 },
+      ),
+    );
+
+    expect(`${previewUrl.origin}${previewUrl.pathname}`).toBe(
+      'https://bricomaitre.com/fr/landing-preview/perceuse-20v',
+    );
+    expect(previewUrl.searchParams.get('previewRevision')).toBe('4');
+    expect(
+      verifyInternalRequestSignature({
+        payload: 'landing-page-preview-v1:fr:perceuse-20v:4',
+        secret: 'test-secret',
+        timestamp: previewUrl.searchParams.get('previewTimestamp'),
+        signature: previewUrl.searchParams.get('previewSignature'),
+        nowMs: 1_787_817_600_000,
+      }),
+    ).toEqual({ ok: true });
   });
 
   it('posts signed product invalidation requests to the canonical API and storefront', async () => {

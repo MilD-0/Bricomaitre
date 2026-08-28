@@ -6,6 +6,7 @@ import type {
   Analytics2Source,
   Analytics2View,
 } from './analytics2';
+import { ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE } from './admin-ai-analytics-contract';
 
 const adminAiAnalyticsFocusDimensions = [
   'economics_timeline',
@@ -56,7 +57,7 @@ const adminAiAnalyticsFocusDimensions = [
 
 export type AdminAiAnalyticsFocusDimension = (typeof adminAiAnalyticsFocusDimensions)[number];
 
-const adminAiAnalyticsSelectorDimensions = new Set<AdminAiAnalyticsFocusDimension>([
+const adminAiAnalyticsSelectorDimensionValues = [
   'campaigns',
   'adsets',
   'ads',
@@ -85,19 +86,28 @@ const adminAiAnalyticsSelectorDimensions = new Set<AdminAiAnalyticsFocusDimensio
   'customers',
   'operating_costs',
   'daily_assumptions',
-]);
+] as const satisfies readonly AdminAiAnalyticsFocusDimension[];
 
-export function adminAiAnalyticsFocusSupportsSelectors(dimension: AdminAiAnalyticsFocusDimension) {
-  return adminAiAnalyticsSelectorDimensions.has(dimension);
-}
+const adminAiAnalyticsSelectorDimensions = new Set<AdminAiAnalyticsFocusDimension>(
+  adminAiAnalyticsSelectorDimensionValues,
+);
+const adminAiAnalyticsFixedDimensionValues = adminAiAnalyticsFocusDimensions.filter(
+  (dimension) => !adminAiAnalyticsSelectorDimensions.has(dimension),
+) as unknown as [AdminAiAnalyticsFocusDimension, ...AdminAiAnalyticsFocusDimension[]];
 
-export const adminAiAnalyticsFocusSchema = z
+const adminAiAnalyticsFocusLimitSchema = z
+  .number()
+  .int()
+  .min(1)
+  .max(100)
+  .default(20)
+  .describe('Maximum matched rows to return.');
+
+const adminAiAnalyticsSelectorFocusSchema = z
   .object({
     dimension: z
-      .enum(adminAiAnalyticsFocusDimensions)
-      .describe(
-        'Select the exact dataset named by the question. Money: economics_timeline, paid_timeline, forecast, posting_cohorts, friday_weeks. Acquisition: campaigns, adsets, ads, attribution_maturation, meta_daily, profit_efficiency, paid_funnel, tracking_events. Fulfillment: cash_pipeline, posting_cohorts, shipment_states, attempt_outcomes, fulfillment_trend, leading_forecast. Storefront: storefront_trend, storefront_funnel, storefront_paths, storefront_searches, storefront_products, storefront_sources, web_vitals, landing_pages, storefront_assistant. Search Console: search_trend, search_opportunities, search_pages, search_devices, search_countries, search_appearances, search_index_issues, search_sitemaps. Catalog: products, basket_pairs, wilayas, communes, meta_regions, customers. Assumptions: operating_costs, daily_assumptions. Command: economics_timeline, cash_pipeline, forecast, signals.',
-      ),
+      .enum(adminAiAnalyticsSelectorDimensionValues)
+      .describe('Entity dataset; supports search and identifier filters.'),
     search: z
       .string()
       .trim()
@@ -110,27 +120,36 @@ export const adminAiAnalyticsFocusSchema = z
       .max(100)
       .default([])
       .describe('Known canonical IDs or exact identifier strings to match; never invent them.'),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .default(20)
-      .describe('Maximum matched rows to return; increase only when the question needs more rows.'),
+    limit: adminAiAnalyticsFocusLimitSchema,
+  })
+  .strict();
+
+const adminAiAnalyticsFixedFocusSchema = z
+  .object({
+    dimension: z
+      .enum(adminAiAnalyticsFixedDimensionValues)
+      .describe('Fixed aggregate or timeline dataset; does not support selector filters.'),
+    search: z
+      .never()
+      .optional()
+      .describe('Omit this field. Fixed datasets cannot be filtered by search text.'),
+    identifiers: z
+      .array(z.never())
+      .max(0)
+      .optional()
+      .describe('Omit this field. Fixed datasets cannot be filtered by identifiers.'),
+    limit: adminAiAnalyticsFocusLimitSchema,
   })
   .strict()
-  .superRefine((value, context) => {
-    if (
-      !adminAiAnalyticsFocusSupportsSelectors(value.dimension) &&
-      (value.search || value.identifiers.length)
-    ) {
-      context.addIssue({
-        code: 'custom',
-        message: `${value.dimension} is a fixed canonical dataset; search and identifiers would incorrectly remove its rows.`,
-        path: ['search'],
-      });
-    }
-  });
+  .transform((value) => ({
+    ...value,
+    search: undefined as string | undefined,
+    identifiers: [] as string[],
+  }));
+
+export const adminAiAnalyticsFocusSchema = z
+  .union([adminAiAnalyticsSelectorFocusSchema, adminAiAnalyticsFixedFocusSchema])
+  .describe('Optional underlying dataset. Omit for headline metrics or source coverage.');
 
 export type AdminAiAnalyticsFocus = z.infer<typeof adminAiAnalyticsFocusSchema>;
 
@@ -206,6 +225,8 @@ const fieldDefinitions: Record<string, string> = {
   delivered: 'Orders with an EcoTrack delivery event; delivery does not establish COD receipt.',
   paidOrders:
     'Orders in EcoTrack payed or paye_et_archive outcomes; both are legitimate paid outcomes.',
+  forecastPaidOrders:
+    'Modeled paid outcomes expected on the future EcoTrack paid/archive recognition date from recent observed daily outcomes.',
   paidUnits: 'Order-line units attached to EcoTrack payed or paye_et_archive outcomes.',
   paid: 'Orders in EcoTrack payed or paye_et_archive outcomes; not merely delivered orders.',
   returnedOrders: 'Orders in the historical return terminal outcome.',
@@ -225,9 +246,9 @@ const fieldDefinitions: Record<string, string> = {
   codDzd: 'EcoTrack COD recognized for the owning paid or pipeline stage.',
   grossProfitDzd:
     'Order value minus product cost before return assumptions, advertising, and operating costs.',
-  adjustedProfitDzd: 'Gross profit after the manually selected planning return rate.',
-  netProfitDzd: 'Adjusted profit minus comparable Meta ad cost.',
-  trueProfitDzd: 'Adjusted profit minus comparable Meta ad cost and operating costs.',
+  adjustedProfitDzd: ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE.adjustedProfit,
+  netProfitDzd: ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE.netProfit,
+  trueProfitDzd: ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE.trueProfit,
   profitDzd:
     'Automatic paid contribution: EcoTrack COD minus estimated tariff and product cost; not whole-business profit.',
   feesDzd: 'Estimated EcoTrack tariff attached to recognized paid outcomes.',
@@ -249,7 +270,7 @@ const fieldDefinitions: Record<string, string> = {
   adCostDzd: 'Meta spend converted to DZD with the snapshotted manual FX rate.',
   attributedAdCostDzd: 'Meta ad cost over the exact captured-attribution spend window.',
   spendEur: 'Meta spend in EUR on the Meta reporting date.',
-  profitX: 'Adjusted profit divided by Meta ad cost; null when comparable ad cost is zero.',
+  profitX: ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE.profitX,
   projectedProfitX: 'Modeled adjusted profit divided by comparable Meta ad cost.',
   paidProfitX:
     'Paid contribution divided by comparable attributed Meta ad cost; not planning Profit ×.',
@@ -329,7 +350,7 @@ const metaNativeField =
 const localDemandField =
   /^(submittedOrders|confirmedOrders|postedOrders|postedUnits|purchases|bricOrders|orders|orderValueDzd)$/u;
 const providerOutcomeField =
-  /^(activeOrders|activeShipments|untrackedOrders|untrackedShipments|deliveredOrders|delivered|paidOrders|paidUnits|paid|returnedOrders|returned|cancelledOrders|terminalPaidRatePct|observedReturnRatePct|matureObservedReturnRatePct|averageAttempts|deliveryMedianHours|paymentMedianHours|providerAmount.*|codDzd|feesDzd|netRecoveredDzd|settledOrders)$/u;
+  /^(activeOrders|activeShipments|untrackedOrders|untrackedShipments|deliveredOrders|delivered|paidOrders|forecastPaidOrders|paidUnits|paid|returnedOrders|returned|cancelledOrders|terminalPaidRatePct|observedReturnRatePct|matureObservedReturnRatePct|averageAttempts|deliveryMedianHours|paymentMedianHours|providerAmount.*|codDzd|feesDzd|netRecoveredDzd|settledOrders)$/u;
 const attributionOutcomeField =
   /^(bricOrders|confirmedOrders|postedOrders|deliveredOrders|paidOrders|returnedOrders|costPer.*Dzd|attributedAdCostDzd|outcomeSpendCoveragePct|attributionCoveragePct|projectedAdjustedProfitDzd|automaticPaidProfitDzd|projectedProfitX|paidProfitX|profitCoveragePct)$/u;
 const storefrontOrderField =
@@ -446,6 +467,7 @@ function fieldDateBasis(
   if (/^(deliveredOrders|delivered)$/u.test(field)) return 'EcoTrack delivery event date.';
   if (/^(paidOrders|paidUnits|paid)$/u.test(field))
     return 'EcoTrack paid/archive recognition date.';
+  if (field === 'forecastPaidOrders') return 'Future EcoTrack paid/archive recognition date.';
   return spec.dateBasis;
 }
 
@@ -609,11 +631,12 @@ export const adminAiAnalyticsDatasetSpecs: Record<AdminAiAnalyticsFocusDimension
   forecast: {
     views: ['command', 'money'],
     paths: { command: ['forecast', 'days'], money: ['forecast'] },
+    additionalEffectiveRangeKeys: ['fulfillment', 'paid'],
     effectiveRangeKey: 'economics',
     definition:
-      'Modeled future completion from the stronger weekday baseline or pending-demand pipeline expectation.',
+      'Modeled future economics and first postings from historical and pending-demand evidence, with paid outcomes from recent recognition-day history.',
     dateBasis: 'Future calculator accounting date.',
-    sources: ['orders', 'meta', 'assumptions'],
+    sources: ['orders', 'ecotrack', 'meta', 'assumptions'],
     totalSemantics: 'Every row is modeled, not observed.',
   },
   signals: {
@@ -804,9 +827,11 @@ export const adminAiAnalyticsDatasetSpecs: Record<AdminAiAnalyticsFocusDimension
     views: ['fulfillment'],
     paths: { fulfillment: ['leadingForecast', 'days'] },
     effectiveRangeKey: 'fulfillment',
-    definition: 'Modeled conversion and delay of known submitted and confirmed demand.',
-    dateBasis: 'Future first-posted expectation date.',
-    sources: ['orders', 'assumptions'],
+    definition:
+      'Known submitted and confirmed demand modeled to first posting, alongside paid outcomes modeled from recent recognition-day history.',
+    dateBasis:
+      'Future first-posted expectation date for pending demand and future EcoTrack recognition date for paid outcomes.',
+    sources: ['orders', 'ecotrack', 'assumptions'],
     totalSemantics: 'Every row is modeled, not observed.',
   },
   storefront_trend: {
@@ -1071,6 +1096,53 @@ export const adminAiAnalyticsDatasetSpecs: Record<AdminAiAnalyticsFocusDimension
     totalSemantics: seriesView,
   },
 };
+
+export function adminAiAnalyticsFocusSchemaForView(view: Analytics2View) {
+  const dimensions = adminAiAnalyticsFocusDimensions.filter((dimension) =>
+    adminAiAnalyticsDatasetSpecs[dimension].views.includes(view),
+  );
+  const selectorDimensions = dimensions.filter((dimension) =>
+    adminAiAnalyticsSelectorDimensions.has(dimension),
+  );
+  const fixedDimensions = dimensions.filter(
+    (dimension) => !adminAiAnalyticsSelectorDimensions.has(dimension),
+  );
+  const selectorSchema = selectorDimensions.length
+    ? z
+        .object({
+          dimension: z.enum(
+            selectorDimensions as [
+              AdminAiAnalyticsFocusDimension,
+              ...AdminAiAnalyticsFocusDimension[],
+            ],
+          ),
+          search: z.string().trim().min(1).max(200).optional(),
+          identifiers: z.array(z.string().trim().min(1).max(200)).max(100).default([]),
+          limit: adminAiAnalyticsFocusLimitSchema,
+        })
+        .strict()
+    : null;
+  const fixedSchema = fixedDimensions.length
+    ? z
+        .object({
+          dimension: z.enum(
+            fixedDimensions as [
+              AdminAiAnalyticsFocusDimension,
+              ...AdminAiAnalyticsFocusDimension[],
+            ],
+          ),
+          search: z.never().optional(),
+          identifiers: z.array(z.never()).max(0).optional(),
+          limit: adminAiAnalyticsFocusLimitSchema,
+        })
+        .strict()
+    : null;
+
+  if (selectorSchema && fixedSchema) return z.union([selectorSchema, fixedSchema]);
+  if (selectorSchema) return selectorSchema;
+  if (fixedSchema) return fixedSchema;
+  throw new Error(`Analytics view ${view} has no focused datasets.`);
+}
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)

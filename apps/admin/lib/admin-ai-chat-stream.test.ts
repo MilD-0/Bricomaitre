@@ -72,8 +72,16 @@ describe('admin AI chat response stream', () => {
       },
     ];
     const onError = vi.fn();
+    const failure = {
+      type: 'error',
+      code: 'admin_ai_failed',
+      message: 'Order updated.\n\nThis response stopped before completion.',
+      conversation,
+      messageId: 92,
+      toolResults,
+    };
     const response = new Response(
-      `${JSON.stringify({ type: 'text-delta', delta: 'Order updated.' })}\n${JSON.stringify({ type: 'error', code: 'admin_ai_failed', toolResults })}\n`,
+      `${JSON.stringify({ type: 'text-delta', delta: 'Order updated.' })}\n${JSON.stringify(failure)}\n`,
       { headers: { 'content-type': 'application/x-ndjson' } },
     );
 
@@ -84,6 +92,12 @@ describe('admin AI chat response stream', () => {
         onError,
       }),
     ).rejects.toThrow('admin_ai_failed');
-    expect(onError).toHaveBeenCalledWith({ code: 'admin_ai_failed', toolResults });
+    expect(onError).toHaveBeenCalledWith({
+      code: 'admin_ai_failed',
+      message: failure.message,
+      conversation,
+      messageId: 92,
+      toolResults,
+    });
   });
 });

@@ -24,6 +24,9 @@ const shipmentSortKeySchema = z.enum([
   'lastStatusSyncedAt',
 ]);
 
+export const ADMIN_AI_INSPECT_ECOTRACK_SHIPMENTS_TOOL_DESCRIPTION =
+  'Read active EcoTrack shipments by exact local order IDs or carrier filters. This refreshes the requested carrier records; use inspect_orders when stored order and deleted-shipment facts are sufficient.';
+
 export const adminAiEcotrackShipmentInspectionSchema = z.discriminatedUnion('scope', [
   z
     .object({
@@ -284,7 +287,10 @@ export async function manageAdminAiEcotrackShipments(
     };
   }
 
-  const items: Array<ReturnType<typeof compactShipment> | { orderId: number; deleted: true }> = [];
+  const items: Array<
+    | ReturnType<typeof compactShipment>
+    | { orderId: number; deleted: true; inHouseOrderStatus: 'confirmed' }
+  > = [];
   const failures: Array<{ orderId: number; message: string }> = [];
   if (parsed.action === 'add_update') {
     for (const request of parsed.items) {
@@ -305,7 +311,11 @@ export async function manageAdminAiEcotrackShipments(
         if (parsed.action === 'delete') {
           const result = await deletePostedEcotrackOrder(orderId, actor);
           if (!result) throw new Error('ECOTRACK shipment not found.');
-          items.push({ orderId, deleted: true });
+          items.push({
+            orderId,
+            deleted: true,
+            inHouseOrderStatus: result.inHouseOrderStatus,
+          });
           continue;
         }
         const item = await requestEcotrackReturn(orderId, actor);

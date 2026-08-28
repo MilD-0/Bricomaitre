@@ -5,7 +5,7 @@ import {
   type LandingPageBlock,
   type LandingPageDocument,
 } from '@bric/storefront-core/landing-pages';
-import { ArrowLeft, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Eye } from 'lucide-react';
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
 import * as React from 'react';
@@ -414,7 +414,16 @@ export function LandingPageBuilder({
             />
           </div>
           <WorkspaceActions>
-            {active ? (
+            <a
+              href={`/api/landing-pages/${page.id}?view=preview`}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={t.preview}
+              className="grid size-9 place-items-center rounded-md text-muted-foreground hover:bg-muted"
+            >
+              <Eye className="size-4" aria-hidden="true" />
+            </a>
+            {savedActive ? (
               <a
                 href={`${storefrontBaseUrl}/${page.locale}/landing/${encodeURIComponent(page.slug)}`}
                 target="_blank"
@@ -422,7 +431,7 @@ export function LandingPageBuilder({
                 aria-label={t.live}
                 className="grid size-9 place-items-center rounded-md text-muted-foreground hover:bg-muted"
               >
-                <ExternalLink className="size-4" />
+                <ExternalLink className="size-4" aria-hidden="true" />
               </a>
             ) : null}
             <label className="flex items-center gap-2 text-sm">

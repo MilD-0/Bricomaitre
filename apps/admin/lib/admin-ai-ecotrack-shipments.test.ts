@@ -255,14 +255,14 @@ describe('admin AI ECOTRACK shipment actions', () => {
   it('continues exact shipment deletion after a canonical failure', async () => {
     mocks.deleteShipment
       .mockRejectedValueOnce(new Error('Order 91 can no longer be deleted.'))
-      .mockResolvedValueOnce({ ok: true });
+      .mockResolvedValueOnce({ ok: true, inHouseOrderStatus: 'confirmed' });
 
     await expect(
       manageAdminAiEcotrackShipments({ action: 'delete', orderIds: [91, 92] }, actor),
     ).resolves.toMatchObject({
       successCount: 1,
       failureCount: 1,
-      items: [{ orderId: 92, deleted: true }],
+      items: [{ orderId: 92, deleted: true, inHouseOrderStatus: 'confirmed' }],
       failures: [{ orderId: 91, message: 'Order 91 can no longer be deleted.' }],
     });
     expect(mocks.deleteShipment).toHaveBeenCalledTimes(2);

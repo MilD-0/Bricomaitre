@@ -12,6 +12,12 @@ import {
 } from './admin-ai-action-history';
 import { adminAiAssetCrudSchema } from './admin-ai-assets';
 import {
+  adminAiAnalyticsCostsMutationSchema,
+  adminAiAnalyticsDayOverridesMutationSchema,
+  adminAiAnalyticsSettingsPatchSchema,
+  adminAiAnalyticsSyncSchema,
+} from './admin-ai-analytics-actions';
+import {
   adminAiBulletinDeleteSchema,
   adminAiBulletinPostSchema,
   adminAiBulletinPostUpdateSchema,
@@ -62,12 +68,19 @@ import {
   adminAiShoppingListApplySchema,
   adminAiShoppingListScopeSchema,
 } from './admin-ai-shopping-list';
-import {
-  adminAiOrderExportScopeSchema,
-  adminAiOrderExportScopeSchemaForMessage,
-} from './admin-ai-order-exports';
+import { adminAiOrderExportScopeSchema } from './admin-ai-order-exports';
 import { adminAiOrderTrackingLinksSchema } from './admin-ai-order-tracking';
 import { adminAiInventoryInspectionSchema } from './admin-ai-domain';
+import {
+  adminAiArchivedCatalogProductInspectionSchema,
+  adminAiCatalogProductInspectionSchema,
+  adminAiCatalogProductLookupSchema,
+} from './admin-ai-catalog';
+import {
+  adminAiBrandQuerySchema,
+  adminAiCatalogQuerySchema,
+  adminAiCategoryQuerySchema,
+} from './admin-ai-catalog-query';
 import { adminAssetStateMutationSchema } from './asset-mutations';
 
 describe('Admin AI production tool schemas', () => {
@@ -81,8 +94,6 @@ describe('Admin AI production tool schemas', () => {
       adminAiShoppingListScopeSchema,
       adminAiShoppingListApplySchema,
       adminAiOrderExportScopeSchema,
-      adminAiOrderExportScopeSchemaForMessage('Exporte les commandes confirmées.'),
-      adminAiOrderExportScopeSchemaForMessage('Exporte les commandes sélectionnées.'),
       adminAiOrderTrackingLinksSchema,
       adminAiEcotrackPostingPreviewSchema,
       adminAiEcotrackPostingStartSchema,
@@ -92,6 +103,16 @@ describe('Admin AI production tool schemas', () => {
       adminAiEcotrackShipmentChangeSchema,
       adminAiInventoryAdjustmentSchema,
       adminAiInventoryInspectionSchema,
+      adminAiCatalogProductLookupSchema,
+      adminAiCatalogProductInspectionSchema,
+      adminAiArchivedCatalogProductInspectionSchema,
+      adminAiCatalogQuerySchema,
+      adminAiBrandQuerySchema,
+      adminAiCategoryQuerySchema,
+      adminAiAnalyticsSettingsPatchSchema,
+      adminAiAnalyticsCostsMutationSchema,
+      adminAiAnalyticsDayOverridesMutationSchema,
+      adminAiAnalyticsSyncSchema,
       adminAiInventoryScanSchema,
       adminAiInventoryReceiptSchema,
       adminAiInventoryStateSchema,

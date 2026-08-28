@@ -12,7 +12,10 @@ import {
   setLandingPageActive,
 } from '../../../../lib/landing-pages';
 import { requireMutationAccess } from '../../../../lib/rbac';
-import { revalidateStorefrontLandingPages } from '../../../../lib/storefront-revalidate';
+import {
+  buildStorefrontLandingPagePreviewUrl,
+  revalidateStorefrontLandingPages,
+} from '../../../../lib/storefront-revalidate';
 
 const requestSchema = z.discriminatedUnion('action', [
   z.strictObject({
@@ -39,13 +42,27 @@ function errorResponse(error: unknown) {
   );
 }
 
-export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await requireMutationAccess('assets');
   if (denied) return denied;
   const id = parsePositiveIntegerId((await params).id);
   if (id === null) return NextResponse.json({ error: 'Invalid landing-page id.' }, { status: 400 });
   try {
-    return NextResponse.json(await getLandingPageDetail(id));
+    const detail = await getLandingPageDetail(id);
+    if (request.nextUrl.searchParams.get('view') === 'preview') {
+      const response = NextResponse.redirect(
+        buildStorefrontLandingPagePreviewUrl({
+          locale: detail.locale,
+          slug: detail.slug,
+          revision: detail.currentRevision,
+        }),
+        307,
+      );
+      response.headers.set('cache-control', 'private, no-store');
+      response.headers.set('referrer-policy', 'no-referrer');
+      return response;
+    }
+    return NextResponse.json(detail);
   } catch (error) {
     return errorResponse(error);
   }

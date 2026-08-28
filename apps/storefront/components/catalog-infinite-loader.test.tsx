@@ -25,6 +25,9 @@ const query = {
   category: null,
   brand: null,
   discounted: false,
+  minPrice: null,
+  maxPrice: null,
+  stock: 'all' as const,
   sort: 'newest' as const,
   page: 1,
 };

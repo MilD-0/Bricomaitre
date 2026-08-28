@@ -1,10 +1,18 @@
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ hasDb: vi.fn(), getDb: vi.fn(), read: vi.fn() }));
+import { signInternalRequest } from '@bric/runtime/internal-signing';
+
+const mocks = vi.hoisted(() => ({
+  hasDb: vi.fn(),
+  getDb: vi.fn(),
+  read: vi.fn(),
+  readRevision: vi.fn(),
+}));
 vi.mock('@bric/db/client', () => ({ hasDb: mocks.hasDb, getDb: mocks.getDb }));
 vi.mock('@bric/storefront-core/landing-page-records', () => ({
   readPublishedStorefrontLandingPage: mocks.read,
+  readStorefrontLandingPageRevision: mocks.readRevision,
 }));
 vi.mock('@bric/storefront-core/server-cache', () => ({
   CACHE_TAGS: { landingPages: 'landing-pages', products: 'products' },
@@ -12,6 +20,8 @@ vi.mock('@bric/storefront-core/server-cache', () => ({
 }));
 
 import { GET } from './route';
+
+const originalPreviewSecret = process.env.STOREFRONT_REVALIDATE_SECRET;
 
 const page = {
   id: 4,
@@ -73,10 +83,18 @@ const page = {
 
 describe('storefront landing page route', () => {
   beforeEach(() => {
+    process.env.STOREFRONT_REVALIDATE_SECRET = 'preview-secret';
     mocks.hasDb.mockReset().mockReturnValue(true);
     mocks.getDb.mockReset().mockReturnValue({ db: true });
     mocks.read.mockReset().mockResolvedValue(page);
+    mocks.readRevision.mockReset().mockResolvedValue({ ...page, revision: 3, publishedAt: null });
   });
+
+  afterAll(() => {
+    if (originalPreviewSecret === undefined) delete process.env.STOREFRONT_REVALIDATE_SECRET;
+    else process.env.STOREFRONT_REVALIDATE_SECRET = originalPreviewSecret;
+  });
+
   it('returns only the validated published revision for the requested locale', async () => {
     const response = await GET(
       new NextRequest('http://localhost/storefront/landing-pages/perceuse-20v?locale=fr'),
@@ -100,5 +118,49 @@ describe('storefront landing page route', () => {
       { params: Promise.resolve({ slug: 'missing' }) },
     );
     expect(response.status).toBe(404);
+  });
+
+  it('returns the exact signed draft revision without caching it', async () => {
+    const timestamp = String(Date.now());
+    const signature = signInternalRequest(
+      'landing-page-preview-v1:fr:perceuse-20v:3',
+      'preview-secret',
+      timestamp,
+    );
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/storefront/landing-pages/perceuse-20v?locale=fr&previewRevision=3&previewTimestamp=${timestamp}&previewSignature=${signature}`,
+      ),
+      { params: Promise.resolve({ slug: 'perceuse-20v' }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+    expect(mocks.readRevision).toHaveBeenCalledWith(
+      { db: true },
+      { slug: 'perceuse-20v', locale: 'fr', revision: 3 },
+    );
+    expect(mocks.read).not.toHaveBeenCalled();
+  });
+
+  it('rejects incomplete and invalid preview credentials before reading a draft', async () => {
+    const incomplete = await GET(
+      new NextRequest(
+        'http://localhost/storefront/landing-pages/perceuse-20v?locale=fr&previewRevision=3',
+      ),
+      { params: Promise.resolve({ slug: 'perceuse-20v' }) },
+    );
+    expect(incomplete.status).toBe(400);
+
+    const timestamp = String(Date.now());
+    const invalid = await GET(
+      new NextRequest(
+        `http://localhost/storefront/landing-pages/perceuse-20v?locale=fr&previewRevision=3&previewTimestamp=${timestamp}&previewSignature=${'a'.repeat(64)}`,
+      ),
+      { params: Promise.resolve({ slug: 'perceuse-20v' }) },
+    );
+    expect(invalid.status).toBe(403);
+    expect(mocks.readRevision).not.toHaveBeenCalled();
   });
 });

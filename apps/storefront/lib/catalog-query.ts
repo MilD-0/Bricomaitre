@@ -54,7 +54,7 @@ const priceSchema = z
   .preprocess(
     firstValue,
     z
-      .union([z.coerce.number().nonnegative(), z.literal(''), z.null(), z.undefined()])
+      .union([z.literal(''), z.null(), z.undefined(), z.coerce.number().nonnegative()])
       .transform((value) => (value === '' || value == null ? null : value)),
   )
   .catch(null);

@@ -7,6 +7,7 @@ import {
   buildEconomicsForecast,
   buildLeadingOrderForecast,
   clipAnalytics2Filters,
+  economicsSummaryMetrics,
   finalizeSearchFilters,
   freshnessState,
   loadAutomaticPaidEconomics,
@@ -61,6 +62,21 @@ describe('analytics2 filter model', () => {
         endDate: '2026-08-19',
       }),
     ).toThrow();
+  });
+
+  it('honors an explicit upper bound for all-history queries', () => {
+    expect(
+      resolveAnalytics2Filters(
+        { view: 'money', range: 'all', endDate: '2026-08-25' },
+        new Date('2026-08-28T12:00:00.000Z'),
+      ),
+    ).toMatchObject({
+      range: 'all',
+      startDate: null,
+      endDate: '2026-08-25',
+      comparisonStartDate: null,
+      comparisonEndDate: null,
+    });
   });
 
   it('rejects fields outside the canonical workspace query', () => {
@@ -157,6 +173,35 @@ describe('analytics2 filter model', () => {
   });
 });
 
+describe('analytics2 economics headline metrics', () => {
+  it('exposes gross profit directly alongside the planning profit ladder', () => {
+    const summary = {
+      trueProfitDzd: 90_000,
+      profitX: 3,
+      adjustedProfitDzd: 120_000,
+      grossProfitDzd: 150_000,
+      rawAdCostDzd: 30_000,
+      ratioAdCostDzd: 30_000,
+      postedOrders: 25,
+    } as never;
+
+    expect(economicsSummaryMetrics(summary, null).map((item) => item.key)).toEqual([
+      'trueProfit',
+      'profitX',
+      'adjustedProfit',
+      'grossProfit',
+      'adCost',
+      'postedOrders',
+      'costPerPosted',
+    ]);
+    expect(economicsSummaryMetrics(summary, null)[3]).toMatchObject({
+      key: 'grossProfit',
+      value: 150_000,
+      unit: 'dzd',
+    });
+  });
+});
+
 describe('analytics2 forecasting', () => {
   it('weights confirmed and submitted queues with historical funnel conversion', () => {
     const leading = buildLeadingOrderForecast({
@@ -189,6 +234,67 @@ describe('analytics2 forecasting', () => {
       expectedGrossProfitDzd: 22_500,
       expectedAdjustedProfitDzd: 20_250,
     });
+  });
+
+  it('forecasts paid outcomes by recognition day from completed calendar-day history', () => {
+    const historicalPaidOutcomeDays = Array.from({ length: 14 }, (_, index) => {
+      const date = new Date(Date.UTC(2026, 7, 5 + index));
+      return {
+        date: date.toISOString().slice(0, 10),
+        paidOrders: date.getUTCDay() === 4 ? 6 : 2,
+      };
+    });
+    const leading = buildLeadingOrderForecast({
+      asOfDate: '2026-08-19',
+      historicalStartDate: '2026-02-01',
+      historicalEndDate: '2026-07-29',
+      historicalSubmittedOrders: 100,
+      historicalConfirmedOrders: 80,
+      historicalPostedOrders: 60,
+      paidOutcomeHistory: {
+        startDate: historicalPaidOutcomeDays[0]!.date,
+        days: historicalPaidOutcomeDays,
+      },
+      submittedOrders: 0,
+      submittedCodDzd: 0,
+      submittedGrossProfitDzd: 0,
+      confirmedOrders: 0,
+      confirmedCodDzd: 0,
+      confirmedGrossProfitDzd: 0,
+      medianSubmittedToPostedHours: 72,
+      medianConfirmedToPostedHours: 24,
+      planningReturnRatePct: 10,
+      restFrom: null,
+    });
+
+    expect(leading.days).toHaveLength(14);
+    expect(leading.days[0]).toMatchObject({
+      date: '2026-08-20',
+      expectedPostedOrders: 0,
+      forecastPaidOrders: 6,
+    });
+    expect(leading.days.slice(1, 7).every((day) => day.forecastPaidOrders === 2)).toBe(true);
+
+    const economics = buildEconomicsForecast(
+      {
+        settings: { restFrom: null },
+        costs: [],
+        days: Array.from({ length: 8 }, (_, index) => ({
+          date: `2026-08-${String(11 + index).padStart(2, '0')}`,
+          postedOrders: 2,
+          operatingCostDzd: 0,
+          trueProfitDzd: 80,
+          isRestDay: false,
+          grossProfitDzd: 100,
+          metrics: { adjustedProfitDzd: 90, adCostDzd: 10 },
+        })),
+      } as unknown as Parameters<typeof buildEconomicsForecast>[0],
+      '2026-08-19',
+      1,
+      leading,
+    );
+
+    expect(economics[0]?.forecastPaidOrders).toBe(6);
   });
 
   it('requires enough completed observations and never trains on today', () => {

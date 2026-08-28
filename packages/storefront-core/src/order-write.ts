@@ -115,6 +115,7 @@ export async function updateCanonicalOrder(
       value: OrderStatus;
       noAnswerCount?: number | null;
     };
+    allowStatusCorrection?: boolean;
     now?: Date;
     actor?: { email?: string | null; name?: string | null };
   },
@@ -147,7 +148,9 @@ export async function updateCanonicalOrder(
 
   const previousStatus = coerceOrderStatus(current.confirmed);
   const nextStatus = input.status?.value ?? previousStatus;
-  assertOrderStatusTransition(previousStatus, nextStatus);
+  if (!input.allowStatusCorrection) {
+    assertOrderStatusTransition(previousStatus, nextStatus);
+  }
   const previousNoAnswerCount = coerceNoAnswerCount(
     previousStatus,
     current.noAnswerCount,

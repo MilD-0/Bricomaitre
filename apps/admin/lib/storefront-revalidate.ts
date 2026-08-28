@@ -1,4 +1,5 @@
 import { signInternalRequest } from '@bric/runtime/internal-signing';
+import { buildLandingPagePreviewPayload } from '@bric/storefront-core/landing-pages';
 
 import { getStorefrontApiBaseUrl } from './storefront-api';
 
@@ -16,6 +17,25 @@ export function getStorefrontBaseUrl() {
 
 function getStorefrontRevalidateSecret() {
   return process.env.STOREFRONT_REVALIDATE_SECRET?.trim() ?? '';
+}
+
+export function buildStorefrontLandingPagePreviewUrl(
+  input: { locale: string; slug: string; revision: number },
+  options: { nowMs?: number } = {},
+) {
+  const secret = getStorefrontRevalidateSecret();
+  if (!secret) throw new Error('Landing-page preview signing is not configured.');
+
+  const timestamp = String(options.nowMs ?? Date.now());
+  const payload = buildLandingPagePreviewPayload(input);
+  const signature = signInternalRequest(payload, secret, timestamp);
+  const url = new URL(
+    `${getStorefrontBaseUrl()}/${input.locale}/landing-preview/${encodeURIComponent(input.slug)}`,
+  );
+  url.searchParams.set('previewRevision', String(input.revision));
+  url.searchParams.set('previewTimestamp', timestamp);
+  url.searchParams.set('previewSignature', signature);
+  return url.toString();
 }
 
 async function postSignedRevalidationRequest(baseUrl: string, bodyText: string, secret: string) {

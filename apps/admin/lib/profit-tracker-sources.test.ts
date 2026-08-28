@@ -252,6 +252,47 @@ describe('canonical order projection adapter', () => {
     });
   });
 
+  it('does not report ad spend as a posted-order loss before any orders are posted', () => {
+    const [day] = applyProfitTrackerRollforward(
+      [
+        {
+          date: '2026-08-15',
+          spendEur: 100,
+          fbPurchases: null,
+          cpm: null,
+          ctr: null,
+          linkClicks: null,
+          landingPageViews: null,
+          grossProfitDzd: null,
+          returnRatePct: null,
+          confirmedOrders: null,
+          note: null,
+          fxRateUsed: 280,
+          postedOrders: 0,
+        },
+      ],
+      { fxRate: 280, restFrom: null },
+    );
+
+    expect(
+      toCanonicalOrderProjectionDay({
+        basis: 'posted',
+        reportDay: day.date,
+        day,
+        defaultReturnRate: 10,
+      }),
+    ).toEqual({
+      basis: 'posted',
+      reportDay: '2026-08-15',
+      grossProfit: null,
+      adSpend: 28_000,
+      estimatedReturnRate: 10,
+      estimatedReturnedOrders: 0,
+      estimatedReturnLoss: null,
+      projectedProfit: null,
+    });
+  });
+
   it('uses first-confirmed orders while retaining the canonical planning calculator', async () => {
     const dialect = new PgDialect();
     const execute = vi.fn(async (query) => {
