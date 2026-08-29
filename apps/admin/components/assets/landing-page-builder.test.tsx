@@ -96,7 +96,7 @@ describe('LandingPageBuilder', () => {
     let body: Record<string, unknown> | null = null;
     server.use(
       http.patch('/api/landing-pages/7', async ({ request }) => {
-        body = await request.json();
+        body = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({ id: 7, active: true, currentRevision: 4 });
       }),
     );

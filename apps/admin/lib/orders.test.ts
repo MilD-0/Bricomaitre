@@ -21,7 +21,7 @@ describe('lib/orders', () => {
     const parsed = orderPatchSchema.safeParse({
       phoneNumber1: '0550 00 00 00',
       note: ' Call before delivery ',
-      confirmed: 2,
+      inHouseStatus: 2,
       delivery: 1,
       state: '16',
       city: 'Bab Ezzouar',
@@ -176,10 +176,10 @@ describe('lib/orders', () => {
   it('parses repeated multi-sort order rules', () => {
     expect(
       orderListQuerySchema.parse({
-        sort: ['confirmed:asc', 'createdAt:desc'],
+        sort: ['inHouseStatus:asc', 'createdAt:desc'],
       }).sortRules,
     ).toEqual([
-      { key: 'confirmed', direction: 'asc' },
+      { key: 'inHouseStatus', direction: 'asc' },
       { key: 'createdAt', direction: 'desc' },
     ]);
   });

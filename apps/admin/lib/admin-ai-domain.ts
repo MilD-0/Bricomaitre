@@ -33,7 +33,7 @@ function assistantOrder(order: NonNullable<Awaited<ReturnType<typeof loadOrderDe
     isDegradedCapture: order.isDegradedCapture,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
-    status: order.confirmed,
+    status: order.inHouseStatus,
     noAnswerCount: order.noAnswerCount,
     customer: {
       firstName: order.firstName,
@@ -106,7 +106,7 @@ export async function inspectAdminOrders(input: {
     {
       page: 1,
       limit: input.limit ?? 20,
-      confirmed: input.status,
+      inHouseStatus: input.status,
       noAnswerCount: input.noAnswerCount,
     },
     false,

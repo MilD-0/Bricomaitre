@@ -1,5 +1,8 @@
 import type { Metadata } from 'next';
 
+import '../../../styles/product.css';
+import '../../../styles/catalog.css';
+
 import {
   ProductPageContent,
   resolveProductPageParams,

@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@bric/db/client', () => ({ getDb: () => ({ select: mocks.select }) }));
-vi.mock('./ai-admin-capabilities', () => ({
+vi.mock('./ai-landing-page-product', () => ({
   generateLandingPageForProduct: mocks.generate,
 }));
 vi.mock('./landing-pages', () => ({

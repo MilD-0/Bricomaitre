@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DELETE, GET, POST } from './route';
@@ -76,7 +76,7 @@ describe('app/api/orders/ecotrack/route', () => {
     );
 
     const response = await POST(
-      new Request('http://localhost/api/orders/ecotrack', { method: 'POST' }),
+      new NextRequest('http://localhost/api/orders/ecotrack', { method: 'POST' }),
     );
 
     expect(response.status).toBe(403);
@@ -85,7 +85,7 @@ describe('app/api/orders/ecotrack/route', () => {
   it('returns 503 when DB is unavailable', async () => {
     hasDbMock.mockReturnValue(false);
 
-    const response = await GET(new Request('http://localhost/api/orders/ecotrack'));
+    const response = await GET(new NextRequest('http://localhost/api/orders/ecotrack'));
 
     expect(response.status).toBe(503);
   });
@@ -93,7 +93,7 @@ describe('app/api/orders/ecotrack/route', () => {
   it('returns the latest posting job', async () => {
     getLatestExportJobMock.mockResolvedValue({ id: 'eco-9', status: 'running' });
 
-    const response = await GET(new Request('http://localhost/api/orders/ecotrack'));
+    const response = await GET(new NextRequest('http://localhost/api/orders/ecotrack'));
 
     expect(response.status).toBe(200);
     expect(getLatestExportJobMock).toHaveBeenCalledWith('admin-order-ecotrack', 'user-1');
@@ -103,7 +103,7 @@ describe('app/api/orders/ecotrack/route', () => {
   it('returns a specific owned job when jobId is provided', async () => {
     getJobSnapshotMock.mockResolvedValue({ id: 'eco-9', status: 'running', ownerKey: 'user-1' });
 
-    const response = await GET(new Request('http://localhost/api/orders/ecotrack?jobId=eco-9'));
+    const response = await GET(new NextRequest('http://localhost/api/orders/ecotrack?jobId=eco-9'));
 
     expect(response.status).toBe(200);
     expect(getJobSnapshotMock).toHaveBeenCalledWith('admin-order-ecotrack', 'eco-9');
@@ -119,14 +119,14 @@ describe('app/api/orders/ecotrack/route', () => {
       ownerKey: 'other-user',
     });
 
-    const response = await GET(new Request('http://localhost/api/orders/ecotrack?jobId=eco-9'));
+    const response = await GET(new NextRequest('http://localhost/api/orders/ecotrack?jobId=eco-9'));
 
     expect(response.status).toBe(404);
   });
 
   it('starts a posting job', async () => {
     const response = await POST(
-      new Request('http://localhost/api/orders/ecotrack', {
+      new NextRequest('http://localhost/api/orders/ecotrack', {
         method: 'POST',
         body: JSON.stringify({ mode: 'selected', orderIds: [11, '12', 12] }),
       }),
@@ -146,7 +146,7 @@ describe('app/api/orders/ecotrack/route', () => {
 
   it('rejects malformed order identifiers instead of partially starting a job', async () => {
     const response = await POST(
-      new Request('http://localhost/api/orders/ecotrack', {
+      new NextRequest('http://localhost/api/orders/ecotrack', {
         method: 'POST',
         body: JSON.stringify({ mode: 'selected', orderIds: [11, '1e2'] }),
       }),
@@ -163,7 +163,7 @@ describe('app/api/orders/ecotrack/route', () => {
     });
 
     const response = await POST(
-      new Request('http://localhost/api/orders/ecotrack', {
+      new NextRequest('http://localhost/api/orders/ecotrack', {
         method: 'POST',
         body: JSON.stringify({ mode: 'selected', orderIds: [11] }),
       }),

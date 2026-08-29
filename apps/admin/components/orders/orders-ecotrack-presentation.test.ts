@@ -12,9 +12,9 @@ import {
 describe('Ecotrack presentation helpers', () => {
   it('summarizes only the requested number of bulk failures', () => {
     const failures = [
-      { orderId: 1, message: 'First failure.' },
-      { orderId: 2, message: 'Second failure.' },
-      { orderId: 3, message: 'Third failure.' },
+      { orderId: 1, reference: null, trackingNumber: null, message: 'First failure.' },
+      { orderId: 2, reference: null, trackingNumber: null, message: 'Second failure.' },
+      { orderId: 3, reference: null, trackingNumber: null, message: 'Third failure.' },
     ];
 
     expect(buildEcotrackFailureSummary(failures)).toBe('First failure. Second failure.');

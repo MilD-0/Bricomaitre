@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { hasDbMock, requireAnalyticsAccessMock, getAnalytics2DataMock } = vi.hoisted(() => ({
+const { hasDbMock, requireAnalyticsAccessMock, getAnalyticsDataMock } = vi.hoisted(() => ({
   hasDbMock: vi.fn(),
   requireAnalyticsAccessMock: vi.fn(),
-  getAnalytics2DataMock: vi.fn(),
+  getAnalyticsDataMock: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: hasDbMock }));
 vi.mock('../../../../lib/rbac', () => ({ requireAnalyticsAccess: requireAnalyticsAccessMock }));
-vi.mock('../../../../lib/analytics2', async () => {
-  const actual = await vi.importActual<typeof import('../../../../lib/analytics2')>(
-    '../../../../lib/analytics2',
+vi.mock('../../../../lib/analytics', async () => {
+  const actual = await vi.importActual<typeof import('../../../../lib/analytics')>(
+    '../../../../lib/analytics',
   );
-  return { ...actual, getAnalytics2Data: getAnalytics2DataMock };
+  return { ...actual, getAnalyticsData: getAnalyticsDataMock };
 });
 
 import { GET } from './route';
@@ -23,7 +23,7 @@ describe('GET /api/stats/workspace', () => {
     vi.clearAllMocks();
     hasDbMock.mockReturnValue(true);
     requireAnalyticsAccessMock.mockResolvedValue(null);
-    getAnalytics2DataMock.mockResolvedValue({
+    getAnalyticsDataMock.mockResolvedValue({
       diagnostics: { queryDurationMs: 37, responseSizeBytes: 100 },
       warnings: [],
     });
@@ -37,7 +37,7 @@ describe('GET /api/stats/workspace', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(getAnalytics2DataMock).toHaveBeenCalledWith({
+    expect(getAnalyticsDataMock).toHaveBeenCalledWith({
       view: 'acquisition',
       range: 'custom',
       startDate: '2026-08-01',
@@ -54,7 +54,7 @@ describe('GET /api/stats/workspace', () => {
       new NextRequest('http://localhost/api/stats/workspace?range=custom&startDate=2026-08-01'),
     );
     expect(response.status).toBe(400);
-    expect(getAnalytics2DataMock).not.toHaveBeenCalled();
+    expect(getAnalyticsDataMock).not.toHaveBeenCalled();
   });
 
   it('enforces analytics access and database availability', async () => {

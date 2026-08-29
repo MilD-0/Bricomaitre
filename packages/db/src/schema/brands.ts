@@ -8,7 +8,9 @@ import {
   timestamp,
   index,
   uniqueIndex,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 export const brands = pgTable(
   'brands',
@@ -41,5 +43,11 @@ export const brands = pgTable(
     index('idx_brands_mongo_id').on(t.mongoId),
     index('idx_brands_popularity').on(t.popularityScore),
     index('idx_brands_last_viewed_at').on(t.lastViewedAt.desc()),
+    check(
+      'brands_engagement_counters_nonnegative_check',
+      sql`${t.viewCount} >= 0 and ${t.addToCartCount} >= 0 and ${t.checkoutCount} >= 0 and ${t.purchaseCount} >= 0`,
+    ),
+    check('brands_popularity_score_nonnegative_check', sql`${t.popularityScore} >= 0`),
+    check('brands_conversion_rate_nonnegative_check', sql`${t.conversionRate} >= 0`),
   ],
 );

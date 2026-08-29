@@ -3,6 +3,7 @@ import { and, asc, count, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { orders, products } from '@bric/db/schema';
+import { CONFIRMED_LIFECYCLE_ORDER_STATUSES } from '@bric/storefront-core/order-domain';
 import { auth } from '../../../lib/auth';
 import { startProductCatalogFeedRefreshJob } from '../../../lib/background-jobs';
 import { productListQuerySchema, productPayloadSchema } from '../../../lib/products';
@@ -129,7 +130,7 @@ async function getProductOrderMetrics(
       select distinct
         sp.id as product_id,
         ${orders.id} as order_id,
-        ${orders.confirmed} as confirmed
+        ${orders.inHouseStatus} as confirmed
       from ${orders}
       inner join selected_products sp
         on sp.id::text = any(${orders.cartProducts})
@@ -139,7 +140,10 @@ async function getProductOrderMetrics(
     select
       product_id::bigint as "productId",
       count(*)::int as "orderPurchaseCount",
-      count(*) filter (where confirmed in (2, 3, 4, 5, 7, 8, 9, 10, 11))::int as "confirmedOrderCount"
+      count(*) filter (where confirmed in (${sql.join(
+        CONFIRMED_LIFECYCLE_ORDER_STATUSES.map((status) => sql`${status}`),
+        sql`, `,
+      )}))::int as "confirmedOrderCount"
     from matched_orders
     group by product_id
   `);

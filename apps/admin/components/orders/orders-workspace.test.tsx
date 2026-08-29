@@ -11,7 +11,7 @@ import type { OrderRecord } from '../../lib/orders';
 import { server } from '../../test/mocks/server';
 import { OrdersWorkspace } from './orders-workspace';
 
-function makeOrder(id: number, name: string, status: OrderRecord['confirmed']): OrderRecord {
+function makeOrder(id: number, name: string, status: OrderRecord['inHouseStatus']): OrderRecord {
   return {
     id,
     publicToken: `token-${id}`,
@@ -30,6 +30,7 @@ function makeOrder(id: number, name: string, status: OrderRecord['confirmed']): 
     orderProducts: [
       {
         productId: id,
+        slug: id === 1 ? 'cordless-drill' : 'tool-case',
         rawValue: String(id),
         title: id === 1 ? 'Cordless drill' : 'Tool case',
         unitPrice: 4000,
@@ -53,7 +54,7 @@ function makeOrder(id: number, name: string, status: OrderRecord['confirmed']): 
     promoDiscountAmount: 0,
     promoFinalSubtotal: null,
     note: id === 1 ? 'Call before delivery.' : null,
-    confirmed: status,
+    inHouseStatus: status,
     noAnswerCount: status === 1 ? 1 : 0,
     confirmedBy: null,
     confirmedByName: null,
@@ -77,7 +78,7 @@ const initialOrders: OrdersResponse = {
   },
 };
 
-function makeOverview(reportCount = 7): DailyOrderStatusOverview {
+function makeOverview(reportCount = 7): Extract<DailyOrderStatusOverview, { available: true }> {
   const reports = Array.from({ length: reportCount }, (_, index) => {
     const day = new Date('2026-08-18T12:00:00.000Z');
     day.setUTCDate(day.getUTCDate() - index);
@@ -196,21 +197,16 @@ describe('OrdersWorkspace', () => {
     const outlook = container.querySelector('[data-orders-pulse]');
 
     expect(outlook).toBeInTheDocument();
-    expect(within(outlook as HTMLElement).getAllByRole('article')).toHaveLength(1);
+    if (!(outlook instanceof HTMLElement)) throw new Error('Orders pulse was not rendered.');
+    expect(within(outlook).getAllByRole('article')).toHaveLength(1);
     expect(container.querySelectorAll('[data-projection-stack-layer]')).toHaveLength(2);
-    expect(within(outlook as HTMLElement).getByText('Tuesday, Aug 18')).toBeInTheDocument();
-    expect(within(outlook as HTMLElement).getAllByText('Updates').length).toBeGreaterThan(0);
-    expect(
-      within(outlook as HTMLElement).getAllByText(/9 confirmation · 4 shipment/).length,
-    ).toBeGreaterThan(0);
-    expect(within(outlook as HTMLElement).getAllByText('Cancelled').length).toBeGreaterThan(0);
-    expect(
-      within(outlook as HTMLElement).getAllByText(/0 admin · 1 carrier/).length,
-    ).toBeGreaterThan(0);
-    expect(within(outlook as HTMLElement).getByText(/Gross DZD/)).toBeInTheDocument();
-    expect(
-      within(outlook as HTMLElement).getAllByText('Estimated return loss').length,
-    ).toBeGreaterThan(0);
+    expect(within(outlook).getByText('Tuesday, Aug 18')).toBeInTheDocument();
+    expect(within(outlook).getAllByText('Updates').length).toBeGreaterThan(0);
+    expect(within(outlook).getAllByText(/9 confirmation · 4 shipment/).length).toBeGreaterThan(0);
+    expect(within(outlook).getAllByText('Cancelled').length).toBeGreaterThan(0);
+    expect(within(outlook).getAllByText(/0 admin · 1 carrier/).length).toBeGreaterThan(0);
+    expect(within(outlook).getByText(/Gross DZD/)).toBeInTheDocument();
+    expect(within(outlook).getAllByText('Estimated return loss').length).toBeGreaterThan(0);
     expect(container.querySelector('[data-projection-summary-grid]')?.children).toHaveLength(6);
     const desktopSummary = container.querySelector('[data-projection-summary-grid]');
     expect(desktopSummary).not.toBeNull();
@@ -223,9 +219,10 @@ describe('OrdersWorkspace', () => {
     expect(within(orderSummary!).getByText('no answer')).toBeInTheDocument();
     const mobileSummary = container.querySelector('[data-mobile-projection-summary]');
     expect(mobileSummary).toBeInTheDocument();
-    expect(
-      within(mobileSummary as HTMLElement).getByText('Ad spend · Updates'),
-    ).toBeInTheDocument();
+    if (!(mobileSummary instanceof HTMLElement)) {
+      throw new Error('Mobile projection summary was not rendered.');
+    }
+    expect(within(mobileSummary).getByText('Ad spend · Updates')).toBeInTheDocument();
     expect(container.querySelector('[data-mobile-projection-controls] label')).toHaveClass(
       'order-3',
       'w-full',
@@ -483,7 +480,7 @@ describe('OrdersWorkspace', () => {
     server.use(
       http.patch('/api/orders/1', async ({ request }) => {
         savedBody = (await request.json()) as Record<string, unknown>;
-        return HttpResponse.json({ ok: true, item: { ...orders[0], confirmed: 1 } });
+        return HttpResponse.json({ ok: true, item: { ...orders[0], inHouseStatus: 1 } });
       }),
       http.get('/api/orders', () => HttpResponse.json(initialOrders)),
     );
@@ -493,7 +490,7 @@ describe('OrdersWorkspace', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: 'Bulk status' }), '1');
     await user.click(screen.getByRole('button', { name: 'Apply status' }));
 
-    await waitFor(() => expect(savedBody).toEqual({ confirmed: 1, noAnswerCount: 1 }));
+    await waitFor(() => expect(savedBody).toEqual({ inHouseStatus: 1, noAnswerCount: 1 }));
     await waitFor(() => expect(screen.queryByText('1 selected')).not.toBeInTheDocument());
   });
 
@@ -530,6 +527,14 @@ describe('OrdersWorkspace', () => {
     expect(await screen.findByText('Returning customer · 3 completed orders')).toBeInTheDocument();
   });
 
+  it('links current order products to the same Storefront pages as the product table', async () => {
+    renderWorkspace();
+
+    const link = await screen.findByRole('link', { name: 'Cordless drill' });
+    expect(link).toHaveAttribute('href', 'https://bricomaitre.com/products/cordless-drill');
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
   it('saves customer, fulfillment, status, products, and notes from the focused editor', async () => {
     const user = userEvent.setup();
     let savedBody: Record<string, unknown> | null = null;
@@ -539,7 +544,7 @@ describe('OrdersWorkspace', () => {
       lastName: 'B',
       fullName: 'A B',
       note: 'Door.',
-      confirmed: 2 as const,
+      inHouseStatus: 2 as const,
       noAnswerCount: 0,
       cartProducts: ['1', '1'],
       orderProducts: [{ ...orders[0]!.orderProducts[0]!, quantity: 2, lineTotal: 8000 }],
@@ -567,7 +572,7 @@ describe('OrdersWorkspace', () => {
       expect(savedBody).toMatchObject({
         firstName: 'A',
         lastName: 'B',
-        confirmed: 2,
+        inHouseStatus: 2,
         cartProducts: ['1', '1'],
         note: 'Door.',
       }),

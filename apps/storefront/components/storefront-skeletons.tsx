@@ -1,5 +1,7 @@
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
+import '@/app/styles/skeletons.css';
+
 type SkeletonProps = ComponentPropsWithoutRef<'span'>;
 
 /** A layout-reserving, decorative placeholder for data that is still streaming. */

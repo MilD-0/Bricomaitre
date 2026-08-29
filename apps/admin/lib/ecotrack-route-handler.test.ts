@@ -33,7 +33,11 @@ function runMutation({
   id?: string;
   body?: string;
   parseBody?: (value: unknown) => { enabled: boolean };
-  action?: ReturnType<typeof vi.fn>;
+  action?: (
+    orderId: number,
+    payload: { enabled: boolean },
+    actor: { email: string | null; name: string | null },
+  ) => Promise<unknown>;
 } = {}) {
   return handleEcotrackShipmentMutation({
     request: new NextRequest('http://localhost/api/orders/ecotrack/shipments/42/action', {

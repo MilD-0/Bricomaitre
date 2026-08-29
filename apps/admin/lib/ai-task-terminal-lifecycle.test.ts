@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   attachAiTaskTerminalFollowups,
   type AiTaskLifecycleJob,
+  type AiTaskLifecycleWorker,
 } from './ai-task-terminal-lifecycle';
 
 function fakeWorker() {
@@ -10,15 +11,17 @@ function fakeWorker() {
     completed?: (job: AiTaskLifecycleJob) => void;
     failed?: (job: AiTaskLifecycleJob | undefined, error: Error) => void;
   } = {};
-  return {
-    worker: {
-      name: 'admin-order-ecotrack',
-      on(event: 'completed' | 'failed', listener: never) {
-        Object.assign(listeners, { [event]: listener });
-      },
+  const worker: AiTaskLifecycleWorker = {
+    name: 'admin-order-ecotrack',
+    on(event, listener) {
+      if (event === 'completed') {
+        listeners.completed = listener as (job: AiTaskLifecycleJob) => void;
+      } else {
+        listeners.failed = listener as (job: AiTaskLifecycleJob | undefined, error: Error) => void;
+      }
     },
-    listeners,
   };
+  return { worker, listeners };
 }
 
 const job = {

@@ -5,12 +5,18 @@ const { notFoundMock } = vi.hoisted(() => ({
   notFoundMock: vi.fn(),
 }));
 
+vi.mock('next/headers', () => ({
+  headers: vi.fn(async () => new Headers({ 'x-nonce': 'request-nonce' })),
+}));
+
 vi.mock('next/navigation', () => ({
   notFound: notFoundMock,
 }));
 
 vi.mock('../../providers/app-providers', () => ({
-  AppProviders: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  AppProviders: ({ children, nonce }: { children: React.ReactNode; nonce?: string }) => (
+    <section data-nonce={nonce}>{children}</section>
+  ),
 }));
 
 import LocaleLayout from './layout';
@@ -32,6 +38,7 @@ describe('app/[locale]/layout', () => {
     const markup = renderToStaticMarkup(ui);
 
     expect(markup).toContain('<html lang="en" dir="ltr">');
+    expect(markup).toContain('data-nonce="request-nonce"');
     expect(ui.props.suppressHydrationWarning).toBe(true);
   });
 

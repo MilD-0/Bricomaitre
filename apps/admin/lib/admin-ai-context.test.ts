@@ -5,6 +5,7 @@ import {
   adminAiSurfaceContextSchema,
   mergeAdminAiSurfaceDetails,
   resolveAdminAiSurfaceContext,
+  suggestionKeysForAdminAi,
 } from './admin-ai-context';
 
 describe('admin AI surface context', () => {
@@ -62,7 +63,7 @@ describe('admin AI surface context', () => {
     ]);
   });
 
-  it('keeps only safe Analytics2 filters and resolves focused landing pages', () => {
+  it('keeps only safe Analytics filters and resolves focused landing pages', () => {
     expect(
       resolveAdminAiSurfaceContext(
         '/fr/stats/meta-ads',
@@ -118,5 +119,21 @@ describe('admin AI surface context', () => {
       },
       selection: null,
     });
+  });
+
+  it('offers live Analytics prompts only when the connected slice is permitted', () => {
+    const context = resolveAdminAiSurfaceContext('/en/stats/website');
+
+    expect(suggestionKeysForAdminAi(context, ['analytics_manage'])).toEqual([
+      'summarizeCurrentAnalytics',
+      'explainAnalyticsChange',
+    ]);
+    expect(suggestionKeysForAdminAi(context, [])).toEqual(['helpCurrentSurface']);
+  });
+
+  it('does not advertise capabilities that are not connected to the model', () => {
+    const context = resolveAdminAiSurfaceContext('/en/orders/ecotrack');
+
+    expect(suggestionKeysForAdminAi(context, ['orders_write'])).toEqual(['helpCurrentSurface']);
   });
 });

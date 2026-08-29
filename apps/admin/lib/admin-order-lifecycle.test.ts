@@ -57,7 +57,7 @@ describe('canonical admin order lifecycle', () => {
       id: 91,
       fullName: 'Ahmed Test',
       phoneNumber1: '0550123456',
-      confirmed: 0,
+      inHouseStatus: 0,
       ecotrackTrackingNumber: null,
       variant: null,
       totalAmount: 15_500,

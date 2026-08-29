@@ -1,14 +1,14 @@
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 
-import type { Analytics2Payload } from './analytics2';
-import { compactAnalytics2ForAssistant, adminAiAnalyticsQuerySchema } from './ai-analytics';
+import type { AnalyticsPayload } from './analytics';
+import { compactAnalyticsForAssistant, adminAiAnalyticsQuerySchema } from './ai-analytics';
 import {
   adminAiAnalyticsFocusSchemaForView,
-  focusAnalytics2ForAssistant,
+  focusAnalyticsForAssistant,
 } from './admin-ai-analytics-focus';
 
-function catalogPayload(): Analytics2Payload {
+function catalogPayload(): AnalyticsPayload {
   return {
     view: 'catalog',
     filters: {
@@ -77,7 +77,7 @@ function catalogPayload(): Analytics2Payload {
     ],
     warnings: [],
     diagnostics: { queryDurationMs: 30, responseSizeBytes: 10_000 },
-  } as Analytics2Payload;
+  } as unknown as AnalyticsPayload;
 }
 
 describe('admin assistant analytics focus', () => {
@@ -88,6 +88,7 @@ describe('admin assistant analytics focus', () => {
       focus: { dimension: 'signals', limit: 20 },
     });
 
+    expect(parsed.focus).toMatchObject({ dimension: 'signals', identifiers: [], limit: 20 });
     expect(adminAiAnalyticsQuerySchema.safeParse(parsed).success).toBe(true);
     expect(
       adminAiAnalyticsQuerySchema.safeParse({
@@ -125,10 +126,10 @@ describe('admin assistant analytics focus', () => {
           sources: ['orders', 'storefront'],
         },
       ],
-    } as unknown as Analytics2Payload;
+    } as unknown as AnalyticsPayload;
 
     expect(
-      focusAnalytics2ForAssistant(payload, {
+      focusAnalyticsForAssistant(payload, {
         dimension: 'storefront_funnel',
         identifiers: [],
         limit: 20,
@@ -167,9 +168,9 @@ describe('admin assistant analytics focus', () => {
           sources: ['orders', 'ecotrack'],
         },
       ],
-    } as unknown as Analytics2Payload;
+    } as unknown as AnalyticsPayload;
 
-    const focus = focusAnalytics2ForAssistant(payload, {
+    const focus = focusAnalyticsForAssistant(payload, {
       dimension: 'leading_forecast',
       identifiers: [],
       limit: 20,
@@ -212,7 +213,7 @@ describe('admin assistant analytics focus', () => {
   });
 
   it('advertises focus dimensions only inside their valid workspace branch', () => {
-    const schema = z.toJSONSchema(adminAiAnalyticsQuerySchema) as {
+    const schema = z.toJSONSchema(adminAiAnalyticsQuerySchema) as unknown as {
       oneOf: Array<{ properties: { view: { const: string }; focus: unknown } }>;
     };
     const branch = (view: string) =>
@@ -223,7 +224,7 @@ describe('admin assistant analytics focus', () => {
   });
 
   it('finds exact rows beyond the generic twenty-row compaction boundary', () => {
-    const result = compactAnalytics2ForAssistant(catalogPayload(), {
+    const result = compactAnalyticsForAssistant(catalogPayload(), {
       dimension: 'products',
       search: 'Product 50',
       identifiers: [],
@@ -281,7 +282,7 @@ describe('admin assistant analytics focus', () => {
   });
 
   it('qualifies zero matches instead of claiming the entity does not exist', () => {
-    const focus = focusAnalytics2ForAssistant(catalogPayload(), {
+    const focus = focusAnalyticsForAssistant(catalogPayload(), {
       dimension: 'products',
       search: 'Never Listed',
       identifiers: [],
@@ -293,7 +294,7 @@ describe('admin assistant analytics focus', () => {
   });
 
   it('can return up to one hundred focused canonical rows without widening other datasets', () => {
-    const result = compactAnalytics2ForAssistant(catalogPayload(), {
+    const result = compactAnalyticsForAssistant(catalogPayload(), {
       dimension: 'products',
       identifiers: [],
       limit: 75,
@@ -341,9 +342,9 @@ describe('admin assistant analytics focus', () => {
           sources: ['orders', 'ecotrack', 'meta', 'assumptions'],
         },
       ],
-    } as unknown as Analytics2Payload;
+    } as unknown as AnalyticsPayload;
 
-    const result = compactAnalytics2ForAssistant(payload, {
+    const result = compactAnalyticsForAssistant(payload, {
       dimension: 'campaigns',
       identifiers: ['cmp-1'],
       limit: 20,
@@ -420,9 +421,9 @@ describe('admin assistant analytics focus', () => {
           sources: ['orders', 'ecotrack', 'meta', 'assumptions'],
         },
       ],
-    } as unknown as Analytics2Payload;
+    } as unknown as AnalyticsPayload;
 
-    const focus = focusAnalytics2ForAssistant(payload, {
+    const focus = focusAnalyticsForAssistant(payload, {
       dimension: 'paid_funnel',
       identifiers: [],
       limit: 20,

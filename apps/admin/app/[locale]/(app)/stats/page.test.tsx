@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../../components/analytics2/analytics2-route-page', () => ({
+vi.mock('../../../../components/analytics/analytics-route-page', () => ({
   StatsRoutePage: ({ locale, view }: { locale: string; view: string }) => (
     <div>{`${locale}:${view}`}</div>
   ),

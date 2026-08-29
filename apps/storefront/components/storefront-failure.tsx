@@ -1,5 +1,7 @@
 'use client';
 
+import '@/app/styles/storefront-failure.css';
+
 import type { Locale } from '@/i18n/config';
 
 const copy = {

@@ -177,8 +177,6 @@ describe('live admin AI stats', () => {
       toolCalls: 3,
       proposals: 1,
       appliedProposals: 1,
-      estimatedCostUsd: 0.000108,
-      costCoverageRate: 100,
     });
 
     expect(stats).toEqual(

@@ -114,10 +114,10 @@ describe('admin AI order shopping lists', () => {
   });
 
   it('loads every page of a status cohort before building the preview', async () => {
-    mocks.loadOrdersPageData.mockImplementation(async ({ page, confirmed }) => ({
+    mocks.loadOrdersPageData.mockImplementation(async ({ page, inHouseStatus }) => ({
       items: page === 1 ? [order(31)] : [order(32)],
       pagination: { page, totalPages: 2 },
-      confirmed,
+      inHouseStatus,
     }));
 
     const result = await inspectAdminAiShoppingList({
@@ -128,12 +128,12 @@ describe('admin AI order shopping lists', () => {
 
     expect(mocks.loadOrdersPageData).toHaveBeenNthCalledWith(
       1,
-      { page: 1, limit: 100, confirmed: 2 },
+      { page: 1, limit: 100, inHouseStatus: 2 },
       false,
     );
     expect(mocks.loadOrdersPageData).toHaveBeenNthCalledWith(
       2,
-      { page: 2, limit: 100, confirmed: 2 },
+      { page: 2, limit: 100, inHouseStatus: 2 },
       false,
     );
     expect(mocks.buildDraft).toHaveBeenCalledWith(

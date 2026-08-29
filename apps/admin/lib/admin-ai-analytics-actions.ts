@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { refreshAnalytics2FactsAfterMutation } from './analytics2-facts';
+import { refreshAnalyticsFactsAfterMutation } from './analytics-facts';
 import { syncMetaAdsInsights } from './meta-ads-insights';
 import {
   createProfitTrackerCost,
@@ -36,13 +36,13 @@ export const adminAiAnalyticsSettingsPatchSchema = z
 type AnalyticsSettingsDependencies = {
   getSettings: typeof getProfitTrackerSettings;
   updateSettings: typeof updateProfitTrackerSettings;
-  refreshFacts: typeof refreshAnalytics2FactsAfterMutation;
+  refreshFacts: typeof refreshAnalyticsFactsAfterMutation;
 };
 
 const defaultSettingsDependencies: AnalyticsSettingsDependencies = {
   getSettings: getProfitTrackerSettings,
   updateSettings: updateProfitTrackerSettings,
-  refreshFacts: refreshAnalytics2FactsAfterMutation,
+  refreshFacts: refreshAnalyticsFactsAfterMutation,
 };
 
 export async function updateAdminAiAnalyticsSettings(
@@ -111,7 +111,7 @@ type AnalyticsCostDependencies = {
   createCost: typeof createProfitTrackerCost;
   updateCost: typeof updateProfitTrackerCost;
   deleteCost: typeof deleteProfitTrackerCost;
-  refreshFacts: typeof refreshAnalytics2FactsAfterMutation;
+  refreshFacts: typeof refreshAnalyticsFactsAfterMutation;
 };
 
 const defaultCostDependencies: AnalyticsCostDependencies = {
@@ -119,7 +119,7 @@ const defaultCostDependencies: AnalyticsCostDependencies = {
   createCost: createProfitTrackerCost,
   updateCost: updateProfitTrackerCost,
   deleteCost: deleteProfitTrackerCost,
-  refreshFacts: refreshAnalytics2FactsAfterMutation,
+  refreshFacts: refreshAnalyticsFactsAfterMutation,
 };
 
 export async function manageAdminAiAnalyticsCosts(
@@ -246,13 +246,13 @@ export const adminAiAnalyticsDayOverridesMutationSchema = z
 type AnalyticsDayDependencies = {
   upsertDay: typeof upsertProfitTrackerDay;
   deleteDay: typeof deleteProfitTrackerDay;
-  refreshFacts: typeof refreshAnalytics2FactsAfterMutation;
+  refreshFacts: typeof refreshAnalyticsFactsAfterMutation;
 };
 
 const defaultDayDependencies: AnalyticsDayDependencies = {
   upsertDay: upsertProfitTrackerDay,
   deleteDay: deleteProfitTrackerDay,
-  refreshFacts: refreshAnalytics2FactsAfterMutation,
+  refreshFacts: refreshAnalyticsFactsAfterMutation,
 };
 
 export async function manageAdminAiAnalyticsDayOverrides(
@@ -355,8 +355,8 @@ function analyticsSyncSchema(sourceSchema: z.ZodType<'meta' | 'searchConsole'>) 
 export const adminAiAnalyticsSyncSchema = analyticsSyncSchema(z.enum(['meta', 'searchConsole']));
 
 type AnalyticsSyncDependencies = {
-  syncMeta: typeof syncMetaAdsInsights;
-  syncSearch: typeof syncSearchConsole;
+  syncMeta: (options?: Parameters<typeof syncMetaAdsInsights>[0]) => Promise<unknown>;
+  syncSearch: (options?: Parameters<typeof syncSearchConsole>[0]) => Promise<unknown>;
 };
 
 const defaultSyncDependencies: AnalyticsSyncDependencies = {

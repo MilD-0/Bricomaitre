@@ -44,7 +44,7 @@ function analyticsObjects(value: unknown, depth = 0): Record<string, unknown>[] 
   if (typeof value !== 'object') return [];
   const record = value as Record<string, unknown>;
   return [
-    ...(record.kind === 'analytics2' || record.kind === 'ai_stats' ? [record] : []),
+    ...(record.kind === 'analytics' || record.kind === 'ai_stats' ? [record] : []),
     ...Object.values(record).flatMap((item) => analyticsObjects(item, depth + 1)),
   ];
 }

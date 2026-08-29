@@ -35,7 +35,7 @@ export const orders = pgTable(
     sessionId: text('session_id'),
     variant: text('variant'),
     delivery: integer('delivery').notNull().default(0),
-    delPr: numeric('del_pr', { precision: 10, scale: 2 }),
+    deliveryFee: numeric('del_pr', { precision: 10, scale: 2 }),
     productSubtotal: numeric('product_subtotal', { precision: 12, scale: 2 }),
     totalAmount: numeric('total_amount', { precision: 12, scale: 2 }),
     price: numeric('price', { precision: 12, scale: 2 }),
@@ -48,7 +48,7 @@ export const orders = pgTable(
     promoFinalSubtotal: numeric('promo_final_subtotal', { precision: 12, scale: 2 }),
     note: text('note'),
 
-    confirmed: integer('confirmed').notNull().default(0),
+    inHouseStatus: integer('confirmed').notNull().default(0),
     noAnswerCount: integer('no_answer_count').notNull().default(0),
     confirmedBy: text('confirmed_by'),
     confirmedByName: text('confirmed_by_name'),
@@ -67,7 +67,7 @@ export const orders = pgTable(
   },
   (t) => [
     index('idx_orders_mongo_id').on(t.mongoId),
-    index('idx_orders_confirmed').on(t.confirmed),
+    index('idx_orders_confirmed').on(t.inHouseStatus),
     index('idx_orders_created').on(t.createdAt),
     index('idx_orders_visit').on(t.visitId),
     index('idx_orders_journey').on(t.journeyId),
@@ -79,7 +79,7 @@ export const orders = pgTable(
     index('idx_orders_cart_products_gin').using('gin', t.cartProducts),
     uniqueIndex('orders_public_token_unique').on(t.publicToken),
     index('idx_orders_created_desc').on(t.createdAt.desc()),
-    index('idx_orders_confirmed_created_desc').on(t.confirmed, t.createdAt.desc()),
+    index('idx_orders_confirmed_created_desc').on(t.inHouseStatus, t.createdAt.desc()),
   ],
 );
 

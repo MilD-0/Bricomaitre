@@ -264,6 +264,36 @@ test('preserves Arabic RTL and narrow-phone usability', async ({ page }) => {
   await expect(zoom).not.toBeVisible();
 });
 
+test('keeps embedded similar products from restoring the mobile page scroll', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.addInitScript(() => {
+    window.sessionStorage.setItem(
+      'bric:catalog-position:v2:/fr/products/desk-lamp',
+      JSON.stringify({
+        items: [],
+        page: 2,
+        hasNextPage: false,
+        totalCount: 9,
+        scrollY: 0,
+      }),
+    );
+    const calls: unknown[][] = [];
+    Object.defineProperty(window, '__bricScrollToCalls', { value: calls });
+    window.scrollTo = ((...args: unknown[]) => calls.push(args)) as typeof window.scrollTo;
+  });
+
+  await page.goto('/fr/products/desk-lamp');
+  const similar = page.getByRole('region', { name: 'Produits similaires' });
+  await expect(similar).toBeVisible();
+  await similar.scrollIntoViewIfNeeded();
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  expect(
+    await page.evaluate(
+      () => (window as typeof window & { __bricScrollToCalls: unknown[][] }).__bricScrollToCalls,
+    ),
+  ).toEqual([]);
+});
+
 test('redirects legacy tokens and distinguishes missing from unavailable products', async ({
   page,
 }) => {

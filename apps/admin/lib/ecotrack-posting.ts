@@ -1,0 +1,596 @@
+import { and, asc, eq, inArray } from 'drizzle-orm';
+
+import type { getDb } from '@bric/db/client';
+import type { EcotrackExtendedRateLimitSnapshot } from '@bric/storefront-core/ecotrack-client';
+import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
+import { orders, orderStatusHistory } from '@bric/db/schema';
+import { getOrderProductLookup, toOrderRecord } from './order-records';
+import { readEcotrackCatalog, type EcotrackCatalogRecord } from './ecotrack-catalog';
+import {
+  buildEcotrackResultMessage,
+  chunkArray,
+  getEcotrackProviderEnv,
+  normalizeEcotrackPhone,
+  normalizeEcotrackText,
+  readEcotrackMessage,
+  readEcotrackSuccess,
+  readEcotrackTracking,
+  requestEcotrack,
+  sleep,
+  type EcotrackProvider,
+} from './ecotrack-provider';
+import { persistEcotrackPostedOrder } from './ecotrack-posting-persistence';
+import { coerceOrderStatus, type OrderRecord, type OrderStatusHistoryRecord } from './orders';
+
+type Database = ReturnType<typeof getDb>;
+const ECOTRACK_PLACEHOLDER_ADDRESS = 'Adresse non renseignee';
+
+type EcotrackPreviewReason =
+  | 'already_posted'
+  | 'status_not_confirmed'
+  | 'missing_name'
+  | 'missing_phone'
+  | 'missing_wilaya'
+  | 'missing_commune'
+  | 'invalid_commune'
+  | 'missing_address';
+
+export type EcotrackOrderPayload = {
+  reference: string;
+  nom_client: string;
+  telephone: string;
+  telephone_2?: string;
+  adresse: string;
+  code_postal?: string;
+  commune: string;
+  code_wilaya: string;
+  montant: string;
+  remarque?: string;
+  produit?: string;
+  type: '1';
+  stop_desk: 0 | 1;
+};
+
+type EcotrackOrderPreviewItem = {
+  orderId: number;
+  customerName: string;
+  destination: string;
+  amount: string;
+  payload: EcotrackOrderPayload;
+};
+
+type EcotrackOrderSkipItem = {
+  orderId: number;
+  customerName: string;
+  reason: 'already_posted';
+};
+
+type EcotrackOrderInvalidItem = {
+  orderId: number;
+  customerName: string;
+  reason: Exclude<EcotrackPreviewReason, 'already_posted'>;
+  message: string;
+};
+
+export type EcotrackCreateOrderResult = {
+  success: boolean;
+  tracking: string | null;
+  message: string | null;
+  raw: unknown;
+};
+
+type EcotrackPostingResultItem = {
+  orderId: number;
+  reference: string;
+  tracking: string | null;
+  status: 'skipped' | 'invalid' | 'created' | 'failed';
+  message: string;
+};
+
+export type EcotrackPostingSummary = {
+  provider: EcotrackProvider;
+  totalRequested: number;
+  eligible: number;
+  created: number;
+  skippedAlreadyPosted: number;
+  invalid: number;
+  failed: number;
+  rateLimits: EcotrackExtendedRateLimitSnapshot[];
+  results: EcotrackPostingResultItem[];
+};
+
+export type EcotrackOrderInput = {
+  row: typeof orders.$inferSelect;
+  record: OrderRecord;
+};
+
+export { persistEcotrackPostedOrder };
+
+type EcotrackPreviewResult = {
+  totalRequested: number;
+  eligible: EcotrackOrderPreviewItem[];
+  skipped: EcotrackOrderSkipItem[];
+  invalid: EcotrackOrderInvalidItem[];
+};
+
+export async function loadEcotrackOrderInputs(
+  db: Database,
+  mode: 'selected' | 'confirmed',
+  orderIds: number[],
+): Promise<EcotrackOrderInput[]> {
+  if (orderIds.length === 0) {
+    return [];
+  }
+
+  const orderRows = await db.query.orders.findMany({
+    where:
+      mode === 'confirmed'
+        ? and(eq(orders.inHouseStatus, ORDER_STATUS.CONFIRMED), inArray(orders.id, orderIds))
+        : inArray(orders.id, orderIds),
+    orderBy: [asc(orders.id)],
+  });
+
+  const historyRows = await db.query.orderStatusHistory.findMany({
+    where: inArray(
+      orderStatusHistory.orderId,
+      orderRows.map((row) => row.id),
+    ),
+    orderBy: [asc(orderStatusHistory.changedAt)],
+  });
+
+  const historyByOrderId = new Map<number, OrderStatusHistoryRecord[]>();
+  for (const row of historyRows) {
+    const list = historyByOrderId.get(row.orderId) ?? [];
+    list.push({
+      id: row.id,
+      status: coerceOrderStatus(row.status),
+      noAnswerCount: row.noAnswerCount,
+      changedAt: row.changedAt.toISOString(),
+      changedBy: row.changedBy,
+      changedByName: row.changedByName,
+    });
+    historyByOrderId.set(row.orderId, list);
+  }
+
+  const productLookup = await getOrderProductLookup(db, orderRows);
+  return orderRows.map((row) => ({
+    row,
+    record: toOrderRecord(row, historyByOrderId.get(row.id) ?? [], productLookup),
+  }));
+}
+
+export async function validateEcotrackToken(
+  options: {
+    fetchImpl?: typeof fetch;
+    env?: NodeJS.ProcessEnv;
+  } = {},
+) {
+  const result = await requestEcotrack({
+    path: '/validate/token',
+    method: 'GET',
+    fetchImpl: options.fetchImpl ?? fetch,
+    env: options.env ?? process.env,
+  });
+
+  return {
+    success: readEcotrackSuccess(result.payload),
+    message: readEcotrackMessage(result.payload),
+    rateLimit: result.rateLimit,
+    raw: result.payload,
+  };
+}
+
+function resolveEcotrackCommune(
+  catalog: EcotrackCatalogRecord,
+  state: number | null,
+  city: string | null,
+) {
+  if (state === null) {
+    return null;
+  }
+
+  const rawCity = normalizeEcotrackText(city);
+  if (!rawCity) {
+    return null;
+  }
+
+  return catalog.communes.find(
+    (entry) =>
+      entry.wilayaId === state &&
+      (String(entry.communeId) === rawCity || entry.name.toLowerCase() === rawCity.toLowerCase()),
+  );
+}
+
+export function buildEcotrackOrderPayload(
+  order: OrderRecord,
+  catalog: EcotrackCatalogRecord,
+): EcotrackOrderPayload {
+  const commune = resolveEcotrackCommune(catalog, order.state, order.city);
+  const normalizedAddress = normalizeEcotrackText(order.homeAddress);
+  const payload: EcotrackOrderPayload = {
+    reference: String(order.id),
+    nom_client: normalizeEcotrackText(order.fullName),
+    telephone: normalizeEcotrackPhone(order.phoneNumber1),
+    adresse: normalizedAddress || ECOTRACK_PLACEHOLDER_ADDRESS,
+    commune: commune?.name ?? normalizeEcotrackText(order.city),
+    code_wilaya: order.state === null ? '' : String(order.state),
+    montant: String(Math.round(order.totalAmount * 100) / 100),
+    type: '1',
+    stop_desk: order.delivery === 1 ? 1 : 0,
+  };
+
+  const secondaryPhone = normalizeEcotrackPhone(order.phoneNumber2);
+  if (secondaryPhone) {
+    payload.telephone_2 = secondaryPhone;
+  }
+
+  if (commune?.postalCode) {
+    payload.code_postal = commune.postalCode;
+  }
+
+  const note = normalizeEcotrackText(order.note);
+  if (note) {
+    payload.remarque = note.slice(0, 255);
+  }
+
+  const product = order.orderProducts
+    .map((item) => `${item.title} x${item.quantity}`)
+    .join(', ')
+    .trim();
+  if (product) {
+    payload.produit = product.slice(0, 255);
+  }
+
+  return payload;
+}
+
+export function classifyOrdersForEcotrackPosting(
+  items: EcotrackOrderInput[],
+  catalog: EcotrackCatalogRecord,
+): EcotrackPreviewResult {
+  const eligible: EcotrackOrderPreviewItem[] = [];
+  const skipped: EcotrackOrderSkipItem[] = [];
+  const invalid: EcotrackOrderInvalidItem[] = [];
+
+  for (const item of items) {
+    const { row, record } = item;
+    const customerName = record.fullName;
+
+    if (row.ecotrackReference || row.ecotrackTrackingNumber) {
+      skipped.push({ orderId: row.id, customerName, reason: 'already_posted' });
+      continue;
+    }
+
+    if (record.inHouseStatus !== ORDER_STATUS.CONFIRMED) {
+      invalid.push({
+        orderId: row.id,
+        customerName,
+        reason: 'status_not_confirmed',
+        message: 'Order must be confirmed before posting.',
+      });
+      continue;
+    }
+
+    if (!normalizeEcotrackText(record.fullName)) {
+      invalid.push({
+        orderId: row.id,
+        customerName,
+        reason: 'missing_name',
+        message: 'Customer name is required.',
+      });
+      continue;
+    }
+
+    if (!normalizeEcotrackPhone(record.phoneNumber1)) {
+      invalid.push({
+        orderId: row.id,
+        customerName,
+        reason: 'missing_phone',
+        message: 'Primary phone number is required.',
+      });
+      continue;
+    }
+
+    if (record.state === null) {
+      invalid.push({
+        orderId: row.id,
+        customerName,
+        reason: 'missing_wilaya',
+        message: 'Wilaya is required.',
+      });
+      continue;
+    }
+
+    if (!normalizeEcotrackText(record.city)) {
+      invalid.push({
+        orderId: row.id,
+        customerName,
+        reason: 'missing_commune',
+        message: 'Commune is required.',
+      });
+      continue;
+    }
+
+    const commune = resolveEcotrackCommune(catalog, record.state, record.city);
+    if (!commune) {
+      invalid.push({
+        orderId: row.id,
+        customerName,
+        reason: 'invalid_commune',
+        message: 'Commune is not active or could not be resolved.',
+      });
+      continue;
+    }
+
+    if (record.delivery !== 1 && !normalizeEcotrackText(record.homeAddress)) {
+      invalid.push({
+        orderId: row.id,
+        customerName,
+        reason: 'missing_address',
+        message: 'Delivery address is required.',
+      });
+      continue;
+    }
+
+    const payload = buildEcotrackOrderPayload(record, catalog);
+    eligible.push({
+      orderId: row.id,
+      customerName,
+      destination: `${payload.commune}, ${payload.code_wilaya}`,
+      amount: payload.montant,
+      payload,
+    });
+  }
+
+  return {
+    totalRequested: items.length,
+    eligible,
+    skipped,
+    invalid,
+  };
+}
+
+export async function createEcotrackOrdersBatch(
+  ordersBatch: EcotrackOrderPayload[],
+  options: {
+    fetchImpl?: typeof fetch;
+    env?: NodeJS.ProcessEnv;
+  } = {},
+) {
+  const keyedOrders = Object.fromEntries(ordersBatch.map((order, index) => [String(index), order]));
+  const result = await requestEcotrack({
+    path: '/create/orders',
+    method: 'POST',
+    json: { orders: keyedOrders },
+    fetchImpl: options.fetchImpl ?? fetch,
+    env: options.env ?? process.env,
+  });
+
+  const payloadObject =
+    typeof result.payload === 'object' && result.payload !== null
+      ? (result.payload as Record<string, unknown>)
+      : {};
+  const rawResults =
+    typeof payloadObject.results === 'object' && payloadObject.results !== null
+      ? (payloadObject.results as Record<string, unknown>)
+      : {};
+  const normalized = new Map<string, EcotrackCreateOrderResult>();
+
+  for (const [index, order] of ordersBatch.entries()) {
+    const raw = rawResults[order.reference] ?? rawResults[String(index)];
+    normalized.set(order.reference, {
+      success: readEcotrackSuccess(raw),
+      tracking: readEcotrackTracking(raw),
+      message:
+        readEcotrackMessage(raw) ??
+        (readEcotrackSuccess(raw)
+          ? null
+          : buildEcotrackResultMessage(raw, 'Ecotrack rejected the order.')),
+      raw,
+    });
+  }
+
+  return {
+    rateLimit: result.rateLimit,
+    results: normalized,
+    raw: result.payload,
+  };
+}
+
+export async function buildEcotrackPostingPreview(
+  db: Database,
+  mode: 'selected' | 'confirmed',
+  orderIds: number[],
+) {
+  const items = await loadEcotrackOrderInputs(db, mode, orderIds);
+  const catalog = await readEcotrackCatalog(db);
+  return classifyOrdersForEcotrackPosting(items, catalog);
+}
+
+function createPostingSummary(
+  preview: EcotrackPreviewResult,
+  provider: EcotrackProvider,
+): EcotrackPostingSummary {
+  return {
+    provider,
+    totalRequested: preview.totalRequested,
+    eligible: preview.eligible.length,
+    created: 0,
+    skippedAlreadyPosted: preview.skipped.length,
+    invalid: preview.invalid.length,
+    failed: 0,
+    rateLimits: [],
+    results: [
+      ...preview.skipped.map((item): EcotrackPostingResultItem => ({
+        orderId: item.orderId,
+        reference: String(item.orderId),
+        tracking: null,
+        status: 'skipped',
+        message: item.reason,
+      })),
+      ...preview.invalid.map((item): EcotrackPostingResultItem => ({
+        orderId: item.orderId,
+        reference: String(item.orderId),
+        tracking: null,
+        status: 'invalid',
+        message: item.message,
+      })),
+    ],
+  };
+}
+
+type EcotrackPostingHooks = {
+  throwIfCancelled?: () => Promise<void>;
+  updateProgress?: (progress: { phase: string; current: number; total: number }) => Promise<void>;
+  updateSummary?: (summary: EcotrackPostingSummary) => Promise<void>;
+};
+
+function withLatestRateLimit(
+  summary: EcotrackPostingSummary,
+  rateLimit: EcotrackExtendedRateLimitSnapshot,
+) {
+  summary.rateLimits = [
+    ...summary.rateLimits.filter((entry) => entry.path !== rateLimit.path),
+    rateLimit,
+  ];
+}
+
+async function flushPostingState(
+  hooks: EcotrackPostingHooks,
+  phase: string,
+  current: number,
+  total: number,
+  summary: EcotrackPostingSummary,
+) {
+  await hooks.updateProgress?.({ phase, current, total });
+  await hooks.updateSummary?.(summary);
+}
+
+export async function postOrdersToEcotrack(
+  db: Database,
+  items: EcotrackOrderInput[],
+  catalog: EcotrackCatalogRecord,
+  actor: { email?: string | null; name?: string | null },
+  options: {
+    fetchImpl?: typeof fetch;
+    env?: NodeJS.ProcessEnv;
+    batchSize?: number;
+    mutatingDelayMs?: number;
+    provider?: EcotrackProvider;
+  } & EcotrackPostingHooks = {},
+) {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const provider = options.provider ?? 'delivro';
+  const env = getEcotrackProviderEnv(provider, options.env ?? process.env);
+  const batchSize = Math.min(Math.max(options.batchSize ?? 100, 1), 100);
+  const mutatingDelayMs = Math.max(
+    options.mutatingDelayMs ?? Number(env.ECOTRACK_MUTATING_DELAY_MS ?? 250),
+    0,
+  );
+  const preview = classifyOrdersForEcotrackPosting(items, catalog);
+  const summary = createPostingSummary(preview, provider);
+  const inputById = new Map(items.map((item) => [item.row.id, item]));
+
+  await flushPostingState(options, 'validating-token', 0, preview.eligible.length, summary);
+  await options.throwIfCancelled?.();
+
+  const tokenValidation = await validateEcotrackToken({ fetchImpl, env });
+  withLatestRateLimit(summary, tokenValidation.rateLimit);
+  await options.updateSummary?.(summary);
+
+  if (!tokenValidation.success) {
+    throw new Error(tokenValidation.message ?? 'ECOTRACK token validation failed.');
+  }
+
+  await flushPostingState(
+    options,
+    'classifying',
+    preview.eligible.length,
+    preview.eligible.length,
+    summary,
+  );
+
+  const batches = chunkArray(preview.eligible, batchSize);
+  let createdCount = 0;
+  let processedCount = 0;
+
+  for (const [batchIndex, batch] of batches.entries()) {
+    await options.throwIfCancelled?.();
+    await options.updateProgress?.({
+      phase: 'creating',
+      current: processedCount,
+      total: preview.eligible.length,
+    });
+
+    const createResponse = await createEcotrackOrdersBatch(
+      batch.map((item) => item.payload),
+      { fetchImpl, env },
+    );
+    withLatestRateLimit(summary, createResponse.rateLimit);
+    await options.updateSummary?.(summary);
+
+    for (const batchItem of batch) {
+      await options.throwIfCancelled?.();
+      const createResult = createResponse.results.get(batchItem.payload.reference) ?? {
+        success: false,
+        tracking: null,
+        message: 'Ecotrack did not return a result for this order.',
+        raw: null,
+      };
+
+      if (createResult.success && createResult.tracking) {
+        createdCount += 1;
+        summary.created = createdCount;
+        summary.results.push({
+          orderId: batchItem.orderId,
+          reference: batchItem.payload.reference,
+          tracking: createResult.tracking,
+          status: 'created',
+          message: createResult.message ?? 'Created successfully.',
+        });
+
+        await options.updateProgress?.({
+          phase: 'persisting',
+          current: createdCount - 1,
+          total: preview.eligible.length,
+        });
+        const input = inputById.get(batchItem.orderId);
+        if (!input) {
+          throw new Error(`Missing order input for Ecotrack order ${batchItem.orderId}.`);
+        }
+
+        await persistEcotrackPostedOrder(db, input, actor, createResult, provider);
+      } else {
+        summary.failed += 1;
+        summary.results.push({
+          orderId: batchItem.orderId,
+          reference: batchItem.payload.reference,
+          tracking: createResult.tracking,
+          status: 'failed',
+          message: createResult.message ?? 'Ecotrack rejected the order.',
+        });
+      }
+
+      processedCount += 1;
+      await options.updateSummary?.(summary);
+    }
+
+    await options.updateProgress?.({
+      phase: 'creating',
+      current: processedCount,
+      total: preview.eligible.length,
+    });
+    if (mutatingDelayMs > 0 && batchIndex < batches.length - 1) {
+      await sleep(mutatingDelayMs);
+    }
+  }
+
+  await flushPostingState(
+    options,
+    'completed',
+    preview.eligible.length,
+    preview.eligible.length,
+    summary,
+  );
+  return summary;
+}

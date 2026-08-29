@@ -228,11 +228,11 @@ function queryConditions(input: ReturnType<typeof normalizeOrderQuery>) {
     if (search) conditions.push(search);
   }
   if (input.currentInHouseStatuses.length > 0) {
-    conditions.push(inArray(orders.confirmed, statusValues(input.currentInHouseStatuses)));
+    conditions.push(inArray(orders.inHouseStatus, statusValues(input.currentInHouseStatuses)));
   }
   if (input.noAnswerCount !== undefined) {
     if (input.currentInHouseStatuses.length === 0) {
-      conditions.push(eq(orders.confirmed, ADMIN_AI_IN_HOUSE_ORDER_STATUS_VALUES.no_answer));
+      conditions.push(eq(orders.inHouseStatus, ADMIN_AI_IN_HOUSE_ORDER_STATUS_VALUES.no_answer));
     }
     conditions.push(eq(orders.noAnswerCount, input.noAnswerCount));
   }
@@ -279,7 +279,7 @@ function orderBy(input: ReturnType<typeof normalizeOrderQuery>) {
     input.sortBy === 'customerName'
       ? sql`coalesce(nullif(trim(concat_ws(' ', ${orders.firstName}, ${orders.lastName})), ''), ${orders.phoneNumber1})`
       : input.sortBy === 'inHouseStatus'
-        ? orders.confirmed
+        ? orders.inHouseStatus
         : input.sortBy === 'totalAmount'
           ? orders.totalAmount
           : orders.createdAt;
@@ -413,7 +413,7 @@ export async function queryAdminOrders(raw: z.input<typeof adminAiOrderQuerySche
       sort: { by: input.sortBy, direction: input.sortDirection },
     },
     items: rows.map((row) => {
-      const inHouseStatus = coerceOrderStatus(row.order.confirmed);
+      const inHouseStatus = coerceOrderStatus(row.order.inHouseStatus);
       return {
         id: row.order.id,
         createdAt: row.order.createdAt.toISOString(),
@@ -496,7 +496,7 @@ export async function inspectAdminOrderDetails(raw: z.input<typeof adminAiOrderI
     items: loadedOrders.flatMap((item) => {
       if (!item) return [];
       const {
-        confirmed,
+        inHouseStatus,
         statusHistory,
         ecotrackTrackingNumber: _ecotrackTrackingNumber,
         hasStatusHistory: _hasStatusHistory,
@@ -507,7 +507,7 @@ export async function inspectAdminOrderDetails(raw: z.input<typeof adminAiOrderI
       return [
         {
           ...order,
-          inHouseStatus: adminAiInHouseOrderStatus(confirmed, item.noAnswerCount),
+          inHouseStatus: adminAiInHouseOrderStatus(inHouseStatus, item.noAnswerCount),
           inHouseStatusHistory: statusHistory.map(({ status, ...entry }) => ({
             ...entry,
             inHouseStatus: adminAiInHouseOrderStatus(status, entry.noAnswerCount),

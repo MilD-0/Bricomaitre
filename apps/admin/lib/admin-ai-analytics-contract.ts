@@ -1,15 +1,15 @@
-import { ANALYTICS2_FACT_SEMANTICS_VERSION } from './analytics2-fact-contract';
+import { ANALYTICS_FACT_SEMANTICS_VERSION } from './analytics-fact-contract';
 import type {
-  Analytics2EffectiveRange,
-  Analytics2Metric,
-  Analytics2Payload,
-  Analytics2Source,
-  Analytics2View,
-} from './analytics2';
+  AnalyticsEffectiveRange,
+  AnalyticsMetric,
+  AnalyticsPayload,
+  AnalyticsSource,
+  AnalyticsView,
+} from './analytics';
 
 type MetricDefinition = {
   definition: string;
-  sources: Analytics2Source['key'][];
+  sources: AnalyticsSource['key'][];
   dateBasis: string;
   assumptions?: string[];
   maturity?: string;
@@ -46,10 +46,10 @@ export const ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE = {
   ],
 } as const;
 
-export type AdminAiAnalyticsMetric = Analytics2Metric & {
+export type AdminAiAnalyticsMetric = AnalyticsMetric & {
   name: string;
   definition: string;
-  sources: Analytics2Source['key'][];
+  sources: AnalyticsSource['key'][];
   requestedRange: { startDate: string | null; endDate: string };
   effectiveRange: { startDate: string | null; endDate: string };
   dateBasis: string;
@@ -253,7 +253,7 @@ const sharedMetricDefinitions: Record<string, MetricDefinition> = {
   },
 };
 
-const viewOverrides: Partial<Record<`${Analytics2View}.${string}`, Partial<MetricDefinition>>> = {
+const viewOverrides: Partial<Record<`${AnalyticsView}.${string}`, Partial<MetricDefinition>>> = {
   'acquisition.adCost': {
     dateBasis: 'Meta reporting date.',
   },
@@ -263,7 +263,7 @@ const viewOverrides: Partial<Record<`${Analytics2View}.${string}`, Partial<Metri
   },
 };
 
-function definitionFor(view: Analytics2View, key: string): MetricDefinition {
+function definitionFor(view: AnalyticsView, key: string): MetricDefinition {
   const shared = sharedMetricDefinitions[key] ?? {
     definition: `Canonical ${key} metric from the ${view} Analytics workspace.`,
     sources: [],
@@ -284,7 +284,7 @@ function numberAt(value: unknown, path: string[]): number | null {
   return typeof current === 'number' && Number.isFinite(current) ? current : null;
 }
 
-function relevantRange(view: Analytics2View, key: string) {
+function relevantRange(view: AnalyticsView, key: string) {
   if (view === 'command') {
     if (key === 'storefrontConversion') return 'storefront';
     if (key === 'automaticPaidProfit' || key === 'postedOrders' || key === 'paidOrders') {
@@ -302,7 +302,7 @@ function relevantRange(view: Analytics2View, key: string) {
   return 'assumptions';
 }
 
-function sourceAsOf(payload: Analytics2Payload, keys: Analytics2Source['key'][]) {
+function sourceAsOf(payload: AnalyticsPayload, keys: AnalyticsSource['key'][]) {
   const dates = payload.sources
     .filter((source) => keys.includes(source.key) && source.throughDate)
     .map((source) => source.throughDate as string)
@@ -310,7 +310,7 @@ function sourceAsOf(payload: Analytics2Payload, keys: Analytics2Source['key'][])
   return dates.at(0) ?? null;
 }
 
-function sourceWarning(payload: Analytics2Payload, keys: Analytics2Source['key'][]) {
+function sourceWarning(payload: AnalyticsPayload, keys: AnalyticsSource['key'][]) {
   const source = payload.sources.find(
     (item) =>
       keys.includes(item.key) &&
@@ -321,7 +321,7 @@ function sourceWarning(payload: Analytics2Payload, keys: Analytics2Source['key']
     : null;
 }
 
-function exactCostCoverage(payload: Analytics2Payload, key: string) {
+function exactCostCoverage(payload: AnalyticsPayload, key: string) {
   if (key === 'projectedCoverage') {
     const metric = record(payload.data)?.metrics;
     const rows = Array.isArray(metric) ? metric : [];
@@ -336,7 +336,7 @@ function exactCostCoverage(payload: Analytics2Payload, key: string) {
     );
   }
   if (['trueProfit', 'profitX', 'adjustedProfit', 'grossProfit'].includes(key)) {
-    const paths: Partial<Record<Analytics2View, string[]>> = {
+    const paths: Partial<Record<AnalyticsView, string[]>> = {
       command: ['economics', 'coverage', 'projectedCoveragePct'],
       money: ['coverage', 'projectedCoveragePct'],
       acquisition: ['coverage', 'projectedCoveragePct'],
@@ -348,7 +348,7 @@ function exactCostCoverage(payload: Analytics2Payload, key: string) {
   return null;
 }
 
-function attributionCoverage(payload: Analytics2Payload, key: string) {
+function attributionCoverage(payload: AnalyticsPayload, key: string) {
   if (
     payload.view !== 'acquisition' ||
     !['postedOrders', 'costPerPosted', 'costPerDelivered'].includes(key)
@@ -359,8 +359,8 @@ function attributionCoverage(payload: Analytics2Payload, key: string) {
 }
 
 function metricWarning(
-  payload: Analytics2Payload,
-  metric: Analytics2Metric,
+  payload: AnalyticsPayload,
+  metric: AnalyticsMetric,
   definition: MetricDefinition,
   coveragePct: number | null,
 ) {
@@ -382,8 +382,8 @@ function metricWarning(
 }
 
 function metricComparison(
-  payload: Analytics2Payload,
-  metric: Analytics2Metric,
+  payload: AnalyticsPayload,
+  metric: AnalyticsMetric,
   definition: MetricDefinition,
 ): Pick<AdminAiAnalyticsMetric, 'comparisonStatus' | 'comparisonReason'> {
   if (metric.previous != null) {
@@ -412,9 +412,9 @@ function metricComparison(
 }
 
 function effectiveRangeFor(
-  payload: Analytics2Payload,
-  metric: Analytics2Metric,
-): Analytics2EffectiveRange {
+  payload: AnalyticsPayload,
+  metric: AnalyticsMetric,
+): AnalyticsEffectiveRange {
   return (
     payload.effectiveRanges.find(
       (range) => range.key === relevantRange(payload.view, metric.key),
@@ -427,11 +427,11 @@ function effectiveRangeFor(
   );
 }
 
-export function analyticsMetricsForAssistant(payload: Analytics2Payload): AdminAiAnalyticsMetric[] {
+export function analyticsMetricsForAssistant(payload: AnalyticsPayload): AdminAiAnalyticsMetric[] {
   const metrics = record(payload.data)?.metrics;
   if (!Array.isArray(metrics)) return [];
   return metrics.flatMap((value) => {
-    const metric = record(value) as Analytics2Metric | null;
+    const metric = record(value) as AnalyticsMetric | null;
     if (!metric || typeof metric.key !== 'string') return [];
     const definition = definitionFor(payload.view, metric.key);
     const effectiveRange = effectiveRangeFor(payload, metric);
@@ -470,7 +470,7 @@ export function analyticsMetricsForAssistant(payload: Analytics2Payload): AdminA
 }
 
 export const ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT = {
-  semanticsVersion: ANALYTICS2_FACT_SEMANTICS_VERSION,
+  semanticsVersion: ANALYTICS_FACT_SEMANTICS_VERSION,
   timezone: 'Africa/Algiers',
   lifecycle: {
     submitted: 'Incoming storefront order; never call it a completed sale or revenue.',

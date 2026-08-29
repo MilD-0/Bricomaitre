@@ -1,4 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  createProduct: vi.fn(),
+  startOrderExport: vi.fn(),
+  updateAnnouncement: vi.fn(),
+}));
+
+vi.mock('./admin-ai-products', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./admin-ai-products')>()),
+  createAdminAiProduct: mocks.createProduct,
+}));
+vi.mock('./admin-ai-order-exports', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./admin-ai-order-exports')>()),
+  startAdminAiOrderExport: mocks.startOrderExport,
+}));
+vi.mock('./admin-ai-storefront', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./admin-ai-storefront')>()),
+  updateAdminStorefrontAnnouncement: mocks.updateAnnouncement,
+}));
 
 import { buildAdminAiTools } from './admin-ai-tools';
 
@@ -12,6 +31,8 @@ const allPermissions = [
 ] as const;
 
 describe('Admin AI live tool construction', () => {
+  beforeEach(() => vi.clearAllMocks());
+
   it('constructs only the decided live surface', () => {
     const tools = buildAdminAiTools({
       permissions: allPermissions,
@@ -114,7 +135,7 @@ describe('Admin AI live tool construction', () => {
       runtime: { kind: 'evaluation' },
     });
     const input = { title: 'Evaluation drill', price: 12_345 };
-    const createProduct = tools.create_product as {
+    const createProduct = tools.create_product as unknown as {
       description: string;
       execute: (value: unknown) => Promise<unknown> | unknown;
     };
@@ -126,5 +147,45 @@ describe('Admin AI live tool construction', () => {
       reason: 'Read-only evaluation: no application state was changed.',
       receivedInput: input,
     });
+  });
+
+  it('hands live actor and job context to canonical workflows', async () => {
+    const actor = { email: 'operator@bricomaitre.com', name: 'Operator' };
+    const now = new Date('2026-08-29T08:00:00.000Z');
+    mocks.createProduct.mockResolvedValue({ ok: true });
+    mocks.startOrderExport.mockResolvedValue({ ok: true });
+    mocks.updateAnnouncement.mockResolvedValue({ ok: true });
+    const tools = buildAdminAiTools({
+      permissions: ['products_write', 'orders_write', 'settings_manage'],
+      locale: 'en',
+      now,
+      runtime: {
+        kind: 'live',
+        actorId: actor.email,
+        actor,
+        conversationId: 101,
+        autoAcceptProposals: false,
+      },
+    }) as unknown as Record<string, { execute: (input: unknown) => unknown }>;
+
+    const product = { title: 'Evaluation drill', price: 12_345 };
+    await tools.create_product.execute(product);
+    await tools.start_order_export.execute({ mode: 'confirmed', orderIds: [] });
+    await tools.update_storefront_announcement.execute({
+      messageFr: 'Bienvenue',
+      messageAr: 'مرحبا',
+      active: true,
+    });
+
+    expect(mocks.createProduct).toHaveBeenCalledWith({ product }, actor);
+    expect(mocks.startOrderExport).toHaveBeenCalledWith(
+      { mode: 'confirmed', orderIds: [] },
+      { ownerKey: actor.email, conversationId: 101 },
+      now,
+    );
+    expect(mocks.updateAnnouncement).toHaveBeenCalledWith(
+      { messageFr: 'Bienvenue', messageAr: 'مرحبا', active: true },
+      actor.email,
+    );
   });
 });

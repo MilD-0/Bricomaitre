@@ -56,7 +56,7 @@ export type AssetsWorkspaceCopy = {
   cta: string;
   ctaAr: string;
   link: string;
-  pinProducts: string;
+  recommendationPriority: string;
   products: string;
   brands: string;
   categories: string;
@@ -285,7 +285,9 @@ function GroupEditor({
   const [productIds, setProductIds] = React.useState(item?.productIds ?? []);
   const [brandIds, setBrandIds] = React.useState(item?.brandIds ?? []);
   const [categoryIds, setCategoryIds] = React.useState(item?.categoryIds ?? []);
-  const [pin, setPin] = React.useState(item?.showAtTopOfProductsPage ?? false);
+  const [prioritizeRecommendations, setPrioritizeRecommendations] = React.useState(
+    item?.prioritizeRecommendations ?? false,
+  );
   const [active, setActive] = React.useState(item?.active ?? true);
   const [error, setError] = React.useState('');
 
@@ -299,7 +301,7 @@ function GroupEditor({
       productIds,
       brandIds,
       categoryIds,
-      showAtTopOfProductsPage: pin,
+      prioritizeRecommendations,
       active,
     });
     if (!parsed.success) {
@@ -389,8 +391,11 @@ function GroupEditor({
           />
         </div>
         <label className="flex items-center justify-between border-b border-border/60 pb-3 text-sm font-medium">
-          {copy.pinProducts}
-          <Switch checked={pin} onCheckedChange={setPin} />
+          {copy.recommendationPriority}
+          <Switch
+            checked={prioritizeRecommendations}
+            onCheckedChange={setPrioritizeRecommendations}
+          />
         </label>
         <label className="flex items-center justify-between border-b border-border/60 pb-3 text-sm font-medium">
           {copy.active}

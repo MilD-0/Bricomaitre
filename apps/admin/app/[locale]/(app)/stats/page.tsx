@@ -1,4 +1,4 @@
-import { StatsRoutePage } from '../../../../components/analytics2/analytics2-route-page';
+import { StatsRoutePage } from '../../../../components/analytics/analytics-route-page';
 
 export default async function StatsPage({
   params,

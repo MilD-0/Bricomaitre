@@ -4,9 +4,10 @@ import { withSentryConfig } from '@sentry/nextjs';
 
 import { getStorefrontImageOrigins, getStorefrontRemoteImagePatterns } from './lib/product-images';
 import { getAllowedDevOrigins } from './lib/dev-origins';
+import { buildStorefrontContentSecurityPolicy } from './lib/content-security-policy';
 
 const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
-const configuredImageSources = getStorefrontImageOrigins().join(' ');
+const configuredImageSources = getStorefrontImageOrigins();
 
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -19,17 +20,7 @@ const securityHeaders = [
   },
   {
     key: 'Content-Security-Policy',
-    value: [
-      "default-src 'self'",
-      "base-uri 'self'",
-      "frame-ancestors 'none'",
-      "form-action 'self'",
-      `img-src 'self' data: blob: https:${configuredImageSources ? ` ${configuredImageSources}` : ''}`,
-      "font-src 'self' data: https:",
-      "style-src 'self' 'unsafe-inline' https:",
-      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''} https:`,
-      "connect-src 'self' https: wss:",
-    ].join('; '),
+    value: buildStorefrontContentSecurityPolicy(configuredImageSources),
   },
 ];
 

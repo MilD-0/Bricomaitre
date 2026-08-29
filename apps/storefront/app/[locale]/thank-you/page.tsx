@@ -3,6 +3,8 @@ import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 
+import '../../styles/checkout.css';
+
 import { PageShell } from '@/components/page-shell';
 import { ThankYouConfirmation } from '@/components/thank-you-confirmation';
 import { ThankYouPageSkeleton } from '@/components/storefront-skeletons';

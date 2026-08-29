@@ -26,7 +26,10 @@ import { applyRateLimit } from '@bric/runtime/rate-limit';
 import { getRedis } from '@bric/runtime/redis';
 import { storefrontOrderCreateRequestSchema } from '@bric/storefront-core/contracts';
 import { claimStorefrontOrderIdempotency } from '@bric/storefront-core/order-idempotency';
-import { ingestStorefrontAnalyticsEvent } from '@bric/storefront-core/analytics';
+import {
+  ingestStorefrontAnalyticsEvent,
+  type StorefrontAnalyticsEvent,
+} from '@bric/storefront-core/analytics';
 import {
   deleteExpiredAnalyticsEventsBatch,
   deleteExpiredAnalyticsSessionsBatch,
@@ -65,6 +68,31 @@ describe('real PostgreSQL and Redis contracts', () => {
       analyticsCategoryIndex: 'idx_analytics_events_category',
       metaAnalyticsEventIndex: 'idx_meta_event_outbox_analytics_event',
     });
+  });
+
+  it('keeps stable catalog values protected by database constraints', async () => {
+    const expected = [
+      'brands_conversion_rate_nonnegative_check',
+      'brands_engagement_counters_nonnegative_check',
+      'brands_popularity_score_nonnegative_check',
+      'categories_conversion_rate_nonnegative_check',
+      'categories_engagement_counters_nonnegative_check',
+      'categories_popularity_score_nonnegative_check',
+      'products_availability_status_check',
+      'products_conversion_rate_nonnegative_check',
+      'products_engagement_counters_nonnegative_check',
+      'products_inventory_quantity_nonnegative_check',
+      'products_old_price_nonnegative_check',
+      'products_popularity_score_nonnegative_check',
+      'products_price_nonnegative_check',
+      'products_purchase_price_nonnegative_check',
+    ];
+    const result = await getPool().query<{ conname: string }>(
+      `select conname from pg_constraint where conname = any($1::text[]) order by conname`,
+      [expected],
+    );
+
+    expect(result.rows.map((row) => row.conname)).toEqual(expected);
   });
 
   it('preserves idempotency under concurrent Redis claims', async () => {
@@ -186,7 +214,7 @@ describe('real PostgreSQL and Redis contracts', () => {
     let orderId: number | null = null;
     let legacyOrderId: number | null = null;
 
-    const commonEvent = {
+    const commonEvent: Omit<StorefrontAnalyticsEvent, 'eventId' | 'eventName'> = {
       eventVersion: 1 as const,
       visitId,
       journeyId,
@@ -201,6 +229,18 @@ describe('real PostgreSQL and Redis contracts', () => {
       utmCampaign: campaignId,
       utmTerm: adsetId,
       utmContent: adId,
+      gaEventName: null,
+      productId: null,
+      productSlug: null,
+      categoryId: null,
+      categorySlug: null,
+      brandId: null,
+      brandSlug: null,
+      orderId: null,
+      searchTerm: null,
+      quantity: null,
+      value: null,
+      currency: 'DZD',
       metadata: {
         storefrontProject: 'storefront',
         sessionStartedAt: capturedAtIso,

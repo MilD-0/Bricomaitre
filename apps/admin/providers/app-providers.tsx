@@ -30,16 +30,18 @@ export function AppProviders({
   children,
   locale,
   messages,
+  nonce,
 }: {
   children: React.ReactNode;
   locale: string;
   messages: Record<string, string>;
+  nonce?: string;
 }) {
   const [queryClient] = useState(() => new QueryClient());
 
   return (
     <MotionProvider>
-      <ThemeProvider>
+      <ThemeProvider nonce={nonce}>
         <QueryClientProvider client={queryClient}>
           <NextIntlClientProvider locale={locale} messages={messages} timeZone="UTC">
             <AdminAiMutationSync />

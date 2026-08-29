@@ -4,11 +4,12 @@ import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 
 const defaultStorageState = resolve(process.cwd(), '../../ops/runtime/admin-playwright-state.json');
+const storageState = process.env.ADMIN_PLAYWRIGHT_STORAGE_STATE?.trim() || defaultStorageState;
 
 test.beforeAll(() => {
   expect(
-    existsSync(defaultStorageState),
-    `Missing authenticated Admin browser state at ${defaultStorageState}.`,
+    existsSync(storageState),
+    `Missing authenticated Admin browser state at ${storageState}.`,
   ).toBe(true);
 });
 

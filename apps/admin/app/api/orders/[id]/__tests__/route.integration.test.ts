@@ -231,10 +231,10 @@ describe('app/api/orders/[id]/route', () => {
       state: 31,
       city: 'Bir El Djir',
       homeAddress: 'Street 5',
-      delPr: '150.00',
+      deliveryFee: '150.00',
       price: '1200.00',
       note: null,
-      confirmed: 2,
+      inHouseStatus: 2,
       noAnswerCount: 0,
       confirmedBy: 'admin@example.com',
       confirmedByName: 'Admin',
@@ -336,7 +336,7 @@ describe('app/api/orders/[id]/route', () => {
     vi.spyOn(orderPatchSchema, 'safeParse').mockReturnValue({
       success: true,
       data: {
-        confirmed: 2,
+        inHouseStatus: 2,
         noAnswerCount: 0,
         note: 'Handle with care',
       },
@@ -353,10 +353,10 @@ describe('app/api/orders/[id]/route', () => {
       state: 31,
       city: 'Bir El Djir',
       homeAddress: 'Street 5',
-      delPr: '150.00',
+      deliveryFee: '150.00',
       price: '1200.00',
       note: null,
-      confirmed: 0,
+      inHouseStatus: 0,
       noAnswerCount: 0,
       confirmedBy: null,
       confirmedByName: null,
@@ -411,7 +411,7 @@ describe('app/api/orders/[id]/route', () => {
         {
           ...existingOrder,
           note: 'Handle with care',
-          confirmed: 2,
+          inHouseStatus: 2,
           noAnswerCount: 0,
           confirmedBy: 'admin@example.com',
           confirmedByName: 'Admin',
@@ -438,7 +438,7 @@ describe('app/api/orders/[id]/route', () => {
     const response = await PATCH(
       new NextRequest('http://localhost/api/orders/7', {
         method: 'PATCH',
-        body: JSON.stringify({ confirmed: 2, noAnswerCount: 0, note: 'Handle with care' }),
+        body: JSON.stringify({ inHouseStatus: 2, noAnswerCount: 0, note: 'Handle with care' }),
         headers: { 'content-type': 'application/json' },
       }),
       { params: Promise.resolve({ id: '7' }) },
@@ -477,7 +477,7 @@ describe('app/api/orders/[id]/route', () => {
         ok: true,
         item: expect.objectContaining({
           id: 7,
-          confirmed: 2,
+          inHouseStatus: 2,
           noAnswerCount: 0,
           note: 'Handle with care',
           subtotalOverride: 1200,
@@ -506,7 +506,7 @@ describe('app/api/orders/[id]/route', () => {
     hasDbMock.mockReturnValue(true);
     vi.spyOn(orderPatchSchema, 'safeParse').mockReturnValue({
       success: true,
-      data: { confirmed: 4, noAnswerCount: 0 },
+      data: { inHouseStatus: 4, noAnswerCount: 0 },
     } as never);
     const existingOrder = {
       id: 7,
@@ -519,10 +519,10 @@ describe('app/api/orders/[id]/route', () => {
       state: 31,
       city: 'Bir El Djir',
       homeAddress: 'Street 5',
-      delPr: '150.00',
+      deliveryFee: '150.00',
       price: '1200.00',
       note: null,
-      confirmed: 2,
+      inHouseStatus: 2,
       noAnswerCount: 0,
       confirmedBy: 'admin@example.com',
       confirmedByName: 'Admin',
@@ -582,7 +582,7 @@ describe('app/api/orders/[id]/route', () => {
         update: () => ({
           set: (values: Record<string, unknown>) => ({
             where: () => ({
-              returning: () => Promise.resolve([{ ...existingOrder, ...values, confirmed: 4 }]),
+              returning: () => Promise.resolve([{ ...existingOrder, ...values, inHouseStatus: 4 }]),
             }),
           }),
         }),
@@ -595,7 +595,7 @@ describe('app/api/orders/[id]/route', () => {
     const response = await PATCH(
       new NextRequest('http://localhost/api/orders/7', {
         method: 'PATCH',
-        body: JSON.stringify({ confirmed: 4, noAnswerCount: 0 }),
+        body: JSON.stringify({ inHouseStatus: 4, noAnswerCount: 0 }),
         headers: { 'content-type': 'application/json' },
       }),
       { params: Promise.resolve({ id: '7' }) },
@@ -627,7 +627,7 @@ describe('app/api/orders/[id]/route', () => {
     hasDbMock.mockReturnValue(true);
     vi.spyOn(orderPatchSchema, 'safeParse').mockReturnValue({
       success: true,
-      data: { confirmed: 10, noAnswerCount: 0 },
+      data: { inHouseStatus: 10, noAnswerCount: 0 },
     } as never);
     const existingOrder = {
       id: 7,
@@ -640,10 +640,10 @@ describe('app/api/orders/[id]/route', () => {
       state: 31,
       city: 'Bir El Djir',
       homeAddress: 'Street 5',
-      delPr: '150.00',
+      deliveryFee: '150.00',
       price: '1200.00',
       note: null,
-      confirmed: 2,
+      inHouseStatus: 2,
       noAnswerCount: 0,
       confirmedBy: 'admin@example.com',
       confirmedByName: 'Admin',
@@ -682,7 +682,8 @@ describe('app/api/orders/[id]/route', () => {
         update: () => ({
           set: (values: Record<string, unknown>) => ({
             where: () => ({
-              returning: () => Promise.resolve([{ ...existingOrder, ...values, confirmed: 10 }]),
+              returning: () =>
+                Promise.resolve([{ ...existingOrder, ...values, inHouseStatus: 10 }]),
             }),
           }),
         }),
@@ -695,7 +696,7 @@ describe('app/api/orders/[id]/route', () => {
     const response = await PATCH(
       new NextRequest('http://localhost/api/orders/7', {
         method: 'PATCH',
-        body: JSON.stringify({ confirmed: 10, noAnswerCount: 0 }),
+        body: JSON.stringify({ inHouseStatus: 10, noAnswerCount: 0 }),
         headers: { 'content-type': 'application/json' },
       }),
       { params: Promise.resolve({ id: '7' }) },
@@ -730,10 +731,10 @@ describe('app/api/orders/[id]/route', () => {
       state: 31,
       city: 'Bir El Djir',
       homeAddress: 'Street 5',
-      delPr: '150.00',
+      deliveryFee: '150.00',
       price: '1200.00',
       note: null,
-      confirmed: 0,
+      inHouseStatus: 0,
       noAnswerCount: 0,
       confirmedBy: null,
       confirmedByName: null,
@@ -839,10 +840,10 @@ describe('app/api/orders/[id]/route', () => {
       state: null,
       city: null,
       homeAddress: null,
-      delPr: null,
+      deliveryFee: null,
       price: null,
       note: null,
-      confirmed: 0,
+      inHouseStatus: 0,
       noAnswerCount: 0,
       confirmedBy: null,
       confirmedByName: null,
@@ -892,7 +893,7 @@ describe('app/api/orders/[id]/route', () => {
           state: 31,
           city: 'Bir El Djir',
           homeAddress: 'Street 5',
-          delPr: '400.00',
+          deliveryFee: '400.00',
           variant: null,
           updatedAt: new Date('2026-03-02T11:00:00.000Z'),
         },
@@ -964,10 +965,10 @@ describe('app/api/orders/[id]/route', () => {
       state: 16,
       city: '42',
       homeAddress: 'Street 9',
-      delPr: '200.00',
+      deliveryFee: '200.00',
       price: '0.00',
       note: null,
-      confirmed: 0,
+      inHouseStatus: 0,
       noAnswerCount: 0,
       confirmedBy: null,
       confirmedByName: null,
@@ -1017,7 +1018,7 @@ describe('app/api/orders/[id]/route', () => {
                       delivery: 1,
                       state: 31,
                       city: '77',
-                      delPr: '350.00',
+                      deliveryFee: '350.00',
                     },
                   ]),
               }),
@@ -1047,7 +1048,7 @@ describe('app/api/orders/[id]/route', () => {
         delivery: 1,
         state: 31,
         city: '77',
-        delPr: '350.00',
+        deliveryFee: '350.00',
       }),
     );
     await expect(response.json()).resolves.toEqual(

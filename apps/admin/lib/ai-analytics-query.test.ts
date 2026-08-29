@@ -1,24 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Analytics2Payload } from './analytics2';
+import type { AnalyticsPayload } from './analytics';
 
-const { dbExecuteMock, getAnalytics2DataMock } = vi.hoisted(() => ({
+const { dbExecuteMock, getAnalyticsDataMock } = vi.hoisted(() => ({
   dbExecuteMock: vi.fn(),
-  getAnalytics2DataMock: vi.fn(),
+  getAnalyticsDataMock: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', () => ({
   getDb: () => ({ execute: dbExecuteMock }),
 }));
 
-vi.mock('./analytics2', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./analytics2')>()),
-  getAnalytics2Data: getAnalytics2DataMock,
+vi.mock('./analytics', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./analytics')>()),
+  getAnalyticsData: getAnalyticsDataMock,
 }));
 
 import { queryAdminAnalytics } from './ai-analytics';
 
-function payload(view: 'storefront' | 'money'): Analytics2Payload {
+function payload(view: 'storefront' | 'money'): AnalyticsPayload {
   return {
     view,
     filters: {
@@ -45,11 +45,11 @@ function payload(view: 'storefront' | 'money'): Analytics2Payload {
 describe('admin assistant analytics query execution', () => {
   beforeEach(() => {
     dbExecuteMock.mockReset();
-    getAnalytics2DataMock.mockReset();
+    getAnalyticsDataMock.mockReset();
   });
 
   it('loads the Storefront deferred detail surface for assistant questions', async () => {
-    getAnalytics2DataMock.mockResolvedValue(payload('storefront'));
+    getAnalyticsDataMock.mockResolvedValue(payload('storefront'));
 
     await queryAdminAnalytics({
       view: 'storefront',
@@ -57,14 +57,14 @@ describe('admin assistant analytics query execution', () => {
       grain: 'day',
     });
 
-    expect(getAnalytics2DataMock).toHaveBeenCalledWith(
+    expect(getAnalyticsDataMock).toHaveBeenCalledWith(
       expect.objectContaining({ view: 'storefront', range: '30d', grain: 'day' }),
       { includeStorefrontDetails: true },
     );
   });
 
   it('does not pay the Storefront detail cost for another workspace', async () => {
-    getAnalytics2DataMock.mockResolvedValue(payload('money'));
+    getAnalyticsDataMock.mockResolvedValue(payload('money'));
 
     await queryAdminAnalytics({
       view: 'money',
@@ -72,7 +72,7 @@ describe('admin assistant analytics query execution', () => {
       grain: 'day',
     });
 
-    expect(getAnalytics2DataMock).toHaveBeenCalledWith(expect.objectContaining({ view: 'money' }), {
+    expect(getAnalyticsDataMock).toHaveBeenCalledWith(expect.objectContaining({ view: 'money' }), {
       includeStorefrontDetails: false,
     });
     expect(dbExecuteMock).not.toHaveBeenCalled();
@@ -81,7 +81,7 @@ describe('admin assistant analytics query execution', () => {
   it('maps explicit assistant date scopes to canonical Analytics ranges', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-28T12:00:00.000Z'));
-    getAnalytics2DataMock.mockResolvedValue(payload('money'));
+    getAnalyticsDataMock.mockResolvedValue(payload('money'));
 
     await queryAdminAnalytics({ view: 'money', date: { kind: 'day', date: '2026-08-10' } });
     await queryAdminAnalytics({
@@ -91,7 +91,7 @@ describe('admin assistant analytics query execution', () => {
     await queryAdminAnalytics({ view: 'money', date: { kind: 'since', date: '2026-08-10' } });
     await queryAdminAnalytics({ view: 'money', date: { kind: 'through', date: '2026-08-25' } });
 
-    expect(getAnalytics2DataMock.mock.calls.map(([query]) => query)).toEqual([
+    expect(getAnalyticsDataMock.mock.calls.map(([query]) => query)).toEqual([
       expect.objectContaining({
         view: 'money',
         range: 'custom',
@@ -116,7 +116,7 @@ describe('admin assistant analytics query execution', () => {
   });
 
   it('adds an exact EcoTrack coverage drilldown only when the model asks for that evidence facet', async () => {
-    getAnalytics2DataMock.mockResolvedValue(payload('money'));
+    getAnalyticsDataMock.mockResolvedValue(payload('money'));
     dbExecuteMock.mockResolvedValue({
       rows: [
         {

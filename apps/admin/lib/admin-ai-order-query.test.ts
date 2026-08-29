@@ -36,7 +36,7 @@ function orderRow(overrides: Record<string, unknown> = {}) {
     city: 'Alger Centre',
     state: 16,
     delivery: 0,
-    confirmed: 7,
+    inHouseStatus: 7,
     noAnswerCount: 0,
     totalAmount: '15600.00',
     createdAt: new Date('2026-08-24T08:00:00.000Z'),

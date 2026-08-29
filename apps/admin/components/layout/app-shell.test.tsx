@@ -378,6 +378,34 @@ describe('AppShell', () => {
     expect(document.body.style.overflow).toBe('');
   });
 
+  it('keeps the mobile sidebar open until the pathname actually changes', async () => {
+    usePathnameMock.mockReturnValue('/en/orders');
+    const view = render(
+      <AppShell initialPermissions={['orders_write']} initialRole="employee">
+        <div>orders</div>
+      </AppShell>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open sidebar' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    view.rerender(
+      <AppShell initialPermissions={['orders_write']} initialRole="employee">
+        <div>same orders route</div>
+      </AppShell>,
+    );
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    usePathnameMock.mockReturnValue('/en/products');
+    view.rerender(
+      <AppShell initialPermissions={['orders_write']} initialRole="employee">
+        <div>products</div>
+      </AppShell>,
+    );
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
   it('does not render the old role selector UI', async () => {
     render(
       <AppShell

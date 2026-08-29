@@ -1,3 +1,4 @@
+import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DELETE, GET, POST } from './route';
@@ -69,7 +70,7 @@ describe('app/api/orders/export/route', () => {
   it('returns the current user export job', async () => {
     getLatestExportJobMock.mockResolvedValue({ id: 'export-1', status: 'running' });
 
-    const response = await GET(new Request('http://localhost/api/orders/export'));
+    const response = await GET(new NextRequest('http://localhost/api/orders/export'));
 
     expect(response.status).toBe(200);
     expect(response.headers.get('x-request-id')).toBe('request-1');
@@ -78,7 +79,7 @@ describe('app/api/orders/export/route', () => {
 
   it('starts an export with exact, deduplicated identifiers', async () => {
     const response = await POST(
-      new Request('http://localhost/api/orders/export', {
+      new NextRequest('http://localhost/api/orders/export', {
         method: 'POST',
         body: JSON.stringify({ mode: 'selected', orderIds: [11, '12', 12] }),
       }),
@@ -94,7 +95,7 @@ describe('app/api/orders/export/route', () => {
 
   it('rejects malformed identifiers instead of starting a partial export', async () => {
     const response = await POST(
-      new Request('http://localhost/api/orders/export', {
+      new NextRequest('http://localhost/api/orders/export', {
         method: 'POST',
         body: JSON.stringify({ mode: 'selected', orderIds: [11, '1e2'] }),
       }),
@@ -111,7 +112,7 @@ describe('app/api/orders/export/route', () => {
     });
 
     const response = await POST(
-      new Request('http://localhost/api/orders/export', {
+      new NextRequest('http://localhost/api/orders/export', {
         method: 'POST',
         body: JSON.stringify({ mode: 'confirmed', orderIds: [11] }),
       }),
@@ -122,7 +123,7 @@ describe('app/api/orders/export/route', () => {
 
   it('cancels the current user export job', async () => {
     const response = await DELETE(
-      new Request('http://localhost/api/orders/export', { method: 'DELETE' }),
+      new NextRequest('http://localhost/api/orders/export', { method: 'DELETE' }),
     );
 
     expect(response.status).toBe(200);
@@ -132,7 +133,7 @@ describe('app/api/orders/export/route', () => {
   it('returns authorization failures before reading job state', async () => {
     authMock.mockResolvedValue(null);
 
-    const response = await GET(new Request('http://localhost/api/orders/export'));
+    const response = await GET(new NextRequest('http://localhost/api/orders/export'));
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({ error: 'Unauthorized' });
@@ -142,7 +143,7 @@ describe('app/api/orders/export/route', () => {
   it('returns permission failures before reading job state', async () => {
     canMutateResourceMock.mockReturnValue(false);
 
-    const response = await GET(new Request('http://localhost/api/orders/export'));
+    const response = await GET(new NextRequest('http://localhost/api/orders/export'));
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ error: 'Forbidden' });

@@ -25,7 +25,7 @@ import {
   ADMIN_AI_CONTEXT_QUERY_LIMIT,
   buildAdminAiConversationContext,
 } from '../../../../lib/admin-ai-conversation-context';
-import { adminAiContextMessage } from '../../../../lib/admin-ai-capabilities';
+import { adminAiContextMessage } from '../../../../lib/admin-ai-context';
 import { ADMIN_AI_MAX_OUTPUT_TOKENS, resolveAdminAiModel } from '../../../../lib/admin-ai-models';
 import { normalizePermissions } from '../../../../lib/permissions';
 import { requireAppAccess } from '../../../../lib/rbac';

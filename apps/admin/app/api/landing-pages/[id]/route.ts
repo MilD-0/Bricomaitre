@@ -88,16 +88,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       await revalidateStorefrontLandingPages();
       return NextResponse.json(result);
     }
-    if (parsed.data.action === 'set-active') {
-      const result = await setLandingPageActive({
-        id,
-        active: parsed.data.active,
-        expectedRevision: parsed.data.expectedRevision,
-        actorId: session?.user?.email,
-      });
-      await revalidateStorefrontLandingPages();
-      return NextResponse.json(result);
-    }
+    const result = await setLandingPageActive({
+      id,
+      active: parsed.data.active,
+      expectedRevision: parsed.data.expectedRevision,
+      actorId: session?.user?.email,
+    });
+    await revalidateStorefrontLandingPages();
+    return NextResponse.json(result);
   } catch (error) {
     return errorResponse(error);
   }

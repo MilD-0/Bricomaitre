@@ -56,5 +56,11 @@ export const categories = pgTable(
       'categories_not_self_parent_check',
       sql`${t.parentId} is null or ${t.parentId} <> ${t.id}`,
     ),
+    check(
+      'categories_engagement_counters_nonnegative_check',
+      sql`${t.viewCount} >= 0 and ${t.addToCartCount} >= 0 and ${t.checkoutCount} >= 0 and ${t.purchaseCount} >= 0`,
+    ),
+    check('categories_popularity_score_nonnegative_check', sql`${t.popularityScore} >= 0`),
+    check('categories_conversion_rate_nonnegative_check', sql`${t.conversionRate} >= 0`),
   ],
 );

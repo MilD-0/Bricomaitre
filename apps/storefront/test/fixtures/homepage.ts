@@ -243,7 +243,7 @@ export const homepageFixtureResponse: StorefrontHomepageResponse = {
       ctaAr: 'عرض المجموعة',
       link: '/products',
       sortOrder: 0,
-      showAtTopOfProductsPage: false,
+      prioritizeRecommendations: false,
       active: true,
       productIds: homepageProducts.map(({ product }) => product.id),
       brandIds: [],

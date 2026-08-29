@@ -51,7 +51,7 @@ describe('admin assistant result presentation', () => {
     ]);
   });
 
-  it('extracts canonical Analytics2 metrics from nested payloads', () => {
+  it('extracts canonical Analytics metrics from nested payloads', () => {
     expect(
       adminAiMetricsFromUnknown({
         kind: 'catalog',

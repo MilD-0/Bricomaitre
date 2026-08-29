@@ -22,8 +22,8 @@ describe('legacy order commercial snapshot backfill', () => {
   it('persists complete rows and reports rows whose historical products cannot be resolved', async () => {
     const db = databaseWithBatches([
       [
-        { id: 2, cartProducts: ['9', '9'], promoCode: null, delPr: '400', price: null },
-        { id: 3, cartProducts: ['missing'], promoCode: null, delPr: '500', price: null },
+        { id: 2, cartProducts: ['9', '9'], promoCode: null, deliveryFee: '400', price: null },
+        { id: 3, cartProducts: ['missing'], promoCode: null, deliveryFee: '500', price: null },
       ],
       [],
     ]);

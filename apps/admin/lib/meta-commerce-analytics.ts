@@ -10,9 +10,24 @@ import {
   orders,
   processedOrders,
 } from '@bric/db/schema';
-import { CONFIRMED_LIFECYCLE_ORDER_STATUSES } from '@bric/storefront-core/order-domain';
+import {
+  CONFIRMED_LIFECYCLE_ORDER_STATUSES,
+  ORDER_STATUS,
+} from '@bric/storefront-core/order-domain';
 
 type Database = ReturnType<typeof getDb>;
+
+const META_COMMERCE_DISPATCHED_STATUSES = CONFIRMED_LIFECYCLE_ORDER_STATUSES.filter(
+  (status) => status !== ORDER_STATUS.CONFIRMED,
+);
+const META_COMMERCE_COMPLETED_STATUSES = [
+  ORDER_STATUS.COMPLETED,
+  ORDER_STATUS.MANUAL_COMPLETED,
+] as const;
+const META_COMMERCE_NEGATIVE_OUTCOME_STATUSES = [
+  ORDER_STATUS.RETURNED,
+  ORDER_STATUS.FAILED,
+] as const;
 
 export type MetaCommerceFilters = {
   startDate?: string;
@@ -174,11 +189,11 @@ export function buildMetaCommercePerformanceQuery(
         max(${orderAcquisitionAttribution.metaAdsetId}) as adset_id,
         ${orderAcquisitionAttribution.metaAdId} as ad_id,
         count(*)::int as bric_orders,
-        count(*) filter (where ${inArray(orders.confirmed, confirmedStatuses)})::int as confirmed_orders,
-        count(*) filter (where ${orders.confirmed} in (3, 4, 5, 7, 8, 9, 10, 11))::int as dispatched_orders,
-        count(*) filter (where ${orders.confirmed} in (4, 10))::int as completed_orders,
-        count(*) filter (where ${orders.confirmed} = 6)::int as cancelled_orders,
-        count(*) filter (where ${orders.confirmed} in (8, 9))::int as negative_outcome_orders,
+        count(*) filter (where ${inArray(orders.inHouseStatus, confirmedStatuses)})::int as confirmed_orders,
+        count(*) filter (where ${inArray(orders.inHouseStatus, META_COMMERCE_DISPATCHED_STATUSES)})::int as dispatched_orders,
+        count(*) filter (where ${inArray(orders.inHouseStatus, [...META_COMMERCE_COMPLETED_STATUSES])})::int as completed_orders,
+        count(*) filter (where ${orders.inHouseStatus} = ${ORDER_STATUS.CANCELLED})::int as cancelled_orders,
+        count(*) filter (where ${inArray(orders.inHouseStatus, [...META_COMMERCE_NEGATIVE_OUTCOME_STATUSES])})::int as negative_outcome_orders,
         count(*) filter (where ${ecotrackOrderStates.currentStatus} = 'paye_et_archive')::int as paid_orders,
         count(*) filter (where ${ecotrackOrderStates.currentStatus} = 'retour_archive')::int as returned_orders,
         coalesce(sum(coalesce(line_economics.submitted_product_value, ${orders.price}::double precision, 0)), 0)::double precision as submitted_value_dzd,
@@ -280,11 +295,11 @@ export function buildMetaCommerceSummaryQuery(filters: MetaCommerceFilters) {
       group by ${processedOrders.orderId}
     ), outcomes as (
       select count(*)::int as bric_orders,
-        count(*) filter (where ${inArray(orders.confirmed, confirmedStatuses)})::int as confirmed_orders,
-        count(*) filter (where ${orders.confirmed} in (3, 4, 5, 7, 8, 9, 10, 11))::int as dispatched_orders,
-        count(*) filter (where ${orders.confirmed} in (4, 10))::int as completed_orders,
-        count(*) filter (where ${orders.confirmed} = 6)::int as cancelled_orders,
-        count(*) filter (where ${orders.confirmed} in (8, 9))::int as negative_outcome_orders,
+        count(*) filter (where ${inArray(orders.inHouseStatus, confirmedStatuses)})::int as confirmed_orders,
+        count(*) filter (where ${inArray(orders.inHouseStatus, META_COMMERCE_DISPATCHED_STATUSES)})::int as dispatched_orders,
+        count(*) filter (where ${inArray(orders.inHouseStatus, [...META_COMMERCE_COMPLETED_STATUSES])})::int as completed_orders,
+        count(*) filter (where ${orders.inHouseStatus} = ${ORDER_STATUS.CANCELLED})::int as cancelled_orders,
+        count(*) filter (where ${inArray(orders.inHouseStatus, [...META_COMMERCE_NEGATIVE_OUTCOME_STATUSES])})::int as negative_outcome_orders,
         count(*) filter (where ${ecotrackOrderStates.currentStatus} = 'paye_et_archive')::int as paid_orders,
         count(*) filter (where ${ecotrackOrderStates.currentStatus} = 'retour_archive')::int as returned_orders,
         coalesce(sum(coalesce(line_economics.submitted_product_value, ${orders.price}::double precision, 0)), 0)::double precision as submitted_value_dzd,

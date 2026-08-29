@@ -9,7 +9,7 @@ import {
   orderMarketingAttribution,
   orders,
 } from '@bric/db/schema';
-import { parseNumericAmount } from '../orders-support';
+import { ORDER_STATUS, parseNumericAmount } from '../orders-support';
 import {
   getOrderCompletedEventId,
   getOrderConfirmedEventId,
@@ -559,7 +559,11 @@ export async function ensureMarketingOrderStatusEvents(
   },
 ) {
   const kind =
-    input.status === 2 ? 'confirmed' : [4, 10].includes(input.status) ? 'completed' : null;
+    input.status === ORDER_STATUS.CONFIRMED
+      ? 'confirmed'
+      : input.status === ORDER_STATUS.COMPLETED || input.status === ORDER_STATUS.MANUAL_COMPLETED
+        ? 'completed'
+        : null;
   if (!kind) return { created: false, reason: 'unqualified' as const };
   const [attribution] = await db
     .select()
@@ -819,11 +823,11 @@ export async function reconcileMarketingOrderEvents(db: Database, limit = 100) {
     from order_status_history history
     inner join order_marketing_attribution attribution on attribution.order_id = history.order_id
       and attribution.semantics_version = ${MARKETING_SEMANTICS_VERSION}
-    where history.status in (2, 4, 10)
+    where history.status in (${ORDER_STATUS.CONFIRMED}, ${ORDER_STATUS.COMPLETED}, ${ORDER_STATUS.MANUAL_COMPLETED})
       and not exists (
         select 1 from marketing_event_outbox outbox
         where outbox.order_id = history.order_id
-          and outbox.source = case when history.status = 2 then 'order_confirmation' else 'order_completion' end
+          and outbox.source = case when history.status = ${ORDER_STATUS.CONFIRMED} then 'order_confirmation' else 'order_completion' end
       )
     order by history.changed_at asc, history.id asc
     limit ${Math.max(1, Math.min(limit, 500))}

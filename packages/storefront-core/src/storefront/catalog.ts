@@ -448,7 +448,7 @@ export function buildRecommendedProductOrderBy(search = '') {
     select min(${featuredProductGroups.sortOrder})
     from ${featuredProductGroups}
     where ${featuredProductGroups.active} = true
-      and ${featuredProductGroups.showAtTopOfProductsPage} = true
+      and ${featuredProductGroups.prioritizeRecommendations} = true
       and (
         exists (
           select 1

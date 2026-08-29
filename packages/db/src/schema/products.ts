@@ -8,6 +8,7 @@ import {
   timestamp,
   index,
   uniqueIndex,
+  check,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { brands } from './brands';
@@ -78,5 +79,22 @@ export const products = pgTable(
     index('idx_products_title_trgm').using('gin', t.title.op('gin_trgm_ops')),
     index('idx_products_sku_trgm').using('gin', t.sku.op('gin_trgm_ops')),
     index('idx_products_barcode_trgm').using('gin', t.barcode.op('gin_trgm_ops')),
+    check('products_price_nonnegative_check', sql`${t.price} >= 0`),
+    check('products_old_price_nonnegative_check', sql`${t.oldPrice} is null or ${t.oldPrice} >= 0`),
+    check(
+      'products_purchase_price_nonnegative_check',
+      sql`${t.purchasePrice} is null or ${t.purchasePrice} >= 0`,
+    ),
+    check('products_inventory_quantity_nonnegative_check', sql`${t.inventoryQuantity} >= 0`),
+    check(
+      'products_engagement_counters_nonnegative_check',
+      sql`${t.unitsSold} >= 0 and ${t.viewCount} >= 0 and ${t.addToCartCount} >= 0 and ${t.checkoutCount} >= 0 and ${t.purchaseCount} >= 0`,
+    ),
+    check('products_popularity_score_nonnegative_check', sql`${t.popularityScore} >= 0`),
+    check('products_conversion_rate_nonnegative_check', sql`${t.conversionRate} >= 0`),
+    check(
+      'products_availability_status_check',
+      sql`${t.availabilityStatus} in ('in_stock', 'out_of_stock')`,
+    ),
   ],
 );
