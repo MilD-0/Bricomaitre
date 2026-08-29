@@ -1,16 +1,7 @@
 import { zodSchema } from 'ai';
 import { describe, expect, it } from 'vitest';
 
-import {
-  adminAiAccessGrantSchema,
-  adminAiAccessRevocationSchema,
-  adminAiRoleDefinitionSchema,
-} from './admin-ai-administration';
-import {
-  adminAiActionHistoryInspectionSchema,
-  adminAiActionHistoryRecoverySchema,
-} from './admin-ai-action-history';
-import { adminAiAssetCrudSchema } from './admin-ai-assets';
+import { adminAiStatsQuerySchema } from './admin-ai-ai-stats';
 import {
   adminAiAnalyticsCostsMutationSchema,
   adminAiAnalyticsDayOverridesMutationSchema,
@@ -18,59 +9,10 @@ import {
   adminAiAnalyticsSyncSchema,
 } from './admin-ai-analytics-actions';
 import {
-  adminAiBulletinDeleteSchema,
-  adminAiBulletinPostSchema,
-  adminAiBulletinPostUpdateSchema,
-  adminAiBulletinReplySchema,
-  adminAiBulletinReactionSchema,
-} from './admin-ai-bulletin';
-import {
-  adminAiInventoryAdjustmentSchema,
-  adminAiInventoryReceiptSchema,
-  adminAiInventoryScanSchema,
-  adminAiInventoryStateSchema,
-} from './admin-ai-inventory';
-import {
-  adminAiEcotrackPostingPreviewSchema,
-  adminAiEcotrackPostingStartSchema,
-  adminAiEcotrackRequirementsSchema,
-} from './admin-ai-ecotrack';
-import {
-  adminAiEcotrackShipmentActionSchema,
-  adminAiEcotrackShipmentChangeSchema,
-  adminAiEcotrackShipmentInspectionSchema,
-} from './admin-ai-ecotrack-shipments';
-import {
-  adminAiLandingPageCreateSchema,
-  adminAiLandingPageEditSchema,
-} from './admin-ai-landing-pages';
-import {
-  adminAiOrderCreateSchema,
-  adminAiOrderDeleteSchema,
-  adminAiOrderDetailsMutationSchema,
-  adminAiOrderDetailsToolSchema,
-  adminAiOrderStatusMutationSchema,
-} from './admin-ai-orders';
-import {
-  adminAiArchivedProductInspectionSchema,
-  adminAiProductArchiveSchema,
-  adminAiProductCreateSchema,
-  adminAiProductRestoreSchema,
-  adminAiProductUpdateSchema,
-} from './admin-ai-products';
-import { adminAiProposalReviewSchema } from './admin-ai-proposal-review';
-import {
-  storefrontAnnouncementMutationSchema,
-  storefrontSettingsToolSchema,
-} from './admin-ai-storefront';
-import { adminAiTaxonomyMutationSchema } from './admin-ai-taxonomy';
-import {
-  adminAiShoppingListApplySchema,
-  adminAiShoppingListScopeSchema,
-} from './admin-ai-shopping-list';
-import { adminAiOrderExportScopeSchema } from './admin-ai-order-exports';
-import { adminAiOrderTrackingLinksSchema } from './admin-ai-order-tracking';
-import { adminAiInventoryInspectionSchema } from './admin-ai-domain';
+  adminAiAssetCrudSchema,
+  adminAiAssetInspectionSchema,
+  adminAiAssetReorderSchema,
+} from './admin-ai-assets';
 import {
   adminAiArchivedCatalogProductInspectionSchema,
   adminAiCatalogProductInspectionSchema,
@@ -81,67 +23,122 @@ import {
   adminAiCatalogQuerySchema,
   adminAiCategoryQuerySchema,
 } from './admin-ai-catalog-query';
-import { adminAssetStateMutationSchema } from './asset-mutations';
+import {
+  adminAiEcotrackShipmentActionSchema,
+  adminAiEcotrackShipmentChangeSchema,
+  adminAiEcotrackShipmentInspectionSchema,
+} from './admin-ai-ecotrack-shipments';
+import {
+  adminAiEcotrackPostingPreviewSchema,
+  adminAiEcotrackPostingStartSchema,
+  adminAiEcotrackRequirementsSchema,
+} from './admin-ai-ecotrack';
+import {
+  adminAiInventoryAdjustmentSchema,
+  adminAiInventoryReceiptSchema,
+  adminAiInventoryScanSchema,
+  adminAiInventoryStateSchema,
+} from './admin-ai-inventory';
+import {
+  adminAiLandingPageJobStatusSchema,
+  adminAiLandingPageWorkSchema,
+} from './admin-ai-landing-page-jobs';
+import {
+  adminAiLandingPageInspectionSchema,
+  adminAiLandingPagePublicationSchema,
+} from './admin-ai-landing-pages';
+import { adminAiOrderExportScopeSchema } from './admin-ai-order-exports';
+import { adminAiOrderInspectionSchema, adminAiOrderQuerySchema } from './admin-ai-order-query';
+import { adminAiOrderTrackingLinksSchema } from './admin-ai-order-tracking';
+import {
+  adminAiOrderCreateSchema,
+  adminAiOrderDeleteSchema,
+  adminAiOrderDetailsToolSchema,
+  adminAiOrderStatusMutationSchema,
+} from './admin-ai-orders';
+import { adminAiPresentationPlanSchema } from './admin-ai-presentation';
+import {
+  adminAiCatalogCategorizationSchema,
+  adminAiProductContentGenerationSchema,
+  adminAiProductJobStatusSchema,
+} from './admin-ai-product-jobs';
+import {
+  adminAiProductArchiveSchema,
+  adminAiProductRestoreSchema,
+  adminAiProductUpdateSchema,
+} from './admin-ai-products';
+import { adminAiGuidanceRequestSchema } from './admin-ai-runtime';
+import {
+  adminAiShoppingListApplySchema,
+  adminAiShoppingListInspectionSchema,
+  adminAiShoppingListScopeSchema,
+} from './admin-ai-shopping-list';
+import {
+  storefrontAnnouncementMutationSchema,
+  storefrontSettingsToolSchema,
+} from './admin-ai-storefront';
+import { adminAiTaxonomyMutationSchema } from './admin-ai-taxonomy';
+import { adminAiAnalyticsQuerySchema } from './ai-analytics';
+import { productPayloadSchema } from './products';
 
 describe('Admin AI production tool schemas', () => {
-  it('serializes production mutations to provider-compatible JSON Schema', () => {
+  it('serializes the live tool inputs to provider-compatible JSON Schema', () => {
     for (const schema of [
-      adminAiOrderStatusMutationSchema,
-      adminAiOrderCreateSchema,
-      adminAiOrderDeleteSchema,
-      adminAiOrderDetailsMutationSchema,
-      adminAiOrderDetailsToolSchema,
-      adminAiShoppingListScopeSchema,
-      adminAiShoppingListApplySchema,
-      adminAiOrderExportScopeSchema,
-      adminAiOrderTrackingLinksSchema,
-      adminAiEcotrackPostingPreviewSchema,
-      adminAiEcotrackPostingStartSchema,
-      adminAiEcotrackRequirementsSchema,
-      adminAiEcotrackShipmentInspectionSchema,
-      adminAiEcotrackShipmentActionSchema,
-      adminAiEcotrackShipmentChangeSchema,
-      adminAiInventoryAdjustmentSchema,
-      adminAiInventoryInspectionSchema,
+      adminAiGuidanceRequestSchema,
       adminAiCatalogProductLookupSchema,
-      adminAiCatalogProductInspectionSchema,
-      adminAiArchivedCatalogProductInspectionSchema,
-      adminAiCatalogQuerySchema,
       adminAiBrandQuerySchema,
       adminAiCategoryQuerySchema,
+      adminAiCatalogQuerySchema,
+      adminAiCatalogProductInspectionSchema,
+      adminAiArchivedCatalogProductInspectionSchema,
+      productPayloadSchema,
+      adminAiProductUpdateSchema,
+      adminAiProductArchiveSchema,
+      adminAiProductRestoreSchema,
+      adminAiInventoryAdjustmentSchema,
+      adminAiInventoryScanSchema,
+      adminAiInventoryReceiptSchema,
+      adminAiInventoryStateSchema,
+      adminAiProductContentGenerationSchema,
+      adminAiProductJobStatusSchema,
+      adminAiCatalogCategorizationSchema,
+      adminAiTaxonomyMutationSchema,
+      adminAiAssetInspectionSchema,
+      adminAiAssetCrudSchema,
+      adminAiAssetReorderSchema,
+      adminAiLandingPageInspectionSchema,
+      adminAiLandingPageWorkSchema,
+      adminAiLandingPagePublicationSchema,
+      adminAiLandingPageJobStatusSchema,
+      adminAiOrderQuerySchema,
+      adminAiOrderInspectionSchema,
+      adminAiEcotrackShipmentInspectionSchema,
+      adminAiShoppingListInspectionSchema,
+      adminAiShoppingListScopeSchema,
+      adminAiShoppingListApplySchema,
+      adminAiOrderTrackingLinksSchema,
+      adminAiOrderExportScopeSchema,
+      adminAiOrderCreateSchema,
+      adminAiOrderStatusMutationSchema,
+      adminAiOrderDetailsToolSchema,
+      adminAiOrderDeleteSchema,
+      adminAiEcotrackRequirementsSchema,
+      adminAiEcotrackPostingPreviewSchema,
+      adminAiEcotrackPostingStartSchema,
+      adminAiEcotrackShipmentActionSchema,
+      adminAiEcotrackShipmentChangeSchema,
+      adminAiAnalyticsQuerySchema,
+      adminAiStatsQuerySchema,
       adminAiAnalyticsSettingsPatchSchema,
       adminAiAnalyticsCostsMutationSchema,
       adminAiAnalyticsDayOverridesMutationSchema,
       adminAiAnalyticsSyncSchema,
-      adminAiInventoryScanSchema,
-      adminAiInventoryReceiptSchema,
-      adminAiInventoryStateSchema,
-      adminAiLandingPageCreateSchema,
-      adminAiLandingPageEditSchema,
-      adminAssetStateMutationSchema,
-      adminAiAssetCrudSchema,
-      adminAiProposalReviewSchema,
-      adminAiAccessGrantSchema,
-      adminAiAccessRevocationSchema,
-      adminAiRoleDefinitionSchema,
-      adminAiActionHistoryInspectionSchema,
-      adminAiActionHistoryRecoverySchema,
-      storefrontAnnouncementMutationSchema,
-      adminAiBulletinPostSchema,
-      adminAiBulletinReplySchema,
-      adminAiBulletinReactionSchema,
-      adminAiBulletinPostUpdateSchema,
-      adminAiBulletinDeleteSchema,
-      adminAiProductCreateSchema,
-      adminAiProductUpdateSchema,
-      adminAiProductArchiveSchema,
-      adminAiArchivedProductInspectionSchema,
-      adminAiProductRestoreSchema,
-      adminAiTaxonomyMutationSchema,
       storefrontSettingsToolSchema,
+      storefrontAnnouncementMutationSchema,
+      adminAiPresentationPlanSchema.omit({ kind: true }),
     ]) {
       const serialized = JSON.stringify(zodSchema(schema).jsonSchema);
-      expect(serialized).not.toContain('(?');
+      expect(serialized).not.toMatch(/\(\?[=!<]/u);
     }
   });
 

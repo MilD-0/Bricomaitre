@@ -1,85 +1,19 @@
 import 'dotenv/config';
 
 // Usage: pnpm --filter @bric/admin eval:ai:wide <suite> [scenario]
-// Catalog and Analytics mutations are intentionally replaced with read-only no-ops.
+// Mutations are intentionally replaced with non-writing evaluation receipts.
 
 import { createAiLanguageModel, getAiConfig } from '@bric/ai-core';
-import { generateText, stepCountIs, tool } from 'ai';
+import { generateText, stepCountIs } from 'ai';
 
-import {
-  ADMIN_AI_FIND_PRODUCTS_TOOL_DESCRIPTION,
-  ADMIN_AI_INSPECT_ARCHIVED_PRODUCTS_TOOL_DESCRIPTION,
-  ADMIN_AI_INSPECT_PRODUCTS_TOOL_DESCRIPTION,
-  adminAiArchivedCatalogProductInspectionSchema,
-  adminAiCatalogProductInspectionSchema,
-  adminAiCatalogProductLookupSchema,
-  findAdminCatalogProducts,
-  inspectAdminArchivedCatalogProducts,
-  inspectAdminCatalogProducts,
-} from './lib/admin-ai-catalog';
-import {
-  ADMIN_AI_FIND_BRANDS_TOOL_DESCRIPTION,
-  ADMIN_AI_FIND_CATEGORIES_TOOL_DESCRIPTION,
-  ADMIN_AI_QUERY_PRODUCTS_TOOL_DESCRIPTION,
-  adminAiBrandQuerySchema,
-  adminAiCatalogQuerySchema,
-  adminAiCategoryQuerySchema,
-  queryAdminBrands,
-  queryAdminCatalogProducts,
-  queryAdminCategories,
-} from './lib/admin-ai-catalog-query';
-import {
-  ADMIN_AI_INSPECT_ECOTRACK_SHIPMENTS_TOOL_DESCRIPTION,
-  adminAiEcotrackShipmentInspectionSchema,
-  inspectAdminAiEcotrackShipments,
-} from './lib/admin-ai-ecotrack-shipments';
-import {
-  ADMIN_AI_INSPECT_ORDERS_TOOL_DESCRIPTION,
-  ADMIN_AI_QUERY_ORDERS_TOOL_DESCRIPTION,
-  adminAiOrderInspectionSchema,
-  adminAiOrderQuerySchema,
-  inspectAdminOrderDetails,
-  queryAdminOrders,
-} from './lib/admin-ai-order-query';
-import {
-  ADMIN_AI_PRESENTATION_TOOL_DESCRIPTION,
-  adminAiPresentationPlanSchema,
-} from './lib/admin-ai-presentation';
-import {
-  ADMIN_AI_STATS_TOOL_DESCRIPTION,
-  adminAiStatsQuerySchema,
-  queryAdminAiStats,
-} from './lib/admin-ai-ai-stats';
 import { adminAiContextMessage } from './lib/admin-ai-capabilities';
-import {
-  adminAiAnalyticsCostsMutationSchema,
-  adminAiAnalyticsDayOverridesMutationSchema,
-  adminAiAnalyticsSettingsPatchSchema,
-  adminAiAnalyticsSyncSchema,
-} from './lib/admin-ai-analytics-actions';
-import {
-  ADMIN_AI_GUIDANCE_TOOL_DESCRIPTION,
-  ADMIN_AI_GUIDANCE_TOPIC_VALUES,
-  adminAiApplicationDate,
-  adminAiGuidanceRequestSchemaForTopics,
-  adminAiRuntimeInstructions,
-  readAdminAiGuidanceForTopics,
-} from './lib/admin-ai-runtime';
-import {
-  adminAiInventoryAdjustmentSchema,
-  adminAiInventoryStateSchema,
-} from './lib/admin-ai-inventory';
 import { ADMIN_AI_MAX_OUTPUT_TOKENS, resolveAdminAiModel } from './lib/admin-ai-models';
-import {
-  adminAiProductArchiveSchema,
-  adminAiProductRestoreSchema,
-  adminAiProductUpdateSchema,
-} from './lib/admin-ai-products';
-import { adminAiTaxonomyMutationSchema } from './lib/admin-ai-taxonomy';
-import { adminAiAnalyticsQuerySchema, queryAdminAnalytics } from './lib/ai-analytics';
-import { productPayloadSchema } from './lib/products';
+import { adminAiApplicationDate, adminAiRuntimeInstructions } from './lib/admin-ai-runtime';
+import { buildAdminAiTools } from './lib/admin-ai-tools';
+import type { PermissionKey } from './lib/permissions';
 
-type Surface = 'orders' | 'products' | 'inventory' | 'stats' | 'unknown';
+type Surface =
+  'orders' | 'products' | 'inventory' | 'stats' | 'administration' | 'assets' | 'unknown';
 type Scenario = { id: string; surface: Surface; turns: string[] };
 
 const suites: Record<string, Scenario[]> = {
@@ -233,6 +167,116 @@ const suites: Record<string, Scenario[]> = {
       turns: [
         'Over the last 30 days, how much paid contribution came from Storefront assistant-influenced orders, what is its coverage, and is it true profit?',
       ],
+    },
+  ],
+  storefront: [
+    {
+      id: 'storefront_configuration',
+      surface: 'administration',
+      turns: [
+        'What contact details, customer assistant model, and announcement are currently shown on the Storefront? Keep it brief.',
+      ],
+    },
+    {
+      id: 'storefront_model_choice',
+      surface: 'administration',
+      turns: [
+        'Can I change the Storefront customer assistant to any model name, or only certain models?',
+      ],
+    },
+    {
+      id: 'storefront_announcement_mutation',
+      surface: 'administration',
+      turns: ['Turn off the Storefront announcement bar. Do not change either saved message.'],
+    },
+    {
+      id: 'storefront_contact_mutation',
+      surface: 'administration',
+      turns: ['Change only the Storefront contact email to ventes@bricomaitre.com.'],
+    },
+    {
+      id: 'storefront_model_mutation',
+      surface: 'administration',
+      turns: ['Switch the Storefront customer assistant model to openai/gpt-5.6-luna.'],
+    },
+    {
+      id: 'storefront_incomplete_announcement',
+      surface: 'administration',
+      turns: [
+        'Turn on a Storefront announcement saying “Livraison gratuite” in French. I have not supplied Arabic text.',
+      ],
+    },
+    {
+      id: 'storefront_phone_availability',
+      surface: 'administration',
+      turns: ['Hide the Storefront phone contact completely, but keep the saved phone number.'],
+    },
+  ],
+  assets: [
+    {
+      id: 'assets_current_state',
+      surface: 'assets',
+      turns: [
+        'How many banners, featured groups, and product cards do we have, and how many of each are active? Keep it brief.',
+      ],
+    },
+    {
+      id: 'assets_featured_group_meaning',
+      surface: 'assets',
+      turns: [
+        'Inspect the first active featured group. What products can it include, and what does its showAtTopOfProductsPage setting do now?',
+      ],
+    },
+    {
+      id: 'assets_disable_card',
+      surface: 'assets',
+      turns: ['Deactivate the first currently active product card. Change nothing else.'],
+    },
+    {
+      id: 'assets_group_recommendation',
+      surface: 'assets',
+      turns: [
+        'Give the first active featured group’s products recommendation priority. Preserve all of its content and selections.',
+      ],
+    },
+    {
+      id: 'assets_reverse_banners',
+      surface: 'assets',
+      turns: ['Reverse the current banner order, using the complete current banner list.'],
+    },
+    {
+      id: 'landing_pages_current_state',
+      surface: 'assets',
+      turns: [
+        'How many landing pages do we have in French and Arabic, and how many are live? Keep it brief.',
+      ],
+    },
+    {
+      id: 'landing_pages_progressive_detail',
+      surface: 'assets',
+      turns: [
+        'Inspect the outline of the first live landing page. Explain what is authored here and what comes from live Storefront product data.',
+        'Now inspect only that page’s hero content. Show the page ID, revision, block ID, and heading.',
+      ],
+    },
+    {
+      id: 'landing_pages_create_draft',
+      surface: 'assets',
+      turns: [
+        'Find the first active in-stock product, then start a French landing-page draft for it aimed at working tradespeople. Do not publish it.',
+      ],
+    },
+    {
+      id: 'landing_pages_scoped_revision',
+      surface: 'assets',
+      turns: [
+        'Inspect the first live landing page, then revise only its hero to be clearer for a non-technical customer. Preserve publication and every other block.',
+      ],
+    },
+    {
+      id: 'landing_pages_unpublish',
+      surface: 'assets',
+      turns: ['Unpublish the first currently live landing page without changing its content.'],
     },
   ],
   cross: [
@@ -811,6 +855,109 @@ const suites: Record<string, Scenario[]> = {
       turns: ['Set the planning return rate to 28%; leave every other setting unchanged.'],
     },
   ],
+  order_mutation_routes: [
+    {
+      id: 'order_mutation_create',
+      surface: 'orders',
+      turns: [
+        'Create a local order for Samir, phone 0555000000, one unit of product 257, home delivery to Alger Centre in wilaya 16, address 12 rue Didouche Mourad. No second phone, email, note, or promo.',
+      ],
+    },
+    {
+      id: 'order_mutation_no_answer',
+      surface: 'orders',
+      turns: ["Order 16360 didn't answer on our second call. Record that accurately."],
+    },
+    {
+      id: 'order_mutation_posted_address',
+      surface: 'orders',
+      turns: [
+        'Order 16360 has already been posted. Change its commune to Bab Ezzouar in EcoTrack and keep our local copy aligned too.',
+      ],
+    },
+    {
+      id: 'order_mutation_post_today',
+      surface: 'orders',
+      turns: [
+        'Post all in-house confirmed orders created today to Delivro. Check what is eligible first and do not treat invalid orders as posted.',
+      ],
+    },
+    {
+      id: 'order_mutation_permanent_delete',
+      surface: 'orders',
+      turns: [
+        'Permanently delete local order 16360. Check whether an active EcoTrack shipment blocks that first.',
+      ],
+    },
+    {
+      id: 'order_mutation_dispatch',
+      surface: 'orders',
+      turns: [
+        'Find the newest active EcoTrack shipment that can be dispatched, dispatch it, and ask for collection.',
+      ],
+    },
+    {
+      id: 'order_mutation_change_shipment',
+      surface: 'orders',
+      turns: [
+        'Find the newest active EcoTrack ready-to-ship shipment and change only its carrier note to “Priority delivery”.',
+      ],
+    },
+  ],
+  commerce_spine: [
+    {
+      id: 'commerce_inventory_scan',
+      surface: 'inventory',
+      turns: [
+        'Scan 16360 for inventory receiving. Tell me whether it resolves as an order or a barcode and summarize the exact product quantities. Do not receive anything yet.',
+      ],
+    },
+    {
+      id: 'commerce_inventory_receive',
+      surface: 'inventory',
+      turns: ['Scan barcode DRILL-12 and receive two units for the matched product.'],
+    },
+    {
+      id: 'commerce_shopping_preview',
+      surface: 'orders',
+      turns: [
+        'Prepare a shopping-list preview for all orders currently in-house confirmed. Give only order count, line count, total units, shortage units, and unmatched lines. Do not save it or change inventory.',
+      ],
+    },
+    {
+      id: 'commerce_shopping_apply',
+      surface: 'orders',
+      turns: [
+        'Save the shared shopping list for all currently in-house confirmed orders, then decrease inventory for every eligible covered line. Report partial failures honestly.',
+      ],
+    },
+    {
+      id: 'commerce_tracking_link',
+      surface: 'orders',
+      turns: ['Give me the customer tracking link for local order 16360.'],
+    },
+    {
+      id: 'commerce_order_export',
+      surface: 'orders',
+      turns: [
+        'Export the current recent confirmed-order cohort to XLSX. Check the native export preview first, then start it if there are exportable rows. Do not change order statuses.',
+      ],
+    },
+    {
+      id: 'commerce_generate_content',
+      surface: 'products',
+      turns: [
+        'Generate every missing Arabic title and description across the active catalog. Leave the proposals pending for operator review.',
+      ],
+    },
+    {
+      id: 'commerce_categorize_catalog',
+      surface: 'products',
+      turns: [
+        'Categorize every uncategorized active product against the current category hierarchy. Keep uncertain products unchanged and leave proposals for review.',
+      ],
+    },
+  ],
 };
 
 const selectedModel = resolveAdminAiModel('gpt-5.6-luna', 'medium');
@@ -819,162 +966,41 @@ const model = createAiLanguageModel(getAiConfig(), 'admin', {
   openRouterRequestBody: selectedModel.openRouterRequestBody,
 });
 
-const analyticsDescription = [
-  'Read canonical live Analytics evidence.',
-  'Results include metric meanings, dates, coverage, estimation, sources, and warnings. Use focus for useful underlying rows and sourceCoverage for the exact EcoTrack denominator and missing eligible orders.',
-].join(' ');
+const evaluationPermissions = [
+  'products_write',
+  'orders_write',
+  'assets_write',
+  'brands_categories_write',
+  'analytics_manage',
+  'settings_manage',
+] satisfies readonly PermissionKey[];
 
-function evaluationNoop(input: unknown) {
-  return {
-    kind: 'evaluation_noop',
-    applied: false,
-    reason: 'Read-only evaluation: no application state was changed.',
-    receivedInput: input,
-  };
-}
-
-const tools = {
-  read_system_guidance: tool({
-    description: ADMIN_AI_GUIDANCE_TOOL_DESCRIPTION,
-    inputSchema: adminAiGuidanceRequestSchemaForTopics([...ADMIN_AI_GUIDANCE_TOPIC_VALUES]),
-    execute: (input) => readAdminAiGuidanceForTopics([...ADMIN_AI_GUIDANCE_TOPIC_VALUES], input),
-  }),
-  find_products: tool({
-    description: ADMIN_AI_FIND_PRODUCTS_TOOL_DESCRIPTION,
-    inputSchema: adminAiCatalogProductLookupSchema,
-    execute: findAdminCatalogProducts,
-  }),
-  find_brands: tool({
-    description: ADMIN_AI_FIND_BRANDS_TOOL_DESCRIPTION,
-    inputSchema: adminAiBrandQuerySchema,
-    execute: (input) => queryAdminBrands(input),
-  }),
-  find_categories: tool({
-    description: ADMIN_AI_FIND_CATEGORIES_TOOL_DESCRIPTION,
-    inputSchema: adminAiCategoryQuerySchema,
-    execute: (input) => queryAdminCategories(input),
-  }),
-  query_products: tool({
-    description: ADMIN_AI_QUERY_PRODUCTS_TOOL_DESCRIPTION,
-    inputSchema: adminAiCatalogQuerySchema,
-    execute: (input) => queryAdminCatalogProducts(input),
-  }),
-  inspect_products: tool({
-    description: ADMIN_AI_INSPECT_PRODUCTS_TOOL_DESCRIPTION,
-    inputSchema: adminAiCatalogProductInspectionSchema,
-    execute: inspectAdminCatalogProducts,
-  }),
-  inspect_archived_products: tool({
-    description: ADMIN_AI_INSPECT_ARCHIVED_PRODUCTS_TOOL_DESCRIPTION,
-    inputSchema: adminAiArchivedCatalogProductInspectionSchema,
-    execute: inspectAdminArchivedCatalogProducts,
-  }),
-  create_product: tool({
-    description:
-      'Create one product. Title and selling price are required; omitted catalog fields use their normal defaults. Returns the saved product.',
-    inputSchema: productPayloadSchema,
-    execute: evaluationNoop,
-  }),
-  update_products: tool({
-    description:
-      'Change specified fields on exact current product IDs. Omitted fields are preserved; returns previous values for the changed fields.',
-    inputSchema: adminAiProductUpdateSchema,
-    execute: evaluationNoop,
-  }),
-  archive_products: tool({
-    description:
-      'Archive exact current product IDs. Their records, inventory, and taxonomy assignments are retained.',
-    inputSchema: adminAiProductArchiveSchema,
-    execute: evaluationNoop,
-  }),
-  restore_products: tool({
-    description:
-      'Restore exact archived product IDs. Restore only removes archive state; it does not reactivate or restock them.',
-    inputSchema: adminAiProductRestoreSchema,
-    execute: evaluationNoop,
-  }),
-  adjust_inventory: tool({
-    description:
-      'Increase or decrease inventory quantities for exact product IDs by positive deltas. Returns previous and resulting quantities.',
-    inputSchema: adminAiInventoryAdjustmentSchema,
-    execute: evaluationNoop,
-  }),
-  update_inventory_state: tool({
-    description:
-      'Set in-stock state or barcode on exact product IDs. This does not change inventory quantity.',
-    inputSchema: adminAiInventoryStateSchema,
-    execute: evaluationNoop,
-  }),
-  manage_taxonomy: tool({
-    description:
-      'Create, update, or delete one brand or category through the canonical catalog workflow.',
-    inputSchema: adminAiTaxonomyMutationSchema,
-    execute: evaluationNoop,
-  }),
-  query_orders: tool({
-    description: ADMIN_AI_QUERY_ORDERS_TOOL_DESCRIPTION,
-    inputSchema: adminAiOrderQuerySchema,
-    execute: queryAdminOrders,
-  }),
-  inspect_orders: tool({
-    description: ADMIN_AI_INSPECT_ORDERS_TOOL_DESCRIPTION,
-    inputSchema: adminAiOrderInspectionSchema,
-    execute: inspectAdminOrderDetails,
-  }),
-  inspect_ecotrack_shipments: tool({
-    description: ADMIN_AI_INSPECT_ECOTRACK_SHIPMENTS_TOOL_DESCRIPTION,
-    inputSchema: adminAiEcotrackShipmentInspectionSchema,
-    execute: inspectAdminAiEcotrackShipments,
-  }),
-  query_analytics: tool({
-    description: analyticsDescription,
-    inputSchema: adminAiAnalyticsQuerySchema,
-    execute: queryAdminAnalytics,
-  }),
-  query_ai_stats: tool({
-    description: ADMIN_AI_STATS_TOOL_DESCRIPTION,
-    inputSchema: adminAiStatsQuerySchema,
-    execute: queryAdminAiStats,
-  }),
-  update_analytics_settings: tool({
-    description:
-      'Change the canonical planning return rate and return the persisted before and after values.',
-    inputSchema: adminAiAnalyticsSettingsPatchSchema,
-    execute: evaluationNoop,
-  }),
-  manage_analytics_costs: tool({
-    description:
-      'Create, update, or delete exact operating-cost records used by true profit. Updates preserve omitted fields and return a persisted outcome for each requested operation.',
-    inputSchema: adminAiAnalyticsCostsMutationSchema,
-    execute: evaluationNoop,
-  }),
-  manage_analytics_day_overrides: tool({
-    description:
-      'Set or reset exact calculator-day overrides for gross profit, planning return rate, confirmed orders, or an operator note. Omitted fields stay unchanged and null clears a named value.',
-    inputSchema: adminAiAnalyticsDayOverridesMutationSchema,
-    execute: evaluationNoop,
-  }),
-  sync_analytics_source: tool({
-    description:
-      'Synchronize an exact Meta or Search Console date range through the canonical integration. Meta ranges are limited to 90 days; returns the source operation result.',
-    inputSchema: adminAiAnalyticsSyncSchema,
-    execute: evaluationNoop,
-  }),
-  present_admin_ui: tool({
-    description: ADMIN_AI_PRESENTATION_TOOL_DESCRIPTION,
-    inputSchema: adminAiPresentationPlanSchema.omit({ kind: true }),
-    execute: async (input) =>
-      adminAiPresentationPlanSchema.parse({ kind: 'admin_ui_blocks_v1', ...input }),
-  }),
-};
+const tools = buildAdminAiTools({
+  permissions: evaluationPermissions,
+  locale: 'en',
+  runtime: { kind: 'evaluation', actorId: 'admin-ai-wide-eval' },
+});
 
 function context(surface: Surface) {
-  const section = surface === 'stats' ? 'money' : surface;
+  const section =
+    surface === 'stats'
+      ? 'money'
+      : surface === 'administration'
+        ? 'storefront'
+        : surface === 'assets'
+          ? 'banners'
+          : surface;
+  const pathname =
+    surface === 'administration'
+      ? '/en/administration/storefront'
+      : surface === 'assets'
+        ? '/en/assets'
+        : `/en/${surface === 'stats' ? 'stats' : surface}`;
   return adminAiContextMessage({
     locale: 'en',
     surface,
     section,
-    pathname: `/en/${surface === 'stats' ? 'stats' : surface}`,
+    pathname,
     hash: null,
     filters: {},
     selection: null,
@@ -1018,6 +1044,14 @@ function evidenceSummary(output: unknown) {
     'missingIds',
     'items',
     'topics',
+    'settings',
+    'announcement',
+    'configuredAiModels',
+    'banners',
+    'featuredGroups',
+    'productCards',
+    'before',
+    'after',
     'applied',
     'reason',
   ];

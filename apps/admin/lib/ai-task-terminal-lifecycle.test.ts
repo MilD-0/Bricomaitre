@@ -83,4 +83,24 @@ describe('AI task terminal lifecycle', () => {
       expect.objectContaining({ status: 'failed', attemptsMade: 3 }),
     );
   });
+
+  it('publishes an operator-requested stop as cancellation', async () => {
+    const { worker, listeners } = fakeWorker();
+    const publish = vi.fn(async () => undefined);
+    attachAiTaskTerminalFollowups(worker, {
+      getSnapshot: async () => ({
+        status: 'cancelled',
+        progress: null,
+        resultSummary: null,
+        errorMessage: 'Job cancelled.',
+        downloadPath: null,
+      }),
+      publish,
+    });
+
+    listeners.failed?.({ ...job, attemptsMade: 3 }, new Error('Job cancelled.'));
+
+    await vi.waitFor(() => expect(publish).toHaveBeenCalledOnce());
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({ status: 'cancelled' }));
+  });
 });

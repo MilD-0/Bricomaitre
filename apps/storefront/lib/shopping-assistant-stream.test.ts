@@ -34,7 +34,7 @@ describe('shopping assistant response stream', () => {
           );
           controller.enqueue(
             encoder.encode(
-              `{"type":"text-delta","delta":"une option."}\n${JSON.stringify({ type: 'result', mode: 'ai', products: [product] })}\n`,
+              `{"type":"text-delta","delta":"une option."}\n${JSON.stringify({ type: 'result', products: [product] })}\n`,
             ),
           );
           controller.close();
@@ -59,22 +59,20 @@ describe('shopping assistant response stream', () => {
     ]);
     expect(deltas).toEqual(['Voici ', 'une option.']);
     expect(onResult).toHaveBeenCalledWith({
-      mode: 'ai',
       products: [product],
       cartMutations: [],
     });
   });
 
-  it('retains compatibility with the previous JSON response during rollout', async () => {
+  it('accepts a validated non-streaming response', async () => {
     const onTextDelta = vi.fn();
     const onResult = vi.fn();
-    const response = Response.json({ message: 'Résultat', mode: 'fallback', products: [] });
+    const response = Response.json({ message: 'Résultat', products: [] });
 
     await consumeShoppingAssistantResponse(response, { onTextDelta, onResult });
 
     expect(onTextDelta).toHaveBeenCalledWith('Résultat');
     expect(onResult).toHaveBeenCalledWith({
-      mode: 'fallback',
       products: [],
       cartMutations: [],
     });
@@ -84,7 +82,7 @@ describe('shopping assistant response stream', () => {
     const onResult = vi.fn();
     const cartMutation = { action: 'add', quantity: 2, product };
     const response = new Response(
-      `${JSON.stringify({ type: 'text-delta', delta: 'Ajout effectué.' })}\n${JSON.stringify({ type: 'result', mode: 'ai', products: [], cartMutations: [cartMutation] })}\n`,
+      `${JSON.stringify({ type: 'text-delta', delta: 'Ajout effectué.' })}\n${JSON.stringify({ type: 'result', products: [], cartMutations: [cartMutation] })}\n`,
       { headers: { 'content-type': 'application/x-ndjson' } },
     );
 
@@ -94,7 +92,6 @@ describe('shopping assistant response stream', () => {
     });
 
     expect(onResult).toHaveBeenCalledWith({
-      mode: 'ai',
       products: [],
       cartMutations: [cartMutation],
     });

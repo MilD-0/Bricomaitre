@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   generate: vi.fn(),
   create: vi.fn(),
   detail: vi.fn(),
+  list: vi.fn(),
   save: vi.fn(),
   setActive: vi.fn(),
   revalidate: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock('./ai-admin-capabilities', () => ({
 vi.mock('./landing-pages', () => ({
   createLandingPage: mocks.create,
   getLandingPageDetail: mocks.detail,
+  listLandingPageSummaries: mocks.list,
   saveLandingPage: mocks.save,
   setLandingPageActive: mocks.setActive,
 }));
@@ -26,8 +28,11 @@ vi.mock('./storefront-revalidate', () => ({
 }));
 
 import {
+  adminAiLandingPageInspectionSchema,
   createAdminAiLandingPage,
   editAdminAiLandingPage,
+  inspectAdminAiLandingPages,
+  setAdminAiLandingPagePublication,
   type AdminAiLandingPageEditor,
 } from './admin-ai-landing-pages';
 
@@ -105,6 +110,19 @@ describe('admin AI landing-page operations', () => {
       updatedAt: '2026-08-23T00:00:00.000Z',
       document,
     });
+    mocks.list.mockResolvedValue([
+      {
+        id: 41,
+        productId: 12,
+        productTitle: 'Perceuse',
+        productSlug: 'perceuse',
+        locale: 'fr',
+        slug: 'perceuse-41',
+        active: false,
+        currentRevision: 3,
+        updatedAt: '2026-08-23T00:00:00.000Z',
+      },
+    ]);
     mocks.save.mockResolvedValue({ id: 41, active: false, currentRevision: 4, changed: true });
     productQuery();
   });
@@ -168,6 +186,7 @@ describe('admin AI landing-page operations', () => {
         landingPageId: 41,
         expectedRevision: 3,
         instruction: 'Réécris le hero.',
+        targetBlockIds: ['hero'],
       },
       { email: 'admin@bricomaitre.com' },
       editor,
@@ -176,6 +195,9 @@ describe('admin AI landing-page operations', () => {
     expect(editor.edit).toHaveBeenCalledWith(
       expect.objectContaining({
         instruction: 'Réécris le hero.',
+        targetBlockIds: ['hero'],
+        deleteBlockIds: [],
+        allowStructuralChanges: false,
         currentDocument: document,
         product: expect.objectContaining({ id: 12, images: ['https://cdn.example.com/drill.jpg'] }),
       }),
@@ -195,23 +217,106 @@ describe('admin AI landing-page operations', () => {
     expect(mocks.revalidate).toHaveBeenCalledOnce();
   });
 
-  it('changes publication state without invoking the content model', async () => {
-    const editor = { edit: vi.fn() };
-    await editAdminAiLandingPage(
+  it('changes publication state directly without invoking the content model', async () => {
+    await setAdminAiLandingPagePublication(
       {
         landingPageId: 41,
         expectedRevision: 3,
-        instruction: null,
         active: true,
       },
+      { email: 'admin@bricomaitre.com' },
+    );
+
+    expect(mocks.select).not.toHaveBeenCalled();
+    expect(mocks.setActive).toHaveBeenCalledWith({
+      id: 41,
+      active: true,
+      expectedRevision: 3,
+      actorId: 'admin@bricomaitre.com',
+    });
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it('preserves publication when revising an active page so the saved revision stays live', async () => {
+    mocks.detail.mockResolvedValueOnce({
+      id: 41,
+      productId: 12,
+      productTitle: 'Perceuse',
+      productSlug: 'perceuse',
+      locale: 'fr',
+      slug: 'perceuse-41',
+      active: true,
+      currentRevision: 3,
+      updatedAt: '2026-08-23T00:00:00.000Z',
+      document,
+    });
+    const editor: AdminAiLandingPageEditor = {
+      edit: vi.fn().mockResolvedValue({
+        document,
+        model: 'openai/gpt-5.6-luna',
+        reasoning: 'Hero revised.',
+        groundingNotes: [],
+        usage: {},
+        stages: {
+          status: 'completed',
+          plannedSections: 2,
+          generatedSections: 1,
+          preservedSections: 1,
+          deletedSections: 0,
+          fallbackSections: 0,
+          skippedSections: 0,
+          retryCount: 0,
+          failures: [],
+        },
+      }),
+    };
+
+    await editAdminAiLandingPage(
+      { landingPageId: 41, expectedRevision: 3, instruction: 'Rewrite the hero.' },
       undefined,
       editor,
     );
 
-    expect(editor.edit).not.toHaveBeenCalled();
-    expect(mocks.select).not.toHaveBeenCalled();
-    expect(mocks.save).toHaveBeenCalledWith(
-      expect.objectContaining({ document, active: true, expectedRevision: 3 }),
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ active: true }));
+  });
+
+  it('progresses from summaries to block outlines and exact selected content', async () => {
+    await expect(inspectAdminAiLandingPages({ query: 'perceuse' })).resolves.toMatchObject({
+      view: 'summary',
+      pagination: { total: 1 },
+      items: [{ id: 41, productId: 12 }],
+    });
+    expect(mocks.detail).not.toHaveBeenCalled();
+
+    await expect(
+      inspectAdminAiLandingPages({ landingPageIds: [41], view: 'outline' }),
+    ).resolves.toMatchObject({
+      view: 'outline',
+      items: [
+        {
+          id: 41,
+          blocks: [
+            { id: 'hero', type: 'product-hero', heading: 'Perceuse' },
+            { id: 'final', type: 'final-cta' },
+          ],
+        },
+      ],
+    });
+
+    const content = await inspectAdminAiLandingPages({
+      landingPageIds: [41],
+      view: 'content',
+      blockIds: ['hero'],
+    });
+    expect(content.items[0]).toMatchObject({
+      availableBlockIds: ['hero', 'final'],
+      document: { blocks: [{ id: 'hero' }] },
+    });
+  });
+
+  it('requires one exact page before returning complete authored content', () => {
+    expect(() => adminAiLandingPageInspectionSchema.parse({ view: 'content' })).toThrow(
+      'one exact landing-page ID',
     );
   });
 });

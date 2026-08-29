@@ -432,7 +432,7 @@ describe('storefront API client', () => {
     });
   });
 
-  it('records the complete assistant conversation through the canonical analytics endpoint', async () => {
+  it('records structured assistant outcomes without customer conversation content', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 202 }));
 
     await recordStorefrontAssistantRun({
@@ -440,21 +440,19 @@ describe('storefront API client', () => {
         journeyId: 'journey-1',
         sessionId: 'session-1',
         pagePath: '/fr/products',
-        intent: 'product_search',
       },
       locale: 'fr',
       status: 'completed',
-      mode: 'ai',
       model: 'storefront-model-id',
       inputTokens: 10,
       outputTokens: 5,
       totalTokens: 15,
       durationMs: 420,
       toolCalls: 1,
+      toolNames: ['search_catalog'],
       resultsCount: 2,
+      cartChanges: 0,
       promptVersion: 'storefront-shopping-v2',
-      conversation: [{ role: 'user', content: 'Find a drill' }],
-      response: 'These drills match your request.',
     });
 
     const [url, options] = vi.mocked(fetch).mock.calls[0] ?? [];
@@ -466,16 +464,16 @@ describe('storefront API client', () => {
       sessionId: 'session-1',
       metadata: {
         storefrontProject: 'storefront',
-        intent: 'product_search',
         model: 'storefront-model-id',
         totalTokens: 15,
         durationMs: 420,
         toolCalls: 1,
+        toolNames: ['search_catalog'],
         promptVersion: 'storefront-shopping-v2',
-        conversation: [{ role: 'user', content: 'Find a drill' }],
-        response: 'These drills match your request.',
       },
     });
+    expect(JSON.stringify(payload)).not.toContain('Find a drill');
+    expect(JSON.stringify(payload)).not.toContain('These drills');
   });
 
   it('server-renders a token-verified order without caching the customer response', async () => {

@@ -125,6 +125,7 @@ describe('catalog categorization background job', () => {
         return { id: 100 + input.productId };
       }),
       applyProposal: vi.fn(),
+      refreshConsumers: vi.fn(async () => undefined),
     };
     const jobHelpers = helpers();
 
@@ -182,6 +183,7 @@ describe('catalog categorization background job', () => {
       listPendingProductIds: async () => new Set(),
       proposeCategory: vi.fn(async () => ({ id: 1 })),
       applyProposal: vi.fn(),
+      refreshConsumers: vi.fn(async () => undefined),
     };
 
     await expect(runAiCategorizationJob(payload(), helpers(), dependencies)).resolves.toMatchObject(
@@ -205,6 +207,7 @@ describe('catalog categorization background job', () => {
       listPendingProductIds: async () => new Set(),
       proposeCategory: vi.fn(async () => ({ id: 1 })),
       applyProposal: vi.fn(),
+      refreshConsumers: vi.fn(async () => undefined),
     };
 
     await expect(runAiCategorizationJob(payload(), jobHelpers, dependencies)).rejects.toThrow(
@@ -221,6 +224,7 @@ describe('catalog categorization background job', () => {
 
   it('auto-applies through verified proposal review when the authorized job requests it', async () => {
     const applyProposal = vi.fn(async () => ({ status: 'applied', verified: true }));
+    const refreshConsumers = vi.fn(async () => undefined);
     const dependencies: AiCategorizationDependencies = {
       classifier: {
         classify: vi.fn(async () => ({
@@ -253,6 +257,7 @@ describe('catalog categorization background job', () => {
       listPendingProductIds: async () => new Set(),
       proposeCategory: vi.fn(async () => ({ id: 77 })),
       applyProposal,
+      refreshConsumers,
     };
 
     await expect(
@@ -264,6 +269,8 @@ describe('catalog categorization background job', () => {
       complete: true,
     });
     expect(applyProposal).toHaveBeenCalledWith(77, { email: 'admin@example.com', name: 'Admin' });
+    expect(refreshConsumers).toHaveBeenCalledOnce();
+    expect(refreshConsumers).toHaveBeenCalledWith('ai-product-categorization:auto-apply');
   });
 
   it('reports an auto-apply conflict while leaving the verified proposal pending', async () => {
@@ -301,6 +308,7 @@ describe('catalog categorization background job', () => {
       applyProposal: vi.fn(async () => {
         throw new Error('category changed');
       }),
+      refreshConsumers: vi.fn(async () => undefined),
     };
 
     await expect(

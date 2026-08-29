@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
       get: vi.fn(),
       set: vi.fn(),
       eval: vi.fn(),
+      exists: vi.fn(),
       zrevrange: vi.fn(),
       scan: vi.fn(),
       mget: vi.fn(),
@@ -125,10 +126,18 @@ describe('runtime system-wide job access', () => {
     const result = await requestJobCancellationById('admin-ai-categorization', 'job-1');
 
     expect(result).toMatchObject({ id: 'job-1', cancelRequested: true });
-    expect(mocks.transaction.zadd).toHaveBeenCalledWith(
+    expect(mocks.redis.eval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('zadd'"),
+      5,
+      'bric:jobs:admin-ai-categorization:job-1',
+      'bric:jobs:admin-ai-categorization:job-1:cancel',
+      'bric:jobs:admin-ai-categorization:owner:admin@example.com',
       'bric:jobs:admin-ai-categorization:index',
+      'bric:jobs:admin-ai-categorization:index',
+      expect.stringMatching(/"cancelRequested":true/),
+      86_400,
       Date.parse(snapshot.createdAt),
-      'job-1',
+      '0',
     );
   });
 
@@ -138,7 +147,7 @@ describe('runtime system-wide job access', () => {
     await expect(
       requestJobCancellationById('admin-ai-categorization', 'job-1'),
     ).resolves.toBeNull();
-    expect(mocks.redis.multi).not.toHaveBeenCalled();
+    expect(mocks.redis.eval).not.toHaveBeenCalled();
   });
 
   it('distinguishes retryable failures from the terminal attempt', () => {
@@ -150,10 +159,10 @@ describe('runtime system-wide job access', () => {
   it('releases the active lock and records failure when job preparation fails', async () => {
     mocks.redis.get.mockResolvedValue(null);
     mocks.redis.set.mockResolvedValue('OK');
-    mocks.redis.eval.mockResolvedValue(1);
-    mocks.transaction.exec
+    mocks.redis.eval
       .mockRejectedValueOnce(new Error('snapshot unavailable'))
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce('OK');
 
     await expect(
       startOwnedJob({
@@ -171,16 +180,18 @@ describe('runtime system-wide job access', () => {
       'bric:jobs:admin-product-export:active:admin@example.com',
       expect.any(String),
     );
-    expect(mocks.transaction.set).toHaveBeenCalledWith(
+    expect(mocks.redis.eval).toHaveBeenCalledWith(
+      expect.stringContaining('cjson.decode'),
+      5,
       expect.stringMatching(/^bric:jobs:admin-product-export:/),
-      expect.stringMatching(/"origin":"admin-ai-assistant".*"status":"failed"/),
-      'EX',
-      86_400,
-    );
-    expect(mocks.transaction.zadd).toHaveBeenCalledWith(
+      expect.stringMatching(/:cancel$/),
+      'bric:jobs:admin-product-export:owner:admin@example.com',
+      'bric:jobs:admin-product-export:index',
       expect.stringMatching(/^bric:jobs:admin-product-export:origin:[a-f0-9]{64}:index$/),
+      expect.stringMatching(/"origin":"admin-ai-assistant".*"status":"failed"/),
+      86_400,
       expect.any(Number),
-      expect.any(String),
+      '1',
     );
   });
 });

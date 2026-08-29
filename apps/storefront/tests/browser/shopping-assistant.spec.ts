@@ -2,7 +2,6 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
 const assistantResponse = {
-  mode: 'ai',
   message:
     'La perceuse à percussion est l’option la plus proche dans le catalogue. Vérifiez sa disponibilité sur la fiche.\n\n| Critère | Valeur |\n| --- | --- |\n| Usage | Travaux courants |\n| Disponibilité | À vérifier sur la fiche |',
   products: [
@@ -29,7 +28,7 @@ const assistantStreamBody =
     { type: 'status', status: 'thinking' },
     { type: 'text-delta', delta: assistantResponse.message.slice(0, 70) },
     { type: 'text-delta', delta: assistantResponse.message.slice(70) },
-    { type: 'result', mode: assistantResponse.mode, products: assistantResponse.products },
+    { type: 'result', products: assistantResponse.products },
   ]
     .map((event) => JSON.stringify(event))
     .join('\n') + '\n';
@@ -104,7 +103,8 @@ test('offers a grounded, fully observable product-advisor conversation in French
   await expect
     .poll(() => analyticsBodies.some((body) => body.includes('ai_assistant_message')))
     .toBe(true);
-  expect(analyticsBodies.join(' ')).toContain('Une perceuse fiable pour du béton');
+  expect(analyticsBodies.join(' ')).not.toContain('Une perceuse fiable pour du béton');
+  expect(analyticsBodies.join(' ')).not.toContain('option la plus proche');
 
   const accessibility = await new AxeBuilder({ page })
     .include('.shopping-assistant-sheet')
@@ -121,31 +121,13 @@ test('lets the advisor update the existing browser cart from natural language', 
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        mode: 'ai',
         message: 'La quantité de la perceuse est maintenant de trois.',
         products: [],
         cartMutations: [
           {
             action: 'set_quantity',
+            productId: 12,
             quantity: 3,
-            product: {
-              id: 12,
-              token: 'perceuse-beton',
-              title: 'Perceuse béton',
-              titleAr: 'مثقاب خرسانة',
-              description: null,
-              descriptionAr: null,
-              sku: null,
-              characteristics: [],
-              characteristicsAr: [],
-              price: '12500.00',
-              oldPrice: null,
-              inStock: true,
-              availabilityStatus: 'in_stock',
-              imageUrl: null,
-              brand: null,
-              category: null,
-            },
           },
         ],
       }),

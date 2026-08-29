@@ -71,6 +71,29 @@ describe('admin AI native inventory operations', () => {
         items: [{ productId: 12, quantity: 1 }],
       }).success,
     ).toBe(false);
+
+    await receiveAdminInventory(
+      {
+        source: 'barcode_scan',
+        orderId: null,
+        items: [{ productId: 12, quantity: 1 }],
+      },
+      actor,
+    );
+    expect(mocks.batch).toHaveBeenLastCalledWith(
+      'database',
+      {
+        mode: 'increase',
+        items: [
+          {
+            productId: 12,
+            quantity: 1,
+            source: { type: 'order-scan' },
+          },
+        ],
+      },
+      actor,
+    );
   });
 
   it('updates explicit state fields once per product and reports partial failures', async () => {

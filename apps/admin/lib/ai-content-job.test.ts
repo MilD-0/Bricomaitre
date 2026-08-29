@@ -48,6 +48,7 @@ describe('AI product content background job', () => {
         return { id: 100 + productId };
       }),
       applyProposal: vi.fn(),
+      refreshConsumers: vi.fn(async () => undefined),
     };
     const jobHelpers = helpers();
 
@@ -78,11 +79,13 @@ describe('AI product content background job', () => {
   });
 
   it('auto-applies generated proposals through verified review', async () => {
+    const refreshConsumers = vi.fn(async () => undefined);
     const dependencies: AiContentJobDependencies = {
       listProducts: vi.fn(async () => [products[0]]),
       listPendingProductIds: vi.fn(async () => new Set()),
       propose: vi.fn(async () => ({ id: 101 })),
       applyProposal: vi.fn(async () => ({ status: 'applied', verified: true })),
+      refreshConsumers,
     };
 
     await expect(
@@ -99,6 +102,8 @@ describe('AI product content background job', () => {
       email: 'admin@example.com',
       name: 'Admin',
     });
+    expect(refreshConsumers).toHaveBeenCalledOnce();
+    expect(refreshConsumers).toHaveBeenCalledWith('ai-product-content:auto-apply');
   });
 
   it('leaves a proposal pending when verified auto-apply fails', async () => {
@@ -109,6 +114,7 @@ describe('AI product content background job', () => {
       applyProposal: vi.fn(async () => {
         throw new Error('verification failed');
       }),
+      refreshConsumers: vi.fn(async () => undefined),
     };
 
     await expect(

@@ -4,13 +4,12 @@ import { describe, expect, it } from 'vitest';
 import type { CartItem } from './cart';
 import { applyShoppingAssistantCartMutations } from './shopping-assistant-cart';
 
-function mutation(
-  action: ShoppingAssistantCartMutation['action'],
+function addMutation(
   quantity: number,
-  overrides: Partial<ShoppingAssistantCartMutation['product']> = {},
-): ShoppingAssistantCartMutation {
+  overrides: Partial<Extract<ShoppingAssistantCartMutation, { action: 'add' }>['product']> = {},
+): Extract<ShoppingAssistantCartMutation, { action: 'add' }> {
   return {
-    action,
+    action: 'add',
     quantity,
     product: {
       id: 12,
@@ -48,7 +47,11 @@ describe('shopping assistant cart mutations', () => {
   it('applies sequential add, exact quantity, and remove operations to the native cart', () => {
     const result = applyShoppingAssistantCartMutations(
       [existing],
-      [mutation('add', 2), mutation('set_quantity', 7), mutation('remove', 0)],
+      [
+        addMutation(2),
+        { action: 'set_quantity', productId: 12, quantity: 7 },
+        { action: 'remove', productId: 12, quantity: 0 },
+      ],
       'fr',
     );
 
@@ -68,7 +71,7 @@ describe('shopping assistant cart mutations', () => {
   it('adds a grounded Arabic product and honors the cart quantity ceiling', () => {
     const result = applyShoppingAssistantCartMutations(
       [{ ...existing, quantity: 19 }],
-      [mutation('add', 4)],
+      [addMutation(4)],
       'ar',
     );
 
@@ -79,7 +82,11 @@ describe('shopping assistant cart mutations', () => {
   it('ignores unavailable additions and cart-only operations for absent products', () => {
     const result = applyShoppingAssistantCartMutations(
       [],
-      [mutation('add', 1, { inStock: false }), mutation('set_quantity', 3), mutation('remove', 0)],
+      [
+        addMutation(1, { inStock: false }),
+        { action: 'set_quantity', productId: 12, quantity: 3 },
+        { action: 'remove', productId: 12, quantity: 0 },
+      ],
       'fr',
     );
 

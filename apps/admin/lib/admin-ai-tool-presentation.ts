@@ -21,16 +21,7 @@ export type AdminAiToolLabelKey =
   | 'assets'
   | 'assetsUpdated'
   | 'landingPages'
-  | 'landingPageCreated'
   | 'landingPageUpdated'
-  | 'proposals'
-  | 'proposalsReviewed'
-  | 'bulletin'
-  | 'bulletinUpdated'
-  | 'administration'
-  | 'administrationUpdated'
-  | 'actionHistory'
-  | 'actionHistoryRecovered'
   | 'storefront'
   | 'storefrontUpdated'
   | 'analyticsUpdated'
@@ -48,8 +39,6 @@ type AdminAiToolDestinationKey =
   | 'assets'
   | 'landingPages'
   | 'proposals'
-  | 'bulletin'
-  | 'administration'
   | 'storefront'
   | 'analytics';
 
@@ -65,9 +54,6 @@ export type AdminAiToolActivityKey =
   | 'orders'
   | 'inventory'
   | 'assets'
-  | 'proposals'
-  | 'bulletin'
-  | 'administration'
   | 'storefront'
   | 'background'
   | 'analytics'
@@ -104,33 +90,17 @@ const labelKeys: Record<string, AdminAiToolLabelKey> = {
   change_ecotrack_shipments: 'ecotrackShipmentsUpdated',
   update_order_status: 'ordersUpdated',
   update_order_details: 'ordersUpdated',
-  inspect_inventory: 'inventory',
   scan_inventory: 'inventory',
   adjust_inventory: 'inventoryUpdated',
   receive_inventory: 'inventoryUpdated',
   update_inventory_state: 'inventoryUpdated',
   inspect_assets: 'assets',
-  update_asset_state: 'assetsUpdated',
   reorder_assets: 'assetsUpdated',
   manage_assets: 'assetsUpdated',
   inspect_landing_pages: 'landingPages',
-  create_landing_page: 'landingPageCreated',
-  edit_landing_page: 'landingPageUpdated',
-  inspect_ai_proposals: 'proposals',
-  review_ai_proposals: 'proposalsReviewed',
-  delete_expired_ai_proposals: 'proposalsReviewed',
-  inspect_bulletin: 'bulletin',
-  create_bulletin_post: 'bulletinUpdated',
-  reply_bulletin_post: 'bulletinUpdated',
-  set_bulletin_reaction: 'bulletinUpdated',
-  update_bulletin_post: 'bulletinUpdated',
-  delete_bulletin_content: 'bulletinUpdated',
-  inspect_administration: 'administration',
-  set_access_grant: 'administrationUpdated',
-  revoke_access_grants: 'administrationUpdated',
-  set_role_definition: 'administrationUpdated',
-  inspect_action_history: 'actionHistory',
-  recover_action_history: 'actionHistoryRecovered',
+  start_landing_page_work: 'background',
+  set_landing_page_active: 'landingPageUpdated',
+  get_landing_page_job_status: 'background',
   inspect_storefront_configuration: 'storefront',
   update_storefront_settings: 'storefrontUpdated',
   update_storefront_announcement: 'storefrontUpdated',
@@ -140,20 +110,8 @@ const labelKeys: Record<string, AdminAiToolLabelKey> = {
   sync_analytics_source: 'analyticsUpdated',
   generate_product_content: 'content',
   get_product_content_job_status: 'content',
-  list_background_jobs: 'background',
-  get_background_job: 'background',
-  stop_background_job: 'background',
-  start_background_job: 'background',
-  suggest_discount: 'proposals',
-  suggest_featured_products: 'proposals',
-  suggest_landing_page: 'proposals',
   categorize_catalog: 'categorization',
   get_catalog_categorization_status: 'categorization',
-  propose_product_edit: 'proposals',
-  propose_brand_edit: 'proposals',
-  propose_category_edit: 'proposals',
-  propose_brand_create: 'proposals',
-  propose_category_create: 'proposals',
 };
 
 const destinationKeys: Record<string, AdminAiToolDestinationKey> = {
@@ -187,33 +145,17 @@ const destinationKeys: Record<string, AdminAiToolDestinationKey> = {
   change_ecotrack_shipments: 'ecotrack',
   update_order_status: 'orders',
   update_order_details: 'orders',
-  inspect_inventory: 'inventory',
   scan_inventory: 'inventory',
   adjust_inventory: 'inventory',
   receive_inventory: 'inventory',
   update_inventory_state: 'inventory',
   inspect_assets: 'assets',
-  update_asset_state: 'assets',
   reorder_assets: 'assets',
   manage_assets: 'assets',
   inspect_landing_pages: 'landingPages',
-  create_landing_page: 'landingPages',
-  edit_landing_page: 'landingPages',
-  inspect_ai_proposals: 'proposals',
-  review_ai_proposals: 'proposals',
-  delete_expired_ai_proposals: 'proposals',
-  inspect_bulletin: 'bulletin',
-  create_bulletin_post: 'bulletin',
-  reply_bulletin_post: 'bulletin',
-  set_bulletin_reaction: 'bulletin',
-  update_bulletin_post: 'bulletin',
-  delete_bulletin_content: 'bulletin',
-  inspect_administration: 'administration',
-  set_access_grant: 'administration',
-  revoke_access_grants: 'administration',
-  set_role_definition: 'administration',
-  inspect_action_history: 'administration',
-  recover_action_history: 'administration',
+  start_landing_page_work: 'landingPages',
+  set_landing_page_active: 'landingPages',
+  get_landing_page_job_status: 'landingPages',
   inspect_storefront_configuration: 'storefront',
   update_storefront_settings: 'storefront',
   update_storefront_announcement: 'storefront',
@@ -225,16 +167,8 @@ const destinationKeys: Record<string, AdminAiToolDestinationKey> = {
   query_ai_stats: 'analytics',
   generate_product_content: 'products',
   get_product_content_job_status: 'products',
-  suggest_discount: 'proposals',
-  suggest_featured_products: 'proposals',
-  suggest_landing_page: 'proposals',
   categorize_catalog: 'proposals',
   get_catalog_categorization_status: 'proposals',
-  propose_product_edit: 'proposals',
-  propose_brand_edit: 'proposals',
-  propose_category_edit: 'proposals',
-  propose_brand_create: 'proposals',
-  propose_category_create: 'proposals',
 };
 
 const activityKeysByLabel: Record<AdminAiToolLabelKey, AdminAiToolActivityKey> = {
@@ -260,16 +194,7 @@ const activityKeysByLabel: Record<AdminAiToolLabelKey, AdminAiToolActivityKey> =
   assets: 'assets',
   assetsUpdated: 'assets',
   landingPages: 'assets',
-  landingPageCreated: 'assets',
   landingPageUpdated: 'assets',
-  proposals: 'proposals',
-  proposalsReviewed: 'proposals',
-  bulletin: 'bulletin',
-  bulletinUpdated: 'bulletin',
-  administration: 'administration',
-  administrationUpdated: 'administration',
-  actionHistory: 'administration',
-  actionHistoryRecovered: 'administration',
   storefront: 'storefront',
   storefrontUpdated: 'storefront',
   analyticsUpdated: 'analytics',
@@ -312,7 +237,6 @@ function destinationHref(
   if (destinationKey === 'ecotrack') return `/${locale}/orders/ecotrack`;
   if (destinationKey === 'inventory') return `/${locale}/inventory`;
   if (destinationKey === 'proposals') return `/${locale}/ai-proposals`;
-  if (destinationKey === 'bulletin') return `/${locale}/bulletin`;
   if (destinationKey === 'storefront') return `/${locale}/administration/storefront`;
   if (destinationKey === 'analytics') {
     if (toolName === 'query_ai_stats') {
@@ -342,16 +266,6 @@ function destinationHref(
         : `/${locale}/stats/meta-ads`;
     }
     return `/${locale}/stats/costs`;
-  }
-  if (destinationKey === 'administration') {
-    if (toolName === 'inspect_action_history' || toolName === 'recover_action_history') {
-      return `/${locale}/administration/history`;
-    }
-    if (toolName === 'set_access_grant' || toolName === 'revoke_access_grants') {
-      return `/${locale}/administration/users`;
-    }
-    if (toolName === 'set_role_definition') return `/${locale}/administration/roles`;
-    return `/${locale}/administration`;
   }
   if (destinationKey === 'assets') return assetHref(locale, output);
 

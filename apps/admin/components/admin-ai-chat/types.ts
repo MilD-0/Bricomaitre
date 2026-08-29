@@ -11,6 +11,7 @@ export type AiJob = {
   queue: string;
   kind: string;
   type?: string;
+  conversationId?: number | null;
   cancellable?: boolean;
   status: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed';
   progress: { phase: string; current: number; total: number; percentage: number };

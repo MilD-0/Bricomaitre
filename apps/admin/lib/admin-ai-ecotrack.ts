@@ -197,6 +197,7 @@ export async function startAdminAiEcotrackPosting(
   );
   if (request.orderIds.length === 0) {
     return {
+      ok: false as const,
       kind: 'ecotrack_posting_not_started' as const,
       provider: parsed.provider,
       request,
@@ -217,6 +218,7 @@ export async function startAdminAiEcotrackPosting(
   );
 
   return {
+    ok: result.kind !== 'busy',
     kind:
       result.kind === 'busy'
         ? ('ecotrack_posting_busy' as const)
@@ -342,8 +344,9 @@ export async function loadAdminAiEcotrackRequirements(
       },
       {
         reason: 'missing_name',
-        requirement: 'A non-empty customer first or last name is required.',
-        repairFields: ['firstName', 'lastName'],
+        requirement:
+          'Canonical fullName must be non-empty. Entered names are optional because posting falls back to the primary phone number.',
+        repairFields: ['firstName', 'lastName', 'phoneNumber'],
       },
       {
         reason: 'missing_phone',

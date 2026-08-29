@@ -59,85 +59,19 @@ export type AiProposalInboxData = {
   facets: { proposalTypes: string[]; entityTypes: string[]; models: string[] };
 };
 
-export type AiProposalAssistantScope = 'products' | 'taxonomy' | 'assets';
+export const CURRENT_AI_PROPOSAL_TYPES = [
+  'product_content',
+  'product_relation',
+  'product_category',
+] as const;
 
-const assistantScopeFilter: Record<AiProposalAssistantScope, SQL> = {
-  products: and(
-    eq(aiProposals.entityType, 'products'),
-    inArray(aiProposals.proposalType, [
-      'product_content',
-      'product_relation',
-      'product_discount',
-      'entity_edit',
-    ]),
-  )!,
-  taxonomy: and(
-    inArray(aiProposals.entityType, ['brands', 'categories']),
-    inArray(aiProposals.proposalType, ['entity_edit', 'entity_create']),
-  )!,
-  assets: inArray(aiProposals.proposalType, ['featured_products', 'landing_page']),
-};
-
-export async function loadAiProposalAssistantItems(
-  db: Database,
-  input: {
-    scopes: readonly AiProposalAssistantScope[];
-    ids?: readonly number[];
-    search?: string;
-    limit?: number;
-  },
-) {
-  const scopes = [...new Set(input.scopes)];
-  if (scopes.length === 0) return [];
-  const ids = [...new Set(input.ids ?? [])].slice(0, 100);
-  const search = input.search?.trim().slice(0, 120) ?? '';
-  const term = search ? `%${search}%` : null;
-  const where = and(
-    eq(aiProposals.status, 'proposed'),
-    or(...scopes.map((scope) => assistantScopeFilter[scope])),
-    ids.length > 0 ? inArray(aiProposals.id, ids) : undefined,
-    term
-      ? or(
-          ilike(aiProposals.proposalType, term),
-          ilike(aiProposals.entityType, term),
-          ilike(aiRuns.task, term),
-          ilike(aiRuns.model, term),
-        )
-      : undefined,
-  );
-
-  const rows = await db
-    .select({
-      id: aiProposals.id,
-      proposalType: aiProposals.proposalType,
-      entityType: aiProposals.entityType,
-      entityId: aiProposals.entityId,
-      payload: aiProposals.payload,
-      reasoning: aiProposals.reasoning,
-      evidence: aiProposals.evidence,
-      confidence: aiProposals.confidence,
-      expiresAt: aiProposals.expiresAt,
-      createdAt: aiProposals.createdAt,
-      task: aiRuns.task,
-      model: aiRuns.model,
-    })
-    .from(aiProposals)
-    .innerJoin(aiRuns, eq(aiRuns.id, aiProposals.runId))
-    .where(where)
-    .orderBy(desc(aiProposals.createdAt), desc(aiProposals.id))
-    .limit(Math.min(Math.max(input.limit ?? 20, 1), 50));
-
-  return rows.map((row) => ({
-    ...row,
-    evidence: row.evidence ?? [],
-    confidence: row.confidence === null ? null : Number(row.confidence),
-    expiresAt: row.expiresAt.toISOString(),
-    createdAt: row.createdAt.toISOString(),
-  }));
-}
+const currentProposalFilter = and(
+  eq(aiProposals.entityType, 'products'),
+  inArray(aiProposals.proposalType, CURRENT_AI_PROPOSAL_TYPES),
+)!;
 
 function buildFilters(query: AiProposalInboxQuery, now: Date) {
-  const filters: SQL[] = [eq(aiProposals.status, 'proposed')];
+  const filters: SQL[] = [eq(aiProposals.status, 'proposed'), currentProposalFilter];
   if (query.proposalType) filters.push(eq(aiProposals.proposalType, query.proposalType));
   if (query.entityType) filters.push(eq(aiProposals.entityType, query.entityType));
   if (query.model) filters.push(eq(aiRuns.model, query.model));
@@ -194,18 +128,18 @@ export async function loadAiProposalInbox(
     db
       .selectDistinct({ value: aiProposals.proposalType })
       .from(aiProposals)
-      .where(eq(aiProposals.status, 'proposed'))
+      .where(and(eq(aiProposals.status, 'proposed'), currentProposalFilter))
       .orderBy(asc(aiProposals.proposalType)),
     db
       .selectDistinct({ value: aiProposals.entityType })
       .from(aiProposals)
-      .where(eq(aiProposals.status, 'proposed'))
+      .where(and(eq(aiProposals.status, 'proposed'), currentProposalFilter))
       .orderBy(asc(aiProposals.entityType)),
     db
       .selectDistinct({ value: aiRuns.model })
       .from(aiProposals)
       .innerJoin(aiRuns, eq(aiRuns.id, aiProposals.runId))
-      .where(eq(aiProposals.status, 'proposed'))
+      .where(and(eq(aiProposals.status, 'proposed'), currentProposalFilter))
       .orderBy(asc(aiRuns.model)),
   ]);
   const total = Number(totalRows[0]?.value ?? 0);

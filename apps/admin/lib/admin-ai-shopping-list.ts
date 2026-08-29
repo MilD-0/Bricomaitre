@@ -29,29 +29,46 @@ const shoppingListSourceModeSchema = z.enum([
   'posted-and-confirmed',
 ]);
 
+const adminAiShoppingListScopeShape = {
+  sourceMode: shoppingListSourceModeSchema,
+  orderIds: z.array(z.number().int().positive()).max(500),
+  title: z.string().trim().min(1).max(220).nullable(),
+};
+
+function validateShoppingListScope(
+  input: { sourceMode: ShoppingListSourceMode; orderIds: number[] },
+  context: z.RefinementCtx,
+) {
+  if (input.sourceMode === 'selected' && input.orderIds.length === 0) {
+    context.addIssue({
+      code: 'custom',
+      path: ['orderIds'],
+      message: 'Selected shopping lists require exact inspected order IDs.',
+    });
+  }
+  if (input.sourceMode !== 'selected' && input.orderIds.length > 0) {
+    context.addIssue({
+      code: 'custom',
+      path: ['orderIds'],
+      message: 'Status-cohort shopping lists must use an empty orderIds array.',
+    });
+  }
+}
+
 export const adminAiShoppingListScopeSchema = z
+  .object(adminAiShoppingListScopeShape)
+  .strict()
+  .superRefine(validateShoppingListScope);
+
+export const adminAiShoppingListInspectionSchema = z
   .object({
-    sourceMode: shoppingListSourceModeSchema,
-    orderIds: z.array(z.number().int().positive()).max(500),
-    title: z.string().trim().min(1).max(220).nullable(),
+    ...adminAiShoppingListScopeShape,
+    query: z.string().trim().max(200).default(''),
+    page: z.number().int().positive().default(1),
+    limit: z.number().int().min(1).max(100).default(50),
   })
   .strict()
-  .superRefine((input, context) => {
-    if (input.sourceMode === 'selected' && input.orderIds.length === 0) {
-      context.addIssue({
-        code: 'custom',
-        path: ['orderIds'],
-        message: 'Selected shopping lists require exact inspected order IDs.',
-      });
-    }
-    if (input.sourceMode !== 'selected' && input.orderIds.length > 0) {
-      context.addIssue({
-        code: 'custom',
-        path: ['orderIds'],
-        message: 'Status-cohort shopping lists must use an empty orderIds array.',
-      });
-    }
-  });
+  .superRefine(validateShoppingListScope);
 
 export const adminAiShoppingListApplySchema = z
   .object({
@@ -158,6 +175,55 @@ function draftSummary(draft: ShoppingListDraftPayload) {
   };
 }
 
+function normalizedSearch(value: string | number | null) {
+  return String(value ?? '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase();
+}
+
+function compactDraftLines(
+  draft: ShoppingListDraftPayload,
+  input: z.output<typeof adminAiShoppingListInspectionSchema>,
+) {
+  const query = normalizedSearch(input.query.trim());
+  const filtered = draft.draftItems.filter(
+    (item) =>
+      !query ||
+      [item.draftId, item.productId, item.brandName, item.title].some((value) =>
+        normalizedSearch(value).includes(query),
+      ),
+  );
+  const offset = (input.page - 1) * input.limit;
+  return {
+    lines: filtered.slice(offset, offset + input.limit).map((item) => ({
+      draftId: item.draftId,
+      productId: item.productId,
+      brandName: item.brandName,
+      title: item.title,
+      quantity: item.quantity,
+      purchasePrice: item.purchasePrice ?? null,
+      inventoryQuantity: item.inventoryQuantity,
+      inventoryDecreaseQuantity: item.inventoryDecreaseQuantity,
+      inventoryShortageQuantity: item.inventoryShortageQuantity,
+      inventoryAppliedQuantity: item.inventoryAppliedQuantity,
+      inventoryActionEligible: item.inventoryActionEligible,
+      checked: item.checked,
+      isCustom: item.isCustom,
+      notes: item.notes.slice(0, 5),
+      notesTruncated: item.notes.length > 5,
+    })),
+    linePagination: {
+      page: input.page,
+      limit: input.limit,
+      totalItems: filtered.length,
+      totalPages: Math.max(1, Math.ceil(filtered.length / input.limit)),
+      hasNextPage: offset + input.limit < filtered.length,
+      hasPreviousPage: input.page > 1,
+    },
+  };
+}
+
 async function buildCurrentDraft(
   input: z.output<typeof adminAiShoppingListScopeSchema>,
   now = new Date(),
@@ -229,9 +295,9 @@ async function buildCurrentDraft(
 }
 
 export async function inspectAdminAiShoppingList(
-  input: z.input<typeof adminAiShoppingListScopeSchema>,
+  input: z.input<typeof adminAiShoppingListInspectionSchema>,
 ) {
-  const values = adminAiShoppingListScopeSchema.parse(input);
+  const values = adminAiShoppingListInspectionSchema.parse(input);
   const current = await buildCurrentDraft(values);
   return {
     kind: 'order_shopping_list_preview' as const,
@@ -240,7 +306,7 @@ export async function inspectAdminAiShoppingList(
     loadedSharedDraft: Boolean(current.existing),
     missingOrderIds: current.missingOrderIds,
     summary: draftSummary(current.draft),
-    draft: current.draft,
+    ...compactDraftLines(current.draft, values),
   };
 }
 
@@ -257,7 +323,6 @@ export async function saveAdminAiShoppingList(
     scopeKey: draft.scopeKey,
     missingOrderIds: current.missingOrderIds,
     summary: draftSummary(draft),
-    draft,
   };
 }
 
@@ -307,11 +372,11 @@ export async function applyAdminAiShoppingListInventory(
   if (candidates.length === 0) {
     return {
       ok: false as const,
+      complete: false as const,
       error: 'no_inventory_changes' as const,
       selectionSkipped,
       applicationSummary: { appliedLineCount: 0, appliedUnits: 0, inventoryRejectedCount: 0 },
       summary: draftSummary(draft),
-      draft,
     };
   }
 
@@ -353,7 +418,8 @@ export async function applyAdminAiShoppingListInventory(
     0,
   );
   return {
-    ok: result.complete && (values.selection === 'all' || selectionSkipped.length === 0),
+    ok: result.items.length > 0,
+    complete: result.complete && (values.selection === 'all' || selectionSkipped.length === 0),
     scopeKey: saved.scopeKey,
     applied: result.items,
     skipped: result.skipped,
@@ -364,6 +430,5 @@ export async function applyAdminAiShoppingListInventory(
       inventoryRejectedCount: result.skipped.length,
     },
     summary: draftSummary(saved),
-    draft: saved,
   };
 }

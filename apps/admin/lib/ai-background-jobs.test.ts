@@ -4,18 +4,13 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   get: vi.fn(),
   cancel: vi.fn(),
-  productExport: vi.fn(),
-  catalogFeed: vi.fn(),
-  orderExport: vi.fn(),
-  reporting: vi.fn(),
-  ecotrack: vi.fn(),
-  shipments: vi.fn(),
 }));
 
 vi.mock('./background-jobs', () => ({
   ADMIN_AD_COST_IMPORT_QUEUE: 'admin-ad-cost-import',
   ADMIN_AI_CATEGORIZATION_QUEUE: 'admin-ai-categorization',
   ADMIN_AI_CONTENT_QUEUE: 'admin-ai-content',
+  ADMIN_AI_LANDING_PAGE_QUEUE: 'admin-ai-landing-page',
   ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE: 'admin-ecotrack-shipment-sync',
   ADMIN_ECOTRACK_SYNC_QUEUE: 'admin-ecotrack-sync',
   ADMIN_ORDER_ECOTRACK_QUEUE: 'admin-order-ecotrack',
@@ -27,21 +22,13 @@ vi.mock('./background-jobs', () => ({
   cancelBackgroundJob: mocks.cancel,
   getBackgroundJob: mocks.get,
   listRecentBackgroundJobs: mocks.list,
-  startAdminReportingRefreshJob: mocks.reporting,
-  startEcotrackShipmentSyncJob: mocks.shipments,
-  startEcotrackSyncJob: mocks.ecotrack,
-  startOrderExportJob: mocks.orderExport,
-  startProductCatalogFeedRefreshJob: mocks.catalogFeed,
-  startProductExportJob: mocks.productExport,
 }));
 
 import {
   allowedAdminBackgroundJobTypes,
-  allowedStartableAdminBackgroundJobTypes,
   cancelAdminBackgroundJob,
   getAdminBackgroundJob,
   listAdminBackgroundJobs,
-  startAdminBackgroundJob,
 } from './ai-background-jobs';
 
 describe('admin AI background job control', () => {
@@ -69,6 +56,7 @@ describe('admin AI background job control', () => {
     expect(mocks.list).toHaveBeenCalledWith(
       expect.arrayContaining([
         'admin-ai-categorization',
+        'admin-ai-landing-page',
         'admin-product-export',
         'admin-order-export',
         'admin-reporting-refresh',
@@ -83,10 +71,8 @@ describe('admin AI background job control', () => {
       'order_export',
       'order_ecotrack',
     ]);
-    expect(allowedStartableAdminBackgroundJobTypes(['analytics_manage'])).toEqual([
-      'reporting_refresh',
-    ]);
     expect(allowedAdminBackgroundJobTypes(['settings_manage'])).toEqual([]);
+    expect(allowedAdminBackgroundJobTypes(['assets_write'])).toEqual(['ai_landing_page']);
 
     mocks.list.mockResolvedValue([{ id: 'job-2', queue: 'admin-order-export', status: 'queued' }]);
     await listAdminBackgroundJobs(10, ['order_export', 'order_ecotrack']);
@@ -144,28 +130,8 @@ describe('admin AI background job control', () => {
       error: expect.stringContaining('does not support cooperative cancellation'),
     });
     expect(mocks.cancel).not.toHaveBeenCalled();
-  });
 
-  it('starts allowlisted jobs and validates order exports', async () => {
-    const actor = { email: 'admin@example.com', name: 'Admin' };
-    mocks.orderExport.mockResolvedValue({ kind: 'started' });
-
-    await expect(startAdminBackgroundJob({ type: 'order_export', actor })).resolves.toMatchObject({
-      error: expect.stringContaining('orderMode'),
-    });
-    await startAdminBackgroundJob({
-      type: 'order_export',
-      actor,
-      conversationId: 42,
-      orderMode: 'selected',
-      orderIds: [4, 4, 9],
-    });
-
-    expect(mocks.orderExport).toHaveBeenCalledWith(
-      'admin@example.com',
-      { mode: 'selected', orderIds: [4, 9] },
-      undefined,
-      { conversationId: 42 },
-    );
+    await cancelAdminBackgroundJob('ai_landing_page', 'job-3');
+    expect(mocks.get).toHaveBeenLastCalledWith('admin-ai-landing-page', 'job-3');
   });
 });

@@ -53,8 +53,14 @@ import { importAdCostsSpreadsheet } from './stats-ad-costs';
 import { importStatsSpreadsheet } from './stats-order-import';
 import { refreshAdminReportingSnapshots } from './stats';
 import { proposeProductContent, reviewProductContentProposal } from './ai-product-content';
-import { proposeEntityEdit, reviewAdminProposal } from './ai-admin-capabilities';
+import {
+  proposeProductCategoryAssignment,
+  reviewProductCategoryProposal,
+} from './ai-admin-capabilities';
+import { createAdminAiLandingPage, editAdminAiLandingPage } from './admin-ai-landing-pages';
 import { refreshAnalytics2Facts } from './analytics2-facts';
+import { CACHE_TAGS, revalidateServerTags } from './server-cache';
+import { revalidateStorefrontProducts } from './storefront-revalidate';
 
 export const ADMIN_PRODUCT_EXPORT_QUEUE = 'admin-product-export';
 export const ADMIN_PRODUCT_CATALOG_FEED_QUEUE = 'admin-product-catalog-feed';
@@ -67,6 +73,7 @@ export const ADMIN_ECOTRACK_SYNC_QUEUE = 'admin-ecotrack-sync';
 export const ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE = 'admin-ecotrack-shipment-sync';
 export const ADMIN_AI_CONTENT_QUEUE = 'admin-ai-content';
 export const ADMIN_AI_CATEGORIZATION_QUEUE = 'admin-ai-categorization';
+export const ADMIN_AI_LANDING_PAGE_QUEUE = 'admin-ai-landing-page';
 
 type QueueJobMeta = {
   __jobMeta: {
@@ -83,6 +90,20 @@ export type AiTaskContext = {
 
 export const ADMIN_AI_ASSISTANT_JOB_ORIGIN = 'admin-ai-assistant';
 
+export async function refreshAppliedAiProposalConsumers(trigger = 'ai-product-content:apply') {
+  try {
+    revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
+  } catch (error) {
+    console.warn('[admin] local product cache invalidation failed after proposal application', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  await Promise.allSettled([
+    revalidateStorefrontProducts(),
+    startProductCatalogFeedRefreshJob(trigger),
+  ]);
+}
+
 function assistantJobOrigin(taskContext: AiTaskContext) {
   return taskContext.conversationId ? ADMIN_AI_ASSISTANT_JOB_ORIGIN : undefined;
 }
@@ -93,6 +114,7 @@ export type ExportJobResponse = {
     queue: string;
     kind: string;
     origin: string | null;
+    conversationId: number | null;
     status: JobSnapshot['status'];
     fileName: string | null;
     progress: JobSnapshot['progress'];
@@ -178,6 +200,28 @@ export type AiCategorizationPayload = QueueJobMeta &
     context?: string;
     actor: { email?: string | null; name?: string | null };
   };
+export type AiLandingPagePayload = QueueJobMeta &
+  AiTaskContext & {
+    work:
+      | {
+          operation: 'create';
+          productId: number;
+          locale: 'fr' | 'ar';
+          creativeBrief?: string;
+          publish: boolean;
+        }
+      | {
+          operation: 'revise';
+          landingPageId: number;
+          expectedRevision: number;
+          instruction: string;
+          targetBlockIds: string[];
+          deleteBlockIds: string[];
+          allowStructuralChanges: boolean;
+          publication: 'preserve' | 'publish' | 'draft';
+        };
+    actor: { email?: string | null; name?: string | null };
+  };
 
 export async function startAiContentJob(
   ownerKey: string,
@@ -189,6 +233,7 @@ export async function startAiContentJob(
     kind: 'ai-product-content',
     ownerKey,
     origin: assistantJobOrigin(payload),
+    conversationId: payload.conversationId,
     requestId,
     data: payload as AiContentPayload,
   });
@@ -216,6 +261,7 @@ export type AiContentJobDependencies = {
     proposalId: number,
     actor: AiContentPayload['actor'],
   ) => Promise<{ status: 'applied'; verified: true }>;
+  refreshConsumers: (trigger: string) => Promise<void>;
 };
 
 function createAiContentJobDependencies(): AiContentJobDependencies {
@@ -271,6 +317,7 @@ function createAiContentJobDependencies(): AiContentJobDependencies {
       }
       return result;
     },
+    refreshConsumers: refreshAppliedAiProposalConsumers,
   };
 }
 
@@ -351,6 +398,9 @@ export async function runAiContentJob(
     complete: counters.processed === rows.length && accounted === rows.length,
     failedProductIds: failures.slice(0, 100),
   };
+  if (counters.applied > 0) {
+    await dependencies.refreshConsumers('ai-product-content:auto-apply');
+  }
   await helpers.updateSummary(summary);
   if (!summary.complete) {
     throw new Error(
@@ -370,6 +420,7 @@ export async function startAiCategorizationJob(
     kind: 'ai-product-categorization',
     ownerKey,
     origin: assistantJobOrigin(payload),
+    conversationId: payload.conversationId,
     requestId,
     activeScope: 'global',
     data: payload as AiCategorizationPayload,
@@ -413,6 +464,7 @@ export type AiCategorizationDependencies = {
     actorId?: string | null;
   }) => Promise<{ id: number }>;
   applyProposal: (proposalId: number, actor: AiCategorizationPayload['actor']) => Promise<unknown>;
+  refreshConsumers: (trigger: string) => Promise<void>;
 };
 
 function createAiCategorizationDependencies(): AiCategorizationDependencies {
@@ -473,43 +525,38 @@ function createAiCategorizationDependencies(): AiCategorizationDependencies {
         .limit(limit),
     async listPendingProductIds() {
       const rows = await db
-        .select({ entityId: aiProposals.entityId, payload: aiProposals.payload })
+        .select({ entityId: aiProposals.entityId })
         .from(aiProposals)
         .where(
           and(
             eq(aiProposals.entityType, 'products'),
-            eq(aiProposals.proposalType, 'entity_edit'),
+            eq(aiProposals.proposalType, 'product_category'),
             eq(aiProposals.status, 'proposed'),
             gt(aiProposals.expiresAt, new Date()),
           ),
         );
-      return new Set(
-        rows.flatMap((row) => {
-          const changes = (row.payload as { changes?: unknown })?.changes;
-          return changes && typeof changes === 'object' && 'categoryId' in changes
-            ? [row.entityId]
-            : [];
-        }),
-      );
+      return new Set(rows.map((row) => row.entityId));
     },
     proposeCategory: (input) =>
-      proposeEntityEdit({
-        entityType: 'products',
-        entityId: input.productId,
-        changes: { categoryId: input.categoryId },
+      proposeProductCategoryAssignment({
+        productId: input.productId,
+        categoryId: input.categoryId,
         actorId: input.actorId,
         reasoning: input.reasoning,
         model: input.model,
         promptVersion: PRODUCT_CATEGORIZATION_PROMPT_VERSION,
         usage: input.usage,
       }),
-    applyProposal: (proposalId, actor) =>
-      reviewAdminProposal({
+    applyProposal: async (proposalId, actor) => {
+      const result = await reviewProductCategoryProposal({
         proposalId,
         action: 'approve',
         actorId: actor.email,
         actorName: actor.name,
-      }),
+      });
+      return result;
+    },
+    refreshConsumers: refreshAppliedAiProposalConsumers,
   };
 }
 
@@ -630,11 +677,111 @@ export async function runAiCategorizationJob(
     ambiguousProductIds,
     failedProductIds,
   };
+  if (counters.applied > 0) {
+    await dependencies.refreshConsumers('ai-product-categorization:auto-apply');
+  }
   await helpers.updateSummary(summary);
   if (!summary.complete)
     throw new Error(
       `Catalog categorization stopped after ${counters.processed} of ${total} products.`,
     );
+  return summary;
+}
+
+export async function startAiLandingPageJob(
+  ownerKey: string,
+  payload: Omit<AiLandingPagePayload, keyof QueueJobMeta>,
+  requestId?: string,
+) {
+  const result = await startOwnedJob<AiLandingPagePayload>({
+    queueName: ADMIN_AI_LANDING_PAGE_QUEUE,
+    kind: `ai-landing-page:${payload.work.operation}`,
+    ownerKey,
+    origin: assistantJobOrigin(payload),
+    conversationId: payload.conversationId,
+    requestId,
+    data: payload as AiLandingPagePayload,
+  });
+  return { kind: result.kind, job: toClientJob(result.job) };
+}
+
+export type AiLandingPageJobDependencies = {
+  create: typeof createAdminAiLandingPage;
+  revise: typeof editAdminAiLandingPage;
+};
+
+const aiLandingPageJobDependencies: AiLandingPageJobDependencies = {
+  create: createAdminAiLandingPage,
+  revise: editAdminAiLandingPage,
+};
+
+function landingPageJobSummary(
+  operation: AiLandingPagePayload['work']['operation'],
+  result: Awaited<ReturnType<typeof createAdminAiLandingPage>>,
+) {
+  const stages = result.generation.stages as {
+    status?: string;
+    failures?: unknown[];
+    [key: string]: unknown;
+  } | null;
+  return {
+    operation,
+    complete: stages?.status === 'completed',
+    partial: stages?.status === 'partial-fallback',
+    landingPageId: result.id,
+    productId: result.productId,
+    locale: result.locale,
+    slug: result.slug,
+    active: result.active,
+    currentRevision: result.currentRevision,
+    generation: {
+      model: result.generation.model,
+      stages,
+      groundingNotes: result.generation.groundingNotes,
+    },
+  };
+}
+
+export async function runAiLandingPageJob(
+  payload: AiLandingPagePayload,
+  helpers: {
+    updateProgress: (progress: { phase: string; current: number; total: number }) => Promise<void>;
+    updateSummary: (summary: Record<string, unknown>) => Promise<void>;
+    throwIfCancelled: () => Promise<void>;
+  },
+  dependencies: AiLandingPageJobDependencies = aiLandingPageJobDependencies,
+) {
+  await helpers.throwIfCancelled();
+  await helpers.updateProgress({ phase: 'generating', current: 0, total: 1 });
+  const result =
+    payload.work.operation === 'create'
+      ? await dependencies.create(
+          {
+            productId: payload.work.productId,
+            locale: payload.work.locale,
+            creativeBrief: payload.work.creativeBrief,
+            active: payload.work.publish,
+          },
+          payload.actor,
+        )
+      : await dependencies.revise(
+          {
+            landingPageId: payload.work.landingPageId,
+            expectedRevision: payload.work.expectedRevision,
+            instruction: payload.work.instruction,
+            targetBlockIds: payload.work.targetBlockIds,
+            deleteBlockIds: payload.work.deleteBlockIds,
+            allowStructuralChanges: payload.work.allowStructuralChanges,
+            active:
+              payload.work.publication === 'preserve'
+                ? null
+                : payload.work.publication === 'publish',
+          },
+          payload.actor,
+        );
+  const summary = landingPageJobSummary(payload.work.operation, result);
+  await helpers.updateProgress({ phase: 'completed', current: 1, total: 1 });
+  await helpers.updateSummary(summary);
   return summary;
 }
 
@@ -662,6 +809,7 @@ function toClientJob(
     queue: snapshot.queue,
     kind: snapshot.kind,
     origin: snapshot.origin ?? null,
+    conversationId: snapshot.conversationId ?? null,
     status: snapshot.status,
     fileName: summaryFileName ?? null,
     progress: snapshot.progress,
@@ -707,6 +855,7 @@ export async function startProductExportJob(
     kind: 'product-export',
     ownerKey,
     origin: assistantJobOrigin(taskContext),
+    conversationId: taskContext.conversationId,
     requestId,
     data: { ...taskContext } as ProductExportPayload,
     activeScope: 'global',
@@ -754,6 +903,7 @@ export async function startProductCatalogFeedRefreshJob(
     kind: 'product-catalog-feed-refresh',
     ownerKey: PRODUCT_CATALOG_FEED_OWNER_KEY,
     origin: assistantJobOrigin(taskContext),
+    conversationId: taskContext.conversationId,
     requestId,
     data: { trigger, ...taskContext } as ProductCatalogFeedPayload,
     activeScope: 'global',
@@ -776,6 +926,7 @@ export async function startOrderExportJob(
     kind: `order-export:${payload.mode}`,
     ownerKey,
     origin: assistantJobOrigin(taskContext),
+    conversationId: taskContext.conversationId,
     requestId,
     data: { ...payload, ...taskContext } as OrderExportPayload,
   });
@@ -802,6 +953,7 @@ export async function startOrderEcotrackJob(
     kind: `order-ecotrack:${payload.mode}`,
     ownerKey,
     origin: assistantJobOrigin(taskContext),
+    conversationId: taskContext.conversationId,
     requestId,
     data: { ...payload, ...taskContext } as OrderEcotrackPayload,
     activeScope: 'global',
@@ -871,6 +1023,7 @@ export async function startAdminReportingRefreshJob(
     kind: 'admin-reporting-refresh',
     ownerKey: 'admin-reporting',
     origin: assistantJobOrigin(taskContext),
+    conversationId: taskContext.conversationId,
     requestId,
     activeScope: 'global',
     data: {
@@ -909,6 +1062,7 @@ export async function startEcotrackSyncJob(
     kind: 'ecotrack-sync',
     ownerKey,
     origin: assistantJobOrigin(taskContext),
+    conversationId: taskContext.conversationId,
     requestId,
     data: { trigger, actor, ...taskContext } as EcotrackSyncPayload,
     activeScope: 'global',
@@ -927,6 +1081,7 @@ export async function startEcotrackShipmentSyncJob(
     kind: 'ecotrack-shipment-sync',
     ownerKey,
     origin: assistantJobOrigin(taskContext),
+    conversationId: taskContext.conversationId,
     requestId,
     data: { trigger, actor, ...taskContext } as EcotrackShipmentSyncPayload,
     activeScope: 'global',

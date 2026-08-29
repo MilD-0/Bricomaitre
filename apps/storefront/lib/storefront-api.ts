@@ -49,20 +49,20 @@ import {
 import { fetchStorefrontUpstream, StorefrontUpstreamError } from './storefront-upstream';
 
 export async function recordStorefrontAssistantRun(input: {
-  telemetry: { journeyId: string; sessionId: string; pagePath: string; intent: string } | undefined;
+  telemetry: { journeyId: string; sessionId: string; pagePath: string } | undefined;
   locale: 'fr' | 'ar';
   status: 'completed' | 'failed' | 'cancelled';
-  mode: 'ai' | 'fallback';
   model: string;
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
   durationMs: number;
   toolCalls: number;
+  toolNames: string[];
   resultsCount: number;
-  conversation: Array<{ role: 'user' | 'assistant'; content: string; productIds?: number[] }>;
-  response: string;
+  cartChanges: number;
   promptVersion: string;
+  errorCode?: string;
 }) {
   if (!input.telemetry) return;
   const body = JSON.stringify({
@@ -78,19 +78,18 @@ export async function recordStorefrontAssistantRun(input: {
     currency: 'DZD',
     metadata: {
       storefrontProject: STOREFRONT_ANALYTICS_PROJECT,
-      intent: input.telemetry.intent,
       status: input.status,
-      mode: input.mode,
       model: input.model,
       inputTokens: input.inputTokens ?? 0,
       outputTokens: input.outputTokens ?? 0,
       totalTokens: input.totalTokens ?? 0,
       durationMs: Math.max(0, Math.round(input.durationMs)),
       toolCalls: Math.max(0, Math.round(input.toolCalls)),
+      toolNames: [...new Set(input.toolNames)].slice(0, 12),
       resultsCount: Math.max(0, Math.round(input.resultsCount)),
+      cartChanges: Math.max(0, Math.round(input.cartChanges)),
       promptVersion: input.promptVersion,
-      conversation: input.conversation,
-      response: input.response,
+      errorCode: input.errorCode ?? null,
     },
   });
   await fetchStorefrontUpstream('/storefront/analytics', {

@@ -22,8 +22,6 @@ export type ProposalReviewCopy = {
   proposedFields: string;
   fieldsChanged: string;
   fieldsChangedMore: string;
-  productsSelected: string;
-  landingPage: string;
   relation: string;
   payloadFields: string;
   noStructuredChanges: string;
@@ -62,8 +60,6 @@ const copy: Record<'en' | 'fr' | 'ar', ProposalReviewCopy> = {
     proposedFields: 'Proposed values',
     fieldsChanged: '{fields}',
     fieldsChangedMore: '{fields} and {count} more',
-    productsSelected: '{count} products selected',
-    landingPage: '{locale} landing page',
     relation: '{relation} product relation',
     payloadFields: '{count} payload fields',
     noStructuredChanges: 'Technical proposal payload',
@@ -100,8 +96,6 @@ const copy: Record<'en' | 'fr' | 'ar', ProposalReviewCopy> = {
     proposedFields: 'Valeurs proposées',
     fieldsChanged: '{fields}',
     fieldsChangedMore: '{fields} et {count} autre(s)',
-    productsSelected: '{count} produits sélectionnés',
-    landingPage: 'Page d’atterrissage {locale}',
     relation: 'Relation produit · {relation}',
     payloadFields: '{count} champs techniques',
     noStructuredChanges: 'Charge technique de la proposition',
@@ -138,8 +132,6 @@ const copy: Record<'en' | 'fr' | 'ar', ProposalReviewCopy> = {
     proposedFields: 'القيم المقترحة',
     fieldsChanged: '{fields}',
     fieldsChangedMore: '{fields} و{count} أخرى',
-    productsSelected: 'تم اختيار {count} منتجات',
-    landingPage: 'صفحة هبوط {locale}',
     relation: 'علاقة منتجات · {relation}',
     payloadFields: '{count} حقول تقنية',
     noStructuredChanges: 'البيانات التقنية للاقتراح',
