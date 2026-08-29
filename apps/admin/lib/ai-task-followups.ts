@@ -210,6 +210,18 @@ export function formatAiTaskTerminalMessage(input: {
       ),
     );
   }
+  if (input.kind.startsWith('ai-landing-page:') && input.status === 'completed') {
+    const pageId = numberValue(summary.landingPageId);
+    const revision = numberValue(summary.currentRevision);
+    lines.push(
+      `Landing page: ${pageId > 0 ? `#${pageId}` : 'saved'}${revision > 0 ? ` · revision ${revision}` : ''}${typeof summary.active === 'boolean' ? ` · ${summary.active ? 'live' : 'draft'}` : ''}`,
+    );
+    if (summary.partial === true) {
+      lines.push(
+        'The page was saved with partial generation; inspect the recorded blocks and failures before treating the requested composition as complete.',
+      );
+    }
+  }
   if (input.errorMessage) lines.push(`Error: ${input.errorMessage}`);
   if (typeof summary.proposed === 'number' && summary.proposed > 0) {
     lines.push(
@@ -221,7 +233,12 @@ export function formatAiTaskTerminalMessage(input: {
       `${summary.autoApplyFailed} automatic application attempt${summary.autoApplyFailed === 1 ? '' : 's'} encountered a live-record conflict or verification failure; the proposal${summary.autoApplyFailed === 1 ? ' remains' : 's remain'} pending for review.`,
     );
   }
-  if (input.status === 'completed' && summary.complete !== true && 'complete' in summary) {
+  if (
+    input.status === 'completed' &&
+    summary.complete !== true &&
+    'complete' in summary &&
+    !input.kind.startsWith('ai-landing-page:')
+  ) {
     lines.push(
       'The task is not being reported as fully reconciled because the server did not confirm complete: true.',
     );

@@ -1,7 +1,7 @@
 import 'dotenv/config';
 
 import * as Sentry from '@sentry/node';
-import { createQueueWorker } from '@bric/runtime/jobs';
+import { createQueueWorker, isJobCancellationError } from '@bric/runtime/jobs';
 import { writeWorkerHeartbeat } from '@bric/runtime/worker-heartbeat';
 import cron from 'node-cron';
 
@@ -18,6 +18,7 @@ import {
   ADMIN_STATS_IMPORT_QUEUE,
   ADMIN_AI_CONTENT_QUEUE,
   ADMIN_AI_CATEGORIZATION_QUEUE,
+  ADMIN_AI_LANDING_PAGE_QUEUE,
   runAdCostsImportJob,
   runEcotrackShipmentSyncJob,
   runEcotrackSyncJob,
@@ -30,6 +31,7 @@ import {
   startAdminReportingRefreshJob,
   runAiContentJob,
   runAiCategorizationJob,
+  runAiLandingPageJob,
   getBackgroundJob,
 } from '../lib/background-jobs';
 import { publishAiTaskTerminalMessage } from '../lib/ai-task-followups';
@@ -79,6 +81,7 @@ startSearchConsoleScheduler();
 const workers = [
   createQueueWorker(ADMIN_AI_CATEGORIZATION_QUEUE, runAiCategorizationJob),
   createQueueWorker(ADMIN_AI_CONTENT_QUEUE, runAiContentJob),
+  createQueueWorker(ADMIN_AI_LANDING_PAGE_QUEUE, runAiLandingPageJob),
   createQueueWorker(ADMIN_PRODUCT_EXPORT_QUEUE, runProductExportJob),
   createQueueWorker(ADMIN_PRODUCT_CATALOG_FEED_QUEUE, runProductCatalogFeedRefreshJob),
   createQueueWorker(ADMIN_ORDER_EXPORT_QUEUE, runOrderExportJob),
@@ -194,6 +197,7 @@ for (const worker of workers) {
   });
 
   worker.on('failed', (job, error) => {
+    if (isJobCancellationError(error)) return;
     Sentry.withScope((scope) => {
       scope.setTag('service', 'worker');
       scope.setTag('queue', worker.name);

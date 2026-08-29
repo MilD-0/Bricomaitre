@@ -43,11 +43,7 @@ export async function requireAiProposalPageAccess(locale: string) {
   const session = await requireAllowedAppUser(locale);
   const permissions = session.user.permissions;
 
-  if (
-    !hasPermission(permissions, 'products_write') &&
-    !hasPermission(permissions, 'assets_write') &&
-    !hasPermission(permissions, 'brands_categories_write')
-  ) {
+  if (!hasPermission(permissions, 'products_write')) {
     redirect(
       getDefaultAuthorizedHref({
         isAllowed: session.user.isAllowed,

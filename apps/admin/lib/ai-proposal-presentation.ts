@@ -33,15 +33,6 @@ export function proposalFields(payload: unknown): ProposalField[] {
     }));
   }
 
-  if (isRecord(payload.values)) {
-    return Object.entries(payload.values).map(([key, after]) => ({
-      key,
-      before: undefined,
-      after,
-      hasBefore: false,
-    }));
-  }
-
   return [];
 }
 
@@ -56,15 +47,6 @@ export function proposalPreview(item: AiProposalInboxItem) {
   }
 
   const payload = isRecord(item.payload) ? item.payload : null;
-  if (item.proposalType === 'featured_products' && Array.isArray(payload?.productIds)) {
-    return { kind: 'products' as const, count: payload.productIds.length };
-  }
-  if (item.proposalType === 'landing_page') {
-    return {
-      kind: 'landing' as const,
-      locale: typeof payload?.locale === 'string' ? payload.locale.toUpperCase() : null,
-    };
-  }
   if (item.proposalType === 'product_relation') {
     return {
       kind: 'relation' as const,

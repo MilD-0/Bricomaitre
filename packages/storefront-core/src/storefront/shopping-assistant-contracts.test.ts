@@ -4,6 +4,7 @@ import {
   shoppingAssistantCartManagementSchema,
   shoppingAssistantCatalogSearchSchema,
   shoppingAssistantCatalogSearchResultSchema,
+  shoppingAssistantCartMutationSchema,
   shoppingAssistantRequestSchema,
   shoppingAssistantResponseSchema,
   shoppingAssistantStreamEventSchema,
@@ -20,7 +21,6 @@ describe('shopping assistant contracts', () => {
     expect(
       shoppingAssistantResponseSchema.parse({
         message: 'Voici une option.',
-        mode: 'fallback',
         products: [
           {
             id: 1,
@@ -147,7 +147,6 @@ describe('shopping assistant contracts', () => {
     expect(
       shoppingAssistantStreamEventSchema.parse({
         type: 'result',
-        mode: 'ai',
         products: [],
       }),
     ).toMatchObject({ cartMutations: [] });
@@ -167,5 +166,20 @@ describe('shopping assistant contracts', () => {
         operations: [{ action: 'add', productId: 12, quantity: 21 }],
       }).success,
     ).toBe(false);
+    expect(
+      shoppingAssistantCartMutationSchema.safeParse({
+        action: 'set_quantity',
+        productId: 12,
+        quantity: 3,
+        product: { id: 12 },
+      }).success,
+    ).toBe(false);
+    expect(
+      shoppingAssistantCartMutationSchema.parse({
+        action: 'remove',
+        productId: 12,
+        quantity: 0,
+      }),
+    ).toEqual({ action: 'remove', productId: 12, quantity: 0 });
   });
 });

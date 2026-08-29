@@ -80,23 +80,20 @@ export async function DELETE(
   if (!hasDb())
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
 
-  let proposal;
   try {
-    proposal = await readAiProposalReviewTarget(proposalId);
+    const proposal = await readAiProposalReviewTarget(proposalId);
+    const resource = aiProposalReviewResource(proposal);
+    const mutationDenied = await requireMutationAccess(resource);
+    if (mutationDenied) return mutationDenied;
+
+    return NextResponse.json({ deleted: await deleteExpiredAiProposal(proposalId) });
   } catch (error) {
     if (error instanceof AiProposalReviewNotFoundError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
+    if (error instanceof AiProposalExpiredDeletionConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     throw error;
-  }
-  const resource = aiProposalReviewResource(proposal);
-  const mutationDenied = await requireMutationAccess(resource);
-  if (mutationDenied) return mutationDenied;
-
-  try {
-    return NextResponse.json({ deleted: await deleteExpiredAiProposal(proposalId) });
-  } catch (error) {
-    if (!(error instanceof AiProposalExpiredDeletionConflictError)) throw error;
-    return NextResponse.json({ error: error.message }, { status: 409 });
   }
 }

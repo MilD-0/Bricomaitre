@@ -1,7 +1,15 @@
 import * as Sentry from '@sentry/node';
 import crypto from 'crypto';
 
-import { Job, Queue, QueueEvents, Worker, type JobsOptions, type Processor } from 'bullmq';
+import {
+  Job,
+  Queue,
+  QueueEvents,
+  UnrecoverableError,
+  Worker,
+  type JobsOptions,
+  type Processor,
+} from 'bullmq';
 import type IORedis from 'ioredis';
 
 import { getBullRedisConnection, getRedis } from './redis';
@@ -14,6 +22,7 @@ export type JobSnapshot = {
   kind: string;
   ownerKey: string;
   origin?: string | null;
+  conversationId?: number | null;
   status: JobState;
   progress: {
     phase: string;
@@ -40,6 +49,7 @@ type StartJobOptions<T> = {
   kind: string;
   ownerKey: string;
   origin?: string;
+  conversationId?: number;
   data: T;
   requestId?: string;
   activeScope?: 'owner' | 'global';
@@ -81,6 +91,26 @@ const RELEASE_OWNED_KEY_SCRIPT = `
   end
   return 0
 `;
+const WRITE_SNAPSHOT_SCRIPT = `
+  local snapshot = cjson.decode(ARGV[1])
+  if redis.call('exists', KEYS[2]) == 1 then
+    snapshot.cancelRequested = true
+  end
+  local encoded = cjson.encode(snapshot)
+  redis.call('set', KEYS[1], encoded, 'EX', ARGV[2])
+  local currentOwner = redis.call('get', KEYS[3])
+  local currentOwnerScore = currentOwner and redis.call('zscore', KEYS[4], currentOwner)
+  if not currentOwner or currentOwner == snapshot.id or not currentOwnerScore or tonumber(ARGV[3]) >= tonumber(currentOwnerScore) then
+    redis.call('set', KEYS[3], snapshot.id, 'EX', ARGV[2])
+  end
+  redis.call('zadd', KEYS[4], ARGV[3], snapshot.id)
+  redis.call('expire', KEYS[4], ARGV[2])
+  if ARGV[4] == '1' then
+    redis.call('zadd', KEYS[5], ARGV[3], snapshot.id)
+    redis.call('expire', KEYS[5], ARGV[2])
+  end
+  return encoded
+`;
 
 function nowIso() {
   return new Date().toISOString();
@@ -92,6 +122,10 @@ function getSnapshotKey(queueName: string, jobId: string) {
 
 function getOwnerKey(queueName: string, ownerKey: string) {
   return `bric:jobs:${queueName}:owner:${ownerKey}`;
+}
+
+function getCancellationKey(queueName: string, jobId: string) {
+  return `bric:jobs:${queueName}:${jobId}:cancel`;
 }
 
 function getActiveKey(queueName: string, scope: 'owner' | 'global', ownerKey: string) {
@@ -127,19 +161,22 @@ function parseSnapshot(value: string | null): JobSnapshot | null {
 
 async function writeSnapshot(redis: IORedis, snapshot: JobSnapshot, ttlSeconds = JOB_TTL_SECONDS) {
   const indexKey = getQueueIndexKey(snapshot.queue);
-  const transaction = redis
-    .multi()
-    .set(getSnapshotKey(snapshot.queue, snapshot.id), serializeSnapshot(snapshot), 'EX', ttlSeconds)
-    .set(getOwnerKey(snapshot.queue, snapshot.ownerKey), snapshot.id, 'EX', ttlSeconds)
-    .zadd(indexKey, Date.parse(snapshot.createdAt), snapshot.id)
-    .expire(indexKey, ttlSeconds);
-  if (snapshot.origin) {
-    const originIndexKey = getQueueOriginIndexKey(snapshot.queue, snapshot.origin);
-    transaction
-      .zadd(originIndexKey, Date.parse(snapshot.createdAt), snapshot.id)
-      .expire(originIndexKey, ttlSeconds);
-  }
-  await transaction.exec();
+  const originIndexKey = snapshot.origin
+    ? getQueueOriginIndexKey(snapshot.queue, snapshot.origin)
+    : indexKey;
+  await redis.eval(
+    WRITE_SNAPSHOT_SCRIPT,
+    5,
+    getSnapshotKey(snapshot.queue, snapshot.id),
+    getCancellationKey(snapshot.queue, snapshot.id),
+    getOwnerKey(snapshot.queue, snapshot.ownerKey),
+    indexKey,
+    originIndexKey,
+    serializeSnapshot(snapshot),
+    ttlSeconds,
+    Date.parse(snapshot.createdAt),
+    snapshot.origin ? '1' : '0',
+  );
 }
 
 export async function getJobSnapshot(queueName: string, jobId: string) {
@@ -183,7 +220,8 @@ export async function listRecentJobSnapshots(
                 suffix !== 'active' &&
                 !suffix.startsWith('active:') &&
                 !suffix.startsWith('owner:') &&
-                !suffix.startsWith('origin:')
+                !suffix.startsWith('origin:') &&
+                !suffix.endsWith(':cancel')
               ) {
                 legacyIds.add(suffix);
               }
@@ -218,6 +256,7 @@ export async function requestJobCancellation(queueName: string, ownerKey: string
     return null;
   }
 
+  await getRedis().set(getCancellationKey(queueName, snapshot.id), '1', 'EX', JOB_TTL_SECONDS);
   const nextSnapshot: JobSnapshot = {
     ...snapshot,
     cancelRequested: true,
@@ -233,6 +272,7 @@ export async function requestJobCancellationById(queueName: string, jobId: strin
     return null;
   }
 
+  await getRedis().set(getCancellationKey(queueName, jobId), '1', 'EX', JOB_TTL_SECONDS);
   const nextSnapshot: JobSnapshot = {
     ...snapshot,
     cancelRequested: true,
@@ -278,6 +318,7 @@ async function startOwnedJobInternal<T>(
     kind: options.kind,
     ownerKey: options.ownerKey,
     origin: options.origin ?? null,
+    conversationId: options.conversationId ?? null,
     status: 'queued',
     progress: {
       phase: 'queued',
@@ -334,11 +375,7 @@ async function startOwnedJobInternal<T>(
         jobId,
         removeOnComplete: 100,
         removeOnFail: 100,
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 1000,
-        },
+        attempts: 1,
         ...options.queueOptions,
       },
     );
@@ -426,7 +463,7 @@ export async function markJobCompleted(
   const completedAt = nowIso();
   const nextSnapshot: JobSnapshot = {
     ...snapshot,
-    status: snapshot.cancelRequested ? 'cancelled' : 'completed',
+    status: 'completed',
     completedAt,
     updatedAt: completedAt,
     downloadUrl: payload?.downloadUrl ?? snapshot.downloadUrl,
@@ -492,14 +529,22 @@ export async function updateJobDownloadUrl(queueName: string, jobId: string, dow
 }
 
 export async function throwIfJobCancelled(queueName: string, jobId: string) {
-  const snapshot = await getJobSnapshot(queueName, jobId);
-  if (snapshot?.cancelRequested) {
-    throw new Error('Job cancelled.');
+  const redis = getRedis();
+  const [snapshot, cancellationRequested] = await Promise.all([
+    getJobSnapshot(queueName, jobId),
+    redis.exists(getCancellationKey(queueName, jobId)),
+  ]);
+  if (snapshot?.cancelRequested || cancellationRequested === 1) {
+    throw new UnrecoverableError('Job cancelled.');
   }
 }
 
 export function isFinalJobAttempt(job: { attemptsMade: number; opts: { attempts?: number } }) {
   return job.attemptsMade >= (job.opts.attempts ?? 1);
+}
+
+export function isJobCancellationError(error: unknown) {
+  return error instanceof Error && error.message === 'Job cancelled.';
 }
 
 export function getQueue(queueName: string) {
@@ -634,28 +679,30 @@ export function createQueueWorker<T>(
 
       return result;
     } catch (error) {
-      Sentry.withScope((scope: Sentry.Scope) => {
-        scope.setTag('service', 'runtime');
-        scope.setTag('runtime_component', 'queue_processor');
-        scope.setTag('queue', queueName);
-        scope.setTag('job_id', job.id ?? 'unknown');
-        scope.setTag('job_name', job.name);
-        const jobMeta = (
-          job.data as { __jobMeta?: { ownerKey?: string; requestId?: string | null } }
-        ).__jobMeta;
-        if (jobMeta?.requestId) {
-          scope.setTag('request_id', jobMeta.requestId);
-        }
-        scope.setContext('job', {
-          id: job.id ?? null,
-          name: job.name,
-          queue: queueName,
-          ownerKey: jobMeta?.ownerKey ?? null,
-          requestId: jobMeta?.requestId ?? null,
-          attemptsMade: job.attemptsMade,
+      if (!isJobCancellationError(error)) {
+        Sentry.withScope((scope: Sentry.Scope) => {
+          scope.setTag('service', 'runtime');
+          scope.setTag('runtime_component', 'queue_processor');
+          scope.setTag('queue', queueName);
+          scope.setTag('job_id', job.id ?? 'unknown');
+          scope.setTag('job_name', job.name);
+          const jobMeta = (
+            job.data as { __jobMeta?: { ownerKey?: string; requestId?: string | null } }
+          ).__jobMeta;
+          if (jobMeta?.requestId) {
+            scope.setTag('request_id', jobMeta.requestId);
+          }
+          scope.setContext('job', {
+            id: job.id ?? null,
+            name: job.name,
+            queue: queueName,
+            ownerKey: jobMeta?.ownerKey ?? null,
+            requestId: jobMeta?.requestId ?? null,
+            attemptsMade: job.attemptsMade,
+          });
+          Sentry.captureException(error);
         });
-        Sentry.captureException(error);
-      });
+      }
       throw error;
     }
   };
@@ -671,27 +718,30 @@ export function createQueueWorker<T>(
       return;
     }
 
-    Sentry.withScope((scope: Sentry.Scope) => {
-      scope.setTag('service', 'runtime');
-      scope.setTag('runtime_component', 'queue_worker');
-      scope.setTag('queue', queueName);
-      scope.setTag('job_id', job.id);
-      scope.setTag('job_name', job.name);
-      const jobMeta = (job.data as { __jobMeta?: { ownerKey?: string; requestId?: string | null } })
-        .__jobMeta;
-      if (jobMeta?.requestId) {
-        scope.setTag('request_id', jobMeta.requestId);
-      }
-      scope.setContext('job', {
-        id: job.id,
-        name: job.name,
-        queue: queueName,
-        ownerKey: jobMeta?.ownerKey ?? null,
-        requestId: jobMeta?.requestId ?? null,
-        attemptsMade: job.attemptsMade,
+    if (!isJobCancellationError(error)) {
+      Sentry.withScope((scope: Sentry.Scope) => {
+        scope.setTag('service', 'runtime');
+        scope.setTag('runtime_component', 'queue_worker');
+        scope.setTag('queue', queueName);
+        scope.setTag('job_id', job.id);
+        scope.setTag('job_name', job.name);
+        const jobMeta = (
+          job.data as { __jobMeta?: { ownerKey?: string; requestId?: string | null } }
+        ).__jobMeta;
+        if (jobMeta?.requestId) {
+          scope.setTag('request_id', jobMeta.requestId);
+        }
+        scope.setContext('job', {
+          id: job.id,
+          name: job.name,
+          queue: queueName,
+          ownerKey: jobMeta?.ownerKey ?? null,
+          requestId: jobMeta?.requestId ?? null,
+          attemptsMade: job.attemptsMade,
+        });
+        Sentry.captureException(error);
       });
-      Sentry.captureException(error);
-    });
+    }
 
     await markJobFailed(queueName, job.id, error.message);
   });
@@ -712,7 +762,7 @@ export function createQueueWorker<T>(
         .__jobMeta?.activeScope ?? 'owner',
       (job.data as { __jobMeta?: { ownerKey?: string } }).__jobMeta?.ownerKey ?? snapshot.ownerKey,
     );
-    await getRedis().del(activeKey);
+    await releaseOwnedKey(getRedis(), activeKey, job.id);
   });
 
   worker.on('failed', async (job) => {
@@ -731,7 +781,7 @@ export function createQueueWorker<T>(
         .__jobMeta?.activeScope ?? 'owner',
       (job.data as { __jobMeta?: { ownerKey?: string } }).__jobMeta?.ownerKey ?? snapshot.ownerKey,
     );
-    await getRedis().del(activeKey);
+    await releaseOwnedKey(getRedis(), activeKey, job.id);
   });
 
   return worker;

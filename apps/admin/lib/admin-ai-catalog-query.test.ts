@@ -162,6 +162,68 @@ describe('Admin assistant broad catalog evidence', () => {
     });
   });
 
+  it('resolves exact brand and category IDs for references from other systems', async () => {
+    const brandDatabase = databaseWithSelects(
+      [
+        {
+          id: 1,
+          name: 'First',
+          slug: 'first',
+          isActive: true,
+          featured: false,
+          updatedAt: new Date('2026-08-01T00:00:00.000Z'),
+        },
+        {
+          id: 18,
+          name: 'Wadfow',
+          slug: 'wadfow',
+          isActive: true,
+          featured: true,
+          updatedAt: new Date('2026-08-02T00:00:00.000Z'),
+        },
+      ],
+      [],
+    );
+    const categoryDatabase = databaseWithSelects(
+      [
+        {
+          id: 60,
+          name: 'Outillage à Main',
+          nameEn: 'Hand Tools',
+          nameAr: 'أدوات يدوية',
+          slug: 'outillage-main',
+          isActive: true,
+          featured: false,
+          parentId: null,
+          updatedAt: new Date('2026-08-01T00:00:00.000Z'),
+        },
+        {
+          id: 61,
+          name: 'Other',
+          nameEn: 'Other',
+          nameAr: null,
+          slug: 'other',
+          isActive: true,
+          featured: false,
+          parentId: null,
+          updatedAt: new Date('2026-08-01T00:00:00.000Z'),
+        },
+      ],
+      [],
+    );
+
+    await expect(queryAdminBrands({ ids: [18] }, brandDatabase)).resolves.toMatchObject({
+      filters: { ids: [18] },
+      items: [{ id: 18, name: 'Wadfow' }],
+      pagination: { totalItems: 1 },
+    });
+    await expect(queryAdminCategories({ ids: [60] }, categoryDatabase)).resolves.toMatchObject({
+      filters: { ids: [60] },
+      items: [{ id: 60, name: 'Outillage à Main' }],
+      pagination: { totalItems: 1 },
+    });
+  });
+
   it('separates category direct assignments from descendant catalog scope', async () => {
     const database = databaseWithSelects(
       [

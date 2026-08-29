@@ -52,7 +52,6 @@ function stagedRunner(options?: {
       if (options?.failPlanOnce && planCalls === 1) throw new Error('provider timeout');
       return {
         plan: {
-          archetype: 'problem-solution',
           theme: { accent: 'graphite', density: 'spacious' },
           seo: {
             title: 'Clé à cliquet sans fil',
@@ -241,7 +240,6 @@ function editRunner(options?: {
               ? slot.blockId !== 'benefits'
               : true,
         ),
-        deletedBlockIds: options?.deleteBenefits ? ['benefits'] : [],
         reasoning: 'Only the hero needs to change for the supplied brief.',
         groundingNotes: ['The revised hero uses the verified product title.'],
       },
@@ -275,20 +273,12 @@ function editRunner(options?: {
 }
 
 describe('AI landing-page output guardrails', () => {
-  it('teaches the model the full expanded composition vocabulary and evidence boundaries', () => {
-    for (const blockType of [
-      'editorial-intro',
-      'image-gallery',
-      'use-cases',
-      'comparison',
-      'process',
-      'trust-band',
-      'commerce-panel',
-    ]) {
-      expect(LANDING_PAGE_GENERATION_INSTRUCTIONS).toContain(blockType);
-    }
-    expect(LANDING_PAGE_GENERATION_INSTRUCTIONS).toContain('section surface and width controls');
-    expect(LANDING_PAGE_GENERATION_INSTRUCTIONS).toContain('both sides are explicitly supported');
+  it('keeps the generator guidance compact and focused on evidence and live-commerce boundaries', () => {
+    expect(LANDING_PAGE_GENERATION_INSTRUCTIONS).toContain('supplied catalog facts');
+    expect(LANDING_PAGE_GENERATION_INSTRUCTIONS).toContain('live Storefront');
+    expect(LANDING_PAGE_GENERATION_INSTRUCTIONS).toContain('non-indexable');
+    expect(LANDING_PAGE_GENERATION_INSTRUCTIONS.length).toBeLessThan(1_500);
+    expect(LANDING_PAGE_GENERATION_INSTRUCTIONS).not.toContain('creative archetype');
   });
   it('keeps a varied valid composition while forcing review-only SEO', () => {
     const document = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
@@ -414,7 +404,7 @@ describe('AI landing-page output guardrails', () => {
     expect(result.stages).toMatchObject({ preservedSections: 3, deletedSections: 0 });
   });
 
-  it('deletes only exact model-declared blocks when the operator explicitly requested it', async () => {
+  it('deletes only exact block IDs supplied by the outer assistant scope', async () => {
     const currentDocument = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
     const result = await createLandingPageEditor(
       testConfig,
@@ -422,6 +412,7 @@ describe('AI landing-page output guardrails', () => {
     ).edit({
       ...generationInput,
       instruction: 'Supprime la section benefits et préserve le reste.',
+      deleteBlockIds: ['benefits'],
       currentDocument,
     });
 
@@ -429,15 +420,19 @@ describe('AI landing-page output guardrails', () => {
     expect(result.stages).toMatchObject({ preservedSections: 2, deletedSections: 1 });
   });
 
-  it('rejects model-declared deletion that the operator did not request', async () => {
+  it('does not infer deletion from words in the edit instruction', async () => {
     const currentDocument = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
-    await expect(
-      createLandingPageEditor(testConfig, editRunner({ deleteBenefits: true })).edit({
-        ...generationInput,
-        instruction: 'Réécris uniquement le hero.',
-        currentDocument,
-      }),
-    ).rejects.toThrow('did not ask to delete');
+    const result = await createLandingPageEditor(
+      testConfig,
+      editRunner({ deleteBenefits: true }),
+    ).edit({
+      ...generationInput,
+      instruction: 'Supprime benefits, mais aucun identifiant de suppression n’a été fourni.',
+      currentDocument,
+    });
+
+    expect(result.document.blocks.map((block) => block.id)).toContain('benefits');
+    expect(result.stages.deletedSections).toBe(0);
   });
 
   it('rejects semantically invalid edit plans before generating any block', async () => {
@@ -451,23 +446,20 @@ describe('AI landing-page output guardrails', () => {
     ).rejects.toThrow('unknown block "missing-hero"');
   });
 
-  it('falls back to the catalog-derived document when generation fails', async () => {
+  it('surfaces generation failure without persisting a generic replacement page', async () => {
     const fallback = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
 
-    const result = await generateLandingPageDraft({
-      generator: {
-        generate: async () => {
-          throw new Error('provider timeout');
+    await expect(
+      generateLandingPageDraft({
+        generator: {
+          generate: async () => {
+            throw new Error('provider timeout');
+          },
         },
-      },
-      generationInput,
-      fallbackDocument: fallback,
-    });
-
-    expect(result.document).toEqual(fallback);
-    expect(result.model).toBe('deterministic-v1');
-    expect(result.reasoning).toContain('safe catalog-grounded fallback');
-    expect(result.stages?.status).toBe('full-fallback');
+        generationInput,
+      }),
+    ).rejects.toThrow('provider timeout');
+    expect(fallback.blocks).toHaveLength(4);
   });
 
   it('assembles several backend stages into one complete generation result', async () => {
@@ -495,7 +487,7 @@ describe('AI landing-page output guardrails', () => {
     expect(result.model).toBe('test/content-model');
   });
 
-  it('keeps successful sections and fills only the failed stage from catalog-safe content', async () => {
+  it('keeps successful sections and reports a failed section without inventing replacement copy', async () => {
     const result = await createLandingPageGenerator(
       testConfig,
       stagedRunner({ failSecondBlock: true }),
@@ -504,14 +496,13 @@ describe('AI landing-page output guardrails', () => {
     expect(result.document.blocks.map((block) => block.type)).toEqual([
       'product-hero',
       'editorial-intro',
-      'benefit-grid',
       'final-cta',
     ]);
     expect(result.stages).toEqual({
       status: 'partial-fallback',
       plannedSections: 2,
       generatedSections: 1,
-      fallbackSections: 1,
+      fallbackSections: 0,
       skippedSections: 1,
       retryCount: 1,
       failures: [
@@ -522,7 +513,7 @@ describe('AI landing-page output guardrails', () => {
         },
       ],
     });
-    expect(result.reasoning).toContain('1 of 2 eligible planned sections were generated');
+    expect(result.groundingNotes.at(-1)).toContain('1 of 2 planned middle section');
   });
 
   it('recovers transient plan and block failures before falling back', async () => {
@@ -587,7 +578,6 @@ describe('AI landing-page output guardrails', () => {
           images: [verifiedImage],
         },
       },
-      fallbackDocument: normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]),
     });
 
     expect(result.model).toBe('content-model');

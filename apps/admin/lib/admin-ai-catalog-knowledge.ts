@@ -9,4 +9,6 @@ export const ADMIN_AI_CATALOG_KNOWLEDGE = {
     'Brands and categories classify products. Making taxonomy inactive does not hide its products. Categories can form parent-child hierarchies, and parent catalog views include descendants.',
   historyAndPerformance:
     'Catalog values describe the product now. Existing orders retain their captured product, price, discount, and cost facts. Use Analytics for dated business performance; Products workspace purchase and confirmation counts describe order lifecycle participation, not completed sales.',
+  generatedWork:
+    'Content and categorization jobs create proposals. Auto-apply uses stale-safe verified application; conflicts remain pending.',
 } as const;

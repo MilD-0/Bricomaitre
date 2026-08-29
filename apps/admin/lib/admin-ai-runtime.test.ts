@@ -21,14 +21,15 @@ describe('model-led Admin assistant runtime', () => {
 
     expect(parsed).toMatchObject({
       message: 'What does adjusted profit mean this month?',
+      autoAcceptProposals: false,
       reasoningEffort: 'medium',
     });
     expect(adminAiChatRequestSchema.safeParse({ ...parsed, extra: 'not accepted' }).success).toBe(
       false,
     );
-    expect(
-      adminAiChatRequestSchema.safeParse({ ...parsed, autoAcceptProposals: true }).success,
-    ).toBe(false);
+    expect(adminAiChatRequestSchema.parse({ ...parsed, autoAcceptProposals: true })).toMatchObject({
+      autoAcceptProposals: true,
+    });
   });
 
   it('keeps runtime instructions lean and lets the connected tools describe capability', () => {
@@ -122,6 +123,61 @@ describe('model-led Admin assistant runtime', () => {
     ]);
     expect(JSON.stringify(result)).not.toContain('analytics_profit');
     expect(JSON.stringify(result.topics[0]?.facts).length).toBeLessThan(3_000);
+  });
+
+  it('keeps Storefront administration guidance limited to its few unusual settings rules', () => {
+    const result = readAdminAiGuidanceForTopics(['storefront'], { topics: ['storefront'] });
+
+    expect(result.topics).toEqual([
+      expect.objectContaining({
+        topic: 'storefront',
+        owner: 'Storefront configuration',
+        facts: {
+          phone: expect.stringContaining('stays enabled'),
+          assistant: expect.stringContaining('configured model choices'),
+          announcement: expect.stringContaining('French and Arabic'),
+        },
+      }),
+    ]);
+    expect(JSON.stringify(result.topics[0]?.facts).length).toBeLessThan(600);
+    expect(JSON.stringify(result)).not.toContain('roles');
+  });
+
+  it('keeps asset guidance compact and explains the current recommendation behavior', () => {
+    const result = readAdminAiGuidanceForTopics(['assets'], { topics: ['assets'] });
+
+    expect(result.topics).toEqual([
+      expect.objectContaining({
+        topic: 'assets',
+        owner: 'Storefront assets',
+        facts: expect.objectContaining({
+          featuredGroups: expect.stringContaining('brands and categories'),
+          productCards: expect.stringContaining('bilingual editorial cards'),
+          recommendation: expect.stringContaining('normal recommendation signals'),
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(result.topics[0]?.facts).length).toBeLessThan(700);
+  });
+
+  it('keeps landing-page knowledge compact while preserving its unusual live contract', () => {
+    const result = readAdminAiGuidanceForTopics(['landing_pages'], {
+      topics: ['landing_pages'],
+    });
+
+    expect(result.topics).toEqual([
+      expect.objectContaining({
+        topic: 'landing_pages',
+        owner: 'Storefront landing pages',
+        facts: expect.objectContaining({
+          identity: expect.stringContaining('multiple landing pages'),
+          publication: expect.stringContaining('updates its live revision immediately'),
+          storefront: expect.stringContaining('live Storefront product data'),
+          discovery: expect.stringContaining('non-indexable direct-link campaigns'),
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(result.topics[0]?.facts).length).toBeLessThan(900);
   });
 
   it('uses the Algeria business date and preserves readable bounded titles', () => {

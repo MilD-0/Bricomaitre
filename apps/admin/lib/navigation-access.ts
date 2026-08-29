@@ -27,11 +27,7 @@ export function canAccessNavigationItem(access: {
   }
 
   if (key === 'aiProposals') {
-    return (
-      hasPermission(permissions, 'products_write') ||
-      hasPermission(permissions, 'assets_write') ||
-      hasPermission(permissions, 'brands_categories_write')
-    );
+    return hasPermission(permissions, 'products_write');
   }
 
   if (key === 'orders') {

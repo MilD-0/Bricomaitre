@@ -1,82 +1,288 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  load: vi.fn(),
   create: vi.fn(),
   replace: vi.fn(),
   remove: vi.fn(),
+  reorder: vi.fn(),
+  updateStates: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', () => ({ getDb: () => 'database' }));
+vi.mock('./admin-assets-data', () => ({ loadAssetsData: mocks.load }));
 vi.mock('./asset-mutations', () => ({
   createAdminAsset: mocks.create,
   replaceAdminAsset: mocks.replace,
   deleteAdminAsset: mocks.remove,
+  reorderAdminAssets: mocks.reorder,
+  updateAdminAssetStates: mocks.updateStates,
 }));
 
-import { manageAdminAiAsset } from './admin-ai-assets';
+import {
+  adminAiAssetCrudSchema,
+  inspectAdminAiAssets,
+  manageAdminAiAsset,
+  reorderAdminAiAssets,
+} from './admin-ai-assets';
 
-describe('admin AI asset CRUD', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('creates a complete bilingual featured group with resolved selections', async () => {
-    mocks.create.mockResolvedValue({ kind: 'featured-group', id: 7, sortOrder: 2 });
-    const actor = { email: 'admin@example.com', name: 'Admin' };
-    const asset = {
-      kind: 'featured-group' as const,
-      data: {
-        name: 'Sélection atelier',
-        nameAr: 'اختيار الورشة',
-        cta: 'Voir la sélection',
-        ctaAr: 'شاهد الاختيار',
-        link: '/fr/products',
-        productIds: [12, 18],
-        brandIds: [],
-        categoryIds: [],
-        showAtTopOfProductsPage: true,
-        active: false,
-      },
-    };
-
-    await expect(manageAdminAiAsset({ operation: 'create', asset }, actor)).resolves.toEqual({
-      ok: true,
-      operation: 'create',
-      kind: 'featured-group',
+const assets = {
+  banners: [
+    {
+      id: 1,
+      title: 'Atelier',
+      titleAr: 'ورشة',
+      imageUrl: 'https://cdn.example.com/wide.jpg',
+      imageUrlLandscape: 'https://cdn.example.com/wide.jpg',
+      imageUrlPortrait: 'https://cdn.example.com/tall.jpg',
+      productId: null,
+      active: true,
+      sortOrder: 0,
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    },
+    {
+      id: 2,
+      title: 'Rangement',
+      titleAr: 'تخزين',
+      imageUrl: 'https://cdn.example.com/storage-wide.jpg',
+      imageUrlLandscape: 'https://cdn.example.com/storage-wide.jpg',
+      imageUrlPortrait: 'https://cdn.example.com/storage-tall.jpg',
+      productId: 18,
+      active: false,
+      sortOrder: 1,
+      createdAt: '2026-08-02T00:00:00.000Z',
+      updatedAt: '2026-08-02T00:00:00.000Z',
+    },
+  ],
+  featuredGroups: [
+    {
       id: 7,
-      sortOrder: 2,
-    });
-    expect(mocks.create).toHaveBeenCalledWith('database', 'featured-group', asset.data, actor);
+      name: 'Sélection atelier',
+      nameAr: 'اختيار الورشة',
+      cta: 'Voir',
+      ctaAr: 'شاهد',
+      link: '/fr/products',
+      productIds: [12],
+      brandIds: [],
+      categoryIds: [3],
+      showAtTopOfProductsPage: true,
+      active: true,
+      sortOrder: 0,
+      createdAt: '2026-08-03T00:00:00.000Z',
+      updatedAt: '2026-08-03T00:00:00.000Z',
+    },
+  ],
+  productCards: [
+    {
+      id: 9,
+      productId: 12,
+      titleAr: 'مثقاب',
+      titleFr: 'Perceuse',
+      descriptionAr: 'وصف المنتج',
+      descriptionFr: 'Description produit',
+      characteristicsAr: ['قوي', 'خفيف', 'عملي'],
+      characteristicsFr: ['Puissante', 'Légère', 'Pratique'],
+      active: true,
+      sortOrder: 0,
+      createdAt: '2026-08-04T00:00:00.000Z',
+      updatedAt: '2026-08-04T00:00:00.000Z',
+    },
+  ],
+};
+
+describe('Admin AI assets', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.load.mockResolvedValue(assets);
   });
 
-  it('replaces and deletes exact inspected assets', async () => {
-    const banner = {
-      kind: 'banner' as const,
-      id: 4,
-      data: {
-        title: 'Livraison nationale',
-        titleAr: 'توصيل وطني',
-        imageUrlLandscape: 'https://cdn.example.com/wide.jpg',
+  it('inspects a bounded surface with active-state counts and exact missing IDs', async () => {
+    await expect(
+      inspectAdminAiAssets({ kind: 'banner', ids: [1, 99], active: true, limit: 10 }),
+    ).resolves.toEqual({
+      kind: 'admin_assets',
+      banners: {
+        counts: { total: 2, active: 1, inactive: 1, matched: 1, returned: 1 },
+        items: [assets.banners[0]],
+        requestedIds: [1, 99],
+        missingIds: [99],
+      },
+    });
+  });
+
+  it('updates only named fields and keeps the legacy banner image coherent', async () => {
+    const actor = { email: 'admin@example.com', name: 'Admin' };
+    mocks.replace.mockImplementation(async (_db, kind, id, data) => ({ kind, id, data }));
+
+    const result = await manageAdminAiAsset(
+      {
+        operation: 'update',
+        asset: {
+          kind: 'banner',
+          id: 1,
+          changes: {
+            title: 'Nouvel atelier',
+            imageUrlLandscape: 'https://cdn.example.com/new-wide.jpg',
+          },
+        },
+      },
+      actor,
+    );
+
+    expect(mocks.replace).toHaveBeenCalledWith(
+      'database',
+      'banner',
+      1,
+      {
+        title: 'Nouvel atelier',
+        titleAr: 'ورشة',
+        imageUrl: 'https://cdn.example.com/new-wide.jpg',
+        imageUrlLandscape: 'https://cdn.example.com/new-wide.jpg',
         imageUrlPortrait: 'https://cdn.example.com/tall.jpg',
         productId: null,
         active: true,
       },
+      actor,
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      operation: 'update',
+      previous: { title: 'Atelier' },
+      data: { title: 'Nouvel atelier' },
+    });
+  });
+
+  it('does not materialize defaults or clear selections in a one-field update', async () => {
+    const actor = { email: 'admin@example.com', name: 'Admin' };
+    mocks.updateStates.mockResolvedValue({ ok: true });
+    const input = {
+      operation: 'update' as const,
+      asset: {
+        kind: 'featured-group' as const,
+        id: 7,
+        changes: { showAtTopOfProductsPage: false },
+      },
     };
-    mocks.replace.mockResolvedValue({ kind: 'banner', id: 4, data: banner.data });
-    mocks.remove.mockResolvedValue({ kind: 'product-card', id: 9, deleted: true });
+
+    expect(adminAiAssetCrudSchema.parse(input).asset).toEqual(input.asset);
+    await expect(manageAdminAiAsset(input, actor)).resolves.toMatchObject({
+      ok: true,
+      previous: { categoryIds: [3], active: true },
+      data: { categoryIds: [3], active: true, showAtTopOfProductsPage: false },
+    });
+    expect(mocks.updateStates).toHaveBeenCalledWith(
+      'database',
+      { items: [{ kind: 'featured-group', id: 7, showAtTopOfProductsPage: false }] },
+      actor,
+    );
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it('changes active state without forcing legacy banner image migration', async () => {
+    mocks.updateStates.mockResolvedValue({ ok: true });
+    mocks.load.mockResolvedValue({
+      ...assets,
+      banners: [
+        {
+          ...assets.banners[0],
+          imageUrlLandscape: null,
+          imageUrlPortrait: null,
+        },
+      ],
+    });
 
     await expect(
-      manageAdminAiAsset({ operation: 'replace', asset: banner }),
-    ).resolves.toMatchObject({ ok: true, operation: 'replace', kind: 'banner', id: 4 });
+      manageAdminAiAsset({
+        operation: 'update',
+        asset: { kind: 'banner', id: 1, changes: { active: false } },
+      }),
+    ).resolves.toMatchObject({ ok: true, data: { active: false } });
+    expect(mocks.updateStates).toHaveBeenCalledWith(
+      'database',
+      { items: [{ kind: 'banner', id: 1, active: false }] },
+      undefined,
+    );
+    expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it('rejects update and delete targets that do not exist', async () => {
+    await expect(
+      manageAdminAiAsset({
+        operation: 'update',
+        asset: { kind: 'product-card', id: 404, changes: { active: false } },
+      }),
+    ).rejects.toThrow('does not exist');
     await expect(
       manageAdminAiAsset({
         operation: 'delete',
-        asset: { kind: 'product-card', id: 9 },
+        asset: { kind: 'featured-group', id: 404 },
       }),
-    ).resolves.toEqual({
+    ).rejects.toThrow('does not exist');
+    expect(mocks.replace).not.toHaveBeenCalled();
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it('creates and deletes through canonical asset mutations', async () => {
+    const actor = { email: 'admin@example.com', name: 'Admin' };
+    mocks.create.mockResolvedValue({ kind: 'featured-group', id: 8, sortOrder: 1 });
+    mocks.remove.mockResolvedValue({ kind: 'product-card', id: 9, deleted: true });
+
+    await expect(
+      manageAdminAiAsset(
+        {
+          operation: 'create',
+          asset: {
+            kind: 'featured-group',
+            data: {
+              name: 'Nouveautés',
+              nameAr: 'وصل حديثا',
+              productIds: [12],
+              brandIds: [],
+              categoryIds: [],
+              showAtTopOfProductsPage: false,
+              active: true,
+            },
+          },
+        },
+        actor,
+      ),
+    ).resolves.toMatchObject({ ok: true, operation: 'create', id: 8 });
+    await expect(
+      manageAdminAiAsset({ operation: 'delete', asset: { kind: 'product-card', id: 9 } }, actor),
+    ).resolves.toMatchObject({
       ok: true,
       operation: 'delete',
-      kind: 'product-card',
-      id: 9,
+      previous: { productId: 12 },
       deleted: true,
     });
+  });
+
+  it('derives canonical sort orders from a complete ordered ID list', async () => {
+    mocks.reorder.mockResolvedValue({ ok: true });
+
+    await expect(reorderAdminAiAssets({ kind: 'banner', orderedIds: [2, 1] })).resolves.toEqual({
+      ok: true,
+      kind: 'banner',
+      before: [1, 2],
+      after: [2, 1],
+    });
+    expect(mocks.reorder).toHaveBeenCalledWith('database', {
+      kind: 'banner',
+      items: [
+        { id: 2, sortOrder: 0 },
+        { id: 1, sortOrder: 1 },
+      ],
+    });
+  });
+
+  it('rejects incomplete or unknown reorder lists before writing', async () => {
+    await expect(reorderAdminAiAssets({ kind: 'banner', orderedIds: [1] })).rejects.toThrow(
+      'Missing: 2',
+    );
+    await expect(reorderAdminAiAssets({ kind: 'banner', orderedIds: [1, 99] })).rejects.toThrow(
+      'Unknown: 99',
+    );
+    expect(mocks.reorder).not.toHaveBeenCalled();
   });
 });

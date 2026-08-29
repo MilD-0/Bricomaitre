@@ -513,6 +513,7 @@ describe('production packaging and release runtime', () => {
     );
 
     expect(storefrontEnv).not.toMatch(/FACEBOOK_ACCESS_TOKEN=.+/);
+    expect(storefrontEnv).toContain('AI_PROVIDER=openrouter');
     expect(storefrontEnv).not.toMatch(/NEXT_PUBLIC_TIKTOK_PIXEL_ID=.+/);
     expect(apiEnv).toContain('META_CONVERSIONS_API_TOKEN=replace-with-meta-access-token');
     expect(apiEnv).toContain('GOOGLE_ANALYTICS_API_SECRET=replace-me');

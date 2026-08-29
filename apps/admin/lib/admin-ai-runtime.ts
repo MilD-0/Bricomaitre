@@ -26,6 +26,7 @@ export const adminAiChatRequestSchema = z
     message: z.string().trim().min(1).max(4_000),
     conversationKey: z.uuid(),
     context: adminAiSurfaceContextSchema.optional(),
+    autoAcceptProposals: z.boolean().optional().default(false),
     model: adminAiModelIdSchema.optional().default(ADMIN_AI_DEFAULT_MODEL),
     reasoningEffort: adminAiReasoningEffortSchema.optional(),
   })
@@ -55,6 +56,9 @@ export const ADMIN_AI_GUIDANCE_TOPIC_VALUES = [
   'ai_stats_shopping',
   'catalog',
   'orders',
+  'storefront',
+  'assets',
+  'landing_pages',
 ] as const;
 
 export type AdminAiGuidanceTopic = (typeof ADMIN_AI_GUIDANCE_TOPIC_VALUES)[number];
@@ -142,6 +146,44 @@ const guidanceByTopic = {
   orders: {
     owner: 'Orders and EcoTrack system',
     facts: ADMIN_AI_ORDERS_KNOWLEDGE,
+  },
+  storefront: {
+    owner: 'Storefront configuration',
+    facts: {
+      phone:
+        'Storefront phone support stays enabled; contactPhone changes the customer-facing number.',
+      assistant:
+        'Storefront AI models must be selected from the configured model choices returned by the configuration read.',
+      announcement:
+        'An active announcement needs both the French and Arabic messages; both languages share one active state.',
+    },
+  },
+  assets: {
+    owner: 'Storefront assets',
+    facts: {
+      visibility: 'Only active assets appear on Storefront, ordered by sortOrder.',
+      featuredGroups:
+        'A featured group combines its directly selected products with active products from its selected brands and categories.',
+      productCards:
+        'Product cards are bilingual editorial cards on the homepage, each tied to one product.',
+      recommendation:
+        'showAtTopOfProductsPage gives a featured group’s selected products priority ahead of normal recommendation signals in the Products recommended order.',
+    },
+  },
+  landing_pages: {
+    owner: 'Storefront landing pages',
+    facts: {
+      identity:
+        'A product and language may have multiple landing pages. Use the exact page ID and current revision when changing one.',
+      publication:
+        'New pages are drafts unless published. Revising an active page with publication preserved updates its live revision immediately.',
+      storefront:
+        'Authored blocks form the campaign; live Storefront product data supplies price, availability, cart controls, and the order form.',
+      discovery:
+        'Landing pages are non-indexable direct-link campaigns and stay out of Storefront sitemap discovery.',
+      structure:
+        'Blocks are ordered and have stable IDs. A page must retain one product hero and one final CTA.',
+    },
   },
 } as const satisfies Record<AdminAiGuidanceTopic, unknown>;
 

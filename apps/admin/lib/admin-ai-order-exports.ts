@@ -99,6 +99,14 @@ function missingRequiredExportFields(rows: ReturnType<typeof buildOrderExportRow
   });
 }
 
+function compactIds(ids: number[], limit = 100) {
+  return {
+    ids: ids.slice(0, limit),
+    count: ids.length,
+    truncated: ids.length > limit,
+  };
+}
+
 export async function previewAdminAiOrderExport(
   input: z.input<typeof adminAiOrderExportScopeSchema>,
   now = new Date(),
@@ -107,14 +115,20 @@ export async function previewAdminAiOrderExport(
   const resolved = await resolveOrderExportScope(values, now);
   const rows = buildOrderExportRows(resolved.orders, await readEcotrackCatalog(getDb()));
   const previewLimit = 20;
+  const resolvedIds = compactIds(resolved.orders.map((order) => order.id));
+  const staleIds = compactIds(resolved.staleConfirmedOrderIds);
   return {
     kind: 'order_export_preview' as const,
     mode: values.mode,
     fileName: buildOrderExportFileName(values.mode, now),
-    orderIds: resolved.orders.map((order) => order.id),
+    resolvedOrderCount: resolvedIds.count,
+    orderIds: resolvedIds.ids,
+    orderIdsTruncated: resolvedIds.truncated,
     rowCount: rows.length,
     missingOrderIds: resolved.missingOrderIds,
-    staleConfirmedOrderIds: resolved.staleConfirmedOrderIds,
+    staleConfirmedOrderCount: staleIds.count,
+    staleConfirmedOrderIds: staleIds.ids,
+    staleConfirmedOrderIdsTruncated: staleIds.truncated,
     missingRequiredFields: missingRequiredExportFields(rows),
     previewRows: rows.slice(0, previewLimit),
     previewRowsTruncated: rows.length > previewLimit,
@@ -131,6 +145,7 @@ export async function startAdminAiOrderExport(
   const resolved = await resolveOrderExportScope(values, now);
   if (resolved.orders.length === 0) {
     return {
+      ok: false as const,
       kind: 'order_export_not_started' as const,
       error: 'no_exportable_orders' as const,
       mode: values.mode,
@@ -145,13 +160,20 @@ export async function startAdminAiOrderExport(
     undefined,
     { conversationId: context.conversationId },
   );
+  const resolvedIds = compactIds(orderIds);
+  const staleIds = compactIds(resolved.staleConfirmedOrderIds);
   return {
-    kind: 'order_export_started' as const,
+    ok: result.kind !== 'busy',
+    kind:
+      result.kind === 'busy' ? ('order_export_busy' as const) : ('order_export_started' as const),
     mode: values.mode,
-    resolvedOrderCount: orderIds.length,
-    orderIds,
+    resolvedOrderCount: resolvedIds.count,
+    orderIds: resolvedIds.ids,
+    orderIdsTruncated: resolvedIds.truncated,
     missingOrderIds: resolved.missingOrderIds,
-    staleConfirmedOrderIds: resolved.staleConfirmedOrderIds,
+    staleConfirmedOrderCount: staleIds.count,
+    staleConfirmedOrderIds: staleIds.ids,
+    staleConfirmedOrderIdsTruncated: staleIds.truncated,
     completionEffect: 'order statuses are unchanged' as const,
     job: result.job,
     startDisposition: result.kind,

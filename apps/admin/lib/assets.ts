@@ -77,55 +77,56 @@ const optionalImageUrlSchema = z
     return z.NEVER;
   });
 
-export const assetBannerSchema = z
-  .object({
-    title: z.string().trim().min(1).max(120),
-    titleAr: z.string().trim().min(1).max(120),
-    imageUrl: optionalImageUrlSchema,
-    imageUrlPortrait: optionalImageUrlSchema,
-    imageUrlLandscape: optionalImageUrlSchema,
-    productId: productLinkSchema,
-    active: z.boolean().default(true),
-  })
-  .transform((value, ctx) => {
-    if (!value.imageUrlLandscape) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['imageUrlLandscape'],
-        message: 'Add a landscape banner image.',
-      });
-    }
+export const assetBannerInputSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  titleAr: z.string().trim().min(1).max(120),
+  imageUrl: optionalImageUrlSchema,
+  imageUrlPortrait: optionalImageUrlSchema,
+  imageUrlLandscape: optionalImageUrlSchema,
+  productId: productLinkSchema,
+  active: z.boolean().default(true),
+});
 
-    if (!value.imageUrlPortrait) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['imageUrlPortrait'],
-        message: 'Add a portrait banner image.',
-      });
-    }
+export const assetBannerSchema = assetBannerInputSchema.transform((value, ctx) => {
+  if (!value.imageUrlLandscape) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['imageUrlLandscape'],
+      message: 'Add a landscape banner image.',
+    });
+  }
 
-    if (!value.imageUrlLandscape || !value.imageUrlPortrait) return z.NEVER;
+  if (!value.imageUrlPortrait) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['imageUrlPortrait'],
+      message: 'Add a portrait banner image.',
+    });
+  }
 
-    return {
-      ...value,
-      imageUrl: value.imageUrl ?? value.imageUrlLandscape,
-    };
-  });
+  if (!value.imageUrlLandscape || !value.imageUrlPortrait) return z.NEVER;
 
-export const featuredProductGroupSchema = z
-  .object({
-    name: z.string().trim().min(1).max(120),
-    nameAr: z.string().trim().min(1).max(120),
-    cta: optionalShortTextSchema,
-    ctaAr: optionalShortTextSchema,
-    link: optionalLinkSchema,
-    productIds: z.array(z.coerce.number().int().positive()).default([]),
-    brandIds: z.array(z.coerce.number().int().positive()).default([]),
-    categoryIds: z.array(z.coerce.number().int().positive()).default([]),
-    showAtTopOfProductsPage: z.boolean().default(false),
-    active: z.boolean().default(true),
-  })
-  .superRefine((value, ctx) => {
+  return {
+    ...value,
+    imageUrl: value.imageUrl ?? value.imageUrlLandscape,
+  };
+});
+
+export const featuredProductGroupInputSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  nameAr: z.string().trim().min(1).max(120),
+  cta: optionalShortTextSchema,
+  ctaAr: optionalShortTextSchema,
+  link: optionalLinkSchema,
+  productIds: z.array(z.coerce.number().int().positive()).default([]),
+  brandIds: z.array(z.coerce.number().int().positive()).default([]),
+  categoryIds: z.array(z.coerce.number().int().positive()).default([]),
+  showAtTopOfProductsPage: z.boolean().default(false),
+  active: z.boolean().default(true),
+});
+
+export const featuredProductGroupSchema = featuredProductGroupInputSchema.superRefine(
+  (value, ctx) => {
     if (value.productIds.length + value.brandIds.length + value.categoryIds.length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -141,13 +142,14 @@ export const featuredProductGroupSchema = z
         message: 'CTA text and link must both be provided together.',
       });
     }
-  });
+  },
+);
 
 const shortText = z.string().trim().min(1).max(80);
 const shortDescription = z.string().trim().min(1).max(140);
 const characteristicsSchema = z.array(z.string().trim().min(1).max(80)).min(3);
 
-export const productCardSchema = z.object({
+export const productCardInputSchema = z.object({
   productId: z.coerce.number().int().positive(),
   titleAr: shortText,
   titleFr: shortText,
@@ -157,6 +159,8 @@ export const productCardSchema = z.object({
   characteristicsFr: characteristicsSchema,
   active: z.boolean().default(true),
 });
+
+export const productCardSchema = productCardInputSchema;
 
 export const assetReorderSchema = z.object({
   kind: z.enum(['banner', 'featured-group', 'product-card']),

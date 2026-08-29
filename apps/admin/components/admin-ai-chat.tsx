@@ -53,6 +53,7 @@ import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Markdown } from './ui/markdown';
 import { Spinner } from './ui/spinner';
+import { Switch } from './ui/switch';
 import { Textarea } from './ui/textarea';
 import { useAdminAiSurfaceContext } from './admin-ai-surface-context';
 import { ADMIN_AI_OPEN_EVENT, notifyAdminAiMutation } from '../lib/admin-ai-events';
@@ -75,22 +76,11 @@ type ChatMessage = {
   terminal?: boolean;
   jobId?: string;
 };
-type LandingPageGenerationPresentation = {
-  status: 'completed' | 'partial-fallback' | 'full-fallback';
-  generatedSections: number;
-  plannedSections: number;
-  preservedSections: number;
-  fallbackSections: number;
-  skippedSections: number;
-  deletedSections: number;
-  retryCount: number;
-  reasoning: string | null;
-  failures: Array<{ type: string | null; reason: string }>;
-};
 type ProposalNextAction = 'refresh' | 'regenerate' | 'review' | 'retry';
 
 export const ADMIN_AI_MODEL_STORAGE_KEY = 'bricomaitre:admin-ai:model';
 export const ADMIN_AI_REASONING_EFFORT_STORAGE_KEY = 'bricomaitre:admin-ai:reasoning-effort';
+export const ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY = 'bricomaitre:admin-ai:auto-accept';
 
 function proposalsFromUnknown(value: unknown, depth = 0): Proposal[] {
   if (depth > 5 || value == null) return [];
@@ -140,7 +130,9 @@ function presentationFromUnknown(value: unknown) {
 
 function notifyAdminAiToolMutations(results: readonly AdminAiToolResult[]) {
   notifyAdminAiMutation(
-    results.map((result) => result.toolName).filter(adminAiToolMutatesApplication),
+    results
+      .map((result) => result.toolName)
+      .filter((toolName) => adminAiToolMutatesApplication(toolName)),
   );
 }
 
@@ -193,46 +185,6 @@ function objectValue(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
-}
-
-function landingPageGenerationPresentation(
-  toolName: string,
-  output: unknown,
-): LandingPageGenerationPresentation | null {
-  if (toolName !== 'create_landing_page' && toolName !== 'edit_landing_page') return null;
-  const generation = objectValue(objectValue(output)?.generation);
-  const stages = objectValue(generation?.stages);
-  if (!stages) return null;
-  const status = stages.status;
-  if (status !== 'completed' && status !== 'partial-fallback' && status !== 'full-fallback')
-    return null;
-  const count = (value: unknown) =>
-    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
-  const failures = Array.isArray(stages.failures)
-    ? stages.failures.flatMap((value) => {
-        const failure = objectValue(value);
-        return failure && typeof failure.reason === 'string'
-          ? [
-              {
-                type: typeof failure.type === 'string' ? failure.type : null,
-                reason: failure.reason,
-              },
-            ]
-          : [];
-      })
-    : [];
-  return {
-    status,
-    generatedSections: count(stages.generatedSections),
-    plannedSections: count(stages.plannedSections),
-    preservedSections: count(stages.preservedSections),
-    fallbackSections: count(stages.fallbackSections),
-    skippedSections: count(stages.skippedSections),
-    deletedSections: count(stages.deletedSections),
-    retryCount: count(stages.retryCount),
-    reasoning: typeof generation?.reasoning === 'string' ? generation.reasoning : null,
-    failures,
-  };
 }
 
 type EcotrackTerminalRow = {
@@ -344,11 +296,9 @@ function StructuredToolResultCard({
   const presentation = adminAiToolPresentation(result.toolName, result.output, locale);
   const displayValue = (value: unknown) =>
     displayAdminAiValue(value, locale, t('aiChat.yes'), t('aiChat.no'));
-  const landingGeneration = landingPageGenerationPresentation(result.toolName, result.output);
   const ecotrackTerminal = ecotrackTerminalPresentation(result.toolName, result.output);
-  const summary =
-    landingGeneration || ecotrackTerminal ? [] : adminAiScalarEntries(result.output, 10);
-  const tables = landingGeneration || ecotrackTerminal ? [] : adminAiResultTables(result.output);
+  const summary = ecotrackTerminal ? [] : adminAiScalarEntries(result.output, 10);
+  const tables = ecotrackTerminal ? [] : adminAiResultTables(result.output);
   const error =
     result.output &&
     typeof result.output === 'object' &&
@@ -370,55 +320,6 @@ function StructuredToolResultCard({
         <p className="px-4 py-3 text-xs text-destructive" role="alert">
           {error}
         </p>
-      ) : null}
-      {landingGeneration ? (
-        <div className="space-y-3 px-4 py-4">
-          <div>
-            <p className="text-xs font-semibold text-foreground">
-              {t(`aiChat.landingGeneration.status.${landingGeneration.status}`)}
-            </p>
-            {landingGeneration.reasoning ? (
-              <p className="mt-1 text-[0.7rem] leading-5 text-muted-foreground">
-                {landingGeneration.reasoning}
-              </p>
-            ) : null}
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {[
-              ['generated', landingGeneration.generatedSections],
-              ['planned', landingGeneration.plannedSections],
-              ['preserved', landingGeneration.preservedSections],
-              ['fallback', landingGeneration.fallbackSections],
-              ['skipped', landingGeneration.skippedSections],
-              ...(landingGeneration.deletedSections > 0
-                ? ([['deleted', landingGeneration.deletedSections]] as const)
-                : []),
-              ['retries', landingGeneration.retryCount],
-            ].map(([key, value]) => (
-              <div key={key} className="rounded-xl bg-secondary/45 px-3 py-2.5">
-                <p className="text-[0.64rem] text-muted-foreground">
-                  {t(`aiChat.landingGeneration.${key}`)}
-                </p>
-                <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">{value}</p>
-              </div>
-            ))}
-          </div>
-          {landingGeneration.failures.length ? (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/8 px-3 py-2.5">
-              <p className="text-[0.68rem] font-semibold text-amber-800 dark:text-amber-200">
-                {t('aiChat.landingGeneration.fallbackDetails')}
-              </p>
-              <ul className="mt-1 space-y-1 text-[0.68rem] text-amber-800/90 dark:text-amber-100/90">
-                {landingGeneration.failures.map((failure, index) => (
-                  <li key={`${failure.type ?? 'plan'}:${failure.reason}:${index}`}>
-                    {failure.type ? `${queryLabel(failure.type)} · ` : ''}
-                    {t(`aiChat.landingGeneration.reasons.${failure.reason}`)}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
       ) : null}
       {ecotrackTerminal ? (
         <div className="space-y-3 px-4 py-4">
@@ -522,11 +423,7 @@ function StructuredToolResultCard({
           showingRows={(shown, available) => t('aiChat.showingRows', { shown, available })}
         />
       ))}
-      {!error &&
-      !landingGeneration &&
-      !ecotrackTerminal &&
-      summary.length === 0 &&
-      tables.length === 0 ? (
+      {!error && !ecotrackTerminal && summary.length === 0 && tables.length === 0 ? (
         <p className="px-4 py-3 text-xs text-muted-foreground">{t('aiChat.noToolData')}</p>
       ) : null}
       {presentation.href && presentation.destinationKey ? (
@@ -562,6 +459,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
   const [activity, setActivity] = useState<AdminAiChatStatus | null>(null);
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(false);
+  const [autoAcceptProposals, setAutoAcceptProposals] = useState(false);
   const [model, setModel] = useState<AdminAiModelId>(ADMIN_AI_DEFAULT_MODEL);
   const [reasoningEffort, setReasoningEffort] = useState<AdminAiReasoningEffort>(
     ADMIN_AI_DEFAULT_REASONING_EFFORT,
@@ -685,17 +583,23 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
     const terminalJobs = nextJobs.filter((job) =>
       ['completed', 'cancelled', 'failed'].includes(job.status),
     );
+    const activeConversation = activeConversationRef.current;
     const newTerminalJobIds = terminalJobs
-      .filter((job) => !terminalJobIdsRef.current.has(job.id))
+      .filter(
+        (job) =>
+          !terminalJobIdsRef.current.has(job.id) &&
+          activeConversation !== null &&
+          job.conversationId === activeConversation.id,
+      )
       .map((job) => job.id);
     terminalJobIdsRef.current = new Set(terminalJobs.map((job) => job.id));
-    const activeConversation = activeConversationRef.current;
     if (newTerminalJobIds.length > 0 && activeConversation) {
       void reconcileTerminalJobs(activeConversation, newTerminalJobIds);
     }
   }, [reconcileTerminalJobs]);
 
   useEffect(() => {
+    const autoAccept = window.localStorage.getItem(ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY) === 'true';
     const storedModel = adminAiModelIdSchema.safeParse(
       window.localStorage.getItem(ADMIN_AI_MODEL_STORAGE_KEY),
     );
@@ -708,6 +612,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
         ? storedEffort.data
         : getDefaultAdminAiReasoningEffort(nextModel);
     queueMicrotask(() => {
+      setAutoAcceptProposals(autoAccept);
       setModel(nextModel);
       setReasoningEffort(nextEffort);
     });
@@ -811,6 +716,11 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
     window.localStorage.setItem(ADMIN_AI_REASONING_EFFORT_STORAGE_KEY, nextEffort);
   }
 
+  function updateAutoAcceptProposals(enabled: boolean) {
+    setAutoAcceptProposals(enabled);
+    window.localStorage.setItem(ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY, String(enabled));
+  }
+
   function updateReasoningEffort(nextEffort: AdminAiReasoningEffort) {
     if (!supportsAdminAiReasoningEffort(model, nextEffort)) return;
     setReasoningEffort(nextEffort);
@@ -902,6 +812,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
         body: JSON.stringify({
           message,
           conversationKey: conversationKeyRef.current,
+          autoAcceptProposals,
           model,
           reasoningEffort,
           context: surfaceContext.surface === 'unknown' ? undefined : surfaceContext,
@@ -1128,6 +1039,16 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
                         </option>
                       ))}
                     </select>
+                  </label>
+                  <label className="flex h-9 cursor-pointer items-center gap-2.5">
+                    <Switch
+                      checked={autoAcceptProposals}
+                      onCheckedChange={updateAutoAcceptProposals}
+                      aria-label={t('aiChat.autoAccept')}
+                    />
+                    <span className="text-xs font-medium text-foreground">
+                      {t('aiChat.autoAccept')}
+                    </span>
                   </label>
                 </div>
               </div>

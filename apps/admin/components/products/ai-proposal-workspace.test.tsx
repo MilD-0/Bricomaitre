@@ -45,17 +45,17 @@ const activeProposal: AiProposalInboxItem = {
 
 const expiredProposal: AiProposalInboxItem = {
   id: 2,
-  proposalType: 'landing_page',
+  proposalType: 'product_category',
   entityType: 'products',
   entityId: 43,
-  payload: { locale: 'ar', document: { schemaVersion: 2, blocks: [] } },
+  payload: { before: { categoryId: null }, changes: { categoryId: 10 } },
   reasoning: null,
   evidence: [],
   confidence: null,
   requestedBy: null,
   expiresAt: '2025-01-01T00:00:00.000Z',
   createdAt: '2026-08-18T10:00:00.000Z',
-  task: 'landing_page_generation',
+  task: 'product_categorization',
   model: 'deepseek-v4',
 };
 
@@ -75,7 +75,7 @@ function data(items = [activeProposal, expiredProposal]): AiProposalInboxData {
     },
     pagination: { page: 1, pageSize: 20, total: 42, totalPages: 3 },
     facets: {
-      proposalTypes: ['landing_page', 'product_content'],
+      proposalTypes: ['product_category', 'product_content'],
       entityTypes: ['products'],
       models: ['deepseek-v4'],
     },
@@ -117,7 +117,7 @@ describe('AI proposal review workspace preview', () => {
     renderWorkspace();
 
     expect(screen.getByText('Title, Active')).toBeInTheDocument();
-    expect(screen.getByText('AR landing page')).toBeInTheDocument();
+    expect(screen.getAllByText('Category Id').length).toBeGreaterThan(0);
     expect(screen.getByText('Old title')).toBeInTheDocument();
     expect(screen.getByText('New title')).toBeInTheDocument();
     expect(screen.getByText('The current title omits the product family.')).toBeInTheDocument();
@@ -164,7 +164,7 @@ describe('AI proposal review workspace preview', () => {
 
     expect(screen.queryByRole('button', { name: 'Approve selected (2)' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select Product content #1' }));
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Landing page #2' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Product category #2' }));
 
     expect(screen.getByRole('button', { name: 'Reject selected (2)' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Approve selected (2)' })).toBeDisabled();
@@ -203,13 +203,13 @@ describe('AI proposal review workspace preview', () => {
     renderWorkspace();
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select Product content #1' }));
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Landing page #2' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Product category #2' }));
     await userEvent.click(screen.getByRole('button', { name: 'Reject selected (2)' }));
     const confirmation = screen.getByRole('dialog', { name: 'Reject this proposal?' });
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Reject' }));
 
     await waitFor(() => expect(screen.queryByText('Title, Active')).not.toBeInTheDocument());
-    expect(screen.getByText('AR landing page')).toBeInTheDocument();
+    expect(screen.getAllByText('Category Id').length).toBeGreaterThan(0);
     expect(await screen.findByText('#2: Already reviewed')).toBeInTheDocument();
   });
 
@@ -232,7 +232,7 @@ describe('AI proposal review workspace preview', () => {
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete expired' }));
 
     await waitFor(() => expect(deleted).toEqual(['2']));
-    await waitFor(() => expect(screen.queryByText('AR landing page')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText('Category Id')).not.toBeInTheDocument());
     expect(screen.getByText('41 proposals')).toBeInTheDocument();
     expect(screen.getByText('Title, Active')).toBeInTheDocument();
     expect(await screen.findByText('Deleted 1 expired proposals.')).toBeInTheDocument();

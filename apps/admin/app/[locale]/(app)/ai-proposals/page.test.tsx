@@ -35,6 +35,7 @@ const query = {
 describe('AiProposalPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    access.mockResolvedValue(undefined);
     parse.mockReturnValue(query);
     load.mockResolvedValue({
       items: [],

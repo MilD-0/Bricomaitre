@@ -3,14 +3,12 @@ import { and, eq, lte } from 'drizzle-orm';
 import { getDb } from '@bric/db/client';
 import { aiProposals } from '@bric/db/schema';
 
-import { reviewAdminProposal } from './ai-admin-capabilities';
+import { reviewProductCategoryProposal } from './ai-admin-capabilities';
 import { reviewProductContentProposal } from './ai-product-content';
 import { reviewProductRelationProposal } from './ai-product-knowledge';
-import { startProductCatalogFeedRefreshJob } from './background-jobs';
-import { CACHE_TAGS, revalidateServerTags } from './server-cache';
-import { revalidateStorefrontProducts } from './storefront-revalidate';
+export { refreshAppliedAiProposalConsumers } from './background-jobs';
 
-export type AiProposalReviewResource = 'products' | 'brandsCategories' | 'assets';
+export type AiProposalReviewResource = 'products';
 
 export type AiProposalReviewTarget = {
   proposalType: string;
@@ -21,11 +19,11 @@ export class AiProposalReviewNotFoundError extends Error {}
 export class AiProposalExpiredDeletionConflictError extends Error {}
 
 export function aiProposalReviewResource(target: AiProposalReviewTarget): AiProposalReviewResource {
-  if (target.proposalType === 'featured_products' || target.proposalType === 'landing_page') {
-    return 'assets';
-  }
-  if (target.entityType === 'brands' || target.entityType === 'categories') {
-    return 'brandsCategories';
+  if (
+    target.entityType !== 'products' ||
+    !['product_content', 'product_relation', 'product_category'].includes(target.proposalType)
+  ) {
+    throw new AiProposalReviewNotFoundError('Unsupported proposal type.');
   }
   return 'products';
 }
@@ -65,7 +63,7 @@ export async function executeAiProposalReview(input: {
       actorId: input.actor.email,
     });
   }
-  return reviewAdminProposal({
+  return reviewProductCategoryProposal({
     proposalId: input.proposalId,
     action: input.action,
     actorId: input.actor.email,
@@ -90,10 +88,4 @@ export async function deleteExpiredAiProposal(proposalId: number, now = new Date
     );
   }
   return deleted;
-}
-
-export async function refreshAppliedAiProposalConsumers(trigger = 'ai-product-content:apply') {
-  revalidateServerTags(CACHE_TAGS.products, CACHE_TAGS.productsMeta);
-  await revalidateStorefrontProducts();
-  await startProductCatalogFeedRefreshJob(trigger).catch(() => undefined);
 }

@@ -1,4 +1,4 @@
-import { isFinalJobAttempt } from '@bric/runtime/jobs';
+import { isFinalJobAttempt, isJobCancellationError } from '@bric/runtime/jobs';
 
 import type { AiTaskTerminalStatus } from './ai-task-followups';
 
@@ -86,7 +86,7 @@ export function attachAiTaskTerminalFollowups(
 
   worker.on('failed', (job, error) => {
     if (!job || !isFinalJobAttempt(job)) return;
-    const status = error.message === 'Job cancelled.' ? 'cancelled' : 'failed';
+    const status = isJobCancellationError(error) ? 'cancelled' : 'failed';
     void publishState(job, status, error.message).catch((publishError) =>
       dependencies.onError?.(publishError, 'failed'),
     );

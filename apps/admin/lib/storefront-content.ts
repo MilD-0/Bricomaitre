@@ -4,11 +4,20 @@ import { z } from 'zod';
 import { getDb, hasDb } from '@bric/db/client';
 import { storefrontAnnouncements } from '@bric/db/schema';
 
-export const storefrontAnnouncementMutationSchema = z.object({
-  messageFr: z.string().trim().max(300),
-  messageAr: z.string().trim().max(300),
-  active: z.boolean(),
-});
+export const storefrontAnnouncementMutationSchema = z
+  .object({
+    messageFr: z.string().trim().max(300),
+    messageAr: z.string().trim().max(300),
+    active: z.boolean(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (!value.active || (value.messageFr && value.messageAr)) return;
+    context.addIssue({
+      code: 'custom',
+      message: 'Both announcement messages are required when the bar is active.',
+    });
+  });
 
 export type StorefrontAnnouncementAdmin = z.infer<typeof storefrontAnnouncementMutationSchema>;
 

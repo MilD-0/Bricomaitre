@@ -134,6 +134,7 @@ describe('admin AI ECOTRACK posting', () => {
         },
       ),
     ).resolves.toMatchObject({
+      ok: true,
       kind: 'ecotrack_posting_started',
       provider: 'emir',
       resolvedOrderCount: 1,
@@ -151,6 +152,58 @@ describe('admin AI ECOTRACK posting', () => {
       undefined,
       { conversationId: 42 },
     );
+  });
+
+  it('returns a non-success receipt when no confirmed orders match', async () => {
+    mocks.loadOrdersPageData.mockResolvedValue(ordersPage([]));
+
+    await expect(
+      startAdminAiEcotrackPosting(
+        {
+          provider: 'delivro',
+          scope: 'confirmed_all',
+          orderIds: [],
+          businessDate: null,
+        },
+        {
+          ownerKey: 'admin@example.com',
+          actor: { email: 'admin@example.com', name: 'Admin' },
+          conversationId: 42,
+        },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      kind: 'ecotrack_posting_not_started',
+      error: expect.stringContaining('No confirmed orders matched'),
+    });
+    expect(mocks.startPostingJob).not.toHaveBeenCalled();
+  });
+
+  it('does not report a busy posting queue as a successful mutation', async () => {
+    mocks.startPostingJob.mockResolvedValue({
+      kind: 'busy',
+      job: { id: '9fc7d69d-bd4b-4ac8-ad62-cf633eccfb13', status: 'running' },
+    });
+
+    await expect(
+      startAdminAiEcotrackPosting(
+        {
+          provider: 'delivro',
+          scope: 'selected',
+          orderIds: [11],
+          businessDate: null,
+        },
+        {
+          ownerKey: 'admin@example.com',
+          actor: { email: 'admin@example.com', name: 'Admin' },
+          conversationId: 42,
+        },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      kind: 'ecotrack_posting_busy',
+      job: { status: 'running' },
+    });
   });
 });
 
@@ -213,6 +266,11 @@ describe('admin AI ECOTRACK requirements', () => {
     ]);
     expect(result.requirements).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          reason: 'missing_name',
+          requirement: expect.stringContaining('Entered names are optional'),
+          repairFields: ['firstName', 'lastName', 'phoneNumber'],
+        }),
         expect.objectContaining({
           reason: 'invalid_commune',
           repairFields: ['wilayaId', 'commune'],

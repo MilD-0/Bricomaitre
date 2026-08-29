@@ -7,32 +7,19 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 const defaultStorageState = resolve(process.cwd(), '../../ops/runtime/admin-playwright-state.json');
 const storageState = process.env.ADMIN_PLAYWRIGHT_STORAGE_STATE?.trim() || defaultStorageState;
 
-const landingPageResult = {
-  message: 'The landing page draft is ready for review.',
+const landingPagePublicationResult = {
+  message: 'Landing page 91 is now unpublished.',
   toolResults: [
     {
       type: 'tool-result',
-      toolName: 'create_landing_page',
+      toolName: 'set_landing_page_active',
       output: {
+        ok: true,
         id: 91,
         productId: 12,
         locale: 'fr',
         active: false,
-        currentRevision: 1,
-        generation: {
-          model: 'openai/gpt-5.6-luna',
-          reasoning: 'A mobile-first product campaign grounded in verified catalog facts.',
-          stages: {
-            status: 'completed',
-            plannedSections: 4,
-            generatedSections: 4,
-            preservedSections: 0,
-            fallbackSections: 0,
-            skippedSections: 0,
-            retryCount: 1,
-            failures: [],
-          },
-        },
+        currentRevision: 7,
       },
     },
   ],
@@ -43,139 +30,6 @@ const landingPageResult = {
   },
   messageId: null,
 };
-
-const landingPageFallbackResult = {
-  ...landingPageResult,
-  message: 'The landing page was saved with one explicit section fallback.',
-  toolResults: [
-    {
-      ...landingPageResult.toolResults[0],
-      output: {
-        ...landingPageResult.toolResults[0].output,
-        id: 92,
-        generation: {
-          ...landingPageResult.toolResults[0].output.generation,
-          stages: {
-            status: 'partial-fallback',
-            plannedSections: 4,
-            generatedSections: 3,
-            preservedSections: 0,
-            fallbackSections: 1,
-            skippedSections: 1,
-            retryCount: 2,
-            failures: [
-              {
-                stage: 'block',
-                type: 'image-gallery',
-                reason: 'insufficient-assets',
-              },
-            ],
-          },
-        },
-      },
-    },
-  ],
-};
-
-const landingPageEditResult = {
-  ...landingPageResult,
-  message: 'The hero was rewritten and every unaffected section was preserved.',
-  toolResults: [
-    {
-      type: 'tool-result',
-      toolName: 'edit_landing_page',
-      output: {
-        id: 91,
-        landingPageId: 91,
-        productId: 12,
-        locale: 'fr',
-        active: false,
-        currentRevision: 2,
-        changed: true,
-        generation: {
-          model: 'openai/gpt-5.6-luna',
-          reasoning: 'Only the requested hero was rewritten; three existing sections are exact.',
-          stages: {
-            status: 'completed',
-            plannedSections: 4,
-            generatedSections: 1,
-            preservedSections: 3,
-            deletedSections: 0,
-            fallbackSections: 0,
-            skippedSections: 0,
-            retryCount: 0,
-            failures: [],
-          },
-        },
-      },
-    },
-  ],
-};
-
-const landingPageEditFallbackResult = {
-  ...landingPageEditResult,
-  message: 'The page was saved with the existing hero preserved after a provider failure.',
-  toolResults: [
-    {
-      ...landingPageEditResult.toolResults[0],
-      output: {
-        ...landingPageEditResult.toolResults[0].output,
-        currentRevision: 2,
-        changed: false,
-        generation: {
-          ...landingPageEditResult.toolResults[0].output.generation,
-          stages: {
-            status: 'partial-fallback',
-            plannedSections: 4,
-            generatedSections: 0,
-            preservedSections: 3,
-            deletedSections: 0,
-            fallbackSections: 1,
-            skippedSections: 0,
-            retryCount: 1,
-            failures: [
-              {
-                blockId: 'hero',
-                type: 'product-hero',
-                action: 'preserved-existing',
-                reason: 'provider-error',
-              },
-            ],
-          },
-        },
-      },
-    },
-  ],
-};
-
-const landingPageDeleteResult = {
-  ...landingPageEditResult,
-  message: 'The requested gallery section was deleted; all other sections were preserved.',
-  toolResults: [
-    {
-      ...landingPageEditResult.toolResults[0],
-      output: {
-        ...landingPageEditResult.toolResults[0].output,
-        currentRevision: 3,
-        generation: {
-          ...landingPageEditResult.toolResults[0].output.generation,
-          stages: {
-            status: 'completed',
-            plannedSections: 3,
-            generatedSections: 0,
-            preservedSections: 3,
-            deletedSections: 1,
-            fallbackSections: 0,
-            skippedSections: 0,
-            retryCount: 0,
-            failures: [],
-          },
-        },
-      },
-    },
-  ],
-};
-
 const ecotrackTerminalMessage = {
   role: 'assistant',
   content: 'The EcoTrack posting job finished with partial success.',
@@ -281,14 +135,10 @@ test.beforeAll(() => {
   ).toBe(true);
 });
 
-test('renders a grounded landing-page result without desktop or mobile overflow', async ({
-  isMobile,
-  page,
-}) => {
+test('renders a live landing-page result without desktop or mobile overflow', async ({ page }) => {
   test.setTimeout(90_000);
   const consoleErrors: string[] = [];
   const requestBodies: Record<string, unknown>[] = [];
-  let requestCount = 0;
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
@@ -308,19 +158,10 @@ test('renders a grounded landing-page result without desktop or mobile overflow'
   );
   await page.route('**/api/ai/chat', async (route) => {
     requestBodies.push(route.request().postDataJSON() as Record<string, unknown>);
-    const responses = [
-      landingPageResult,
-      landingPageFallbackResult,
-      landingPageEditResult,
-      landingPageEditFallbackResult,
-      landingPageDeleteResult,
-    ];
-    const body = responses[requestCount] ?? landingPageResult;
-    requestCount += 1;
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(body),
+      body: JSON.stringify(landingPagePublicationResult),
     });
   });
 
@@ -331,86 +172,21 @@ test('renders a grounded landing-page result without desktop or mobile overflow'
   await openHydratedAssistant(page);
   const dialog = page.getByRole('dialog');
   const workspace = dialog.locator('[data-slot="admin-ai-workspace"]');
-  await expect
-    .poll(() => dialog.evaluate((element) => element.scrollWidth - element.clientWidth))
-    .toBeLessThanOrEqual(0);
-  await expect
-    .poll(() => workspace.evaluate((element) => element.scrollWidth - element.clientWidth))
-    .toBeLessThanOrEqual(0);
-  const newChat = page.getByRole('button', { name: 'New chat' });
-  const startNewChat = async () => {
-    if (isMobile) await page.getByRole('button', { name: 'Your chats' }).click();
-    await newChat.click();
-  };
-  if (await newChat.isVisible()) await newChat.click();
   await page
     .getByRole('textbox', { name: 'Message the AI assistant' })
-    .fill('Create a landing page for product 12 in French');
-  const send = page.getByRole('button', { name: 'Send' });
-  await activatePointerTarget(page, send);
+    .fill('Unpublish landing page 91 without changing its content');
+  await activatePointerTarget(page, page.getByRole('button', { name: 'Send' }));
 
-  await expect(page.getByText('Every planned landing-page section was generated')).toBeVisible();
-  await expect(page.getByText('Generated sections')).toBeVisible();
+  await expect(page.getByText('Landing page 91 is now unpublished.')).toBeVisible();
+  await expect(page.getByText('Landing page updated')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Open landing page' })).toHaveAttribute(
     'href',
     '/en/assets/landing-pages/91',
   );
-  await expect(page).toHaveURL(/\/en\/assets\/landing-pages$/);
   expect(requestBodies[0]).toMatchObject({
     model: 'gpt-5.6-luna',
     context: { surface: 'assets', section: 'landingPages' },
   });
-
-  await startNewChat();
-  const composer = page.getByRole('textbox', { name: 'Message the AI assistant' });
-  await composer.fill('Create another landing page with the available product images');
-  await composer.press('Enter');
-  await expect(
-    page.getByText('The landing page was saved with explicit section fallbacks'),
-  ).toBeVisible();
-  await expect(page.getByText('Sections requiring fallback')).toBeVisible();
-  await expect(page.getByText('The section required more verified product assets')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Open landing page' })).toHaveAttribute(
-    'href',
-    '/en/assets/landing-pages/92',
-  );
-
-  await startNewChat();
-  await composer.fill('Rewrite only the hero on landing page 91 and preserve every other block');
-  await composer.press('Enter');
-  await expect(page.getByText('Landing page updated')).toBeVisible();
-  await expect(page.getByText('Preserved sections')).toBeVisible();
-  await expect(
-    page.getByText('Only the requested hero was rewritten; three existing sections are exact.'),
-  ).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Open landing page' })).toHaveAttribute(
-    'href',
-    '/en/assets/landing-pages/91',
-  );
-
-  await startNewChat();
-  await composer.fill('Rewrite the hero on landing page 91 even if the provider is slow');
-  await composer.press('Enter');
-  await expect(
-    page.getByText('The landing page was saved with explicit section fallbacks'),
-  ).toBeVisible();
-  await expect(page.getByText('The content provider did not complete this section')).toBeVisible();
-
-  await startNewChat();
-  await composer.fill('Delete only the gallery section from landing page 91');
-  await composer.press('Enter');
-  await expect(page.getByText('Deleted sections')).toBeVisible();
-  await expect(
-    page.getByText('The requested gallery section was deleted', { exact: false }),
-  ).toBeVisible();
-
-  if (isMobile) {
-    await page.getByRole('button', { name: 'Your chats' }).click();
-    await expect(page.locator('[data-slot="admin-ai-sidebar"]')).toBeVisible();
-    await page.getByRole('button', { name: 'Conversation' }).click();
-    await expect(page.getByRole('textbox', { name: 'Message the AI assistant' })).toBeVisible();
-  }
-
   await expect
     .poll(() => dialog.evaluate((element) => element.scrollWidth - element.clientWidth))
     .toBeLessThanOrEqual(0);
@@ -425,7 +201,6 @@ test('renders a grounded landing-page result without desktop or mobile overflow'
   expect(accessibility.violations).toEqual([]);
   expect(consoleErrors).toEqual([]);
 });
-
 test('keeps a terminal EcoTrack workflow actionable across close and reload', async ({ page }) => {
   test.setTimeout(90_000);
   let postingQueued = false;
@@ -476,6 +251,7 @@ test('keeps a terminal EcoTrack workflow actionable across close and reload', as
                 id: 'ecotrack-browser-812',
                 queue: 'admin-order-ecotrack',
                 kind: 'order-ecotrack:selected',
+                conversationId: 812,
                 status: terminalReady ? 'completed' : 'running',
                 progress: terminalReady
                   ? { phase: 'completed', current: 3, total: 3, percentage: 100 }

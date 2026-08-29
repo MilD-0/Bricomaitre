@@ -90,6 +90,7 @@ const assignmentFilterSchema = z
   .default('any');
 
 const taxonomyBaseSchema = {
+  ids: z.array(z.number().int().positive()).max(50).default([]),
   query: z.string().trim().max(200).default(''),
   state: z.enum(['any', 'active', 'inactive']).default('any'),
   assignment: assignmentFilterSchema,
@@ -131,10 +132,10 @@ export const ADMIN_AI_QUERY_PRODUCTS_TOOL_DESCRIPTION =
   'Query the catalog or inventory exhaustively with filters, sorting, exact totals, taxonomy, and promotion dates. Use this for cohorts and rankings; use inspect_products for full details of exact current IDs.';
 
 export const ADMIN_AI_FIND_BRANDS_TOOL_DESCRIPTION =
-  'Query brands with exact totals, current and archived product assignment facts, and sorting.';
+  'Query brands by exact IDs or broader filters, with exact totals, current and archived product assignment facts, and sorting.';
 
 export const ADMIN_AI_FIND_CATEGORIES_TOOL_DESCRIPTION =
-  'Query categories with exact totals, direct product assignments, ancestors, children, and descendant catalog scope.';
+  'Query categories by exact IDs or broader filters, with exact totals, direct product assignments, ancestors, children, and descendant catalog scope.';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -470,6 +471,7 @@ export async function queryAdminBrands(
     .map((brand) => ({ brand, assignments: factsById.get(brand.id) ?? emptyAssignmentFacts() }))
     .filter(
       ({ brand, assignments }) =>
+        (input.ids.length === 0 || input.ids.includes(brand.id)) &&
         (!input.query ||
           [brand.name, brand.slug].some((value) =>
             value.toLocaleLowerCase().includes(input.query.toLocaleLowerCase()),
@@ -566,6 +568,7 @@ export async function queryAdminCategories(
   const matches = enriched
     .filter(
       ({ category, assignments }) =>
+        (input.ids.length === 0 || input.ids.includes(category.id)) &&
         (!query ||
           [category.name, category.nameEn, category.nameAr, category.slug].some((value) =>
             value?.toLocaleLowerCase().includes(query),

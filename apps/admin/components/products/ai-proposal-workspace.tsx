@@ -62,10 +62,6 @@ function previewText(item: AiProposalInboxItem, copy: ProposalReviewCopy) {
         count: preview.remaining,
       });
     }
-    case 'products':
-      return interpolateCopy(copy.productsSelected, { count: preview.count });
-    case 'landing':
-      return interpolateCopy(copy.landingPage, { locale: preview.locale ?? '—' });
     case 'relation':
       return interpolateCopy(copy.relation, { relation: preview.relation ?? 'Product' });
     case 'payload':
