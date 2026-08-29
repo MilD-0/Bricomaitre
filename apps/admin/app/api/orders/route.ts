@@ -37,7 +37,9 @@ export async function GET(req: NextRequest) {
     page: searchParams.get('page') ?? undefined,
     limit: searchParams.get('limit') ?? undefined,
     search: searchParams.get('search') ?? undefined,
-    confirmed: searchParams.get('confirmed') ? Number(searchParams.get('confirmed')) : undefined,
+    inHouseStatus: searchParams.get('inHouseStatus')
+      ? Number(searchParams.get('inHouseStatus'))
+      : undefined,
     noAnswerCount: searchParams.get('noAnswerCount')
       ? Number(searchParams.get('noAnswerCount'))
       : undefined,

@@ -49,7 +49,7 @@ describe('admin AI live surface adapters', () => {
     });
   });
 
-  it('summarizes the resolved Analytics2 dataset and source health', () => {
+  it('summarizes the resolved Analytics dataset and source health', () => {
     expect(
       analyticsAiSurfaceDetails({
         view: 'acquisition',

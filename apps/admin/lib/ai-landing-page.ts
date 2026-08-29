@@ -28,7 +28,6 @@ import {
 import { generateText, Output } from 'ai';
 import { z } from 'zod';
 
-export const LANDING_PAGE_PROMPT_VERSION = 'landing-page-v4-model-led';
 const LANDING_PAGE_MODEL_TIMEOUT_MS = 120_000;
 const LANDING_PAGE_STAGE_ATTEMPTS = 2;
 

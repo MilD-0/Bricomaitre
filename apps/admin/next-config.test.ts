@@ -9,17 +9,21 @@ vi.mock('@sentry/nextjs', () => ({
 }));
 
 describe('admin Next configuration', () => {
-  it('omits eval permission from the production content security policy', async () => {
+  it('leaves page CSP to the nonce proxy and denies browser execution on APIs', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.resetModules();
     const { default: config } = await import('./next.config');
 
     const headerRules = await config.headers?.();
-    const contentSecurityPolicy = headerRules?.[0]?.headers.find(
+    const pageContentSecurityPolicy = headerRules?.[0]?.headers.find(
+      (header) => header.key === 'Content-Security-Policy',
+    )?.value;
+    const apiContentSecurityPolicy = headerRules?.[1]?.headers.find(
       (header) => header.key === 'Content-Security-Policy',
     )?.value;
 
-    expect(contentSecurityPolicy).toContain("script-src 'self' 'unsafe-inline' https:");
-    expect(contentSecurityPolicy).not.toContain("'unsafe-eval'");
+    expect(pageContentSecurityPolicy).toBeUndefined();
+    expect(apiContentSecurityPolicy).toContain("default-src 'none'");
+    expect(apiContentSecurityPolicy).not.toContain('script-src');
   });
 });

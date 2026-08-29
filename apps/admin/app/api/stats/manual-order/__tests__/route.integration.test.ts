@@ -68,7 +68,7 @@ describe('app/api/stats/manual-order/route', () => {
       NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
     );
 
-    const response = await GET();
+    const response = await GET(new NextRequest('http://localhost/api/stats/manual-order'));
 
     expect(response.status).toBe(403);
   });
@@ -86,7 +86,7 @@ describe('app/api/stats/manual-order/route', () => {
       },
     });
 
-    const response = await GET();
+    const response = await GET(new NextRequest('http://localhost/api/stats/manual-order'));
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({

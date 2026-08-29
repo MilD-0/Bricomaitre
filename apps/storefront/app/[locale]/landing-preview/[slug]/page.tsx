@@ -1,6 +1,10 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
+import '../../../styles/product.css';
+import '../../../styles/checkout.css';
+import '../../../styles/landing-page.css';
+
 import { LandingPageRenderer } from '@/components/landing-page-renderer';
 import { LandingOrderForm } from '@/components/landing-order-form';
 import { PageShell } from '@/components/page-shell';

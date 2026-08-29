@@ -43,7 +43,7 @@ describe('upload validation', () => {
 
   it('accepts spreadsheets only when extension, MIME, and signature agree', async () => {
     const accepted = await validateAndBufferSpreadsheetUploads([
-      new File([createXlsxBytes()], 'orders.xlsx', {
+      new File([Uint8Array.from(createXlsxBytes())], 'orders.xlsx', {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       }),
     ]);

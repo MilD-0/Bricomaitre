@@ -33,7 +33,7 @@ describe('canonical asset mutations', () => {
               kind: 'featured-group',
               id: 7,
               active: true,
-              showAtTopOfProductsPage: true,
+              prioritizeRecommendations: true,
             },
           ],
         },
@@ -111,7 +111,7 @@ describe('canonical asset mutations', () => {
           productIds: [12, 18],
           brandIds: [],
           categoryIds: [],
-          showAtTopOfProductsPage: true,
+          prioritizeRecommendations: true,
           active: true,
         },
         { email: 'admin@example.com' },
@@ -141,7 +141,7 @@ describe('canonical asset mutations', () => {
   it('rejects unsupported placement changes before mutation', () => {
     expect(
       adminAssetStateMutationSchema.safeParse({
-        items: [{ kind: 'product-card', id: 8, showAtTopOfProductsPage: true }],
+        items: [{ kind: 'product-card', id: 8, prioritizeRecommendations: true }],
       }).success,
     ).toBe(false);
     expect(mocks.mutate).not.toHaveBeenCalled();

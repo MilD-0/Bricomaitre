@@ -9,7 +9,7 @@ const presentationReferenceSchema = z.object({
 
 const presentationTitleSchema = z.string().trim().min(1).max(100).optional();
 
-export const adminAiPresentationBlockSchema = z.discriminatedUnion('kind', [
+const adminAiPresentationBlockSchema = z.discriminatedUnion('kind', [
   presentationReferenceSchema.extend({
     kind: z.literal('metrics'),
     title: presentationTitleSchema,

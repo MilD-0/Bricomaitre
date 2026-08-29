@@ -17,7 +17,7 @@ import {
   supportsAdminAiReasoningEffort,
 } from './admin-ai-models';
 import { adminAiSurfaceContextSchema } from './admin-ai-context';
-import { dayInTimezone } from './analytics2/date-range';
+import { dayInTimezone } from './analytics/date-range';
 
 export const ADMIN_AI_CHAT_PROMPT_VERSION = 'admin-chat-model-led-v6';
 
@@ -46,7 +46,7 @@ export const adminAiChatRequestSchema = z
     reasoningEffort: input.reasoningEffort ?? getDefaultAdminAiReasoningEffort(input.model),
   }));
 
-export const ADMIN_AI_GUIDANCE_TOPIC_VALUES = [
+const ADMIN_AI_GUIDANCE_TOPIC_VALUES = [
   'analytics_profit',
   'analytics_order_lifecycle',
   'analytics_sources_and_coverage',
@@ -167,7 +167,7 @@ const guidanceByTopic = {
       productCards:
         'Product cards are bilingual editorial cards on the homepage, each tied to one product.',
       recommendation:
-        'showAtTopOfProductsPage gives a featured group’s selected products priority ahead of normal recommendation signals in the Products recommended order.',
+        'prioritizeRecommendations gives a featured group’s selected products priority ahead of normal recommendation signals in the Products recommended order.',
     },
   },
   landing_pages: {

@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { requestJson as request } from '../../lib/admin-api';
 import type { OrdersResponse } from '../../lib/order-admin-contracts';
-import { parseNumericAmount, type OrderRecord } from '../../lib/orders';
+import { ORDER_STATUS, parseNumericAmount, type OrderRecord } from '../../lib/orders';
 import {
   type ShoppingListDraftItem,
   type ShoppingListSourceMode,
@@ -57,25 +57,25 @@ type StatusShoppingListMode = Exclude<ShoppingListSourceMode, 'selected'>;
 
 const shoppingListStatusConfig: Record<
   StatusShoppingListMode,
-  { statuses: Array<OrderRecord['confirmed']>; titleKey: string; emptyKey: string }
+  { statuses: Array<OrderRecord['inHouseStatus']>; titleKey: string; emptyKey: string }
 > = {
   confirmed: {
-    statuses: [2],
+    statuses: [ORDER_STATUS.CONFIRMED],
     titleKey: 'ordersManager.shoppingList.confirmedTitle',
     emptyKey: 'ordersManager.shoppingList.emptyConfirmed',
   },
   dispatched: {
-    statuses: [3],
+    statuses: [ORDER_STATUS.DISPATCHED],
     titleKey: 'ordersManager.shoppingList.dispatchedTitle',
     emptyKey: 'ordersManager.shoppingList.emptyDispatched',
   },
   posted: {
-    statuses: [11],
+    statuses: [ORDER_STATUS.POSTED],
     titleKey: 'ordersManager.shoppingList.postedTitle',
     emptyKey: 'ordersManager.shoppingList.emptyPosted',
   },
   'posted-and-confirmed': {
-    statuses: [11, 2],
+    statuses: [ORDER_STATUS.POSTED, ORDER_STATUS.CONFIRMED],
     titleKey: 'ordersManager.shoppingList.postedAndConfirmedTitle',
     emptyKey: 'ordersManager.shoppingList.emptyPostedAndConfirmed',
   },
@@ -219,14 +219,14 @@ export function OrdersWorkflows({
     }
   }, [ecotrackJob, onOrdersChanged, t]);
 
-  async function fetchOrdersByStatus(status: OrderRecord['confirmed']) {
+  async function fetchOrdersByStatus(status: OrderRecord['inHouseStatus']) {
     const items: OrderRecord[] = [];
     let nextPage = 1;
     let totalPages = 1;
 
     do {
       const response = await request<OrdersResponse>(
-        `/api/orders?page=${nextPage}&limit=100&confirmed=${status}&search=&sortKey=createdAt&sortDirection=desc`,
+        `/api/orders?page=${nextPage}&limit=100&inHouseStatus=${status}&search=&sortKey=createdAt&sortDirection=desc`,
       );
       items.push(...response.items);
       totalPages = response.pagination.totalPages;
@@ -595,7 +595,11 @@ export function OrdersWorkflows({
   }
 
   async function openConfirmedEcotrack(provider: 'delivro' | 'emir') {
-    await openEcotrackPreview('confirmed', provider, await fetchOrdersByStatus(2));
+    await openEcotrackPreview(
+      'confirmed',
+      provider,
+      await fetchOrdersByStatus(ORDER_STATUS.CONFIRMED),
+    );
   }
 
   async function confirmEcotrackPosting() {

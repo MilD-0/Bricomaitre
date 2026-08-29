@@ -91,8 +91,8 @@ function createShipmentRow(orderId = 11) {
       city: 'Bab Ezzouar',
       homeAddress: 'Street 11',
       note: null,
-      delPr: '0',
-      confirmed: 2,
+      deliveryFee: '0',
+      inHouseStatus: 2,
       noAnswerCount: 0,
       confirmedBy: null,
       confirmedByName: null,
@@ -104,7 +104,7 @@ function createShipmentRow(orderId = 11) {
       ecotrackStatusData: null,
       updatedAt: now,
     },
-  } as never;
+  };
 }
 
 function createDbMock(
@@ -231,7 +231,7 @@ describe('admin ecotrack shipment reconciliation', () => {
 
   it('soft-deletes the local row when upstream delete returns 400 but the tracking is already gone', async () => {
     const row = createShipmentRow();
-    row.order.confirmed = 11;
+    row.order.inHouseStatus = 11;
     const { db, updates } = createDbMock([row]);
     getDbMock.mockReturnValue(db);
     deleteEcotrackOrderMock.mockRejectedValue(
@@ -259,7 +259,7 @@ describe('admin ecotrack shipment reconciliation', () => {
       ecotrackStatusData: null,
       ecotrackReference: null,
       ecotrackTrackingNumber: null,
-      confirmed: 2,
+      inHouseStatus: 2,
     });
     expect(
       updates.find((update) => update.target === ecotrackOrderStates)?.values.deletedAt,
@@ -447,7 +447,7 @@ describe('admin ecotrack shipment reconciliation', () => {
 
   it('reconciles an in-delivery order when EcoTrack reports a dispatched-stage status', async () => {
     const row = createShipmentRow(11);
-    row.order.confirmed = 7;
+    row.order.inHouseStatus = 7;
     const { db, updates } = createDbMock([row]);
     getDbMock.mockReturnValue(db);
     getEcotrackOrdersStatusMock.mockResolvedValue({
@@ -466,7 +466,7 @@ describe('admin ecotrack shipment reconciliation', () => {
       expect.objectContaining({
         target: orders,
         values: expect.objectContaining({
-          confirmed: 3,
+          inHouseStatus: 3,
           ecotrackStatus: 'en_ramassage',
         }),
       }),

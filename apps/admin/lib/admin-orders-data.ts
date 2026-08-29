@@ -11,6 +11,7 @@ import {
 import {
   coerceNoAnswerCount,
   coerceOrderStatus,
+  ORDER_STATUS,
   orderListQuerySchema,
   type OrderRecord,
   type OrderSortRule,
@@ -30,7 +31,7 @@ type OrdersQueryInput = {
   page?: string | number | undefined;
   limit?: string | number | undefined;
   search?: string | undefined;
-  confirmed?: number | null | undefined;
+  inHouseStatus?: number | null | undefined;
   noAnswerCount?: number | null | undefined;
   sort?: string[] | undefined;
   sortKey?: string | undefined;
@@ -48,8 +49,8 @@ function getOrderBy(sortRules: OrderSortRule[]) {
       return [direction(orders.firstName), direction(orders.lastName)] as const;
     }
 
-    if (rule.key === 'confirmed') {
-      return [direction(orders.confirmed)] as const;
+    if (rule.key === 'inHouseStatus') {
+      return [direction(orders.inHouseStatus)] as const;
     }
 
     return [direction(orders.createdAt)] as const;
@@ -149,7 +150,7 @@ async function loadDailyOrderStatusReport(
       from ${orderStatusHistory}
       inner join ${orders} on ${orders.id} = ${orderStatusHistory.orderId}
       where ${activeOrdersJoinPredicate()}
-        and ${orderStatusHistory.status} = 2
+        and ${orderStatusHistory.status} = ${ORDER_STATUS.CONFIRMED}
         and ${reportDayWhere(sql`${orderStatusHistory.changedAt}`)}
     `,
     ),
@@ -160,7 +161,7 @@ async function loadDailyOrderStatusReport(
       from ${orderStatusHistory}
       inner join ${orders} on ${orders.id} = ${orderStatusHistory.orderId}
       where ${activeOrdersJoinPredicate()}
-        and ${orderStatusHistory.status} = 1
+        and ${orderStatusHistory.status} = ${ORDER_STATUS.NO_ANSWER}
         and ${reportDayWhere(sql`${orderStatusHistory.changedAt}`)}
     `,
     ),
@@ -171,7 +172,7 @@ async function loadDailyOrderStatusReport(
       from ${orderStatusHistory}
       inner join ${orders} on ${orders.id} = ${orderStatusHistory.orderId}
       where ${activeOrdersJoinPredicate()}
-        and ${orderStatusHistory.status} = 6
+        and ${orderStatusHistory.status} = ${ORDER_STATUS.CANCELLED}
         and coalesce(${orderStatusHistory.changedByName}, '') <> ${ECOTRACK_SYNC_ACTOR_NAME}
         and ${reportDayWhere(sql`${orderStatusHistory.changedAt}`)}
     `,
@@ -364,8 +365,10 @@ export async function loadOrdersPageData(
       )
     : undefined;
   const whereClause = and(
-    query.confirmed !== undefined ? sql`${orders.confirmed} = ${query.confirmed}` : undefined,
-    query.confirmed === 1 && query.noAnswerCount !== undefined
+    query.inHouseStatus !== undefined
+      ? sql`${orders.inHouseStatus} = ${query.inHouseStatus}`
+      : undefined,
+    query.inHouseStatus === ORDER_STATUS.NO_ANSWER && query.noAnswerCount !== undefined
       ? sql`${orders.noAnswerCount} = ${query.noAnswerCount}`
       : undefined,
     ...(searchFilter ? [searchFilter] : []),

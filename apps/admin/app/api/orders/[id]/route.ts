@@ -90,7 +90,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({
       ok: true,
       item: await updateAdminOrder(db, numericId, parsed.data, actor, {
-        allowStatusCorrection: parsed.data.confirmed !== undefined,
+        allowStatusCorrection: parsed.data.inHouseStatus !== undefined,
       }),
     });
   } catch (error) {

@@ -9,7 +9,7 @@ import {
   metaAdsSyncRuns,
 } from '@bric/db/schema';
 import { syncProfitTrackerMetaRows } from './profit-tracker';
-import { refreshAnalytics2Facts } from './analytics2-facts';
+import { refreshAnalyticsFacts } from './analytics-facts';
 
 const DEFAULT_GRAPH_API_VERSION = 'v25.0';
 const DEFAULT_LOOKBACK_DAYS = 28;
@@ -862,7 +862,7 @@ export async function syncMetaAdsInsights(
       accountCurrency: loaded.account.currency,
       syncedAt: now,
     });
-    await refreshAnalytics2Facts({
+    await refreshAnalyticsFacts({
       db,
       now,
     });

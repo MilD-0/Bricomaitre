@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
 import { brands, categories, products } from '@bric/db/schema';
-import { generateLandingPageForProduct } from './ai-admin-capabilities';
+import { generateLandingPageForProduct } from './ai-landing-page-product';
 import {
   createLandingPageEditor,
   type LandingPageEditInput,

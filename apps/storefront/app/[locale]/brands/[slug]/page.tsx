@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 
+import '../../../styles/catalog.css';
+
 import { BrandPageContent, resolveBrand, type BrandPageProps } from './page-content';
 import { CatalogPageSkeleton } from '@/components/storefront-skeletons';
 import { buildTaxonomyCatalogMetadata, buildTaxonomyUnavailableMetadata } from '@/lib/catalog-seo';

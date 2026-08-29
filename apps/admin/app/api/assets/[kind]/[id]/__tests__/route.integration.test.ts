@@ -78,7 +78,7 @@ describe('app/api/assets/[kind]/[id]/route', () => {
 
       const req = new NextRequest(`http://localhost/api/assets/${kind}/7`, {
         method: 'PATCH',
-        body: JSON.stringify({ active: true, showAtTopOfProductsPage: true }),
+        body: JSON.stringify({ active: true, prioritizeRecommendations: true }),
         headers: { 'content-type': 'application/json' },
       });
 
@@ -241,7 +241,7 @@ describe('app/api/assets/[kind]/[id]/route', () => {
 
     const req = new NextRequest('http://localhost/api/assets/featured-group/7', {
       method: 'PATCH',
-      body: JSON.stringify({ showAtTopOfProductsPage: true }),
+      body: JSON.stringify({ prioritizeRecommendations: true }),
       headers: { 'content-type': 'application/json' },
     });
 

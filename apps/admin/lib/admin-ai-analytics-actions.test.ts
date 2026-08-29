@@ -12,7 +12,7 @@ import {
 describe('admin AI analytics actions', () => {
   it('changes only the assistant-controlled planning return rate and refreshes facts', async () => {
     const updateSettings = vi.fn(async (input) => ({ ...input }));
-    const refreshFacts = vi.fn(async () => undefined);
+    const refreshFacts = vi.fn(async () => true);
 
     const result = await updateAdminAiAnalyticsSettings(
       { planningReturnRate: 24 },
@@ -53,7 +53,7 @@ describe('admin AI analytics actions', () => {
     const updateCost = vi.fn(async (id, input) => ({ id, ...input }));
     const createCost = vi.fn(async (input) => ({ id: 8, ...input }));
     const deleteCost = vi.fn(async (id) => id);
-    const refreshFacts = vi.fn(async () => undefined);
+    const refreshFacts = vi.fn(async () => true);
 
     const result = await manageAdminAiAnalyticsCosts(
       {
@@ -111,7 +111,7 @@ describe('admin AI analytics actions', () => {
 
   it('writes only named daily overrides and reports missing resets', async () => {
     const upsertDay = vi.fn(async (input) => ({ ...input, source: 'manual' }));
-    const refreshFacts = vi.fn(async () => undefined);
+    const refreshFacts = vi.fn(async () => true);
 
     const result = await manageAdminAiAnalyticsDayOverrides(
       {

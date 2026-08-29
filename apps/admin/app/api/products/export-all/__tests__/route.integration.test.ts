@@ -1,3 +1,4 @@
+import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DELETE, GET, POST } from '../route';
@@ -62,7 +63,7 @@ describe('app/api/products/export-all/route', () => {
     authMock.mockResolvedValue(null);
 
     const response = await POST(
-      new Request('http://localhost/api/products/export-all', { method: 'POST' }),
+      new NextRequest('http://localhost/api/products/export-all', { method: 'POST' }),
     );
 
     expect(response.status).toBe(401);
@@ -72,7 +73,7 @@ describe('app/api/products/export-all/route', () => {
   it('returns 403 when the caller is not admin or developer', async () => {
     canExportAllProductsMock.mockReturnValue(false);
 
-    const response = await GET();
+    const response = await GET(new NextRequest('http://localhost/api/products/export-all'));
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ error: 'Forbidden' });
@@ -81,7 +82,7 @@ describe('app/api/products/export-all/route', () => {
   it('returns the current queued job for the caller', async () => {
     getLatestExportJobMock.mockResolvedValue({ id: 'job-1', status: 'running' });
 
-    const response = await GET();
+    const response = await GET(new NextRequest('http://localhost/api/products/export-all'));
 
     expect(response.status).toBe(200);
     expect(getLatestExportJobMock).toHaveBeenCalledWith('admin-product-export', 'user-1');
@@ -94,7 +95,9 @@ describe('app/api/products/export-all/route', () => {
       job: { id: 'job-9', status: 'running' },
     });
 
-    const response = await POST();
+    const response = await POST(
+      new NextRequest('http://localhost/api/products/export-all', { method: 'POST' }),
+    );
 
     expect(response.status).toBe(429);
     await expect(response.json()).resolves.toEqual({
@@ -104,7 +107,9 @@ describe('app/api/products/export-all/route', () => {
   });
 
   it('starts the queued export job for an authorized caller', async () => {
-    const response = await POST();
+    const response = await POST(
+      new NextRequest('http://localhost/api/products/export-all', { method: 'POST' }),
+    );
 
     expect(response.status).toBe(201);
     expect(startProductExportJobMock).toHaveBeenCalledWith('user-1', expect.any(String));
@@ -114,7 +119,9 @@ describe('app/api/products/export-all/route', () => {
   });
 
   it('cancels the running export for the caller', async () => {
-    const response = await DELETE();
+    const response = await DELETE(
+      new NextRequest('http://localhost/api/products/export-all', { method: 'DELETE' }),
+    );
 
     expect(response.status).toBe(200);
     expect(cancelExportJobMock).toHaveBeenCalledWith('admin-product-export', 'user-1');
@@ -124,7 +131,9 @@ describe('app/api/products/export-all/route', () => {
   it('returns 404 when there is no running export to cancel', async () => {
     cancelExportJobMock.mockResolvedValue(null);
 
-    const response = await DELETE();
+    const response = await DELETE(
+      new NextRequest('http://localhost/api/products/export-all', { method: 'DELETE' }),
+    );
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({

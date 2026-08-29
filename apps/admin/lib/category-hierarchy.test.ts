@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { assertCategoryParentAllowed, CategoryHierarchyError } from './category-hierarchy';
+import { assertCategoryParentAllowed } from './category-hierarchy';
 
 function hierarchyDb(rows: Array<{ id: number; parentId: number | null }>) {
   const queuedRows = [...rows];
@@ -30,7 +30,7 @@ describe('category hierarchy validation', () => {
   it('rejects moving a category below a descendant', async () => {
     const db = hierarchyDb([{ id: 8, parentId: 4 }]);
     await expect(assertCategoryParentAllowed(db as never, 4, 8)).rejects.toEqual(
-      expect.objectContaining<CategoryHierarchyError>({ code: 'descendant_cycle' }),
+      expect.objectContaining({ code: 'descendant_cycle' }),
     );
   });
 

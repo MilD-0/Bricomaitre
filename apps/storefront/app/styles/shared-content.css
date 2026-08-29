@@ -197,3 +197,23 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+@media (hover: hover) and (pointer: fine) {
+  .breadcrumbs a:hover::after {
+    scale: 1 1;
+  }
+}
+
+@media (max-width: 620px) {
+  .site-footer-main {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  .site-footer-brand {
+    grid-column: auto;
+  }
+  .site-footer-bottom {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

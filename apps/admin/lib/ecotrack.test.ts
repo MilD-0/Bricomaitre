@@ -52,20 +52,20 @@ describe('lib/ecotrack', () => {
     note: 'Call first',
     orderProducts: [{ title: 'Chair', quantity: 2 }],
     delivery: 1,
-    confirmed: 2,
-  } as never;
+    inHouseStatus: 2,
+  } as EcotrackOrderInput['record'];
 
   const orderInput: EcotrackOrderInput = {
     row: {
       id: 11,
       ecotrackReference: null,
       ecotrackTrackingNumber: null,
-      confirmed: 2,
+      inHouseStatus: 2,
       noAnswerCount: 0,
       confirmedAt: null,
       confirmedBy: null,
       confirmedByName: null,
-    } as never,
+    } as EcotrackOrderInput['row'],
     record: orderRecord,
   };
 
@@ -472,12 +472,12 @@ describe('lib/ecotrack', () => {
       [
         orderInput,
         {
-          row: { ...orderInput.row, id: 12, ecotrackTrackingNumber: 'TRK-12' } as never,
-          record: { ...orderRecord, id: 12, fullName: 'Grace Hopper' } as never,
+          row: { ...orderInput.row, id: 12, ecotrackTrackingNumber: 'TRK-12' },
+          record: { ...orderRecord, id: 12, fullName: 'Grace Hopper' },
         },
         {
-          row: { ...orderInput.row, id: 13 } as never,
-          record: { ...orderRecord, id: 13, phoneNumber1: null } as never,
+          row: { ...orderInput.row, id: 13 },
+          record: { ...orderRecord, id: 13, phoneNumber1: '' },
         },
       ],
       catalog,
@@ -497,8 +497,8 @@ describe('lib/ecotrack', () => {
     const result = classifyOrdersForEcotrackPosting(
       [
         {
-          row: { ...orderInput.row, id: 14 } as never,
-          record: { ...orderRecord, id: 14, delivery: 1, homeAddress: null } as never,
+          row: { ...orderInput.row, id: 14 },
+          record: { ...orderRecord, id: 14, delivery: 1, homeAddress: null },
         },
       ],
       catalog,
@@ -663,7 +663,7 @@ describe('lib/ecotrack', () => {
     ]);
     expect(updateSetMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        confirmed: 11,
+        inHouseStatus: 11,
         noAnswerCount: 0,
         ecotrackTrackingNumber: 'TRK-11',
       }),

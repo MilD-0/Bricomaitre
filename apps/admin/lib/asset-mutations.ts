@@ -72,17 +72,17 @@ const adminAssetStateItemSchema = z
     kind: z.enum(['banner', 'featured-group', 'product-card']),
     id: z.number().int().positive(),
     active: z.boolean().optional(),
-    showAtTopOfProductsPage: z.boolean().optional(),
+    prioritizeRecommendations: z.boolean().optional(),
   })
   .strict()
   .superRefine((item, context) => {
-    if (item.active === undefined && item.showAtTopOfProductsPage === undefined) {
+    if (item.active === undefined && item.prioritizeRecommendations === undefined) {
       context.addIssue({ code: 'custom', message: 'Provide at least one asset state change.' });
     }
-    if (item.kind !== 'featured-group' && item.showAtTopOfProductsPage !== undefined) {
+    if (item.kind !== 'featured-group' && item.prioritizeRecommendations !== undefined) {
       context.addIssue({
         code: 'custom',
-        path: ['showAtTopOfProductsPage'],
+        path: ['prioritizeRecommendations'],
         message: 'Only featured groups support storefront top placement.',
       });
     }
@@ -138,7 +138,7 @@ export async function createAdminAsset(
             link: data.link,
             active: data.active,
             sortOrder,
-            showAtTopOfProductsPage: data.showAtTopOfProductsPage,
+            prioritizeRecommendations: data.prioritizeRecommendations,
           })
           .returning({ id: featuredProductGroups.id });
         const groupId = result[0]?.id;
@@ -209,7 +209,7 @@ export async function replaceAdminAsset(
             ctaAr: data.ctaAr,
             link: data.link,
             active: data.active,
-            showAtTopOfProductsPage: data.showAtTopOfProductsPage,
+            prioritizeRecommendations: data.prioritizeRecommendations,
             updatedAt: new Date(),
           })
           .where(eq(featuredProductGroups.id, id));
@@ -289,7 +289,7 @@ export async function updateAdminAssetStates(
     const values = {
       active: item.active,
       ...(item.kind === 'featured-group'
-        ? { showAtTopOfProductsPage: item.showAtTopOfProductsPage }
+        ? { prioritizeRecommendations: item.prioritizeRecommendations }
         : {}),
       updatedAt: new Date(),
     };

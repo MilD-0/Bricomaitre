@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Analytics2Payload } from './analytics2';
+import type { AnalyticsPayload } from './analytics';
 import {
   ADMIN_AI_ANALYTICS_PROFIT_KNOWLEDGE,
   ADMIN_AI_ANALYTICS_SEMANTIC_CONTRACT,
   analyticsMetricsForAssistant,
 } from './admin-ai-analytics-contract';
 
-function moneyPayload(costCoveragePct: number): Analytics2Payload {
+function moneyPayload(costCoveragePct: number): AnalyticsPayload {
   return {
     view: 'money',
     filters: {
@@ -96,7 +96,7 @@ function moneyPayload(costCoveragePct: number): Analytics2Payload {
     ],
     warnings: [],
     diagnostics: { queryDurationMs: 42, responseSizeBytes: 1_000 },
-  } as Analytics2Payload;
+  } as unknown as AnalyticsPayload;
 }
 
 describe('admin assistant analytics semantic contract', () => {

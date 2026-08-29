@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
 
-import { analytics2QuerySchema, getAnalytics2StorefrontDetails } from '../../../../lib/analytics2';
+import { analyticsQuerySchema, getAnalyticsStorefrontDetails } from '../../../../lib/analytics';
 import { requireAnalyticsAccess } from '../../../../lib/rbac';
 
 export async function GET(request: NextRequest) {
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
 
-  const parsed = analytics2QuerySchema.safeParse({
+  const parsed = analyticsQuerySchema.safeParse({
     view: 'storefront',
     range: request.nextUrl.searchParams.get('range') ?? undefined,
     startDate: request.nextUrl.searchParams.get('startDate') ?? undefined,
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const details = await getAnalytics2StorefrontDetails(parsed.data);
+  const details = await getAnalyticsStorefrontDetails(parsed.data);
   return NextResponse.json(details, {
     headers: { 'Cache-Control': 'private, no-cache, must-revalidate' },
   });

@@ -6,8 +6,8 @@ const { deleteDayMock, refreshFactsMock, requireMutationMock } = vi.hoisted(() =
   requireMutationMock: vi.fn(),
 }));
 
-vi.mock('../../../../../../lib/analytics2-facts', () => ({
-  refreshAnalytics2FactsAfterMutation: refreshFactsMock,
+vi.mock('../../../../../../lib/analytics-facts', () => ({
+  refreshAnalyticsFactsAfterMutation: refreshFactsMock,
 }));
 
 vi.mock('@bric/db/client', () => ({ hasDb: () => true }));

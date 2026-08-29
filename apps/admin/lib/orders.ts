@@ -15,6 +15,7 @@ export {
   getOrderStatusLabelKey,
   isConfirmedLifecycleStatus,
   isMongoObjectId,
+  ORDER_STATUS,
   parseNumericAmount,
   parseOrderProductId,
 } from '@bric/storefront-core/order-domain';
@@ -64,7 +65,7 @@ export const orderPatchSchema = z
     lastName: optionalPatchNullableTrimmedString(80),
     phoneNumber1: z.string().trim().min(1).max(50).optional(),
     note: nullableTrimmedString(500).optional(),
-    confirmed: orderStatusSchema.optional(),
+    inHouseStatus: orderStatusSchema.optional(),
     noAnswerCount: z.coerce.number().int().min(0).max(99).optional(),
     delivery: deliveryTypeSchema.optional(),
     state: optionalPatchNullableWilayaCode,
@@ -79,7 +80,7 @@ export const orderPatchSchema = z
 export type OrderPatch = z.infer<typeof orderPatchSchema>;
 export type OrderPatchInput = z.input<typeof orderPatchSchema>;
 
-const orderSortKeyValues = ['confirmed', 'createdAt', 'fullName'] as const;
+const orderSortKeyValues = ['inHouseStatus', 'createdAt', 'fullName'] as const;
 const sortDirectionValues = ['asc', 'desc'] as const;
 
 export const orderListQuerySchema = z
@@ -87,7 +88,7 @@ export const orderListQuerySchema = z
     page: z.coerce.number().int().positive().default(1),
     limit: z.coerce.number().int().positive().max(100).default(25),
     search: z.string().trim().default(''),
-    confirmed: z.union([orderStatusSchema, z.null()]).optional(),
+    inHouseStatus: z.union([orderStatusSchema, z.null()]).optional(),
     noAnswerCount: z.union([z.coerce.number().int().min(0).max(99), z.null()]).optional(),
     sort: z.array(z.string().trim()).optional().default([]),
     sortKey: z.enum(orderSortKeyValues).default('createdAt'),

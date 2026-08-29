@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 
+import '../../styles/checkout.css';
+
 import { CheckoutPageContent, type CheckoutPageProps } from './page-content';
 import { CheckoutPageSkeleton } from '@/components/storefront-skeletons';
 

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
 import { orders } from '@bric/db/schema';
 import { normalizeAlgeriaPhone } from '@bric/storefront-core/meta';
+import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
 import { requireMutationAccess } from '../../../../../lib/rbac';
@@ -31,7 +32,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     .where(
       and(
         phoneCondition,
-        inArray(orders.confirmed, [4, 10]),
+        inArray(orders.inHouseStatus, [ORDER_STATUS.COMPLETED, ORDER_STATUS.MANUAL_COMPLETED]),
         lt(orders.createdAt, order.createdAt),
       ),
     );

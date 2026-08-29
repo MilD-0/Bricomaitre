@@ -64,13 +64,13 @@ describe('action-history helpers', () => {
     const beforeRow = {
       id: 3,
       phoneNumber1: '0550',
-      confirmed: 0,
+      inHouseStatus: 0,
       createdAt: new Date('2026-03-20T00:00:00.000Z'),
       updatedAt: new Date('2026-03-20T00:00:00.000Z'),
     };
     const afterRow = {
       ...beforeRow,
-      confirmed: 2,
+      inHouseStatus: 2,
       updatedAt: new Date('2026-03-21T00:00:00.000Z'),
     };
     const selectMock = vi
@@ -104,8 +104,8 @@ describe('action-history helpers', () => {
         createdBy: 'admin@example.com',
         createdByName: 'Admin',
         isReversible: true,
-        beforeState: expect.objectContaining({ confirmed: 0 }),
-        afterState: expect.objectContaining({ confirmed: 2 }),
+        beforeState: expect.objectContaining({ inHouseStatus: 0 }),
+        afterState: expect.objectContaining({ inHouseStatus: 2 }),
       }),
     );
   });
@@ -147,14 +147,14 @@ describe('action-history helpers', () => {
       beforeState: {
         id: 11,
         phoneNumber1: '0550',
-        confirmed: 0,
+        inHouseStatus: 0,
         createdAt: '2026-03-20T00:00:00.000Z',
         updatedAt: '2026-03-20T00:00:00.000Z',
       },
       afterState: {
         id: 11,
         phoneNumber1: '0550',
-        confirmed: 2,
+        inHouseStatus: 2,
         createdAt: '2026-03-20T00:00:00.000Z',
         updatedAt: '2026-03-21T00:00:00.000Z',
       },
@@ -210,7 +210,7 @@ describe('action-history helpers', () => {
       actor: { email: 'admin@example.com' },
     });
 
-    expect(entityUpdateSet).toHaveBeenCalledWith(expect.objectContaining({ confirmed: 0 }));
+    expect(entityUpdateSet).toHaveBeenCalledWith(expect.objectContaining({ inHouseStatus: 0 }));
 
     await applyHistoryAction(db as never, {
       actionLogId: 7,
@@ -218,7 +218,7 @@ describe('action-history helpers', () => {
       actor: { email: 'admin@example.com' },
     });
 
-    expect(entityUpdateSet).toHaveBeenLastCalledWith(expect.objectContaining({ confirmed: 2 }));
+    expect(entityUpdateSet).toHaveBeenLastCalledWith(expect.objectContaining({ inHouseStatus: 2 }));
   });
 
   it('ignores removed columns when replaying historical snapshots', async () => {
@@ -290,8 +290,8 @@ describe('action-history helpers', () => {
       entityId: 11,
       entityLabel: '0550',
       operation: 'update',
-      beforeState: { id: 11, confirmed: 0 },
-      afterState: { id: 11, confirmed: 2 },
+      beforeState: { id: 11, inHouseStatus: 0 },
+      afterState: { id: 11, inHouseStatus: 2 },
       createdBy: 'admin@example.com',
       createdByName: 'Admin',
       isReversible: true,
@@ -343,8 +343,8 @@ describe('action-history helpers', () => {
       entityId: 11,
       entityLabel: '0550',
       operation: 'update',
-      beforeState: { id: 11, confirmed: 2 },
-      afterState: { id: 11, confirmed: 3 },
+      beforeState: { id: 11, inHouseStatus: 2 },
+      afterState: { id: 11, inHouseStatus: 3 },
       createdBy: 'admin@example.com',
       createdByName: 'Admin',
       isReversible: true,
@@ -514,9 +514,9 @@ describe('action-history helpers', () => {
     expect(
       getActionHistoryPreview({
         operation: 'update',
-        beforeState: { confirmed: 0, confirmedBy: null, ecotrackStatus: null, note: null },
+        beforeState: { inHouseStatus: 0, confirmedBy: null, ecotrackStatus: null, note: null },
         afterState: {
-          confirmed: 2,
+          inHouseStatus: 2,
           confirmedBy: 'admin@example.com',
           ecotrackStatus: 'posted',
           note: 'Call first',

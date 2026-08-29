@@ -19,7 +19,7 @@ const { db, refreshFacts, refreshSnapshots, snapshotRun } = vi.hoisted(() => {
 
 vi.mock('@bric/db/client', () => ({ getDb: () => db }));
 vi.mock('./stats', () => ({ refreshAdminReportingSnapshots: refreshSnapshots }));
-vi.mock('./analytics2-facts', () => ({ refreshAnalytics2Facts: refreshFacts }));
+vi.mock('./analytics-facts', () => ({ refreshAnalyticsFacts: refreshFacts }));
 
 import { runAdminReportingRefreshJob } from './background-jobs';
 

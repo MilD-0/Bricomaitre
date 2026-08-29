@@ -55,7 +55,7 @@ describe('app/api/orders/route', () => {
   it('returns an empty payload when DB is unavailable', async () => {
     hasDbMock.mockReturnValue(false);
 
-    const response = await GET();
+    const response = await GET(new NextRequest('http://localhost/api/orders'));
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -153,10 +153,10 @@ describe('app/api/orders/route', () => {
                     state: 16,
                     city: 'Bab Ezzouar',
                     homeAddress: '12 Example street',
-                    delPr: '200.00',
+                    deliveryFee: '200.00',
                     price: '1450.00',
                     note: 'Call first',
-                    confirmed: 2,
+                    inHouseStatus: 2,
                     noAnswerCount: 0,
                     confirmedBy: 'admin@example.com',
                     confirmedByName: 'Admin',
@@ -205,7 +205,7 @@ describe('app/api/orders/route', () => {
 
     getDbMock.mockReturnValue({ select: selectMock });
 
-    const response = await GET();
+    const response = await GET(new NextRequest('http://localhost/api/orders'));
     const payload = await response.json();
 
     expect(payload.writable).toBe(true);
@@ -281,10 +281,10 @@ describe('app/api/orders/route', () => {
                     state: 16,
                     city: 'Algiers',
                     homeAddress: '15 Example street',
-                    delPr: '100.00',
+                    deliveryFee: '100.00',
                     price: '750.00',
                     note: null,
-                    confirmed: 1,
+                    inHouseStatus: 1,
                     noAnswerCount: 2,
                     confirmedBy: null,
                     confirmedByName: null,
@@ -333,13 +333,13 @@ describe('app/api/orders/route', () => {
 
     getDbMock.mockReturnValue({ select: selectMock });
 
-    const response = await GET();
+    const response = await GET(new NextRequest('http://localhost/api/orders'));
     const payload = await response.json();
 
     expect(payload.items).toEqual([
       expect.objectContaining({
         id: 12,
-        confirmed: 1,
+        inHouseStatus: 1,
         noAnswerCount: 2,
         orderProducts: [
           {
@@ -411,7 +411,7 @@ describe('app/api/orders/route', () => {
     });
   });
 
-  it('filters orders by confirmed status when provided', async () => {
+  it('filters orders by inHouseStatus status when provided', async () => {
     hasDbMock.mockReturnValue(true);
     const countWhereMock = vi.fn().mockResolvedValue([{ value: 0 }]);
     const rowsWhereMock = vi.fn().mockReturnValue({
@@ -430,7 +430,7 @@ describe('app/api/orders/route', () => {
 
     getDbMock.mockReturnValue({ select: selectMock });
 
-    await GET(new NextRequest('http://localhost/api/orders?confirmed=3'));
+    await GET(new NextRequest('http://localhost/api/orders?inHouseStatus=3'));
 
     expect(countWhereMock).toHaveBeenCalledOnce();
     expect(rowsWhereMock).toHaveBeenCalledOnce();
@@ -455,7 +455,7 @@ describe('app/api/orders/route', () => {
 
     getDbMock.mockReturnValue({ select: selectMock });
 
-    await GET(new NextRequest('http://localhost/api/orders?confirmed=1&noAnswerCount=3'));
+    await GET(new NextRequest('http://localhost/api/orders?inHouseStatus=1&noAnswerCount=3'));
 
     expect(countWhereMock).toHaveBeenCalledOnce();
     expect(rowsWhereMock).toHaveBeenCalledOnce();

@@ -43,7 +43,7 @@ async function loadAllConfirmedOrders() {
       {
         page,
         limit: 100,
-        confirmed: 2,
+        inHouseStatus: 2,
         search: '',
         sortKey: 'createdAt',
         sortDirection: 'desc',

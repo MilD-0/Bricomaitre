@@ -145,13 +145,42 @@ describe('CatalogInfiniteLoader', () => {
         }),
       ),
     );
-    await waitFor(() =>
-      expect(
-        JSON.parse(
-          window.sessionStorage.getItem('bric:catalog-position:v2:/fr/products') ?? 'null',
-        ),
-      ).toMatchObject({ page: 2, hasNextPage: false }),
+    expect(window.sessionStorage.getItem('bric:catalog-position:v2:/fr/products')).toBeNull();
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('never restores global page position from an embedded similar-products list', async () => {
+    window.history.replaceState({}, '', '/fr/products/current-drill');
+    window.sessionStorage.setItem(
+      'bric:catalog-position:v2:/fr/products/current-drill',
+      JSON.stringify({
+        items: [product(25, 'Previously loaded drill')],
+        page: 2,
+        hasNextPage: false,
+        totalCount: 25,
+        scrollY: 0,
+      }),
     );
+
+    render(
+      <CatalogInfiniteLoader
+        locale="fr"
+        query={query}
+        initialCount={24}
+        initialProductIds={Array.from({ length: 24 }, (_, index) => index + 1)}
+        initialHasNextPage
+        totalCount={25}
+        brandNames={{}}
+        categoryNames={{}}
+        listContext="similar_products"
+        labels={labels}
+      />,
+    );
+
+    expect(
+      screen.queryByRole('heading', { name: 'Previously loaded drill' }),
+    ).not.toBeInTheDocument();
+    await waitFor(() => expect(scrollTo).not.toHaveBeenCalled());
   });
 
   it('does not let a queued scroll save overwrite a newly appended page', async () => {

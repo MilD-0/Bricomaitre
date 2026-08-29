@@ -5,7 +5,7 @@ type ShipmentRow = typeof ecotrackOrderStates.$inferSelect;
 type OrderActionSource = Pick<
   OrderRow,
   | 'id'
-  | 'confirmed'
+  | 'inHouseStatus'
   | 'noAnswerCount'
   | 'confirmedBy'
   | 'confirmedByName'
@@ -57,7 +57,7 @@ export function areEcotrackActionSnapshotsEqual(left: unknown, right: unknown) {
 export function buildEcotrackOrderActionSnapshot(row: OrderActionSource) {
   return {
     id: row.id,
-    confirmed: row.confirmed,
+    inHouseStatus: row.inHouseStatus,
     noAnswerCount: row.noAnswerCount,
     confirmedBy: row.confirmedBy,
     confirmedByName: row.confirmedByName,

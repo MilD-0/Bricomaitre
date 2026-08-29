@@ -72,14 +72,14 @@ describe('app/api/orders/ecotrack/shipments/route', () => {
       NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
     );
 
-    const response = await GET(new Request('http://localhost/api/orders/ecotrack/shipments'));
+    const response = await GET(new NextRequest('http://localhost/api/orders/ecotrack/shipments'));
 
     expect(response.status).toBe(403);
   });
 
   it('loads cached shipments without blocking on upstream freshness', async () => {
     const response = await GET(
-      new Request(
+      new NextRequest(
         'http://localhost/api/orders/ecotrack/shipments?page=2&status=en_livraison&staleOnly=true',
       ),
     );

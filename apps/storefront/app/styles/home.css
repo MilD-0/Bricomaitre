@@ -504,3 +504,253 @@
   display: grid;
   gap: clamp(3.5rem, 7vw, 6rem);
 }
+
+@media (hover: hover) and (pointer: fine) {
+  .home-primary-cta:hover {
+    background: var(--commerce-orange-strong);
+    box-shadow: 0 13px 26px rgba(188, 70, 10, 0.29);
+    transform: translateY(-2px);
+  }
+  .home-carousel-controls button:hover {
+    border-color: #9eaaad;
+    color: var(--brand-teal);
+    box-shadow: 0 6px 15px rgba(31, 40, 44, 0.08);
+    transform: translateY(-1px);
+  }
+  .home-category-carousel a:hover {
+    border-color: #b9c3c5;
+    box-shadow: 0 11px 24px rgba(35, 42, 46, 0.08);
+    transform: translateY(-2px);
+  }
+  .home-category-carousel a:hover img,
+  .home-editorial-card:hover .home-editorial-media img {
+    transform: scale(1.035);
+  }
+  .home-brand-carousel a:hover {
+    transform: scale(1.04);
+  }
+  .home-editorial-add:hover {
+    background: var(--brand-teal-strong);
+    box-shadow: 0 8px 18px rgba(1, 115, 122, 0.2);
+    transform: translateY(-1px);
+  }
+  .home-editorial-view:hover {
+    border-color: #9fabad;
+    transform: translateY(-1px);
+  }
+}
+
+@media (max-width: 900px) {
+  .home-product-carousel > div > div {
+    flex-basis: calc(33.333% - 0.75rem);
+  }
+  .home-category-carousel a {
+    flex-basis: 27%;
+  }
+  .home-editorial-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .home-banner {
+    margin-inline: -1rem;
+    border-radius: 0;
+  }
+  .home-banner-picture {
+    aspect-ratio: 19 / 23;
+  }
+  .home-product-carousel > div > div {
+    flex-basis: calc(66% - 0.75rem);
+  }
+  .home-product-carousel .catalog-card-body {
+    padding: 0.82rem;
+  }
+  .home-product-carousel .catalog-card-body > p {
+    min-height: 1.1rem;
+    font-size: 0.67rem;
+  }
+  .home-product-carousel .catalog-card-body h2 {
+    min-height: 2.7em;
+    font-size: 0.98rem;
+    line-height: 1.32;
+  }
+  .home-product-carousel .catalog-stock {
+    font-size: 0.72rem;
+  }
+  .home-product-carousel .catalog-card-price strong {
+    font-size: 1.04rem;
+  }
+  .home-product-carousel .catalog-card-compare-price {
+    font-size: 0.7rem;
+  }
+  .home-product-carousel .catalog-card-price {
+    min-height: 2.55rem;
+  }
+  .home-product-carousel .catalog-card-action {
+    min-height: 2.45rem;
+    font-size: 0.76rem;
+  }
+  .home-category-carousel a {
+    flex-basis: 36%;
+  }
+  .home-category-carousel a > span {
+    min-height: 6.15rem;
+  }
+  .home-category-carousel img {
+    height: 6.15rem;
+  }
+  .home-category-carousel strong {
+    min-height: 2.75rem;
+    padding: 0.5rem;
+    font-size: 0.67rem;
+  }
+  .home-carousel-controls {
+    margin: 0;
+  }
+  .home-editorial-card {
+    position: relative;
+    grid-template-columns: 1fr;
+    border-color: #d5dadd;
+    border-radius: 1.65rem;
+    box-shadow: 0 16px 38px rgba(31, 40, 44, 0.09);
+  }
+  .home-editorial-card::after {
+    position: absolute;
+    inset-inline: 1.1rem;
+    inset-block-start: 0;
+    height: 3px;
+    border-radius: 0 0 999px 999px;
+    background: linear-gradient(90deg, var(--brand-teal), var(--commerce-orange));
+    content: '';
+  }
+  .home-editorial-media {
+    min-height: 14.5rem;
+    aspect-ratio: 1.18;
+    border-block-end: 1px solid #edf0f1;
+  }
+  .home-editorial-media img {
+    padding: 0.65rem;
+  }
+  .home-editorial-card > div {
+    padding: 1.15rem;
+  }
+  .home-editorial-card > div > p:first-child {
+    position: absolute;
+    z-index: 2;
+    inset-block-start: 0.85rem;
+    inset-inline-start: 0.85rem;
+    border: 1px solid rgba(21, 112, 68, 0.13);
+    border-radius: 999px;
+    background: rgba(244, 252, 247, 0.94);
+    padding: 0.42rem 0.65rem;
+    font-size: 0.7rem;
+    box-shadow: 0 5px 14px rgba(31, 40, 44, 0.07);
+    backdrop-filter: blur(7px);
+  }
+  .home-editorial-card h3 {
+    margin-top: 0;
+    font-size: 1.3rem;
+    line-height: 1.15;
+  }
+  .home-editorial-card > div > strong {
+    margin-top: 0.65rem;
+    font-size: 1.35rem;
+  }
+  .home-editorial-card > div > p:not(:first-child) {
+    margin-top: 0.65rem;
+    font-size: 0.84rem;
+    line-height: 1.55;
+  }
+  .home-editorial-card ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+    margin-top: 0.85rem;
+    font-size: 0.75rem;
+  }
+  .home-editorial-card li {
+    border-radius: 0.7rem;
+    background: #f3f6f5;
+    padding: 0.55rem 0.6rem;
+  }
+  .home-editorial-card li::before {
+    width: 0.34rem;
+    height: 0.34rem;
+    margin-inline-end: 0.35rem;
+  }
+  .home-editorial-card > div > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+    margin-top: 1rem;
+  }
+  .home-editorial-add,
+  .home-editorial-view {
+    width: 100%;
+    min-height: 3rem;
+    padding-inline: 0.65rem;
+    font-size: 0.78rem;
+  }
+  .home-editorial-view {
+    border-color: transparent;
+    background: var(--commerce-orange);
+    color: #202529;
+  }
+  .home-brand-band {
+    padding-block: 0.5rem;
+  }
+  .home-brand-carousel > div {
+    margin-inline-start: -0.85rem;
+  }
+  .home-brand-carousel a {
+    flex-basis: 6.5rem;
+    height: 3.6rem;
+    margin-inline-start: 0.85rem;
+    padding: 0.35rem;
+  }
+  .home-brand-carousel img {
+    max-height: 2.4rem;
+  }
+  .home-brand-name {
+    font-size: 0.72rem;
+  }
+  .home-page {
+    gap: 3.2rem;
+  }
+  .home-trust-band ul {
+    grid-template-columns: 1fr;
+  }
+  .home-trust-band li {
+    min-height: 4.5rem;
+    justify-content: start;
+  }
+  .home-section-heading {
+    align-items: start;
+  }
+  .home-section-heading p {
+    max-width: 26rem;
+  }
+  .home-featured-heading {
+    display: block;
+  }
+  .home-featured-cta {
+    max-width: min(100%, 15rem);
+    font-size: 0.76rem !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-loading {
+    animation: none;
+  }
+  .home-primary-cta {
+    transition: none;
+  }
+  .home-banner-picture > picture:last-child,
+  .home-category-carousel a,
+  .home-category-carousel img,
+  .home-editorial-media img,
+  .home-brand-carousel a {
+    transition: none;
+  }
+}

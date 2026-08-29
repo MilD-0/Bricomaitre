@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
+import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 
 const { getCanonicalOrderProjectionDaysMock, getDbMock, hasDbMock } = vi.hoisted(() => ({
   getCanonicalOrderProjectionDaysMock: vi.fn(),
@@ -39,7 +40,8 @@ describe('loadDailyOrderStatusOverview', () => {
 
       if (
         built.sql.includes('from "order_status_history"') &&
-        built.sql.includes('"order_status_history"."status" = 1') &&
+        built.sql.includes('"order_status_history"."status" = $') &&
+        built.params.includes(ORDER_STATUS.NO_ANSWER) &&
         built.sql.includes('"order_status_history"."changed_at" >=')
       ) {
         if (built.params.includes('2026-07-02')) {
@@ -79,7 +81,8 @@ describe('loadDailyOrderStatusOverview', () => {
       .filter(
         (built) =>
           built.sql.includes('from "order_status_history"') &&
-          built.sql.includes('"order_status_history"."status" = 1') &&
+          built.sql.includes('"order_status_history"."status" = $') &&
+          built.params.includes(ORDER_STATUS.NO_ANSWER) &&
           built.sql.includes('"order_status_history"."changed_at" >='),
       );
 
@@ -90,7 +93,10 @@ describe('loadDailyOrderStatusOverview', () => {
 
   it('can load a bounded seven-day operating window without changing the default', async () => {
     const dialect = new PgDialect();
-    const executeMock = vi.fn(async () => ({ rows: [{ value: 0 }] }));
+    const executeMock = vi.fn(async (query: Parameters<PgDialect['sqlToQuery']>[0]) => {
+      void query;
+      return { rows: [{ value: 0 }] };
+    });
 
     getDbMock.mockReturnValue({ execute: executeMock });
 
@@ -181,6 +187,7 @@ describe('loadDailyOrderStatusOverview', () => {
       },
       { db },
     );
+    if (!overview.available) throw new Error('Expected an available order overview.');
     expect(overview.reports[0]?.profitProjection).toMatchObject({
       projectedProfit: 8_800,
     });

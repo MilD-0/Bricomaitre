@@ -1,6 +1,9 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 
+import '../styles/home.css';
+import '../styles/catalog.css';
+
 import { HomePageContent, type HomePageProps } from './page-content';
 import { HomePageSkeleton } from '@/components/storefront-skeletons';
 import { isLocale } from '@/i18n/config';

@@ -62,6 +62,7 @@ describe('production packaging and release runtime', () => {
       'service-contracts',
       'tests',
       'browser-acceptance',
+      'admin-browser-acceptance',
       'browser-performance',
       'production-builds',
       'required',
@@ -88,6 +89,9 @@ describe('production packaging and release runtime', () => {
     );
     expect(ci).toContain(
       'ops/scripts/run-ci-check.sh "Storefront browser acceptance tests" pnpm test:storefront:browser',
+    );
+    expect(ci).toContain(
+      'ops/scripts/run-ci-check.sh "Admin browser acceptance tests" pnpm test:admin:browser',
     );
     expect(ci).toContain(
       'ops/scripts/run-ci-check.sh "Storefront performance budgets" pnpm test:storefront:performance',
@@ -134,7 +138,7 @@ describe('production packaging and release runtime', () => {
           reference.startsWith('./.github/actions/') || /@[a-f0-9]{40}$/.test(reference),
       ),
     ).toBe(true);
-    expect(ci.match(/uses: [.][/][.]github[/]actions[/]setup-workspace/g)).toHaveLength(6);
+    expect(ci.match(/uses: [.][/][.]github[/]actions[/]setup-workspace/g)).toHaveLength(7);
     expect(ci).toContain(
       'uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c',
     );

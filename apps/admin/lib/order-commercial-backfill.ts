@@ -12,7 +12,7 @@ import { normalizeAlgeriaPhone } from '@bric/storefront-core/meta';
 type Database = ReturnType<typeof getDb>;
 type BackfillRow = Pick<
   typeof orders.$inferSelect,
-  'id' | 'cartProducts' | 'promoCode' | 'delPr' | 'price'
+  'id' | 'cartProducts' | 'promoCode' | 'deliveryFee' | 'price'
 >;
 
 export type OrderCommercialBackfillResult = {
@@ -54,7 +54,7 @@ export async function backfillOrderCommercialSnapshots(
   const persist =
     options.persist ??
     (async (executor, row, commercial) => {
-      const deliveryFee = Number(row.delPr ?? 0);
+      const deliveryFee = Number(row.deliveryFee ?? 0);
       const subtotalOverride = row.price == null ? null : Number(row.price);
       await executor.transaction((tx) =>
         updateCanonicalOrder(tx, {
@@ -81,7 +81,7 @@ export async function backfillOrderCommercialSnapshots(
         id: orders.id,
         cartProducts: orders.cartProducts,
         promoCode: orders.promoCode,
-        delPr: orders.delPr,
+        deliveryFee: orders.deliveryFee,
         price: orders.price,
       })
       .from(orders)

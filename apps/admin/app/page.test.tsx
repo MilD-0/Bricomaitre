@@ -11,7 +11,9 @@ const {
   signInMock,
 } = vi.hoisted(() => ({
   authMock: vi.fn(),
-  authPanelMock: vi.fn(() => <div>GoogleLoginPanel</div>),
+  authPanelMock: vi.fn((props: { signInLabel: string; onSignIn: () => Promise<void> }) => (
+    <div data-sign-in-label={props.signInLabel}>GoogleLoginPanel</div>
+  )),
   connectionMock: vi.fn(),
   getLocaleMock: vi.fn(),
   getTranslationsMock: vi.fn(),

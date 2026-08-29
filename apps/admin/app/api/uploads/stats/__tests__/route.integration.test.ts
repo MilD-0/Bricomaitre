@@ -63,7 +63,7 @@ describe('app/api/uploads/stats/route', () => {
   it('returns the latest queued import job', async () => {
     getLatestExportJobMock.mockResolvedValue({ id: 'job-2', status: 'running' });
 
-    const response = await GET();
+    const response = await GET(new NextRequest('http://localhost/api/uploads/stats'));
 
     expect(response.status).toBe(200);
     expect(getLatestExportJobMock).toHaveBeenCalledWith('admin-stats-import', 'ops@example.com');
@@ -99,7 +99,7 @@ describe('app/api/uploads/stats/route', () => {
     const formData = new FormData();
     formData.append(
       'files',
-      new File([xlsxBytes], 'report.xlsx', {
+      new File([Uint8Array.from(xlsxBytes)], 'report.xlsx', {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       }),
     );
@@ -138,7 +138,7 @@ describe('app/api/uploads/stats/route', () => {
     const formData = new FormData();
     formData.append(
       'files',
-      new File([xlsxBytes], 'one.xlsx', {
+      new File([Uint8Array.from(xlsxBytes)], 'one.xlsx', {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       }),
     );

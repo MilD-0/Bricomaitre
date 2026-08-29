@@ -82,9 +82,9 @@ describe('AI product content background job', () => {
     const refreshConsumers = vi.fn(async () => undefined);
     const dependencies: AiContentJobDependencies = {
       listProducts: vi.fn(async () => [products[0]]),
-      listPendingProductIds: vi.fn(async () => new Set()),
+      listPendingProductIds: vi.fn(async () => new Set<number>()),
       propose: vi.fn(async () => ({ id: 101 })),
-      applyProposal: vi.fn(async () => ({ status: 'applied', verified: true })),
+      applyProposal: vi.fn(async () => ({ status: 'applied' as const, verified: true as const })),
       refreshConsumers,
     };
 
@@ -109,7 +109,7 @@ describe('AI product content background job', () => {
   it('leaves a proposal pending when verified auto-apply fails', async () => {
     const dependencies: AiContentJobDependencies = {
       listProducts: vi.fn(async () => [products[0]]),
-      listPendingProductIds: vi.fn(async () => new Set()),
+      listPendingProductIds: vi.fn(async () => new Set<number>()),
       propose: vi.fn(async () => ({ id: 101 })),
       applyProposal: vi.fn(async () => {
         throw new Error('verification failed');
