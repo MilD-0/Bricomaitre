@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Analytics2Payload } from './analytics2';
-import { compactAnalytics2ForAssistant } from './ai-analytics';
+import type { AnalyticsPayload } from './analytics';
+import { compactAnalyticsForAssistant } from './ai-analytics';
 
-describe('admin assistant Analytics2 adapter', () => {
+describe('admin assistant Analytics adapter', () => {
   it('preserves canonical metrics, comparisons, sources, and warnings', () => {
     const payload = {
       view: 'catalog',
@@ -57,12 +57,12 @@ describe('admin assistant Analytics2 adapter', () => {
       ],
       warnings: [{ key: 'projectedCostCoverage', value: 92 }],
       diagnostics: { queryDurationMs: 42, responseSizeBytes: 10_000 },
-    } as unknown as Analytics2Payload;
+    } as unknown as AnalyticsPayload;
 
-    const result = compactAnalytics2ForAssistant(payload);
+    const result = compactAnalyticsForAssistant(payload);
 
     expect(result).toMatchObject({
-      kind: 'analytics2',
+      kind: 'analytics',
       responseContractVersion: 6,
       query: 'catalog',
       view: 'catalog',

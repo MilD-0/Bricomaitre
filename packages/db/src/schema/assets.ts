@@ -45,7 +45,7 @@ export const featuredProductGroups = pgTable('featured_product_groups', {
   ctaAr: text('cta_ar'),
   link: text('link'),
   sortOrder: integer('sort_order').notNull().default(0),
-  showAtTopOfProductsPage: boolean('show_at_top_of_products_page').notNull().default(false),
+  prioritizeRecommendations: boolean('show_at_top_of_products_page').notNull().default(false),
   active: boolean('active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

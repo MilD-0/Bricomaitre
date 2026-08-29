@@ -66,7 +66,7 @@ const assets = {
       productIds: [12],
       brandIds: [],
       categoryIds: [3],
-      showAtTopOfProductsPage: true,
+      prioritizeRecommendations: true,
       active: true,
       sortOrder: 0,
       createdAt: '2026-08-03T00:00:00.000Z',
@@ -161,7 +161,7 @@ describe('Admin AI assets', () => {
       asset: {
         kind: 'featured-group' as const,
         id: 7,
-        changes: { showAtTopOfProductsPage: false },
+        changes: { prioritizeRecommendations: false },
       },
     };
 
@@ -169,11 +169,11 @@ describe('Admin AI assets', () => {
     await expect(manageAdminAiAsset(input, actor)).resolves.toMatchObject({
       ok: true,
       previous: { categoryIds: [3], active: true },
-      data: { categoryIds: [3], active: true, showAtTopOfProductsPage: false },
+      data: { categoryIds: [3], active: true, prioritizeRecommendations: false },
     });
     expect(mocks.updateStates).toHaveBeenCalledWith(
       'database',
-      { items: [{ kind: 'featured-group', id: 7, showAtTopOfProductsPage: false }] },
+      { items: [{ kind: 'featured-group', id: 7, prioritizeRecommendations: false }] },
       actor,
     );
     expect(mocks.replace).not.toHaveBeenCalled();
@@ -240,7 +240,7 @@ describe('Admin AI assets', () => {
               productIds: [12],
               brandIds: [],
               categoryIds: [],
-              showAtTopOfProductsPage: false,
+              prioritizeRecommendations: false,
               active: true,
             },
           },

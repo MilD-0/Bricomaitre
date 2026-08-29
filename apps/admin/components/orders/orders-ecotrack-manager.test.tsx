@@ -3,6 +3,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type {
+  EcotrackShipmentListItem,
+  EcotrackShipmentsResponse,
+} from '../../lib/ecotrack-admin-contracts';
 import { OrdersEcotrackManager } from './orders-ecotrack-manager';
 
 const { surfaceDetailsMock, toastMock } = vi.hoisted(() => ({
@@ -73,12 +77,13 @@ function buildShipment(
   trackingNumber: string,
   phoneNumber1: string,
   productTitle: string,
-  overrides: Record<string, unknown> = {},
-) {
+  overrides: Partial<EcotrackShipmentListItem> = {},
+): EcotrackShipmentListItem {
   return {
     orderId,
     reference: String(orderId),
     trackingNumber,
+    provider: 'delivro',
     createdAt: '2026-04-08T08:00:00.000Z',
     updatedAt: '2026-04-08T08:00:00.000Z',
     firstName: fullName.split(' ')[0] ?? fullName,
@@ -92,7 +97,19 @@ function buildShipment(
     stateName: 'Alger',
     city: 'Bab Ezzouar',
     homeAddress: `${orderId} Example street`,
-    orderProducts: [{ title: productTitle, quantity: 1, lineTotal: 1200 }],
+    orderProducts: [
+      {
+        productId: orderId,
+        rawValue: String(orderId),
+        title: productTitle,
+        unitPrice: 1200,
+        quantity: 1,
+        lineTotal: 1200,
+        thumbnailUrl: null,
+        missing: false,
+      },
+    ],
+    subtotalOverride: null,
     productSubtotal: 1200,
     deliveryFee: 200,
     totalAmount: 1400,
@@ -123,7 +140,7 @@ function buildShipment(
   };
 }
 
-function buildInitialOrders(count = 1) {
+function buildInitialOrders(count = 1): EcotrackShipmentsResponse {
   const items = [
     buildShipment(11, 'Ada Lovelace', 'TRK-11', '0550123456', 'Chair'),
     buildShipment(12, 'Grace Hopper', 'TRK-12', '0550123457', 'Desk'),
@@ -143,7 +160,7 @@ function buildInitialOrders(count = 1) {
   };
 }
 
-function buildDispatchableOrders(count = 2) {
+function buildDispatchableOrders(count = 2): EcotrackShipmentsResponse {
   const orders = buildInitialOrders(count);
   return {
     ...orders,
@@ -210,7 +227,7 @@ describe('OrdersEcotrackManager', () => {
     expect(screen.getAllByText('ordersEcotrackManager.columns.amount').length).toBeGreaterThan(0);
     expect(screen.getAllByText('ordersEcotrackManager.columns.status').length).toBeGreaterThan(0);
     expect(screen.getAllByText('TRK-11').length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('button', { name: /TRK-11 Ada Lovelace/ }).length).toBeGreaterThan(
+    expect(screen.getAllByRole('button', { name: /TRK-11.*Ada Lovelace/ }).length).toBeGreaterThan(
       0,
     );
     expect(
@@ -929,7 +946,7 @@ describe('OrdersEcotrackManager', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    resolveLookup?.(
+    (resolveLookup as unknown as (value: Response) => void)(
       new Response(JSON.stringify(buildDispatchableOrders(2)), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },

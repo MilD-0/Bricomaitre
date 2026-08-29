@@ -14,8 +14,9 @@ import {
   profitTrackerOperatingCosts,
   profitTrackerSettings,
 } from '@bric/db/schema';
+import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 
-import { ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE } from './analytics2-fact-contract';
+import { ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE } from './analytics-fact-contract';
 import { effectiveEcotrackStatusSql } from './ecotrack-status-policy';
 import {
   applyProfitTrackerRollforward,
@@ -36,7 +37,6 @@ const DEFAULT_SETTINGS: ProfitTrackerSettings = {
   restFrom: null,
 };
 const ANALYTICS_TIMEZONE = 'Africa/Algiers';
-const POSTED_ORDER_STATUS = 11;
 
 const dateOnlySchema = z
   .string()
@@ -343,7 +343,7 @@ async function loadOrderCohortDayEconomics(
         line_economics.gross_profit,
         case
           when ${effectiveEcotrackStatusSql({
-            localStatus: orders.confirmed,
+            localStatus: orders.inHouseStatus,
             providerStatus: ecotrackOrderStates.currentStatus,
             latestActivityAt: sql`lifecycle.latest_activity_at`,
             fallbackActivityAt: sql`coalesce(
@@ -353,7 +353,7 @@ async function loadOrderCohortDayEconomics(
             referenceAt: sql`${endDate}::date + interval '1 day'`,
           })} in ('retour_archive', 'annule', 'failed') then 'lost'
           when ${effectiveEcotrackStatusSql({
-            localStatus: orders.confirmed,
+            localStatus: orders.inHouseStatus,
             providerStatus: ecotrackOrderStates.currentStatus,
             latestActivityAt: sql`lifecycle.latest_activity_at`,
             fallbackActivityAt: sql`coalesce(
@@ -406,7 +406,7 @@ async function loadOrderCohortDayEconomics(
 }
 
 async function loadAutomaticDayEconomics(db: Database, startDate: string | null, endDate: string) {
-  const rows = await loadOrderCohortDayEconomics(db, startDate, endDate, POSTED_ORDER_STATUS);
+  const rows = await loadOrderCohortDayEconomics(db, startDate, endDate, ORDER_STATUS.POSTED);
   return rows.map((row): AutomaticDayEconomics => ({
     date: row.date,
     postedOrders: row.orderCount,
@@ -656,7 +656,10 @@ export async function upsertProfitTrackerDay(
   return mapDay(row);
 }
 
-export async function deleteProfitTrackerDay(date: string, db: Database = getDb()) {
+export async function deleteProfitTrackerDay(
+  date: string,
+  db: Database = getDb(),
+): Promise<string | null> {
   const parsedDate = dateOnlySchema.parse(date);
   const rows = await db
     .delete(profitTrackerDays)

@@ -47,7 +47,7 @@ describe('shared Admin AI source adapters', () => {
       id: 42,
       createdAt: '2026-08-20T10:00:00.000Z',
       updatedAt: '2026-08-21T10:00:00.000Z',
-      confirmed: 2,
+      inHouseStatus: 2,
       noAnswerCount: 1,
       delivery: 0,
       state: 16,

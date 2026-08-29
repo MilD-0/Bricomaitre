@@ -11,7 +11,7 @@ type AiStatsMetricDefinition = {
   exclusions?: string[];
 };
 
-export const ADMIN_AI_STATS_METRIC_DEFINITIONS: Record<
+const ADMIN_AI_STATS_METRIC_DEFINITIONS: Record<
   AiStatsSurface,
   Record<string, AiStatsMetricDefinition>
 > = {
@@ -155,7 +155,7 @@ export type AdminAiStatsMetric = AiStatsMetric &
     nullMeaning: string;
   };
 
-export function aiStatsMetricsForAssistant(payload: AiStatsPayload): AdminAiStatsMetric[] {
+function aiStatsMetricsForAssistant(payload: AiStatsPayload): AdminAiStatsMetric[] {
   const definitions = ADMIN_AI_STATS_METRIC_DEFINITIONS[payload.surface];
   return payload.data.metrics.map((metric) => {
     const definition = definitions[metric.key] ?? {

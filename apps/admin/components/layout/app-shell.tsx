@@ -120,6 +120,7 @@ export function AppShell({
   const sidebarTriggerRef = useRef<HTMLButtonElement>(null);
   const sidebarCloseRef = useRef<HTMLButtonElement>(null);
   const sidebarNavigationRef = useRef<HTMLElement>(null);
+  const previousPathnameRef = useRef(pathname);
   const displayName = initialUserName?.trim() || initialUserEmail?.trim() || t('auth.unknownUser');
   const displayEmail = initialUserEmail?.trim() || t('settings.general.missingEmail');
   const avatarAlt = initialUserName?.trim() || initialUserEmail?.trim() || t('labels.userProfile');
@@ -134,6 +135,8 @@ export function AppShell({
   }, [initialPermissions, initialRole, initialRoleLabel, setAccess]);
 
   useEffect(() => {
+    if (previousPathnameRef.current === pathname) return;
+    previousPathnameRef.current = pathname;
     queueMicrotask(() => setSidebarOpen(false));
   }, [pathname]);
 

@@ -137,7 +137,9 @@ describe('Admin AI production tool schemas', () => {
       storefrontAnnouncementMutationSchema,
       adminAiPresentationPlanSchema.omit({ kind: true }),
     ]) {
-      const serialized = JSON.stringify(zodSchema(schema).jsonSchema);
+      const serialized = JSON.stringify(
+        zodSchema(schema as unknown as Parameters<typeof zodSchema>[0]).jsonSchema,
+      );
       expect(serialized).not.toMatch(/\(\?[=!<]/u);
     }
   });

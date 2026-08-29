@@ -142,6 +142,82 @@ describe('Storefront assistant tools', () => {
     expect(fetchProductDetail).toHaveBeenCalledTimes(9);
   });
 
+  it('returns the linked campaign document only through current-page inspection', async () => {
+    const getLandingPage = vi.fn(async () => ({
+      id: 4,
+      slug: 'lampe-atelier',
+      locale: 'fr' as const,
+      revision: 3,
+      publishedAt: null,
+      document: {
+        schemaVersion: 1 as const,
+        theme: {
+          accent: 'orange' as const,
+          density: 'comfortable' as const,
+          shell: 'campaign' as const,
+        },
+        seo: {
+          title: 'Offre lampe atelier',
+          description: 'La campagne publique de la lampe atelier.',
+          indexable: false,
+        },
+        blocks: [
+          {
+            id: 'hero',
+            type: 'product-hero' as const,
+            variant: 'media-left' as const,
+            heading: 'Éclairez chaque chantier',
+            subheading: '',
+            imageUrl: null,
+            imageAlt: '',
+            primaryCtaLabel: 'Commander',
+            showAddToCart: true,
+            surface: 'plain' as const,
+            width: 'wide' as const,
+          },
+          {
+            id: 'final',
+            type: 'final-cta' as const,
+            variant: 'solid' as const,
+            heading: 'Commandez maintenant',
+            body: '',
+            primaryCtaLabel: 'Commander',
+            imageUrl: null,
+            imageAlt: '',
+            surface: 'plain' as const,
+            width: 'wide' as const,
+          },
+        ],
+      },
+      product: productDetail(12).item,
+    }));
+    const runtime = buildShoppingAssistantTools({
+      request: request({
+        pathname: '/fr/landing/lampe-atelier',
+        currentLandingPageSlug: 'lampe-atelier',
+      }),
+      settings,
+      dependencies: {
+        fetchAssets: async () => ({ banners: [], featuredGroups: [], productCards: [] }),
+        getLandingPage: getLandingPage as never,
+      },
+    });
+
+    const evidence = await execute(runtime.tools.inspect_products, {
+      targets: [{ kind: 'current_page' }],
+    });
+
+    expect(getLandingPage).toHaveBeenCalledWith('fr', 'lampe-atelier');
+    expect(evidence).toMatchObject({
+      products: [expect.objectContaining({ id: 12 })],
+      currentCampaign: {
+        slug: 'lampe-atelier',
+        locale: 'fr',
+        document: { seo: { title: 'Offre lampe atelier' } },
+      },
+    });
+  });
+
   it('keeps product cards optional after a catalog search', async () => {
     const runtime = buildShoppingAssistantTools({
       request: request(),

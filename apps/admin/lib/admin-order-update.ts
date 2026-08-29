@@ -40,7 +40,7 @@ export class AdminOrderNotFoundError extends Error {
   }
 }
 
-export class AdminOrderStatusTransitionError extends Error {
+class AdminOrderStatusTransitionError extends Error {
   constructor(
     readonly from: OrderStatus,
     readonly to: OrderStatus,
@@ -158,13 +158,13 @@ export async function updateAdminOrder(
   const existing = await db.query.orders.findFirst({ where: eq(orders.id, orderId) });
   if (!existing) throw new AdminOrderNotFoundError(orderId);
 
-  const currentStatus = coerceOrderStatus(existing.confirmed);
+  const currentStatus = coerceOrderStatus(existing.inHouseStatus);
   if (
-    changes.confirmed !== undefined &&
+    changes.inHouseStatus !== undefined &&
     !options.allowStatusCorrection &&
-    !canTransitionOrderStatus(currentStatus, changes.confirmed)
+    !canTransitionOrderStatus(currentStatus, changes.inHouseStatus)
   ) {
-    throw new AdminOrderStatusTransitionError(currentStatus, changes.confirmed);
+    throw new AdminOrderStatusTransitionError(currentStatus, changes.inHouseStatus);
   }
 
   const catalog =
@@ -175,7 +175,7 @@ export async function updateAdminOrder(
   const nextState = changes.state !== undefined ? changes.state : existing.state;
   const nextDeliveryFee = catalog
     ? resolveEcotrackDeliveryFee(catalog, nextState, nextDelivery)
-    : Number(existing.delPr ?? 0);
+    : Number(existing.deliveryFee ?? 0);
   const commercial =
     changes.cartProducts === undefined
       ? null
@@ -197,15 +197,15 @@ export async function updateAdminOrder(
       const currentNoAnswerCount = coerceNoAnswerCount(
         currentStatus,
         existing.noAnswerCount,
-        existing.confirmed,
+        existing.inHouseStatus,
       );
-      const nextStatus = changes.confirmed ?? currentStatus;
+      const nextStatus = changes.inHouseStatus ?? currentStatus;
       const nextNoAnswerCount =
         nextStatus === 1
           ? coerceNoAnswerCount(
               nextStatus,
               changes.noAnswerCount ?? currentNoAnswerCount,
-              existing.confirmed,
+              existing.inHouseStatus,
             )
           : 0;
       const now = new Date();
@@ -236,7 +236,7 @@ export async function updateAdminOrder(
           changes.state !== undefined ||
           changes.city !== undefined)
       ) {
-        update.delPr = nextDeliveryFee.toFixed(2);
+        update.deliveryFee = nextDeliveryFee.toFixed(2);
         update.productSubtotal = persistedSubtotal.toFixed(2);
         update.totalAmount = (persistedSubtotal + nextDeliveryFee).toFixed(2);
       }
@@ -258,7 +258,7 @@ export async function updateAdminOrder(
         commercial: commercial ?? undefined,
         deliveryFee: commercial ? nextDeliveryFee : undefined,
         status:
-          changes.confirmed !== undefined || changes.noAnswerCount !== undefined
+          changes.inHouseStatus !== undefined || changes.noAnswerCount !== undefined
             ? { value: nextStatus, noAnswerCount: nextNoAnswerCount }
             : undefined,
         allowStatusCorrection: options.allowStatusCorrection,

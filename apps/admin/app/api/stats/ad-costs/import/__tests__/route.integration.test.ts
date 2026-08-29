@@ -99,7 +99,7 @@ describe('app/api/stats/ad-costs/import/route', () => {
   it('returns the latest queued ad-cost import job', async () => {
     getLatestExportJobMock.mockResolvedValue({ id: 'job-8', status: 'running' });
 
-    const response = await GET();
+    const response = await GET(new NextRequest('http://localhost/api/stats/ad-costs/import'));
 
     expect(response.status).toBe(200);
     expect(getLatestExportJobMock).toHaveBeenCalledWith('admin-ad-cost-import', 'ops@example.com');
@@ -108,7 +108,7 @@ describe('app/api/stats/ad-costs/import/route', () => {
 
   it('queues an ad-cost spreadsheet import', async () => {
     const formData = new FormData();
-    formData.append('file', new File([xlsxBytes], 'ads.xlsx'));
+    formData.append('file', new File([Uint8Array.from(xlsxBytes)], 'ads.xlsx'));
     formData.append('rate', '230');
 
     const request = new NextRequest('http://localhost/api/stats/ad-costs/import', {
@@ -147,8 +147,8 @@ describe('app/api/stats/ad-costs/import/route', () => {
 
   it('rejects multiple spreadsheets instead of silently ignoring extras', async () => {
     const formData = new FormData();
-    formData.append('files', new File([xlsxBytes], 'one.xlsx'));
-    formData.append('files', new File([xlsxBytes], 'two.xlsx'));
+    formData.append('files', new File([Uint8Array.from(xlsxBytes)], 'one.xlsx'));
+    formData.append('files', new File([Uint8Array.from(xlsxBytes)], 'two.xlsx'));
     const request = new NextRequest('http://localhost/api/stats/ad-costs/import', {
       method: 'POST',
     });
@@ -162,7 +162,7 @@ describe('app/api/stats/ad-costs/import/route', () => {
 
   it('rejects invalid currency conversion rates', async () => {
     const formData = new FormData();
-    formData.append('file', new File([xlsxBytes], 'ads.xlsx'));
+    formData.append('file', new File([Uint8Array.from(xlsxBytes)], 'ads.xlsx'));
     formData.append('rate', '-1');
     const request = new NextRequest('http://localhost/api/stats/ad-costs/import', {
       method: 'POST',

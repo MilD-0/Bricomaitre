@@ -34,9 +34,9 @@ import {
   AdminOrderLifecycleNotFoundError,
 } from './admin-order-lifecycle';
 
-function order(confirmed: number, history: number[], noAnswerCount = 0) {
+function order(inHouseStatus: number, history: number[], noAnswerCount = 0) {
   return {
-    confirmed,
+    inHouseStatus,
     noAnswerCount,
     statusHistory: history.map((status, index) => ({ id: index + 1, status })),
   };
@@ -68,7 +68,7 @@ describe('admin AI order status updates', () => {
     expect(mocks.update).toHaveBeenCalledWith(
       'database',
       91,
-      { confirmed: 2 },
+      { inHouseStatus: 2 },
       { email: 'admin@example.com', name: 'Admin' },
       { allowStatusCorrection: true },
     );
@@ -181,7 +181,7 @@ describe('admin AI order status updates', () => {
     ).toBe(false);
     expect(
       adminAiOrderDetailsMutationSchema.safeParse({
-        items: [{ orderId: 91, changes: { confirmed: 2 } }],
+        items: [{ orderId: 91, changes: { inHouseStatus: 2 } }],
       }).success,
     ).toBe(false);
 

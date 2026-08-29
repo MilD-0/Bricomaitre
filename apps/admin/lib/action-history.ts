@@ -598,7 +598,7 @@ export function getActionHistoryChanges(
 }
 
 const confirmationFieldKeys = new Set([
-  'confirmed',
+  'inHouseStatus',
   'confirmedAt',
   'confirmedBy',
   'confirmedByName',

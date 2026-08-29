@@ -14,7 +14,6 @@ import {
   assetBannerSchema,
   featuredProductGroupInputSchema,
   featuredProductGroupSchema,
-  productCardInputSchema,
   productCardSchema,
   type AssetBannerPayload,
   type AssetBannerRecord,
@@ -71,7 +70,7 @@ const featuredGroupCreateSchema = featuredProductGroupInputSchema
   .strict()
   .describe('A bilingual featured group selecting at least one product, brand, or category.');
 
-const productCardCreateSchema = productCardInputSchema
+const productCardCreateSchema = productCardSchema
   .strict()
   .describe('A bilingual editorial card tied to one product.');
 
@@ -105,7 +104,7 @@ const featuredGroupChangesSchema = requireChanges(
       productIds: z.array(z.coerce.number().int().positive()).optional(),
       brandIds: z.array(z.coerce.number().int().positive()).optional(),
       categoryIds: z.array(z.coerce.number().int().positive()).optional(),
-      showAtTopOfProductsPage: z.boolean().optional(),
+      prioritizeRecommendations: z.boolean().optional(),
       active: z.boolean().optional(),
     })
     .strict(),
@@ -113,13 +112,13 @@ const featuredGroupChangesSchema = requireChanges(
 const productCardChangesSchema = requireChanges(
   z
     .object({
-      productId: productCardInputSchema.shape.productId.optional(),
-      titleAr: productCardInputSchema.shape.titleAr.optional(),
-      titleFr: productCardInputSchema.shape.titleFr.optional(),
-      descriptionAr: productCardInputSchema.shape.descriptionAr.optional(),
-      descriptionFr: productCardInputSchema.shape.descriptionFr.optional(),
-      characteristicsAr: productCardInputSchema.shape.characteristicsAr.optional(),
-      characteristicsFr: productCardInputSchema.shape.characteristicsFr.optional(),
+      productId: productCardSchema.shape.productId.optional(),
+      titleAr: productCardSchema.shape.titleAr.optional(),
+      titleFr: productCardSchema.shape.titleFr.optional(),
+      descriptionAr: productCardSchema.shape.descriptionAr.optional(),
+      descriptionFr: productCardSchema.shape.descriptionFr.optional(),
+      characteristicsAr: productCardSchema.shape.characteristicsAr.optional(),
+      characteristicsFr: productCardSchema.shape.characteristicsFr.optional(),
       active: z.boolean().optional(),
     })
     .strict(),
@@ -252,7 +251,7 @@ function featuredGroupPayload(record: FeaturedProductGroupRecord): FeaturedProdu
     productIds: record.productIds,
     brandIds: record.brandIds,
     categoryIds: record.categoryIds,
-    showAtTopOfProductsPage: record.showAtTopOfProductsPage,
+    prioritizeRecommendations: record.prioritizeRecommendations,
     active: record.active,
   };
 }
@@ -317,7 +316,7 @@ export async function manageAdminAiAsset(
   const stateOnly =
     stateFields.every((field) =>
       input.asset.kind === 'featured-group'
-        ? field === 'active' || field === 'showAtTopOfProductsPage'
+        ? field === 'active' || field === 'prioritizeRecommendations'
         : field === 'active',
     ) && stateFields.length > 0;
   if (stateOnly) {
@@ -332,9 +331,9 @@ export async function manageAdminAiAsset(
               ? { active: input.asset.changes.active }
               : {}),
             ...(input.asset.kind === 'featured-group' &&
-            input.asset.changes.showAtTopOfProductsPage !== undefined
+            input.asset.changes.prioritizeRecommendations !== undefined
               ? {
-                  showAtTopOfProductsPage: input.asset.changes.showAtTopOfProductsPage,
+                  prioritizeRecommendations: input.asset.changes.prioritizeRecommendations,
                 }
               : {}),
           },

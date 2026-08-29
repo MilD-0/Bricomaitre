@@ -3,7 +3,7 @@ import { and, eq, lte } from 'drizzle-orm';
 import { getDb } from '@bric/db/client';
 import { aiProposals } from '@bric/db/schema';
 
-import { reviewProductCategoryProposal } from './ai-admin-capabilities';
+import { reviewProductCategoryProposal } from './ai-product-category-proposals';
 import { reviewProductContentProposal } from './ai-product-content';
 import { reviewProductRelationProposal } from './ai-product-knowledge';
 export { refreshAppliedAiProposalConsumers } from './background-jobs';

@@ -1,12 +1,50 @@
 import { z } from 'zod';
 
-const orderStatusValues = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
+export const ORDER_STATUS = {
+  NOT_CONTACTED: 0,
+  NO_ANSWER: 1,
+  CONFIRMED: 2,
+  DISPATCHED: 3,
+  COMPLETED: 4,
+  DELAYED: 5,
+  CANCELLED: 6,
+  IN_DELIVERY: 7,
+  RETURNED: 8,
+  FAILED: 9,
+  MANUAL_COMPLETED: 10,
+  POSTED: 11,
+} as const;
+
+export const ORDER_STATUS_VALUES = [
+  ORDER_STATUS.NOT_CONTACTED,
+  ORDER_STATUS.NO_ANSWER,
+  ORDER_STATUS.CONFIRMED,
+  ORDER_STATUS.DISPATCHED,
+  ORDER_STATUS.COMPLETED,
+  ORDER_STATUS.DELAYED,
+  ORDER_STATUS.CANCELLED,
+  ORDER_STATUS.IN_DELIVERY,
+  ORDER_STATUS.RETURNED,
+  ORDER_STATUS.FAILED,
+  ORDER_STATUS.MANUAL_COMPLETED,
+  ORDER_STATUS.POSTED,
+] as const;
 const deliveryTypeValues = [0, 1] as const;
 export const DEGRADED_CAPTURE_VARIANT = 'degraded_capture' as const;
-export const CONFIRMED_LIFECYCLE_ORDER_STATUSES = [2, 3, 4, 5, 7, 8, 9, 10, 11] as const;
+export const CONFIRMED_LIFECYCLE_ORDER_STATUSES = [
+  ORDER_STATUS.CONFIRMED,
+  ORDER_STATUS.DISPATCHED,
+  ORDER_STATUS.COMPLETED,
+  ORDER_STATUS.DELAYED,
+  ORDER_STATUS.IN_DELIVERY,
+  ORDER_STATUS.RETURNED,
+  ORDER_STATUS.FAILED,
+  ORDER_STATUS.MANUAL_COMPLETED,
+  ORDER_STATUS.POSTED,
+] as const;
 
 export const orderStatusSchema = z.union(
-  orderStatusValues.map((value) => z.literal(value)) as [
+  ORDER_STATUS_VALUES.map((value) => z.literal(value)) as [
     z.ZodLiteral<0>,
     z.ZodLiteral<1>,
     z.ZodLiteral<2>,
@@ -26,20 +64,20 @@ export const deliveryTypeSchema = z.union(
 );
 const noAnswerCountSchema = z.number().int().min(0).max(99);
 
-const ORDER_STATUS_LABEL_KEYS = {
-  0: 'notContacted',
-  1: 'noAnswer',
-  2: 'confirmed',
-  3: 'dispatched',
-  4: 'completed',
-  5: 'delayed',
-  6: 'cancelled',
-  7: 'inDelivery',
-  8: 'returned',
-  9: 'failed',
-  10: 'manualCompleted',
-  11: 'posted',
-} as const satisfies Record<(typeof orderStatusValues)[number], string>;
+export const ORDER_STATUS_LABEL_KEYS = {
+  [ORDER_STATUS.NOT_CONTACTED]: 'notContacted',
+  [ORDER_STATUS.NO_ANSWER]: 'noAnswer',
+  [ORDER_STATUS.CONFIRMED]: 'confirmed',
+  [ORDER_STATUS.DISPATCHED]: 'dispatched',
+  [ORDER_STATUS.COMPLETED]: 'completed',
+  [ORDER_STATUS.DELAYED]: 'delayed',
+  [ORDER_STATUS.CANCELLED]: 'cancelled',
+  [ORDER_STATUS.IN_DELIVERY]: 'inDelivery',
+  [ORDER_STATUS.RETURNED]: 'returned',
+  [ORDER_STATUS.FAILED]: 'failed',
+  [ORDER_STATUS.MANUAL_COMPLETED]: 'manualCompleted',
+  [ORDER_STATUS.POSTED]: 'posted',
+} as const satisfies Record<(typeof ORDER_STATUS_VALUES)[number], string>;
 
 const DELIVERY_TYPE_LABEL_KEYS = {
   0: 'home',
@@ -108,7 +146,7 @@ const orderPatchSchema = z
   .object({
     phoneNumber1: z.string().trim().min(1).max(50).optional(),
     note: nullableTrimmedString(500).optional(),
-    confirmed: orderStatusSchema.optional(),
+    inHouseStatus: orderStatusSchema.optional(),
     noAnswerCount: z.coerce.number().int().min(0).max(99).optional(),
     delivery: deliveryTypeSchema.optional(),
     state: nullableWilayaCode.optional(),
@@ -163,14 +201,14 @@ type StorefrontOrderPatch = z.infer<typeof storefrontOrderPatchSchema>;
 export type OrderStatus = z.infer<typeof orderStatusSchema>;
 export type DeliveryType = z.infer<typeof deliveryTypeSchema>;
 
-const orderSortKeyValues = ['confirmed', 'createdAt', 'fullName'] as const;
+const orderSortKeyValues = ['inHouseStatus', 'createdAt', 'fullName'] as const;
 const sortDirectionValues = ['asc', 'desc'] as const;
 
 const orderListQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(25),
   search: z.string().trim().default(''),
-  confirmed: z.union([orderStatusSchema, z.null()]).optional(),
+  inHouseStatus: z.union([orderStatusSchema, z.null()]).optional(),
   noAnswerCount: z.union([z.coerce.number().int().min(0).max(99), z.null()]).optional(),
   sortKey: z.enum(orderSortKeyValues).default('createdAt'),
   sortDirection: z.enum(sortDirectionValues).default('desc'),
@@ -228,7 +266,7 @@ export type OrderRecord = {
   promoDiscountAmount?: number;
   promoFinalSubtotal?: number | null;
   note: string | null;
-  confirmed: OrderStatus;
+  inHouseStatus: OrderStatus;
   noAnswerCount: number;
   confirmedBy: string | null;
   confirmedByName: string | null;
@@ -259,25 +297,25 @@ const legacyDeliveryTypeMap = {
 } as const;
 
 const legacyOrderStatusMap = {
-  pending: 0,
-  nocon: 0,
-  no2: 1,
-  no3: 1,
-  no4: 1,
-  confirmed: 2,
-  yes: 2,
-  dispatched: 3,
-  delivered: 4,
-  complete: 4,
-  delayed: 5,
-  cancelled: 6,
-  in_delivery: 7,
-  'in delivery': 7,
-  returned: 8,
-  failed: 9,
-  manual_completed: 10,
-  'manual completed': 10,
-  posted: 11,
+  pending: ORDER_STATUS.NOT_CONTACTED,
+  nocon: ORDER_STATUS.NOT_CONTACTED,
+  no2: ORDER_STATUS.NO_ANSWER,
+  no3: ORDER_STATUS.NO_ANSWER,
+  no4: ORDER_STATUS.NO_ANSWER,
+  confirmed: ORDER_STATUS.CONFIRMED,
+  yes: ORDER_STATUS.CONFIRMED,
+  dispatched: ORDER_STATUS.DISPATCHED,
+  delivered: ORDER_STATUS.COMPLETED,
+  complete: ORDER_STATUS.COMPLETED,
+  delayed: ORDER_STATUS.DELAYED,
+  cancelled: ORDER_STATUS.CANCELLED,
+  in_delivery: ORDER_STATUS.IN_DELIVERY,
+  'in delivery': ORDER_STATUS.IN_DELIVERY,
+  returned: ORDER_STATUS.RETURNED,
+  failed: ORDER_STATUS.FAILED,
+  manual_completed: ORDER_STATUS.MANUAL_COMPLETED,
+  'manual completed': ORDER_STATUS.MANUAL_COMPLETED,
+  posted: ORDER_STATUS.POSTED,
 } as const;
 
 const legacyNoAnswerCountMap = {
@@ -287,7 +325,7 @@ const legacyNoAnswerCountMap = {
 } as const;
 
 export function coerceOrderStatus(value: unknown): OrderStatus {
-  if (typeof value === 'number' && orderStatusValues.includes(value as OrderStatus)) {
+  if (typeof value === 'number' && ORDER_STATUS_VALUES.includes(value as OrderStatus)) {
     return value as OrderStatus;
   }
 
@@ -295,11 +333,11 @@ export function coerceOrderStatus(value: unknown): OrderStatus {
     const trimmed = value.trim().toLowerCase();
 
     if (trimmed === '') {
-      return 0;
+      return ORDER_STATUS.NOT_CONTACTED;
     }
 
     const numeric = Number.parseInt(trimmed, 10);
-    if (Number.isInteger(numeric) && orderStatusValues.includes(numeric as OrderStatus)) {
+    if (Number.isInteger(numeric) && ORDER_STATUS_VALUES.includes(numeric as OrderStatus)) {
       return numeric as OrderStatus;
     }
 
@@ -308,11 +346,11 @@ export function coerceOrderStatus(value: unknown): OrderStatus {
     }
   }
 
-  return 0;
+  return ORDER_STATUS.NOT_CONTACTED;
 }
 
 export function coerceNoAnswerCount(status: OrderStatus, count: unknown, legacyStatus?: unknown) {
-  if (status !== 1) {
+  if (status !== ORDER_STATUS.NO_ANSWER) {
     return 0;
   }
 
@@ -344,18 +382,70 @@ export function isConfirmedLifecycleStatus(status: OrderStatus) {
 }
 
 const ALLOWED_ORDER_STATUS_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
-  0: [1, 2, 6, 10],
-  1: [2, 6, 10],
-  2: [3, 4, 5, 6, 7, 8, 9, 10, 11],
-  3: [4, 5, 7, 8, 9, 10],
-  4: [],
-  5: [2, 3, 4, 6, 7, 8, 9, 10, 11],
-  6: [],
-  7: [3, 4, 5, 8, 9, 10],
-  8: [],
-  9: [],
-  10: [],
-  11: [3, 4, 5, 6, 7, 8, 9, 10],
+  [ORDER_STATUS.NOT_CONTACTED]: [
+    ORDER_STATUS.NO_ANSWER,
+    ORDER_STATUS.CONFIRMED,
+    ORDER_STATUS.CANCELLED,
+    ORDER_STATUS.MANUAL_COMPLETED,
+  ],
+  [ORDER_STATUS.NO_ANSWER]: [
+    ORDER_STATUS.CONFIRMED,
+    ORDER_STATUS.CANCELLED,
+    ORDER_STATUS.MANUAL_COMPLETED,
+  ],
+  [ORDER_STATUS.CONFIRMED]: [
+    ORDER_STATUS.DISPATCHED,
+    ORDER_STATUS.COMPLETED,
+    ORDER_STATUS.DELAYED,
+    ORDER_STATUS.CANCELLED,
+    ORDER_STATUS.IN_DELIVERY,
+    ORDER_STATUS.RETURNED,
+    ORDER_STATUS.FAILED,
+    ORDER_STATUS.MANUAL_COMPLETED,
+    ORDER_STATUS.POSTED,
+  ],
+  [ORDER_STATUS.DISPATCHED]: [
+    ORDER_STATUS.COMPLETED,
+    ORDER_STATUS.DELAYED,
+    ORDER_STATUS.IN_DELIVERY,
+    ORDER_STATUS.RETURNED,
+    ORDER_STATUS.FAILED,
+    ORDER_STATUS.MANUAL_COMPLETED,
+  ],
+  [ORDER_STATUS.COMPLETED]: [],
+  [ORDER_STATUS.DELAYED]: [
+    ORDER_STATUS.CONFIRMED,
+    ORDER_STATUS.DISPATCHED,
+    ORDER_STATUS.COMPLETED,
+    ORDER_STATUS.CANCELLED,
+    ORDER_STATUS.IN_DELIVERY,
+    ORDER_STATUS.RETURNED,
+    ORDER_STATUS.FAILED,
+    ORDER_STATUS.MANUAL_COMPLETED,
+    ORDER_STATUS.POSTED,
+  ],
+  [ORDER_STATUS.CANCELLED]: [],
+  [ORDER_STATUS.IN_DELIVERY]: [
+    ORDER_STATUS.DISPATCHED,
+    ORDER_STATUS.COMPLETED,
+    ORDER_STATUS.DELAYED,
+    ORDER_STATUS.RETURNED,
+    ORDER_STATUS.FAILED,
+    ORDER_STATUS.MANUAL_COMPLETED,
+  ],
+  [ORDER_STATUS.RETURNED]: [],
+  [ORDER_STATUS.FAILED]: [],
+  [ORDER_STATUS.MANUAL_COMPLETED]: [],
+  [ORDER_STATUS.POSTED]: [
+    ORDER_STATUS.DISPATCHED,
+    ORDER_STATUS.COMPLETED,
+    ORDER_STATUS.DELAYED,
+    ORDER_STATUS.CANCELLED,
+    ORDER_STATUS.IN_DELIVERY,
+    ORDER_STATUS.RETURNED,
+    ORDER_STATUS.FAILED,
+    ORDER_STATUS.MANUAL_COMPLETED,
+  ],
 };
 
 export function canTransitionOrderStatus(from: OrderStatus, to: OrderStatus) {

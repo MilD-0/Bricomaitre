@@ -207,7 +207,7 @@ describe('app/api/assets/route', () => {
         productIds: [9],
         brandIds: [],
         categoryIds: [],
-        showAtTopOfProductsPage: true,
+        prioritizeRecommendations: true,
         active: true,
       },
     } as never);
@@ -237,7 +237,7 @@ describe('app/api/assets/route', () => {
       link: '/products?featured=1',
       active: true,
       sortOrder: 2,
-      showAtTopOfProductsPage: true,
+      prioritizeRecommendations: true,
     });
   });
 });

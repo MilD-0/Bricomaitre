@@ -31,7 +31,7 @@
     "test:integration": "pnpm test:contract",
     "test:services": "vitest run --project service-integration-node",
     "test:redis:ai": "vitest run --project redis-integration-node --maxWorkers=1",
-    "eval:ai:wide": "tsx admin-ai-wide-eval.ts",
+    "eval:ai": "tsx scripts/run-ai-evals.ts",
     "test:browser": "playwright test"
   },
   "dependencies": {

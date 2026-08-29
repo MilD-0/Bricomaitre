@@ -42,7 +42,7 @@ function createTransaction(current: Record<string, unknown>) {
 function currentOrder(status = 2) {
   return {
     id: 7,
-    confirmed: status,
+    inHouseStatus: status,
     noAnswerCount: 0,
     confirmedAt: null,
     confirmedBy: null,
@@ -67,7 +67,7 @@ describe('canonical order updates', () => {
       expect.objectContaining({
         table: orders,
         values: expect.objectContaining({
-          confirmed: 11,
+          inHouseStatus: 11,
           noAnswerCount: 0,
           confirmedAt: now,
           confirmedBy: 'ops@example.com',
@@ -106,7 +106,7 @@ describe('canonical order updates', () => {
         actor: { email: 'ops@example.com', name: 'Ops' },
       }),
     ).resolves.toMatchObject({ statusChanged: true });
-    expect(updates[0]?.values).toMatchObject({ confirmed: 2 });
+    expect(updates[0]?.values).toMatchObject({ inHouseStatus: 2 });
     expect(inserts).toContainEqual(
       expect.objectContaining({
         table: orderStatusHistory,

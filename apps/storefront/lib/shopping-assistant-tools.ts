@@ -238,7 +238,7 @@ export function buildShoppingAssistantTools(input: {
     }),
     inspect_products: tool({
       description:
-        'Inspect exact public products in detail. Targets may identify a product by ID or token, or refer to the product or campaign on the customer’s current page. Call again whenever more products need inspection.',
+        'Inspect exact public products in detail. Only the current_page target can return the landing-page campaign document; catalog search and ID or token targets return product facts only. Call again whenever more products need inspection.',
       inputSchema: shoppingAssistantProductLookupSchema,
       execute: async ({ targets }) => {
         const cards = await loadProductCards();

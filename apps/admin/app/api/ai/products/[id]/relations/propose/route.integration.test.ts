@@ -95,9 +95,9 @@ describe('admin product relation AI proposal route', () => {
   it('rejects a generated relation when catalog evidence is too weak', async () => {
     const { UnsupportedProductRelationError } =
       await import('../../../../../../../lib/ai-product-knowledge');
-    mocks.propose.mockRejectedValue(
-      new UnsupportedProductRelationError('Insufficient relationship evidence.'),
-    );
+    const error = new UnsupportedProductRelationError();
+    error.message = 'Insufficient relationship evidence.';
+    mocks.propose.mockRejectedValue(error);
 
     const response = await POST(request({ targetProductId: 2 }), {
       params: Promise.resolve({ id: '1' }),

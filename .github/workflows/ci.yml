@@ -145,6 +145,67 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  admin-browser-acceptance:
+    name: Admin browser acceptance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-bookworm@sha256:60f4761b9035e0b8d5218f701a8c3382f641bf12b1604822574cf5be3baeb537
+        env:
+          POSTGRES_DB: bricomaitre_browser
+          POSTGRES_USER: bricomaitre
+          POSTGRES_PASSWORD: bricomaitre
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bricomaitre -d bricomaitre_browser"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-bookworm@sha256:e9b2e45ecd47fbb69b877cf8d045d5cccaaaed52524b6e098b4abe8212994f73
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://bricomaitre:bricomaitre@127.0.0.1:5432/bricomaitre_browser
+      REDIS_URL: redis://127.0.0.1:6379/0
+      BETTER_AUTH_SECRET: ci-browser-verification-secret-1234567890
+      BETTER_AUTH_URL: http://localhost:3000
+      GOOGLE_CLIENT_ID: ci-browser-client
+      GOOGLE_CLIENT_SECRET: ci-browser-secret
+      ADMIN_EMAILS: playwright@bricomaitre.invalid
+      ADMIN_PLAYWRIGHT_EMAIL: playwright@bricomaitre.invalid
+      ADMIN_PLAYWRIGHT_STORAGE_STATE: ${{ github.workspace }}/apps/admin/test-results/auth.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - name: Prepare authenticated Admin database
+        run: |
+          pnpm --filter @bric/admin db:migrate
+          pnpm --filter @bric/admin exec tsx scripts/create-playwright-session.ts
+      - name: Install Chromium
+        run: pnpm --filter @bric/admin exec playwright install --with-deps chromium
+      - name: Run Admin browser acceptance tests
+        run: ops/scripts/run-ci-check.sh "Admin browser acceptance tests" pnpm test:admin:browser
+      - name: Upload Admin browser diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: admin-browser-diagnostics
+          path: |
+            apps/admin/playwright-report
+            apps/admin/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
   browser-performance:
     name: Browser performance budgets
     runs-on: ubuntu-24.04
@@ -199,6 +260,7 @@ jobs:
       - service-contracts
       - tests
       - browser-acceptance
+      - admin-browser-acceptance
       - browser-performance
       - production-builds
     runs-on: ubuntu-24.04

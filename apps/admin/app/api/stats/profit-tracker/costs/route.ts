@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
-import { refreshAnalytics2FactsAfterMutation } from '../../../../../lib/analytics2-facts';
+import { refreshAnalyticsFactsAfterMutation } from '../../../../../lib/analytics-facts';
 import {
   createProfitTrackerCost,
   listProfitTrackerCosts,
@@ -30,6 +30,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
   const data = await createProfitTrackerCost(parsed.data);
-  await refreshAnalytics2FactsAfterMutation();
+  await refreshAnalyticsFactsAfterMutation();
   return NextResponse.json({ data });
 }

@@ -1,4 +1,10 @@
 {
   "version": 1,
-  "exceptions": []
+  "exceptions": [
+    {
+      "migration": "0088_petite_enchantress.sql",
+      "sha256": "26f02b2b0c6a8e6e763499ec85526ab72209da603dd26d58b7f0bcc62bc9f815",
+      "reason": "The previous runtime already validates catalog prices, inventory, availability, counters, and scores within these domains before writing."
+    }
+  ]
 }

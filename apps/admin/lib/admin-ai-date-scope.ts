@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { dayInTimezone } from './analytics2/date-range';
+import { dayInTimezone } from './analytics/date-range';
 
 export const adminAiDateScopeSchema = z
   .discriminatedUnion('kind', [

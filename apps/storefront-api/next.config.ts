@@ -12,15 +12,10 @@ const securityHeaders = [
   {
     key: 'Content-Security-Policy',
     value: [
-      "default-src 'self'",
-      "base-uri 'self'",
+      "default-src 'none'",
+      "base-uri 'none'",
       "frame-ancestors 'none'",
-      "form-action 'self'",
-      "img-src 'self' data: blob: https:",
-      "font-src 'self' data: https:",
-      "style-src 'self' 'unsafe-inline' https:",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:",
-      "connect-src 'self' https:",
+      "form-action 'none'",
     ].join('; '),
   },
 ];

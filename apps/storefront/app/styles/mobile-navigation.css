@@ -171,6 +171,22 @@
 .support-contact-drawer .support-contact-action {
   min-height: 2.25rem;
 }
+
+@media (max-width: 430px) {
+  .support-contact {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .support-contact-actions {
+    width: 100%;
+  }
+  .support-contact-action {
+    flex: 1 1 auto;
+  }
+  .support-contact-drawer .support-contact-actions {
+    justify-content: stretch;
+  }
+}
 .navigation-drawer-cart-summary {
   min-height: 3.5rem;
   display: grid;
@@ -221,4 +237,23 @@
 }
 .navigation-drawer-locale-toggle {
   display: none;
+}
+
+@media (max-width: 620px) {
+  .navigation-drawer-locale-toggle {
+    display: grid;
+    min-height: 2.2rem;
+    grid-template-columns: repeat(2, 2.15rem);
+    padding: 0.16rem;
+  }
+  .navigation-drawer-locale-toggle .navigation-locale-indicator {
+    inset-block: 0.16rem;
+    inset-inline-start: 0.16rem;
+    width: 2.15rem;
+  }
+  .navigation-drawer-locale-toggle .navigation-locale-option {
+    min-width: 2.15rem;
+    min-height: 1.75rem;
+    font-size: 0.72rem;
+  }
 }

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { refreshAnalytics2FactsAfterMutation } from '../../../../../../lib/analytics2-facts';
+import { refreshAnalyticsFactsAfterMutation } from '../../../../../../lib/analytics-facts';
 import {
   deleteProfitTrackerCost,
   profitTrackerCostSchema,
@@ -31,7 +31,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
   const row = await updateProfitTrackerCost(id, parsed.data);
-  if (row) await refreshAnalytics2FactsAfterMutation();
+  if (row) await refreshAnalyticsFactsAfterMutation();
   return row
     ? NextResponse.json({ data: row })
     : NextResponse.json({ error: 'Operating cost not found' }, { status: 404 });
@@ -48,7 +48,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     return NextResponse.json({ error: 'Invalid operating-cost id' }, { status: 400 });
   }
   const deleted = await deleteProfitTrackerCost(id);
-  if (deleted) await refreshAnalytics2FactsAfterMutation();
+  if (deleted) await refreshAnalyticsFactsAfterMutation();
   return deleted
     ? NextResponse.json({ data: { id: deleted } })
     : NextResponse.json({ error: 'Operating cost not found' }, { status: 404 });

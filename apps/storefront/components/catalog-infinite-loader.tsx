@@ -112,6 +112,7 @@ export function CatalogInfiniteLoader({
   };
 }) {
   const normalizedQuery = useMemo(() => parseCatalogPageQuery(query), [query]);
+  const restoresCatalogPosition = listContext === 'catalog';
   const [items, setItems] = useState<CatalogProduct[]>([]);
   const [hasNextPage, setHasNextPage] = useState(initialHasNextPage);
   const [loading, setLoading] = useState(false);
@@ -124,6 +125,14 @@ export function CatalogInfiniteLoader({
   const hasNextPageRef = useRef(initialHasNextPage);
 
   useEffect(() => {
+    if (!restoresCatalogPosition) {
+      itemsRef.current = [];
+      pageRef.current = normalizedQuery.page;
+      hasNextPageRef.current = initialHasNextPage;
+      restoringRef.current = false;
+      return;
+    }
+
     const previousRestoration = history.scrollRestoration;
     history.scrollRestoration = 'manual';
     const stored = readStoredState();
@@ -152,9 +161,17 @@ export function CatalogInfiniteLoader({
     return () => {
       history.scrollRestoration = previousRestoration;
     };
-  }, [initialHasNextPage, initialProductIds, normalizedQuery.page, totalCount]);
+  }, [
+    initialHasNextPage,
+    initialProductIds,
+    normalizedQuery.page,
+    restoresCatalogPosition,
+    totalCount,
+  ]);
 
   useEffect(() => {
+    if (!restoresCatalogPosition) return;
+
     let frame = 0;
     function persist() {
       if (restoringRef.current) return;
@@ -178,7 +195,7 @@ export function CatalogInfiniteLoader({
       window.removeEventListener('scroll', handleScroll);
       window.removeEventListener('pagehide', persist);
     };
-  }, [totalCount]);
+  }, [restoresCatalogPosition, totalCount]);
 
   const loadNextPage = useCallback(async () => {
     if (loadingRef.current || !hasNextPageRef.current) return;
@@ -213,13 +230,15 @@ export function CatalogInfiniteLoader({
       hasNextPageRef.current = payload.hasNextPage;
       setItems(appendedItems);
       setHasNextPage(payload.hasNextPage);
-      writeStoredState({
-        items: appendedItems.slice(0, MAX_PERSISTED_ITEMS),
-        page: nextPage,
-        hasNextPage: payload.hasNextPage,
-        totalCount,
-        scrollY: window.scrollY,
-      });
+      if (restoresCatalogPosition) {
+        writeStoredState({
+          items: appendedItems.slice(0, MAX_PERSISTED_ITEMS),
+          page: nextPage,
+          hasNextPage: payload.hasNextPage,
+          totalCount,
+          scrollY: window.scrollY,
+        });
+      }
       void trackCatalogEvent({
         eventName: 'view_item_list',
         locale,
@@ -237,7 +256,16 @@ export function CatalogInfiniteLoader({
       loadingRef.current = false;
       setLoading(false);
     }
-  }, [initialProductIds, items, listContext, locale, normalizedQuery, pageSize, totalCount]);
+  }, [
+    initialProductIds,
+    items,
+    listContext,
+    locale,
+    normalizedQuery,
+    pageSize,
+    restoresCatalogPosition,
+    totalCount,
+  ]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;

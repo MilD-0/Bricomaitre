@@ -209,12 +209,15 @@ describe('admin AI direct product updates', () => {
   });
 
   it('reports invalid merged promo economics without hiding successful sibling updates', async () => {
-    const result = await updateAdminAiProducts({
-      items: [
-        { productId: 12, changes: { title: 'Perceuse Pro' } },
-        { productId: 13, changes: { price: 80 } },
-      ],
-    });
+    const result = await updateAdminAiProducts(
+      {
+        items: [
+          { productId: 12, changes: { title: 'Perceuse Pro' } },
+          { productId: 13, changes: { price: 80 } },
+        ],
+      },
+      { email: 'admin@example.com', name: 'Admin' },
+    );
 
     expect(result).toMatchObject({
       ok: false,
@@ -234,7 +237,10 @@ describe('admin AI direct product updates', () => {
   });
 
   it('does not refresh storefront or catalog feeds when every update is rejected', async () => {
-    await updateAdminAiProducts({ items: [{ productId: 12, changes: { price: 80 } }] });
+    await updateAdminAiProducts(
+      { items: [{ productId: 12, changes: { price: 80 } }] },
+      { email: 'admin@example.com', name: 'Admin' },
+    );
     expect(mocks.replace).not.toHaveBeenCalled();
     expect(mocks.revalidateProducts).not.toHaveBeenCalled();
     expect(mocks.startFeed).not.toHaveBeenCalled();

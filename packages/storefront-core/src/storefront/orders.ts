@@ -413,12 +413,12 @@ export async function updateStorefrontOrder(
     });
   }
 
-  let nextDeliveryFee = Number(access.order.delPr ?? 0);
+  let nextDeliveryFee = Number(access.order.deliveryFee ?? 0);
   if (shouldResolveDeliveryFee) {
     const nextDelivery = coerceDeliveryType(changes.delivery ?? access.order.delivery);
     const nextState = changes.state !== undefined ? changes.state : access.order.state;
     nextDeliveryFee = await readEcotrackDeliveryFee(db, nextState, nextDelivery);
-    update.delPr = nextDeliveryFee.toFixed(2);
+    update.deliveryFee = nextDeliveryFee.toFixed(2);
   }
 
   if (!nextCommercial && shouldResolveDeliveryFee) {

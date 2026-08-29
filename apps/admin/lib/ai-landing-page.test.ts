@@ -223,16 +223,16 @@ function editRunner(options?: {
         },
         blocks: [
           {
-            mode: 'generate',
+            mode: 'generate' as const,
             blockId: options?.unknownBlock ? 'missing-hero' : 'hero',
-            type: 'product-hero',
+            type: 'product-hero' as const,
             purpose: 'Rewrite the hero for mobile mechanics.',
-            surface: 'dark',
-            width: 'full',
+            surface: 'dark' as const,
+            width: 'full' as const,
           },
-          { mode: 'preserve', blockId: 'benefits' },
-          { mode: 'preserve', blockId: 'feature' },
-          { mode: 'preserve', blockId: 'final' },
+          { mode: 'preserve' as const, blockId: 'benefits' },
+          { mode: 'preserve' as const, blockId: 'feature' },
+          { mode: 'preserve' as const, blockId: 'final' },
         ].filter((slot) =>
           options?.omitUnmentionedBlocks
             ? slot.blockId === 'hero' || slot.blockId === 'final'
@@ -552,7 +552,7 @@ describe('AI landing-page output guardrails', () => {
   });
 
   it('reapplies asset and indexing guardrails to injected generator results', async () => {
-    const generated = generatedDocument();
+    const generated = normalizeGeneratedLandingPage(generatedDocument(), [verifiedImage]);
     const result = await generateLandingPageDraft({
       generator: {
         generate: async () => ({

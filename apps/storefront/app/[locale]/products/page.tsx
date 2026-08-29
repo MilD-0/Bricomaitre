@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 
+import '../../styles/catalog.css';
+
 import {
   CatalogNoScriptCatalog,
   CatalogPageContent,

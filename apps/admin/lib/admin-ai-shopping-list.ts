@@ -129,7 +129,7 @@ async function loadStatusOrders(status: number) {
   let page = 1;
   let totalPages = 1;
   do {
-    const result = await loadOrdersPageData({ page, limit: 100, confirmed: status }, false);
+    const result = await loadOrdersPageData({ page, limit: 100, inHouseStatus: status }, false);
     items.push(...result.items);
     totalPages = result.pagination.totalPages;
     page += 1;

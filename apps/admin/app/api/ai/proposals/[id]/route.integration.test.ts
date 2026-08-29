@@ -33,8 +33,7 @@ vi.mock('../../../../../lib/ai-product-content', () => ({
   AiProposalConflictError: class AiProposalConflictError extends Error {},
   reviewProductContentProposal: mocks.review,
 }));
-vi.mock('../../../../../lib/ai-admin-capabilities', () => ({
-  AiAdminCapabilityError: class AiAdminCapabilityError extends Error {},
+vi.mock('../../../../../lib/ai-product-category-proposals', () => ({
   reviewProductCategoryProposal: mocks.reviewAdmin,
 }));
 vi.mock('../../../../../lib/background-jobs', () => ({

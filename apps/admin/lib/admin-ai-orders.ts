@@ -204,7 +204,7 @@ export async function updateAdminOrderStatuses(
         db,
         item.orderId,
         {
-          confirmed: status,
+          inHouseStatus: status,
           ...(item.status === 'no_answer' ? { noAnswerCount: item.noAnswerCount } : {}),
         },
         actor,
@@ -213,11 +213,11 @@ export async function updateAdminOrderStatuses(
       const previousStatus =
         updated.statusHistory.length > 1
           ? updated.statusHistory.at(-2)!.status
-          : (updated.statusHistory[0]?.status ?? updated.confirmed);
+          : (updated.statusHistory[0]?.status ?? updated.inHouseStatus);
       items.push({
         orderId: item.orderId,
         previousStatus,
-        status: updated.confirmed,
+        status: updated.inHouseStatus,
         statusLabel: item.status,
         noAnswerCount: updated.noAnswerCount,
       });

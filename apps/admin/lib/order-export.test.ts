@@ -59,6 +59,7 @@ const order: OrderRecord = {
   state: 16,
   city: '42',
   homeAddress: 'Street 21',
+  subtotalOverride: null,
   productSubtotal: 4000,
   deliveryFee: 200,
   totalAmount: 4200,

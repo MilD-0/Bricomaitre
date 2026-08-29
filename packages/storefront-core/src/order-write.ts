@@ -40,7 +40,7 @@ type CanonicalOrderUpdateValues = Omit<
   | 'promoOriginalSubtotal'
   | 'promoDiscountAmount'
   | 'promoFinalSubtotal'
-  | 'confirmed'
+  | 'inHouseStatus'
   | 'noAnswerCount'
 >;
 
@@ -62,11 +62,11 @@ export async function insertCanonicalOrder(
   },
 ) {
   const now = input.now ?? new Date();
-  const status = coerceOrderStatus(input.values.confirmed);
+  const status = coerceOrderStatus(input.values.inHouseStatus);
   const noAnswerCount = coerceNoAnswerCount(
     status,
     input.values.noAnswerCount,
-    input.values.confirmed,
+    input.values.inHouseStatus,
   );
   const [order] = await tx
     .insert(orders)
@@ -74,8 +74,8 @@ export async function insertCanonicalOrder(
       ...input.values,
       ...buildOrderCommercialValues(input.commercial, input.deliveryFee),
       normalizedPhone: normalizeAlgeriaPhone(input.values.phoneNumber1),
-      delPr: input.deliveryFee.toFixed(2),
-      confirmed: status,
+      deliveryFee: input.deliveryFee.toFixed(2),
+      inHouseStatus: status,
       noAnswerCount,
       createdAt: input.values.createdAt ?? now,
       updatedAt: input.values.updatedAt ?? now,
@@ -146,7 +146,7 @@ export async function updateCanonicalOrder(
   }
   update.updatedAt = now;
 
-  const previousStatus = coerceOrderStatus(current.confirmed);
+  const previousStatus = coerceOrderStatus(current.inHouseStatus);
   const nextStatus = input.status?.value ?? previousStatus;
   if (!input.allowStatusCorrection) {
     assertOrderStatusTransition(previousStatus, nextStatus);
@@ -154,18 +154,18 @@ export async function updateCanonicalOrder(
   const previousNoAnswerCount = coerceNoAnswerCount(
     previousStatus,
     current.noAnswerCount,
-    current.confirmed,
+    current.inHouseStatus,
   );
   const nextNoAnswerCount = input.status
     ? nextStatus === 1
-      ? coerceNoAnswerCount(nextStatus, input.status.noAnswerCount, current.confirmed)
+      ? coerceNoAnswerCount(nextStatus, input.status.noAnswerCount, current.inHouseStatus)
       : 0
     : previousNoAnswerCount;
   const statusChanged =
     nextStatus !== previousStatus || nextNoAnswerCount !== previousNoAnswerCount;
 
   if (input.status) {
-    update.confirmed = nextStatus;
+    update.inHouseStatus = nextStatus;
     update.noAnswerCount = nextNoAnswerCount;
     if (isConfirmedLifecycleStatus(nextStatus) && !current.confirmedAt) {
       update.confirmedAt = now;

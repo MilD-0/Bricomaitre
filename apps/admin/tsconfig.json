@@ -8,7 +8,6 @@
       "@bric/storefront-core/*": ["../../packages/storefront-core/src/*"],
       "drizzle-orm": ["./node_modules/drizzle-orm"],
       "drizzle-orm/*": ["./node_modules/drizzle-orm/*"],
-      "pg": ["./node_modules/pg"],
       "next": ["./node_modules/next"],
       "next/*": ["./node_modules/next/*"],
       "zod": ["./node_modules/zod"],

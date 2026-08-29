@@ -454,7 +454,7 @@ describe('AdminAiChat', () => {
     );
   });
 
-  it('renders canonical Analytics2 metrics, source health, and data notes', async () => {
+  it('renders canonical Analytics metrics, source health, and data notes', async () => {
     vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
       const url = String(input);
       if (url === '/api/ai/conversations')
@@ -475,7 +475,7 @@ describe('AdminAiChat', () => {
                   warning: 'Workspace values were recomputed over their shared effective range.',
                   results: [
                     {
-                      kind: 'analytics2',
+                      kind: 'analytics',
                       query: 'catalog',
                       view: 'catalog',
                       filters: {

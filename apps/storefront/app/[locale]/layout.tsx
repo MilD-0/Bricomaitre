@@ -3,6 +3,12 @@ import localFont from 'next/font/local';
 import { setRequestLocale } from 'next-intl/server';
 import { Suspense } from 'react';
 
+import '../styles/site-navigation.css';
+import '../styles/shopping-assistant.css';
+import '../styles/mobile-navigation.css';
+import '../styles/cart-drawer.css';
+import '../styles/shared-content.css';
+
 import { isLocale, isRtl, locales } from '@/i18n/config';
 import { MarketingPixels } from '@/components/marketing-pixels';
 import { PageViewTelemetry } from '@/components/page-view-telemetry';

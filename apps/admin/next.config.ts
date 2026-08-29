@@ -4,6 +4,8 @@ import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs';
 import createNextIntlPlugin from 'next-intl/plugin';
 
+import { ADMIN_API_CONTENT_SECURITY_POLICY } from './lib/content-security-policy';
+
 const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 const appRoot = path.dirname(fileURLToPath(import.meta.url));
 const tailwindCssEntry = path.join(appRoot, 'node_modules/tailwindcss/index.css');
@@ -15,20 +17,6 @@ const securityHeaders = [
   {
     key: 'Strict-Transport-Security',
     value: 'max-age=63072000; includeSubDomains; preload',
-  },
-  {
-    key: 'Content-Security-Policy',
-    value: [
-      "default-src 'self'",
-      "base-uri 'self'",
-      "frame-ancestors 'self'",
-      "form-action 'self'",
-      "img-src 'self' data: blob: https:",
-      "font-src 'self' data: https:",
-      "style-src 'self' 'unsafe-inline' https:",
-      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''} https:`,
-      "connect-src 'self' https: wss:",
-    ].join('; '),
   },
 ];
 
@@ -44,6 +32,15 @@ const nextConfig: NextConfig = {
       {
         source: '/:path*',
         headers: securityHeaders,
+      },
+      {
+        source: '/api/:path*',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: ADMIN_API_CONTENT_SECURITY_POLICY,
+          },
+        ],
       },
     ];
   },

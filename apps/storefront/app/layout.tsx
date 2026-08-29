@@ -1,17 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 
 import './globals.css';
-import './styles/site-navigation.css';
-import './styles/shopping-assistant.css';
-import './styles/mobile-navigation.css';
-import './styles/cart-drawer.css';
-import './styles/home.css';
-import './styles/shared-content.css';
-import './styles/product.css';
-import './styles/catalog.css';
-import './styles/checkout.css';
-import './styles/landing-page.css';
-import './styles/skeletons.css';
 
 import { getStorefrontSiteUrl } from '@/lib/site-url';
 

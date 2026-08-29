@@ -9,11 +9,11 @@ const { hasDbMock, requireAnalyticsAccessMock, getDetailsMock } = vi.hoisted(() 
 
 vi.mock('@bric/db/client', () => ({ hasDb: hasDbMock }));
 vi.mock('../../../../lib/rbac', () => ({ requireAnalyticsAccess: requireAnalyticsAccessMock }));
-vi.mock('../../../../lib/analytics2', async () => {
-  const actual = await vi.importActual<typeof import('../../../../lib/analytics2')>(
-    '../../../../lib/analytics2',
+vi.mock('../../../../lib/analytics', async () => {
+  const actual = await vi.importActual<typeof import('../../../../lib/analytics')>(
+    '../../../../lib/analytics',
   );
-  return { ...actual, getAnalytics2StorefrontDetails: getDetailsMock };
+  return { ...actual, getAnalyticsStorefrontDetails: getDetailsMock };
 });
 
 import { GET } from './route';

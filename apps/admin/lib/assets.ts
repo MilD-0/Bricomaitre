@@ -121,7 +121,7 @@ export const featuredProductGroupInputSchema = z.object({
   productIds: z.array(z.coerce.number().int().positive()).default([]),
   brandIds: z.array(z.coerce.number().int().positive()).default([]),
   categoryIds: z.array(z.coerce.number().int().positive()).default([]),
-  showAtTopOfProductsPage: z.boolean().default(false),
+  prioritizeRecommendations: z.boolean().default(false),
   active: z.boolean().default(true),
 });
 
@@ -149,7 +149,7 @@ const shortText = z.string().trim().min(1).max(80);
 const shortDescription = z.string().trim().min(1).max(140);
 const characteristicsSchema = z.array(z.string().trim().min(1).max(80)).min(3);
 
-export const productCardInputSchema = z.object({
+export const productCardSchema = z.object({
   productId: z.coerce.number().int().positive(),
   titleAr: shortText,
   titleFr: shortText,
@@ -159,8 +159,6 @@ export const productCardInputSchema = z.object({
   characteristicsFr: characteristicsSchema,
   active: z.boolean().default(true),
 });
-
-export const productCardSchema = productCardInputSchema;
 
 export const assetReorderSchema = z.object({
   kind: z.enum(['banner', 'featured-group', 'product-card']),
@@ -190,11 +188,11 @@ export const assetActiveToggleSchema = z.strictObject({
 export const featuredProductGroupToggleSchema = z
   .strictObject({
     active: z.boolean().optional(),
-    showAtTopOfProductsPage: z.boolean().optional(),
+    prioritizeRecommendations: z.boolean().optional(),
   })
   .refine(
     (value) =>
-      typeof value.active === 'boolean' || typeof value.showAtTopOfProductsPage === 'boolean',
+      typeof value.active === 'boolean' || typeof value.prioritizeRecommendations === 'boolean',
   );
 
 export const assetProductOptionQuerySchema = z

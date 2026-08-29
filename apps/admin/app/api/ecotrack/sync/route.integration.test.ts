@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET, POST } from './route';
@@ -46,7 +46,9 @@ describe('app/api/ecotrack/sync/route', () => {
       NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
     );
 
-    const response = await POST();
+    const response = await POST(
+      new NextRequest('http://localhost/api/ecotrack/sync', { method: 'POST' }),
+    );
 
     expect(response.status).toBe(403);
   });
@@ -54,7 +56,7 @@ describe('app/api/ecotrack/sync/route', () => {
   it('returns the latest sync job snapshot', async () => {
     getLatestExportJobMock.mockResolvedValue({ id: 'sync-9', status: 'running' });
 
-    const response = await GET();
+    const response = await GET(new NextRequest('http://localhost/api/ecotrack/sync'));
 
     expect(response.status).toBe(200);
     expect(getLatestExportJobMock).toHaveBeenCalledWith('admin-ecotrack-sync', 'ops@example.com');
@@ -63,7 +65,7 @@ describe('app/api/ecotrack/sync/route', () => {
 
   it('queues a manual sync', async () => {
     const response = await POST(
-      new Request('http://localhost/api/ecotrack/sync', { method: 'POST' }),
+      new NextRequest('http://localhost/api/ecotrack/sync', { method: 'POST' }),
     );
 
     expect(startEcotrackSyncJobMock).toHaveBeenCalledWith(
@@ -84,7 +86,9 @@ describe('app/api/ecotrack/sync/route', () => {
       job: { id: 'sync-2', status: 'running' },
     });
 
-    const response = await POST();
+    const response = await POST(
+      new NextRequest('http://localhost/api/ecotrack/sync', { method: 'POST' }),
+    );
 
     expect(response.status).toBe(429);
     await expect(response.json()).resolves.toEqual({

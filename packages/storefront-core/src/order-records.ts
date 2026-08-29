@@ -169,9 +169,9 @@ export function toOrderRecord(
   history: OrderStatusHistoryRecord[] = [],
   productLookup: OrderProductLookup = new OrderProductLookup(),
 ): OrderRecord {
-  const confirmed = coerceOrderStatus(row.confirmed);
-  const noAnswerCount = coerceNoAnswerCount(confirmed, row.noAnswerCount, row.confirmed);
-  const deliveryFee = parseNumericAmount(row.delPr);
+  const inHouseStatus = coerceOrderStatus(row.inHouseStatus);
+  const noAnswerCount = coerceNoAnswerCount(inHouseStatus, row.noAnswerCount, row.inHouseStatus);
+  const deliveryFee = parseNumericAmount(row.deliveryFee);
   const subtotalOverride = row.price === null ? null : parseNumericAmount(row.price);
   const snapshotLines = productLookup.orderLinesByOrderId.get(row.id) ?? [];
   const mutableCatalogProducts = buildOrderProductSummaries(
@@ -268,7 +268,7 @@ export function toOrderRecord(
     promoFinalSubtotal:
       row.promoFinalSubtotal === null ? null : parseNumericAmount(row.promoFinalSubtotal),
     note: row.note,
-    confirmed,
+    inHouseStatus,
     noAnswerCount,
     confirmedBy: row.confirmedBy,
     confirmedByName: row.confirmedByName,
@@ -316,7 +316,7 @@ export function toStorefrontOrderRecord(
     promoDiscountAmount: record.promoDiscountAmount,
     promoFinalSubtotal: record.promoFinalSubtotal,
     note: record.note,
-    confirmed: record.confirmed,
+    confirmed: record.inHouseStatus,
     noAnswerCount: record.noAnswerCount,
     confirmedAt: record.confirmedAt,
     hasStatusHistory: record.hasStatusHistory,

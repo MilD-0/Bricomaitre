@@ -1,4 +1,4 @@
-import { AiStatsRoutePage } from '../../../../../components/analytics2/ai-stats-route-page';
+import { AiStatsRoutePage } from '../../../../../components/analytics/ai-stats-route-page';
 
 export default async function StatsAiAssistantsPage({
   params,

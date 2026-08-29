@@ -266,7 +266,7 @@ export const storefrontAssetsResponseSchema = z.object({
       ctaAr: z.string().nullable(),
       link: z.string().nullable(),
       sortOrder: z.number().int(),
-      showAtTopOfProductsPage: z.boolean(),
+      prioritizeRecommendations: z.boolean(),
       active: z.boolean(),
       productIds: z.array(z.number().int()),
       brandIds: z.array(z.number().int()),

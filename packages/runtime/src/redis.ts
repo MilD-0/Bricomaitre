@@ -9,6 +9,8 @@ type RedisConnectionOptions = RedisOptions & {
   db?: number;
 };
 
+type RedisEnvironment = Readonly<Record<string, string | undefined>>;
+
 const runtimeGlobal = globalThis as typeof globalThis & {
   __bricRedisClients?: Map<string, IORedis>;
 };
@@ -39,7 +41,7 @@ function readNumber(value: string | undefined, fallback: number) {
 }
 
 export function getRedisConnectionOptions(
-  env: NodeJS.ProcessEnv = process.env,
+  env: RedisEnvironment = process.env,
 ): RedisConnectionOptions {
   const url = env.REDIS_URL?.trim();
 
@@ -79,7 +81,7 @@ export function getRedisConnectionOptions(
 }
 
 export function getRequestRedisConnectionOptions(
-  env: NodeJS.ProcessEnv = process.env,
+  env: RedisEnvironment = process.env,
 ): RedisConnectionOptions {
   return {
     ...getRedisConnectionOptions(env),

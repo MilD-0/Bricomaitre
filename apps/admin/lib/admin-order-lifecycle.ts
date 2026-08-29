@@ -134,6 +134,6 @@ export async function deleteAdminOrder(db: Database, orderId: number, actor?: Ac
     id: orderId,
     customerName: existing.fullName,
     phoneNumber: existing.phoneNumber1,
-    status: existing.confirmed,
+    status: existing.inHouseStatus,
   };
 }

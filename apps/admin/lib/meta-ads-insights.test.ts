@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-const { refreshAnalytics2FactsMock, syncProfitTrackerMetaRowsMock } = vi.hoisted(() => ({
-  refreshAnalytics2FactsMock: vi.fn().mockResolvedValue({ dailyFacts: 0 }),
+const { refreshAnalyticsFactsMock, syncProfitTrackerMetaRowsMock } = vi.hoisted(() => ({
+  refreshAnalyticsFactsMock: vi.fn().mockResolvedValue({ dailyFacts: 0 }),
   syncProfitTrackerMetaRowsMock: vi.fn().mockResolvedValue([]),
 }));
 
@@ -9,8 +9,8 @@ vi.mock('./profit-tracker', () => ({
   syncProfitTrackerMetaRows: syncProfitTrackerMetaRowsMock,
 }));
 
-vi.mock('./analytics2-facts', () => ({
-  refreshAnalytics2Facts: refreshAnalytics2FactsMock,
+vi.mock('./analytics-facts', () => ({
+  refreshAnalyticsFacts: refreshAnalyticsFactsMock,
 }));
 
 function emptyMetaPage() {
@@ -360,7 +360,7 @@ describe('Meta Ads Insights ingestion', () => {
       syncedAt: new Date('2026-08-17T00:00:00.000Z'),
     });
     expect(updateWhere).toHaveBeenCalledOnce();
-    expect(refreshAnalytics2FactsMock).toHaveBeenCalledWith({
+    expect(refreshAnalyticsFactsMock).toHaveBeenCalledWith({
       db,
       now: new Date('2026-08-17T00:00:00.000Z'),
     });

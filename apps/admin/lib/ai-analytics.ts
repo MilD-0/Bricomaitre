@@ -5,16 +5,16 @@ import { getDb } from '@bric/db/client';
 import { ecotrackOrderStates, orders, orderStatusHistory } from '@bric/db/schema';
 
 import {
-  analytics2QuerySchema,
-  getAnalytics2Data,
-  type Analytics2Payload,
-  type Analytics2Query,
-  type Analytics2View,
-} from './analytics2';
+  analyticsQuerySchema,
+  getAnalyticsData,
+  type AnalyticsPayload,
+  type AnalyticsQuery,
+  type AnalyticsView,
+} from './analytics';
 import { analyticsMetricsForAssistant } from './admin-ai-analytics-contract';
 import {
   adminAiAnalyticsFocusSchemaForView,
-  focusAnalytics2ForAssistant,
+  focusAnalyticsForAssistant,
   type AdminAiAnalyticsFocus,
 } from './admin-ai-analytics-focus';
 import { adminAiDateScopeSchema, canonicalAdminAiDateQuery } from './admin-ai-date-scope';
@@ -67,13 +67,13 @@ function compactValue(
   return value;
 }
 
-export function compactAnalytics2ForAssistant(
-  payload: Analytics2Payload,
+export function compactAnalyticsForAssistant(
+  payload: AnalyticsPayload,
   focus?: AdminAiAnalyticsFocus,
 ) {
   const truncations: AnalyticsTruncation[] = [];
   const metrics = analyticsMetricsForAssistant(payload);
-  const focusedDataset = focus ? focusAnalytics2ForAssistant(payload, focus) : null;
+  const focusedDataset = focus ? focusAnalyticsForAssistant(payload, focus) : null;
   const summary =
     payload.data && typeof payload.data === 'object' && 'summary' in payload.data
       ? payload.data.summary
@@ -89,7 +89,7 @@ export function compactAnalytics2ForAssistant(
     focus?.limit ?? ADMIN_AI_ANALYTICS_ARRAY_LIMIT,
   );
   return {
-    kind: 'analytics2' as const,
+    kind: 'analytics' as const,
     responseContractVersion: 6 as const,
     // Kept as a string for the current generic tool-result card. `view` is authoritative.
     query: payload.view,
@@ -120,7 +120,7 @@ const adminAiAnalyticsSourceCoverageSchema = z
     'Optional source-coverage drilldown. Use to explain the canonical EcoTrack coverage percentage or inspect its missing posted orders. It returns the exact denominator, gap reasons, and bounded missing-order rows.',
   );
 
-function adminAiAnalyticsQuerySchemaForView<const View extends Analytics2View>(view: View) {
+function adminAiAnalyticsQuerySchemaForView<const View extends AnalyticsView>(view: View) {
   return z
     .object({
       view: z.literal(view),
@@ -180,7 +180,7 @@ async function loadEcotrackSourceCoverage(input: {
         first_posted.order_id,
         first_posted.posted_at,
         first_posted.posted_day,
-        ${orders.confirmed} as local_status,
+        ${orders.inHouseStatus} as local_status,
         ${orders.ecotrackReference} as local_reference,
         ${orders.ecotrackTrackingNumber} as local_tracking_number,
         active_state.id as active_state_id,
@@ -291,14 +291,14 @@ export async function queryAdminAnalytics(raw: unknown) {
         identifiers: focus.identifiers ?? [],
       } satisfies AdminAiAnalyticsFocus)
     : undefined;
-  const query = analytics2QuerySchema.parse({
+  const query = analyticsQuerySchema.parse({
     ...queryOptions,
     ...canonicalAdminAiDateQuery(date),
-  }) as Analytics2Query;
-  const payload = await getAnalytics2Data(query, {
+  }) as AnalyticsQuery;
+  const payload = await getAnalyticsData(query, {
     includeStorefrontDetails: query.view === 'storefront',
   });
-  const compact = compactAnalytics2ForAssistant(payload, normalizedFocus);
+  const compact = compactAnalyticsForAssistant(payload, normalizedFocus);
   if (!sourceCoverage) return compact;
   return {
     ...compact,

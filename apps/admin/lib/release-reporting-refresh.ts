@@ -1,14 +1,14 @@
-import { refreshAnalytics2Facts } from './analytics2-facts';
+import { refreshAnalyticsFacts } from './analytics-facts';
 import { refreshAdminReportingSnapshots } from './stats';
 
 type ReleaseReportingRefreshDependencies = {
   refreshSnapshots: typeof refreshAdminReportingSnapshots;
-  refreshFacts: typeof refreshAnalytics2Facts;
+  refreshFacts: typeof refreshAnalyticsFacts;
 };
 
 const defaultDependencies: ReleaseReportingRefreshDependencies = {
   refreshSnapshots: refreshAdminReportingSnapshots,
-  refreshFacts: refreshAnalytics2Facts,
+  refreshFacts: refreshAnalyticsFacts,
 };
 
 export async function refreshReleaseReporting(
