@@ -45,11 +45,15 @@ describe('navigation access', () => {
   });
 
   it('derives AI proposal review from existing catalog ownership', () => {
-    for (const permission of [
-      'products_write',
-      'assets_write',
-      'brands_categories_write',
-    ] as const) {
+    expect(
+      canAccessNavigationItem({
+        isAllowed: true,
+        key: 'aiProposals',
+        permissions: ['products_write'],
+        role: 'employee',
+      }),
+    ).toBe(true);
+    for (const permission of ['assets_write', 'brands_categories_write', 'orders_write'] as const) {
       expect(
         canAccessNavigationItem({
           isAllowed: true,
@@ -57,15 +61,7 @@ describe('navigation access', () => {
           permissions: [permission],
           role: 'employee',
         }),
-      ).toBe(true);
+      ).toBe(false);
     }
-    expect(
-      canAccessNavigationItem({
-        isAllowed: true,
-        key: 'aiProposals',
-        permissions: ['orders_write'],
-        role: 'employee',
-      }),
-    ).toBe(false);
   });
 });

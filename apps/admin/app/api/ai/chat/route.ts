@@ -1,5 +1,5 @@
 import { createAiLanguageModel, getAiConfig } from '@bric/ai-core';
-import { generateText, stepCountIs, streamText, tool, type ToolSet } from 'ai';
+import { generateText, stepCountIs, streamText, type ToolSet } from 'ai';
 import { and, desc, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -7,94 +7,15 @@ import { getDb, hasDb } from '@bric/db/client';
 import { aiConversations, aiMessages, aiRuns, aiToolCalls } from '@bric/db/schema';
 
 import {
-  ADMIN_AI_GUIDANCE_TOOL_DESCRIPTION,
   ADMIN_AI_CHAT_PROMPT_VERSION,
-  type AdminAiGuidanceTopic,
   adminAiApplicationDate,
   adminAiChatRequestSchema,
   adminAiCompletedMutationNarrationFailure,
   adminAiConversationTitle,
-  adminAiGuidanceRequestSchemaForTopics,
   adminAiReliableAnswerFailure,
   adminAiRuntimeInstructions,
   adminAiToolErrorCode,
-  readAdminAiGuidanceForTopics,
 } from '../../../../lib/admin-ai-runtime';
-import {
-  ADMIN_AI_FIND_PRODUCTS_TOOL_DESCRIPTION,
-  ADMIN_AI_INSPECT_ARCHIVED_PRODUCTS_TOOL_DESCRIPTION,
-  ADMIN_AI_INSPECT_PRODUCTS_TOOL_DESCRIPTION,
-  adminAiArchivedCatalogProductInspectionSchema,
-  adminAiCatalogProductInspectionSchema,
-  adminAiCatalogProductLookupSchema,
-  findAdminCatalogProducts,
-  inspectAdminArchivedCatalogProducts,
-  inspectAdminCatalogProducts,
-} from '../../../../lib/admin-ai-catalog';
-import {
-  ADMIN_AI_FIND_BRANDS_TOOL_DESCRIPTION,
-  ADMIN_AI_FIND_CATEGORIES_TOOL_DESCRIPTION,
-  ADMIN_AI_QUERY_PRODUCTS_TOOL_DESCRIPTION,
-  adminAiBrandQuerySchema,
-  adminAiCatalogQuerySchema,
-  adminAiCategoryQuerySchema,
-  queryAdminBrands,
-  queryAdminCatalogProducts,
-  queryAdminCategories,
-} from '../../../../lib/admin-ai-catalog-query';
-import {
-  adminAiProductArchiveSchema,
-  adminAiProductRestoreSchema,
-  adminAiProductUpdateSchema,
-  archiveAdminAiProducts,
-  createAdminAiProduct,
-  restoreAdminAiProducts,
-  updateAdminAiProducts,
-} from '../../../../lib/admin-ai-products';
-import {
-  adminAiInventoryAdjustmentSchema,
-  adminAiInventoryStateSchema,
-  adjustAdminInventory,
-  updateAdminInventoryState,
-} from '../../../../lib/admin-ai-inventory';
-import {
-  adminAiTaxonomyMutationSchema,
-  manageAdminAiTaxonomy,
-} from '../../../../lib/admin-ai-taxonomy';
-import {
-  ADMIN_AI_INSPECT_ORDERS_TOOL_DESCRIPTION,
-  ADMIN_AI_QUERY_ORDERS_TOOL_DESCRIPTION,
-  adminAiOrderInspectionSchema,
-  adminAiOrderQuerySchema,
-  inspectAdminOrderDetails,
-  queryAdminOrders,
-} from '../../../../lib/admin-ai-order-query';
-import {
-  ADMIN_AI_INSPECT_ECOTRACK_SHIPMENTS_TOOL_DESCRIPTION,
-  adminAiEcotrackShipmentInspectionSchema,
-  inspectAdminAiEcotrackShipments,
-} from '../../../../lib/admin-ai-ecotrack-shipments';
-import {
-  ADMIN_AI_PRESENTATION_TOOL_DESCRIPTION,
-  ADMIN_AI_PRESENTATION_TOOL_NAME,
-  adminAiPresentationPlanSchema,
-} from '../../../../lib/admin-ai-presentation';
-import {
-  ADMIN_AI_STATS_TOOL_DESCRIPTION,
-  adminAiStatsQuerySchema,
-  queryAdminAiStats,
-} from '../../../../lib/admin-ai-ai-stats';
-import {
-  adminAiAnalyticsCostsMutationSchema,
-  adminAiAnalyticsDayOverridesMutationSchema,
-  adminAiAnalyticsSettingsPatchSchema,
-  adminAiAnalyticsSyncSchema,
-  manageAdminAiAnalyticsCosts,
-  manageAdminAiAnalyticsDayOverrides,
-  syncAdminAiAnalyticsSource,
-  updateAdminAiAnalyticsSettings,
-} from '../../../../lib/admin-ai-analytics-actions';
-import { adminAiAnalyticsQuerySchema, queryAdminAnalytics } from '../../../../lib/ai-analytics';
 import { auth } from '../../../../lib/auth';
 import {
   adminAiChatStreamEventSchema,
@@ -107,14 +28,9 @@ import {
 import { adminAiContextMessage } from '../../../../lib/admin-ai-capabilities';
 import { ADMIN_AI_MAX_OUTPUT_TOKENS, resolveAdminAiModel } from '../../../../lib/admin-ai-models';
 import { normalizePermissions } from '../../../../lib/permissions';
-import { productPayloadSchema } from '../../../../lib/products';
 import { requireAppAccess } from '../../../../lib/rbac';
-import { adminAiToolMutatesApplication } from '../../../../lib/admin-ai-execution-capabilities';
-
-const ADMIN_AI_ANALYTICS_TOOL_DESCRIPTION = [
-  'Read canonical live Analytics evidence.',
-  'Results include metric meanings, dates, coverage, estimation, sources, and warnings. Use focus for useful underlying rows and sourceCoverage for the exact EcoTrack denominator and missing eligible orders.',
-].join(' ');
+import { adminAiToolConfirmsCompletedMutation } from '../../../../lib/admin-ai-execution-capabilities';
+import { buildAdminAiTools } from '../../../../lib/admin-ai-tools';
 
 function interruptedAnswer(locale: 'en' | 'fr' | 'ar', partialText: string) {
   const marker =
@@ -171,12 +87,7 @@ function hasSuccessfulMutation(toolResults: unknown[]) {
     if (!result || typeof result !== 'object') return false;
     const record = result as Record<string, unknown>;
     if (record.type !== 'tool-result' || typeof record.toolName !== 'string') return false;
-    if (!adminAiToolMutatesApplication(record.toolName)) return false;
-    return Boolean(
-      record.output &&
-      typeof record.output === 'object' &&
-      (record.output as { ok?: unknown }).ok === true,
-    );
+    return adminAiToolConfirmsCompletedMutation(record.toolName, record.output);
   });
 }
 
@@ -291,205 +202,18 @@ export async function POST(request: NextRequest) {
       model: selectedModel.model,
       openRouterRequestBody: selectedModel.openRouterRequestBody,
     });
-    const hasAnalytics = permissions.includes('analytics_manage');
-    const hasCatalogLookup =
-      permissions.includes('products_write') ||
-      permissions.includes('orders_write') ||
-      permissions.includes('assets_write') ||
-      permissions.includes('brands_categories_write');
-    const hasTaxonomyLookup =
-      permissions.includes('products_write') ||
-      permissions.includes('assets_write') ||
-      permissions.includes('brands_categories_write');
-    const canInspectProducts = permissions.includes('products_write');
-    const hasOrders = permissions.includes('orders_write');
-    const canMutateTaxonomy = permissions.includes('brands_categories_write');
-    const guidanceTopics: AdminAiGuidanceTopic[] = [
-      ...(hasAnalytics
-        ? ([
-            'analytics_profit',
-            'analytics_order_lifecycle',
-            'analytics_sources_and_coverage',
-            'analytics_dates_and_comparisons',
-            'analytics_storefront_and_attribution',
-            'ai_stats_operations',
-            'ai_stats_shopping',
-          ] satisfies AdminAiGuidanceTopic[])
-        : []),
-      ...(hasCatalogLookup ? (['catalog'] satisfies AdminAiGuidanceTopic[]) : []),
-      ...(hasOrders ? (['orders'] satisfies AdminAiGuidanceTopic[]) : []),
-    ];
-    const permittedGuidanceTopics = guidanceTopics as [
-      AdminAiGuidanceTopic,
-      ...AdminAiGuidanceTopic[],
-    ];
-    const hasEvidenceTools = hasAnalytics || hasCatalogLookup || hasOrders;
-    const tools = {
-      ...(guidanceTopics.length > 0
-        ? {
-            read_system_guidance: tool({
-              description: ADMIN_AI_GUIDANCE_TOOL_DESCRIPTION,
-              inputSchema: adminAiGuidanceRequestSchemaForTopics(permittedGuidanceTopics),
-              execute: (input) => readAdminAiGuidanceForTopics(permittedGuidanceTopics, input),
-            }),
-          }
-        : {}),
-      ...(hasCatalogLookup
-        ? {
-            find_products: tool({
-              description: ADMIN_AI_FIND_PRODUCTS_TOOL_DESCRIPTION,
-              inputSchema: adminAiCatalogProductLookupSchema,
-              execute: findAdminCatalogProducts,
-            }),
-          }
-        : {}),
-      ...(hasTaxonomyLookup
-        ? {
-            find_brands: tool({
-              description: ADMIN_AI_FIND_BRANDS_TOOL_DESCRIPTION,
-              inputSchema: adminAiBrandQuerySchema,
-              execute: (input) => queryAdminBrands(input),
-            }),
-            find_categories: tool({
-              description: ADMIN_AI_FIND_CATEGORIES_TOOL_DESCRIPTION,
-              inputSchema: adminAiCategoryQuerySchema,
-              execute: (input) => queryAdminCategories(input),
-            }),
-          }
-        : {}),
-      ...(canInspectProducts
-        ? {
-            query_products: tool({
-              description: ADMIN_AI_QUERY_PRODUCTS_TOOL_DESCRIPTION,
-              inputSchema: adminAiCatalogQuerySchema,
-              execute: (input) => queryAdminCatalogProducts(input),
-            }),
-            inspect_products: tool({
-              description: ADMIN_AI_INSPECT_PRODUCTS_TOOL_DESCRIPTION,
-              inputSchema: adminAiCatalogProductInspectionSchema,
-              execute: inspectAdminCatalogProducts,
-            }),
-            inspect_archived_products: tool({
-              description: ADMIN_AI_INSPECT_ARCHIVED_PRODUCTS_TOOL_DESCRIPTION,
-              inputSchema: adminAiArchivedCatalogProductInspectionSchema,
-              execute: inspectAdminArchivedCatalogProducts,
-            }),
-            create_product: tool({
-              description:
-                'Create one product. Title and selling price are required; omitted catalog fields use their normal defaults. Returns the saved product.',
-              inputSchema: productPayloadSchema,
-              execute: (product) => createAdminAiProduct({ product }, actor),
-            }),
-            update_products: tool({
-              description:
-                'Change specified fields on exact current product IDs. Omitted fields are preserved; returns previous values for the changed fields.',
-              inputSchema: adminAiProductUpdateSchema,
-              execute: (input) => updateAdminAiProducts(input, actor),
-            }),
-            archive_products: tool({
-              description:
-                'Archive exact current product IDs. Their records, inventory, and taxonomy assignments are retained.',
-              inputSchema: adminAiProductArchiveSchema,
-              execute: (input) => archiveAdminAiProducts(input, actor),
-            }),
-            restore_products: tool({
-              description:
-                'Restore exact archived product IDs. Restore only removes archive state; it does not reactivate or restock them.',
-              inputSchema: adminAiProductRestoreSchema,
-              execute: (input) => restoreAdminAiProducts(input, actor),
-            }),
-            adjust_inventory: tool({
-              description:
-                'Increase or decrease inventory quantities for exact product IDs by positive deltas. Returns previous and resulting quantities.',
-              inputSchema: adminAiInventoryAdjustmentSchema,
-              execute: (input) => adjustAdminInventory(input, actor),
-            }),
-            update_inventory_state: tool({
-              description:
-                'Set in-stock state or barcode on exact product IDs. This does not change inventory quantity.',
-              inputSchema: adminAiInventoryStateSchema,
-              execute: (input) => updateAdminInventoryState(input, actor),
-            }),
-          }
-        : {}),
-      ...(canMutateTaxonomy
-        ? {
-            manage_taxonomy: tool({
-              description:
-                'Create, update, or delete one brand or category through the canonical catalog workflow.',
-              inputSchema: adminAiTaxonomyMutationSchema,
-              execute: (input) => manageAdminAiTaxonomy(input, actor),
-            }),
-          }
-        : {}),
-      ...(hasOrders
-        ? {
-            query_orders: tool({
-              description: ADMIN_AI_QUERY_ORDERS_TOOL_DESCRIPTION,
-              inputSchema: adminAiOrderQuerySchema,
-              execute: queryAdminOrders,
-            }),
-            inspect_orders: tool({
-              description: ADMIN_AI_INSPECT_ORDERS_TOOL_DESCRIPTION,
-              inputSchema: adminAiOrderInspectionSchema,
-              execute: inspectAdminOrderDetails,
-            }),
-            inspect_ecotrack_shipments: tool({
-              description: ADMIN_AI_INSPECT_ECOTRACK_SHIPMENTS_TOOL_DESCRIPTION,
-              inputSchema: adminAiEcotrackShipmentInspectionSchema,
-              execute: inspectAdminAiEcotrackShipments,
-            }),
-          }
-        : {}),
-      ...(hasAnalytics
-        ? {
-            query_analytics: tool({
-              description: ADMIN_AI_ANALYTICS_TOOL_DESCRIPTION,
-              inputSchema: adminAiAnalyticsQuerySchema,
-              execute: queryAdminAnalytics,
-            }),
-            query_ai_stats: tool({
-              description: ADMIN_AI_STATS_TOOL_DESCRIPTION,
-              inputSchema: adminAiStatsQuerySchema,
-              execute: queryAdminAiStats,
-            }),
-            update_analytics_settings: tool({
-              description:
-                'Change the canonical planning return rate and return the persisted before and after values.',
-              inputSchema: adminAiAnalyticsSettingsPatchSchema,
-              execute: (input) => updateAdminAiAnalyticsSettings(input),
-            }),
-            manage_analytics_costs: tool({
-              description:
-                'Create, update, or delete exact operating-cost records used by true profit. Updates preserve omitted fields and return a persisted outcome for each requested operation.',
-              inputSchema: adminAiAnalyticsCostsMutationSchema,
-              execute: (input) => manageAdminAiAnalyticsCosts(input),
-            }),
-            manage_analytics_day_overrides: tool({
-              description:
-                'Set or reset exact calculator-day overrides for gross profit, planning return rate, confirmed orders, or an operator note. Omitted fields stay unchanged and null clears a named value.',
-              inputSchema: adminAiAnalyticsDayOverridesMutationSchema,
-              execute: (input) => manageAdminAiAnalyticsDayOverrides(input),
-            }),
-            sync_analytics_source: tool({
-              description:
-                'Synchronize an exact Meta or Search Console date range through the canonical integration. Meta ranges are limited to 90 days; returns the source operation result.',
-              inputSchema: adminAiAnalyticsSyncSchema,
-              execute: (input) => syncAdminAiAnalyticsSource(input),
-            }),
-          }
-        : {}),
-      ...(hasEvidenceTools
-        ? {
-            [ADMIN_AI_PRESENTATION_TOOL_NAME]: tool({
-              description: ADMIN_AI_PRESENTATION_TOOL_DESCRIPTION,
-              inputSchema: adminAiPresentationPlanSchema.omit({ kind: true }),
-              execute: async (input) =>
-                adminAiPresentationPlanSchema.parse({ kind: 'admin_ui_blocks_v1', ...input }),
-            }),
-          }
-        : {}),
-    } satisfies ToolSet;
+    const tools = buildAdminAiTools({
+      permissions,
+      locale,
+      now,
+      runtime: {
+        kind: 'live',
+        actorId,
+        actor,
+        conversationId: conversation.id,
+        autoAcceptProposals: parsed.data.autoAcceptProposals,
+      },
+    });
     const createResult = repeatableStreamText({
       model: languageModel,
       instructions,

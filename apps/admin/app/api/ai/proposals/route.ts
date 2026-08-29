@@ -3,10 +3,10 @@ import { NextResponse } from 'next/server';
 import { getDb, hasDb } from '@bric/db/client';
 
 import { loadAiProposalInbox } from '../../../../lib/ai-proposal-inbox';
-import { requireAnyMutationAccess } from '../../../../lib/rbac';
+import { requireMutationAccess } from '../../../../lib/rbac';
 
 export async function GET() {
-  const denied = await requireAnyMutationAccess(['products', 'assets', 'brandsCategories']);
+  const denied = await requireMutationAccess('products');
   if (denied) return denied;
   if (!hasDb()) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });

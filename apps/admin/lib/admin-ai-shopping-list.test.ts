@@ -147,6 +147,36 @@ describe('admin AI order shopping lists', () => {
       shortageUnits: 1,
       unmatchedLines: 1,
     });
+    expect(result.lines).toHaveLength(3);
+    expect(result.linePagination).toEqual({
+      page: 1,
+      limit: 50,
+      totalItems: 3,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    });
+    expect(result).not.toHaveProperty('draft');
+  });
+
+  it('searches and paginates compact draft lines without returning the full shared draft', async () => {
+    mocks.loadOrdersPageData.mockResolvedValue({
+      items: [order(31)],
+      pagination: { page: 1, totalPages: 1 },
+    });
+
+    const result = await inspectAdminAiShoppingList({
+      sourceMode: 'confirmed',
+      orderIds: [],
+      title: null,
+      query: '18',
+      page: 1,
+      limit: 1,
+    });
+
+    expect(result.lines).toEqual([expect.objectContaining({ draftId: '2:18', productId: 18 })]);
+    expect(result.linePagination).toMatchObject({ totalItems: 1, totalPages: 1 });
+    expect(JSON.stringify(result)).not.toContain('generatedItems');
   });
 
   it('reports missing selected orders and saves through the shared draft store', async () => {
@@ -163,6 +193,7 @@ describe('admin AI order shopping lists', () => {
     expect(result.missingOrderIds).toEqual([404]);
     expect(mocks.saveDraft).toHaveBeenCalledWith(mocks.db, expect.any(Object), actor);
     expect(result).toMatchObject({ ok: true, action: 'created' });
+    expect(result).not.toHaveProperty('draft');
   });
 
   it('applies exact eligible draft lines and reports every non-applicable or rejected line', async () => {
@@ -207,7 +238,8 @@ describe('admin AI order shopping lists', () => {
       undefined,
     );
     expect(result).toMatchObject({
-      ok: false,
+      ok: true,
+      complete: false,
       applied: [{ productId: 12, previousQuantity: 10, nextQuantity: 6 }],
       skipped: [{ productId: 18, reason: 'insufficient', available: 1 }],
       applicationSummary: {
@@ -220,6 +252,7 @@ describe('admin AI order shopping lists', () => {
         { draftId: 'missing:99', productId: null, reason: 'missing_draft_line' },
       ],
     });
+    expect(result).not.toHaveProperty('draft');
     const savedPayload = mocks.saveDraft.mock.calls[0]?.[1] as ShoppingListDraftPayload;
     expect(savedPayload.draftItems.find((item) => item.productId === 12)).toMatchObject({
       inventoryQuantity: 6,

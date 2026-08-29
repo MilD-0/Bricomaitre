@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY,
   ADMIN_AI_MODEL_STORAGE_KEY,
   ADMIN_AI_REASONING_EFFORT_STORAGE_KEY,
   AdminAiChat,
@@ -87,7 +88,7 @@ describe('AdminAiChat', () => {
     expect(within(dialog).queryByText('aiChat.reviewMode')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('aiChat.description')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('aiChat.sendHint')).not.toBeInTheDocument();
-    expect(within(dialog).queryByText('aiChat.autoAccept')).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('switch', { name: 'aiChat.autoAccept' })).toBeInTheDocument();
   });
 
   it('opens from a contextual workspace event', async () => {
@@ -192,6 +193,7 @@ describe('AdminAiChat', () => {
     expect(JSON.parse(String(chatCall?.[1]?.body))).toEqual({
       message: 'Find missing Arabic titles',
       conversationKey: expect.any(String),
+      autoAcceptProposals: false,
       model: 'gpt-5.6-luna',
       reasoningEffort: 'medium',
     });
@@ -223,11 +225,14 @@ describe('AdminAiChat', () => {
 
     const model = await screen.findByRole('combobox', { name: 'aiChat.model' });
     const effort = screen.getByRole('combobox', { name: 'aiChat.reasoningEffort' });
+    const autoAccept = screen.getByRole('switch', { name: 'aiChat.autoAccept' });
     await user.selectOptions(model, 'gpt-5.6-luna');
     await user.selectOptions(effort, 'medium');
+    await user.click(autoAccept);
 
     expect(window.localStorage.getItem(ADMIN_AI_MODEL_STORAGE_KEY)).toBe('gpt-5.6-luna');
     expect(window.localStorage.getItem(ADMIN_AI_REASONING_EFFORT_STORAGE_KEY)).toBe('medium');
+    expect(window.localStorage.getItem(ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY)).toBe('true');
     expect(
       within(model).getByRole('option', { name: 'DeepSeek V4 Flash · $' }),
     ).toBeInTheDocument();
@@ -245,6 +250,7 @@ describe('AdminAiChat', () => {
     expect(JSON.parse(String(chatCall?.[1]?.body))).toMatchObject({
       model: 'gpt-5.6-luna',
       reasoningEffort: 'medium',
+      autoAcceptProposals: true,
     });
   });
 
@@ -260,7 +266,7 @@ describe('AdminAiChat', () => {
             toolResults: [
               {
                 type: 'tool-result',
-                output: { id: 84, type: 'product_discount', status: 'proposed' },
+                output: { id: 84, type: 'product_content', status: 'proposed' },
               },
             ],
             conversation: {
@@ -397,7 +403,7 @@ describe('AdminAiChat', () => {
               controller = streamController;
               streamController.enqueue(
                 encoder.encode(
-                  '{"type":"status","status":"thinking"}\n{"type":"status","status":"working","toolName":"create_landing_page","phase":"running"}\n',
+                  '{"type":"status","status":"thinking"}\n{"type":"status","status":"working","toolName":"start_landing_page_work","phase":"running"}\n',
                 ),
               );
             },
@@ -424,7 +430,7 @@ describe('AdminAiChat', () => {
     await act(async () => {
       controller!.enqueue(
         encoder.encode(
-          '{"type":"status","status":"working","toolName":"create_landing_page","phase":"completed"}\n',
+          '{"type":"status","status":"working","toolName":"start_landing_page_work","phase":"completed"}\n',
         ),
       );
     });
@@ -696,38 +702,25 @@ describe('AdminAiChat', () => {
         return new Response(JSON.stringify({ conversations: [] }), { status: 200 });
       if (url === '/api/ai/chat')
         return Response.json({
-          message: 'The landing page was created as a draft.',
+          message: 'Landing page 91 is now unpublished.',
           toolResults: [
             {
               type: 'tool-result',
-              toolName: 'create_landing_page',
+              toolName: 'set_landing_page_active',
               output: {
+                ok: true,
                 id: 91,
                 productId: 12,
                 locale: 'fr',
                 active: false,
                 currentRevision: 1,
-                generation: {
-                  model: 'openai/gpt-5.6-luna',
-                  reasoning: 'A mobile-first product campaign.',
-                  stages: {
-                    status: 'completed',
-                    plannedSections: 4,
-                    generatedSections: 4,
-                    preservedSections: 0,
-                    fallbackSections: 0,
-                    skippedSections: 0,
-                    retryCount: 1,
-                    failures: [],
-                  },
-                },
               },
             },
           ],
           conversation: {
             id: 31,
             sessionKey: '182ffc13-33e5-43b7-a064-e4c437b0ea67',
-            title: 'Create drill landing page',
+            title: 'Unpublish landing page',
           },
         });
       return new Response('{}', { status: 200 });
@@ -759,23 +752,19 @@ describe('AdminAiChat', () => {
     await user.click(conversationTab);
     await user.type(
       await screen.findByRole('textbox', { name: 'aiChat.placeholder' }),
-      'Create a landing page for the drill',
+      'Unpublish landing page 91',
     );
     await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
 
-    expect(await screen.findByText('aiChat.toolLabels.landingPageCreated')).toBeInTheDocument();
+    expect(await screen.findByText('aiChat.toolLabels.landingPageUpdated')).toBeInTheDocument();
     expect(
       screen.getByRole('link', { name: 'aiChat.toolDestinations.landingPages' }),
     ).toHaveAttribute('href', '/en/assets/landing-pages/91');
-    expect(screen.getByText('create landing page')).toBeInTheDocument();
-    expect(screen.getByText('aiChat.landingGeneration.status.completed')).toBeInTheDocument();
-    expect(screen.getByText('aiChat.landingGeneration.generated')).toBeInTheDocument();
-    expect(screen.getByText('aiChat.landingGeneration.retries')).toBeInTheDocument();
-    expect(screen.getByText('A mobile-first product campaign.')).toBeInTheDocument();
+    expect(screen.getByText('set landing page active')).toBeInTheDocument();
     expect(mutationListener).toHaveBeenCalledOnce();
     expect(
       (mutationListener.mock.calls[0]?.[0] as CustomEvent<AdminAiMutationEventDetail>).detail,
-    ).toEqual({ toolNames: ['create_landing_page'] });
+    ).toEqual({ toolNames: ['set_landing_page_active'] });
     window.removeEventListener(ADMIN_AI_MUTATION_EVENT, mutationListener);
   });
 
@@ -808,6 +797,7 @@ describe('AdminAiChat', () => {
                   id: 'ecotrack-52',
                   queue: 'admin-order-ecotrack',
                   kind: 'order-ecotrack:selected',
+                  conversationId: 52,
                   status: 'completed',
                   progress: { phase: 'completed', current: 3, total: 3, percentage: 100 },
                   errorMessage: null,

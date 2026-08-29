@@ -4,7 +4,6 @@ import {
   shoppingAssistantCartMutationSchema,
   type ShoppingAssistantCartMutation,
   type ShoppingAssistantProduct,
-  type ShoppingAssistantResponse,
   type ShoppingAssistantToolName,
 } from '@bric/storefront-core/shopping-assistant-contracts';
 import {
@@ -56,11 +55,10 @@ export type ShoppingAssistantLabels = {
   retry: string;
   thinking: string;
   toolActivity: Record<ShoppingAssistantToolName, string>;
-  toolRetrying: string;
+  toolFailed: string;
   error: string;
   interrupted: string;
   rateLimited: string;
-  fallback: string;
   inStock: string;
   outOfStock: string;
   priceOnRequest: string;
@@ -79,7 +77,6 @@ type ChatEntry = {
   role: 'user' | 'assistant';
   content: string;
   products?: ShoppingAssistantProduct[];
-  mode?: ShoppingAssistantResponse['mode'];
   cartMutations?: ShoppingAssistantCartMutation[];
   feedback?: 'helpful' | 'not_helpful';
   interrupted?: boolean;
@@ -132,7 +129,6 @@ function storedEntries(value: unknown): ChatEntry[] {
         candidate.feedback !== 'helpful' &&
         candidate.feedback !== 'not_helpful') ||
       (candidate.interrupted !== undefined && typeof candidate.interrupted !== 'boolean') ||
-      (candidate.mode !== undefined && candidate.mode !== 'ai' && candidate.mode !== 'fallback') ||
       (candidate.products !== undefined &&
         (!Array.isArray(candidate.products) || !candidate.products.every(isStoredProduct))) ||
       (candidate.cartMutations !== undefined &&
@@ -329,6 +325,7 @@ export function ShoppingAssistantPanel({
     const userEntry: ChatEntry = { id: crypto.randomUUID(), role: 'user', content: normalized };
     const nextMessages = [...history, userEntry];
     const controller = new AbortController();
+    const analyticsIdentity = getAnalyticsIdentity();
     silentAbortRef.current = false;
     activeRequestRef.current = controller;
     setMessages(nextMessages);
@@ -338,11 +335,10 @@ export function ShoppingAssistantPanel({
     setReceivingText(false);
     setActivity(null);
     void triggerHaptic('primary');
-    recordAssistantEngagement(getAnalyticsIdentity());
+    recordAssistantEngagement(analyticsIdentity);
     void trackNavigationEvent({
       eventName: 'ai_assistant_message',
       locale,
-      searchTerm: normalized,
       metadata: {
         surface: 'ai_assistant',
         target: analyticsTarget,
@@ -373,6 +369,15 @@ export function ShoppingAssistantPanel({
               content: message.slice(0, 1_500),
               productIds: products?.map((product) => product.id),
             })),
+          ...(analyticsIdentity.journeyId && analyticsIdentity.sessionId
+            ? {
+                telemetry: {
+                  journeyId: analyticsIdentity.journeyId,
+                  sessionId: analyticsIdentity.sessionId,
+                  pagePath: pathname ?? window.location.pathname,
+                },
+              }
+            : {}),
         }),
       });
       if (!response.ok) {
@@ -417,16 +422,14 @@ export function ShoppingAssistantPanel({
                 );
                 for (const change of applied.changes) {
                   const delta = change.resultingQuantity - change.previousQuantity;
-                  const unitPrice = Number(change.mutation.product.price);
+                  const unitPrice = change.unitPrice;
                   void trackNavigationEvent({
                     eventName: delta > 0 ? 'add_to_cart' : 'remove_from_cart',
                     locale,
-                    productId: change.mutation.product.id,
-                    productSlug: change.mutation.product.token,
+                    productId: change.productId,
+                    productSlug: change.productToken,
                     quantity: Math.abs(delta),
-                    ...(change.mutation.product.price !== null &&
-                    Number.isFinite(unitPrice) &&
-                    unitPrice >= 0
+                    ...(Number.isFinite(unitPrice) && unitPrice >= 0
                       ? { value: Math.abs(delta) * unitPrice }
                       : {}),
                     metadata: {
@@ -446,7 +449,6 @@ export function ShoppingAssistantPanel({
                 ? {
                     ...message,
                     products: result.products,
-                    mode: result.mode,
                     cartMutations: appliedMutations,
                   }
                 : message,
@@ -530,7 +532,6 @@ export function ShoppingAssistantPanel({
     void trackNavigationEvent({
       eventName: 'ai_assistant_feedback',
       locale,
-      searchTerm: message.content,
       metadata: {
         surface: 'ai_assistant',
         target: 'assistant_response',
@@ -620,7 +621,6 @@ export function ShoppingAssistantPanel({
                 </span>
               ) : null}
               <div className="shopping-assistant-bubble">
-                {message.mode === 'fallback' ? <small>{labels.fallback}</small> : null}
                 {message.role === 'assistant' ? (
                   <AssistantMarkdown>{message.content}</AssistantMarkdown>
                 ) : (
@@ -698,7 +698,7 @@ export function ShoppingAssistantPanel({
               <em>
                 {activity?.type === 'tool'
                   ? activity.status === 'failed'
-                    ? labels.toolRetrying
+                    ? labels.toolFailed
                     : labels.toolActivity[activity.name]
                   : labels.thinking}
               </em>

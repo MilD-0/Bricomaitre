@@ -42,14 +42,7 @@ describe('AI proposal presentation', () => {
     ]);
   });
 
-  it('treats creation values as proposed-only fields', () => {
-    expect(proposalFields({ values: { name: 'Wadfow', isActive: false } })).toEqual([
-      { key: 'name', before: undefined, after: 'Wadfow', hasBefore: false },
-      { key: 'isActive', before: undefined, after: false, hasBefore: false },
-    ]);
-  });
-
-  it('builds concise previews for changes and specialized proposals', () => {
+  it('builds concise previews for changes and product relations', () => {
     expect(
       proposalPreview(
         proposal({ payload: { changes: { titleAr: 'عنوان', description: 'Copy', active: true } } }),
@@ -58,16 +51,11 @@ describe('AI proposal presentation', () => {
     expect(
       proposalPreview(
         proposal({
-          proposalType: 'featured_products',
-          payload: { productIds: [1, 2, 3] },
+          proposalType: 'product_relation',
+          payload: { relationType: 'compatible_with' },
         }),
       ),
-    ).toEqual({ kind: 'products', count: 3 });
-    expect(
-      proposalPreview(
-        proposal({ proposalType: 'landing_page', payload: { locale: 'ar', document: {} } }),
-      ),
-    ).toEqual({ kind: 'landing', locale: 'AR' });
+    ).toEqual({ kind: 'relation', relation: 'Compatible with' });
   });
 
   it('summarizes structured values without hiding their exact representation', () => {

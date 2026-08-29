@@ -28,7 +28,6 @@ export async function consumeShoppingAssistantResponse(
     const result = shoppingAssistantResponseSchema.parse(await response.json());
     handlers.onTextDelta(result.message);
     handlers.onResult({
-      mode: result.mode,
       products: result.products,
       cartMutations: result.cartMutations,
     });
@@ -52,7 +51,6 @@ export async function consumeShoppingAssistantResponse(
       if (completed) throw new Error('duplicate_assistant_result');
       completed = true;
       handlers.onResult({
-        mode: event.mode,
         products: event.products,
         cartMutations: event.cartMutations,
       });

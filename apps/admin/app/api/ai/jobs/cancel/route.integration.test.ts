@@ -15,6 +15,10 @@ vi.mock('../../../../../lib/background-jobs', () => ({
 }));
 vi.mock('../../../../../lib/ai-background-jobs', () => ({
   ADMIN_BACKGROUND_JOB_TYPES: ['ai_categorization', 'ai_content', 'reporting_refresh'],
+  allowedAdminBackgroundJobTypes: (permissions: string[]) => [
+    ...(permissions.includes('products_write') ? ['ai_categorization', 'ai_content'] : []),
+    ...(permissions.includes('analytics_manage') ? ['reporting_refresh'] : []),
+  ],
   cancelAdminBackgroundJob: mocks.cancelExact,
 }));
 vi.mock('../../../../../lib/auth', () => ({
@@ -54,8 +58,7 @@ describe('POST /api/ai/jobs/cancel', () => {
     expect(mocks.cancel).not.toHaveBeenCalled();
   });
 
-  it('cancels an exact server job for settings managers', async () => {
-    mocks.permissions = ['settings_manage'];
+  it('cancels an exact server job for an operator with its domain permission', async () => {
     const jobId = '3c2e0103-ce88-4b4b-b185-f46ed298fe27';
 
     const response = await POST(request({ type: 'ai_categorization', jobId }));
@@ -64,7 +67,8 @@ describe('POST /api/ai/jobs/cancel', () => {
     expect(mocks.cancelExact).toHaveBeenCalledWith('ai_categorization', jobId);
   });
 
-  it('forbids system-wide cancellation without settings management', async () => {
+  it('forbids exact cancellation outside the operator domain', async () => {
+    mocks.permissions = ['settings_manage'];
     const response = await POST(
       request({
         type: 'ai_categorization',

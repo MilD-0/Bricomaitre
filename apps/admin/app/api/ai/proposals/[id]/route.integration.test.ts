@@ -35,10 +35,15 @@ vi.mock('../../../../../lib/ai-product-content', () => ({
 }));
 vi.mock('../../../../../lib/ai-admin-capabilities', () => ({
   AiAdminCapabilityError: class AiAdminCapabilityError extends Error {},
-  reviewAdminProposal: mocks.reviewAdmin,
+  reviewProductCategoryProposal: mocks.reviewAdmin,
 }));
 vi.mock('../../../../../lib/background-jobs', () => ({
   startProductCatalogFeedRefreshJob: mocks.refreshFeed,
+  refreshAppliedAiProposalConsumers: vi.fn(async () => {
+    mocks.revalidateTags('products', 'products-meta');
+    await mocks.revalidateProducts();
+    await mocks.refreshFeed();
+  }),
 }));
 vi.mock('../../../../../lib/server-cache', () => ({
   CACHE_TAGS: { products: 'products', productsMeta: 'products-meta' },
@@ -84,38 +89,29 @@ describe('AI proposal review route', () => {
     mocks.refreshFeed.mockReset().mockResolvedValue(undefined);
   });
 
-  it('uses asset access for a featured-products proposal', async () => {
+  it('uses product access for category-assignment proposals', async () => {
     mocks.proposalRow.mockResolvedValue([
-      { proposalType: 'featured_products', entityType: 'featured_product_groups' },
-    ]);
-    const response = await PATCH(request('approve'), { params: Promise.resolve({ id: '4' }) });
-    expect(response.status).toBe(200);
-    expect(mocks.mutationAccess).toHaveBeenCalledWith('assets');
-    expect(mocks.reviewAdmin).toHaveBeenCalled();
-  });
-
-  it('derives discount review access from product management', async () => {
-    mocks.proposalRow.mockResolvedValue([
-      { proposalType: 'product_discount', entityType: 'products' },
+      { proposalType: 'product_category', entityType: 'products' },
     ]);
     const response = await PATCH(request('approve'), { params: Promise.resolve({ id: '4' }) });
     expect(response.status).toBe(200);
     expect(mocks.mutationAccess).toHaveBeenCalledWith('products');
-  });
-
-  it('uses brands and categories access for taxonomy creation', async () => {
-    mocks.proposalRow.mockResolvedValue([
-      { proposalType: 'entity_create', entityType: 'categories' },
-    ]);
-    const response = await PATCH(request('approve'), { params: Promise.resolve({ id: '4' }) });
-    expect(response.status).toBe(200);
-    expect(mocks.mutationAccess).toHaveBeenCalledWith('brandsCategories');
     expect(mocks.reviewAdmin).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: 'admin@example.com',
         actorName: 'Admin',
       }),
     );
+  });
+
+  it('does not review retired generic proposal types', async () => {
+    mocks.proposalRow.mockResolvedValue([{ proposalType: 'entity_edit', entityType: 'products' }]);
+
+    const response = await PATCH(request('approve'), { params: Promise.resolve({ id: '4' }) });
+
+    expect(response.status).toBe(404);
+    expect(mocks.mutationAccess).not.toHaveBeenCalled();
+    expect(mocks.reviewAdmin).not.toHaveBeenCalled();
   });
 
   it('requires the proposal domain permission for approval', async () => {
@@ -174,6 +170,18 @@ describe('AI proposal review route', () => {
     expect(mocks.mutationAccess).toHaveBeenCalledWith('products');
     expect(mocks.deleteRows).toHaveBeenCalledOnce();
     await expect(response.json()).resolves.toEqual({ deleted: { id: 4 } });
+  });
+
+  it('does not delete retired generic proposal types', async () => {
+    mocks.proposalRow.mockResolvedValue([{ proposalType: 'entity_edit', entityType: 'products' }]);
+
+    const response = await DELETE(request('reject'), {
+      params: Promise.resolve({ id: '4' }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(mocks.mutationAccess).not.toHaveBeenCalled();
+    expect(mocks.deleteRows).not.toHaveBeenCalled();
   });
 
   it('keeps non-expired or already-reviewed proposals', async () => {

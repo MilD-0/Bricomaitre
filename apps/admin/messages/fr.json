@@ -1478,6 +1478,7 @@
     "administration": "Vue d’ensemble de l’administration et historique des actions."
   },
   "aiChat": {
+    "autoAccept": "Appliquer automatiquement les propositions générées",
     "open": "Assistant IA",
     "close": "Fermer l’assistant IA",
     "fullScreen": "Ouvrir l’assistant en plein écran",
@@ -1574,27 +1575,6 @@
     "analyticsMatched": "{matched} correspondance(s) · {available} dans la vue de décision",
     "analyticsGeneratedAt": "Généré",
     "openAnalytics": "Ouvrir dans Analytics",
-    "landingGeneration": {
-      "status": {
-        "completed": "Toutes les sections prévues ont été générées",
-        "partial-fallback": "La page a été enregistrée avec des replis de section explicites",
-        "full-fallback": "Une page de repli fondée sur le catalogue a été enregistrée"
-      },
-      "generated": "Sections générées",
-      "planned": "Sections prévues",
-      "preserved": "Sections préservées",
-      "fallback": "Sections de repli",
-      "skipped": "Sections ignorées",
-      "deleted": "Sections supprimées",
-      "retries": "Relances récupérées",
-      "fallbackDetails": "Sections ayant nécessité un repli",
-      "reasons": {
-        "timeout": "Le modèle de contenu a dépassé le délai",
-        "invalid-structured-output": "Le modèle a renvoyé un contenu structuré invalide",
-        "provider-error": "Le fournisseur n’a pas terminé cette section",
-        "insufficient-assets": "Cette section nécessitait davantage de ressources produit vérifiées"
-      }
-    },
     "ecotrackTerminal": {
       "attempts": "Tentative du worker {attempt} · {retries} relance(s)",
       "successes": "Envois réussis ({count})",
@@ -1629,16 +1609,7 @@
       "assets": "Résultats des ressources",
       "assetsUpdated": "Ressources mises à jour",
       "landingPages": "Résultats des pages de destination",
-      "landingPageCreated": "Page de destination créée",
       "landingPageUpdated": "Page de destination mise à jour",
-      "proposals": "Proposition à valider",
-      "proposalsReviewed": "Propositions examinées",
-      "bulletin": "Résultats du Bulletin",
-      "bulletinUpdated": "Bulletin mis à jour",
-      "administration": "Résultats d’administration",
-      "administrationUpdated": "Administration mise à jour",
-      "actionHistory": "Résultats de l’historique des actions",
-      "actionHistoryRecovered": "Historique des actions restauré",
       "storefront": "Configuration de la vitrine",
       "storefrontUpdated": "Configuration de la vitrine mise à jour",
       "analyticsUpdated": "Analytics mis à jour",
@@ -1656,8 +1627,6 @@
       "assets": "Ouvrir les ressources",
       "landingPages": "Ouvrir la page de destination",
       "proposals": "Ouvrir les propositions IA",
-      "bulletin": "Ouvrir le Bulletin",
-      "administration": "Ouvrir l’administration",
       "storefront": "Ouvrir la configuration de la vitrine",
       "analytics": "Ouvrir les analytics"
     },

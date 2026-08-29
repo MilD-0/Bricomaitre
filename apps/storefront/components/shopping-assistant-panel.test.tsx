@@ -31,6 +31,7 @@ const labels: ShoppingAssistantLabels = {
   retry: 'Réessayer',
   thinking: 'Recherche…',
   toolActivity: {
+    read_storefront_guidance: 'Informations Bricomaitre…',
     search_catalog: 'Recherche catalogue…',
     inspect_products: 'Vérification produits…',
     inspect_order: 'Vérification commande…',
@@ -39,11 +40,10 @@ const labels: ShoppingAssistantLabels = {
     manage_cart: 'Mise à jour panier…',
     present_products: 'Préparation options…',
   },
-  toolRetrying: 'Nouvelle tentative…',
+  toolFailed: 'Données indisponibles…',
   error: 'Indisponible',
   interrupted: 'Réponse interrompue',
   rateLimited: 'Patientez',
-  fallback: 'Résultats du catalogue',
   inStock: 'En stock',
   outOfStock: 'Indisponible',
   priceOnRequest: 'Prix sur demande',
@@ -72,7 +72,6 @@ describe('ShoppingAssistantPanel', () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          mode: 'ai',
           message:
             'Voici une **option** du catalogue.\n\n- Adaptée au béton\n- Disponible en stock',
           products: [
@@ -126,11 +125,15 @@ describe('ShoppingAssistantPanel', () => {
         cartItems: [],
       },
       messages: [{ role: 'user', content: 'Une perceuse pour le béton' }],
+      telemetry: {
+        journeyId: 'journey-1',
+        sessionId: 'session-1',
+        pagePath: '/',
+      },
     });
     expect(behavior.analytics).toHaveBeenCalledWith(
       expect.objectContaining({
         eventName: 'ai_assistant_message',
-        searchTerm: 'Une perceuse pour le béton',
         metadata: { surface: 'ai_assistant', target: 'submitted' },
       }),
     );
@@ -138,7 +141,6 @@ describe('ShoppingAssistantPanel', () => {
     expect(behavior.analytics).toHaveBeenCalledWith({
       eventName: 'ai_assistant_feedback',
       locale: 'fr',
-      searchTerm: 'Voici une **option** du catalogue.\n\n- Adaptée au béton\n- Disponible en stock',
       metadata: {
         surface: 'ai_assistant',
         target: 'assistant_response',
@@ -188,7 +190,7 @@ describe('ShoppingAssistantPanel', () => {
     await act(async () => {
       streamController!.enqueue(
         encoder.encode(
-          '{"type":"text-delta","delta":" immédiate."}\n{"type":"result","mode":"ai","products":[]}\n',
+          '{"type":"text-delta","delta":" immédiate."}\n{"type":"result","products":[]}\n',
         ),
       );
       streamController!.close();
@@ -218,31 +220,13 @@ describe('ShoppingAssistantPanel', () => {
       'fetch',
       vi.fn().mockResolvedValue(
         Response.json({
-          mode: 'ai',
           message: 'La quantité est maintenant de trois.',
           products: [],
           cartMutations: [
             {
               action: 'set_quantity',
+              productId: 12,
               quantity: 3,
-              product: {
-                id: 12,
-                token: 'perceuse-beton',
-                title: 'Perceuse béton',
-                titleAr: 'مثقاب خرسانة',
-                description: null,
-                descriptionAr: null,
-                sku: null,
-                characteristics: [],
-                characteristicsAr: [],
-                price: '12500.00',
-                oldPrice: null,
-                inStock: true,
-                availabilityStatus: 'in_stock',
-                imageUrl: null,
-                brand: null,
-                category: null,
-              },
             },
           ],
         }),
@@ -289,9 +273,7 @@ describe('ShoppingAssistantPanel', () => {
           { headers: { 'content-type': 'application/x-ndjson' } },
         ),
       )
-      .mockResolvedValueOnce(
-        Response.json({ mode: 'ai', message: 'Nouvelle réponse complète', products: [] }),
-      );
+      .mockResolvedValueOnce(Response.json({ message: 'Nouvelle réponse complète', products: [] }));
     vi.stubGlobal('fetch', fetchMock);
     render(<ShoppingAssistantPanel locale="fr" labels={labels} onClose={vi.fn()} />);
 
@@ -368,7 +350,7 @@ describe('ShoppingAssistantPanel', () => {
     await act(async () => {
       streamController!.enqueue(
         encoder.encode(
-          '{"type":"text-delta","delta":"J’ai trouvé une option."}\n{"type":"result","mode":"ai","products":[]}\n',
+          '{"type":"text-delta","delta":"J’ai trouvé une option."}\n{"type":"result","products":[]}\n',
         ),
       );
       streamController!.close();
@@ -390,7 +372,7 @@ describe('ShoppingAssistantPanel', () => {
     );
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(Response.json({ mode: 'ai', message: 'Réponse continue', products: [] }));
+      .mockResolvedValue(Response.json({ message: 'Réponse continue', products: [] }));
     vi.stubGlobal('fetch', fetchMock);
     render(<ShoppingAssistantPanel locale="fr" labels={labels} onClose={vi.fn()} />);
 
@@ -431,9 +413,7 @@ describe('ShoppingAssistantPanel', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response('{}', { status: 429 }))
-      .mockResolvedValueOnce(
-        Response.json({ mode: 'ai', message: 'La réponse relancée', products: [] }),
-      );
+      .mockResolvedValueOnce(Response.json({ message: 'La réponse relancée', products: [] }));
     vi.stubGlobal('fetch', fetchMock);
     render(<ShoppingAssistantPanel locale="fr" labels={labels} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Une perceuse' }));

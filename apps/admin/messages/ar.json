@@ -1478,6 +1478,7 @@
     "administration": "نظرة عامة على الإدارة وسجل الإجراءات."
   },
   "aiChat": {
+    "autoAccept": "تطبيق الاقتراحات المُنشأة تلقائيًا",
     "open": "مساعد الذكاء الاصطناعي",
     "close": "إغلاق مساعد الذكاء الاصطناعي",
     "fullScreen": "فتح المساعد بملء الشاشة",
@@ -1574,27 +1575,6 @@
     "analyticsMatched": "{matched} مطابق · {available} في عرض القرار",
     "analyticsGeneratedAt": "تم الإنشاء",
     "openAnalytics": "فتح في التحليلات",
-    "landingGeneration": {
-      "status": {
-        "completed": "تم إنشاء جميع أقسام صفحة الهبوط المخطط لها",
-        "partial-fallback": "تم حفظ الصفحة مع توضيح الأقسام البديلة",
-        "full-fallback": "تم حفظ صفحة بديلة مبنية على بيانات الكتالوج"
-      },
-      "generated": "الأقسام المنشأة",
-      "planned": "الأقسام المخطط لها",
-      "preserved": "الأقسام المحفوظة",
-      "fallback": "الأقسام البديلة",
-      "skipped": "الأقسام المتجاوزة",
-      "deleted": "الأقسام المحذوفة",
-      "retries": "المحاولات المستعادة",
-      "fallbackDetails": "الأقسام التي احتاجت إلى بديل",
-      "reasons": {
-        "timeout": "انتهت مهلة نموذج المحتوى",
-        "invalid-structured-output": "أعاد النموذج محتوى منظماً غير صالح",
-        "provider-error": "لم يكمل مزود المحتوى هذا القسم",
-        "insufficient-assets": "يتطلب هذا القسم المزيد من موارد المنتج الموثقة"
-      }
-    },
     "ecotrackTerminal": {
       "attempts": "محاولة العامل {attempt} · عدد إعادة المحاولة {retries}",
       "successes": "تم الإرسال بنجاح ({count})",
@@ -1629,16 +1609,7 @@
       "assets": "نتائج المحتوى",
       "assetsUpdated": "تم تحديث المحتوى",
       "landingPages": "نتائج صفحات الهبوط",
-      "landingPageCreated": "تم إنشاء صفحة الهبوط",
       "landingPageUpdated": "تم تحديث صفحة الهبوط",
-      "proposals": "اقتراح قابل للمراجعة",
-      "proposalsReviewed": "تمت مراجعة الاقتراحات",
-      "bulletin": "نتائج النشرة",
-      "bulletinUpdated": "تم تحديث النشرة",
-      "administration": "نتائج الإدارة",
-      "administrationUpdated": "تم تحديث الإدارة",
-      "actionHistory": "نتائج سجل الإجراءات",
-      "actionHistoryRecovered": "تمت استعادة سجل الإجراءات",
       "storefront": "إعدادات واجهة المتجر",
       "storefrontUpdated": "تم تحديث إعدادات واجهة المتجر",
       "analyticsUpdated": "تم تحديث التحليلات",
@@ -1656,8 +1627,6 @@
       "assets": "فتح المحتوى",
       "landingPages": "فتح صفحة الهبوط",
       "proposals": "فتح اقتراحات الذكاء الاصطناعي",
-      "bulletin": "فتح النشرة",
-      "administration": "فتح الإدارة",
       "storefront": "فتح إعدادات واجهة المتجر",
       "analytics": "فتح التحليلات"
     },

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { auth } from '../../../../../lib/auth';
 import {
   ADMIN_BACKGROUND_JOB_TYPES,
+  allowedAdminBackgroundJobTypes,
   cancelAdminBackgroundJob,
 } from '../../../../../lib/ai-background-jobs';
 import {
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
   const session = await auth();
   const permissions = normalizePermissions(session?.user?.permissions);
   if ('type' in parsed.data) {
-    if (!hasPermission(permissions, 'settings_manage')) {
+    if (!allowedAdminBackgroundJobTypes(permissions).includes(parsed.data.type)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     return NextResponse.json(await cancelAdminBackgroundJob(parsed.data.type, parsed.data.jobId));

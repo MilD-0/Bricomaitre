@@ -1,5 +1,5 @@
-import { z } from 'zod';
 import { eq } from 'drizzle-orm';
+import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
 import { brands, categories, products } from '@bric/db/schema';
@@ -13,10 +13,46 @@ import {
 import {
   createLandingPage,
   getLandingPageDetail,
+  listLandingPageSummaries,
   saveLandingPage,
   setLandingPageActive,
 } from './landing-pages';
 import { revalidateStorefrontLandingPages } from './storefront-revalidate';
+
+export const ADMIN_AI_INSPECT_LANDING_PAGES_TOOL_DESCRIPTION = [
+  'Find landing pages and inspect only the detail needed.',
+  'summary lists records, outline returns block identity and structure, and content returns one exact page document or selected block IDs.',
+].join(' ');
+
+export const adminAiLandingPageInspectionSchema = z
+  .object({
+    landingPageIds: z.array(z.number().int().positive()).max(20).default([]),
+    productIds: z.array(z.number().int().positive()).max(20).default([]),
+    query: z.string().trim().max(200).default(''),
+    locale: z.enum(['fr', 'ar']).nullable().default(null),
+    active: z.boolean().nullable().default(null),
+    view: z.enum(['summary', 'outline', 'content']).default('summary'),
+    blockIds: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
+    page: z.number().int().min(1).default(1),
+    limit: z.number().int().min(1).max(20).default(20),
+  })
+  .strict()
+  .superRefine((input, context) => {
+    if (input.view === 'content' && input.landingPageIds.length !== 1) {
+      context.addIssue({
+        code: 'custom',
+        path: ['landingPageIds'],
+        message: 'Content inspection requires one exact landing-page ID.',
+      });
+    }
+    if (input.blockIds.length > 0 && input.view !== 'content') {
+      context.addIssue({
+        code: 'custom',
+        path: ['blockIds'],
+        message: 'Block selection is available only for content inspection.',
+      });
+    }
+  });
 
 export const adminAiLandingPageCreateSchema = z
   .object({
@@ -31,17 +67,21 @@ export const adminAiLandingPageEditSchema = z
   .object({
     landingPageId: z.number().int().positive(),
     expectedRevision: z.number().int().positive(),
-    instruction: z.string().trim().min(1).max(4_000).nullable().default(null),
+    instruction: z.string().trim().min(1).max(4_000),
+    targetBlockIds: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
+    deleteBlockIds: z.array(z.string().trim().min(1).max(80)).max(18).default([]),
+    allowStructuralChanges: z.boolean().default(false),
     active: z.boolean().nullable().default(null),
   })
-  .strict()
-  .superRefine((input, context) => {
-    if (input.instruction == null && input.active == null)
-      context.addIssue({
-        code: 'custom',
-        message: 'Provide a content edit instruction, a publication change, or both.',
-      });
-  });
+  .strict();
+
+export const adminAiLandingPagePublicationSchema = z
+  .object({
+    landingPageId: z.number().int().positive(),
+    expectedRevision: z.number().int().positive(),
+    active: z.boolean(),
+  })
+  .strict();
 
 type AdminAiActor = { email?: string | null; name?: string | null };
 
@@ -49,8 +89,115 @@ export interface AdminAiLandingPageEditor {
   edit(input: LandingPageEditInput): Promise<LandingPageEditResult>;
 }
 
+type LandingPageInspectionDependencies = {
+  listSummaries: typeof listLandingPageSummaries;
+  getDetail: typeof getLandingPageDetail;
+};
+
+const inspectionDependencies: LandingPageInspectionDependencies = {
+  listSummaries: listLandingPageSummaries,
+  getDetail: getLandingPageDetail,
+};
+
 function actorId(actor?: AdminAiActor) {
   return actor?.email?.trim() || null;
+}
+
+function normalizedSearch(value: string) {
+  return value.normalize('NFKC').toLocaleLowerCase();
+}
+
+function blockOutline(
+  block: Awaited<ReturnType<typeof getLandingPageDetail>>['document']['blocks'][number],
+) {
+  return {
+    id: block.id,
+    type: block.type,
+    surface: block.surface,
+    width: block.width,
+    heading: 'heading' in block ? block.heading : null,
+  };
+}
+
+export async function inspectAdminAiLandingPages(
+  rawInput: z.input<typeof adminAiLandingPageInspectionSchema>,
+  dependencies: LandingPageInspectionDependencies = inspectionDependencies,
+) {
+  const input = adminAiLandingPageInspectionSchema.parse(rawInput);
+  const requestedIds = [...new Set(input.landingPageIds)];
+  const requestedProductIds = new Set(input.productIds);
+  const query = normalizedSearch(input.query);
+  const summaries = await dependencies.listSummaries();
+  const knownIds = new Set(summaries.map((page) => page.id));
+  const filtered = summaries.filter((page) => {
+    if (requestedIds.length > 0 && !requestedIds.includes(page.id)) return false;
+    if (requestedProductIds.size > 0 && !requestedProductIds.has(page.productId)) return false;
+    if (input.locale && page.locale !== input.locale) return false;
+    if (input.active !== null && page.active !== input.active) return false;
+    if (!query) return true;
+    return normalizedSearch(
+      `${page.id} ${page.productId} ${page.productTitle} ${page.productSlug} ${page.slug}`,
+    ).includes(query);
+  });
+  const offset = (input.page - 1) * input.limit;
+  const selected = filtered.slice(offset, offset + input.limit);
+  const pagination = {
+    page: input.page,
+    limit: input.limit,
+    total: filtered.length,
+    totalPages: Math.max(1, Math.ceil(filtered.length / input.limit)),
+    hasNextPage: offset + input.limit < filtered.length,
+  };
+  const base = {
+    kind: 'admin_landing_pages' as const,
+    view: input.view,
+    filters: {
+      landingPageIds: requestedIds,
+      productIds: [...requestedProductIds],
+      query: input.query,
+      locale: input.locale,
+      active: input.active,
+    },
+    requestedIds,
+    missingIds: requestedIds.filter((id) => !knownIds.has(id)),
+    pagination,
+  };
+
+  if (input.view === 'summary') return { ...base, items: selected };
+
+  const details = await Promise.all(selected.map((page) => dependencies.getDetail(page.id)));
+  if (input.view === 'outline') {
+    return {
+      ...base,
+      items: details.map(({ document, ...page }) => ({
+        ...page,
+        theme: document.theme,
+        seo: document.seo,
+        blocks: document.blocks.map(blockOutline),
+      })),
+    };
+  }
+
+  const detail = details[0];
+  if (!detail) return { ...base, items: [] };
+  const selectedBlockIds = new Set(input.blockIds);
+  const blocks =
+    selectedBlockIds.size === 0
+      ? detail.document.blocks
+      : detail.document.blocks.filter((block) => selectedBlockIds.has(block.id));
+  return {
+    ...base,
+    items: [
+      {
+        ...detail,
+        document: { ...detail.document, blocks },
+        availableBlockIds: detail.document.blocks.map((block) => block.id),
+        missingBlockIds: input.blockIds.filter(
+          (id) => !detail.document.blocks.some((block) => block.id === id),
+        ),
+      },
+    ],
+  };
 }
 
 function generationSummary(result: {
@@ -96,6 +243,7 @@ export async function createAdminAiLandingPage(
     await revalidateStorefrontLandingPages();
   }
   return {
+    ok: true as const,
     id: page.id,
     productId: input.productId,
     locale: input.locale,
@@ -137,32 +285,30 @@ export async function editAdminAiLandingPage(
 ) {
   const input = adminAiLandingPageEditSchema.parse(rawInput);
   const page = await getLandingPageDetail(input.landingPageId);
-  const instruction = input.instruction;
-  const edited = instruction
-    ? await (async () => {
-        const product = await loadLandingPageProduct(page.productId);
-        return editor.edit({
-          locale: page.locale,
-          instruction,
-          currentDocument: page.document,
-          product: {
-            id: product.id,
-            title: product.title,
-            titleAr: product.titleAr,
-            description: product.description?.slice(0, 12_000) ?? null,
-            descriptionAr: product.descriptionAr?.slice(0, 12_000) ?? null,
-            brand: product.brand,
-            category: product.category,
-            sku: product.sku,
-            barcode: product.barcode,
-            images: product.images.filter((image): image is string => Boolean(image)).slice(0, 12),
-          },
-        });
-      })()
-    : null;
+  const product = await loadLandingPageProduct(page.productId);
+  const edited = await editor.edit({
+    locale: page.locale,
+    instruction: input.instruction,
+    targetBlockIds: input.targetBlockIds,
+    deleteBlockIds: input.deleteBlockIds,
+    allowStructuralChanges: input.allowStructuralChanges,
+    currentDocument: page.document,
+    product: {
+      id: product.id,
+      title: product.title,
+      titleAr: product.titleAr,
+      description: product.description?.slice(0, 12_000) ?? null,
+      descriptionAr: product.descriptionAr?.slice(0, 12_000) ?? null,
+      brand: product.brand,
+      category: product.category,
+      sku: product.sku,
+      barcode: product.barcode,
+      images: product.images.filter((image): image is string => Boolean(image)).slice(0, 12),
+    },
+  });
   const saved = await saveLandingPage({
     id: page.id,
-    document: edited?.document ?? page.document,
+    document: edited.document,
     active: input.active ?? page.active,
     expectedRevision: input.expectedRevision,
     actorId: actorId(actor),
@@ -170,10 +316,36 @@ export async function editAdminAiLandingPage(
   });
   await revalidateStorefrontLandingPages();
   return {
+    ok: true as const,
     ...saved,
     slug: page.slug,
     productId: page.productId,
     locale: page.locale,
-    generation: edited ? generationSummary(edited) : null,
+    generation: generationSummary(edited),
+  };
+}
+
+export async function setAdminAiLandingPagePublication(
+  rawInput: z.input<typeof adminAiLandingPagePublicationSchema>,
+  actor?: AdminAiActor,
+) {
+  const input = adminAiLandingPagePublicationSchema.parse(rawInput);
+  const page = await getLandingPageDetail(input.landingPageId);
+  const result = await setLandingPageActive({
+    id: page.id,
+    active: input.active,
+    expectedRevision: input.expectedRevision,
+    actorId: actorId(actor),
+  });
+  await revalidateStorefrontLandingPages();
+  return {
+    ok: true as const,
+    id: page.id,
+    slug: page.slug,
+    locale: page.locale,
+    currentRevision: result.currentRevision,
+    before: { active: page.active },
+    after: { active: result.active },
+    changed: page.active !== result.active,
   };
 }

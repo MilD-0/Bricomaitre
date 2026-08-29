@@ -41,33 +41,17 @@ describe('admin assistant tool presentation', () => {
       'change_ecotrack_shipments',
       'update_order_status',
       'update_order_details',
-      'inspect_inventory',
       'scan_inventory',
       'adjust_inventory',
       'receive_inventory',
       'update_inventory_state',
       'inspect_assets',
       'inspect_landing_pages',
-      'create_landing_page',
-      'edit_landing_page',
-      'update_asset_state',
+      'start_landing_page_work',
+      'set_landing_page_active',
+      'get_landing_page_job_status',
       'reorder_assets',
       'manage_assets',
-      'inspect_ai_proposals',
-      'review_ai_proposals',
-      'delete_expired_ai_proposals',
-      'inspect_bulletin',
-      'create_bulletin_post',
-      'reply_bulletin_post',
-      'set_bulletin_reaction',
-      'update_bulletin_post',
-      'delete_bulletin_content',
-      'inspect_administration',
-      'set_access_grant',
-      'revoke_access_grants',
-      'set_role_definition',
-      'inspect_action_history',
-      'recover_action_history',
       'inspect_storefront_configuration',
       'update_storefront_settings',
       'update_storefront_announcement',
@@ -77,20 +61,8 @@ describe('admin assistant tool presentation', () => {
       'sync_analytics_source',
       'generate_product_content',
       'get_product_content_job_status',
-      'list_background_jobs',
-      'get_background_job',
-      'stop_background_job',
-      'start_background_job',
-      'suggest_discount',
-      'suggest_featured_products',
-      'suggest_landing_page',
       'categorize_catalog',
       'get_catalog_categorization_status',
-      'propose_product_edit',
-      'propose_brand_edit',
-      'propose_category_edit',
-      'propose_brand_create',
-      'propose_category_create',
     ];
 
     expect([...ADMIN_AI_PRESENTED_TOOL_NAMES].sort()).toEqual(toolNames.sort());
@@ -116,7 +88,6 @@ describe('admin assistant tool presentation', () => {
       'inspect_ecotrack_shipments',
       'query_analytics',
       'query_ai_stats',
-      'list_background_jobs',
     ]) {
       expect(adminAiToolMutatesApplication(toolName)).toBe(false);
     }
@@ -151,13 +122,11 @@ describe('admin assistant tool presentation', () => {
   });
 
   it('links landing-page mutations to the exact persisted editor', () => {
-    expect(adminAiToolPresentation('create_landing_page', { id: 91 }, 'en')).toEqual({
-      labelKey: 'landingPageCreated',
-      destinationKey: 'landingPages',
-      href: '/en/assets/landing-pages/91',
-    });
-    expect(adminAiToolPresentation('edit_landing_page', { landingPageId: 12 }, 'ar').href).toBe(
-      '/ar/assets/landing-pages/12',
+    expect(adminAiToolPresentation('set_landing_page_active', { id: 41 }, 'fr').href).toBe(
+      '/fr/assets/landing-pages/41',
+    );
+    expect(adminAiToolPresentation('start_landing_page_work', {}, 'en').href).toBe(
+      '/en/assets/landing-pages',
     );
   });
 
@@ -211,25 +180,10 @@ describe('admin assistant tool presentation', () => {
     }
   });
 
-  it('links assets and administration results to their exact owning workspace', () => {
+  it('links assets to their exact owning workspace', () => {
     expect(
       adminAiToolPresentation('manage_assets', { kind: 'featured-group', id: 8 }, 'fr').href,
     ).toBe('/fr/assets/featured-groups');
-    expect(adminAiToolPresentation('set_access_grant', {}, 'en').href).toBe(
-      '/en/administration/users',
-    );
-    expect(adminAiToolPresentation('revoke_access_grants', {}, 'fr').href).toBe(
-      '/fr/administration/users',
-    );
-    expect(adminAiToolPresentation('set_role_definition', {}, 'en').href).toBe(
-      '/en/administration/roles',
-    );
-    expect(adminAiToolPresentation('inspect_action_history', {}, 'en').href).toBe(
-      '/en/administration/history',
-    );
-    expect(adminAiToolPresentation('recover_action_history', {}, 'ar').href).toBe(
-      '/ar/administration/history',
-    );
   });
 
   it('links archived product reads and restores back to the native archive', () => {

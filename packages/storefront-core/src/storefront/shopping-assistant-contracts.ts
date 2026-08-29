@@ -71,17 +71,6 @@ export const shoppingAssistantRequestSchema = z
         journeyId: z.string().trim().min(1).max(120),
         sessionId: z.string().trim().min(1).max(120),
         pagePath: z.string().trim().min(1).max(2_048),
-        intent: z.enum([
-          'product_search',
-          'product_comparison',
-          'compatibility',
-          'price',
-          'availability',
-          'how_to',
-          'recommendation',
-          'cart_management',
-          'other',
-        ]),
       })
       .strict()
       .optional(),
@@ -125,24 +114,40 @@ export const shoppingAssistantCartManagementSchema = z
   })
   .strict();
 
-export const shoppingAssistantCartMutationSchema = z
-  .object({
-    action: shoppingAssistantCartActionSchema,
-    quantity: z.number().int().min(0).max(20),
-    product: shoppingAssistantProductSchema,
-  })
-  .strict();
+export const shoppingAssistantCartMutationSchema = z.discriminatedUnion('action', [
+  z
+    .object({
+      action: z.literal('add'),
+      quantity: z.number().int().min(1).max(20),
+      product: shoppingAssistantProductSchema,
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('set_quantity'),
+      productId: z.number().int().positive(),
+      quantity: z.number().int().min(1).max(20),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('remove'),
+      productId: z.number().int().positive(),
+      quantity: z.literal(0),
+    })
+    .strict(),
+]);
 
 export const shoppingAssistantResponseSchema = z
   .object({
     message: z.string().trim().min(1).max(4_000),
     products: z.array(shoppingAssistantProductSchema).max(8),
     cartMutations: z.array(shoppingAssistantCartMutationSchema).max(8).default([]),
-    mode: z.enum(['ai', 'fallback']),
   })
   .strict();
 
 export const shoppingAssistantToolNameSchema = z.enum([
+  'read_storefront_guidance',
   'search_catalog',
   'inspect_products',
   'inspect_order',
@@ -167,7 +172,6 @@ export const shoppingAssistantStreamEventSchema = z.discriminatedUnion('type', [
       type: z.literal('result'),
       products: z.array(shoppingAssistantProductSchema).max(8),
       cartMutations: z.array(shoppingAssistantCartMutationSchema).max(8).default([]),
-      mode: z.enum(['ai', 'fallback']),
     })
     .strict(),
   z
@@ -179,10 +183,14 @@ export const shoppingAssistantStreamEventSchema = z.discriminatedUnion('type', [
     .strict(),
 ]);
 
+export const shoppingAssistantProductTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('current_page') }).strict(),
+  z.object({ kind: z.literal('product_id'), productId: z.number().int().positive() }).strict(),
+  z.object({ kind: z.literal('product_token'), token: z.string().trim().min(1).max(200) }).strict(),
+]);
+
 export const shoppingAssistantProductLookupSchema = z
-  .object({
-    tokens: z.array(z.string().trim().min(1).max(200)).min(1).max(4),
-  })
+  .object({ targets: z.array(shoppingAssistantProductTargetSchema).min(1).max(8) })
   .strict();
 
 export const shoppingAssistantOrderLookupSchema = z.object({}).strict();
@@ -206,6 +214,14 @@ export const shoppingAssistantProductSelectionSchema = z
   })
   .strict();
 
+export const shoppingAssistantGuidanceTopicSchema = z.enum(['ordering', 'tracking', 'delivery']);
+
+export const shoppingAssistantGuidanceRequestSchema = z
+  .object({
+    topics: z.array(shoppingAssistantGuidanceTopicSchema).min(1).max(3),
+  })
+  .strict();
+
 export const shoppingAssistantCatalogSearchResultSchema = z
   .object({
     products: z.array(shoppingAssistantProductSchema).max(24),
@@ -226,3 +242,5 @@ export type ShoppingAssistantToolName = z.infer<typeof shoppingAssistantToolName
 export type ShoppingAssistantCartAction = z.infer<typeof shoppingAssistantCartActionSchema>;
 export type ShoppingAssistantCartOperation = z.infer<typeof shoppingAssistantCartOperationSchema>;
 export type ShoppingAssistantCartMutation = z.infer<typeof shoppingAssistantCartMutationSchema>;
+export type ShoppingAssistantProductTarget = z.infer<typeof shoppingAssistantProductTargetSchema>;
+export type ShoppingAssistantGuidanceTopic = z.infer<typeof shoppingAssistantGuidanceTopicSchema>;

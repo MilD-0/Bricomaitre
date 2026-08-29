@@ -43,6 +43,7 @@ export function storefrontDeliverySupportEvidence(
       normalizeDeliveryQuery(wilaya.name).includes(query) ||
       matchingCommuneWilayaIds.has(wilaya.wilayaId),
   );
+  const visibleWilayas = matchingWilayas.slice(0, query ? 8 : catalog.wilayas.length);
 
   return {
     contact: {
@@ -55,7 +56,7 @@ export function storefrontDeliverySupportEvidence(
       facebookUrl: settings.facebookUrl,
     },
     query: rawQuery.trim(),
-    matchedWilayas: matchingWilayas.slice(0, 8).map((wilaya) => {
+    matchedWilayas: visibleWilayas.map((wilaya) => {
       const wilayaCommunes = catalog.communes.filter(
         (commune) => commune.wilayaId === wilaya.wilayaId,
       );
@@ -63,7 +64,11 @@ export function storefrontDeliverySupportEvidence(
         !query ||
         String(wilaya.wilayaId) === query ||
         normalizeDeliveryQuery(wilaya.name).includes(query);
-      const relevantCommunes = query && !wilayaNameMatches ? matchingCommunes : wilayaCommunes;
+      const relevantCommunes = !query
+        ? []
+        : query && !wilayaNameMatches
+          ? matchingCommunes.filter((commune) => commune.wilayaId === wilaya.wilayaId)
+          : wilayaCommunes;
       const fee = catalog.serviceFees.find(
         (candidate) =>
           candidate.serviceType === 'livraison' && candidate.wilayaId === wilaya.wilayaId,
@@ -74,24 +79,17 @@ export function storefrontDeliverySupportEvidence(
         fees: fee ? { homeDeliveryDzd: fee.homeFee, stopDeskDzd: fee.stopDeskFee } : null,
         communeCount: wilayaCommunes.length,
         stopDeskCommuneCount: wilayaCommunes.filter((commune) => commune.hasStopDesk).length,
-        communes: relevantCommunes.slice(0, 100).map((commune) => ({
+        communes: relevantCommunes.slice(0, 20).map((commune) => ({
           name: commune.name,
           postalCode: commune.postalCode,
           hasStopDesk: commune.hasStopDesk,
         })),
-        communesTruncated: relevantCommunes.length > 100,
+        communesTruncated: relevantCommunes.length > 20,
       };
     }),
     matchedWilayaCount: matchingWilayas.length,
-    deliveryWeightSurcharges: catalog.weightFees
-      .filter((fee) => fee.serviceType === 'livraison')
-      .map((fee) => ({
-        startsAtKg: fee.startsAtKg,
-        homeSurchargeDzd: fee.homeSurcharge,
-        stopDeskSurchargeDzd: fee.stopDeskSurcharge,
-        perAdditionalKgDzd: fee.perAdditionalKg,
-      })),
-    lastSync: catalog.lastSync,
+    wilayasTruncated: visibleWilayas.length < matchingWilayas.length,
+    catalogUpdatedAt: catalog.lastSync?.finishedAt ?? null,
   };
 }
 

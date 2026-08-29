@@ -25,6 +25,7 @@ vi.mock('./storefront-revalidate', () => ({
 
 import {
   inspectAdminStorefrontConfiguration,
+  storefrontAnnouncementMutationSchema,
   storefrontSettingsToolSchema,
   updateAdminStorefrontAnnouncement,
   updateAdminStorefrontSettings,
@@ -136,5 +137,22 @@ describe('admin AI storefront operations', () => {
       'admin@bricomaitre.com',
     );
     expect(mocks.revalidate).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an active announcement unless both localized messages are present', () => {
+    expect(
+      storefrontAnnouncementMutationSchema.safeParse({
+        messageFr: 'Livraison gratuite',
+        messageAr: '',
+        active: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      storefrontAnnouncementMutationSchema.safeParse({
+        messageFr: '',
+        messageAr: '',
+        active: false,
+      }).success,
+    ).toBe(true);
   });
 });

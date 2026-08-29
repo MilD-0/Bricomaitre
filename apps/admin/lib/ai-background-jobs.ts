@@ -2,6 +2,7 @@ import {
   ADMIN_AD_COST_IMPORT_QUEUE,
   ADMIN_AI_CATEGORIZATION_QUEUE,
   ADMIN_AI_CONTENT_QUEUE,
+  ADMIN_AI_LANDING_PAGE_QUEUE,
   ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE,
   ADMIN_ECOTRACK_SYNC_QUEUE,
   ADMIN_ORDER_ECOTRACK_QUEUE,
@@ -13,12 +14,6 @@ import {
   cancelBackgroundJob,
   getBackgroundJob,
   listRecentBackgroundJobs,
-  startAdminReportingRefreshJob,
-  startEcotrackShipmentSyncJob,
-  startEcotrackSyncJob,
-  startOrderExportJob,
-  startProductCatalogFeedRefreshJob,
-  startProductExportJob,
 } from './background-jobs';
 import { hasPermission, type PermissionKey } from './permissions';
 
@@ -27,6 +22,7 @@ export { ADMIN_AI_ASSISTANT_JOB_ORIGIN } from './background-jobs';
 export const ADMIN_BACKGROUND_JOB_TYPES = [
   'ai_categorization',
   'ai_content',
+  'ai_landing_page',
   'product_export',
   'catalog_feed_refresh',
   'order_export',
@@ -40,20 +36,10 @@ export const ADMIN_BACKGROUND_JOB_TYPES = [
 
 export type AdminBackgroundJobType = (typeof ADMIN_BACKGROUND_JOB_TYPES)[number];
 
-const STARTABLE_ADMIN_BACKGROUND_JOB_TYPES = [
-  'product_export',
-  'catalog_feed_refresh',
-  'order_export',
-  'reporting_refresh',
-  'ecotrack_catalog_sync',
-  'ecotrack_shipment_sync',
-] as const;
-
-export type StartableAdminBackgroundJobType = (typeof STARTABLE_ADMIN_BACKGROUND_JOB_TYPES)[number];
-
 const ADMIN_BACKGROUND_JOB_PERMISSION: Record<AdminBackgroundJobType, PermissionKey> = {
   ai_categorization: 'products_write',
   ai_content: 'products_write',
+  ai_landing_page: 'assets_write',
   product_export: 'products_write',
   catalog_feed_refresh: 'products_write',
   order_export: 'orders_write',
@@ -77,6 +63,7 @@ const CANCELLABLE_ADMIN_BACKGROUND_JOB_TYPES = [
 const queueByType: Record<AdminBackgroundJobType, string> = {
   ai_categorization: ADMIN_AI_CATEGORIZATION_QUEUE,
   ai_content: ADMIN_AI_CONTENT_QUEUE,
+  ai_landing_page: ADMIN_AI_LANDING_PAGE_QUEUE,
   product_export: ADMIN_PRODUCT_EXPORT_QUEUE,
   catalog_feed_refresh: ADMIN_PRODUCT_CATALOG_FEED_QUEUE,
   order_export: ADMIN_ORDER_EXPORT_QUEUE,
@@ -97,11 +84,6 @@ export function allowedAdminBackgroundJobTypes(permissions: readonly PermissionK
   return ADMIN_BACKGROUND_JOB_TYPES.filter((type) =>
     hasPermission(permissions, ADMIN_BACKGROUND_JOB_PERMISSION[type]),
   );
-}
-
-export function allowedStartableAdminBackgroundJobTypes(permissions: readonly PermissionKey[]) {
-  const allowed = new Set(allowedAdminBackgroundJobTypes(permissions));
-  return STARTABLE_ADMIN_BACKGROUND_JOB_TYPES.filter((type) => allowed.has(type));
 }
 
 export async function listAdminBackgroundJobs(
@@ -139,47 +121,4 @@ export async function cancelAdminBackgroundJob(type: AdminBackgroundJobType, job
   return job
     ? { job }
     : { error: 'The job was not found or is no longer queued/running.', job: null };
-}
-
-export async function startAdminBackgroundJob(input: {
-  type: StartableAdminBackgroundJobType;
-  actor: { email: string; name?: string | null };
-  conversationId?: number;
-  orderMode?: 'selected' | 'confirmed';
-  orderIds?: number[];
-}) {
-  const trigger = `ai-assistant:${input.actor.email}`;
-  const taskContext = { conversationId: input.conversationId };
-  switch (input.type) {
-    case 'product_export':
-      return startProductExportJob(input.actor.email, undefined, taskContext);
-    case 'catalog_feed_refresh':
-      return startProductCatalogFeedRefreshJob(trigger, undefined, taskContext);
-    case 'order_export': {
-      const orderIds = [...new Set(input.orderIds ?? [])];
-      if (!input.orderMode || orderIds.length === 0) {
-        return {
-          error: 'orderMode and at least one resolved order ID are required for an order export.',
-        };
-      }
-      return startOrderExportJob(
-        input.actor.email,
-        { mode: input.orderMode, orderIds },
-        undefined,
-        taskContext,
-      );
-    }
-    case 'reporting_refresh':
-      return startAdminReportingRefreshJob(trigger, null, undefined, taskContext);
-    case 'ecotrack_catalog_sync':
-      return startEcotrackSyncJob(input.actor.email, trigger, input.actor, undefined, taskContext);
-    case 'ecotrack_shipment_sync':
-      return startEcotrackShipmentSyncJob(
-        input.actor.email,
-        trigger,
-        input.actor,
-        undefined,
-        taskContext,
-      );
-  }
 }

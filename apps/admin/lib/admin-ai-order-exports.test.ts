@@ -133,11 +133,32 @@ describe('admin AI order exports', () => {
       { conversationId: 91 },
     );
     expect(result).toMatchObject({
+      ok: true,
       kind: 'order_export_started',
       resolvedOrderCount: 1,
       missingOrderIds: [404],
       completionEffect: 'order statuses are unchanged',
       job: { status: 'queued', downloadPath: null },
+    });
+  });
+
+  it('returns a truthful non-success receipt when the export queue is already busy', async () => {
+    mocks.loadOrderDetail.mockResolvedValue(order(31, '2026-08-23T10:00:00.000Z'));
+    mocks.startExport.mockResolvedValue({
+      kind: 'busy',
+      job: { id: 'job-1', status: 'running', downloadPath: null },
+    });
+
+    await expect(
+      startAdminAiOrderExport(
+        { mode: 'selected', orderIds: [31] },
+        { ownerKey: 'admin@example.com', conversationId: 91 },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      kind: 'order_export_busy',
+      startDisposition: 'busy',
+      job: { status: 'running' },
     });
   });
 });

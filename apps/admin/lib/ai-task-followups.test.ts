@@ -91,6 +91,26 @@ describe('AI task terminal follow-ups', () => {
     expect(message).toContain('proposals remain pending for review');
   });
 
+  it('reports the persisted landing-page revision and partial generation plainly', () => {
+    const message = formatAiTaskTerminalMessage({
+      jobId: 'landing-job',
+      kind: 'ai-landing-page:revise',
+      status: 'completed',
+      summary: {
+        operation: 'revise',
+        complete: false,
+        partial: true,
+        landingPageId: 41,
+        currentRevision: 4,
+        active: true,
+      },
+    });
+
+    expect(message).toContain('Landing page: #41 · revision 4 · live');
+    expect(message).toContain('saved with partial generation');
+    expect(message).not.toContain('server did not confirm complete');
+  });
+
   it('separates every ECOTRACK outcome and makes worker retries explicit', () => {
     const message = formatAiTaskTerminalMessage({
       jobId: 'ecotrack-1',

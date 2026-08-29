@@ -163,15 +163,56 @@ describe('storefront shopping assistant', () => {
           communes: [{ name: 'Bab Ezzouar', postalCode: '16042', hasStopDesk: true }],
         },
       ],
-      deliveryWeightSurcharges: [
-        {
-          startsAtKg: '5.00',
-          homeSurchargeDzd: '100.00',
-          stopDeskSurchargeDzd: '80.00',
-          perAdditionalKgDzd: '20.00',
-        },
-      ],
+      catalogUpdatedAt: null,
     });
+    expect(JSON.stringify(evidence)).not.toMatch(/weight|surcharge|poids/i);
+  });
+
+  it('lists delivery wilayas without dumping their communes into model context', () => {
+    const evidence = storefrontDeliverySupportEvidence(
+      {
+        wilayas: [
+          { wilayaId: 8, name: 'Béchar' },
+          { wilayaId: 16, name: 'Alger' },
+        ],
+        communes: [
+          {
+            communeId: 1,
+            wilayaId: 8,
+            name: 'Abadla',
+            postalCode: '08010',
+            hasStopDesk: false,
+          },
+          {
+            communeId: 2,
+            wilayaId: 16,
+            name: 'Bab Ezzouar',
+            postalCode: '16042',
+            hasStopDesk: true,
+          },
+        ],
+        serviceFees: [],
+        weightFees: [],
+        lastSync: null,
+      },
+      {
+        phoneDisplay: '0795 34 28 26',
+        phoneHref: 'tel:+213795342826',
+        phoneEnabled: true,
+        aiAssistantEnabled: true,
+        contactEmail: null,
+        address: null,
+        mapUrl: null,
+        facebookUrl: null,
+        aiModel: 'openai/gpt-5.6-luna',
+        aiFallbackModel: null,
+      },
+      '',
+    );
+
+    expect(evidence.matchedWilayas).toHaveLength(2);
+    expect(evidence.matchedWilayas.every((wilaya) => wilaya.communes.length === 0)).toBe(true);
+    expect(evidence.wilayasTruncated).toBe(false);
   });
 
   it('carries the current catalog filters, product, and cart into assistant context', () => {
@@ -237,7 +278,6 @@ describe('storefront shopping assistant', () => {
     ).toBe(false);
     expect(
       shoppingAssistantResponseSchema.safeParse({
-        mode: 'ai',
         message: 'Suggestion',
         products: [
           {
