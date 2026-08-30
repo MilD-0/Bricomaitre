@@ -26,10 +26,10 @@
     "db:normalize-slugs": "tsx scripts/normalize-slugs.ts",
     "test": "vitest run --project unit-node --maxWorkers=2 && vitest run --project component-jsdom --maxWorkers=2",
     "test:watch": "vitest --project unit-node --project component-jsdom --maxWorkers=2",
-    "test:coverage": "vitest run --project unit-node --project component-jsdom --coverage",
-    "test:contract": "vitest run --project route-contract-node",
+    "test:coverage": "vitest run --project unit-node --project component-jsdom --coverage --maxWorkers=2",
+    "test:contract": "vitest run --project route-contract-node --maxWorkers=2",
     "test:integration": "pnpm test:contract",
-    "test:services": "vitest run --project service-integration-node",
+    "test:services": "vitest run --project service-integration-node --maxWorkers=2",
     "test:redis:ai": "vitest run --project redis-integration-node --maxWorkers=1",
     "eval:ai": "tsx scripts/run-ai-evals.ts",
     "test:browser": "playwright test"

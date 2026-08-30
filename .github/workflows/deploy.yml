@@ -20,7 +20,7 @@ jobs:
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 5
     permissions:
       contents: read
@@ -103,7 +103,7 @@ jobs:
     name: Build images / storefront API
     needs: release-context
     if: needs.release-context.outputs.current == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 30
     permissions:
       contents: read
@@ -123,22 +123,35 @@ jobs:
         with:
           ref: ${{ needs.release-context.outputs.sha }}
           persist-credentials: false
+      - name: Isolate Docker registry credentials
+        run: |
+          set -euo pipefail
+          docker_config="$RUNNER_TEMP/docker-config"
+          mkdir -p "$docker_config"
+          {
+            echo "DOCKER_CONFIG=$docker_config"
+            echo "BUILDX_CONFIG=$HOME/.docker/buildx"
+          } >> "$GITHUB_ENV"
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        with:
+          name: bricomaitre-ci
+          driver-opts: network=host
+          keep-state: true
+          cache-binary: false
+          cleanup: false
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Configure cached Cosign
+        run: bash ops/scripts/install-cosign.sh
       - name: Build, push, and sign storefront API images
         run: |
           set -euo pipefail
           mkdir -p build-metadata release-parts
-          docker buildx bake \
-            --file ops/docker/docker-bake.hcl \
-            --push --provenance=true --sbom=true --progress plain \
-            --metadata-file build-metadata/api.json \
-            api 2>&1 | tee build-metadata/api.log
+          bash ops/scripts/build-release-images.sh \
+            api build-metadata/api.json build-metadata/api.log
           echo "## Storefront API images" >> "$GITHUB_STEP_SUMMARY"
           bash ops/scripts/sign-bake-images.sh \
             build-metadata/api.json \
@@ -157,7 +170,7 @@ jobs:
     name: Build images / admin
     needs: release-context
     if: needs.release-context.outputs.current == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 30
     permissions:
       contents: read
@@ -183,22 +196,35 @@ jobs:
         with:
           ref: ${{ needs.release-context.outputs.sha }}
           persist-credentials: false
+      - name: Isolate Docker registry credentials
+        run: |
+          set -euo pipefail
+          docker_config="$RUNNER_TEMP/docker-config"
+          mkdir -p "$docker_config"
+          {
+            echo "DOCKER_CONFIG=$docker_config"
+            echo "BUILDX_CONFIG=$HOME/.docker/buildx"
+          } >> "$GITHUB_ENV"
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        with:
+          name: bricomaitre-ci
+          driver-opts: network=host
+          keep-state: true
+          cache-binary: false
+          cleanup: false
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Configure cached Cosign
+        run: bash ops/scripts/install-cosign.sh
       - name: Build, push, and sign admin images
         run: |
           set -euo pipefail
           mkdir -p build-metadata release-parts
-          docker buildx bake \
-            --file ops/docker/docker-bake.hcl \
-            --push --provenance=true --sbom=true --progress plain \
-            --metadata-file build-metadata/admin.json \
-            admin 2>&1 | tee build-metadata/admin.log
+          bash ops/scripts/build-release-images.sh \
+            admin build-metadata/admin.json build-metadata/admin.log
           echo "## Admin images" >> "$GITHUB_STEP_SUMMARY"
           bash ops/scripts/sign-bake-images.sh \
             build-metadata/admin.json \
@@ -218,7 +244,7 @@ jobs:
     name: Build images / storefront
     needs: release-context
     if: needs.release-context.outputs.current == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 30
     permissions:
       contents: read
@@ -246,22 +272,35 @@ jobs:
         with:
           ref: ${{ needs.release-context.outputs.sha }}
           persist-credentials: false
+      - name: Isolate Docker registry credentials
+        run: |
+          set -euo pipefail
+          docker_config="$RUNNER_TEMP/docker-config"
+          mkdir -p "$docker_config"
+          {
+            echo "DOCKER_CONFIG=$docker_config"
+            echo "BUILDX_CONFIG=$HOME/.docker/buildx"
+          } >> "$GITHUB_ENV"
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        with:
+          name: bricomaitre-ci
+          driver-opts: network=host
+          keep-state: true
+          cache-binary: false
+          cleanup: false
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Configure cached Cosign
+        run: bash ops/scripts/install-cosign.sh
       - name: Build, push, and sign storefront image
         run: |
           set -euo pipefail
           mkdir -p build-metadata release-parts
-          docker buildx bake \
-            --file ops/docker/docker-bake.hcl \
-            --push --provenance=true --sbom=true --progress plain \
-            --metadata-file build-metadata/storefront.json \
-            storefront 2>&1 | tee build-metadata/storefront-web.log
+          bash ops/scripts/build-release-images.sh \
+            storefront build-metadata/storefront.json build-metadata/storefront-web.log
           echo "## Storefront image" >> "$GITHUB_STEP_SUMMARY"
           bash ops/scripts/sign-bake-images.sh \
             build-metadata/storefront.json \
@@ -287,7 +326,7 @@ jobs:
       - build-api-images
       - build-admin-images
       - build-storefront-image
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 10
     permissions:
       contents: read
@@ -342,7 +381,7 @@ jobs:
     needs:
       - release-context
       - assemble-release-manifest
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 20
     concurrency:
       group: bricomaitre-production
@@ -419,10 +458,35 @@ jobs:
           test -n "$DEPLOY_KNOWN_HOSTS"
           test -n "$GHCR_USERNAME"
           test -n "$GHCR_READ_TOKEN"
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/bric_deploy_key
-          chmod 600 ~/.ssh/bric_deploy_key
+          [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._:-]+$ ]]
+          [[ "$DEPLOY_PORT" =~ ^[0-9]+$ ]]
+          [[ "$DEPLOY_USER" =~ ^[A-Za-z0-9._-]+$ ]]
+
+          ssh_dir="$RUNNER_TEMP/bric-deploy-ssh"
+          ssh_key="$ssh_dir/deploy-key"
+          known_hosts="$ssh_dir/known-hosts"
+          ssh_config="$ssh_dir/config"
+          install -m 700 -d "$ssh_dir"
+          install -m 600 /dev/null "$ssh_key"
+          install -m 600 /dev/null "$known_hosts"
+          install -m 600 /dev/null "$ssh_config"
+          printf '%s\n' "$DEPLOY_KEY" > "$ssh_key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$known_hosts"
+          {
+            printf 'Host bric-production\n'
+            printf '  HostName %s\n' "$DEPLOY_HOST"
+            printf '  Port %s\n' "$DEPLOY_PORT"
+            printf '  User %s\n' "$DEPLOY_USER"
+            printf '  IdentityFile %s\n' "$ssh_key"
+            printf '  UserKnownHostsFile %s\n' "$known_hosts"
+            printf '  StrictHostKeyChecking yes\n'
+            printf '  IdentitiesOnly yes\n'
+            printf '  BatchMode yes\n'
+            printf '  ServerAliveInterval 15\n'
+            printf '  ServerAliveCountMax 4\n'
+            printf '  TCPKeepAlive yes\n'
+          } > "$ssh_config"
+          echo "BRIC_DEPLOY_SSH_CONFIG=$ssh_config" >> "$GITHUB_ENV"
       - name: Stage release, cut over, and run production smoke checks
         if: steps.freshness.outputs.current == 'true'
         run: |
@@ -469,16 +533,16 @@ jobs:
           cp .cursor/rules/bricomaitre-proprietary.mdc "$bundle_dir/.cursor/rules/bricomaitre-proprietary.mdc"
           cp .github/copilot-instructions.md "$bundle_dir/.github/copilot-instructions.md"
 
-          ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+          ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
             "mkdir -p '$release_path'"
           rsync -az --delete \
-            -e "ssh -i ~/.ssh/bric_deploy_key -p $DEPLOY_PORT" \
-            "$bundle_dir/" "$DEPLOY_USER@$DEPLOY_HOST:$release_path/"
-          printf '%s\n' "$GHCR_READ_TOKEN" | ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            -e "ssh -F $BRIC_DEPLOY_SSH_CONFIG" \
+            "$bundle_dir/" "bric-production:$release_path/"
+          printf '%s\n' "$GHCR_READ_TOKEN" | ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
             "docker login ghcr.io -u '$GHCR_USERNAME' --password-stdin >/dev/null"
 
           printf '%s\n%s\n' "$ECOTRACK_EMIR_BASE_URL" "$ECOTRACK_EMIR_TOKEN" | \
-            ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+            ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production '
               set -euo pipefail
               IFS= read -r emir_base_url
               IFS= read -r emir_token
@@ -498,7 +562,7 @@ jobs:
             "$AI_STOREFRONT_MODEL" \
             "$AI_STOREFRONT_FALLBACK_MODEL" \
             "$AI_STOREFRONT_MODEL_OPTIONS" | \
-            ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+            ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production '
               set -euo pipefail
               IFS= read -r openrouter_api_key
               IFS= read -r admin_model
@@ -531,7 +595,7 @@ jobs:
             "$META_AD_ACCOUNT_ID" \
             "$META_ADS_ACCESS_TOKEN" \
             "$META_ADS_GRAPH_API_VERSION" | \
-            ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+            ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production '
               set -euo pipefail
               IFS= read -r sync_enabled
               IFS= read -r account_id
@@ -558,7 +622,7 @@ jobs:
             "$GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64" \
             "$SEARCH_CONSOLE_SITE_URL" \
             "$SEARCH_CONSOLE_SITE_ORIGIN" | \
-            ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+            ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production '
               set -euo pipefail
               IFS= read -r sync_enabled
               IFS= read -r credentials_base64
@@ -582,7 +646,7 @@ jobs:
             "$GOOGLE_ANALYTICS_API_SECRET" \
             "$TIKTOK_PIXEL_ID" \
             "$TIKTOK_EVENTS_API_ACCESS_TOKEN" | \
-            ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+            ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production '
               set -euo pipefail
               IFS= read -r measurement_id
               IFS= read -r api_secret
@@ -619,7 +683,7 @@ jobs:
             "$SENTRY_DSN_STOREFRONT_API" \
             "$SENTRY_DSN_STOREFRONT" \
             "$NEXT_PUBLIC_SENTRY_DSN_STOREFRONT" | \
-            ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+            ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production '
               set -euo pipefail
               IFS= read -r admin_dsn
               IFS= read -r admin_browser_dsn
@@ -653,7 +717,7 @@ jobs:
               mv "$storefront_tmp_file" "$storefront_env_file"
             '
 
-          ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+          ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
             "bash '$release_path/ops/scripts/deploy.sh' '$release_path' '$RELEASE_SHA'"
           echo "## Deploy phase" >> "$GITHUB_STEP_SUMMARY"
           echo "- ✅ Deployed verified release ${BRIC_RELEASE_ID}" >> "$GITHUB_STEP_SUMMARY"

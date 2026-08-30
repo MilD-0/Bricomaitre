@@ -1,6 +1,7 @@
 FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS base
 
 ENV PNPM_HOME="/pnpm"
+ENV COREPACK_HOME="/corepack"
 ENV PATH="$PNPM_HOME:$PATH"
 ARG BRIC_BUILD_NODE_OPTIONS=""
 ARG SENTRY_ORG
@@ -20,7 +21,16 @@ COPY packages/db/package.json packages/db/package.json
 COPY packages/runtime/package.json packages/runtime/package.json
 COPY packages/storefront-core/package.json packages/storefront-core/package.json
 
-RUN NODE_OPTIONS="${BRIC_BUILD_NODE_OPTIONS}" pnpm install --filter @bric/storefront-api... --frozen-lockfile
+RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-10.33.0,target=/corepack,sharing=shared \
+  --mount=type=cache,id=bricomaitre-pnpm-store-v10,target=/pnpm/store,sharing=shared \
+  npm_config_store_dir=/pnpm/store \
+  npm_config_prefer_offline=true \
+  npm_config_fetch_retries=8 \
+  npm_config_fetch_retry_factor=2 \
+  npm_config_fetch_retry_mintimeout=1000 \
+  npm_config_fetch_retry_maxtimeout=60000 \
+  NODE_OPTIONS="${BRIC_BUILD_NODE_OPTIONS}" \
+  pnpm install --filter @bric/storefront-api... --frozen-lockfile
 
 COPY tsconfig.base.json ./
 COPY apps/storefront-api ./apps/storefront-api
@@ -32,7 +42,8 @@ COPY ops/scripts/hydrate-next-standalone.sh ./ops/scripts/hydrate-next-standalon
 COPY ops/ownership ./ops/ownership
 
 RUN mkdir -p apps/storefront-api/public
-RUN BRIC_WORKER_SOURCEMAPS=1 pnpm --filter @bric/storefront-api build:worker
+RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-10.33.0,target=/corepack,sharing=shared \
+  BRIC_WORKER_SOURCEMAPS=1 pnpm --filter @bric/storefront-api build:worker
 
 FROM base AS worker
 
@@ -40,7 +51,8 @@ ENV NODE_ENV=production
 
 FROM base AS build
 
-RUN --mount=type=secret,id=sentry_auth_token \
+RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-10.33.0,target=/corepack,sharing=shared \
+  --mount=type=secret,id=sentry_auth_token \
   SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)" \
   pnpm --filter @bric/storefront-api build \
   && bash ops/scripts/hydrate-next-standalone.sh apps/storefront-api

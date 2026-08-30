@@ -4,6 +4,48 @@ set -euo pipefail
 workspace_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 validation_dir="$(mktemp -d)"
 trap 'rm -rf "$validation_dir"' EXIT
+cache_root="${BRIC_CI_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/bricomaitre-ci}"
+download_cache_dir="$cache_root/downloads"
+mkdir -p "$download_cache_dir"
+
+download_with_retry() {
+  local url="$1"
+  local destination="$2"
+  curl \
+    --fail \
+    --silent \
+    --show-error \
+    --location \
+    --retry 3 \
+    --retry-delay 2 \
+    --retry-all-errors \
+    --connect-timeout 20 \
+    --max-time 180 \
+    "$url" \
+    -o "$destination"
+}
+
+download_from_cache() {
+  local url="$1"
+  local cache_name="$2"
+  local expected_sha256="$3"
+  local destination="$4"
+  local cache_path="$download_cache_dir/$cache_name"
+
+  exec {cache_lock_fd}>"$cache_path.lock"
+  flock "$cache_lock_fd"
+  if [[ ! -f "$cache_path" ]] ||
+    ! printf '%s  %s\n' "$expected_sha256" "$cache_path" | sha256sum -c --status; then
+    download_with_retry "$url" "$destination"
+    printf '%s  %s\n' "$expected_sha256" "$destination" | sha256sum -c -
+    install -m 0644 "$destination" "$cache_path.pending.$$"
+    mv -f "$cache_path.pending.$$" "$cache_path"
+  else
+    cp "$cache_path" "$destination"
+  fi
+  flock -u "$cache_lock_fd"
+  exec {cache_lock_fd}>&-
+}
 
 while IFS= read -r -d '' script; do
   bash -n "$script"
@@ -31,9 +73,11 @@ else
   esac
 
   shellcheck_archive="$validation_dir/shellcheck.tar.xz"
-  curl -fsSL \
+  download_from_cache \
     "https://github.com/koalaman/shellcheck/releases/download/v${shellcheck_version}/shellcheck-v${shellcheck_version}.linux.${shellcheck_arch}.tar.xz" \
-    -o "$shellcheck_archive"
+    "shellcheck-v${shellcheck_version}.linux.${shellcheck_arch}.tar.xz" \
+    "$shellcheck_sha256" \
+    "$shellcheck_archive"
   printf '%s  %s\n' "$shellcheck_sha256" "$shellcheck_archive" | sha256sum -c -
   tar -xJf "$shellcheck_archive" -C "$validation_dir"
   shellcheck_bin="$validation_dir/shellcheck-v${shellcheck_version}/shellcheck"
@@ -74,9 +118,11 @@ else
   esac
 
   actionlint_archive="$validation_dir/actionlint.tar.gz"
-  curl -fsSL \
+  download_from_cache \
     "https://github.com/rhysd/actionlint/releases/download/v${actionlint_version}/actionlint_${actionlint_version}_linux_${actionlint_arch}.tar.gz" \
-    -o "$actionlint_archive"
+    "actionlint_${actionlint_version}_linux_${actionlint_arch}.tar.gz" \
+    "$actionlint_sha256" \
+    "$actionlint_archive"
   printf '%s  %s\n' "$actionlint_sha256" "$actionlint_archive" | sha256sum -c -
   tar -xzf "$actionlint_archive" -C "$validation_dir"
   actionlint_bin="$validation_dir/actionlint"
@@ -104,16 +150,37 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
     exit 1
   fi
 
-  (
-    cd "$workspace_dir"
-    GOOGLE_CLIENT_SECRET=build-check-placeholder \
-      BETTER_AUTH_SECRET=build-check-placeholder \
-      SENTRY_AUTH_TOKEN=build-check-placeholder \
-      docker buildx bake \
-        --check \
-        --file ops/docker/docker-bake.hcl \
-        api admin storefront
-  )
+  build_check_log="$validation_dir/build-check.log"
+  build_check_max_attempts=3
+  build_check_succeeded='false'
+  for attempt in $(seq 1 "$build_check_max_attempts"); do
+    if (
+      cd "$workspace_dir"
+      GOOGLE_CLIENT_SECRET=build-check-placeholder \
+        BETTER_AUTH_SECRET=build-check-placeholder \
+        SENTRY_AUTH_TOKEN=build-check-placeholder \
+        docker buildx bake \
+          --check \
+          --file ops/docker/docker-bake.hcl \
+          api admin storefront
+    ) 2>&1 | tee "$build_check_log"; then
+      build_check_succeeded='true'
+      break
+    fi
+
+    if ! grep -Eiq \
+      'i/o timeout|TLS handshake timeout|connection reset by peer|temporary failure in name resolution' \
+      "$build_check_log"; then
+      exit 1
+    fi
+    if ((attempt < build_check_max_attempts)); then
+      echo "BuildKit registry metadata check hit a transient network error; retrying ($attempt/$build_check_max_attempts)." >&2
+      sleep "$((attempt * 2))"
+    fi
+  done
+  if [[ "$build_check_succeeded" != 'true' ]]; then
+    exit 1
+  fi
 fi
 
 echo 'Operational scripts, workflow, and Compose configuration are valid.'

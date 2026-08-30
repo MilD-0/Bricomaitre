@@ -86,16 +86,6 @@ function "release_tags" {
   )
 }
 
-function "registry_cache" {
-  params = [image]
-  result = "type=registry,ref=${IMAGE_NAMESPACE}/cache-${image}:buildcache"
-}
-
-function "registry_cache_max" {
-  params = [image]
-  result = "${registry_cache(image)},mode=max,image-manifest=true,oci-mediatypes=true"
-}
-
 target "_common" {
   context = "."
   args = {
@@ -119,16 +109,12 @@ target "storefront-api-web" {
   inherits  = ["_storefront_api"]
   target    = "web"
   tags      = release_tags("storefront-api-web")
-  cache-from = [registry_cache("storefront-api-web")]
-  cache-to   = [registry_cache_max("storefront-api-web")]
 }
 
 target "storefront-api-meta-worker" {
   inherits  = ["_storefront_api"]
   target    = "meta-worker"
   tags      = release_tags("storefront-api-meta-worker")
-  cache-from = [registry_cache("storefront-api-meta-worker")]
-  cache-to   = [registry_cache_max("storefront-api-meta-worker")]
 }
 
 group "api" {
@@ -138,10 +124,6 @@ group "api" {
 target "_admin" {
   inherits   = ["_common"]
   dockerfile = "ops/docker/Dockerfile.admin"
-  # Every admin image depends on the same expensive `build` stage. Import one
-  # full cache for all targets and export it once from the worker target rather
-  # than uploading three nearly identical mode=max caches on every release.
-  cache-from = [registry_cache("admin-worker")]
   args = {
     GOOGLE_CLIENT_ID        = GOOGLE_CLIENT_ID
     APPLICATION_ORIGIN      = BETTER_AUTH_URL
@@ -167,7 +149,6 @@ target "admin-worker" {
   inherits  = ["_admin"]
   target    = "worker"
   tags      = release_tags("admin-worker")
-  cache-to   = [registry_cache_max("admin-worker")]
 }
 
 target "admin-migrations" {
@@ -201,8 +182,6 @@ target "storefront-web" {
   }
   secret     = ["id=sentry_auth_token,env=SENTRY_AUTH_TOKEN"]
   tags       = release_tags("storefront-web")
-  cache-from = [registry_cache("storefront-web")]
-  cache-to   = [registry_cache_max("storefront-web")]
 }
 
 group "storefront" {
