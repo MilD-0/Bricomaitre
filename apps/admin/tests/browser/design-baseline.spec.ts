@@ -123,16 +123,20 @@ test.beforeAll(() => {
   ).toBe(true);
 });
 
-test('captures every authenticated workspace for a design-system baseline', async ({ browser }) => {
+test('captures every authenticated workspace for a design-system baseline', async ({
+  baseURL,
+  browser,
+}) => {
   test.skip(!baselineDirectory, 'Set BRIC_UI_BASELINE_DIR to opt into private UI captures.');
   test.setTimeout(20 * 60_000);
+  expect(baseURL).toBeTruthy();
 
   const root = resolve(baselineDirectory!);
   await mkdir(root, { recursive: true });
 
   for (const mode of modes) {
     const context: BrowserContext = await browser.newContext({
-      baseURL: 'http://localhost:3000',
+      baseURL,
       storageState,
       viewport: mode.viewport,
       colorScheme: mode.theme,

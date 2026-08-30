@@ -1,6 +1,13 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 
+const storefrontOrigin = process.env.STOREFRONT_ORIGIN ?? 'http://127.0.0.1:3003';
+const fixtureApiOrigin = process.env.FIXTURE_API_ORIGIN ?? 'http://127.0.0.1:4311';
+const fixtureApiPort = Number(process.env.PORT ?? new URL(fixtureApiOrigin).port);
+if (!Number.isSafeInteger(fixtureApiPort) || fixtureApiPort < 1) {
+  throw new Error('PORT must be a positive integer.');
+}
+
 const homepageFixtureAssets = new Map(
   [
     'accessories.svg',
@@ -34,14 +41,14 @@ const product = {
   availability: { status: 'in_stock', inStock: true, quantity: 4 },
   media: [
     {
-      url: 'http://127.0.0.1:3003/product-placeholder.svg',
+      url: `${storefrontOrigin}/product-placeholder.svg`,
       position: 0,
       width: 900,
       height: 900,
       blurDataUrl: null,
     },
     {
-      url: 'http://127.0.0.1:3003/product-placeholder.svg?view=2',
+      url: `${storefrontOrigin}/product-placeholder.svg?view=2`,
       position: 1,
       width: 900,
       height: 900,
@@ -52,7 +59,7 @@ const product = {
     id: 2,
     name: 'Bric Pro',
     slug: 'bric-pro',
-    image: 'http://127.0.0.1:3003/brand-placeholder.svg',
+    image: `${storefrontOrigin}/brand-placeholder.svg`,
   },
   category: {
     id: 3,
@@ -297,9 +304,9 @@ function homepage() {
         id: 1,
         title: 'Puissance pour vos travaux',
         titleAr: 'قوة لأعمالكم',
-        imageUrl: 'http://127.0.0.1:4311/fixture/homepage/banner-power-wide.svg',
-        imageUrlPortrait: 'http://127.0.0.1:4311/fixture/homepage/banner-power-portrait.svg',
-        imageUrlLandscape: 'http://127.0.0.1:4311/fixture/homepage/banner-power-wide.svg',
+        imageUrl: `${fixtureApiOrigin}/fixture/homepage/banner-power-wide.svg`,
+        imageUrlPortrait: `${fixtureApiOrigin}/fixture/homepage/banner-power-portrait.svg`,
+        imageUrlLandscape: `${fixtureApiOrigin}/fixture/homepage/banner-power-wide.svg`,
         productId: 12,
         sortOrder: 0,
         active: true,
@@ -310,9 +317,9 @@ function homepage() {
         id: 2,
         title: 'Équipez votre atelier',
         titleAr: 'جهزوا ورشتكم',
-        imageUrl: 'http://127.0.0.1:4311/fixture/homepage/banner-workshop-wide.svg',
-        imageUrlPortrait: 'http://127.0.0.1:4311/fixture/homepage/banner-workshop-portrait.svg',
-        imageUrlLandscape: 'http://127.0.0.1:4311/fixture/homepage/banner-workshop-wide.svg',
+        imageUrl: `${fixtureApiOrigin}/fixture/homepage/banner-workshop-wide.svg`,
+        imageUrlPortrait: `${fixtureApiOrigin}/fixture/homepage/banner-workshop-portrait.svg`,
+        imageUrlLandscape: `${fixtureApiOrigin}/fixture/homepage/banner-workshop-wide.svg`,
         productId: 13,
         sortOrder: 1,
         active: true,
@@ -617,7 +624,7 @@ function matchesSearch(item, query) {
 }
 
 const server = createServer((request, response) => {
-  const url = new URL(request.url ?? '/', 'http://127.0.0.1:4311');
+  const url = new URL(request.url ?? '/', fixtureApiOrigin);
   const fixtureAsset = homepageFixtureAssets.get(url.pathname);
   if (request.method === 'GET' && fixtureAsset) {
     send(response, { status: 200, body: fixtureAsset, type: 'image/svg+xml' });
@@ -747,7 +754,7 @@ const server = createServer((request, response) => {
   send(response, result);
 });
 
-server.listen(4311, '127.0.0.1');
+server.listen(fixtureApiPort, '127.0.0.1');
 
 function close() {
   server.close(() => process.exit(0));

@@ -6,6 +6,17 @@ import { defineConfig, devices } from '@playwright/test';
 const defaultStorageState = resolve(process.cwd(), '../../ops/runtime/admin-playwright-state.json');
 const storageState = process.env.ADMIN_PLAYWRIGHT_STORAGE_STATE?.trim() || defaultStorageState;
 
+function readLoopbackOrigin(name: string, fallback: string) {
+  const origin = new URL(process.env[name] ?? fallback);
+  if (origin.protocol !== 'http:' || origin.hostname !== '127.0.0.1' || !origin.port) {
+    throw new Error(`${name} must be an HTTP 127.0.0.1 origin with an explicit port.`);
+  }
+  return origin.origin;
+}
+
+const adminOrigin = readLoopbackOrigin('BRIC_PLAYWRIGHT_ADMIN_ORIGIN', 'http://127.0.0.1:3000');
+const adminPort = new URL(adminOrigin).port;
+
 export default defineConfig({
   testDir: './tests/browser',
   fullyParallel: false,
@@ -21,7 +32,7 @@ export default defineConfig({
       ]
     : 'list',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: adminOrigin,
     storageState: existsSync(storageState) ? storageState : undefined,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
@@ -38,9 +49,13 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm dev',
-    url: 'http://localhost:3000/api/auth/get-session',
-    reuseExistingServer: true,
+    command: 'pnpm dev --hostname 127.0.0.1',
+    url: `${adminOrigin}/api/auth/get-session`,
+    reuseExistingServer: false,
     timeout: 60_000,
+    env: {
+      BETTER_AUTH_URL: adminOrigin,
+      PORT: adminPort,
+    },
   },
 });

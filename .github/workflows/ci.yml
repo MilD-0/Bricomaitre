@@ -17,17 +17,24 @@ concurrency:
 jobs:
   static-quality:
     name: Static quality
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          clean: false
           persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
       - name: Set up the production Buildx driver
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        with:
+          name: bricomaitre-ci
+          driver-opts: network=host
+          keep-state: true
+          cache-binary: false
+          cleanup: false
       - name: Validate operational configuration
         run: bash ops/scripts/validate-operations.sh
-      - uses: ./.github/actions/setup-workspace
       - name: Run static quality gates
         run: |
           pnpm format:check
@@ -37,48 +44,25 @@ jobs:
 
   service-contracts:
     name: PostgreSQL and Redis contracts
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 15
-    services:
-      postgres:
-        image: postgres:16-bookworm@sha256:60f4761b9035e0b8d5218f701a8c3382f641bf12b1604822574cf5be3baeb537
-        env:
-          POSTGRES_DB: bricomaitre_test
-          POSTGRES_USER: bricomaitre
-          POSTGRES_PASSWORD: bricomaitre
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U bricomaitre -d bricomaitre_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-      redis:
-        image: redis:7-bookworm@sha256:e9b2e45ecd47fbb69b877cf8d045d5cccaaaed52524b6e098b4abe8212994f73
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          clean: false
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - name: Apply migrations and test real service contracts
         env:
-          DATABASE_URL: postgres://bricomaitre:bricomaitre@127.0.0.1:5432/bricomaitre_test
-          REDIS_URL: redis://127.0.0.1:6379/0
+          DATABASE_URL: postgres://bricomaitre:bricomaitre@127.0.0.1:55432/bricomaitre_test
+          REDIS_URL: redis://127.0.0.1:56379/0
         run: |
-          pnpm --filter @bric/admin db:migrate
-          pnpm --filter @bric/admin db:verify
-          pnpm test:services
+          ops/scripts/run-with-ci-services.sh 55432 56379 bricomaitre_test \
+            bash -lc 'pnpm --filter @bric/admin db:migrate && pnpm --filter @bric/admin db:verify && pnpm test:services'
 
   tests:
     name: Tests / ${{ matrix.suite }}
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -91,6 +75,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          clean: false
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - name: Run ${{ matrix.suite }} tests
@@ -123,17 +108,20 @@ jobs:
 
   browser-acceptance:
     name: Browser acceptance
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          clean: false
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - name: Install Chromium
-        run: pnpm --filter @bric/storefront exec playwright install --with-deps chromium
+        run: bash ops/scripts/install-playwright-chromium.sh @bric/storefront
       - name: Run browser acceptance tests
-        run: ops/scripts/run-ci-check.sh "Storefront browser acceptance tests" pnpm test:storefront:browser
+        run: >-
+          ops/scripts/run-ci-check.sh "Storefront browser acceptance tests"
+          ops/scripts/run-loopback-isolated.sh pnpm test:storefront:browser
       - name: Upload browser diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -147,54 +135,32 @@ jobs:
 
   admin-browser-acceptance:
     name: Admin browser acceptance
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 20
-    services:
-      postgres:
-        image: postgres:16-bookworm@sha256:60f4761b9035e0b8d5218f701a8c3382f641bf12b1604822574cf5be3baeb537
-        env:
-          POSTGRES_DB: bricomaitre_browser
-          POSTGRES_USER: bricomaitre
-          POSTGRES_PASSWORD: bricomaitre
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U bricomaitre -d bricomaitre_browser"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-      redis:
-        image: redis:7-bookworm@sha256:e9b2e45ecd47fbb69b877cf8d045d5cccaaaed52524b6e098b4abe8212994f73
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     env:
-      DATABASE_URL: postgres://bricomaitre:bricomaitre@127.0.0.1:5432/bricomaitre_browser
-      REDIS_URL: redis://127.0.0.1:6379/0
+      DATABASE_URL: postgres://bricomaitre:bricomaitre@127.0.0.1:55433/bricomaitre_browser
+      REDIS_URL: redis://127.0.0.1:56380/0
       BETTER_AUTH_SECRET: ci-browser-verification-secret-1234567890
-      BETTER_AUTH_URL: http://localhost:3000
+      BETTER_AUTH_URL: http://127.0.0.1:3020
+      BRIC_PLAYWRIGHT_ADMIN_ORIGIN: http://127.0.0.1:3020
       GOOGLE_CLIENT_ID: ci-browser-client
       GOOGLE_CLIENT_SECRET: ci-browser-secret
       ADMIN_EMAILS: playwright@bricomaitre.invalid
       ADMIN_PLAYWRIGHT_EMAIL: playwright@bricomaitre.invalid
-      ADMIN_PLAYWRIGHT_STORAGE_STATE: ${{ github.workspace }}/apps/admin/test-results/auth.json
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          clean: false
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
-      - name: Prepare authenticated Admin database
-        run: |
-          pnpm --filter @bric/admin db:migrate
-          pnpm --filter @bric/admin exec tsx scripts/create-playwright-session.ts
+      - name: Configure ephemeral Admin browser state
+        run: printf 'ADMIN_PLAYWRIGHT_STORAGE_STATE=%s/admin-playwright-auth.json\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Install Chromium
-        run: pnpm --filter @bric/admin exec playwright install --with-deps chromium
+        run: bash ops/scripts/install-playwright-chromium.sh @bric/admin
       - name: Run Admin browser acceptance tests
-        run: ops/scripts/run-ci-check.sh "Admin browser acceptance tests" pnpm test:admin:browser
+        run: |
+          ops/scripts/run-with-ci-services.sh 55433 56380 bricomaitre_browser \
+            bash -lc 'pnpm --filter @bric/admin db:migrate && pnpm --filter @bric/admin exec tsx scripts/create-playwright-session.ts && ops/scripts/run-ci-check.sh "Admin browser acceptance tests" pnpm test:admin:browser'
       - name: Upload Admin browser diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -208,17 +174,24 @@ jobs:
 
   browser-performance:
     name: Browser performance budgets
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 15
+    env:
+      BRIC_PLAYWRIGHT_FIXTURE_API_ORIGIN: http://127.0.0.1:4321
+      BRIC_PLAYWRIGHT_STOREFRONT_ORIGIN: http://127.0.0.1:3013
+      BRIC_PLAYWRIGHT_UPSTREAM_ORIGIN: http://127.0.0.1:3014
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          clean: false
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - name: Install Chromium
-        run: pnpm --filter @bric/storefront exec playwright install --with-deps chromium
+        run: bash ops/scripts/install-playwright-chromium.sh @bric/storefront
       - name: Run performance budgets
-        run: ops/scripts/run-ci-check.sh "Storefront performance budgets" pnpm test:storefront:performance
+        run: >-
+          ops/scripts/run-ci-check.sh "Storefront performance budgets"
+          ops/scripts/run-loopback-isolated.sh pnpm test:storefront:performance
       - name: Upload performance diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -233,11 +206,12 @@ jobs:
   production-builds:
     name: Production builds
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          clean: false
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - name: Build production applications
@@ -263,7 +237,7 @@ jobs:
       - admin-browser-acceptance
       - browser-performance
       - production-builds
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 5
     steps:
       - name: Fail when an upstream gate failed or was cancelled

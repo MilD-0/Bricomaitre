@@ -9,9 +9,9 @@
     "start": "bash ../../ops/scripts/hydrate-next-standalone.sh apps/storefront && node ../../ops/scripts/start-next-standalone.mjs --app-dir . --nested-dir apps/storefront --default-port 3003",
     "lint": "eslint .",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "vitest run --project unit-node && vitest run --project browser-unit-jsdom && vitest run --project component-jsdom",
-    "test:contract": "vitest run --project app-contract-node",
-    "test:integration": "pnpm test:contract && vitest run --project component-integration-jsdom",
+    "test": "vitest run --project unit-node --maxWorkers=2 && vitest run --project browser-unit-jsdom --maxWorkers=2 && vitest run --project component-jsdom --maxWorkers=2",
+    "test:contract": "vitest run --project app-contract-node --maxWorkers=2",
+    "test:integration": "pnpm test:contract && vitest run --project component-integration-jsdom --maxWorkers=2",
     "test:browser": "playwright test --project=chromium --project=mobile-iphone --project=mobile-android",
     "test:performance": "BRIC_PLAYWRIGHT_SERVER=production playwright test --project=performance",
     "eval:ai": "tsx scripts/run-ai-evals.ts"

@@ -51,8 +51,10 @@ test('AI operations stats use focused pages and preserve the active range', asyn
   const shoppingAssistantLink = page.getByRole('link', { name: 'Shopping assistant' });
   await shoppingAssistantLink.scrollIntoViewIfNeeded();
   await expect(shoppingAssistantLink).toBeInViewport();
-  await shoppingAssistantLink.click();
-  await expect(page).toHaveURL(/\/stats\/shopping-assistant\?range=90d/);
+  await Promise.all([
+    page.waitForURL(/\/stats\/shopping-assistant\?range=90d/),
+    shoppingAssistantLink.click(),
+  ]);
   await expect(page.getByRole('heading', { name: 'Shopping assistant' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Assistant journey' })).toBeVisible();
   await expect(page.getByText('Opened')).toBeVisible();

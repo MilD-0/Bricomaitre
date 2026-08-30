@@ -4,7 +4,31 @@ const playwrightServerMode = process.env.BRIC_PLAYWRIGHT_SERVER;
 const useProductionServer =
   playwrightServerMode === 'production' || playwrightServerMode === 'prebuilt';
 const usePrebuiltProductionServer = playwrightServerMode === 'prebuilt';
-const nextServerPort = useProductionServer ? '3004' : '3003';
+
+function readLoopbackOrigin(name: string, fallback: string) {
+  const origin = new URL(process.env[name] ?? fallback);
+  if (origin.protocol !== 'http:' || origin.hostname !== '127.0.0.1' || !origin.port) {
+    throw new Error(`${name} must be an HTTP 127.0.0.1 origin with an explicit port.`);
+  }
+  return origin.origin;
+}
+
+const storefrontOrigin = readLoopbackOrigin(
+  'BRIC_PLAYWRIGHT_STOREFRONT_ORIGIN',
+  'http://127.0.0.1:3003',
+);
+const upstreamOrigin = readLoopbackOrigin(
+  'BRIC_PLAYWRIGHT_UPSTREAM_ORIGIN',
+  'http://127.0.0.1:3004',
+);
+const fixtureApiOrigin = readLoopbackOrigin(
+  'BRIC_PLAYWRIGHT_FIXTURE_API_ORIGIN',
+  'http://127.0.0.1:4311',
+);
+const storefrontPort = new URL(storefrontOrigin).port;
+const upstreamPort = new URL(upstreamOrigin).port;
+const fixtureApiPort = new URL(fixtureApiOrigin).port;
+const nextServerPort = useProductionServer ? upstreamPort : storefrontPort;
 
 export default defineConfig({
   testDir: './tests',
@@ -21,7 +45,7 @@ export default defineConfig({
       ]
     : 'list',
   use: {
-    baseURL: 'http://127.0.0.1:3003',
+    baseURL: storefrontOrigin,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
@@ -52,9 +76,14 @@ export default defineConfig({
   webServer: [
     {
       command: 'node test/fixture-storefront-api.mjs',
-      url: 'http://127.0.0.1:4311/api/health',
+      url: `${fixtureApiOrigin}/api/health`,
       reuseExistingServer: false,
       timeout: 30_000,
+      env: {
+        FIXTURE_API_ORIGIN: fixtureApiOrigin,
+        PORT: fixtureApiPort,
+        STOREFRONT_ORIGIN: storefrontOrigin,
+      },
     },
     {
       // Keep the production performance gate within the memory envelope used
@@ -70,9 +99,9 @@ export default defineConfig({
       timeout: useProductionServer ? 180_000 : 60_000,
       env: {
         PORT: nextServerPort,
-        STOREFRONT_API_BASE_URL: 'http://127.0.0.1:4311',
-        NEXT_PUBLIC_SITE_URL: 'http://127.0.0.1:3003',
-        NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS: 'http://127.0.0.1:3003,http://127.0.0.1:4311',
+        STOREFRONT_API_BASE_URL: fixtureApiOrigin,
+        NEXT_PUBLIC_SITE_URL: storefrontOrigin,
+        NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS: `${storefrontOrigin},${fixtureApiOrigin}`,
         NEXT_PUBLIC_RELEASE: 'browser-test',
         NEXT_PUBLIC_FACEBOOK_PIXEL_ID: '',
         NEXT_PUBLIC_GA_MEASUREMENT_ID: '',
@@ -86,10 +115,10 @@ export default defineConfig({
             // owns that work. Keep the lab on the public port and reproduce
             // the edge boundary so slow-network budgets measure deployed bytes.
             command: 'node test/fixture-production-proxy.mjs',
-            url: 'http://127.0.0.1:3003/api/health',
+            url: `${storefrontOrigin}/api/health`,
             reuseExistingServer: false,
             timeout: 30_000,
-            env: { PORT: '3003', UPSTREAM_PORT: nextServerPort },
+            env: { PORT: storefrontPort, UPSTREAM_PORT: nextServerPort },
           },
         ]
       : []),

@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+const storefrontOrigin = process.env.BRIC_PLAYWRIGHT_STOREFRONT_ORIGIN ?? 'http://127.0.0.1:3003';
+
 test('serves crawl policy, merchant identity, and API-backed localized product discovery', async ({
   page,
   request,
@@ -7,16 +9,16 @@ test('serves crawl policy, merchant identity, and API-backed localized product d
   const robotsResponse = await request.get('/robots.txt');
   expect(robotsResponse.ok()).toBe(true);
   const robots = await robotsResponse.text();
-  expect(robots).toContain('Sitemap: http://127.0.0.1:3003/sitemap.xml');
+  expect(robots).toContain(`Sitemap: ${storefrontOrigin}/sitemap.xml`);
   expect(robots).toContain('Disallow: /fr/checkout');
   expect(robots).toContain('Disallow: /ar/thank-you');
 
   const sitemapResponse = await request.get('/sitemap.xml');
   expect(sitemapResponse.ok()).toBe(true);
   const sitemap = await sitemapResponse.text();
-  expect(sitemap).toContain('<loc>http://127.0.0.1:3003/fr</loc>');
-  expect(sitemap).toContain('<loc>http://127.0.0.1:3003/ar/products</loc>');
-  expect(sitemap).toContain('<loc>http://127.0.0.1:3003/fr/products/desk-lamp</loc>');
+  expect(sitemap).toContain(`<loc>${storefrontOrigin}/fr</loc>`);
+  expect(sitemap).toContain(`<loc>${storefrontOrigin}/ar/products</loc>`);
+  expect(sitemap).toContain(`<loc>${storefrontOrigin}/fr/products/desk-lamp</loc>`);
   expect(sitemap).toContain('hreflang="ar"');
   expect(sitemap).not.toContain('/checkout</loc>');
   expect(sitemap).not.toContain('/thank-you</loc>');
