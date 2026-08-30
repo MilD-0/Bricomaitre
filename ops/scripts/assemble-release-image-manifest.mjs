@@ -9,7 +9,6 @@ const EXPECTED_KEYS = new Set([
   'BRIC_IMAGE_ADMIN_MIGRATIONS',
   'BRIC_IMAGE_STOREFRONT_WEB',
   'BRIC_STOREFRONT_APP',
-  'BRIC_STOREFRONT_STATIC_PAGES',
 ]);
 const IMAGE_REF_PATTERN = /^ghcr[.]io\/mild-0\/bricomaitre2\/[a-z0-9-]+@sha256:[a-f0-9]{64}$/;
 
@@ -58,10 +57,6 @@ for (const [key, value] of values) {
   if (key === 'BRIC_STOREFRONT_APP') {
     if (value !== 'storefront') {
       throw new Error(`${key} must identify storefront`);
-    }
-  } else if (key === 'BRIC_STOREFRONT_STATIC_PAGES') {
-    if (!/^\d+$/.test(value)) {
-      throw new Error(`${key} must be a non-negative integer`);
     }
   } else if (!IMAGE_REF_PATTERN.test(value)) {
     throw new Error(`${key} must be an immutable Bricomaitre GHCR digest ref`);

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
+import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 import type { AnalyticsPayload } from './analytics';
 
 const { dbExecuteMock, getAnalyticsDataMock } = vi.hoisted(() => ({
@@ -148,6 +150,9 @@ describe('admin assistant analytics query execution', () => {
     });
 
     expect(dbExecuteMock).toHaveBeenCalledOnce();
+    const sourceCoverageQuery = new PgDialect().sqlToQuery(dbExecuteMock.mock.calls[0][0]);
+    expect(sourceCoverageQuery.params).toContain(ORDER_STATUS.POSTED);
+    expect(sourceCoverageQuery.sql).not.toMatch(/status[^\n]*=\s*11\b/);
     expect(result).toMatchObject({
       sourceCoverage: {
         source: 'ecotrack',

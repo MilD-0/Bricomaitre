@@ -36,9 +36,14 @@ import {
   rollUpNextExpiredAnalyticsDay,
 } from '@bric/storefront-core/maintenance';
 import { createStorefrontOrder, readStorefrontOrderByToken } from '@bric/storefront-core/orders';
+import { dayInTimezone } from '../lib/analytics/date-range';
 import { getMetaCommercePerformance, getMetaCommerceReport } from '../lib/meta-commerce-analytics';
 import { buildWebsiteProductMetricsQuery } from '../lib/stats';
-import { getExperienceStats, getLiveStorefrontAiStats } from '../lib/stats-experience';
+import {
+  ADMIN_REPORTING_TIMEZONE,
+  getExperienceStats,
+  getLiveStorefrontAiStats,
+} from '../lib/stats-experience';
 import { deleteImportBatch, importStatsSpreadsheet } from '../lib/stats-order-import';
 
 const runId = randomUUID();
@@ -78,6 +83,7 @@ describe('real PostgreSQL and Redis contracts', () => {
       'categories_conversion_rate_nonnegative_check',
       'categories_engagement_counters_nonnegative_check',
       'categories_popularity_score_nonnegative_check',
+      'products_availability_matches_stock_check',
       'products_availability_status_check',
       'products_conversion_rate_nonnegative_check',
       'products_engagement_counters_nonnegative_check',
@@ -93,6 +99,19 @@ describe('real PostgreSQL and Redis contracts', () => {
     );
 
     expect(result.rows.map((row) => row.conname)).toEqual(expected);
+  });
+
+  it('rejects product availability that contradicts stock state', async () => {
+    await expect(
+      getPool().query(
+        `insert into products (title, slug, price, in_stock, availability_status)
+         values ($1, $2, $3, true, 'out_of_stock')`,
+        ['Contradictory stock fixture', `contradictory-stock-${runId}`, '100.00'],
+      ),
+    ).rejects.toMatchObject({
+      code: '23514',
+      constraint: 'products_availability_matches_stock_check',
+    });
   });
 
   it('preserves idempotency under concurrent Redis claims', async () => {
@@ -388,10 +407,12 @@ describe('real PostgreSQL and Redis contracts', () => {
         }),
       ]);
 
-      const filters = {
-        startDate: capturedAtIso.slice(0, 10),
-        endDate: capturedAtIso.slice(0, 10),
-      };
+      const utcDay = capturedAtIso.slice(0, 10);
+      const reportingDay = dayInTimezone(capturedAt, ADMIN_REPORTING_TIMEZONE);
+      const [startDate, endDate] = [utcDay, reportingDay].sort();
+      // Retained Storefront rollups preserve their recorded UTC day while live commerce uses the
+      // reporting day. Cover both when this test runs during Algiers' one-hour midnight boundary.
+      const filters = { startDate, endDate };
       await expect(getLiveStorefrontAiStats(db, filters)).resolves.toMatchObject({
         opens: 1,
         messages: 1,

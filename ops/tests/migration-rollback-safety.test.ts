@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -133,10 +133,65 @@ describe('migration rollback-safety verification', () => {
     expect(result.stderr).toContain('reviewed rollback-safety exception');
   });
 
+  it('rejects an exception after its migration becomes historical', () => {
+    const sql = 'ALTER TABLE products ADD CONSTRAINT positive_price CHECK (price >= 0);';
+    const digest = createHash('sha256').update(sql).digest('hex');
+    const exception = {
+      migration: '0001_constraint.sql',
+      sha256: digest,
+      reason: 'The previous runtime validates every affected value before writing.',
+    };
+    const previous = release({
+      '0000_base.sql': 'SELECT 1;',
+      '0001_constraint.sql': sql,
+    });
+    const candidate = release(
+      {
+        '0000_base.sql': 'SELECT 1;',
+        '0001_constraint.sql': sql,
+      },
+      [exception],
+    );
+
+    const result = run(previous, candidate);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      `unused or stale rollback-safety exception: 0001_constraint.sql ${digest}`,
+    );
+  });
+
   it('bridges the source-free current production release through its pinned baseline', () => {
     const previous = mkdtempSync(join(tmpdir(), 'bric-migration-legacy-release-'));
     const candidate = mkdtempSync(join(tmpdir(), 'bric-migration-state-release-'));
-    temporaryDirectories.push(previous, candidate);
+    const source = mkdtempSync(join(tmpdir(), 'bric-migration-source-release-'));
+    temporaryDirectories.push(previous, candidate, source);
+    cpSync(
+      join(workspaceRoot, 'apps/admin/drizzle/migrations'),
+      join(source, 'apps/admin/drizzle/migrations'),
+      { recursive: true },
+    );
+    mkdirSync(join(source, 'ops'), { recursive: true });
+    writeFileSync(
+      join(source, 'ops/migration-rollback-exceptions.json'),
+      JSON.stringify({
+        version: 1,
+        exceptions: [
+          {
+            migration: '0088_petite_enchantress.sql',
+            sha256: '26f02b2b0c6a8e6e763499ec85526ab72209da603dd26d58b7f0bcc62bc9f815',
+            reason:
+              'The previous runtime validates every affected value before writing to these domains.',
+          },
+          {
+            migration: '0089_gigantic_frightful_four.sql',
+            sha256: 'bf3692f8f7b53e1f8561867a558659bd95708d310d6e7d236c0a84402eb719d1',
+            reason:
+              'The previous runtime canonicalizes availability from stock state before every product write.',
+          },
+        ],
+      }),
+    );
     writeFileSync(
       join(previous, '.bric-release.env'),
       'BRIC_RELEASE_COMMIT=ab11790b49df28cdf99bde05052993962ad879f2\n',
@@ -150,7 +205,7 @@ describe('migration rollback-safety verification', () => {
       [
         verifier,
         '--build-state',
-        workspaceRoot,
+        source,
         'ab11790b49df28cdf99bde05052993962ad879f2',
         join(candidate, '.bric-migrations.json'),
       ],
@@ -160,6 +215,6 @@ describe('migration rollback-safety verification', () => {
     expect(build.status).toBe(0);
     const result = run(previous, candidate);
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('88 historical and 1 new migration');
+    expect(result.stdout).toContain('88 historical and 2 new migration');
   });
 });

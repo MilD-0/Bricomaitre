@@ -76,6 +76,21 @@ describe('production packaging and release runtime', () => {
     expect(healthGate).toContain('docker logs --tail 100 "$container_id"');
   });
 
+  it('does not derive release validity from cache-sensitive build progress logs', () => {
+    const release = readFileSync(resolve(workspaceRoot, '.github/workflows/deploy.yml'), 'utf8');
+    const deploy = readFileSync(resolve(workspaceRoot, 'ops/scripts/deploy.sh'), 'utf8');
+    const manifest = readFileSync(
+      resolve(workspaceRoot, 'ops/scripts/assemble-release-image-manifest.mjs'),
+      'utf8',
+    );
+
+    expect(`${release}\n${deploy}\n${manifest}`).not.toContain('BRIC_STOREFRONT_STATIC_PAGES');
+    expect(release).not.toContain('extract-static-page-count.py');
+    expect(release).toContain('bash ops/scripts/build-release-images.sh');
+    expect(release).toContain('bash ops/scripts/sign-bake-images.sh');
+    expect(deploy).toContain('bash "$script_dir/smoke-check.sh"');
+  });
+
   it('separates cancellable CI from serialized, verified production releases', () => {
     const ci = readFileSync(resolve(workspaceRoot, '.github/workflows/ci.yml'), 'utf8');
     const release = readFileSync(resolve(workspaceRoot, '.github/workflows/deploy.yml'), 'utf8');
@@ -147,6 +162,9 @@ describe('production packaging and release runtime', () => {
     );
     expect(serviceContracts).toContain('127.0.0.1:55432/bricomaitre_test');
     expect(serviceContracts).toContain('127.0.0.1:56379/0');
+    expect(serviceContracts).toContain(
+      'configure-postgres-autovacuum.sh "$BRIC_CI_POSTGRES_CONTAINER" "$BRIC_CI_POSTGRES_PORT"',
+    );
 
     const adminBrowser = ci.slice(
       ci.indexOf('  admin-browser-acceptance:'),
@@ -277,6 +295,16 @@ describe('production packaging and release runtime', () => {
     expect(imageBuilder).toContain('docker buildx bake');
     expect(imageBuilder).toContain('Release image build failed with a non-network error');
     expect(imageBuilder).toContain('i/o timeout|TLS handshake timeout|connection reset by peer');
+    const imageSigner = readFileSync(
+      resolve(workspaceRoot, 'ops/scripts/sign-bake-images.sh'),
+      'utf8',
+    );
+    expect(imageSigner).toContain('BRIC_SIGN_MAX_ATTEMPTS:-3');
+    expect(imageSigner).toContain('BRIC_SIGN_RETRY_DELAY_SECONDS:-5');
+    expect(imageSigner).toContain('--retry-all-errors');
+    expect(imageSigner).toContain('tuf refresh failed');
+    expect(imageSigner).toContain('failed with a non-network error; not retrying');
+    expect(imageSigner).toContain('exhausted $max_attempts transient-network attempts');
     expect(ci.indexOf('uses: docker/setup-buildx-action@')).toBeLessThan(
       ci.indexOf('run: bash ops/scripts/validate-operations.sh'),
     );
@@ -341,6 +369,7 @@ describe('production packaging and release runtime', () => {
     expect(release).toContain('SENTRY_DSN_ADMIN=%s');
     expect(release).toContain('SENTRY_DSN_STOREFRONT_API=%s');
     expect(release).toContain('SENTRY_DSN_STOREFRONT=%s');
+    expect(release).toContain('(SENTRY|NEXT_PUBLIC_SENTRY)_[A-Z0-9_]+_STOREFRONT_NEW');
     expect(release).toContain(
       'TIKTOK_EVENTS_API_ACCESS_TOKEN: ${{ secrets.TIKTOK_EVENTS_API_ACCESS_TOKEN }}',
     );
@@ -417,6 +446,15 @@ describe('production packaging and release runtime', () => {
       expect(dockerfile).toContain('npm_config_fetch_retries=8');
       expect(dockerfile).toContain('npm_config_fetch_retry_maxtimeout=60000');
     }
+    expect(dockerfiles[0]).toContain(
+      '--mount=type=cache,id=bricomaitre-admin-next-build,target=/workspace/apps/admin/.next/cache,sharing=locked',
+    );
+    expect(dockerfiles[1]).toContain(
+      '--mount=type=cache,id=bricomaitre-storefront-api-next-build,target=/workspace/apps/storefront-api/.next/cache,sharing=locked',
+    );
+    expect(dockerfiles[2]).toContain(
+      '--mount=type=cache,id=bricomaitre-storefront-next-build,target=/workspace/apps/storefront/.next/cache,sharing=locked',
+    );
     expect(bake).toContain('BRIC_IMAGE_REVISION = IMAGE_REVISION');
     expect(bake).toContain('BRIC_IMAGE_CREATED  = IMAGE_CREATED');
   });
@@ -608,6 +646,22 @@ describe('production packaging and release runtime', () => {
       resolve(workspaceRoot, 'ops/host/bricomaitre-maintenance.logrotate'),
       'utf8',
     );
+    const dockerDaemon = readFileSync(
+      resolve(workspaceRoot, 'ops/host/docker-daemon.json'),
+      'utf8',
+    );
+    const sshHardening = readFileSync(
+      resolve(workspaceRoot, 'ops/host/00-bricomaitre-hardening.conf'),
+      'utf8',
+    );
+    const storefrontMemoryService = readFileSync(
+      resolve(workspaceRoot, 'ops/host/bricomaitre-storefront-memory.service'),
+      'utf8',
+    );
+    const storefrontMemoryTimer = readFileSync(
+      resolve(workspaceRoot, 'ops/host/bricomaitre-storefront-memory.timer'),
+      'utf8',
+    );
     const release = readFileSync(resolve(workspaceRoot, '.github/workflows/deploy.yml'), 'utf8');
 
     expect(sysctl).toContain('vm.overcommit_memory = 1');
@@ -619,6 +673,24 @@ describe('production packaging and release runtime', () => {
     expect(installer).toContain('bricomaitre-maintenance.logrotate');
     expect(installer).toContain('/etc/logrotate.d/bricomaitre-maintenance');
     expect(installer).toContain('/var/log/bric-postgres-restore.log');
+    expect(dockerDaemon).toContain('"live-restore": true');
+    expect(installer).toContain('dockerd --validate');
+    expect(installer).toContain('systemctl reload docker');
+    expect(installer).toContain("'{{.LiveRestoreEnabled}}'");
+    expect(sshHardening).toContain('DisableForwarding yes');
+    expect(sshHardening).toContain('AllowAgentForwarding no');
+    expect(sshHardening).toContain('AllowTcpForwarding no');
+    expect(sshHardening).toContain('X11Forwarding no');
+    expect(installer).toContain('sshd -t');
+    expect(installer).toContain('systemctl reload ssh');
+    expect(installer).toContain('bricomaitre-storefront-memory.timer');
+    expect(installer).toContain('systemctl start bricomaitre-storefront-memory.service');
+    expect(storefrontMemoryService).toContain(
+      '/usr/local/libexec/bricomaitre/check-storefront-memory.sh',
+    );
+    expect(storefrontMemoryService).toContain('User={{OPERATIONS_USER}}');
+    expect(storefrontMemoryTimer).toContain('OnUnitActiveSec=5min');
+    expect(storefrontMemoryTimer).toContain('Persistent=true');
     expect(backupCron).toContain('backup-postgres-to-s3.sh');
     expect(backupCron).toContain('verify-postgres-backup-restore.sh');
     expect(backupCron).toContain('BRIC_POSTGRES_RESTORE_MEMORY=512m');

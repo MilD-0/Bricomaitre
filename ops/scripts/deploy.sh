@@ -204,18 +204,8 @@ if [[ -n "$previous_slot" ]]; then
   append_summary "- ✅ Previous slot ${previous_slot} remained rollback-compatible after migrations"
 fi
 
-actual_static_pages="$BRIC_STOREFRONT_STATIC_PAGES"
-printf 'storefront build generated %s prerendered routes; remaining catalog routes use ISR\n' "$actual_static_pages"
 append_summary "- Storefront release surface: ${BRIC_STOREFRONT_APP}"
-append_summary "- Prerendered routes: ${actual_static_pages} (remaining catalog routes use ISR)"
-
-if (( actual_static_pages < 1 )); then
-  echo "storefront build did not report any prerendered routes" >&2
-  append_summary "- ❌ Storefront prerender sanity check failed"
-  exit 1
-fi
-
-append_summary "- ✅ Storefront release identity, live catalog preflight, and prerender sanity check passed"
+append_summary "- ✅ Storefront release identity and live catalog preflight passed"
 
 compose pull "$admin_service" "$storefront_service"
 compose up -d --force-recreate "$admin_service" "$storefront_service"

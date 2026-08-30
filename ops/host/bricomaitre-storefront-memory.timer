@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Bricomaitre Storefront memory checks every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
+Persistent=true
+Unit=bricomaitre-storefront-memory.service
+
+[Install]
+WantedBy=timers.target

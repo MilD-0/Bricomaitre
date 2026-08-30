@@ -16,6 +16,7 @@ import {
   inventoryBarcodeSchema,
   inventoryScanQuerySchema,
 } from './inventory';
+import { productAvailabilityStatus } from './products';
 import { CACHE_TAGS, revalidateServerTags } from './server-cache';
 import { revalidateStorefrontProducts } from './storefront-revalidate';
 
@@ -50,6 +51,10 @@ export async function updateAdminInventoryProduct(
   actor?: ActionActor,
 ) {
   const changes = adminInventoryStatePatchSchema.parse(input);
+  const canonicalChanges =
+    changes.inStock === undefined
+      ? changes
+      : { ...changes, availabilityStatus: productAvailabilityStatus(changes.inStock) };
   const current = await readInventoryProductById(db, productId);
   if (!current) throw new AdminInventoryNotFoundError(productId);
 
@@ -61,7 +66,7 @@ export async function updateAdminInventoryProduct(
     execute: (tx) =>
       tx
         .update(products)
-        .set({ ...changes, updatedAt: new Date() })
+        .set({ ...canonicalChanges, updatedAt: new Date() })
         .where(eq(products.id, productId))
         .returning(buildInventoryRowSelection()),
   });

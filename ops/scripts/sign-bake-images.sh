@@ -14,6 +14,19 @@ fi
 : "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:?GitHub OIDC request token is required}"
 : "${ACTIONS_ID_TOKEN_REQUEST_URL:?GitHub OIDC request URL is required}"
 
+max_attempts="${BRIC_SIGN_MAX_ATTEMPTS:-3}"
+retry_delay_seconds="${BRIC_SIGN_RETRY_DELAY_SECONDS:-5}"
+transient_pattern='i/o timeout|TLS handshake timeout|connection reset by peer|unexpected EOF|unexpected eof|temporary failure in name resolution|dial tcp|network is unreachable|context deadline exceeded|DeadlineExceeded|net/http: request canceled|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|tuf refresh failed'
+
+if [[ ! "$max_attempts" =~ ^[1-9][0-9]*$ ]]; then
+  echo 'BRIC_SIGN_MAX_ATTEMPTS must be a positive integer' >&2
+  exit 64
+fi
+if [[ ! "$retry_delay_seconds" =~ ^[0-9]+$ ]]; then
+  echo 'BRIC_SIGN_RETRY_DELAY_SECONDS must be a non-negative integer' >&2
+  exit 64
+fi
+
 mkdir -p "$(dirname "$output_file")"
 : >"$output_file"
 
@@ -32,13 +45,42 @@ for image_spec in "$@"; do
   digest_ref="${IMAGE_NAMESPACE}/${image_name}@${digest}"
 
   echo "::group::Sign ${image_name}"
-  oidc_token="$(
-    curl --fail-with-body --silent --show-error \
-      -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-      "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sigstore" \
-      | node -e 'let data = ""; process.stdin.on("data", chunk => data += chunk); process.stdin.on("end", () => { const parsed = JSON.parse(data); if (!parsed.value) throw new Error("GitHub OIDC response did not include a token"); process.stdout.write(parsed.value); });'
-  )"
-  cosign sign --yes --identity-token "$oidc_token" "$digest_ref"
+  signed=false
+  for attempt in $(seq 1 "$max_attempts"); do
+    oidc_token="$(
+      curl --fail-with-body --silent --show-error \
+        --retry 3 \
+        --retry-all-errors \
+        --retry-delay 2 \
+        --retry-max-time 60 \
+        -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+        "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sigstore" \
+        | node -e 'let data = ""; process.stdin.on("data", chunk => data += chunk); process.stdin.on("end", () => { const parsed = JSON.parse(data); if (!parsed.value) throw new Error("GitHub OIDC response did not include a token"); process.stdout.write(parsed.value); });'
+    )"
+
+    if sign_output="$(cosign sign --yes --identity-token "$oidc_token" "$digest_ref" 2>&1)"; then
+      printf '%s\n' "$sign_output"
+      signed=true
+      break
+    else
+      sign_status=$?
+    fi
+    printf '%s\n' "$sign_output" >&2
+
+    if ! grep -Eiq "$transient_pattern" <<<"$sign_output"; then
+      echo "Signing ${image_name} failed with a non-network error; not retrying." >&2
+      exit "$sign_status"
+    fi
+    if ((attempt == max_attempts)); then
+      echo "Signing ${image_name} exhausted $max_attempts transient-network attempts." >&2
+      exit "$sign_status"
+    fi
+
+    delay="$((retry_delay_seconds * attempt))"
+    echo "Signing ${image_name} hit a transient network error; retrying ($attempt/$max_attempts) in ${delay}s." >&2
+    sleep "$delay"
+  done
+  [[ "$signed" == true ]]
   echo "::endgroup::"
 
   printf '%s=%s\n' "$env_key" "$digest_ref" >>"$output_file"
