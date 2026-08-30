@@ -68,7 +68,7 @@ exit 0
       'bricomaitre_test',
       'bash',
       '-c',
-      'echo invoked >> "$FAKE_COMMAND_LOG"; exit "$FAKE_COMMAND_EXIT"',
+      'printf "%s|%s|%s|%s\n" "$BRIC_CI_POSTGRES_CONTAINER" "$BRIC_CI_POSTGRES_PORT" "$BRIC_CI_REDIS_CONTAINER" "$BRIC_CI_REDIS_PORT" >> "$FAKE_COMMAND_LOG"; exit "$FAKE_COMMAND_EXIT"',
     ],
     {
       cwd: workspaceRoot,
@@ -105,7 +105,9 @@ describe('self-hosted CI network isolation', () => {
     const result = runServiceCommand();
 
     expect(result.status).toBe(0);
-    expect(result.commandLog).toContain('invoked');
+    expect(result.commandLog).toMatch(
+      /^bricomaitre-ci-postgres-.+\|55432\|bricomaitre-ci-redis-.+\|56379$/m,
+    );
     expect(result.dockerLog).not.toContain('pull ');
     expect(result.dockerLog.match(/run --detach --init --network host/g)).toHaveLength(2);
     expect(result.dockerLog.match(/rm --force bricomaitre-ci-/g)).toHaveLength(2);

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   productListQuerySchema,
+  productAvailabilityStatus,
   productPatchSchema,
   productPayloadSchema,
   productPromoCodePayloadSchema,
@@ -46,6 +47,19 @@ describe('productPayloadSchema', () => {
     expect(nullableParsed.oldPrice).toBeNull();
   });
 
+  it('derives the public availability status from the authoritative stock flag', () => {
+    expect(productAvailabilityStatus(true)).toBe('in_stock');
+    expect(productAvailabilityStatus(false)).toBe('out_of_stock');
+    expect(
+      productPayloadSchema.parse({
+        title: 'Canonical stock',
+        price: 10,
+        inStock: false,
+        availabilityStatus: 'in_stock',
+      }),
+    ).toMatchObject({ inStock: false, availabilityStatus: 'out_of_stock' });
+  });
+
   it('rejects invalid payloads', () => {
     const result = productPayloadSchema.safeParse({
       title: '',
@@ -74,7 +88,10 @@ describe('productPayloadSchema', () => {
 
   it('validates partial product toggle updates', () => {
     expect(productPatchSchema.parse({ active: false })).toEqual({ active: false });
-    expect(productPatchSchema.parse({ inStock: true })).toEqual({ inStock: true });
+    expect(productPatchSchema.parse({ inStock: true })).toEqual({
+      inStock: true,
+      availabilityStatus: 'in_stock',
+    });
     expect(productPatchSchema.safeParse({}).success).toBe(false);
   });
 

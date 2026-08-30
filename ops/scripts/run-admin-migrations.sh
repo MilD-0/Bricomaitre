@@ -26,3 +26,4 @@ run_migration_task() {
 run_migration_task verify
 run_migration_task migrate
 run_migration_task verify
+"$script_dir/configure-postgres-autovacuum.sh"

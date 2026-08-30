@@ -624,6 +624,13 @@
       "when": 1787996566351,
       "tag": "0088_petite_enchantress",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1788129509292,
+      "tag": "0089_gigantic_frightful_four",
+      "breakpoints": true
     }
   ]
 }

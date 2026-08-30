@@ -96,6 +96,15 @@ done < <(find "$workspace_dir/ops/scripts" -type f -name '*.py' -print0)
 
 if command -v systemd-analyze >/dev/null 2>&1; then
   systemd-analyze verify "$workspace_dir/ops/host/bricomaitre-disable-thp.service"
+  rendered_memory_service="$validation_dir/bricomaitre-storefront-memory.service"
+  sed \
+    -e 's/{{OPERATIONS_USER}}/deploy/g' \
+    -e 's/{{OPERATIONS_GROUP}}/deploy/g' \
+    "$workspace_dir/ops/host/bricomaitre-storefront-memory.service" \
+    >"$rendered_memory_service"
+  systemd-analyze verify \
+    "$rendered_memory_service" \
+    "$workspace_dir/ops/host/bricomaitre-storefront-memory.timer"
 fi
 
 if command -v actionlint >/dev/null 2>&1; then

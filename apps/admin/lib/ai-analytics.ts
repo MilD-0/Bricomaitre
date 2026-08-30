@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
 import { ecotrackOrderStates, orders, orderStatusHistory } from '@bric/db/schema';
+import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 
 import {
   analyticsQuerySchema,
@@ -173,7 +174,7 @@ async function loadEcotrackSourceCoverage(input: {
         ${orderStatusHistory.changedAt} as posted_at,
         (${orderStatusHistory.changedAt} at time zone 'Africa/Algiers')::date as posted_day
       from ${orderStatusHistory}
-      where ${orderStatusHistory.status} = 11
+      where ${orderStatusHistory.status} = ${ORDER_STATUS.POSTED}
       order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
     ), eligible as (
       select
@@ -243,8 +244,7 @@ async function loadEcotrackSourceCoverage(input: {
   const rawOrders = Array.isArray(row.missing_orders) ? row.missing_orders : [];
   return {
     source: 'ecotrack' as const,
-    definition:
-      'EcoTrack coverage is posted orders with a non-deleted canonical EcoTrack state divided by all orders whose first local status-11 transition falls in the requested period.',
+    definition: `EcoTrack coverage is posted orders with a non-deleted canonical EcoTrack state divided by all orders whose first local status-${ORDER_STATUS.POSTED} transition falls in the requested period.`,
     evidenceBasis:
       'Live canonical order status history and current EcoTrack state queried for this drilldown. The general Analytics source through-date does not shorten this separately queried eligible-order cohort.',
     requestedRange: { startDate: input.startDate, endDate: input.endDate },
@@ -268,8 +268,7 @@ async function loadEcotrackSourceCoverage(input: {
         {
           orderId: numberValue(order.orderId),
           firstPostedAt: dateValue(order.firstPostedAt),
-          eligibilityReason:
-            'The order has a recorded historical transition to local posted status 11 in the requested period.',
+          eligibilityReason: `The order has a recorded historical transition to local posted status ${ORDER_STATUS.POSTED} in the requested period.`,
           currentLocalStatus: numberValue(order.currentLocalStatus),
           localReference: order.localReference == null ? null : String(order.localReference),
           localTrackingNumber:

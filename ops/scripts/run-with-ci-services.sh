@@ -162,4 +162,9 @@ docker run \
 postgres_started='true'
 wait_for_postgres
 
+export BRIC_CI_POSTGRES_CONTAINER="$postgres_container"
+export BRIC_CI_POSTGRES_PORT="$postgres_port"
+export BRIC_CI_REDIS_CONTAINER="$redis_container"
+export BRIC_CI_REDIS_PORT="$redis_port"
+
 "$@"

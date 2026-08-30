@@ -64,6 +64,7 @@ ENV SENTRY_PROJECT_STOREFRONT="${SENTRY_PROJECT_STOREFRONT}"
 ENV SENTRY_RELEASE="${SENTRY_RELEASE}"
 
 RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-10.33.0,target=/corepack,sharing=shared \
+  --mount=type=cache,id=bricomaitre-storefront-next-build,target=/workspace/apps/storefront/.next/cache,sharing=locked \
   --mount=type=secret,id=sentry_auth_token \
   SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)" \
   pnpm --filter @bric/storefront build \

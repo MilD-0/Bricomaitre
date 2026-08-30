@@ -58,7 +58,7 @@ jobs:
           REDIS_URL: redis://127.0.0.1:56379/0
         run: |
           ops/scripts/run-with-ci-services.sh 55432 56379 bricomaitre_test \
-            bash -lc 'pnpm --filter @bric/admin db:migrate && pnpm --filter @bric/admin db:verify && pnpm test:services'
+            bash -lc 'pnpm --filter @bric/admin db:migrate && pnpm --filter @bric/admin db:verify && POSTGRES_USER=bricomaitre POSTGRES_DB=bricomaitre_test ops/scripts/configure-postgres-autovacuum.sh "$BRIC_CI_POSTGRES_CONTAINER" "$BRIC_CI_POSTGRES_PORT" && pnpm test:services'
 
   tests:
     name: Tests / ${{ matrix.suite }}

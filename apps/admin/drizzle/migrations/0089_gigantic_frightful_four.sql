@@ -1,0 +1,1 @@
+ALTER TABLE "products" ADD CONSTRAINT "products_availability_matches_stock_check" CHECK ("products"."availability_status" = case when "products"."in_stock" then 'in_stock' else 'out_of_stock' end);

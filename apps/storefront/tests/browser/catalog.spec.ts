@@ -303,6 +303,13 @@ test('renders and filters the server-first French catalog with governed analytic
   });
   await allCategories.hover();
   await expect(allCategories).toHaveCSS('transform', 'none');
+  const inStock = page
+    .locator('.catalog-filter-rail')
+    .getByRole('checkbox', { name: 'En stock', exact: true });
+  await inStock.check();
+  await expect(inStock).toHaveCSS('background-color', 'rgb(1, 115, 122)');
+  await expect(inStock).toHaveCSS('background-image', /data:image\/svg\+xml/);
+  await expect(inStock).not.toHaveCSS('background-image', /var\(/);
   const filterLayout = await page.locator('.catalog-filters fieldset').evaluateAll((fieldsets) =>
     fieldsets.map((fieldset) => {
       const heading = fieldset.querySelector('legend');

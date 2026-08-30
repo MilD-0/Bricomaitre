@@ -501,7 +501,6 @@ require_release_image_manifest() {
     BRIC_IMAGE_ADMIN_MIGRATIONS
     BRIC_IMAGE_STOREFRONT_WEB
     BRIC_STOREFRONT_APP
-    BRIC_STOREFRONT_STATIC_PAGES
   )
   local var
 
@@ -511,11 +510,6 @@ require_release_image_manifest() {
       return 1
     fi
   done
-
-  if [[ ! "${BRIC_STOREFRONT_STATIC_PAGES}" =~ ^[0-9]+$ ]]; then
-    echo "BRIC_STOREFRONT_STATIC_PAGES must be an integer" >&2
-    return 1
-  fi
 
   if [[ "$BRIC_STOREFRONT_APP" != "storefront" ]]; then
     echo "BRIC_STOREFRONT_APP must identify storefront" >&2

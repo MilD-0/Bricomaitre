@@ -96,5 +96,9 @@ export const products = pgTable(
       'products_availability_status_check',
       sql`${t.availabilityStatus} in ('in_stock', 'out_of_stock')`,
     ),
+    check(
+      'products_availability_matches_stock_check',
+      sql`${t.availabilityStatus} = case when ${t.inStock} then 'in_stock' else 'out_of_stock' end`,
+    ),
   ],
 );

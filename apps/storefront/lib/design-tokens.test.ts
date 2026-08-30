@@ -62,7 +62,8 @@ describe('storefront design tokens', () => {
         const property = match[1].toLowerCase();
         const value = match[2].trim();
         const location = `${file.slice(stylesRoot.length + 1)}: ${property}: ${value}`;
-        const usesSemanticToken = /var\(\s*--sf-/.test(value);
+        const declarationValue = value.replace(/url\([^)]*\)/g, '');
+        const usesSemanticToken = /var\(\s*--sf-/.test(declarationValue);
 
         if (
           /^(?:font-size|font-weight|line-height|letter-spacing)$/.test(property) &&
@@ -78,7 +79,10 @@ describe('storefront design tokens', () => {
         ) {
           failures.push(location);
         }
-        if (/#[0-9a-f]{3,8}\b|rgba?\(|\b(?:white|black)\b/i.test(value) && !usesSemanticToken) {
+        if (
+          /#[0-9a-f]{3,8}\b|rgba?\(|\b(?:white|black)\b/i.test(declarationValue) &&
+          !usesSemanticToken
+        ) {
           failures.push(location);
         }
         if (
@@ -91,6 +95,18 @@ describe('storefront design tokens', () => {
       }
     }
 
+    expect(failures).toEqual([]);
+  });
+
+  it('keeps embedded CSS assets self-contained', () => {
+    const failures = productionFiles(appRoot)
+      .filter((file) => extname(file) === '.css')
+      .filter((file) => /url\([^;{}]*var\(/.test(readFileSync(file, 'utf8')))
+      .map((file) => file.slice(appRoot.length + 1));
+
+    // Custom properties are evaluated in CSS declarations, not inside the
+    // encoded SVG or other resource fetched by url(). Theme-dependent assets
+    // must use masks/currentColor or remain deliberately self-contained.
     expect(failures).toEqual([]);
   });
 });
