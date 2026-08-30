@@ -12,6 +12,7 @@ dist/
 **/dist/
 coverage/
 **/test-results/
+**/playwright-report/
 gh_build_logs/
 apps/admin/exports/
 legacy-mongo-exports/

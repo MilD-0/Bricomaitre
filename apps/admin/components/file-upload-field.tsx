@@ -411,11 +411,11 @@ export function FileUploadField({
       >
         <DialogContent className="max-w-5xl border-none bg-transparent p-0 shadow-none">
           {previewFile ? (
-            <div className="overflow-hidden rounded-[1.75rem] border border-border/15 bg-[hsl(var(--background)/0.86)] p-3 shadow-[var(--shadow-vapor-strong)] backdrop-blur-xl">
+            <div className="overflow-hidden rounded-[var(--shape-radius-overlay-relaxed)] border border-border/15 bg-[hsl(var(--background)/0.86)] p-3 shadow-[var(--shadow-vapor-strong)] backdrop-blur-xl">
               <img
                 src={previewFile.src}
                 alt={previewFile.alt}
-                className="max-h-[85vh] w-full rounded-[1.25rem] object-contain"
+                className="max-h-[85vh] w-full rounded-[var(--shape-radius-panel)] object-contain"
               />
             </div>
           ) : null}

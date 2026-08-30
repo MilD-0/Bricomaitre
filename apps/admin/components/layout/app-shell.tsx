@@ -23,12 +23,13 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
-import { cn } from '../../lib/utils';
 import { authClient } from '../../lib/auth-client';
+import { rootMotionTransition } from '../../lib/design-tokens';
 import { navigationItems, type NavigationItem, type NavigationKey } from '../../lib/navigation';
 import { canAccessNavigationItem } from '../../lib/navigation-access';
 import { isBuiltInRole, type PermissionKey, type Role } from '../../lib/permissions';
 import { localeLabels, locales } from '../../lib/i18n';
+import { cn } from '../../lib/utils';
 import { useAppStore } from '../../store/app-store';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -297,14 +298,14 @@ export function AppShell({
           role={!isDesktop && sidebarOpen ? 'dialog' : undefined}
           inert={!isDesktop && !sidebarOpen ? true : undefined}
           className={cn(
-            'fixed inset-0 z-40 flex w-full flex-col bg-background p-0 text-card-foreground shadow-[var(--shadow-vapor-strong)] transition-transform duration-300 lg:sticky lg:inset-auto lg:top-3 lg:h-[calc(100vh-1.5rem)] lg:w-[17rem] lg:rounded-xl lg:border lg:border-border/60 lg:bg-background/92 lg:shadow-sm lg:backdrop-blur-xl',
+            'fixed inset-0 z-40 flex w-full flex-col bg-background p-0 text-card-foreground shadow-[var(--shadow-vapor-strong)] transition-transform duration-[var(--duration-navigation)] lg:sticky lg:inset-auto lg:top-3 lg:h-[calc(100vh-1.5rem)] lg:w-[17rem] lg:rounded-xl lg:border lg:border-border/60 lg:bg-background/92 lg:shadow-sm lg:backdrop-blur-xl',
             sidebarOpen
               ? 'translate-x-0'
               : '-translate-x-[110%] rtl:translate-x-[110%] lg:translate-x-0',
             sidebarCollapsed ? 'lg:w-[4.75rem]' : 'lg:w-[17rem]',
           )}
           animate={{ opacity: sidebarOpen ? 1 : 0.98 }}
-          transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+          transition={rootMotionTransition()}
         >
           <motion.div
             layout
@@ -314,8 +315,10 @@ export function AppShell({
               <div
                 aria-label="BricAdmin"
                 className={cn(
-                  'truncate leading-none font-semibold tracking-[-0.05em] antialiased',
-                  sidebarCollapsed ? 'lg:text-center lg:text-xl' : 'text-[1.6rem]',
+                  'truncate leading-none font-semibold tracking-[var(--type-tracking-n050)] antialiased',
+                  sidebarCollapsed
+                    ? 'lg:text-center lg:text-xl'
+                    : 'text-[length:var(--type-size-brand)]',
                 )}
               >
                 <span className={cn(sidebarCollapsed && 'lg:hidden')}>
@@ -448,7 +451,7 @@ export function AppShell({
         <main className="min-w-0 flex-1 space-y-3 sm:space-y-4">
           <div
             data-mobile-workflow-header
-            className="sticky top-2 z-20 flex items-center justify-between gap-3 rounded-[1rem] border border-border/50 bg-[var(--glass-surface)] px-2.5 py-2 shadow-[var(--shadow-vapor)] backdrop-blur-xl sm:px-4 sm:py-3 lg:hidden"
+            className="sticky top-2 z-20 flex items-center justify-between gap-3 rounded-[var(--shape-radius-card)] border border-border/50 bg-[var(--glass-surface)] px-2.5 py-2 shadow-[var(--shadow-vapor)] backdrop-blur-xl sm:px-4 sm:py-3 lg:hidden"
           >
             <div className="flex min-w-0 items-center gap-3">
               <Button
@@ -474,7 +477,7 @@ export function AppShell({
               <PendingInline active={isNavigating} label={t('labels.loading')} />
               <button
                 type="button"
-                className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                className="rounded-full focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"
                 aria-label={`${t('labels.userProfile')} · ${displayName}`}
                 onClick={() => setProfileOpen(true)}
               >
@@ -500,7 +503,7 @@ export function AppShell({
       <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
         <DialogContent
           id="sidebar-profile-drawer"
-          className="max-w-sm rounded-[1.5rem] bg-[var(--glass-surface)] p-4 sm:ml-auto sm:mr-4 sm:mt-auto"
+          className="max-w-sm rounded-[var(--shape-radius-overlay)] bg-[var(--glass-surface)] p-4 sm:ml-auto sm:mr-4 sm:mt-auto"
         >
           <div className="flex items-center justify-between gap-3">
             <Badge variant="secondary" className="max-w-[12rem] truncate">

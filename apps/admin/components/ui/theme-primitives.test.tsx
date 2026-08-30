@@ -74,6 +74,10 @@ describe('theme primitives', () => {
       </Field>,
     );
 
-    expect(screen.getByText('Example')).toHaveClass('text-[0.75rem]', 'font-semibold', 'uppercase');
+    expect(screen.getByText('Example')).toHaveClass(
+      'text-[length:var(--type-size-control)]',
+      'font-semibold',
+      'uppercase',
+    );
   });
 });

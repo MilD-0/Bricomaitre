@@ -132,14 +132,14 @@ export function AdminAiPresentationBlocks({
               <div className="grid grid-cols-2 gap-px bg-border/45 sm:grid-cols-3">
                 {metrics.map((metric) => (
                   <div key={metric.name ?? metric.key} className="min-w-0 bg-card/85 px-3 py-2.5">
-                    <p className="truncate text-[0.66rem] capitalize text-muted-foreground">
+                    <p className="truncate text-[length:var(--type-size-caption-relaxed)] capitalize text-muted-foreground">
                       {label(metric.name ?? metric.key ?? '')}
                     </p>
                     <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
                       {formatValue(metric.value, metric.unit)}
                     </p>
                     {typeof metric.changePct === 'number' ? (
-                      <p className="mt-0.5 text-[0.64rem] text-muted-foreground">
+                      <p className="mt-0.5 text-[length:var(--type-size-caption-tight)] text-muted-foreground">
                         {metric.changePct >= 0 ? '+' : ''}
                         {formatValue(metric.changePct, 'percent')}
                       </p>
@@ -171,7 +171,7 @@ export function AdminAiPresentationBlocks({
               {sources.map((source) => (
                 <span
                   key={source.key}
-                  className="rounded-full bg-secondary px-2.5 py-1 text-[0.68rem] text-muted-foreground"
+                  className="rounded-full bg-secondary px-2.5 py-1 text-[length:var(--type-size-label)] text-muted-foreground"
                 >
                   <span className="font-medium capitalize text-foreground">
                     {label(source.key ?? '')}
@@ -223,7 +223,7 @@ export function AdminAiPresentationBlocks({
             key={`${block.kind}-${index}`}
             href={presentation.href}
             onClick={onNavigate}
-            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-primary/20"
           >
             {block.title ?? t(`aiChat.toolDestinations.${presentation.destinationKey}`)}
             <ArrowUpRight className="size-3.5 rtl:-scale-x-100" />

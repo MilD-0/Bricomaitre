@@ -63,14 +63,14 @@ export default function GlobalError({
   return (
     <html lang={locale} dir={isRtl(locale) ? 'rtl' : 'ltr'}>
       <body>
-        <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.18),transparent_32%),linear-gradient(180deg,#020617_0%,#0f172a_36%,#111827_100%)] px-4 py-8 text-foreground">
+        <main className="min-h-screen bg-[image:var(--error-page-background)] px-4 py-8 text-foreground">
           <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl items-center justify-center">
-            <section className="w-full overflow-hidden rounded-[2rem] border border-white/10 bg-[var(--glass-surface)] p-6 shadow-[var(--shadow-vapor-strong)] backdrop-blur-xl md:p-10">
+            <section className="w-full overflow-hidden rounded-[var(--shape-radius-hero)] border border-white/10 bg-[var(--glass-surface)] p-6 shadow-[var(--shadow-vapor-strong)] backdrop-blur-xl md:p-10">
               <div className="mx-auto max-w-3xl text-center">
-                <div className="inline-flex rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.24em] text-amber-200">
+                <div className="inline-flex rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[var(--type-tracking-p240)] text-amber-200">
                   {copy.badge}
                 </div>
-                <h1 className="mt-5 text-balance text-4xl font-semibold tracking-[-0.04em] text-white md:text-6xl">
+                <h1 className="mt-5 text-balance text-4xl font-semibold tracking-[var(--type-tracking-n040)] text-white md:text-6xl">
                   {copy.title}
                 </h1>
                 <p className="mx-auto mt-4 max-w-2xl text-pretty text-sm leading-7 text-slate-300 md:text-base">
@@ -78,7 +78,7 @@ export default function GlobalError({
                 </p>
 
                 {error.digest ? (
-                  <div className="mx-auto mt-6 max-w-xl rounded-[1.25rem] border border-white/10 bg-black/20 px-4 py-3 text-left text-sm text-slate-300">
+                  <div className="mx-auto mt-6 max-w-xl rounded-[var(--shape-radius-panel)] border border-white/10 bg-black/20 px-4 py-3 text-left text-sm text-slate-300">
                     <span className="font-semibold text-slate-100">{copy.digest}:</span>{' '}
                     {error.digest}
                   </div>
@@ -88,19 +88,19 @@ export default function GlobalError({
                   <button
                     type="button"
                     onClick={() => reset()}
-                    className="inline-flex min-w-52 items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-vapor)] transition-transform duration-200 hover:-translate-y-0.5"
+                    className="inline-flex min-w-52 items-center justify-center rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-vapor)] transition-transform duration-[var(--duration-standard)] hover:-translate-y-0.5"
                   >
                     {copy.retry}
                   </button>
                   <Link
                     href={`/${locale}/administration`}
-                    className="inline-flex min-w-52 items-center justify-center rounded-2xl border border-white/12 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-100 transition-colors duration-200 hover:bg-white/10"
+                    className="inline-flex min-w-52 items-center justify-center rounded-2xl border border-white/12 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-100 transition-colors duration-[var(--duration-standard)] hover:bg-white/10"
                   >
                     {copy.dashboard}
                   </Link>
                   <Link
                     href={`/${locale}/products`}
-                    className="inline-flex min-w-52 items-center justify-center rounded-2xl border border-white/12 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-100 transition-colors duration-200 hover:bg-white/10"
+                    className="inline-flex min-w-52 items-center justify-center rounded-2xl border border-white/12 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-100 transition-colors duration-[var(--duration-standard)] hover:bg-white/10"
                   >
                     {copy.products}
                   </Link>

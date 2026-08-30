@@ -6,6 +6,7 @@ import { inspectAdminOrders } from './admin-ai-domain';
 import { loadOrdersPageData } from './admin-orders-data';
 import { startOrderEcotrackJob } from './background-jobs';
 import { buildEcotrackPostingPreview, readEcotrackCatalog } from './ecotrack';
+import { ORDER_STATUS } from './orders';
 
 const ECOTRACK_BUSINESS_TIMEZONE = 'Africa/Algiers';
 const ecotrackPostingScopeValues = [
@@ -78,7 +79,7 @@ async function loadConfirmedOrders() {
       {
         page,
         limit: 100,
-        inHouseStatus: 2,
+        inHouseStatus: ORDER_STATUS.CONFIRMED,
         search: '',
         sortKey: 'createdAt',
         sortDirection: 'desc',

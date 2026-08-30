@@ -522,7 +522,7 @@ export function EcotrackActionDialogs({
           <FieldGroup>
             <Field
               orientation="horizontal"
-              className="justify-between rounded-[1rem] border border-border/70 bg-muted/10 p-3"
+              className="justify-between rounded-[var(--shape-radius-card)] border border-border/70 bg-muted/10 p-3"
             >
               <div className="flex flex-col gap-1">
                 <FieldLabel htmlFor="ecotrack-ask-collection">

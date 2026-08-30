@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const withSentryConfig = vi.hoisted(() => vi.fn((config: unknown) => config));
+
 vi.mock('next-intl/plugin', () => ({
   default: vi.fn(() => (config: unknown) => config),
 }));
 
 vi.mock('@sentry/nextjs', () => ({
-  withSentryConfig: vi.fn((config: unknown) => config),
+  withSentryConfig,
 }));
 
 describe('storefront Next configuration', () => {
@@ -14,6 +16,10 @@ describe('storefront Next configuration', () => {
     process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID = 'meta-id';
     process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID = 'google-id';
     process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID = 'tiktok-id';
+    vi.stubEnv('SENTRY_AUTH_TOKEN', 'build-token');
+    vi.stubEnv('SENTRY_ORG', 'bricomaitre');
+    vi.stubEnv('SENTRY_PROJECT_STOREFRONT', 'storefront');
+    vi.stubEnv('SENTRY_RELEASE', 'commit-sha');
     vi.resetModules();
     const { default: config } = await import('./next.config');
 
@@ -62,6 +68,17 @@ describe('storefront Next configuration', () => {
           ),
         }),
       ]),
+    );
+    expect(withSentryConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        authToken: 'build-token',
+        org: 'bricomaitre',
+        project: 'storefront',
+        release: { name: 'commit-sha' },
+        sourcemaps: { deleteSourcemapsAfterUpload: true },
+        widenClientFileUpload: true,
+      }),
     );
   });
 });

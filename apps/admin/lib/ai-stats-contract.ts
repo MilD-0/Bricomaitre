@@ -2,11 +2,7 @@ import { sql, type SQLWrapper } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
-import {
-  type AnalyticsGrain,
-  type AnalyticsRange,
-  type AnalyticsResolvedGrain,
-} from './analytics';
+import { type AnalyticsGrain, type AnalyticsRange, type AnalyticsResolvedGrain } from './analytics';
 
 export type Database = ReturnType<typeof getDb>;
 

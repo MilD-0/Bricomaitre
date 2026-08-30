@@ -234,10 +234,7 @@ export function inclusiveDateDays(filters: ExperienceStatsFilters) {
 
 export const ADMIN_REPORTING_TIMEZONE = 'Africa/Algiers';
 
-export function reportingTimestampCondition(
-  column: SQLWrapper,
-  filters: ExperienceStatsFilters,
-) {
+export function reportingTimestampCondition(column: SQLWrapper, filters: ExperienceStatsFilters) {
   const conditions = [];
   if (filters.startDate)
     conditions.push(

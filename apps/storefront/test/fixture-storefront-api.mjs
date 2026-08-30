@@ -548,7 +548,7 @@ function createOrder(payload) {
     promoDiscountAmount: 0,
     promoFinalSubtotal: null,
     note: null,
-    confirmed: 0,
+    inHouseStatus: 0,
     noAnswerCount: 0,
     confirmedAt: null,
     hasStatusHistory: false,

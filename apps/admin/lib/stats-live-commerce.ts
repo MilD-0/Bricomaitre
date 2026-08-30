@@ -12,10 +12,7 @@ import {
   processedOrders,
   products,
 } from '@bric/db/schema';
-import {
-  ADMIN_REPORTING_TIMEZONE,
-  CUSTOMER_SUCCESSFUL_ORDER_STATUSES,
-} from './stats-experience';
+import { ADMIN_REPORTING_TIMEZONE, CUSTOMER_SUCCESSFUL_ORDER_STATUSES } from './stats-experience';
 import { numberOrZero, round, toDateInput } from './stats-values';
 import {
   statsQuerySchema,

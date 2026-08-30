@@ -6,6 +6,7 @@ import type { HTMLAttributes } from 'react';
 import { forwardRef, useCallback, useImperativeHandle, useRef } from 'react';
 
 import { cn } from '@/lib/utils';
+import { rootMotionDurationSeconds } from '@/lib/design-tokens';
 
 interface ChevronRightIconHandle {
   startAnimation: () => void;
@@ -16,10 +17,12 @@ interface ChevronRightIconProps extends HTMLAttributes<HTMLDivElement> {
   size?: number;
 }
 
-const DEFAULT_TRANSITION: Transition = {
-  times: [0, 0.4, 1],
-  duration: 0.5,
-};
+function defaultTransition(): Transition {
+  return {
+    times: [0, 0.4, 1],
+    duration: rootMotionDurationSeconds('--sf-duration-slow', 0.5),
+  };
+}
 
 const ChevronRightIcon = forwardRef<ChevronRightIconHandle, ChevronRightIconProps>(
   ({ onMouseEnter, onMouseLeave, className, size = 28, ...props }, ref) => {
@@ -77,7 +80,7 @@ const ChevronRightIcon = forwardRef<ChevronRightIconHandle, ChevronRightIconProp
           <motion.path
             animate={controls}
             d="m9 18 6-6-6-6"
-            transition={DEFAULT_TRANSITION}
+            transition={defaultTransition()}
             variants={{
               normal: { x: 0 },
               animate: { x: [0, 2, 0] },

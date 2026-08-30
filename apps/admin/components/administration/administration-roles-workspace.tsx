@@ -151,7 +151,7 @@ export function AdministrationRolesWorkspace() {
           if (keys.length === 0) return null;
           return (
             <fieldset key={group.label} className="space-y-2">
-              <legend className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+              <legend className="mb-2 text-xs font-semibold uppercase tracking-[var(--type-tracking-p150)] text-muted-foreground">
                 {t(`settings.permissionGroups.${group.label}`)}
               </legend>
               <div className="grid gap-x-5 gap-y-2 sm:grid-cols-2">

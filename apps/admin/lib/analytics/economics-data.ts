@@ -34,6 +34,14 @@ import {
   metric,
 } from './loaders-shared';
 
+export type MaterializedEconomicsReport = EconomicsReport & { materializedFacts: true };
+
+export function isMaterializedEconomicsReport(
+  report: EconomicsReport,
+): report is MaterializedEconomicsReport {
+  return 'materializedFacts' in report && report.materializedFacts === true;
+}
+
 export function materializedFactsAreUsable(input: {
   requestedStartDate: string | null;
   requestedEndDate: string;
@@ -62,7 +70,7 @@ export function materializedFactsAreUsable(input: {
 export async function loadMaterializedEconomicsReport(
   db: Database,
   filters: AnalyticsFilters,
-): Promise<EconomicsReport | null> {
+): Promise<MaterializedEconomicsReport | null> {
   const factWhere = datePredicate(
     analyticsEconomicsDailyFacts.day,
     filters.startDate,
@@ -196,6 +204,12 @@ export async function loadMaterializedEconomicsReport(
     const fxRateUsed = numeric(row.fx_rate) || settings.fxRate;
     const postedOrders = numeric(row.posted_orders);
     const costCompleteOrders = numeric(row.cost_complete_orders);
+    const grossProfitSource: EconomicsReport['days'][number]['grossProfitSource'] =
+      grossProfitDzd == null ? 'missing' : 'automatic';
+    const returnRateSource: EconomicsReport['days'][number]['returnRateSource'] =
+      grossProfitDzd == null ? 'missing' : 'default';
+    const confirmedOrdersSource: EconomicsReport['days'][number]['confirmedOrdersSource'] =
+      'automatic';
     const isRestDay = Boolean(
       settings.restFrom &&
       date >= settings.restFrom &&
@@ -222,9 +236,9 @@ export async function loadMaterializedEconomicsReport(
       note: null,
       fxRateUsed,
       metaSyncedAt: oldestRefresh ?? null,
-      grossProfitSource: grossProfitDzd == null ? 'missing' : 'automatic',
-      returnRateSource: grossProfitDzd == null ? 'missing' : 'default',
-      confirmedOrdersSource: 'automatic',
+      grossProfitSource,
+      returnRateSource,
+      confirmedOrdersSource,
       postedOrders,
       costCompleteOrders,
       projectedCoveragePct: ratio(costCompleteOrders, postedOrders),
@@ -389,7 +403,7 @@ export async function loadMaterializedEconomicsReport(
       metaSyncedAt: oldestRefresh ?? null,
       settledReportThroughDate: null,
     },
-  } as unknown as EconomicsReport;
+  } satisfies MaterializedEconomicsReport;
 }
 
 export async function loadEconomicsPair(

@@ -112,7 +112,7 @@ export function MetaCatalogExportDialog({
                       : 'min-w-[920px] origin-top-left scale-[0.78]',
                   )}
                 >
-                  <Table className="text-[11px] leading-tight">
+                  <Table className="text-[length:var(--type-size-label-px)] leading-tight">
                     <TableHeader>
                       <TableRow>
                         {META_CATALOG_EXPORT_HEADERS.map((header) => (

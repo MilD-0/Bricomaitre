@@ -267,7 +267,7 @@ export function ImageUploadField({
                   </button>
                 </div>
                 <div className="flex items-center justify-between gap-2 border-t border-border/60 px-2.5 py-2">
-                  <span className="truncate text-[11px] font-medium text-muted-foreground">
+                  <span className="truncate text-[length:var(--type-size-label-px)] font-medium text-muted-foreground">
                     Uploaded
                   </span>
                   <div className="flex items-center gap-1">
@@ -315,20 +315,20 @@ export function ImageUploadField({
                     <img
                       src={upload.previewUrl}
                       alt={upload.fileName}
-                      className={`size-full object-cover transition-all duration-200 ${upload.status === 'uploading' ? 'scale-[1.02] blur-sm brightness-75' : ''}`}
+                      className={`size-full object-cover transition-all duration-[var(--duration-standard)] ${upload.status === 'uploading' ? 'scale-[1.02] blur-sm brightness-75' : ''}`}
                     />
                   </button>
                   <div className="absolute inset-0 bg-[hsl(var(--foreground)/0.12)]" />
                   <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-[hsl(var(--background)/0.94)] via-[hsl(var(--background)/0.55)] to-transparent p-2">
                     <div className="h-1.5 overflow-hidden rounded-full bg-[hsl(var(--foreground)/0.12)]">
                       <div
-                        className="h-full rounded-full bg-primary transition-[width] duration-200"
+                        className="h-full rounded-full bg-primary transition-[width] duration-[var(--duration-standard)]"
                         style={{ width: `${upload.progress}%` }}
                       />
                     </div>
                   </div>
                   <div className="absolute inset-x-0 top-3 flex justify-center">
-                    <div className="rounded-full border border-border/20 bg-[hsl(var(--background)/0.84)] px-2.5 py-1 text-[11px] font-medium text-foreground backdrop-blur-sm">
+                    <div className="rounded-full border border-border/20 bg-[hsl(var(--background)/0.84)] px-2.5 py-1 text-[length:var(--type-size-label-px)] font-medium text-foreground backdrop-blur-sm">
                       {upload.status === 'uploading'
                         ? `${upload.progress}%`
                         : upload.status === 'success'
@@ -345,8 +345,10 @@ export function ImageUploadField({
                   </div>
                 </div>
                 <div className="space-y-1 border-t border-border/60 px-2.5 py-2">
-                  <p className="truncate text-[11px] font-medium">{upload.fileName}</p>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="truncate text-[length:var(--type-size-label-px)] font-medium">
+                    {upload.fileName}
+                  </p>
+                  <p className="text-[length:var(--type-size-label-px)] text-muted-foreground">
                     {upload.status === 'uploading'
                       ? `${upload.progress}% uploaded`
                       : upload.status === 'success'
@@ -407,11 +409,11 @@ export function ImageUploadField({
       >
         <DialogContent className="max-w-5xl border-none bg-transparent p-0 shadow-none">
           {previewImage ? (
-            <div className="overflow-hidden rounded-[1.75rem] border border-border/15 bg-[hsl(var(--background)/0.86)] p-3 shadow-[var(--shadow-vapor-strong)] backdrop-blur-xl">
+            <div className="overflow-hidden rounded-[var(--shape-radius-overlay-relaxed)] border border-border/15 bg-[hsl(var(--background)/0.86)] p-3 shadow-[var(--shadow-vapor-strong)] backdrop-blur-xl">
               <img
                 src={previewImage.src}
                 alt={previewImage.alt}
-                className="max-h-[85vh] w-full rounded-[1.25rem] object-contain"
+                className="max-h-[85vh] w-full rounded-[var(--shape-radius-panel)] object-contain"
               />
             </div>
           ) : null}

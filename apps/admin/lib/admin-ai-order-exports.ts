@@ -10,6 +10,7 @@ import {
   buildOrderExportRows,
   filterRecentConfirmedOrders,
 } from './order-export';
+import { ORDER_STATUS } from './orders';
 
 export const adminAiOrderExportScopeSchema = z
   .object({
@@ -43,7 +44,7 @@ async function loadAllConfirmedOrders() {
       {
         page,
         limit: 100,
-        inHouseStatus: 2,
+        inHouseStatus: ORDER_STATUS.CONFIRMED,
         search: '',
         sortKey: 'createdAt',
         sortDirection: 'desc',

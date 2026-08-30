@@ -3,15 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- Operational product thumbnails may use legacy external origins. */
 
 import { useQuery } from '@tanstack/react-query';
-import {
-  Check,
-  Minus,
-  Package,
-  Phone,
-  Plus,
-  Search,
-  X,
-} from 'lucide-react';
+import { Check, Minus, Package, Phone, Plus, Search, X } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useDeferredValue, useMemo, useState } from 'react';
 
@@ -144,10 +136,10 @@ function OrderProductThumbnail({
     <img
       src={product.thumbnailUrl}
       alt=""
-      className="size-10 shrink-0 rounded-[0.7rem] object-cover"
+      className="size-10 shrink-0 rounded-[var(--shape-radius-soft-sm)] object-cover"
     />
   ) : (
-    <span className="grid size-10 shrink-0 place-items-center rounded-[0.7rem] bg-muted text-muted-foreground">
+    <span className="grid size-10 shrink-0 place-items-center rounded-[var(--shape-radius-soft-sm)] bg-muted text-muted-foreground">
       <Package className="size-4" aria-hidden="true" />
     </span>
   );
@@ -358,7 +350,7 @@ function OrderEditorBody({
               </div>
             </label>
           ) : (
-            <div className="rounded-[0.9rem] bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
+            <div className="rounded-[var(--shape-radius-card-compact)] bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
               {order.confirmedByName ?? order.confirmedBy ?? t('ordersManager.unconfirmed')}
               <span className="mt-1 block">
                 {order.confirmedAt
@@ -464,7 +456,7 @@ function OrderEditorBody({
             onChange={(event) => setProductSearch(event.target.value)}
           />
           {deferredProductSearch ? (
-            <div className="absolute inset-x-0 top-12 z-20 overflow-hidden rounded-[1rem] border border-border/65 bg-background shadow-[var(--shadow-vapor-strong)]">
+            <div className="absolute inset-x-0 top-12 z-20 overflow-hidden rounded-[var(--shape-radius-card)] border border-border/65 bg-background shadow-[var(--shadow-vapor-strong)]">
               {productSearchQuery.isFetching ? (
                 <p className="px-3 py-3 text-sm text-muted-foreground">
                   {t('ordersManager.products.searchLoading')}
@@ -481,10 +473,10 @@ function OrderEditorBody({
                     <img
                       src={product.images[0]}
                       alt=""
-                      className="size-9 rounded-[0.6rem] object-cover"
+                      className="size-9 rounded-[var(--shape-radius-soft-xs)] object-cover"
                     />
                   ) : (
-                    <span className="grid size-9 place-items-center rounded-[0.6rem] bg-muted">
+                    <span className="grid size-9 place-items-center rounded-[var(--shape-radius-soft-xs)] bg-muted">
                       <Package className="size-4" />
                     </span>
                   )}
@@ -506,7 +498,7 @@ function OrderEditorBody({
           ) : null}
         </div>
 
-        <div className="mt-4 divide-y divide-border/55 overflow-hidden rounded-[1rem] border border-border/60">
+        <div className="mt-4 divide-y divide-border/55 overflow-hidden rounded-[var(--shape-radius-card)] border border-border/60">
           {selectedProducts.map((product) => (
             <div
               key={product.rawValue}
@@ -522,7 +514,7 @@ function OrderEditorBody({
                     })}
                     target="_blank"
                     rel="noreferrer"
-                    className="block truncate text-sm font-medium underline-offset-4 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                    className="block truncate text-sm font-medium underline-offset-4 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"
                   >
                     {product.title}
                   </a>
@@ -587,7 +579,7 @@ function OrderEditorBody({
           ) : null}
         </div>
 
-        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 rounded-[1rem] bg-muted/30 px-4 py-3 text-sm">
+        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 rounded-[var(--shape-radius-card)] bg-muted/30 px-4 py-3 text-sm">
           <dt className="text-muted-foreground">{t('ordersManager.amount.subtotal')}</dt>
           <dd className="text-end font-medium tabular-nums">
             {formatOrderMoney(locale, productSubtotal)}
@@ -703,7 +695,7 @@ export function OrderEditor({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs font-medium text-primary">#{detail.id}</p>
-            <h2 className="mt-1 truncate text-xl font-semibold tracking-[-0.02em]">
+            <h2 className="mt-1 truncate text-xl font-semibold tracking-[var(--type-tracking-n020)]">
               {detail.fullName}
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">

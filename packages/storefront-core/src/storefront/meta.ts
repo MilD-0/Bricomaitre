@@ -22,7 +22,6 @@ import {
   isValidFbp,
   type MetaOrderLocation,
   type MetaRequestContext,
-  readMetaOrderLocation,
 } from './meta-identity';
 import { resolveOrderPromo } from './promos';
 
@@ -435,7 +434,7 @@ export async function enqueueMetaBrowserEvent(
       : event.eventName === 'PageView'
         ? {}
         : buildMetaCommerceCustomData(lines);
-  let outbox = await insertMetaOutboxEvent(db, {
+  const outbox = await insertMetaOutboxEvent(db, {
     eventName: event.eventName,
     eventId: event.eventId,
     source: 'browser',

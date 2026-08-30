@@ -3,6 +3,12 @@ FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba32756
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ARG BRIC_BUILD_NODE_OPTIONS=""
+ARG SENTRY_ORG
+ARG SENTRY_PROJECT_STOREFRONT_API
+ARG SENTRY_RELEASE
+ENV SENTRY_ORG="${SENTRY_ORG}"
+ENV SENTRY_PROJECT_STOREFRONT_API="${SENTRY_PROJECT_STOREFRONT_API}"
+ENV SENTRY_RELEASE="${SENTRY_RELEASE}"
 
 RUN corepack enable
 
@@ -26,16 +32,17 @@ COPY ops/scripts/hydrate-next-standalone.sh ./ops/scripts/hydrate-next-standalon
 COPY ops/ownership ./ops/ownership
 
 RUN mkdir -p apps/storefront-api/public
+RUN BRIC_WORKER_SOURCEMAPS=1 pnpm --filter @bric/storefront-api build:worker
 
 FROM base AS worker
 
 ENV NODE_ENV=production
 
-RUN pnpm --filter @bric/storefront-api build:worker
-
 FROM base AS build
 
-RUN pnpm --filter @bric/storefront-api build \
+RUN --mount=type=secret,id=sentry_auth_token \
+  SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)" \
+  pnpm --filter @bric/storefront-api build \
   && bash ops/scripts/hydrate-next-standalone.sh apps/storefront-api
 
 FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS web

@@ -23,12 +23,12 @@ export function AdminAiResultTable({
     >
       {compact ? (
         table.available > table.rows.length ? (
-          <p className="min-w-[28rem] px-2 pb-1 pt-2 text-end text-[0.68rem] text-muted-foreground">
+          <p className="min-w-[28rem] px-2 pb-1 pt-2 text-end text-[length:var(--type-size-label)] text-muted-foreground">
             {showingRows(table.rows.length, table.available)}
           </p>
         ) : null
       ) : (
-        <div className="flex min-w-[28rem] items-center justify-between gap-3 px-2 pb-1 pt-2.5 text-[0.68rem] text-muted-foreground">
+        <div className="flex min-w-[28rem] items-center justify-between gap-3 px-2 pb-1 pt-2.5 text-[length:var(--type-size-label)] text-muted-foreground">
           <p className="font-medium capitalize">{label}</p>
           {table.available > table.rows.length ? (
             <p>{showingRows(table.rows.length, table.available)}</p>

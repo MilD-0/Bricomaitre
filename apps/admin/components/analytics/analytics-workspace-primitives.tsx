@@ -35,7 +35,14 @@ export type DataOf<Kind extends AnalyticsPayload['data']['kind']> = Extract<
   { kind: Kind }
 >;
 
-export const chartColors = ['#7c3aed', '#0f766e', '#e11d48', '#d97706', '#2563eb', '#64748b'];
+export const chartColors = [
+  'var(--chart-violet)',
+  'var(--chart-teal)',
+  'var(--chart-rose)',
+  'var(--chart-amber)',
+  'var(--chart-blue)',
+  'var(--chart-slate)',
+];
 
 type AnalyticsAssistantFocus = {
   dimension: AdminAiAnalyticsFocusDimension;
@@ -143,7 +150,7 @@ export function MetricStrip({
             label={copy.metrics[item.key as keyof typeof copy.metrics] ?? item.key}
             value={
               <div className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-end sm:gap-2">
-                <strong className="max-w-full whitespace-nowrap text-lg font-semibold tracking-[-0.035em] tabular-nums sm:text-2xl">
+                <strong className="max-w-full whitespace-nowrap text-lg font-semibold tracking-[var(--type-tracking-n035)] tabular-nums sm:text-2xl">
                   {formatMetric(locale, item)}
                 </strong>
                 {item.changePct != null ? (
@@ -284,10 +291,10 @@ export function chartTooltip(
 ) {
   return {
     contentStyle: {
-      borderRadius: '10px',
+      borderRadius: 'var(--shape-radius-chart-tooltip)',
       border: '1px solid color-mix(in oklab, var(--border) 70%, transparent)',
       background: 'color-mix(in oklab, var(--background) 96%, transparent)',
-      fontSize: '12px',
+      fontSize: 'var(--type-size-chart-tooltip)',
     },
     formatter: (value: unknown, name: unknown) => {
       const number = Number(value);
@@ -333,7 +340,7 @@ export function SourceRail({
   return (
     <div className="border-b border-border/60 bg-muted/10 px-4 py-2.5 sm:px-6">
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+        <span className="text-[length:var(--type-size-label-px)] font-semibold uppercase tracking-[var(--type-tracking-p100)] text-muted-foreground">
           {copy.sourceHealth}
         </span>
         {payload.sources
@@ -482,7 +489,7 @@ export function CashPipeline({
       role="region"
       aria-label={copy.sections.cashPipeline}
       tabIndex={0}
-      className="grid snap-x snap-mandatory grid-flow-col auto-cols-[minmax(14rem,80vw)] overflow-x-auto border-y border-border/60 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/30 sm:snap-none sm:grid-flow-row sm:auto-cols-auto sm:grid-cols-2 sm:overflow-visible xl:flex"
+      className="grid snap-x snap-mandatory grid-flow-col auto-cols-[minmax(14rem,80vw)] overflow-x-auto border-y border-border/60 outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-inset focus-visible:ring-ring/30 sm:snap-none sm:grid-flow-row sm:auto-cols-auto sm:grid-cols-2 sm:overflow-visible xl:flex"
     >
       {visibleRows.map((row) => (
         <div
@@ -492,18 +499,18 @@ export function CashPipeline({
           <p className="min-h-8 text-xs font-medium leading-4 text-muted-foreground">
             {copy.cashStages[row.key]}
           </p>
-          <p className="mt-1 text-xl font-semibold tracking-[-0.025em]">
+          <p className="mt-1 text-xl font-semibold tracking-[var(--type-tracking-n025)]">
             {formatMoney(locale, row.amountDzd, true)}
           </p>
-          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[length:var(--type-size-label-px)] text-muted-foreground">
             <span>{formatNumber(locale, row.orders)} orders</span>
           </div>
           {row.confidencePct != null ? (
-            <p className="mt-1 text-[10px] text-muted-foreground/75">
+            <p className="mt-1 text-[length:var(--type-size-micro-px)] text-muted-foreground/75">
               {formatPercent(locale, row.confidencePct)} {copy.expectedToPost}
             </p>
           ) : row.providerAmountCoveragePct != null ? (
-            <p className="mt-1 text-[10px] text-muted-foreground/75">
+            <p className="mt-1 text-[length:var(--type-size-micro-px)] text-muted-foreground/75">
               {formatPercent(locale, row.providerAmountCoveragePct)} provider COD
             </p>
           ) : null}

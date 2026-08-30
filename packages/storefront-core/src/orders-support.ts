@@ -62,7 +62,6 @@ export const orderStatusSchema = z.union(
 export const deliveryTypeSchema = z.union(
   deliveryTypeValues.map((value) => z.literal(value)) as [z.ZodLiteral<0>, z.ZodLiteral<1>],
 );
-const noAnswerCountSchema = z.number().int().min(0).max(99);
 
 export const ORDER_STATUS_LABEL_KEYS = {
   [ORDER_STATUS.NOT_CONTACTED]: 'notContacted',
@@ -142,22 +141,6 @@ const nullableWilayaCode = z.union([z.number(), z.string(), z.null()]).transform
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 58 ? parsed : null;
 });
 
-const orderPatchSchema = z
-  .object({
-    phoneNumber1: z.string().trim().min(1).max(50).optional(),
-    note: nullableTrimmedString(500).optional(),
-    inHouseStatus: orderStatusSchema.optional(),
-    noAnswerCount: z.coerce.number().int().min(0).max(99).optional(),
-    delivery: deliveryTypeSchema.optional(),
-    state: nullableWilayaCode.optional(),
-    city: nullableTrimmedString(120).optional(),
-    homeAddress: nullableTrimmedString(300).optional(),
-    cartProducts: z.array(z.string().trim().min(1).max(160)).max(50).optional(),
-  })
-  .refine((value) => Object.keys(value).length > 0, {
-    message: 'At least one field must be provided.',
-  });
-
 export const storefrontOrderCreateSchema = z.object({
   firstName: optionalNullableTrimmedString(80),
   lastName: optionalNullableTrimmedString(80),
@@ -195,24 +178,8 @@ export const storefrontOrderPatchSchema = z
     message: 'At least one field must be provided.',
   });
 
-type OrderPatch = z.infer<typeof orderPatchSchema>;
-type StorefrontOrderCreate = z.infer<typeof storefrontOrderCreateSchema>;
-type StorefrontOrderPatch = z.infer<typeof storefrontOrderPatchSchema>;
 export type OrderStatus = z.infer<typeof orderStatusSchema>;
 export type DeliveryType = z.infer<typeof deliveryTypeSchema>;
-
-const orderSortKeyValues = ['inHouseStatus', 'createdAt', 'fullName'] as const;
-const sortDirectionValues = ['asc', 'desc'] as const;
-
-const orderListQuerySchema = z.object({
-  page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().max(100).default(25),
-  search: z.string().trim().default(''),
-  inHouseStatus: z.union([orderStatusSchema, z.null()]).optional(),
-  noAnswerCount: z.union([z.coerce.number().int().min(0).max(99), z.null()]).optional(),
-  sortKey: z.enum(orderSortKeyValues).default('createdAt'),
-  sortDirection: z.enum(sortDirectionValues).default('desc'),
-});
 
 export type OrderStatusHistoryRecord = {
   id: number;
@@ -274,9 +241,6 @@ export type OrderRecord = {
   hasStatusHistory: boolean;
   statusHistory: OrderStatusHistoryRecord[];
 };
-
-type OrderSortKey = z.infer<typeof orderListQuerySchema>['sortKey'];
-type SortDirection = z.infer<typeof orderListQuerySchema>['sortDirection'];
 
 export function parseNumericAmount(value: string | number | null | undefined) {
   if (typeof value === 'number') {

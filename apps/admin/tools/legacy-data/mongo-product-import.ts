@@ -1,9 +1,12 @@
+import type { InferInsertModel } from 'drizzle-orm';
+
+import type { brands, categories, orders, products } from '@bric/db/schema';
+import { normalizeAlgeriaPhone } from '@bric/storefront-core/meta';
 import {
   coerceDeliveryType,
   coerceNoAnswerCount,
   coerceOrderStatus,
   isConfirmedLifecycleStatus,
-  type OrderStatus,
 } from '../../lib/orders';
 import { createSlugAssigner, slugify } from '../../lib/slug';
 
@@ -85,93 +88,110 @@ export type MongoSecondaryStockDocument = {
   secondaryStock?: number;
 };
 
-export type ImportedProductRow = {
-  mongoId: string | null;
-  title: string;
-  slug: string;
-  titleAr: string | null;
-  description: string | null;
-  descriptionAr: string | null;
-  sku: string | null;
-  barcode: string | null;
-  price: string;
-  oldPrice: string | null;
-  purchasePrice: string | null;
-  active: boolean;
-  inStock: boolean;
-  availabilityStatus: 'in_stock' | 'out_of_stock';
-  unitsSold: number;
-  inventoryQuantity: number;
-  brandId: number | null;
-  categoryId: number | null;
-  images: string[];
-  createdAt: Date;
-  updatedAt: Date;
-};
+type ProductInsert = InferInsertModel<typeof products>;
+type BrandInsert = InferInsertModel<typeof brands>;
+type CategoryInsert = InferInsertModel<typeof categories>;
+type OrderInsert = InferInsertModel<typeof orders>;
 
-export type ImportedBrandRow = {
-  mongoId: string | null;
-  name: string;
-  slug: string;
-  image: string | null;
-  isActive: boolean;
-  featured: boolean;
-  createdBy: null;
-  createdByName: null;
-  updatedBy: null;
-  updatedByName: null;
-  createdAt: Date;
-  updatedAt: Date;
-};
+export type ImportedProductRow = Required<
+  Pick<
+    ProductInsert,
+    | 'mongoId'
+    | 'title'
+    | 'slug'
+    | 'titleAr'
+    | 'description'
+    | 'descriptionAr'
+    | 'sku'
+    | 'barcode'
+    | 'price'
+    | 'oldPrice'
+    | 'purchasePrice'
+    | 'active'
+    | 'inStock'
+    | 'availabilityStatus'
+    | 'unitsSold'
+    | 'inventoryQuantity'
+    | 'brandId'
+    | 'categoryId'
+    | 'images'
+    | 'createdAt'
+    | 'updatedAt'
+  >
+>;
 
-export type ImportedCategoryRow = {
-  mongoId: string | null;
-  name: string;
-  slug: string;
-  nameEn: string | null;
-  nameAr: string | null;
-  image: string | null;
-  isActive: boolean;
-  parentId: number | null;
-  properties: unknown[];
-  featured: boolean;
-  createdBy: null;
-  createdByName: null;
-  updatedBy: null;
-  updatedByName: null;
-  createdAt: Date;
-  updatedAt: Date;
-};
+export type ImportedBrandRow = Required<
+  Pick<
+    BrandInsert,
+    | 'mongoId'
+    | 'name'
+    | 'slug'
+    | 'image'
+    | 'isActive'
+    | 'featured'
+    | 'createdBy'
+    | 'createdByName'
+    | 'updatedBy'
+    | 'updatedByName'
+    | 'createdAt'
+    | 'updatedAt'
+  >
+>;
 
-export type ImportedOrderRow = {
-  mongoId: string | null;
-  firstName: string | null;
-  lastName: string | null;
-  state: number | null;
-  city: string | null;
-  homeAddress: string | null;
-  email: string | null;
-  phoneNumber1: string;
-  phoneNumber2: string | null;
-  cartProducts: string[];
-  delivery: 0 | 1;
-  delPr: string | null;
-  price: string | null;
-  note: string | null;
-  confirmed: OrderStatus;
-  noAnswerCount: number;
-  confirmedBy: null;
-  confirmedByName: null;
-  confirmedAt: Date | null;
-  archivedAt: Date | null;
-  ecotrackStatus: string | null;
-  ecotrackStatusLastUpdate: Date | null;
-  ecotrackStatusData: Record<string, unknown> | null;
-  ecotrackReference: string | null;
-  ecotrackTrackingNumber: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-};
+export type ImportedCategoryRow = Required<
+  Pick<
+    CategoryInsert,
+    | 'mongoId'
+    | 'name'
+    | 'slug'
+    | 'nameEn'
+    | 'nameAr'
+    | 'image'
+    | 'isActive'
+    | 'parentId'
+    | 'properties'
+    | 'featured'
+    | 'createdBy'
+    | 'createdByName'
+    | 'updatedBy'
+    | 'updatedByName'
+    | 'createdAt'
+    | 'updatedAt'
+  >
+>;
+
+export type ImportedOrderRow = Required<
+  Pick<
+    OrderInsert,
+    | 'mongoId'
+    | 'firstName'
+    | 'lastName'
+    | 'state'
+    | 'city'
+    | 'homeAddress'
+    | 'email'
+    | 'phoneNumber1'
+    | 'normalizedPhone'
+    | 'phoneNumber2'
+    | 'cartProducts'
+    | 'delivery'
+    | 'deliveryFee'
+    | 'price'
+    | 'note'
+    | 'inHouseStatus'
+    | 'noAnswerCount'
+    | 'confirmedBy'
+    | 'confirmedByName'
+    | 'confirmedAt'
+    | 'ecotrackStatus'
+    | 'ecotrackStatusLastUpdate'
+    | 'ecotrackStatusData'
+    | 'ecotrackReference'
+    | 'ecotrackTrackingNumber'
+    | 'createdAt'
+    | 'updatedAt'
+  >
+>;
 
 export type ProductImportLookups = {
   brandIdByMongoId?: Map<string, number>;
@@ -180,7 +200,6 @@ export type ProductImportLookups = {
 
 export type OrderImportLookups = {
   productIdByMongoId: Map<string, number>;
-  importNow: Date;
 };
 
 export type ProductImportDiagnostics = {
@@ -275,7 +294,6 @@ for (const [name, code] of Object.entries(WILAYA_CODE_BY_NAME)) {
 }
 
 const MONEY_ABS_LIMIT = 10_000_000_000;
-const ARCHIVE_CUTOFF = new Date('2026-01-01T00:00:00.000Z');
 
 function trimNullableText(value: unknown) {
   if (typeof value !== 'string') {
@@ -717,18 +735,18 @@ export function mapMongoOrderToCurrentSchema(
       homeAddress: trimNullableScalarText(order.homeAddress),
       email: trimNullableText(order.email)?.toLowerCase() ?? null,
       phoneNumber1,
+      normalizedPhone: normalizeAlgeriaPhone(phoneNumber1),
       phoneNumber2: trimNullableScalarText(order.phoneNumber2),
       cartProducts: remappedCartProducts,
       delivery: coerceDeliveryType(order.delivery),
-      delPr: toOptionalMoneyString(typeof order.del_pr === 'number' ? order.del_pr : null),
+      deliveryFee: toOptionalMoneyString(typeof order.del_pr === 'number' ? order.del_pr : null),
       price: toOptionalMoneyString(typeof order.price === 'number' ? order.price : null),
       note: trimNullableScalarText(order.note),
-      confirmed,
+      inHouseStatus: confirmed,
       noAnswerCount: coerceNoAnswerCount(confirmed, order.noAnswerCount, order.confirmed),
       confirmedBy: null,
       confirmedByName: null,
       confirmedAt: isConfirmedLifecycleStatus(confirmed) ? updatedAt : null,
-      archivedAt: createdAt < ARCHIVE_CUTOFF ? lookups.importNow : null,
       ecotrackStatus,
       ecotrackStatusLastUpdate:
         ecotrackStatus || ecotrackCurrentStatus

@@ -89,15 +89,15 @@ function ToastStack({ className, toasts }: { className: string; toasts: ToastRec
             role="status"
             aria-live={toast.tone === 'error' ? 'assertive' : 'polite'}
             className={cn(
-              'pointer-events-auto overflow-hidden rounded-[1.5rem] border shadow-[var(--shadow-vapor-strong)]',
+              'pointer-events-auto overflow-hidden rounded-[var(--shape-radius-overlay)] border shadow-[var(--shadow-vapor-strong)]',
               card,
             )}
           >
             <div className="bg-linear-to-r from-muted/45 via-background/80 to-background/60 p-1">
-              <div className="flex items-start gap-3 rounded-[calc(1.5rem-0.25rem)] px-3.5 py-3">
+              <div className="flex items-start gap-3 rounded-[var(--shape-radius-panel)] px-3.5 py-3">
                 <div
                   className={cn(
-                    'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-[1rem] shadow-[var(--shadow-vapor)]',
+                    'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-[var(--shape-radius-card)] shadow-[var(--shadow-vapor)]',
                     icon,
                   )}
                 >
@@ -105,7 +105,7 @@ function ToastStack({ className, toasts }: { className: string; toasts: ToastRec
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  <p className="text-[length:var(--type-size-label-px)] font-semibold uppercase tracking-[var(--type-tracking-p180)] text-muted-foreground">
                     {label}
                   </p>
                   <p className="mt-1 text-sm font-medium leading-5 text-foreground">

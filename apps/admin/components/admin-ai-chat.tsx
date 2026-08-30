@@ -1,12 +1,6 @@
 'use client';
 
-import {
-  Bot,
-  Maximize2,
-  Minimize2,
-  Sparkles,
-  X,
-} from 'lucide-react';
+import { Bot, Maximize2, Minimize2, Sparkles, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -579,7 +573,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
     <>
       <Button
         type="button"
-        className="group fixed bottom-4 end-4 z-30 size-12 rounded-[1rem] p-0 shadow-[var(--shadow-vapor-strong)] sm:bottom-6 sm:end-6 sm:h-12 sm:w-auto sm:px-4"
+        className="group fixed bottom-4 end-4 z-30 size-12 rounded-[var(--shape-radius-card)] p-0 shadow-[var(--shadow-vapor-strong)] sm:bottom-6 sm:end-6 sm:h-12 sm:w-auto sm:px-4"
         onClick={() => setOpen(true)}
         aria-label={t('aiChat.open')}
       >
@@ -594,20 +588,20 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
         <DialogContent
           data-full-screen={fullScreen}
           className={cn(
-            'flex h-[min(52rem,calc(100dvh-1rem))] max-h-[calc(100dvh-1rem)] max-w-[76rem] flex-col overflow-hidden rounded-[1.75rem] border border-border/60 bg-[var(--glass-surface)] p-0 sm:h-[min(52rem,calc(100vh-2rem))] sm:max-h-[calc(100vh-2rem)]',
+            'flex h-[min(52rem,calc(100dvh-1rem))] max-h-[calc(100dvh-1rem)] max-w-[76rem] flex-col overflow-hidden rounded-[var(--shape-radius-overlay-relaxed)] border border-border/60 bg-[var(--glass-surface)] p-0 sm:h-[min(52rem,calc(100vh-2rem))] sm:max-h-[calc(100vh-2rem)]',
             fullScreen && '!m-0 !h-dvh !max-h-dvh !max-w-none !rounded-none !border-0',
           )}
         >
           <DialogHeader className="relative shrink-0 border-b border-border/60 bg-card/75 px-4 py-4 pe-28 backdrop-blur-xl sm:px-6 sm:py-5 sm:pe-32">
             <div className="flex items-start gap-3">
-              <div className="grid size-11 shrink-0 place-items-center rounded-[1rem] bg-primary text-primary-foreground shadow-[var(--shadow-vapor)]">
+              <div className="grid size-11 shrink-0 place-items-center rounded-[var(--shape-radius-card)] bg-primary text-primary-foreground shadow-[var(--shadow-vapor)]">
                 <Bot className="size-5" />
               </div>
               <div className="min-w-0 flex-1">
                 <DialogTitle className="text-base sm:text-lg">{t('aiChat.title')}</DialogTitle>
                 <div className="mt-3 flex flex-wrap items-end gap-3">
                   <label className="min-w-[13rem]">
-                    <span className="mb-1 block text-[0.68rem] font-medium text-muted-foreground">
+                    <span className="mb-1 block text-[length:var(--type-size-label)] font-medium text-muted-foreground">
                       {t('aiChat.model')}
                     </span>
                     <select
@@ -626,7 +620,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
                     </select>
                   </label>
                   <label className="min-w-[8rem]">
-                    <span className="mb-1 block text-[0.68rem] font-medium text-muted-foreground">
+                    <span className="mb-1 block text-[length:var(--type-size-label)] font-medium text-muted-foreground">
                       {t('aiChat.reasoningEffort')}
                     </span>
                     <select
@@ -663,7 +657,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
               <Button
                 type="button"
                 variant="ghost"
-                className="size-10 rounded-[0.9rem] p-0"
+                className="size-10 rounded-[var(--shape-radius-card-compact)] p-0"
                 onClick={() => setFullScreen((value) => !value)}
                 aria-label={t(fullScreen ? 'aiChat.exitFullScreen' : 'aiChat.fullScreen')}
                 aria-pressed={fullScreen}
@@ -677,7 +671,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
               <Button
                 type="button"
                 variant="ghost"
-                className="size-10 rounded-[0.9rem] p-0"
+                className="size-10 rounded-[var(--shape-radius-card-compact)] p-0"
                 onClick={() => setOpen(false)}
                 aria-label={t('aiChat.close')}
               >

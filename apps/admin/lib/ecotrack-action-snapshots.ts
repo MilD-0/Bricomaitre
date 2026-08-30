@@ -1,5 +1,7 @@
 import { ecotrackOrderStates, orders } from '@bric/db/schema';
 
+import { normalizeEcotrackMonetarySnapshotValue } from './ecotrack-monetary';
+
 type OrderRow = typeof orders.$inferSelect;
 type ShipmentRow = typeof ecotrackOrderStates.$inferSelect;
 type OrderActionSource = Pick<
@@ -77,7 +79,7 @@ export function buildEcotrackShipmentActionSnapshot(row: ShipmentActionSource) {
     provider: row.provider === 'emir' ? 'emir' : 'delivro',
     currentStatus: row.currentStatus,
     driverPhone: row.driverPhone,
-    estimatedFee: row.estimatedFee,
+    estimatedFee: normalizeEcotrackMonetarySnapshotValue(row.estimatedFee),
     deskPhone: row.deskPhone,
     deskCommune: row.deskCommune,
     deskMapLink: row.deskMapLink,

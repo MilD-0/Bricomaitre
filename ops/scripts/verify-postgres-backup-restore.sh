@@ -29,6 +29,8 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ -z "$backup_input" && -n "${BACKUP_S3_URI:-}" ]]; then
+  # shellcheck source=use-backup-aws-credentials.sh
+  source "$script_dir/use-backup-aws-credentials.sh"
   if [[ -z "${AWS_REGION:-}" ]]; then
     echo 'AWS_REGION is required to verify a backup from S3' >&2
     exit 1

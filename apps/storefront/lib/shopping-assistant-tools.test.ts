@@ -272,7 +272,7 @@ describe('Storefront assistant tools', () => {
           note: 'Private note',
           createdAt: '2026-08-01T00:00:00.000Z',
           updatedAt: '2026-08-02T00:00:00.000Z',
-          confirmed: 7,
+          inHouseStatus: 7,
           delivery: 0,
           productSubtotal: 5000,
           deliveryFee: 600,

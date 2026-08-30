@@ -155,6 +155,28 @@ describe('production packaging and release runtime', () => {
     expect(release).toContain(
       'GOOGLE_ANALYTICS_API_SECRET: ${{ secrets.GOOGLE_ANALYTICS_API_SECRET }}',
     );
+    expect(release).toContain('SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}');
+    expect(release).toContain(
+      "SENTRY_PROJECT_ADMIN: ${{ vars.SENTRY_PROJECT_ADMIN || 'bricadmin' }}",
+    );
+    expect(release).toContain(
+      "SENTRY_PROJECT_STOREFRONT_API: ${{ vars.SENTRY_PROJECT_STOREFRONT_API || 'brico-api' }}",
+    );
+    expect(release).toContain(
+      "SENTRY_PROJECT_STOREFRONT: ${{ vars.SENTRY_PROJECT_STOREFRONT || 'bricomaitre' }}",
+    );
+    expect(release).toContain('test -n "$SENTRY_AUTH_TOKEN"');
+    expect(release).toContain('SENTRY_DSN_ADMIN=%s');
+    expect(release).toContain('SENTRY_DSN_STOREFRONT_API=%s');
+    expect(release).toContain('SENTRY_DSN_STOREFRONT=%s');
+    expect(release).toContain(
+      'TIKTOK_EVENTS_API_ACCESS_TOKEN: ${{ secrets.TIKTOK_EVENTS_API_ACCESS_TOKEN }}',
+    );
+    expect(release).toContain(
+      'TikTok destination requires both pixel ID and Events API access token',
+    );
+    expect(release).toContain('MARKETING_GOOGLE_DESTINATION_ENABLED=true');
+    expect(release).toContain('MARKETING_TIKTOK_DESTINATION_ENABLED=%s');
   });
 
   it('keeps action and container pins on a bounded update schedule', () => {
@@ -217,7 +239,7 @@ describe('production packaging and release runtime', () => {
       readFileSync(resolve(workspaceRoot, 'apps/storefront/package.json'), 'utf8'),
     ) as { scripts: Record<string, string> };
 
-    expect(dockerfile).toContain('RUN pnpm --filter @bric/storefront build');
+    expect(dockerfile).toContain('pnpm --filter @bric/storefront build');
     expect(storefrontPackage.scripts.build).toBe('next build --webpack');
     expect(dockerfile).toContain(
       '"/app/apps/storefront/.next/cache", "node", "apps/storefront/server.js"',
@@ -251,6 +273,35 @@ describe('production packaging and release runtime', () => {
     expect(metaWorker).not.toContain('/workspace/node_modules');
     expect(adminWorker).toContain('/BRIC_WORKER_HEARTBEAT_V1');
     expect(metaWorker).toContain('/BRIC_WORKER_HEARTBEAT_V1');
+    expect(admin).toContain('BRIC_WORKER_SOURCEMAPS=1');
+    expect(api).toContain('BRIC_WORKER_SOURCEMAPS=1');
+  });
+
+  it('uploads exact-release Sentry source maps through build secrets', () => {
+    const admin = readFileSync(resolve(workspaceRoot, 'ops/docker/Dockerfile.admin'), 'utf8');
+    const api = readFileSync(
+      resolve(workspaceRoot, 'ops/docker/Dockerfile.storefront-api'),
+      'utf8',
+    );
+    const storefront = readFileSync(
+      resolve(workspaceRoot, 'ops/docker/Dockerfile.storefront'),
+      'utf8',
+    );
+    const bake = readFileSync(resolve(workspaceRoot, 'ops/docker/docker-bake.hcl'), 'utf8');
+    const workerBuilder = readFileSync(
+      resolve(workspaceRoot, 'ops/scripts/build-worker.mjs'),
+      'utf8',
+    );
+
+    for (const dockerfile of [admin, api, storefront]) {
+      expect(dockerfile).toContain('--mount=type=secret,id=sentry_auth_token');
+      expect(dockerfile).toContain('SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"');
+      expect(dockerfile).not.toMatch(/ARG SENTRY_AUTH_TOKEN|ENV SENTRY_AUTH_TOKEN/);
+    }
+    expect(bake).toContain('SENTRY_RELEASE      = IMAGE_REVISION');
+    expect(bake.match(/id=sentry_auth_token,env=SENTRY_AUTH_TOKEN/g)).toHaveLength(3);
+    expect(workerBuilder).toContain("process.env.BRIC_WORKER_SOURCEMAPS === '1'");
+    expect(workerBuilder).toContain("sourcemap: emitSourceMap ? 'external' : false");
   });
 
   it('bounds and health-checks every long-running application process', () => {
@@ -361,6 +412,10 @@ describe('production packaging and release runtime', () => {
       resolve(workspaceRoot, 'ops/host/bricomaitre-backups.cron'),
       'utf8',
     );
+    const maintenanceLogrotate = readFileSync(
+      resolve(workspaceRoot, 'ops/host/bricomaitre-maintenance.logrotate'),
+      'utf8',
+    );
     const release = readFileSync(resolve(workspaceRoot, '.github/workflows/deploy.yml'), 'utf8');
 
     expect(sysctl).toContain('vm.overcommit_memory = 1');
@@ -369,11 +424,19 @@ describe('production packaging and release runtime', () => {
     expect(installer).toContain('systemctl enable --now bricomaitre-disable-thp.service');
     expect(installer).toContain('/proc/sys/vm/overcommit_memory');
     expect(installer).toContain('bricomaitre-backups.cron');
+    expect(installer).toContain('bricomaitre-maintenance.logrotate');
+    expect(installer).toContain('/etc/logrotate.d/bricomaitre-maintenance');
     expect(installer).toContain('/var/log/bric-postgres-restore.log');
     expect(backupCron).toContain('backup-postgres-to-s3.sh');
     expect(backupCron).toContain('verify-postgres-backup-restore.sh');
     expect(backupCron).toContain('BRIC_POSTGRES_RESTORE_MEMORY=512m');
     expect(backupCron).toContain('/usr/bin/flock -n');
+    expect(maintenanceLogrotate).toContain('/var/log/bric-postgres-backup.log');
+    expect(maintenanceLogrotate).toContain('/var/log/bric-postgres-restore.log');
+    expect(maintenanceLogrotate).toContain('/var/log/bric-action-log-cleanup.log');
+    expect(maintenanceLogrotate).toContain('rotate 14');
+    expect(maintenanceLogrotate).toContain('maxsize 20M');
+    expect(maintenanceLogrotate).toContain('create 0640 {{OPERATIONS_USER}} {{OPERATIONS_GROUP}}');
     expect(release).toContain('rsync -a ops/host/ "$bundle_dir/ops/host/"');
   });
 

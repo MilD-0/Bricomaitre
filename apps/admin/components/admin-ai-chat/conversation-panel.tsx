@@ -91,7 +91,7 @@ export function ConversationPanel({
         ) : messages.length === 0 ? (
           <div className="mx-auto flex min-h-full max-w-xl items-center justify-center py-8 text-center">
             <div>
-              <div className="mx-auto grid size-14 place-items-center rounded-[1.25rem] bg-primary/10 text-primary">
+              <div className="mx-auto grid size-14 place-items-center rounded-[var(--shape-radius-panel)] bg-primary/10 text-primary">
                 <Sparkles className="size-6" />
               </div>
               <h3 className="mt-4 text-base font-semibold text-foreground">
@@ -109,7 +109,7 @@ export function ConversationPanel({
                     <button
                       key={key}
                       type="button"
-                      className="rounded-xl border border-border/65 bg-card px-3 py-2.5 text-xs leading-5 text-foreground transition-colors hover:border-primary/35 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+                      className="rounded-xl border border-border/65 bg-card px-3 py-2.5 text-xs leading-5 text-foreground transition-colors hover:border-primary/35 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-primary/20"
                       onClick={() => onInputChange(prompt)}
                     >
                       {prompt}
@@ -131,7 +131,7 @@ export function ConversationPanel({
                 }
               >
                 {message.role === 'assistant' ? (
-                  <span className="grid size-8 shrink-0 place-items-center rounded-[0.8rem] bg-primary/10 text-primary">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-[var(--shape-radius-control-relaxed)] bg-primary/10 text-primary">
                     <Bot className="size-4" />
                   </span>
                 ) : null}
@@ -143,7 +143,7 @@ export function ConversationPanel({
                   }
                   className={
                     message.role === 'user'
-                      ? 'min-w-0 max-w-[88%] rounded-[1.2rem] rounded-ee-md bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground shadow-[var(--shadow-vapor)] [overflow-wrap:anywhere]'
+                      ? 'min-w-0 max-w-[88%] rounded-[var(--shape-radius-panel-compact)] rounded-ee-md bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground shadow-[var(--shadow-vapor)] [overflow-wrap:anywhere]'
                       : 'min-w-0 w-full flex-1 overflow-hidden py-0.5 text-sm leading-6 text-foreground'
                   }
                 >
@@ -184,9 +184,7 @@ export function ConversationPanel({
                                 type="button"
                                 size="sm"
                                 disabled={reviewingProposalId !== null}
-                                onClick={() =>
-                                  onReviewProposal(message.id, proposal.id, 'approve')
-                                }
+                                onClick={() => onReviewProposal(message.id, proposal.id, 'approve')}
                               >
                                 {reviewingProposalId === proposal.id ? (
                                   <Spinner className="size-3.5" />
@@ -200,9 +198,7 @@ export function ConversationPanel({
                                 variant="outline"
                                 size="sm"
                                 disabled={reviewingProposalId !== null}
-                                onClick={() =>
-                                  onReviewProposal(message.id, proposal.id, 'reject')
-                                }
+                                onClick={() => onReviewProposal(message.id, proposal.id, 'reject')}
                               >
                                 <X className="size-3.5" />
                                 {t('aiChat.reject')}
@@ -263,7 +259,7 @@ export function ConversationPanel({
             ))}
             {pending && !receivingText ? (
               <div className="flex items-center gap-2.5 text-xs text-muted-foreground">
-                <span className="grid size-8 place-items-center rounded-[0.8rem] bg-primary/10 text-primary">
+                <span className="grid size-8 place-items-center rounded-[var(--shape-radius-control-relaxed)] bg-primary/10 text-primary">
                   <Bot className="size-4" />
                 </span>
                 <AdminAiActivity status={activity} />
@@ -275,7 +271,7 @@ export function ConversationPanel({
       </div>
 
       <div className="relative z-20 min-w-0 w-full shrink-0 border-t border-border/60 bg-card/80 p-3 backdrop-blur-xl sm:p-4">
-        <div className="mx-auto flex min-w-0 w-full max-w-3xl items-end gap-2 overflow-hidden rounded-[1.15rem] border border-border/70 bg-background p-2 shadow-[var(--shadow-vapor)] focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/10">
+        <div className="mx-auto flex min-w-0 w-full max-w-3xl items-end gap-2 overflow-hidden rounded-[var(--shape-radius-card-relaxed)] border border-border/70 bg-background p-2 shadow-[var(--shadow-vapor)] focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/10">
           <Textarea
             ref={composerRef}
             value={input}
@@ -294,7 +290,7 @@ export function ConversationPanel({
             <Button
               type="button"
               variant="destructive"
-              className="relative z-10 size-10 shrink-0 rounded-[0.85rem] p-0"
+              className="relative z-10 size-10 shrink-0 rounded-[var(--shape-radius-field)] p-0"
               onClick={onCancel}
               aria-label={t('aiChat.stopResponse')}
             >
@@ -303,7 +299,7 @@ export function ConversationPanel({
           ) : (
             <Button
               type="button"
-              className="relative z-10 size-10 shrink-0 rounded-[0.85rem] p-0"
+              className="relative z-10 size-10 shrink-0 rounded-[var(--shape-radius-field)] p-0"
               disabled={loading || !input.trim()}
               onClick={onSend}
               aria-label={t('aiChat.send')}

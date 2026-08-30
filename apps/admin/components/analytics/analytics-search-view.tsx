@@ -113,14 +113,14 @@ export function SearchVisibilityView({
                   tickFormatter={(value) => formatDate(locale, String(value))}
                   tickLine={false}
                   axisLine={false}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
                 <YAxis
                   yAxisId="impressions"
                   tickLine={false}
                   axisLine={false}
                   width={46}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
                 <YAxis
                   yAxisId="clicks"
@@ -128,14 +128,14 @@ export function SearchVisibilityView({
                   tickLine={false}
                   axisLine={false}
                   width={40}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
                 <Tooltip {...chartTooltip(locale)} />
                 <Bar
                   yAxisId="impressions"
                   dataKey="impressions"
                   name={copy.metrics.searchImpressions}
-                  fill="#7c3aed"
+                  fill="var(--chart-violet)"
                   opacity={0.28}
                 />
                 <Line
@@ -143,7 +143,7 @@ export function SearchVisibilityView({
                   type="monotone"
                   dataKey="clicks"
                   name={copy.metrics.searchClicks}
-                  stroke="#0f766e"
+                  stroke="var(--chart-teal)"
                   strokeWidth={2.25}
                   dot={false}
                 />
@@ -326,7 +326,7 @@ export function SearchVisibilityView({
               [copy.labels.countries, data.countries.slice(0, 8), 'country'],
             ].map(([title, rows, field]) => (
               <div key={String(title)}>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                <p className="text-xs font-semibold uppercase tracking-[var(--type-tracking-p080)] text-muted-foreground">
                   {String(title)}
                 </p>
                 <div className="mt-2 divide-y divide-border/50 border-y border-border/60">
@@ -352,7 +352,7 @@ export function SearchVisibilityView({
           </div>
           {data.appearances.length ? (
             <div className="mt-7">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-[var(--type-tracking-p080)] text-muted-foreground">
                 {copy.labels.searchAppearance}
               </p>
               <div className="mt-2 flex flex-wrap gap-x-6 gap-y-2 border-y border-border/60 py-3 text-sm">
@@ -456,7 +456,7 @@ export function SearchVisibilityView({
               </div>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-[var(--type-tracking-p080)] text-muted-foreground">
                 {copy.labels.rankingPages}
               </p>
               <div className="mt-2 divide-y divide-border/50 border-y border-border/60">

@@ -14,7 +14,7 @@ import type {
 
 export const ECOTRACK_SYNC_ACTOR_NAME = 'ECOTRACK sync';
 
-export function resolveEcotrackActor(actor?: ActionActor | null): ActionActor {
+function resolveEcotrackActor(actor?: ActionActor | null): ActionActor {
   if (actor?.email || actor?.name) return actor;
   return { email: null, name: ECOTRACK_SYNC_ACTOR_NAME };
 }

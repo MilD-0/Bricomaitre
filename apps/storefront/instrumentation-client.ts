@@ -29,6 +29,15 @@ function initializeSentryClient() {
         0.1,
       ),
       sendDefaultPii: false,
+      integrations: [
+        Sentry.browserTracingIntegration({
+          // The SDK is deliberately loaded after the rendering quiet window.
+          // A page-load span started at that point is backdated to timeOrigin
+          // and measures the deferral itself rather than route latency.
+          instrumentPageLoad: false,
+          instrumentNavigation: true,
+        }),
+      ],
       beforeSend: sanitizeSentryEvent,
       initialScope: { tags: { service: 'storefront' } },
     });

@@ -51,7 +51,7 @@ export function ReturnEvidence({
           {formatPercent(locale, returns.mature.terminalCoveragePct)} {copy.labels.resolved}
         </p>
         {returns.mature.cohortStartDate && returns.mature.cohortEndDate ? (
-          <p className="mt-1 text-[11px] text-muted-foreground/75">
+          <p className="mt-1 text-[length:var(--type-size-label-px)] text-muted-foreground/75">
             {formatDate(locale, returns.mature.cohortStartDate)}–
             {formatDate(locale, returns.mature.cohortEndDate)} {copy.labels.postingCohorts}
           </p>
@@ -163,22 +163,32 @@ export function FulfillmentView({
                   tickFormatter={(value) => formatDate(locale, String(value))}
                   tickLine={false}
                   axisLine={false}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
-                <YAxis tickLine={false} axisLine={false} width={36} fontSize={11} />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  width={36}
+                  fontSize="var(--type-size-label-px)"
+                />
                 <Tooltip {...chartTooltip(locale)} />
-                <Bar dataKey="paid" stackId="outcome" name={copy.columns.paid} fill="#0f766e" />
+                <Bar
+                  dataKey="paid"
+                  stackId="outcome"
+                  name={copy.columns.paid}
+                  fill="var(--chart-teal)"
+                />
                 <Bar
                   dataKey="returned"
                   stackId="outcome"
                   name={copy.columns.returned}
-                  fill="#e11d48"
+                  fill="var(--chart-rose)"
                 />
                 <Bar
                   dataKey="active"
                   stackId="outcome"
                   name={copy.labels.active}
-                  fill="#d97706"
+                  fill="var(--chart-amber)"
                   opacity={0.65}
                 />
               </ComposedChart>
@@ -202,11 +212,21 @@ export function FulfillmentView({
                 }))}
               >
                 <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.5} />
-                <XAxis dataKey="band" tickLine={false} axisLine={false} fontSize={11} />
-                <YAxis tickLine={false} axisLine={false} width={36} fontSize={11} />
+                <XAxis
+                  dataKey="band"
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize="var(--type-size-label-px)"
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  width={36}
+                  fontSize="var(--type-size-label-px)"
+                />
                 <Tooltip {...chartTooltip(locale)} />
-                <Bar dataKey="paid" name={copy.columns.paid} fill="#0f766e" />
-                <Bar dataKey="returned" name={copy.columns.returned} fill="#e11d48" />
+                <Bar dataKey="paid" name={copy.columns.paid} fill="var(--chart-teal)" />
+                <Bar dataKey="returned" name={copy.columns.returned} fill="var(--chart-rose)" />
               </ComposedChart>
             </ResponsiveChart>
           </ChartFrame>

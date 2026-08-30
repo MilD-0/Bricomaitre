@@ -12,9 +12,7 @@ import { parseNumericAmount, type DeliveryType } from './orders-support';
 
 type Database = ReturnType<typeof getDb>;
 
-const ecotrackServiceTypes = ['livraison', 'pickup', 'echange', 'recouvrement', 'retours'] as const;
-
-export type EcotrackServiceType = (typeof ecotrackServiceTypes)[number];
+export type EcotrackServiceType = 'livraison' | 'pickup' | 'echange' | 'recouvrement' | 'retours';
 
 export type EcotrackCatalogRecord = {
   wilayas: (typeof ecotrackWilayas.$inferSelect)[];

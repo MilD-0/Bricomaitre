@@ -1,5 +1,8 @@
 export { statsQuerySchema, type StatsDashboardData, type StatsFilters } from './stats-contract';
-export { normalizeStatsDashboardData, optionalAnalyticsDiagnostic } from './stats-dashboard-foundation';
+export {
+  normalizeStatsDashboardData,
+  optionalAnalyticsDiagnostic,
+} from './stats-dashboard-foundation';
 export { getLiveStorefrontAnalytics, getStatsDashboardSection } from './stats-dashboard-live';
 export {
   getReportThroughDate,

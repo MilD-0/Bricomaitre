@@ -372,7 +372,7 @@ export function ProductEditorPanel({
                 </NativeSelect>
               </Field>
             </div>
-            <div className="mt-5 grid gap-px overflow-hidden rounded-[1rem] border border-border/60 bg-border/60 sm:grid-cols-2">
+            <div className="mt-5 grid gap-px overflow-hidden rounded-[var(--shape-radius-card)] border border-border/60 bg-border/60 sm:grid-cols-2">
               <label className="flex items-center justify-between gap-4 bg-background px-4 py-3">
                 <span>
                   <span className="block text-sm font-medium">{t('labels.active')}</span>
@@ -441,7 +441,7 @@ export function ProductEditorPanel({
                 return (
                   <div
                     key={field.id}
-                    className="rounded-[1rem] border border-border/60 bg-muted/15 p-3"
+                    className="rounded-[var(--shape-radius-card)] border border-border/60 bg-muted/15 p-3"
                   >
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Field>

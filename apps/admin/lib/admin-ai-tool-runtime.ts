@@ -8,7 +8,7 @@ export type AdminAiLiveToolRuntime = {
   autoAcceptProposals: boolean;
 };
 
-export type AdminAiEvaluationToolRuntime = {
+type AdminAiEvaluationToolRuntime = {
   kind: 'evaluation';
   actorId?: string;
 };

@@ -72,7 +72,7 @@ function MetricStrip({
             humanizeAnalyticsKey(metric.key)
           }
           value={
-            <strong className="block truncate text-xl font-semibold tracking-[-0.035em] tabular-nums sm:text-2xl">
+            <strong className="block truncate text-xl font-semibold tracking-[var(--type-tracking-n035)] tabular-nums sm:text-2xl">
               {formatMetric(locale, metric)}
             </strong>
           }
@@ -126,30 +126,40 @@ function OperationsView({
                   axisLine={false}
                   tickLine={false}
                   tickFormatter={(value) => formatDate(locale, String(value))}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
-                <YAxis axisLine={false} tickLine={false} allowDecimals={false} fontSize={11} />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  allowDecimals={false}
+                  fontSize="var(--type-size-label-px)"
+                />
                 <Tooltip
                   labelFormatter={(value) => formatDate(locale, String(value))}
                   contentStyle={{
                     background: 'hsl(var(--popover))',
                     border: '1px solid hsl(var(--border))',
-                    borderRadius: '0.5rem',
+                    borderRadius: 'var(--shape-radius-lg)',
                   }}
                 />
                 <Bar
                   dataKey="completed"
                   name={copy.chart.completed}
                   stackId="outcome"
-                  fill="#0f766e"
+                  fill="var(--chart-teal)"
                   radius={[3, 3, 0, 0]}
                 />
-                <Bar dataKey="failed" name={copy.chart.failed} stackId="outcome" fill="#e11d48" />
+                <Bar
+                  dataKey="failed"
+                  name={copy.chart.failed}
+                  stackId="outcome"
+                  fill="var(--chart-rose)"
+                />
                 <Bar
                   dataKey="cancelled"
                   name={copy.chart.cancelled}
                   stackId="outcome"
-                  fill="#d97706"
+                  fill="var(--chart-amber)"
                 />
               </ComposedChart>
             </ResponsiveChart>
@@ -162,7 +172,7 @@ function OperationsView({
         {data.workflows.length ? (
           <AnalyticsDenseTable label={copy.sections.workflows}>
             <AnalyticsTableHead>
-              <tr className="border-b border-border/70 text-start text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+              <tr className="border-b border-border/70 text-start text-[length:var(--type-size-label-px)] uppercase tracking-[var(--type-tracking-p120)] text-muted-foreground">
                 <th className="px-2 py-2 text-start font-medium">{copy.columns.workflow}</th>
                 <th className="px-2 py-2 text-start font-medium">{copy.columns.mode}</th>
                 <th className="px-2 py-2 text-end font-medium">{copy.columns.runs}</th>
@@ -254,7 +264,7 @@ function OperationsView({
         {data.releases.length ? (
           <AnalyticsDenseTable label={copy.sections.releases}>
             <AnalyticsTableHead>
-              <tr className="border-b border-border/70 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+              <tr className="border-b border-border/70 text-[length:var(--type-size-label-px)] uppercase tracking-[var(--type-tracking-p120)] text-muted-foreground">
                 <th className="px-2 py-2 text-start font-medium">{copy.columns.prompt}</th>
                 <th className="px-2 py-2 text-start font-medium">{copy.columns.model}</th>
                 <th className="px-2 py-2 text-end font-medium">{copy.columns.runs}</th>
@@ -414,22 +424,27 @@ function ShoppingView({
                   axisLine={false}
                   tickLine={false}
                   tickFormatter={(value) => formatDate(locale, String(value))}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
-                <YAxis axisLine={false} tickLine={false} allowDecimals={false} fontSize={11} />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  allowDecimals={false}
+                  fontSize="var(--type-size-label-px)"
+                />
                 <Tooltip
                   labelFormatter={(value) => formatDate(locale, String(value))}
                   contentStyle={{
                     background: 'hsl(var(--popover))',
                     border: '1px solid hsl(var(--border))',
-                    borderRadius: '0.5rem',
+                    borderRadius: 'var(--shape-radius-lg)',
                   }}
                 />
                 <Line
                   type="monotone"
                   dataKey="messages"
                   name={copy.chart.questions}
-                  stroke="#0f766e"
+                  stroke="var(--chart-teal)"
                   strokeWidth={2}
                   dot={false}
                 />
@@ -437,7 +452,7 @@ function ShoppingView({
                   type="monotone"
                   dataKey="resultClicks"
                   name={copy.chart.resultClicks}
-                  stroke="#7c3aed"
+                  stroke="var(--chart-violet)"
                   strokeWidth={2}
                   dot={false}
                 />
@@ -452,7 +467,7 @@ function ShoppingView({
         {data.intents.length ? (
           <AnalyticsDenseTable label={copy.sections.intents}>
             <AnalyticsTableHead>
-              <tr className="border-b border-border/70 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+              <tr className="border-b border-border/70 text-[length:var(--type-size-label-px)] uppercase tracking-[var(--type-tracking-p120)] text-muted-foreground">
                 <th className="px-2 py-2 text-start font-medium">{copy.columns.intent}</th>
                 <th className="px-2 py-2 text-end font-medium">{copy.columns.questions}</th>
                 <th className="px-2 py-2 text-end font-medium">{copy.columns.runs}</th>

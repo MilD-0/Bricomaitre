@@ -202,7 +202,7 @@ export function CatalogView({
         }
       >
         <div className="mb-5" data-product-outcome-plot>
-          <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-2 px-2 text-[11px] text-muted-foreground sm:px-3">
+          <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-2 px-2 text-[length:var(--type-size-label-px)] text-muted-foreground sm:px-3">
             <span>{copy.labels.scatterViews}</span>
             <span>{copy.labels.scatterPaidOutcome}</span>
             <span>{copy.labels.bubbleResolvedOrders}</span>
@@ -233,7 +233,7 @@ export function CatalogView({
                     tickFormatter={(value) => formatNumber(locale, Number(value), true)}
                     tickLine={false}
                     axisLine={false}
-                    fontSize={11}
+                    fontSize="var(--type-size-label-px)"
                   />
                   <YAxis
                     type="number"
@@ -245,7 +245,7 @@ export function CatalogView({
                     tickLine={false}
                     axisLine={false}
                     width={42}
-                    fontSize={11}
+                    fontSize="var(--type-size-label-px)"
                   />
                   <ZAxis type="number" dataKey="z" range={[42, 300]} />
                   {portfolioPaidRatePct != null ? (
@@ -260,14 +260,14 @@ export function CatalogView({
                     cursor={{ strokeDasharray: '3 3' }}
                     content={<ProductScatterTooltip locale={locale} copy={copy} />}
                   />
-                  <Scatter data={scatter} fill="#7c3aed">
+                  <Scatter data={scatter} fill="var(--chart-violet)">
                     {scatter.map((row: ProductScatterPoint) => (
                       <Cell
                         key={row.id}
                         fill={
                           portfolioPaidRatePct != null && row.y >= portfolioPaidRatePct
-                            ? '#0f766e'
-                            : '#d97706'
+                            ? 'var(--chart-teal)'
+                            : 'var(--chart-amber)'
                         }
                       />
                     ))}
@@ -369,10 +369,10 @@ export function CatalogView({
         {data.geography.metaRegions.length ? (
           <div className="mt-6 border-y border-border/60">
             <div className="flex items-center justify-between py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-[var(--type-tracking-p080)] text-muted-foreground">
                 {copy.labels.metaReportedRegions}
               </p>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[length:var(--type-size-label-px)] text-muted-foreground">
                 {copy.labels.aggregateMediaGeography}
               </p>
             </div>
@@ -410,7 +410,7 @@ export function CatalogView({
                   <td className="px-3 py-2.5 text-end tabular-nums">
                     {formatNumber(locale, wilaya.postedOrders)}
                     {wilaya.untrackedOrders > 0 ? (
-                      <span className="mt-0.5 block text-[10px] text-amber-700 dark:text-amber-400">
+                      <span className="mt-0.5 block text-[length:var(--type-size-micro-px)] text-amber-700 dark:text-amber-400">
                         {formatNumber(locale, wilaya.untrackedOrders)} {copy.labels.untracked}
                       </span>
                     ) : null}
@@ -427,7 +427,7 @@ export function CatalogView({
                   <td className="px-3 py-2.5 text-end font-medium tabular-nums">
                     {formatMoney(locale, wilaya.pipelineCodDzd)}
                     {wilaya.pipelineCodDzd > 0 ? (
-                      <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">
+                      <span className="mt-0.5 block text-[length:var(--type-size-micro-px)] font-normal text-muted-foreground">
                         {formatPercent(locale, wilaya.providerAmountValueCoveragePct)}{' '}
                         {copy.labels.provider}
                       </span>
@@ -593,7 +593,7 @@ export function CatalogView({
               ))}
             </div>
             <div className="p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-[var(--type-tracking-p080)] text-muted-foreground">
                 {copy.labels.exactMetaAssociations}
               </p>
               {selected.metaAssociations.length ? (
@@ -634,7 +634,7 @@ export function CatalogView({
               )}
             </div>
             <div className="p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-[var(--type-tracking-p080)] text-muted-foreground">
                 {copy.labels.periodChange}
               </p>
               <div className="mt-3">

@@ -19,6 +19,7 @@ import {
   ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE,
 } from '../analytics-fact-contract';
 import type { AnalyticsEntityLevel, AnalyticsFilters } from './contract';
+import { isMaterializedEconomicsReport } from './economics-data';
 import { ratio } from './metrics';
 import { datePredicate, numeric, timestampPredicate } from './query-values';
 import {
@@ -359,9 +360,7 @@ export async function loadMetaPerformance(
     [...CONFIRMED_LIFECYCLE_ORDER_STATUSES].map((status) => sql`${status}`),
     sql`, `,
   );
-  const useMaterializedFacts = Boolean(
-    (economics as EconomicsReport & { materializedFacts?: boolean }).materializedFacts,
-  );
+  const useMaterializedFacts = isMaterializedEconomicsReport(economics);
   const [spendResult, outcomeResult] = await Promise.all([
     db.execute(sql`
       select ${metaAdsDailyInsights.day}::text as day,
