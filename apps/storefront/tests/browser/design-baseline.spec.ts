@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 const baselineDirectory = process.env.BRIC_UI_BASELINE_DIR?.trim();
+const storefrontOrigin = process.env.BRIC_PLAYWRIGHT_STOREFRONT_ORIGIN ?? 'http://127.0.0.1:3003';
 
 const modes = [
   {
@@ -129,7 +130,7 @@ test('captures every storefront surface for a design-system baseline', async ({ 
 
   for (const mode of modes) {
     const context = await browser.newContext({
-      baseURL: 'http://127.0.0.1:3003',
+      baseURL: storefrontOrigin,
       viewport: mode.viewport,
       reducedMotion: 'reduce',
       hasTouch: mode.mobile,

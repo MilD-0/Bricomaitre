@@ -1,6 +1,7 @@
 FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS base
 
 ENV PNPM_HOME="/pnpm"
+ENV COREPACK_HOME="/corepack"
 ENV PATH="$PNPM_HOME:$PATH"
 ARG BRIC_BUILD_NODE_OPTIONS=""
 
@@ -14,7 +15,16 @@ COPY packages/ai-core/package.json packages/ai-core/package.json
 COPY packages/runtime/package.json packages/runtime/package.json
 COPY packages/storefront-core/package.json packages/storefront-core/package.json
 
-RUN NODE_OPTIONS="${BRIC_BUILD_NODE_OPTIONS}" pnpm install --filter @bric/storefront... --frozen-lockfile
+RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-10.33.0,target=/corepack,sharing=shared \
+  --mount=type=cache,id=bricomaitre-pnpm-store-v10,target=/pnpm/store,sharing=shared \
+  npm_config_store_dir=/pnpm/store \
+  npm_config_prefer_offline=true \
+  npm_config_fetch_retries=8 \
+  npm_config_fetch_retry_factor=2 \
+  npm_config_fetch_retry_mintimeout=1000 \
+  npm_config_fetch_retry_maxtimeout=60000 \
+  NODE_OPTIONS="${BRIC_BUILD_NODE_OPTIONS}" \
+  pnpm install --filter @bric/storefront... --frozen-lockfile
 
 COPY tsconfig.base.json ./
 COPY apps/storefront ./apps/storefront
@@ -53,7 +63,8 @@ ENV SENTRY_ORG="${SENTRY_ORG}"
 ENV SENTRY_PROJECT_STOREFRONT="${SENTRY_PROJECT_STOREFRONT}"
 ENV SENTRY_RELEASE="${SENTRY_RELEASE}"
 
-RUN --mount=type=secret,id=sentry_auth_token \
+RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-10.33.0,target=/corepack,sharing=shared \
+  --mount=type=secret,id=sentry_auth_token \
   SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)" \
   pnpm --filter @bric/storefront build \
   && bash ops/scripts/hydrate-next-standalone.sh apps/storefront

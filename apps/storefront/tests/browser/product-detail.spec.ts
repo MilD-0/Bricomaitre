@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+const storefrontOrigin = process.env.BRIC_PLAYWRIGHT_STOREFRONT_ORIGIN ?? 'http://127.0.0.1:3003';
+
 test('renders the French product journey with SEO and governed analytics', async ({ page }) => {
   const analyticsEvents: string[] = [];
   const analyticsLists: string[] = [];
@@ -153,11 +155,11 @@ test('renders the French product journey with SEO and governed analytics', async
   );
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     'href',
-    'http://127.0.0.1:3003/fr/products/desk-lamp',
+    `${storefrontOrigin}/fr/products/desk-lamp`,
   );
   await expect(page.locator('link[hreflang="ar"]')).toHaveAttribute(
     'href',
-    'http://127.0.0.1:3003/ar/products/desk-lamp',
+    `${storefrontOrigin}/ar/products/desk-lamp`,
   );
   const jsonLd = await page.locator('script[type="application/ld+json"]').textContent();
   expect(JSON.parse(jsonLd ?? '[]')[0]).toMatchObject({

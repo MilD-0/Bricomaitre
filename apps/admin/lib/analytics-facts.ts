@@ -4,6 +4,7 @@ import { getDb } from '@bric/db/client';
 import {
   analyticsEconomicsDailyFacts,
   metaAdsDailyInsights,
+  orders,
   orderStatusHistory,
 } from '@bric/db/schema';
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
@@ -84,6 +85,19 @@ export function buildAnalyticsEconomicsDailyFactRows(
       semanticsVersion: ANALYTICS_FACT_SEMANTICS_VERSION,
       refreshedAt: now,
     };
+  });
+}
+
+export function buildAnalyticsOrderCohortOutcomeSql(endDate: string) {
+  return effectiveEcotrackStatusSql({
+    localStatus: orders.inHouseStatus,
+    providerStatus: sql`state.current_status`,
+    latestActivityAt: sql`lifecycle.latest_activity_at`,
+    fallbackActivityAt: sql`coalesce(
+      state.provider_created_at at time zone 'Africa/Algiers',
+      first_posted.posted_at
+    )`,
+    referenceAt: sql`${endDate}::date + interval '1 day'`,
   });
 }
 
@@ -205,16 +219,7 @@ export async function refreshAnalyticsFacts(
         first_posted.posted_day,
         lifecycle.delivered_at,
         lifecycle.paid_at,
-        ${effectiveEcotrackStatusSql({
-          localStatus: sql`orders.inHouseStatus`,
-          providerStatus: sql`state.current_status`,
-          latestActivityAt: sql`lifecycle.latest_activity_at`,
-          fallbackActivityAt: sql`coalesce(
-            state.provider_created_at at time zone 'Africa/Algiers',
-            first_posted.posted_at
-          )`,
-          referenceAt: sql`${filters.endDate}::date + interval '1 day'`,
-        })},
+        ${buildAnalyticsOrderCohortOutcomeSql(filters.endDate)},
         orders.total_amount,
         state.current_amount,
         coalesce(state.delivery_tariff, state.estimated_fee),

@@ -205,13 +205,11 @@ test('supports touch navigation, search, and homepage carousels', async ({ page,
     .poll(() => filterScroller.evaluate((element) => element.scrollTop))
     .toBeGreaterThan(0);
   await filters.getByRole('radio', { name: 'Éclairage' }).tap();
-  await filters.getByRole('button', { name: 'Appliquer les filtres' }).tap();
-  await expect(page.getByRole('heading', { level: 1, name: 'Éclairage' })).toBeVisible({
-    timeout: 10_000,
-  });
-  await expect
-    .poll(() => new URL(page.url()).pathname, { timeout: 10_000 })
-    .toBe('/fr/categories/lighting');
+  await Promise.all([
+    page.waitForURL((url) => url.pathname === '/fr/categories/lighting'),
+    filters.getByRole('button', { name: 'Appliquer les filtres' }).tap(),
+  ]);
+  await expect(page.getByRole('heading', { level: 1, name: 'Éclairage' })).toBeVisible();
 });
 
 test('completes the essential product and checkout journey by touch', async ({ page, context }) => {

@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+const storefrontOrigin = process.env.BRIC_PLAYWRIGHT_STOREFRONT_ORIGIN ?? 'http://127.0.0.1:3003';
+
 test('lets the catalog loading skeleton fill the available product width', async ({ page }) => {
   await page.goto('/fr/products');
   const geometry = await page.evaluate(() => {
@@ -272,7 +274,7 @@ test('renders and filters the server-first French catalog with governed analytic
   expect(typography.cardWeight).toBeLessThanOrEqual(750);
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     'href',
-    'http://127.0.0.1:3003/fr/products',
+    `${storefrontOrigin}/fr/products`,
   );
   expect(await page.locator('script[type="application/ld+json"]').textContent()).toContain(
     'ItemList',

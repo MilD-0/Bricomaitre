@@ -141,19 +141,24 @@ test('keeps representative workspaces at WCAG A and AA', async ({ page }) => {
   }
 });
 
-test('keeps default Stats routes canonical without hydration navigation', async ({ page }) => {
+test('keeps default Stats routes canonical without hydration navigation', async ({
+  baseURL,
+  page,
+}) => {
+  expect(baseURL).toBeTruthy();
   for (const path of ['/en/stats', '/en/stats/ai-assistants', '/en/stats/shopping-assistant']) {
     await page.goto(path, { waitUntil: 'load' });
     await expect(page.locator('[data-workspace-frame]')).toHaveCount(1, { timeout: 30_000 });
     await page.waitForTimeout(500);
-    await expect(page).toHaveURL(`http://localhost:3000${path}`);
+    await expect(page).toHaveURL(`${baseURL}${path}`);
   }
 });
 
-test('does not retain compatibility routes for the retired admin UI', async ({ page }) => {
+test('does not retain compatibility routes for the retired admin UI', async ({ baseURL, page }) => {
+  expect(baseURL).toBeTruthy();
   for (const path of retiredUiRoutes) {
     const response = await page.goto(path, { waitUntil: 'load' });
     expect(response?.status(), `${path} should be removed`).toBe(404);
-    await expect(page).toHaveURL(`http://localhost:3000${path}`);
+    await expect(page).toHaveURL(`${baseURL}${path}`);
   }
 });

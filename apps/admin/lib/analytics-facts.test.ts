@@ -1,7 +1,9 @@
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
 
 import {
   buildAnalyticsEconomicsDailyFactRows,
+  buildAnalyticsOrderCohortOutcomeSql,
   resolveAnalyticsFactRefreshFilters,
 } from './analytics-facts';
 import { ANALYTICS_FACT_SEMANTICS_VERSION } from './analytics-fact-contract';
@@ -14,6 +16,13 @@ describe('analytics fact refresh range', () => {
         new Date('2026-08-23T12:00:00.000Z'),
       ),
     ).toMatchObject({ startDate: null, endDate: '2026-08-19', range: 'all' });
+  });
+
+  it('renders the physical order status column in cohort refresh SQL', () => {
+    const query = new PgDialect().sqlToQuery(buildAnalyticsOrderCohortOutcomeSql('2026-08-30'));
+
+    expect(query.sql).toContain('"orders"."confirmed"');
+    expect(query.sql).not.toContain('orders.inHouseStatus');
   });
 });
 

@@ -1,18 +1,68 @@
 name: Set up workspace
-description: Install the pinned Node.js and pnpm toolchain with a shared pnpm-store cache.
+description: Clean generated state, configure durable host caches, and install the pinned toolchain.
 
 runs:
   using: composite
   steps:
+    - name: Configure persistent host caches
+      shell: bash
+      run: |
+        cache_home="${XDG_CACHE_HOME:-$HOME/.cache}"
+        ci_cache_dir="$cache_home/bricomaitre-ci"
+        corepack_cache_dir="$ci_cache_dir/corepack"
+        playwright_cache_dir="$cache_home/ms-playwright"
+        mkdir -p "$corepack_cache_dir" "$playwright_cache_dir"
+        {
+          printf 'BRIC_CI_CACHE_DIR=%s\n' "$ci_cache_dir"
+          printf 'COREPACK_HOME=%s\n' "$corepack_cache_dir"
+          printf 'PLAYWRIGHT_BROWSERS_PATH=%s\n' "$playwright_cache_dir"
+        } >> "$GITHUB_ENV"
+        echo "Using persistent Playwright cache: $playwright_cache_dir"
+    - name: Clean generated workspace state
+      shell: bash
+      run: |
+        git reset --hard HEAD
+
+        runner_cache_key="${RUNNER_NAME//[^A-Za-z0-9._-]/_}"
+        next_cache_root="$BRIC_CI_CACHE_DIR/next/$runner_cache_key"
+        cache_pairs=(
+          "apps/admin/.next/cache|$next_cache_root/admin/build"
+          "apps/admin/.next/dev/cache/turbopack|$next_cache_root/admin/dev-turbopack"
+          "apps/storefront/.next/cache|$next_cache_root/storefront/build"
+          "apps/storefront/.next/dev/cache/turbopack|$next_cache_root/storefront/dev-turbopack"
+        )
+
+        for pair in "${cache_pairs[@]}"; do
+          source_path="${pair%%|*}"
+          target_path="${pair#*|}"
+          if [[ -d "$source_path" && ! -L "$source_path" && ! -e "$target_path" ]]; then
+            mkdir -p "$(dirname "$target_path")"
+            mv "$source_path" "$target_path"
+          fi
+        done
+
+        git clean -ffdx -e node_modules/
+
+        for pair in "${cache_pairs[@]}"; do
+          source_path="${pair%%|*}"
+          target_path="${pair#*|}"
+          mkdir -p "$target_path" "$(dirname "$source_path")"
+          ln -s "$target_path" "$source_path"
+        done
+        echo "Using persistent per-runner Next caches: $next_cache_root"
     - name: Set up Node.js
       uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with:
         node-version: 24
         package-manager-cache: false
-    - name: Set up pnpm and restore its content-addressed store
-      uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      with:
-        cache: true
+    - name: Activate the pinned pnpm release
+      shell: bash
+      run: |
+        exec 9>"$BRIC_CI_CACHE_DIR/corepack.lock"
+        flock 9
+        corepack enable pnpm
+        corepack pnpm --version
+        echo "Using persistent pnpm store: $(corepack pnpm store path --silent)"
     - name: Install dependencies
       shell: bash
       run: pnpm install --frozen-lockfile
