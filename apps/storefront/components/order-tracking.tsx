@@ -35,7 +35,7 @@ export function OrderTracking({
   order: StorefrontOrderResponseItem;
   labels: TrackingLabels;
 }) {
-  const state = getCustomerOrderTrackingState(order.confirmed);
+  const state = getCustomerOrderTrackingState(order.inHouseStatus);
   const exception = exceptionLabel(state.variant, labels);
 
   return (

@@ -28,7 +28,7 @@ export function FieldLabel({ className, ...props }: React.LabelHTMLAttributes<HT
   return (
     <label
       className={cn(
-        'text-[0.75rem] font-semibold uppercase tracking-[0.05em] text-muted-foreground',
+        'text-[length:var(--type-size-control)] font-semibold uppercase tracking-[var(--type-tracking-p050)] text-muted-foreground',
         className,
       )}
       {...props}

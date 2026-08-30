@@ -486,7 +486,7 @@ export function AiProposalWorkspace({
                       />
                       <button
                         type="button"
-                        className="min-w-0 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                        className="min-w-0 text-start focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"
                         aria-current={active ? 'true' : undefined}
                         onClick={() => inspect(proposal)}
                       >

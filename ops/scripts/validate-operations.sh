@@ -108,6 +108,7 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
     cd "$workspace_dir"
     GOOGLE_CLIENT_SECRET=build-check-placeholder \
       BETTER_AUTH_SECRET=build-check-placeholder \
+      SENTRY_AUTH_TOKEN=build-check-placeholder \
       docker buildx bake \
         --check \
         --file ops/docker/docker-bake.hcl \

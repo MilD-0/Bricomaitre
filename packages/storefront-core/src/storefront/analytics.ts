@@ -9,7 +9,6 @@ import {
   analyticsSessions,
   brands,
   categories,
-  orders,
   products,
 } from '@bric/db/schema';
 import { classifyAcquisition } from './acquisition';
@@ -284,21 +283,24 @@ function compactMetaTracking(value: unknown) {
 }
 
 export function buildStoredAnalyticsMetadata(event: StorefrontAnalyticsEvent) {
-  const {
-    landingUrl: _landingUrl,
-    landingHost: _landingHost,
-    userAgent: _userAgent,
-    fbc: _fbc,
-    paidClickSeenAt: _paidClickSeenAt,
-    paidClickCookie: _paidClickCookie,
-    title: _title,
-    storefrontVariant: _storefrontVariant,
-    requestedVariant: _requestedVariant,
-    experimentMode: _experimentMode,
-    experimentSource: _experimentSource,
-    metaTracking,
-    ...metadata
-  } = event.metadata;
+  const metadata = { ...event.metadata };
+  const metaTracking = metadata.metaTracking;
+  for (const key of [
+    'landingUrl',
+    'landingHost',
+    'userAgent',
+    'fbc',
+    'paidClickSeenAt',
+    'paidClickCookie',
+    'title',
+    'storefrontVariant',
+    'requestedVariant',
+    'experimentMode',
+    'experimentSource',
+    'metaTracking',
+  ] as const) {
+    delete metadata[key];
+  }
   const compactTracking = compactMetaTracking(metaTracking);
 
   return {
@@ -723,7 +725,6 @@ export async function attachJourneyToOrder(
   db: Database,
   orderId: number,
   journeyId: string | null,
-  _sessionId: string | null,
 ) {
   if (!journeyId) {
     return;

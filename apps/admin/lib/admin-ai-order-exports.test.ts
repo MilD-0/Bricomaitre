@@ -17,9 +17,9 @@ vi.mock('./ecotrack', () => ({ readEcotrackCatalog: mocks.readCatalog }));
 vi.mock('./background-jobs', () => ({ startOrderExportJob: mocks.startExport }));
 
 import { previewAdminAiOrderExport, startAdminAiOrderExport } from './admin-ai-order-exports';
-import type { OrderRecord } from './orders';
+import { ORDER_STATUS, type OrderRecord } from './orders';
 
-function order(id: number, createdAt: string, overrides: Partial<OrderRecord> = {}) {
+function order(id: number, createdAt: string, overrides: Partial<OrderRecord> = {}): OrderRecord {
   return {
     id,
     createdAt,
@@ -52,7 +52,7 @@ function order(id: number, createdAt: string, overrides: Partial<OrderRecord> = 
     deliveryFee: 600,
     totalAmount: 15_600,
     note: null,
-    confirmed: 2,
+    inHouseStatus: ORDER_STATUS.CONFIRMED,
     noAnswerCount: 0,
     confirmedBy: null,
     confirmedByName: null,
@@ -60,7 +60,7 @@ function order(id: number, createdAt: string, overrides: Partial<OrderRecord> = 
     hasStatusHistory: false,
     statusHistory: [],
     ...overrides,
-  } as OrderRecord;
+  };
 }
 
 describe('admin AI order exports', () => {

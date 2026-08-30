@@ -79,4 +79,12 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(withNextIntl(nextConfig), { silent: true });
+export default withSentryConfig(withNextIntl(nextConfig), {
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT_STOREFRONT,
+  release: { name: process.env.SENTRY_RELEASE },
+  silent: process.env.CI !== 'true',
+  sourcemaps: { deleteSourcemapsAfterUpload: true },
+  widenClientFileUpload: true,
+});

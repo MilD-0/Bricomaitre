@@ -17,7 +17,7 @@ describe('tools/legacy-data/mongo-product-import', () => {
   it('maps the mongo product shape to the current product schema', () => {
     const row = mapMongoProductToCurrentSchema(
       {
-        _id: { $oid: 'mongo-1' } as never,
+        _id: { $oid: 'mongo-1' },
         title: 'Desk Lamp',
         description: 'Warm light',
         title_ar: 'مصباح مكتب',
@@ -29,8 +29,8 @@ describe('tools/legacy-data/mongo-product-import', () => {
         stock: 12,
         images: ['https://cdn.example.com/lamp.jpg'],
         units_sold: 5,
-        brand: { $oid: 'brand-mongo-1' } as never,
-        category: { $oid: 'category-mongo-1' } as never,
+        brand: { $oid: 'brand-mongo-1' },
+        category: { $oid: 'category-mongo-1' },
         createdAt: '2024-01-01T10:00:00.000Z',
         updatedAt: '2024-01-02T10:00:00.000Z',
       },
@@ -162,14 +162,14 @@ describe('tools/legacy-data/mongo-product-import', () => {
     const insertedCategories: Array<{ id: number; name: string; parentId: number | null }> = [];
 
     const brandMap = await importMongoBrands(
-      [{ _id: { $oid: 'brand-1' } as never, name: 'Acme' }],
+      [{ _id: { $oid: 'brand-1' }, name: 'Acme' }],
       async () => 1,
     );
 
     const categoryMap = await importMongoCategories(
       [
         { _id: 'cat-1', name: 'Lighting' },
-        { _id: 'cat-2', name: 'Wall Lights', parent: { $oid: 'cat-1' } as never },
+        { _id: 'cat-2', name: 'Wall Lights', parent: { $oid: 'cat-1' } },
       ],
       async (row) => {
         const id = insertedCategories.length + 1;
@@ -205,7 +205,7 @@ describe('tools/legacy-data/mongo-product-import', () => {
   it('marks zero-stock products as out of stock', () => {
     expect(
       mapMongoProductToCurrentSchema({
-        _id: { $oid: 'mongo-2' } as never,
+        _id: { $oid: 'mongo-2' },
         title: 'Empty shelf',
         price: 200,
         stock: 0,
@@ -222,7 +222,7 @@ describe('tools/legacy-data/mongo-product-import', () => {
   it('maps legacy orders into the current schema with product id remapping', () => {
     const result = mapMongoOrderToCurrentSchema(
       {
-        _id: { $oid: 'order-1' } as never,
+        _id: { $oid: 'order-1' },
         firstName: 'Amine',
         lastName: 'Test',
         state: 'Tébessa',
@@ -237,16 +237,15 @@ describe('tools/legacy-data/mongo-product-import', () => {
         price: 1900,
         note: 'Note',
         confirmed: 'no3',
-        createdAt: { $date: '2025-12-20T00:00:00.000Z' } as never,
-        updatedAt: { $date: '2025-12-21T00:00:00.000Z' } as never,
+        createdAt: { $date: '2025-12-20T00:00:00.000Z' },
+        updatedAt: { $date: '2025-12-21T00:00:00.000Z' },
         ecotrackStatus: 'En attente',
         ecotrackCurrentStatus: 'Commande creee',
-        ecotrackLastSync: { $date: '2025-12-21T10:00:00.000Z' } as never,
+        ecotrackLastSync: { $date: '2025-12-21T10:00:00.000Z' },
         ecotrackTrackingNumber: 'trk-1',
       },
       {
         productIdByMongoId: new Map([['mongo-product-1', 42]]),
-        importNow: new Date('2026-04-04T00:00:00.000Z'),
       },
     );
 
@@ -260,18 +259,18 @@ describe('tools/legacy-data/mongo-product-import', () => {
         homeAddress: 'Rue 1',
         email: 'test@example.com',
         phoneNumber1: '551234567',
+        normalizedPhone: '213551234567',
         phoneNumber2: '552345678',
         cartProducts: ['42', '42'],
         delivery: 1,
-        delPr: '400.00',
+        deliveryFee: '400.00',
         price: '1900.00',
         note: 'Note',
-        confirmed: 1,
+        inHouseStatus: 1,
         noAnswerCount: 2,
         confirmedBy: null,
         confirmedByName: null,
         confirmedAt: null,
-        archivedAt: new Date('2026-04-04T00:00:00.000Z'),
         ecotrackStatus: 'En attente',
         ecotrackStatusLastUpdate: new Date('2025-12-21T10:00:00.000Z'),
         ecotrackStatusData: { currentStatus: 'Commande creee' },
@@ -288,15 +287,14 @@ describe('tools/legacy-data/mongo-product-import', () => {
   it('blocks orders with unmatched cart refs and skips unresolved states', () => {
     const missingProduct = mapMongoOrderToCurrentSchema(
       {
-        _id: { $oid: 'order-2' } as never,
+        _id: { $oid: 'order-2' },
         state: 'Alger',
         phoneNumber1: 551234567,
         cartProducts: ['missing'],
-        createdAt: { $date: '2026-01-02T00:00:00.000Z' } as never,
+        createdAt: { $date: '2026-01-02T00:00:00.000Z' },
       },
       {
         productIdByMongoId: new Map(),
-        importNow: new Date('2026-04-04T00:00:00.000Z'),
       },
     );
 
@@ -307,15 +305,14 @@ describe('tools/legacy-data/mongo-product-import', () => {
 
     const unresolvedState = mapMongoOrderToCurrentSchema(
       {
-        _id: { $oid: 'order-3' } as never,
+        _id: { $oid: 'order-3' },
         state: 'Unknown State',
         phoneNumber1: 551234567,
         cartProducts: [],
-        createdAt: { $date: '2026-01-02T00:00:00.000Z' } as never,
+        createdAt: { $date: '2026-01-02T00:00:00.000Z' },
       },
       {
         productIdByMongoId: new Map(),
-        importNow: new Date('2026-04-04T00:00:00.000Z'),
       },
     );
 

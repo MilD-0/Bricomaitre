@@ -12,7 +12,7 @@ export function NativeSelect({
     <select
       data-slot="native-select"
       className={cn(
-        'flex h-10 w-full cursor-pointer rounded-[0.75rem] border border-input/15 bg-input px-3 py-1 text-sm text-foreground shadow-[var(--shadow-vapor)] transition-[background-color,box-shadow,border-color] focus-visible:border-primary/20 focus-visible:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50',
+        'flex h-[var(--control-height-default)] w-full cursor-pointer rounded-[var(--shape-radius-control)] border border-input/15 bg-input px-3 py-1 text-sm text-foreground shadow-[var(--shadow-vapor)] transition-[background-color,box-shadow,border-color] focus-visible:border-primary/20 focus-visible:bg-background focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50',
         className,
       )}
       {...props}

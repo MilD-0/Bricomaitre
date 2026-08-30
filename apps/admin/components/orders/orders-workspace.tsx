@@ -163,26 +163,28 @@ function OrdersPulse({
         <div
           aria-hidden="true"
           data-projection-stack-layer
-          className="absolute inset-x-4 inset-y-0 translate-y-2 scale-[0.97] rounded-[0.9rem] border border-border/45 bg-background/45"
+          className="absolute inset-x-4 inset-y-0 translate-y-2 scale-[0.97] rounded-[var(--shape-radius-card-compact)] border border-border/45 bg-background/45"
         />
         <div
           aria-hidden="true"
           data-projection-stack-layer
-          className="absolute inset-x-2 inset-y-0 translate-y-1 scale-[0.985] rounded-[0.9rem] border border-border/55 bg-background/70 shadow-[var(--shadow-vapor)]"
+          className="absolute inset-x-2 inset-y-0 translate-y-1 scale-[0.985] rounded-[var(--shape-radius-card-compact)] border border-border/55 bg-background/70 shadow-[var(--shadow-vapor)]"
         />
         <article
           key={activeReport.reportDay}
           aria-live="polite"
           className={cn(
-            'relative z-10 overflow-hidden rounded-[0.9rem] border border-border/65 bg-background shadow-[var(--shadow-vapor-strong)] transition-opacity',
+            'relative z-10 overflow-hidden rounded-[var(--shape-radius-card-compact)] border border-border/65 bg-background shadow-[var(--shadow-vapor-strong)] transition-opacity',
             loading && 'opacity-65',
           )}
         >
           <div className="divide-y divide-border/55 sm:hidden" data-mobile-projection-summary>
             <div className="flex items-end justify-between gap-4 px-3.5 py-3">
               <div className="min-w-0">
-                <p className="text-[0.68rem] text-muted-foreground">{t('projectedProfit')}</p>
-                <p className="mt-0.5 truncate text-xl font-semibold tracking-[-0.02em] tabular-nums">
+                <p className="text-[length:var(--type-size-label)] text-muted-foreground">
+                  {t('projectedProfit')}
+                </p>
+                <p className="mt-0.5 truncate text-xl font-semibold tracking-[var(--type-tracking-n020)] tabular-nums">
                   {projectionMoney(projection?.projectedProfit)}
                 </p>
               </div>
@@ -201,7 +203,9 @@ function OrdersPulse({
               ].map(([label, value]) => (
                 <div key={label} className="min-w-0 px-3 py-2.5">
                   <dd className="text-base font-semibold tabular-nums">{value}</dd>
-                  <dt className="truncate text-[0.65rem] text-muted-foreground">{label}</dt>
+                  <dt className="truncate text-[length:var(--type-size-caption)] text-muted-foreground">
+                    {label}
+                  </dt>
                 </div>
               ))}
             </dl>
@@ -217,7 +221,7 @@ function OrdersPulse({
               </summary>
               <dl className="grid grid-cols-2 border-t border-border/55 bg-muted/15">
                 <div className="min-w-0 px-3.5 py-2.5">
-                  <dt className="text-[0.65rem] text-muted-foreground">
+                  <dt className="text-[length:var(--type-size-caption)] text-muted-foreground">
                     {overviewT('projection.adSpend')}
                   </dt>
                   <dd className="mt-0.5 text-sm font-semibold tabular-nums">
@@ -225,7 +229,7 @@ function OrdersPulse({
                   </dd>
                 </div>
                 <div className="min-w-0 px-3.5 py-2.5">
-                  <dt className="text-[0.65rem] text-muted-foreground">
+                  <dt className="text-[length:var(--type-size-caption)] text-muted-foreground">
                     {overviewT('projection.returnLoss')}
                   </dt>
                   <dd className="mt-0.5 text-sm font-semibold tabular-nums">
@@ -233,17 +237,21 @@ function OrdersPulse({
                   </dd>
                 </div>
                 <div className="min-w-0 border-t border-border/55 px-3.5 py-2.5">
-                  <dt className="text-[0.65rem] text-muted-foreground">{t('updates')}</dt>
+                  <dt className="text-[length:var(--type-size-caption)] text-muted-foreground">
+                    {t('updates')}
+                  </dt>
                   <dd className="mt-0.5 text-sm font-semibold tabular-nums">{updates}</dd>
-                  <p className="truncate text-[0.62rem] text-muted-foreground">
+                  <p className="truncate text-[length:var(--type-size-micro)] text-muted-foreground">
                     {activeReport.confirmationStatusChanges} {t('confirmationShort')} ·{' '}
                     {activeReport.shipmentUpdates} {t('shipmentShort')}
                   </p>
                 </div>
                 <div className="min-w-0 border-t border-border/55 px-3.5 py-2.5">
-                  <dt className="text-[0.65rem] text-muted-foreground">{t('cancelled')}</dt>
+                  <dt className="text-[length:var(--type-size-caption)] text-muted-foreground">
+                    {t('cancelled')}
+                  </dt>
                   <dd className="mt-0.5 text-sm font-semibold tabular-nums">{cancellations}</dd>
-                  <p className="truncate text-[0.62rem] text-muted-foreground">
+                  <p className="truncate text-[length:var(--type-size-micro)] text-muted-foreground">
                     {activeReport.adminCancelled} {t('adminShort')} ·{' '}
                     {activeReport.carrierCancelled} {t('carrierShort')}
                   </p>
@@ -256,18 +264,18 @@ function OrdersPulse({
             className="hidden gap-px bg-border/45 sm:grid sm:grid-cols-3 lg:grid-cols-[minmax(9rem,1fr)_minmax(6rem,0.65fr)_minmax(9rem,1fr)_minmax(14rem,1.55fr)_minmax(9rem,0.95fr)_minmax(8rem,0.85fr)]"
           >
             <div className="min-w-0 bg-background px-3 py-2">
-              <p className="truncate text-[0.68rem] text-muted-foreground">
+              <p className="truncate text-[length:var(--type-size-label)] text-muted-foreground">
                 {t('projectedProfit')}
               </p>
-              <p className="mt-0.5 truncate text-lg font-semibold tracking-[-0.02em] tabular-nums">
+              <p className="mt-0.5 truncate text-lg font-semibold tracking-[var(--type-tracking-n020)] tabular-nums">
                 {projectionMoney(projection?.projectedProfit)}
               </p>
-              <p className="truncate text-[0.65rem] text-muted-foreground">
+              <p className="truncate text-[length:var(--type-size-caption)] text-muted-foreground">
                 {t('grossShort')} {projectionMoney(projection?.grossProfit)}
               </p>
             </div>
             <div className="min-w-0 bg-background px-3 py-2">
-              <p className="truncate text-[0.68rem] text-muted-foreground">
+              <p className="truncate text-[length:var(--type-size-label)] text-muted-foreground">
                 {overviewT('projection.adSpend')}
               </p>
               <p className="mt-0.5 truncate text-base font-semibold tabular-nums">
@@ -275,14 +283,14 @@ function OrdersPulse({
               </p>
             </div>
             <div className="min-w-0 bg-background px-3 py-2">
-              <p className="truncate text-[0.68rem] text-muted-foreground">
+              <p className="truncate text-[length:var(--type-size-label)] text-muted-foreground">
                 {overviewT('projection.returnLoss')}
               </p>
               <p className="mt-0.5 truncate text-base font-semibold tabular-nums">
                 {projectionMoney(projection?.estimatedReturnLoss)}
               </p>
               {projection ? (
-                <p className="truncate text-[0.65rem] text-muted-foreground">
+                <p className="truncate text-[length:var(--type-size-caption)] text-muted-foreground">
                   {new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(
                     projection.estimatedReturnRate,
                   )}
@@ -296,7 +304,9 @@ function OrdersPulse({
               ) : null}
             </div>
             <div className="min-w-0 bg-background px-3 py-2">
-              <p className="truncate text-[0.68rem] text-muted-foreground">{t('ordersSummary')}</p>
+              <p className="truncate text-[length:var(--type-size-label)] text-muted-foreground">
+                {t('ordersSummary')}
+              </p>
               <dl className="mt-1 grid grid-cols-3 gap-2">
                 {[
                   [t('newShort'), activeReport.newOrders],
@@ -304,7 +314,7 @@ function OrdersPulse({
                   [t('noAnswerShort'), activeReport.noAnswerOrders],
                 ].map(([label, value]) => (
                   <div key={label} className="flex min-w-0 flex-col">
-                    <dt className="order-2 truncate text-[0.62rem] text-muted-foreground">
+                    <dt className="order-2 truncate text-[length:var(--type-size-micro)] text-muted-foreground">
                       {label}
                     </dt>
                     <dd className="order-1 text-base font-semibold tabular-nums">{value}</dd>
@@ -313,17 +323,21 @@ function OrdersPulse({
               </dl>
             </div>
             <div className="min-w-0 bg-background px-3 py-2">
-              <p className="truncate text-[0.68rem] text-muted-foreground">{t('updates')}</p>
+              <p className="truncate text-[length:var(--type-size-label)] text-muted-foreground">
+                {t('updates')}
+              </p>
               <p className="mt-0.5 text-base font-semibold tabular-nums">{updates}</p>
-              <p className="truncate text-[0.65rem] text-muted-foreground">
+              <p className="truncate text-[length:var(--type-size-caption)] text-muted-foreground">
                 {activeReport.confirmationStatusChanges} {t('confirmationShort')} ·{' '}
                 {activeReport.shipmentUpdates} {t('shipmentShort')}
               </p>
             </div>
             <div className="min-w-0 bg-background px-3 py-2">
-              <p className="truncate text-[0.68rem] text-muted-foreground">{t('cancelled')}</p>
+              <p className="truncate text-[length:var(--type-size-label)] text-muted-foreground">
+                {t('cancelled')}
+              </p>
               <p className="mt-0.5 text-base font-semibold tabular-nums">{cancellations}</p>
-              <p className="truncate text-[0.65rem] text-muted-foreground">
+              <p className="truncate text-[length:var(--type-size-caption)] text-muted-foreground">
                 {activeReport.adminCancelled} {t('adminShort')} · {activeReport.carrierCancelled}{' '}
                 {t('carrierShort')}
               </p>
@@ -396,7 +410,7 @@ export function OrdersWorkspace({
         page: String(page),
         limit: '25',
         search: deferredSearch,
-          inHouseStatus: statusFilter === 'all' ? '' : String(statusFilter),
+        inHouseStatus: statusFilter === 'all' ? '' : String(statusFilter),
       });
       return request<OrdersResponse>(`/api/orders?${params.toString()}`);
     },
@@ -684,7 +698,7 @@ export function OrdersWorkspace({
                     setActiveOrderId(null);
                   }}
                   className={cn(
-                    'shrink-0 rounded-[0.7rem] px-3 py-1.5 text-sm font-medium transition-colors',
+                    'shrink-0 rounded-[var(--shape-radius-soft-sm)] px-3 py-1.5 text-sm font-medium transition-colors',
                     statusFilter === status
                       ? 'bg-primary text-primary-foreground shadow-[var(--shadow-vapor)]'
                       : 'text-muted-foreground hover:bg-background hover:text-foreground',
@@ -754,7 +768,7 @@ export function OrdersWorkspace({
                     <button
                       type="button"
                       onClick={() => focusOrder(order.id)}
-                      className="min-w-0 rounded-sm text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                      className="min-w-0 rounded-sm text-start focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"
                     >
                       <span className="flex items-center gap-2">
                         <span
@@ -796,7 +810,7 @@ export function OrdersWorkspace({
                           aria-label={t('adminWorkspace.orders.openTracking', {
                             name: order.fullName,
                           })}
-                          className="flex h-9 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-background hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                          className="flex h-9 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-background hover:text-primary focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"
                         >
                           <ExternalLink className="size-4" aria-hidden="true" />
                           <span className="hidden min-[390px]:inline">

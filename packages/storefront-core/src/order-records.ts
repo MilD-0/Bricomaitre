@@ -316,7 +316,7 @@ export function toStorefrontOrderRecord(
     promoDiscountAmount: record.promoDiscountAmount,
     promoFinalSubtotal: record.promoFinalSubtotal,
     note: record.note,
-    confirmed: record.inHouseStatus,
+    inHouseStatus: record.inHouseStatus,
     noAnswerCount: record.noAnswerCount,
     confirmedAt: record.confirmedAt,
     hasStatusHistory: record.hasStatusHistory,

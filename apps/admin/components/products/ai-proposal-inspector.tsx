@@ -72,11 +72,11 @@ export function AiProposalInspector({
   return (
     <div className="min-w-0">
       <header className="border-b border-border/60 px-5 py-5 sm:px-6">
-        <p className="text-xs font-medium uppercase tracking-[0.13em] text-primary">
+        <p className="text-xs font-medium uppercase tracking-[var(--type-tracking-p130)] text-primary">
           {humanizeProposalToken(item.proposalType)}
         </p>
         <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
-          <h2 className="text-xl font-semibold tracking-[-0.02em] text-foreground">
+          <h2 className="text-xl font-semibold tracking-[var(--type-tracking-n020)] text-foreground">
             {humanizeProposalToken(item.entityType)} #{item.entityId}
           </h2>
           <div className="flex items-center gap-2 text-xs">
@@ -117,14 +117,14 @@ export function AiProposalInspector({
                   </p>
                   {field.hasBefore ? (
                     <div>
-                      <p className="mb-1 text-[0.7rem] uppercase tracking-wide text-muted-foreground">
+                      <p className="mb-1 text-[length:var(--type-size-compact)] uppercase tracking-wide text-muted-foreground">
                         {copy.current}
                       </p>
                       <ProposalValue value={field.before} />
                     </div>
                   ) : null}
                   <div className={field.hasBefore ? undefined : 'lg:col-span-2'}>
-                    <p className="mb-1 text-[0.7rem] uppercase tracking-wide text-muted-foreground">
+                    <p className="mb-1 text-[length:var(--type-size-compact)] uppercase tracking-wide text-muted-foreground">
                       {copy.proposed}
                     </p>
                     <ProposalValue value={field.after} />

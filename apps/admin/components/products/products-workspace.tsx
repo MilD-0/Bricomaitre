@@ -90,9 +90,13 @@ function formatDate(locale: string, value: string) {
 function ProductThumbnail({ product }: { product: ProductRecord }) {
   const image = product.images[0];
   return image ? (
-    <img src={image} alt="" className="size-10 shrink-0 rounded-[0.7rem] object-cover" />
+    <img
+      src={image}
+      alt=""
+      className="size-10 shrink-0 rounded-[var(--shape-radius-soft-sm)] object-cover"
+    />
   ) : (
-    <span className="grid size-10 shrink-0 place-items-center rounded-[0.7rem] bg-muted text-muted-foreground">
+    <span className="grid size-10 shrink-0 place-items-center rounded-[var(--shape-radius-soft-sm)] bg-muted text-muted-foreground">
       <PackageOpen className="size-4" aria-hidden="true" />
     </span>
   );
@@ -650,7 +654,7 @@ export function ProductsWorkspace({
                     href={buildStorefrontProductHref(product)}
                     target="_blank"
                     rel="noreferrer"
-                    className="block truncate text-sm font-semibold underline-offset-4 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                    className="block truncate text-sm font-semibold underline-offset-4 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"
                   >
                     {product.title}
                   </a>
@@ -686,13 +690,13 @@ export function ProductsWorkspace({
         </div>
 
         <div
-          className="hidden overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/30 lg:block"
+          className="hidden overflow-x-auto outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-inset focus-visible:ring-ring/30 lg:block"
           role="region"
           aria-label={t('nav.products')}
           tabIndex={0}
         >
           <table className="w-full min-w-[1160px] border-collapse text-sm">
-            <thead className="bg-muted/30 text-xs uppercase tracking-[0.08em] text-muted-foreground">
+            <thead className="bg-muted/30 text-xs uppercase tracking-[var(--type-tracking-p080)] text-muted-foreground">
               <tr className="border-b border-border/60">
                 <th className="w-12 px-3 py-3 text-start">
                   <Checkbox
@@ -785,7 +789,7 @@ export function ProductsWorkspace({
                           href={buildStorefrontProductHref(product)}
                           target="_blank"
                           rel="noreferrer"
-                          className="block truncate font-medium underline-offset-4 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                          className="block truncate font-medium underline-offset-4 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"
                         >
                           {product.title}
                         </a>
@@ -828,7 +832,7 @@ export function ProductsWorkspace({
                   <td className="px-3 py-3 text-xs text-muted-foreground">
                     {formatDate(locale, product.updatedAt)}
                   </td>
-                  <td className="sticky end-0 z-10 bg-background px-3 py-3 shadow-[-10px_0_14px_-16px_rgba(0,0,0,0.65)] rtl:shadow-[10px_0_14px_-16px_rgba(0,0,0,0.65)]">
+                  <td className="sticky end-0 z-10 bg-background px-3 py-3 shadow-[var(--elevation-sticky-end)] rtl:shadow-[var(--elevation-sticky-start)]">
                     <CompactMenu
                       label={`${t('labels.actions')} · ${product.title}`}
                       side={index >= visibleProducts.length - 2 ? 'top' : 'bottom'}

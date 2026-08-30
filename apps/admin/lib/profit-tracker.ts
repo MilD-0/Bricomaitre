@@ -627,27 +627,19 @@ export async function upsertProfitTrackerDay(
     createdAt: now,
     updatedAt: now,
   };
-  const updateValue: Partial<typeof profitTrackerDays.$inferInsert> = { updatedAt: now };
-  const fieldMap = {
-    spendEur: 'spendEur',
-    fbPurchases: 'fbPurchases',
-    cpm: 'cpm',
-    ctr: 'ctr',
-    linkClicks: 'linkClicks',
-    landingPageViews: 'landingPageViews',
-    grossProfitDzd: 'grossProfitDzd',
-    returnRatePct: 'returnRatePct',
-    confirmedOrders: 'confirmedOrders',
-    note: 'note',
-  } as const;
-
-  for (const [inputKey, columnKey] of Object.entries(fieldMap) as Array<
-    [keyof typeof fieldMap, (typeof fieldMap)[keyof typeof fieldMap]]
-  >) {
-    if (provided.has(inputKey)) {
-      updateValue[columnKey] = insertValue[columnKey] as never;
-    }
-  }
+  const updateValue = {
+    updatedAt: now,
+    ...(provided.has('spendEur') ? { spendEur: insertValue.spendEur } : {}),
+    ...(provided.has('fbPurchases') ? { fbPurchases: insertValue.fbPurchases } : {}),
+    ...(provided.has('cpm') ? { cpm: insertValue.cpm } : {}),
+    ...(provided.has('ctr') ? { ctr: insertValue.ctr } : {}),
+    ...(provided.has('linkClicks') ? { linkClicks: insertValue.linkClicks } : {}),
+    ...(provided.has('landingPageViews') ? { landingPageViews: insertValue.landingPageViews } : {}),
+    ...(provided.has('grossProfitDzd') ? { grossProfitDzd: insertValue.grossProfitDzd } : {}),
+    ...(provided.has('returnRatePct') ? { returnRatePct: insertValue.returnRatePct } : {}),
+    ...(provided.has('confirmedOrders') ? { confirmedOrders: insertValue.confirmedOrders } : {}),
+    ...(provided.has('note') ? { note: insertValue.note } : {}),
+  } satisfies Partial<typeof profitTrackerDays.$inferInsert>;
   const [row] = await db
     .insert(profitTrackerDays)
     .values(insertValue)
@@ -1071,7 +1063,7 @@ export async function getProfitTrackerReport(
     ? 0
     : realizedSummary.realizedProfitDzd - periodKnownMetaAdCostDzd;
   realizedSummary.metaCoveredDays = periodMetaDays.length;
-  const reportThroughDate = realizedSelected[0]?.date ?? null;
+  const reportThroughDate = realizedSelected.at(0)?.date ?? null;
   const settlementCoveragePct =
     summary.postedOrders > 0 ? (realizedSummary.settledOrders / summary.postedOrders) * 100 : null;
   const pendingRollforwardDzd = selected[0]?.isRestDay ? selected[0].rolledOutDzd : 0;

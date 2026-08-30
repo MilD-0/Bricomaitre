@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const sentry = vi.hoisted(() => ({
   init: vi.fn(),
+  browserTracingIntegration: vi.fn(() => ({ name: 'BrowserTracing' })),
   captureException: vi.fn(),
   captureRouterTransitionStart: vi.fn(),
 }));
@@ -14,6 +15,7 @@ describe('client instrumentation loading', () => {
     vi.unstubAllEnvs();
     vi.resetModules();
     sentry.init.mockReset();
+    sentry.browserTracingIntegration.mockClear();
     sentry.captureException.mockReset();
     sentry.captureRouterTransitionStart.mockReset();
   });
@@ -34,9 +36,14 @@ describe('client instrumentation loading', () => {
       expect.objectContaining({
         enabled: true,
         sendDefaultPii: false,
+        integrations: [{ name: 'BrowserTracing' }],
         initialScope: { tags: { service: 'storefront' } },
       }),
     );
+    expect(sentry.browserTracingIntegration).toHaveBeenCalledWith({
+      instrumentPageLoad: false,
+      instrumentNavigation: true,
+    });
 
     const error = new Error('after initialization');
     window.dispatchEvent(new ErrorEvent('error', { error }));

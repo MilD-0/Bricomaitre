@@ -15,6 +15,7 @@ const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const entryPoint = resolve(rootDir, entryArg);
 const outfile = resolve(rootDir, outfileArg);
 const format = outfile.endsWith('.cjs') ? 'cjs' : 'esm';
+const emitSourceMap = process.env.BRIC_WORKER_SOURCEMAPS === '1';
 
 function loadEsbuild() {
   const requireFromEntry = createRequire(entryPoint);
@@ -66,7 +67,7 @@ await build({
   minify: true,
   outfile,
   platform: 'node',
-  sourcemap: false,
+  sourcemap: emitSourceMap ? 'external' : false,
   target: 'node24',
 });
 

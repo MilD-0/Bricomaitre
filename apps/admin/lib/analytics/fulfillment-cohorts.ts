@@ -15,6 +15,7 @@ import {
 } from '../analytics-fact-contract';
 import { effectiveEcotrackStatusSql } from '../ecotrack-status-policy';
 import { addDays } from './date-range';
+import { isMaterializedEconomicsReport } from './economics-data';
 import { ratio, returnRate } from './metrics';
 import { datePredicate, isoValue, nullableNumeric, numeric } from './query-values';
 import {
@@ -245,7 +246,7 @@ export async function loadFulfillmentCohorts(
     )`,
     referenceAt: sql`${endDate}::date + interval '1 day'`,
   });
-  const result = (economics as EconomicsReport & { materializedFacts?: boolean }).materializedFacts
+  const result = isMaterializedEconomicsReport(economics)
     ? await db.execute(sql`
     with cohort as (
       select (

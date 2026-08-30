@@ -63,6 +63,13 @@ jobs:
           META_ADS_ACCESS_TOKEN: ${{ secrets.META_ADS_ACCESS_TOKEN }}
           ADMIN_SEARCH_CONSOLE_SYNC_ENABLED: ${{ vars.ADMIN_SEARCH_CONSOLE_SYNC_ENABLED || 'false' }}
           GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64 }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_DSN_ADMIN: ${{ secrets.SENTRY_DSN_ADMIN }}
+          NEXT_PUBLIC_SENTRY_DSN_ADMIN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN_ADMIN }}
+          SENTRY_DSN_WORKER: ${{ secrets.SENTRY_DSN_WORKER }}
+          SENTRY_DSN_STOREFRONT_API: ${{ secrets.SENTRY_DSN_STOREFRONT_API }}
+          SENTRY_DSN_STOREFRONT: ${{ secrets.SENTRY_DSN_STOREFRONT }}
+          NEXT_PUBLIC_SENTRY_DSN_STOREFRONT: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN_STOREFRONT }}
         run: |
           set -euo pipefail
           test -n "$OPENROUTER_API_KEY"
@@ -71,6 +78,13 @@ jobs:
           test -n "$AI_STOREFRONT_MODEL"
           test -n "$AI_STOREFRONT_FALLBACK_MODEL"
           test -n "$AI_STOREFRONT_MODEL_OPTIONS"
+          test -n "$SENTRY_AUTH_TOKEN"
+          test -n "$SENTRY_DSN_ADMIN"
+          test -n "$NEXT_PUBLIC_SENTRY_DSN_ADMIN"
+          test -n "$SENTRY_DSN_WORKER"
+          test -n "$SENTRY_DSN_STOREFRONT_API"
+          test -n "$SENTRY_DSN_STOREFRONT"
+          test -n "$NEXT_PUBLIC_SENTRY_DSN_STOREFRONT"
           case "$ADMIN_META_ADS_SYNC_ENABLED" in
             true)
               test -n "$META_AD_ACCOUNT_ID"
@@ -101,6 +115,9 @@ jobs:
       RELEASE_CHANNEL: main
       IMAGE_REVISION: ${{ needs.release-context.outputs.sha }}
       IMAGE_CREATED: ${{ needs.release-context.outputs.created }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_ORG: ${{ vars.SENTRY_ORG || 'bricomaitre' }}
+      SENTRY_PROJECT_STOREFRONT_API: ${{ vars.SENTRY_PROJECT_STOREFRONT_API || 'brico-api' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -157,6 +174,10 @@ jobs:
       BETTER_AUTH_URL: ${{ secrets.BETTER_AUTH_URL }}
       BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
       STOREFRONT_BUILD_API_BASE_URL: ${{ vars.STOREFRONT_BUILD_API_BASE_URL || 'https://api.bricomaitre.com' }}
+      NEXT_PUBLIC_SENTRY_DSN_ADMIN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN_ADMIN }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_ORG: ${{ vars.SENTRY_ORG || 'bricomaitre' }}
+      SENTRY_PROJECT_ADMIN: ${{ vars.SENTRY_PROJECT_ADMIN || 'bricadmin' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -217,6 +238,9 @@ jobs:
       NEXT_PUBLIC_CLOUDFRONT_URL: ${{ vars.NEXT_PUBLIC_CLOUDFRONT_URL }}
       NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS: ${{ vars.NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS }}
       STOREFRONT_BUILD_API_BASE_URL: ${{ vars.STOREFRONT_BUILD_API_BASE_URL || 'https://api.bricomaitre.com' }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_ORG: ${{ vars.SENTRY_ORG || 'bricomaitre' }}
+      SENTRY_PROJECT_STOREFRONT: ${{ vars.SENTRY_PROJECT_STOREFRONT || 'bricomaitre' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -354,6 +378,14 @@ jobs:
       SEARCH_CONSOLE_SITE_ORIGIN: ${{ vars.SEARCH_CONSOLE_SITE_ORIGIN || 'https://bricomaitre.com' }}
       GOOGLE_ANALYTICS_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}
       GOOGLE_ANALYTICS_API_SECRET: ${{ secrets.GOOGLE_ANALYTICS_API_SECRET }}
+      TIKTOK_PIXEL_ID: ${{ secrets.NEXT_PUBLIC_TIKTOK_PIXEL_ID }}
+      TIKTOK_EVENTS_API_ACCESS_TOKEN: ${{ secrets.TIKTOK_EVENTS_API_ACCESS_TOKEN }}
+      SENTRY_DSN_ADMIN: ${{ secrets.SENTRY_DSN_ADMIN }}
+      NEXT_PUBLIC_SENTRY_DSN_ADMIN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN_ADMIN }}
+      SENTRY_DSN_WORKER: ${{ secrets.SENTRY_DSN_WORKER }}
+      SENTRY_DSN_STOREFRONT_API: ${{ secrets.SENTRY_DSN_STOREFRONT_API }}
+      SENTRY_DSN_STOREFRONT: ${{ secrets.SENTRY_DSN_STOREFRONT }}
+      NEXT_PUBLIC_SENTRY_DSN_STOREFRONT: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN_STOREFRONT }}
       GHCR_USERNAME: ${{ github.actor }}
       GHCR_READ_TOKEN: ${{ github.token }}
     steps:
@@ -545,19 +577,80 @@ jobs:
                 "$sync_enabled" "$credentials_base64" "$site_url" "$site_origin" >> "$tmp_file"
               mv "$tmp_file" "$env_file"
             '
-          printf '%s\n%s\n' "$GOOGLE_ANALYTICS_MEASUREMENT_ID" "$GOOGLE_ANALYTICS_API_SECRET" | \
+          printf '%s\n%s\n%s\n%s\n' \
+            "$GOOGLE_ANALYTICS_MEASUREMENT_ID" \
+            "$GOOGLE_ANALYTICS_API_SECRET" \
+            "$TIKTOK_PIXEL_ID" \
+            "$TIKTOK_EVENTS_API_ACCESS_TOKEN" | \
             ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
               set -euo pipefail
               IFS= read -r measurement_id
               IFS= read -r api_secret
+              IFS= read -r tiktok_pixel_id
+              IFS= read -r tiktok_access_token
               test -n "$measurement_id"
               test -n "$api_secret"
-              env_file="/srv/bric/env/storefront-api.env"
+              if [[ -n "$tiktok_pixel_id" && -n "$tiktok_access_token" ]]; then
+                tiktok_enabled=true
+              elif [[ -z "$tiktok_pixel_id" && -z "$tiktok_access_token" ]]; then
+                tiktok_enabled=false
+              else
+                echo "TikTok destination requires both pixel ID and Events API access token" >&2
+                exit 64
+              fi
+              api_env_file="/srv/bric/env/storefront-api.env"
               umask 077
-              tmp_file="${env_file}.tmp.$$"
-              grep -v -E "^GOOGLE_ANALYTICS_(MEASUREMENT_ID|API_SECRET)=" "$env_file" > "$tmp_file" || true
-              printf "GOOGLE_ANALYTICS_MEASUREMENT_ID=%s\nGOOGLE_ANALYTICS_API_SECRET=%s\n" "$measurement_id" "$api_secret" >> "$tmp_file"
-              mv "$tmp_file" "$env_file"
+              api_tmp_file="${api_env_file}.tmp.$$"
+              grep -v -E "^(GOOGLE_ANALYTICS_(MEASUREMENT_ID|API_SECRET)|TIKTOK_(PIXEL_ID|EVENTS_API_ACCESS_TOKEN)|MARKETING_(GOOGLE|TIKTOK)_DESTINATION_ENABLED)=" "$api_env_file" > "$api_tmp_file" || true
+              printf "GOOGLE_ANALYTICS_MEASUREMENT_ID=%s\nGOOGLE_ANALYTICS_API_SECRET=%s\nTIKTOK_PIXEL_ID=%s\nTIKTOK_EVENTS_API_ACCESS_TOKEN=%s\nMARKETING_GOOGLE_DESTINATION_ENABLED=true\nMARKETING_TIKTOK_DESTINATION_ENABLED=%s\n" \
+                "$measurement_id" "$api_secret" "$tiktok_pixel_id" "$tiktok_access_token" "$tiktok_enabled" >> "$api_tmp_file"
+              mv "$api_tmp_file" "$api_env_file"
+              admin_env_file="/srv/bric/env/admin.env"
+              admin_tmp_file="${admin_env_file}.tmp.$$"
+              grep -v -E "^MARKETING_(GOOGLE|TIKTOK)_DESTINATION_ENABLED=" "$admin_env_file" > "$admin_tmp_file" || true
+              printf "MARKETING_GOOGLE_DESTINATION_ENABLED=true\nMARKETING_TIKTOK_DESTINATION_ENABLED=%s\n" \
+                "$tiktok_enabled" >> "$admin_tmp_file"
+              mv "$admin_tmp_file" "$admin_env_file"
+            '
+          printf '%s\n%s\n%s\n%s\n%s\n%s\n' \
+            "$SENTRY_DSN_ADMIN" \
+            "$NEXT_PUBLIC_SENTRY_DSN_ADMIN" \
+            "$SENTRY_DSN_WORKER" \
+            "$SENTRY_DSN_STOREFRONT_API" \
+            "$SENTRY_DSN_STOREFRONT" \
+            "$NEXT_PUBLIC_SENTRY_DSN_STOREFRONT" | \
+            ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+              set -euo pipefail
+              IFS= read -r admin_dsn
+              IFS= read -r admin_browser_dsn
+              IFS= read -r worker_dsn
+              IFS= read -r api_dsn
+              IFS= read -r storefront_dsn
+              IFS= read -r storefront_browser_dsn
+              test -n "$admin_dsn"
+              test -n "$admin_browser_dsn"
+              test -n "$worker_dsn"
+              test -n "$api_dsn"
+              test -n "$storefront_dsn"
+              test -n "$storefront_browser_dsn"
+              umask 077
+              admin_env_file="/srv/bric/env/admin.env"
+              admin_tmp_file="${admin_env_file}.tmp.$$"
+              grep -v -E "^(SENTRY_DSN_ADMIN|NEXT_PUBLIC_SENTRY_DSN_ADMIN|SENTRY_DSN_WORKER)=" "$admin_env_file" > "$admin_tmp_file" || true
+              printf "SENTRY_DSN_ADMIN=%s\nNEXT_PUBLIC_SENTRY_DSN_ADMIN=%s\nSENTRY_DSN_WORKER=%s\n" \
+                "$admin_dsn" "$admin_browser_dsn" "$worker_dsn" >> "$admin_tmp_file"
+              mv "$admin_tmp_file" "$admin_env_file"
+              api_env_file="/srv/bric/env/storefront-api.env"
+              api_tmp_file="${api_env_file}.tmp.$$"
+              grep -v -E "^SENTRY_DSN_STOREFRONT_API=" "$api_env_file" > "$api_tmp_file" || true
+              printf "SENTRY_DSN_STOREFRONT_API=%s\n" "$api_dsn" >> "$api_tmp_file"
+              mv "$api_tmp_file" "$api_env_file"
+              storefront_env_file="/srv/bric/env/storefront.env"
+              storefront_tmp_file="${storefront_env_file}.tmp.$$"
+              grep -v -E "^(SENTRY_DSN_STOREFRONT|NEXT_PUBLIC_SENTRY_DSN_STOREFRONT)=" "$storefront_env_file" > "$storefront_tmp_file" || true
+              printf "SENTRY_DSN_STOREFRONT=%s\nNEXT_PUBLIC_SENTRY_DSN_STOREFRONT=%s\n" \
+                "$storefront_dsn" "$storefront_browser_dsn" >> "$storefront_tmp_file"
+              mv "$storefront_tmp_file" "$storefront_env_file"
             '
 
           ssh -i ~/.ssh/bric_deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \

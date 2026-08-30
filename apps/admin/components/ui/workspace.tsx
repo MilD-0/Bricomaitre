@@ -48,7 +48,7 @@ export function WorkspaceHeading({
       <div className="flex min-w-0 items-baseline gap-2">
         <h1
           className={cn(
-            'min-w-0 truncate font-semibold tracking-[-0.025em] text-foreground lg:text-3xl',
+            'min-w-0 truncate font-semibold tracking-[var(--type-tracking-n025)] text-foreground lg:text-3xl',
             showTitleOnMobile ? 'text-xl' : 'sr-only lg:not-sr-only',
           )}
         >

@@ -10,3 +10,11 @@ export function createNextEslintConfig(overrides = []) {
     globalIgnores(['.next/**', 'out/**', 'build/**', 'dist/**', 'coverage/**', 'next-env.d.ts']),
   ]);
 }
+
+export function createTypeScriptEslintConfig(overrides = []) {
+  return defineConfig([
+    ...nextTs,
+    ...overrides,
+    globalIgnores(['build/**', 'dist/**', 'coverage/**']),
+  ]);
+}

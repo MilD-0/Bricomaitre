@@ -1,4 +1,5 @@
 import type { AnalyticsFilters } from './contract';
+import { isMaterializedEconomicsReport } from './economics-data';
 import {
   loadCashPipeline,
   loadFulfillmentSummary,
@@ -31,7 +32,7 @@ export async function loadFulfillmentData(
         db,
         filters.startDate,
         filters.endDate,
-        Boolean((economics as EconomicsReport & { materializedFacts?: boolean }).materializedFacts),
+        isMaterializedEconomicsReport(economics),
       ),
       loadFulfillmentTrend(db, filters.startDate, filters.endDate),
       loadFulfillmentCohorts(db, filters.startDate, filters.endDate, economics),

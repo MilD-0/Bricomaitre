@@ -16,7 +16,10 @@ const markdownComponents: Components = {
   p: ({ className, ...props }) => (
     <p
       {...props}
-      className={cn('my-0 leading-[1.65] [overflow-wrap:anywhere] [&+*]:mt-3', className)}
+      className={cn(
+        'my-0 leading-[var(--type-leading-copy)] [overflow-wrap:anywhere] [&+*]:mt-3',
+        className,
+      )}
     />
   ),
   ul: ({ className, ...props }) => (
@@ -29,7 +32,7 @@ const markdownComponents: Components = {
     <li
       {...props}
       className={cn(
-        'leading-[1.65] [overflow-wrap:anywhere] marker:text-muted-foreground',
+        'leading-[var(--type-leading-copy)] [overflow-wrap:anywhere] marker:text-muted-foreground',
         className,
       )}
     />
@@ -116,7 +119,10 @@ const markdownComponents: Components = {
     return (
       <code
         {...props}
-        className={cn('rounded-md bg-muted/60 px-1.5 py-0.5 font-mono text-[0.925em]', className)}
+        className={cn(
+          'rounded-md bg-muted/60 px-1.5 py-0.5 font-mono text-[length:var(--type-size-relative-compact)]',
+          className,
+        )}
       >
         {children}
       </code>

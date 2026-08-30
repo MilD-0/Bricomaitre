@@ -15,7 +15,7 @@ export function ScrollableRegion({
     <div
       aria-label={label}
       className={cn(
-        'max-w-full overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40',
+        'max-w-full overflow-x-auto outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-inset focus-visible:ring-ring/40',
         className,
       )}
       role="region"

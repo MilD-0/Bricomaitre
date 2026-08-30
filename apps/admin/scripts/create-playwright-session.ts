@@ -7,7 +7,7 @@ import { dirname, resolve } from 'node:path';
 import { eq } from 'drizzle-orm';
 
 import { getDb, getPool, hasDb } from '@bric/db/client';
-import { sessions, users } from '@bric/db/schema';
+import { sessions, userAccessGrants, users } from '@bric/db/schema';
 import { buildPlaywrightAuthState } from '../test/playwright-auth-state';
 
 const userId = 'admin-playwright-browser';
@@ -31,6 +31,22 @@ async function main() {
   const sessionToken = randomBytes(24).toString('hex');
 
   await db.transaction(async (tx) => {
+    await tx
+      .insert(userAccessGrants)
+      .values({
+        email,
+        role: 'admin',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: userAccessGrants.email,
+        set: {
+          role: 'admin',
+          roleDefinitionId: null,
+          updatedAt: now,
+        },
+      });
     await tx.delete(sessions).where(eq(sessions.userId, userId));
     await tx
       .insert(users)

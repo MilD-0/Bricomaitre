@@ -215,7 +215,7 @@ function HistoryInspector({
     <div className={cn('min-w-0', !compact && 'h-full')}>
       {!compact ? (
         <header className="border-b border-border/60 px-5 py-5 sm:px-6">
-          <p className="text-xs font-medium uppercase tracking-[0.15em] text-primary">
+          <p className="text-xs font-medium uppercase tracking-[var(--type-tracking-p150)] text-primary">
             {t(`history.operations.${item.operation}`)}
           </p>
           <h3 className="mt-1 text-xl font-semibold tracking-tight text-foreground">
@@ -288,13 +288,13 @@ function HistoryInspector({
                     {fieldLabel(t, { ...change, kind: 'field' })}
                   </p>
                   <div>
-                    <p className="mb-1 text-[0.7rem] uppercase tracking-wide text-muted-foreground">
+                    <p className="mb-1 text-[length:var(--type-size-compact)] uppercase tracking-wide text-muted-foreground">
                       {t('history.details.columns.before')}
                     </p>
                     <HistoryValue value={change.before} />
                   </div>
                   <div>
-                    <p className="mb-1 text-[0.7rem] uppercase tracking-wide text-muted-foreground">
+                    <p className="mb-1 text-[length:var(--type-size-compact)] uppercase tracking-wide text-muted-foreground">
                       {t('history.details.columns.after')}
                     </p>
                     <HistoryValue value={change.after} />
@@ -505,7 +505,7 @@ export function ActionHistoryPanel({
   return (
     <section
       className={cn(
-        'overflow-hidden rounded-[1.4rem] border border-border/70 bg-background shadow-sm',
+        'overflow-hidden rounded-[var(--shape-radius-panel-relaxed)] border border-border/70 bg-background shadow-sm',
         className,
       )}
     >

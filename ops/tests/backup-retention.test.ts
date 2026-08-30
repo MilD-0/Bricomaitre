@@ -20,6 +20,10 @@ const backupScript = resolve(workspaceRoot, 'ops/scripts/backup-postgres.sh');
 const pruneScript = resolve(workspaceRoot, 'ops/scripts/prune-postgres-backups.sh');
 const privacyScript = resolve(workspaceRoot, 'ops/scripts/validate-s3-backup-privacy.sh');
 const restoreScript = resolve(workspaceRoot, 'ops/scripts/verify-postgres-backup-restore.sh');
+const backupAwsCredentialsScript = resolve(
+  workspaceRoot,
+  'ops/scripts/use-backup-aws-credentials.sh',
+);
 
 describe('production Postgres backup retention', () => {
   it('creates database dumps and their directory with owner-only permissions', () => {
@@ -141,10 +145,84 @@ describe('production Postgres backup retention', () => {
     const pruneIndex = uploadScript.indexOf('prune-postgres-backups.sh');
 
     expect(privacyIndex).toBeGreaterThan(-1);
+    expect(uploadScript.indexOf('use-backup-aws-credentials.sh')).toBeLessThan(privacyIndex);
     expect(backupIndex).toBeGreaterThan(privacyIndex);
     expect(uploadIndex).toBeGreaterThan(-1);
     expect(uploadScript).toContain('--only-show-errors');
     expect(pruneIndex).toBeGreaterThan(uploadIndex);
+  });
+
+  it('maps a dedicated backup key into the AWS CLI environment', () => {
+    const result = spawnSync(
+      'bash',
+      [
+        '-c',
+        `source "$1" && printf '%s|%s|%s|%s' "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" "${'${AWS_SESSION_TOKEN:-}'}" "${'${AWS_PROFILE:-}'}"`,
+        'bash',
+        backupAwsCredentialsScript,
+      ],
+      {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          AWS_ACCESS_KEY_ID: 'application-key',
+          AWS_SECRET_ACCESS_KEY: 'application-secret',
+          AWS_PROFILE: 'application-profile',
+          BACKUP_AWS_ACCESS_KEY_ID: 'backup-key',
+          BACKUP_AWS_SECRET_ACCESS_KEY: 'backup-secret',
+          BACKUP_AWS_SESSION_TOKEN: 'backup-session',
+          BACKUP_AWS_PROFILE: '',
+        },
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('backup-key|backup-secret|backup-session|');
+  });
+
+  it('fails closed when backup jobs would reuse the application AWS key', () => {
+    const result = spawnSync('bash', ['-c', 'source "$1"', 'bash', backupAwsCredentialsScript], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        AWS_ACCESS_KEY_ID: 'shared-key',
+        AWS_SECRET_ACCESS_KEY: 'shared-secret',
+        BACKUP_AWS_ACCESS_KEY_ID: 'shared-key',
+        BACKUP_AWS_SECRET_ACCESS_KEY: 'shared-secret',
+        BACKUP_AWS_PROFILE: '',
+      },
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('must not reuse the application AWS access key');
+  });
+
+  it('supports a dedicated backup profile without inheriting static app credentials', () => {
+    const result = spawnSync(
+      'bash',
+      [
+        '-c',
+        `source "$1" && printf '%s|%s|%s' "${'${AWS_PROFILE:-}'}" "${'${AWS_ACCESS_KEY_ID:-}'}" "${'${AWS_SECRET_ACCESS_KEY:-}'}"`,
+        'bash',
+        backupAwsCredentialsScript,
+      ],
+      {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          AWS_ACCESS_KEY_ID: 'application-key',
+          AWS_SECRET_ACCESS_KEY: 'application-secret',
+          AWS_PROFILE: 'application-profile',
+          BACKUP_AWS_ACCESS_KEY_ID: '',
+          BACKUP_AWS_SECRET_ACCESS_KEY: '',
+          BACKUP_AWS_SESSION_TOKEN: '',
+          BACKUP_AWS_PROFILE: 'backup-writer',
+        },
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('backup-writer||');
   });
 
   it.each([

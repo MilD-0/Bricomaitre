@@ -31,6 +31,7 @@ import {
   buildEcotrackOrderActionSnapshot,
   buildEcotrackShipmentActionSnapshot,
 } from './ecotrack-action-snapshots';
+import { normalizeEcotrackMonetarySnapshotValue } from './ecotrack-monetary';
 import { isEcotrackMissingTrackingInfoError } from './ecotrack-shipment-errors';
 import {
   mapMajEntry,
@@ -50,11 +51,7 @@ import type {
   EcotrackDatabase as Database,
   EcotrackShipmentRow as ShipmentRow,
 } from './ecotrack-shipment-types';
-import {
-  coerceOrderStatus,
-  isConfirmedLifecycleStatus,
-  ORDER_STATUS,
-} from './orders';
+import { coerceOrderStatus, isConfirmedLifecycleStatus, ORDER_STATUS } from './orders';
 import {
   ECOTRACK_SYNC_ACTOR_NAME,
   loadMajSyncSummary,
@@ -394,6 +391,10 @@ export async function upsertShipmentState(
     const afterShipmentState = {
       ...beforeShipmentState,
       ...updates,
+      estimatedFee:
+        updates.estimatedFee === undefined
+          ? beforeShipmentState.estimatedFee
+          : normalizeEcotrackMonetarySnapshotValue(updates.estimatedFee),
     };
     const afterMajState = await loadMajSyncSummary(tx, row.order.id, row.trackingNumber);
     const afterTrackingState = await loadTrackingSyncSummary(tx, row.order.id, row.trackingNumber);

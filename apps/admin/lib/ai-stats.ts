@@ -39,7 +39,6 @@ export type {
   AiStatsQuery,
   AiStatsRange,
   AiStatsSurface,
-  AiWorkloadMode,
 } from './ai-stats-contract';
 
 async function loadAiDatasetCutoff(db: Database, surface: AiStatsSurface) {

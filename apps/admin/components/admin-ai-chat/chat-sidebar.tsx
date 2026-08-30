@@ -227,7 +227,7 @@ export function ChatSidebar({
                 >
                   <ChevronLeft className="size-3.5 rtl:rotate-180" />
                 </Button>
-                <span className="min-w-8 text-center text-[0.68rem] tabular-nums text-muted-foreground">
+                <span className="min-w-8 text-center text-[length:var(--type-size-label)] tabular-nums text-muted-foreground">
                   {boundedJobIndex + 1}/{jobs.length}
                 </span>
                 <Button
@@ -278,7 +278,7 @@ export function ChatSidebar({
                           <p className="truncate text-xs font-medium">
                             {labelKey ? t(`aiChat.jobLabels.${labelKey}`) : labelize(job.kind)}
                           </p>
-                          <p className="mt-0.5 text-[0.68rem] text-muted-foreground">
+                          <p className="mt-0.5 text-[length:var(--type-size-label)] text-muted-foreground">
                             {t(`aiChat.jobStatus.${job.status}`)}
                           </p>
                         </div>
@@ -303,13 +303,13 @@ export function ChatSidebar({
                           }}
                         />
                       </div>
-                      <p className="mt-1.5 text-[0.68rem] text-muted-foreground">
+                      <p className="mt-1.5 text-[length:var(--type-size-label)] text-muted-foreground">
                         {job.progress.current}/{job.progress.total || '—'} ·{' '}
                         {job.progress.phase.replaceAll('-', ' ')}
                       </p>
                       {job.kind === 'ai-product-categorization' &&
                       Object.keys(summary).length > 0 ? (
-                        <p className="mt-2 text-[0.68rem] leading-5 text-muted-foreground">
+                        <p className="mt-2 text-[length:var(--type-size-label)] leading-5 text-muted-foreground">
                           {t('aiChat.categorizationSummary', {
                             proposed: Number(summary.proposed ?? 0),
                             applied: Number(summary.applied ?? 0),
@@ -320,21 +320,23 @@ export function ChatSidebar({
                         </p>
                       ) : null}
                       {job.kind !== 'ai-product-categorization' && summaryEntries.length > 0 ? (
-                        <p className="mt-2 text-[0.68rem] leading-5 text-muted-foreground">
+                        <p className="mt-2 text-[length:var(--type-size-label)] leading-5 text-muted-foreground">
                           {summaryEntries
                             .map(([key, value]) => `${labelize(key)}: ${String(value ?? '—')}`)
                             .join(' · ')}
                         </p>
                       ) : null}
                       {Number(summary.autoApplyFailed ?? 0) > 0 ? (
-                        <p className="mt-2 text-[0.68rem] leading-5 text-amber-700 dark:text-amber-300">
+                        <p className="mt-2 text-[length:var(--type-size-label)] leading-5 text-amber-700 dark:text-amber-300">
                           {t('aiChat.autoApplyFailed', {
                             count: Number(summary.autoApplyFailed),
                           })}
                         </p>
                       ) : null}
                       {job.errorMessage ? (
-                        <p className="mt-2 text-[0.68rem] text-destructive">{job.errorMessage}</p>
+                        <p className="mt-2 text-[length:var(--type-size-label)] text-destructive">
+                          {job.errorMessage}
+                        </p>
                       ) : null}
                       {job.status === 'completed' && downloadPath ? (
                         <Button

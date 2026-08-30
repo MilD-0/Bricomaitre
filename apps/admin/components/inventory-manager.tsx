@@ -291,7 +291,7 @@ function ScanOrderDialog({
 
   return (
     <Dialog open={state.open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] max-w-none overflow-y-auto rounded-xl p-4 sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-[1.5rem] sm:p-6">
+      <DialogContent className="h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] max-w-none overflow-y-auto rounded-xl p-4 sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-[var(--shape-radius-overlay)] sm:p-6">
         <DialogHeader>
           <DialogTitle>{t('inventory.scan.orderTitle', { id: state.order?.id ?? 0 })}</DialogTitle>
           <DialogDescription>{state.order?.fullName ?? ''}</DialogDescription>
@@ -751,7 +751,7 @@ export function InventoryManager({ title }: { title: string }) {
     <WorkspaceFrame>
       <motion.section
         className="scroll-mt-24"
-        {...sectionTransitionProps}
+        {...sectionTransitionProps()}
         data-admin-workspace="inventory"
       >
         <WorkspaceHeader>
@@ -814,8 +814,8 @@ export function InventoryManager({ title }: { title: string }) {
           <div
             className={
               query.isFetching && !isLoading
-                ? 'transition-opacity duration-200 opacity-70'
-                : 'transition-opacity duration-200'
+                ? 'transition-opacity duration-[var(--duration-standard)] opacity-70'
+                : 'transition-opacity duration-[var(--duration-standard)]'
             }
           >
             <ScrollableRegion label={t('nav.inventory')} className="hidden md:block">

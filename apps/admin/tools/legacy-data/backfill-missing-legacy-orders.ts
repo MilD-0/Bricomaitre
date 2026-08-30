@@ -58,7 +58,6 @@ async function main() {
 
     const result = mapMongoOrderToCurrentSchema(order, {
       productIdByMongoId,
-      importNow: new Date(),
     });
 
     if (!result.row) {

@@ -4,6 +4,9 @@ set -euo pipefail
 # shellcheck source=load-infra-env.sh
 source "$(dirname "$0")/load-infra-env.sh"
 
+# shellcheck source=use-backup-aws-credentials.sh
+source "$(dirname "$0")/use-backup-aws-credentials.sh"
+
 backup_s3_uri="${BACKUP_S3_URI:-}"
 
 if [[ -z "$backup_s3_uri" ]]; then

@@ -25,7 +25,22 @@ describe('product relation AI contracts', () => {
     };
 
     await expect(
-      createFixedProductRelationGenerator(result).generate({} as never),
+      createFixedProductRelationGenerator(result).generate({
+        sourceProduct: {
+          id: 1,
+          title: 'Cordless drill',
+          description: '18V cordless drill',
+          category: 'Power tools',
+          brand: 'Acme',
+        },
+        targetProduct: {
+          id: 2,
+          title: '18V battery',
+          description: 'Compatible battery pack',
+          category: 'Power tool accessories',
+          brand: 'Acme',
+        },
+      }),
     ).resolves.toEqual(result);
   });
 

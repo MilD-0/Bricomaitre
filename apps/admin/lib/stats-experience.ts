@@ -44,7 +44,6 @@ export {
 } from './stats-experience-shared';
 export type {
   AiAssistantStats,
-  AiSurfaceStats,
   CustomerStats,
   ExperienceStats,
   ExperienceStatsFilters,

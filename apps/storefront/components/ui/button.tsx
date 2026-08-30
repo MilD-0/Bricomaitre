@@ -4,14 +4,14 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 cursor-pointer items-center justify-center rounded-[var(--squircle-sm)] [corner-shape:squircle] border border-transparent bg-clip-padding text-sm font-bold whitespace-nowrap transition-[background-color,border-color,color,box-shadow,transform] outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/35 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 cursor-pointer items-center justify-center rounded-[var(--squircle-sm)] [corner-shape:squircle] border border-transparent bg-clip-padding text-sm font-bold whitespace-nowrap transition-[background-color,border-color,color,box-shadow,transform] outline-none select-none focus-visible:border-ring focus-visible:ring-[length:var(--sf-focus-width)] focus-visible:ring-ring/35 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-[length:var(--sf-focus-width)] aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
         default:
-          'bg-primary text-primary-foreground shadow-[0_10px_24px_rgba(1,115,122,0.18)] hover:bg-[var(--brand-teal-strong)]',
+          'bg-primary text-primary-foreground shadow-[var(--sf-button-primary-shadow)] hover:bg-[var(--brand-teal-strong)]',
         outline:
-          'border-border bg-background text-[var(--brand-graphite)] hover:border-[#9ea6aa] hover:bg-accent aria-expanded:bg-accent',
+          'border-border bg-background text-[var(--brand-graphite)] hover:border-[var(--sf-control-border-hover)] hover:bg-accent aria-expanded:bg-accent',
         secondary:
           'bg-secondary text-secondary-foreground hover:bg-accent aria-expanded:bg-secondary aria-expanded:text-secondary-foreground',
         ghost:
@@ -23,14 +23,14 @@ const buttonVariants = cva(
       size: {
         default:
           'min-h-11 gap-2 px-4 has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3',
-        xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pe-1.5 has-data-[icon=inline-start]:ps-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pe-1.5 has-data-[icon=inline-start]:ps-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        xs: "h-6 gap-1 rounded-[min(var(--radius-md),var(--sf-control-radius-xs-max))] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pe-1.5 has-data-[icon=inline-start]:ps-1.5 [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-7 gap-1 rounded-[min(var(--radius-md),var(--sf-control-radius-sm-max))] px-2.5 text-[length:var(--sf-control-type-small)] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pe-1.5 has-data-[icon=inline-start]:ps-1.5 [&_svg:not([class*='size-'])]:size-3.5",
         lg: 'min-h-12 gap-2 px-5 text-base has-data-[icon=inline-end]:pe-4 has-data-[icon=inline-start]:ps-4',
         icon: 'size-11',
         'icon-xs':
-          "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
+          "size-6 rounded-[min(var(--radius-md),var(--sf-control-radius-xs-max))] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
         'icon-sm':
-          'size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg',
+          'size-7 rounded-[min(var(--radius-md),var(--sf-control-radius-sm-max))] in-data-[slot=button-group]:rounded-lg',
         'icon-lg': 'size-9',
       },
     },

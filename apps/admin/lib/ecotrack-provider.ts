@@ -37,11 +37,7 @@ export function chunkArray<T>(items: T[], size: number) {
   return chunks;
 }
 
-export {
-  cleanEcotrackEnvValue,
-  getEcotrackConfig,
-  type EcotrackExtendedRateLimitSnapshot,
-} from '@bric/storefront-core/ecotrack-client';
+export { cleanEcotrackEnvValue, getEcotrackConfig } from '@bric/storefront-core/ecotrack-client';
 
 export function normalizeEcotrackText(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';

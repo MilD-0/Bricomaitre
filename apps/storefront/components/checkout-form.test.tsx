@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CheckoutForm } from './checkout-form';
@@ -47,45 +48,46 @@ vi.mock('@/components/ui/shield-check', async () => {
   return { ShieldCheckIcon };
 });
 
-const labels = Object.fromEntries(
-  [
-    'title',
-    'description',
-    'phone',
-    'phonePlaceholder',
-    'phoneError',
-    'lastName',
-    'firstName',
-    'wilaya',
-    'commune',
-    'address',
-    'email',
-    'optional',
-    'deliveryMode',
-    'homeDelivery',
-    'officeDelivery',
-    'officeUnavailable',
-    'orderSummary',
-    'subtotal',
-    'delivery',
-    'total',
-    'quantity',
-    'submit',
-    'submitting',
-    'emptyTitle',
-    'emptyBody',
-    'browseProducts',
-    'requiredError',
-    'emailError',
-    'submitError',
-    'cartUpdated',
-    'retry',
-    'savedAttempt',
-    'trustPhone',
-    'trustPayment',
-    'trustDelivery',
-  ].map((key) => [key, key]),
-) as Record<string, string>;
+const labelKeys = [
+  'title',
+  'description',
+  'phone',
+  'phonePlaceholder',
+  'phoneError',
+  'lastName',
+  'firstName',
+  'wilaya',
+  'commune',
+  'address',
+  'email',
+  'optional',
+  'deliveryMode',
+  'homeDelivery',
+  'officeDelivery',
+  'officeUnavailable',
+  'orderSummary',
+  'subtotal',
+  'delivery',
+  'total',
+  'quantity',
+  'submit',
+  'submitting',
+  'emptyTitle',
+  'emptyBody',
+  'browseProducts',
+  'requiredError',
+  'emailError',
+  'submitError',
+  'cartUpdated',
+  'retry',
+  'savedAttempt',
+  'trustPhone',
+  'trustPayment',
+  'trustDelivery',
+] as const;
+const labels: ComponentProps<typeof CheckoutForm>['labels'] = Object.fromEntries(
+  labelKeys.map((key) => [key, key]),
+) as Record<(typeof labelKeys)[number], string>;
 
 const catalog = {
   wilayas: [{ wilayaId: 16, name: 'Alger' }],
@@ -152,7 +154,7 @@ const order = {
   promoDiscountAmount: 0,
   promoFinalSubtotal: null,
   note: null,
-  confirmed: 0,
+  inHouseStatus: 0,
   noAnswerCount: 0,
   confirmedAt: null,
   hasStatusHistory: false,
@@ -188,7 +190,7 @@ describe('CheckoutForm', () => {
         locale="fr"
         catalog={catalog}
         directItem={directItem}
-        labels={labels as never}
+        labels={labels}
         support={support}
       />,
     );
@@ -209,7 +211,7 @@ describe('CheckoutForm', () => {
         catalog={catalog}
         directItem={directItem}
         landingAttribution={{ landingPageId: 4, landingRevision: 2 }}
-        labels={labels as never}
+        labels={labels}
       />,
     );
     await waitFor(() =>
@@ -233,7 +235,7 @@ describe('CheckoutForm', () => {
         catalog={catalog}
         directItem={directItem}
         embedded
-        labels={labels as never}
+        labels={labels}
       />,
     );
     expect(screen.getByRole('heading', { level: 2, name: 'title' })).toBeVisible();
@@ -255,7 +257,7 @@ describe('CheckoutForm', () => {
         locale="fr"
         catalog={catalog}
         directItem={directItem}
-        labels={labels as never}
+        labels={labels}
         support={support}
       />,
     );
@@ -267,14 +269,7 @@ describe('CheckoutForm', () => {
   });
 
   it('uses a specific error for an invalid Algerian phone number', async () => {
-    render(
-      <CheckoutForm
-        locale="fr"
-        catalog={catalog}
-        directItem={directItem}
-        labels={labels as never}
-      />,
-    );
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels} />);
     fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
       target: { value: '1234567890' },
     });
@@ -305,14 +300,7 @@ describe('CheckoutForm', () => {
         delivery: 'office',
       }),
     );
-    render(
-      <CheckoutForm
-        locale="fr"
-        catalog={catalog}
-        directItem={directItem}
-        labels={labels as never}
-      />,
-    );
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels} />);
 
     await waitFor(() =>
       expect(screen.getByRole('textbox', { name: /phone/ })).toHaveValue('0774246465'),
@@ -336,14 +324,7 @@ describe('CheckoutForm', () => {
   });
 
   it('keeps the address optional for home delivery', async () => {
-    render(
-      <CheckoutForm
-        locale="fr"
-        catalog={catalog}
-        directItem={directItem}
-        labels={labels as never}
-      />,
-    );
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels} />);
     fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
       target: { value: '0550000000' },
     });
@@ -360,14 +341,7 @@ describe('CheckoutForm', () => {
   });
 
   it('animates the shield from the full submit-button hover target', () => {
-    render(
-      <CheckoutForm
-        locale="fr"
-        catalog={catalog}
-        directItem={directItem}
-        labels={labels as never}
-      />,
-    );
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels} />);
     const submit = screen.getByRole('button', { name: 'submit' });
 
     expect(screen.getByTestId('animated-shield')).toBeVisible();
@@ -379,14 +353,7 @@ describe('CheckoutForm', () => {
   });
 
   it('creates an idempotent direct-product order and stores its verified handoff snapshot', async () => {
-    render(
-      <CheckoutForm
-        locale="fr"
-        catalog={catalog}
-        directItem={directItem}
-        labels={labels as never}
-      />,
-    );
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels} />);
     fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
       target: { value: '0550000000' },
     });
@@ -429,14 +396,7 @@ describe('CheckoutForm', () => {
       changed: true,
       requiresReview: false,
     });
-    render(
-      <CheckoutForm
-        locale="fr"
-        catalog={catalog}
-        directItem={directItem}
-        labels={labels as never}
-      />,
-    );
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels} />);
     fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
       target: { value: '0550000000' },
     });
@@ -463,14 +423,7 @@ describe('CheckoutForm', () => {
       changed: true,
       requiresReview: true,
     });
-    render(
-      <CheckoutForm
-        locale="fr"
-        catalog={catalog}
-        directItem={directItem}
-        labels={labels as never}
-      />,
-    );
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels} />);
     fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
       target: { value: '0550000000' },
     });
@@ -493,7 +446,7 @@ describe('CheckoutForm', () => {
         locale="fr"
         catalog={catalog}
         directItem={directItem}
-        labels={labels as never}
+        labels={labels}
         support={support}
       />,
     );

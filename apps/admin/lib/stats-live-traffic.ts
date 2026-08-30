@@ -13,7 +13,6 @@ import {
   orderMetaAttribution,
   orderStatusHistory,
   orders,
-  processedOrders,
 } from '@bric/db/schema';
 import { ORDER_STATUS } from './orders';
 import type { MetaPaidAttributionStats } from './stats-experience';
@@ -26,7 +25,6 @@ import {
   buildWebsiteProductMetricsQuery,
 } from './stats-live-commerce';
 
-export const statsDateExpression = sql`coalesce(${processedOrders.encaissedAt}, ${processedOrders.deliveredAt}, ${processedOrders.orderCreatedAt})`;
 const analyticsResultsCountExpression = sql<number>`case
   when coalesce(${analyticsEvents.metadata}->>'resultsCount', '') ~ '^-?[0-9]+$'
     then (${analyticsEvents.metadata}->>'resultsCount')::int

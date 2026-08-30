@@ -28,7 +28,6 @@ export type {
   AnalyticsCashStage,
   AnalyticsEffectiveRange,
   AnalyticsEntityLevel,
-  AnalyticsFilters,
   AnalyticsGrain,
   AnalyticsMetric,
   AnalyticsQuery,

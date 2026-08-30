@@ -441,7 +441,7 @@ export const storefrontOrderResponseItemSchema = z.object({
   promoDiscountAmount: z.number().default(0),
   promoFinalSubtotal: z.number().nullable().default(null),
   note: z.string().nullable(),
-  confirmed: orderStatusSchema,
+  inHouseStatus: orderStatusSchema,
   noAnswerCount: z.number().int().min(0),
   confirmedAt: isoTimestampSchema.nullable(),
   hasStatusHistory: z.boolean(),

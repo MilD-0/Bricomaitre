@@ -5,7 +5,9 @@ export type CustomerOrderTrackingStage = (typeof customerOrderTrackingStages)[nu
 export type CustomerOrderTrackingVariant =
   'progress' | 'delayed' | 'cancelled' | 'returned' | 'failed';
 
-export function getCustomerOrderTrackingState(status: StorefrontOrderResponseItem['confirmed']): {
+export function getCustomerOrderTrackingState(
+  status: StorefrontOrderResponseItem['inHouseStatus'],
+): {
   activeStage: number;
   current: CustomerOrderTrackingStage;
   variant: CustomerOrderTrackingVariant;

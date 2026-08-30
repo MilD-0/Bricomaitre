@@ -24,12 +24,7 @@ describe('similar product matching', () => {
 
   it('excludes the current product while retaining the relevant recommended order', () => {
     const ranked = rankSimilarProducts(
-      [
-        product(12, 2, true),
-        product(13, 4, true),
-        product(14, 2, false),
-        product(15, 2, true),
-      ] as never[],
+      [product(12, 2, true), product(13, 4, true), product(14, 2, false), product(15, 2, true)],
       12,
     );
     expect(ranked.map(({ id }) => id)).toEqual([13, 14, 15]);

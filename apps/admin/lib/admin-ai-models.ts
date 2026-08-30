@@ -63,7 +63,7 @@ export function supportsAdminAiReasoningEffort(
 
 export function getDefaultAdminAiReasoningEffort(modelId: AdminAiModelId): AdminAiReasoningEffort {
   const option = getAdminAiModelOption(modelId);
-  return option.reasoningEfforts.includes(ADMIN_AI_DEFAULT_REASONING_EFFORT as never)
+  return supportsAdminAiReasoningEffort(modelId, ADMIN_AI_DEFAULT_REASONING_EFFORT)
     ? ADMIN_AI_DEFAULT_REASONING_EFFORT
     : option.reasoningEfforts[0];
 }

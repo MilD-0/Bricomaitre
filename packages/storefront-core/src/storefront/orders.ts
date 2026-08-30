@@ -253,12 +253,7 @@ export async function createStorefrontOrder(
 
   if (payload.journeyId || payload.sessionId) {
     void measureStep('attachJourneyToOrder', reportTiming, () =>
-      attachJourneyToOrder(
-        db,
-        currentOrder.id,
-        payload.journeyId ?? null,
-        payload.sessionId ?? null,
-      ),
+      attachJourneyToOrder(db, currentOrder.id, payload.journeyId ?? null),
     ).catch(() => {
       void markDegradedCapture();
     });
