@@ -968,7 +968,7 @@ export function BulletinBoard() {
           <section>
             <div className="flex items-center gap-2 border-b border-border/60 bg-muted/15 px-3 py-2.5 sm:px-4 lg:px-5">
               <Pin className="text-amber-600" />
-              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              <p className="text-sm font-semibold uppercase tracking-[var(--type-tracking-p160)] text-muted-foreground">
                 {t('sections.pinned')}
               </p>
             </div>
@@ -1062,7 +1062,7 @@ export function BulletinBoard() {
 
         <section>
           <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/15 px-3 py-2.5 sm:px-4 lg:px-5">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            <p className="text-sm font-semibold uppercase tracking-[var(--type-tracking-p160)] text-muted-foreground">
               {t('sections.recent')}
             </p>
             <p className="text-xs text-muted-foreground">
@@ -1229,7 +1229,7 @@ function ReactionRow({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+        <span className="text-xs font-medium uppercase tracking-[var(--type-tracking-p160)] text-muted-foreground">
           {addReactionLabel}
         </span>
         {options.map((emoji) => {

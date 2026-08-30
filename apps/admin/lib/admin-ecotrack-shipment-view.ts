@@ -25,16 +25,12 @@ import type {
   EcotrackDatabase as Database,
   EcotrackShipmentRow as ShipmentRow,
 } from './ecotrack-shipment-types';
-import {
-  parseNumericAmount,
-  type DeliveryType,
-  type OrderRecord,
-} from './orders';
+import { parseNumericAmount, type DeliveryType, type OrderRecord } from './orders';
 
 type EcotrackOrderListItem = EcotrackShipmentListItem;
 type EcotrackOrderDetail = EcotrackShipmentDetail;
 
-export function isoOrNull(value: Date | null | undefined) {
+function isoOrNull(value: Date | null | undefined) {
   return value ? value.toISOString() : null;
 }
 
@@ -46,11 +42,11 @@ export function isStaleAt(value: Date | null | undefined, maxAgeMs: number) {
   return Date.now() - value.getTime() >= maxAgeMs;
 }
 
-export function mapDeliveryLabel(delivery: DeliveryType) {
+function mapDeliveryLabel(delivery: DeliveryType) {
   return delivery === 1 ? 'office' : 'home';
 }
 
-export function isMongoObjectId(value: string) {
+function isMongoObjectId(value: string) {
   return /^[a-f\d]{24}$/i.test(value.trim());
 }
 
@@ -97,9 +93,7 @@ export function getActionFlags(currentStatus: string, deletedAt: Date | null) {
   };
 }
 
-export function buildStatusSummary(
-  row: typeof ecotrackOrderStates.$inferSelect,
-): EcotrackStatusSummary {
+function buildStatusSummary(row: typeof ecotrackOrderStates.$inferSelect): EcotrackStatusSummary {
   return {
     currentStatus: row.currentStatus,
     driverPhone: sanitizeNullableText(row.driverPhone),
@@ -117,7 +111,7 @@ export function buildStatusSummary(
   };
 }
 
-export function toListItem(
+function toListItem(
   row: ShipmentRow,
   record: OrderRecord,
   stateNameById: Map<number, string>,

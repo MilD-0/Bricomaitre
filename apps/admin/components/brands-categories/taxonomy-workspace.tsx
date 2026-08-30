@@ -439,7 +439,7 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
       <div aria-busy={loading} className="relative">
         {items.length > 0 ? (
           <>
-            <div className="hidden grid-cols-[2.5rem_minmax(16rem,1.4fr)_minmax(8rem,.65fr)_7rem_3rem] items-center border-b border-border/70 px-2 py-2 text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground md:grid">
+            <div className="hidden grid-cols-[2.5rem_minmax(16rem,1.4fr)_minmax(8rem,.65fr)_7rem_3rem] items-center border-b border-border/70 px-2 py-2 text-xs font-semibold uppercase tracking-[var(--type-tracking-p060)] text-muted-foreground md:grid">
               <Checkbox
                 checked={allVisibleSelected}
                 aria-label={t.selectAll}
@@ -471,13 +471,13 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
                   />
                   <button
                     type="button"
-                    className="flex min-w-0 items-center gap-3 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                    className="flex min-w-0 items-center gap-3 text-start focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"
                     disabled={!data.writable}
                     onClick={() => setEditor({ mode: 'edit', item })}
                   >
                     <TaxonomyThumbnail item={item} />
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-foreground sm:text-[0.95rem]">
+                      <span className="block truncate text-sm font-medium text-foreground sm:text-[length:var(--type-size-body-compact)]">
                         {item.name}
                       </span>
                       <span className="mt-0.5 block truncate text-xs text-muted-foreground">

@@ -9,7 +9,6 @@ import {
   jsonb,
   index,
   uniqueIndex,
-  check,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { products } from './products';

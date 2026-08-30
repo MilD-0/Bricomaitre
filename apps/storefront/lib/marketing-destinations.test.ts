@@ -15,6 +15,7 @@ function payload(overrides: Partial<StorefrontAnalyticsPayload> = {}): Storefron
   return {
     eventVersion: 1,
     eventId: 'event-1',
+    visitId: 'visit-1',
     journeyId: 'journey-1',
     sessionId: 'session-1',
     eventName: 'view_item',
@@ -23,6 +24,11 @@ function payload(overrides: Partial<StorefrontAnalyticsPayload> = {}): Storefron
     pageType: 'product_detail',
     locale: 'fr',
     referrer: null,
+    utmSource: null,
+    utmMedium: null,
+    utmCampaign: null,
+    utmTerm: null,
+    utmContent: null,
     productId: 12,
     productSlug: 'perceuse',
     categoryId: 3,
@@ -40,8 +46,8 @@ function payload(overrides: Partial<StorefrontAnalyticsPayload> = {}): Storefron
       effectiveConnectionType: null,
       saveData: false,
       release: null,
-      landingUrl: null,
-      landingHost: null,
+      landingUrl: '',
+      landingHost: '',
       fbc: null,
       paidClickCookie: false,
       sessionStartedAt: '2026-07-16T10:00:00.000Z',
@@ -52,7 +58,7 @@ function payload(overrides: Partial<StorefrontAnalyticsPayload> = {}): Storefron
       hasTikTokClickId: false,
     },
     ...overrides,
-  } as StorefrontAnalyticsPayload;
+  };
 }
 
 describe('client destination mappings', () => {

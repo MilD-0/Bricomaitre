@@ -10,6 +10,7 @@ import {
   resolveEcotrackStatusEvidence,
 } from './admin-ecotrack-orders-data';
 import type { EcotrackCatalogRecord } from './ecotrack';
+import { getUpstreamTrackingValues } from './ecotrack-shipment-status';
 import { localOrderCanRemainInCashPipeline } from './ecotrack-status-policy';
 
 describe('admin ECOTRACK shipment mapping', () => {
@@ -109,14 +110,31 @@ describe('admin ECOTRACK shipment mapping', () => {
         last_updated_at: '2026-08-16T12:00:00Z',
       }),
     ).toMatchObject({
-      currentAmount: '12700',
+      currentAmount: '12700.00',
       currentAmountSource: 'ecotrack_orders',
-      deliveryTariff: '400',
-      returnTariff: '0',
+      deliveryTariff: '400.00',
+      returnTariff: '0.00',
       stopDesk: true,
       paymentId: '22',
       statusReason: null,
     });
+  });
+
+  it('normalizes tracking fees to the persisted numeric scale', () => {
+    expect(
+      getUpstreamTrackingValues({
+        status: 'en_livraison',
+        activity: [],
+        estimated_fee: '600',
+      }),
+    ).toMatchObject({ estimatedFee: '600.00' });
+    expect(
+      getUpstreamTrackingValues({
+        status: 'en_livraison',
+        activity: [],
+        estimated_fee: 'invalid',
+      }),
+    ).toMatchObject({ estimatedFee: null });
   });
 
   it('interprets timezone-less provider timestamps as Algeria time', () => {

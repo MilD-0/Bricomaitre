@@ -6,6 +6,7 @@ import {
   resolveProfitTrackerDaySources,
   stateAwareProjectedContribution,
   toCanonicalOrderProjectionDay,
+  upsertProfitTrackerDay,
 } from './profit-tracker';
 import { applyProfitTrackerRollforward } from './profit-tracker-metrics';
 
@@ -20,6 +21,47 @@ const automatic = {
 };
 
 describe('profit tracker source precedence', () => {
+  it('updates only the manual fields supplied by the operator', async () => {
+    const now = new Date('2026-08-15T12:00:00.000Z');
+    const conflictInputs: Array<{ set: Record<string, unknown> }> = [];
+    const onConflictDoUpdate = vi.fn((input: { set: Record<string, unknown> }) => {
+      conflictInputs.push(input);
+      return {
+        returning: vi.fn(async () => [
+          {
+            day: '2026-08-15',
+            spendEur: null,
+            fbPurchases: null,
+            cpm: null,
+            ctr: null,
+            linkClicks: null,
+            landingPageViews: null,
+            grossProfitDzd: '100000',
+            returnRatePct: null,
+            confirmedOrders: null,
+            note: null,
+            rawMetaJson: null,
+            fxRateUsed: '280',
+            metaSyncedAt: null,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ]),
+      };
+    });
+    const values = vi.fn(() => ({ onConflictDoUpdate }));
+    const db = {
+      query: { profitTrackerSettings: { findFirst: vi.fn(async () => undefined) } },
+      insert: vi.fn(() => ({ values })),
+    };
+
+    await upsertProfitTrackerDay({ date: '2026-08-15', grossProfitDzd: 100_000 }, db as never);
+
+    const update = conflictInputs[0]!.set;
+    expect(update.grossProfitDzd).toBe('100000');
+    expect(Object.keys(update).sort()).toEqual(['grossProfitDzd', 'updatedAt']);
+  });
+
   it('applies manual fields independently over posted-order economics', () => {
     const day = resolveProfitTrackerDaySources({
       date: '2026-08-15',

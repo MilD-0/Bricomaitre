@@ -8,6 +8,7 @@ import type {
 import { readEcotrackActivityTimestamp } from '@bric/storefront-core/ecotrack-tracking';
 
 import { ECOTRACK_FAILED_STATUS_MAX_AGE_MS } from './ecotrack-status-policy';
+import { normalizeEcotrackMonetaryValue } from './ecotrack-monetary';
 import { findLatestDate } from './ecotrack-shipment-errors';
 import type { EcotrackShipmentRow } from './ecotrack-shipment-types';
 import type { OrderStatus } from './orders';
@@ -44,7 +45,7 @@ export function getUpstreamTrackingValues(item: EcotrackStatusItem) {
   return {
     currentStatus: item.status,
     driverPhone: sanitizeNullableText(item.driver_phone),
-    estimatedFee: item.estimated_fee == null ? null : String(item.estimated_fee),
+    estimatedFee: normalizeEcotrackMonetaryValue(item.estimated_fee),
     deskPhone: sanitizeNullableText(item.desk_phone),
     deskCommune: sanitizeNullableText(item.desk_commune),
     deskMapLink: sanitizeNullableText(item.desk_map_link),
@@ -53,9 +54,7 @@ export function getUpstreamTrackingValues(item: EcotrackStatusItem) {
 }
 
 function nullableProviderAmount(value: string | number | null | undefined) {
-  if (value === null || value === undefined || String(value).trim() === '') return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 ? String(parsed) : null;
+  return normalizeEcotrackMonetaryValue(value);
 }
 
 export function parseEcotrackProviderTimestamp(value: string | null | undefined) {

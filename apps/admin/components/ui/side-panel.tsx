@@ -5,6 +5,7 @@ import { X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import * as React from 'react';
 
+import { rootMotionTransition } from '../../lib/design-tokens';
 import { cn } from '../../lib/utils';
 
 function getFocusableElements(container: HTMLElement | null) {
@@ -128,18 +129,21 @@ export function SidePanel({
             aria-describedby={description ? descriptionId : undefined}
             tabIndex={-1}
             className={cn(
-              'relative z-10 flex h-full w-full flex-col overflow-hidden bg-[var(--glass-surface)] shadow-[var(--shadow-vapor-strong)] backdrop-blur-xl focus:outline-none sm:max-w-[48rem] sm:rounded-[1.5rem] sm:border sm:border-border/60',
+              'relative z-10 flex h-full w-full flex-col overflow-hidden bg-[var(--glass-surface)] shadow-[var(--shadow-vapor-strong)] backdrop-blur-xl focus:outline-none sm:max-w-[48rem] sm:rounded-[var(--shape-radius-overlay)] sm:border sm:border-border/60',
               className,
             )}
             initial={{ opacity: 0, x: '4%', filter: 'blur(6px)' }}
             animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
             exit={{ opacity: 0, x: '3%', filter: 'blur(4px)' }}
-            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            transition={rootMotionTransition('--duration-standard')}
             onPointerDown={(event) => event.stopPropagation()}
           >
             <header className="flex shrink-0 items-start gap-4 border-b border-border/60 bg-background/72 px-4 py-4 backdrop-blur-xl sm:px-6">
               <div className="min-w-0 flex-1">
-                <h2 id={titleId} className="text-lg font-semibold tracking-[-0.015em] sm:text-xl">
+                <h2
+                  id={titleId}
+                  className="text-lg font-semibold tracking-[var(--type-tracking-n015)] sm:text-xl"
+                >
                   {title}
                 </h2>
                 {description ? (
@@ -151,7 +155,7 @@ export function SidePanel({
               <button
                 type="button"
                 onClick={() => onOpenChangeRef.current(false)}
-                className="grid size-9 shrink-0 place-items-center rounded-[0.75rem] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20"
+                className="grid size-9 shrink-0 place-items-center rounded-[var(--shape-radius-control)] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/20"
                 aria-label={closeLabel}
               >
                 <X className="size-4" aria-hidden="true" />

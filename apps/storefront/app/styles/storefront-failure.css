@@ -2,27 +2,32 @@
   min-height: 100dvh;
   display: grid;
   place-items: center;
-  padding: 1.25rem;
+  padding: calc(1.25rem * var(--sf-density));
   background:
-    radial-gradient(circle at top, rgba(1, 115, 122, 0.1), transparent 42%), var(--background);
+    radial-gradient(
+      circle at top,
+      var(--sf-surface-overlay, rgba(1, 115, 122, 0.1)),
+      transparent 42%
+    ),
+    var(--background);
 }
 .storefront-failure-card {
   width: min(100%, 42rem);
-  border: 1px solid rgba(1, 115, 122, 0.16);
+  border: var(--sf-border-width, 1px) solid var(--sf-border-brand, rgba(1, 115, 122, 0.16));
   border-radius: var(--squircle-lg);
   corner-shape: squircle;
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--sf-surface-glass, rgba(255, 255, 255, 0.96));
   padding: clamp(2rem, 7vw, 4.5rem);
   text-align: center;
   box-shadow: var(--shadow-vapor);
 }
 .storefront-failure-brand {
   display: inline-flex;
-  margin-block-end: 2rem;
+  margin-block-end: calc(2rem * var(--sf-density));
   color: var(--brand-graphite);
-  font-size: 1rem;
-  font-weight: 850;
-  letter-spacing: 0.08em;
+  font-size: var(--sf-type-body, 1rem);
+  font-weight: var(--sf-weight-heavy, 850);
+  letter-spacing: var(--sf-tracking-wide, 0.08em);
 }
 .storefront-failure-brand span {
   color: var(--brand-teal);
@@ -32,32 +37,32 @@
   height: 4.5rem;
   display: grid;
   place-items: center;
-  margin: 0 auto 1.25rem;
+  margin: 0 auto calc(1.25rem * var(--sf-density));
   border-radius: var(--squircle-md);
   corner-shape: squircle;
-  background: #e7f1ef;
+  background: var(--sf-surface-subtle, #e7f1ef);
   color: var(--brand-teal-strong);
-  font-size: 2rem;
-  font-weight: 800;
+  font-size: var(--sf-type-heading, 2rem);
+  font-weight: var(--sf-weight-heavy, 800);
 }
 .storefront-failure-card h1 {
-  margin: 0.6rem 0 0;
-  color: #123c38;
-  font-size: clamp(2rem, 7vw, 3.4rem);
-  letter-spacing: -0.035em;
-  line-height: 1.04;
+  margin: calc(0.6rem * var(--sf-density)) 0 0;
+  color: var(--sf-text-brand, #123c38);
+  font-size: var(--sf-type-display, clamp(2rem, 7vw, 3.4rem));
+  letter-spacing: var(--sf-tracking-tight, -0.035em);
+  line-height: var(--sf-leading-tight, 1.04);
 }
 .storefront-failure-card > p:not(.eyebrow) {
   max-width: 34rem;
-  margin: 1rem auto 1.6rem;
-  color: #566a66;
-  line-height: 1.7;
+  margin: calc(1rem * var(--sf-density)) auto calc(1.6rem * var(--sf-density));
+  color: var(--sf-text-brand, #566a66);
+  line-height: var(--sf-leading-copy, 1.7);
 }
 .storefront-failure-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 0.75rem;
+  gap: calc(0.75rem * var(--sf-density));
 }
 @media (max-width: 620px) {
   .storefront-failure-actions {

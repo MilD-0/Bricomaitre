@@ -6,8 +6,16 @@ ARG BRIC_BUILD_NODE_OPTIONS=""
 ARG GOOGLE_CLIENT_ID
 ARG APPLICATION_ORIGIN
 ARG STOREFRONT_API_BASE_URL
+ARG NEXT_PUBLIC_SENTRY_DSN_ADMIN
+ARG SENTRY_ORG
+ARG SENTRY_PROJECT_ADMIN
+ARG SENTRY_RELEASE
 ENV GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID}"
 ENV STOREFRONT_API_BASE_URL="${STOREFRONT_API_BASE_URL}"
+ENV NEXT_PUBLIC_SENTRY_DSN_ADMIN="${NEXT_PUBLIC_SENTRY_DSN_ADMIN}"
+ENV SENTRY_ORG="${SENTRY_ORG}"
+ENV SENTRY_PROJECT_ADMIN="${SENTRY_PROJECT_ADMIN}"
+ENV SENTRY_RELEASE="${SENTRY_RELEASE}"
 
 RUN corepack enable
 
@@ -36,13 +44,15 @@ FROM base AS build
 
 RUN --mount=type=secret,id=google_client_secret \
   --mount=type=secret,id=better_auth_secret \
-  GOOGLE_CLIENT_SECRET="$(cat /run/secrets/google_client_secret)" \
+  --mount=type=secret,id=sentry_auth_token \
+  export GOOGLE_CLIENT_SECRET="$(cat /run/secrets/google_client_secret)" \
   BETTER_AUTH_SECRET="$(cat /run/secrets/better_auth_secret)" \
   BETTER_AUTH_URL="${APPLICATION_ORIGIN}" \
-  pnpm --filter @bric/admin build \
-  && bash ops/scripts/hydrate-next-standalone.sh apps/admin \
-  && pnpm --filter @bric/admin build:worker \
+  SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)" \
+  && BRIC_WORKER_SOURCEMAPS=1 pnpm --filter @bric/admin build:worker \
   && pnpm --filter @bric/admin build:db-tasks \
+  && pnpm --filter @bric/admin build \
+  && bash ops/scripts/hydrate-next-standalone.sh apps/admin \
   && mkdir -p /runtime/node_modules \
   && cp -LR /workspace/apps/admin/node_modules/node-cron /runtime/node_modules/node-cron
 

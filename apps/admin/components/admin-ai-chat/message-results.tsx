@@ -1,11 +1,6 @@
 'use client';
 
-import {
-  ArrowUpRight,
-  Check,
-  Pencil,
-  X,
-} from 'lucide-react';
+import { ArrowUpRight, Check, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 
@@ -272,12 +267,12 @@ export function StructuredToolResultCard({
       : null;
 
   return (
-    <section className="mt-4 overflow-hidden rounded-[1.15rem] border border-border/60 bg-card shadow-[var(--shadow-vapor)]">
+    <section className="mt-4 overflow-hidden rounded-[var(--shape-radius-card-relaxed)] border border-border/60 bg-card shadow-[var(--shadow-vapor)]">
       <div className="border-b border-border/60 bg-secondary/35 px-4 py-3">
         <p className="text-xs font-semibold text-foreground">
           {t(`aiChat.toolLabels.${presentation.labelKey}`)}
         </p>
-        <p className="mt-0.5 text-[0.65rem] capitalize text-muted-foreground">
+        <p className="mt-0.5 text-[length:var(--type-size-caption)] capitalize text-muted-foreground">
           {queryLabel(result.toolName)}
         </p>
       </div>
@@ -288,7 +283,7 @@ export function StructuredToolResultCard({
       ) : null}
       {ecotrackTerminal ? (
         <div className="space-y-3 px-4 py-4">
-          <p className="text-[0.68rem] text-muted-foreground">
+          <p className="text-[length:var(--type-size-label)] text-muted-foreground">
             {t('aiChat.ecotrackTerminal.attempts', {
               attempt: ecotrackTerminal.attemptNumber,
               retries: ecotrackTerminal.retryCount,
@@ -308,10 +303,10 @@ export function StructuredToolResultCard({
           ).map(([key, rows, tone]) =>
             rows.length ? (
               <section key={key} className="rounded-xl border border-border/55 px-3 py-2.5">
-                <p className={`text-[0.68rem] font-semibold ${tone}`}>
+                <p className={`text-[length:var(--type-size-label)] font-semibold ${tone}`}>
                   {t(`aiChat.ecotrackTerminal.${key}`, { count: rows.length })}
                 </p>
-                <ul className="mt-1.5 space-y-1 text-[0.68rem] leading-5 text-foreground">
+                <ul className="mt-1.5 space-y-1 text-[length:var(--type-size-label)] leading-5 text-foreground">
                   {rows.map((row, index) => (
                     <li key={`${row.orderId ?? row.reference ?? 'order'}-${index}`}>
                       <span className="font-semibold">
@@ -369,7 +364,7 @@ export function StructuredToolResultCard({
         <div className="grid grid-cols-2 gap-px bg-border/50 sm:grid-cols-4">
           {summary.map(([key, value]) => (
             <div key={key} className="min-w-0 bg-card px-3 py-3">
-              <p className="truncate text-[0.66rem] capitalize text-muted-foreground">
+              <p className="truncate text-[length:var(--type-size-caption-relaxed)] capitalize text-muted-foreground">
                 {queryLabel(key)}
               </p>
               <p className="mt-1 break-words text-xs font-semibold text-foreground">
@@ -396,7 +391,7 @@ export function StructuredToolResultCard({
           <Link
             href={presentation.href}
             onClick={onNavigate}
-            className="inline-flex min-h-8 items-center gap-1.5 rounded-[0.75rem] px-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+            className="inline-flex min-h-8 items-center gap-1.5 rounded-[var(--shape-radius-control)] px-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-primary/20"
           >
             {t(`aiChat.toolDestinations.${presentation.destinationKey}`)}
             <ArrowUpRight className="size-3.5 rtl:-scale-x-100" />

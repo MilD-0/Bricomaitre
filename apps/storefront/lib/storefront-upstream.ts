@@ -2,6 +2,7 @@ const DEFAULT_STOREFRONT_API_BASE_URL = 'http://localhost:3001';
 const DEFAULT_STOREFRONT_API_TIMEOUT_MS = 5_000;
 
 type StorefrontRuntimeEnv = {
+  [key: string]: string | undefined;
   STOREFRONT_API_BASE_URL?: string;
   STOREFRONT_API_TIMEOUT_MS?: string;
 };
@@ -35,15 +36,11 @@ function normalizeBaseUrl(value: string) {
   return value.trim().replace(/\/+$/, '');
 }
 
-export function getStorefrontApiBaseUrl(
-  env: StorefrontRuntimeEnv = process.env as unknown as StorefrontRuntimeEnv,
-) {
+export function getStorefrontApiBaseUrl(env: StorefrontRuntimeEnv = process.env) {
   return normalizeBaseUrl(env.STOREFRONT_API_BASE_URL || DEFAULT_STOREFRONT_API_BASE_URL);
 }
 
-export function getStorefrontApiTimeoutMs(
-  env: StorefrontRuntimeEnv = process.env as unknown as StorefrontRuntimeEnv,
-) {
+export function getStorefrontApiTimeoutMs(env: StorefrontRuntimeEnv = process.env) {
   const configured = Number(env.STOREFRONT_API_TIMEOUT_MS);
   return Number.isFinite(configured) && configured > 0
     ? configured

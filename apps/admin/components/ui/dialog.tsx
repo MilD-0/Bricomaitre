@@ -183,7 +183,7 @@ export function DialogContent({ className, ...props }: React.HTMLAttributes<HTML
         props.onClick?.(event);
       }}
       className={cn(
-        'relative z-10 my-auto max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-[1.5rem] bg-[var(--glass-surface)] p-6 shadow-[var(--shadow-vapor-strong)] backdrop-blur-xl focus:outline-hidden',
+        'relative z-10 my-auto max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-[var(--shape-radius-overlay)] bg-[var(--glass-surface)] p-6 shadow-[var(--shadow-vapor-strong)] backdrop-blur-xl focus:outline-hidden',
         className,
       )}
       {...props}

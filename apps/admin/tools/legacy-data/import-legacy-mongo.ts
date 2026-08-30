@@ -42,7 +42,6 @@ type ValidationReport = {
     purchasePriceDropped: number;
   };
   orderDiagnostics: {
-    archivedCount: number;
     skippedForState: Array<{ mongoId: string | null; state: string | null }>;
     blockedByCart: Array<{ mongoId: string | null; missingRefs: string[] }>;
   };
@@ -237,7 +236,6 @@ function prepareImportData(
       purchasePriceDropped: 0,
     },
     orderDiagnostics: {
-      archivedCount: 0,
       skippedForState: [],
       blockedByCart: [],
     },
@@ -334,7 +332,6 @@ function prepareImportData(
           productIdByMongoId: selectedTargets.includes('products')
             ? validationProductMap
             : existingLookups.products,
-          importNow: new Date(),
         });
 
         if (!result.row) {
@@ -360,10 +357,6 @@ function prepareImportData(
           }
 
           return false;
-        }
-
-        if (result.row.archivedAt) {
-          report.orderDiagnostics.archivedCount += 1;
         }
 
         return true;
@@ -444,7 +437,6 @@ async function importOrders(
   for (const order of mongoOrders) {
     const result = mapMongoOrderToCurrentSchema(order, {
       productIdByMongoId,
-      importNow: new Date(),
     });
 
     if (!result.row) {
@@ -643,7 +635,6 @@ function printReport(
   console.log(
     `- Product purchase prices dropped: ${report.productDiagnostics.purchasePriceDropped}`,
   );
-  console.log(`- Orders archived by cutoff: ${report.orderDiagnostics.archivedCount}`);
   console.log(
     `- Orders skipped for unresolved state: ${report.orderDiagnostics.skippedForState.length}`,
   );

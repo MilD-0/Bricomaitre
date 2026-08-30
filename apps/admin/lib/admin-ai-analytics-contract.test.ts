@@ -37,7 +37,13 @@ function moneyPayload(costCoveragePct: number): AnalyticsPayload {
       ],
       series: [],
       coverage: {
+        projectedOrders: 0,
+        costCompleteOrders: 0,
         projectedCoveragePct: costCoveragePct,
+        settledOrders: 0,
+        settlementCoveragePct: null,
+        metaDays: 0,
+        pendingRollforwardDzd: 0,
       },
       automaticPaid: {
         summary: {
@@ -96,7 +102,7 @@ function moneyPayload(costCoveragePct: number): AnalyticsPayload {
     ],
     warnings: [],
     diagnostics: { queryDurationMs: 42, responseSizeBytes: 1_000 },
-  } as unknown as AnalyticsPayload;
+  } satisfies AnalyticsPayload;
 }
 
 describe('admin assistant analytics semantic contract', () => {

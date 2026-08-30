@@ -9,7 +9,6 @@ describe('tools/legacy-data/import-legacy-mongo', () => {
         { skipBlockedOrders: false },
         {
           orderDiagnostics: {
-            archivedCount: 0,
             skippedForState: [],
             blockedByCart: [{ mongoId: 'order-1', missingRefs: ['missing-product'] }],
           },
@@ -24,7 +23,6 @@ describe('tools/legacy-data/import-legacy-mongo', () => {
         { skipBlockedOrders: true },
         {
           orderDiagnostics: {
-            archivedCount: 0,
             skippedForState: [],
             blockedByCart: [{ mongoId: 'order-1', missingRefs: ['missing-product'] }],
           },

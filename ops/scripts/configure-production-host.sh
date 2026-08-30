@@ -6,6 +6,7 @@ host_config_dir="$(cd "$script_dir/../host" && pwd -P)"
 sysctl_target="/etc/sysctl.d/99-bricomaitre-redis.conf"
 thp_unit_target="/etc/systemd/system/bricomaitre-disable-thp.service"
 backup_cron_target="/etc/cron.d/bric-postgres-backup"
+maintenance_logrotate_target="/etc/logrotate.d/bricomaitre-maintenance"
 operations_user="${BRIC_OPERATIONS_USER:-${SUDO_USER:-deploy}}"
 
 if [[ "$(id -u)" -ne 0 ]]; then
@@ -21,11 +22,18 @@ operations_group="$(id -gn "$operations_user")"
 install -m 0644 "$host_config_dir/99-bricomaitre-redis.conf" "$sysctl_target"
 install -m 0644 "$host_config_dir/bricomaitre-disable-thp.service" "$thp_unit_target"
 rendered_backup_cron="$(mktemp)"
-trap 'rm -f -- "$rendered_backup_cron"' EXIT
+rendered_maintenance_logrotate="$(mktemp)"
+trap 'rm -f -- "$rendered_backup_cron" "$rendered_maintenance_logrotate"' EXIT
 sed "s/{{OPERATIONS_USER}}/$operations_user/g" "$host_config_dir/bricomaitre-backups.cron" \
   >"$rendered_backup_cron"
 install -m 0644 "$rendered_backup_cron" "$backup_cron_target"
-rm -f -- "$rendered_backup_cron"
+sed \
+  -e "s/{{OPERATIONS_USER}}/$operations_user/g" \
+  -e "s/{{OPERATIONS_GROUP}}/$operations_group/g" \
+  "$host_config_dir/bricomaitre-maintenance.logrotate" \
+  >"$rendered_maintenance_logrotate"
+install -m 0644 "$rendered_maintenance_logrotate" "$maintenance_logrotate_target"
+rm -f -- "$rendered_backup_cron" "$rendered_maintenance_logrotate"
 trap - EXIT
 touch /var/log/bric-postgres-backup.log /var/log/bric-postgres-restore.log
 chown "$operations_user:$operations_group" \
@@ -46,4 +54,4 @@ if ! grep -q '\[never\]' /sys/kernel/mm/transparent_hugepage/enabled; then
   exit 1
 fi
 
-echo "Redis memory settings and bounded database backup drills are active and persistent."
+echo "Redis memory settings, bounded database backup drills, and maintenance log rotation are active and persistent."

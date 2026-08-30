@@ -120,7 +120,7 @@ export function ShoppingListWorkspaceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] max-w-none flex-col overflow-hidden rounded-xl p-0 sm:h-auto sm:max-h-[92vh] sm:max-w-6xl sm:rounded-[1.5rem]">
+      <DialogContent className="flex h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] max-w-none flex-col overflow-hidden rounded-xl p-0 sm:h-auto sm:max-h-[92vh] sm:max-w-6xl sm:rounded-[var(--shape-radius-overlay)]">
         <DialogHeader className="shrink-0 border-b border-border/60 px-5 py-4">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <DialogTitle>{state?.title ?? t('ordersManager.shoppingList.title')}</DialogTitle>
@@ -433,7 +433,7 @@ export function EcotrackPostingWorkspaceDialog({
 
   return (
     <Dialog open={Boolean(state)} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] max-w-none flex-col overflow-hidden rounded-xl p-0 sm:h-auto sm:max-h-[92vh] sm:max-w-5xl sm:rounded-[1.5rem]">
+      <DialogContent className="flex h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] max-w-none flex-col overflow-hidden rounded-xl p-0 sm:h-auto sm:max-h-[92vh] sm:max-w-5xl sm:rounded-[var(--shape-radius-overlay)]">
         <DialogHeader className="shrink-0 border-b border-border/60 px-5 py-4">
           <DialogTitle>{state?.title ?? t('ordersManager.ecotrack.previewTitle')}</DialogTitle>
         </DialogHeader>

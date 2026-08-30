@@ -161,27 +161,27 @@ export function AcquisitionView({
                   tickFormatter={(value) => formatDate(locale, String(value))}
                   tickLine={false}
                   axisLine={false}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
                 <YAxis
                   tickFormatter={(value) => `${value}×`}
                   tickLine={false}
                   axisLine={false}
                   width={38}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
                 <Tooltip {...chartTooltip(locale, 'ratio')} />
-                <ReferenceLine y={1} stroke="#e11d48" strokeDasharray="5 4" />
+                <ReferenceLine y={1} stroke="var(--chart-rose)" strokeDasharray="5 4" />
                 <ActualOpenLine
                   dataKey="profitXBeforeReturns"
                   name={copy.labels.beforeReturns}
-                  stroke="#64748b"
+                  stroke="var(--chart-slate)"
                   strokeWidth={1.7}
                 />
                 <ActualOpenLine
                   dataKey="profitX"
                   name={copy.labels.afterReturns}
-                  stroke="#7c3aed"
+                  stroke="var(--chart-violet)"
                   strokeWidth={2.4}
                 />
               </ComposedChart>
@@ -198,9 +198,15 @@ export function AcquisitionView({
                   tickFormatter={(value) => formatDate(locale, String(value))}
                   tickLine={false}
                   axisLine={false}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
-                <YAxis yAxisId="cpm" tickLine={false} axisLine={false} width={38} fontSize={11} />
+                <YAxis
+                  yAxisId="cpm"
+                  tickLine={false}
+                  axisLine={false}
+                  width={38}
+                  fontSize="var(--type-size-label-px)"
+                />
                 <YAxis
                   yAxisId="ctr"
                   orientation="right"
@@ -208,14 +214,14 @@ export function AcquisitionView({
                   tickLine={false}
                   axisLine={false}
                   width={38}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
                 <Tooltip {...chartTooltip(locale)} />
                 <Bar
                   yAxisId="cpm"
                   dataKey="cpmEur"
                   name={copy.labels.cpmEur}
-                  fill="#d97706"
+                  fill="var(--chart-amber)"
                   opacity={0.45}
                 />
                 <Line
@@ -223,7 +229,7 @@ export function AcquisitionView({
                   type="monotone"
                   dataKey="outboundCtrPct"
                   name={copy.columns.outboundCtr}
-                  stroke="#2563eb"
+                  stroke="var(--chart-blue)"
                   strokeWidth={2.2}
                   dot={false}
                   connectNulls={false}
@@ -353,14 +359,14 @@ export function AcquisitionView({
                     tickFormatter={(value) => `D${value}`}
                     tickLine={false}
                     axisLine={false}
-                    fontSize={11}
+                    fontSize="var(--type-size-label-px)"
                   />
                   <YAxis
                     tickFormatter={(value) => `${value}%`}
                     tickLine={false}
                     axisLine={false}
                     width={42}
-                    fontSize={11}
+                    fontSize="var(--type-size-label-px)"
                     domain={[0, 100]}
                   />
                   <Tooltip {...chartTooltip(locale, 'percent')} />
@@ -453,14 +459,14 @@ export function AcquisitionView({
                     tickFormatter={(value) => formatDate(locale, String(value))}
                     tickLine={false}
                     axisLine={false}
-                    fontSize={11}
+                    fontSize="var(--type-size-label-px)"
                   />
                   <YAxis
                     tickFormatter={(value) => formatNumber(locale, Number(value), true)}
                     tickLine={false}
                     axisLine={false}
                     width={46}
-                    fontSize={11}
+                    fontSize="var(--type-size-label-px)"
                   />
                   <Tooltip {...chartTooltip(locale, 'money')} />
                   {selectedIds.map((id, index) => (
@@ -536,7 +542,7 @@ export function AcquisitionView({
                   <td className="px-3 py-2.5 text-end tabular-nums">
                     {formatMoney(locale, entity.adCostDzd)}
                     {entity.outcomeSpendCoveragePct != null ? (
-                      <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                      <span className="mt-0.5 block text-[length:var(--type-size-micro-px)] text-muted-foreground">
                         {formatPercent(locale, entity.outcomeSpendCoveragePct)}{' '}
                         {copy.labels.outcomeWindow}
                       </span>

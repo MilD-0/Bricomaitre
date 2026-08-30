@@ -241,7 +241,7 @@ export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale
                 stroke={isActive ? 'hsl(var(--foreground))' : 'hsl(var(--background))'}
                 strokeWidth={isActive ? 2.2 : 1}
                 vectorEffect="non-scaling-stroke"
-                className="transition-[fill,opacity,stroke] duration-150"
+                className="transition-[fill,opacity,stroke] duration-[var(--duration-instant)]"
               />
             );
           })}
@@ -308,7 +308,7 @@ export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale
       <div className="min-w-0">
         <div className="border-y border-border/60 py-3">
           <div className="mb-2 px-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-[var(--type-tracking-p080)] text-muted-foreground">
               Northern detail
             </p>
           </div>
@@ -343,7 +343,7 @@ export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale
                 'linear-gradient(90deg, hsl(var(--muted)), hsl(var(--chart-1) / 0.45), hsl(var(--chart-1)))',
             }}
           />
-          <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
+          <div className="mt-2 flex justify-between text-[length:var(--type-size-label-px)] text-muted-foreground">
             <span>No posted orders</span>
             <span>{number.format(maximum)} posted</span>
           </div>
@@ -355,14 +355,16 @@ export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale
             <p className="mt-1 text-lg font-semibold tabular-nums">
               {number.format(activeRow?.postedOrders ?? 0)}
             </p>
-            <p className="text-[11px] text-muted-foreground">posted orders</p>
+            <p className="text-[length:var(--type-size-label-px)] text-muted-foreground">
+              posted orders
+            </p>
           </div>
           <div className="py-3 pl-4">
             <p className="text-xs text-muted-foreground">Paid among resolved</p>
             <p className="mt-1 text-lg font-semibold tabular-nums">
               {percent(activeRow?.terminalPaidRatePct ?? null)}
             </p>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[length:var(--type-size-label-px)] text-muted-foreground">
               {number.format(activeRow?.activeOrders ?? 0)} active ·{' '}
               {duration(activeRow?.deliveryMedianHours ?? null)} median
             </p>
@@ -387,7 +389,9 @@ export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale
                 onBlur={() => setHoveredName(null)}
                 onClick={() => setSelectedName(row.name)}
               >
-                <span className="text-[11px] tabular-nums text-muted-foreground">{index + 1}</span>
+                <span className="text-[length:var(--type-size-label-px)] tabular-nums text-muted-foreground">
+                  {index + 1}
+                </span>
                 <span className="truncate font-medium text-foreground">{row.name}</span>
                 <span className="tabular-nums">{number.format(row.postedOrders)}</span>
               </button>

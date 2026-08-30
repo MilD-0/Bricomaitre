@@ -8,7 +8,7 @@ import {
   ORDER_EXPORT_HEADERS,
   type EcotrackCatalogExportData,
 } from './order-export';
-import type { OrderRecord } from './orders';
+import { ORDER_STATUS, type OrderRecord } from './orders';
 
 const catalog: EcotrackCatalogExportData = {
   wilayas: [{ wilayaId: 16, name: 'Alger' }],
@@ -64,7 +64,7 @@ const order: OrderRecord = {
   deliveryFee: 200,
   totalAmount: 4200,
   note: 'Handle with care',
-  confirmed: 2,
+  inHouseStatus: ORDER_STATUS.CONFIRMED,
   noAnswerCount: 0,
   confirmedBy: null,
   confirmedByName: null,

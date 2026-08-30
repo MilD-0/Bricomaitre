@@ -77,8 +77,8 @@ export function CommandView({
               <ComposedChart data={trajectory} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <defs>
                   <linearGradient id="commandTrueProfit" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#7c3aed" stopOpacity={0.28} />
-                    <stop offset="100%" stopColor="#7c3aed" stopOpacity={0.02} />
+                    <stop offset="0%" stopColor="var(--chart-violet)" stopOpacity={0.28} />
+                    <stop offset="100%" stopColor="var(--chart-violet)" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.5} />
@@ -87,14 +87,14 @@ export function CommandView({
                   tickFormatter={(value) => formatDate(locale, String(value))}
                   tickLine={false}
                   axisLine={false}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
                 <YAxis
                   tickFormatter={(value) => formatNumber(locale, Number(value), true)}
                   tickLine={false}
                   axisLine={false}
                   width={54}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
                 <Tooltip {...chartTooltip(locale, 'money')} />
                 <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeDasharray="4 4" />
@@ -109,13 +109,13 @@ export function CommandView({
                 <ActualOpenLine
                   dataKey="trueProfitDzd"
                   name={copy.metrics.trueProfit}
-                  stroke="#7c3aed"
+                  stroke="var(--chart-violet)"
                   strokeWidth={2.2}
                 />
                 <ActualOpenLine
                   dataKey="automaticPaidProfitDzd"
                   name={copy.metrics.automaticPaidProfit}
-                  stroke="#0f766e"
+                  stroke="var(--chart-teal)"
                   strokeWidth={2.2}
                 />
               </ComposedChart>
@@ -260,14 +260,14 @@ export function MoneyView({
                 tickFormatter={(value) => formatDate(locale, String(value))}
                 tickLine={false}
                 axisLine={false}
-                fontSize={11}
+                fontSize="var(--type-size-label-px)"
               />
               <YAxis
                 tickFormatter={(value) => formatNumber(locale, Number(value), true)}
                 tickLine={false}
                 axisLine={false}
                 width={56}
-                fontSize={11}
+                fontSize="var(--type-size-label-px)"
               />
               <Tooltip {...chartTooltip(locale, 'money')} />
               <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeDasharray="4 4" />
@@ -276,31 +276,31 @@ export function MoneyView({
                   <Bar
                     dataKey="adCostDzdDisplay"
                     name={copy.columns.adCost}
-                    fill="#d97706"
+                    fill="var(--chart-amber)"
                     opacity={0.45}
                   />
                   <ActualOpenLine
                     dataKey="grossProfitDzd"
                     name={copy.columns.grossProfit}
-                    stroke="#64748b"
+                    stroke="var(--chart-slate)"
                     strokeWidth={1.5}
                   />
                   <ActualOpenLine
                     dataKey="adjustedProfitDzd"
                     name={copy.columns.adjustedProfit}
-                    stroke="#2563eb"
+                    stroke="var(--chart-blue)"
                     strokeWidth={1.8}
                   />
                   <ActualOpenLine
                     dataKey="netProfitDzd"
                     name={copy.columns.netProfit}
-                    stroke="#7c3aed"
+                    stroke="var(--chart-violet)"
                     strokeWidth={2}
                   />
                   <ActualOpenLine
                     dataKey="trueProfitDzd"
                     name={copy.columns.trueProfit}
-                    stroke="#0f766e"
+                    stroke="var(--chart-teal)"
                     strokeWidth={2.4}
                   />
                 </>
@@ -310,19 +310,19 @@ export function MoneyView({
                   <Bar
                     dataKey="feesDzd"
                     name={copy.labels.ecoTrackFee}
-                    fill="#d97706"
+                    fill="var(--chart-amber)"
                     opacity={0.45}
                   />
                   <ActualOpenLine
                     dataKey="codDzd"
                     name={copy.labels.paidCod}
-                    stroke="#2563eb"
+                    stroke="var(--chart-blue)"
                     strokeWidth={1.6}
                   />
                   <ActualOpenLine
                     dataKey="profitDzd"
                     name={copy.metrics.automaticPaidProfit}
-                    stroke="#0f766e"
+                    stroke="var(--chart-teal)"
                     strokeWidth={2.4}
                   />
                 </>
@@ -332,13 +332,13 @@ export function MoneyView({
                   <ActualOpenLine
                     dataKey="cumulativeNetProfitDzd"
                     name={copy.columns.netProfit}
-                    stroke="#7c3aed"
+                    stroke="var(--chart-violet)"
                     strokeWidth={2}
                   />
                   <ActualOpenLine
                     dataKey="cumulativeTrueProfitDzd"
                     name={copy.columns.trueProfit}
-                    stroke="#0f766e"
+                    stroke="var(--chart-teal)"
                     strokeWidth={2.4}
                   />
                 </>
@@ -437,29 +437,33 @@ export function MoneyView({
                 tickFormatter={(value) => formatDate(locale, String(value))}
                 tickLine={false}
                 axisLine={false}
-                fontSize={11}
+                fontSize="var(--type-size-label-px)"
               />
               <YAxis
                 tickFormatter={(value) => formatNumber(locale, Number(value), true)}
                 tickLine={false}
                 axisLine={false}
                 width={52}
-                fontSize={11}
+                fontSize="var(--type-size-label-px)"
               />
               <Tooltip {...chartTooltip(locale, 'money')} />
               <Bar
                 dataKey="projectedTrueProfitDzd"
                 name={copy.labels.projectedTrueProfit}
-                fill="#7c3aed"
+                fill="var(--chart-violet)"
                 opacity={0.32}
               />
               <Bar
                 dataKey="deliveredTrueProfitDzd"
                 name={copy.labels.deliveredTrueProfit}
-                fill="#2563eb"
+                fill="var(--chart-blue)"
                 opacity={0.5}
               />
-              <Bar dataKey="paidTrueProfitDzd" name={copy.labels.paidTrueProfit} fill="#0f766e" />
+              <Bar
+                dataKey="paidTrueProfitDzd"
+                name={copy.labels.paidTrueProfit}
+                fill="var(--chart-teal)"
+              />
             </ComposedChart>
           </ResponsiveChart>
         </ChartFrame>
@@ -482,7 +486,9 @@ export function MoneyView({
                 <td className="px-3 py-2.5 font-medium">
                   {formatDate(locale, cohort.weekStart, { long: true })}
                   {!cohort.mature ? (
-                    <span className="ms-2 text-[10px] text-amber-700">{copy.labels.open}</span>
+                    <span className="ms-2 text-[length:var(--type-size-micro-px)] text-amber-700">
+                      {copy.labels.open}
+                    </span>
                   ) : null}
                 </td>
                 <td className="px-3 py-2.5 text-end tabular-nums">
@@ -541,7 +547,9 @@ export function MoneyView({
                   <td className="px-3 py-2.5 font-medium">
                     {formatDate(locale, week.weekStart, { long: true })}
                     {week.isPartial ? (
-                      <span className="ms-2 text-[10px] text-amber-700">{copy.partialPeriod}</span>
+                      <span className="ms-2 text-[length:var(--type-size-micro-px)] text-amber-700">
+                        {copy.partialPeriod}
+                      </span>
                     ) : null}
                   </td>
                   <td className="px-3 py-2.5 text-end tabular-nums">
@@ -573,20 +581,20 @@ export function MoneyView({
                   tickFormatter={(value) => formatDate(locale, String(value))}
                   tickLine={false}
                   axisLine={false}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
                 <YAxis
                   tickFormatter={(value) => formatNumber(locale, Number(value), true)}
                   tickLine={false}
                   axisLine={false}
                   width={52}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
                 <Tooltip {...chartTooltip(locale, 'money')} />
                 <Area
                   dataKey="upperTrueProfitDzd"
                   name={copy.labels.upper}
-                  fill="#7c3aed"
+                  fill="var(--chart-violet)"
                   fillOpacity={0.08}
                   stroke="none"
                 />
@@ -600,7 +608,7 @@ export function MoneyView({
                   type="monotone"
                   dataKey="forecastTrueProfitDzd"
                   name={copy.metrics.trueProfit}
-                  stroke="#7c3aed"
+                  stroke="var(--chart-violet)"
                   strokeWidth={2.2}
                   strokeDasharray="5 4"
                   dot={false}
@@ -636,7 +644,9 @@ export function MoneyView({
                   <td className="px-3 py-2.5 font-medium">
                     {formatDate(locale, row.bucket, { long: true })}
                     {row.isPartial ? (
-                      <span className="ms-2 text-[10px] text-amber-700">{copy.partialPeriod}</span>
+                      <span className="ms-2 text-[length:var(--type-size-micro-px)] text-amber-700">
+                        {copy.partialPeriod}
+                      </span>
                     ) : null}
                   </td>
                   <td className="px-3 py-2.5 text-end tabular-nums">

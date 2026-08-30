@@ -124,7 +124,7 @@ function ShipmentIdentity({
     <div className="min-w-0">
       <div className="flex min-w-0 items-center gap-2">
         <span className="truncate font-semibold">{item.trackingNumber}</span>
-        <span className="shrink-0 text-[0.68rem] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+        <span className="shrink-0 text-[length:var(--type-size-label)] font-medium uppercase tracking-[var(--type-tracking-p080)] text-muted-foreground">
           {item.provider}
         </span>
       </div>
@@ -165,7 +165,7 @@ function ShipmentInspector({
     <section aria-label={t('ordersEcotrackManager.summaryTitle')} className="min-w-0">
       <header className="flex flex-col gap-3 border-b border-border px-4 py-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-[0.08em] text-primary">
+          <p className="text-xs font-medium uppercase tracking-[var(--type-tracking-p080)] text-primary">
             #{item.reference}
           </p>
           <h2 className="mt-1 truncate text-lg font-semibold">{item.fullName}</h2>

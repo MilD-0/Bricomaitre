@@ -7,7 +7,7 @@ import { brands, products } from '@bric/db/schema';
 import type { ActionActor } from './action-history';
 import { applyAdminInventoryBatch } from './admin-inventory-workflow';
 import { loadOrderDetail, loadOrdersPageData } from './admin-orders-data';
-import { parseNumericAmount } from './orders';
+import { ORDER_STATUS, parseNumericAmount, type OrderStatus } from './orders';
 import {
   buildGeneratedShoppingListDraft,
   buildShoppingListInventoryPreview,
@@ -109,11 +109,11 @@ export const adminAiShoppingListApplySchema = z
     }
   });
 
-const statusesBySource: Record<Exclude<ShoppingListSourceMode, 'selected'>, number[]> = {
-  confirmed: [2],
-  dispatched: [3],
-  posted: [11],
-  'posted-and-confirmed': [11, 2],
+const statusesBySource: Record<Exclude<ShoppingListSourceMode, 'selected'>, OrderStatus[]> = {
+  confirmed: [ORDER_STATUS.CONFIRMED],
+  dispatched: [ORDER_STATUS.DISPATCHED],
+  posted: [ORDER_STATUS.POSTED],
+  'posted-and-confirmed': [ORDER_STATUS.POSTED, ORDER_STATUS.CONFIRMED],
 };
 
 const defaultTitles: Record<ShoppingListSourceMode, string> = {
@@ -124,7 +124,7 @@ const defaultTitles: Record<ShoppingListSourceMode, string> = {
   'posted-and-confirmed': 'Posted and confirmed orders shopping list',
 };
 
-async function loadStatusOrders(status: number) {
+async function loadStatusOrders(status: OrderStatus) {
   const items = [];
   let page = 1;
   let totalPages = 1;

@@ -35,7 +35,52 @@ describe('admin assistant Analytics adapter', () => {
         products: Array.from({ length: 35 }, (_, index) => ({
           id: String(index + 1),
           title: `Product ${index + 1}`,
+          sku: null,
+          categoryName: null,
+          brandName: null,
+          postedOrders: 35 - index,
+          postedUnits: 35 - index,
+          paidOrders: index,
+          returnedOrders: 0,
+          activeOrders: 0,
+          terminalPaidRatePct: null,
+          costCoveragePct: 100,
+          projectedContributionDzd: 0,
+          deliveryMedianHours: null,
+          metaAssociations: [],
+          viewCount: 0,
+          websiteConversionRate: 0,
+          changes: { unitsPct: null },
         })),
+        coverage: {
+          projectedOrders: 0,
+          costCompleteOrders: 0,
+          projectedCoveragePct: 100,
+          settledOrders: 0,
+          settlementCoveragePct: null,
+          metaDays: 0,
+          pendingRollforwardDzd: 0,
+        },
+        basketPairs: [],
+        geography: { wilayas: [], communes: [], metaRegions: [] },
+        customers: {
+          summary: {
+            customers: 0,
+            repeatCustomers: 0,
+            repeatRate: 0,
+            secondOrderConversionPct: 0,
+            secondOrderEligibleCustomers: 0,
+            secondOrderConvertedCustomers: 0,
+            secondOrderWindowDays: 30,
+            averageOrders: 0,
+            averageOrderValue: 0,
+            medianReorderIntervalDays: null,
+            averageContributionLtvDzd: null,
+            acquisitionPaybackPct: null,
+            acquisitionCoveragePct: null,
+          },
+          rows: [],
+        },
       },
       effectiveRanges: [
         {
@@ -57,7 +102,7 @@ describe('admin assistant Analytics adapter', () => {
       ],
       warnings: [{ key: 'projectedCostCoverage', value: 92 }],
       diagnostics: { queryDurationMs: 42, responseSizeBytes: 10_000 },
-    } as unknown as AnalyticsPayload;
+    } satisfies AnalyticsPayload;
 
     const result = compactAnalyticsForAssistant(payload);
 

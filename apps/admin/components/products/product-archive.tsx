@@ -55,7 +55,7 @@ export function ProductArchive({ initialProducts }: { initialProducts: ArchivedP
         <WorkspaceActions>
           <Link
             href={`/${locale}/products`}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-[0.75rem] bg-secondary px-4 text-sm font-semibold text-secondary-foreground hover:bg-accent"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--shape-radius-control)] bg-secondary px-4 text-sm font-semibold text-secondary-foreground hover:bg-accent"
           >
             <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden="true" />
             <span>{nav('products')}</span>

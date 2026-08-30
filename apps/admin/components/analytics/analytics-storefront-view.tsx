@@ -91,14 +91,14 @@ export function StorefrontView({
                   tickFormatter={(value) => formatDate(locale, String(value))}
                   tickLine={false}
                   axisLine={false}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
                 <YAxis
                   yAxisId="traffic"
                   tickLine={false}
                   axisLine={false}
                   width={42}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
                 <YAxis
                   yAxisId="outcome"
@@ -106,7 +106,7 @@ export function StorefrontView({
                   tickLine={false}
                   axisLine={false}
                   width={36}
-                  fontSize={11}
+                  fontSize="var(--type-size-label-px)"
                 />
                 <Tooltip {...chartTooltip(locale)} />
                 <Area
@@ -114,9 +114,9 @@ export function StorefrontView({
                   type="monotone"
                   dataKey="sessions"
                   name={copy.metrics.sessions}
-                  fill="#2563eb"
+                  fill="var(--chart-blue)"
                   fillOpacity={0.12}
-                  stroke="#2563eb"
+                  stroke="var(--chart-blue)"
                   strokeWidth={2}
                 />
                 <Line
@@ -124,7 +124,7 @@ export function StorefrontView({
                   type="monotone"
                   dataKey="purchases"
                   name={copy.metrics.purchases}
-                  stroke="#0f766e"
+                  stroke="var(--chart-teal)"
                   strokeWidth={2.3}
                   dot={false}
                 />
@@ -133,7 +133,7 @@ export function StorefrontView({
                   type="monotone"
                   dataKey="errors"
                   name={copy.labels.errors}
-                  stroke="#e11d48"
+                  stroke="var(--chart-rose)"
                   strokeWidth={1.6}
                   dot={false}
                 />

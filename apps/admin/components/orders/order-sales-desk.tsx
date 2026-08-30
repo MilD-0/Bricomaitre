@@ -132,7 +132,7 @@ export function OrderSalesDesk({
           if (!open) reset();
         }}
       >
-        <DialogContent className="h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] max-w-none overflow-y-auto rounded-xl p-4 sm:h-auto sm:max-h-[92vh] sm:max-w-3xl sm:rounded-[1.5rem] sm:p-6">
+        <DialogContent className="h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] max-w-none overflow-y-auto rounded-xl p-4 sm:h-auto sm:max-h-[92vh] sm:max-w-3xl sm:rounded-[var(--shape-radius-overlay)] sm:p-6">
           <DialogHeader>
             <DialogTitle>{t('newOrderTitle')}</DialogTitle>
             <DialogDescription>{t('newOrderDescription')}</DialogDescription>

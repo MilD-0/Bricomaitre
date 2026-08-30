@@ -642,7 +642,7 @@ export function OrdersWorkflows({
         aria-label={t('adminWorkspace.orders.operations')}
         className="flex flex-wrap items-center gap-2 border-b border-border/60 bg-muted/[0.1] px-3 py-2.5"
       >
-        <span className="me-auto hidden text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground sm:inline">
+        <span className="me-auto hidden text-xs font-medium uppercase tracking-[var(--type-tracking-p080)] text-muted-foreground sm:inline">
           {t('adminWorkspace.orders.operations')}
         </span>
         <SplitActionButton

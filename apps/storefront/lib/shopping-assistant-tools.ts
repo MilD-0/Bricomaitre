@@ -326,7 +326,7 @@ export function buildShoppingAssistantTools(input: {
           orderId: order.id,
           createdAt: order.createdAt,
           updatedAt: order.updatedAt,
-          tracking: getCustomerOrderTrackingState(order.confirmed),
+          tracking: getCustomerOrderTrackingState(order.inHouseStatus),
           deliveryMode: order.delivery === 1 ? 'stop_desk' : 'home',
           currency: 'DZD' as const,
           productSubtotal: order.productSubtotal,

@@ -4,6 +4,5 @@ export {
   cleanEcotrackEnvValue,
   getEcotrackConfig,
   getEcotrackProviderEnv,
-  type EcotrackExtendedRateLimitSnapshot,
   type EcotrackProvider,
 } from './ecotrack-provider';

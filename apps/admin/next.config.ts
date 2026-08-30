@@ -62,7 +62,21 @@ const nextConfig: NextConfig = {
 };
 
 export default withSentryConfig(withNextIntl(nextConfig), {
-  silent: true,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT_ADMIN,
+  release: { name: process.env.SENTRY_RELEASE },
+  silent: process.env.CI !== 'true',
+  sourcemaps: {
+    assets: [
+      path.join(appRoot, '.next/server'),
+      path.join(appRoot, '.next/static/chunks'),
+      path.join(appRoot, 'dist/run-background-workers.cjs'),
+      path.join(appRoot, 'dist/run-background-workers.cjs.map'),
+    ],
+    deleteSourcemapsAfterUpload: true,
+  },
+  widenClientFileUpload: true,
   webpack: {
     treeshake: {
       removeDebugLogging: true,

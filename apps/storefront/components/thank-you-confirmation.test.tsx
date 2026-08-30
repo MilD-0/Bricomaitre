@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CHECKOUT_CONFIRMATION_KEY } from '@/lib/checkout';
@@ -11,46 +12,47 @@ vi.mock('@/lib/analytics', () => ({ trackCheckoutEvent: mocks.track }));
 vi.mock('@/components/storefront-image', () => ({
   StorefrontImage: ({ src }: { src: string }) => <span data-image-src={src} />,
 }));
-const labels = Object.fromEntries(
-  [
-    'verifying',
-    'title',
-    'description',
-    'orderNumber',
-    'nextTitle',
-    'nextOne',
-    'nextTwo',
-    'nextThree',
-    'summary',
-    'quantity',
-    'subtotal',
-    'delivery',
-    'total',
-    'customer',
-    'phone',
-    'wilaya',
-    'commune',
-    'address',
-    'deliveryMode',
-    'homeDelivery',
-    'officeDelivery',
-    'fallback',
-    'unavailableTitle',
-    'unavailableBody',
-    'retry',
-    'browseProducts',
-    'trackingTitle',
-    'trackingLive',
-    'trackingWaiting',
-    'trackingPreparing',
-    'trackingOnWay',
-    'trackingDelivered',
-    'trackingDelayed',
-    'trackingCancelled',
-    'trackingReturned',
-    'trackingFailed',
-  ].map((key) => [key, key]),
-) as never;
+const labelKeys = [
+  'verifying',
+  'title',
+  'description',
+  'orderNumber',
+  'nextTitle',
+  'nextOne',
+  'nextTwo',
+  'nextThree',
+  'summary',
+  'quantity',
+  'subtotal',
+  'delivery',
+  'total',
+  'customer',
+  'phone',
+  'wilaya',
+  'commune',
+  'address',
+  'deliveryMode',
+  'homeDelivery',
+  'officeDelivery',
+  'fallback',
+  'unavailableTitle',
+  'unavailableBody',
+  'retry',
+  'browseProducts',
+  'trackingTitle',
+  'trackingLive',
+  'trackingWaiting',
+  'trackingPreparing',
+  'trackingOnWay',
+  'trackingDelivered',
+  'trackingDelayed',
+  'trackingCancelled',
+  'trackingReturned',
+  'trackingFailed',
+] as const;
+const labels: ComponentProps<typeof ThankYouConfirmation>['labels'] = Object.fromEntries(
+  labelKeys.map((key) => [key, key]),
+) as Record<(typeof labelKeys)[number], string>;
 
 const order: StorefrontOrderResponseItem = {
   id: 42,
@@ -90,7 +92,7 @@ const order: StorefrontOrderResponseItem = {
   promoDiscountAmount: 0,
   promoFinalSubtotal: null,
   note: null,
-  confirmed: 0,
+  inHouseStatus: 0,
   noAnswerCount: 0,
   confirmedAt: null,
   hasStatusHistory: false,
@@ -191,7 +193,7 @@ describe('ThankYouConfirmation', () => {
 
   it('renders a connected rail with completed connectors and one current node', () => {
     mocks.verify.mockImplementationOnce(() => new Promise(() => undefined));
-    const inDeliveryOrder = { ...order, confirmed: 7 as const };
+    const inDeliveryOrder = { ...order, inHouseStatus: 7 as const };
     render(
       <ThankYouConfirmation
         locale="fr"

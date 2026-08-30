@@ -40,7 +40,7 @@ import {
   filterRecentConfirmedOrders,
   type EcotrackCatalogExportData,
 } from './order-export';
-import type { OrderStatusHistoryRecord } from './orders';
+import { ORDER_STATUS, type OrderStatusHistoryRecord } from './orders';
 import { importAdCostsSpreadsheet } from './stats-ad-costs';
 import { importStatsSpreadsheet } from './stats-order-import';
 import { refreshAdminReportingSnapshots } from './stats';
@@ -522,7 +522,7 @@ async function loadOrdersForExport(mode: 'selected' | 'confirmed', orderIds: num
   const orderRows = await db.query.orders.findMany({
     where:
       mode === 'confirmed'
-        ? and(eq(orders.inHouseStatus, 2), inArray(orders.id, orderIds))
+        ? and(eq(orders.inHouseStatus, ORDER_STATUS.CONFIRMED), inArray(orders.id, orderIds))
         : inArray(orders.id, orderIds),
     orderBy: [asc(orders.id)],
   });
@@ -625,7 +625,7 @@ export async function runOrderEcotrackJob(
     throwIfCancelled: helpers.throwIfCancelled,
     updateProgress: helpers.updateProgress,
     updateSummary: async (summary) => {
-      await helpers.updateSummary(summary as unknown as Record<string, unknown>);
+      await helpers.updateSummary({ ...summary });
     },
   });
 }
@@ -770,8 +770,9 @@ export async function runEcotrackSyncJob(
     trigger: payload.trigger,
     actor: payload.actor,
   });
-  await helpers.updateSummary(result as unknown as Record<string, unknown>);
-  return result as unknown as Record<string, unknown>;
+  const summary = { ...result };
+  await helpers.updateSummary(summary);
+  return summary;
 }
 
 export async function runEcotrackShipmentSyncJob(

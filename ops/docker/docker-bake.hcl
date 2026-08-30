@@ -58,6 +58,26 @@ variable "NEXT_PUBLIC_SENTRY_DSN_STOREFRONT" {
   default = ""
 }
 
+variable "NEXT_PUBLIC_SENTRY_DSN_ADMIN" {
+  default = ""
+}
+
+variable "SENTRY_ORG" {
+  default = "bricomaitre"
+}
+
+variable "SENTRY_PROJECT_ADMIN" {
+  default = "bricadmin"
+}
+
+variable "SENTRY_PROJECT_STOREFRONT_API" {
+  default = "brico-api"
+}
+
+variable "SENTRY_PROJECT_STOREFRONT" {
+  default = "storefront"
+}
+
 function "release_tags" {
   params = [image]
   result = concat(
@@ -81,12 +101,18 @@ target "_common" {
   args = {
     BRIC_IMAGE_REVISION = IMAGE_REVISION
     BRIC_IMAGE_CREATED  = IMAGE_CREATED
+    SENTRY_RELEASE      = IMAGE_REVISION
   }
 }
 
 target "_storefront_api" {
   inherits   = ["_common"]
   dockerfile = "ops/docker/Dockerfile.storefront-api"
+  args = {
+    SENTRY_ORG                    = SENTRY_ORG
+    SENTRY_PROJECT_STOREFRONT_API = SENTRY_PROJECT_STOREFRONT_API
+  }
+  secret = ["id=sentry_auth_token,env=SENTRY_AUTH_TOKEN"]
 }
 
 target "storefront-api-web" {
@@ -119,11 +145,15 @@ target "_admin" {
   args = {
     GOOGLE_CLIENT_ID        = GOOGLE_CLIENT_ID
     APPLICATION_ORIGIN      = BETTER_AUTH_URL
+    NEXT_PUBLIC_SENTRY_DSN_ADMIN = NEXT_PUBLIC_SENTRY_DSN_ADMIN
+    SENTRY_ORG              = SENTRY_ORG
+    SENTRY_PROJECT_ADMIN    = SENTRY_PROJECT_ADMIN
     STOREFRONT_API_BASE_URL = STOREFRONT_BUILD_API_BASE_URL
   }
   secret = [
     "id=google_client_secret,env=GOOGLE_CLIENT_SECRET",
     "id=better_auth_secret,env=BETTER_AUTH_SECRET",
+    "id=sentry_auth_token,env=SENTRY_AUTH_TOKEN",
   ]
 }
 
@@ -166,8 +196,10 @@ target "storefront-web" {
     NEXT_PUBLIC_SENTRY_DSN_STOREFRONT                   = NEXT_PUBLIC_SENTRY_DSN_STOREFRONT
     NEXT_PUBLIC_SENTRY_ENVIRONMENT                          = "production"
     NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE_STOREFRONT    = "0.1"
-    SENTRY_RELEASE                                           = SHA_TAG
+    SENTRY_ORG                                               = SENTRY_ORG
+    SENTRY_PROJECT_STOREFRONT                                = SENTRY_PROJECT_STOREFRONT
   }
+  secret     = ["id=sentry_auth_token,env=SENTRY_AUTH_TOKEN"]
   tags       = release_tags("storefront-web")
   cache-from = [registry_cache("storefront-web")]
   cache-to   = [registry_cache_max("storefront-web")]
