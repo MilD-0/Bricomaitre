@@ -19,8 +19,13 @@ import {
   storefrontPathCoverage,
 } from './analytics';
 import { ANALYTICS_FACT_SEMANTICS_VERSION } from './analytics-fact-contract';
+import { dayInTimezone } from './analytics/date-range';
 
 describe('analytics filter model', () => {
+  it('resolves the Algiers reporting day across the UTC midnight boundary', () => {
+    expect(dayInTimezone(new Date('2026-08-30T23:11:00.000Z'))).toBe('2026-08-31');
+  });
+
   it('normalizes presets, comparison windows and automatic grain', () => {
     expect(
       resolveAnalyticsFilters(

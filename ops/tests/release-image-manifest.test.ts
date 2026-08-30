@@ -76,11 +76,7 @@ describe('release image manifest assembler', () => {
       `BRIC_IMAGE_ADMIN_WORKER=${imageRef('admin-worker')}`,
       `BRIC_IMAGE_ADMIN_MIGRATIONS=${imageRef('admin-migrations')}`,
     ],
-    [
-      `BRIC_IMAGE_STOREFRONT_WEB=${imageRef('storefront-web')}`,
-      'BRIC_STOREFRONT_APP=storefront',
-      'BRIC_STOREFRONT_STATIC_PAGES=123',
-    ],
+    [`BRIC_IMAGE_STOREFRONT_WEB=${imageRef('storefront-web')}`, 'BRIC_STOREFRONT_APP=storefront'],
   ];
 
   function writeParts(parts = validParts) {
@@ -100,10 +96,9 @@ describe('release image manifest assembler', () => {
 
     expect(result.status).toBe(0);
     const manifest = readFileSync(output, 'utf8');
-    expect(manifest.split('\n').filter(Boolean)).toHaveLength(8);
+    expect(manifest.split('\n').filter(Boolean)).toHaveLength(7);
     expect(manifest).toContain(`BRIC_IMAGE_STOREFRONT_API=${imageRef('storefront-api-web')}`);
     expect(manifest).toContain('BRIC_STOREFRONT_APP=storefront');
-    expect(manifest).toContain('BRIC_STOREFRONT_STATIC_PAGES=123');
   });
 
   it.each([

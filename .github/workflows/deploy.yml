@@ -306,11 +306,8 @@ jobs:
             build-metadata/storefront.json \
             release-parts/.bric-images-storefront.env \
             BRIC_IMAGE_STOREFRONT_WEB:storefront-web:storefront-web
-          storefront_static_pages="$(python3 ops/scripts/extract-static-page-count.py build-metadata/storefront-web.log)"
-          printf 'BRIC_STOREFRONT_STATIC_PAGES=%s\n' "$storefront_static_pages" >> release-parts/.bric-images-storefront.env
           printf 'BRIC_STOREFRONT_APP=storefront\n' >> release-parts/.bric-images-storefront.env
           echo "- Release surface: storefront" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Prerendered routes: ${storefront_static_pages}" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: bric-images-storefront
@@ -711,7 +708,7 @@ jobs:
               mv "$api_tmp_file" "$api_env_file"
               storefront_env_file="/srv/bric/env/storefront.env"
               storefront_tmp_file="${storefront_env_file}.tmp.$$"
-              grep -v -E "^(SENTRY_DSN_STOREFRONT|NEXT_PUBLIC_SENTRY_DSN_STOREFRONT)=" "$storefront_env_file" > "$storefront_tmp_file" || true
+              grep -v -E "^(SENTRY_DSN_STOREFRONT|NEXT_PUBLIC_SENTRY_DSN_STOREFRONT|(SENTRY|NEXT_PUBLIC_SENTRY)_[A-Z0-9_]+_STOREFRONT_NEW)=" "$storefront_env_file" > "$storefront_tmp_file" || true
               printf "SENTRY_DSN_STOREFRONT=%s\nNEXT_PUBLIC_SENTRY_DSN_STOREFRONT=%s\n" \
                 "$storefront_dsn" "$storefront_browser_dsn" >> "$storefront_tmp_file"
               mv "$storefront_tmp_file" "$storefront_env_file"

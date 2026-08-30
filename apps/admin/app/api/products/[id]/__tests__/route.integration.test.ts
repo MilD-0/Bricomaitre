@@ -221,7 +221,7 @@ describe('app/api/products/[id]/route', () => {
         purchasePrice: null,
         active: false,
         inStock: false,
-        availabilityStatus: 'in_stock',
+        availabilityStatus: 'out_of_stock',
         inventoryQuantity: 3,
         brandId: null,
         categoryId: null,
@@ -280,6 +280,8 @@ describe('app/api/products/[id]/route', () => {
         oldPrice: '8.20',
         purchasePrice: null,
         active: false,
+        inStock: false,
+        availabilityStatus: 'out_of_stock',
         inventoryQuantity: 3,
         updatedAt: expect.any(Date),
       }),
@@ -310,6 +312,7 @@ describe('app/api/products/[id]/route', () => {
       data: {
         active: true,
         inStock: false,
+        availabilityStatus: 'out_of_stock',
       },
     } as never);
 
@@ -338,6 +341,7 @@ describe('app/api/products/[id]/route', () => {
       expect.objectContaining({
         active: true,
         inStock: false,
+        availabilityStatus: 'out_of_stock',
         updatedAt: expect.any(Date),
       }),
     );

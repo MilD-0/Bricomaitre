@@ -1,0 +1,14 @@
+[Unit]
+Description=Check Bricomaitre Storefront memory and OOM counters
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User={{OPERATIONS_USER}}
+Group={{OPERATIONS_GROUP}}
+WorkingDirectory=/srv/bric/current
+ExecStart=/bin/bash /usr/local/libexec/bricomaitre/check-storefront-memory.sh
+
+[Install]
+WantedBy=multi-user.target

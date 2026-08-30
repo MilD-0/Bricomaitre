@@ -26,6 +26,10 @@ export function normalizePromoCode(value: string) {
   return value.trim().toLowerCase();
 }
 
+export function productAvailabilityStatus(inStock: boolean) {
+  return inStock ? ('in_stock' as const) : ('out_of_stock' as const);
+}
+
 export const productPromoCodePayloadSchema = z.object({
   code: z.string().trim().min(1).max(120),
   promoPrice: z.coerce.number().min(0),
@@ -106,7 +110,11 @@ export const productPayloadSchema = z
         });
       }
     });
-  });
+  })
+  .transform((value) => ({
+    ...value,
+    availabilityStatus: productAvailabilityStatus(value.inStock),
+  }));
 
 export type ProductPayloadInput = z.input<typeof productPayloadSchema>;
 export type ProductPayload = z.output<typeof productPayloadSchema>;
@@ -119,7 +127,12 @@ export const productPatchSchema = z
   })
   .refine((value) => value.active !== undefined || value.inStock !== undefined, {
     message: 'At least one product field must be updated.',
-  });
+  })
+  .transform((value) =>
+    value.inStock === undefined
+      ? value
+      : { ...value, availabilityStatus: productAvailabilityStatus(value.inStock) },
+  );
 
 export type ProductPatch = z.output<typeof productPatchSchema>;
 

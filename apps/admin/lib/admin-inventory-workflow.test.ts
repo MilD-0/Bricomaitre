@@ -70,6 +70,20 @@ describe('canonical admin inventory workflow', () => {
     expect(mocks.revalidateTags).toHaveBeenCalledWith('products', 'products-meta');
     expect(mocks.revalidateStorefront).toHaveBeenCalledOnce();
 
+    const { execute } = mocks.history.mock.calls[0][1];
+    const returning = vi.fn().mockResolvedValue([{ id: 12 }]);
+    const where = vi.fn(() => ({ returning }));
+    const set = vi.fn(() => ({ where }));
+    await execute({ update: vi.fn(() => ({ set })) });
+    expect(set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        barcode: 'DRILL-12',
+        inStock: false,
+        availabilityStatus: 'out_of_stock',
+        updatedAt: expect.any(Date),
+      }),
+    );
+
     mocks.readProduct.mockResolvedValueOnce(null);
     await expect(
       updateAdminInventoryProduct(db as never, 99, { inStock: true }),
