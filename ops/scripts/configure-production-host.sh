@@ -12,7 +12,7 @@ ssh_hardening_target="/etc/ssh/sshd_config.d/00-bricomaitre-hardening.conf"
 storefront_memory_service_target="/etc/systemd/system/bricomaitre-storefront-memory.service"
 storefront_memory_timer_target="/etc/systemd/system/bricomaitre-storefront-memory.timer"
 operations_libexec_dir="/usr/local/libexec/bricomaitre"
-operations_user="${BRIC_OPERATIONS_USER:-${SUDO_USER:-deploy}}"
+operations_user="${BRIC_OPERATIONS_USER:-${SUDO_USER:-codex}}"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "run this host configuration command as root" >&2

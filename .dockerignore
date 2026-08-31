@@ -40,17 +40,19 @@ archive
 .env.*
 **/.env
 **/.env.*
+ENV_VALUES
+codexCreds
 *.pem
 *.key
-*.p12
-*.pfx
 
 bricomaitre-postgres-*.sql.gz
 *.sql.gz
 backups
 **/backups
 
-*.sw?
+*.swn
+*.swo
+*.swp
 *.save
 *.save.*
 .DS_Store

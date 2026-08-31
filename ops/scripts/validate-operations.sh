@@ -98,8 +98,8 @@ if command -v systemd-analyze >/dev/null 2>&1; then
   systemd-analyze verify "$workspace_dir/ops/host/bricomaitre-disable-thp.service"
   rendered_memory_service="$validation_dir/bricomaitre-storefront-memory.service"
   sed \
-    -e 's/{{OPERATIONS_USER}}/deploy/g' \
-    -e 's/{{OPERATIONS_GROUP}}/deploy/g' \
+    -e 's/{{OPERATIONS_USER}}/codex/g' \
+    -e 's/{{OPERATIONS_GROUP}}/codex/g' \
     "$workspace_dir/ops/host/bricomaitre-storefront-memory.service" \
     >"$rendered_memory_service"
   systemd-analyze verify \
@@ -149,7 +149,7 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
   cp "$workspace_dir/ops/env/storefront-api.env.example" "$env_dir/storefront-api.env"
   cp "$workspace_dir/ops/env/storefront.env.example" "$env_dir/storefront.env"
 
-  BRIC_ENV_DIR="$env_dir" docker compose \
+  POSTGRES_PASSWORD='compose-validation-only' BRIC_ENV_DIR="$env_dir" docker compose \
     --env-file "$workspace_dir/ops/env/infra.env.example" \
     -f "$workspace_dir/ops/docker/compose.prod.yml" \
     config --quiet

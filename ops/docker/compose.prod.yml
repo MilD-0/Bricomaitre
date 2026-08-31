@@ -254,7 +254,7 @@ x-storefront-blue: &storefront-blue
 
 services:
   postgres:
-    image: postgres:16-bookworm@sha256:60f4761b9035e0b8d5218f701a8c3382f641bf12b1604822574cf5be3baeb537
+    image: postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
     restart: unless-stopped
     init: true
     oom_score_adj: ${BRIC_POSTGRES_OOM_SCORE_ADJ:--800}
@@ -266,7 +266,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-bricadmin}
       POSTGRES_USER: ${POSTGRES_USER:-bricadmin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in infra.env}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -276,7 +276,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-bookworm@sha256:e9b2e45ecd47fbb69b877cf8d045d5cccaaaed52524b6e098b4abe8212994f73
+    image: redis:7-bookworm@sha256:71da9275c5f3fcb97d0fa0c8c5b36cc995327265420f17a04bfd544f458059f7
     restart: unless-stopped
     init: true
     oom_score_adj: ${BRIC_REDIS_OOM_SCORE_ADJ:--800}
@@ -384,7 +384,7 @@ services:
         condition: service_healthy
 
   nginx:
-    image: nginx:1.27-bookworm@sha256:6784fb0834aa7dbbe12e3d7471e69c290df3e6ba810dc38b34ae33d3c1c05f7d
+    image: nginx:stable-trixie@sha256:09cc2702709e6388d979d8030e3ab4eb1ceb699b2dced26d7543e872a822e823
     restart: unless-stopped
     init: true
     # Keep the small public edge alive long enough to route or report failures.
@@ -419,7 +419,7 @@ services:
       test:
         [
           'CMD-SHELL',
-          'nginx -t -c /etc/nginx-main/nginx.conf && curl --fail --silent --show-error --insecure --resolve "${BRIC_API_DOMAIN:-api.example.com}:443:127.0.0.1" "https://${BRIC_API_DOMAIN:-api.example.com}/api/health" >/dev/null && curl --fail --silent --show-error --insecure --resolve "${BRIC_STOREFRONT_DOMAIN:-www.example.com}:443:127.0.0.1" "https://${BRIC_STOREFRONT_DOMAIN:-www.example.com}/api/health" >/dev/null',
+          'nginx -t -c /etc/nginx-main/nginx.conf && curl --fail --silent --show-error --resolve "${BRIC_API_DOMAIN:-api.example.com}:443:127.0.0.1" "https://${BRIC_API_DOMAIN:-api.example.com}/api/health" >/dev/null && curl --fail --silent --show-error --resolve "${BRIC_STOREFRONT_DOMAIN:-www.example.com}:443:127.0.0.1" "https://${BRIC_STOREFRONT_DOMAIN:-www.example.com}/api/health" >/dev/null',
         ]
       interval: 30s
       timeout: 5s

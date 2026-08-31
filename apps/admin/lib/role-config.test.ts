@@ -11,7 +11,7 @@ describe('role config', () => {
   beforeEach(async () => {
     vi.resetModules();
     process.env.ADMIN_EMAILS = 'admin@example.com,owner@example.com';
-    process.env.DEVELOPER_EMAILS = 'private-contact-01@example.invalid,dev@example.com';
+    process.env.DEVELOPER_EMAILS = 'developer@example.com,dev@example.com';
   });
 
   afterEach(() => {

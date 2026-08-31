@@ -5,7 +5,7 @@ packages:
 
 overrides:
   '@types/react': 19.2.18
-  '@types/react-dom': 19.2.4
+  '@types/react-dom': 19.2.5
   'brace-expansion@1': 1.1.18
   'esbuild@<=0.24.2': 0.25.12
   'esbuild@>=0.27.3 <0.28.1': 0.28.1
@@ -14,6 +14,7 @@ overrides:
   undici: 7.29.0
   'uuid@11': 11.1.1
   vite: 8.0.16
+  zod: 4.4.3
 
 allowBuilds:
   '@parcel/watcher': false

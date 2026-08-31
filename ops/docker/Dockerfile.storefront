@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS base
+FROM node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS base
 
 ENV PNPM_HOME="/pnpm"
 ENV COREPACK_HOME="/corepack"
@@ -15,8 +15,8 @@ COPY packages/ai-core/package.json packages/ai-core/package.json
 COPY packages/runtime/package.json packages/runtime/package.json
 COPY packages/storefront-core/package.json packages/storefront-core/package.json
 
-RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-10.33.0,target=/corepack,sharing=shared \
-  --mount=type=cache,id=bricomaitre-pnpm-store-v10,target=/pnpm/store,sharing=shared \
+RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-11.24.0,target=/corepack,sharing=shared \
+  --mount=type=cache,id=bricomaitre-pnpm-store-v11,target=/pnpm/store,sharing=shared \
   npm_config_store_dir=/pnpm/store \
   npm_config_prefer_offline=true \
   npm_config_fetch_retries=8 \
@@ -31,8 +31,9 @@ COPY apps/storefront ./apps/storefront
 COPY packages/ai-core ./packages/ai-core
 COPY packages/runtime ./packages/runtime
 COPY packages/storefront-core ./packages/storefront-core
+COPY ops/scripts/generate-runtime-license-bundle.mjs ./ops/scripts/generate-runtime-license-bundle.mjs
 COPY ops/scripts/hydrate-next-standalone.sh ./ops/scripts/hydrate-next-standalone.sh
-COPY ops/ownership ./ops/ownership
+COPY third_party/licenses ./third_party/licenses
 
 ARG STOREFRONT_API_BASE_URL
 ARG NEXT_PUBLIC_SITE_URL="https://bricomaitre.com"
@@ -63,14 +64,18 @@ ENV SENTRY_ORG="${SENTRY_ORG}"
 ENV SENTRY_PROJECT_STOREFRONT="${SENTRY_PROJECT_STOREFRONT}"
 ENV SENTRY_RELEASE="${SENTRY_RELEASE}"
 
-RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-10.33.0,target=/corepack,sharing=shared \
+RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-11.24.0,target=/corepack,sharing=shared \
   --mount=type=cache,id=bricomaitre-storefront-next-build,target=/workspace/apps/storefront/.next/cache,sharing=locked \
   --mount=type=secret,id=sentry_auth_token \
   SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)" \
   pnpm --filter @bric/storefront build \
-  && bash ops/scripts/hydrate-next-standalone.sh apps/storefront
+  && bash ops/scripts/hydrate-next-standalone.sh apps/storefront \
+  && node ops/scripts/generate-runtime-license-bundle.mjs \
+    node_modules \
+    apps/storefront/.next/standalone/RUNTIME_THIRD_PARTY_LICENSES.txt \
+    apps/storefront/.next/standalone
 
-FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS runner
+FROM node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS runner
 
 WORKDIR /app
 ARG SENTRY_RELEASE
@@ -84,26 +89,21 @@ ENV BRIC_STOREFRONT_APP="storefront"
 
 LABEL org.opencontainers.image.title="Bricomaitre storefront web" \
   org.opencontainers.image.vendor="Bricomaitre" \
-  org.opencontainers.image.source="https://github.com/MilD-0/Bricomaitre2" \
+  org.opencontainers.image.source="https://github.com/MilD-0/Bricomaitre" \
   org.opencontainers.image.revision="${BRIC_IMAGE_REVISION}" \
   org.opencontainers.image.created="${BRIC_IMAGE_CREATED}" \
   org.opencontainers.image.licenses="AGPL-3.0-only" \
-  org.opencontainers.image.description="Bricomaitre production image." \
-  com.bricomaitre.repository="MilD-0/Bricomaitre2" \
+  org.opencontainers.image.description="Bricomaitre customer storefront runtime." \
+  com.bricomaitre.repository="MilD-0/Bricomaitre" \
   com.bricomaitre.application="storefront" \
-  com.bricomaitre.release-surface="storefront" \
-  com.bricomaitre.source-license="AGPL-3.0-only"
+  com.bricomaitre.release-surface="storefront"
 
-RUN groupadd --gid 10001 bric \
+RUN rm -rf /usr/local/lib/node_modules/npm \
+  && rm -f /usr/local/bin/npm /usr/local/bin/npx \
+  && groupadd --gid 10001 bric \
   && useradd --uid 10001 --gid bric --home-dir /app --shell /usr/sbin/nologin --no-create-home bric
-COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./BRICOMAITRE_AI_AGENT_BOUNDARY.md
-COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./AGENTS.md
-COPY --chown=bric:bric ops/ownership/AI_AGENT_BOUNDARY.md ./CLAUDE.md
-COPY --chown=bric:bric ops/ownership/AI_POLICY.md ./AI_POLICY.md
-COPY --chown=bric:bric ops/ownership/BRICOMAITRE_AUTHORIZED_RELEASE.txt ./BRICOMAITRE_AUTHORIZED_RELEASE.txt
-COPY --chown=bric:bric ops/ownership/LICENSE ./LICENSE
-COPY --chown=bric:bric ops/ownership/NOTICE ./NOTICE
-COPY --chown=bric:bric ops/ownership/SECURITY.md ./SECURITY.md
+COPY --chown=bric:bric LICENSE NOTICE SECURITY.md ASSET-LICENSING.md THIRD_PARTY_NOTICES.md ./
+COPY --chown=bric:bric third_party/licenses ./third_party/licenses
 COPY --chown=bric:bric ops/scripts/prune-next-runtime-cache.mjs ./prune-next-runtime-cache.mjs
 COPY --chown=bric:bric ops/scripts/run-storefront-with-cache-pruning.mjs ./run-storefront-with-cache-pruning.mjs
 COPY --from=base --chown=bric:bric /workspace/apps/storefront/.next/standalone ./

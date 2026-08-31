@@ -8,6 +8,8 @@ node_modules
 playwright-report
 test-results
 pnpm-lock.yaml
+LICENSE
+third_party/licenses
 apps/admin/drizzle/bootstrap
 apps/admin/drizzle/migrations
 **/*.png

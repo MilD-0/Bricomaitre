@@ -108,14 +108,14 @@ describe('CatalogCard', () => {
   it('renders a canonical legacy HTTPS image instead of replacing it with a placeholder', () => {
     const html = renderToStaticMarkup(
       <CatalogCard
-        product={{ ...product, images: ['https://legacy-media.example.com/catalog/tool.jpg'] }}
+        product={{ ...product, images: ['https://competitor.example/catalog/tool.jpg'] }}
         locale="fr"
         position={4}
         labels={labels}
       />,
     );
 
-    expect(html).toContain('src="https://legacy-media.example.com/catalog/tool.jpg"');
+    expect(html).toContain('src="https://competitor.example/catalog/tool.jpg"');
     expect(html).not.toContain('catalog-card-placeholder');
   });
 });

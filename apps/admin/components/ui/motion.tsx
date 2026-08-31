@@ -62,6 +62,7 @@ export function PendingInline({
         initial={false}
         animate={{ opacity: active ? 1 : 0, y: active ? 0 : -4 }}
         transition={transition}
+        aria-hidden={!active}
         className={cn(
           'inline-flex items-center gap-2 text-xs font-medium text-muted-foreground',
           !active && 'pointer-events-none',

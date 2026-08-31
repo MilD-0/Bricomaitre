@@ -75,7 +75,7 @@ trap cleanup_failed_rollback EXIT
 
 begin_image_state_transaction
 begin_nginx_main_config_transaction "$current_release/ops/nginx/nginx.conf"
-apply_release_images "$target_slot" "$release_images_file"
+apply_release_images "$target_slot" "$release_images_file" "$verified_release_layout"
 
 compose pull "$api_service" "$admin_service" "$storefront_service"
 compose up -d --force-recreate "$api_service" "$admin_service" "$storefront_service"

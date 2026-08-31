@@ -28,10 +28,16 @@ release_images_marker_name="${BRIC_RELEASE_IMAGES_MARKER_NAME:-.bric-images.env}
 release_keep_count="${BRIC_RELEASE_KEEP_COUNT:-5}"
 image_ref_regex="${BRIC_IMAGE_REF_REGEX:-}"
 if [[ -z "$image_ref_regex" ]]; then
-  image_ref_regex='^ghcr[.]io/mild-0/bricomaitre2/[a-z0-9-]+@sha256:[a-f0-9]{64}$'
+  image_ref_regex='^ghcr[.]io/mild-0/bricomaitre/[a-z0-9-]+@sha256:[a-f0-9]{64}$'
 fi
-cosign_certificate_identity="${BRIC_COSIGN_CERTIFICATE_IDENTITY:-https://github.com/MilD-0/Bricomaitre2/.github/workflows/deploy.yml@refs/heads/main}"
+legacy_image_ref_regex="${BRIC_LEGACY_IMAGE_REF_REGEX:-}"
+if [[ -z "$legacy_image_ref_regex" ]]; then
+  legacy_image_ref_regex='^ghcr[.]io/mild-0/bricomaitre2/[a-z0-9-]+@sha256:[a-f0-9]{64}$'
+fi
+cosign_certificate_identity="${BRIC_COSIGN_CERTIFICATE_IDENTITY:-https://github.com/MilD-0/Bricomaitre/.github/workflows/deploy.yml@refs/heads/main}"
+legacy_cosign_certificate_identity="${BRIC_LEGACY_COSIGN_CERTIFICATE_IDENTITY:-https://github.com/MilD-0/Bricomaitre2/.github/workflows/deploy.yml@refs/heads/main}"
 cosign_oidc_issuer="${BRIC_COSIGN_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
+verified_release_layout=""
 
 slot_is_valid() {
   [[ "$1" == "blue" || "$1" == "green" ]]
@@ -408,11 +414,29 @@ verify_release_dir() {
   local expected_commit="${2:-}"
   local marker_file="$release_dir/$release_marker_name"
   local images_marker_file="$release_dir/$release_images_marker_name"
-  local required_files=(
+  local common_required_files=(
     "$release_dir/ops/scripts/deploy.sh"
     "$release_dir/ops/docker/compose.prod.yml"
     "$release_dir/ops/nginx/nginx.conf"
     "$release_dir/ops/nginx/templates/default.conf.template"
+    "$marker_file"
+    "$images_marker_file"
+  )
+  local public_legal_files=(
+    "$release_dir/LICENSE"
+    "$release_dir/NOTICE"
+    "$release_dir/SECURITY.md"
+    "$release_dir/ASSET-LICENSING.md"
+    "$release_dir/THIRD_PARTY_NOTICES.md"
+    "$release_dir/third_party/licenses/GPL-3.0-only.txt"
+    "$release_dir/third_party/licenses/LGPL-3.0-or-later.txt"
+    "$release_dir/third_party/licenses/SHARP-LIBVIPS-THIRD-PARTY-NOTICES.md"
+    "$release_dir/third_party/licenses/SHARP-LIBVIPS-VERSIONS.json"
+  )
+  # Retain one release-generation compatibility window so the first public
+  # release can roll back to the immediately preceding bundle. New deployments
+  # (which always supply expected_commit) must use the public legal layout.
+  local legacy_legal_files=(
     "$release_dir/ops/ownership/AI_AGENT_BOUNDARY.md"
     "$release_dir/ops/ownership/BRICOMAITRE_AUTHORIZED_RELEASE.txt"
     "$release_dir/ops/ownership/AI_POLICY.md"
@@ -425,17 +449,38 @@ verify_release_dir() {
     "$release_dir/NOTICE"
     "$release_dir/SECURITY.md"
     "$release_dir/.well-known/ai-policy.md"
-    "$marker_file"
-    "$images_marker_file"
   )
   local file
 
-  for file in "${required_files[@]}"; do
+  verified_release_layout=""
+
+  for file in "${common_required_files[@]}"; do
     if [[ ! -f "$file" ]]; then
       echo "release is missing required file: $file" >&2
       exit 1
     fi
   done
+
+  release_has_all_files() {
+    local candidate
+    for candidate in "$@"; do
+      [[ -f "$candidate" ]] || return 1
+    done
+  }
+
+  if release_has_all_files "${public_legal_files[@]}"; then
+    # Consumed by rollback.sh after this library returns.
+    # shellcheck disable=SC2034
+    verified_release_layout="public"
+  elif [[ -z "$expected_commit" ]] && release_has_all_files "${legacy_legal_files[@]}"; then
+    # Consumed by rollback.sh after this library returns.
+    # shellcheck disable=SC2034
+    verified_release_layout="legacy"
+    echo 'warning: accepting a retained legacy release for rollback compatibility' >&2
+  else
+    echo 'release is missing the complete public legal/license surface' >&2
+    exit 1
+  fi
 
   set -a
   # shellcheck disable=SC1090
@@ -466,8 +511,17 @@ slot_env_suffix() {
 
 verify_image_ref_format() {
   local image_ref="${1:?image ref is required}"
+  local verification_profile="${2:-public}"
+  local expected_regex="$image_ref_regex"
 
-  if [[ ! "$image_ref" =~ $image_ref_regex ]]; then
+  if [[ "$verification_profile" == "legacy" ]]; then
+    expected_regex="$legacy_image_ref_regex"
+  elif [[ "$verification_profile" != "public" ]]; then
+    echo "invalid image verification profile: $verification_profile" >&2
+    return 1
+  fi
+
+  if [[ ! "$image_ref" =~ $expected_regex ]]; then
     echo "invalid image ref; expected immutable GHCR digest ref: $image_ref" >&2
     return 1
   fi
@@ -475,6 +529,15 @@ verify_image_ref_format() {
 
 verify_signed_image() {
   local image_ref="${1:?image ref is required}"
+  local verification_profile="${2:-public}"
+  local expected_identity="$cosign_certificate_identity"
+
+  if [[ "$verification_profile" == "legacy" ]]; then
+    expected_identity="$legacy_cosign_certificate_identity"
+  elif [[ "$verification_profile" != "public" ]]; then
+    echo "invalid image verification profile: $verification_profile" >&2
+    return 1
+  fi
 
   if ! command -v cosign >/dev/null 2>&1; then
     echo "cosign is required on the VPS before registry-based deploys" >&2
@@ -482,7 +545,7 @@ verify_signed_image() {
   fi
 
   cosign verify \
-    --certificate-identity "$cosign_certificate_identity" \
+    --certificate-identity "$expected_identity" \
     --certificate-oidc-issuer "$cosign_oidc_issuer" \
     "$image_ref" >/dev/null
 }
@@ -527,11 +590,17 @@ env_value_or_default() {
 apply_release_images() {
   local target_slot="${1:?target slot is required}"
   local images_file="${2:?images manifest is required}"
+  local verification_profile="${3:-public}"
   local slot_suffix
   local state_tmp
 
   require_slot "$target_slot"
   require_release_image_manifest "$images_file"
+
+  if [[ "$verification_profile" != "public" && "$verification_profile" != "legacy" ]]; then
+    echo "invalid image verification profile: $verification_profile" >&2
+    return 1
+  fi
 
   local release_storefront_api="$BRIC_IMAGE_STOREFRONT_API"
   local release_storefront_meta_worker="$BRIC_IMAGE_STOREFRONT_META_WORKER"
@@ -551,8 +620,8 @@ apply_release_images() {
   local image_ref
 
   for image_ref in "${image_refs[@]}"; do
-    verify_image_ref_format "$image_ref"
-    verify_signed_image "$image_ref"
+    verify_image_ref_format "$image_ref" "$verification_profile"
+    verify_signed_image "$image_ref" "$verification_profile"
     docker pull "$image_ref"
   done
 

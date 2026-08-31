@@ -71,7 +71,7 @@ echo 'synthetic signing succeeded'
       env: {
         ...process.env,
         PATH: `${directory}:${process.env.PATH ?? ''}`,
-        IMAGE_NAMESPACE: 'ghcr.io/mild-0/bricomaitre2',
+        IMAGE_NAMESPACE: 'ghcr.io/mild-0/bricomaitre',
         ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'synthetic-request-token',
         ACTIONS_ID_TOKEN_REQUEST_URL: 'https://oidc.invalid/token?job=1',
         FAKE_COSIGN_MODE: mode,
@@ -107,7 +107,7 @@ describe('release image signing retries', () => {
     expect(result.oidcCalls).toBe(2);
     expect(result.stderr).toContain('transient network error; retrying');
     expect(result.output).toContain(
-      `BRIC_IMAGE_ADMIN=ghcr.io/mild-0/bricomaitre2/admin-web@${result.digest}`,
+      `BRIC_IMAGE_ADMIN=ghcr.io/mild-0/bricomaitre/admin-web@${result.digest}`,
     );
   });
 

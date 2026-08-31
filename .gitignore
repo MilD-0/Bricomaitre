@@ -19,6 +19,8 @@ legacy-mongo-exports/
 lighthouse-reports/
 .bric-*.env
 bric-local-build/
+codexCreds
+ENV_VALUES
 *.build.log
 .env
 .env.local
@@ -32,9 +34,6 @@ bric-local-build/
 
 .DS_Store
 *.pem
-*.key
-*.p12
-*.pfx
 *.tsbuildinfo
 .pnpm-debug.log*
 npm-debug.log*
@@ -58,6 +57,12 @@ skills-lock.json
 **/skills-lock.json
 ops/runtime/
 
-*.sw?
+*.swn
+*.swo
+*.swp
 *.save
 *.save.*
+BricoMaitre_Pixel_Fix_Brief.pdf
+ops/scripts/generate-pixel-response-brief.mjs
+BricoMaitre_Pixel_Response_Brief.pdf
+docs/BricoMaitre_Pixel_Response_Brief.md
