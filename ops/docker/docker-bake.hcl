@@ -1,5 +1,5 @@
 variable "IMAGE_NAMESPACE" {
-  default = "ghcr.io/mild-0/bricomaitre2"
+  default = "ghcr.io/mild-0/bricomaitre"
 }
 
 variable "SHA_TAG" {

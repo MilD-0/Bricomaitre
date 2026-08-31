@@ -276,7 +276,7 @@ describe('app/api/orders/route', () => {
                     lastName: 'Hopper',
                     phoneNumber1: '0660000000',
                     phoneNumber2: null,
-                    cartProducts: ['f00000000000000000000005', '2'],
+                    cartProducts: ['696b80ad978cdf3fa9f5915a', '2'],
                     delivery: 0,
                     state: 16,
                     city: 'Algiers',
@@ -308,7 +308,7 @@ describe('app/api/orders/route', () => {
           where: vi.fn().mockResolvedValue([
             {
               id: 31,
-              mongoId: 'f00000000000000000000005',
+              mongoId: '696b80ad978cdf3fa9f5915a',
               brandId: 4,
               title: 'Legacy Lamp',
               price: 300,
@@ -345,7 +345,7 @@ describe('app/api/orders/route', () => {
           {
             productId: 31,
             brandId: 4,
-            rawValue: 'f00000000000000000000005',
+            rawValue: '696b80ad978cdf3fa9f5915a',
             title: 'Legacy Lamp',
             unitPrice: 300,
             quantity: 1,

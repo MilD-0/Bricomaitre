@@ -18,12 +18,12 @@
     "./pricing": "./src/pricing.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^4.0.42",
-    "ai": "^7.0.66",
-    "zod": "^4.4.3"
+    "@ai-sdk/openai": "^4.0.52",
+    "ai": "^7.0.85",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

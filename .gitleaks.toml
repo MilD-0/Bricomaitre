@@ -1,24 +1,5 @@
 title = "Bricomaitre secret scanning"
-minVersion = "8.30.0"
+minVersion = "8.18.4"
 
 [extend]
 useDefault = true
-
-[[allowlists]]
-description = "Deterministic UUID session identifiers in exact AI test fixtures"
-targetRules = ["generic-api-key"]
-condition = "AND"
-regexTarget = "secret"
-regexes = [
-  '''^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$''',
-]
-paths = [
-  '''(^|/)apps/admin/app/api/ai/chat/route\.integration\.test\.ts$''',
-  '''(^|/)apps/admin/components/admin-ai-chat\.test\.tsx$''',
-  '''(^|/)apps/admin/lib/admin-ai-chat-stream\.test\.ts$''',
-  '''(^|/)apps/admin/lib/admin-ai-runtime\.test\.ts$''',
-  '''(^|/)apps/admin/tests/browser/admin-ai-assistant\.spec\.ts$''',
-  '''(^|/)adminstration/app/api/ai/chat/route\.integration\.test\.ts$''',
-  '''(^|/)adminstration/components/admin-ai-chat\.test\.tsx$''',
-  '''(^|/)adminstration/lib/admin-ai-chat-stream\.test\.ts$''',
-]

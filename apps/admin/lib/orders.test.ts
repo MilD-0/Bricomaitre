@@ -114,8 +114,8 @@ describe('lib/orders', () => {
   });
 
   it('does not parse Mongo object ids as numeric product ids', () => {
-    expect(isMongoObjectId('f00000000000000000000005')).toBe(true);
-    expect(parseOrderProductId('f00000000000000000000005')).toBeNull();
+    expect(isMongoObjectId('696b80ad978cdf3fa9f5915a')).toBe(true);
+    expect(parseOrderProductId('696b80ad978cdf3fa9f5915a')).toBeNull();
     expect(parseOrderProductId('12chairs')).toBeNull();
     expect(parseOrderProductId('12')).toBe(12);
   });

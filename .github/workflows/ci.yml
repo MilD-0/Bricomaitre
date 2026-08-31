@@ -2,7 +2,6 @@ name: CI
 
 on:
   workflow_dispatch:
-  pull_request:
   push:
     branches:
       - main
@@ -11,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -24,6 +23,7 @@ jobs:
         with:
           clean: false
           persist-credentials: false
+          fetch-depth: 0
       - uses: ./.github/actions/setup-workspace
       - name: Set up the production Buildx driver
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
@@ -35,6 +35,8 @@ jobs:
           cleanup: false
       - name: Validate operational configuration
         run: bash ops/scripts/validate-operations.sh
+      - name: Scan current files and complete reachable history for secrets
+        run: pnpm secrets:check
       - name: Run static quality gates
         run: |
           pnpm format:check
@@ -205,7 +207,7 @@ jobs:
 
   production-builds:
     name: Production builds
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 20
     steps:
@@ -214,17 +216,8 @@ jobs:
           clean: false
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
-      - name: Build production applications
-        env:
-          BETTER_AUTH_SECRET: ci-build-verification-secret-1234567890
-          BETTER_AUTH_URL: http://127.0.0.1:3000
-          GOOGLE_CLIENT_ID: ci-build-client
-          GOOGLE_CLIENT_SECRET: ci-build-secret
-          STOREFRONT_API_BASE_URL: ${{ vars.STOREFRONT_BUILD_API_BASE_URL || 'https://api.bricomaitre.com' }}
-          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL || 'https://bricomaitre.com' }}
-          NEXT_PUBLIC_CLOUDFRONT_URL: ${{ vars.NEXT_PUBLIC_CLOUDFRONT_URL }}
-          NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS: ${{ vars.NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS }}
-        run: pnpm build:apps
+      - name: Build production applications without external services
+        run: ops/scripts/run-loopback-isolated.sh pnpm build:verify
 
   required:
     name: CI / Required

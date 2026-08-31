@@ -8,14 +8,20 @@ const storageState = process.env.ADMIN_PLAYWRIGHT_STORAGE_STATE?.trim() || defau
 
 function readLoopbackOrigin(name: string, fallback: string) {
   const origin = new URL(process.env[name] ?? fallback);
-  if (origin.protocol !== 'http:' || origin.hostname !== '127.0.0.1' || !origin.port) {
-    throw new Error(`${name} must be an HTTP 127.0.0.1 origin with an explicit port.`);
+  if (
+    origin.protocol !== 'http:' ||
+    !['localhost', '127.0.0.1'].includes(origin.hostname) ||
+    !origin.port
+  ) {
+    throw new Error(`${name} must be an HTTP localhost or 127.0.0.1 origin with an explicit port.`);
   }
   return origin.origin;
 }
 
-const adminOrigin = readLoopbackOrigin('BRIC_PLAYWRIGHT_ADMIN_ORIGIN', 'http://127.0.0.1:3000');
-const adminPort = new URL(adminOrigin).port;
+const adminOrigin = readLoopbackOrigin('BRIC_PLAYWRIGHT_ADMIN_ORIGIN', 'http://localhost:3000');
+const adminUrl = new URL(adminOrigin);
+const adminPort = adminUrl.port;
+const adminReadinessOrigin = `http://127.0.0.1:${adminPort}`;
 
 export default defineConfig({
   testDir: './tests/browser',
@@ -50,7 +56,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'pnpm dev --hostname 127.0.0.1',
-    url: `${adminOrigin}/api/auth/get-session`,
+    url: `${adminReadinessOrigin}/android-chrome-192x192.png`,
     reuseExistingServer: false,
     timeout: 60_000,
     env: {

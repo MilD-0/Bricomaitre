@@ -34,7 +34,6 @@ request() {
     --fail \
     --silent \
     --show-error \
-    --insecure \
     --noproxy "*" \
     --max-time "${BRIC_SMOKE_TIMEOUT_SECONDS:-20}" \
     --connect-to "$domain:$proxy_port:$proxy_host:$proxy_port" \
@@ -49,7 +48,6 @@ response_headers() {
   curl \
     --silent \
     --show-error \
-    --insecure \
     --noproxy "*" \
     --max-time "${BRIC_SMOKE_TIMEOUT_SECONDS:-20}" \
     --connect-to "$domain:$proxy_port:$proxy_host:$proxy_port" \

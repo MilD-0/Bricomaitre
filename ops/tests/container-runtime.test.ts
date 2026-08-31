@@ -1,13 +1,39 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const productionDockerfiles = [
-  { path: 'ops/docker/Dockerfile.admin', appDirectory: 'apps/admin', stages: 4 },
-  { path: 'ops/docker/Dockerfile.storefront-api', appDirectory: 'apps/storefront-api', stages: 3 },
-  { path: 'ops/docker/Dockerfile.storefront', appDirectory: 'apps/storefront', stages: 2 },
+  {
+    path: 'ops/docker/Dockerfile.admin',
+    appDirectory: 'apps/admin',
+    stages: 4,
+    runtimeStages: 3,
+  },
+  {
+    path: 'ops/docker/Dockerfile.storefront-api',
+    appDirectory: 'apps/storefront-api',
+    stages: 3,
+    runtimeStages: 2,
+  },
+  {
+    path: 'ops/docker/Dockerfile.storefront',
+    appDirectory: 'apps/storefront',
+    stages: 2,
+    runtimeStages: 1,
+  },
+];
+const licensedPackageManifests = [
+  'package.json',
+  'apps/admin/package.json',
+  'apps/storefront/package.json',
+  'apps/storefront-api/package.json',
+  'ops/package.json',
+  'packages/ai-core/package.json',
+  'packages/db/package.json',
+  'packages/runtime/package.json',
+  'packages/storefront-core/package.json',
 ];
 const vitestPackages = [
   'apps/admin/package.json',
@@ -50,21 +76,201 @@ describe('production packaging and release runtime', () => {
   );
 
   it.each(productionDockerfiles)(
-    'copies only the source inputs owned by $path',
+    'copies only the app source and release inputs required by $path',
     ({ path, appDirectory }) => {
       const source = readFileSync(resolve(workspaceRoot, path), 'utf8');
 
       expect(source).not.toMatch(/^COPY [.] [.]$/m);
       expect(source).toContain(`COPY ${appDirectory} ./${appDirectory}`);
       expect(source).toContain('COPY packages/storefront-core ./packages/storefront-core');
-      expect(source).toContain('COPY ops/ownership ./ops/ownership');
+      expect(source).not.toContain('ops/ownership');
+      expect(source).toContain(
+        'COPY --chown=bric:bric LICENSE NOTICE SECURITY.md ASSET-LICENSING.md THIRD_PARTY_NOTICES.md ./',
+      );
+      expect(source).toContain(
+        'COPY --chown=bric:bric third_party/licenses ./third_party/licenses',
+      );
       expect(source).toContain(
         'COPY ops/scripts/hydrate-next-standalone.sh ./ops/scripts/hydrate-next-standalone.sh',
       );
+      expect(source).toContain(
+        'COPY ops/scripts/generate-runtime-license-bundle.mjs ./ops/scripts/generate-runtime-license-bundle.mjs',
+      );
+      expect(source).toContain('RUNTIME_THIRD_PARTY_LICENSES.txt');
+      expect(source).toContain('node ops/scripts/generate-runtime-license-bundle.mjs');
       expect(source).toContain(`bash ops/scripts/hydrate-next-standalone.sh ${appDirectory}`);
       expect(source).toContain('node -e "require(\'next/dist/server/next-server\')"');
     },
   );
+
+  it.each(productionDockerfiles)(
+    'publishes AGPL metadata and notices in every runtime stage of $path',
+    ({ path, runtimeStages }) => {
+      const source = readFileSync(resolve(workspaceRoot, path), 'utf8');
+
+      expect(
+        source.match(/org[.]opencontainers[.]image[.]licenses="AGPL-3[.]0-only"/g),
+      ).toHaveLength(runtimeStages);
+      expect(
+        source.match(
+          /COPY --chown=bric:bric LICENSE NOTICE SECURITY[.]md ASSET-LICENSING[.]md THIRD_PARTY_NOTICES[.]md [.][/]/g,
+        ),
+      ).toHaveLength(runtimeStages);
+      expect(source.match(/COPY --chown=bric:bric third_party[/]licenses/g)).toHaveLength(
+        runtimeStages,
+      );
+      expect(
+        source.match(
+          /org[.]opencontainers[.]image[.]source="https:\/\/github[.]com\/MilD-0\/Bricomaitre"/g,
+        ),
+      ).toHaveLength(runtimeStages);
+      expect(source.match(/com[.]bricomaitre[.]repository="MilD-0\/Bricomaitre"/g)).toHaveLength(
+        runtimeStages,
+      );
+      expect(source).not.toContain('Bricomaitre2');
+      expect(source).not.toMatch(/Proprietary|com[.]bricomaitre[.]ai-policy/);
+    },
+  );
+
+  it.each(productionDockerfiles)(
+    'removes the unused npm client from every runtime stage of $path',
+    ({ path, runtimeStages }) => {
+      const source = readFileSync(resolve(workspaceRoot, path), 'utf8');
+
+      expect(source.match(/rm -rf \/usr\/local\/lib\/node_modules\/npm/g)).toHaveLength(
+        runtimeStages,
+      );
+      expect(source.match(/rm -f \/usr\/local\/bin\/npm \/usr\/local\/bin\/npx/g)).toHaveLength(
+        runtimeStages,
+      );
+    },
+  );
+
+  it.each(licensedPackageManifests)('declares AGPL-3.0-only in %s', (packagePath) => {
+    const packageJson = JSON.parse(readFileSync(resolve(workspaceRoot, packagePath), 'utf8')) as {
+      license?: string;
+    };
+
+    expect(packageJson.license).toBe('AGPL-3.0-only');
+  });
+
+  it('keeps source-verification builds isolated from production services', () => {
+    const packageJson = JSON.parse(
+      readFileSync(resolve(workspaceRoot, 'package.json'), 'utf8'),
+    ) as {
+      scripts?: Record<string, string>;
+    };
+    const buildScript = readFileSync(
+      resolve(workspaceRoot, 'ops/scripts/build-public-apps.sh'),
+      'utf8',
+    );
+
+    expect(packageJson.scripts?.['build:verify']).toBe('bash ops/scripts/build-public-apps.sh');
+    expect(buildScript).toContain("fixture_origin='http://127.0.0.1:4311'");
+    expect(buildScript).toContain('node apps/storefront/test/fixture-storefront-api.mjs');
+    expect(buildScript).toContain('export STOREFRONT_API_BASE_URL="$fixture_origin"');
+    expect(buildScript).toContain("STOREFRONT_API_TIMEOUT_MS='1000'");
+    expect(buildScript).toContain("SENTRY_AUTH_TOKEN=''");
+    expect(buildScript).toContain('pnpm build:apps');
+    expect(buildScript).not.toContain('api.bricomaitre.com');
+  });
+
+  it('requires an explicit production PostgreSQL password', () => {
+    const compose = readFileSync(resolve(workspaceRoot, 'ops/docker/compose.prod.yml'), 'utf8');
+    const infraExample = readFileSync(resolve(workspaceRoot, 'ops/env/infra.env.example'), 'utf8');
+    const adminExample = readFileSync(resolve(workspaceRoot, 'ops/env/admin.env.example'), 'utf8');
+    const storefrontApiExample = readFileSync(
+      resolve(workspaceRoot, 'ops/env/storefront-api.env.example'),
+      'utf8',
+    );
+    const validator = readFileSync(
+      resolve(workspaceRoot, 'ops/scripts/validate-operations.sh'),
+      'utf8',
+    );
+
+    expect(compose).toContain(
+      'POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in infra.env}',
+    );
+    expect(compose).not.toContain('POSTGRES_PASSWORD:-change-me');
+    expect(infraExample).toMatch(/^POSTGRES_PASSWORD=$/m);
+    expect(`${infraExample}\n${adminExample}\n${storefrontApiExample}`).not.toContain('change-me');
+    expect(validator).toContain(
+      `POSTGRES_PASSWORD='compose-validation-only' BRIC_ENV_DIR="$env_dir" docker compose`,
+    );
+  });
+
+  it('packages the public legal surface instead of legacy ownership boundaries', () => {
+    const license = readFileSync(resolve(workspaceRoot, 'LICENSE'), 'utf8');
+    const notice = readFileSync(resolve(workspaceRoot, 'NOTICE'), 'utf8');
+    const assetLicensing = readFileSync(resolve(workspaceRoot, 'ASSET-LICENSING.md'), 'utf8');
+    const thirdPartyNotices = readFileSync(
+      resolve(workspaceRoot, 'THIRD_PARTY_NOTICES.md'),
+      'utf8',
+    );
+    const release = readFileSync(resolve(workspaceRoot, '.github/workflows/deploy.yml'), 'utf8');
+    const deployVerifier = readFileSync(
+      resolve(workspaceRoot, 'ops/scripts/blue-green.sh'),
+      'utf8',
+    );
+    const lockfile = readFileSync(resolve(workspaceRoot, 'pnpm-lock.yaml'), 'utf8');
+    const libvipsVersions = JSON.parse(
+      readFileSync(
+        resolve(workspaceRoot, 'third_party/licenses/SHARP-LIBVIPS-VERSIONS.json'),
+        'utf8',
+      ),
+    ) as { vips?: string };
+
+    expect(license).toContain('GNU AFFERO GENERAL PUBLIC LICENSE');
+    expect(license).toContain('Version 3, 19 November 2007');
+    expect(notice).toContain('AGPL-3.0-only');
+    expect(notice).toContain('ASSET-LICENSING.md');
+
+    for (const assetPath of [
+      'apps/admin/app/icon.png',
+      'apps/admin/app/apple-icon.png',
+      'apps/admin/app/favicon.ico',
+      'apps/admin/public/android-chrome-192x192.png',
+      'apps/admin/public/android-chrome-512x512.png',
+      'apps/admin/public/favicon-16x16.png',
+      'apps/admin/public/favicon-32x32.png',
+      'apps/admin/public/favicon-48x48.png',
+      'apps/admin/public/mask-icon-512.png',
+      'apps/storefront/public/logo.png',
+      'apps/storefront/app/icon.png',
+      'apps/storefront/app/apple-icon.png',
+      'apps/storefront/app/favicon.ico',
+      'apps/storefront/public/icons/icon-192.png',
+      'apps/storefront/public/icons/icon-512.png',
+      'apps/storefront/public/icons/icon-maskable-512.png',
+    ]) {
+      expect(assetLicensing).toContain(`\`${assetPath}\``);
+      expect(existsSync(resolve(workspaceRoot, assetPath))).toBe(true);
+    }
+
+    for (const releaseFile of [
+      'LICENSE',
+      'NOTICE',
+      'SECURITY.md',
+      'ASSET-LICENSING.md',
+      'THIRD_PARTY_NOTICES.md',
+    ]) {
+      expect(release).toContain(releaseFile);
+      expect(deployVerifier).toContain(`$release_dir/${releaseFile}`);
+    }
+    expect(release).toContain('rsync -a third_party/licenses/');
+    expect(release).not.toContain('ops/ownership');
+    expect(release).not.toContain('AI_AGENT_BOUNDARY');
+    expect(deployVerifier).toContain(
+      'warning: accepting a retained legacy release for rollback compatibility',
+    );
+
+    expect(lockfile).toContain("'@img/sharp-libvips-linux-x64@1.3.3'");
+    expect(lockfile).toContain("'@fontsource-variable/inter@5.3.0'");
+    expect(lockfile).toContain("'@fontsource/ibm-plex-sans-arabic@5.3.0'");
+    expect(libvipsVersions.vips).toBe('8.18.6');
+    expect(thirdPartyNotices).toContain('sharp-libvips/tree/v1.3.3');
+    expect(thirdPartyNotices).toContain('libvips/tree/v8.18.6');
+  });
 
   it('prints candidate state and bounded logs when a health gate expires', () => {
     const healthGate = readFileSync(
@@ -187,16 +393,19 @@ describe('production packaging and release runtime', () => {
     expect(ci).toContain('name: CI / Required');
     expect(ci).toContain('cancel-in-progress: true');
     expect(ci).toContain('fail-fast: false');
-    expect(ci).toContain('pnpm build:apps');
-    expect(ci).toContain(
-      "if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'",
+    const productionBuilds = ci.slice(
+      ci.indexOf('  production-builds:'),
+      ci.indexOf('\n  required:'),
     );
+    expect(productionBuilds).toContain('ops/scripts/run-loopback-isolated.sh pnpm build:verify');
+    expect(productionBuilds).not.toContain('api.bricomaitre.com');
+    expect(ci).toContain("if: github.event_name == 'workflow_dispatch'");
     expect(ci).toContain('ops/scripts/run-loopback-isolated.sh pnpm test:storefront:browser');
     expect(ci).toContain(
       'ops/scripts/run-ci-check.sh "Admin browser acceptance tests" pnpm test:admin:browser',
     );
     expect(ci).toContain('ops/scripts/run-loopback-isolated.sh pnpm test:storefront:performance');
-    expect(ci.match(/ops[/]scripts[/]run-loopback-isolated[.]sh/g)).toHaveLength(2);
+    expect(ci.match(/ops[/]scripts[/]run-loopback-isolated[.]sh/g)).toHaveLength(3);
     expect(ci.match(/ops[/]scripts[/]run-with-ci-services[.]sh/g)).toHaveLength(2);
     expect(release).toContain('workflow_run:');
     expect(release).toMatch(/workflow_run:[\s\S]*branches:\s+- main/);
@@ -251,6 +460,9 @@ describe('production packaging and release runtime', () => {
     const actionReferences = [
       ...`${ci}\n${release}\n${workspaceSetup}`.matchAll(/^\s*-?\s*uses:\s+([^\s#]+)/gm),
     ].map(([, reference]) => reference);
+    expect(ci).not.toMatch(/^\s*pull_request:/m);
+    expect(ci).not.toContain('github.event.pull_request');
+    expect(ci).toContain("if: github.event_name == 'workflow_dispatch'");
     expect(actionReferences.length).toBeGreaterThan(0);
     expect(
       actionReferences.every(
@@ -380,13 +592,22 @@ describe('production packaging and release runtime', () => {
     expect(release).toContain('MARKETING_TIKTOK_DESTINATION_ENABLED=%s');
   });
 
-  it('keeps action and container pins on a bounded update schedule', () => {
+  it('keeps private dependency pins on schedule but omits the bot from public history', () => {
     const dependabot = readFileSync(resolve(workspaceRoot, '.github/dependabot.yml'), 'utf8');
+    const historyPlan = JSON.parse(
+      readFileSync(resolve(workspaceRoot, 'ops/public-release/history-plan.json'), 'utf8'),
+    ) as {
+      sanitizationProfiles: { common: { removePaths: string[]; replace: string[] } };
+    };
 
     expect(dependabot).toContain('package-ecosystem: github-actions');
     expect(dependabot).toContain('package-ecosystem: docker');
     expect(dependabot.match(/interval: monthly/g)).toHaveLength(3);
     expect(dependabot).toContain('open-pull-requests-limit: 5');
+    expect(historyPlan.sanitizationProfiles.common.removePaths).toContain('.github/dependabot.yml');
+    expect(historyPlan.sanitizationProfiles.common.replace).toContain(
+      'globally routable IP test fixtures with documentation-reserved addresses',
+    );
   });
 
   it('validates shell operations with a pinned, integrity-checked ShellCheck release', () => {
@@ -435,11 +656,11 @@ describe('production packaging and release runtime', () => {
     expect(bake).not.toContain('type=registry');
     for (const dockerfile of dockerfiles) {
       expect(dockerfile).toContain(
-        '--mount=type=cache,id=bricomaitre-pnpm-store-v10,target=/pnpm/store,sharing=shared',
+        '--mount=type=cache,id=bricomaitre-pnpm-store-v11,target=/pnpm/store,sharing=shared',
       );
       expect(dockerfile).toContain('ENV COREPACK_HOME="/corepack"');
       expect(dockerfile).toContain(
-        '--mount=type=cache,id=bricomaitre-corepack-pnpm-10.33.0,target=/corepack,sharing=shared',
+        '--mount=type=cache,id=bricomaitre-corepack-pnpm-11.24.0,target=/corepack,sharing=shared',
       );
       expect(dockerfile).toContain('npm_config_store_dir=/pnpm/store');
       expect(dockerfile).toContain('npm_config_prefer_offline=true');
@@ -717,11 +938,15 @@ describe('production packaging and release runtime', () => {
     expect(compose).toContain('nginx-storefront-image-cache:/var/cache/nginx');
     expect(compose).toContain('\n  nginx-storefront-image-cache:');
     expect(compose).toContain(
-      'curl --fail --silent --show-error --insecure --resolve "${BRIC_API_DOMAIN:-api.example.com}:443:127.0.0.1"',
+      'curl --fail --silent --show-error --resolve "${BRIC_API_DOMAIN:-api.example.com}:443:127.0.0.1"',
     );
     expect(compose).toContain(
-      'curl --fail --silent --show-error --insecure --resolve "${BRIC_STOREFRONT_DOMAIN:-www.example.com}:443:127.0.0.1"',
+      'curl --fail --silent --show-error --resolve "${BRIC_STOREFRONT_DOMAIN:-www.example.com}:443:127.0.0.1"',
     );
+    expect(compose).not.toContain('--insecure');
+    expect(
+      readFileSync(resolve(workspaceRoot, 'ops/scripts/smoke-check.sh'), 'utf8'),
+    ).not.toContain('--insecure');
     expect(nginx).toContain('$request_method $uri $server_protocol');
     expect(nginx).toContain('$request_id $remote_addr');
     expect(nginx).toContain('proxy_cache_path /var/cache/nginx/storefront-images');
@@ -817,6 +1042,10 @@ describe('production packaging and release runtime', () => {
     );
     expect(rollback).toContain('render_release_nginx_config "$target_release" "$target_slot"');
     expect(rollback).toContain('render_release_nginx_config "$current_release" "$current_slot"');
+    expect(deploy).toContain('apply_release_images "$target_slot" "$release_images_file"');
+    expect(rollback).toContain(
+      'apply_release_images "$target_slot" "$release_images_file" "$verified_release_layout"',
+    );
     expect(deploy).toContain('preserving the candidate services');
     expect(rollback).toContain('preserving the rollback candidate');
     expect(deploy.indexOf('routing_changed=true')).toBeLessThan(

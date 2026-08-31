@@ -11,7 +11,7 @@ backup_input="${1:-}"
 temporary_directory=""
 container_name="bric-postgres-restore-verify-$(date +%Y%m%d%H%M%S)-$$"
 volume_name="$container_name-data"
-restore_image="${BRIC_POSTGRES_RESTORE_IMAGE:-postgres:16-bookworm@sha256:60f4761b9035e0b8d5218f701a8c3382f641bf12b1604822574cf5be3baeb537}"
+restore_image="${BRIC_POSTGRES_RESTORE_IMAGE:-postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825}"
 restore_database="bric_restore_verify"
 restore_user="${POSTGRES_USER:-bricadmin}"
 

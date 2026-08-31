@@ -110,7 +110,7 @@ jobs:
       id-token: write
       packages: write
     env:
-      IMAGE_NAMESPACE: ghcr.io/mild-0/bricomaitre2
+      IMAGE_NAMESPACE: ghcr.io/mild-0/bricomaitre
       SHA_TAG: sha-${{ needs.release-context.outputs.sha }}
       RELEASE_CHANNEL: main
       IMAGE_REVISION: ${{ needs.release-context.outputs.sha }}
@@ -177,7 +177,7 @@ jobs:
       id-token: write
       packages: write
     env:
-      IMAGE_NAMESPACE: ghcr.io/mild-0/bricomaitre2
+      IMAGE_NAMESPACE: ghcr.io/mild-0/bricomaitre
       SHA_TAG: sha-${{ needs.release-context.outputs.sha }}
       RELEASE_CHANNEL: main
       IMAGE_REVISION: ${{ needs.release-context.outputs.sha }}
@@ -251,7 +251,7 @@ jobs:
       id-token: write
       packages: write
     env:
-      IMAGE_NAMESPACE: ghcr.io/mild-0/bricomaitre2
+      IMAGE_NAMESPACE: ghcr.io/mild-0/bricomaitre
       SHA_TAG: sha-${{ needs.release-context.outputs.sha }}
       RELEASE_CHANNEL: main
       IMAGE_REVISION: ${{ needs.release-context.outputs.sha }}
@@ -393,7 +393,7 @@ jobs:
       RELEASE_SHA: ${{ needs.release-context.outputs.sha }}
       DEPLOY_HOST: ${{ secrets.BRIC_DEPLOY_SSH_HOST }}
       DEPLOY_PORT: ${{ secrets.BRIC_DEPLOY_SSH_PORT || '2345' }}
-      DEPLOY_USER: ${{ secrets.BRIC_DEPLOY_SSH_USER }}
+      DEPLOY_USER: ${{ secrets.BRIC_DEPLOY_SSH_USER || 'codex' }}
       DEPLOY_KEY: ${{ secrets.BRIC_DEPLOY_SSH_KEY }}
       DEPLOY_KNOWN_HOSTS: ${{ secrets.BRIC_DEPLOY_KNOWN_HOSTS }}
       ECOTRACK_EMIR_BASE_URL: ${{ secrets.ECOTRACK_EMIR_BASE_URL }}
@@ -450,7 +450,6 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$DEPLOY_HOST"
-          test -n "$DEPLOY_USER"
           test -n "$DEPLOY_KEY"
           test -n "$DEPLOY_KNOWN_HOSTS"
           test -n "$GHCR_USERNAME"
@@ -499,15 +498,12 @@ jobs:
           trap 'rm -rf "$bundle_dir"' EXIT
 
           mkdir -p \
-            "$bundle_dir/.cursor/rules" \
-            "$bundle_dir/.github" \
-            "$bundle_dir/.well-known" \
             "$bundle_dir/ops/scripts" \
             "$bundle_dir/ops/docker" \
             "$bundle_dir/ops/host" \
             "$bundle_dir/ops/nginx" \
             "$bundle_dir/ops/env" \
-            "$bundle_dir/ops/ownership"
+            "$bundle_dir/third_party/licenses"
           cp release-manifest/.bric-release.env "$bundle_dir/.bric-release.env"
           cp release-manifest/.bric-images.env "$bundle_dir/.bric-images.env"
           python3 ops/scripts/verify-migration-rollback-safety.py \
@@ -517,18 +513,8 @@ jobs:
           rsync -a ops/host/ "$bundle_dir/ops/host/"
           rsync -a ops/nginx/ "$bundle_dir/ops/nginx/"
           rsync -a ops/env/ "$bundle_dir/ops/env/"
-          rsync -a ops/ownership/ "$bundle_dir/ops/ownership/"
-          cp ops/ownership/AI_AGENT_BOUNDARY.md "$bundle_dir/AGENTS.md"
-          cp ops/ownership/AI_AGENT_BOUNDARY.md "$bundle_dir/CLAUDE.md"
-          cp ops/ownership/AI_AGENT_BOUNDARY.md "$bundle_dir/GEMINI.md"
-          cp ops/ownership/AI_AGENT_BOUNDARY.md "$bundle_dir/.cursorrules"
-          cp ops/ownership/AI_AGENT_BOUNDARY.md "$bundle_dir/.windsurfrules"
-          cp LICENSE "$bundle_dir/LICENSE"
-          cp NOTICE "$bundle_dir/NOTICE"
-          cp SECURITY.md "$bundle_dir/SECURITY.md"
-          cp .well-known/ai-policy.md "$bundle_dir/.well-known/ai-policy.md"
-          cp .cursor/rules/bricomaitre-proprietary.mdc "$bundle_dir/.cursor/rules/bricomaitre-proprietary.mdc"
-          cp .github/copilot-instructions.md "$bundle_dir/.github/copilot-instructions.md"
+          rsync -a third_party/licenses/ "$bundle_dir/third_party/licenses/"
+          cp LICENSE NOTICE SECURITY.md ASSET-LICENSING.md THIRD_PARTY_NOTICES.md "$bundle_dir/"
 
           ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
             "mkdir -p '$release_path'"
