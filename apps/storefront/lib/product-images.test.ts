@@ -56,18 +56,16 @@ describe('product image policy', () => {
   });
 
   it('displays canonical legacy HTTPS images without trusting them for optimization or metadata', () => {
-    expect(
-      isDisplayableProductImageUrl('https://legacy-media.example.com/catalog/tool.jpg', env),
-    ).toBe(true);
-    expect(isSafeProductImageUrl('https://legacy-media.example.com/catalog/tool.jpg', env)).toBe(
+    expect(isDisplayableProductImageUrl('https://competitor.example/catalog/tool.jpg', env)).toBe(
+      true,
+    );
+    expect(isSafeProductImageUrl('https://competitor.example/catalog/tool.jpg', env)).toBe(false);
+    expect(isDisplayableProductImageUrl('http://competitor.example/catalog/tool.jpg', env)).toBe(
       false,
     );
     expect(
-      isDisplayableProductImageUrl('http://legacy-media.example.com/catalog/tool.jpg', env),
+      isDisplayableProductImageUrl('https://user:secret@competitor.example/tool.jpg', env),
     ).toBe(false);
-    expect(
-      isDisplayableProductImageUrl('https://user:secret@legacy-media.example.com/tool.jpg', env),
-    ).toBe(false);
-    expect(isDisplayableProductImageUrl('//legacy-media.example.com/tool.jpg', env)).toBe(false);
+    expect(isDisplayableProductImageUrl('//competitor.example/tool.jpg', env)).toBe(false);
   });
 });

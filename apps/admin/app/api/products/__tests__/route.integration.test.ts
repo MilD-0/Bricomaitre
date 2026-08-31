@@ -234,7 +234,7 @@ describe('app/api/products/route', () => {
     const rows = [
       {
         id: 1,
-        mongoId: 'f00000000000000000000005',
+        mongoId: '696b80ad978cdf3fa9f5915a',
         title: 'Metric product',
         updatedAt: new Date('2026-03-06T00:00:00.000Z'),
       },
@@ -276,7 +276,7 @@ describe('app/api/products/route', () => {
       items: [
         {
           id: 1,
-          mongoId: 'f00000000000000000000005',
+          mongoId: '696b80ad978cdf3fa9f5915a',
           title: 'Metric product',
           updatedAt: '2026-03-06T00:00:00.000Z',
           orderPurchaseCount: 12,

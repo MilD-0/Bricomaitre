@@ -23,11 +23,11 @@
     "./worker-heartbeat": "./src/worker-heartbeat.ts"
   },
   "dependencies": {
-    "@sentry/node": "10.70.0",
-    "bullmq": "^6.1.2",
+    "@sentry/node": "10.72.0",
+    "bullmq": "^6.3.2",
     "ioredis": "^6.0.0"
   },
   "devDependencies": {
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

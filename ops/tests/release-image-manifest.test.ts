@@ -9,7 +9,7 @@ const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const digestReader = resolve(workspaceRoot, 'ops/scripts/read-buildx-digest.mjs');
 const manifestAssembler = resolve(workspaceRoot, 'ops/scripts/assemble-release-image-manifest.mjs');
 const digest = `sha256:${'a'.repeat(64)}`;
-const imageRef = (name: string) => `ghcr.io/mild-0/bricomaitre2/${name}@${digest}`;
+const imageRef = (name: string) => `ghcr.io/mild-0/bricomaitre/${name}@${digest}`;
 const temporaryDirectories: string[] = [];
 
 function makeTemporaryDirectory() {
@@ -117,7 +117,7 @@ describe('release image manifest assembler', () => {
       parts: validParts.map((part, index) =>
         index === 0
           ? [
-              `BRIC_IMAGE_STOREFRONT_API=ghcr.io/mild-0/bricomaitre2/storefront-api-web:main`,
+              `BRIC_IMAGE_STOREFRONT_API=ghcr.io/mild-0/bricomaitre/storefront-api-web:main`,
               part[1],
             ]
           : part,

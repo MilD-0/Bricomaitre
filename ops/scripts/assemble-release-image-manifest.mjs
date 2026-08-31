@@ -10,7 +10,7 @@ const EXPECTED_KEYS = new Set([
   'BRIC_IMAGE_STOREFRONT_WEB',
   'BRIC_STOREFRONT_APP',
 ]);
-const IMAGE_REF_PATTERN = /^ghcr[.]io\/mild-0\/bricomaitre2\/[a-z0-9-]+@sha256:[a-f0-9]{64}$/;
+const IMAGE_REF_PATTERN = /^ghcr[.]io\/mild-0\/bricomaitre\/[a-z0-9-]+@sha256:[a-f0-9]{64}$/;
 
 const [, , outputPath, ...inputPaths] = process.argv;
 
