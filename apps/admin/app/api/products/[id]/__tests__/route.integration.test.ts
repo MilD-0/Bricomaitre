@@ -286,14 +286,7 @@ describe('app/api/products/[id]/route', () => {
         updatedAt: expect.any(Date),
       }),
     );
-    expect(setMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        slug: 'updated-product',
-        updatedBy: 'admin@example.com',
-        updatedAt: expect.any(Date),
-      }),
-    );
-    expect(updateMock).toHaveBeenCalledTimes(2);
+    expect(updateMock).toHaveBeenCalledOnce();
     expect(deleteMock).toHaveBeenCalledOnce();
     expect(startProductCatalogFeedRefreshJobMock).toHaveBeenCalledWith(
       'product:update',

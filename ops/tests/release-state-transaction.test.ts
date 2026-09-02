@@ -34,7 +34,6 @@ const legacyLegalFiles = [
   'ops/ownership/NOTICE',
   'ops/ownership/SECURITY.md',
   'AGENTS.md',
-  'CLAUDE.md',
   'LICENSE',
   'NOTICE',
   'SECURITY.md',

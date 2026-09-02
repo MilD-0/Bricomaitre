@@ -3,6 +3,7 @@ import { and, eq, isNotNull } from 'drizzle-orm';
 import type { getDb } from '@bric/db/client';
 import { landingPages, productPromoCodes, productSlugHistory, products } from '@bric/db/schema';
 import { mutateEntityWithHistory } from './action-history';
+import { landingPageSlugFromProduct } from './landing-pages';
 import { toProductMutationValues, toProductPromoRows } from './product-mutations';
 import { assertUniqueProductIdentifiers, ProductIntegrityConflictError } from './product-integrity';
 import { productPayloadSchema, type ProductPayload } from './products';
@@ -106,7 +107,8 @@ export async function replaceProductThroughCanonicalWorkflow(
         .where(eq(products.id, productId))
         .limit(1);
       if (!current) throw new ProductMutationNotFoundError(productId);
-      if (current.slug !== values.slug) {
+      const slugChanged = current.slug !== values.slug;
+      if (slugChanged) {
         await tx
           .delete(productSlugHistory)
           .where(
@@ -124,10 +126,22 @@ export async function replaceProductThroughCanonicalWorkflow(
         .update(products)
         .set({ ...values, updatedAt })
         .where(eq(products.id, productId));
-      await tx
-        .update(landingPages)
-        .set({ slug: values.slug, updatedAt, updatedBy: actor.email })
-        .where(eq(landingPages.productId, productId));
+      if (slugChanged) {
+        const pages = await tx
+          .select({ id: landingPages.id })
+          .from(landingPages)
+          .where(eq(landingPages.productId, productId));
+        for (const page of pages) {
+          await tx
+            .update(landingPages)
+            .set({
+              slug: landingPageSlugFromProduct(values, page.id),
+              updatedAt,
+              updatedBy: actor.email,
+            })
+            .where(eq(landingPages.id, page.id));
+        }
+      }
       await tx.delete(productPromoCodes).where(eq(productPromoCodes.productId, productId));
       const promoRows = toProductPromoRows(productId, data.promoCodes);
       if (promoRows.length > 0) await tx.insert(productPromoCodes).values(promoRows);
