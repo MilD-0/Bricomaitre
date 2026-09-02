@@ -22,6 +22,7 @@ import {
   createProductThroughCanonicalWorkflow,
   ProductMutationNotFoundError,
   readArchivedProductMutationPayload,
+  replaceProductThroughCanonicalWorkflow,
   restoreProductThroughCanonicalWorkflow,
 } from './product-update-workflow';
 
@@ -100,6 +101,62 @@ describe('canonical product lifecycle workflow', () => {
       inventoryQuantity: 5,
       promoCodeCount: 1,
     });
+  });
+
+  it('keeps landing-page slugs unique when the product slug changes', async () => {
+    const productWhere = vi.fn().mockResolvedValue(undefined);
+    const firstPageWhere = vi.fn().mockResolvedValue(undefined);
+    const secondPageWhere = vi.fn().mockResolvedValue(undefined);
+    const update = vi
+      .fn()
+      .mockReturnValueOnce({ set: vi.fn().mockReturnValue({ where: productWhere }) })
+      .mockReturnValueOnce({ set: vi.fn().mockReturnValue({ where: firstPageWhere }) })
+      .mockReturnValueOnce({ set: vi.fn().mockReturnValue({ where: secondPageWhere }) });
+    const select = vi
+      .fn()
+      .mockReturnValueOnce({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn().mockResolvedValue([{ slug: 'ancienne-perceuse' }]),
+          })),
+        })),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn(() => ({
+          where: vi.fn().mockResolvedValue([{ id: 41 }, { id: 42 }]),
+        })),
+      });
+    const deleteWhere = vi.fn().mockResolvedValue(undefined);
+    const tx = {
+      select,
+      update,
+      delete: vi.fn().mockReturnValue({ where: deleteWhere }),
+      insert: vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({ onConflictDoNothing: vi.fn() }),
+      }),
+    };
+    mocks.mutate.mockImplementation(async (_db, config) => config.execute(tx));
+
+    await replaceProductThroughCanonicalWorkflow(
+      'database' as never,
+      21,
+      { title: 'Perceuse compacte', price: 12_900, promoCodes: [] },
+      { email: 'admin@example.com' },
+    );
+
+    expect(update).toHaveBeenCalledTimes(3);
+    expect(update.mock.results[1]?.value.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        slug: 'perceuse-compacte-41',
+        updatedBy: 'admin@example.com',
+      }),
+    );
+    expect(update.mock.results[2]?.value.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        slug: 'perceuse-compacte-42',
+        updatedBy: 'admin@example.com',
+      }),
+    );
   });
 
   it('archives a product without deleting its historical record', async () => {
