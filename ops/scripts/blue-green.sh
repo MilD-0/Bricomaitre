@@ -444,7 +444,6 @@ verify_release_dir() {
     "$release_dir/ops/ownership/NOTICE"
     "$release_dir/ops/ownership/SECURITY.md"
     "$release_dir/AGENTS.md"
-    "$release_dir/CLAUDE.md"
     "$release_dir/LICENSE"
     "$release_dir/NOTICE"
     "$release_dir/SECURITY.md"
