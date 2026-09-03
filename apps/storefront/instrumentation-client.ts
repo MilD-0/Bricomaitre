@@ -31,9 +31,8 @@ function initializeSentryClient() {
       sendDefaultPii: false,
       integrations: [
         Sentry.browserTracingIntegration({
-          // The SDK is deliberately loaded after the rendering quiet window.
-          // A page-load span started at that point is backdated to timeOrigin
-          // and measures the deferral itself rather than route latency.
+          // The SDK loads only after an exception. Starting a page-load span
+          // then would measure the deferral rather than the page load.
           instrumentPageLoad: false,
           instrumentNavigation: true,
         }),
@@ -71,21 +70,14 @@ if (dsn && typeof window !== 'undefined') {
     bufferedExceptions.push({ error: event.reason, mechanism: 'unhandledrejection' });
     void initializeSentryClient();
   };
-  const initializeAfterInteraction = () => {
-    window.removeEventListener('pointerdown', initializeAfterInteraction);
-    window.removeEventListener('keydown', initializeAfterInteraction);
-    window.setTimeout(() => void initializeSentryClient(), 1_000);
-  };
-
   window.addEventListener('error', captureError);
   window.addEventListener('unhandledrejection', captureRejection);
-  window.addEventListener('pointerdown', initializeAfterInteraction, { passive: true });
-  window.addEventListener('keydown', initializeAfterInteraction, { passive: true });
-  window.setTimeout(() => void initializeSentryClient(), 20_000);
 }
 
 export function onRouterTransitionStart(
   ...args: Parameters<SentryClient['captureRouterTransitionStart']>
 ) {
-  void initializeSentryClient().then((Sentry) => Sentry?.captureRouterTransitionStart(...args));
+  // A normal interaction must not download and evaluate the monitoring SDK.
+  // If an error already initialized Sentry, keep tracing that broken session.
+  sentryClient?.captureRouterTransitionStart(...args);
 }

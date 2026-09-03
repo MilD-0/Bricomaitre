@@ -1,42 +1,47 @@
 'use client';
 
-import { useEffect } from 'react';
+import Script from 'next/script';
+import { useEffect, useState } from 'react';
 
 import { captureMarketingAttribution } from '@/lib/marketing-attribution';
-import {
-  loadMarketingDestinationScripts,
-  prepareMarketingDestinations,
-} from '@/lib/marketing-destinations';
+import { prepareMarketingDestinations } from '@/lib/marketing-destinations';
 
-export const MARKETING_SCRIPT_FALLBACK_DELAY_MS = 10_000;
+type MarketingPixelsProps = {
+  metaPixelId: string | null;
+  googleMeasurementId: string | null;
+};
 
-export function MarketingPixels() {
+export function MarketingPixels({ metaPixelId, googleMeasurementId }: MarketingPixelsProps) {
+  const normalizedMetaPixelId = metaPixelId?.trim() || null;
+  const normalizedGoogleMeasurementId = googleMeasurementId?.trim() || null;
+  const [metaSettled, setMetaSettled] = useState(!normalizedMetaPixelId);
+
   useEffect(() => {
     captureMarketingAttribution();
-    prepareMarketingDestinations();
-    let started = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const start = () => {
-      if (started) return;
-      started = true;
-      if (timer) globalThis.clearTimeout(timer);
-      loadMarketingDestinationScripts();
-    };
-    const scheduleFallback = () => {
-      timer ??= globalThis.setTimeout(start, MARKETING_SCRIPT_FALLBACK_DELAY_MS);
-    };
+    prepareMarketingDestinations({
+      metaPixelId: normalizedMetaPixelId,
+      googleMeasurementId: normalizedGoogleMeasurementId,
+    });
+  }, [normalizedGoogleMeasurementId, normalizedMetaPixelId]);
 
-    if (document.readyState === 'complete') scheduleFallback();
-    else window.addEventListener('load', scheduleFallback, { once: true });
-    window.addEventListener('click', start, { once: true, passive: true });
-    window.addEventListener('keydown', start, { once: true, passive: true });
-
-    return () => {
-      window.removeEventListener('load', scheduleFallback);
-      window.removeEventListener('click', start);
-      window.removeEventListener('keydown', start);
-      if (timer) globalThis.clearTimeout(timer);
-    };
-  }, []);
-  return null;
+  return (
+    <>
+      {normalizedMetaPixelId ? (
+        <Script
+          id="bric-meta-pixel"
+          src="https://connect.facebook.net/en_US/fbevents.js"
+          strategy="lazyOnload"
+          onLoad={() => setMetaSettled(true)}
+          onError={() => setMetaSettled(true)}
+        />
+      ) : null}
+      {normalizedGoogleMeasurementId && metaSettled ? (
+        <Script
+          id="bric-google-analytics"
+          src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(normalizedGoogleMeasurementId)}`}
+          strategy="lazyOnload"
+        />
+      ) : null}
+    </>
+  );
 }

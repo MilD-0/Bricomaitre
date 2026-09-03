@@ -4,10 +4,8 @@ import type { StorefrontAnalyticsPayload } from './analytics';
 import {
   buildMetaServerEvent,
   deliverClientMarketingEvent,
-  loadMarketingDestinationScripts,
   mapGoogleEvent,
   mapMetaEvent,
-  mapTikTokEvent,
   prepareMarketingDestinations,
 } from './marketing-destinations';
 
@@ -65,20 +63,15 @@ describe('client destination mappings', () => {
   beforeEach(() => {
     delete window.fbq;
     delete window.gtag;
-    delete window.ttq;
   });
 
-  it('prepares vendor queues immediately but defers all remote scripts', () => {
-    vi.stubEnv('NEXT_PUBLIC_FACEBOOK_PIXEL_ID', 'meta-id');
-    vi.stubEnv('NEXT_PUBLIC_GA_MEASUREMENT_ID', 'G-TEST');
+  it('prepares Meta and GA queues without injecting vendor scripts or TikTok', () => {
     vi.stubEnv('NEXT_PUBLIC_TIKTOK_PIXEL_ID', 'tt-id');
-    prepareMarketingDestinations();
+    prepareMarketingDestinations({ metaPixelId: 'meta-id', googleMeasurementId: 'G-TEST' });
     expect(window.fbq).toBeTypeOf('function');
     expect(window.gtag).toBeTypeOf('function');
-    expect(window.ttq?.track).toBeTypeOf('function');
+    expect('ttq' in window).toBe(false);
     expect(document.querySelectorAll('script[id^="bric-"]')).toHaveLength(0);
-    loadMarketingDestinationScripts();
-    expect(document.querySelectorAll('script[id^="bric-"]')).toHaveLength(3);
   });
 
   it('uses governed vendor names and a shared event identifier', () => {
@@ -89,10 +82,6 @@ describe('client destination mappings', () => {
     expect(mapMetaEvent(payload())).toMatchObject({
       name: 'ViewContent',
       params: { content_ids: ['12'] },
-    });
-    expect(mapTikTokEvent(payload())).toMatchObject({
-      name: 'ViewContent',
-      properties: { content_id: '12' },
     });
     expect(mapMetaEvent(payload())).toMatchObject({
       params: { value: 4500, contents: [{ id: '12', quantity: 2, item_price: 2250 }] },
@@ -128,7 +117,7 @@ describe('client destination mappings', () => {
         ],
       },
     });
-    const mapped = [mapGoogleEvent(purchase), mapMetaEvent(purchase), mapTikTokEvent(purchase)];
+    const mapped = [mapGoogleEvent(purchase), mapMetaEvent(purchase)];
     expect(mapped[0]).toMatchObject({ params: { transaction_id: '91' } });
     expect(mapped[1]).toMatchObject({
       name: 'Purchase',
