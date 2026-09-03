@@ -1,7 +1,6 @@
 type StorefrontCspEnv = {
   NODE_ENV?: string;
   NEXT_PUBLIC_FACEBOOK_PIXEL_ID?: string;
-  NEXT_PUBLIC_GA_MEASUREMENT_ID?: string;
   NEXT_PUBLIC_SENTRY_DSN_STOREFRONT?: string;
 };
 
@@ -33,10 +32,6 @@ export function buildStorefrontContentSecurityPolicy(
   if (hasValue(env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID)) {
     scriptSources.push('https://connect.facebook.net');
     connectSources.push('https://www.facebook.com');
-  }
-  if (hasValue(env.NEXT_PUBLIC_GA_MEASUREMENT_ID)) {
-    scriptSources.push('https://www.googletagmanager.com');
-    connectSources.push('https://www.google-analytics.com', 'https://region1.google-analytics.com');
   }
   const sentryOrigin = tlsOrigin(env.NEXT_PUBLIC_SENTRY_DSN_STOREFRONT);
   if (sentryOrigin) connectSources.push(sentryOrigin);

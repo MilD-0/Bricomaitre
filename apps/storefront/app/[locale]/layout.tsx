@@ -70,10 +70,7 @@ export default async function LocaleLayout({
       className={`${inter.variable}${locale === 'ar' ? ` ${ibmPlexSansArabic.variable}` : ''}`}
     >
       <body>
-        <MarketingPixels
-          metaPixelId={process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID?.trim() || null}
-          googleMeasurementId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim() || null}
-        />
+        <MarketingPixels metaPixelId={process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID?.trim() || null} />
         <Suspense fallback={null}>
           <PageViewTelemetry locale={locale} />
         </Suspense>

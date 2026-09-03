@@ -1,4 +1,4 @@
-import { act, cleanup, render } from '@testing-library/react';
+import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -8,13 +8,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('next/script', () => ({
-  default: (props: {
-    id: string;
-    src: string;
-    strategy: string;
-    onLoad?: () => void;
-    onError?: () => void;
-  }) => {
+  default: (props: { id: string; src: string; strategy: string }) => {
     mocks.script(props);
     return null;
   },
@@ -43,11 +37,11 @@ describe('MarketingPixels standard script loading boundary', () => {
     cleanup();
   });
 
-  it('queues events immediately and gives Meta the first browser-idle slot', () => {
-    render(<MarketingPixels metaPixelId="meta-id" googleMeasurementId="G-TEST" />);
+  it('queues events immediately and loads only Meta during browser idle', () => {
+    render(<MarketingPixels metaPixelId="meta-id" />);
 
     expect(mocks.capture).toHaveBeenCalledOnce();
-    expect(mocks.prepare).toHaveBeenCalledOnce();
+    expect(mocks.prepare).toHaveBeenCalledWith({ metaPixelId: 'meta-id' });
     expect(scriptProps('bric-meta-pixel')).toMatchObject({
       src: 'https://connect.facebook.net/en_US/fbevents.js',
       strategy: 'lazyOnload',
@@ -56,22 +50,11 @@ describe('MarketingPixels standard script loading boundary', () => {
     expect(scriptProps('bric-tiktok-pixel')).toBeUndefined();
   });
 
-  it('offers GA4 its own idle slot only after Meta has loaded', () => {
-    render(<MarketingPixels metaPixelId="meta-id" googleMeasurementId="G-TEST" />);
-    const metaProps = scriptProps('bric-meta-pixel');
-    act(() => metaProps?.onLoad?.());
+  it('does not load a marketing script when Meta is unconfigured', () => {
+    render(<MarketingPixels metaPixelId={null} />);
 
-    expect(scriptProps('bric-google-analytics')).toMatchObject({
-      src: 'https://www.googletagmanager.com/gtag/js?id=G-TEST',
-      strategy: 'lazyOnload',
-    });
-  });
-
-  it('does not let a blocked Meta request prevent GA4 from loading', () => {
-    render(<MarketingPixels metaPixelId="meta-id" googleMeasurementId="G-TEST" />);
-    const metaProps = scriptProps('bric-meta-pixel');
-    act(() => metaProps?.onError?.());
-
-    expect(scriptProps('bric-google-analytics')).toBeDefined();
+    expect(mocks.capture).toHaveBeenCalledOnce();
+    expect(mocks.prepare).toHaveBeenCalledWith({ metaPixelId: null });
+    expect(mocks.script).not.toHaveBeenCalled();
   });
 });

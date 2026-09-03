@@ -4,8 +4,6 @@ import type { StorefrontAnalyticsPayload } from '@/lib/analytics';
 
 declare global {
   interface Window {
-    dataLayer?: unknown[];
-    gtag?: (...args: unknown[]) => void;
     fbq?: ((...args: unknown[]) => void) & {
       callMethod?: (...args: unknown[]) => void;
       queue?: unknown[][];
@@ -21,7 +19,6 @@ let prepared = false;
 
 type MarketingDestinationConfig = {
   metaPixelId?: string | null;
-  googleMeasurementId?: string | null;
 };
 
 function initializeMeta(pixelId: string) {
@@ -39,15 +36,6 @@ function initializeMeta(pixelId: string) {
   window.fbq?.('init', pixelId);
 }
 
-function initializeGoogle(measurementId: string) {
-  window.dataLayer ??= [];
-  window.gtag ??= (...args: unknown[]) => {
-    window.dataLayer?.push(args);
-  };
-  window.gtag('js', new Date());
-  window.gtag('config', measurementId, { send_page_view: false });
-}
-
 export function prepareMarketingDestinations(config: MarketingDestinationConfig = {}) {
   if (prepared || typeof window === 'undefined') return;
   prepared = true;
@@ -55,12 +43,7 @@ export function prepareMarketingDestinations(config: MarketingDestinationConfig 
     config.metaPixelId === undefined
       ? process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID?.trim()
       : config.metaPixelId?.trim();
-  const googleId =
-    config.googleMeasurementId === undefined
-      ? process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim()
-      : config.googleMeasurementId?.trim();
   if (metaId) initializeMeta(metaId);
-  if (googleId) initializeGoogle(googleId);
 }
 
 function commerceItems(payload: StorefrontAnalyticsPayload) {
@@ -85,43 +68,6 @@ function commerceItems(payload: StorefrontAnalyticsPayload) {
         },
       ]
     : [];
-}
-
-function googleItems(payload: StorefrontAnalyticsPayload) {
-  return commerceItems(payload).map((entry) => ({
-    item_id: String(entry.productId),
-    quantity: entry.quantity,
-    price: entry.price,
-  }));
-}
-
-export function mapGoogleEvent(payload: StorefrontAnalyticsPayload) {
-  const names: Partial<Record<StorefrontAnalyticsPayload['eventName'], string>> = {
-    page_view: 'page_view',
-    view_item: 'view_item',
-    view_item_list: 'view_item_list',
-    search: 'view_search_results',
-    select_item: 'select_item',
-    add_to_cart: 'add_to_cart',
-    view_cart: 'view_cart',
-    begin_checkout: 'begin_checkout',
-    purchase: 'purchase',
-  };
-  const name = names[payload.eventName];
-  if (!name) return null;
-  const items = googleItems(payload);
-  return {
-    name,
-    params: {
-      event_id: payload.eventId,
-      page_location: `${window.location.origin}${payload.pagePath ?? window.location.pathname}`,
-      currency: payload.currency,
-      ...(payload.value != null ? { value: payload.value } : {}),
-      ...(payload.searchTerm ? { search_term: payload.searchTerm } : {}),
-      ...(payload.orderId ? { transaction_id: String(payload.orderId) } : {}),
-      ...(items.length ? { items } : {}),
-    },
-  };
 }
 
 export function mapMetaEvent(payload: StorefrontAnalyticsPayload) {
@@ -176,9 +122,6 @@ function once(destination: string, eventId: string, send: () => void) {
 
 export function deliverClientMarketingEvent(payload: StorefrontAnalyticsPayload) {
   prepareMarketingDestinations();
-  const google = mapGoogleEvent(payload);
-  if (google && window.gtag)
-    once('google', payload.eventId, () => window.gtag?.('event', google.name, google.params));
   const meta = mapMetaEvent(payload);
   const metaInvoked = Boolean(
     meta &&
