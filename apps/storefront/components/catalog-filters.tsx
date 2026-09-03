@@ -1,9 +1,10 @@
 'use client';
 
 import { SlidersHorizontal } from 'lucide-react';
-import { useId, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 
 import { MobileSheet } from '@/components/mobile-sheet';
+import { Button } from '@/components/ui/button';
 import type { Locale } from '@/i18n/config';
 import { prepareHaptics, triggerHaptic } from '@/lib/haptics';
 
@@ -79,6 +80,7 @@ export function CatalogFilters({
   const filterLabels = { ...fallbackLabels, ...labels };
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const railRef = useRef<HTMLElement>(null);
   const formId = `catalog-mobile-filters-${locale}`;
   const activeCount =
     Number(selectedCategory !== null) +
@@ -87,6 +89,33 @@ export function CatalogFilters({
     Number(stock !== 'all') +
     Number(minPrice !== null || maxPrice !== null);
   const action = `/${locale}/products`;
+
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!rail) return;
+
+    let animationFrame = 0;
+    const updateAvailableHeight = () => {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = requestAnimationFrame(() => {
+        const computedTop = Number.parseFloat(getComputedStyle(rail).top);
+        const stickyTop = Number.isFinite(computedTop) ? computedTop : 0;
+        const railTop = Math.max(stickyTop, rail.getBoundingClientRect().top);
+        const availableHeight = Math.max(0, window.innerHeight - railTop);
+        rail.style.setProperty('--catalog-filter-viewport-height', `${availableHeight}px`);
+      });
+    };
+
+    updateAvailableHeight();
+    window.addEventListener('resize', updateAvailableHeight);
+    window.addEventListener('scroll', updateAvailableHeight, { passive: true });
+
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      window.removeEventListener('resize', updateAvailableHeight);
+      window.removeEventListener('scroll', updateAvailableHeight);
+    };
+  }, []);
 
   function close() {
     setOpen(false);
@@ -149,7 +178,7 @@ export function CatalogFilters({
   );
 
   return (
-    <aside className="catalog-filters">
+    <aside ref={railRef} className="catalog-filters">
       <button
         ref={triggerRef}
         className="catalog-mobile-filter-button"
@@ -173,7 +202,7 @@ export function CatalogFilters({
       <div className="catalog-filter-rail">
         <h2>{labels.title}</h2>
         <form action={action} method="get" onSubmit={prepareSubmission}>
-          {fields('rail')}
+          <div className="catalog-filter-fields">{fields('rail')}</div>
           <FilterActions locale={locale} activeCount={activeCount} labels={labels} />
         </form>
       </div>
@@ -186,14 +215,9 @@ export function CatalogFilters({
           onClose={close}
           footer={
             <div className="catalog-filter-sheet-actions">
-              <button
-                className="button button-primary"
-                type="submit"
-                form={formId}
-                onPointerDown={prepareHaptics}
-              >
+              <Button size="lg" type="submit" form={formId} onPointerDown={prepareHaptics}>
                 {labels.apply}
-              </button>
+              </Button>
               {activeCount > 0 ? <a href={action}>{labels.reset}</a> : null}
             </div>
           }
@@ -343,13 +367,9 @@ function FilterActions({
 }) {
   return (
     <div className="catalog-filter-actions">
-      <button
-        type="submit"
-        className="button button-primary catalog-filter-submit"
-        onPointerDown={prepareHaptics}
-      >
+      <Button type="submit" className="catalog-filter-submit" onPointerDown={prepareHaptics}>
         {labels.apply}
-      </button>
+      </Button>
       {activeCount > 0 ? (
         <a href={`/${locale}/products`} className="catalog-reset">
           {labels.reset}

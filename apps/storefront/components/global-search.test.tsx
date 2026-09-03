@@ -58,8 +58,10 @@ describe('GlobalSearch', () => {
   });
 
   it('debounces suggestions and records governed selection telemetry', async () => {
-    render(<GlobalSearch locale="fr" labels={labels} />);
+    const { container } = render(<GlobalSearch locale="fr" labels={labels} />);
     const input = screen.getByRole('combobox', { name: labels.label });
+    expect(container.querySelectorAll('.global-search svg')).toHaveLength(1);
+    expect(container.querySelector('.global-search-icon')).not.toBeInTheDocument();
     expect(
       screen
         .getByRole('button', { name: labels.label })

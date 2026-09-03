@@ -1,5 +1,8 @@
 import { NextRequest } from 'next/server';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 
 import { GET, POST } from '../route';
 
@@ -458,6 +461,32 @@ describe('app/api/orders/route', () => {
     await GET(new NextRequest('http://localhost/api/orders?inHouseStatus=1&noAnswerCount=3'));
 
     expect(countWhereMock).toHaveBeenCalledOnce();
+    expect(rowsWhereMock).toHaveBeenCalledOnce();
+  });
+
+  it('filters the terminal no-answer bucket by a minimum count', async () => {
+    hasDbMock.mockReturnValue(true);
+    const countWhereMock = vi.fn().mockResolvedValue([{ value: 0 }]);
+    const rowsWhereMock = vi.fn().mockReturnValue({
+      orderBy: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          offset: vi.fn().mockResolvedValue([]),
+        }),
+      }),
+    });
+    const selectMock = vi
+      .fn()
+      .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: countWhereMock }) })
+      .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: rowsWhereMock }) });
+
+    getDbMock.mockReturnValue({ select: selectMock });
+
+    await GET(new NextRequest('http://localhost/api/orders?inHouseStatus=1&noAnswerCountMin=3'));
+
+    const whereClause = countWhereMock.mock.calls[0]?.[0];
+    const built = new PgDialect().sqlToQuery(whereClause);
+    expect(built.sql).toContain('"orders"."no_answer_count" >= $');
+    expect(built.params).toEqual(expect.arrayContaining([ORDER_STATUS.NO_ANSWER, 3]));
     expect(rowsWhereMock).toHaveBeenCalledOnce();
   });
 });
