@@ -68,6 +68,7 @@ export default defineConfig({
     timeout: 60_000,
     env: {
       BETTER_AUTH_URL: adminOrigin,
+      BRIC_PLAYWRIGHT_DISABLE_DEV_INDICATORS: '1',
       PORT: adminPort,
     },
   },
