@@ -47,10 +47,12 @@ export {
 } from './analytics/economics-series';
 export { economicsSummaryMetrics, materializedFactsAreUsable } from './analytics/economics-data';
 export {
+  appendEconomicsForecastSeries,
   buildEconomicsForecast,
   buildLeadingOrderForecast,
   projectOpenEconomicsSeries,
 } from './analytics/forecast';
+export { projectCohortCompletion } from './analytics/cohort-completion';
 export { loadAutomaticPaidEconomics } from './analytics/fulfillment-data';
 export { metricChange } from './analytics/metrics';
 export { freshnessState } from './analytics/source-health';

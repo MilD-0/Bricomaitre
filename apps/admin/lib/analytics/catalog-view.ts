@@ -14,6 +14,7 @@ import {
   type OperationalProductRow,
   type ProductMetaAssociation,
 } from './commerce-data';
+import { cohortCompletionCovers, loadCohortCompletionPair } from './cohort-completion';
 import type { AnalyticsFilters } from './contract';
 import {
   commonCoverageStart,
@@ -22,7 +23,13 @@ import {
 } from './data-boundaries';
 import { clipAnalyticsFilters } from './date-range';
 import { loadEconomicsPair, previousFiltersWithCoverage, sourceWarnings } from './economics-data';
-import { type Database, effectiveRange, metric, statsInput } from './loaders-shared';
+import {
+  type Database,
+  effectiveRange,
+  metric,
+  metricWithProjectedComparison,
+  statsInput,
+} from './loaders-shared';
 import { metricChange } from './metrics';
 import { datePredicate, numeric } from './query-values';
 import { loadSourceHealth } from './source-health';
@@ -91,6 +98,7 @@ export async function loadCatalogView(
     metaRegions,
     operationalSummary,
     previousOperationalSummary,
+    completion,
   ] = await Promise.all([
     getLiveWebsiteProductMetrics(
       statsInput(storefrontFilters.startDate, storefrontFilters.endDate),
@@ -123,6 +131,7 @@ export async function loadCatalogView(
     previousAnalytics
       ? loadCatalogOperationalSummary(db, previousAnalytics)
       : Promise.resolve(null),
+    loadCohortCompletionPair(db, catalogFilters, 1 - economics.settings.defaultReturnRate / 100),
   ]);
   const currentWebsiteProducts = websiteProducts as LiveWebsiteProductMetric[];
   const currentOperationalProducts = operationalProducts as OperationalProductRow[];
@@ -187,6 +196,12 @@ export async function loadCatalogView(
       };
     });
   const geography = operationalGeography as OperationalGeographyRow[];
+  const completionComparisonAvailable = Boolean(
+    completion?.previous &&
+    previousEconomics &&
+    cohortCompletionCovers(economics.summary.postedOrders, completion.current) &&
+    cohortCompletionCovers(previousEconomics.summary.postedOrders, completion.previous),
+  );
   return {
     data: {
       kind: 'catalog' as const,
@@ -197,11 +212,19 @@ export async function loadCatalogView(
           previousOperationalSummary?.postedUnits ?? null,
           'number',
         ),
-        metric(
+        metricWithProjectedComparison(
           'paidUnits',
           operationalSummary.paidUnits,
           previousOperationalSummary?.paidUnits ?? null,
           'number',
+          {
+            value: completionComparisonAvailable
+              ? (completion?.current.projectedPaidUnits ?? null)
+              : null,
+            previous: completionComparisonAvailable
+              ? (completion?.previous?.projectedPaidUnits ?? null)
+              : null,
+          },
         ),
         metric(
           'adjustedProfit',

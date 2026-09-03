@@ -44,6 +44,26 @@ describe('Playwright server isolation', () => {
     });
   });
 
+  it('keeps design-baseline captures out of browser acceptance', async () => {
+    const config = await loadConfig();
+    const projects = config.projects ?? [];
+
+    expect(projects.map((project) => project.name)).toEqual([
+      'chromium',
+      'mobile-chromium',
+      'design-baseline',
+    ]);
+    expect(projects.find((project) => project.name === 'chromium')?.testIgnore).toEqual(
+      /design-baseline\.spec\.ts/,
+    );
+    expect(projects.find((project) => project.name === 'mobile-chromium')?.testIgnore).toEqual(
+      /design-baseline\.spec\.ts/,
+    );
+    expect(projects.find((project) => project.name === 'design-baseline')?.testMatch).toEqual(
+      /design-baseline\.spec\.ts/,
+    );
+  });
+
   it('rejects non-loopback test origins', async () => {
     vi.stubEnv('BRIC_PLAYWRIGHT_ADMIN_ORIGIN', 'https://example.com:3020');
 

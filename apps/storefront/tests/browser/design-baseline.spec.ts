@@ -4,6 +4,9 @@ import { join, resolve } from 'node:path';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 const baselineDirectory = process.env.BRIC_UI_BASELINE_DIR?.trim();
+if (!baselineDirectory) {
+  throw new Error('Set BRIC_UI_BASELINE_DIR to a writable output directory.');
+}
 const storefrontOrigin = process.env.BRIC_PLAYWRIGHT_STOREFRONT_ORIGIN ?? 'http://127.0.0.1:3003';
 
 const modes = [
@@ -122,10 +125,9 @@ async function openSurface(page: Page, locale: string, path: string, rootErrorDo
 }
 
 test('captures every storefront surface for a design-system baseline', async ({ browser }) => {
-  test.skip(!baselineDirectory, 'Set BRIC_UI_BASELINE_DIR to opt into private UI captures.');
   test.setTimeout(20 * 60_000);
 
-  const root = resolve(baselineDirectory!);
+  const root = resolve(baselineDirectory);
   await mkdir(root, { recursive: true });
 
   for (const mode of modes) {

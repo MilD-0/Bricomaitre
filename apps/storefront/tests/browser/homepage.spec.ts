@@ -11,6 +11,9 @@ test('renders the production homepage hierarchy with responsive banner media', a
   );
   await expect(banner.locator('.home-banner-picture').first()).toHaveClass(/is-ready/);
   await expect(banner.locator('.home-banner-picture').nth(1)).toHaveClass(/is-ready/);
+  const bannerBox = await banner.locator('.home-banner-picture').first().boundingBox();
+  expect(bannerBox).not.toBeNull();
+  expect(bannerBox!.height).toBeCloseTo((bannerBox!.width * 21) / 50, 0);
   await expect(page.locator('.site-header .brand img')).toHaveAttribute('src', /^\/_next\/image\?/);
   const fontPreload = page.locator('link[rel="preload"][as="font"]');
   await expect(fontPreload).toHaveCount(1);

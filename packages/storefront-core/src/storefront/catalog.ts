@@ -120,17 +120,30 @@ function buildCatalogSearchDocument() {
   )), 'œ', 'oe'), 'æ', 'ae'), ${SEARCH_DOCUMENT_TRANSLATE_FROM}, ${SEARCH_DOCUMENT_TRANSLATE_TO})`;
 }
 
+function buildCatalogSearchTitleDocument() {
+  return sql<string>`translate(replace(replace(lower(regexp_replace(
+    coalesce(${products.title}, '') || ' ' ||
+    coalesce(${products.titleAr}, ''),
+    '[\u0610-\u061a\u064b-\u065f\u0670\u06d6-\u06ed\u0640]', '', 'g'
+  )), 'œ', 'oe'), 'æ', 'ae'), ${SEARCH_DOCUMENT_TRANSLATE_FROM}, ${SEARCH_DOCUMENT_TRANSLATE_TO})`;
+}
+
 export function buildCatalogSearchRelevance(value: string) {
   const normalized = normalizeCatalogSearch(value);
   if (!normalized) return undefined;
 
   const document = buildCatalogSearchDocument();
+  const titleDocument = buildCatalogSearchTitleDocument();
   const exactMatch = sql<number>`case when position(${normalized} in ${document}) > 0 then 1 else 0 end`;
+  const exactTitleMatch = sql<number>`case when position(${normalized} in ${titleDocument}) > 0 then 1 else 0 end`;
   const threshold = getCatalogSearchSimilarityThreshold(normalized);
 
   return threshold === null
-    ? exactMatch
-    : sql<number>`(${exactMatch} + word_similarity(${normalized}, ${document}))`;
+    ? sql<number>`(${exactMatch} + ${exactTitleMatch})`
+    : sql<number>`(
+        ${exactMatch} + word_similarity(${normalized}, ${document}) +
+        ${exactTitleMatch} + word_similarity(${normalized}, ${titleDocument})
+      )`;
 }
 
 export function normalizeStorefrontProductToken(value: string) {

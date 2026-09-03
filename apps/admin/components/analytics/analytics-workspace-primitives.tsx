@@ -236,14 +236,22 @@ export function splitPartialSeries(
 ) {
   return rows.map((row, index) => {
     const partial = row.isPartial === true;
-    const nextIsPartial = rows[index + 1]?.isPartial === true;
+    const forecast = row.isForecast === true;
+    const nextIsForecast = rows[index + 1]?.isForecast === true;
+    const nextIsOpen = rows[index + 1]?.isPartial === true || rows[index + 1]?.isForecast === true;
     const result = { ...row };
     for (const key of keys) {
       const projected = row[`${key}Projected`];
       const projectedValue = typeof projected === 'number' ? projected : null;
-      result[`${key}Actual`] = row[key];
-      result[`${key}Open`] = partial ? projectedValue : nextIsPartial ? row[key] : null;
-      result[`${key}Display`] = partial ? projectedValue : row[key];
+      result[`${key}Actual`] = forecast ? null : row[key];
+      result[`${key}Open`] = forecast
+        ? projectedValue
+        : partial
+          ? (projectedValue ?? (nextIsForecast ? row[key] : null))
+          : nextIsOpen
+            ? row[key]
+            : null;
+      result[`${key}Display`] = forecast || partial ? projectedValue : row[key];
     }
     return result;
   });

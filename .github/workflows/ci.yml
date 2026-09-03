@@ -55,12 +55,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - name: Apply migrations and test real service contracts
-        env:
-          DATABASE_URL: postgres://bricomaitre:bricomaitre@127.0.0.1:55432/bricomaitre_test
-          REDIS_URL: redis://127.0.0.1:56379/0
-        run: |
-          ops/scripts/run-with-ci-services.sh 55432 56379 bricomaitre_test \
-            bash -lc 'pnpm --filter @bric/admin db:migrate && pnpm --filter @bric/admin db:verify && POSTGRES_USER=bricomaitre POSTGRES_DB=bricomaitre_test ops/scripts/configure-postgres-autovacuum.sh "$BRIC_CI_POSTGRES_CONTAINER" "$BRIC_CI_POSTGRES_PORT" && pnpm test:services'
+        run: bash ops/scripts/run-service-contract-tests.sh 55432 56379 bricomaitre_test
 
   tests:
     name: Tests / ${{ matrix.suite }}
@@ -123,7 +118,7 @@ jobs:
       - name: Run browser acceptance tests
         run: >-
           ops/scripts/run-ci-check.sh "Storefront browser acceptance tests"
-          ops/scripts/run-loopback-isolated.sh pnpm test:storefront:browser
+          ops/scripts/run-loopback-isolated.sh pnpm test:storefront:browser --workers=2
       - name: Upload browser diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -162,7 +157,7 @@ jobs:
       - name: Run Admin browser acceptance tests
         run: |
           ops/scripts/run-with-ci-services.sh 55433 56380 bricomaitre_browser \
-            bash -lc 'pnpm --filter @bric/admin db:migrate && pnpm --filter @bric/admin exec tsx scripts/create-playwright-session.ts && ops/scripts/run-ci-check.sh "Admin browser acceptance tests" pnpm test:admin:browser'
+            bash -lc 'pnpm --filter @bric/admin db:migrate && pnpm --filter @bric/admin exec tsx scripts/create-playwright-session.ts && ops/scripts/run-ci-check.sh "Admin browser acceptance tests" pnpm test:admin:browser --workers=2'
       - name: Upload Admin browser diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

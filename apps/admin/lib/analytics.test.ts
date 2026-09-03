@@ -4,6 +4,7 @@ import {
   aggregateAutomaticPaidSeries,
   aggregateEconomicsSeries,
   analyticsQuerySchema,
+  appendEconomicsForecastSeries,
   buildEconomicsForecast,
   buildLeadingOrderForecast,
   clipAnalyticsFilters,
@@ -14,12 +15,14 @@ import {
   materializedFactsAreUsable,
   metricChange,
   projectOpenEconomicsSeries,
+  projectCohortCompletion,
   resolveAnalyticsReferenceNow,
   resolveAnalyticsFilters,
   storefrontPathCoverage,
 } from './analytics';
 import { ANALYTICS_FACT_SEMANTICS_VERSION } from './analytics-fact-contract';
 import { dayInTimezone } from './analytics/date-range';
+import { metricWithProjectedComparison } from './analytics/loaders-shared';
 
 describe('analytics filter model', () => {
   it('resolves the Algiers reporting day across the UTC midnight boundary', () => {
@@ -99,6 +102,64 @@ describe('analytics filter model', () => {
     expect(metricChange(12, 0)).toBeNull();
     expect(metricChange(12, null)).toBeNull();
     expect(metricChange(120, 100)).toBe(20);
+  });
+
+  it('keeps card values actual while deriving the arrow from projected completion', () => {
+    const metric = metricWithProjectedComparison('paidUnits', 299, 761, 'number', {
+      value: 790,
+      previous: 848,
+    });
+    expect(metric).toMatchObject({
+      value: 299,
+      previous: 761,
+      comparison: { basis: 'projected_completion', value: 790, previous: 848 },
+    });
+    expect(metric.changePct).toBeCloseTo(-6.8396);
+  });
+
+  it('compares posted cohorts at projected completion without changing the return assumption', () => {
+    const projection = projectCohortCompletion(
+      [
+        {
+          postedDay: '2026-08-18',
+          deliveredDay: '2026-08-19',
+          outcome: 'livre_non_encaisse',
+          grossProfitDzd: 90,
+          units: 3,
+        },
+        {
+          postedDay: '2026-08-18',
+          deliveredDay: null,
+          outcome: 'paye_et_archive',
+          grossProfitDzd: 100,
+          units: 2,
+        },
+        {
+          postedDay: '2026-08-18',
+          deliveredDay: null,
+          outcome: 'retour_archive',
+          grossProfitDzd: 80,
+          units: 1,
+        },
+        {
+          postedDay: '2026-08-19',
+          deliveredDay: null,
+          outcome: 'en_livraison',
+          grossProfitDzd: 200,
+          units: 4,
+        },
+      ],
+      { startDate: '2026-08-18', endDate: '2026-08-19' },
+      0.75,
+    );
+
+    expect(projection).toMatchObject({
+      observedOrders: 4,
+      unresolvedOrders: 1,
+      projectedPaidOrders: 2.75,
+      projectedPaidUnits: 8,
+      projectedAdjustedProfitDzd: 340,
+    });
   });
 
   it('anchors static-clone review time to the dataset cutoff only when enabled', () => {
@@ -346,6 +407,36 @@ describe('analytics forecasting', () => {
     );
   });
 
+  it('backtests its baseline and prevents one exceptional day from driving the forward view', () => {
+    const days = Array.from({ length: 42 }, (_, index) => {
+      const date = new Date(Date.UTC(2026, 6, 9 + index)).toISOString().slice(0, 10);
+      const exceptional = index === 41;
+      return {
+        date,
+        postedOrders: exceptional ? 100 : 2,
+        operatingCostDzd: 0,
+        trueProfitDzd: exceptional ? 9_990 : 80,
+        isRestDay: false,
+        grossProfitDzd: exceptional ? 10_000 : 100,
+        metrics: {
+          adjustedProfitDzd: exceptional ? 10_000 : 90,
+          adCostDzd: 10,
+        },
+      };
+    }).reverse();
+    const forecast = buildEconomicsForecast(
+      { settings: { restFrom: null }, costs: [], days } as unknown as Parameters<
+        typeof buildEconomicsForecast
+      >[0],
+      '2026-08-20',
+      7,
+    );
+
+    expect(forecast).toHaveLength(7);
+    expect(Math.max(...forecast.map((day) => day.forecastTrueProfitDzd))).toBeLessThan(500);
+    expect(forecast.every((day) => day.method.startsWith('backtested-'))).toBe(true);
+  });
+
   it('trains on the period identity and keeps configured Fridays as rest days', () => {
     const report = {
       settings: { restFrom: '2026-08-01' },
@@ -475,6 +566,42 @@ describe('analytics forecasting', () => {
       projectionDays: 2,
     });
     expect(projected?.profitXProjected).toBeCloseTo(330 / 90);
+  });
+
+  it('appends future buckets as forecast-only economics points', () => {
+    const series = appendEconomicsForecastSeries(
+      [
+        {
+          bucket: '2026-08-19',
+          label: '2026-08-19',
+          netProfitDzd: 60,
+          trueProfitDzd: 55,
+          cumulativeNetProfitDzd: 600,
+          cumulativeTrueProfitDzd: 550,
+          isPartial: true,
+        },
+      ] as never,
+      [
+        {
+          date: '2026-08-20',
+          forecastGrossProfitDzd: 100,
+          forecastAdjustedProfitDzd: 80,
+          forecastAdCostDzd: 20,
+          forecastNetProfitDzd: 60,
+          forecastTrueProfitDzd: 55,
+          forecastPostedOrders: 2,
+        },
+      ] as never,
+      'day',
+    );
+
+    expect(series.at(-1)).toMatchObject({
+      bucket: '2026-08-20',
+      trueProfitDzd: null,
+      trueProfitDzdProjected: 55,
+      cumulativeTrueProfitDzdProjected: 605,
+      isForecast: true,
+    });
   });
 });
 

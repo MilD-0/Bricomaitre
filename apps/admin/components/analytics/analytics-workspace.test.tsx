@@ -46,6 +46,25 @@ describe('open-period chart series', () => {
     expect(rows[1]).toMatchObject({ profitActual: 40, profitOpen: 90, profitDisplay: 90 });
     expect(rows[0]).toMatchObject({ profitActual: 100, profitOpen: 100 });
   });
+
+  it('continues the dotted series through future-only points', () => {
+    const rows = splitPartialSeries(
+      [
+        { label: 'Aug 19', profit: 100, profitProjected: null, isPartial: true },
+        {
+          label: 'Aug 20',
+          profit: null,
+          profitProjected: 110,
+          isPartial: false,
+          isForecast: true,
+        },
+      ],
+      ['profit'],
+    );
+
+    expect(rows[0]).toMatchObject({ profitActual: 100, profitOpen: 100 });
+    expect(rows[1]).toMatchObject({ profitActual: null, profitOpen: 110, profitDisplay: 110 });
+  });
 });
 
 function commandPayload(): AnalyticsPayload {
