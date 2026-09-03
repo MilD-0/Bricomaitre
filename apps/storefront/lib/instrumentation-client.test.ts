@@ -20,18 +20,23 @@ describe('client instrumentation loading', () => {
     sentry.captureRouterTransitionStart.mockReset();
   });
 
-  it('keeps the Sentry SDK off the initial rendering path and initializes it after the quiet window', async () => {
+  it('loads Sentry for an error, not for successful-session interactions or navigation', async () => {
     vi.useFakeTimers();
     vi.stubEnv('NEXT_PUBLIC_SENTRY_DSN_STOREFRONT', 'https://public@example.ingest.sentry.io/123');
 
-    await import('../instrumentation-client');
+    const { onRouterTransitionStart } = await import('../instrumentation-client');
     expect(sentry.init).not.toHaveBeenCalled();
 
-    await vi.advanceTimersByTimeAsync(19_999);
+    window.dispatchEvent(new PointerEvent('pointerdown'));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    onRouterTransitionStart('/fr/products', 'push');
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(sentry.init).not.toHaveBeenCalled();
+    expect(sentry.captureRouterTransitionStart).not.toHaveBeenCalled();
 
-    await vi.advanceTimersByTimeAsync(1);
-    expect(sentry.init).toHaveBeenCalledOnce();
+    const error = new Error('after initialization');
+    window.dispatchEvent(new ErrorEvent('error', { error }));
+    await vi.waitFor(() => expect(sentry.init).toHaveBeenCalledOnce());
     expect(sentry.init).toHaveBeenCalledWith(
       expect.objectContaining({
         enabled: true,
@@ -44,11 +49,11 @@ describe('client instrumentation loading', () => {
       instrumentPageLoad: false,
       instrumentNavigation: true,
     });
-
-    const error = new Error('after initialization');
-    window.dispatchEvent(new ErrorEvent('error', { error }));
     expect(sentry.captureException).toHaveBeenCalledWith(error, {
       mechanism: { type: 'error', handled: false },
     });
+
+    onRouterTransitionStart('/fr/checkout', 'push');
+    expect(sentry.captureRouterTransitionStart).toHaveBeenCalledWith('/fr/checkout', 'push');
   });
 });

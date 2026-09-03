@@ -830,57 +830,41 @@ export function OrdersWorkspace({
                   <div
                     key={order.id}
                     className={cn(
-                      'group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 py-3 transition-colors hover:bg-primary/[0.035]',
+                      'group relative grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 px-3 py-3.5 transition-colors hover:bg-primary/[0.035] sm:px-4 sm:py-4',
                       activeOrderId === order.id && 'bg-primary/[0.055]',
                     )}
                   >
-                    <Checkbox
-                      aria-label={t('labels.selectRow', { name: order.fullName })}
-                      checked={selectedIds.includes(order.id)}
-                      onChange={(event) =>
-                        setSelectedIds((current) =>
-                          event.target.checked
-                            ? [...new Set([...current, order.id])]
-                            : current.filter((id) => id !== order.id),
-                        )
-                      }
-                    />
+                    <span className="pt-1">
+                      <Checkbox
+                        aria-label={t('labels.selectRow', { name: order.fullName })}
+                        checked={selectedIds.includes(order.id)}
+                        onChange={(event) =>
+                          setSelectedIds((current) =>
+                            event.target.checked
+                              ? [...new Set([...current, order.id])]
+                              : current.filter((id) => id !== order.id),
+                          )
+                        }
+                      />
+                    </span>
                     <button
                       type="button"
                       onClick={() => focusOrder(order.id)}
                       className="min-w-0 rounded-sm text-start focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"
                     >
-                      <span className="flex min-w-0 items-baseline gap-2">
+                      <span
+                        className={cn(
+                          'flex min-w-0 items-baseline gap-2',
+                          trackingUrl ? 'pe-[4.75rem]' : 'pe-10',
+                        )}
+                      >
                         <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                           {order.fullName}
                         </span>
                         <span className="shrink-0 text-xs text-muted-foreground">#{order.id}</span>
                       </span>
-                      <span className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                        <time
-                          dateTime={order.createdAt}
-                          title={formatOrderDate(locale, order.createdAt, true)}
-                          dir="ltr"
-                          className="shrink-0 whitespace-nowrap text-[length:var(--type-size-caption)] font-normal tabular-nums"
-                        >
-                          {formatOrderListTimestamp(locale, order.createdAt)}
-                        </time>
-                        <span aria-hidden="true">·</span>
-                        <span className="min-w-0 truncate">
-                          {summarizeOrderProducts(order)} ·{' '}
-                          {formatOrderRegionLabel(
-                            initialCatalog,
-                            order.state,
-                            order.city,
-                            t('adminWorkspace.orders.noLocation'),
-                          )}
-                        </span>
-                      </span>
-                      <span className="mt-1.5 flex min-w-0 items-center gap-3">
-                        <span className="shrink-0 text-sm font-semibold tabular-nums">
-                          {formatOrderMoney(locale, order.totalAmount)}
-                        </span>
-                        <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs font-medium">
+                      <span className="mt-2 flex min-w-0 items-center justify-between gap-3 pe-[4.75rem]">
+                        <span className="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-xs font-medium">
                           <span
                             className={cn(
                               'size-2 shrink-0 rounded-full',
@@ -890,15 +874,37 @@ export function OrdersWorkspace({
                           />
                           {statusLabel}
                         </span>
+                        <time
+                          dateTime={order.createdAt}
+                          title={formatOrderDate(locale, order.createdAt, true)}
+                          dir="ltr"
+                          className="shrink-0 whitespace-nowrap text-[length:var(--type-size-caption)] font-normal tabular-nums"
+                        >
+                          {formatOrderListTimestamp(locale, order.createdAt)}
+                        </time>
+                      </span>
+                      <span className="mt-1.5 flex min-w-0 items-baseline justify-between gap-3">
+                        <span className="min-w-0 truncate text-xs leading-5 text-muted-foreground">
+                          {summarizeOrderProducts(order)} ·{' '}
+                          {formatOrderRegionLabel(
+                            initialCatalog,
+                            order.state,
+                            order.city,
+                            t('adminWorkspace.orders.noLocation'),
+                          )}
+                        </span>
+                        <span className="shrink-0 text-sm font-semibold text-foreground tabular-nums">
+                          {formatOrderMoney(locale, order.totalAmount)}
+                        </span>
                       </span>
                       {note ? (
-                        <span className="mt-1 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                        <span className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs leading-5 text-muted-foreground">
                           <MessageSquareText className="size-3.5 shrink-0" aria-hidden="true" />
                           <span className="truncate">{note}</span>
                         </span>
                       ) : null}
                     </button>
-                    <div className="flex items-center gap-0.5">
+                    <div className="absolute end-3 top-3.5 flex items-center gap-0.5 sm:end-4 sm:top-4">
                       {trackingUrl ? (
                         <a
                           href={trackingUrl}
@@ -907,12 +913,9 @@ export function OrdersWorkspace({
                           aria-label={t('adminWorkspace.orders.openTracking', {
                             name: order.fullName,
                           })}
-                          className="flex h-9 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-background hover:text-primary focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"
+                          className="grid size-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-primary focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"
                         >
                           <ExternalLink className="size-4" aria-hidden="true" />
-                          <span className="hidden min-[390px]:inline">
-                            {t('adminWorkspace.orders.tracking')}
-                          </span>
                         </a>
                       ) : null}
                       <CompactMenu label={`${t('labels.actions')} · ${order.fullName}`}>
