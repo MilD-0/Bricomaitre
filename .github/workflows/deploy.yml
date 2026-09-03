@@ -20,7 +20,7 @@ jobs:
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
-    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -103,7 +103,7 @@ jobs:
     name: Build images / storefront API
     needs: release-context
     if: needs.release-context.outputs.current == 'true'
-    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -170,7 +170,7 @@ jobs:
     name: Build images / admin
     needs: release-context
     if: needs.release-context.outputs.current == 'true'
-    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -244,7 +244,7 @@ jobs:
     name: Build images / storefront
     needs: release-context
     if: needs.release-context.outputs.current == 'true'
-    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -323,7 +323,7 @@ jobs:
       - build-api-images
       - build-admin-images
       - build-storefront-image
-    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -378,7 +378,7 @@ jobs:
     needs:
       - release-context
       - assemble-release-manifest
-    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     concurrency:
       group: bricomaitre-production
