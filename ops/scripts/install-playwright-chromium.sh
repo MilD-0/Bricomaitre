@@ -13,4 +13,4 @@ mkdir -p "$playwright_cache_dir"
 exec 9>"$playwright_cache_dir/.install.lock"
 flock 9
 PLAYWRIGHT_BROWSERS_PATH="$playwright_cache_dir" \
-  pnpm --filter "$workspace_filter" exec playwright install chromium
+  pnpm --filter "$workspace_filter" exec playwright install --with-deps chromium

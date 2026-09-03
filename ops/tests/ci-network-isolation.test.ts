@@ -100,7 +100,7 @@ afterEach(() => {
   }
 });
 
-describe('self-hosted CI network isolation', () => {
+describe('CI network isolation', () => {
   it('reuses warm service images and avoids Docker bridge interfaces', () => {
     const result = runServiceCommand();
 
@@ -157,6 +157,28 @@ printf 'ip %s\n' "$*" >> "$FAKE_NAMESPACE_LOG"
 `,
       { mode: 0o755 },
     );
+    writeFileSync(
+      join(directory, 'sudo'),
+      `#!/usr/bin/env bash
+printf 'sudo %s\n' "$*" >> "$FAKE_NAMESPACE_LOG"
+while [[ "$1" == --* ]]; do shift; done
+command="$1"
+shift
+export HOME=/root PATH=/usr/bin:/bin
+exec "\${0%/*}/$command" "$@"
+`,
+      { mode: 0o755 },
+    );
+    writeFileSync(
+      join(directory, 'setpriv'),
+      `#!/usr/bin/env bash
+printf 'setpriv %s\n' "$*" >> "$FAKE_NAMESPACE_LOG"
+while [[ "$1" != '--' ]]; do shift; done
+shift
+exec "$@"
+`,
+      { mode: 0o755 },
+    );
 
     const result = spawnSync(
       'bash',
@@ -169,6 +191,7 @@ printf 'ip %s\n' "$*" >> "$FAKE_NAMESPACE_LOG"
           PATH: `${directory}:${process.env.PATH ?? ''}`,
           FAKE_COMMAND_LOG: commandFile,
           FAKE_NAMESPACE_LOG: logFile,
+          RUNNER_ENVIRONMENT: '',
         },
       },
     );
@@ -177,5 +200,34 @@ printf 'ip %s\n' "$*" >> "$FAKE_NAMESPACE_LOG"
     expect(readFileSync(commandFile, 'utf8')).toBe('isolated\n');
     expect(readFileSync(logFile, 'utf8')).toContain('--user --map-root-user --net --');
     expect(readFileSync(logFile, 'utf8')).toContain('ip link set lo up');
+
+    writeFileSync(commandFile, '');
+    writeFileSync(logFile, '');
+    const hostedResult = spawnSync(
+      'bash',
+      [
+        loopbackRunner,
+        'bash',
+        '-c',
+        'test "$HOME" != /root && echo hosted-isolated > "$FAKE_COMMAND_LOG"',
+      ],
+      {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${directory}:${process.env.PATH ?? ''}`,
+          FAKE_COMMAND_LOG: commandFile,
+          FAKE_NAMESPACE_LOG: logFile,
+          RUNNER_ENVIRONMENT: 'github-hosted',
+        },
+      },
+    );
+
+    expect(hostedResult.status).toBe(0);
+    expect(readFileSync(commandFile, 'utf8')).toBe('hosted-isolated\n');
+    expect(readFileSync(logFile, 'utf8')).toContain('sudo --preserve-env unshare --net --');
+    expect(readFileSync(logFile, 'utf8')).toContain('setpriv --reuid');
+    expect(readFileSync(logFile, 'utf8')).not.toContain('--map-root-user');
   });
 });
