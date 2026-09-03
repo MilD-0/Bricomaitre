@@ -1,7 +1,13 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { enforceRequestRateLimitMock, hasDbMock, enqueueLightweightJobMock } = vi.hoisted(() => ({
+const {
+  enforceGlobalRateLimitMock,
+  enforceRequestRateLimitMock,
+  hasDbMock,
+  enqueueLightweightJobMock,
+} = vi.hoisted(() => ({
+  enforceGlobalRateLimitMock: vi.fn(),
   enforceRequestRateLimitMock: vi.fn(),
   hasDbMock: vi.fn(),
   enqueueLightweightJobMock: vi.fn(),
@@ -11,7 +17,11 @@ vi.mock('@bric/db/client', () => ({ hasDb: hasDbMock }));
 vi.mock('@bric/runtime/jobs', () => ({ enqueueLightweightJob: enqueueLightweightJobMock }));
 vi.mock('../../../lib/request-security', () => ({
   buildRateLimitHeaders: () => ({}),
+  enforceGlobalRateLimit: enforceGlobalRateLimitMock,
   enforceRequestRateLimit: enforceRequestRateLimitMock,
+}));
+vi.mock('../../../lib/meta-request', () => ({
+  hasTrustedStorefrontProxySecret: () => true,
 }));
 
 import { POST } from './route';
@@ -28,10 +38,17 @@ describe('POST /storefront/analytics', () => {
   beforeEach(() => {
     hasDbMock.mockReset().mockReturnValue(true);
     enqueueLightweightJobMock.mockReset().mockResolvedValue({ kind: 'created' });
+    enforceGlobalRateLimitMock.mockReset().mockResolvedValue({
+      ok: true,
+      limit: 1_200,
+      remaining: 1_199,
+      resetAt: Date.now() + 60_000,
+      retryAfterSeconds: 0,
+    });
     enforceRequestRateLimitMock.mockReset().mockResolvedValue({
       ok: true,
-      limit: 120,
-      remaining: 119,
+      limit: 60,
+      remaining: 59,
       resetAt: Date.now() + 60_000,
       retryAfterSeconds: 0,
     });

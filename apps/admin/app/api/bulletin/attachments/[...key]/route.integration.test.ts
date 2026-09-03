@@ -1,0 +1,78 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { GET } from './route';
+
+const { requireSessionMock, readObjectMock } = vi.hoisted(() => ({
+  requireSessionMock: vi.fn(),
+  readObjectMock: vi.fn(),
+}));
+
+vi.mock('../../../../../lib/bulletin-server', () => ({
+  requireBulletinSession: requireSessionMock,
+}));
+vi.mock('../../../../../lib/s3-upload', () => ({
+  readPrivateS3Object: readObjectMock,
+  isS3ObjectNotFound: (error: unknown) =>
+    Boolean(error && typeof error === 'object' && 'name' in error && error.name === 'NoSuchKey'),
+}));
+
+describe('bulletin attachment access', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireSessionMock.mockResolvedValue({ session: { user: { id: 'user-1' } }, response: null });
+    readObjectMock.mockResolvedValue({
+      ContentType: 'application/pdf',
+      Body: {
+        transformToWebStream: () =>
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('private attachment'));
+              controller.close();
+            },
+          }),
+      },
+    });
+  });
+
+  it('requires a Bulletin session before reading private storage', async () => {
+    requireSessionMock.mockResolvedValue({
+      session: null,
+      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    });
+
+    const response = await GET(new NextRequest('http://localhost/attachment'), {
+      params: Promise.resolve({ key: ['bulletin', '2026-09-04', 'file.pdf'] }),
+    });
+
+    expect(response.status).toBe(401);
+    expect(readObjectMock).not.toHaveBeenCalled();
+  });
+
+  it('serves only Bulletin-prefixed keys with private no-store headers', async () => {
+    const response = await GET(
+      new NextRequest('http://localhost/attachment?name=customer%20brief.pdf'),
+      { params: Promise.resolve({ key: ['bulletin', '2026-09-04', 'file.pdf'] }) },
+    );
+
+    expect(readObjectMock).toHaveBeenCalledWith('bulletin/2026-09-04/file.pdf');
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('content-disposition')).toBe(
+      'inline; filename="customer brief.pdf"',
+    );
+    await expect(response.text()).resolves.toBe('private attachment');
+  });
+
+  it('rejects traversal and non-Bulletin storage keys', async () => {
+    for (const key of [
+      ['exports', 'orders', 'private.xlsx'],
+      ['bulletin', '..', 'private.pdf'],
+    ]) {
+      const response = await GET(new NextRequest('http://localhost/attachment'), {
+        params: Promise.resolve({ key }),
+      });
+      expect(response.status).toBe(404);
+    }
+    expect(readObjectMock).not.toHaveBeenCalled();
+  });
+});

@@ -62,6 +62,7 @@ function draftRow(overrides: Record<string, unknown> = {}) {
   return {
     id: 1,
     scopeKey: 'status:confirmed',
+    revision: 0,
     sourceMode: 'confirmed',
     orderIds: [31],
     title: 'Confirmed shopping list',
@@ -133,6 +134,7 @@ describe('app/api/orders/shopping-list-draft/route', () => {
     await expect(response.json()).resolves.toEqual({
       draft: {
         scopeKey: 'status:confirmed',
+        revision: 0,
         sourceMode: 'confirmed',
         orderIds: [31],
         title: 'Confirmed shopping list',
@@ -166,7 +168,7 @@ describe('app/api/orders/shopping-list-draft/route', () => {
 
   it('upserts a draft and sorts selected order scope deterministically', async () => {
     const valuesMock = vi.fn();
-    const onConflictDoUpdateMock = vi.fn();
+    const onConflictDoNothingMock = vi.fn();
     const returningMock = vi.fn().mockResolvedValue([
       draftRow({
         scopeKey: 'selected:31,32',
@@ -175,8 +177,8 @@ describe('app/api/orders/shopping-list-draft/route', () => {
         title: 'Selected shopping list',
       }),
     ]);
-    valuesMock.mockReturnValue({ onConflictDoUpdate: onConflictDoUpdateMock });
-    onConflictDoUpdateMock.mockReturnValue({ returning: returningMock });
+    valuesMock.mockReturnValue({ onConflictDoNothing: onConflictDoNothingMock });
+    onConflictDoNothingMock.mockReturnValue({ returning: returningMock });
     getDbMock.mockReturnValue({
       insert: () => ({ values: valuesMock }),
     });
@@ -186,6 +188,7 @@ describe('app/api/orders/shopping-list-draft/route', () => {
         method: 'PUT',
         body: JSON.stringify({
           sourceMode: 'selected',
+          revision: null,
           orderIds: [32, 31, 31],
           title: 'Selected shopping list',
           draftItems: [draftItem],
@@ -205,14 +208,7 @@ describe('app/api/orders/shopping-list-draft/route', () => {
         updatedByName: 'Admin',
       }),
     );
-    expect(onConflictDoUpdateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        set: expect.objectContaining({
-          orderIds: [31, 32],
-          updatedBy: 'admin@example.com',
-        }),
-      }),
-    );
+    expect(onConflictDoNothingMock).toHaveBeenCalledWith(expect.any(Object));
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual(
       expect.objectContaining({

@@ -164,7 +164,11 @@ export function CheckoutForm({
           );
         }
       } catch {
-        window.localStorage.removeItem('bric:cart:delivery-estimate:v1');
+        try {
+          window.localStorage.removeItem('bric:cart:delivery-estimate:v1');
+        } catch {
+          // Delivery estimates are optional browser state.
+        }
       }
     }
     setPending(savedAttempt);
@@ -268,7 +272,11 @@ export function CheckoutForm({
         purchaseEventId: attempt.payload.marketing?.eventId ?? null,
       });
       clearPendingCheckout(window.localStorage);
-      window.localStorage.removeItem(STOREFRONT_CART_KEY);
+      try {
+        window.localStorage.removeItem(STOREFRONT_CART_KEY);
+      } catch {
+        // The committed order must still succeed when browser storage is unavailable.
+      }
       window.dispatchEvent(new CustomEvent('bric:cart-updated'));
       setPending(null);
       void triggerHaptic('success');
@@ -283,8 +291,22 @@ export function CheckoutForm({
       router.push(`/${locale}/thank-you?token=${encodeURIComponent(order.publicToken!)}`);
     } catch (error) {
       const code = error instanceof CheckoutOrderError ? error.code : 'request_failed';
-      setPending(readPendingCheckout(window.localStorage));
-      setRequestError(labels.submitError);
+      if (code === 'cart_changed') {
+        clearPendingCheckout(window.localStorage);
+        setPending(null);
+        try {
+          const reconciled = await reconcileCartWithCatalog(items);
+          setItems(reconciled.items);
+          if (!directItem) writeCart(window.localStorage, reconciled.items);
+          window.dispatchEvent(new CustomEvent('bric:cart-updated'));
+        } catch {
+          // A fresh submit will validate again before creating another attempt.
+        }
+        setRequestError(labels.cartUpdated);
+      } else {
+        setPending(readPendingCheckout(window.localStorage) ?? attempt);
+        setRequestError(labels.submitError);
+      }
       void triggerHaptic('error');
       void trackCheckoutEvent({
         eventName: 'order_create_failed',

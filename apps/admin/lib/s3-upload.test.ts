@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { DeleteObjectsCommand, ListObjectsV2Command, type S3Client } from '@aws-sdk/client-s3';
+import { describe, expect, it, vi } from 'vitest';
 
 import { MAX_IMAGE_UPLOAD_BYTES, validateAndBufferImageUploads } from './upload-validation';
+import { deleteExpiredPrivateS3Objects } from './s3-upload';
 
 describe('image upload validation', () => {
   it('accepts supported image content and derives canonical metadata', async () => {
@@ -54,5 +56,39 @@ describe('image upload validation', () => {
       error: 'Upload at most 12 images at a time',
       status: 400,
     });
+  });
+});
+
+describe('private S3 retention', () => {
+  it('deletes only objects at or beyond the retention cutoff', async () => {
+    const send = vi.fn(async (command: ListObjectsV2Command | DeleteObjectsCommand) => {
+      if (command instanceof ListObjectsV2Command) {
+        return {
+          Contents: [
+            { Key: 'exports/orders/expired.xlsx', LastModified: new Date('2026-09-03T00:00:00Z') },
+            { Key: 'exports/orders/cutoff.xlsx', LastModified: new Date('2026-09-04T00:00:00Z') },
+            { Key: 'exports/orders/current.xlsx', LastModified: new Date('2026-09-04T00:00:01Z') },
+          ],
+        };
+      }
+      return { Errors: [] };
+    });
+
+    await expect(
+      deleteExpiredPrivateS3Objects({
+        prefix: 'exports/orders/',
+        cutoff: new Date('2026-09-04T00:00:00Z'),
+        client: { send } as unknown as S3Client,
+        bucket: 'private-artifacts',
+      }),
+    ).resolves.toBe(2);
+
+    expect(send).toHaveBeenCalledTimes(2);
+    const deletion = send.mock.calls[1]![0];
+    expect(deletion).toBeInstanceOf(DeleteObjectsCommand);
+    expect((deletion as DeleteObjectsCommand).input.Delete?.Objects).toEqual([
+      { Key: 'exports/orders/expired.xlsx' },
+      { Key: 'exports/orders/cutoff.xlsx' },
+    ]);
   });
 });

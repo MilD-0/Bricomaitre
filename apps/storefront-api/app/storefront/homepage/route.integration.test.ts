@@ -13,15 +13,12 @@ vi.mock('@bric/storefront-core/server-cache', () => ({
 describe('storefront homepage route', () => {
   beforeEach(() => Object.values(mocks).forEach((mock) => mock.mockReset()));
 
-  it('returns a stable empty shape without a database', async () => {
+  it('returns an unavailable response without a database', async () => {
     mocks.hasDb.mockReturnValue(false);
-    await expect((await GET()).json()).resolves.toEqual({
-      banners: [],
-      topProducts: [],
-      categories: [],
-      productCards: [],
-      brands: [],
-      featuredGroups: [],
+    const response = await GET();
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Storefront database is unavailable.',
     });
   });
 

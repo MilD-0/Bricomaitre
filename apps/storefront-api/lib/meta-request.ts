@@ -38,7 +38,7 @@ export function isAllowedMetaSourceUrl(value: string) {
   }
 }
 
-function hasTrustedProxySecret(request: NextRequest) {
+export function hasTrustedStorefrontProxySecret(request: NextRequest) {
   const configured = process.env.STOREFRONT_META_PROXY_SECRET?.trim();
   const supplied = request.headers.get('x-storefront-meta-proxy-secret')?.trim();
   return Boolean(configured && supplied && safeEqual(configured, supplied));
@@ -46,7 +46,7 @@ function hasTrustedProxySecret(request: NextRequest) {
 
 export function authorizeMetaSourceRequest(request: NextRequest, eventSourceUrl: string) {
   if (!isAllowedMetaSourceUrl(eventSourceUrl)) return false;
-  if (hasTrustedProxySecret(request)) return true;
+  if (hasTrustedStorefrontProxySecret(request)) return true;
 
   const origin = request.headers.get('origin');
   const host =

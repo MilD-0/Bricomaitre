@@ -32,7 +32,7 @@ describe('storefront homepage featured group route', () => {
     expect(mocks.read).toHaveBeenCalledWith({ db: true }, 2, 3, 12);
   });
 
-  it('rejects invalid group identifiers and handles a missing database', async () => {
+  it('rejects invalid group identifiers and reports a missing database', async () => {
     const invalid = await GET(
       new NextRequest('http://localhost/storefront/homepage/groups/nope'),
       context('nope'),
@@ -40,10 +40,13 @@ describe('storefront homepage featured group route', () => {
     expect(invalid.status).toBe(400);
 
     mocks.hasDb.mockReturnValue(false);
-    const empty = await GET(
+    const unavailable = await GET(
       new NextRequest('http://localhost/storefront/homepage/groups/2'),
       context('2'),
     );
-    await expect(empty.json()).resolves.toEqual({ items: [], total: 0 });
+    expect(unavailable.status).toBe(503);
+    await expect(unavailable.json()).resolves.toEqual({
+      error: 'Storefront database is unavailable.',
+    });
   });
 });

@@ -30,6 +30,8 @@ import {
 
 const SLOW_ORDER_CREATE_THRESHOLD_MS = 2_000;
 const ORDER_CREATE_PROCESSING_TTL_SECONDS = 120;
+const MAX_ORDER_BODY_BYTES = 32_768;
+const MAX_IDEMPOTENCY_KEY_LENGTH = 200;
 
 type OrderTimingEntry = {
   step: string;
@@ -112,6 +114,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const idempotencyKey = req.headers.get('idempotency-key')?.trim();
+  if (!idempotencyKey || idempotencyKey.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
+    return NextResponse.json(
+      { error: 'idempotency_key_required' },
+      { status: 400, headers: withRequestIdHeaders(requestId) },
+    );
+  }
+
   let rateLimit;
   try {
     rateLimit = await enforceRequestRateLimit(req, {
@@ -137,9 +147,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const body = await req.text();
+  if (new TextEncoder().encode(body).byteLength > MAX_ORDER_BODY_BYTES) {
+    return NextResponse.json(
+      { error: 'order_payload_too_large' },
+      { status: 413, headers: withRequestIdHeaders(requestId) },
+    );
+  }
+
   let payload: unknown;
   try {
-    payload = await req.json();
+    payload = JSON.parse(body);
   } catch {
     return NextResponse.json(
       { error: 'Invalid JSON request body.' },
@@ -171,9 +189,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const idempotencyKey = req.headers.get('idempotency-key')?.trim();
   const fingerprint = buildIdempotencyFingerprint(parsed.data);
-  const idempotencyKeyHash = idempotencyKey ? buildIdempotencyKeyHash(idempotencyKey) : null;
+  const idempotencyKeyHash = buildIdempotencyKeyHash(idempotencyKey);
   let durableIdempotencyStarted = false;
   const timings: OrderTimingEntry[] = [];
   const startedAt = performance.now();
@@ -244,6 +261,7 @@ export async function POST(req: NextRequest) {
           ...(durableClaim.metaResponse ? { meta: durableClaim.metaResponse } : {}),
         };
         return NextResponse.json(body, {
+          status: 201,
           headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)),
         });
       }
@@ -407,7 +425,7 @@ export async function POST(req: NextRequest) {
           scope: 'storefront-order-create',
           key: idempotencyKey,
           fingerprint,
-          statusCode: 200,
+          statusCode: 201,
           body,
         });
       } catch (error) {
@@ -424,6 +442,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(body, {
+      status: 201,
       headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)),
     });
   } catch (error) {

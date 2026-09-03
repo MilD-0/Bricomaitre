@@ -43,13 +43,16 @@ function createRuntime() {
   temporaryDirectories.push(directory);
   const runtime = join(directory, 'runtime');
   const releases = join(directory, 'releases');
+  const envDirectory = join(directory, 'env');
   mkdirSync(runtime);
   mkdirSync(releases);
+  mkdirSync(envDirectory);
 
   return {
     directory,
     runtime,
     releases,
+    envDirectory,
     env: {
       ...process.env,
       BRIC_INFRA_ENV_FILE: join(directory, 'missing-infra.env'),
@@ -57,6 +60,7 @@ function createRuntime() {
       BRIC_IMAGE_STATE_FILE: join(runtime, 'images.env'),
       BRIC_DEPLOY_STATE_FILE: join(runtime, 'blue-green.env'),
       BRIC_RELEASES_DIR: releases,
+      BRIC_ENV_DIR: envDirectory,
       BRIC_CURRENT_LINK: join(directory, 'current'),
       BRIC_PREVIOUS_LINK: join(directory, 'previous'),
     },
@@ -244,6 +248,58 @@ describe('release-state transactions', () => {
 
     expect(result.status).toBe(0);
     expect(readFileSync(imageState, 'utf8')).toBe('candidate\n');
+  });
+
+  it('restores every previous runtime environment file and removes newly introduced files', () => {
+    const fixture = createRuntime();
+    writeFileSync(join(fixture.envDirectory, 'admin.env'), 'ADMIN_VALUE=previous\n', {
+      mode: 0o600,
+    });
+    writeFileSync(join(fixture.envDirectory, 'storefront.env'), 'STORE_VALUE=previous\n', {
+      mode: 0o600,
+    });
+
+    const result = spawnSync(
+      'bash',
+      [
+        '-c',
+        'set -euo pipefail; source "$1"; begin_runtime_env_transaction; printf "ADMIN_VALUE=candidate\\n" >"$runtime_env_dir/admin.env"; rm "$runtime_env_dir/storefront.env"; printf "API_VALUE=candidate\\n" >"$runtime_env_dir/storefront-api.env"; rollback_runtime_env_transaction',
+        'bash',
+        blueGreenScript,
+      ],
+      { env: fixture.env, encoding: 'utf8' },
+    );
+
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    expect(readFileSync(join(fixture.envDirectory, 'admin.env'), 'utf8')).toBe(
+      'ADMIN_VALUE=previous\n',
+    );
+    expect(readFileSync(join(fixture.envDirectory, 'storefront.env'), 'utf8')).toBe(
+      'STORE_VALUE=previous\n',
+    );
+    expect(() => readFileSync(join(fixture.envDirectory, 'storefront-api.env'))).toThrow();
+  });
+
+  it('keeps committed runtime environment values and removes their rollback snapshot', () => {
+    const fixture = createRuntime();
+    const adminEnv = join(fixture.envDirectory, 'admin.env');
+    writeFileSync(adminEnv, 'ADMIN_VALUE=previous\n', { mode: 0o600 });
+
+    const result = spawnSync(
+      'bash',
+      [
+        '-c',
+        'set -euo pipefail; source "$1"; begin_runtime_env_transaction; printf "ADMIN_VALUE=candidate\\n" >"$runtime_env_dir/admin.env"; commit_runtime_env_transaction; test ! -e "$runtime_env_transaction_dir"',
+        'bash',
+        blueGreenScript,
+      ],
+      { env: fixture.env, encoding: 'utf8' },
+    );
+
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    expect(readFileSync(adminEnv, 'utf8')).toBe('ADMIN_VALUE=candidate\n');
   });
 
   it('maintains explicit current and previous verified release links', () => {

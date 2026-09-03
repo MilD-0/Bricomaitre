@@ -41,7 +41,12 @@ export function readCart(storage: Pick<Storage, 'getItem'>) {
 }
 
 export function writeCart(storage: Pick<Storage, 'setItem'>, cart: CartItem[]) {
-  storage.setItem(STOREFRONT_CART_KEY, JSON.stringify(cartSchema.parse(cart)));
+  try {
+    storage.setItem(STOREFRONT_CART_KEY, JSON.stringify(cartSchema.parse(cart)));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function updateCartItemQuantity(current: unknown, productId: number, quantity: number) {

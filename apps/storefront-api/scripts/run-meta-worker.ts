@@ -93,23 +93,24 @@ async function run() {
   }
 }
 
-async function shutdown(signal: string) {
+async function shutdown(signal: string, exitCode = 0) {
   if (stopping) return;
   stopping = true;
   console.log(`[storefront-meta-worker] stopping on ${signal}`);
   await analyticsWorker.close();
   await Sentry.close(2_000);
+  process.exit(exitCode);
 }
 
 process.on('SIGINT', () => void shutdown('SIGINT'));
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
 process.on('uncaughtException', (error) => {
   Sentry.captureException(error);
-  void Sentry.flush(2_000);
+  void shutdown('uncaughtException', 1);
 });
 process.on('unhandledRejection', (error) => {
   Sentry.captureException(error);
-  void Sentry.flush(2_000);
+  void shutdown('unhandledRejection', 1);
 });
 
 void run().catch(async (error) => {

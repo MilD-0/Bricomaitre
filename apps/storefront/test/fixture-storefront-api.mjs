@@ -38,7 +38,7 @@ const product = {
   barcode: null,
   price: '4500.00',
   oldPrice: '5200.00',
-  availability: { status: 'in_stock', inStock: true, quantity: 4 },
+  availability: { status: 'in_stock', inStock: true },
   media: [
     {
       url: `${storefrontOrigin}/product-placeholder.svg`,
@@ -191,10 +191,8 @@ const catalogProducts = [
     barcode: null,
     price: '4500.00',
     oldPrice: '5200.00',
-    active: true,
     inStock: true,
     availabilityStatus: 'in_stock',
-    inventoryQuantity: 4,
     brandId: 2,
     categoryId: 3,
     images: ['/product-placeholder.svg'],
@@ -213,10 +211,8 @@ const catalogProducts = [
     barcode: null,
     price: '7200.00',
     oldPrice: null,
-    active: true,
     inStock: true,
     availabilityStatus: 'in_stock',
-    inventoryQuantity: 3,
     brandId: 2,
     categoryId: 3,
     images: ['/product-placeholder.svg?light=2'],
@@ -235,10 +231,8 @@ const catalogProducts = [
     barcode: null,
     price: '8900.00',
     oldPrice: null,
-    active: true,
     inStock: false,
     availabilityStatus: 'out_of_stock',
-    inventoryQuantity: 0,
     brandId: 2,
     categoryId: 4,
     images: ['/product-placeholder.svg?drill=1'],
@@ -260,10 +254,8 @@ for (let id = 14; id <= 41; id += 1) {
     barcode: null,
     price: `${3000 + id * 100}.00`,
     oldPrice: null,
-    active: true,
     inStock: true,
     availabilityStatus: 'in_stock',
-    inventoryQuantity: 5,
     brandId: 2,
     categoryId: 4,
     images: ['/product-placeholder.svg?tool=1'],
@@ -285,10 +277,8 @@ for (let id = 43; id <= 50; id += 1) {
     barcode: null,
     price: `${5000 + id * 50}.00`,
     oldPrice: null,
-    active: true,
     inStock: true,
     availabilityStatus: 'in_stock',
-    inventoryQuantity: 4,
     brandId: 2,
     categoryId: 3,
     images: ['/product-placeholder.svg?light=3'],
@@ -650,10 +640,7 @@ const server = createServer((request, response) => {
       try {
         const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
         const ids = new Set(Array.isArray(payload.productIds) ? payload.productIds : []);
-        send(
-          response,
-          json({ items: catalogProducts.filter((item) => item.active && ids.has(item.id)) }),
-        );
+        send(response, json({ items: catalogProducts.filter((item) => ids.has(item.id)) }));
       } catch {
         send(response, json({ error: 'Invalid cart validation' }, 400));
       }
@@ -669,6 +656,19 @@ const server = createServer((request, response) => {
     result = json({ ok: true, queued: true }, 202);
   } else if (url.pathname === '/storefront/ecotrack/catalog') {
     result = json(ecotrackCatalog);
+  } else if (request.method === 'POST' && url.pathname === '/storefront/orders/track') {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      try {
+        const { token } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        const order = [...orders.values()].find((candidate) => candidate.publicToken === token);
+        send(response, order ? json({ item: order }) : json({ error: 'Not found' }, 404));
+      } catch {
+        send(response, json({ error: 'Invalid tracking request' }, 400));
+      }
+    });
+    return;
   } else if (url.pathname.startsWith('/storefront/orders/track/')) {
     const token = decodeURIComponent(url.pathname.slice('/storefront/orders/track/'.length));
     const order = [...orders.values()].find((candidate) => candidate.publicToken === token);
@@ -676,7 +676,7 @@ const server = createServer((request, response) => {
   } else if (/^\/storefront\/orders\/\d+$/.test(url.pathname)) {
     const order = orders.get(Number(url.pathname.split('/').at(-1)));
     result =
-      order && url.searchParams.get('token') === order.publicToken
+      order && request.headers['x-order-token'] === order.publicToken
         ? json({ item: order })
         : json({ error: 'Not found' }, 404);
   } else if (url.pathname === '/storefront/homepage') {

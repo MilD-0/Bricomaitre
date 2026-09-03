@@ -31,16 +31,13 @@ describe('app/storefront/assets/route', () => {
     readStorefrontAssetsMock.mockReset();
   });
 
-  it('returns empty storefront assets when DB is unavailable', async () => {
+  it('returns an unavailable response when DB is unavailable', async () => {
     hasDbMock.mockReturnValue(false);
 
     const res = await GET();
 
-    await expect(res.json()).resolves.toEqual({
-      banners: [],
-      featuredGroups: [],
-      productCards: [],
-    });
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toEqual({ error: 'Storefront database is unavailable.' });
   });
 
   it('returns storefront assets from the shared service', async () => {

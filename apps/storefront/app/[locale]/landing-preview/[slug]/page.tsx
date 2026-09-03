@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 
 import '../../../styles/product.css';
@@ -31,7 +32,11 @@ export default async function LandingPagePreview({
   params,
   searchParams,
 }: LandingPagePreviewProps) {
-  const [{ locale, slug }, previewQuery] = await Promise.all([params, searchParams]);
+  const [{ locale, slug }, previewQuery, requestHeaders] = await Promise.all([
+    params,
+    searchParams,
+    headers(),
+  ]);
   if (!isLocale(locale)) notFound();
   const { preview } = parseLandingPagePreviewSearchParams(previewQuery);
   if (!preview) notFound();
@@ -45,7 +50,11 @@ export default async function LandingPagePreview({
           ? 'معاينة آمنة للنسخة المحفوظة. إرسال النموذج سينشئ طلباً حقيقياً.'
           : 'Aperçu sécurisé de la version enregistrée. Envoyer le formulaire créera une vraie commande.'}
       </aside>
-      <LandingPageRenderer page={page} locale={locale} />
+      <LandingPageRenderer
+        page={page}
+        locale={locale}
+        nonce={requestHeaders.get('x-nonce') ?? undefined}
+      />
       <LandingOrderForm page={page} locale={locale} />
     </PageShell>
   );

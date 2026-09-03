@@ -24,6 +24,7 @@ describe('GET /api/health', () => {
     await expect(response.json()).resolves.toEqual({
       status: 'ok',
       app: 'storefront',
+      release: 'unknown',
     });
   });
 
@@ -35,6 +36,7 @@ describe('GET /api/health', () => {
     await expect(response.json()).resolves.toEqual({
       status: 'degraded',
       app: 'storefront',
+      release: 'unknown',
     });
   });
 });

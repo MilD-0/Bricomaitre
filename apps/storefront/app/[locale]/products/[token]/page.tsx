@@ -11,15 +11,10 @@ import {
 import { buildMissingProductMetadata, buildProductMetadata } from '@/lib/product-seo';
 import { getStorefrontProductDetail } from '@/lib/storefront-api';
 
-export const revalidate = 900;
-export const dynamicParams = true;
-
-// Product HTML is generated and cached on first request. Admin mutations use
-// signed tag invalidation; the interval is a bounded fallback if that signal
-// fails, not the primary freshness mechanism.
-export function generateStaticParams() {
-  return [];
-}
+// A per-request CSP nonce cannot be embedded safely in cached HTML. Product
+// data remains tag-cached and invalidated by Admin, while the lightweight page
+// shell is rendered per request so every inline Next.js script has a fresh nonce.
+export const dynamic = 'force-dynamic';
 
 export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
   const { locale, token } = await resolveProductPageParams(params);

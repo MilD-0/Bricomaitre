@@ -1,8 +1,12 @@
-import { asc, count, desc, eq } from 'drizzle-orm';
+import { count, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { getDb } from '@bric/db/client';
 import type { EcotrackRateLimitSnapshot } from '@bric/storefront-core/ecotrack-client';
+import {
+  readEcotrackCatalog,
+  type EcotrackCatalogRecord,
+} from '@bric/storefront-core/ecotrack-support';
 import {
   ecotrackCommunes,
   ecotrackServiceFees,
@@ -134,13 +138,7 @@ export type EcotrackCatalogSnapshot = {
   rateLimits: EcotrackRateLimitSnapshot[];
 };
 
-export type EcotrackCatalogRecord = {
-  wilayas: (typeof ecotrackWilayas.$inferSelect)[];
-  communes: (typeof ecotrackCommunes.$inferSelect)[];
-  serviceFees: (typeof ecotrackServiceFees.$inferSelect)[];
-  weightFees: (typeof ecotrackWeightFees.$inferSelect)[];
-  lastSync: typeof ecotrackSyncRuns.$inferSelect | null;
-};
+export type { EcotrackCatalogRecord };
 
 export type EcotrackSyncResult = {
   trigger: string;
@@ -154,6 +152,35 @@ export type EcotrackSyncResult = {
 };
 
 export type EcotrackFeeLookup = Pick<EcotrackCatalogRecord, 'serviceFees'>;
+
+class EcotrackCatalogSnapshotIncompleteError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EcotrackCatalogSnapshotIncompleteError';
+  }
+}
+
+function assertCompleteEcotrackCatalogSnapshot(snapshot: EcotrackCatalogSnapshot) {
+  if (snapshot.wilayas.length === 0 || snapshot.communes.length === 0) {
+    throw new EcotrackCatalogSnapshotIncompleteError(
+      'ECOTRACK returned an empty location catalog; the previous catalog was preserved.',
+    );
+  }
+
+  const deliveryFeeWilayas = new Set(
+    snapshot.serviceFees
+      .filter((fee) => fee.serviceType === 'livraison')
+      .map((fee) => fee.wilayaId),
+  );
+  const missingFeeWilayas = snapshot.wilayas.filter(
+    (wilaya) => !deliveryFeeWilayas.has(wilaya.wilayaId),
+  );
+  if (missingFeeWilayas.length > 0) {
+    throw new EcotrackCatalogSnapshotIncompleteError(
+      `ECOTRACK omitted delivery fees for ${missingFeeWilayas.length} wilaya(s); the previous catalog was preserved.`,
+    );
+  }
+}
 export async function fetchEcotrackCatalogSnapshot(
   options: {
     fetchImpl?: typeof fetch;
@@ -243,34 +270,7 @@ export async function fetchEcotrackCatalogSnapshot(
   };
 }
 
-export async function readEcotrackCatalog(db: Database): Promise<EcotrackCatalogRecord> {
-  const [wilayas, communes, serviceFees, weightFees, lastSync] = await Promise.all([
-    db.select().from(ecotrackWilayas).orderBy(asc(ecotrackWilayas.wilayaId)),
-    db
-      .select()
-      .from(ecotrackCommunes)
-      .orderBy(asc(ecotrackCommunes.wilayaId), asc(ecotrackCommunes.name)),
-    db
-      .select()
-      .from(ecotrackServiceFees)
-      .orderBy(asc(ecotrackServiceFees.serviceType), asc(ecotrackServiceFees.wilayaId)),
-    db.select().from(ecotrackWeightFees).orderBy(asc(ecotrackWeightFees.serviceType)),
-    db
-      .select()
-      .from(ecotrackSyncRuns)
-      .orderBy(desc(ecotrackSyncRuns.startedAt))
-      .limit(1)
-      .then((rows) => rows[0] ?? null),
-  ]);
-
-  return {
-    wilayas,
-    communes,
-    serviceFees,
-    weightFees,
-    lastSync,
-  };
-}
+export { readEcotrackCatalog };
 
 export function resolveEcotrackDeliveryFee(
   catalog: EcotrackFeeLookup,
@@ -313,6 +313,7 @@ export async function syncEcotrackCatalog(
       fetchImpl: options.fetchImpl,
       env: options.env,
     });
+    assertCompleteEcotrackCatalogSnapshot(snapshot);
     const finishedAt = new Date();
 
     await db.transaction(async (tx) => {

@@ -13,7 +13,13 @@ export async function POST(request: NextRequest) {
   try {
     const upstream = await fetchStorefrontUpstream('/storefront/analytics', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        'x-storefront-meta-proxy-secret': process.env.STOREFRONT_META_PROXY_SECRET ?? '',
+        'x-real-ip': request.headers.get('x-real-ip') ?? '',
+        'x-forwarded-for': request.headers.get('x-forwarded-for') ?? '',
+        'user-agent': request.headers.get('user-agent') ?? '',
+      },
       body,
       timeoutMs: 2_000,
       cache: 'no-store',

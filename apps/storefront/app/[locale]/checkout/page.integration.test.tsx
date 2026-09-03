@@ -112,17 +112,14 @@ describe('localized Checkout Page', () => {
     expect(html).not.toContain('data-eyebrow=');
   });
 
-  it('degrades a delivery-catalog outage to an empty, still-renderable checkout', async () => {
+  it('does not fabricate an empty delivery catalog during an outage', async () => {
     mocks.catalog.mockRejectedValue(new Error('delivery API unavailable'));
 
-    const element = await CheckoutPageContent({
-      params: Promise.resolve({ locale: 'fr' }),
-      searchParams: Promise.resolve({}),
-    });
-    const html = renderToStaticMarkup(element);
-
-    expect(html).toContain('data-wilayas="0"');
-    expect(html).toContain('data-communes="0"');
-    expect(html).toContain('Finaliser votre commande');
+    await expect(
+      CheckoutPageContent({
+        params: Promise.resolve({ locale: 'fr' }),
+        searchParams: Promise.resolve({}),
+      }),
+    ).rejects.toThrow('delivery API unavailable');
   });
 });

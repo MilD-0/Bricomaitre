@@ -105,6 +105,7 @@ export type ShoppingListGenerationGroup = {
 export type ShoppingListState =
   | (ShoppingListDraftPayload & {
       scopeKey: string;
+      revision: number | null;
       search: string;
       updatedAt: string | null;
       updatedByName: string | null;

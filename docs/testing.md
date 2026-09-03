@@ -70,3 +70,16 @@ make concurrent execution misleading. Vitest is capped at two workers so
 parallel CI lanes do not each expand to the host CPU count. Browser and
 performance lanes run after setup in a loopback-only network namespace, while
 real-service fixtures use pinned local container images.
+
+CI collects coverage across each deployable application's unit and contract
+suites and rejects regressions below the measured baseline. The enforced
+statement/branch/function/line percentages are `60/50/57/61` for Admin,
+`84/78/90/85` for the Storefront API, and `80/68/78/82` for the Storefront.
+These floors are ratchets, not substitutes for behavior-focused tests: raise
+them when durable coverage improves, and do not weaken them to make a failing change pass.
+
+Production dependencies are scanned for high-severity advisories. SheetJS is a
+documented exception to registry-based scanning because the maintained release
+is distributed from the project's own CDN while the npm package is stale. Admin
+therefore pins the exact `0.20.3` tarball and the lockfile verifies its SHA-512
+integrity; changing that URL or digest requires an explicit dependency review.

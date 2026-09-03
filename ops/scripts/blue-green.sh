@@ -26,6 +26,8 @@ previous_link="${BRIC_PREVIOUS_LINK:-/srv/bric/previous}"
 release_marker_name="${BRIC_RELEASE_MARKER_NAME:-.bric-release.env}"
 release_images_marker_name="${BRIC_RELEASE_IMAGES_MARKER_NAME:-.bric-images.env}"
 release_keep_count="${BRIC_RELEASE_KEEP_COUNT:-5}"
+runtime_env_dir="${BRIC_ENV_DIR:-/srv/bric/env}"
+runtime_env_transaction_dir="$runtime_dir/env.rollback"
 image_ref_regex="${BRIC_IMAGE_REF_REGEX:-}"
 if [[ -z "$image_ref_regex" ]]; then
   image_ref_regex='^ghcr[.]io/mild-0/bricomaitre/[a-z0-9-]+@sha256:[a-f0-9]{64}$'
@@ -695,6 +697,43 @@ commit_image_state_transaction() {
   fi
   image_state_snapshot=""
   image_state_had_file=false
+}
+
+begin_runtime_env_transaction() {
+  ensure_runtime_dirs
+  if [[ -d "$runtime_env_transaction_dir" ]]; then
+    echo 'a runtime-environment transaction is already active' >&2
+    return 1
+  fi
+  mkdir -m 0700 "$runtime_env_transaction_dir"
+  local name
+  for name in admin storefront storefront-api; do
+    if [[ -f "$runtime_env_dir/${name}.env" ]]; then
+      cp -p "$runtime_env_dir/${name}.env" "$runtime_env_transaction_dir/${name}.env"
+      : >"$runtime_env_transaction_dir/${name}.present"
+    fi
+  done
+}
+
+rollback_runtime_env_transaction() {
+  if [[ ! -d "$runtime_env_transaction_dir" ]]; then
+    return 0
+  fi
+  local name
+  for name in admin storefront storefront-api; do
+    if [[ -f "$runtime_env_transaction_dir/${name}.present" ]]; then
+      cp -p "$runtime_env_transaction_dir/${name}.env" "$runtime_env_dir/${name}.env"
+    else
+      rm -f "$runtime_env_dir/${name}.env"
+    fi
+  done
+  rm -rf -- "$runtime_env_transaction_dir"
+}
+
+commit_runtime_env_transaction() {
+  if [[ -d "$runtime_env_transaction_dir" ]]; then
+    rm -rf -- "$runtime_env_transaction_dir"
+  fi
 }
 
 release_link_target() {

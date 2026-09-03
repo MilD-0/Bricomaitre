@@ -109,8 +109,8 @@ describe('checkout order client', () => {
       new Response(JSON.stringify({ item: order }), { status: 200 }),
     );
     await expect(verifyCheckoutOrder(42, 'token with spaces')).resolves.toEqual(order);
-    expect(fetch).toHaveBeenCalledWith('/api/orders/42?token=token%20with%20spaces', {
-      headers: { accept: 'application/json' },
+    expect(fetch).toHaveBeenCalledWith('/api/orders/42', {
+      headers: { accept: 'application/json', 'x-order-token': 'token with spaces' },
     });
   });
 
@@ -119,8 +119,10 @@ describe('checkout order client', () => {
       new Response(JSON.stringify({ item: order }), { status: 200 }),
     );
     await expect(verifyCheckoutOrderByToken('token with spaces')).resolves.toEqual(order);
-    expect(fetch).toHaveBeenCalledWith('/api/orders/track/token%20with%20spaces', {
-      headers: { accept: 'application/json' },
+    expect(fetch).toHaveBeenCalledWith('/api/orders/track', {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      body: JSON.stringify({ token: 'token with spaces' }),
     });
   });
 

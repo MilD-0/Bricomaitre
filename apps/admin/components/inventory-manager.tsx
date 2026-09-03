@@ -5,7 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Search } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTranslations } from 'next-intl';
-import { useDeferredValue, useMemo, useState, useTransition } from 'react';
+import { useDeferredValue, useMemo, useRef, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 
 import {
@@ -491,6 +491,7 @@ export function InventoryManager({ title }: { title: string }) {
         }),
       ),
   });
+  const batchRequestRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const batchApplyMutation = useMutation<
     InventoryApplyResponse,
     Error,
@@ -503,14 +504,20 @@ export function InventoryManager({ title }: { title: string }) {
       }>;
     }
   >({
-    mutationFn: async (payload) =>
-      inventoryApplyResponseSchema.parse(
+    mutationFn: async (payload) => {
+      const fingerprint = JSON.stringify(payload);
+      if (batchRequestRef.current?.fingerprint !== fingerprint) {
+        batchRequestRef.current = { fingerprint, requestId: crypto.randomUUID() };
+      }
+      return inventoryApplyResponseSchema.parse(
         await request('/api/inventory/apply', {
           method: 'POST',
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...payload, requestId: batchRequestRef.current.requestId }),
         }),
-      ),
+      );
+    },
     onSuccess: async () => {
+      batchRequestRef.current = null;
       await queryClient.invalidateQueries({ queryKey: ['inventory-table'] });
       await queryClient.invalidateQueries({ queryKey: ['products'] });
       await queryClient.invalidateQueries({ queryKey: ['action-history'] });

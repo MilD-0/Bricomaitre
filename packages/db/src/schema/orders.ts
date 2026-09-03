@@ -9,6 +9,7 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  check,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { products } from './products';
@@ -28,6 +29,7 @@ export const orders = pgTable(
     normalizedPhone: text('normalized_phone'),
     phoneNumber2: text('phone_number_2'),
     publicToken: text('public_token'),
+    publicTokenExpiresAt: timestamp('public_token_expires_at', { withTimezone: true }),
     cartProducts: text('cart_products').array().notNull().default([]),
     visitId: text('visit_id'),
     journeyId: text('journey_id'),
@@ -77,8 +79,30 @@ export const orders = pgTable(
     index('idx_orders_normalized_phone_created').on(t.normalizedPhone, t.createdAt.desc()),
     index('idx_orders_cart_products_gin').using('gin', t.cartProducts),
     uniqueIndex('orders_public_token_unique').on(t.publicToken),
+    index('idx_orders_public_token_expires').on(t.publicTokenExpiresAt),
     index('idx_orders_created_desc').on(t.createdAt.desc()),
     index('idx_orders_confirmed_created_desc').on(t.inHouseStatus, t.createdAt.desc()),
+    check('orders_state_check', sql`${t.state} is null or ${t.state} between 1 and 58`),
+    check('orders_delivery_check', sql`${t.delivery} in (0, 1)`),
+    check('orders_status_check', sql`${t.inHouseStatus} between 0 and 11`),
+    check('orders_no_answer_count_check', sql`${t.noAnswerCount} >= 0`),
+    check(
+      'orders_amounts_nonnegative_check',
+      sql`${t.deliveryFee} is null or ${t.deliveryFee} >= 0`,
+    ),
+    check(
+      'orders_commercial_amounts_nonnegative_check',
+      sql`(${t.productSubtotal} is null or ${t.productSubtotal} >= 0)
+        and (${t.totalAmount} is null or ${t.totalAmount} >= 0)
+        and (${t.price} is null or ${t.price} >= 0)
+        and (${t.promoOriginalSubtotal} is null or ${t.promoOriginalSubtotal} >= 0)
+        and (${t.promoDiscountAmount} is null or ${t.promoDiscountAmount} >= 0)
+        and (${t.promoFinalSubtotal} is null or ${t.promoFinalSubtotal} >= 0)`,
+    ),
+    check(
+      'orders_public_token_expiry_check',
+      sql`${t.publicTokenExpiresAt} is null or ${t.publicToken} is not null`,
+    ),
   ],
 );
 
@@ -98,5 +122,7 @@ export const orderStatusHistory = pgTable(
   (t) => [
     index('idx_osh_order').on(t.orderId, t.changedAt),
     index('idx_osh_status_changed_order').on(t.status, t.changedAt, t.orderId),
+    check('order_status_history_status_check', sql`${t.status} between 0 and 11`),
+    check('order_status_history_no_answer_count_check', sql`${t.noAnswerCount} >= 0`),
   ],
 );

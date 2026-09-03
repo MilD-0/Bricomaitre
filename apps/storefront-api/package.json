@@ -13,7 +13,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run --project unit-node --maxWorkers=2 && vitest run --project route-contract-node --maxWorkers=2",
     "test:watch": "vitest --project unit-node --maxWorkers=2",
-    "test:coverage": "vitest run --project unit-node --coverage --maxWorkers=2",
+    "test:coverage": "vitest run --project unit-node --project route-contract-node --coverage --maxWorkers=2",
     "test:contract": "vitest run --project route-contract-node --maxWorkers=2",
     "test:integration": "pnpm test:contract"
   },

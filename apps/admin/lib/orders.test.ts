@@ -40,15 +40,13 @@ describe('lib/orders', () => {
   });
 
   it('rejects invalid wilaya codes in order patch payloads', () => {
-    const parsed = orderPatchSchema.safeParse({
-      state: '999',
+    expect(orderPatchSchema.safeParse({ state: '999' }).success).toBe(false);
+    expect(orderPatchSchema.safeParse({ state: 999 }).success).toBe(false);
+    expect(orderPatchSchema.safeParse({ state: '16abc' }).success).toBe(false);
+    expect(orderPatchSchema.safeParse({ state: '' })).toMatchObject({
+      success: true,
+      data: { state: null },
     });
-
-    expect(parsed.success).toBe(true);
-
-    if (parsed.success) {
-      expect(parsed.data.state).toBeNull();
-    }
   });
 
   it('rejects empty order patch payloads', () => {

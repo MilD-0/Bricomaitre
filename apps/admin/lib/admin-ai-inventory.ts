@@ -114,6 +114,7 @@ export async function receiveAdminInventory(
   return applyAdminInventoryBatch(
     getDb(),
     {
+      requestId: crypto.randomUUID(),
       mode: 'increase',
       items: values.items.map((item) => ({
         ...item,
@@ -170,6 +171,10 @@ export async function adjustAdminInventory(
   actor?: ActionActor,
 ) {
   const values = adminAiInventoryAdjustmentSchema.parse(input);
-  const result = await applyAdminInventoryBatch(getDb(), values, actor);
+  const result = await applyAdminInventoryBatch(
+    getDb(),
+    { ...values, requestId: crypto.randomUUID() },
+    actor,
+  );
   return { ok: result.complete, items: result.items, skipped: result.skipped };
 }

@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { NextRequest } from 'next/server';
 
 import { getTrustedClientIp } from '@bric/runtime/client-ip';
@@ -24,9 +26,30 @@ export async function enforceRequestRateLimit(
   },
 ) {
   const clientKey = getRequestClientKey(request);
+  const clientResult = await applyRateLimit({
+    scope: options.scope,
+    key: clientKey,
+    limit: options.limit,
+    windowSeconds: options.windowSeconds,
+  });
+  if (!clientResult.ok || !options.suffix) return clientResult;
+
+  return applyRateLimit({
+    scope: `${options.scope}:subject`,
+    key: createHash('sha256').update(options.suffix).digest('hex'),
+    limit: options.limit,
+    windowSeconds: options.windowSeconds,
+  });
+}
+
+export function enforceGlobalRateLimit(options: {
+  scope: string;
+  limit: number;
+  windowSeconds: number;
+}) {
   return applyRateLimit({
     scope: options.scope,
-    key: options.suffix ? `${clientKey}:${options.suffix}` : clientKey,
+    key: 'global',
     limit: options.limit,
     windowSeconds: options.windowSeconds,
   });
@@ -54,7 +77,15 @@ export async function enforceOrderVelocityLimit(
 ) {
   const redis = getRedis();
   const clientKey = getRequestClientKey(request);
+  const ipResult = await enforceOrderVelocityKey(redis, `ip:${clientKey}`);
+  if (!ipResult.ok) return ipResult;
+
   const key = getOrderVelocityIdentity({ clientKey, ...identity });
+  if (key === `ip:${clientKey}`) return ipResult;
+  return enforceOrderVelocityKey(redis, key);
+}
+
+async function enforceOrderVelocityKey(redis: ReturnType<typeof getRedis>, key: string) {
   const penaltyKey = `bric:ratelimit:storefront-order-velocity:penalty:${key}`;
   const violationKey = `bric:ratelimit:storefront-order-velocity:violations:${key}`;
   const activePenaltySeconds = await redis.ttl(penaltyKey);

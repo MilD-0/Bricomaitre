@@ -2,7 +2,11 @@ import { and, eq, gte, sql } from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
 import { products } from '@bric/db/schema';
-import { mutateEntityWithHistory, type ActionActor } from './action-history';
+import {
+  mutateEntityWithHistoryTransaction,
+  type ActionActor,
+  type Transaction,
+} from './action-history';
 
 type Database = ReturnType<typeof getDb>;
 type InventoryRow = Pick<
@@ -47,12 +51,24 @@ export async function applyInventoryQuantityChange(
     actor?: ActionActor;
   },
 ) {
+  return db.transaction((tx) => applyInventoryQuantityChangeInTransaction(tx, input));
+}
+
+export async function applyInventoryQuantityChangeInTransaction(
+  tx: Transaction,
+  input: {
+    productId: number;
+    mode: 'increase' | 'decrease';
+    quantity: number;
+    actor?: ActionActor;
+  },
+) {
   const delta = input.mode === 'increase' ? input.quantity : -input.quantity;
   const nextQuantity = sql<number>`${products.inventoryQuantity} + ${delta}`;
   let updated: InventoryRow | undefined;
 
   try {
-    [updated] = await mutateEntityWithHistory(db, {
+    [updated] = await mutateEntityWithHistoryTransaction(tx, {
       entityType: 'products',
       entityId: input.productId,
       operation: 'update',
@@ -93,7 +109,9 @@ export async function applyInventoryQuantityChange(
       throw error;
     }
 
-    const current = await readInventoryProductById(db, input.productId);
+    const current = await tx.query.products.findFirst({
+      where: eq(products.id, input.productId),
+    });
     return current
       ? { kind: 'insufficient' as const, available: current.inventoryQuantity }
       : { kind: 'missing' as const };

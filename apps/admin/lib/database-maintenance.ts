@@ -7,10 +7,12 @@ import { sql } from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
 import { actionLogs, adminReportingSnapshotRuns, adminReportingSnapshots } from '@bric/db/schema';
+import { deleteExpiredPrivateS3Objects } from './s3-upload';
 
 export const ACTION_LOG_RETENTION_DAYS = 7;
 export const REPORTING_SNAPSHOT_RETENTION_DAYS = 7;
 export const REPORTING_RUN_RETENTION_DAYS = 30;
+export const ORDER_EXPORT_ARTIFACT_RETENTION_HOURS = 24;
 const DATABASE_MAINTENANCE_MAX_BATCHES = 25;
 
 type Database = ReturnType<typeof getDb>;
@@ -29,6 +31,17 @@ export function getReportingSnapshotCutoff(now: Date) {
 
 export function getReportingRunCutoff(now: Date) {
   return daysBefore(now, REPORTING_RUN_RETENTION_DAYS);
+}
+
+export function getOrderExportArtifactCutoff(now: Date) {
+  return new Date(now.getTime() - ORDER_EXPORT_ARTIFACT_RETENTION_HOURS * 60 * 60 * 1_000);
+}
+
+function deleteExpiredOrderExportArtifacts(now = new Date()) {
+  return deleteExpiredPrivateS3Objects({
+    prefix: 'exports/orders/',
+    cutoff: getOrderExportArtifactCutoff(now),
+  });
 }
 
 export async function deleteExpiredReportingSnapshotsBatch(
@@ -136,6 +149,7 @@ export async function runDatabaseMaintenance({
     analyticsDaysRolledUp: 0,
     metaDaysRolledUp: 0,
     orderIdempotency: 0,
+    orderExportArtifacts: 0,
   };
 
   for (let batch = 0; batch < Math.max(1, maxBatches); batch += 1) {
@@ -188,6 +202,8 @@ export async function runDatabaseMaintenance({
       break;
     }
   }
+
+  totals.orderExportArtifacts = await deleteExpiredOrderExportArtifacts(now);
 
   return totals;
 }

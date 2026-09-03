@@ -22,7 +22,7 @@ const loadProducts = createServerCache({
 
 export async function GET(req: NextRequest) {
   if (!hasDb()) {
-    return NextResponse.json({ items: [], total: 0 });
+    return NextResponse.json({ error: 'Storefront database is unavailable.' }, { status: 503 });
   }
 
   const parsed = storefrontProductListQuerySchema.safeParse({

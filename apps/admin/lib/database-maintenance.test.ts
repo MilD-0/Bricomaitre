@@ -1,14 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getDbMock, runStorefrontDataMaintenanceBatchMock } = vi.hoisted(() => ({
-  getDbMock: vi.fn(),
-  runStorefrontDataMaintenanceBatchMock: vi.fn(),
-}));
+const { deleteExpiredPrivateS3ObjectsMock, getDbMock, runStorefrontDataMaintenanceBatchMock } =
+  vi.hoisted(() => ({
+    deleteExpiredPrivateS3ObjectsMock: vi.fn(),
+    getDbMock: vi.fn(),
+    runStorefrontDataMaintenanceBatchMock: vi.fn(),
+  }));
 
 vi.mock('@bric/db/client', () => ({ getDb: getDbMock }));
 vi.mock('@bric/storefront-core/maintenance', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@bric/storefront-core/maintenance')>()),
   runStorefrontDataMaintenanceBatch: runStorefrontDataMaintenanceBatchMock,
+}));
+vi.mock('./s3-upload', () => ({
+  deleteExpiredPrivateS3Objects: deleteExpiredPrivateS3ObjectsMock,
 }));
 
 import {
@@ -16,8 +21,10 @@ import {
   deleteExpiredReportingRunsBatch,
   deleteExpiredReportingSnapshotsBatch,
   getActionLogCutoff,
+  getOrderExportArtifactCutoff,
   getReportingRunCutoff,
   getReportingSnapshotCutoff,
+  ORDER_EXPORT_ARTIFACT_RETENTION_HOURS,
   REPORTING_RUN_RETENTION_DAYS,
   REPORTING_SNAPSHOT_RETENTION_DAYS,
   runDatabaseMaintenance,
@@ -26,6 +33,14 @@ import {
 describe('database maintenance retention', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    deleteExpiredPrivateS3ObjectsMock.mockResolvedValue(0);
+  });
+
+  it('physically deletes private order exports after twenty-four hours', () => {
+    const now = new Date('2026-07-19T12:30:00.000Z');
+
+    expect(ORDER_EXPORT_ARTIFACT_RETENTION_HOURS).toBe(24);
+    expect(getOrderExportArtifactCutoff(now).toISOString()).toBe('2026-07-18T12:30:00.000Z');
   });
 
   it('keeps raw action logs for exactly seven days', () => {
@@ -91,6 +106,7 @@ describe('database maintenance retention', () => {
       orderAiInfluenceBackfilled: 27,
       paidClickNormalizedDays: 32,
       analyticsSessions: 29,
+      orderExportArtifacts: 0,
     });
     expect(runStorefrontDataMaintenanceBatchMock).toHaveBeenCalledTimes(2);
     expect(runStorefrontDataMaintenanceBatchMock).toHaveBeenNthCalledWith(
@@ -98,5 +114,9 @@ describe('database maintenance retention', () => {
       { execute },
       { now: expect.any(Date), limit: 25 },
     );
+    expect(deleteExpiredPrivateS3ObjectsMock).toHaveBeenCalledWith({
+      prefix: 'exports/orders/',
+      cutoff: expect.any(Date),
+    });
   });
 });

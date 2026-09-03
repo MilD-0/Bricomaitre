@@ -1,4 +1,5 @@
 import type { Route } from 'next';
+import { headers } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { Fragment, Suspense } from 'react';
@@ -11,6 +12,7 @@ import { ProductTelemetry } from '@/components/product-telemetry';
 import { ProductTrustSignal } from '@/components/product-trust-signal';
 import { SimilarProducts } from '@/components/similar-products';
 import { StorefrontImage } from '@/components/storefront-image';
+import { StructuredData } from '@/components/structured-data';
 import { SimilarProductsSkeleton } from '@/components/storefront-skeletons';
 import { isLocale, type Locale } from '@/i18n/config';
 import { isDisplayableProductImageUrl } from '@/lib/product-images';
@@ -21,11 +23,7 @@ import {
   hasProductDiscount,
   parseProductPrice,
 } from '@/lib/product-presentation';
-import {
-  buildProductStructuredData,
-  getProductPath,
-  serializeStructuredData,
-} from '@/lib/product-seo';
+import { buildProductStructuredData, getProductPath } from '@/lib/product-seo';
 import {
   getStorefrontCatalogMeta,
   getStorefrontProductDetail,
@@ -65,7 +63,10 @@ async function ProductUnavailable({ locale }: { locale: Locale }) {
 }
 
 export async function ProductPageContent({ params }: ProductPageProps) {
-  const { locale, token } = await resolveProductPageParams(params);
+  const [{ locale, token }, requestHeaders] = await Promise.all([
+    resolveProductPageParams(params),
+    headers(),
+  ]);
   const productPromise = getStorefrontProductDetail(token);
   const translationsPromise = getTranslations({ locale, namespace: 'ProductDetail' });
   const settingsPromise = getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse);
@@ -121,13 +122,9 @@ export async function ProductPageContent({ params }: ProductPageProps) {
 
   return (
     <PageShell locale={locale} contactSettings={contact}>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: serializeStructuredData(
-            buildProductStructuredData(product, locale, categoryBreadcrumbs),
-          ),
-        }}
+      <StructuredData
+        value={buildProductStructuredData(product, locale, categoryBreadcrumbs)}
+        nonce={requestHeaders.get('x-nonce') ?? undefined}
       />
       <ProductTelemetry
         locale={locale}

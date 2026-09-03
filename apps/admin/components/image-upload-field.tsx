@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- Upload previews use transient blob URLs and must bypass the Next image optimizer. */
 
 import { ImagePlus, LoaderCircle, Pencil, Trash2, XCircle } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { cn } from '../lib/utils';
@@ -91,6 +92,7 @@ export function ImageUploadField({
   value,
   onChange,
 }: ImageUploadFieldProps) {
+  const t = useTranslations('uploadFields');
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
@@ -257,10 +259,13 @@ export function ImageUploadField({
                 <div className="relative aspect-square bg-muted/30">
                   <button
                     type="button"
-                    aria-label={`Open image ${image.index + 1}`}
+                    aria-label={t('openImage', { number: image.index + 1 })}
                     className="block size-full cursor-pointer"
                     onClick={() =>
-                      setPreviewImage({ src: image.url, alt: `Image ${image.index + 1}` })
+                      setPreviewImage({
+                        src: image.url,
+                        alt: t('imageAlt', { number: image.index + 1 }),
+                      })
                     }
                   >
                     <img src={image.url} alt="" className="size-full object-cover" />
@@ -268,12 +273,12 @@ export function ImageUploadField({
                 </div>
                 <div className="flex items-center justify-between gap-2 border-t border-border/60 px-2.5 py-2">
                   <span className="truncate text-[length:var(--type-size-label-px)] font-medium text-muted-foreground">
-                    Uploaded
+                    {t('uploaded')}
                   </span>
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      aria-label={`Change image ${image.index + 1}`}
+                      aria-label={t('changeImage', { number: image.index + 1 })}
                       className="inline-flex size-7 cursor-pointer items-center justify-center rounded-full border border-border/70 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                       onClick={(event) => {
                         event.stopPropagation();
@@ -284,7 +289,7 @@ export function ImageUploadField({
                     </button>
                     <button
                       type="button"
-                      aria-label={`Delete image ${image.index + 1}`}
+                      aria-label={t('deleteImage', { number: image.index + 1 })}
                       className="inline-flex size-7 cursor-pointer items-center justify-center rounded-full border border-border/70 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                       onClick={(event) => {
                         event.stopPropagation();
@@ -306,7 +311,7 @@ export function ImageUploadField({
                 <div className="relative aspect-square bg-muted/30">
                   <button
                     type="button"
-                    aria-label={`Open upload preview ${upload.fileName}`}
+                    aria-label={t('openUploadPreview', { name: upload.fileName })}
                     className="block size-full cursor-pointer"
                     onClick={() =>
                       setPreviewImage({ src: upload.previewUrl, alt: upload.fileName })
@@ -332,8 +337,8 @@ export function ImageUploadField({
                       {upload.status === 'uploading'
                         ? `${upload.progress}%`
                         : upload.status === 'success'
-                          ? 'Done'
-                          : 'Failed'}
+                          ? t('done')
+                          : t('failed')}
                     </div>
                   </div>
                   <div className="absolute right-2 top-2 rounded-full border border-border/20 bg-[hsl(var(--background)/0.84)] p-1.5 text-foreground backdrop-blur-sm">
@@ -350,10 +355,10 @@ export function ImageUploadField({
                   </p>
                   <p className="text-[length:var(--type-size-label-px)] text-muted-foreground">
                     {upload.status === 'uploading'
-                      ? `${upload.progress}% uploaded`
+                      ? t('progress', { progress: upload.progress })
                       : upload.status === 'success'
-                        ? 'Uploaded'
-                        : 'Upload failed'}
+                        ? t('uploaded')
+                        : t('uploadFailed')}
                   </p>
                 </div>
               </div>
@@ -391,12 +396,10 @@ export function ImageUploadField({
         >
           <ImagePlus className="size-4" />
           <span>
-            {isDragActive ? 'Drop images to upload' : multiple ? 'Add images' : 'Choose image'}
+            {isDragActive ? t('dropImages') : multiple ? t('addImages') : t('chooseImage')}
           </span>
           <span className="text-xs font-normal text-muted-foreground">
-            {multiple
-              ? 'Drag and drop images here, or click to browse'
-              : 'Drag and drop an image here, or click to browse'}
+            {multiple ? t('browseImages') : t('browseImage')}
           </span>
         </button>
       </FieldContent>
@@ -428,12 +431,12 @@ export function ImageUploadField({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete image?</DialogTitle>
-            <DialogDescription>This image will be removed from the form.</DialogDescription>
+            <DialogTitle>{t('deleteImageTitle')}</DialogTitle>
+            <DialogDescription>{t('deleteImageDescription')}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setDeleteIndex(null)}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               type="button"
@@ -445,7 +448,7 @@ export function ImageUploadField({
                 setDeleteIndex(null);
               }}
             >
-              Delete
+              {t('delete')}
             </Button>
           </DialogFooter>
         </DialogContent>

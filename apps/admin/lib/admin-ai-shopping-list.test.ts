@@ -221,6 +221,7 @@ describe('admin AI order shopping lists', () => {
     expect(mocks.applyInventory).toHaveBeenCalledWith(
       mocks.db,
       {
+        requestId: expect.any(String),
         mode: 'decrease',
         items: [
           {

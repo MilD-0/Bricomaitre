@@ -13,7 +13,7 @@ const loadBuildFeed = createServerCache({
 
 export async function GET() {
   if (!hasDb()) {
-    return NextResponse.json({ items: [] });
+    return NextResponse.json({ error: 'Storefront database is unavailable.' }, { status: 503 });
   }
 
   return NextResponse.json({ items: await loadBuildFeed() });

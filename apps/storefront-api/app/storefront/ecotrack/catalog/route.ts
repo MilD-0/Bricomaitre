@@ -13,13 +13,7 @@ const loadCatalog = createServerCache({
 
 export async function GET() {
   if (!hasDb()) {
-    return NextResponse.json({
-      wilayas: [],
-      communes: [],
-      serviceFees: [],
-      weightFees: [],
-      lastSync: null,
-    });
+    return NextResponse.json({ error: 'Storefront database is unavailable.' }, { status: 503 });
   }
 
   const response = NextResponse.json(await loadCatalog());

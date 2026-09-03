@@ -24,6 +24,7 @@ import {
 } from './bulletin';
 import { syncBulletinPostAttachments, syncBulletinPostTags } from './bulletin-server';
 import type { PermissionKey } from './permissions';
+import { deletePrivateS3Object } from './s3-upload';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -248,6 +249,7 @@ export async function updateBulletinPost(
     throw new BulletinMutationForbiddenError('post', postId);
   }
 
+  let removedAttachmentKeys: string[] = [];
   await mutateEntityWithHistory(db, {
     entityType: 'bulletinPosts',
     entityId: postId,
@@ -271,9 +273,15 @@ export async function updateBulletinPost(
       await tx.update(bulletinPosts).set(update).where(eq(bulletinPosts.id, postId));
       if (values.tags !== undefined) await syncBulletinPostTags(tx, postId, values.tags);
       if (values.attachments !== undefined)
-        await syncBulletinPostAttachments(tx, postId, values.attachments);
+        removedAttachmentKeys = await syncBulletinPostAttachments(tx, postId, values.attachments);
     },
   });
+
+  await Promise.all(
+    removedAttachmentKeys
+      .filter((key) => key.startsWith('bulletin/'))
+      .map((key) => deletePrivateS3Object(key).catch(() => undefined)),
+  );
 
   return {
     id: postId,
@@ -301,6 +309,11 @@ export async function deleteBulletinPost(
     throw new BulletinMutationForbiddenError('post', postId);
   }
 
+  const attachments = await db
+    .select({ fileKey: bulletinPostAttachments.fileKey })
+    .from(bulletinPostAttachments)
+    .where(eq(bulletinPostAttachments.postId, postId));
+
   await mutateEntityWithHistory(db, {
     entityType: 'bulletinPosts',
     entityId: postId,
@@ -312,6 +325,12 @@ export async function deleteBulletinPost(
       await tx.delete(bulletinPosts).where(eq(bulletinPosts.id, postId));
     },
   });
+  await Promise.all(
+    attachments
+      .map((attachment) => attachment.fileKey)
+      .filter((key) => key.startsWith('bulletin/'))
+      .map((key) => deletePrivateS3Object(key).catch(() => undefined)),
+  );
   return { id: postId, deleted: true as const };
 }
 

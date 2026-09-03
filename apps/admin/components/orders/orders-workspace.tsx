@@ -224,29 +224,56 @@ export function OrdersWorkspace({
   };
   const bulkStatusMutation = useMutation({
     mutationFn: async () => {
-      await Promise.all(
-        selectedOrders.map((order) =>
-          request<OrderDetailResponse>(`/api/orders/${order.id}`, {
+      const results = await Promise.allSettled(
+        selectedOrders.map(async (order) => {
+          const response = await request<OrderDetailResponse>(`/api/orders/${order.id}`, {
             method: 'PATCH',
             body: JSON.stringify({
               inHouseStatus: bulkStatus,
               noAnswerCount:
                 bulkStatus === ORDER_STATUS.NO_ANSWER ? Math.max(order.noAnswerCount, 1) : 0,
             }),
-          }),
-        ),
+          });
+          return { orderId: order.id, response };
+        }),
+      );
+      return results.reduce(
+        (summary, result, index) => {
+          if (result.status === 'fulfilled') {
+            summary.succeeded.push(result.value);
+          } else {
+            summary.failedIds.push(selectedOrders[index]!.id);
+          }
+          return summary;
+        },
+        {
+          succeeded: [] as Array<{ orderId: number; response: OrderDetailResponse }>,
+          failedIds: [] as number[],
+        },
       );
     },
-    onSuccess: async () => {
-      toast.success(t('notifications.orders.bulkStatus.success', { count: selectedOrders.length }));
-      setSelectedIds([]);
+    onSuccess: async (result) => {
+      if (result.succeeded.length > 0) {
+        toast.success(
+          t('notifications.orders.bulkStatus.success', { count: result.succeeded.length }),
+        );
+      }
+      if (result.failedIds.length > 0) {
+        toast.error(t('notifications.orders.bulkStatus.error', { count: result.failedIds.length }));
+      }
+      setSelectedIds(result.failedIds);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['orders-workspace'] }),
         queryClient.invalidateQueries({ queryKey: ['orders-workspace-detail'] }),
       ]);
     },
-    onError: () =>
-      toast.error(t('notifications.orders.bulkStatus.error', { count: selectedOrders.length })),
+    onError: async () => {
+      toast.error(t('notifications.orders.bulkStatus.error', { count: selectedOrders.length }));
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['orders-workspace'] }),
+        queryClient.invalidateQueries({ queryKey: ['orders-workspace-detail'] }),
+      ]);
+    },
   });
   const deleteMutation = useMutation({
     mutationFn: ({ id }: DeleteTarget) =>

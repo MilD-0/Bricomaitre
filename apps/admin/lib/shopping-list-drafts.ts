@@ -61,6 +61,7 @@ export type ShoppingListDraftPayload = {
 
 export type ShoppingListDraftRecord = ShoppingListDraftPayload & {
   scopeKey: string;
+  revision: number;
   updatedAt: string;
   updatedByName: string | null;
 };
@@ -138,6 +139,10 @@ export const shoppingListDraftPayloadSchema = z.object({
   generatedItems: z.array(shoppingListDraftItemSchema).max(500),
   draftItems: z.array(shoppingListDraftItemSchema).max(500),
   orders: z.array(shoppingListOrderGroupSchema).max(500),
+});
+
+export const shoppingListDraftSaveRequestSchema = shoppingListDraftPayloadSchema.extend({
+  revision: z.number().int().nonnegative().nullable(),
 });
 
 export const shoppingListDraftQuerySchema = z.object({

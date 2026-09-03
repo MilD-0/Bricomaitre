@@ -24,22 +24,14 @@ vi.mock('@bric/storefront-core/server-cache', () => ({
 describe('app/storefront/settings/route', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('returns the safe default contact settings without a database', async () => {
+  it('returns an unavailable response without a database', async () => {
     mocks.hasDb.mockReturnValue(false);
 
     const response = await GET();
 
+    expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
-      phoneDisplay: '0795 34 28 26',
-      phoneHref: 'tel:+213795342826',
-      phoneEnabled: true,
-      aiAssistantEnabled: true,
-      contactEmail: 'bricomaitre@gmail.com',
-      address: 'BT N20, Cité 08 Mai 45, Bab Ezzouar 16024, Alger',
-      mapUrl: 'https://maps.app.goo.gl/MpAM58nHS2G5JBah8',
-      facebookUrl: 'https://www.facebook.com/profile.php?id=61562272954715',
-      aiModel: 'openai/gpt-5.6-luna',
-      aiFallbackModel: null,
+      error: 'Storefront database is unavailable.',
     });
   });
 

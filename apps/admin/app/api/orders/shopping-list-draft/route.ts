@@ -4,13 +4,14 @@ import { getDb, hasDb } from '@bric/db/client';
 import { auth } from '../../../../lib/auth';
 import { requireMutationAccess } from '../../../../lib/rbac';
 import {
-  shoppingListDraftPayloadSchema,
+  shoppingListDraftSaveRequestSchema,
   shoppingListDraftQuerySchema,
 } from '../../../../lib/shopping-list-drafts';
 import {
   deleteAdminShoppingListDraft,
   loadAdminShoppingListDraft,
   saveAdminShoppingListDraft,
+  ShoppingListDraftConflictError,
 } from '../../../../lib/shopping-list-drafts.server';
 
 function parseDraftQuery(req: NextRequest) {
@@ -49,19 +50,26 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
 
-  const parsed = shoppingListDraftPayloadSchema.safeParse(await req.json().catch(() => null));
+  const parsed = shoppingListDraftSaveRequestSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
   const session = await auth();
-  return NextResponse.json({
-    ok: true,
-    draft: await saveAdminShoppingListDraft(getDb(), parsed.data, {
-      email: session?.user?.email,
-      name: session?.user?.name,
-    }),
-  });
+  try {
+    return NextResponse.json({
+      ok: true,
+      draft: await saveAdminShoppingListDraft(getDb(), parsed.data, {
+        email: session?.user?.email,
+        name: session?.user?.name,
+      }),
+    });
+  } catch (error) {
+    if (error instanceof ShoppingListDraftConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    throw error;
+  }
 }
 
 export async function DELETE(req: NextRequest) {

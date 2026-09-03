@@ -1,14 +1,25 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render as testingRender, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { NextIntlClientProvider } from 'next-intl';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BulletinAttachment } from '../lib/bulletin';
+import messages from '../messages/en.json';
 import {
   MAX_BULLETIN_UPLOAD_BYTES,
   MAX_BULLETIN_UPLOAD_TOTAL_BYTES,
   SPREADSHEET_UPLOAD_EXTENSIONS,
 } from '../lib/upload-limits';
 import { FileUploadField } from './file-upload-field';
+
+function render(ui: ReactNode) {
+  return testingRender(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      {ui}
+    </NextIntlClientProvider>,
+  );
+}
 
 const mockUse = vi.fn();
 const mockOn = vi.fn();

@@ -4,14 +4,6 @@ import { getDb, hasDb } from '@bric/db/client';
 import { readStorefrontHomepage } from '@bric/storefront-core/assets';
 import { CACHE_TAGS, createServerCache } from '@bric/storefront-core/server-cache';
 
-const emptyHomepage = {
-  banners: [],
-  topProducts: [],
-  categories: [],
-  productCards: [],
-  brands: [],
-  featuredGroups: [],
-};
 const loadHomepage = createServerCache({
   keyParts: ['storefront-homepage'],
   revalidate: 120,
@@ -20,6 +12,8 @@ const loadHomepage = createServerCache({
 });
 
 export async function GET() {
-  if (!hasDb()) return NextResponse.json(emptyHomepage);
+  if (!hasDb()) {
+    return NextResponse.json({ error: 'Storefront database is unavailable.' }, { status: 503 });
+  }
   return NextResponse.json(await loadHomepage());
 }

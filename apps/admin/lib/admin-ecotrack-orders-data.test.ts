@@ -25,6 +25,7 @@ describe('admin ECOTRACK shipment mapping', () => {
     expect(mapEcotrackStatusToOrderStatus('vers_hub', freshActivity)).toBe(7);
     expect(mapEcotrackStatusToOrderStatus('suspendu', freshActivity)).toBe(5);
     expect(mapEcotrackStatusToOrderStatus('annule', freshActivity)).toBe(6);
+    expect(mapEcotrackStatusToOrderStatus('payed', freshActivity)).toBe(4);
     expect(mapEcotrackStatusToOrderStatus('paye_et_archive', freshActivity)).toBe(4);
     expect(mapEcotrackStatusToOrderStatus('retour_recu', freshActivity)).toBe(8);
   });

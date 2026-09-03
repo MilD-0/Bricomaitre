@@ -51,7 +51,7 @@ Each deployable application exposes `GET /api/health`. Releases preserve an immu
 
 **Catalog browsing**
 
-The Customer’s browser reaches the Storefront. Server-side Storefront reads use the typed Storefront API client, and the API serves PostgreSQL-backed catalog and merchandising contracts with explicit cache tags.
+The Customer’s browser reaches the Storefront. Server-side Storefront reads use the typed Storefront API client, and the API serves PostgreSQL-backed catalog and merchandising contracts with explicit cache tags. Product and campaign data remains tag-cached, but their HTML is rendered per request because a fresh Content Security Policy nonce cannot be embedded safely in cached HTML.
 
 **Order submission and access**
 
@@ -71,7 +71,7 @@ Both assistants use model-led tool loops over bounded application capabilities. 
 
 ## Fulfilment and carrier boundary
 
-Confirmation Status and Shipment Status are separate state machines. The Commerce Operating System owns contact and confirmation work; carriers own transport events after Posting.
+Operational Order Status and Shipment Status are separate state systems. The former is Bricomaitre’s normalized view across contact, confirmation, Posting, and fulfilment; the latter preserves the carrier-owned transport state. Projecting a carrier outcome into the operational view does not replace or rewrite the raw Shipment Status.
 
 1. Carrier catalog synchronization validates wilayas, communes, service availability, and fees before replacing the persisted snapshot.
 2. Admin previews classify Orders as eligible, skipped, or invalid before a Posting mutation.
