@@ -84,9 +84,7 @@ describe('production packaging and release runtime', () => {
       expect(source).toContain(`COPY ${appDirectory} ./${appDirectory}`);
       expect(source).toContain('COPY packages/storefront-core ./packages/storefront-core');
       expect(source).not.toContain('ops/ownership');
-      expect(source).toContain(
-        'COPY --chown=bric:bric LICENSE NOTICE SECURITY.md ASSET-LICENSING.md THIRD_PARTY_NOTICES.md ./',
-      );
+      expect(source).toContain('COPY --chown=bric:bric LICENSE NOTICE SECURITY.md ./');
       expect(source).toContain(
         'COPY --chown=bric:bric third_party/licenses ./third_party/licenses',
       );
@@ -112,9 +110,7 @@ describe('production packaging and release runtime', () => {
         source.match(/org[.]opencontainers[.]image[.]licenses="AGPL-3[.]0-only"/g),
       ).toHaveLength(runtimeStages);
       expect(
-        source.match(
-          /COPY --chown=bric:bric LICENSE NOTICE SECURITY[.]md ASSET-LICENSING[.]md THIRD_PARTY_NOTICES[.]md [.][/]/g,
-        ),
+        source.match(/COPY --chown=bric:bric LICENSE NOTICE SECURITY[.]md [.][/]/g),
       ).toHaveLength(runtimeStages);
       expect(source.match(/COPY --chown=bric:bric third_party[/]licenses/g)).toHaveLength(
         runtimeStages,
@@ -202,11 +198,6 @@ describe('production packaging and release runtime', () => {
   it('packages the public legal surface instead of legacy ownership boundaries', () => {
     const license = readFileSync(resolve(workspaceRoot, 'LICENSE'), 'utf8');
     const notice = readFileSync(resolve(workspaceRoot, 'NOTICE'), 'utf8');
-    const assetLicensing = readFileSync(resolve(workspaceRoot, 'ASSET-LICENSING.md'), 'utf8');
-    const thirdPartyNotices = readFileSync(
-      resolve(workspaceRoot, 'THIRD_PARTY_NOTICES.md'),
-      'utf8',
-    );
     const release = readFileSync(resolve(workspaceRoot, '.github/workflows/deploy.yml'), 'utf8');
     const deployVerifier = readFileSync(
       resolve(workspaceRoot, 'ops/scripts/blue-green.sh'),
@@ -223,7 +214,9 @@ describe('production packaging and release runtime', () => {
     expect(license).toContain('GNU AFFERO GENERAL PUBLIC LICENSE');
     expect(license).toContain('Version 3, 19 November 2007');
     expect(notice).toContain('AGPL-3.0-only');
-    expect(notice).toContain('ASSET-LICENSING.md');
+    expect(notice).toContain('EXCLUDED VISUAL IDENTITY');
+    expect(notice).toContain('PUBLIC HISTORY');
+    expect(notice).toContain('THIRD-PARTY SOFTWARE AND FONTS');
 
     for (const assetPath of [
       'apps/admin/app/icon.png',
@@ -243,17 +236,11 @@ describe('production packaging and release runtime', () => {
       'apps/storefront/public/icons/icon-512.png',
       'apps/storefront/public/icons/icon-maskable-512.png',
     ]) {
-      expect(assetLicensing).toContain(`\`${assetPath}\``);
+      expect(notice).toContain(assetPath);
       expect(existsSync(resolve(workspaceRoot, assetPath))).toBe(true);
     }
 
-    for (const releaseFile of [
-      'LICENSE',
-      'NOTICE',
-      'SECURITY.md',
-      'ASSET-LICENSING.md',
-      'THIRD_PARTY_NOTICES.md',
-    ]) {
+    for (const releaseFile of ['LICENSE', 'NOTICE', 'SECURITY.md']) {
       expect(release).toContain(releaseFile);
       expect(deployVerifier).toContain(`$release_dir/${releaseFile}`);
     }
@@ -268,8 +255,8 @@ describe('production packaging and release runtime', () => {
     expect(lockfile).toContain("'@fontsource-variable/inter@5.3.0'");
     expect(lockfile).toContain("'@fontsource/ibm-plex-sans-arabic@5.3.0'");
     expect(libvipsVersions.vips).toBe('8.18.6');
-    expect(thirdPartyNotices).toContain('sharp-libvips/tree/v1.3.3');
-    expect(thirdPartyNotices).toContain('libvips/tree/v8.18.6');
+    expect(notice).toContain('sharp-libvips/tree/v1.3.3');
+    expect(notice).toContain('libvips/tree/v8.18.6');
   });
 
   it('prints candidate state and bounded logs when a health gate expires', () => {
@@ -613,22 +600,13 @@ describe('production packaging and release runtime', () => {
     expect(release).toContain('MARKETING_TIKTOK_DESTINATION_ENABLED=%s');
   });
 
-  it('keeps private dependency pins on schedule but omits the bot from public history', () => {
+  it('keeps dependency pins on schedule', () => {
     const dependabot = readFileSync(resolve(workspaceRoot, '.github/dependabot.yml'), 'utf8');
-    const historyPlan = JSON.parse(
-      readFileSync(resolve(workspaceRoot, 'ops/public-release/history-plan.json'), 'utf8'),
-    ) as {
-      sanitizationProfiles: { common: { removePaths: string[]; replace: string[] } };
-    };
 
     expect(dependabot).toContain('package-ecosystem: github-actions');
     expect(dependabot).toContain('package-ecosystem: docker');
     expect(dependabot.match(/interval: monthly/g)).toHaveLength(3);
     expect(dependabot).toContain('open-pull-requests-limit: 5');
-    expect(historyPlan.sanitizationProfiles.common.removePaths).toContain('.github/dependabot.yml');
-    expect(historyPlan.sanitizationProfiles.common.replace).toContain(
-      'globally routable IP test fixtures with documentation-reserved addresses',
-    );
   });
 
   it('validates shell operations with a pinned, integrity-checked ShellCheck release', () => {

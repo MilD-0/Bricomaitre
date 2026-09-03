@@ -254,7 +254,7 @@ describe('admin AI ECOTRACK requirements', () => {
     });
 
     expect(result.documentation).toMatchObject({
-      repositoryGuide: 'docs/ecotrack-integration.md',
+      repositoryGuide: 'docs/architecture.md#fulfilment-and-carrier-boundary',
       provider: 'delivro',
     });
     expect(result.likelyRepairFields).toEqual(['commune']);

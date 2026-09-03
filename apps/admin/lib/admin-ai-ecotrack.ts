@@ -331,7 +331,7 @@ export async function loadAdminAiEcotrackRequirements(
   return {
     kind: 'ecotrack_requirements' as const,
     documentation: {
-      repositoryGuide: 'docs/ecotrack-integration.md',
+      repositoryGuide: 'docs/architecture.md#fulfilment-and-carrier-boundary',
       canonicalPostingContract: 'apps/admin/lib/ecotrack.ts',
       canonicalOrderRepair: 'update_order_details',
       provider: parsed.provider,
