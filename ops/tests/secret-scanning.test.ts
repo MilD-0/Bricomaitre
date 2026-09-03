@@ -44,6 +44,7 @@ fi
 source_path=''
 report_path=''
 is_directory_scan='false'
+log_opts=''
 while (($#)); do
   case "$1" in
     --source)
@@ -58,12 +59,16 @@ while (($#)); do
       is_directory_scan='true'
       shift
       ;;
+    --log-opts)
+      log_opts="$2"
+      shift 2
+      ;;
     *)
       shift
       ;;
   esac
 done
-printf '%s|%s\n' "$is_directory_scan" "$source_path" >> "$FAKE_GITLEAKS_CALLS"
+printf '%s|%s|%s\n' "$is_directory_scan" "$source_path" "$log_opts" >> "$FAKE_GITLEAKS_CALLS"
 if [[ "$source_path" == */canary.env ]]; then
   exit "\${FAKE_GITLEAKS_CANARY_STATUS:-23}"
 fi
@@ -152,8 +157,8 @@ describe('repository secret scanning', () => {
     expect(result.stdout).toContain('Gitleaks canary and worktree secret scan passed.');
     const calls = readFileSync(fake.calls, 'utf8').trim().split('\n');
     expect(calls).toHaveLength(2);
-    expect(calls[0]).toMatch(/^true[|].+[/]canary[.]env$/);
-    expect(calls[1]).toMatch(/^true[|].+[/]worktree$/);
+    expect(calls[0]).toMatch(/^true[|].+[/]canary[.]env[|]$/);
+    expect(calls[1]).toMatch(/^true[|].+[/]worktree[|]$/);
   });
 
   it('runs the history scan only from a complete checkout', () => {
@@ -165,7 +170,11 @@ describe('repository secret scanning', () => {
     expect(result.stdout).toContain('Gitleaks canary and history secret scan passed.');
     const calls = readFileSync(fake.calls, 'utf8').trim().split('\n');
     expect(calls).toHaveLength(2);
-    expect(calls[1]).toBe(`false|${repository}`);
+    const headCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: repository,
+      encoding: 'utf8',
+    }).trim();
+    expect(calls[1]).toBe(`false|${repository}|${headCommit}`);
   });
 
   it('allows only UUIDv4 findings in the exact AI fixture paths', () => {
@@ -239,6 +248,7 @@ describe('repository secret scanning', () => {
     expect(staticQuality).toContain('run: pnpm secrets:check');
     expect(scannerSource).toContain('git -C "$scan_source" ls-files --cached --others');
     expect(scannerSource).toContain('rev-parse --is-shallow-repository');
+    expect(scannerSource).toContain('--log-opts "$head_commit"');
     expect(scannerSource.match(/--redact/g)).toHaveLength(1);
     expect(scannerSource).toContain('node "$report_verifier" "$report_path"');
   });

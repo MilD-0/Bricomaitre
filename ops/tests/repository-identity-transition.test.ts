@@ -59,15 +59,14 @@ afterEach(() => {
   }
 });
 
-describe('canonical repository identity transition', () => {
-  it('accepts canonical images only with the canonical workflow identity', () => {
+describe('canonical image namespace transition', () => {
+  it('accepts canonical images with the current repository workflow identity', () => {
     const result = verifyImage(canonicalImage, 'public');
 
     expect(result.status).toBe(0);
     expect(result.cosignArguments).toContain(
-      '--certificate-identity https://github.com/MilD-0/Bricomaitre/.github/workflows/deploy.yml@refs/heads/main',
+      '--certificate-identity https://github.com/MilD-0/Bricomaitre2/.github/workflows/deploy.yml@refs/heads/main',
     );
-    expect(result.cosignArguments).not.toContain('Bricomaitre2');
   });
 
   it('rejects legacy images from a new deployment candidate', () => {
