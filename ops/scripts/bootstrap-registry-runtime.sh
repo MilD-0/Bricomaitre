@@ -26,7 +26,7 @@ printf '%s\n' "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --pa
 
 if [[ -n "$known_good_image" ]]; then
   cosign verify \
-    --certificate-identity "${BRIC_COSIGN_CERTIFICATE_IDENTITY:-https://github.com/MilD-0/Bricomaitre/.github/workflows/deploy.yml@refs/heads/main}" \
+    --certificate-identity "${BRIC_COSIGN_CERTIFICATE_IDENTITY:-https://github.com/MilD-0/Bricomaitre2/.github/workflows/deploy.yml@refs/heads/main}" \
     --certificate-oidc-issuer "${BRIC_COSIGN_OIDC_ISSUER:-https://token.actions.githubusercontent.com}" \
     "$known_good_image" >/dev/null
 fi

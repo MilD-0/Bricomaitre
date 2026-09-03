@@ -51,6 +51,7 @@ bricomaitre-postgres-*.sql.gz
 
 .agents/
 **/.agents/
+.obsidian/
 .codex
 **/.codex
 skills-lock.json
