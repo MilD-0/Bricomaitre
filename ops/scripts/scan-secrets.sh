@@ -80,12 +80,17 @@ run_worktree_scan() {
 }
 
 run_history_scan() {
+  local head_commit
   if [[ "$(git -C "$scan_source" rev-parse --is-shallow-repository)" != 'false' ]]; then
     echo 'Full secret-history scanning requires a non-shallow checkout.' >&2
     exit 1
   fi
 
-  run_repository_scan "$scan_dir/history-report.json" --source "$scan_source"
+  head_commit="$(git -C "$scan_source" rev-parse --verify 'HEAD^{commit}')"
+  run_repository_scan \
+    "$scan_dir/history-report.json" \
+    --source "$scan_source" \
+    --log-opts "$head_commit"
 }
 
 run_repository_scan() {

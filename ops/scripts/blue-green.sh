@@ -34,7 +34,7 @@ legacy_image_ref_regex="${BRIC_LEGACY_IMAGE_REF_REGEX:-}"
 if [[ -z "$legacy_image_ref_regex" ]]; then
   legacy_image_ref_regex='^ghcr[.]io/mild-0/bricomaitre2/[a-z0-9-]+@sha256:[a-f0-9]{64}$'
 fi
-cosign_certificate_identity="${BRIC_COSIGN_CERTIFICATE_IDENTITY:-https://github.com/MilD-0/Bricomaitre/.github/workflows/deploy.yml@refs/heads/main}"
+cosign_certificate_identity="${BRIC_COSIGN_CERTIFICATE_IDENTITY:-https://github.com/MilD-0/Bricomaitre2/.github/workflows/deploy.yml@refs/heads/main}"
 legacy_cosign_certificate_identity="${BRIC_LEGACY_COSIGN_CERTIFICATE_IDENTITY:-https://github.com/MilD-0/Bricomaitre2/.github/workflows/deploy.yml@refs/heads/main}"
 cosign_oidc_issuer="${BRIC_COSIGN_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
 verified_release_layout=""
