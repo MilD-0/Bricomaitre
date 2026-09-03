@@ -16,7 +16,7 @@ concurrency:
 jobs:
   static-quality:
     name: Static quality
-    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -46,7 +46,7 @@ jobs:
 
   service-contracts:
     name: PostgreSQL and Redis contracts
-    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -59,7 +59,7 @@ jobs:
 
   tests:
     name: Tests / ${{ matrix.suite }}
-    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -105,7 +105,7 @@ jobs:
 
   browser-acceptance:
     name: Browser acceptance
-    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -118,7 +118,7 @@ jobs:
       - name: Run browser acceptance tests
         run: >-
           ops/scripts/run-ci-check.sh "Storefront browser acceptance tests"
-          ops/scripts/run-loopback-isolated.sh pnpm test:storefront:browser --workers=2
+          ops/scripts/run-loopback-isolated.sh pnpm test:storefront:browser
       - name: Upload browser diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -132,7 +132,7 @@ jobs:
 
   admin-browser-acceptance:
     name: Admin browser acceptance
-    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       DATABASE_URL: postgres://bricomaitre:bricomaitre@127.0.0.1:55433/bricomaitre_browser
@@ -157,7 +157,7 @@ jobs:
       - name: Run Admin browser acceptance tests
         run: |
           ops/scripts/run-with-ci-services.sh 55433 56380 bricomaitre_browser \
-            bash -lc 'pnpm --filter @bric/admin db:migrate && pnpm --filter @bric/admin exec tsx scripts/create-playwright-session.ts && ops/scripts/run-ci-check.sh "Admin browser acceptance tests" pnpm test:admin:browser --workers=2'
+            bash -lc 'pnpm --filter @bric/admin db:migrate && pnpm --filter @bric/admin exec tsx scripts/create-playwright-session.ts && ops/scripts/run-ci-check.sh "Admin browser acceptance tests" pnpm test:admin:browser'
       - name: Upload Admin browser diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -171,7 +171,7 @@ jobs:
 
   browser-performance:
     name: Browser performance budgets
-    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       BRIC_PLAYWRIGHT_FIXTURE_API_ORIGIN: http://127.0.0.1:4321
@@ -203,7 +203,7 @@ jobs:
   production-builds:
     name: Production builds
     if: github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -225,7 +225,7 @@ jobs:
       - admin-browser-acceptance
       - browser-performance
       - production-builds
-    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Fail when an upstream gate failed or was cancelled

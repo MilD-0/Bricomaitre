@@ -287,7 +287,6 @@ describe('production packaging and release runtime', () => {
   it('separates cancellable CI from serialized, verified production releases', () => {
     const ci = readFileSync(resolve(workspaceRoot, '.github/workflows/ci.yml'), 'utf8');
     const release = readFileSync(resolve(workspaceRoot, '.github/workflows/deploy.yml'), 'utf8');
-    const actionlint = readFileSync(resolve(workspaceRoot, '.github/actionlint.yaml'), 'utf8');
 
     for (const job of [
       'static-quality',
@@ -331,14 +330,12 @@ describe('production packaging and release runtime', () => {
       );
     }
 
-    const runnerSelector = 'runs-on: [self-hosted, Linux, X64, bricomaitre-ci]';
-    expect(ci.split(runnerSelector)).toHaveLength(9);
-    expect(release.split(runnerSelector)).toHaveLength(7);
-    expect(actionlint).toContain('self-hosted-runner:');
-    expect(actionlint).toContain('- bricomaitre-ci');
-    expect(ci).not.toContain('runs-on: ubuntu-');
-    expect(release).not.toContain('runs-on: ubuntu-');
-    expect(ci).not.toContain('playwright install --with-deps');
+    const selfHostedRunnerSelector = 'runs-on: [self-hosted, Linux, X64, bricomaitre-ci]';
+    const hostedRunnerSelector = 'runs-on: ubuntu-24.04';
+    expect(ci).not.toContain(selfHostedRunnerSelector);
+    expect(release).not.toContain(selfHostedRunnerSelector);
+    expect(ci.split(hostedRunnerSelector)).toHaveLength(9);
+    expect(release.split(hostedRunnerSelector)).toHaveLength(7);
     expect(ci).not.toContain('services:');
     expect(ci).not.toContain('55432:5432');
     expect(ci).not.toContain('56379:6379');
@@ -406,12 +403,12 @@ describe('production packaging and release runtime', () => {
     expect(productionBuilds).toContain('ops/scripts/run-loopback-isolated.sh pnpm build:verify');
     expect(productionBuilds).not.toContain('api.bricomaitre.com');
     expect(ci).toContain("if: github.event_name == 'workflow_dispatch'");
+    expect(ci).toContain('ops/scripts/run-loopback-isolated.sh pnpm test:storefront:browser');
+    expect(ci).not.toContain('pnpm test:storefront:browser --workers=2');
     expect(ci).toContain(
-      'ops/scripts/run-loopback-isolated.sh pnpm test:storefront:browser --workers=2',
+      'ops/scripts/run-ci-check.sh "Admin browser acceptance tests" pnpm test:admin:browser',
     );
-    expect(ci).toContain(
-      'ops/scripts/run-ci-check.sh "Admin browser acceptance tests" pnpm test:admin:browser --workers=2',
-    );
+    expect(ci).not.toContain('pnpm test:admin:browser --workers=2');
     expect(ci).toContain('ops/scripts/run-loopback-isolated.sh pnpm test:storefront:performance');
     expect(ci.match(/ops[/]scripts[/]run-loopback-isolated[.]sh/g)).toHaveLength(3);
     expect(ci.match(/ops[/]scripts[/]run-with-ci-services[.]sh/g)).toHaveLength(1);
@@ -549,11 +546,15 @@ describe('production packaging and release runtime', () => {
     );
     expect(playwrightInstaller).toContain('exec 9>"$playwright_cache_dir/.install.lock"');
     expect(playwrightInstaller).toContain('flock 9');
-    expect(playwrightInstaller).toContain('playwright install chromium');
+    expect(playwrightInstaller).toContain('playwright install --with-deps chromium');
     const loopbackRunner = readFileSync(
       resolve(workspaceRoot, 'ops/scripts/run-loopback-isolated.sh'),
       'utf8',
     );
+    expect(loopbackRunner).toContain("RUNNER_ENVIRONMENT:-}\" == 'github-hosted'");
+    expect(loopbackRunner).toContain('sudo --preserve-env unshare --net');
+    expect(loopbackRunner).toContain('export HOME="$3" PATH="$4"');
+    expect(loopbackRunner).toContain('setpriv --reuid');
     expect(loopbackRunner).toContain('unshare --user --map-root-user --net');
     expect(loopbackRunner).toContain('ip link set lo up');
     const serviceRunner = readFileSync(
