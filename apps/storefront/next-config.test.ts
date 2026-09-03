@@ -54,7 +54,7 @@ describe('storefront Next configuration', () => {
     expect(contentSecurityPolicy).not.toMatch(/script-src[^;]*\shttps:(?:;|\s)/);
     expect(contentSecurityPolicy).toContain('https://connect.facebook.net');
     expect(contentSecurityPolicy).toContain('https://www.googletagmanager.com');
-    expect(contentSecurityPolicy).toContain('https://analytics.tiktok.com');
+    expect(contentSecurityPolicy).not.toContain('https://analytics.tiktok.com');
     expect(headerRules?.[0]?.headers).toEqual(
       expect.arrayContaining([
         { key: 'X-Content-Type-Options', value: 'nosniff' },
