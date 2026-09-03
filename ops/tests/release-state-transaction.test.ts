@@ -19,8 +19,6 @@ const publicLegalFiles = [
   'LICENSE',
   'NOTICE',
   'SECURITY.md',
-  'ASSET-LICENSING.md',
-  'THIRD_PARTY_NOTICES.md',
   'third_party/licenses/GPL-3.0-only.txt',
   'third_party/licenses/LGPL-3.0-or-later.txt',
   'third_party/licenses/SHARP-LIBVIPS-THIRD-PARTY-NOTICES.md',
@@ -143,7 +141,7 @@ describe('release-state transactions', () => {
   it('rejects an incomplete public release layout', () => {
     const fixture = createRuntime();
     const release = createRelease(fixture, 'incomplete-release', 'public');
-    rmSync(join(release, 'THIRD_PARTY_NOTICES.md'));
+    rmSync(join(release, 'NOTICE'));
 
     const result = verifyRelease(fixture, release, 'incomplete-release-commit');
 

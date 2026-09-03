@@ -131,7 +131,7 @@ async function activatePointerTarget(page: Page, locator: Locator, timeout = 5_0
 test.beforeAll(() => {
   expect(
     existsSync(storageState),
-    `Missing authenticated Admin browser state at ${storageState}. See apps/admin/README.md.`,
+    `Missing authenticated Admin browser state at ${storageState}. Set ADMIN_PLAYWRIGHT_STORAGE_STATE or create the default state before running this suite.`,
   ).toBe(true);
 });
 

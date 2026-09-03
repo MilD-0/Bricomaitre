@@ -514,7 +514,7 @@ jobs:
           rsync -a ops/nginx/ "$bundle_dir/ops/nginx/"
           rsync -a ops/env/ "$bundle_dir/ops/env/"
           rsync -a third_party/licenses/ "$bundle_dir/third_party/licenses/"
-          cp LICENSE NOTICE SECURITY.md ASSET-LICENSING.md THIRD_PARTY_NOTICES.md "$bundle_dir/"
+          cp LICENSE NOTICE SECURITY.md "$bundle_dir/"
 
           ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
             "mkdir -p '$release_path'"
