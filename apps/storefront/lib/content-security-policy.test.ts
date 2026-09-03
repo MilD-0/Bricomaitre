@@ -18,12 +18,12 @@ describe('Storefront content security policy', () => {
     const policy = buildStorefrontContentSecurityPolicy([], {
       NODE_ENV: 'production',
       NEXT_PUBLIC_FACEBOOK_PIXEL_ID: 'meta-id',
-      NEXT_PUBLIC_GA_MEASUREMENT_ID: 'google-id',
       NEXT_PUBLIC_SENTRY_DSN_STOREFRONT: 'https://public@example.ingest.sentry.io/42',
     });
 
     expect(policy).toContain('https://connect.facebook.net');
-    expect(policy).toContain('https://www.googletagmanager.com');
+    expect(policy).not.toContain('https://www.googletagmanager.com');
+    expect(policy).not.toContain('https://www.google-analytics.com');
     expect(policy).not.toContain('https://analytics.tiktok.com');
     expect(policy).toContain('https://example.ingest.sentry.io');
     expect(policy).not.toMatch(/script-src[^;]*\shttps:(?:;|\s)/);

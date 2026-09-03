@@ -177,6 +177,28 @@ describe('AppShell', () => {
     expect(activeLink).toHaveAttribute('title', 'nav.products');
   });
 
+  it('shows compact locale codes with full accessible names', () => {
+    render(
+      <AppShell initialPermissions={[]} initialRole="viewer">
+        <div>child</div>
+      </AppShell>,
+    );
+
+    expect(screen.getByRole('button', { name: 'English' })).toHaveTextContent(/^EN$/);
+    expect(screen.getByRole('button', { name: 'English' })).toHaveClass(
+      'size-9',
+      'cursor-pointer',
+      'font-bold',
+    );
+    expect(screen.getByRole('button', { name: 'English' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Français' })).toHaveTextContent(/^FR$/);
+    expect(screen.getByRole('button', { name: 'Français' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    expect(screen.getByRole('button', { name: 'العربية' })).toHaveTextContent(/^AR$/);
+  });
+
   it('associates the product archive with the Products navigation family', () => {
     usePathnameMock.mockReturnValue('/en/archive');
     const view = render(

@@ -4,7 +4,6 @@ import type { StorefrontAnalyticsPayload } from './analytics';
 import {
   buildMetaServerEvent,
   deliverClientMarketingEvent,
-  mapGoogleEvent,
   mapMetaEvent,
   prepareMarketingDestinations,
 } from './marketing-destinations';
@@ -62,23 +61,20 @@ function payload(overrides: Partial<StorefrontAnalyticsPayload> = {}): Storefron
 describe('client destination mappings', () => {
   beforeEach(() => {
     delete window.fbq;
-    delete window.gtag;
   });
 
-  it('prepares Meta and GA queues without injecting vendor scripts or TikTok', () => {
+  it('prepares only the Meta queue without injecting vendor scripts', () => {
     vi.stubEnv('NEXT_PUBLIC_TIKTOK_PIXEL_ID', 'tt-id');
-    prepareMarketingDestinations({ metaPixelId: 'meta-id', googleMeasurementId: 'G-TEST' });
+    vi.stubEnv('NEXT_PUBLIC_GA_MEASUREMENT_ID', 'G-TEST');
+    prepareMarketingDestinations({ metaPixelId: 'meta-id' });
     expect(window.fbq).toBeTypeOf('function');
-    expect(window.gtag).toBeTypeOf('function');
+    expect('gtag' in window).toBe(false);
+    expect('dataLayer' in window).toBe(false);
     expect('ttq' in window).toBe(false);
     expect(document.querySelectorAll('script[id^="bric-"]')).toHaveLength(0);
   });
 
-  it('uses governed vendor names and a shared event identifier', () => {
-    expect(mapGoogleEvent(payload())).toMatchObject({
-      name: 'view_item',
-      params: { event_id: 'event-1', currency: 'DZD' },
-    });
+  it('uses governed Meta names and commerce parameters', () => {
     expect(mapMetaEvent(payload())).toMatchObject({
       name: 'ViewContent',
       params: { content_ids: ['12'] },
@@ -117,9 +113,8 @@ describe('client destination mappings', () => {
         ],
       },
     });
-    const mapped = [mapGoogleEvent(purchase), mapMetaEvent(purchase)];
-    expect(mapped[0]).toMatchObject({ params: { transaction_id: '91' } });
-    expect(mapped[1]).toMatchObject({
+    const mapped = mapMetaEvent(purchase);
+    expect(mapped).toMatchObject({
       name: 'Purchase',
       params: {
         value: 8000,
