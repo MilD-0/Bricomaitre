@@ -416,34 +416,46 @@ export function AppShell({
 
             <div
               className={cn(
-                'flex items-center gap-1 border-t border-border/50 pt-3',
+                'flex items-center gap-2 border-t border-border/50 pt-3',
                 sidebarCollapsed && 'lg:flex-col',
               )}
             >
               <div className="hidden lg:block">
                 <ThemeToggle />
               </div>
-              {locales.map((l) => (
-                <Button
-                  key={l}
-                  variant={l === locale ? 'default' : 'outline'}
-                  size="sm"
-                  className={cn(
-                    'min-w-0 flex-1 px-2',
-                    sidebarCollapsed && 'lg:w-full lg:flex-none',
-                  )}
-                  disabled={isNavigating}
-                  onClick={() => switchLocale(l)}
-                >
-                  {isNavigating && pendingHref === pathname.replace(`/${locale}`, `/${l}`) ? (
-                    <Spinner data-icon="inline-start" className="size-3.5" />
-                  ) : null}
-                  <span className={cn(sidebarCollapsed && 'lg:hidden')}>{localeLabels[l]}</span>
-                  <span className={cn('hidden', sidebarCollapsed && 'lg:inline')}>
-                    {l.toUpperCase()}
-                  </span>
-                </Button>
-              ))}
+              <div
+                className={cn(
+                  'ms-auto flex items-center gap-1',
+                  sidebarCollapsed && 'lg:ms-0 lg:flex-col',
+                )}
+              >
+                {locales.map((l) => {
+                  const localePending =
+                    isNavigating && pendingHref === pathname.replace(`/${locale}`, `/${l}`);
+
+                  return (
+                    <button
+                      key={l}
+                      type="button"
+                      aria-label={localeLabels[l]}
+                      aria-pressed={l === locale}
+                      className={cn(
+                        'relative grid size-9 cursor-pointer place-items-center rounded-sm text-xs font-bold tracking-wide text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50',
+                        l === locale &&
+                          'text-foreground after:absolute after:inset-x-1.5 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary',
+                      )}
+                      disabled={isNavigating}
+                      onClick={() => switchLocale(l)}
+                    >
+                      {localePending ? (
+                        <Spinner className="size-3.5" />
+                      ) : (
+                        <span dir="ltr">{l.toUpperCase()}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </motion.aside>
