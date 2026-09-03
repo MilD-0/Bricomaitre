@@ -10,6 +10,7 @@ import {
   getOrderStatusLabelKey,
   isConfirmedLifecycleStatus,
   isMongoObjectId,
+  ORDER_STATUS,
   orderListQuerySchema,
   orderPatchSchema,
   parseNumericAmount,
@@ -182,5 +183,22 @@ describe('lib/orders', () => {
       { key: 'inHouseStatus', direction: 'asc' },
       { key: 'createdAt', direction: 'desc' },
     ]);
+  });
+
+  it('parses a minimum no-answer count without allowing an exact count too', () => {
+    expect(
+      orderListQuerySchema.parse({
+        inHouseStatus: ORDER_STATUS.NO_ANSWER,
+        noAnswerCountMin: '3',
+      }).noAnswerCountMin,
+    ).toBe(3);
+
+    expect(() =>
+      orderListQuerySchema.parse({
+        inHouseStatus: ORDER_STATUS.NO_ANSWER,
+        noAnswerCount: '2',
+        noAnswerCountMin: '3',
+      }),
+    ).toThrow();
   });
 });

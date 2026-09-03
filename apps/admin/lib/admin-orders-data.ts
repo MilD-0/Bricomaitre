@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, ilike, inArray, or, sql } from 'drizzle-orm';
 
 import { getDb, hasDb } from '@bric/db/client';
 import {
@@ -33,6 +33,7 @@ type OrdersQueryInput = {
   search?: string | undefined;
   inHouseStatus?: number | null | undefined;
   noAnswerCount?: number | null | undefined;
+  noAnswerCountMin?: number | null | undefined;
   sort?: string[] | undefined;
   sortKey?: string | undefined;
   sortDirection?: string | undefined;
@@ -368,8 +369,11 @@ export async function loadOrdersPageData(
     query.inHouseStatus !== undefined
       ? sql`${orders.inHouseStatus} = ${query.inHouseStatus}`
       : undefined,
-    query.inHouseStatus === ORDER_STATUS.NO_ANSWER && query.noAnswerCount !== undefined
+    query.inHouseStatus === ORDER_STATUS.NO_ANSWER && query.noAnswerCount != null
       ? sql`${orders.noAnswerCount} = ${query.noAnswerCount}`
+      : undefined,
+    query.inHouseStatus === ORDER_STATUS.NO_ANSWER && query.noAnswerCountMin != null
+      ? gte(orders.noAnswerCount, query.noAnswerCountMin)
       : undefined,
     ...(searchFilter ? [searchFilter] : []),
   );

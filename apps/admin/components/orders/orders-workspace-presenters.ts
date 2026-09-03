@@ -1,6 +1,8 @@
 import type { OrderRecord, OrderStatus } from '../../lib/orders';
 import { ORDER_STATUS } from '../../lib/orders';
 
+const ORDER_OPERATING_TIME_ZONE = 'Africa/Algiers';
+
 export const orderStatusOptions: OrderStatus[] = [
   ORDER_STATUS.NOT_CONTACTED,
   ORDER_STATUS.NO_ANSWER,
@@ -47,7 +49,28 @@ export function formatOrderDate(locale: string, value: string, includeTime = fal
   return new Intl.DateTimeFormat(locale, {
     dateStyle: 'medium',
     ...(includeTime ? { timeStyle: 'short' as const } : {}),
+    timeZone: ORDER_OPERATING_TIME_ZONE,
   }).format(date);
+}
+
+export function formatOrderListTimestamp(locale: string, value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  const day = new Intl.DateTimeFormat(locale, {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    timeZone: ORDER_OPERATING_TIME_ZONE,
+  }).format(date);
+  const time = new Intl.DateTimeFormat(locale, {
+    hour: '2-digit',
+    hourCycle: 'h23',
+    minute: '2-digit',
+    timeZone: ORDER_OPERATING_TIME_ZONE,
+  }).format(date);
+
+  return `${day} · ${time}`;
 }
 
 export function orderStatusTone(status: OrderStatus) {

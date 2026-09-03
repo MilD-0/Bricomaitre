@@ -214,6 +214,20 @@ test('renders and filters the server-first French catalog with governed analytic
   await expect(
     page.locator('.catalog-results-heading').getByText('39 produits', { exact: true }),
   ).toBeVisible();
+  const desktopFilterRail = page.locator('.catalog-filters');
+  const desktopFilterAction = desktopFilterRail.getByRole('button', {
+    name: 'Appliquer les filtres',
+  });
+  await expect(desktopFilterAction).toBeInViewport();
+  await expect
+    .poll(() =>
+      desktopFilterRail.evaluate((rail) => {
+        const bounds = rail.getBoundingClientRect();
+        return Math.round(window.innerHeight - bounds.bottom);
+      }),
+    )
+    .toBeGreaterThanOrEqual(0);
+  await expect(desktopFilterRail.locator('.catalog-filter-fields')).toHaveCSS('overflow-y', 'auto');
   const footer = page.locator('.site-footer');
   await expect(footer.getByRole('heading', { name: 'Nous contacter' })).toBeVisible();
   await expect(footer.getByRole('link', { name: '0795 34 28 26', exact: true })).toHaveAttribute(
@@ -340,6 +354,7 @@ test('renders and filters the server-first French catalog with governed analytic
     return { headerBottom: header.bottom, filterTop: filters.top };
   });
   expect(stickyClearance.filterTop).toBeGreaterThanOrEqual(stickyClearance.headerBottom + 8);
+  await expect(desktopFilterAction).toBeInViewport();
   await page.evaluate(() => window.scrollTo(0, 0));
   await expect.poll(() => analyticsEvents).toContain('view_item_list');
   await expect(page.getByRole('navigation', { name: 'Pages du catalogue' })).toHaveCount(0);

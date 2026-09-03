@@ -40,6 +40,10 @@ describe('CatalogFilters', () => {
 
     const trigger = screen.getByRole('button', { name: /Filtrer les produits/ });
     expect(within(trigger).getByLabelText('1')).toHaveClass('catalog-mobile-filter-count');
+    expect(screen.getAllByRole('button', { name: labels.apply })[0]).toHaveAttribute(
+      'data-slot',
+      'button',
+    );
     fireEvent.pointerDown(trigger);
     fireEvent.click(trigger);
 

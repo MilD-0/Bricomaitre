@@ -43,6 +43,9 @@ export async function GET(req: NextRequest) {
     noAnswerCount: searchParams.get('noAnswerCount')
       ? Number(searchParams.get('noAnswerCount'))
       : undefined,
+    noAnswerCountMin: searchParams.get('noAnswerCountMin')
+      ? Number(searchParams.get('noAnswerCountMin'))
+      : undefined,
     sort: searchParams.getAll('sort'),
     sortKey: searchParams.get('sortKey') ?? undefined,
     sortDirection: searchParams.get('sortDirection') ?? undefined,

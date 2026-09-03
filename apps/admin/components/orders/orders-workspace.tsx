@@ -54,6 +54,8 @@ import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { SearchField } from '../search-field';
 import { OrderEditor } from './order-editor';
 import {
+  formatOrderDate,
+  formatOrderListTimestamp,
   formatOrderMoney,
   orderStatusOptions,
   orderStatusTone,
@@ -63,6 +65,9 @@ import {
 type OrderDetailResponse = { ok: true; item: OrderRecord };
 type TrackingTokenResponse = { ok: true; publicToken: string };
 type DeleteTarget = { id: number; label: string };
+type NoAnswerAttemptFilter = 'all' | 1 | 2 | '3-plus';
+
+const noAnswerAttemptFilters: NoAnswerAttemptFilter[] = ['all', 1, 2, '3-plus'];
 
 function OrdersPulse({
   overview,
@@ -365,6 +370,7 @@ export function OrdersWorkspace({
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search.trim());
   const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all');
+  const [noAnswerAttemptFilter, setNoAnswerAttemptFilter] = useState<NoAnswerAttemptFilter>('all');
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
   const [openedOrder, setOpenedOrder] = useState<OrderRecord | null>(null);
@@ -377,6 +383,23 @@ export function OrdersWorkspace({
     Partial<Record<ProfitProjectionBasis, DailyOrderStatusOverview>>
   >(() => (initialOverview ? { confirmed: initialOverview } : {}));
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const effectiveNoAnswerAttemptFilter =
+    statusFilter === ORDER_STATUS.NO_ANSWER ? noAnswerAttemptFilter : 'all';
+  const activeFilterCount =
+    (statusFilter === 'all' ? 0 : 1) + (effectiveNoAnswerAttemptFilter === 'all' ? 0 : 1);
+  const selectStatusFilter = (status: 'all' | OrderStatus) => {
+    setStatusFilter(status);
+    if (status !== ORDER_STATUS.NO_ANSWER) setNoAnswerAttemptFilter('all');
+    setPage(1);
+    setSelectedIds([]);
+    setActiveOrderId(null);
+  };
+  const selectNoAnswerAttemptFilter = (filter: NoAnswerAttemptFilter) => {
+    setNoAnswerAttemptFilter(filter);
+    setPage(1);
+    setSelectedIds([]);
+    setActiveOrderId(null);
+  };
   const focusOrder = (orderId: number) => {
     if (activeOrderId === null) queueScrollTopRef.current = window.scrollY;
     restoreQueueScrollRef.current = false;
@@ -395,6 +418,7 @@ export function OrdersWorkspace({
     filters: {
       page,
       status: statusFilter,
+      noAnswerAttempts: effectiveNoAnswerAttemptFilter,
       projectionBasis,
     },
     selection: {
@@ -404,7 +428,13 @@ export function OrdersWorkspace({
     },
   });
   const ordersQuery = useQuery({
-    queryKey: ['orders-workspace', page, deferredSearch, statusFilter],
+    queryKey: [
+      'orders-workspace',
+      page,
+      deferredSearch,
+      statusFilter,
+      effectiveNoAnswerAttemptFilter,
+    ],
     queryFn: () => {
       const params = new URLSearchParams({
         page: String(page),
@@ -412,10 +442,20 @@ export function OrdersWorkspace({
         search: deferredSearch,
         inHouseStatus: statusFilter === 'all' ? '' : String(statusFilter),
       });
+      if (effectiveNoAnswerAttemptFilter === 1 || effectiveNoAnswerAttemptFilter === 2) {
+        params.set('noAnswerCount', String(effectiveNoAnswerAttemptFilter));
+      } else if (effectiveNoAnswerAttemptFilter === '3-plus') {
+        params.set('noAnswerCountMin', '3');
+      }
       return request<OrdersResponse>(`/api/orders?${params.toString()}`);
     },
     initialData:
-      page === 1 && deferredSearch === '' && statusFilter === 'all' ? initialOrders : undefined,
+      page === 1 &&
+      deferredSearch === '' &&
+      statusFilter === 'all' &&
+      effectiveNoAnswerAttemptFilter === 'all'
+        ? initialOrders
+        : undefined,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
   });
@@ -613,12 +653,9 @@ export function OrdersWorkspace({
             )}
             aria-label={t('ordersManager.filters.statusLabel')}
             onChange={(event) => {
-              setStatusFilter(
+              selectStatusFilter(
                 event.target.value === 'all' ? 'all' : (Number(event.target.value) as OrderStatus),
               );
-              setPage(1);
-              setSelectedIds([]);
-              setActiveOrderId(null);
             }}
           >
             <NativeSelectOption value="all">
@@ -633,14 +670,14 @@ export function OrdersWorkspace({
           <Button
             type="button"
             size="sm"
-            variant={mobileFiltersOpen || statusFilter !== 'all' ? 'default' : 'outline'}
+            variant={mobileFiltersOpen || activeFilterCount > 0 ? 'default' : 'outline'}
             className="sm:hidden"
             aria-expanded={mobileFiltersOpen}
             onClick={() => setMobileFiltersOpen((open) => !open)}
           >
             <SlidersHorizontal className="size-4" aria-hidden="true" />
             {t('adminWorkspace.common.filters')}
-            {statusFilter !== 'all' ? ' · 1' : ''}
+            {activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
           </Button>
         </WorkspaceToolbar>
 
@@ -691,12 +728,7 @@ export function OrdersWorkspace({
                 <button
                   key={status}
                   type="button"
-                  onClick={() => {
-                    setStatusFilter(status);
-                    setPage(1);
-                    setSelectedIds([]);
-                    setActiveOrderId(null);
-                  }}
+                  onClick={() => selectStatusFilter(status)}
                   className={cn(
                     'shrink-0 rounded-[var(--shape-radius-soft-sm)] px-3 py-1.5 text-sm font-medium transition-colors',
                     statusFilter === status
@@ -710,6 +742,48 @@ export function OrdersWorkspace({
                 </button>
               ))}
             </div>
+            {statusFilter === ORDER_STATUS.NO_ANSWER ? (
+              <div className="flex items-center gap-3 overflow-x-auto border-b border-border/60 px-3 py-1.5">
+                <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                  {t('adminWorkspace.orders.noAnswerAttempts')}
+                </span>
+                <div className="flex items-center gap-1">
+                  {noAnswerAttemptFilters.map((filter) => {
+                    const ariaLabel =
+                      filter === 'all'
+                        ? t('ordersManager.filters.allNoAnswerCounts')
+                        : filter === '3-plus'
+                          ? t('ordersManager.filters.noAnswerCountAtLeast', { count: 3 })
+                          : t('ordersManager.status.noAnswerWithCount', { count: filter });
+                    const label =
+                      filter === 'all'
+                        ? t('adminWorkspace.common.all')
+                        : filter === '3-plus'
+                          ? '3+'
+                          : String(filter);
+
+                    return (
+                      <button
+                        key={filter}
+                        type="button"
+                        aria-label={ariaLabel}
+                        aria-pressed={noAnswerAttemptFilter === filter}
+                        dir={filter === '3-plus' ? 'ltr' : undefined}
+                        onClick={() => selectNoAnswerAttemptFilter(filter)}
+                        className={cn(
+                          'min-w-8 shrink-0 border-b-2 px-2 py-1 text-xs font-medium transition-colors',
+                          noAnswerAttemptFilter === filter
+                            ? 'border-primary text-foreground'
+                            : 'border-transparent text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
             {selectedIds.length > 0 ? (
               <div className="flex flex-wrap items-center gap-2 border-b border-border/60 bg-primary/[0.045] px-3 py-2.5">
                 <span className="me-auto text-sm font-medium">
@@ -745,6 +819,12 @@ export function OrdersWorkspace({
               {orders.map((order) => {
                 const trackingUrl = buildOrderTrackingUrl(order.publicToken, locale);
                 const note = order.note?.trim();
+                const statusLabel =
+                  order.inHouseStatus === ORDER_STATUS.NO_ANSWER
+                    ? t('ordersManager.status.noAnswerWithCount', {
+                        count: order.noAnswerCount,
+                      })
+                    : t(`ordersManager.status.${getOrderStatusLabelKey(order.inHouseStatus)}`);
 
                 return (
                   <div
@@ -770,36 +850,53 @@ export function OrdersWorkspace({
                       onClick={() => focusOrder(order.id)}
                       className="min-w-0 rounded-sm text-start focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"
                     >
-                      <span className="flex items-center gap-2">
-                        <span
-                          className={cn(
-                            'size-2 shrink-0 rounded-full',
-                            orderStatusTone(order.inHouseStatus),
-                          )}
-                        />
-                        <span className="truncate text-sm font-semibold">{order.fullName}</span>
+                      <span className="flex min-w-0 items-baseline gap-2">
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                          {order.fullName}
+                        </span>
                         <span className="shrink-0 text-xs text-muted-foreground">#{order.id}</span>
                       </span>
-                      <span className="mt-1 block truncate text-xs text-muted-foreground">
-                        {summarizeOrderProducts(order)} ·{' '}
-                        {formatOrderRegionLabel(
-                          initialCatalog,
-                          order.state,
-                          order.city,
-                          t('adminWorkspace.orders.noLocation'),
-                        )}
+                      <span className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                        <time
+                          dateTime={order.createdAt}
+                          title={formatOrderDate(locale, order.createdAt, true)}
+                          dir="ltr"
+                          className="shrink-0 whitespace-nowrap text-[length:var(--type-size-caption)] font-normal tabular-nums"
+                        >
+                          {formatOrderListTimestamp(locale, order.createdAt)}
+                        </time>
+                        <span aria-hidden="true">·</span>
+                        <span className="min-w-0 truncate">
+                          {summarizeOrderProducts(order)} ·{' '}
+                          {formatOrderRegionLabel(
+                            initialCatalog,
+                            order.state,
+                            order.city,
+                            t('adminWorkspace.orders.noLocation'),
+                          )}
+                        </span>
                       </span>
                       <span className="mt-1.5 flex min-w-0 items-center gap-3">
                         <span className="shrink-0 text-sm font-semibold tabular-nums">
                           {formatOrderMoney(locale, order.totalAmount)}
                         </span>
-                        {note ? (
-                          <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-                            <MessageSquareText className="size-3.5 shrink-0" aria-hidden="true" />
-                            <span className="truncate">{note}</span>
-                          </span>
-                        ) : null}
+                        <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs font-medium">
+                          <span
+                            className={cn(
+                              'size-2 shrink-0 rounded-full',
+                              orderStatusTone(order.inHouseStatus),
+                            )}
+                            aria-hidden="true"
+                          />
+                          {statusLabel}
+                        </span>
                       </span>
+                      {note ? (
+                        <span className="mt-1 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                          <MessageSquareText className="size-3.5 shrink-0" aria-hidden="true" />
+                          <span className="truncate">{note}</span>
+                        </span>
+                      ) : null}
                     </button>
                     <div className="flex items-center gap-0.5">
                       {trackingUrl ? (

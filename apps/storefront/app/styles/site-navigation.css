@@ -205,22 +205,18 @@
 .global-search form {
   height: 3rem;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: calc(0.65rem * var(--sf-density));
   border: var(--sf-border-width, 1px) solid var(--sf-border-default, #d6dadd);
   border-radius: var(--sf-radius-pill, 999px);
   background: var(--sf-surface-raised, #fff);
-  padding: calc(0.25rem * var(--sf-density)) calc(0.3rem * var(--sf-density))
-    calc(0.25rem * var(--sf-density)) calc(1rem * var(--sf-density));
+  padding-block: calc(0.25rem * var(--sf-density));
+  padding-inline: calc(1rem * var(--sf-density)) calc(0.3rem * var(--sf-density));
   transition:
     border-color var(--sf-duration-fast, 160ms) var(--sf-ease-standard, ease),
     background-color var(--sf-duration-fast, 160ms) var(--sf-ease-standard, ease),
     box-shadow var(--sf-duration-fast, 160ms) var(--sf-ease-standard, ease);
-}
-[dir='rtl'] .global-search form {
-  padding: calc(0.25rem * var(--sf-density)) calc(1rem * var(--sf-density))
-    calc(0.25rem * var(--sf-density)) calc(0.3rem * var(--sf-density));
 }
 .global-search form:focus-within {
   border-color: var(--brand-teal);
@@ -230,16 +226,6 @@
     0 0 0 3px rgba(1, 115, 122, 0.1),
     0 7px 18px rgba(1, 115, 122, 0.07)
   );
-}
-.global-search-icon {
-  color: var(--sf-text-muted, #70787c);
-  transition:
-    color var(--sf-duration-fast, 160ms) var(--sf-ease-standard, ease),
-    transform var(--sf-duration-fast, 160ms) var(--sf-ease-standard, ease);
-}
-.global-search form:focus-within .global-search-icon {
-  color: var(--brand-teal-strong);
-  transform: scale(1.06);
 }
 .global-search input {
   width: 100%;

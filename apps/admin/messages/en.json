@@ -1805,7 +1805,8 @@
       "statusLabel": "Filter by status",
       "allStatuses": "All statuses",
       "noAnswerCountLabel": "Filter by no-answer count",
-      "allNoAnswerCounts": "All no-answer counts"
+      "allNoAnswerCounts": "All no-answer counts",
+      "noAnswerCountAtLeast": "At least {count} no-answer attempts"
     },
     "columns": {
       "date": "Date",
