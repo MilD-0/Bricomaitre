@@ -14,6 +14,34 @@ volume_name="$container_name-data"
 restore_image="${BRIC_POSTGRES_RESTORE_IMAGE:-postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825}"
 restore_database="bric_restore_verify"
 restore_user="${POSTGRES_USER:-bricadmin}"
+max_backup_age_hours="${BACKUP_RESTORE_MAX_AGE_HOURS:-36}"
+minimum_products="${BACKUP_RESTORE_MIN_PRODUCTS:-1}"
+minimum_orders="${BACKUP_RESTORE_MIN_ORDERS:-1}"
+checkin_url="${BACKUP_RESTORE_CHECKIN_URL:-}"
+
+for numeric_setting in "$max_backup_age_hours" "$minimum_products" "$minimum_orders"; do
+  if [[ ! "$numeric_setting" =~ ^[0-9]+$ ]]; then
+    echo 'backup restore thresholds must be non-negative integers' >&2
+    exit 1
+  fi
+done
+if ((max_backup_age_hours < 1 || max_backup_age_hours > 168)); then
+  echo 'BACKUP_RESTORE_MAX_AGE_HOURS must be between 1 and 168' >&2
+  exit 1
+fi
+if [[ "${BRIC_REQUIRE_RESTORE_CHECKIN:-false}" == true && -z "$checkin_url" ]]; then
+  echo 'BACKUP_RESTORE_CHECKIN_URL is required for the scheduled restore drill' >&2
+  exit 1
+fi
+
+notify_checkin() {
+  local suffix="${1:-}"
+  if [[ -n "$checkin_url" ]]; then
+    curl --fail --silent --show-error --max-time 15 "${checkin_url}${suffix}" >/dev/null
+  fi
+}
+
+notify_checkin '/start'
 
 cleanup() {
   local status=$?
@@ -22,6 +50,11 @@ cleanup() {
   docker volume rm "$volume_name" >/dev/null 2>&1 || true
   if [[ -n "$temporary_directory" ]]; then
     rm -rf -- "$temporary_directory"
+  fi
+  if ((status == 0)); then
+    notify_checkin || status=1
+  else
+    notify_checkin '/fail' || true
   fi
   exit "$status"
 }
@@ -73,6 +106,15 @@ if [[ -z "$backup_input" && -n "${BACKUP_S3_URI:-}" ]]; then
   aws s3 cp "s3://$backup_bucket/$latest_key" "$backup_file" \
     --region "$AWS_REGION" \
     --only-show-errors
+  backup_last_modified="$(
+    aws s3api head-object \
+      --bucket "$backup_bucket" \
+      --key "$latest_key" \
+      --region "$AWS_REGION" \
+      --query LastModified \
+      --output text
+  )"
+  backup_source_epoch="$(date --date="$backup_last_modified" +%s)"
 elif [[ -n "$backup_input" ]]; then
   backup_file="$backup_input"
 else
@@ -87,6 +129,13 @@ fi
 
 if [[ -z "${backup_file:-}" || ! -f "$backup_file" || -L "$backup_file" ]]; then
   echo "backup is missing, not a regular file, or is a symlink: ${backup_file:-<none>}" >&2
+  exit 1
+fi
+
+backup_modified_epoch="${backup_source_epoch:-$(stat -c '%Y' "$backup_file")}"
+backup_age_seconds="$(( $(date +%s) - backup_modified_epoch ))"
+if ((backup_age_seconds < 0 || backup_age_seconds > max_backup_age_hours * 3600)); then
+  echo "backup is outside the ${max_backup_age_hours}-hour freshness window: $backup_file" >&2
   exit 1
 fi
 
@@ -151,18 +200,27 @@ BEGIN
   END IF;
 END
 $verify$;
-SELECT pg_database_size(current_database());
+SELECT pg_database_size(current_database())::text
+  || '|' || (SELECT count(*) FROM public.products)::text
+  || '|' || (SELECT count(*) FROM public.orders)::text;
 SQL
 )"
 
-restored_bytes="$(tail -n1 <<<"$verification_output")"
-if [[ ! "$restored_bytes" =~ ^[0-9]+$ ]]; then
-  echo "restore verification returned an invalid database size: $restored_bytes" >&2
+verification_counts="$(tail -n1 <<<"$verification_output")"
+IFS='|' read -r restored_bytes restored_products restored_orders <<<"$verification_counts"
+if [[ ! "$restored_bytes" =~ ^[0-9]+$ || ! "$restored_products" =~ ^[0-9]+$ || ! "$restored_orders" =~ ^[0-9]+$ ]]; then
+  echo "restore verification returned invalid business counts: $verification_counts" >&2
+  exit 1
+fi
+if ((restored_products < minimum_products || restored_orders < minimum_orders)); then
+  echo "restored business data is below the required floor: products=${restored_products}/${minimum_products} orders=${restored_orders}/${minimum_orders}" >&2
   exit 1
 fi
 
-printf 'postgres backup restore verified: file=%s sha256=%s compressed_bytes=%s restored_bytes=%s\n' \
+printf 'postgres backup restore verified: file=%s sha256=%s compressed_bytes=%s restored_bytes=%s products=%s orders=%s\n' \
   "$(basename "$backup_file")" \
   "$backup_sha256" \
   "$backup_bytes" \
-  "$restored_bytes"
+  "$restored_bytes" \
+  "$restored_products" \
+  "$restored_orders"

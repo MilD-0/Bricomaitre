@@ -2,13 +2,14 @@ import {
   defaultStorefrontSettingsResponse,
   type StorefrontHomepageResponse,
 } from '@bric/storefront-core/contracts';
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 
 import { Homepage } from '@/components/homepage';
 import { PageShell } from '@/components/page-shell';
+import { StructuredData } from '@/components/structured-data';
 import { isLocale } from '@/i18n/config';
 import { buildHomepageStructuredData } from '@/lib/homepage-seo';
-import { serializeStructuredData } from '@/lib/product-seo';
 import { getStorefrontHomepage, getStorefrontSettings } from '@/lib/storefront-api';
 
 export type HomePageProps = { params: Promise<{ locale: string }> };
@@ -23,7 +24,7 @@ const emptyHomepage: StorefrontHomepageResponse = {
 };
 
 export async function HomePageContent({ params }: HomePageProps) {
-  const { locale } = await params;
+  const [{ locale }, requestHeaders] = await Promise.all([params, headers()]);
   if (!isLocale(locale)) notFound();
   const [data, contact] = await Promise.all([
     getStorefrontHomepage().catch(() => emptyHomepage),
@@ -32,11 +33,9 @@ export async function HomePageContent({ params }: HomePageProps) {
 
   return (
     <PageShell locale={locale} contactSettings={contact}>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: serializeStructuredData(buildHomepageStructuredData(locale)),
-        }}
+      <StructuredData
+        value={buildHomepageStructuredData(locale)}
+        nonce={requestHeaders.get('x-nonce') ?? undefined}
       />
       <Homepage data={data} locale={locale} contact={contact} />
     </PageShell>

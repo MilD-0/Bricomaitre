@@ -72,7 +72,7 @@ const page = {
     barcode: null,
     price: '12000.00',
     oldPrice: null,
-    availability: { status: 'in_stock', inStock: true, quantity: 3 },
+    availability: { status: 'in_stock', inStock: true },
     media: [],
     brand: null,
     category: null,

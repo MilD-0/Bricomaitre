@@ -30,6 +30,9 @@ vi.mock('@/lib/storefront-api', () => ({
   getStorefrontCatalogMeta: getCatalogMetaMock,
   getStorefrontSettings: getSettingsMock,
 }));
+vi.mock('next/headers', () => ({
+  headers: async () => new Headers({ 'x-nonce': 'test-nonce' }),
+}));
 vi.mock('@/lib/sentry', () => ({ captureProductPageException: captureProductPageExceptionMock }));
 vi.mock('next/navigation', () => ({
   notFound: notFoundMock,
@@ -111,7 +114,7 @@ const productResponse = {
     barcode: null,
     price: '1500.00',
     oldPrice: '1750.00',
-    availability: { status: 'in_stock', inStock: true, quantity: 4 },
+    availability: { status: 'in_stock', inStock: true },
     media: [{ url: '/product.jpg', position: 0, width: 900, height: 900, blurDataUrl: null }],
     brand: { id: 2, name: 'Bric', slug: 'bric', image: '/brand.svg' },
     category: {

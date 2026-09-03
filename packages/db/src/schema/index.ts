@@ -5,6 +5,7 @@ export * from './productLifecycle';
 export * from './productPromoCodes';
 export * from './orders';
 export * from './orderIdempotency';
+export * from './adminMutationIdempotency';
 export * from './analytics';
 export * from './analyticsEconomics';
 export * from './meta';

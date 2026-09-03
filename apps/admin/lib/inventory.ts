@@ -48,10 +48,21 @@ const inventoryApplyItemSchema = z.object({
     .optional(),
 });
 
-export const inventoryApplyRequestSchema = z.object({
-  mode: z.enum(['decrease', 'increase']),
-  items: z.array(inventoryApplyItemSchema).min(1),
-});
+export const inventoryApplyRequestSchema = z
+  .object({
+    requestId: z
+      .string()
+      .trim()
+      .min(16)
+      .max(160)
+      .regex(/^[A-Za-z0-9:_-]+$/),
+    mode: z.enum(['decrease', 'increase']),
+    items: z.array(inventoryApplyItemSchema).min(1).max(200),
+  })
+  .refine(
+    (value) => new Set(value.items.map((item) => item.productId)).size === value.items.length,
+    { message: 'Each product can appear only once in an inventory batch.', path: ['items'] },
+  );
 
 const inventoryApplyResultItemSchema = z.object({
   productId: z.number().int().positive(),

@@ -16,6 +16,13 @@ import { classifyAcquisition } from './acquisition';
 type Database = ReturnType<typeof getDb>;
 
 export const ANALYTICS_CLIENT_TIMESTAMP_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+export const ANALYTICS_MAX_ITEMS = 50;
+export const ANALYTICS_MAX_QUANTITY = 50;
+export const ANALYTICS_MAX_METADATA_BYTES = 12 * 1024;
+const ANALYTICS_MAX_METADATA_DEPTH = 4;
+const ANALYTICS_MAX_METADATA_KEYS = 64;
+const ANALYTICS_MAX_METADATA_NODES = 500;
+const ANALYTICS_MAX_METADATA_STRING_LENGTH = 2_048;
 
 const nullableTrimmedString = (max: number) =>
   z
@@ -38,8 +45,19 @@ const nullablePositiveInt = z
       return null;
     }
 
-    const parsed = typeof value === 'number' ? value : Number.parseInt(String(value), 10);
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+    const parsed = typeof value === 'number' ? value : Number(String(value));
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+  });
+
+const nullableQuantity = z
+  .union([z.number(), z.string(), z.null()])
+  .optional()
+  .transform((value) => {
+    if (value == null || value === '') return null;
+    const parsed = typeof value === 'number' ? value : Number(String(value));
+    return Number.isInteger(parsed) && parsed > 0 && parsed <= ANALYTICS_MAX_QUANTITY
+      ? parsed
+      : null;
   });
 
 const nullablePositiveNumber = z
@@ -50,8 +68,8 @@ const nullablePositiveNumber = z
       return null;
     }
 
-    const parsed = typeof value === 'number' ? value : Number.parseFloat(String(value));
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+    const parsed = typeof value === 'number' ? value : Number(String(value));
+    return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1_000_000_000 ? parsed : null;
   });
 
 const analyticsItemSchema = z.object({
@@ -61,9 +79,48 @@ const analyticsItemSchema = z.object({
   categorySlug: nullableTrimmedString(180),
   brandId: nullablePositiveInt,
   brandSlug: nullableTrimmedString(180),
-  quantity: nullablePositiveInt,
+  quantity: nullableQuantity,
   price: nullablePositiveNumber,
 });
+
+function validateAnalyticsMetadata(value: unknown) {
+  let nodes = 0;
+
+  function visit(current: unknown, depth: number): boolean {
+    nodes += 1;
+    if (nodes > ANALYTICS_MAX_METADATA_NODES || depth > ANALYTICS_MAX_METADATA_DEPTH) {
+      return false;
+    }
+    if (current === null || typeof current === 'boolean') return true;
+    if (typeof current === 'number') return Number.isFinite(current);
+    if (typeof current === 'string') {
+      return current.length <= ANALYTICS_MAX_METADATA_STRING_LENGTH;
+    }
+    if (Array.isArray(current)) {
+      return (
+        current.length <= ANALYTICS_MAX_ITEMS && current.every((entry) => visit(entry, depth + 1))
+      );
+    }
+    if (typeof current !== 'object') return false;
+
+    const entries = Object.entries(current);
+    return (
+      entries.length <= ANALYTICS_MAX_METADATA_KEYS &&
+      entries.every(
+        ([key, entry]) => key.length <= 80 && key !== '__proto__' && visit(entry, depth + 1),
+      )
+    );
+  }
+
+  if (!visit(value, 0)) return false;
+  try {
+    return (
+      new TextEncoder().encode(JSON.stringify(value)).byteLength <= ANALYTICS_MAX_METADATA_BYTES
+    );
+  } catch {
+    return false;
+  }
+}
 
 export function normalizeAnalyticsOccurredAt(value: string, now = new Date()) {
   const occurredAt = Date.parse(value);
@@ -139,10 +196,13 @@ export const storefrontAnalyticsEventSchema = z.object({
   brandSlug: nullableTrimmedString(180),
   orderId: nullablePositiveInt,
   searchTerm: nullableTrimmedString(1500),
-  quantity: nullablePositiveInt,
+  quantity: nullableQuantity,
   value: nullablePositiveNumber,
   currency: z.string().trim().min(1).max(12).default('DZD'),
-  metadata: z.record(z.string(), z.unknown()).default({}),
+  metadata: z
+    .record(z.string(), z.unknown())
+    .default({})
+    .refine(validateAnalyticsMetadata, 'Analytics metadata exceeds its structural limits.'),
 });
 
 export type StorefrontAnalyticsEvent = z.infer<typeof storefrontAnalyticsEventSchema>;
@@ -472,45 +532,33 @@ function computeConversionSql(
   end`;
 }
 
-function extractItems(event: StorefrontAnalyticsEvent) {
-  const rawItems = Array.isArray(event.metadata.items) ? event.metadata.items : [];
-  const parsedItems = rawItems
-    .map((item) => analyticsItemSchema.safeParse(item))
-    .filter((result) => result.success)
-    .map((result) => result.data);
-
-  if (parsedItems.length > 0) {
-    return parsedItems;
-  }
-
+function extractMetricItem(event: StorefrontAnalyticsEvent) {
   if (!event.productId && !event.productSlug) {
-    return [];
+    return null;
   }
 
-  return [
-    {
-      productId: event.productId,
-      productSlug: event.productSlug,
-      categoryId: event.categoryId,
-      categorySlug: event.categorySlug,
-      brandId: event.brandId,
-      brandSlug: event.brandSlug,
-      quantity: event.quantity ?? 1,
-      price: event.value,
-    },
-  ];
+  return analyticsItemSchema.parse({
+    productId: event.productId,
+    productSlug: event.productSlug,
+    categoryId: event.categoryId,
+    categorySlug: event.categorySlug,
+    brandId: event.brandId,
+    brandSlug: event.brandSlug,
+    quantity: event.quantity ?? 1,
+    price: event.value,
+  });
 }
 
 async function updateCatalogMetrics(
   tx: Parameters<Parameters<Database['transaction']>[0]>[0],
   event: StorefrontAnalyticsEvent,
 ) {
-  const items = extractItems(event);
+  const item = extractMetricItem(event);
   const metricBump = {
     view: event.eventName === 'view_item' ? 1 : 0,
     cart: event.eventName === 'add_to_cart' ? 1 : 0,
     checkout: event.eventName === 'begin_checkout' ? 1 : 0,
-    purchase: event.eventName === 'purchase' ? 1 : 0,
+    purchase: 0,
   };
 
   if (
@@ -522,7 +570,7 @@ async function updateCatalogMetrics(
     return;
   }
 
-  for (const item of items) {
+  if (item) {
     const quantity = Math.max(1, item.quantity ?? 1);
     const productView = metricBump.view;
     const productCart = metricBump.cart * quantity;

@@ -1,3 +1,4 @@
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 
@@ -14,6 +15,7 @@ import { CatalogFilters } from '@/components/catalog-filters';
 import { CatalogLiveSearch } from '@/components/catalog-live-search';
 import { CatalogLiveSort } from '@/components/catalog-live-sort';
 import { PageShell } from '@/components/page-shell';
+import { StructuredData } from '@/components/structured-data';
 import { isLocale } from '@/i18n/config';
 import {
   buildCatalogPath,
@@ -25,7 +27,6 @@ import {
 } from '@/lib/catalog-query';
 import { buildCatalogStructuredData } from '@/lib/catalog-seo';
 import { formatProductPrice } from '@/lib/product-presentation';
-import { serializeStructuredData } from '@/lib/product-seo';
 import { captureCatalogPageException } from '@/lib/sentry';
 import { getStorefrontCatalog, getStorefrontCatalogMeta } from '@/lib/storefront-api';
 
@@ -54,7 +55,11 @@ export async function CatalogPageContent({
   searchParams,
   heading,
 }: CatalogPageContentProps) {
-  const [locale, values] = await Promise.all([resolveCatalogLocale(params), searchParams]);
+  const [locale, values, requestHeaders] = await Promise.all([
+    resolveCatalogLocale(params),
+    searchParams,
+    headers(),
+  ]);
   const query = parseCatalogPageQuery(values);
   const t = await getTranslations({ locale, namespace: 'Products' });
   let products: StorefrontProductsResponse['items'] = [];
@@ -84,13 +89,9 @@ export async function CatalogPageContent({
 
   return (
     <PageShell locale={locale}>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: serializeStructuredData(
-            buildCatalogStructuredData(visibleProducts, locale, heading?.title),
-          ),
-        }}
+      <StructuredData
+        value={buildCatalogStructuredData(visibleProducts, locale, heading?.title)}
+        nonce={requestHeaders.get('x-nonce') ?? undefined}
       />
       <CatalogTelemetry
         locale={locale}

@@ -1,4 +1,4 @@
-export const TERMINAL_STATUSES = new Set(['annule', 'paye_et_archive', 'retour_archive']);
+export const TERMINAL_STATUSES = new Set(['annule', 'payed', 'paye_et_archive', 'retour_archive']);
 export const STATUS_STALE_MS = 15 * 60 * 1000;
 export const TRACKING_STALE_MS = 30 * 60 * 1000;
 export const MAJ_STALE_MS = 30 * 60 * 1000;

@@ -19,7 +19,7 @@ const product = {
   barcode: null,
   price: '1500.00',
   oldPrice: null,
-  availability: { status: 'in_stock', inStock: true, quantity: 4 },
+  availability: { status: 'in_stock', inStock: true },
   media: [
     {
       url: 'https://cdn.example.com/lamp.jpg',

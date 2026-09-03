@@ -37,6 +37,7 @@ const actor = {
 function database() {
   const updateChain = { where: vi.fn().mockResolvedValue(undefined) };
   const deleteChain = { where: mocks.deleteWhere.mockResolvedValue(undefined) };
+  const selectWhere = vi.fn().mockResolvedValue([]);
   const tx = {
     update: vi.fn(() => ({
       set: (values: unknown) => {
@@ -48,6 +49,9 @@ function database() {
     insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue(undefined) })),
   };
   const db = {
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({ where: selectWhere })),
+    })),
     query: {
       bulletinPosts: { findFirst: mocks.post },
       bulletinReplies: { findFirst: mocks.reply },

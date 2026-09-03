@@ -24,6 +24,7 @@ import type { StorefrontOrderCreateRequest, StorefrontOrderPatchRequest } from '
 import { toStorefrontOrderDto } from './dto';
 import {
   createPublicOrderToken,
+  createPublicOrderTokenExpiry,
   requireStorefrontOrderAccess,
   requireStorefrontOrderAccessByToken,
 } from './order-access';
@@ -167,6 +168,7 @@ export async function createStorefrontOrder(
           phoneNumber1: payload.phoneNumber1,
           phoneNumber2: payload.phoneNumber2,
           publicToken,
+          publicTokenExpiresAt: createPublicOrderTokenExpiry(now),
           visitId: payload.visitId,
           journeyId: payload.journeyId,
           sessionId: payload.sessionId,

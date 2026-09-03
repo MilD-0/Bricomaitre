@@ -53,7 +53,7 @@ const page: StorefrontLandingPageResponse = {
     barcode: null,
     price: '4500.00',
     oldPrice: null,
-    availability: { status: 'in_stock', inStock: true, quantity: 2 },
+    availability: { status: 'in_stock', inStock: true },
     media: [],
     brand: null,
     category: null,

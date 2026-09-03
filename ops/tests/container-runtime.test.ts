@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -171,7 +171,7 @@ describe('production packaging and release runtime', () => {
     expect(buildScript).not.toContain('api.bricomaitre.com');
   });
 
-  it('requires an explicit production PostgreSQL password', () => {
+  it('requires isolated production database roles and authenticated Redis', () => {
     const compose = readFileSync(resolve(workspaceRoot, 'ops/docker/compose.prod.yml'), 'utf8');
     const infraExample = readFileSync(resolve(workspaceRoot, 'ops/env/infra.env.example'), 'utf8');
     const adminExample = readFileSync(resolve(workspaceRoot, 'ops/env/admin.env.example'), 'utf8');
@@ -183,15 +183,65 @@ describe('production packaging and release runtime', () => {
       resolve(workspaceRoot, 'ops/scripts/validate-operations.sh'),
       'utf8',
     );
+    const roleProvisionerPath = resolve(workspaceRoot, 'ops/docker/postgres/init-roles.sh');
+    const roleProvisioner = readFileSync(roleProvisionerPath, 'utf8');
+    const deploy = readFileSync(resolve(workspaceRoot, 'ops/scripts/deploy.sh'), 'utf8');
 
     expect(compose).toContain(
       'POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in infra.env}',
     );
     expect(compose).not.toContain('POSTGRES_PASSWORD:-change-me');
     expect(infraExample).toMatch(/^POSTGRES_PASSWORD=$/m);
+    expect(infraExample).toMatch(/^POSTGRES_ADMIN_PASSWORD=$/m);
+    expect(infraExample).toMatch(/^POSTGRES_STOREFRONT_PASSWORD=$/m);
+    expect(infraExample).toMatch(/^REDIS_PASSWORD=$/m);
+    expect(adminExample).toContain('postgresql://bricadmin_admin:');
+    expect(storefrontApiExample).toContain('postgresql://bricadmin_storefront:');
+    expect(compose).toContain("'--requirepass'");
+    expect(compose).toContain('postgres/init-roles.sh');
+    expect(statSync(roleProvisionerPath).mode & 0o111).not.toBe(0);
+    expect(roleProvisioner).toContain('WHERE NOT EXISTS (SELECT FROM pg_roles');
+    expect(roleProvisioner).toContain('ALTER ROLE :"admin_user" LOGIN PASSWORD');
+    expect(roleProvisioner).toContain('ALTER ROLE :"storefront_user" LOGIN PASSWORD');
+    expect(roleProvisioner).toContain('GRANT :"owner_user" TO :"admin_user"');
+    expect(roleProvisioner).toContain("'public.storefront_order_idempotency'");
+    expect(roleProvisioner).toContain("'admin.ecotrack_service_fees'");
+    expect(roleProvisioner).toContain('GRANT USAGE ON SCHEMA admin');
+    expect(roleProvisioner).toContain(
+      'GRANT UPDATE (view_count, add_to_cart_count, checkout_count, purchase_count, popularity_score, conversion_rate, last_viewed_at)',
+    );
+    expect(roleProvisioner).toContain(
+      'REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM :"storefront_user"',
+    );
+    expect(roleProvisioner).not.toContain('GRANT UPDATE ON TABLE public.products');
+    expect(roleProvisioner).not.toContain('GRANT UPDATE ON TABLE public.storefront_settings');
+    expect(roleProvisioner).not.toContain('GRANT SELECT ON ALL TABLES');
+    expect(roleProvisioner).not.toContain('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES');
+    expect(roleProvisioner).not.toContain('ALTER DEFAULT PRIVILEGES');
+    expect(
+      deploy.match(
+        /docker exec "\$postgres_container_id" \/docker-entrypoint-initdb[.]d\/10-bric-roles[.]sh/g,
+      ),
+    ).toHaveLength(2);
+    expect(deploy).toContain(
+      'docker exec "$postgres_container_id" /docker-entrypoint-initdb.d/10-bric-roles.sh',
+    );
     expect(`${infraExample}\n${adminExample}\n${storefrontApiExample}`).not.toContain('change-me');
-    expect(validator).toContain(
-      `POSTGRES_PASSWORD='compose-validation-only' BRIC_ENV_DIR="$env_dir" docker compose`,
+    expect(validator).toContain(`POSTGRES_PASSWORD='compose-validation-only'`);
+    expect(validator).toContain(`REDIS_PASSWORD='compose-validation-redis-only'`);
+  });
+
+  it('pins the upstream SheetJS release and its lockfile integrity', () => {
+    const adminPackage = JSON.parse(
+      readFileSync(resolve(workspaceRoot, 'apps/admin/package.json'), 'utf8'),
+    ) as { dependencies?: Record<string, string> };
+    const lockfile = readFileSync(resolve(workspaceRoot, 'pnpm-lock.yaml'), 'utf8');
+    const sheetJsUrl = 'https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz';
+
+    expect(adminPackage.dependencies?.xlsx).toBe(sheetJsUrl);
+    expect(lockfile).toContain(`specifier: ${sheetJsUrl}`);
+    expect(lockfile).toContain(
+      'integrity: sha512-oLDq3jw7AcLqKWH2AhCpVTZl8mf6X2YReP+Neh0SJUzV/BdZYjth94tG5toiMB1PPrYtxOCfaoUCkvtuH+3AJA==',
     );
   });
 
@@ -426,7 +476,7 @@ describe('production packaging and release runtime', () => {
     expect(release).toContain('ServerAliveInterval 15\\n');
     expect(release).toContain('ServerAliveCountMax 4\\n');
     expect(release).toContain('echo "BRIC_DEPLOY_SSH_CONFIG=$ssh_config"');
-    expect(release.match(/ssh -F "\$BRIC_DEPLOY_SSH_CONFIG" bric-production/g)).toHaveLength(9);
+    expect(release.match(/ssh -F "\$BRIC_DEPLOY_SSH_CONFIG" bric-production/g)).toHaveLength(11);
     expect(release).not.toContain('~/.ssh/bric_deploy_key');
     expect(release).not.toContain('> ~/.ssh/known_hosts');
     expect(release).toContain('Reject a superseded release');
@@ -947,7 +997,8 @@ describe('production packaging and release runtime', () => {
     expect(
       readFileSync(resolve(workspaceRoot, 'ops/scripts/smoke-check.sh'), 'utf8'),
     ).not.toContain('--insecure');
-    expect(nginx).toContain('$request_method $uri $server_protocol');
+    expect(nginx).toContain('$request_method $bric_log_uri $server_protocol');
+    expect(nginx).toContain('$1/[redacted]');
     expect(nginx).toContain('$request_id $remote_addr');
     expect(nginx).toContain('proxy_cache_path /var/cache/nginx/storefront-images');
     expect(nginx).toContain('max_size=384m');

@@ -4,12 +4,19 @@ import { enqueueLightweightJob } from '@bric/runtime/jobs';
 import { hasDb } from '@bric/db/client';
 import { storefrontAnalyticsEventSchema } from '@bric/storefront-core/analytics';
 
-import { buildRateLimitHeaders, enforceRequestRateLimit } from '../../../lib/request-security';
+import {
+  buildRateLimitHeaders,
+  enforceGlobalRateLimit,
+  enforceRequestRateLimit,
+} from '../../../lib/request-security';
 import {
   captureStorefrontApiException,
   getRequestId,
   withRequestIdHeaders,
 } from '../../../lib/sentry';
+import { hasTrustedStorefrontProxySecret } from '../../../lib/meta-request';
+
+const MAX_ANALYTICS_BODY_BYTES = 16_384;
 
 export function isAutomatedAnalyticsRequest(req: Pick<NextRequest, 'headers'>) {
   const userAgent = req.headers.get('user-agent')?.toLowerCase() ?? '';
@@ -25,9 +32,31 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (!hasTrustedStorefrontProxySecret(req)) {
+    return NextResponse.json(
+      { error: 'Analytics proxy authorization is required.' },
+      { status: 403, headers: withRequestIdHeaders(requestId) },
+    );
+  }
+
+  const globalRateLimit = await enforceGlobalRateLimit({
+    scope: 'storefront-analytics-global',
+    limit: 1_200,
+    windowSeconds: 60,
+  });
+  if (!globalRateLimit.ok) {
+    return NextResponse.json(
+      { error: 'Analytics ingestion is busy.' },
+      {
+        status: 429,
+        headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(globalRateLimit)),
+      },
+    );
+  }
+
   const rateLimit = await enforceRequestRateLimit(req, {
     scope: 'storefront-analytics',
-    limit: 120,
+    limit: 60,
     windowSeconds: 60,
   });
   if (!rateLimit.ok) {
@@ -40,9 +69,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const body = await req.text();
+  if (new TextEncoder().encode(body).byteLength > MAX_ANALYTICS_BODY_BYTES) {
+    return NextResponse.json(
+      { error: 'Analytics request is too large.' },
+      { status: 413, headers: withRequestIdHeaders(requestId) },
+    );
+  }
+
   let payload: unknown;
   try {
-    payload = await req.json();
+    payload = JSON.parse(body);
   } catch {
     return NextResponse.json(
       { error: 'Invalid JSON request body.' },
@@ -62,6 +99,13 @@ export async function POST(req: NextRequest) {
   if (isAutomatedAnalyticsRequest(req)) {
     return NextResponse.json(
       { ok: true, queued: false, filtered: 'automation' },
+      { headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)) },
+    );
+  }
+
+  if (parsed.data.eventName === 'purchase') {
+    return NextResponse.json(
+      { ok: true, queued: false, filtered: 'server_authoritative' },
       { headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)) },
     );
   }

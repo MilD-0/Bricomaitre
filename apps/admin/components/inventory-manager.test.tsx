@@ -336,10 +336,12 @@ describe('InventoryManager', () => {
 
     expect(scanCalls).toEqual(['123456', '50']);
     expect(applyCalls).toContainEqual({
+      requestId: expect.any(String),
       mode: 'increase',
       items: [{ productId: 1, quantity: 1, source: { type: 'order-scan' } }],
     });
     expect(applyCalls).toContainEqual({
+      requestId: expect.any(String),
       mode: 'increase',
       items: [{ productId: 1, quantity: 2, source: { type: 'order-scan', orderIds: [50] } }],
     });

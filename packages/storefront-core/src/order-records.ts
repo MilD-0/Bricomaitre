@@ -238,7 +238,10 @@ export function toOrderRecord(
 
   return {
     id: row.id,
-    publicToken: row.publicToken ?? null,
+    publicToken:
+      row.publicTokenExpiresAt && row.publicTokenExpiresAt.getTime() > Date.now()
+        ? (row.publicToken ?? null)
+        : null,
     ecotrackTrackingNumber: row.ecotrackTrackingNumber ?? null,
     variant: row.variant ?? null,
     isDegradedCapture: row.variant === DEGRADED_CAPTURE_VARIANT,

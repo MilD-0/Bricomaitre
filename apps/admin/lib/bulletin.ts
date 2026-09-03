@@ -9,7 +9,13 @@ import {
 
 const bulletinAttachmentSchema = z.object({
   fileName: z.string().trim().min(1).max(255),
-  fileUrl: z.string().trim().url(),
+  fileUrl: z
+    .string()
+    .trim()
+    .refine(
+      (value) => value.startsWith('/api/bulletin/attachments/') || z.url().safeParse(value).success,
+      'Attachment URL is invalid',
+    ),
   fileKey: z.string().trim().min(1).max(512),
   contentType: z.string().trim().min(1).max(255),
   size: z.number().int().nonnegative().max(MAX_BULLETIN_UPLOAD_BYTES),

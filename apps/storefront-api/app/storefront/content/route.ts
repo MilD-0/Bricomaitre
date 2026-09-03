@@ -9,7 +9,9 @@ export async function GET(request: NextRequest) {
   if (locale !== 'fr' && locale !== 'ar') {
     return NextResponse.json({ error: 'Invalid locale.' }, { status: 400 });
   }
-  if (!hasDb()) return NextResponse.json({ announcement: null });
+  if (!hasDb()) {
+    return NextResponse.json({ error: 'Storefront database is unavailable.' }, { status: 503 });
+  }
   const db = getDb();
   const announcements = await db
     .select({ message: storefrontAnnouncements.message })

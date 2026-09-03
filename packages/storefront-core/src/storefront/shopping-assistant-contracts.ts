@@ -23,7 +23,7 @@ export const shoppingAssistantCatalogSearchSchema = z
     minPrice: nullablePriceSchema,
     maxPrice: nullablePriceSchema,
     sortKey: z
-      .enum(['recommended', 'active', 'title', 'price', 'inStock', 'updatedAt', 'createdAt'])
+      .enum(['recommended', 'title', 'price', 'inStock', 'updatedAt', 'createdAt'])
       .default('recommended'),
     sortDirection: z.enum(['asc', 'desc']).default('desc'),
     page: z.number().int().positive().max(10_000).default(1),

@@ -129,7 +129,7 @@ describe('app/storefront/orders/route', () => {
       new NextRequest('http://localhost/storefront/orders', {
         method: 'POST',
         body: JSON.stringify({ phoneNumber1: '0550111111' }),
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'idempotency-key': 'submission-key' },
       }),
     );
 
@@ -147,7 +147,7 @@ describe('app/storefront/orders/route', () => {
       new NextRequest('http://localhost/storefront/orders', {
         method: 'POST',
         body: '{',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'idempotency-key': 'submission-key' },
       }),
     );
 
@@ -167,7 +167,7 @@ describe('app/storefront/orders/route', () => {
       new NextRequest('http://localhost/storefront/orders', {
         method: 'POST',
         body: JSON.stringify({}),
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'idempotency-key': 'submission-key' },
       }),
     );
 
@@ -233,7 +233,7 @@ describe('app/storefront/orders/route', () => {
       new NextRequest('http://localhost/storefront/orders', {
         method: 'POST',
         body: JSON.stringify({}),
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'idempotency-key': 'submission-key' },
       }),
     );
 
@@ -245,7 +245,7 @@ describe('app/storefront/orders/route', () => {
         sessionId: undefined,
       }),
     );
-    expect(beginIdempotentRequestMock).not.toHaveBeenCalled();
+    expect(beginIdempotentRequestMock).toHaveBeenCalled();
     expect(createStorefrontOrderMock).toHaveBeenCalledWith(
       { tag: 'db' },
       expect.objectContaining({
@@ -261,6 +261,24 @@ describe('app/storefront/orders/route', () => {
       ok: true,
       item: { id: 11, publicToken: 'public-token' },
     });
+    expect(res.status).toBe(201);
+  });
+
+  it('rejects order creation without an idempotency key', async () => {
+    hasDbMock.mockReturnValue(true);
+
+    const res = await POST(
+      new NextRequest('http://localhost/storefront/orders', {
+        method: 'POST',
+        body: JSON.stringify({ phoneNumber1: '0550111111' }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'idempotency_key_required' });
+    expect(enforceRequestRateLimitMock).not.toHaveBeenCalled();
+    expect(createStorefrontOrderMock).not.toHaveBeenCalled();
   });
 
   it('passes trusted Meta context into the transactional order create flow', async () => {
@@ -299,6 +317,7 @@ describe('app/storefront/orders/route', () => {
         }),
         headers: {
           'content-type': 'application/json',
+          'idempotency-key': 'submission-key',
           'x-storefront-meta-proxy-secret': 'proxy-secret',
           'x-real-ip': '203.0.113.12',
           'user-agent': 'Vitest',
@@ -307,7 +326,7 @@ describe('app/storefront/orders/route', () => {
       }),
     );
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     expect(createStorefrontOrderMock).toHaveBeenCalledWith(
       { tag: 'db' },
       expect.objectContaining({
@@ -343,7 +362,7 @@ describe('app/storefront/orders/route', () => {
       }),
     );
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     expect(beginIdempotentRequestMock).toHaveBeenCalledWith(
       expect.objectContaining({
         scope: 'storefront-order-create',
@@ -392,7 +411,7 @@ describe('app/storefront/orders/route', () => {
       }),
     );
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     expect(readCommittedStorefrontOrderMock).toHaveBeenCalledWith({ tag: 'db' }, 11);
     expect(createStorefrontOrderMock).not.toHaveBeenCalled();
     await expect(res.json()).resolves.toEqual({
@@ -441,7 +460,7 @@ describe('app/storefront/orders/route', () => {
       }),
     );
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     expect(createStorefrontOrderMock).toHaveBeenCalledOnce();
     expect(clearIdempotentRequestMock).not.toHaveBeenCalled();
     await expect(res.json()).resolves.toMatchObject({ ok: true, item: { id: 11 } });
@@ -475,7 +494,7 @@ describe('app/storefront/orders/route', () => {
       new NextRequest('http://localhost/storefront/orders', {
         method: 'POST',
         body: JSON.stringify({}),
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'idempotency-key': 'submission-key' },
       }),
     );
 
@@ -522,11 +541,11 @@ describe('app/storefront/orders/route', () => {
       new NextRequest('http://localhost/storefront/orders', {
         method: 'POST',
         body: JSON.stringify({}),
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'idempotency-key': 'submission-key' },
       }),
     );
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     expect(warnSpy).toHaveBeenCalledWith(
       '[storefront-api] order create timing',
       expect.objectContaining({

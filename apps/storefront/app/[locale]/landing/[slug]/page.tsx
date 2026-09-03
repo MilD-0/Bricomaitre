@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 
@@ -16,12 +17,9 @@ import { getStorefrontLandingPage } from '@/lib/storefront-api';
 
 type LandingPageProps = { params: Promise<{ locale: string; slug: string }> };
 
-export const revalidate = 900;
-export const dynamicParams = true;
-
-export function generateStaticParams() {
-  return [];
-}
+// Landing data remains tag-cached, but nonce-bearing HTML must be rendered for
+// each request so the response CSP and every inline script share a fresh nonce.
+export const dynamic = 'force-dynamic';
 
 export async function generateMetadata({ params }: LandingPageProps): Promise<Metadata> {
   const { locale, slug } = await params;
@@ -36,13 +34,17 @@ export async function generateMetadata({ params }: LandingPageProps): Promise<Me
 }
 
 async function LandingPageContent({ params }: LandingPageProps) {
-  const { locale, slug } = await params;
+  const [{ locale, slug }, requestHeaders] = await Promise.all([params, headers()]);
   if (!isLocale(locale)) notFound();
   const page = await getStorefrontLandingPage(locale, slug).catch(() => null);
   if (!page) notFound();
   return (
     <PageShell locale={locale}>
-      <LandingPageRenderer page={page} locale={locale} />
+      <LandingPageRenderer
+        page={page}
+        locale={locale}
+        nonce={requestHeaders.get('x-nonce') ?? undefined}
+      />
       <LandingOrderForm page={page} locale={locale} />
     </PageShell>
   );

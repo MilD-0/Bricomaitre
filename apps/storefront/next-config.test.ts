@@ -47,27 +47,15 @@ describe('storefront Next configuration', () => {
     });
     expect(config).not.toHaveProperty('cacheComponents');
     const headerRules = await config.headers?.();
-    const contentSecurityPolicy = headerRules?.[0]?.headers.find(
-      (header) => header.key === 'Content-Security-Policy',
-    )?.value;
-    expect(contentSecurityPolicy).not.toContain("'unsafe-eval'");
-    expect(contentSecurityPolicy).not.toMatch(/script-src[^;]*\shttps:(?:;|\s)/);
-    expect(contentSecurityPolicy).toContain('https://connect.facebook.net');
-    expect(contentSecurityPolicy).not.toContain('https://www.googletagmanager.com');
-    expect(contentSecurityPolicy).not.toContain('https://www.google-analytics.com');
-    expect(contentSecurityPolicy).not.toContain('https://analytics.tiktok.com');
+    expect(
+      headerRules?.[0]?.headers.some((header) => header.key === 'Content-Security-Policy'),
+    ).toBe(false);
     expect(headerRules?.[0]?.headers).toEqual(
       expect.arrayContaining([
         { key: 'X-Content-Type-Options', value: 'nosniff' },
         { key: 'X-Frame-Options', value: 'DENY' },
         { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
         { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
-        expect.objectContaining({
-          key: 'Content-Security-Policy',
-          value: expect.stringMatching(
-            /frame-ancestors 'none'.*img-src[^;]*http:\/\/cdn\.example\.com:4311/,
-          ),
-        }),
       ]),
     );
     expect(withSentryConfig).toHaveBeenCalledWith(

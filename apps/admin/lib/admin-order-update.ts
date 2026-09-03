@@ -16,7 +16,7 @@ import {
 } from '@bric/storefront-core/order-commercial';
 import { updateCanonicalOrder } from '@bric/storefront-core/order-write';
 
-import { mutateEntityWithHistory, type ActionActor } from './action-history';
+import { mutateEntityWithHistoryTransaction, type ActionActor } from './action-history';
 import { readEcotrackCatalog, resolveEcotrackDeliveryFee } from './ecotrack';
 import { getOrderProductLookup, toOrderRecord } from './order-records';
 import {
@@ -155,122 +155,129 @@ export async function updateAdminOrder(
   options: { allowStatusCorrection?: boolean } = {},
 ) {
   const changes = orderPatchSchema.parse(input);
-  const existing = await db.query.orders.findFirst({ where: eq(orders.id, orderId) });
-  if (!existing) throw new AdminOrderNotFoundError(orderId);
-
-  const currentStatus = coerceOrderStatus(existing.inHouseStatus);
-  if (
-    changes.inHouseStatus !== undefined &&
-    !options.allowStatusCorrection &&
-    !canTransitionOrderStatus(currentStatus, changes.inHouseStatus)
-  ) {
-    throw new AdminOrderStatusTransitionError(currentStatus, changes.inHouseStatus);
-  }
-
-  const catalog =
-    changes.delivery !== undefined || changes.state !== undefined || changes.city !== undefined
-      ? await readEcotrackCatalog(db)
-      : null;
-  const nextDelivery = coerceDeliveryType(changes.delivery ?? existing.delivery);
-  const nextState = changes.state !== undefined ? changes.state : existing.state;
-  const nextDeliveryFee = catalog
-    ? resolveEcotrackDeliveryFee(catalog, nextState, nextDelivery)
-    : Number(existing.deliveryFee ?? 0);
-  const commercial =
-    changes.cartProducts === undefined
-      ? null
-      : await resolveOrderCommercialState(db, {
-          cartProducts: changes.cartProducts,
-          promoCode: existing.promoCode,
-        });
-  const persistedSubtotal =
-    commercial === null ? await readOrderProductSubtotal(db, existing) : commercial.productSubtotal;
   let queueConfirmation = false;
   let queueCompletion = false;
 
-  const [updated] = await mutateEntityWithHistory(db, {
-    entityType: 'orders',
-    entityId: orderId,
-    operation: 'update',
-    actor,
-    execute: async (tx) => {
-      const currentNoAnswerCount = coerceNoAnswerCount(
-        currentStatus,
-        existing.noAnswerCount,
-        existing.inHouseStatus,
-      );
-      const nextStatus = changes.inHouseStatus ?? currentStatus;
-      const nextNoAnswerCount =
-        nextStatus === 1
-          ? coerceNoAnswerCount(
-              nextStatus,
-              changes.noAnswerCount ?? currentNoAnswerCount,
-              existing.inHouseStatus,
-            )
-          : 0;
-      const now = new Date();
-      const update: Partial<InferInsertModel<typeof orders>> & { updatedAt: Date } = {
-        updatedAt: now,
-      };
+  const updated = await db.transaction(async (tx) => {
+    const [existing] = await tx.select().from(orders).where(eq(orders.id, orderId)).for('update');
+    if (!existing) throw new AdminOrderNotFoundError(orderId);
 
-      if (changes.firstName !== undefined) update.firstName = changes.firstName;
-      if (changes.lastName !== undefined) update.lastName = changes.lastName;
-      const nextPhoneNumber1 = changes.phoneNumber1 ?? existing.phoneNumber1;
-      const nextCity = changes.city !== undefined ? changes.city : existing.city;
-      const nextHomeAddress =
-        changes.homeAddress !== undefined ? changes.homeAddress : existing.homeAddress;
-      const nextCartProducts = commercial?.cartProducts ?? existing.cartProducts ?? [];
+    const currentStatus = coerceOrderStatus(existing.inHouseStatus);
+    if (
+      changes.inHouseStatus !== undefined &&
+      !options.allowStatusCorrection &&
+      !canTransitionOrderStatus(currentStatus, changes.inHouseStatus)
+    ) {
+      throw new AdminOrderStatusTransitionError(currentStatus, changes.inHouseStatus);
+    }
 
-      if (changes.phoneNumber1 !== undefined) {
-        update.phoneNumber1 = changes.phoneNumber1;
-        update.normalizedPhone = normalizeAlgeriaPhone(changes.phoneNumber1);
-      }
-      if (changes.note !== undefined) update.note = changes.note;
-      if (changes.delivery !== undefined) update.delivery = changes.delivery;
-      if (changes.state !== undefined) update.state = changes.state;
-      if (changes.city !== undefined) update.city = changes.city;
-      if (changes.homeAddress !== undefined) update.homeAddress = changes.homeAddress;
-      if (
-        catalog &&
-        (changes.delivery !== undefined ||
-          changes.state !== undefined ||
-          changes.city !== undefined)
-      ) {
-        update.deliveryFee = nextDeliveryFee.toFixed(2);
-        update.productSubtotal = persistedSubtotal.toFixed(2);
-        update.totalAmount = (persistedSubtotal + nextDeliveryFee).toFixed(2);
-      }
-
-      update.variant = shouldUseDegradedCaptureVariant({
-        phoneNumber1: nextPhoneNumber1,
-        cartProducts: nextCartProducts,
-        delivery: nextDelivery,
-        state: nextState,
-        city: nextCity,
-        homeAddress: nextHomeAddress,
-      })
-        ? DEGRADED_CAPTURE_VARIANT
+    const catalog =
+      changes.delivery !== undefined || changes.state !== undefined || changes.city !== undefined
+        ? await readEcotrackCatalog(tx)
         : null;
+    const nextDelivery = coerceDeliveryType(changes.delivery ?? existing.delivery);
+    const nextState = changes.state !== undefined ? changes.state : existing.state;
+    const nextDeliveryFee = catalog
+      ? resolveEcotrackDeliveryFee(catalog, nextState, nextDelivery)
+      : Number(existing.deliveryFee ?? 0);
+    const commercial =
+      changes.cartProducts === undefined
+        ? null
+        : await resolveOrderCommercialState(tx, {
+            cartProducts: changes.cartProducts,
+            promoCode: existing.promoCode,
+          });
+    const persistedSubtotal =
+      commercial === null
+        ? await readOrderProductSubtotal(tx, existing)
+        : commercial.productSubtotal;
 
-      const result = await updateCanonicalOrder(tx, {
-        orderId,
-        values: update,
-        commercial: commercial ?? undefined,
-        deliveryFee: commercial ? nextDeliveryFee : undefined,
-        status:
-          changes.inHouseStatus !== undefined || changes.noAnswerCount !== undefined
-            ? { value: nextStatus, noAnswerCount: nextNoAnswerCount }
-            : undefined,
-        allowStatusCorrection: options.allowStatusCorrection,
-        actor,
-        now,
-      });
-      if (result.statusChanged) {
-        queueConfirmation = isMetaOrderConfirmedStatus(nextStatus);
-        queueCompletion = isMetaCompletedStatus(nextStatus);
-      }
-      return [result.order];
-    },
+    const [saved] = await mutateEntityWithHistoryTransaction(tx, {
+      entityType: 'orders',
+      entityId: orderId,
+      operation: 'update',
+      actor,
+      execute: async (mutationTx) => {
+        const currentNoAnswerCount = coerceNoAnswerCount(
+          currentStatus,
+          existing.noAnswerCount,
+          existing.inHouseStatus,
+        );
+        const nextStatus = changes.inHouseStatus ?? currentStatus;
+        const nextNoAnswerCount =
+          nextStatus === 1
+            ? coerceNoAnswerCount(
+                nextStatus,
+                changes.noAnswerCount ?? currentNoAnswerCount,
+                existing.inHouseStatus,
+              )
+            : 0;
+        const now = new Date();
+        const update: Partial<InferInsertModel<typeof orders>> & { updatedAt: Date } = {
+          updatedAt: now,
+        };
+
+        if (changes.firstName !== undefined) update.firstName = changes.firstName;
+        if (changes.lastName !== undefined) update.lastName = changes.lastName;
+        const nextPhoneNumber1 = changes.phoneNumber1 ?? existing.phoneNumber1;
+        const nextCity = changes.city !== undefined ? changes.city : existing.city;
+        const nextHomeAddress =
+          changes.homeAddress !== undefined ? changes.homeAddress : existing.homeAddress;
+        const nextCartProducts = commercial?.cartProducts ?? existing.cartProducts ?? [];
+
+        if (changes.phoneNumber1 !== undefined) {
+          update.phoneNumber1 = changes.phoneNumber1;
+          update.normalizedPhone = normalizeAlgeriaPhone(changes.phoneNumber1);
+        }
+        if (changes.note !== undefined) update.note = changes.note;
+        if (changes.delivery !== undefined) update.delivery = changes.delivery;
+        if (changes.state !== undefined) update.state = changes.state;
+        if (changes.city !== undefined) update.city = changes.city;
+        if (changes.homeAddress !== undefined) update.homeAddress = changes.homeAddress;
+        if (
+          catalog &&
+          (changes.delivery !== undefined ||
+            changes.state !== undefined ||
+            changes.city !== undefined)
+        ) {
+          update.deliveryFee = nextDeliveryFee.toFixed(2);
+          update.productSubtotal = persistedSubtotal.toFixed(2);
+          update.totalAmount = (persistedSubtotal + nextDeliveryFee).toFixed(2);
+        }
+
+        update.variant = shouldUseDegradedCaptureVariant({
+          phoneNumber1: nextPhoneNumber1,
+          cartProducts: nextCartProducts,
+          delivery: nextDelivery,
+          state: nextState,
+          city: nextCity,
+          homeAddress: nextHomeAddress,
+        })
+          ? DEGRADED_CAPTURE_VARIANT
+          : null;
+
+        const result = await updateCanonicalOrder(mutationTx, {
+          orderId,
+          values: update,
+          commercial: commercial ?? undefined,
+          deliveryFee: commercial ? nextDeliveryFee : undefined,
+          status:
+            changes.inHouseStatus !== undefined || changes.noAnswerCount !== undefined
+              ? { value: nextStatus, noAnswerCount: nextNoAnswerCount }
+              : undefined,
+          allowStatusCorrection: options.allowStatusCorrection,
+          actor,
+          now,
+        });
+        if (result.statusChanged) {
+          queueConfirmation = isMetaOrderConfirmedStatus(nextStatus);
+          queueCompletion = isMetaCompletedStatus(nextStatus);
+        }
+        return [result.order];
+      },
+    });
+
+    return saved!;
   });
 
   const historyRows = await db

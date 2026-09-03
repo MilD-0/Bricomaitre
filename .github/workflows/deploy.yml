@@ -495,7 +495,18 @@ jobs:
 
           release_path="/srv/bric/releases/${BRIC_RELEASE_ID}"
           bundle_dir="$(mktemp -d)"
-          trap 'rm -rf "$bundle_dir"' EXIT
+          env_transaction_started=false
+          cleanup_deploy_step() {
+            status=$?
+            trap - EXIT
+            rm -rf "$bundle_dir"
+            if [[ "$env_transaction_started" == true ]]; then
+              ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
+                "source '$release_path/ops/scripts/blue-green.sh'; rollback_runtime_env_transaction" || true
+            fi
+            exit "$status"
+          }
+          trap cleanup_deploy_step EXIT
 
           mkdir -p \
             "$bundle_dir/ops/scripts" \
@@ -523,6 +534,10 @@ jobs:
             "$bundle_dir/" "bric-production:$release_path/"
           printf '%s\n' "$GHCR_READ_TOKEN" | ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
             "docker login ghcr.io -u '$GHCR_USERNAME' --password-stdin >/dev/null"
+
+          ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
+            "source '$release_path/ops/scripts/blue-green.sh'; begin_runtime_env_transaction"
+          env_transaction_started=true
 
           printf '%s\n%s\n' "$ECOTRACK_EMIR_BASE_URL" "$ECOTRACK_EMIR_TOKEN" | \
             ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production '
@@ -702,5 +717,6 @@ jobs:
 
           ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
             "bash '$release_path/ops/scripts/deploy.sh' '$release_path' '$RELEASE_SHA'"
+          env_transaction_started=false
           echo "## Deploy phase" >> "$GITHUB_STEP_SUMMARY"
           echo "- ✅ Deployed verified release ${BRIC_RELEASE_ID}" >> "$GITHUB_STEP_SUMMARY"

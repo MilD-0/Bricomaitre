@@ -31,12 +31,13 @@ describe('app/storefront/brands/route', () => {
     readStorefrontBrandsMock.mockReset();
   });
 
-  it('returns an empty list when DB is unavailable', async () => {
+  it('returns an unavailable response when DB is unavailable', async () => {
     hasDbMock.mockReturnValue(false);
 
     const res = await GET();
 
-    await expect(res.json()).resolves.toEqual({ items: [] });
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toEqual({ error: 'Storefront database is unavailable.' });
   });
 
   it('returns active brands for the storefront', async () => {

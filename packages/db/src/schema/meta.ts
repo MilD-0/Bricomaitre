@@ -50,6 +50,15 @@ export const orderLineItems = pgTable(
     uniqueIndex('order_line_items_order_content_unique').on(t.orderId, t.contentId),
     index('idx_order_line_items_order').on(t.orderId),
     index('idx_order_line_items_product').on(t.productId),
+    check('order_line_items_quantity_positive_check', sql`${t.quantity} > 0`),
+    check(
+      'order_line_items_amounts_nonnegative_check',
+      sql`${t.originalUnitPrice} >= 0
+        and ${t.effectiveUnitPrice} >= 0
+        and (${t.unitPurchasePriceSnapshot} is null or ${t.unitPurchasePriceSnapshot} >= 0)
+        and ${t.discountAmount} >= 0
+        and ${t.lineTotal} >= 0`,
+    ),
   ],
 );
 

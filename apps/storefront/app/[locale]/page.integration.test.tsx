@@ -11,6 +11,9 @@ vi.mock('@/lib/storefront-api', () => ({
   getStorefrontHomepage: mocks.homepage,
   getStorefrontSettings: mocks.settings,
 }));
+vi.mock('next/headers', () => ({
+  headers: async () => new Headers({ 'x-nonce': 'test-nonce' }),
+}));
 vi.mock('next/navigation', () => ({
   notFound: vi.fn(() => {
     throw new Error('NEXT_NOT_FOUND');
@@ -131,9 +134,10 @@ describe('homepage', () => {
     );
 
     const rendering = HomePageContent({ params: Promise.resolve({ locale: 'fr' }) });
-    await Promise.resolve();
-    expect(mocks.homepage).toHaveBeenCalledOnce();
-    expect(mocks.settings).toHaveBeenCalledOnce();
+    await vi.waitFor(() => {
+      expect(mocks.homepage).toHaveBeenCalledOnce();
+      expect(mocks.settings).toHaveBeenCalledOnce();
+    });
     releaseHomepage();
     releaseSettings();
     await expect(rendering).resolves.toBeTruthy();

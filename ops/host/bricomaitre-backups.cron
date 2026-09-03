@@ -2,4 +2,4 @@ SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 15 3 * * * {{OPERATIONS_USER}} cd /srv/bric/current && /bin/bash ops/scripts/backup-postgres-to-s3.sh >> /var/log/bric-postgres-backup.log 2>&1
-45 4 * * 0 {{OPERATIONS_USER}} cd /srv/bric/current && BRIC_POSTGRES_RESTORE_MEMORY=512m BRIC_POSTGRES_RESTORE_CPUS=0.5 /usr/bin/flock -n /srv/bric/runtime/postgres-restore.lock /bin/bash ops/scripts/verify-postgres-backup-restore.sh >> /var/log/bric-postgres-restore.log 2>&1
+45 4 * * 0 {{OPERATIONS_USER}} cd /srv/bric/current && BRIC_REQUIRE_RESTORE_CHECKIN=true BRIC_POSTGRES_RESTORE_MEMORY=512m BRIC_POSTGRES_RESTORE_CPUS=0.5 /usr/bin/flock -n /srv/bric/runtime/postgres-restore.lock /bin/bash ops/scripts/verify-postgres-backup-restore.sh >> /var/log/bric-postgres-restore.log 2>&1

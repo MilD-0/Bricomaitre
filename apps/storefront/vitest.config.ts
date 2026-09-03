@@ -11,6 +11,15 @@ export default defineConfig({
     alias: aliases,
   },
   test: {
+    coverage: {
+      provider: 'v8',
+      thresholds: {
+        statements: 80,
+        branches: 68,
+        functions: 78,
+        lines: 82,
+      },
+    },
     projects: [
       {
         test: {

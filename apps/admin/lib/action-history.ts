@@ -47,7 +47,7 @@ const actionHistorySortKeyValues = [
 const ECOTRACK_SYNC_ACTOR_NAME = 'ECOTRACK sync';
 
 type Database = ReturnType<typeof getDb>;
-type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
 type SnapshotRecord = Record<string, unknown>;
 
@@ -859,32 +859,45 @@ export async function mutateEntityWithHistory<T>(
     isReversible?: boolean;
   },
 ) {
-  return db.transaction(async (tx) => {
-    const beforeState = params.entityId
-      ? await fetchEntity(tx, params.entityType, params.entityId)
-      : null;
-    const result = await params.execute(tx);
-    const entityId = params.resolveEntityId?.(result) ?? params.entityId;
+  return db.transaction((tx) => mutateEntityWithHistoryTransaction(tx, params));
+}
 
-    if (!entityId) {
-      throw new Error(`Unable to resolve entity id for ${params.entityType} ${params.operation}`);
-    }
+export async function mutateEntityWithHistoryTransaction<T>(
+  tx: Transaction,
+  params: {
+    entityType: string;
+    operation: ActionOperation;
+    actor?: ActionActor;
+    entityId?: number;
+    execute: (tx: Transaction) => Promise<T>;
+    resolveEntityId?: (result: T) => number;
+    isReversible?: boolean;
+  },
+) {
+  const beforeState = params.entityId
+    ? await fetchEntity(tx, params.entityType, params.entityId)
+    : null;
+  const result = await params.execute(tx);
+  const entityId = params.resolveEntityId?.(result) ?? params.entityId;
 
-    const afterState =
-      params.operation === 'delete' ? null : await fetchEntity(tx, params.entityType, entityId);
+  if (!entityId) {
+    throw new Error(`Unable to resolve entity id for ${params.entityType} ${params.operation}`);
+  }
 
-    await recordActionLog(tx, {
-      entityType: params.entityType,
-      entityId,
-      operation: params.operation,
-      beforeState,
-      afterState,
-      actor: params.actor,
-      isReversible: params.isReversible,
-    });
+  const afterState =
+    params.operation === 'delete' ? null : await fetchEntity(tx, params.entityType, entityId);
 
-    return result;
+  await recordActionLog(tx, {
+    entityType: params.entityType,
+    entityId,
+    operation: params.operation,
+    beforeState,
+    afterState,
+    actor: params.actor,
+    isReversible: params.isReversible,
   });
+
+  return result;
 }
 
 export async function listActionHistory(

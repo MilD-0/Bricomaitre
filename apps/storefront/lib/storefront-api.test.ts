@@ -42,7 +42,6 @@ const validProductResponse = {
     availability: {
       status: 'in_stock',
       inStock: true,
-      quantity: 4,
     },
     media: [],
     brand: null,
@@ -306,10 +305,8 @@ describe('storefront API client', () => {
                 slug: 'first',
                 mongoId: null,
                 titleAr: null,
-                active: true,
                 inStock: true,
                 availabilityStatus: 'in_stock',
-                inventoryQuantity: 1,
                 brandId: null,
                 categoryId: null,
                 images: [],
@@ -331,10 +328,8 @@ describe('storefront API client', () => {
                 slug: 'second',
                 mongoId: null,
                 titleAr: null,
-                active: true,
                 inStock: true,
                 availabilityStatus: 'in_stock',
-                inventoryQuantity: 1,
                 brandId: null,
                 categoryId: null,
                 images: [],
@@ -356,10 +351,8 @@ describe('storefront API client', () => {
                 slug: 'third',
                 mongoId: null,
                 titleAr: null,
-                active: true,
                 inStock: true,
                 availabilityStatus: 'in_stock',
-                inventoryQuantity: 1,
                 brandId: null,
                 categoryId: null,
                 images: [],
@@ -485,8 +478,14 @@ describe('storefront API client', () => {
       validOrder,
     );
     expect(fetch).toHaveBeenCalledWith(
-      'http://localhost:3001/storefront/orders/42?token=public-order-token-1234567890',
-      expect.objectContaining({ cache: 'no-store', signal: expect.any(AbortSignal) }),
+      'http://localhost:3001/storefront/orders/42',
+      expect.objectContaining({
+        cache: 'no-store',
+        headers: expect.objectContaining({
+          'x-order-token': 'public-order-token-1234567890',
+        }),
+        signal: expect.any(AbortSignal),
+      }),
     );
   });
 
@@ -499,8 +498,13 @@ describe('storefront API client', () => {
       validOrder,
     );
     expect(fetch).toHaveBeenCalledWith(
-      'http://localhost:3001/storefront/orders/track/public-order-token-1234567890',
-      expect.objectContaining({ cache: 'no-store', signal: expect.any(AbortSignal) }),
+      'http://localhost:3001/storefront/orders/track',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ token: 'public-order-token-1234567890' }),
+        cache: 'no-store',
+        signal: expect.any(AbortSignal),
+      }),
     );
   });
 

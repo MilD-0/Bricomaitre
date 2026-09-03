@@ -85,7 +85,7 @@ const page = {
     barcode: null,
     price: '4500.00',
     oldPrice: null,
-    availability: { status: 'in_stock', inStock: true, quantity: 4 },
+    availability: { status: 'in_stock', inStock: true },
     media: [],
     brand: null,
     category: null,
@@ -126,7 +126,7 @@ describe('LandingOrderForm', () => {
       ...page,
       product: {
         ...page.product,
-        availability: { status: 'out_of_stock' as const, inStock: false, quantity: 0 },
+        availability: { status: 'out_of_stock' as const, inStock: false },
       },
     };
     const html = renderToStaticMarkup(await LandingOrderForm({ page: unavailable, locale: 'fr' }));

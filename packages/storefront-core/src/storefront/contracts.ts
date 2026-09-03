@@ -15,10 +15,8 @@ export const STOREFRONT_ANALYTICS_PROJECT = 'storefront' as const;
 const isoTimestampSchema = z.string().datetime({ offset: true });
 const productSortKeyValues = [
   'recommended',
-  'active',
   'title',
   'price',
-  'purchasePrice',
   'inStock',
   'updatedAt',
   'createdAt',
@@ -125,10 +123,8 @@ export const storefrontProductResponseItemSchema = z.object({
   barcode: z.string().nullable(),
   price: z.string().nullable(),
   oldPrice: z.string().nullable(),
-  active: z.boolean(),
   inStock: z.boolean(),
   availabilityStatus: z.string(),
-  inventoryQuantity: z.number().int(),
   brandId: z.number().int().nullable(),
   categoryId: z.number().int().nullable(),
   images: z.array(z.string()),
@@ -165,7 +161,6 @@ export const storefrontProductDetailResponseItemSchema = z.object({
   availability: z.object({
     status: z.string(),
     inStock: z.boolean(),
-    quantity: z.number().int(),
   }),
   media: z.array(
     z.object({

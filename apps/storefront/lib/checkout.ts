@@ -167,7 +167,11 @@ function readStored<T>(
   } catch {
     // Invalid browser state is discarded below.
   }
-  storage.removeItem(key);
+  try {
+    storage.removeItem(key);
+  } catch {
+    // Browser persistence is optional; invalid state can remain until storage is available again.
+  }
   return null;
 }
 
@@ -176,11 +180,21 @@ export function readPendingCheckout(storage: Pick<Storage, 'getItem' | 'removeIt
 }
 
 export function writePendingCheckout(storage: Pick<Storage, 'setItem'>, value: PendingCheckout) {
-  storage.setItem(PENDING_CHECKOUT_KEY, JSON.stringify(pendingCheckoutSchema.parse(value)));
+  try {
+    storage.setItem(PENDING_CHECKOUT_KEY, JSON.stringify(pendingCheckoutSchema.parse(value)));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function clearPendingCheckout(storage: Pick<Storage, 'removeItem'>) {
-  storage.removeItem(PENDING_CHECKOUT_KEY);
+  try {
+    storage.removeItem(PENDING_CHECKOUT_KEY);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function readCheckoutDraft(storage: Pick<Storage, 'getItem' | 'removeItem'>) {
@@ -188,7 +202,12 @@ export function readCheckoutDraft(storage: Pick<Storage, 'getItem' | 'removeItem
 }
 
 export function writeCheckoutDraft(storage: Pick<Storage, 'setItem'>, value: CheckoutDraft) {
-  storage.setItem(CHECKOUT_DRAFT_KEY, JSON.stringify(checkoutDraftSchema.parse(value)));
+  try {
+    storage.setItem(CHECKOUT_DRAFT_KEY, JSON.stringify(checkoutDraftSchema.parse(value)));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function readCheckoutConfirmation(storage: Pick<Storage, 'getItem' | 'removeItem'>) {
@@ -199,8 +218,13 @@ export function writeCheckoutConfirmation(
   storage: Pick<Storage, 'setItem'>,
   value: CheckoutConfirmation,
 ) {
-  storage.setItem(
-    CHECKOUT_CONFIRMATION_KEY,
-    JSON.stringify(checkoutConfirmationSchema.parse(value)),
-  );
+  try {
+    storage.setItem(
+      CHECKOUT_CONFIRMATION_KEY,
+      JSON.stringify(checkoutConfirmationSchema.parse(value)),
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }

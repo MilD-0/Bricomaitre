@@ -369,8 +369,12 @@ export async function fetchStorefrontOrder(
     return null;
   }
 
-  const pathname = `/storefront/orders/${orderId}?token=${encodeURIComponent(publicToken.trim())}`;
-  const response = await fetchStorefrontUpstream(pathname, { cache: 'no-store', timeoutMs: 6_000 });
+  const pathname = `/storefront/orders/${orderId}`;
+  const response = await fetchStorefrontUpstream(pathname, {
+    headers: { 'x-order-token': publicToken.trim() },
+    cache: 'no-store',
+    timeoutMs: 6_000,
+  });
   if (response.status === 404) return null;
   const result = await parseUpstreamJson(response, pathname, storefrontReadOrderResponseSchema);
   return result.item;
@@ -384,8 +388,14 @@ export async function fetchStorefrontOrderByToken(
     return null;
   }
 
-  const pathname = `/storefront/orders/track/${encodeURIComponent(token)}`;
-  const response = await fetchStorefrontUpstream(pathname, { cache: 'no-store', timeoutMs: 6_000 });
+  const pathname = '/storefront/orders/track';
+  const response = await fetchStorefrontUpstream(pathname, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token }),
+    cache: 'no-store',
+    timeoutMs: 6_000,
+  });
   if (response.status === 404) return null;
   const result = await parseUpstreamJson(response, pathname, storefrontReadOrderResponseSchema);
   return result.item;
@@ -401,6 +411,24 @@ export async function getStorefrontSettings() {
       }
     },
     ['storefront-settings'],
+    {
+      revalidate: 3600,
+      tags: [STOREFRONT_CACHE_TAGS.settings],
+    },
+  )();
+}
+
+export async function getStorefrontAssistantSettings() {
+  return unstable_cache(
+    async () => {
+      const pathname = '/storefront/settings';
+      return parseUpstreamJson(
+        await fetchStorefrontUpstream(pathname),
+        pathname,
+        storefrontSettingsResponseSchema,
+      );
+    },
+    ['storefront-assistant-settings'],
     {
       revalidate: 3600,
       tags: [STOREFRONT_CACHE_TAGS.settings],

@@ -12,7 +12,9 @@ const loadLandingPages = createServerCache({
 });
 
 export async function GET() {
-  if (!hasDb()) return NextResponse.json({ items: [] });
+  if (!hasDb()) {
+    return NextResponse.json({ error: 'Storefront database is unavailable.' }, { status: 503 });
+  }
   return NextResponse.json(
     storefrontLandingPageSitemapResponseSchema.parse({ items: await loadLandingPages() }),
   );

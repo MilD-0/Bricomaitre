@@ -17,6 +17,7 @@
     "./contracts": "./src/storefront/contracts.ts",
     "./dto": "./src/storefront/dto.ts",
     "./ecotrack-client": "./src/ecotrack-client.ts",
+    "./ecotrack-support": "./src/ecotrack-support.ts",
     "./ecotrack-catalog": "./src/storefront/ecotrack-catalog.ts",
     "./ecotrack-tracking": "./src/ecotrack-tracking.ts",
     "./landing-pages": "./src/storefront/landing-pages.ts",

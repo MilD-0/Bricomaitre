@@ -33,7 +33,6 @@ const productResponse = {
     availability: {
       status: 'in_stock',
       inStock: true,
-      quantity: 4,
     },
     media: [
       {

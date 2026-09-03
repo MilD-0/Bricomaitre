@@ -36,6 +36,7 @@ describe('app/api/health/route', () => {
     expect(payload).toEqual({
       status: 'ok',
       service: 'storefront-api',
+      release: 'unknown',
       timestamp: expect.any(String),
     });
   });
@@ -66,6 +67,7 @@ describe('app/api/health/route', () => {
     expect(payload).toEqual({
       status: 'degraded',
       service: 'storefront-api',
+      release: 'unknown',
       timestamp: expect.any(String),
     });
   });

@@ -73,20 +73,23 @@ export function CatalogLiveSearch({
     setQueued(true);
     const connection = (navigator as Navigator & { connection?: ConnectionHint }).connection;
     timerRef.current = setTimeout(
-      () => {
-        const params = new URLSearchParams(searchParams.toString());
-        const normalizedValue = nextValue.trim();
-        if (normalizedValue) params.set('q', normalizedValue);
-        else params.delete('q');
-        params.delete('page');
-        setCommittedValue(normalizedValue);
-        setQueued(false);
-        const query = params.toString();
-        startTransition(() =>
-          router.replace(`${pathname}${query ? `?${query}` : ''}` as Route, { scroll: false }),
-        );
-      },
+      () => commit(nextValue),
       getAdaptiveSearchDelay(nextValue, inputType, connection),
+    );
+  }
+
+  function commit(nextValue: string) {
+    timerRef.current = null;
+    const params = new URLSearchParams(searchParams.toString());
+    const normalizedValue = nextValue.trim();
+    if (normalizedValue) params.set('q', normalizedValue);
+    else params.delete('q');
+    params.delete('page');
+    setCommittedValue(normalizedValue);
+    setQueued(false);
+    const query = params.toString();
+    startTransition(() =>
+      router.replace(`${pathname}${query ? `?${query}` : ''}` as Route, { scroll: false }),
     );
   }
 
@@ -119,7 +122,10 @@ export function CatalogLiveSearch({
           schedule(event.currentTarget.value, 'insertCompositionText');
         }}
         onKeyDown={(event) => {
-          if (event.key === 'Enter' && timerRef.current) clearTimeout(timerRef.current);
+          if (event.key !== 'Enter' || composingRef.current) return;
+          event.preventDefault();
+          if (timerRef.current) clearTimeout(timerRef.current);
+          commit(event.currentTarget.value);
         }}
       />
       <small className="catalog-search-status" role="status" aria-live="polite">

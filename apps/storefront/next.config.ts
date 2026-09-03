@@ -2,13 +2,10 @@ import type { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
 import { withSentryConfig } from '@sentry/nextjs';
 
-import { getStorefrontImageOrigins, getStorefrontRemoteImagePatterns } from './lib/product-images';
+import { getStorefrontRemoteImagePatterns } from './lib/product-images';
 import { getAllowedDevOrigins } from './lib/dev-origins';
-import { buildStorefrontContentSecurityPolicy } from './lib/content-security-policy';
 
 const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
-const configuredImageSources = getStorefrontImageOrigins();
-
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'X-Frame-Options', value: 'DENY' },
@@ -17,10 +14,6 @@ const securityHeaders = [
   {
     key: 'Strict-Transport-Security',
     value: 'max-age=63072000; includeSubDomains; preload',
-  },
-  {
-    key: 'Content-Security-Policy',
-    value: buildStorefrontContentSecurityPolicy(configuredImageSources),
   },
 ];
 

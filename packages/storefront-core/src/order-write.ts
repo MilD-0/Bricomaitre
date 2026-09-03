@@ -12,6 +12,7 @@ import {
   type OrderStatus,
 } from './orders-support';
 import { normalizeAlgeriaPhone, replaceOrderLineSnapshots } from './storefront/meta';
+import { createPublicOrderTokenExpiry } from './storefront/order-access';
 
 type Database = ReturnType<typeof getDb>;
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -239,17 +240,31 @@ export async function ensureCanonicalOrderPublicToken(
   orderId: number,
   publicToken: string,
 ) {
+  const now = new Date();
   const [current] = await tx
-    .select({ publicToken: orders.publicToken })
+    .select({
+      publicToken: orders.publicToken,
+      publicTokenExpiresAt: orders.publicTokenExpiresAt,
+    })
     .from(orders)
     .where(eq(orders.id, orderId))
     .for('update');
   if (!current) throw new CanonicalOrderNotFoundError(orderId);
-  if (current.publicToken) return current.publicToken;
+  if (
+    current.publicToken &&
+    current.publicTokenExpiresAt &&
+    current.publicTokenExpiresAt.getTime() > now.getTime()
+  ) {
+    return current.publicToken;
+  }
 
   const [updated] = await tx
     .update(orders)
-    .set({ publicToken, updatedAt: new Date() })
+    .set({
+      publicToken,
+      publicTokenExpiresAt: createPublicOrderTokenExpiry(now),
+      updatedAt: now,
+    })
     .where(eq(orders.id, orderId))
     .returning({ publicToken: orders.publicToken });
   if (!updated?.publicToken) throw new CanonicalOrderNotFoundError(orderId);

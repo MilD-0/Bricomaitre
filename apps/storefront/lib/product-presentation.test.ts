@@ -18,7 +18,7 @@ const product = {
   barcode: null,
   price: '1500.00',
   oldPrice: '1750.00',
-  availability: { status: 'in_stock', inStock: true, quantity: 4 },
+  availability: { status: 'in_stock', inStock: true },
   media: [],
   brand: null,
   category: {

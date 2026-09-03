@@ -1,4 +1,20 @@
 {
   "version": 1,
-  "exceptions": []
+  "exceptions": [
+    {
+      "migration": "0090_sparkling_toad_men.sql",
+      "sha256": "7d33cf90f58514cf3791fdc82b23664285a6f2118c4e756e5d460a7055285aea",
+      "reason": "The previous runtime validates order states, delivery modes, statuses, counters, line quantities, and monetary values before every write; the constraints make those existing invariants durable."
+    },
+    {
+      "migration": "0091_deep_blonde_phantom.sql",
+      "sha256": "a630e598efd176ff20e58cb66725419e6375f6bd633550638eeaff39da91b663",
+      "reason": "The unique index belongs to a new idempotency table that the previous runtime neither reads nor writes."
+    },
+    {
+      "migration": "0092_clumsy_deadpool.sql",
+      "sha256": "9de21c5d770f7545b17bc78525544ceb521e8209481cf0496b1d837c6acbe283",
+      "reason": "The required revision column has a database default, so previous-runtime inserts remain valid during rollout or rollback."
+    }
+  ]
 }

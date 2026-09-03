@@ -36,7 +36,7 @@ const loadSettings = createServerCache({
 
 export async function GET() {
   if (!hasDb()) {
-    return NextResponse.json(toStorefrontContactSettings(DEFAULT_STOREFRONT_SETTINGS));
+    return NextResponse.json({ error: 'Storefront database is unavailable.' }, { status: 503 });
   }
 
   return NextResponse.json(await loadSettings());

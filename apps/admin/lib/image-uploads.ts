@@ -1,5 +1,6 @@
 import {
   buildDatedObjectKey,
+  deletePrivateS3Object,
   ensureS3UploadConfig,
   getS3UploadClient,
   uploadBufferToS3,
@@ -24,10 +25,12 @@ export async function uploadImages(request: Request, prefix: string): Promise<Im
 
   const { region, bucket, cloudfrontDomain } = ensureS3UploadConfig();
   const client = getS3UploadClient(region);
-  const urls = await Promise.all(
-    validated.files.map(({ buffer, contentType, extension }) => {
+  const urls: string[] = [];
+  const uploadedKeys: string[] = [];
+  try {
+    for (const { buffer, contentType, extension } of validated.files) {
       const key = buildDatedObjectKey(prefix, extension);
-      return uploadBufferToS3({
+      const url = await uploadBufferToS3({
         client,
         bucket,
         cloudfrontDomain,
@@ -35,8 +38,13 @@ export async function uploadImages(request: Request, prefix: string): Promise<Im
         body: buffer,
         contentType,
       });
-    }),
-  );
+      uploadedKeys.push(key);
+      urls.push(url);
+    }
+  } catch (error) {
+    await Promise.all(uploadedKeys.map((key) => deletePrivateS3Object(key).catch(() => undefined)));
+    throw error;
+  }
 
   return { ok: true, urls };
 }

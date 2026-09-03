@@ -168,6 +168,7 @@ export function OrdersWorkflows({
       return { product: detail.item, brandName };
     },
   });
+  const inventoryRequestRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const applyInventoryMutation = useMutation({
     mutationFn: (
       items: Array<{
@@ -175,12 +176,19 @@ export function OrdersWorkflows({
         quantity: number;
         source: { type: 'shopping-list'; orderIds: number[] };
       }>,
-    ) =>
-      request<InventoryApplyResponse>('/api/inventory/apply', {
+    ) => {
+      const payload = { mode: 'decrease' as const, items };
+      const fingerprint = JSON.stringify(payload);
+      if (inventoryRequestRef.current?.fingerprint !== fingerprint) {
+        inventoryRequestRef.current = { fingerprint, requestId: crypto.randomUUID() };
+      }
+      return request<InventoryApplyResponse>('/api/inventory/apply', {
         method: 'POST',
-        body: JSON.stringify({ mode: 'decrease', items }),
-      }),
+        body: JSON.stringify({ ...payload, requestId: inventoryRequestRef.current.requestId }),
+      });
+    },
     onSuccess: async () => {
+      inventoryRequestRef.current = null;
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['inventory-table'] }),
         queryClient.invalidateQueries({ queryKey: ['products-workspace'] }),
@@ -264,6 +272,7 @@ export function OrdersWorkflows({
         current?.scopeKey === response.draft.scopeKey
           ? {
               ...current,
+              revision: response.draft.revision,
               updatedAt: response.draft.updatedAt,
               updatedByName: response.draft.updatedByName,
             }
@@ -404,6 +413,7 @@ export function OrdersWorkflows({
                 checked: false,
               })),
               search: '',
+              revision: null,
               updatedAt: null,
               updatedByName: null,
             }
@@ -631,6 +641,15 @@ export function OrdersWorkflows({
         shoppingListState,
         locale,
         t('ordersManager.shoppingList.previousGeneration'),
+        {
+          generated: (value) => t('ordersManager.shoppingList.generatedAt', { date: value }),
+          unitPrice: t('ordersManager.shoppingList.unitPrice'),
+          purchasePrice: t('ordersManager.shoppingList.purchasePrice'),
+          inventoryDecrease: t('ordersManager.shoppingList.inventoryAdjustLabel'),
+          inventoryShortage: (count) =>
+            t('ordersManager.shoppingList.inventoryShortage', { count }),
+          notes: t('ordersManager.shoppingList.notes'),
+        },
       ),
     );
     printWindow.document.close();

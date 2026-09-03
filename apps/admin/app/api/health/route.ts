@@ -11,6 +11,7 @@ export async function GET(request: Request) {
     {
       status: health.ok ? 'ok' : 'degraded',
       service: 'admin',
+      release: process.env.SENTRY_RELEASE?.trim() || 'unknown',
       timestamp: new Date().toISOString(),
     },
     {

@@ -10,10 +10,19 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('./action-history', () => ({ mutateEntityWithHistory: mocks.history }));
+vi.mock('./admin-mutation-idempotency', () => ({
+  runIdempotentAdminMutation: async (
+    _db: unknown,
+    input: { execute: (tx: unknown) => unknown },
+  ) => ({
+    value: await input.execute({}),
+    replayed: false,
+  }),
+}));
 vi.mock('./admin-orders-data', () => ({ loadOrderDetail: mocks.loadOrder }));
 vi.mock('./inventory-actions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./inventory-actions')>()),
-  applyInventoryQuantityChange: mocks.change,
+  applyInventoryQuantityChangeInTransaction: mocks.change,
   readInventoryProductById: mocks.readProduct,
 }));
 vi.mock('./server-cache', () => ({
@@ -100,6 +109,7 @@ describe('canonical admin inventory workflow', () => {
       applyAdminInventoryBatch(
         {} as never,
         {
+          requestId: 'inventory-test-request-0001',
           mode: 'increase',
           items: [
             { productId: 12, quantity: 3 },

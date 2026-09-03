@@ -56,7 +56,7 @@ describe('request-security order velocity limit', () => {
     getRedisMock.mockReturnValue(redis);
   });
 
-  it('allows six order attempts per fifteen minutes for the selected identity', async () => {
+  it('limits both the client address and selected analytics identity', async () => {
     redis.ttl.mockResolvedValue(-2);
     applyRateLimitMock.mockResolvedValue({
       ok: true,
@@ -74,7 +74,13 @@ describe('request-security order velocity limit', () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(applyRateLimitMock).toHaveBeenCalledWith({
+    expect(applyRateLimitMock).toHaveBeenNthCalledWith(1, {
+      scope: 'storefront-order-velocity',
+      key: 'ip:198.51.100.77',
+      limit: 6,
+      windowSeconds: 900,
+    });
+    expect(applyRateLimitMock).toHaveBeenNthCalledWith(2, {
       scope: 'storefront-order-velocity',
       key: 'journey:journey-1',
       limit: 6,
@@ -83,7 +89,7 @@ describe('request-security order velocity limit', () => {
     expect(redis.incr).not.toHaveBeenCalled();
   });
 
-  it('locks an identity for ten minutes on the first velocity breach', async () => {
+  it('locks the client address for ten minutes even when identities can rotate', async () => {
     redis.ttl.mockResolvedValue(-2);
     redis.incr.mockResolvedValue(1);
     applyRateLimitMock.mockResolvedValue({
@@ -102,11 +108,11 @@ describe('request-security order velocity limit', () => {
     expect(result.ok).toBe(false);
     expect(result.retryAfterSeconds).toBe(600);
     expect(redis.expire).toHaveBeenCalledWith(
-      'bric:ratelimit:storefront-order-velocity:violations:journey:journey-1',
+      'bric:ratelimit:storefront-order-velocity:violations:ip:unknown',
       7200,
     );
     expect(redis.set).toHaveBeenCalledWith(
-      'bric:ratelimit:storefront-order-velocity:penalty:journey:journey-1',
+      'bric:ratelimit:storefront-order-velocity:penalty:ip:unknown',
       '1',
       'EX',
       600,
@@ -116,13 +122,21 @@ describe('request-security order velocity limit', () => {
   it('escalates a repeat velocity breach to one hour', async () => {
     redis.ttl.mockResolvedValue(-2);
     redis.incr.mockResolvedValue(2);
-    applyRateLimitMock.mockResolvedValue({
-      ok: false,
-      limit: 6,
-      remaining: 0,
-      resetAt: Date.now() + 60_000,
-      retryAfterSeconds: 60,
-    });
+    applyRateLimitMock
+      .mockResolvedValueOnce({
+        ok: true,
+        limit: 6,
+        remaining: 5,
+        resetAt: Date.now() + 60_000,
+        retryAfterSeconds: 60,
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        limit: 6,
+        remaining: 0,
+        resetAt: Date.now() + 60_000,
+        retryAfterSeconds: 60,
+      });
 
     const result = await enforceOrderVelocityLimit(
       new NextRequest('https://api.example.test/storefront/orders'),

@@ -1,8 +1,25 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render as testingRender,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { NextIntlClientProvider } from 'next-intl';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import messages from '../messages/en.json';
 import { ImageUploadField } from './image-upload-field';
+
+function render(ui: ReactNode) {
+  return testingRender(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      {ui}
+    </NextIntlClientProvider>,
+  );
+}
 
 class MockXHR {
   responseType = '';

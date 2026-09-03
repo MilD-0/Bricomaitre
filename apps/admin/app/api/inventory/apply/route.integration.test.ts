@@ -3,23 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { POST } from './route';
 
-const {
-  hasDbMock,
-  getDbMock,
-  requireMutationAccessMock,
-  authMock,
-  applyInventoryQuantityChangeMock,
-  revalidateServerTagsMock,
-  revalidateStorefrontProductsMock,
-} = vi.hoisted(() => ({
-  hasDbMock: vi.fn(),
-  getDbMock: vi.fn(),
-  requireMutationAccessMock: vi.fn(),
-  authMock: vi.fn(),
-  applyInventoryQuantityChangeMock: vi.fn(),
-  revalidateServerTagsMock: vi.fn(),
-  revalidateStorefrontProductsMock: vi.fn(),
-}));
+const { hasDbMock, getDbMock, requireMutationAccessMock, authMock, applyAdminInventoryBatchMock } =
+  vi.hoisted(() => ({
+    hasDbMock: vi.fn(),
+    getDbMock: vi.fn(),
+    requireMutationAccessMock: vi.fn(),
+    authMock: vi.fn(),
+    applyAdminInventoryBatchMock: vi.fn(),
+  }));
 
 vi.mock('@bric/db/client', () => ({
   hasDb: hasDbMock,
@@ -34,17 +25,8 @@ vi.mock('../../../../lib/auth', () => ({
   auth: authMock,
 }));
 
-vi.mock('../../../../lib/inventory-actions', () => ({
-  applyInventoryQuantityChange: applyInventoryQuantityChangeMock,
-}));
-
-vi.mock('../../../../lib/server-cache', () => ({
-  CACHE_TAGS: { products: 'products', productsMeta: 'products-meta' },
-  revalidateServerTags: revalidateServerTagsMock,
-}));
-
-vi.mock('../../../../lib/storefront-revalidate', () => ({
-  revalidateStorefrontProducts: revalidateStorefrontProductsMock,
+vi.mock('../../../../lib/admin-inventory-workflow', () => ({
+  applyAdminInventoryBatch: applyAdminInventoryBatchMock,
 }));
 
 describe('app/api/inventory/apply/route', () => {
@@ -53,9 +35,7 @@ describe('app/api/inventory/apply/route', () => {
     getDbMock.mockReset();
     requireMutationAccessMock.mockReset();
     authMock.mockReset();
-    applyInventoryQuantityChangeMock.mockReset();
-    revalidateServerTagsMock.mockReset();
-    revalidateStorefrontProductsMock.mockReset().mockResolvedValue(undefined);
+    applyAdminInventoryBatchMock.mockReset();
 
     requireMutationAccessMock.mockResolvedValue(null);
     hasDbMock.mockReturnValue(true);
@@ -80,14 +60,18 @@ describe('app/api/inventory/apply/route', () => {
   });
 
   it('applies batch inventory updates and reports skipped rows', async () => {
-    applyInventoryQuantityChangeMock
-      .mockResolvedValueOnce({ kind: 'updated', previousQuantity: 2, nextQuantity: 4, item: {} })
-      .mockResolvedValueOnce({ kind: 'missing' });
+    applyAdminInventoryBatchMock.mockResolvedValue({
+      ok: true,
+      complete: false,
+      items: [{ productId: 1, previousQuantity: 2, nextQuantity: 4 }],
+      skipped: [{ productId: 2, reason: 'missing' }],
+    });
 
     const res = await POST(
       new NextRequest('http://localhost/api/inventory/apply', {
         method: 'POST',
         body: JSON.stringify({
+          requestId: '71d3f110-0bb0-41d9-bdc4-6107707c2524',
           mode: 'increase',
           items: [
             { productId: 1, quantity: 2, source: { type: 'order-scan', orderIds: [99] } },
@@ -98,19 +82,19 @@ describe('app/api/inventory/apply/route', () => {
       }),
     );
 
-    expect(applyInventoryQuantityChangeMock).toHaveBeenNthCalledWith(
-      1,
+    expect(applyAdminInventoryBatchMock).toHaveBeenCalledWith(
       { marker: 'db' },
       {
-        productId: 1,
+        requestId: '71d3f110-0bb0-41d9-bdc4-6107707c2524',
         mode: 'increase',
-        quantity: 2,
-        actor: { email: 'admin@example.com', name: 'Admin' },
+        items: [
+          { productId: 1, quantity: 2, source: { type: 'order-scan', orderIds: [99] } },
+          { productId: 2, quantity: 1, source: { type: 'shopping-list', orderIds: [44] } },
+        ],
       },
+      { email: 'admin@example.com', name: 'Admin' },
     );
     expect(res.status).toBe(200);
-    expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
-    expect(revalidateStorefrontProductsMock).toHaveBeenCalledOnce();
     await expect(res.json()).resolves.toEqual({
       ok: true,
       items: [{ productId: 1, previousQuantity: 2, nextQuantity: 4 }],

@@ -7,7 +7,6 @@ import {
   mergeShoppingListDraft,
   normalizeShoppingListOrderIds,
   type ShoppingListDraftItem,
-  type ShoppingListDraftPayload,
   type ShoppingListDraftRecord,
   type ShoppingListDraftResponse,
   type ShoppingListSourceMode,
@@ -57,13 +56,14 @@ export async function fetchShoppingListDraft(
 }
 
 export async function saveShoppingListDraft(state: NonNullable<ShoppingListState>) {
-  const payload: ShoppingListDraftPayload = {
+  const payload = {
     sourceMode: state.sourceMode,
     orderIds: state.orderIds,
     title: state.title,
     generatedItems: state.generatedItems,
     draftItems: state.draftItems,
     orders: state.orders,
+    revision: state.revision,
   };
 
   return request<ShoppingListDraftSaveResponse>('/api/orders/shopping-list-draft', {
@@ -80,6 +80,7 @@ export function buildShoppingListStateFromDraft(
     sourceMode: draft.sourceMode,
     orderIds: normalizeShoppingListOrderIds(draft.orderIds),
     scopeKey: draft.scopeKey,
+    revision: draft.revision,
     title: title ?? draft.title,
     generatedItems: draft.generatedItems,
     draftItems: draft.draftItems,
@@ -175,6 +176,7 @@ async function buildShoppingListState(
   return {
     ...generated,
     scopeKey: buildShoppingListScopeKey(sourceMode, generated.orderIds),
+    revision: null,
     search: '',
     updatedAt: null,
     updatedByName: null,
@@ -198,6 +200,7 @@ export async function buildMergedShoppingListState(
     state: {
       ...merged,
       scopeKey: response.draft.scopeKey,
+      revision: response.draft.revision,
       search: '',
       updatedAt: response.draft.updatedAt,
       updatedByName: response.draft.updatedByName,
@@ -210,6 +213,14 @@ export function buildShoppingListPrintHtml(
   state: NonNullable<ShoppingListState>,
   locale: string,
   previousGenerationLabel: string,
+  labels: {
+    generated: (value: string) => string;
+    unitPrice: string;
+    purchasePrice: string;
+    inventoryDecrease: string;
+    inventoryShortage: (count: number) => string;
+    notes: string;
+  },
 ) {
   const escapeHtml = (value: string) =>
     value
@@ -225,7 +236,7 @@ export function buildShoppingListPrintHtml(
     .map(
       (generation) => `
     <section>
-      <h2>Generated ${escapeHtml(generation.label)}</h2>
+      <h2>${escapeHtml(labels.generated(generation.label))}</h2>
       ${generation.brandGroups
         .map(
           (group) => `
@@ -245,9 +256,9 @@ export function buildShoppingListPrintHtml(
                 ${product.thumbnailUrl ? `<img src="${escapeHtml(product.thumbnailUrl)}" alt="${escapeHtml(product.title)}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 8px; border: 1px solid #d4d4d8; flex: none;" />` : ''}
                 <div>
                   <strong>${product.checked ? '&#10003; ' : ''}${escapeHtml(product.title)}</strong> x${product.quantity}
-                  ${product.unitPrice == null ? '' : `<div>Unit price: ${escapeHtml(formatCurrency(locale, product.unitPrice))}${product.purchasePrice == null ? '' : ` | Purchase price: ${escapeHtml(formatCurrency(locale, product.purchasePrice))}`}</div>`}
-                  ${product.inventoryActionEligible ? `<div>Inventory decrease: ${product.inventoryDecreaseQuantity}${product.inventoryShortageQuantity > 0 ? ` | Short: ${product.inventoryShortageQuantity}` : ''}</div>` : ''}
-                  ${product.notes.length ? `<div>Notes: ${escapeHtml(product.notes.join(' | '))}</div>` : ''}
+                  ${product.unitPrice == null ? '' : `<div>${escapeHtml(labels.unitPrice)}: ${escapeHtml(formatCurrency(locale, product.unitPrice))}${product.purchasePrice == null ? '' : ` | ${escapeHtml(labels.purchasePrice)}: ${escapeHtml(formatCurrency(locale, product.purchasePrice))}`}</div>`}
+                  ${product.inventoryActionEligible ? `<div>${escapeHtml(labels.inventoryDecrease)}: ${product.inventoryDecreaseQuantity}${product.inventoryShortageQuantity > 0 ? ` | ${escapeHtml(labels.inventoryShortage(product.inventoryShortageQuantity))}` : ''}</div>` : ''}
+                  ${product.notes.length ? `<div>${escapeHtml(labels.notes)}: ${escapeHtml(product.notes.join(' | '))}</div>` : ''}
                 </div>
               </div>
             </li>
@@ -267,14 +278,14 @@ export function buildShoppingListPrintHtml(
     .map(
       (generation) => `
     <section>
-      <h2>Generated ${escapeHtml(generation.label)}</h2>
+      <h2>${escapeHtml(labels.generated(generation.label))}</h2>
       <ul>
         ${generation.orders
           .map(
             (order) => `
           <li>
             <h3>#${order.orderId} ${escapeHtml(order.customerName)}</h3>
-            ${order.note ? `<p>Note: ${escapeHtml(order.note)}</p>` : ''}
+            ${order.note ? `<p>${escapeHtml(labels.notes)}: ${escapeHtml(order.note)}</p>` : ''}
             <ul>
               ${order.products
                 .map(

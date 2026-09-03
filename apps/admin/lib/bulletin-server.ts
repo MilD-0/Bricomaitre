@@ -109,10 +109,14 @@ export async function syncBulletinPostAttachments(
   postId: number,
   attachments: BulletinAttachment[] | undefined,
 ) {
+  const existing = await tx
+    .select({ fileKey: bulletinPostAttachments.fileKey })
+    .from(bulletinPostAttachments)
+    .where(eq(bulletinPostAttachments.postId, postId));
   await tx.delete(bulletinPostAttachments).where(eq(bulletinPostAttachments.postId, postId));
 
   if (!attachments || attachments.length === 0) {
-    return;
+    return existing.map((attachment) => attachment.fileKey);
   }
 
   await tx.insert(bulletinPostAttachments).values(
@@ -125,6 +129,10 @@ export async function syncBulletinPostAttachments(
       size: attachment.size,
     })),
   );
+  const retained = new Set(attachments.map((attachment) => attachment.fileKey));
+  return existing
+    .map((attachment) => attachment.fileKey)
+    .filter((fileKey) => !retained.has(fileKey));
 }
 
 function mapReactions(
