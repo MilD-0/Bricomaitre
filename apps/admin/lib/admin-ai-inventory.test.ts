@@ -1,19 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  change: vi.fn(),
-  revalidateTags: vi.fn(),
-  revalidateStorefront: vi.fn(),
+  batch: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', () => ({ getDb: () => 'database' }));
-vi.mock('./inventory-actions', () => ({ applyInventoryQuantityChange: mocks.change }));
-vi.mock('./server-cache', () => ({
-  CACHE_TAGS: { products: 'products', productsMeta: 'products-meta' },
-  revalidateServerTags: mocks.revalidateTags,
-}));
-vi.mock('./storefront-revalidate', () => ({
-  revalidateStorefrontProducts: mocks.revalidateStorefront,
+vi.mock('./admin-inventory-workflow', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./admin-inventory-workflow')>()),
+  applyAdminInventoryBatch: mocks.batch,
 }));
 
 import { adjustAdminInventory } from './admin-ai-inventory';
@@ -21,10 +15,16 @@ import { adjustAdminInventory } from './admin-ai-inventory';
 describe('admin AI inventory adjustments', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('applies exact resolved deltas with actor history and refreshes catalog consumers once', async () => {
-    mocks.change
-      .mockResolvedValueOnce({ kind: 'updated', previousQuantity: 4, nextQuantity: 9 })
-      .mockResolvedValueOnce({ kind: 'updated', previousQuantity: 10, nextQuantity: 15 });
+  it('passes exact resolved deltas and actor history to the canonical batch workflow', async () => {
+    mocks.batch.mockResolvedValue({
+      ok: true,
+      complete: true,
+      items: [
+        { productId: 12, previousQuantity: 4, nextQuantity: 9 },
+        { productId: 18, previousQuantity: 10, nextQuantity: 15 },
+      ],
+      skipped: [],
+    });
 
     await expect(
       adjustAdminInventory(
@@ -45,21 +45,30 @@ describe('admin AI inventory adjustments', () => {
       ],
       skipped: [],
     });
-    expect(mocks.change).toHaveBeenNthCalledWith(1, 'database', {
-      productId: 12,
-      quantity: 5,
-      mode: 'increase',
-      actor: { email: 'admin@bricomaitre.com', name: 'Admin' },
-    });
-    expect(mocks.revalidateTags).toHaveBeenCalledWith('products', 'products-meta');
-    expect(mocks.revalidateStorefront).toHaveBeenCalledOnce();
+    expect(mocks.batch).toHaveBeenCalledWith(
+      'database',
+      {
+        requestId: expect.any(String),
+        mode: 'increase',
+        items: [
+          { productId: 12, quantity: 5 },
+          { productId: 18, quantity: 5 },
+        ],
+      },
+      { email: 'admin@bricomaitre.com', name: 'Admin' },
+    );
   });
 
   it('reports missing and insufficient rows without hiding successful adjustments', async () => {
-    mocks.change
-      .mockResolvedValueOnce({ kind: 'updated', previousQuantity: 8, nextQuantity: 6 })
-      .mockResolvedValueOnce({ kind: 'insufficient', available: 1 })
-      .mockResolvedValueOnce({ kind: 'missing' });
+    mocks.batch.mockResolvedValue({
+      ok: true,
+      complete: false,
+      items: [{ productId: 1, previousQuantity: 8, nextQuantity: 6 }],
+      skipped: [
+        { productId: 2, reason: 'insufficient', available: 1 },
+        { productId: 3, reason: 'missing' },
+      ],
+    });
 
     await expect(
       adjustAdminInventory({
@@ -78,16 +87,5 @@ describe('admin AI inventory adjustments', () => {
         { productId: 3, reason: 'missing' },
       ],
     });
-    expect(mocks.revalidateStorefront).toHaveBeenCalledOnce();
-  });
-
-  it('does not refresh catalog consumers when every adjustment is rejected', async () => {
-    mocks.change.mockResolvedValue({ kind: 'insufficient', available: 0 });
-    await adjustAdminInventory({
-      mode: 'decrease',
-      items: [{ productId: 12, quantity: 1 }],
-    });
-    expect(mocks.revalidateTags).not.toHaveBeenCalled();
-    expect(mocks.revalidateStorefront).not.toHaveBeenCalled();
   });
 });

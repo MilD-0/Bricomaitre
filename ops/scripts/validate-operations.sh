@@ -149,7 +149,11 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
   cp "$workspace_dir/ops/env/storefront-api.env.example" "$env_dir/storefront-api.env"
   cp "$workspace_dir/ops/env/storefront.env.example" "$env_dir/storefront.env"
 
-  POSTGRES_PASSWORD='compose-validation-only' BRIC_ENV_DIR="$env_dir" docker compose \
+  POSTGRES_PASSWORD='compose-validation-only' \
+    POSTGRES_ADMIN_PASSWORD='compose-validation-admin-only' \
+    POSTGRES_STOREFRONT_PASSWORD='compose-validation-storefront-only' \
+    REDIS_PASSWORD='compose-validation-redis-only' \
+    BRIC_ENV_DIR="$env_dir" docker compose \
     --env-file "$workspace_dir/ops/env/infra.env.example" \
     -f "$workspace_dir/ops/docker/compose.prod.yml" \
     config --quiet

@@ -2,7 +2,10 @@ import { and, desc, eq, gte } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
 import { orders } from '@bric/db/schema';
-import { createPublicOrderToken } from '@bric/storefront-core/order-access';
+import {
+  createPublicOrderToken,
+  createPublicOrderTokenExpiry,
+} from '@bric/storefront-core/order-access';
 import { resolveOrderCommercialState } from '@bric/storefront-core/order-commercial';
 import { storefrontOrderCreateSchema } from '@bric/storefront-core/order-domain';
 import { insertCanonicalOrder } from '@bric/storefront-core/order-write';
@@ -85,6 +88,7 @@ export async function createAdminOrder(
           phoneNumber1: data.phoneNumber1,
           phoneNumber2: data.phoneNumber2,
           publicToken: createPublicOrderToken(),
+          publicTokenExpiresAt: createPublicOrderTokenExpiry(now),
           visitId: data.visitId,
           journeyId: data.journeyId,
           sessionId: data.sessionId,

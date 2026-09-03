@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   getOrderProductLookup: vi.fn(),
   readEcotrackCatalog: vi.fn(),
   toXlsxBuffer: vi.fn(),
-  uploadExportArtifact: vi.fn(),
+  uploadPrivateExportArtifact: vi.fn(),
 }));
 
 vi.mock('@bric/db/client', async (importOriginal) => ({
@@ -22,7 +22,7 @@ vi.mock('./ecotrack', async (importOriginal) => ({
 }));
 vi.mock('./export-artifacts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./export-artifacts')>()),
-  uploadExportArtifact: mocks.uploadExportArtifact,
+  uploadPrivateExportArtifact: mocks.uploadPrivateExportArtifact,
 }));
 vi.mock('./meta-catalog', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./meta-catalog')>()),
@@ -48,7 +48,10 @@ beforeEach(() => {
     lastSync: null,
   });
   mocks.toXlsxBuffer.mockReturnValue(Buffer.from('xlsx'));
-  mocks.uploadExportArtifact.mockResolvedValue('/api/orders/export/download');
+  mocks.uploadPrivateExportArtifact.mockResolvedValue({
+    key: 'exports/orders/private.xlsx',
+    expiresAt: new Date('2026-01-02T00:00:00.000Z'),
+  });
 });
 
 describe('filterCatalogFeedProducts', () => {
@@ -92,6 +95,12 @@ describe('runOrderExportJob', () => {
       'loading',
       'exporting',
     ]);
-    expect(setDownloadUrl).toHaveBeenCalledWith('/api/orders/export/download');
+    expect(setDownloadUrl).toHaveBeenCalledWith('/api/orders/export/download?jobId=job-1');
+    expect(updateSummary).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        artifactKey: 'exports/orders/private.xlsx',
+        artifactExpiresAt: '2026-01-02T00:00:00.000Z',
+      }),
+    );
   });
 });

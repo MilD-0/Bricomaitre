@@ -12,12 +12,21 @@ import {
   withRequestIdHeaders,
 } from '../../../../lib/sentry';
 
+const PRIVATE_ORDER_HEADERS = {
+  'cache-control': 'private, no-store',
+  'x-robots-tag': 'noindex, nofollow',
+};
+
+function privateHeaders(requestId: string, extra: Record<string, string> = {}) {
+  return withRequestIdHeaders(requestId, { ...PRIVATE_ORDER_HEADERS, ...extra });
+}
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const requestId = getRequestId(req);
   if (!hasDb()) {
     return NextResponse.json(
       { error: 'DATABASE_URL is not configured' },
-      { status: 503, headers: withRequestIdHeaders(requestId) },
+      { status: 503, headers: privateHeaders(requestId) },
     );
   }
 
@@ -36,7 +45,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       { error: 'Too many order lookup requests.' },
       {
         status: 429,
-        headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)),
+        headers: privateHeaders(requestId, buildRateLimitHeaders(rateLimit)),
       },
     );
   }
@@ -46,7 +55,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (orderId === null) {
     return NextResponse.json(
       { error: 'Invalid order id.' },
-      { status: 400, headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)) },
+      { status: 400, headers: privateHeaders(requestId, buildRateLimitHeaders(rateLimit)) },
     );
   }
 
@@ -56,21 +65,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (result.kind === 'missing_token') {
       return NextResponse.json(
         { error: 'Order token is required' },
-        { status: 401, headers: withRequestIdHeaders(requestId) },
+        { status: 401, headers: privateHeaders(requestId) },
       );
     }
 
     if (result.kind === 'not_found') {
       return NextResponse.json(
         { error: 'Not found' },
-        { status: 404, headers: withRequestIdHeaders(requestId) },
+        { status: 404, headers: privateHeaders(requestId) },
       );
     }
 
     return NextResponse.json(
       { item: result.item },
       {
-        headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)),
+        headers: privateHeaders(requestId, buildRateLimitHeaders(rateLimit)),
       },
     );
   } catch (error) {

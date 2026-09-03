@@ -17,6 +17,9 @@ vi.mock('@/lib/storefront-api', () => ({
   getStorefrontCatalog: mocks.catalog,
   getStorefrontCatalogMeta: mocks.meta,
 }));
+vi.mock('next/headers', () => ({
+  headers: async () => new Headers({ 'x-nonce': 'test-nonce' }),
+}));
 vi.mock('@/lib/sentry', () => ({ captureCatalogPageException: mocks.capture }));
 vi.mock('next/navigation', () => ({ notFound: mocks.notFound }));
 vi.mock('next/image', () => ({
@@ -97,10 +100,8 @@ const product = {
   barcode: null,
   price: '4500.00',
   oldPrice: '5200.00',
-  active: true,
   inStock: true,
   availabilityStatus: 'in_stock',
-  inventoryQuantity: 4,
   brandId: 2,
   categoryId: 3,
   images: ['/product-placeholder.svg'],

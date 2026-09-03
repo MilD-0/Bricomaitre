@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { InferInsertModel } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
@@ -9,6 +9,7 @@ import {
   buildShoppingListScopeKey,
   normalizeShoppingListOrderIds,
   shoppingListDraftPayloadSchema,
+  shoppingListDraftSaveRequestSchema,
   type ShoppingListDraftPayload,
 } from './shopping-list-drafts';
 
@@ -25,6 +26,7 @@ function serializeShoppingListDraft(row: typeof shoppingListDrafts.$inferSelect)
   });
   return {
     scopeKey: row.scopeKey,
+    revision: row.revision,
     ...payload,
     orderIds: normalizeShoppingListOrderIds(payload.orderIds),
     updatedAt: row.updatedAt.toISOString(),
@@ -47,11 +49,11 @@ export async function loadAdminShoppingListDraft(
 
 export async function saveAdminShoppingListDraft(
   db: Database,
-  input: ShoppingListDraftPayload,
+  input: ShoppingListDraftPayload & { revision: number | null },
   actor?: ActionActor,
   now = new Date(),
 ) {
-  const payload = shoppingListDraftPayloadSchema.parse(input);
+  const payload = shoppingListDraftSaveRequestSchema.parse(input);
   const orderIds = normalizeShoppingListOrderIds(payload.orderIds);
   const scopeKey = buildShoppingListScopeKey(payload.sourceMode, orderIds);
   const userEmail = actor?.email ?? 'unknown@example.com';
@@ -71,25 +73,44 @@ export async function saveAdminShoppingListDraft(
     createdAt: now,
     updatedAt: now,
   };
-  const [row] = await db
-    .insert(shoppingListDrafts)
-    .values(values)
-    .onConflictDoUpdate({
-      target: shoppingListDrafts.scopeKey,
-      set: {
-        sourceMode: payload.sourceMode,
-        orderIds,
-        title: payload.title,
-        draftItems: payload.draftItems,
-        generatedItems: payload.generatedItems,
-        ordersSnapshot: payload.orders,
-        updatedBy: userEmail,
-        updatedByName: userName,
-        updatedAt: now,
-      },
-    })
-    .returning();
+  const update = {
+    sourceMode: payload.sourceMode,
+    orderIds,
+    title: payload.title,
+    draftItems: payload.draftItems,
+    generatedItems: payload.generatedItems,
+    ordersSnapshot: payload.orders,
+    updatedBy: userEmail,
+    updatedByName: userName,
+    updatedAt: now,
+    revision: sql`${shoppingListDrafts.revision} + 1`,
+  };
+  const [row] =
+    payload.revision === null
+      ? await db
+          .insert(shoppingListDrafts)
+          .values(values)
+          .onConflictDoNothing({ target: shoppingListDrafts.scopeKey })
+          .returning()
+      : await db
+          .update(shoppingListDrafts)
+          .set(update)
+          .where(
+            and(
+              eq(shoppingListDrafts.scopeKey, scopeKey),
+              eq(shoppingListDrafts.revision, payload.revision),
+            ),
+          )
+          .returning();
+  if (!row) throw new ShoppingListDraftConflictError();
   return serializeShoppingListDraft(row!);
+}
+
+export class ShoppingListDraftConflictError extends Error {
+  constructor() {
+    super('This shopping list was changed by another operator. Reload it before saving again.');
+    this.name = 'ShoppingListDraftConflictError';
+  }
 }
 
 export async function deleteAdminShoppingListDraft(

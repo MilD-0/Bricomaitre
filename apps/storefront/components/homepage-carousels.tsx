@@ -230,11 +230,11 @@ export function HomepageProductCarousel({
 }
 
 export function HomepageBrandCarousel({ brands, locale }: { brands: Brand[]; locale: Locale }) {
-  const [ref] = useEmblaCarousel(
+  const [ref, api] = useEmblaCarousel(
     { loop: true, dragFree: true, watchDrag: false, direction: locale === 'ar' ? 'rtl' : 'ltr' },
     [
       AutoScroll({
-        playOnInit: true,
+        playOnInit: false,
         startDelay: 0,
         speed: 1.25,
         direction: locale === 'ar' ? 'backward' : 'forward',
@@ -244,6 +244,21 @@ export function HomepageBrandCarousel({ brands, locale }: { brands: Brand[]; loc
       }),
     ],
   );
+  useEffect(() => {
+    if (!api) return;
+    const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const synchronizeMotion = () => {
+      const autoScroll = api.plugins().autoScroll;
+      if (preference.matches) autoScroll.stop();
+      else autoScroll.play();
+    };
+    synchronizeMotion();
+    preference.addEventListener('change', synchronizeMotion);
+    return () => {
+      preference.removeEventListener('change', synchronizeMotion);
+      api.plugins().autoScroll.stop();
+    };
+  }, [api]);
   if (brands.length === 0) return null;
   // Embla can only honor `loop` when the slides are wide enough to cover its
   // loop points. Keep a generous minimum for wide desktop displays instead of
@@ -253,26 +268,31 @@ export function HomepageBrandCarousel({ brands, locale }: { brands: Brand[]; loc
   return (
     <div className="home-brand-carousel" ref={ref}>
       <div>
-        {loopBrands.map((brand, index) => (
-          <a
-            key={`${brand.id}-${index}`}
-            href={getBrandPath(locale, brand)}
-            aria-label={brand.name}
-          >
-            {brand.image ? (
-              <StorefrontImage
-                src={brand.image}
-                alt={brand.name}
-                width={190}
-                height={100}
-                sizes="150px"
-                quality={60}
-              />
-            ) : (
-              <strong className="home-brand-name">{brand.name}</strong>
-            )}
-          </a>
-        ))}
+        {loopBrands.map((brand, index) => {
+          const repeatedCopy = index >= brands.length;
+          return (
+            <a
+              key={`${brand.id}-${index}`}
+              href={getBrandPath(locale, brand)}
+              aria-label={brand.name}
+              aria-hidden={repeatedCopy || undefined}
+              tabIndex={repeatedCopy ? -1 : undefined}
+            >
+              {brand.image ? (
+                <StorefrontImage
+                  src={brand.image}
+                  alt={brand.name}
+                  width={190}
+                  height={100}
+                  sizes="150px"
+                  quality={60}
+                />
+              ) : (
+                <strong className="home-brand-name">{brand.name}</strong>
+              )}
+            </a>
+          );
+        })}
       </div>
     </div>
   );

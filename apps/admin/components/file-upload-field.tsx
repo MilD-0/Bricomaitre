@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import Uppy from '@uppy/core';
 import XHRUpload from '@uppy/xhr-upload';
+import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { BulletinAttachment } from '../lib/bulletin';
@@ -87,6 +88,7 @@ export function FileUploadField({
   maxTotalFileSize = MAX_BULLETIN_UPLOAD_TOTAL_BYTES,
   allowedFileTypes = BULLETIN_UPLOAD_EXTENSIONS,
 }: FileUploadFieldProps) {
+  const t = useTranslations('uploadFields');
   const [uploads, setUploads] = useState<UploadState[]>([]);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
   const [previewFile, setPreviewFile] = useState<{ src: string; alt: string } | null>(null);
@@ -301,7 +303,7 @@ export function FileUploadField({
                   {isPreviewableImage(file) ? (
                     <button
                       type="button"
-                      aria-label={`Preview ${file.fileName}`}
+                      aria-label={t('previewFile', { name: file.fileName })}
                       className="shrink-0"
                       onClick={() => setPreviewFile({ src: file.fileUrl, alt: file.fileName })}
                     >
@@ -329,7 +331,7 @@ export function FileUploadField({
                       >
                         <Button type="button" variant="outline" size="sm">
                           <Download data-icon="inline-start" />
-                          Download
+                          {t('download')}
                         </Button>
                       </a>
                       <Button
@@ -339,7 +341,7 @@ export function FileUploadField({
                         onClick={() => setDeleteIndex(file.index)}
                       >
                         <Trash2 data-icon="inline-start" />
-                        Delete
+                        {t('delete')}
                       </Button>
                     </div>
                   </div>
@@ -382,8 +384,8 @@ export function FileUploadField({
                       ) : null}
                       <span>
                         {upload.status === 'error'
-                          ? 'Upload failed'
-                          : `${upload.progress}% uploaded`}
+                          ? t('uploadFailed')
+                          : t('progress', { progress: upload.progress })}
                       </span>
                     </div>
                   </div>
@@ -399,7 +401,7 @@ export function FileUploadField({
           onClick={openPicker}
         >
           <ImagePlus className="size-4" />
-          <span>Add files</span>
+          <span>{t('addFiles')}</span>
         </button>
       </FieldContent>
 
@@ -430,12 +432,12 @@ export function FileUploadField({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete attachment?</DialogTitle>
-            <DialogDescription>This file will be removed from the draft.</DialogDescription>
+            <DialogTitle>{t('deleteAttachmentTitle')}</DialogTitle>
+            <DialogDescription>{t('deleteAttachmentDescription')}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setDeleteIndex(null)}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               type="button"
@@ -447,7 +449,7 @@ export function FileUploadField({
                 setDeleteIndex(null);
               }}
             >
-              Delete
+              {t('delete')}
             </Button>
           </DialogFooter>
         </DialogContent>

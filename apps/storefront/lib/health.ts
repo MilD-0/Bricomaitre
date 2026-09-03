@@ -3,6 +3,7 @@ import { fetchStorefrontUpstream } from './storefront-upstream';
 export type HealthPayload = {
   status: 'ok' | 'degraded';
   app: 'storefront';
+  release: string;
 };
 
 export async function getStorefrontHealth() {
@@ -39,5 +40,6 @@ export function buildHealthPayload(ok: boolean): HealthPayload {
   return {
     status: ok ? 'ok' : 'degraded',
     app: 'storefront',
+    release: process.env.SENTRY_RELEASE?.trim() || 'unknown',
   };
 }

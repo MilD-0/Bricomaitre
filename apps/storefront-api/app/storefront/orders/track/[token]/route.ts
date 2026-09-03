@@ -15,13 +15,21 @@ import {
 
 const TOKEN_MIN_LENGTH = 20;
 const TOKEN_MAX_LENGTH = 200;
+const PRIVATE_ORDER_HEADERS = {
+  'cache-control': 'private, no-store',
+  'x-robots-tag': 'noindex, nofollow',
+};
+
+function privateHeaders(requestId: string, extra: Record<string, string> = {}) {
+  return withRequestIdHeaders(requestId, { ...PRIVATE_ORDER_HEADERS, ...extra });
+}
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const requestId = getRequestId(req);
   if (!hasDb()) {
     return NextResponse.json(
       { error: 'DATABASE_URL is not configured' },
-      { status: 503, headers: withRequestIdHeaders(requestId) },
+      { status: 503, headers: privateHeaders(requestId) },
     );
   }
 
@@ -29,7 +37,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   if (token.length < TOKEN_MIN_LENGTH || token.length > TOKEN_MAX_LENGTH) {
     return NextResponse.json(
       { error: 'Not found' },
-      { status: 404, headers: withRequestIdHeaders(requestId) },
+      { status: 404, headers: privateHeaders(requestId) },
     );
   }
 
@@ -44,7 +52,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       { error: 'Too many order lookup requests.' },
       {
         status: 429,
-        headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)),
+        headers: privateHeaders(requestId, buildRateLimitHeaders(rateLimit)),
       },
     );
   }
@@ -54,18 +62,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     if (result.kind !== 'ok') {
       return NextResponse.json(
         { error: 'Not found' },
-        { status: 404, headers: withRequestIdHeaders(requestId) },
+        { status: 404, headers: privateHeaders(requestId) },
       );
     }
 
     return NextResponse.json(
       { item: result.item },
       {
-        headers: withRequestIdHeaders(requestId, {
-          ...buildRateLimitHeaders(rateLimit),
-          'cache-control': 'private, no-store',
-          'x-robots-tag': 'noindex, nofollow',
-        }),
+        headers: privateHeaders(requestId, buildRateLimitHeaders(rateLimit)),
       },
     );
   } catch (error) {

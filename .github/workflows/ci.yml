@@ -37,6 +37,8 @@ jobs:
         run: bash ops/scripts/validate-operations.sh
       - name: Scan current files and complete reachable history for secrets
         run: pnpm secrets:check
+      - name: Scan production dependencies for high-severity advisories
+        run: pnpm dependencies:check
       - name: Run static quality gates
         run: |
           pnpm format:check
@@ -87,15 +89,15 @@ jobs:
               ;;
             admin)
               ops/scripts/run-ci-check.sh "Admin unit, component, and route-contract tests" \
-                bash -lc 'pnpm test:admin && pnpm test:admin:integration'
+                bash -lc 'pnpm --filter @bric/admin test:coverage && pnpm test:admin:integration'
               ;;
             storefront-api)
               ops/scripts/run-ci-check.sh "Storefront API unit and route-contract tests" \
-                pnpm test:storefront-api
+                pnpm --filter @bric/storefront-api test:coverage
               ;;
             storefront)
               ops/scripts/run-ci-check.sh "Storefront unit, component, and application-contract tests" \
-                bash -lc 'pnpm test:storefront && pnpm test:storefront:integration'
+                bash -lc 'pnpm --filter @bric/storefront test:coverage && pnpm test:storefront:integration'
               ;;
             *)
               echo "unknown test suite: $TEST_SUITE" >&2

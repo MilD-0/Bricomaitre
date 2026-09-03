@@ -28,6 +28,7 @@ const ECOTRACK_COMPLETED_STATUSES = new Set([
   'livre_non_encaisse',
   'encaisse_non_paye',
   'paiements_prets',
+  'payed',
   'paye_et_archive',
 ]);
 const ECOTRACK_RETURNED_STATUSES = new Set([

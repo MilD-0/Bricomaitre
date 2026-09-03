@@ -84,12 +84,15 @@ export function ProductActions({
   function addToCart() {
     try {
       const next = addCartItem(readCart(window.localStorage), { ...item, quantity });
-      writeCart(window.localStorage, next);
-      window.dispatchEvent(
-        new CustomEvent('bric:cart-updated', { detail: { count: next.length } }),
-      );
-      setAnnouncement(labels.added);
-      void triggerHaptic('success');
+      if (writeCart(window.localStorage, next)) {
+        window.dispatchEvent(
+          new CustomEvent('bric:cart-updated', { detail: { count: next.length } }),
+        );
+        setAnnouncement(labels.added);
+        void triggerHaptic('success');
+      } else {
+        setAnnouncement('');
+      }
     } catch {
       setAnnouncement('');
     }

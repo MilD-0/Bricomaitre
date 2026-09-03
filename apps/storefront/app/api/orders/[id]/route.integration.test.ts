@@ -19,20 +19,27 @@ describe('GET /api/orders/:id', () => {
     vi.mocked(fetch).mockResolvedValue(new Response('{"item":{"id":42}}', { status: 200 }));
     const token = 'public token 123456789012345';
     const response = await GET(
-      new NextRequest(`http://localhost/api/orders/42?token=${encodeURIComponent(token)}`),
+      new NextRequest('http://localhost/api/orders/42', {
+        headers: { 'x-order-token': token },
+      }),
       { params: Promise.resolve({ id: '42' }) },
     );
     expect(response.status).toBe(200);
     expect(fetch).toHaveBeenCalledWith(
-      `http://localhost:3001/storefront/orders/42?token=${encodeURIComponent(token)}`,
-      expect.objectContaining({ cache: 'no-store' }),
+      'http://localhost:3001/storefront/orders/42',
+      expect.objectContaining({
+        cache: 'no-store',
+        headers: expect.objectContaining({ 'x-order-token': token }),
+      }),
     );
   });
 
   it('does not turn an upstream outage into an unhandled page error', async () => {
     vi.mocked(fetch).mockRejectedValue(new TypeError('offline'));
     const response = await GET(
-      new NextRequest('http://localhost/api/orders/42?token=public-order-token-1234567890'),
+      new NextRequest('http://localhost/api/orders/42', {
+        headers: { 'x-order-token': 'public-order-token-1234567890' },
+      }),
       { params: Promise.resolve({ id: '42' }) },
     );
     expect(response.status).toBe(503);

@@ -25,10 +25,6 @@ export function createServerCache<TArgs extends unknown[], TResult>(options: {
 
 export function revalidateServerTags(...tags: string[]) {
   for (const tag of new Set(tags)) {
-    try {
-      revalidateTag(tag, 'max');
-    } catch {
-      // Route integration tests call handlers outside the Next request store.
-    }
+    revalidateTag(tag, 'max');
   }
 }

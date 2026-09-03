@@ -11,6 +11,7 @@ import {
 import { parseNumericAmount, type DeliveryType } from './orders-support';
 
 type Database = ReturnType<typeof getDb>;
+export type EcotrackCatalogExecutor = Pick<Database, 'select'>;
 
 export type EcotrackServiceType = 'livraison' | 'pickup' | 'echange' | 'recouvrement' | 'retours';
 
@@ -22,7 +23,9 @@ export type EcotrackCatalogRecord = {
   lastSync: typeof ecotrackSyncRuns.$inferSelect | null;
 };
 
-export async function readEcotrackCatalog(db: Database): Promise<EcotrackCatalogRecord> {
+export async function readEcotrackCatalog(
+  db: EcotrackCatalogExecutor,
+): Promise<EcotrackCatalogRecord> {
   const [wilayas, communes, serviceFees, weightFees, lastSync] = await Promise.all([
     db.select().from(ecotrackWilayas).orderBy(asc(ecotrackWilayas.wilayaId)),
     db

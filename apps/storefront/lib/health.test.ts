@@ -33,6 +33,7 @@ describe('storefront health', () => {
     expect(buildHealthPayload(false)).toEqual({
       status: 'degraded',
       app: 'storefront',
+      release: 'unknown',
     });
   });
 
@@ -40,6 +41,7 @@ describe('storefront health', () => {
     expect(buildHealthPayload(true)).toEqual({
       status: 'ok',
       app: 'storefront',
+      release: 'unknown',
     });
   });
 });

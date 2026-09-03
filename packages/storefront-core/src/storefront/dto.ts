@@ -23,10 +23,8 @@ export type StorefrontProductDtoRow = Pick<
   | 'barcode'
   | 'price'
   | 'oldPrice'
-  | 'active'
   | 'inStock'
   | 'availabilityStatus'
-  | 'inventoryQuantity'
   | 'brandId'
   | 'categoryId'
   | 'images'
@@ -47,10 +45,8 @@ export function toStorefrontProductDto(row: StorefrontProductDtoRow) {
     barcode: row.barcode,
     price: row.price,
     oldPrice: row.oldPrice,
-    active: row.active,
     inStock: row.inStock,
     availabilityStatus: row.availabilityStatus,
-    inventoryQuantity: row.inventoryQuantity,
     brandId: row.brandId,
     categoryId: row.categoryId,
     images: row.images,
@@ -82,7 +78,6 @@ export function toStorefrontProductDetailDto(row: StorefrontProductDetailDtoRow)
     availability: {
       status: row.availabilityStatus,
       inStock: row.inStock,
-      quantity: row.inventoryQuantity,
     },
     media: row.images.flatMap((url, position) => {
       const normalizedUrl = url.trim();

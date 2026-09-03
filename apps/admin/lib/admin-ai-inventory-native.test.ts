@@ -48,6 +48,7 @@ describe('admin AI native inventory operations', () => {
     expect(mocks.batch).toHaveBeenCalledWith(
       'database',
       {
+        requestId: expect.any(String),
         mode: 'increase',
         items: [
           {
@@ -83,6 +84,7 @@ describe('admin AI native inventory operations', () => {
     expect(mocks.batch).toHaveBeenLastCalledWith(
       'database',
       {
+        requestId: expect.any(String),
         mode: 'increase',
         items: [
           {

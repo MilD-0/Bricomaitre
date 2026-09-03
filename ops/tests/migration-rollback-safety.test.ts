@@ -189,6 +189,22 @@ describe('migration rollback-safety verification', () => {
             reason:
               'The previous runtime canonicalizes availability from stock state before every product write.',
           },
+          {
+            migration: '0090_sparkling_toad_men.sql',
+            sha256: '7d33cf90f58514cf3791fdc82b23664285a6f2118c4e756e5d460a7055285aea',
+            reason:
+              'The previous runtime validates these order invariants before every affected write.',
+          },
+          {
+            migration: '0091_deep_blonde_phantom.sql',
+            sha256: 'a630e598efd176ff20e58cb66725419e6375f6bd633550638eeaff39da91b663',
+            reason: 'The unique index belongs to a new table that the previous runtime never uses.',
+          },
+          {
+            migration: '0092_clumsy_deadpool.sql',
+            sha256: '9de21c5d770f7545b17bc78525544ceb521e8209481cf0496b1d837c6acbe283',
+            reason: 'The required column has a default that preserves previous-runtime inserts.',
+          },
         ],
       }),
     );
@@ -215,6 +231,6 @@ describe('migration rollback-safety verification', () => {
     expect(build.status).toBe(0);
     const result = run(previous, candidate);
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('88 historical and 2 new migration');
+    expect(result.stdout).toContain('88 historical and 5 new migration');
   });
 });

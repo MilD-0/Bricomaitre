@@ -1,0 +1,1 @@
+ALTER TABLE "admin"."shopping_list_drafts" ADD COLUMN "revision" integer DEFAULT 0 NOT NULL;

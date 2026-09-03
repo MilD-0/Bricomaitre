@@ -82,7 +82,7 @@ describe('HomepageBrandCarousel', () => {
     );
     expect(mocks.autoScroll).toHaveBeenCalledWith(
       expect.objectContaining({
-        playOnInit: true,
+        playOnInit: false,
         startDelay: 0,
         stopOnFocusIn: false,
         stopOnInteraction: false,
@@ -90,6 +90,12 @@ describe('HomepageBrandCarousel', () => {
       }),
     );
     expect(container.querySelectorAll('.home-brand-carousel a')).toHaveLength(24);
+    expect(container.querySelectorAll('.home-brand-carousel a:not([tabindex="-1"])')).toHaveLength(
+      brands.length,
+    );
+    expect(container.querySelectorAll('.home-brand-carousel a[aria-hidden="true"]')).toHaveLength(
+      20,
+    );
     expect(container.querySelector('.home-brand-name')).toHaveTextContent('INGCO');
     expect(container.querySelector('a[aria-label="WADFOW"]')).toHaveAttribute(
       'href',

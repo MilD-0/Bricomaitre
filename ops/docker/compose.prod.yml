@@ -85,7 +85,7 @@ x-storefront-meta-worker: &storefront-meta-worker
     test:
       [
         'CMD-SHELL',
-        'node -e "const fs=require(''node:fs''); if (!fs.existsSync(''/BRIC_WORKER_HEARTBEAT_V1'')) process.exit(0); const age=Date.now()-Number(fs.readFileSync(''/tmp/bric-storefront-meta-worker-heartbeat'',''utf8'').trim()); process.exit(age >= 0 && age <= 45000 ? 0 : 1)"',
+        'node -e "const fs=require(''node:fs''); if (!fs.existsSync(''/BRIC_WORKER_HEARTBEAT_V1'')) process.exit(0); const age=Date.now()-Number(fs.readFileSync(''/tmp/bric-storefront-meta-worker-heartbeat'',''utf8'').trim()); if (age >= 0 && age <= 45000) process.exit(0); process.kill(1, ''SIGTERM''); process.exit(1)"',
       ]
     interval: 10s
     timeout: 3s
@@ -166,7 +166,7 @@ x-admin-worker-blue: &admin-worker-blue
     test:
       [
         'CMD-SHELL',
-        'node -e "const fs=require(''node:fs''); if (!fs.existsSync(''/BRIC_WORKER_HEARTBEAT_V1'')) process.exit(0); const age=Date.now()-Number(fs.readFileSync(''/tmp/bric-admin-worker-heartbeat'',''utf8'').trim()); process.exit(age >= 0 && age <= 45000 ? 0 : 1)"',
+        'node -e "const fs=require(''node:fs''); if (!fs.existsSync(''/BRIC_WORKER_HEARTBEAT_V1'')) process.exit(0); const age=Date.now()-Number(fs.readFileSync(''/tmp/bric-admin-worker-heartbeat'',''utf8'').trim()); if (age >= 0 && age <= 45000) process.exit(0); process.kill(1, ''SIGTERM''); process.exit(1)"',
       ]
     interval: 10s
     timeout: 3s
@@ -267,8 +267,13 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-bricadmin}
       POSTGRES_USER: ${POSTGRES_USER:-bricadmin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in infra.env}
+      POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-bricadmin_admin}
+      POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?POSTGRES_ADMIN_PASSWORD must be set in infra.env}
+      POSTGRES_STOREFRONT_USER: ${POSTGRES_STOREFRONT_USER:-bricadmin_storefront}
+      POSTGRES_STOREFRONT_PASSWORD: ${POSTGRES_STOREFRONT_PASSWORD:?POSTGRES_STOREFRONT_PASSWORD must be set in infra.env}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init-roles.sh:/docker-entrypoint-initdb.d/10-bric-roles.sh:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-bricadmin} -d ${POSTGRES_DB:-bricadmin}']
       interval: 10s
@@ -285,7 +290,16 @@ services:
     logging: *default-logging
     mem_limit: ${BRIC_REDIS_MEM_LIMIT:-768m}
     mem_reservation: ${BRIC_REDIS_MEM_RESERVATION:-256m}
-    command: ['redis-server', '--appendonly', 'yes']
+    command:
+      [
+        'redis-server',
+        '--appendonly',
+        'yes',
+        '--requirepass',
+        '${REDIS_PASSWORD:?REDIS_PASSWORD must be set in infra.env}',
+      ]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in infra.env}
     volumes:
       - redis-data:/data
     healthcheck:

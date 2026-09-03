@@ -1,5 +1,4 @@
 import { assertAiConfigured, createAiLanguageModel, getAiConfig } from '@bric/ai-core';
-import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 import {
   shoppingAssistantRequestSchema,
   shoppingAssistantStreamEventSchema,
@@ -20,7 +19,7 @@ import {
   shoppingAssistantModelMessages,
 } from '@/lib/shopping-assistant-runtime';
 import { buildShoppingAssistantTools } from '@/lib/shopping-assistant-tools';
-import { getStorefrontSettings, recordStorefrontAssistantRun } from '@/lib/storefront-api';
+import { getStorefrontAssistantSettings, recordStorefrontAssistantRun } from '@/lib/storefront-api';
 
 type AssistantUsage = {
   inputTokens?: number;
@@ -48,7 +47,7 @@ export async function POST(request: NextRequest) {
   try {
     [rateLimit, settings, body] = await Promise.all([
       enforceShoppingAssistantRateLimit(request),
-      getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse),
+      getStorefrontAssistantSettings(),
       request.json().catch(() => null),
     ]);
   } catch {

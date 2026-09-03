@@ -37,13 +37,13 @@ describe('app/storefront/products/route', () => {
     countStorefrontProductsMock.mockReset();
   });
 
-  it('returns an empty list when DB is unavailable', async () => {
+  it('returns an unavailable response when DB is unavailable', async () => {
     hasDbMock.mockReturnValue(false);
 
     const res = await GET(new NextRequest('http://localhost/storefront/products'));
 
-    expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ items: [], total: 0 });
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toEqual({ error: 'Storefront database is unavailable.' });
   });
 
   it('returns active storefront products with serialized timestamps', async () => {

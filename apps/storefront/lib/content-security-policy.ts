@@ -20,9 +20,10 @@ function tlsOrigin(value: string | undefined) {
 
 export function buildStorefrontContentSecurityPolicy(
   imageOrigins: readonly string[],
+  nonce: string,
   env: StorefrontCspEnv = process.env,
 ) {
-  const scriptSources = ["'self'", "'unsafe-inline'"];
+  const scriptSources = ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'"];
   const connectSources = ["'self'"];
 
   if (env.NODE_ENV === 'development') {
@@ -46,6 +47,7 @@ export function buildStorefrontContentSecurityPolicy(
     "font-src 'self' data:",
     "style-src 'self' 'unsafe-inline'",
     `script-src ${scriptSources.join(' ')}`,
+    "script-src-attr 'none'",
     `connect-src ${Array.from(new Set(connectSources)).join(' ')}`,
   ].join('; ');
 }

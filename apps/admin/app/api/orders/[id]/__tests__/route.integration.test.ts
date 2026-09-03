@@ -63,6 +63,7 @@ vi.mock('../../../../../lib/auth', () => ({
 
 vi.mock('../../../../../lib/action-history', () => ({
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
+  mutateEntityWithHistoryTransaction: mutateEntityWithHistoryMock,
 }));
 
 vi.mock('../../../../../lib/reporting-refresh-trigger', () => ({
@@ -366,6 +367,9 @@ describe('app/api/orders/[id]/route', () => {
     };
 
     const db = {
+      transaction: vi.fn((callback) =>
+        callback({ select: () => lockedOrderSelect(existingOrder) }),
+      ),
       query: {
         orders: {
           findFirst: vi.fn().mockResolvedValue(existingOrder),
@@ -447,7 +451,7 @@ describe('app/api/orders/[id]/route', () => {
     expect(requireMutationAccessMock).toHaveBeenCalledWith('orders');
     expect(triggerAdminReportingRefreshMock).toHaveBeenCalledWith('order-update');
     expect(mutateEntityWithHistoryMock).toHaveBeenCalledWith(
-      db,
+      expect.objectContaining({ select: expect.any(Function) }),
       expect.objectContaining({
         entityType: 'orders',
         entityId: 7,
@@ -531,6 +535,9 @@ describe('app/api/orders/[id]/route', () => {
       updatedAt: new Date('2026-03-02T11:00:00.000Z'),
     };
     const db = {
+      transaction: vi.fn((callback) =>
+        callback({ select: () => lockedOrderSelect(existingOrder) }),
+      ),
       query: { orders: { findFirst: vi.fn().mockResolvedValue(existingOrder) } },
       select: vi.fn().mockReturnValue({
         from: vi
@@ -652,6 +659,9 @@ describe('app/api/orders/[id]/route', () => {
       updatedAt: new Date('2026-03-02T11:00:00.000Z'),
     };
     const db = {
+      transaction: vi.fn((callback) =>
+        callback({ select: () => lockedOrderSelect(existingOrder) }),
+      ),
       query: { orders: { findFirst: vi.fn().mockResolvedValue(existingOrder) } },
       select: vi.fn().mockReturnValue({
         from: vi
@@ -744,6 +754,9 @@ describe('app/api/orders/[id]/route', () => {
     };
 
     const db = {
+      transaction: vi.fn((callback) =>
+        callback({ select: () => lockedOrderSelect(existingOrder) }),
+      ),
       query: {
         orders: {
           findFirst: vi.fn().mockResolvedValue(existingOrder),
@@ -855,6 +868,9 @@ describe('app/api/orders/[id]/route', () => {
     };
 
     const db = {
+      transaction: vi.fn((callback) =>
+        callback({ select: () => lockedOrderSelect(existingOrder) }),
+      ),
       query: {
         orders: {
           findFirst: vi.fn().mockResolvedValue(existingOrder),
@@ -978,6 +994,9 @@ describe('app/api/orders/[id]/route', () => {
     };
 
     const db = {
+      transaction: vi.fn((callback) =>
+        callback({ select: () => lockedOrderSelect(existingOrder) }),
+      ),
       query: {
         orders: {
           findFirst: vi.fn().mockResolvedValue(existingOrder),
@@ -1042,7 +1061,9 @@ describe('app/api/orders/[id]/route', () => {
       { params: Promise.resolve({ id: '9' }) },
     );
 
-    expect(readEcotrackCatalogMock).toHaveBeenCalledWith(db);
+    expect(readEcotrackCatalogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ select: expect.any(Function) }),
+    );
     expect(capturedUpdate).toEqual(
       expect.objectContaining({
         delivery: 1,

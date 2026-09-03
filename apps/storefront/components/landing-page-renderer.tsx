@@ -23,13 +23,14 @@ import {
 } from '@/components/landing-page-interactions';
 import { ProductActions } from '@/components/product-actions';
 import { StorefrontImage } from '@/components/storefront-image';
+import { StructuredData } from '@/components/structured-data';
 import type { Locale } from '@/i18n/config';
 import {
   formatProductPrice,
   hasProductDiscount,
   parseProductPrice,
 } from '@/lib/product-presentation';
-import { buildProductStructuredData, serializeStructuredData } from '@/lib/product-seo';
+import { buildProductStructuredData } from '@/lib/product-seo';
 import { getStorefrontSiteUrl } from '@/lib/site-url';
 import { LANDING_ORDER_SECTION_ID } from '@/lib/landing-order';
 
@@ -82,9 +83,11 @@ function blockClass(block: LandingPageBlock, ...classes: string[]) {
 export function LandingPageRenderer({
   page,
   locale,
+  nonce,
 }: {
   page: StorefrontLandingPageResponse;
   locale: Locale;
+  nonce?: string;
 }) {
   const { product, document } = page;
   const token = product.canonicalToken;
@@ -129,10 +132,7 @@ export function LandingPageRenderer({
     <div
       className={`landing-page landing-accent-${document.theme.accent} landing-density-${document.theme.density}`}
     >
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: serializeStructuredData(structuredData) }}
-      />
+      <StructuredData value={structuredData} nonce={nonce} />
       <LandingPageTelemetry
         locale={locale}
         landingPageId={page.id}

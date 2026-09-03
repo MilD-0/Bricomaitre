@@ -9,6 +9,7 @@ const {
   requireMutationAccessMock,
   authMock,
   mutateEntityWithHistoryMock,
+  applyInventoryQuantityChangeMock,
   revalidateServerTagsMock,
   revalidateStorefrontProductsMock,
 } = vi.hoisted(() => ({
@@ -17,6 +18,7 @@ const {
   requireMutationAccessMock: vi.fn(),
   authMock: vi.fn(),
   mutateEntityWithHistoryMock: vi.fn(),
+  applyInventoryQuantityChangeMock: vi.fn(),
   revalidateServerTagsMock: vi.fn(),
   revalidateStorefrontProductsMock: vi.fn(),
 }));
@@ -38,6 +40,11 @@ vi.mock('../../../../../lib/action-history', () => ({
   mutateEntityWithHistory: mutateEntityWithHistoryMock,
 }));
 
+vi.mock('../../../../../lib/inventory-actions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../../lib/inventory-actions')>()),
+  applyInventoryQuantityChange: applyInventoryQuantityChangeMock,
+}));
+
 vi.mock('../../../../../lib/server-cache', () => ({
   CACHE_TAGS: { products: 'products', productsMeta: 'products-meta' },
   revalidateServerTags: revalidateServerTagsMock,
@@ -56,6 +63,7 @@ describe('app/api/inventory/[id]/route', () => {
     authMock.mockReset();
     authMock.mockResolvedValue({ user: { email: 'admin@example.com', name: 'Admin' } });
     mutateEntityWithHistoryMock.mockReset();
+    applyInventoryQuantityChangeMock.mockReset();
     revalidateServerTagsMock.mockReset();
     revalidateStorefrontProductsMock.mockReset().mockResolvedValue(undefined);
     mutateEntityWithHistoryMock.mockResolvedValue([
@@ -128,7 +136,7 @@ describe('app/api/inventory/[id]/route', () => {
     await expect(res.json()).resolves.toEqual({ error: 'Not found' });
   });
 
-  it('records inventory adjustments through action history', async () => {
+  it('passes inventory adjustments to the canonical quantity workflow', async () => {
     hasDbMock.mockReturnValue(true);
     const db = {
       marker: 'db',
@@ -145,6 +153,21 @@ describe('app/api/inventory/[id]/route', () => {
       },
     };
     getDbMock.mockReturnValue(db);
+    applyInventoryQuantityChangeMock.mockResolvedValue({
+      kind: 'updated',
+      previousQuantity: 4,
+      nextQuantity: 2,
+      item: {
+        id: 9,
+        title: 'Hammer',
+        inventoryQuantity: 2,
+        barcode: '123',
+        sku: 'HAM-1',
+        inStock: true,
+        availabilityStatus: 'in_stock',
+        updatedAt: new Date('2026-03-21T00:00:00.000Z'),
+      },
+    });
 
     const res = await PATCH(
       new NextRequest('http://localhost/api/inventory/9', {
@@ -155,53 +178,12 @@ describe('app/api/inventory/[id]/route', () => {
       { params: Promise.resolve({ id: '9' }) },
     );
 
-    expect(mutateEntityWithHistoryMock).toHaveBeenCalledWith(
-      db,
-      expect.objectContaining({
-        entityType: 'products',
-        entityId: 9,
-        operation: 'update',
-        actor: { email: 'admin@example.com', name: 'Admin' },
-        execute: expect.any(Function),
-      }),
-    );
-
-    const { execute } = mutateEntityWithHistoryMock.mock.calls[0][1];
-    const returningMock = vi.fn().mockResolvedValue([
-      {
-        id: 9,
-        title: 'Hammer',
-        inventoryQuantity: 5,
-        barcode: '123',
-        sku: 'HAM-1',
-        inStock: true,
-        availabilityStatus: 'in_stock',
-        updatedAt: new Date('2026-03-21T00:00:00.000Z'),
-      },
-    ]);
-    const whereMock = vi.fn().mockReturnValue({ returning: returningMock });
-    const setMock = vi.fn().mockReturnValue({ where: whereMock });
-    const updateMock = vi.fn().mockReturnValue({ set: setMock });
-
-    await execute({
-      update: updateMock,
-      select: vi.fn(() => ({
-        from: vi.fn(() => ({
-          innerJoin: vi.fn(() => ({
-            where: vi.fn(() => ({ orderBy: vi.fn().mockResolvedValue([]) })),
-          })),
-        })),
-      })),
+    expect(applyInventoryQuantityChangeMock).toHaveBeenCalledWith(db, {
+      productId: 9,
+      mode: 'decrease',
+      quantity: 2,
+      actor: { email: 'admin@example.com', name: 'Admin' },
     });
-
-    expect(setMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        inventoryQuantity: expect.anything(),
-        inStock: expect.anything(),
-        availabilityStatus: expect.anything(),
-        updatedAt: expect.any(Date),
-      }),
-    );
     expect(res.status).toBe(200);
     expect(revalidateServerTagsMock).toHaveBeenCalledWith('products', 'products-meta');
     expect(revalidateStorefrontProductsMock).toHaveBeenCalledOnce();
@@ -210,7 +192,7 @@ describe('app/api/inventory/[id]/route', () => {
       item: {
         id: 9,
         title: 'Hammer',
-        inventoryQuantity: 5,
+        inventoryQuantity: 2,
         barcode: '123',
         sku: 'HAM-1',
         inStock: true,

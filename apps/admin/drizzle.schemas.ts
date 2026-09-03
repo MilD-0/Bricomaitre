@@ -4,6 +4,7 @@ export const drizzleSchemaFiles = [
   '../../packages/db/src/schema/aiPricingPolicies.ts',
   '../../packages/db/src/schema/landingPages.ts',
   '../../packages/db/src/schema/adCosts.ts',
+  '../../packages/db/src/schema/adminMutationIdempotency.ts',
   '../../packages/db/src/schema/adminReporting.ts',
   '../../packages/db/src/schema/analytics.ts',
   '../../packages/db/src/schema/analyticsEconomics.ts',

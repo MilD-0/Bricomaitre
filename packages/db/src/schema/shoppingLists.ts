@@ -1,4 +1,13 @@
-import { bigserial, bigint, index, jsonb, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  bigserial,
+  bigint,
+  index,
+  integer,
+  jsonb,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 
 import { adminSchema } from './namespaces';
 
@@ -13,6 +22,7 @@ export const shoppingListDrafts = adminSchema.table(
     draftItems: jsonb('draft_items').notNull(),
     generatedItems: jsonb('generated_items').notNull(),
     ordersSnapshot: jsonb('orders_snapshot').notNull(),
+    revision: integer('revision').notNull().default(0),
     createdBy: text('created_by'),
     createdByName: text('created_by_name'),
     updatedBy: text('updated_by'),

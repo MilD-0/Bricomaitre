@@ -59,6 +59,7 @@ cleanup_failed_deployment() {
     set +e
     echo "deployment failed; restoring the previously verified runtime state" >&2
 
+    rollback_runtime_env_transaction
     rollback_nginx_main_config_transaction
     if [[ "$routing_changed" == true && -n "$previous_slot" ]]; then
       if ! render_release_nginx_config "$original_current_release" "$previous_slot" \
@@ -151,6 +152,12 @@ apply_release_images "$target_slot" "$release_images_file"
 printf 'reconciling persistent services serially\n'
 compose up -d postgres
 bash "$script_dir/wait-for-health.sh" postgres
+postgres_container_id="$(compose ps -q postgres)"
+if [[ -z "$postgres_container_id" ]]; then
+  echo 'postgres container is unavailable for runtime-role provisioning' >&2
+  exit 1
+fi
+docker exec "$postgres_container_id" /docker-entrypoint-initdb.d/10-bric-roles.sh
 compose up -d redis
 bash "$script_dir/wait-for-health.sh" redis
 
@@ -189,6 +196,9 @@ if [[ -n "$original_current_release" && "$original_current_release" != "$release
 fi
 
 "$script_dir/run-admin-migrations.sh" "$target_slot"
+# Migrations may create a newly allowlisted public table or sequence. Reconcile
+# the restricted Storefront role again before any candidate worker starts.
+docker exec "$postgres_container_id" /docker-entrypoint-initdb.d/10-bric-roles.sh
 
 if [[ -n "$previous_slot" ]]; then
   previous_api_service="$(service_name storefront-api "$previous_slot")"
@@ -267,6 +277,7 @@ set_current_release "$release_dir"
 set_active_slot "$target_slot"
 commit_image_state_transaction
 commit_nginx_main_config_transaction
+commit_runtime_env_transaction
 deployment_committed=true
 if [[ -n "$previous_slot" ]]; then
   stop_slot_app_services "$previous_slot"

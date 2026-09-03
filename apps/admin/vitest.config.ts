@@ -36,6 +36,15 @@ export default defineConfig({
     ],
   },
   test: {
+    coverage: {
+      provider: 'v8',
+      thresholds: {
+        statements: 60,
+        branches: 50,
+        functions: 57,
+        lines: 61,
+      },
+    },
     projects: [
       {
         test: {

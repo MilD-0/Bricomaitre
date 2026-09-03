@@ -23,13 +23,7 @@ export async function CheckoutPageContent({ params, searchParams }: CheckoutPage
   if (!isLocale(locale)) notFound();
   const [t, catalog, contact] = await Promise.all([
     getTranslations({ locale, namespace: 'Checkout' }),
-    getStorefrontEcotrackCatalog().catch(() => ({
-      wilayas: [],
-      communes: [],
-      serviceFees: [],
-      weightFees: [],
-      lastSync: null,
-    })),
+    getStorefrontEcotrackCatalog(),
     getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse),
   ]);
   const rawProduct = Array.isArray(query.product) ? query.product[0] : query.product;

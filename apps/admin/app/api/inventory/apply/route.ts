@@ -5,6 +5,7 @@ import { applyAdminInventoryBatch } from '../../../../lib/admin-inventory-workfl
 import { auth } from '../../../../lib/auth';
 import { inventoryApplyRequestSchema } from '../../../../lib/inventory';
 import { requireMutationAccess } from '../../../../lib/rbac';
+import { AdminMutationIdempotencyConflictError } from '../../../../lib/admin-mutation-idempotency';
 
 export async function POST(req: NextRequest) {
   const denied = await requireMutationAccess('products');
@@ -24,7 +25,15 @@ export async function POST(req: NextRequest) {
   const db = getDb();
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
-  const result = await applyAdminInventoryBatch(db, parsed.data, actor);
+  let result;
+  try {
+    result = await applyAdminInventoryBatch(db, parsed.data, actor);
+  } catch (error) {
+    if (error instanceof AdminMutationIdempotencyConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    throw error;
+  }
   return NextResponse.json({
     ok: true,
     items: result.items,

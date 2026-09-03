@@ -18,6 +18,7 @@ function orderRow(overrides: Partial<typeof orders.$inferSelect> = {}): typeof o
     normalizedPhone: '213550000000',
     phoneNumber2: null,
     publicToken: 'public-order-token',
+    publicTokenExpiresAt: new Date('2026-11-16T10:00:00.000Z'),
     cartProducts: ['7', '7'],
     visitId: null,
     journeyId: null,

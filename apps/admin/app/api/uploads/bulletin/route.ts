@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireBulletinSession } from '../../../../lib/bulletin-server';
 import {
   buildDatedObjectKey,
-  ensureS3UploadConfig,
+  deletePrivateS3Object,
+  ensurePrivateS3Config,
   getS3UploadClient,
-  uploadBufferToS3,
+  uploadPrivateBufferToS3,
 } from '../../../../lib/s3-upload';
 import { captureAdminException, getRequestId, withRequestIdHeaders } from '../../../../lib/sentry';
 import {
@@ -20,6 +21,7 @@ export async function POST(req: NextRequest) {
     return response;
   }
 
+  const uploadedKeys: string[] = [];
   try {
     const requestLengthError = validateBulletinRequestLength(req);
     if (requestLengthError) {
@@ -53,7 +55,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { region, bucket, cloudfrontDomain } = ensureS3UploadConfig();
+    const { region, bucket } = ensurePrivateS3Config();
     const client = getS3UploadClient(region);
     const uploadedFiles: Array<{
       fileName: string;
@@ -65,14 +67,18 @@ export async function POST(req: NextRequest) {
 
     for (const { file, buffer, extension, contentType } of validated.files) {
       const key = buildDatedObjectKey('bulletin', extension);
-      const fileUrl = await uploadBufferToS3({
+      await uploadPrivateBufferToS3({
         client,
         bucket,
-        cloudfrontDomain,
         key,
         body: buffer,
         contentType,
       });
+      uploadedKeys.push(key);
+      const fileUrl = `/api/bulletin/attachments/${key
+        .split('/')
+        .map(encodeURIComponent)
+        .join('/')}?name=${encodeURIComponent(file.name)}`;
 
       uploadedFiles.push({
         fileName: file.name,
@@ -88,6 +94,7 @@ export async function POST(req: NextRequest) {
       { headers: withRequestIdHeaders(requestId) },
     );
   } catch (error) {
+    await Promise.all(uploadedKeys.map((key) => deletePrivateS3Object(key).catch(() => undefined)));
     captureAdminException(error, {
       requestId,
       operation: 'bulletin-upload',

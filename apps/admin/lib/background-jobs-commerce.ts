@@ -25,7 +25,11 @@ import {
   syncEcotrackCatalog,
   type EcotrackProvider,
 } from './ecotrack';
-import { uploadExportArtifact, uploadStableArtifact } from './export-artifacts';
+import {
+  uploadExportArtifact,
+  uploadPrivateExportArtifact,
+  uploadStableArtifact,
+} from './export-artifacts';
 import {
   buildMetaCatalogExportFileName,
   buildMetaCatalogExportRows,
@@ -581,15 +585,23 @@ export async function runOrderExportJob(
 
   const fileName = buildOrderExportFileName(payload.mode);
   const workbook = buildOrderExportWorkbook(exportRows);
-  const downloadUrl = await uploadExportArtifact({
+  const artifact = await uploadPrivateExportArtifact({
     prefix: 'exports/orders',
     fileName,
     contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     body: toXlsxBuffer(workbook),
   });
 
-  await helpers.setDownloadUrl(downloadUrl);
-  await helpers.updateSummary({ fileName, mode: payload.mode, totalOrders: exportOrders.length });
+  await helpers.setDownloadUrl(
+    `/api/orders/export/download?jobId=${encodeURIComponent(payload.__jobMeta.id)}`,
+  );
+  await helpers.updateSummary({
+    fileName,
+    mode: payload.mode,
+    totalOrders: exportOrders.length,
+    artifactKey: artifact.key,
+    artifactExpiresAt: artifact.expiresAt.toISOString(),
+  });
 
   return {
     fileName,

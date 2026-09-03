@@ -44,20 +44,21 @@ const optionalPatchNullableTrimmedString = (max: number) =>
       return trimmed.length === 0 ? null : trimmed.slice(0, max);
     });
 
-const optionalPatchNullableWilayaCode = z
-  .union([z.number(), z.string(), z.null()])
-  .optional()
-  .transform((value) => {
-    if (value === undefined || value === null) return value;
-    if (typeof value === 'number') {
-      return Number.isInteger(value) && value >= 1 && value <= 58 ? value : null;
-    }
-
+const wilayaCodeSchema = z.number().int().min(1).max(58);
+const optionalPatchNullableWilayaCode = z.preprocess(
+  (value) => {
+    if (typeof value !== 'string') return value;
     const trimmed = value.trim();
-    if (trimmed.length === 0) return null;
-    const parsed = Number.parseInt(trimmed, 10);
-    return Number.isInteger(parsed) && parsed >= 1 && parsed <= 58 ? parsed : null;
-  });
+    return trimmed.length === 0 ? null : trimmed;
+  },
+  z
+    .union([
+      wilayaCodeSchema,
+      z.string().regex(/^\d+$/).transform(Number).pipe(wilayaCodeSchema),
+      z.null(),
+    ])
+    .optional(),
+);
 
 export const orderPatchSchema = z
   .object({

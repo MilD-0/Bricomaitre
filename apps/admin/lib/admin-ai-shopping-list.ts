@@ -1,4 +1,6 @@
 import { inArray } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
+
 import { z } from 'zod';
 
 import { getDb } from '@bric/db/client';
@@ -316,7 +318,11 @@ export async function saveAdminAiShoppingList(
 ) {
   const values = adminAiShoppingListScopeSchema.parse(input);
   const current = await buildCurrentDraft(values);
-  const draft = await saveAdminShoppingListDraft(current.db, current.draft, actor);
+  const draft = await saveAdminShoppingListDraft(
+    current.db,
+    { ...current.draft, revision: current.existing?.revision ?? null },
+    actor,
+  );
   return {
     ok: true as const,
     action: current.existing ? ('merged' as const) : ('created' as const),
@@ -383,6 +389,16 @@ export async function applyAdminAiShoppingListInventory(
   const result = await applyAdminInventoryBatch(
     db,
     {
+      requestId: createHash('sha256')
+        .update(
+          JSON.stringify({
+            scopeKey: draft.scopeKey,
+            revision: draft.revision,
+            selection: values.selection,
+            draftIds: values.draftIds,
+          }),
+        )
+        .digest('hex'),
       mode: 'decrease',
       items: candidates.map((item) => ({
         productId: item.productId!,
@@ -412,7 +428,11 @@ export async function applyAdminAiShoppingListInventory(
       };
     }),
   };
-  const saved = await saveAdminShoppingListDraft(db, nextPayload, actor);
+  const saved = await saveAdminShoppingListDraft(
+    db,
+    { ...nextPayload, revision: draft.revision },
+    actor,
+  );
   const appliedUnits = result.items.reduce(
     (total, item) => total + item.previousQuantity - item.nextQuantity,
     0,

@@ -6,7 +6,6 @@ import { readStorefrontHomepageFeaturedGroupProducts } from '@bric/storefront-co
 import { CACHE_TAGS, createServerCache } from '@bric/storefront-core/server-cache';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 
-const emptyPage = { items: [], total: 0 };
 const loadGroup = createServerCache({
   keyParts: ['storefront-homepage-group'],
   revalidate: 120,
@@ -30,7 +29,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: 'Invalid product page query.' }, { status: 400 });
   }
 
-  if (!hasDb()) return NextResponse.json(emptyPage);
+  if (!hasDb()) {
+    return NextResponse.json({ error: 'Storefront database is unavailable.' }, { status: 503 });
+  }
 
   const result = await loadGroup(groupId, parsed.data.page, parsed.data.limit);
   return result

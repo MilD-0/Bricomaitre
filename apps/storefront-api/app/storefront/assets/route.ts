@@ -13,7 +13,7 @@ const loadAssets = createServerCache({
 
 export async function GET() {
   if (!hasDb()) {
-    return NextResponse.json({ banners: [], featuredGroups: [], productCards: [] });
+    return NextResponse.json({ error: 'Storefront database is unavailable.' }, { status: 503 });
   }
 
   return NextResponse.json(await loadAssets());

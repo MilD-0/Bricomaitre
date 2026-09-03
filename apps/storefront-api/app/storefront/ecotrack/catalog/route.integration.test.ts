@@ -29,18 +29,14 @@ describe('app/storefront/ecotrack/catalog/route', () => {
     readStorefrontEcotrackCatalogMock.mockReset();
   });
 
-  it('returns empty catalog payloads when DB is unavailable', async () => {
+  it('returns an unavailable response when DB is unavailable', async () => {
     hasDbMock.mockReturnValue(false);
 
     const response = await GET();
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
-      wilayas: [],
-      communes: [],
-      serviceFees: [],
-      weightFees: [],
-      lastSync: null,
+      error: 'Storefront database is unavailable.',
     });
   });
 

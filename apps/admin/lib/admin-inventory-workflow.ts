@@ -5,9 +5,10 @@ import type { getDb } from '@bric/db/client';
 import { products } from '@bric/db/schema';
 
 import { mutateEntityWithHistory, type ActionActor } from './action-history';
+import { runIdempotentAdminMutation } from './admin-mutation-idempotency';
 import { loadOrderDetail } from './admin-orders-data';
 import {
-  applyInventoryQuantityChange,
+  applyInventoryQuantityChangeInTransaction,
   buildInventoryRowSelection,
   readInventoryProductById,
 } from './inventory-actions';
@@ -81,39 +82,49 @@ export async function applyAdminInventoryBatch(
   actor?: ActionActor,
 ) {
   const values = inventoryApplyRequestSchema.parse(input);
-  const items: Array<{ productId: number; previousQuantity: number; nextQuantity: number }> = [];
-  const skipped: Array<{
-    productId: number;
-    reason: 'missing' | 'insufficient';
-    available?: number;
-  }> = [];
+  const result = await runIdempotentAdminMutation(db, {
+    scope: 'inventory-apply',
+    requestId: values.requestId,
+    payload: values,
+    execute: async (tx) => {
+      const items: Array<{ productId: number; previousQuantity: number; nextQuantity: number }> =
+        [];
+      const skipped: Array<{
+        productId: number;
+        reason: 'missing' | 'insufficient';
+        available?: number;
+      }> = [];
 
-  for (const item of values.items) {
-    const result = await applyInventoryQuantityChange(db, {
-      productId: item.productId,
-      mode: values.mode,
-      quantity: item.quantity,
-      actor,
-    });
-    if (result.kind === 'updated') {
-      items.push({
-        productId: item.productId,
-        previousQuantity: result.previousQuantity,
-        nextQuantity: result.nextQuantity,
-      });
-    } else if (result.kind === 'insufficient') {
-      skipped.push({
-        productId: item.productId,
-        reason: 'insufficient',
-        available: result.available,
-      });
-    } else {
-      skipped.push({ productId: item.productId, reason: 'missing' });
-    }
-  }
+      for (const item of values.items) {
+        const change = await applyInventoryQuantityChangeInTransaction(tx, {
+          productId: item.productId,
+          mode: values.mode,
+          quantity: item.quantity,
+          actor,
+        });
+        if (change.kind === 'updated') {
+          items.push({
+            productId: item.productId,
+            previousQuantity: change.previousQuantity,
+            nextQuantity: change.nextQuantity,
+          });
+        } else if (change.kind === 'insufficient') {
+          skipped.push({
+            productId: item.productId,
+            reason: 'insufficient',
+            available: change.available,
+          });
+        } else {
+          skipped.push({ productId: item.productId, reason: 'missing' });
+        }
+      }
 
-  if (items.length > 0) await refreshInventoryConsumers();
-  return { ok: true as const, complete: skipped.length === 0, items, skipped };
+      return { ok: true as const, complete: skipped.length === 0, items, skipped };
+    },
+  });
+
+  if (!result.replayed && result.value.items.length > 0) await refreshInventoryConsumers();
+  return result.value;
 }
 
 function isExactNumeric(value: string) {
