@@ -22,6 +22,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  devIndicators: process.env.BRIC_PLAYWRIGHT_DISABLE_DEV_INDICATORS === '1' ? false : undefined,
   serverExternalPackages: ['bullmq', 'ioredis'],
   experimental: {
     turbopackFileSystemCacheForDev: true,

@@ -107,6 +107,5 @@ External services are documented with the subsystem that owns their meaning:
 
 - `apps/` contains deployable application source and app-owned tests.
 - `packages/` contains shared code with explicit exports.
-- `docs/adr/` records durable architectural decisions.
 - `ops/` contains container, proxy, release, backup, restore, and host tooling.
 - `.github/workflows/` contains CI and the serialized production release.
