@@ -212,7 +212,7 @@ export function MoneyView({
       dimension: mode === 'realized' ? 'paid_timeline' : 'economics_timeline',
     });
   }, [mode, setActiveAssistantFocus]);
-  const sourceRows = (mode === 'realized' ? data.paidSeries : data.series) as Array<
+  const sourceRows = (mode === 'realized' ? data.paidSeries : data.performanceSeries) as Array<
     Record<string, string | number | boolean | null>
   >;
   const chartData = splitPartialSeries(

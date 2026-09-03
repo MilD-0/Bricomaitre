@@ -133,6 +133,32 @@ export function metric(
   return { key, value, previous, changePct: metricChange(value, previous), unit, goodWhen };
 }
 
+export function metricWithProjectedComparison(
+  key: string,
+  value: number | null,
+  previous: number | null,
+  unit: AnalyticsMetric['unit'],
+  comparison: { value: number | null; previous: number | null },
+  goodWhen: AnalyticsMetric['goodWhen'] = 'up',
+): AnalyticsMetric {
+  if (comparison.value == null || comparison.previous == null) {
+    return metric(key, value, previous, unit, goodWhen);
+  }
+  return {
+    key,
+    value,
+    previous,
+    changePct: metricChange(comparison.value, comparison.previous),
+    comparison: {
+      basis: 'projected_completion',
+      value: comparison.value,
+      previous: comparison.previous,
+    },
+    unit,
+    goodWhen,
+  };
+}
+
 export function fulfillmentPhase(status: string) {
   if (status === 'paye_et_archive' || status === 'payed') return 'paid';
   if (status.startsWith('retour')) return 'return';

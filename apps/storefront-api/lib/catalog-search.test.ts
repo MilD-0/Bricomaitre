@@ -39,12 +39,26 @@ describe('storefront catalog search normalization', () => {
     expect(query.params).toContain(0.64);
   });
 
-  it('builds relevance ordering for typo-tolerant searches without weakening exact matches', () => {
+  it('adds a title-specific score to broad exact and typo-tolerant relevance', () => {
     const relevance = buildCatalogSearchRelevance('Pérceuse');
     const query = new PgDialect().sqlToQuery(relevance!);
 
-    expect(query.sql).toContain('case when position');
-    expect(query.sql).toContain('word_similarity');
-    expect(query.params).toContain('perceuse');
+    expect(query.sql.match(/case when position/g)).toHaveLength(2);
+    expect(query.sql.match(/word_similarity/g)).toHaveLength(2);
+    expect(query.sql.match(/"products"\."title"/g)).toHaveLength(4);
+    expect(query.sql.match(/"products"\."title_ar"/g)).toHaveLength(4);
+    expect(query.sql.match(/"products"\."description"/g)).toHaveLength(2);
+    expect(query.sql.match(/"products"\."description_ar"/g)).toHaveLength(2);
+    expect(query.params.filter((parameter) => parameter === 'perceuse')).toHaveLength(4);
+  });
+
+  it('keeps the title boost for short queries without typo tolerance', () => {
+    const relevance = buildCatalogSearchRelevance('vis');
+    const query = new PgDialect().sqlToQuery(relevance!);
+
+    expect(query.sql.match(/case when position/g)).toHaveLength(2);
+    expect(query.sql).not.toContain('word_similarity');
+    expect(query.sql.match(/"products"\."title"/g)).toHaveLength(2);
+    expect(query.sql.match(/"products"\."description"/g)).toHaveLength(1);
   });
 });

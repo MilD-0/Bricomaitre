@@ -47,11 +47,18 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      testIgnore: /design-baseline\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'mobile-chromium',
+      testIgnore: /design-baseline\.spec\.ts/,
       use: { ...devices['iPhone 13'], browserName: 'chromium' },
+    },
+    {
+      name: 'design-baseline',
+      testMatch: /design-baseline\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
     },
   ],
   webServer: {

@@ -21,6 +21,7 @@ export default defineConfig({
             'lib/**/*.test.ts',
             'next-config.test.ts',
             'test/fixture-production-proxy.test.ts',
+            'test/playwright-config.test.ts',
           ],
           exclude: [
             'lib/analytics.test.ts',

@@ -87,6 +87,11 @@ export type AnalyticsMetric = {
   value: number | null;
   previous: number | null;
   changePct: number | null;
+  comparison?: {
+    basis: 'projected_completion';
+    value: number;
+    previous: number;
+  };
   unit: 'dzd' | 'eur' | 'number' | 'percent' | 'ratio' | 'hours';
   goodWhen?: 'up' | 'down' | 'neutral';
 };
@@ -137,6 +142,7 @@ export type AnalyticsEconomicsPoint = {
   cumulativeNetProfitDzdProjected: number | null;
   cumulativeTrueProfitDzdProjected: number | null;
   projectionDays: number;
+  isForecast?: boolean;
 };
 
 export type AnalyticsAutomaticPaidDay = {

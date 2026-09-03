@@ -1,5 +1,6 @@
 import { getProfitTrackerSettings } from '../profit-tracker';
 import { loadStorefrontOrderConversion } from './commerce-data';
+import { cohortCompletionCovers, loadCohortCompletionPair } from './cohort-completion';
 import type { AnalyticsFilters } from './contract';
 import {
   commonCoverageStart,
@@ -16,7 +17,7 @@ import {
   previousFiltersWithCoverage,
   sourceWarnings,
 } from './economics-data';
-import { buildEconomicsForecast, projectOpenEconomicsSeries } from './forecast';
+import { appendEconomicsForecastSeries, buildEconomicsForecast } from './forecast';
 import {
   loadAutomaticPaidEconomics,
   loadCashPipeline,
@@ -26,7 +27,12 @@ import {
   loadReturnObservation,
   withLeadingCashStages,
 } from './fulfillment-data';
-import { type Database, effectiveRange, metric } from './loaders-shared';
+import {
+  type Database,
+  effectiveRange,
+  metric,
+  metricWithProjectedComparison,
+} from './loaders-shared';
 import { loadSourceHealth } from './source-health';
 
 export async function loadCommandView(
@@ -71,6 +77,7 @@ export async function loadCommandView(
     previousAutomaticPaid,
     cashPipeline,
     leadingForecast,
+    fulfillmentCompletion,
   ] = await Promise.all([
     loadEconomicsPair(db, economicsFilters, cutoffs.postedFrom, cutoffs.metaFrom),
     loadStorefrontOrderConversion(db, storefrontFilters),
@@ -89,6 +96,9 @@ export async function loadCommandView(
       : Promise.resolve(null),
     loadCashPipeline(db, fulfillmentFilters),
     settingsPromise.then((settings) => loadLeadingOrderForecast(db, fulfillmentFilters, settings)),
+    settingsPromise.then((settings) =>
+      loadCohortCompletionPair(db, fulfillmentFilters, 1 - settings.defaultReturnRate / 100),
+    ),
   ]);
   const { current, previous } = economicsPair;
   const [returns, sources] = await Promise.all([
@@ -105,6 +115,12 @@ export async function loadCommandView(
       filters.resolvedGrain,
       fulfillmentFilters.endDate,
     ).map((row) => [row.bucket, row.profitDzd]),
+  );
+  const completionComparisonAvailable = Boolean(
+    fulfillmentCompletion?.previous &&
+    previousFulfillment &&
+    cohortCompletionCovers(fulfillment.postedOrders, fulfillmentCompletion.current) &&
+    cohortCompletionCovers(previousFulfillment.postedOrders, fulfillmentCompletion.previous),
   );
 
   return {
@@ -125,11 +141,19 @@ export async function loadCommandView(
           'number',
           'neutral',
         ),
-        metric(
+        metricWithProjectedComparison(
           'paidOrders',
           fulfillment.paidOrders,
           previousFulfillment?.paidOrders ?? null,
           'number',
+          {
+            value: completionComparisonAvailable
+              ? (fulfillmentCompletion?.current.projectedPaidOrders ?? null)
+              : null,
+            previous: completionComparisonAvailable
+              ? (fulfillmentCompletion?.previous?.projectedPaidOrders ?? null)
+              : null,
+          },
         ),
         metric(
           'storefrontConversion',
@@ -144,7 +168,7 @@ export async function loadCommandView(
         coverage: current.coverage,
         automaticPaid,
       },
-      trajectory: projectOpenEconomicsSeries(
+      trajectory: appendEconomicsForecastSeries(
         aggregateEconomicsSeries(current, filters.resolvedGrain, economicsFilters.endDate),
         forecast,
         filters.resolvedGrain,
@@ -228,6 +252,11 @@ export async function loadMoneyView(
     ]);
   const forecast = buildEconomicsForecast(current, economicsFilters.endDate, 14, leadingForecast);
   const headlineMetrics = economicsMetrics(current, previous);
+  const performanceSeries = appendEconomicsForecastSeries(
+    aggregateEconomicsSeries(current, filters.resolvedGrain, economicsFilters.endDate),
+    forecast,
+    filters.resolvedGrain,
+  );
   return {
     data: {
       kind: 'money' as const,
@@ -242,11 +271,8 @@ export async function loadMoneyView(
         headlineMetrics[4],
         metric('paidProfitCoverage', automaticPaid.summary.profitCoveragePct, null, 'percent'),
       ],
-      series: projectOpenEconomicsSeries(
-        aggregateEconomicsSeries(current, filters.resolvedGrain, economicsFilters.endDate),
-        forecast,
-        filters.resolvedGrain,
-      ),
+      series: performanceSeries.filter((point) => !point.isForecast),
+      performanceSeries,
       automaticPaid,
       coverage: current.coverage,
       paidSeries: aggregateAutomaticPaidSeries(
