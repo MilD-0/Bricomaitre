@@ -135,7 +135,6 @@ export function GlobalSearch({
           });
         }}
       >
-        <Search className="global-search-icon" aria-hidden="true" size={19} strokeWidth={1.8} />
         <label className="sr-only" htmlFor={inputId}>
           {labels.label}
         </label>

@@ -1805,7 +1805,8 @@
       "statusLabel": "تصفية حسب الحالة",
       "allStatuses": "كل الحالات",
       "noAnswerCountLabel": "تصفية حسب عدد عدم الرد",
-      "allNoAnswerCounts": "كل أعداد عدم الرد"
+      "allNoAnswerCounts": "كل أعداد عدم الرد",
+      "noAnswerCountAtLeast": "{count} محاولات بدون رد على الأقل"
     },
     "columns": {
       "date": "التاريخ",

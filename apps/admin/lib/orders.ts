@@ -90,9 +90,14 @@ export const orderListQuerySchema = z
     search: z.string().trim().default(''),
     inHouseStatus: z.union([orderStatusSchema, z.null()]).optional(),
     noAnswerCount: z.union([z.coerce.number().int().min(0).max(99), z.null()]).optional(),
+    noAnswerCountMin: z.union([z.coerce.number().int().min(0).max(99), z.null()]).optional(),
     sort: z.array(z.string().trim()).optional().default([]),
     sortKey: z.enum(orderSortKeyValues).default('createdAt'),
     sortDirection: z.enum(sortDirectionValues).default('desc'),
+  })
+  .refine((value) => value.noAnswerCount == null || value.noAnswerCountMin == null, {
+    message: 'Choose either an exact or minimum no-answer count.',
+    path: ['noAnswerCountMin'],
   })
   .transform((value, ctx) => {
     const parsedSortRules = parseSortRuleStrings(value.sort, orderSortKeyValues);

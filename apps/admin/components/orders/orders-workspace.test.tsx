@@ -8,8 +8,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import messages from '../../messages/en.json';
 import type { DailyOrderStatusOverview, OrdersResponse } from '../../lib/order-admin-contracts';
 import type { OrderRecord } from '../../lib/orders';
+import { ORDER_STATUS } from '../../lib/orders';
 import { server } from '../../test/mocks/server';
 import { OrdersWorkspace } from './orders-workspace';
+import { formatOrderListTimestamp } from './orders-workspace-presenters';
 
 function makeOrder(id: number, name: string, status: OrderRecord['inHouseStatus']): OrderRecord {
   return {
@@ -189,6 +191,64 @@ describe('OrdersWorkspace', () => {
     expect(filters).toHaveAttribute('aria-expanded', 'false');
     await user.click(filters);
     expect(filters).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('shows submission time and the full workflow status in each queue row', () => {
+    const noAnswerOrder = {
+      ...makeOrder(2, 'Customer Two', ORDER_STATUS.NO_ANSWER),
+      noAnswerCount: 2,
+    };
+    renderWorkspace({
+      initialOrders: {
+        ...initialOrders,
+        items: [noAnswerOrder],
+        pagination: { ...initialOrders.pagination, totalItems: 1 },
+      },
+    });
+    const queue = screen.getByRole('region', { name: 'Order queue' });
+    const timestamp = within(queue).getByText(
+      formatOrderListTimestamp('en', noAnswerOrder.createdAt),
+    );
+
+    expect(timestamp.tagName).toBe('TIME');
+    expect(timestamp).toHaveAttribute('dateTime', noAnswerOrder.createdAt);
+    expect(within(queue).getByText('No answer 2')).toBeInTheDocument();
+  });
+
+  it('filters no-answer work by exact attempt count or the three-plus bucket', async () => {
+    const user = userEvent.setup();
+    const requestedUrls: string[] = [];
+    server.use(
+      http.get('/api/orders', ({ request }) => {
+        requestedUrls.push(request.url);
+        return HttpResponse.json(initialOrders);
+      }),
+    );
+    renderWorkspace();
+
+    await user.click(screen.getByRole('button', { name: /^No answer$/ }));
+    await user.click(screen.getByRole('button', { name: /^No answer 2$/ }));
+
+    await waitFor(() =>
+      expect(
+        requestedUrls.some((url) => {
+          const params = new URL(url).searchParams;
+          return params.get('inHouseStatus') === '1' && params.get('noAnswerCount') === '2';
+        }),
+      ).toBe(true),
+    );
+    expect(screen.getByRole('button', { name: 'Filters · 2' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^At least 3 no-answer attempts$/ }));
+
+    await waitFor(() =>
+      expect(
+        requestedUrls.some((url) => {
+          const params = new URL(url).searchParams;
+          return params.get('inHouseStatus') === '1' && params.get('noAnswerCountMin') === '3';
+        }),
+      ).toBe(true),
+    );
   });
 
   it('presents seven projections as a compact stacked deck', async () => {
