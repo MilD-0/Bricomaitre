@@ -14,6 +14,7 @@
     "test:integration": "pnpm test:contract && vitest run --project component-integration-jsdom --maxWorkers=2",
     "test:browser": "playwright test --project=chromium --project=mobile-iphone --project=mobile-android",
     "test:performance": "BRIC_PLAYWRIGHT_SERVER=production playwright test --project=performance",
+    "capture:design-baseline": "playwright test --project=design-baseline",
     "eval:ai": "tsx scripts/run-ai-evals.ts"
   },
   "dependencies": {

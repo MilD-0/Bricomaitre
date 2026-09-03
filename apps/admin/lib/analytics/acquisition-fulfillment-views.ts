@@ -1,6 +1,7 @@
 import { getProfitTrackerReport } from '../profit-tracker';
 import { getStatsDashboardSection } from '../stats';
 import { loadMetaBreakdowns, loadMetaPerformance, publicMetaEntity } from './acquisition-data';
+import { cohortCompletionCovers, loadCohortCompletionPair } from './cohort-completion';
 import type { AnalyticsFilters } from './contract';
 import {
   commonCoverageStart,
@@ -28,6 +29,7 @@ import {
   economicsInput,
   effectiveRange,
   metric,
+  metricWithProjectedComparison,
   statsInput,
 } from './loaders-shared';
 import { ratio } from './metrics';
@@ -190,14 +192,25 @@ export async function loadFulfillmentView(
       economicsInput(operationalFilters.startDate, operationalFilters.endDate),
       { db },
     ));
-  const [fulfillment, previousSummary] = await Promise.all([
+  const [fulfillment, previousSummary, completion] = await Promise.all([
     loadFulfillmentData(db, operationalFilters, economics),
     prior ? loadFulfillmentSummary(db, prior.startDate, prior.endDate) : Promise.resolve(null),
+    loadCohortCompletionPair(
+      db,
+      operationalFilters,
+      1 - economics.settings.defaultReturnRate / 100,
+    ),
   ]);
   const [returns, sources] = await Promise.all([
     loadReturnObservation(db, operationalFilters, economics.settings.defaultReturnRate),
     loadSourceHealth(db, filters, economics),
   ]);
+  const completionComparisonAvailable = Boolean(
+    completion?.previous &&
+    previousSummary &&
+    cohortCompletionCovers(fulfillment.summary.postedOrders, completion.current) &&
+    cohortCompletionCovers(previousSummary.postedOrders, completion.previous),
+  );
   return {
     data: {
       kind: 'fulfillment' as const,
@@ -215,11 +228,19 @@ export async function loadFulfillmentView(
           'number',
           'neutral',
         ),
-        metric(
+        metricWithProjectedComparison(
           'paidOrders',
           fulfillment.summary.paidOrders,
           previousSummary?.paidOrders ?? null,
           'number',
+          {
+            value: completionComparisonAvailable
+              ? (completion?.current.projectedPaidOrders ?? null)
+              : null,
+            previous: completionComparisonAvailable
+              ? (completion?.previous?.projectedPaidOrders ?? null)
+              : null,
+          },
         ),
       ],
       ...fulfillment,

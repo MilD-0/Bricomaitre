@@ -357,19 +357,38 @@ describe('production packaging and release runtime', () => {
     expect(ci).not.toContain('56379:6379');
     expect(ci).not.toContain('55433:5432');
     expect(ci).not.toContain('56380:6379');
-    expect(ci).toContain('127.0.0.1:55432/bricomaitre_test');
     expect(ci).toContain('127.0.0.1:55433/bricomaitre_browser');
-    expect(ci).toContain('127.0.0.1:56379/0');
     expect(ci).toContain('127.0.0.1:56380/0');
 
     const serviceContracts = ci.slice(ci.indexOf('  service-contracts:'), ci.indexOf('\n  tests:'));
     expect(serviceContracts).toContain(
-      'ops/scripts/run-with-ci-services.sh 55432 56379 bricomaitre_test',
+      'bash ops/scripts/run-service-contract-tests.sh 55432 56379 bricomaitre_test',
     );
-    expect(serviceContracts).toContain('127.0.0.1:55432/bricomaitre_test');
-    expect(serviceContracts).toContain('127.0.0.1:56379/0');
-    expect(serviceContracts).toContain(
+    const serviceContractRunner = readFileSync(
+      resolve(workspaceRoot, 'ops/scripts/run-service-contract-tests.sh'),
+      'utf8',
+    );
+    expect(serviceContractRunner).toContain('127.0.0.1:${postgres_port}/${database}');
+    expect(serviceContractRunner).toContain('127.0.0.1:${redis_port}/0');
+    expect(serviceContractRunner).toContain(
+      'ops/scripts/run-with-ci-services.sh "$postgres_port" "$redis_port" "$database"',
+    );
+    expect(serviceContractRunner).toContain(
       'configure-postgres-autovacuum.sh "$BRIC_CI_POSTGRES_CONTAINER" "$BRIC_CI_POSTGRES_PORT"',
+    );
+    expect(serviceContractRunner).toContain('pnpm --filter @bric/admin test:services');
+    const workspacePackage = JSON.parse(
+      readFileSync(resolve(workspaceRoot, 'package.json'), 'utf8'),
+    ) as { scripts: Record<string, string> };
+    const adminPackage = JSON.parse(
+      readFileSync(resolve(workspaceRoot, 'apps/admin/package.json'), 'utf8'),
+    ) as { scripts: Record<string, string> };
+    expect(workspacePackage.scripts['test:services']).toBe(
+      'bash ops/scripts/run-service-contract-tests.sh',
+    );
+    expect(workspacePackage.scripts['test:ci']).toContain('pnpm test:services');
+    expect(adminPackage.scripts['test:services']).toContain(
+      '--project service-integration-node --project redis-integration-node --maxWorkers=1',
     );
 
     const adminBrowser = ci.slice(
@@ -400,13 +419,15 @@ describe('production packaging and release runtime', () => {
     expect(productionBuilds).toContain('ops/scripts/run-loopback-isolated.sh pnpm build:verify');
     expect(productionBuilds).not.toContain('api.bricomaitre.com');
     expect(ci).toContain("if: github.event_name == 'workflow_dispatch'");
-    expect(ci).toContain('ops/scripts/run-loopback-isolated.sh pnpm test:storefront:browser');
     expect(ci).toContain(
-      'ops/scripts/run-ci-check.sh "Admin browser acceptance tests" pnpm test:admin:browser',
+      'ops/scripts/run-loopback-isolated.sh pnpm test:storefront:browser --workers=2',
+    );
+    expect(ci).toContain(
+      'ops/scripts/run-ci-check.sh "Admin browser acceptance tests" pnpm test:admin:browser --workers=2',
     );
     expect(ci).toContain('ops/scripts/run-loopback-isolated.sh pnpm test:storefront:performance');
     expect(ci.match(/ops[/]scripts[/]run-loopback-isolated[.]sh/g)).toHaveLength(3);
-    expect(ci.match(/ops[/]scripts[/]run-with-ci-services[.]sh/g)).toHaveLength(2);
+    expect(ci.match(/ops[/]scripts[/]run-with-ci-services[.]sh/g)).toHaveLength(1);
     expect(release).toContain('workflow_run:');
     expect(release).toMatch(/workflow_run:[\s\S]*branches:\s+- main/);
     expect(release).not.toContain('pull-requests: read');

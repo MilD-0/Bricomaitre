@@ -29,10 +29,11 @@
     "test:coverage": "vitest run --project unit-node --project component-jsdom --coverage --maxWorkers=2",
     "test:contract": "vitest run --project route-contract-node --maxWorkers=2",
     "test:integration": "pnpm test:contract",
-    "test:services": "vitest run --project service-integration-node --maxWorkers=2",
+    "test:services": "vitest run --project service-integration-node --project redis-integration-node --maxWorkers=1",
     "test:redis:ai": "vitest run --project redis-integration-node --maxWorkers=1",
     "eval:ai": "tsx scripts/run-ai-evals.ts",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test --project=chromium --project=mobile-chromium",
+    "capture:design-baseline": "playwright test --project=design-baseline"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1121.0",

@@ -53,7 +53,7 @@ export default defineConfig({
     {
       name: 'chromium',
       testMatch: /browser\/.*\.spec\.ts/,
-      testIgnore: /browser\/mobile\/.*\.spec\.ts/,
+      testIgnore: [/browser\/mobile\/.*\.spec\.ts/, /browser\/design-baseline\.spec\.ts/],
       use: { ...devices['Desktop Chrome'] },
     },
     {
@@ -65,6 +65,11 @@ export default defineConfig({
       name: 'mobile-android',
       testMatch: /browser\/mobile\/.*\.spec\.ts/,
       use: { ...devices['Pixel 5'] },
+    },
+    {
+      name: 'design-baseline',
+      testMatch: /browser\/design-baseline\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'performance',

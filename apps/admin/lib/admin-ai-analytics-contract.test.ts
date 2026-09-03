@@ -36,6 +36,7 @@ function moneyPayload(costCoveragePct: number): AnalyticsPayload {
         },
       ],
       series: [],
+      performanceSeries: [],
       coverage: {
         projectedOrders: 0,
         costCompleteOrders: 0,

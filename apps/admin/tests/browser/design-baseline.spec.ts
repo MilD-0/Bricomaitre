@@ -7,6 +7,9 @@ import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 const defaultStorageState = resolve(process.cwd(), '../../ops/runtime/admin-playwright-state.json');
 const storageState = process.env.ADMIN_PLAYWRIGHT_STORAGE_STATE?.trim() || defaultStorageState;
 const baselineDirectory = process.env.BRIC_UI_BASELINE_DIR?.trim();
+if (!baselineDirectory) {
+  throw new Error('Set BRIC_UI_BASELINE_DIR to a writable output directory.');
+}
 
 const workspaceRoutes = [
   '/administration',
@@ -127,11 +130,10 @@ test('captures every authenticated workspace for a design-system baseline', asyn
   baseURL,
   browser,
 }) => {
-  test.skip(!baselineDirectory, 'Set BRIC_UI_BASELINE_DIR to opt into private UI captures.');
   test.setTimeout(20 * 60_000);
   expect(baseURL).toBeTruthy();
 
-  const root = resolve(baselineDirectory!);
+  const root = resolve(baselineDirectory);
   await mkdir(root, { recursive: true });
 
   for (const mode of modes) {
