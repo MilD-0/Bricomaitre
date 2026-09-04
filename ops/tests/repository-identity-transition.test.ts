@@ -11,7 +11,7 @@ const canonicalImage = `ghcr.io/mild-0/bricomaitre/admin-web@${digest}`;
 const legacyImage = `ghcr.io/mild-0/bricomaitre2/admin-web@${digest}`;
 const temporaryDirectories: string[] = [];
 
-function verifyImage(image: string, profile: 'public' | 'legacy') {
+function verifyImage(image: string, profile: 'public' | 'legacy-public' | 'legacy') {
   const directory = mkdtempSync(join(tmpdir(), 'bric-repository-identity-'));
   temporaryDirectories.push(directory);
   const cosignArguments = join(directory, 'cosign-arguments');
@@ -65,7 +65,7 @@ describe('canonical image namespace transition', () => {
 
     expect(result.status).toBe(0);
     expect(result.cosignArguments).toContain(
-      '--certificate-identity https://github.com/MilD-0/Bricomaitre2/.github/workflows/deploy.yml@refs/heads/main',
+      '--certificate-identity https://github.com/MilD-0/Bricomaitre/.github/workflows/deploy.yml@refs/heads/main',
     );
   });
 
@@ -79,6 +79,15 @@ describe('canonical image namespace transition', () => {
 
   it('accepts the former namespace and identity only for legacy rollback', () => {
     const result = verifyImage(legacyImage, 'legacy');
+
+    expect(result.status).toBe(0);
+    expect(result.cosignArguments).toContain(
+      '--certificate-identity https://github.com/MilD-0/Bricomaitre2/.github/workflows/deploy.yml@refs/heads/main',
+    );
+  });
+
+  it('accepts canonical images signed before the repository transition only for rollback', () => {
+    const result = verifyImage(canonicalImage, 'legacy-public');
 
     expect(result.status).toBe(0);
     expect(result.cosignArguments).toContain(

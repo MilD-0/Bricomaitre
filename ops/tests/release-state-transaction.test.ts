@@ -7,6 +7,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 const workspaceRoot = resolve(import.meta.dirname, '../..');
 const blueGreenScript = resolve(workspaceRoot, 'ops/scripts/blue-green.sh');
 const temporaryDirectories: string[] = [];
+const currentSignerIdentity =
+  'https://github.com/MilD-0/Bricomaitre/.github/workflows/deploy.yml@refs/heads/main';
+const formerSignerIdentity =
+  'https://github.com/MilD-0/Bricomaitre2/.github/workflows/deploy.yml@refs/heads/main';
 
 const commonReleaseFiles = [
   'ops/scripts/deploy.sh',
@@ -71,6 +75,7 @@ function createRelease(
   fixture: ReturnType<typeof createRuntime>,
   name: string,
   legalLayout: 'public' | 'legacy',
+  signerIdentity?: string,
 ) {
   const release = join(fixture.releases, name);
   const files = [
@@ -84,7 +89,7 @@ function createRelease(
   }
   writeFileSync(
     join(release, '.bric-release.env'),
-    `BRIC_RELEASE_ID=${name}\nBRIC_RELEASE_COMMIT=${name}-commit\n`,
+    `BRIC_RELEASE_ID=${name}\nBRIC_RELEASE_COMMIT=${name}-commit\n${signerIdentity ? `BRIC_RELEASE_SIGNER_IDENTITY=${signerIdentity}\n` : ''}`,
   );
   return release;
 }
@@ -98,7 +103,7 @@ function verifyRelease(
     'bash',
     [
       '-c',
-      'set -euo pipefail; source "$1"; verify_release_dir "$2" "${3:-}"',
+      'set -euo pipefail; source "$1"; verify_release_dir "$2" "${3:-}"; printf "LAYOUT=%s\\nPROFILE=%s\\n" "$verified_release_layout" "$verified_release_image_profile"',
       'bash',
       blueGreenScript,
       release,
@@ -117,12 +122,42 @@ afterEach(() => {
 describe('release-state transactions', () => {
   it('requires the public legal layout for a new deployment candidate', () => {
     const fixture = createRuntime();
-    const release = createRelease(fixture, 'public-release', 'public');
+    const release = createRelease(fixture, 'public-release', 'public', currentSignerIdentity);
 
     const result = verifyRelease(fixture, release, 'public-release-commit');
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('LAYOUT=public');
+    expect(result.stdout).toContain('PROFILE=public');
+  });
+
+  it('rejects a new deployment candidate without the current repository signer', () => {
+    const fixture = createRuntime();
+    const unsignedRelease = createRelease(fixture, 'unsigned-release', 'public');
+    const formerRelease = createRelease(fixture, 'former-release', 'public', formerSignerIdentity);
+
+    const unsignedResult = verifyRelease(fixture, unsignedRelease, 'unsigned-release-commit');
+    const formerResult = verifyRelease(fixture, formerRelease, 'former-release-commit');
+
+    expect(unsignedResult.status).not.toBe(0);
+    expect(unsignedResult.stderr).toContain('release signer mismatch');
+    expect(formerResult.status).not.toBe(0);
+    expect(formerResult.stderr).toContain('release signer mismatch');
+  });
+
+  it('retains rollback compatibility for canonical releases signed by the former repository', () => {
+    const fixture = createRuntime();
+    const release = createRelease(fixture, 'former-public-release', 'public');
+
+    const result = verifyRelease(fixture, release);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('LAYOUT=public');
+    expect(result.stdout).toContain('PROFILE=legacy-public');
+    expect(result.stderr).toContain(
+      'warning: accepting a canonical release signed by the former repository for rollback compatibility',
+    );
   });
 
   it('retains one-way compatibility with the previous legacy rollback bundle', () => {
@@ -133,6 +168,8 @@ describe('release-state transactions', () => {
     const deploymentResult = verifyRelease(fixture, release, 'legacy-release-commit');
 
     expect(rollbackResult.status).toBe(0);
+    expect(rollbackResult.stdout).toContain('LAYOUT=legacy');
+    expect(rollbackResult.stdout).toContain('PROFILE=legacy');
     expect(rollbackResult.stderr).toContain(
       'warning: accepting a retained legacy release for rollback compatibility',
     );
