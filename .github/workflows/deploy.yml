@@ -510,7 +510,7 @@ jobs:
 
           mkdir -p \
             "$bundle_dir/ops/scripts" \
-            "$bundle_dir/ops/docker" \
+            "$bundle_dir/ops/docker/postgres" \
             "$bundle_dir/ops/host" \
             "$bundle_dir/ops/nginx" \
             "$bundle_dir/ops/env" \
@@ -521,6 +521,10 @@ jobs:
             --build-state "$PWD" "$RELEASE_SHA" "$bundle_dir/.bric-migrations.json"
           rsync -a ops/scripts/ "$bundle_dir/ops/scripts/"
           cp ops/docker/compose.prod.yml "$bundle_dir/ops/docker/compose.prod.yml"
+          install -m 0755 \
+            ops/docker/postgres/init-roles.sh \
+            "$bundle_dir/ops/docker/postgres/init-roles.sh"
+          test -x "$bundle_dir/ops/docker/postgres/init-roles.sh"
           rsync -a ops/host/ "$bundle_dir/ops/host/"
           rsync -a ops/nginx/ "$bundle_dir/ops/nginx/"
           rsync -a ops/env/ "$bundle_dir/ops/env/"

@@ -186,6 +186,7 @@ describe('production packaging and release runtime', () => {
     const roleProvisionerPath = resolve(workspaceRoot, 'ops/docker/postgres/init-roles.sh');
     const roleProvisioner = readFileSync(roleProvisionerPath, 'utf8');
     const deploy = readFileSync(resolve(workspaceRoot, 'ops/scripts/deploy.sh'), 'utf8');
+    const release = readFileSync(resolve(workspaceRoot, '.github/workflows/deploy.yml'), 'utf8');
 
     expect(compose).toContain(
       'POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in infra.env}',
@@ -200,6 +201,9 @@ describe('production packaging and release runtime', () => {
     expect(compose).toContain("'--requirepass'");
     expect(compose).toContain('postgres/init-roles.sh');
     expect(statSync(roleProvisionerPath).mode & 0o111).not.toBe(0);
+    expect(release).toContain('"$bundle_dir/ops/docker/postgres"');
+    expect(release).toContain('ops/docker/postgres/init-roles.sh');
+    expect(release).toContain('test -x "$bundle_dir/ops/docker/postgres/init-roles.sh"');
     expect(roleProvisioner).toContain('WHERE NOT EXISTS (SELECT FROM pg_roles');
     expect(roleProvisioner).toContain('ALTER ROLE :"admin_user" LOGIN PASSWORD');
     expect(roleProvisioner).toContain('ALTER ROLE :"storefront_user" LOGIN PASSWORD');
