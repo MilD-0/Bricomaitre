@@ -15,7 +15,7 @@ const DEFAULT_GRAPH_API_VERSION = 'v25.0';
 const DEFAULT_LOOKBACK_DAYS = 28;
 const MAX_LOOKBACK_DAYS = 90;
 const ACTION_REPORT_TIME = 'conversion';
-const META_GRAPH_HOST = 'graph.facebook.com';
+const DEFAULT_META_GRAPH_ORIGIN = 'https://graph.facebook.com';
 const META_PAGE_LIMIT = 500;
 const MAX_PAGES = 300;
 const MAX_INSIGHTS_DAYS_PER_REQUEST = 30;
@@ -25,7 +25,10 @@ type Database = ReturnType<typeof getDb>;
 type MetaAdsEnvironment = Record<string, string | undefined> &
   Partial<
     Record<
-      'META_ADS_ACCESS_TOKEN' | 'META_AD_ACCOUNT_ID' | 'META_ADS_GRAPH_API_VERSION',
+      | 'META_ADS_ACCESS_TOKEN'
+      | 'META_AD_ACCOUNT_ID'
+      | 'META_ADS_GRAPH_API_VERSION'
+      | 'META_ADS_GRAPH_API_ORIGIN',
       string | undefined
     >
   >;
@@ -154,6 +157,20 @@ export function readMetaAdsConfig(env: MetaAdsEnvironment = process.env) {
   const apiVersion = /^v\d+\.\d+$/.test(configuredVersion)
     ? configuredVersion
     : DEFAULT_GRAPH_API_VERSION;
+  const configuredOrigin = (
+    env.META_ADS_GRAPH_API_ORIGIN?.trim() || DEFAULT_META_GRAPH_ORIGIN
+  ).replace(/\/+$/, '');
+  let graphApiOrigin: string;
+  try {
+    const url = new URL(configuredOrigin);
+    if (!['http:', 'https:'].includes(url.protocol) || url.pathname !== '/') throw new Error();
+    graphApiOrigin = url.origin;
+  } catch {
+    throw new MetaAdsSyncError(
+      'META_ADS_GRAPH_API_ORIGIN must be an HTTP or HTTPS origin.',
+      'meta_ads_invalid_origin',
+    );
+  }
 
   if (!accessToken || !/^\d{6,30}$/.test(accountId)) {
     throw new MetaAdsSyncError(
@@ -162,7 +179,7 @@ export function readMetaAdsConfig(env: MetaAdsEnvironment = process.env) {
     );
   }
 
-  return { accessToken, accountId, apiVersion };
+  return { accessToken, accountId, apiVersion, graphApiOrigin };
 }
 
 function finiteNumber(value: string | number | undefined) {
@@ -344,7 +361,7 @@ async function metaRequest<T>(
   schema: z.ZodType<T>,
   responseName: string,
 ): Promise<MetaRequestResult<T>> {
-  if (url.hostname !== META_GRAPH_HOST || url.protocol !== 'https:') {
+  if (url.origin !== config.graphApiOrigin) {
     throw new MetaAdsSyncError(
       'Meta returned an invalid pagination URL.',
       'invalid_pagination_url',
@@ -475,7 +492,7 @@ export async function fetchMetaAdsInsightRows(input: {
   const explicitSince = input.since ? dateOnly(input.since, 'since') : undefined;
   const explicitUntil = input.until ? dateOnly(input.until, 'until') : undefined;
   const accountUrl = new URL(
-    `https://${META_GRAPH_HOST}/${input.config.apiVersion}/act_${input.config.accountId}`,
+    `${input.config.graphApiOrigin}/${input.config.apiVersion}/act_${input.config.accountId}`,
   );
   accountUrl.searchParams.set('fields', 'id,currency,timezone_name');
   const accountResult = await metaRequest<z.infer<typeof accountResponseSchema>>(
@@ -548,7 +565,7 @@ export async function fetchMetaAdsInsightRows(input: {
 
   const buildInsightsUrl = (range: { since: string; until: string }) => {
     const url = new URL(
-      `https://${META_GRAPH_HOST}/${input.config.apiVersion}/act_${input.config.accountId}/insights`,
+      `${input.config.graphApiOrigin}/${input.config.apiVersion}/act_${input.config.accountId}/insights`,
     );
     url.searchParams.set('level', 'ad');
     url.searchParams.set('time_increment', '1');
@@ -562,7 +579,7 @@ export async function fetchMetaAdsInsightRows(input: {
 
   const buildBreakdownUrl = (range: { since: string; until: string }, breakdowns: string) => {
     const url = new URL(
-      `https://${META_GRAPH_HOST}/${input.config.apiVersion}/act_${input.config.accountId}/insights`,
+      `${input.config.graphApiOrigin}/${input.config.apiVersion}/act_${input.config.accountId}/insights`,
     );
     url.searchParams.set('level', 'ad');
     url.searchParams.set('time_increment', '1');
@@ -659,7 +676,7 @@ export async function fetchMetaAdsInsightRows(input: {
   }
 
   const campaignUrl = new URL(
-    `https://${META_GRAPH_HOST}/${input.config.apiVersion}/act_${input.config.accountId}/campaigns`,
+    `${input.config.graphApiOrigin}/${input.config.apiVersion}/act_${input.config.accountId}/campaigns`,
   );
   campaignUrl.searchParams.set(
     'fields',
@@ -667,7 +684,7 @@ export async function fetchMetaAdsInsightRows(input: {
   );
   campaignUrl.searchParams.set('limit', String(META_PAGE_LIMIT));
   const adsetUrl = new URL(
-    `https://${META_GRAPH_HOST}/${input.config.apiVersion}/act_${input.config.accountId}/adsets`,
+    `${input.config.graphApiOrigin}/${input.config.apiVersion}/act_${input.config.accountId}/adsets`,
   );
   adsetUrl.searchParams.set(
     'fields',

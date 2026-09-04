@@ -10,4 +10,13 @@ describe('GoogleLoginPanel', () => {
     expect(screen.getAllByRole('button')).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeInTheDocument();
   });
+
+  it('uses the same restrained login treatment without Google branding in demo mode', () => {
+    const { container } = render(
+      <GoogleLoginPanel demo signInLabel="Enter the demo" onSignIn={vi.fn()} />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Enter the demo' })).toBeInTheDocument();
+    expect(container.querySelector('svg')).toBeNull();
+  });
 });

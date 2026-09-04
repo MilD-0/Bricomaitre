@@ -651,7 +651,13 @@ export async function sendMarketingDestinationEvent(row: OutboxRow): Promise<Sen
           code: 'destination_unconfigured',
           message: 'Google Analytics Measurement Protocol credentials are not configured.',
         };
-      url = `https://www.google-analytics.com/mp/collect?measurement_id=${encodeURIComponent(measurementId)}&api_secret=${encodeURIComponent(apiSecret)}`;
+      const endpoint =
+        process.env.GOOGLE_ANALYTICS_API_ENDPOINT?.trim() ||
+        'https://www.google-analytics.com/mp/collect';
+      const endpointUrl = new URL(endpoint);
+      endpointUrl.searchParams.set('measurement_id', measurementId);
+      endpointUrl.searchParams.set('api_secret', apiSecret);
+      url = endpointUrl.toString();
     } else if (row.destination === 'tiktok') {
       const pixelId =
         process.env.TIKTOK_PIXEL_ID?.trim() || process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID?.trim();
@@ -665,7 +671,9 @@ export async function sendMarketingDestinationEvent(row: OutboxRow): Promise<Sen
           code: 'destination_unconfigured',
           message: 'TikTok Events API credentials are not configured.',
         };
-      url = 'https://business-api.tiktok.com/open_api/v1.3/event/track/';
+      url =
+        process.env.TIKTOK_EVENTS_API_ENDPOINT?.trim() ||
+        'https://business-api.tiktok.com/open_api/v1.3/event/track/';
       headers = { ...headers, 'Access-Token': accessToken };
       body = { ...(row.payload as Record<string, unknown>), event_source_id: pixelId };
     } else {

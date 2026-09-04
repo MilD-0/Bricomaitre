@@ -57,6 +57,7 @@ bricomaitre-postgres-*.sql.gz
 skills-lock.json
 **/skills-lock.json
 ops/runtime/
+ops/demo/.runtime/
 
 *.swn
 *.swo

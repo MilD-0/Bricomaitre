@@ -1,0 +1,15 @@
+FROM node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+RUN rm -rf /usr/local/lib/node_modules/npm \
+  && rm -f /usr/local/bin/npm /usr/local/bin/npx \
+  && groupadd --gid 10001 demo \
+  && useradd --uid 10001 --gid demo --home-dir /app --shell /usr/sbin/nologin --no-create-home demo
+
+COPY --chown=demo:demo mock-services.mjs ./mock-services.mjs
+
+USER demo
+EXPOSE 8080
+CMD ["node", "mock-services.mjs"]

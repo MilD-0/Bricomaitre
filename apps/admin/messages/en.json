@@ -2551,7 +2551,8 @@
     "unknownUser": "Unknown user",
     "accessPending": "Your email has not been granted access yet. An admin or developer must allowlist your address and assign a role before you can enter the app.",
     "signOut": "Sign out",
-    "signInWithGoogle": "Sign in with Google"
+    "signInWithGoogle": "Sign in with Google",
+    "enterDemo": "Enter the demo"
   },
   "history": {
     "title": "Action history",

@@ -1,3 +1,4 @@
+export * from './aws';
 export * from './client-ip';
 export * from './diagnostics';
 export * from './health';
