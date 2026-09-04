@@ -39,6 +39,19 @@ original_current_release="$(release_link_target "$current_link")"
 original_previous_release="$(release_link_target "$previous_link")"
 deployment_committed=false
 routing_changed=false
+shared_runtime_changed=false
+incumbent_reconciled=false
+
+previous_api_service=""
+previous_admin_service=""
+previous_storefront_service=""
+previous_worker_service=""
+if [[ -n "$previous_slot" ]]; then
+  previous_api_service="$(service_name storefront-api "$previous_slot")"
+  previous_admin_service="$(service_name admin "$previous_slot")"
+  previous_storefront_service="$(service_name storefront "$previous_slot")"
+  previous_worker_service="$(service_name admin-worker "$previous_slot")"
+fi
 
 if [[ ! -f "$migration_state_file" ]]; then
   echo "release is missing migration state: $migration_state_file" >&2
@@ -49,6 +62,24 @@ nginx_main_fallback="$release_dir/ops/nginx/nginx.conf"
 if [[ -n "$original_current_release" ]]; then
   nginx_main_fallback="$original_current_release/ops/nginx/nginx.conf"
 fi
+
+reconcile_incumbent_slot() {
+  if [[ -z "$previous_slot" ]]; then
+    return 0
+  fi
+
+  printf 'reloading incumbent slot %s after shared runtime reconciliation\n' "$previous_slot"
+  compose up -d --no-deps --force-recreate "$previous_api_service"
+  bash "$script_dir/wait-for-health.sh" "$previous_api_service"
+
+  compose up -d --no-deps --force-recreate \
+    "$previous_admin_service" \
+    "$previous_storefront_service" \
+    "$previous_worker_service"
+  bash "$script_dir/wait-for-health.sh" "$previous_admin_service"
+  bash "$script_dir/wait-for-health.sh" "$previous_storefront_service"
+  bash "$script_dir/wait-for-health.sh" "$previous_worker_service"
+}
 
 cleanup_failed_deployment() {
   local status=$?
@@ -76,6 +107,12 @@ cleanup_failed_deployment() {
       # The running Nginx generation may still route to the candidate. Keep
       # both its containers and digest pins intact instead of causing an outage.
       commit_image_state_transaction
+    fi
+
+    if [[ "$routing_restored" == true && "$shared_runtime_changed" == true \
+      && "$incumbent_reconciled" != true ]]; then
+      reconcile_incumbent_slot || \
+        echo "failed to reload the incumbent slot after shared runtime rollback" >&2
     fi
 
     if [[ "$routing_restored" == true && -f "$image_state_file" ]] \
@@ -158,8 +195,44 @@ if [[ -z "$postgres_container_id" ]]; then
   exit 1
 fi
 docker exec "$postgres_container_id" /docker-entrypoint-initdb.d/10-bric-roles.sh
+redis_container_before="$(compose ps -q redis)"
 compose up -d redis
 bash "$script_dir/wait-for-health.sh" redis
+redis_container_id="$(compose ps -q redis)"
+if [[ -z "$redis_container_id" ]]; then
+  echo 'redis container is unavailable for authentication verification' >&2
+  exit 1
+fi
+if [[ -n "$redis_container_before" && "$redis_container_before" != "$redis_container_id" ]]; then
+  shared_runtime_changed=true
+fi
+
+# A prior interrupted credential cutover may leave the existing Redis process
+# running without the password declared by Compose. Repair and verify the live
+# process instead of trusting container configuration alone.
+unauthenticated_redis_ping="$(
+  docker exec "$redis_container_id" env -u REDISCLI_AUTH redis-cli --raw ping 2>/dev/null || true
+)"
+if [[ "$unauthenticated_redis_ping" == 'PONG' ]]; then
+  docker exec "$redis_container_id" sh -eu -c '
+    response="$(env -u REDISCLI_AUTH redis-cli --raw CONFIG SET requirepass "$REDISCLI_AUTH")"
+    test "$response" = "OK"
+  '
+  shared_runtime_changed=true
+fi
+authenticated_redis_ping="$(
+  docker exec "$redis_container_id" redis-cli --no-auth-warning --raw ping 2>/dev/null || true
+)"
+if [[ "$authenticated_redis_ping" != 'PONG' ]]; then
+  echo 'redis did not accept its configured authentication secret' >&2
+  exit 1
+fi
+bash "$script_dir/wait-for-health.sh" redis
+
+if [[ "$shared_runtime_changed" == true && -n "$previous_slot" ]]; then
+  reconcile_incumbent_slot
+  incumbent_reconciled=true
+fi
 
 set -a
 # shellcheck disable=SC1091
@@ -201,11 +274,6 @@ fi
 docker exec "$postgres_container_id" /docker-entrypoint-initdb.d/10-bric-roles.sh
 
 if [[ -n "$previous_slot" ]]; then
-  previous_api_service="$(service_name storefront-api "$previous_slot")"
-  previous_admin_service="$(service_name admin "$previous_slot")"
-  previous_storefront_service="$(service_name storefront "$previous_slot")"
-  previous_worker_service="$(service_name admin-worker "$previous_slot")"
-
   bash "$script_dir/wait-for-health.sh" "$previous_api_service"
   bash "$script_dir/wait-for-health.sh" "$previous_admin_service"
   bash "$script_dir/wait-for-health.sh" "$previous_storefront_service"
