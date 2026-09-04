@@ -2551,7 +2551,8 @@
     "unknownUser": "Utilisateur inconnu",
     "accessPending": "Votre e-mail n’a pas encore été autorisé. Un admin ou un développeur doit ajouter votre adresse à la liste autorisée puis vous attribuer un rôle avant l’accès à l’application.",
     "signOut": "Se déconnecter",
-    "signInWithGoogle": "Se connecter avec Google"
+    "signInWithGoogle": "Se connecter avec Google",
+    "enterDemo": "Entrer dans la démonstration"
   },
   "history": {
     "title": "Historique des actions",

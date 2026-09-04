@@ -7,6 +7,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { getS3EndpointConfig } from '@bric/runtime/aws';
 
 const required = ['AWS_REGION', 'AWS_S3_BUCKET', 'AWS_CLOUDFRONT_DOMAIN'] as const;
 export function ensureS3UploadConfig() {
@@ -35,11 +36,14 @@ export function ensurePrivateS3Config() {
 }
 
 export function getS3UploadClient(region: string) {
-  return new S3Client({ region });
+  return new S3Client({ region, ...getS3EndpointConfig() });
 }
 
 export function buildCloudfrontUrl(cloudfrontDomain: string, key: string) {
-  return `https://${cloudfrontDomain}/${key}`;
+  const publicOrigin = /^https?:\/\//i.test(cloudfrontDomain)
+    ? cloudfrontDomain
+    : `https://${cloudfrontDomain}`;
+  return `${publicOrigin.replace(/\/+$/, '')}/${key}`;
 }
 
 export function buildDatedObjectKey(prefix: string, extension: string, now = new Date()) {

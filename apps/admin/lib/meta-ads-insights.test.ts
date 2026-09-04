@@ -37,7 +37,22 @@ describe('Meta Ads Insights ingestion', () => {
         META_AD_ACCOUNT_ID: 'act_123456789',
         META_ADS_GRAPH_API_VERSION: 'invalid',
       }),
-    ).toEqual({ accessToken: 'token', accountId: '123456789', apiVersion: 'v25.0' });
+    ).toEqual({
+      accessToken: 'token',
+      accountId: '123456789',
+      apiVersion: 'v25.0',
+      graphApiOrigin: 'https://graph.facebook.com',
+    });
+  });
+
+  it('accepts one exact internal Graph API origin for demonstration deployments', () => {
+    expect(
+      readMetaAdsConfig({
+        META_ADS_ACCESS_TOKEN: 'token',
+        META_AD_ACCOUNT_ID: '123456789',
+        META_ADS_GRAPH_API_ORIGIN: 'http://mock-services:8080/',
+      }),
+    ).toMatchObject({ graphApiOrigin: 'http://mock-services:8080' });
   });
 
   it('uses one prioritized purchase action instead of double-counting overlapping Meta totals', () => {

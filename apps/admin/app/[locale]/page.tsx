@@ -4,6 +4,7 @@ import { connection } from 'next/server';
 
 import { GoogleLoginPanel } from '../../components/auth/google-login-panel';
 import { auth, signIn } from '../../lib/auth';
+import { isDemoMode, signInDemo } from '../../lib/demo-auth';
 import { getDefaultAuthorizedHref } from '../../lib/navigation-access';
 
 export default async function LocaleRootPage({ params }: { params: Promise<{ locale: string }> }) {
@@ -23,13 +24,20 @@ export default async function LocaleRootPage({ params }: { params: Promise<{ loc
   }
 
   const t = await getTranslations();
+  const demo = isDemoMode();
 
   return (
     <GoogleLoginPanel
-      signInLabel={t('auth.signInWithGoogle')}
+      demo={demo}
+      signInLabel={t(demo ? 'auth.enterDemo' : 'auth.signInWithGoogle')}
       onSignIn={async () => {
         'use server';
-        await signIn('google', { redirectTo: `/${locale}/administration` });
+        const redirectTo = `/${locale}/administration`;
+        if (isDemoMode()) {
+          await signInDemo(redirectTo);
+          return;
+        }
+        await signIn('google', { redirectTo });
       }}
     />
   );

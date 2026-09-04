@@ -2,7 +2,21 @@ import { DeleteObjectsCommand, ListObjectsV2Command, type S3Client } from '@aws-
 import { describe, expect, it, vi } from 'vitest';
 
 import { MAX_IMAGE_UPLOAD_BYTES, validateAndBufferImageUploads } from './upload-validation';
-import { deleteExpiredPrivateS3Objects } from './s3-upload';
+import { buildCloudfrontUrl, deleteExpiredPrivateS3Objects } from './s3-upload';
+
+describe('public S3 object URLs', () => {
+  it('defaults a bare CDN domain to HTTPS', () => {
+    expect(buildCloudfrontUrl('cdn.example.com', 'products/image.webp')).toBe(
+      'https://cdn.example.com/products/image.webp',
+    );
+  });
+
+  it('preserves an explicit origin for a local S3-compatible service', () => {
+    expect(buildCloudfrontUrl('http://127.0.0.1:3900/demo', 'products/image.webp')).toBe(
+      'http://127.0.0.1:3900/demo/products/image.webp',
+    );
+  });
+});
 
 describe('image upload validation', () => {
   it('accepts supported image content and derives canonical metadata', async () => {

@@ -3,7 +3,7 @@
   "ignoreUnresolved": ["next"],
   "workspaces": {
     "ops": {
-      "entry": ["scripts/*.mjs"]
+      "entry": ["scripts/*.mjs", "demo/mock-services.mjs"]
     },
     "apps/admin": {
       "entry": [
