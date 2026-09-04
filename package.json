@@ -38,7 +38,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "dead-code:check": "knip",
-    "dependencies:check": "pnpm audit --prod --audit-level high",
+    "dependencies:check": "bash ops/scripts/check-production-dependencies.sh",
     "analyze:storefront": "pnpm --filter @bric/storefront build",
     "ops:up": "docker compose -f ops/docker/compose.prod.yml up -d",
     "ops:down": "docker compose -f ops/docker/compose.prod.yml down",
