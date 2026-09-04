@@ -1,19 +1,34 @@
 import { render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { authMock, authPanelMock, connectionMock, getTranslationsMock, redirectMock, signInMock } =
-  vi.hoisted(() => ({
-    authMock: vi.fn(),
-    authPanelMock: vi.fn(() => <div>GoogleLoginPanel</div>),
-    connectionMock: vi.fn(),
-    getTranslationsMock: vi.fn(),
-    redirectMock: vi.fn(),
-    signInMock: vi.fn(),
-  }));
+const {
+  authMock,
+  authPanelMock,
+  connectionMock,
+  getTranslationsMock,
+  isDemoModeMock,
+  redirectMock,
+  signInDemoMock,
+  signInMock,
+} = vi.hoisted(() => ({
+  authMock: vi.fn(),
+  authPanelMock: vi.fn(() => <div>GoogleLoginPanel</div>),
+  connectionMock: vi.fn(),
+  getTranslationsMock: vi.fn(),
+  isDemoModeMock: vi.fn(() => false),
+  redirectMock: vi.fn(),
+  signInDemoMock: vi.fn(),
+  signInMock: vi.fn(),
+}));
 
 vi.mock('../../lib/auth', () => ({
   auth: authMock,
   signIn: signInMock,
+}));
+
+vi.mock('../../lib/demo-auth', () => ({
+  isDemoMode: isDemoModeMock,
+  signInDemo: signInDemoMock,
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -37,9 +52,11 @@ import LocaleRootPage from './page';
 describe('LocaleRootPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    isDemoModeMock.mockReturnValue(false);
     getTranslationsMock.mockResolvedValue((key: string) => {
       const map: Record<string, string> = {
         'auth.signInWithGoogle': 'Sign in with Google',
+        'auth.enterDemo': 'Enter the demo',
       };
 
       return map[key] ?? key;

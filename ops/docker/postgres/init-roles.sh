@@ -8,7 +8,7 @@ set -euo pipefail
 
 PGPASSWORD="${PGPASSWORD:-${POSTGRES_PASSWORD:-}}" psql \
   --set=ON_ERROR_STOP=1 \
-  --host 127.0.0.1 \
+  --host "${POSTGRES_HOST:-127.0.0.1}" \
   --port "${POSTGRES_PORT:-5432}" \
   --username "$POSTGRES_USER" \
   --dbname "$POSTGRES_DB" \

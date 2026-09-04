@@ -199,8 +199,25 @@ behavior.
 
 ## Run it locally
 
-Use Node.js 24, Corepack, PostgreSQL 16, and Redis 7. The pinned package manager
-is pnpm 11.
+To explore the application stack with synthetic data and local substitutes for
+auth, carrier, marketing, reporting, and object-storage services, use Docker
+with Compose and run:
+
+```bash
+./demo up
+```
+
+This starts dedicated PostgreSQL, Redis, and object-storage instances alongside
+the real Storefront, Storefront API, Commerce Operating System, and workers. The
+admin entry button creates a real local session with developer RBAC; it bypasses
+only external identity proof. No production credentials or data are used. AI is
+disabled until its local demo runtime is added.
+
+Use `./demo urls` to print the entry points, `./demo reset` to restore the
+synthetic dataset, and `./demo down` to stop the stack without deleting it.
+
+For source-native development, use Node.js 24, Corepack, PostgreSQL 16, and
+Redis 7. The pinned package manager is pnpm 11.
 
 ```bash
 corepack enable

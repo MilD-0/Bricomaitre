@@ -29,6 +29,26 @@ describe('Search Console ingestion', () => {
     expect(() => readSearchConsoleConfig({})).toThrowError(SearchConsoleSyncError);
   });
 
+  it('accepts explicit internal API endpoints for isolated deployments', () => {
+    const config = readSearchConsoleConfig({
+      GOOGLE_SEARCH_CONSOLE_CREDENTIALS_JSON: JSON.stringify(credentials),
+      SEARCH_CONSOLE_ANALYTICS_ENDPOINT: 'http://mock-services:8080/google/webmasters/v3/sites/',
+      SEARCH_CONSOLE_INSPECTION_ENDPOINT:
+        'http://mock-services:8080/google/urlInspection/index:inspect',
+    });
+
+    expect(config.analyticsEndpoint).toBe('http://mock-services:8080/google/webmasters/v3/sites');
+    expect(config.inspectionEndpoint).toBe(
+      'http://mock-services:8080/google/urlInspection/index:inspect',
+    );
+    expect(() =>
+      readSearchConsoleConfig({
+        GOOGLE_SEARCH_CONSOLE_CREDENTIALS_JSON: JSON.stringify(credentials),
+        SEARCH_CONSOLE_ANALYTICS_ENDPOINT: 'file:///tmp/search-console',
+      }),
+    ).toThrowError(SearchConsoleSyncError);
+  });
+
   it('loads exact totals separately from privacy-limited detail and tolerates inspection failure', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
       const url = String(input);

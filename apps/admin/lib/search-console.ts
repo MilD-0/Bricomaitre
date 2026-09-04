@@ -17,8 +17,8 @@ import {
 type Database = ReturnType<typeof getDb>;
 type FetchLike = typeof fetch;
 
-const SEARCH_ANALYTICS_ENDPOINT = 'https://www.googleapis.com/webmasters/v3/sites';
-const SEARCH_INSPECTION_ENDPOINT =
+const DEFAULT_SEARCH_ANALYTICS_ENDPOINT = 'https://www.googleapis.com/webmasters/v3/sites';
+const DEFAULT_SEARCH_INSPECTION_ENDPOINT =
   'https://searchconsole.googleapis.com/v1/urlInspection/index:inspect';
 const SEARCH_CONSOLE_SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly';
 const DETAIL_PAGE_SIZE = 25_000;
@@ -121,6 +121,8 @@ export type SearchConsoleEnvironment = {
   GOOGLE_APPLICATION_CREDENTIALS?: string;
   SEARCH_CONSOLE_SITE_URL?: string;
   SEARCH_CONSOLE_SITE_ORIGIN?: string;
+  SEARCH_CONSOLE_ANALYTICS_ENDPOINT?: string;
+  SEARCH_CONSOLE_INSPECTION_ENDPOINT?: string;
 };
 
 function decodeCredentials(env: SearchConsoleEnvironment) {
@@ -173,7 +175,23 @@ export function readSearchConsoleConfig(env: SearchConsoleEnvironment = process.
       'invalid_site_origin',
     );
   }
-  return { credentials: parsed.data, siteUrl, siteOrigin };
+  const analyticsEndpoint = (
+    env.SEARCH_CONSOLE_ANALYTICS_ENDPOINT?.trim() || DEFAULT_SEARCH_ANALYTICS_ENDPOINT
+  ).replace(/\/+$/, '');
+  const inspectionEndpoint =
+    env.SEARCH_CONSOLE_INSPECTION_ENDPOINT?.trim() || DEFAULT_SEARCH_INSPECTION_ENDPOINT;
+  for (const [name, value] of [
+    ['SEARCH_CONSOLE_ANALYTICS_ENDPOINT', analyticsEndpoint],
+    ['SEARCH_CONSOLE_INSPECTION_ENDPOINT', inspectionEndpoint],
+  ] as const) {
+    try {
+      const url = new URL(value);
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error();
+    } catch {
+      throw new SearchConsoleSyncError(`${name} must be an HTTP or HTTPS URL.`, 'invalid_endpoint');
+    }
+  }
+  return { credentials: parsed.data, siteUrl, siteOrigin, analyticsEndpoint, inspectionEndpoint };
 }
 
 function base64Url(value: string) {
@@ -271,7 +289,7 @@ async function queryAnalytics(
   fetchImpl: FetchLike,
   input: AnalyticsQuery,
 ) {
-  const url = `${SEARCH_ANALYTICS_ENDPOINT}/${encodeURIComponent(config.siteUrl)}/searchAnalytics/query`;
+  const url = `${config.analyticsEndpoint}/${encodeURIComponent(config.siteUrl)}/searchAnalytics/query`;
   const body = await googleRequest(
     url,
     {
@@ -371,7 +389,7 @@ export async function fetchSearchConsoleSnapshot(input: {
     )
   ).flat();
 
-  const sitemapsUrl = `${SEARCH_ANALYTICS_ENDPOINT}/${encodeURIComponent(config.siteUrl)}/sitemaps`;
+  const sitemapsUrl = `${config.analyticsEndpoint}/${encodeURIComponent(config.siteUrl)}/sitemaps`;
   const sitemapBody = await googleRequest(sitemapsUrl, { method: 'GET' }, token, fetchImpl);
   const sitemaps = sitemapResponseSchema.parse(sitemapBody).sitemap ?? [];
 
@@ -392,7 +410,7 @@ export async function fetchSearchConsoleSnapshot(input: {
       inspectionUrls.map(async (url) => {
         try {
           const body = await googleRequest(
-            SEARCH_INSPECTION_ENDPOINT,
+            config.inspectionEndpoint,
             {
               method: 'POST',
               body: JSON.stringify({

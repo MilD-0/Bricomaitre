@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 700">
+  <rect width="1600" height="700" fill="#202527"/>
+  <circle cx="1320" cy="105" r="390" fill="#dc542c" opacity=".9"/>
+  <path d="M990 142h338v165H990zM1072 307h162l-31 230h-99z" fill="#e7e2d8"/>
+  <circle cx="1005" cy="225" r="76" fill="#111415"/>
+  <path d="M1328 181h155v79h-155z" fill="#9a9e9b"/>
+  <text x="112" y="250" fill="#f6f2e9" font-family="sans-serif" font-size="92" font-weight="700">L’atelier, bien équipé.</text>
+  <text x="116" y="345" fill="#cdd0cc" font-family="sans-serif" font-size="40">Une vitrine synthétique pour explorer Bricomaitre.</text>
+</svg>

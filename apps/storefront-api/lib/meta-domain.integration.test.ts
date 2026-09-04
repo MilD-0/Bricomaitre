@@ -21,6 +21,10 @@ import { storefrontAnalyticsEventSchema } from '@bric/storefront-core/analytics'
 describe('Meta domain rules', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    delete process.env.META_PIXEL_ID;
+    delete process.env.META_CONVERSIONS_API_TOKEN;
+    delete process.env.META_GRAPH_API_VERSION;
+    delete process.env.META_GRAPH_API_ORIGIN;
   });
 
   it('uses custom status event allow-lists', () => {
@@ -439,6 +443,7 @@ describe('Meta domain rules', () => {
     process.env.META_PIXEL_ID = 'pixel';
     process.env.META_CONVERSIONS_API_TOKEN = 'token';
     delete process.env.META_GRAPH_API_VERSION;
+    delete process.env.META_GRAPH_API_ORIGIN;
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -464,6 +469,33 @@ describe('Meta domain rules', () => {
     });
     expect(fetchMock).toHaveBeenCalledWith(
       'https://graph.facebook.com/v25.0/pixel/events',
+      expect.any(Object),
+    );
+  });
+
+  it('uses an explicit internal Graph origin in an isolated deployment', async () => {
+    process.env.META_PIXEL_ID = 'demo-pixel';
+    process.env.META_CONVERSIONS_API_TOKEN = 'demo-token';
+    process.env.META_GRAPH_API_ORIGIN = 'http://mock-services:8080/meta/';
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ events_received: 1, fbtrace_id: 'demo-trace' }), {
+        status: 200,
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await sendMetaEvent({
+      eventName: 'PageView',
+      eventId: 'demo-event',
+      eventTime: new Date(),
+      eventSourceUrl: 'https://demo.bricomaitre.invalid/',
+      userData: {},
+      customData: {},
+    });
+
+    expect(result).toMatchObject({ ok: true, status: 200 });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://mock-services:8080/meta/v25.0/demo-pixel/events',
       expect.any(Object),
     );
   });

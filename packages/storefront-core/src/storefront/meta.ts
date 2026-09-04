@@ -536,7 +536,10 @@ function getMetaCredentials() {
     '';
   const configuredVersion = process.env.META_GRAPH_API_VERSION?.trim() || 'v25.0';
   const graphVersion = /^v\d+\.\d+$/.test(configuredVersion) ? configuredVersion : 'v25.0';
-  return { pixelId, token, graphVersion };
+  const graphApiOrigin = (
+    process.env.META_GRAPH_API_ORIGIN?.trim() || 'https://graph.facebook.com'
+  ).replace(/\/+$/, '');
+  return { pixelId, token, graphVersion, graphApiOrigin };
 }
 
 type MetaSendResult =
@@ -572,7 +575,7 @@ export async function sendMetaEvent(
   >,
   options?: { testEventCode?: string | null },
 ): Promise<MetaSendResult> {
-  const { pixelId, token, graphVersion } = getMetaCredentials();
+  const { pixelId, token, graphVersion, graphApiOrigin } = getMetaCredentials();
   if (!pixelId || !token) {
     return {
       ok: false,
@@ -603,7 +606,7 @@ export async function sendMetaEvent(
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
     const response = await fetch(
-      `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(pixelId)}/events`,
+      `${graphApiOrigin}/${graphVersion}/${encodeURIComponent(pixelId)}/events`,
       {
         method: 'POST',
         headers: {

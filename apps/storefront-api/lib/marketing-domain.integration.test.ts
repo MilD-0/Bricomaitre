@@ -28,8 +28,10 @@ describe('multi-destination marketing domain', () => {
     vi.unstubAllGlobals();
     delete process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID;
     delete process.env.GOOGLE_ANALYTICS_API_SECRET;
+    delete process.env.GOOGLE_ANALYTICS_API_ENDPOINT;
     delete process.env.TIKTOK_PIXEL_ID;
     delete process.env.TIKTOK_EVENTS_API_ACCESS_TOKEN;
+    delete process.env.TIKTOK_EVENTS_API_ENDPOINT;
   });
 
   it('maps stable Meta campaign dimensions without retaining click identifiers', () => {
@@ -266,6 +268,27 @@ describe('multi-destination marketing domain', () => {
       payload: { client_id: '123.456', events: [] },
     } as never);
     expect(result).toMatchObject({ ok: true, status: 204 });
+  });
+
+  it('uses explicit internal delivery endpoints in isolated deployments', async () => {
+    process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID = 'G-DEMO';
+    process.env.GOOGLE_ANALYTICS_API_SECRET = 'demo-secret';
+    process.env.GOOGLE_ANALYTICS_API_ENDPOINT = 'http://mock-services:8080/google/mp/collect';
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await sendMarketingDestinationEvent({
+      destination: 'google',
+      payload: { client_id: '123.456', events: [] },
+    } as never);
+
+    expect(result).toMatchObject({ ok: true, status: 204 });
+    const requestedUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
+    expect(requestedUrl.origin + requestedUrl.pathname).toBe(
+      'http://mock-services:8080/google/mp/collect',
+    );
+    expect(requestedUrl.searchParams.get('measurement_id')).toBe('G-DEMO');
+    expect(requestedUrl.searchParams.get('api_secret')).toBe('demo-secret');
   });
 
   it('does not queue optional destinations whose complete credentials are absent', () => {
