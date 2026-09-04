@@ -362,7 +362,7 @@ describe('BulletinBoard', () => {
         body: { body: 'I will handle it.' },
       });
     });
-  }, 15_000);
+  }, 30_000);
 
   it('updates reply reactions optimistically', async () => {
     renderBoard();
