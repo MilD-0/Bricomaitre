@@ -11,8 +11,10 @@ describe('PendingInline', () => {
     const statusContent = view.getByText('Loading').parentElement;
 
     expect(statusContent).toHaveAttribute('aria-hidden', 'true');
+    expect(statusContent).toHaveClass('invisible');
 
     view.rerender(<PendingInline active label="Loading" />);
     expect(view.getByText('Loading').parentElement).toHaveAttribute('aria-hidden', 'false');
+    expect(view.getByText('Loading').parentElement).not.toHaveClass('invisible');
   });
 });
