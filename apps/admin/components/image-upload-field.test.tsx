@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render as testingRender,
@@ -12,6 +13,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import messages from '../messages/en.json';
 import { ImageUploadField } from './image-upload-field';
+
+let deferUploadCompletion = false;
+const pendingUploadCompletions: Array<() => void> = [];
 
 function render(ui: ReactNode) {
   return testingRender(
@@ -35,16 +39,23 @@ class MockXHR {
   open = vi.fn();
   send = vi.fn(() => {
     this.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 100 });
-    setTimeout(() => {
+    const complete = () => {
       this.status = 200;
       this.response = { urls: ['https://cdn.example.com/uploaded.jpg'] };
       this.onload?.();
-    }, 80);
+    };
+    if (deferUploadCompletion) {
+      pendingUploadCompletions.push(complete);
+      return;
+    }
+    setTimeout(complete, 80);
   });
 }
 
 describe('ImageUploadField', () => {
   beforeEach(() => {
+    deferUploadCompletion = false;
+    pendingUploadCompletions.length = 0;
     vi.stubGlobal('XMLHttpRequest', MockXHR as unknown as typeof XMLHttpRequest);
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
@@ -58,6 +69,7 @@ describe('ImageUploadField', () => {
 
   it('shows a thumbnail and upload progress before applying the returned URL', async () => {
     const onChange = vi.fn();
+    deferUploadCompletion = true;
 
     render(
       <ImageUploadField
@@ -73,6 +85,10 @@ describe('ImageUploadField', () => {
 
     expect(await screen.findByText('preview.png')).toBeInTheDocument();
     expect(screen.getByText('50%')).toBeInTheDocument();
+
+    await act(async () => {
+      pendingUploadCompletions.splice(0).forEach((complete) => complete());
+    });
 
     await waitFor(() => {
       expect(onChange).toHaveBeenCalledWith(['https://cdn.example.com/uploaded.jpg']);
