@@ -514,6 +514,8 @@ verify_release_dir() {
   elif [[ "$BRIC_RELEASE_SIGNER_IDENTITY" == "$cosign_certificate_identity" ]]; then
     verified_release_image_profile="public"
   elif [[ -z "$BRIC_RELEASE_SIGNER_IDENTITY" || "$BRIC_RELEASE_SIGNER_IDENTITY" == "$legacy_cosign_certificate_identity" ]]; then
+    # rollback.sh consumes this global after sourcing this library.
+    # shellcheck disable=SC2034
     verified_release_image_profile="legacy-public"
     echo 'warning: accepting a canonical release signed by the former repository for rollback compatibility' >&2
   else
