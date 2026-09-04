@@ -9,6 +9,13 @@ vi.mock('@/lib/analytics', () => ({ trackCatalogEvent }));
 vi.mock('next/image', () => ({
   default: (props: Record<string, unknown>) => React.createElement('img', props),
 }));
+vi.mock('@/components/catalog-card', () => ({
+  CatalogCard: ({ product }: { product: { id: number; title: string } }) => (
+    <article data-product-id={product.id}>
+      <h2>{product.title}</h2>
+    </article>
+  ),
+}));
 
 const labels = {
   inStock: 'In stock',
@@ -356,8 +363,10 @@ describe('CatalogInfiniteLoader', () => {
       />,
     );
 
-    await expect(screen.findByRole('heading', { name: 'Tool 265' })).resolves.toBeInTheDocument();
-    expect(screen.getAllByRole('article')).toHaveLength(241);
+    await waitFor(() =>
+      expect(document.querySelector('[data-product-id="265"]')).toBeInTheDocument(),
+    );
+    expect(document.querySelectorAll('[data-product-id]')).toHaveLength(241);
     expect(
       JSON.parse(window.sessionStorage.getItem('bric:catalog-position:v2:/fr/products') ?? 'null')
         .items,
