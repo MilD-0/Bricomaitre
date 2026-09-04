@@ -9,17 +9,16 @@ function readAppFile(pathname: string) {
 }
 
 describe('public storefront rendering policy', () => {
-  it.each([
-    ['app/[locale]/products/[token]/page.tsx', 900],
-    ['app/[locale]/landing/[slug]/page.tsx', 900],
-  ])('uses on-demand ISR for %s', (pathname, seconds) => {
-    const source = readAppFile(pathname);
+  it.each(['app/[locale]/products/[token]/page.tsx', 'app/[locale]/landing/[slug]/page.tsx'])(
+    'renders nonce-bearing route %s for each request',
+    (pathname) => {
+      const source = readAppFile(pathname);
 
-    expect(source).toContain(`export const revalidate = ${seconds};`);
-    expect(source).toContain('export const dynamicParams = true;');
-    expect(source).toMatch(/export function generateStaticParams\(\) \{\s+return \[\];\s+\}/);
-    expect(source).not.toContain("from 'next/server'");
-  });
+      expect(source).toContain("export const dynamic = 'force-dynamic';");
+      expect(source).not.toContain('export const revalidate');
+      expect(source).not.toContain('generateStaticParams');
+    },
+  );
 
   it('keeps Cache Components disabled until unknown slugs preserve status and no-JavaScript HTML', () => {
     const config = readAppFile('next.config.ts');
