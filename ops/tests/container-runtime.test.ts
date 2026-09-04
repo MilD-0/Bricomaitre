@@ -1036,6 +1036,11 @@ describe('production packaging and release runtime', () => {
     expect(redisHealth).toBeGreaterThan(redisStart);
     expect(apiStart).toBeGreaterThan(redisHealth);
     expect(deploy).not.toContain('compose up -d postgres redis');
+    expect(deploy).toContain('env -u REDISCLI_AUTH redis-cli --raw ping');
+    expect(deploy).toContain('CONFIG SET requirepass "$REDISCLI_AUTH"');
+    expect(deploy).toContain('authenticated_redis_ping');
+    expect(deploy).toContain('reconcile_incumbent_slot');
+    expect(deploy).toContain('compose up -d --no-deps --force-recreate "$previous_api_service"');
   });
 
   it('rebuilds persisted reporting with the candidate artifact before cutover', () => {
