@@ -60,12 +60,12 @@ export function PendingInline({
     <div className={cn('min-h-4', className)} aria-live="polite">
       <motion.div
         initial={false}
-        animate={{ opacity: active ? 1 : 0, y: active ? 0 : -4 }}
+        animate={{ y: active ? 0 : -4 }}
         transition={transition}
         aria-hidden={!active}
         className={cn(
           'inline-flex items-center gap-2 text-xs font-medium text-muted-foreground',
-          !active && 'pointer-events-none',
+          !active && 'invisible pointer-events-none',
         )}
       >
         <Spinner className="size-3.5" />
