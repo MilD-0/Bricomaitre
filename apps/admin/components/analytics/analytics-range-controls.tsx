@@ -1,3 +1,7 @@
+'use client';
+
+import { useSyncExternalStore } from 'react';
+
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { NativeSelect, NativeSelectOption } from '../ui/native-select';
@@ -46,6 +50,12 @@ export function AnalyticsRangeControls({
   onCustomEndChange: (value: string) => void;
   onApplyCustom: () => void;
 }) {
+  // Server-rendered controls must not accept changes before React attaches handlers.
+  const interactive = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
   const customRangeIsValid = Boolean(customStart) && Boolean(customEnd) && customStart <= customEnd;
 
   return (
@@ -55,6 +65,7 @@ export function AnalyticsRangeControls({
           <button
             key={option}
             type="button"
+            disabled={!interactive}
             aria-pressed={range === option}
             onClick={() => onRangeChange(option)}
             className={
@@ -71,6 +82,7 @@ export function AnalyticsRangeControls({
         aria-label={ariaLabels.range}
         name={`${namePrefix}-range`}
         className="w-auto lg:hidden"
+        disabled={!interactive}
         value={range}
         onChange={(event) => onRangeChange(event.target.value as AnalyticsRange)}
       >
@@ -87,6 +99,7 @@ export function AnalyticsRangeControls({
             name={`${namePrefix}-start-date`}
             className="w-auto"
             type="date"
+            disabled={!interactive}
             value={customStart}
             max={customEnd}
             onChange={(event) => onCustomStartChange(event.target.value)}
@@ -99,12 +112,18 @@ export function AnalyticsRangeControls({
             name={`${namePrefix}-end-date`}
             className="w-auto"
             type="date"
+            disabled={!interactive}
             value={customEnd}
             min={customStart}
             max={maxEndDate}
             onChange={(event) => onCustomEndChange(event.target.value)}
           />
-          <Button type="button" size="sm" disabled={!customRangeIsValid} onClick={onApplyCustom}>
+          <Button
+            type="button"
+            size="sm"
+            disabled={!interactive || !customRangeIsValid}
+            onClick={onApplyCustom}
+          >
             {applyLabel}
           </Button>
         </div>
@@ -113,6 +132,7 @@ export function AnalyticsRangeControls({
         aria-label={ariaLabels.grain}
         name={`${namePrefix}-grain`}
         className="ms-auto w-auto"
+        disabled={!interactive}
         value={grain}
         onChange={(event) => onGrainChange(event.target.value as AnalyticsGrain)}
       >

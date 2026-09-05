@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AnalyticsPayload } from '../../lib/analytics';
@@ -601,6 +601,45 @@ describe('StatsWorkspace', () => {
     expect(screen.getByText('Profit')).toBeInTheDocument();
     await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     expect(String(vi.mocked(fetch).mock.calls[0]?.[0])).not.toContain('refresh=1');
+  });
+
+  it('polls stale snapshots until a fresh replacement arrives, then stops', async () => {
+    vi.useFakeTimers();
+    try {
+      const payload = commandPayload();
+      payload.diagnostics.cache = { state: 'stale', computedAt: '2026-08-19T12:00:00Z' };
+      const fresh = commandPayload();
+      fresh.diagnostics.cache = { state: 'fresh', computedAt: fresh.generatedAt };
+      const fetchMock = vi.mocked(fetch);
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ data: payload }),
+      } as Response);
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ data: fresh }),
+      } as Response);
+
+      renderWorkspace(payload);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(screen.getByText('Profit')).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled();
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
   });
 
   it('keeps the clean default route without triggering a duplicate server render', () => {
