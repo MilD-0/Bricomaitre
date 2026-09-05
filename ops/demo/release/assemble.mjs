@@ -374,7 +374,6 @@ for (const file of ['LICENSE', 'NOTICE']) await cp(resolve(root, file), resolve(
 await cp(resolve(root, 'third_party/licenses'), resolve(bundle, 'third_party/licenses'), {
   recursive: true,
 });
-await cp(resolve(root, 'ops/demo/release/README.md'), resolve(bundle, 'README.md'));
 await cp(resolve(root, 'ops/demo/data/sources.lock.json'), resolve(bundle, 'sources.lock.json'));
 await cp(resolve(root, 'ops/demo/data/image-manifest.tsv'), resolve(bundle, 'image-manifest.tsv'));
 await cp(resolve(mediaRoot, 'SHA256SUMS'), resolve(bundle, 'MEDIA-SHA256SUMS'));

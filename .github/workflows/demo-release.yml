@@ -178,4 +178,4 @@ jobs:
             "$RUNNER_TEMP/release/bricomaitre-demo-$DEMO_VERSION.tar.gz.sha256" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
             --title "Bricomaitre demo $DEMO_VERSION" \
-            --notes-file ops/demo/release/README.md
+            --notes-file docs/demo.md
