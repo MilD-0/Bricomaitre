@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { cp, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { verifyPublicImages } from './verify-public.mjs';
 
 // Invoked only by the explicit publish job after both native installation gates.
 const [amd64Directory, arm64Directory, destination] = process.argv.slice(2);
@@ -61,20 +62,11 @@ execFileSync('docker', ['compose', '-f', resolve(output, 'compose.yaml'), 'confi
 });
 // A login-free pull is part of the release contract. Public source repositories
 // do not automatically guarantee public package visibility.
-for (const reference of Object.values(images)) {
-  const [, repository, digest] =
-    /^(ghcr\.io\/[^:]+):[^@]+@(sha256:[a-f0-9]+)$/.exec(reference) ?? [];
-  assert.ok(repository && digest);
-  const path = repository.slice('ghcr.io/'.length);
-  const auth = await fetch(`https://ghcr.io/token?service=ghcr.io&scope=repository:${path}:pull`);
-  assert.equal(auth.status, 200, `Make ${path} public in GitHub package settings`);
-  const { token } = await auth.json();
-  const manifest = await fetch(`https://ghcr.io/v2/${path}/manifests/${digest}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.oci.image.index.v1+json',
-    },
-  });
-  assert.equal(manifest.status, 200, `Anonymous pull failed for ${path}`);
+if (process.env.DEMO_PRIVATE_DRAFT === '1') {
+  console.log(
+    `Private draft bundle: ${output}. Run verify-public.mjs before publishing the release.`,
+  );
+} else {
+  await verifyPublicImages(images);
+  console.log(`Public multi-architecture bundle: ${output}`);
 }
-console.log(`Public multi-architecture bundle: ${output}`);
