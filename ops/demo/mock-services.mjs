@@ -254,11 +254,28 @@ async function handleEcotrack(request, response, url) {
   }
 
   if (route === '/get/orders') {
-    const rows = [...shipments.values()].map((state) => ({
-      ...orderInfo(state),
-      status: state.status,
-    }));
-    return json(response, 200, { current_page: 1, last_page: 1, next_page_url: null, data: rows });
+    const page = Math.max(1, Number.parseInt(url.searchParams.get('page') ?? '1', 10) || 1);
+    const tracking = url.searchParams.get('tracking');
+    const start = url.searchParams.get('start_date');
+    const end = url.searchParams.get('end_date');
+    const rows = [];
+    let total = 0;
+    for (const state of shipments.values()) {
+      if (state.provider !== provider || (tracking && state.tracking !== tracking)) continue;
+      const day = state.createdAt.slice(0, 10);
+      if ((start && day < start) || (end && day > end)) continue;
+      if (total >= (page - 1) * 100 && rows.length < 100) {
+        rows.push({ ...orderInfo(state), status: state.status });
+      }
+      total += 1;
+    }
+    const lastPage = Math.max(1, Math.ceil(total / 100));
+    return json(response, 200, {
+      current_page: page,
+      last_page: lastPage,
+      next_page_url: page < lastPage ? `?page=${page + 1}` : null,
+      data: rows,
+    });
   }
 
   if (route === '/get/order/label') {
@@ -488,7 +505,8 @@ const server = createServer(async (request, response) => {
     if (url.pathname === '/__demo/requests') return json(response, 200, { requests });
     if (url.pathname === '/__demo/state')
       return json(response, 200, {
-        shipments: [...shipments.values()],
+        shipments: Array.from(shipments.values()).slice(0, 2000),
+        shipmentCount: shipments.size,
         requestCount: requests.length,
       });
     if (url.pathname === '/__demo/reset' && request.method === 'POST') {

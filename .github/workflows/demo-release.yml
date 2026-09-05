@@ -114,7 +114,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Combine architectures and verify anonymous access
+      - name: Combine architectures into a private draft
+        env:
+          DEMO_PRIVATE_DRAFT: '1'
         run: |
           node ops/demo/release/publish.mjs \
             "$RUNNER_TEMP/bundles/demo-bundle-amd64" \

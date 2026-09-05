@@ -329,21 +329,9 @@ reset_external_state() {
   source "$runtime_dir/compose.env"
   curl --fail --silent --show-error -X POST \
     "http://127.0.0.1:$DEMO_MOCK_PORT/__demo/reset" >/dev/null
-  compose exec -T postgres psql -U bricomaitre_demo_owner -d bricomaitre_demo -Atc \
-    "SELECT jsonb_build_object('shipments', coalesce(jsonb_agg(jsonb_build_object(
-      'tracking', shipment.tracking_number,
-      'reference', shipment.reference,
-      'status', shipment.current_status,
-      'amount', shipment.current_amount,
-      'provider', shipment.provider,
-      'createdAt', shipment.provider_created_at
-    )), '[]'::jsonb))
-    FROM admin.ecotrack_order_states shipment
-    JOIN orders ON orders.id = shipment.order_id
-    WHERE orders.mongo_id LIKE 'demo-live-order:%' AND shipment.deleted_at IS NULL" \
-    | curl --fail --silent --show-error \
-      -H 'content-type: application/json' --data-binary @- \
-      "http://127.0.0.1:$DEMO_MOCK_PORT/__demo/shipments" >/dev/null
+  DEMO_POSTGRES_CONTAINER="$(compose ps -q postgres)" \
+    DEMO_MOCK_ORIGIN="http://127.0.0.1:$DEMO_MOCK_PORT" \
+    node "$repo_root/ops/demo/release/mock-state.mjs"
   compose exec -T redis redis-cli FLUSHDB >/dev/null
   compose run --rm --no-deps --entrypoint /bin/sh object-storage-init /init.sh reset
 }
