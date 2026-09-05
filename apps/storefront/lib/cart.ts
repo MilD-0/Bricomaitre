@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { withCheckoutRequestTimeout } from './checkout-request';
+
 const cartItemSchema = z.object({
   productId: z.number().int().positive(),
   token: z.string().trim().min(1).max(200),
@@ -87,23 +89,26 @@ export async function reconcileCartWithCatalog(current: CartItem[], fetcher: typ
       requiresReview: false,
     };
   }
-  const response = await fetcher('/api/cart/validate', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ productIds: current.map((item) => item.productId) }),
+  const payload = await withCheckoutRequestTimeout(async (signal) => {
+    const response = await fetcher('/api/cart/validate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ productIds: current.map((item) => item.productId) }),
+      signal,
+    });
+    if (!response.ok) throw new Error('Cart validation is unavailable.');
+    return (await response.json()) as {
+      items?: Array<{
+        id: number;
+        slug: string | null;
+        title: string;
+        price: string | null;
+        inStock: boolean;
+        availabilityStatus: string;
+        images: string[];
+      }>;
+    };
   });
-  if (!response.ok) throw new Error('Cart validation is unavailable.');
-  const payload = (await response.json()) as {
-    items?: Array<{
-      id: number;
-      slug: string | null;
-      title: string;
-      price: string | null;
-      inStock: boolean;
-      availabilityStatus: string;
-      images: string[];
-    }>;
-  };
   const products = new Map((payload.items ?? []).map((product) => [product.id, product]));
   const removedProductIds: number[] = [];
   const priceChangedProductIds: number[] = [];

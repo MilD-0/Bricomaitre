@@ -9,12 +9,9 @@ const { hasDbMock, requireAnalyticsAccessMock, getAnalyticsDataMock } = vi.hoist
 
 vi.mock('@bric/db/client', () => ({ hasDb: hasDbMock }));
 vi.mock('../../../../lib/rbac', () => ({ requireAnalyticsAccess: requireAnalyticsAccessMock }));
-vi.mock('../../../../lib/analytics', async () => {
-  const actual = await vi.importActual<typeof import('../../../../lib/analytics')>(
-    '../../../../lib/analytics',
-  );
-  return { ...actual, getAnalyticsData: getAnalyticsDataMock };
-});
+vi.mock('../../../../lib/analytics-snapshots', () => ({
+  getAnalyticsSnapshot: getAnalyticsDataMock,
+}));
 
 import { GET } from './route';
 
@@ -24,7 +21,7 @@ describe('GET /api/stats/workspace', () => {
     hasDbMock.mockReturnValue(true);
     requireAnalyticsAccessMock.mockResolvedValue(null);
     getAnalyticsDataMock.mockResolvedValue({
-      diagnostics: { queryDurationMs: 37, responseSizeBytes: 100 },
+      diagnostics: { queryDurationMs: 37, responseSizeBytes: 100, cache: { state: 'fresh' } },
       warnings: [],
     });
   });
@@ -37,16 +34,29 @@ describe('GET /api/stats/workspace', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(getAnalyticsDataMock).toHaveBeenCalledWith({
-      view: 'acquisition',
-      range: 'custom',
-      startDate: '2026-08-01',
-      endDate: '2026-08-19',
-      grain: 'day',
-    });
-    expect(response.headers.get('server-timing')).toBe('stats;dur=37');
+    expect(getAnalyticsDataMock).toHaveBeenCalledWith(
+      {
+        view: 'acquisition',
+        range: 'custom',
+        startDate: '2026-08-01',
+        endDate: '2026-08-19',
+        grain: 'day',
+      },
+      { refresh: false },
+    );
+    expect(response.headers.get('server-timing')).toMatch(/^stats;dur=\d+$/);
     expect(response.headers.get('x-analytics-coverage')).toBe('complete');
+    expect(response.headers.get('x-analytics-cache')).toBe('fresh');
     expect(response.headers.get('cache-control')).toBe('private, no-cache, must-revalidate');
+  });
+
+  it('forwards an explicit refresh without bypassing access control', async () => {
+    await GET(new NextRequest('http://localhost/api/stats/workspace?refresh=1'));
+    expect(requireAnalyticsAccessMock).toHaveBeenCalledOnce();
+    expect(getAnalyticsDataMock).toHaveBeenCalledWith(
+      { view: 'command', range: '30d', grain: 'auto' },
+      { refresh: true },
+    );
   });
 
   it('rejects an incomplete custom range without loading analytics', async () => {

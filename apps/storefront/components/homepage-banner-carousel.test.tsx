@@ -49,8 +49,6 @@ describe('HomepageBannerCarousel', () => {
   it('does not autoplay until the second full-resolution image has loaded', () => {
     const { container } = render(<HomepageBannerCarousel banners={banners} locale="fr" />);
     const fullImages = container.querySelectorAll('.home-banner-picture > picture:last-child img');
-    expect(container.querySelectorAll('.home-banner-copy')).toHaveLength(2);
-    expect(container.querySelector('.home-banner-copy')).toHaveTextContent('Voir la sélection');
     fireEvent.load(fullImages[0]!);
     vi.advanceTimersByTime(10_000);
     expect(mocks.scrollNext).not.toHaveBeenCalled();

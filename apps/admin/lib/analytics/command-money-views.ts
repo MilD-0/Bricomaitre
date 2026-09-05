@@ -80,7 +80,9 @@ export async function loadCommandView(
     leadingForecast,
     fulfillmentCompletion,
   ] = await Promise.all([
-    loadEconomicsPair(db, economicsFilters, cutoffs.postedFrom, cutoffs.metaFrom),
+    loadEconomicsPair(db, economicsFilters, cutoffs.postedFrom, cutoffs.metaFrom).then(
+      async (pair) => ({ ...pair, sources: await loadSourceHealth(db, filters, pair.current) }),
+    ),
     loadStorefrontOrderConversion(db, storefrontFilters),
     priorStorefront ? loadStorefrontOrderConversion(db, priorStorefront) : Promise.resolve(null),
     loadFulfillmentSummary(db, fulfillmentFilters.startDate, fulfillmentFilters.endDate),
@@ -101,11 +103,13 @@ export async function loadCommandView(
       loadCohortCompletionPair(db, fulfillmentFilters, 1 - settings.defaultReturnRate / 100),
     ),
   ]);
-  const { current, previous } = economicsPair;
-  const [returns, sources] = await Promise.all([
-    loadReturnObservation(db, fulfillmentFilters, current.settings.defaultReturnRate),
-    loadSourceHealth(db, filters, current),
-  ]);
+  const { current, previous, sources } = economicsPair;
+  const returns = await loadReturnObservation(
+    db,
+    fulfillmentFilters,
+    current.settings.defaultReturnRate,
+    fulfillment,
+  );
   const forecast = buildEconomicsForecast(
     current,
     economicsFilters.endDate,

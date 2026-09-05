@@ -861,13 +861,7 @@ export async function ensureOrderConfirmedEventForOrder(
     };
   }
 
-  const currentLines = await resolveOrderLineSnapshots(db, {
-    cartProducts: order.cartProducts,
-    promoCode: order.promoCode,
-  });
-  await db.transaction(async (tx) => {
-    await replaceOrderLineSnapshots(tx, order.id, currentLines);
-  });
+  // Advertising events consume the saved commercial record, even after catalog changes.
   const lineRows = await db
     .select()
     .from(orderLineItems)
@@ -965,23 +959,10 @@ export async function ensureOrderCompletedEventForOrder(
     };
   }
 
-  let lineRows = await db
+  const lineRows = await db
     .select()
     .from(orderLineItems)
     .where(eq(orderLineItems.orderId, input.orderId));
-  if (lineRows.length === 0) {
-    const currentLines = await resolveOrderLineSnapshots(db, {
-      cartProducts: order.cartProducts,
-      promoCode: order.promoCode,
-    });
-    await db.transaction(async (tx) => {
-      await replaceOrderLineSnapshots(tx, order.id, currentLines);
-    });
-    lineRows = await db
-      .select()
-      .from(orderLineItems)
-      .where(eq(orderLineItems.orderId, input.orderId));
-  }
   const lines = lineRows
     .map(lineRowToCommerceLine)
     .filter((line) => Number.isInteger(line.productId));

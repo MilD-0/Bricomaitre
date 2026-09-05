@@ -58,18 +58,6 @@ export async function loadFulfillmentSummary(
       from ${orderStatusHistory}
       where ${orderStatusHistory.status} = ${ORDER_STATUS.POSTED}
       order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
-    ), lifecycle as (
-      select ${ecotrackOrderTrackingEvents.orderId} as order_id,
-        min(
-          ${ecotrackOrderTrackingEvents.eventDate}::timestamp
-            + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
-        ) filter (where ${ecotrackOrderTrackingEvents.status} = 'livred') as delivered_at,
-        max(
-          ${ecotrackOrderTrackingEvents.eventDate}::timestamp
-            + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
-        ) as latest_activity_at
-      from ${ecotrackOrderTrackingEvents}
-      group by ${ecotrackOrderTrackingEvents.orderId}
     ), posted_cohort as (
       select first_posted.order_id,
         first_posted.posted_day,
@@ -89,7 +77,19 @@ export async function loadFulfillmentSummary(
       left join ${ecotrackOrderStates}
         on ${ecotrackOrderStates.orderId} = first_posted.order_id
         and ${ecotrackOrderStates.deletedAt} is null
-      left join lifecycle on lifecycle.order_id = first_posted.order_id
+      left join lateral (
+        select
+          min(
+            ${ecotrackOrderTrackingEvents.eventDate}::timestamp
+              + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
+          ) filter (where ${ecotrackOrderTrackingEvents.status} = 'livred') as delivered_at,
+          max(
+            ${ecotrackOrderTrackingEvents.eventDate}::timestamp
+              + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
+          ) as latest_activity_at
+        from ${ecotrackOrderTrackingEvents}
+        where ${ecotrackOrderTrackingEvents.orderId} = first_posted.order_id
+      ) lifecycle on true
       where ${datePredicate(sql`first_posted.posted_day`, startDate, endDate)}
     ), order_cohort as (
       select ${orders.id}, ${orders.inHouseStatus}
@@ -149,8 +149,10 @@ export async function loadReturnObservation(
   db: Database,
   filters: AnalyticsFilters,
   planningRatePct: number,
+  fulfillmentSummary?: Awaited<ReturnType<typeof loadFulfillmentSummary>>,
 ): Promise<AnalyticsReturnObservation> {
-  const summary = await loadFulfillmentSummary(db, filters.startDate, filters.endDate);
+  const summary =
+    fulfillmentSummary ?? (await loadFulfillmentSummary(db, filters.startDate, filters.endDate));
   const matureCutoffDate = summary.matureCutoffDate;
   const result = await db.execute(sql`
     with first_posted as (
@@ -161,14 +163,6 @@ export async function loadReturnObservation(
       from ${orderStatusHistory}
       where ${orderStatusHistory.status} = ${ORDER_STATUS.POSTED}
       order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
-    ), lifecycle as (
-      select ${ecotrackOrderTrackingEvents.orderId} as order_id,
-        max(
-          ${ecotrackOrderTrackingEvents.eventDate}::timestamp
-            + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
-        ) as latest_activity_at
-      from ${ecotrackOrderTrackingEvents}
-      group by ${ecotrackOrderTrackingEvents.orderId}
     ), cohort as (
       select first_posted.posted_day,
         ${effectiveEcotrackStatusSql({
@@ -186,7 +180,15 @@ export async function loadReturnObservation(
       left join ${ecotrackOrderStates}
         on ${ecotrackOrderStates.orderId} = first_posted.order_id
         and ${ecotrackOrderStates.deletedAt} is null
-      left join lifecycle on lifecycle.order_id = first_posted.order_id
+      left join lateral (
+        select
+          max(
+            ${ecotrackOrderTrackingEvents.eventDate}::timestamp
+              + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
+          ) as latest_activity_at
+        from ${ecotrackOrderTrackingEvents}
+        where ${ecotrackOrderTrackingEvents.orderId} = first_posted.order_id
+      ) lifecycle on true
       where ${datePredicate(sql`first_posted.posted_day`, filters.startDate, filters.endDate)}
     )
     select
@@ -262,18 +264,6 @@ export async function loadAutomaticPaidEconomics(
       from ${orderStatusHistory}
       where ${orderStatusHistory.status} = ${ORDER_STATUS.COMPLETED}
       order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
-    ), line_economics as (
-      select ${orderLineItems.orderId} as order_id,
-        bool_and(
-          ${orderLineItems.unitPurchasePriceSnapshot} is not null
-          and ${orderLineItems.lineTotal} is not null
-        ) as cost_complete,
-        sum(${orderLineItems.lineTotal})::double precision as product_revenue,
-        sum(
-          ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity}
-        )::double precision as product_cost
-      from ${orderLineItems}
-      group by ${orderLineItems.orderId}
     ), paid as (
       select ${ecotrackOrderStates.orderId} as order_id,
         coalesce(
@@ -326,7 +316,19 @@ export async function loadAutomaticPaidEconomics(
       left join paid_events on paid_events.order_id = ${ecotrackOrderStates.orderId}
       left join paid_observations on paid_observations.order_id = ${ecotrackOrderStates.orderId}
       left join paid_local on paid_local.order_id = ${ecotrackOrderStates.orderId}
-      left join line_economics on line_economics.order_id = ${ecotrackOrderStates.orderId}
+      left join lateral (
+        select
+          bool_and(
+            ${orderLineItems.unitPurchasePriceSnapshot} is not null
+            and ${orderLineItems.lineTotal} is not null
+          ) as cost_complete,
+          sum(${orderLineItems.lineTotal})::double precision as product_revenue,
+          sum(
+            ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity}
+          )::double precision as product_cost
+        from ${orderLineItems}
+        where ${orderLineItems.orderId} = ${ecotrackOrderStates.orderId}
+      ) line_economics on true
       left join ${processedOrders}
         on ${processedOrders.tracking} = ${ecotrackOrderStates.trackingNumber}
       where ${ecotrackOrderStates.deletedAt} is null
@@ -469,18 +471,10 @@ export async function loadLeadingOrderForecast(
           where ${orderStatusHistory.status} = ${ORDER_STATUS.POSTED}
         ) as posted_at
       from ${orderStatusHistory}
-      where ${orderStatusHistory.changedAt} < ${filters.endDate}::date + interval '1 day'
+      inner join ${orders} on ${orders.id} = ${orderStatusHistory.orderId}
+      where ${timestampPredicate(orders.createdAt, historicalStartDate, filters.endDate)}
+        and ${orderStatusHistory.changedAt} < ${filters.endDate}::date + interval '1 day'
       group by ${orderStatusHistory.orderId}
-    ), line_economics as (
-      select ${orderLineItems.orderId} as order_id,
-        sum(
-          ${orderLineItems.lineTotal} - coalesce(
-            ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity},
-            ${orderLineItems.lineTotal} * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
-          )
-        )::double precision as gross_profit
-      from ${orderLineItems}
-      group by ${orderLineItems.orderId}
     ), historical as (
       select ${orders.id} as order_id,
         ${orders.createdAt} as submitted_at,
@@ -525,7 +519,17 @@ export async function loadLeadingOrderForecast(
         ) as gross_profit_dzd
       from ${orders}
       left join lifecycle on lifecycle.order_id = ${orders.id}
-      left join line_economics on line_economics.order_id = ${orders.id}
+      left join lateral (
+        select
+          sum(
+            ${orderLineItems.lineTotal} - coalesce(
+              ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity},
+              ${orderLineItems.lineTotal} * ${1 - ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE}
+            )
+          )::double precision as gross_profit
+        from ${orderLineItems}
+        where ${orderLineItems.orderId} = ${orders.id}
+      ) line_economics on true
       left join ${ecotrackOrderStates}
         on ${ecotrackOrderStates.orderId} = ${orders.id}
         and ${ecotrackOrderStates.deletedAt} is null
@@ -617,14 +621,6 @@ export async function loadCashPipeline(
       from ${orderStatusHistory}
       where ${orderStatusHistory.status} = ${ORDER_STATUS.POSTED}
       order by ${orderStatusHistory.orderId}, ${orderStatusHistory.changedAt} asc
-    ), lifecycle as (
-      select ${ecotrackOrderTrackingEvents.orderId} as order_id,
-        max(
-          ${ecotrackOrderTrackingEvents.eventDate}::timestamp
-            + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
-        ) as latest_activity_at
-      from ${ecotrackOrderTrackingEvents}
-      group by ${ecotrackOrderTrackingEvents.orderId}
     ), effective as (
       select ${effectiveEcotrackStatusSql({
         localStatus: orders.inHouseStatus,
@@ -646,7 +642,15 @@ export async function loadCashPipeline(
         on ${ecotrackOrderStates.orderId} = first_posted.order_id
         and ${ecotrackOrderStates.deletedAt} is null
       inner join ${orders} on ${orders.id} = first_posted.order_id
-      left join lifecycle on lifecycle.order_id = first_posted.order_id
+      left join lateral (
+        select
+          max(
+            ${ecotrackOrderTrackingEvents.eventDate}::timestamp
+              + nullif(${ecotrackOrderTrackingEvents.eventTime}, '')::time
+          ) as latest_activity_at
+        from ${ecotrackOrderTrackingEvents}
+        where ${ecotrackOrderTrackingEvents.orderId} = first_posted.order_id
+      ) lifecycle on true
       where ${datePredicate(sql`first_posted.posted_day`, filters.startDate, filters.endDate)}
     ), pipeline as (
       select case

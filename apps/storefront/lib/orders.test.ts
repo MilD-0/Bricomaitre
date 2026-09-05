@@ -85,6 +85,7 @@ describe('checkout order client', () => {
         method: 'POST',
         headers: expect.objectContaining({ 'idempotency-key': 'attempt-1' }),
         body: JSON.stringify(payload),
+        signal: expect.any(AbortSignal),
       }),
     );
   });

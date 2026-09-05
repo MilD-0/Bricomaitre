@@ -587,6 +587,22 @@ describe('StatsWorkspace', () => {
     expect(replaceMock).not.toHaveBeenCalled();
   });
 
+  it('requests a fresh calculation when Refresh is clicked', async () => {
+    renderWorkspace();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    expect(String(vi.mocked(fetch).mock.calls[0]?.[0])).toContain('refresh=1');
+  });
+
+  it('shows a stale server result while checking for its background replacement', async () => {
+    const payload = commandPayload();
+    payload.diagnostics.cache = { state: 'stale', computedAt: '2026-08-19T12:00:00Z' };
+    renderWorkspace(payload);
+    expect(screen.getByText('Profit')).toBeInTheDocument();
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    expect(String(vi.mocked(fetch).mock.calls[0]?.[0])).not.toContain('refresh=1');
+  });
+
   it('keeps the clean default route without triggering a duplicate server render', () => {
     searchParamsState.current = '';
     renderWorkspace();
@@ -763,10 +779,10 @@ describe('StatsWorkspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
-    expect(replaceMock).toHaveBeenCalledWith(
+    expect(window.location.pathname + window.location.search).toBe(
       '/en/stats?range=custom&grain=auto&startDate=2026-08-01&endDate=2026-08-10',
-      { scroll: false },
     );
+    expect(replaceMock).not.toHaveBeenCalled();
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('range=custom');
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('startDate=2026-08-01');
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('endDate=2026-08-10');

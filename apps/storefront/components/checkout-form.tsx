@@ -95,6 +95,8 @@ export function CheckoutForm({
   const [requestError, setRequestError] = useState('');
   const [pending, setPending] = useState<PendingCheckout | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const busy = validating || submitting;
   const submissionLock = useRef(false);
   const submitIconRef = useRef<ShieldCheckIconHandle>(null);
   const viewed = useRef(false);
@@ -324,10 +326,11 @@ export function CheckoutForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!hydrated || items.length === 0) return;
-    let validatedItems = items;
+    setValidating(true);
+    setRequestError('');
     try {
       const reconciled = await reconcileCartWithCatalog(items);
-      validatedItems = reconciled.items;
+      const validatedItems = reconciled.items;
       if (reconciled.changed) {
         setItems(reconciled.items);
         if (!directItem) writeCart(window.localStorage, reconciled.items);
@@ -337,62 +340,71 @@ export function CheckoutForm({
           return;
         }
       }
+      const parsed = checkoutFormSchema.safeParse({
+        phoneNumber1,
+        lastName,
+        firstName,
+        state,
+        city,
+        homeAddress,
+        email,
+        delivery,
+      });
+      if (!parsed.success) {
+        const nextErrors: Record<string, string> = {};
+        for (const issue of parsed.error.issues) {
+          const field = String(issue.path[0] ?? 'form');
+          nextErrors[field] =
+            issue.message === 'invalid_email'
+              ? labels.emailError
+              : issue.message === 'phone_invalid'
+                ? labels.phoneError
+                : labels.requiredError;
+        }
+        setErrors(nextErrors);
+        setRequestError('');
+        window.setTimeout(
+          () => document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
+          0,
+        );
+        return;
+      }
+      setErrors({});
+      const purchaseEventId = createId();
+      let attribution: Pick<
+        Parameters<typeof buildCheckoutOrderPayload>[0],
+        'visitId' | 'journeyId' | 'sessionId' | 'marketing'
+      > = { visitId: null, journeyId: null, sessionId: null };
+      try {
+        attribution = {
+          ...getAnalyticsIdentity(),
+          marketing: getMarketingOrderContext(purchaseEventId),
+        };
+      } catch {
+        // Optional attribution must never prevent a customer from ordering.
+      }
+      const payload = buildCheckoutOrderPayload({
+        form: parsed.data,
+        cartProducts: expandCheckoutCart(validatedItems),
+        ...attribution,
+      });
+      const attempt = { idempotencyKey: createId(), payload, createdAt: new Date().toISOString() };
+      writePendingCheckout(window.localStorage, attempt);
+      setPending(attempt);
+      void triggerHaptic('primary');
+      void trackCheckoutEvent({
+        eventName: 'checkout_submit_attempt',
+        locale,
+        quantity: itemCount,
+        value: total,
+        metadata: { cartMode, itemCount, delivery, ...landingAttribution },
+      });
+      await completeSubmission(attempt);
     } catch {
       setRequestError(labels.submitError);
-      return;
+    } finally {
+      setValidating(false);
     }
-    const parsed = checkoutFormSchema.safeParse({
-      phoneNumber1,
-      lastName,
-      firstName,
-      state,
-      city,
-      homeAddress,
-      email,
-      delivery,
-    });
-    if (!parsed.success) {
-      const nextErrors: Record<string, string> = {};
-      for (const issue of parsed.error.issues) {
-        const field = String(issue.path[0] ?? 'form');
-        nextErrors[field] =
-          issue.message === 'invalid_email'
-            ? labels.emailError
-            : issue.message === 'phone_invalid'
-              ? labels.phoneError
-              : labels.requiredError;
-      }
-      setErrors(nextErrors);
-      setRequestError('');
-      window.setTimeout(
-        () => document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
-        0,
-      );
-      return;
-    }
-    setErrors({});
-    const identity = getAnalyticsIdentity();
-    const purchaseEventId = createId();
-    const payload = buildCheckoutOrderPayload({
-      form: parsed.data,
-      cartProducts: expandCheckoutCart(validatedItems),
-      visitId: identity.visitId,
-      journeyId: identity.journeyId,
-      sessionId: identity.sessionId,
-      marketing: getMarketingOrderContext(purchaseEventId),
-    });
-    const attempt = { idempotencyKey: createId(), payload, createdAt: new Date().toISOString() };
-    writePendingCheckout(window.localStorage, attempt);
-    setPending(attempt);
-    void triggerHaptic('primary');
-    void trackCheckoutEvent({
-      eventName: 'checkout_submit_attempt',
-      locale,
-      quantity: itemCount,
-      value: total,
-      metadata: { cartMode, itemCount, delivery, ...landingAttribution },
-    });
-    await completeSubmission(attempt);
   }
 
   if (!hydrated && !directItem) return <CheckoutContentSkeleton />;
@@ -430,11 +442,7 @@ export function CheckoutForm({
             <strong>{labels.savedAttempt}</strong>
             <p>{requestError}</p>
           </div>
-          <button
-            type="button"
-            onClick={() => void completeSubmission(pending)}
-            disabled={submitting}
-          >
+          <button type="button" onClick={() => void completeSubmission(pending)} disabled={busy}>
             {labels.retry}
           </button>
           {support ? (
@@ -449,7 +457,7 @@ export function CheckoutForm({
         </section>
       ) : null}
 
-      <form className="checkout-layout" onSubmit={submit} noValidate>
+      <form className="checkout-layout" onSubmit={submit} aria-busy={busy} noValidate>
         <section className="checkout-form-panel" aria-label={labels.title}>
           <div className="checkout-fields">
             <label className="checkout-field checkout-field-phone">
@@ -646,14 +654,14 @@ export function CheckoutForm({
           <button
             className="checkout-submit"
             type="submit"
-            disabled={submitting || items.length === 0}
+            disabled={!hydrated || busy || items.length === 0}
             onPointerDown={prepareHaptics}
             onMouseEnter={startSubmitIconAnimation}
             onMouseLeave={() => submitIconRef.current?.stopAnimation()}
             onFocus={startSubmitIconAnimation}
             onBlur={() => submitIconRef.current?.stopAnimation()}
           >
-            {submitting ? (
+            {busy ? (
               <LoaderCircle className="checkout-spinner" aria-hidden="true" />
             ) : (
               <ShieldCheckIcon
@@ -663,8 +671,8 @@ export function CheckoutForm({
                 aria-hidden="true"
               />
             )}
-            {submitting ? labels.submitting : labels.submit}
-            {!submitting ? <ArrowRight aria-hidden="true" /> : null}
+            {busy ? labels.submitting : labels.submit}
+            {!busy ? <ArrowRight aria-hidden="true" /> : null}
           </button>
           <div className="checkout-trust">
             <span>

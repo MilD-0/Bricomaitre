@@ -4,7 +4,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { AnalyticsPayload, AnalyticsRange } from '../../lib/analytics';
 import { statsPath } from '../../lib/analytics-routes';
@@ -46,6 +46,7 @@ export function StatsWorkspace({ initialData }: { initialData: AnalyticsPayload 
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [initialDataReceivedAt] = useState(() => Date.now());
+  const forceRefresh = useRef(false);
   const [filters, setFilters] = useState(() => ({
     view: initialData.filters.view,
     range: initialData.filters.range,
@@ -90,8 +91,10 @@ export function StatsWorkspace({ initialData }: { initialData: AnalyticsPayload 
     if (!currentQuery && usesDefaultFilters) return;
     const normalizedQuery = routeSearchParams.toString();
     if (currentQuery === normalizedQuery) return;
-    router.replace(`${pathname}?${normalizedQuery}`, { scroll: false });
-  }, [filters.grain, filters.range, pathname, routeSearchParams, router, searchParams]);
+    // React Query owns filter loading. A router navigation would also rerun
+    // the server page and calculate the same report a second time.
+    window.history.replaceState(null, '', `${pathname}?${normalizedQuery}`);
+  }, [filters.grain, filters.range, pathname, routeSearchParams, searchParams]);
 
   const analyticsQuery = useQuery({
     queryKey: [
@@ -102,14 +105,26 @@ export function StatsWorkspace({ initialData }: { initialData: AnalyticsPayload 
       filters.range === 'custom' ? filters.endDate : null,
       filters.grain,
     ],
-    queryFn: ({ signal }) =>
-      request<{ data: AnalyticsPayload }>(`/api/stats/workspace?${apiSearchParams.toString()}`, {
-        signal,
-      }).then((response) => response.data),
+    queryFn: ({ signal }) => {
+      const refresh = forceRefresh.current;
+      forceRefresh.current = false;
+      return request<{ data: AnalyticsPayload }>(
+        `/api/stats/workspace?${apiSearchParams.toString()}${refresh ? '&refresh=1' : ''}`,
+        {
+          signal,
+        },
+      ).then((response) => response.data);
+    },
     initialData: matchesInitialQuery ? initialData : undefined,
-    initialDataUpdatedAt: matchesInitialQuery ? initialDataReceivedAt : undefined,
+    initialDataUpdatedAt: matchesInitialQuery
+      ? initialData.diagnostics.cache?.state === 'stale'
+        ? 0
+        : initialDataReceivedAt
+      : undefined,
     placeholderData: keepPreviousData,
     staleTime: 30_000,
+    refetchInterval: (query) =>
+      query.state.data?.diagnostics.cache?.state === 'stale' ? 5_000 : false,
   });
   const payload = analyticsQuery.data ?? initialData;
   const titleKey = {
@@ -126,7 +141,7 @@ export function StatsWorkspace({ initialData }: { initialData: AnalyticsPayload 
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: ANALYTICS_TIME_ZONE,
-  }).format(new Date(payload.generatedAt))}`;
+  }).format(new Date(payload.diagnostics.cache?.computedAt ?? payload.generatedAt))}`;
   useAdminAiSurfaceDetails(
     analyticsAiSurfaceDetails({
       view: payload.filters.view,
@@ -203,7 +218,10 @@ export function StatsWorkspace({ initialData }: { initialData: AnalyticsPayload 
             size="sm"
             variant="outline"
             disabled={analyticsQuery.isFetching}
-            onClick={() => analyticsQuery.refetch()}
+            onClick={() => {
+              forceRefresh.current = true;
+              void analyticsQuery.refetch();
+            }}
           >
             {analyticsQuery.isFetching ? (
               <Loader2 className="size-3.5 animate-spin" />

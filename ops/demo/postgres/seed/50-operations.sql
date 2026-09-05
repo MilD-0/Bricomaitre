@@ -268,51 +268,14 @@ JOIN products product ON product.mongo_id = campaign.product_key
 CROSS JOIN unnest(ARRAY['fr','ar']) locale
 CROSS JOIN LATERAL (SELECT campaign.sort_order AS page_number) numbered;
 
-INSERT INTO landing_page_revisions (
-  landing_page_id, revision, schema_version, document, source, created_by, created_at
-)
-SELECT page.id, 1, 2,
-  jsonb_build_object(
-    'schemaVersion', 2,
-    'theme', jsonb_build_object('accent', CASE WHEN page.locale = 'ar' THEN 'teal' ELSE 'orange' END,
-      'density', 'comfortable', 'shell', 'campaign'),
-    'seo', jsonb_build_object('title', left(product.title, 70),
-      'description', left(CASE WHEN page.locale = 'ar'
-        THEN 'صفحة عرض تجريبية لأداة عملية مع الدفع عند الاستلام.'
-        ELSE 'Une sélection pratique pour l’atelier, avec paiement à la livraison.' END, 170),
-      'indexable', false),
-    'blocks', jsonb_build_array(
-      jsonb_build_object('id','hero','type','product-hero','variant','product-stage',
-        'heading', CASE WHEN page.locale = 'ar' THEN product.title_ar ELSE product.title END,
-        'subheading', CASE WHEN page.locale = 'ar' THEN product.description_ar ELSE product.description END,
-        'imageUrl', product.images[1], 'imageAlt', product.title,
-        'primaryCtaLabel', CASE WHEN page.locale = 'ar' THEN 'اطلب الآن' ELSE 'Commander maintenant' END,
-        'showAddToCart', true),
-      jsonb_build_object('id','benefits','type','benefit-grid','variant','compact',
-        'heading', CASE WHEN page.locale = 'ar' THEN 'لماذا هذا الاختيار؟' ELSE 'Pourquoi ce choix ?' END,
-        'items', jsonb_build_array(
-          jsonb_build_object('title',CASE WHEN page.locale = 'ar' THEN 'جاهز للعمل' ELSE 'Prêt à travailler' END,
-            'description',CASE WHEN page.locale = 'ar' THEN 'مخزون وسعر واضحان.' ELSE 'Stock et prix clairement indiqués.' END,'icon','tool'),
-          jsonb_build_object('title',CASE WHEN page.locale = 'ar' THEN 'تأكيد هاتفي' ELSE 'Confirmation téléphonique' END,
-            'description',CASE WHEN page.locale = 'ar' THEN 'نتحقق من الطلب قبل الإرسال.' ELSE 'La commande est vérifiée avant expédition.' END,'icon','phone'))),
-      jsonb_build_object('id','final','type','final-cta','variant','solid',
-        'heading', CASE WHEN page.locale = 'ar' THEN 'اطلبها الآن' ELSE 'Équipez votre atelier' END,
-        'body', CASE WHEN page.locale = 'ar' THEN 'الدفع عند الاستلام.' ELSE 'Paiement à la livraison.' END,
-        'primaryCtaLabel', CASE WHEN page.locale = 'ar' THEN 'اطلب الآن' ELSE 'Commander' END,
-        'imageUrl', product.images[2], 'imageAlt', product.title)
-    )
-  ), 'admin', 'operator@demo.bricomaitre.invalid', page.created_at
-FROM landing_pages page JOIN products product ON product.id = page.product_id;
-
 INSERT INTO product_slug_history (product_id, slug, replaced_at)
 SELECT id, slug || '-ancienne-reference', '2025-06-01 09:00:00+00'
 FROM products WHERE mod(id, 137) = 0;
 
-INSERT INTO ai_conversations (
-  surface, actor_id, session_key, title, created_at, updated_at
-)
-SELECT CASE WHEN mod(conversation_number, 5) < 3 THEN 'admin' ELSE 'storefront' END::ai_surface,
-  CASE WHEN mod(conversation_number, 5) < 3 THEN 'operator@demo.bricomaitre.invalid' END,
+-- Synthetic execution metrics have no saved chat transcript.
+CREATE TEMP TABLE demo_ai_sessions (id, surface, actor_id, session_key, title, created_at, updated_at) AS
+SELECT conversation_number AS id, CASE WHEN mod(conversation_number, 5) < 3 THEN 'admin' ELSE 'storefront' END::ai_surface AS surface,
+  CASE WHEN mod(conversation_number, 5) < 3 THEN 'operator@demo.bricomaitre.invalid' END AS actor_id,
   'historical-conversation-' || conversation_number,
   (ARRAY[
     'Préparer le lot de commandes à poster',
@@ -324,31 +287,18 @@ SELECT CASE WHEN mod(conversation_number, 5) < 3 THEN 'admin' ELSE 'storefront' 
   ])[1 + mod(conversation_number, 6)],
   current_date::timestamptz - interval '730 days'
     + power(conversation_number / 600.0, 0.82) * interval '729 days'
-    + (mod(conversation_number * 7919, 21600)::text || ' seconds')::interval,
+    + (mod(conversation_number * 7919, 21600)::text || ' seconds')::interval AS created_at,
   current_date::timestamptz - interval '730 days'
     + power(conversation_number / 600.0, 0.82) * interval '729 days'
     + (mod(conversation_number * 7919, 21600)::text || ' seconds')::interval
     + interval '8 minutes'
 FROM generate_series(1, 600) conversation_number;
 
-INSERT INTO ai_messages (conversation_id, role, content, created_at)
-SELECT conversation.id, CASE WHEN message_number IN (1, 3) THEN 'user' ELSE 'assistant' END,
-  CASE message_number
-    WHEN 1 THEN jsonb_build_object('text', conversation.title)
-    WHEN 2 THEN jsonb_build_object('text', 'J’ai vérifié les données concernées et préparé une synthèse liée aux enregistrements de démonstration.',
-      'toolResults', jsonb_build_array(jsonb_build_object('toolName','query_analytics','status','completed','output',jsonb_build_object('rows',12))))
-    WHEN 3 THEN jsonb_build_object('text', 'Montre-moi les éléments les plus importants et les actions possibles.')
-    ELSE jsonb_build_object('text', 'Les priorités sont classées par impact. Je peux préparer une proposition réversible pour les éléments sélectionnés.',
-      'feedback', CASE WHEN mod(conversation.id, 9) = 0 THEN 'not_helpful' ELSE 'helpful' END)
-  END,
-  conversation.created_at + (message_number * interval '2 minutes')
-FROM ai_conversations conversation CROSS JOIN generate_series(1, 4) message_number;
-
 INSERT INTO ai_runs (
   conversation_id, surface, task, status, model, prompt_version, actor_id,
   input_tokens, output_tokens, total_tokens, error_code, started_at, completed_at
 )
-SELECT conversation.id, conversation.surface,
+SELECT NULL, conversation.surface,
   CASE WHEN conversation.surface = 'admin' THEN 'admin_chat' ELSE 'shopping_assistant' END,
   CASE
     WHEN mod(conversation.id * 13 + run_number * 17, 47) < 2 THEN 'failed'
@@ -363,7 +313,9 @@ SELECT conversation.id, conversation.surface,
   conversation.created_at + (run_number * interval '2 minutes'),
   conversation.created_at + (run_number * interval '2 minutes')
     + ((1050 + mod(conversation.id * 37 + run_number * 211, 2350))::text || ' milliseconds')::interval
-FROM ai_conversations conversation CROSS JOIN generate_series(1, 4) run_number;
+FROM demo_ai_sessions conversation CROSS JOIN generate_series(1, 4) run_number;
+
+DROP TABLE demo_ai_sessions;
 
 INSERT INTO ai_tool_calls (
   run_id, tool_name, status, input, output, error_code, started_at, completed_at

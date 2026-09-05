@@ -98,7 +98,7 @@ describe('LandingOrderForm', () => {
   beforeEach(() => {
     mocks.catalog.mockReset().mockResolvedValue({
       wilayas: [{ wilayaId: 16, name: 'Alger' }],
-      communes: [],
+      communes: [{ communeId: 1, wilayaId: 16, name: 'Alger Centre', hasStopDesk: true }],
       serviceFees: [],
       weightFees: [],
       lastSync: null,
@@ -133,4 +133,27 @@ describe('LandingOrderForm', () => {
     expect(html).toContain('Ce produit est actuellement indisponible.');
     expect(html).not.toContain('data-testid="inline-order"');
   });
+
+  it.each(['fr', 'ar'] as const)(
+    'offers a reload instead of an unusable form when delivery lookup fails in %s',
+    async (locale) => {
+      mocks.catalog.mockRejectedValue(new Error('Delivery API timed out'));
+      const html = renderToStaticMarkup(await LandingOrderForm({ page, locale }));
+      expect(html).toContain('role="alert"');
+      expect(html).toContain(`action="/${locale}/landing/lampe-atelier#landing-order"`);
+      expect(html).toContain('method="get"');
+      expect(html).not.toContain('data-testid="inline-order"');
+      mocks.catalog.mockResolvedValue({ wilayas: [], communes: [] });
+      expect(renderToStaticMarkup(await LandingOrderForm({ page, locale }))).toContain(
+        'role="alert"',
+      );
+      mocks.catalog.mockResolvedValue({
+        wilayas: [{ wilayaId: 16 }],
+        communes: [{ communeId: 1 }],
+      });
+      expect(renderToStaticMarkup(await LandingOrderForm({ page, locale }))).toContain(
+        'data-testid="inline-order"',
+      );
+    },
+  );
 });

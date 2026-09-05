@@ -1,4 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  metaEventOutbox,
+  orderLineItems,
+  orderMetaAttribution,
+  orders,
+  products,
+} from '@bric/db/schema';
 
 import {
   buildMetaCommerceCustomData,
@@ -14,6 +21,7 @@ import {
   normalizeAlgeriaPhone,
   normalizeMetaEventTime,
   resolveMetaOrderLocation,
+  reconcileOrderConfirmedEvents,
   sendMetaEvent,
 } from '@bric/storefront-core/meta';
 import { storefrontAnalyticsEventSchema } from '@bric/storefront-core/analytics';
@@ -98,13 +106,6 @@ describe('Meta domain rules', () => {
       cartProducts: ['12', '12'],
       promoCode: null,
     };
-    const product = {
-      id: 12,
-      mongoId: null,
-      title: 'Drill',
-      price: '800.00',
-      images: [],
-    };
     const line = {
       id: 1,
       orderId: 42,
@@ -130,9 +131,7 @@ describe('Meta domain rules', () => {
               ? [order]
               : selectCall === 3
                 ? []
-                : selectCall === 4
-                  ? [product]
-                  : [line];
+                : [line];
         return {
           from: () => ({
             where: () => (selectCall <= 3 ? { limit: async () => rows } : Promise.resolve(rows)),
@@ -284,6 +283,128 @@ describe('Meta domain rules', () => {
         }),
       }),
     );
+  });
+
+  describe.each([
+    { name: 'confirmation', ensure: ensureOrderConfirmedEventForOrder, status: 2 },
+    { name: 'completion', ensure: ensureOrderCompletedEventForOrder, status: 4 },
+  ])('$name snapshot preservation', ({ ensure, status }) => {
+    function fixture({ missing = false, failInsert = false } = {}) {
+      const line = {
+        orderId: 42,
+        productId: 12,
+        contentId: '12',
+        rawValue: '12',
+        titleSnapshot: 'Drill',
+        originalUnitPrice: '4500.00',
+        effectiveUnitPrice: '4500.00',
+        unitPurchasePriceSnapshot: '3000.00',
+        quantity: 1,
+        discountAmount: '0.00',
+        lineTotal: '4500.00',
+        thumbnailUrl: null,
+      };
+      const savedLines = missing ? [] : [line];
+      const originalLines = structuredClone(savedLines);
+      const catalog = { id: 12, price: '5000.00', purchasePrice: '3500.00', images: [] };
+      const outbox: Record<string, unknown>[] = [];
+      const catalogRead = vi.fn(() => [catalog]);
+      const db = {
+        execute: vi.fn(async () => ({
+          rows: [{ history_id: 6, order_id: 42, status: 2, changed_at: new Date() }],
+        })),
+        select: () => ({
+          from: (table: unknown) => ({
+            where: () => {
+              const rows =
+                table === orderMetaAttribution
+                  ? [{ orderId: 42, externalIdSource: 'visit-1' }]
+                  : table === orders
+                    ? [
+                        {
+                          id: 42,
+                          cartProducts: ['12'],
+                          promoCode: null,
+                          phoneNumber1: '0550112233',
+                        },
+                      ]
+                    : table === orderLineItems
+                      ? savedLines
+                      : table === metaEventOutbox
+                        ? outbox
+                        : table === products
+                          ? catalogRead()
+                          : [];
+              return Object.assign(Promise.resolve(rows), { limit: async () => rows });
+            },
+          }),
+        }),
+        transaction: vi.fn(async (callback: (tx: unknown) => unknown) =>
+          callback({
+            delete: () => ({
+              where: async () => {
+                savedLines.length = 0;
+              },
+            }),
+            insert: () => ({
+              values: async (rows: typeof savedLines) => {
+                savedLines.push(...rows);
+              },
+            }),
+          }),
+        ),
+        insert: (table: unknown) => ({
+          values: (value: Record<string, unknown>) => ({
+            onConflictDoNothing: () => ({
+              returning: async () => {
+                expect(table).toBe(metaEventOutbox);
+                if (failInsert) throw new Error('outbox unavailable');
+                outbox.push(value);
+                return [{ id: 98 }];
+              },
+            }),
+          }),
+        }),
+      };
+      return { db, savedLines, originalLines, outbox, catalogRead };
+    }
+
+    const input = () => ({ orderId: 42, statusHistoryId: 6, status, changedAt: new Date() });
+
+    it('uses saved prices and preserves costs after the catalog changes', async () => {
+      const f = fixture();
+      if (status === 2) {
+        expect(await reconcileOrderConfirmedEvents(f.db as never)).toEqual({
+          confirmationScanned: 1,
+          confirmationCreated: 1,
+        });
+      } else {
+        expect(await ensure(f.db as never, input())).toMatchObject({ created: true });
+      }
+      expect(f.outbox[0].customData).toMatchObject({ value: 4500 });
+      expect(f.savedLines).toEqual(f.originalLines);
+      expect(f.catalogRead).not.toHaveBeenCalled();
+      expect(f.db.transaction).not.toHaveBeenCalled();
+    });
+
+    it('leaves missing snapshots absent and skips event creation', async () => {
+      const f = fixture({ missing: true });
+      expect(await ensure(f.db as never, input())).toEqual({
+        created: false,
+        reason: 'missing_lines',
+      });
+      expect(f.savedLines).toEqual([]);
+      expect(f.outbox).toEqual([]);
+      expect(f.catalogRead).not.toHaveBeenCalled();
+      expect(f.db.transaction).not.toHaveBeenCalled();
+    });
+
+    it('preserves snapshots when outbox insertion fails', async () => {
+      const f = fixture({ failInsert: true });
+      await expect(ensure(f.db as never, input())).rejects.toThrow('outbox unavailable');
+      expect(f.savedLines).toEqual(f.originalLines);
+      expect(f.db.transaction).not.toHaveBeenCalled();
+    });
   });
 
   it('preserves long paid landing paths instead of truncating fbclid data', () => {

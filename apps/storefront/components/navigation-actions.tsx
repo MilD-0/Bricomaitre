@@ -47,6 +47,7 @@ export function NavigationActions({
   locale,
   alternateLocale,
   alternateLabel,
+  alternatePath,
   categories,
   labels,
   contact,
@@ -54,6 +55,7 @@ export function NavigationActions({
   locale: Locale;
   alternateLocale: Locale;
   alternateLabel: string;
+  alternatePath?: string;
   categories: NavigationCategory[];
   labels: NavigationLabels;
   contact: StorefrontSupportContact;
@@ -63,7 +65,7 @@ export function NavigationActions({
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [drawerCategories, setDrawerCategories] = useState(categories);
   const [drawerBrands, setDrawerBrands] = useState<NavigationBrand[]>([]);
-  const [alternateHref, setAlternateHref] = useState(`/${alternateLocale}`);
+  const [alternateHref, setAlternateHref] = useState(alternatePath ?? `/${alternateLocale}`);
   const [visualLocale, setVisualLocale] = useState<Locale>(locale);
   const cartButtonRef = useRef<HTMLButtonElement>(null);
   const cartCount = getCartItemCount(cartItems);
@@ -87,7 +89,7 @@ export function NavigationActions({
   useEffect(() => {
     queueMicrotask(() =>
       setAlternateHref(
-        `${window.location.pathname.replace(/^\/(fr|ar)(?=\/|$)/, `/${alternateLocale}`)}${window.location.search}`,
+        `${alternatePath ?? window.location.pathname.replace(/^\/(fr|ar)(?=\/|$)/, `/${alternateLocale}`)}${window.location.search}`,
       ),
     );
     const controller = new AbortController();
@@ -107,7 +109,7 @@ export function NavigationActions({
       })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [alternateLocale, categories.length, locale]);
+  }, [alternateLocale, alternatePath, categories.length, locale]);
 
   useEffect(() => {
     const updateCart = () => setCartItems(readCart(window.localStorage));

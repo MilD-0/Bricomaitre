@@ -17,7 +17,13 @@ import { ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE } from '../analytics-fact-contra
 import { effectiveEcotrackStatusSql } from '../ecotrack-status-policy';
 import type { AnalyticsFilters } from './contract';
 import { ratio } from './metrics';
-import { datePredicate, isoValue, nullableNumeric, numeric } from './query-values';
+import {
+  datePredicate,
+  isoValue,
+  nullableNumeric,
+  numeric,
+  timestampPredicate,
+} from './query-values';
 import { type Database, resolvedShipmentStatusesSql } from './loaders-shared';
 
 export type OperationalGeographyRow = {
@@ -259,7 +265,27 @@ export async function loadCustomerEconomics(
   profitsSuppressed = false,
 ) {
   const result = await db.execute(sql`
-    with line_economics as (
+    with cohort_customers as materialized (
+      select coalesce(
+        nullif(${orders.normalizedPhone}, ''),
+        regexp_replace(${orders.phoneNumber1}, '\\D', '', 'g')
+      ) as customer_key
+      from ${orders}
+      where ${timestampPredicate(orders.createdAt, null, filters.endDate)}
+      group by customer_key
+      having ${filters.startDate ? sql`min((${orders.createdAt} at time zone 'Africa/Algiers')::date) >= ${filters.startDate}::date and` : sql``}
+        min((${orders.createdAt} at time zone 'Africa/Algiers')::date) <= ${filters.endDate}::date
+    ), selected_orders as materialized (
+      select ${orders.id}, ${orders.normalizedPhone}, ${orders.phoneNumber1},
+        ${orders.firstName}, ${orders.lastName}, ${orders.city}, ${orders.createdAt},
+        ${orders.totalAmount}
+      from ${orders}
+      inner join cohort_customers on cohort_customers.customer_key = coalesce(
+        nullif(${orders.normalizedPhone}, ''),
+        regexp_replace(${orders.phoneNumber1}, '\\D', '', 'g')
+      )
+      where ${timestampPredicate(orders.createdAt, null, filters.endDate)}
+    ), line_economics as (
       select ${orderLineItems.orderId} as order_id,
         bool_and(
           ${orderLineItems.unitPurchasePriceSnapshot} is not null
@@ -270,12 +296,14 @@ export async function loadCustomerEconomics(
           ${orderLineItems.unitPurchasePriceSnapshot} * ${orderLineItems.quantity}
         )::double precision as product_cost
       from ${orderLineItems}
+      inner join selected_orders on selected_orders.id = ${orderLineItems.orderId}
       group by ${orderLineItems.orderId}
     ), meta_spend as (
       select ${metaAdsDailyInsights.adId} as ad_id,
         ${metaAdsDailyInsights.day} as day,
         sum(${metaAdsDailyInsights.spend})::double precision as spend_eur
       from ${metaAdsDailyInsights}
+      where ${datePredicate(metaAdsDailyInsights.day, filters.startDate, filters.endDate)}
       group by ${metaAdsDailyInsights.adId}, ${metaAdsDailyInsights.day}
     ), attributed_orders as (
       select ${orderAcquisitionAttribution.metaAdId} as ad_id,
@@ -285,6 +313,7 @@ export async function loadCustomerEconomics(
       inner join ${orders} on ${orders.id} = ${orderAcquisitionAttribution.orderId}
       where ${orderAcquisitionAttribution.channel} = 'meta_paid'
         and ${orderAcquisitionAttribution.metaAdId} is not null
+        and ${timestampPredicate(orders.createdAt, filters.startDate, filters.endDate)}
       group by ${orderAcquisitionAttribution.metaAdId},
         (${orders.createdAt} at time zone 'Africa/Algiers')::date
     ), ordered as (
@@ -347,7 +376,7 @@ export async function loadCustomerEconomics(
           and not coalesce(line_economics.cost_complete, false)
         then 1 else 0 end as paid_contribution_uses_fallback,
         ${orderAcquisitionAttribution.metaAdId} as meta_ad_id
-      from ${orders}
+      from selected_orders as ${orders}
       left join line_economics on line_economics.order_id = ${orders.id}
       left join ${ecotrackOrderStates}
         on ${ecotrackOrderStates.orderId} = ${orders.id}
@@ -356,12 +385,6 @@ export async function loadCustomerEconomics(
         on ${orderAcquisitionAttribution.orderId} = ${orders.id}
         and ${orderAcquisitionAttribution.channel} = 'meta_paid'
       where (${orders.createdAt} at time zone 'Africa/Algiers')::date <= ${filters.endDate}::date
-    ), cohort_customers as (
-      select customer_key
-      from ordered
-      group by customer_key
-      having ${filters.startDate ? sql`min(order_day) >= ${filters.startDate}::date and` : sql``}
-        min(order_day) <= ${filters.endDate}::date
     ), with_acquisition as (
       select ordered.*,
         case when ordered.order_number = 1 and attributed_orders.orders > 0 then
@@ -370,7 +393,6 @@ export async function loadCustomerEconomics(
           / attributed_orders.orders
         end as acquisition_cost
       from ordered
-      inner join cohort_customers using (customer_key)
       left join attributed_orders
         on attributed_orders.ad_id = ordered.meta_ad_id
         and attributed_orders.day = ordered.order_day

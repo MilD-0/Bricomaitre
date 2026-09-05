@@ -1187,52 +1187,25 @@ FROM orders
 WHERE mongo_id LIKE 'demo-live-order:%' AND confirmed NOT IN (0, 1, 2, 6)
 ORDER BY updated_at DESC LIMIT 320;
 
-INSERT INTO ai_conversations (
-  surface, actor_id, session_key, title, created_at, updated_at
+-- Keep a recent synthetic execution sample without inventing a saved conversation.
+WITH recent_run AS (
+  INSERT INTO ai_runs (
+    surface, task, status, model, prompt_version, actor_id,
+    input_tokens, output_tokens, total_tokens, started_at, completed_at
+  ) VALUES (
+    'admin', 'admin_chat', 'completed', 'openai/gpt-5.6-luna', 'demo-v1',
+    'operator@demo.bricomaitre.invalid', 1840, 612, 2452,
+    now() - interval '2 minutes 8 seconds', now() - interval '2 minutes'
+  ) RETURNING id, started_at
 )
-VALUES ('admin', 'operator@demo.bricomaitre.invalid', 'demo-showcase-current',
-  'Préparer les commandes confirmées et signaler les risques de stock',
-  now() - interval '14 minutes', now() - interval '2 minutes');
-
-WITH showcase AS (
-  SELECT id FROM ai_conversations WHERE session_key = 'demo-showcase-current'
-)
-INSERT INTO ai_messages (conversation_id, role, content, created_at)
-SELECT showcase.id, message.role, message.content, now() + message.time_offset
-FROM showcase CROSS JOIN (VALUES
-  ('user', jsonb_build_object('text', 'Prépare le prochain lot de commandes confirmées. Vérifie le stock, regroupe les besoins et signale ce qui risque de bloquer l’expédition.'), interval '-14 minutes'),
-  ('assistant', jsonb_build_object(
-    'text', 'J’ai analysé les commandes confirmées, les lignes produit et le stock disponible. Le lot peut avancer, avec trois références à réapprovisionner avant impression des étiquettes. J’ai préparé une liste d’achat regroupée et laissé les commandes concernées inchangées pour validation.',
-    'toolResults', jsonb_build_array(
-      jsonb_build_object('toolName','inspect_orders','status','completed','output',jsonb_build_object('confirmed',160,'ready',143,'blocked',17)),
-      jsonb_build_object('toolName','inspect_inventory','status','completed','output',jsonb_build_object('productsChecked',412,'shortages',3)),
-      jsonb_build_object('toolName','save_order_shopping_list','status','completed','output',jsonb_build_object('items',18,'scope','confirmed'))),
-    'feedback', 'helpful'), interval '-2 minutes')
-) message(role, content, time_offset);
-
-WITH showcase AS (
-  SELECT id FROM ai_conversations WHERE session_key = 'demo-showcase-current'
-)
-INSERT INTO ai_runs (
-  conversation_id, surface, task, status, model, prompt_version, actor_id,
-  input_tokens, output_tokens, total_tokens, started_at, completed_at
-)
-SELECT id, 'admin', 'admin_chat', 'completed', 'openai/gpt-5.6-luna', 'demo-v1',
-  'operator@demo.bricomaitre.invalid', 1840, 612, 2452,
-  now() - interval '2 minutes 8 seconds', now() - interval '2 minutes'
-FROM showcase;
-
 INSERT INTO ai_tool_calls (
   run_id, tool_name, status, input, output, started_at, completed_at
 )
 SELECT run.id, tool_name, 'completed', jsonb_build_object('scope','confirmed'), output,
   run.started_at + sequence * interval '2 seconds',
   run.started_at + sequence * interval '2 seconds 500 milliseconds'
-FROM ai_runs run CROSS JOIN (VALUES
+FROM recent_run run CROSS JOIN (VALUES
   (1, 'inspect_orders', '{"confirmed":160,"ready":143,"blocked":17}'::jsonb),
   (2, 'inspect_inventory', '{"productsChecked":412,"shortages":3}'::jsonb),
   (3, 'save_order_shopping_list', '{"items":18,"scope":"confirmed"}'::jsonb)
-) tools(sequence, tool_name, output)
-WHERE run.conversation_id = (
-  SELECT id FROM ai_conversations WHERE session_key = 'demo-showcase-current'
-);
+) tools(sequence, tool_name, output);

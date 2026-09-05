@@ -219,7 +219,8 @@ BEGIN
     RAISE EXCEPTION 'Live order timelines are incoherent';
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM ai_conversations WHERE session_key = 'demo-showcase-current')
+  IF EXISTS (SELECT 1 FROM ai_conversations WHERE session_key = 'demo-showcase-current'
+      OR session_key LIKE 'historical-conversation-%')
     OR NOT EXISTS (SELECT 1 FROM meta_worker_heartbeat WHERE worker_key = 'storefront-meta-worker') THEN
     RAISE EXCEPTION 'Reset-relative operational state is incomplete';
   END IF;
