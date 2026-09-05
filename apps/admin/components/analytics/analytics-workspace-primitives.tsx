@@ -238,7 +238,6 @@ export function splitPartialSeries(
   return rows.map((row, index) => {
     const partial = row.isPartial === true;
     const forecast = row.isForecast === true;
-    const nextIsForecast = rows[index + 1]?.isForecast === true;
     const nextIsOpen = rows[index + 1]?.isPartial === true || rows[index + 1]?.isForecast === true;
     const result = { ...row };
     for (const key of keys) {
@@ -248,7 +247,7 @@ export function splitPartialSeries(
       result[`${key}Open`] = forecast
         ? projectedValue
         : partial
-          ? (projectedValue ?? (nextIsForecast ? row[key] : null))
+          ? projectedValue
           : nextIsOpen
             ? row[key]
             : null;
@@ -296,7 +295,7 @@ export function ActualOpenLine({
   return (
     <>
       <Line
-        type="monotone"
+        type="linear"
         dataKey={`${dataKey}Actual`}
         name={name}
         stroke={stroke}
@@ -305,7 +304,7 @@ export function ActualOpenLine({
         connectNulls={false}
       />
       <Line
-        type="monotone"
+        type="linear"
         dataKey={`${dataKey}Open`}
         name={`${name} · Forecast`}
         stroke={stroke}
