@@ -679,6 +679,9 @@ describe('production packaging and release runtime', () => {
     expect(serviceRunner).toContain('docker image inspect "$image"');
     expect(serviceRunner).toContain('docker-images.lock');
     expect(serviceRunner).toContain('flock 9');
+    expect(serviceRunner).toContain('service-ports.lock');
+    expect(serviceRunner).toContain('choose_available_port');
+    expect(serviceRunner).toContain('flock -u "$service_port_lock_fd"');
     expect(serviceRunner).toContain('docker pull "$image"');
     expect(serviceRunner).toContain('docker rm --force');
     expect(ci).toContain('BRIC_PLAYWRIGHT_STOREFRONT_ORIGIN: http://127.0.0.1:3013');

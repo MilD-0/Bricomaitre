@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { createServer } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const workspaceRoot = resolve(import.meta.dirname, '../..');
@@ -15,7 +16,13 @@ function makeTemporaryDirectory() {
   return directory;
 }
 
-function runServiceCommand(commandExit = 0, coldCache = false, serviceFailure = false) {
+function runServiceCommand(
+  commandExit = 0,
+  coldCache = false,
+  serviceFailure = false,
+  postgresPort = '55432',
+  redisPort = '56379',
+) {
   const directory = makeTemporaryDirectory();
   const logFile = join(directory, 'docker.log');
   const commandFile = join(directory, 'command.log');
@@ -63,8 +70,8 @@ exit 0
     'bash',
     [
       serviceRunner,
-      '55432',
-      '56379',
+      postgresPort,
+      redisPort,
       'bricomaitre_test',
       'bash',
       '-c',
@@ -106,11 +113,29 @@ describe('CI network isolation', () => {
 
     expect(result.status).toBe(0);
     expect(result.commandLog).toMatch(
-      /^bricomaitre-ci-postgres-.+\|55432\|bricomaitre-ci-redis-.+\|56379$/m,
+      /^bricomaitre-ci-postgres-.+\|[0-9]+\|bricomaitre-ci-redis-.+\|[0-9]+$/m,
     );
     expect(result.dockerLog).not.toContain('pull ');
     expect(result.dockerLog.match(/run --detach --init --network host/g)).toHaveLength(2);
     expect(result.dockerLog.match(/rm --force bricomaitre-ci-/g)).toHaveLength(2);
+  });
+
+  it('allocates a free host port when the requested port is already occupied', async () => {
+    const listener = createServer();
+    await new Promise<void>((resolvePromise) => listener.listen(0, '0.0.0.0', resolvePromise));
+    const address = listener.address();
+    if (address === null || typeof address === 'string') throw new Error('missing TCP port');
+
+    try {
+      const requestedPort = String(address.port);
+      const result = runServiceCommand(0, false, false, requestedPort);
+      const fields = result.commandLog.trim().split('|');
+
+      expect(result.status, result.stderr).toBe(0);
+      expect(fields[1]).not.toBe(requestedPort);
+    } finally {
+      listener.close();
+    }
   });
 
   it('pulls each pinned image once on a cold host and preserves command failure', () => {

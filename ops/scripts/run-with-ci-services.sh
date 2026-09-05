@@ -62,6 +62,49 @@ ensure_image() {
 ensure_image "$postgres_image"
 ensure_image "$redis_image"
 
+port_is_available() {
+  python3 - "$1" <<'PY'
+import socket
+import sys
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+try:
+    sock.bind(("0.0.0.0", int(sys.argv[1])))
+except OSError:
+    raise SystemExit(1)
+finally:
+    sock.close()
+PY
+}
+
+choose_available_port() {
+  local preferred_port="$1"
+  local offset
+  local candidate
+
+  for offset in $(seq 0 199); do
+    candidate=$((preferred_port + offset))
+    if ((candidate > 65535)); then
+      break
+    fi
+    if port_is_available "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  echo "no available CI service port near $preferred_port" >&2
+  return 1
+}
+
+# Every self-hosted runner shares the host network. Serialize allocation until
+# both containers have bound their selected ports, then let their test jobs run
+# concurrently on distinct listeners.
+exec {service_port_lock_fd}>"$cache_root/service-ports.lock"
+flock "$service_port_lock_fd"
+postgres_port="$(choose_available_port "$postgres_port")"
+redis_port="$(choose_available_port "$redis_port")"
+
 run_token="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-${GITHUB_JOB:-job}-$$"
 run_token="${run_token//[^a-zA-Z0-9_.-]/-}"
 postgres_container="bricomaitre-ci-postgres-$run_token"
@@ -161,6 +204,11 @@ docker run \
   -c "port=$postgres_port" >/dev/null
 postgres_started='true'
 wait_for_postgres
+
+flock -u "$service_port_lock_fd"
+
+export DATABASE_URL="postgres://bricomaitre:bricomaitre@127.0.0.1:${postgres_port}/${database}"
+export REDIS_URL="redis://127.0.0.1:${redis_port}/0"
 
 export BRIC_CI_POSTGRES_CONTAINER="$postgres_container"
 export BRIC_CI_POSTGRES_PORT="$postgres_port"
