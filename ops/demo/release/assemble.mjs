@@ -25,21 +25,30 @@ execFileSync('node', ['ops/demo/scripts/verify-generated-data.mjs'], {
   cwd: root,
   stdio: 'inherit',
 });
-execFileSync('bash', ['demo', 'prepare'], { cwd: root, stdio: 'inherit' });
+const buildRuntime = resolve(output, '.build-runtime');
+const buildEnvironment = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => !key.startsWith('BRIC_DEMO_')),
+);
+buildEnvironment.BRIC_DEMO_RUNTIME_DIR = buildRuntime;
+execFileSync('bash', ['demo', 'prepare'], {
+  cwd: root,
+  env: buildEnvironment,
+  stdio: 'inherit',
+});
 const source = JSON.parse(
   execFileSync(
     'docker',
     [
       'compose',
       '--env-file',
-      'ops/demo/.runtime/compose.env',
+      resolve(buildRuntime, 'compose.env'),
       '-f',
       'ops/demo/compose.yml',
       'config',
       '--format',
       'json',
     ],
-    { cwd: root, encoding: 'utf8' },
+    { cwd: root, env: buildEnvironment, encoding: 'utf8' },
   ),
 );
 

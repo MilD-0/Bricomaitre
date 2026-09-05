@@ -32,6 +32,14 @@ configuration because browser configuration is compiled into the web images.
 The release uses its own Compose project and volumes, separate from `./demo`.
 Stop the source demo first if it occupies these ports.
 
+For a source-based host, put `BRIC_DEMO_ADMIN_ORIGIN`,
+`BRIC_DEMO_STOREFRONT_ORIGIN`, and `BRIC_DEMO_OBJECT_ORIGIN` in the ignored
+`ops/demo/.runtime/host.env` file before running `./demo up`. Use the public
+HTTPS origins served by your reverse proxy. The launcher and scheduled resets
+retain these settings. Changing the media origin rebuilds the seeded template
+so stored image URLs match. Keep the internal API, databases, provider mocks,
+and storage console private.
+
 ## AI assistants
 
 AI assistants are not yet available in the hosted demo, and this bundle keeps

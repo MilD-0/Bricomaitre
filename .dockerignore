@@ -42,6 +42,8 @@ archive
 **/.env.*
 ENV_VALUES
 codexCreds
+ops/demo/.runtime
+ops/demo/.cache
 *.pem
 *.key
 
