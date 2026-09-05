@@ -179,21 +179,20 @@ describe('POST /api/ai/chat model-led runtime', () => {
 
   it('lets the model combine conceptual and live evidence without a preflight plan', async () => {
     mocks.permissions = ['analytics_manage'];
-    const response = await POST(
-      request({
-        message: 'What is adjusted profit, and why is it down this month?',
-        conversationKey,
-        context: {
-          locale: 'en',
-          surface: 'orders',
-          section: 'orders',
-          pathname: '/en/orders',
-          hash: null,
-          filters: {},
-          selection: null,
-        },
-      }),
-    );
+    const chatRequest = request({
+      message: 'What is adjusted profit, and why is it down this month?',
+      conversationKey,
+      context: {
+        locale: 'en',
+        surface: 'orders',
+        section: 'orders',
+        pathname: '/en/orders',
+        hash: null,
+        filters: {},
+        selection: null,
+      },
+    });
+    const response = await POST(chatRequest);
     const body = events(await response.text());
     const options = mocks.streamOptions as {
       instructions: string;
@@ -202,6 +201,7 @@ describe('POST /api/ai/chat model-led runtime', () => {
       prepareStep?: unknown;
       toolChoice: string;
       stopWhen: unknown;
+      abortSignal?: AbortSignal;
     };
 
     expect(response.status).toBe(200);
@@ -211,6 +211,8 @@ describe('POST /api/ai/chat model-led runtime', () => {
     expect(options.prepareStep).toBeUndefined();
     expect(options.toolChoice).toBe('auto');
     expect(options.stopWhen).toBe('eight-step-stop');
+    expect(options.abortSignal).toBe(chatRequest.signal);
+    expect(options).not.toHaveProperty('timeout');
     expect(options.instructions).toContain('Use available tools when');
     expect(options.instructions).not.toContain('Connected capability map');
     expect(options.instructions).not.toContain('interpret_admin_turn');
@@ -344,6 +346,7 @@ describe('POST /api/ai/chat model-led runtime', () => {
     expect(mocks.streamOptions).not.toHaveProperty('maxOutputTokens');
     const recovery = mocks.generateText.mock.calls[0]![0];
     expect(recovery).not.toHaveProperty('maxOutputTokens');
+    expect(recovery).not.toHaveProperty('timeout');
     const evidence = recovery.messages.at(-1).content.split('this turn:\n')[1];
     expect(JSON.parse(evidence)).toEqual(toolResults);
   });
@@ -461,6 +464,28 @@ describe('POST /api/ai/chat model-led runtime', () => {
         content: expect.objectContaining({
           text: 'The partial answer\n\nThis response stopped before completion.',
           outcome: { status: 'failed', errorCode: 'Error' },
+        }),
+      }),
+    );
+  });
+
+  it('records a provider-aborted stream as cancelled instead of completed', async () => {
+    mocks.streamParts = [{ type: 'abort', reason: 'Provider stopped the stream' }];
+
+    const response = await POST(request({ message: 'Investigate this.', conversationKey }));
+    const body = events(await response.text());
+
+    expect(body).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'error', code: 'admin_ai_failed' })]),
+    );
+    expect(mocks.updatedValues).toContainEqual(
+      expect.objectContaining({ status: 'cancelled', errorCode: 'request_aborted' }),
+    );
+    expect(mocks.insertedValues).toContainEqual(
+      expect.objectContaining({
+        role: 'assistant',
+        content: expect.objectContaining({
+          outcome: { status: 'cancelled', errorCode: 'request_aborted' },
         }),
       }),
     );

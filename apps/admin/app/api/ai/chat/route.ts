@@ -229,7 +229,9 @@ export async function POST(request: NextRequest) {
       tools,
       toolChoice: 'auto',
       stopWhen: stepCountIs(8),
-      abortSignal: AbortSignal.any([request.signal, AbortSignal.timeout(config.requestTimeoutMs)]),
+      // An operating investigation may span several live queries and a long
+      // reasoning pass. Keep it alive until the client disconnects.
+      abortSignal: request.signal,
       maxRetries: config.maxRetries,
     });
 
@@ -241,6 +243,16 @@ export async function POST(request: NextRequest) {
             encoder.encode(`${JSON.stringify(adminAiChatStreamEventSchema.parse(event))}\n`),
           );
         };
+        // Keep reverse proxies from treating a long provider reasoning pass or
+        // tool execution as an idle response. Empty lines are ignored by the
+        // NDJSON client.
+        const heartbeat = setInterval(() => {
+          try {
+            controller.enqueue(encoder.encode('\n'));
+          } catch {
+            clearInterval(heartbeat);
+          }
+        }, 15_000);
         write({ type: 'status', status: 'thinking' });
 
         void (async () => {
@@ -322,6 +334,9 @@ export async function POST(request: NextRequest) {
                     write({ type: 'text-delta', delta: part.text });
                   }
                   if (part.type === 'finish') usage = combineUsage(usage, part.totalUsage);
+                  if (part.type === 'abort') {
+                    throw new DOMException(part.reason || 'Model stream aborted', 'AbortError');
+                  }
                   if (part.type === 'error') throw part.error;
                 }
                 break;
@@ -350,7 +365,6 @@ export async function POST(request: NextRequest) {
                   ],
                   abortSignal: request.signal,
                   maxRetries: config.maxRetries,
-                  timeout: config.requestTimeoutMs,
                 });
                 text = synthesis.text.trim();
                 usage = combineUsage(usage, synthesis.usage);
@@ -517,6 +531,7 @@ export async function POST(request: NextRequest) {
               });
             }
           } finally {
+            clearInterval(heartbeat);
             controller.close();
           }
         })();
