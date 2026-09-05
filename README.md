@@ -13,8 +13,8 @@ catalog, while the other helps staff investigate and prepare operational work.
 [Email Mild](mailto:mayldsauce@gmail.com)
 
 The hosted demo runs on my own machine over an unreliable connection, so it may
-be slow or offline. If you need access at a particular time,
-[email me](mailto:mayldsauce@gmail.com) and I'll make sure it's running.
+be slow or offline. You can [run it locally](./docs/demo.md#run-it-locally), or
+[email me](mailto:mayldsauce@gmail.com) if you need it running at a particular time.
 
 ## Production figures
 
@@ -200,48 +200,7 @@ BullMQ, Vitest, Playwright, Docker, Nginx, S3, CloudFront, and Sentry. See the
 [architecture](./docs/architecture.md) for boundaries, data flows, and failure
 behavior.
 
-## Run it locally
-
-Demo releases use a Docker-only [installation bundle](./ops/demo/release/README.md).
-The bundle pulls prebuilt application and media images. It does not need Node.js,
-a source checkout, or external accounts on the machine running it.
-The commands below build the demo from this checkout instead.
-
-To explore the application stack with synthetic data and local substitutes for
-auth, carrier, marketing, reporting, and object-storage services, use Docker
-with Compose and run:
-
-```bash
-./demo up
-```
-
-This starts dedicated PostgreSQL, Redis, and object-storage instances alongside
-the real Storefront, Storefront API, Commerce Operating System, and workers. The
-admin entry button creates a real local session with developer RBAC; it bypasses
-only external identity proof. No production credentials or data are used.
-
-AI assistants are not yet available in the hosted demo. To try them, run the
-demo locally from source with your own `OPENROUTER_API_KEY`, set
-`AI_PROVIDER=openrouter` and `AI_ENABLED=true`, and configure the models in the
-Admin and Storefront environments. The shopping assistant also needs enabling
-in Storefront settings. See the [demo AI setup notes](./ops/demo/release/README.md#ai-assistants).
-
-TODO: add local AI model support to the demo.
-
-The catalog contains 3,884 hardware products and 9,065 exact-product images
-derived from pinned public datasets. Deterministic generators add 250,000
-orders, one million line items, 200,000 carrier shipments, four years of
-analytics, and populated operational, financial, marketing, Search Console,
-fulfillment, and assistant histories. Images are downloaded and optimized once,
-then served from local object storage; browsers do not load them from the source
-hosts.
-
-Use `./demo urls` to print the entry points, `./demo reset` to restore the
-synthetic dataset, and `./demo down` to stop the stack without deleting it. The
-first build creates a versioned PostgreSQL template; later resets restore that
-verified template and add a fresh seven-day activity window. On a persistent
-demo host, `./demo schedule` installs the six-hour reset timer for the current
-user.
+## Development
 
 For source-native development, use Node.js 24, Corepack, PostgreSQL 16, and
 Redis 7. The pinned package manager is pnpm 11.
@@ -255,7 +214,7 @@ pnpm build:verify
 `build:verify` compiles all three applications with inert build values and a
 local storefront fixture. It does not require production credentials or data.
 
-For interactive development, copy each application’s `.env.example` to `.env`,
+For interactive development, copy each application's `.env.example` to `.env`,
 start PostgreSQL and Redis, then run the applications from separate terminals:
 
 ```bash
@@ -268,6 +227,7 @@ pnpm dev:admin
 
 - [Project story and lineage](./docs/project-story.md)
 - [Architecture](./docs/architecture.md)
+- [Demo](./docs/demo.md)
 - [Operations](./docs/operations.md)
 - [Domain language](./CONTEXT.md)
 - [Analytics semantics](./docs/analytics.md)
