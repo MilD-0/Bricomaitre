@@ -237,6 +237,6 @@ describe('migration rollback-safety verification', () => {
     expect(build.status).toBe(0);
     const result = run(previous, candidate);
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('88 historical and 9 new migration');
+    expect(result.stdout).toContain('88 historical and 10 new migration');
   });
 });
