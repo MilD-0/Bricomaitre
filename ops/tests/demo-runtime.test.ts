@@ -161,7 +161,7 @@ describe('self-contained demo runtime', () => {
     expect(compose).not.toContain('/seed-assets');
   });
 
-  it('keeps AI offline while seeding representative assistant history', () => {
+  it('keeps AI offline while seeding synthetic execution metrics', () => {
     expect(launcher).toContain("'AI_ENABLED=false'");
     expect(launcher).not.toContain('OPENAI_API_KEY=');
     expect(launcher).not.toContain('OPENROUTER_API_KEY=');

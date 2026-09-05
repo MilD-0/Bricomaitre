@@ -55,6 +55,23 @@ BEGIN
   END IF;
 
   IF EXISTS (
+    SELECT 1 FROM ai_conversations
+    WHERE session_key LIKE 'historical-conversation-%' OR session_key = 'demo-showcase-current'
+  ) THEN
+    RAISE EXCEPTION 'Demo chat history must start empty';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM landing_pages page
+    LEFT JOIN landing_page_revisions revision ON revision.landing_page_id = page.id
+      AND revision.revision = page.draft_revision
+    WHERE revision.id IS NULL OR jsonb_array_length(revision.document->'blocks') < 8
+      OR NOT revision.document->'blocks' @> '[{"type":"specifications"},{"type":"faq"}]'::jsonb
+  ) THEN
+    RAISE EXCEPTION 'Demo campaigns need product details and purchasing answers';
+  END IF;
+
+  IF EXISTS (
     SELECT 1 FROM product_cards card
     JOIN demo_runtime.merchandise_product_ids merchandise
       ON merchandise.product_id = card.product_id
