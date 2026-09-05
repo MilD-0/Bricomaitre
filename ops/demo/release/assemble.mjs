@@ -69,6 +69,18 @@ builds.services.toolkit = {
     args: { BRIC_IMAGE_REVISION: revision },
   },
 };
+builds.services.gateway = {
+  image: image('gateway'),
+  build: { context: resolve(root, 'ops/demo/gateway') },
+};
+builds.services['storefront-runtime'] = {
+  image: image('storefront-runtime'),
+  build: {
+    context: root,
+    dockerfile: 'ops/demo/storefront-runtime/Dockerfile',
+    additional_contexts: { storefront_image: 'service:storefront' },
+  },
+};
 
 // A small build context includes only the selected optimized media. Originals,
 // upstream dataset downloads, and generated credentials never enter this image.
@@ -80,7 +92,12 @@ await cp(resolve(root, 'ops/demo/.cache/images/catalog'), resolve(mediaRoot, 'ca
 await cp(resolve(root, 'ops/demo/object-storage/assets'), resolve(mediaRoot, 'merchandising'), {
   recursive: true,
 });
-for (const file of ['init.sh', 'public-read-policy.json']) {
+for (const file of [
+  'init.sh',
+  'public-read-policy.json',
+  'admin-policy.json',
+  'reader-policy.json',
+]) {
   await cp(resolve(root, 'ops/demo/object-storage', file), resolve(mediaRoot, file));
 }
 for (const file of ['LICENSE', 'NOTICE']) await cp(resolve(root, file), resolve(mediaRoot, file));
@@ -107,6 +124,8 @@ COPY catalog /catalog-images
 COPY merchandising /merchandising-assets
 COPY init.sh /init.sh
 COPY public-read-policy.json /public-read-policy.json
+COPY admin-policy.json /admin-policy.json
+COPY reader-policy.json /reader-policy.json
 COPY LICENSE NOTICE sources.lock.json image-manifest.tsv SHA256SUMS /licenses/
 LABEL org.opencontainers.image.source="https://github.com/MilD-0/Bricomaitre" org.opencontainers.image.revision="${revision}"
 ENTRYPOINT ["/bin/sh", "/runtime/run.sh", "media"]
@@ -119,6 +138,15 @@ await writeFile(resolve(output, 'compose.build.json'), JSON.stringify(builds, nu
 const completed = { condition: 'service_completed_successfully' };
 const healthy = { condition: 'service_healthy' };
 const runtime = 'runtime:/runtime:ro';
+const appRuntime = (name) => {
+  const owner =
+    name === 'admin-worker'
+      ? 'admin'
+      : name === 'storefront-marketing-worker'
+        ? 'storefront-api'
+        : name;
+  return `runtime-${owner}:/runtime:ro`;
+};
 const service = (name, command) => ({
   image: image(name),
   init: true,
@@ -127,7 +155,7 @@ const service = (name, command) => ({
   security_opt: ['no-new-privileges:true'],
   read_only: true,
   tmpfs: ['/tmp:size=64m,mode=1777'],
-  volumes: [runtime],
+  volumes: [appRuntime(name)],
   entrypoint: ['/bin/sh', '/runtime/run.sh', name],
   command,
   healthcheck: source.services[name].healthcheck,
@@ -145,7 +173,12 @@ const config = {
     initialize: {
       image: image('toolkit'),
       restart: 'no',
-      volumes: ['runtime:/runtime'],
+      volumes: [
+        'runtime:/runtime',
+        'runtime-admin:/runtime-admin',
+        'runtime-storefront-api:/runtime-storefront-api',
+        'runtime-storefront:/runtime-storefront',
+      ],
       environment: { DEMO_RELEASE: version },
     },
     postgres: {
@@ -215,15 +248,16 @@ const config = {
     }),
     'storefront-api': {
       ...service('storefront-api', ['node', 'apps/storefront-api/server.js']),
-      volumes: [runtime, 'storefront-api-cache:/app/apps/storefront-api/.next/cache'],
-      ports: ['127.0.0.1:3401:3001'],
+      volumes: [
+        appRuntime('storefront-api'),
+        'storefront-api-cache:/app/apps/storefront-api/.next/cache',
+      ],
       depends_on: { dataset: completed, media: completed, redis: healthy, 'mock-state': completed },
     },
     admin: {
       ...service('admin', ['node', 'apps/admin/server.js']),
       environment: source.services.admin.environment,
-      volumes: [runtime, 'admin-cache:/app/apps/admin/.next/cache'],
-      ports: ['127.0.0.1:3400:3000'],
+      volumes: [appRuntime('admin'), 'admin-cache:/app/apps/admin/.next/cache'],
       depends_on: { 'storefront-api': healthy },
     },
     'admin-worker': {
@@ -245,10 +279,12 @@ const config = {
         'node',
         'apps/storefront/server.js',
       ]),
-      read_only: false,
-      volumes: [runtime, 'storefront-cache:/app/apps/storefront/.next/cache'],
-      ports: ['127.0.0.1:3402:3002'],
-      depends_on: { 'storefront-api': healthy },
+      volumes: [
+        appRuntime('storefront'),
+        'storefront-cache:/app/apps/storefront/.next/cache',
+        'storefront-server:/app/apps/storefront/.next/server',
+      ],
+      depends_on: { 'storefront-api': healthy, 'storefront-runtime': completed },
     },
     'cache-reset': {
       image: source.services.redis.image,
@@ -270,15 +306,45 @@ const config = {
   volumes: Object.fromEntries(
     [
       'runtime',
+      'runtime-admin',
+      'runtime-storefront-api',
+      'runtime-storefront',
       'postgres-data',
       'redis-data',
       'object-storage-data',
       'admin-cache',
       'storefront-cache',
+      'storefront-server',
       'storefront-api-cache',
     ].map((key) => [key, {}]),
   ),
 };
+config.services.gateway = {
+  ...source.services.gateway,
+  image: image('gateway'),
+  volumes: [],
+  depends_on: { admin: healthy, storefront: healthy, 'object-storage': healthy },
+};
+config.services['storefront-runtime'] = {
+  ...source.services['storefront-runtime'],
+  image: image('storefront-runtime'),
+  volumes: ['storefront-server:/next-server'],
+};
+for (const name of ['postgres', 'redis', 'object-storage', 'mock-services']) {
+  for (const key of ['read_only', 'tmpfs', 'cap_drop', 'security_opt']) {
+    if (source.services[name][key] !== undefined) {
+      config.services[name][key] = source.services[name][key];
+    }
+  }
+}
+delete config.services['object-storage'].ports;
+config.networks = { default: { driver_opts: { 'com.docker.network.bridge.name': 'br-bric-rel' } } };
+for (const [name, definition] of Object.entries(config.services)) {
+  const budget = source.services[name] ?? source.services.seed;
+  for (const key of ['cpus', 'mem_limit', 'memswap_limit', 'pids_limit', 'logging', 'dns']) {
+    definition[key] = budget[key];
+  }
+}
 // Never serialize resolved local environment values into a public artifact.
 config.services.admin.environment = Object.fromEntries(
   Object.entries(config.services.admin.environment).filter(

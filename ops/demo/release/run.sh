@@ -8,9 +8,15 @@ load_env() {
   done < "$1"
 }
 
-load_env /runtime/compose.env
 task="$1"
 shift
+case "$task" in
+  admin|admin-worker|storefront-api|storefront-marketing-worker|storefront)
+    load_env /runtime/app.env
+    exec "$@"
+    ;;
+esac
+load_env /runtime/compose.env
 case "$task" in
   postgres)
     export POSTGRES_DB=bricomaitre_demo POSTGRES_USER=bricomaitre_demo_owner
@@ -20,7 +26,7 @@ case "$task" in
   redis|redis-health)
     export REDISCLI_AUTH="$DEMO_REDIS_PASSWORD"
     if [ "$task" = redis-health ]; then exec redis-cli ping; fi
-    exec /usr/local/bin/docker-entrypoint.sh redis-server --appendonly yes --requirepass "$DEMO_REDIS_PASSWORD"
+    exec /usr/local/bin/docker-entrypoint.sh redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction --requirepass "$DEMO_REDIS_PASSWORD"
     ;;
   object-storage)
     export MINIO_ROOT_USER="$DEMO_S3_ACCESS_KEY" MINIO_ROOT_PASSWORD="$DEMO_S3_SECRET_KEY"
@@ -37,19 +43,9 @@ case "$task" in
     export POSTGRES_STOREFRONT_USER=bricomaitre_demo_storefront POSTGRES_STOREFRONT_PASSWORD="$DEMO_POSTGRES_STOREFRONT_PASSWORD"
     exec "$@"
     ;;
-  migrations|admin|admin-worker)
+  migrations)
     load_env /runtime/admin.env
-    export DATABASE_URL="postgresql://bricomaitre_demo_admin:$DEMO_POSTGRES_ADMIN_PASSWORD@postgres:5432/bricomaitre_demo"
-    if [ "$task" = migrations ]; then
-      export DATABASE_URL="postgresql://bricomaitre_demo_owner:$DEMO_POSTGRES_OWNER_PASSWORD@postgres:5432/bricomaitre_demo"
-    fi
-    ;;
-  storefront-api|storefront-marketing-worker)
-    load_env /runtime/storefront-api.env
-    export DATABASE_URL="postgresql://bricomaitre_demo_storefront:$DEMO_POSTGRES_STOREFRONT_PASSWORD@postgres:5432/bricomaitre_demo"
-    ;;
-  storefront)
-    load_env /runtime/storefront.env
+    export DATABASE_URL="postgresql://bricomaitre_demo_owner:$DEMO_POSTGRES_OWNER_PASSWORD@postgres:5432/bricomaitre_demo"
     ;;
   *) printf 'Unknown demo process: %s\n' "$task" >&2; exit 2 ;;
 esac
