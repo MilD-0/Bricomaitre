@@ -12,6 +12,7 @@ WORKDIR /workspace
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/storefront/package.json apps/storefront/package.json
 COPY packages/ai-core/package.json packages/ai-core/package.json
+COPY packages/db/package.json packages/db/package.json
 COPY packages/runtime/package.json packages/runtime/package.json
 COPY packages/storefront-core/package.json packages/storefront-core/package.json
 
@@ -29,6 +30,7 @@ RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-11.24.0,target=/corepack,sha
 COPY tsconfig.base.json ./
 COPY apps/storefront ./apps/storefront
 COPY packages/ai-core ./packages/ai-core
+COPY packages/db ./packages/db
 COPY packages/runtime ./packages/runtime
 COPY packages/storefront-core ./packages/storefront-core
 COPY ops/scripts/generate-runtime-license-bundle.mjs ./ops/scripts/generate-runtime-license-bundle.mjs

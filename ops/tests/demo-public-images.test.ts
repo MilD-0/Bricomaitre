@@ -1,5 +1,12 @@
 import { expect, it, vi } from 'vitest';
-import { verifyPublicImages } from '../demo/release/verify-public.mjs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const { verifyPublicImages } = (await import(
+  pathToFileURL(resolve(import.meta.dirname, '../demo/release/verify-public.mjs')).href
+)) as {
+  verifyPublicImages: (images: Record<string, string>, fetchImpl?: typeof fetch) => Promise<void>;
+};
 
 const images = {
   admin: `ghcr.io/mild-0/bricomaitre-demo/admin:2026.09.05@sha256:${'a'.repeat(64)}`,
