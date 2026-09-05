@@ -11,7 +11,7 @@ services:
     mem_limit: 64m
     memswap_limit: 64m
     pids_limit: 64
-    tmpfs: [/tmp:size=16m, mode=1777]
+    tmpfs: ['/tmp:size=16m,mode=1777']
     logging:
       driver: local
       options: { max-size: '10m', max-file: '3' }
