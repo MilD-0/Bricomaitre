@@ -522,7 +522,14 @@ describe('production packaging and release runtime', () => {
     expect(release).toContain('StrictHostKeyChecking yes\\n');
     expect(release).toContain('ServerAliveInterval 15\\n');
     expect(release).toContain('ServerAliveCountMax 4\\n');
+    expect(release).toContain('ControlMaster auto\\n');
+    expect(release).toContain('ControlPath %s\\n');
+    expect(release).toContain('ControlPersist 10m\\n');
     expect(release).toContain('echo "BRIC_DEPLOY_SSH_CONFIG=$ssh_config"');
+    expect(release).toContain('echo "BRIC_DEPLOY_SSH_CONTROL_PATH=$control_path"');
+    expect(release).toContain(
+      'ssh -F "$BRIC_DEPLOY_SSH_CONFIG" -O exit bric-production >/dev/null 2>&1 || true',
+    );
     expect(release.match(/ssh -F "\$BRIC_DEPLOY_SSH_CONFIG" bric-production/g)).toHaveLength(11);
     expect(release).not.toContain('~/.ssh/bric_deploy_key');
     expect(release).not.toContain('> ~/.ssh/known_hosts');

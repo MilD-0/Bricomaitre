@@ -463,10 +463,12 @@ jobs:
           ssh_key="$ssh_dir/deploy-key"
           known_hosts="$ssh_dir/known-hosts"
           ssh_config="$ssh_dir/config"
+          control_path="/tmp/bric-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.sock"
           install -m 700 -d "$ssh_dir"
           install -m 600 /dev/null "$ssh_key"
           install -m 600 /dev/null "$known_hosts"
           install -m 600 /dev/null "$ssh_config"
+          rm -f "$control_path"
           printf '%s\n' "$DEPLOY_KEY" > "$ssh_key"
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$known_hosts"
           {
@@ -482,8 +484,12 @@ jobs:
             printf '  ServerAliveInterval 15\n'
             printf '  ServerAliveCountMax 4\n'
             printf '  TCPKeepAlive yes\n'
+            printf '  ControlMaster auto\n'
+            printf '  ControlPath %s\n' "$control_path"
+            printf '  ControlPersist 10m\n'
           } > "$ssh_config"
           echo "BRIC_DEPLOY_SSH_CONFIG=$ssh_config" >> "$GITHUB_ENV"
+          echo "BRIC_DEPLOY_SSH_CONTROL_PATH=$control_path" >> "$GITHUB_ENV"
       - name: Stage release, cut over, and run production smoke checks
         if: steps.freshness.outputs.current == 'true'
         run: |
@@ -505,6 +511,8 @@ jobs:
               ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
                 "source '$release_path/ops/scripts/blue-green.sh'; rollback_runtime_env_transaction" || true
             fi
+            ssh -F "$BRIC_DEPLOY_SSH_CONFIG" -O exit bric-production >/dev/null 2>&1 || true
+            rm -f "$BRIC_DEPLOY_SSH_CONTROL_PATH"
             exit "$status"
           }
           trap cleanup_deploy_step EXIT
