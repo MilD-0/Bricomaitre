@@ -4,6 +4,8 @@ const playwrightServerMode = process.env.BRIC_PLAYWRIGHT_SERVER;
 const useProductionServer =
   playwrightServerMode === 'production' || playwrightServerMode === 'prebuilt';
 const usePrebuiltProductionServer = playwrightServerMode === 'prebuilt';
+const productionServerCommand =
+  'bash ../../ops/scripts/hydrate-next-standalone.sh apps/storefront && node ../../ops/scripts/start-next-standalone.mjs --app-dir . --nested-dir apps/storefront --default-port 3003';
 
 function readLoopbackOrigin(name: string, fallback: string) {
   const origin = new URL(process.env[name] ?? fallback);
@@ -95,9 +97,9 @@ export default defineConfig({
       // by local and constrained CI runners. The cap applies to compilation;
       // the measured standalone server starts with its normal runtime limits.
       command: usePrebuiltProductionServer
-        ? 'pnpm start'
+        ? productionServerCommand
         : useProductionServer
-          ? 'NODE_OPTIONS=--max-old-space-size=2048 pnpm build && pnpm start'
+          ? `NODE_OPTIONS=--max-old-space-size=2048 pnpm build && ${productionServerCommand}`
           : 'pnpm dev',
       url: `http://127.0.0.1:${nextServerPort}/api/health`,
       reuseExistingServer: false,

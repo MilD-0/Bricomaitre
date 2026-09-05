@@ -69,7 +69,8 @@ describe('Playwright server isolation', () => {
 
     expect(webServers).toHaveLength(3);
     expect(webServers[1]).toMatchObject({
-      command: 'pnpm start',
+      command:
+        'bash ../../ops/scripts/hydrate-next-standalone.sh apps/storefront && node ../../ops/scripts/start-next-standalone.mjs --app-dir . --nested-dir apps/storefront --default-port 3003',
       url: 'http://127.0.0.1:3004/api/health',
     });
     expect(webServers[2]).toMatchObject({

@@ -120,6 +120,12 @@ test('returns a real permanent redirect for legacy taxonomy URLs', async ({ requ
 });
 
 test('appends the second catalog page without inventing empty price filters', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'IntersectionObserver', {
+      configurable: true,
+      value: undefined,
+    });
+  });
   await page.goto('/fr/products');
   const cards = page.locator('.catalog-grid > .catalog-card');
   await expect(cards).toHaveCount(24);

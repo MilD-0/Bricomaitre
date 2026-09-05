@@ -71,7 +71,8 @@ describe('Playwright server isolation', () => {
     const config = await loadConfig();
 
     expect(config.webServer).toMatchObject({
-      command: 'pnpm start',
+      command:
+        'bash ../../ops/scripts/hydrate-next-standalone.sh apps/admin && node ../../ops/scripts/start-next-standalone.mjs --app-dir . --nested-dir apps/admin --default-port 3000',
       url: 'http://127.0.0.1:3020/android-chrome-192x192.png',
       reuseExistingServer: false,
       env: { HOSTNAME: '127.0.0.1', PORT: '3020', BETTER_AUTH_URL: 'http://127.0.0.1:3020' },
