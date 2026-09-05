@@ -2,7 +2,8 @@ import { notFound } from 'next/navigation';
 
 import { hasDb } from '@bric/db/client';
 
-import { analyticsQuerySchema, getAnalyticsData, type AnalyticsView } from '../../lib/analytics';
+import { analyticsQuerySchema, type AnalyticsView } from '../../lib/analytics';
+import { getAnalyticsSnapshot } from '../../lib/analytics-snapshots';
 import { requireStatsPageAccess } from '../../lib/page-access';
 import { StatsWorkspace } from './analytics-workspace';
 
@@ -32,7 +33,7 @@ export async function StatsRoutePage({
     endDate: first(query.endDate),
     grain: first(query.grain),
   });
-  const initialData = await getAnalyticsData(
+  const initialData = await getAnalyticsSnapshot(
     parsed.success ? parsed.data : { view, range: '30d', grain: 'auto' },
   );
 

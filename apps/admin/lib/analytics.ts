@@ -83,6 +83,7 @@ export type AnalyticsPayload = {
   diagnostics: {
     queryDurationMs: number;
     responseSizeBytes: number;
+    cache?: { state: 'fresh' | 'stale' | 'miss'; computedAt: string };
   };
 };
 

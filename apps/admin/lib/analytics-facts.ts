@@ -294,5 +294,11 @@ export async function refreshAnalyticsFactsAfterMutation() {
   } catch (error) {
     console.error('Stats fact refresh failed after an economics mutation.', error);
     return false;
+  } finally {
+    // Rotate after rebuilding so an overlapping reader cannot cache old facts
+    // under the new generation. Failed rebuilds also discard old snapshots.
+    await import('./analytics-snapshots')
+      .then(({ invalidateAnalyticsSnapshots }) => invalidateAnalyticsSnapshots())
+      .catch((error) => console.error('Stats snapshot invalidation failed.', error));
   }
 }

@@ -146,7 +146,7 @@ describe('AppShell', () => {
       'href',
       '/en/stats/meta-ads?range=custom&startDate=2026-08-01&endDate=2026-08-15&grain=week',
     );
-    expect(acquisitionLink).toHaveAttribute('data-prefetch', 'false');
+    expect(acquisitionLink).toHaveAttribute('data-prefetch', 'true');
   });
 
   it('uses a flat desktop navigation rail with a compact collapsed state', async () => {

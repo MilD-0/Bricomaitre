@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
 
-import { analyticsQuerySchema, getAnalyticsData } from '../../../../lib/analytics';
+import { analyticsQuerySchema } from '../../../../lib/analytics';
+import { getAnalyticsSnapshot } from '../../../../lib/analytics-snapshots';
 import { requireAnalyticsAccess } from '../../../../lib/rbac';
 
 export async function GET(request: NextRequest) {
@@ -24,13 +25,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const data = await getAnalyticsData(parsed.data);
+  const startedAt = performance.now();
+  const data = await getAnalyticsSnapshot(parsed.data, {
+    refresh: request.nextUrl.searchParams.get('refresh') === '1',
+  });
   return NextResponse.json(
     { data },
     {
       headers: {
         'Cache-Control': 'private, no-cache, must-revalidate',
-        'Server-Timing': `stats;dur=${data.diagnostics.queryDurationMs}`,
+        'Server-Timing': `stats;dur=${Math.round(performance.now() - startedAt)}`,
+        'X-Analytics-Cache': data.diagnostics.cache?.state ?? 'bypass',
         'X-Analytics-Coverage': data.warnings.length ? 'partial' : 'complete',
       },
     },

@@ -9,10 +9,7 @@ const { getAnalyticsDataMock, hasDbMock, requireStatsPageAccessMock } = vi.hoist
 
 vi.mock('@bric/db/client', () => ({ hasDb: hasDbMock }));
 vi.mock('../../lib/page-access', () => ({ requireStatsPageAccess: requireStatsPageAccessMock }));
-vi.mock('../../lib/analytics', async () => {
-  const actual = await vi.importActual<typeof import('../../lib/analytics')>('../../lib/analytics');
-  return { ...actual, getAnalyticsData: getAnalyticsDataMock };
-});
+vi.mock('../../lib/analytics-snapshots', () => ({ getAnalyticsSnapshot: getAnalyticsDataMock }));
 vi.mock('./analytics-workspace', () => ({
   StatsWorkspace: ({ initialData }: { initialData: { marker: string } }) => (
     <div>{initialData.marker}</div>

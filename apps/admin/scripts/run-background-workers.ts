@@ -1,11 +1,21 @@
 import 'dotenv/config';
 
 import * as Sentry from '@sentry/node';
-import { createQueueWorker, isJobCancellationError } from '@bric/runtime/jobs';
+import {
+  createLightweightQueueWorker,
+  createQueueWorker,
+  isJobCancellationError,
+} from '@bric/runtime/jobs';
 import { writeWorkerHeartbeat } from '@bric/runtime/worker-heartbeat';
 import cron from 'node-cron';
 
 import { readSampleRate } from '../lib/sentry';
+import {
+  ANALYTICS_SNAPSHOT_QUEUE,
+  getAnalyticsSnapshot,
+  warmAnalyticsSnapshots,
+} from '../lib/analytics-snapshots';
+import type { AnalyticsQuery } from '../lib/analytics';
 import {
   ADMIN_AD_COST_IMPORT_QUEUE,
   ADMIN_ECOTRACK_SYNC_QUEUE,
@@ -93,15 +103,43 @@ const workers = [
   createQueueWorker(ADMIN_ECOTRACK_SHIPMENT_SYNC_QUEUE, runEcotrackShipmentSyncJob),
 ];
 
+const analyticsWorker = createLightweightQueueWorker<AnalyticsQuery>(
+  ANALYTICS_SNAPSHOT_QUEUE,
+  async (query) => {
+    await getAnalyticsSnapshot(query, { refresh: true, remember: false });
+  },
+  { concurrency: 1 },
+);
+analyticsWorker.on('error', (error) => {
+  console.error('[analytics] Snapshot worker error', error);
+  Sentry.captureException(error);
+});
+let warmingAnalytics = false;
+async function warmAnalytics() {
+  if (stopping || warmingAnalytics) return;
+  warmingAnalytics = true;
+  try {
+    await warmAnalyticsSnapshots();
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('[worker] analytics warm-up failed', error);
+  } finally {
+    warmingAnalytics = false;
+  }
+}
+const analyticsWarmTimer = setInterval(() => void warmAnalytics(), 15 * 60_000);
+analyticsWarmTimer.unref();
+
 let stopping = false;
 let heartbeatRunning = false;
+void warmAnalytics();
 
 async function refreshWorkerHeartbeat() {
   if (stopping || heartbeatRunning) return;
 
   heartbeatRunning = true;
   try {
-    await Promise.all(workers.map((worker) => worker.waitUntilReady()));
+    await Promise.all([...workers, analyticsWorker].map((worker) => worker.waitUntilReady()));
     await writeWorkerHeartbeat(WORKER_HEARTBEAT_PATH);
   } catch (error) {
     Sentry.captureException(error, { tags: { operation: 'worker-heartbeat' } });
@@ -226,12 +264,13 @@ async function shutdown(signal: string, exitCode = 0) {
   stopping = true;
   console.log(`[worker] shutting down on ${signal}`);
   clearInterval(heartbeatTimer);
+  clearInterval(analyticsWarmTimer);
   reportingRefreshTask.stop();
   databaseMaintenanceTask.stop();
   stopEcotrackScheduler();
   stopMetaAdsScheduler();
   stopSearchConsoleScheduler();
-  await Promise.all(workers.map((worker) => worker.close()));
+  await Promise.all([...workers, analyticsWorker].map((worker) => worker.close()));
   await Sentry.close(2000);
   process.exit(exitCode);
 }
