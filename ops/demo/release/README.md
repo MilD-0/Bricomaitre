@@ -26,7 +26,7 @@ records the architectures supplied. Allocate 4 GB of memory to Docker and allow
 These are starting allocations, not measured minimum requirements.
 
 The browser URLs and ports above are fixed for these prebuilt images. Keep
-ports 3400, 3401, 3402, and 3900 available. Services bind to your machine's
+ports 3400, 3401, 3402, 3900, 3901, and 3808 available. Services bind to your machine's
 loopback interface. Custom domains and hosted deployments use the source demo
 configuration because browser configuration is compiled into the web images.
 The release uses its own Compose project and volumes, separate from `./demo`.
@@ -40,6 +40,17 @@ retain these settings. Changing the media origin rebuilds the seeded template
 so stored image URLs match. Keep the internal API, databases, provider mocks,
 and storage console private.
 
+The demo limits container CPU, memory, processes, and log rotation. Its gateway
+limits requests and uploads; object storage has a 4 GiB bucket quota. Apps use
+scoped storage credentials, not the storage administrator account.
+
+Compose alone does not isolate containers from your host or LAN, or cap the
+total size of database volumes. The hosted demo adds a host firewall and a
+separate 16 GiB filesystem for all writable demo data. Keep those protections
+when hosting it publicly. Public Admin access is intentional; assume visitors
+can change or delete anything inside the demo. Never connect real business data
+or credentials.
+
 ## AI assistants
 
 AI assistants are not yet available in the hosted demo, and this bundle keeps
@@ -49,11 +60,16 @@ checkout and run `./demo up`. In `ops/demo/.runtime/admin.env` and
 `AI_PROVIDER=openrouter`, and `AI_ENABLED=true`. Configure `AI_ADMIN_MODEL` and
 `AI_CONTENT_MODEL` for Admin, and `AI_STOREFRONT_MODEL` for Storefront.
 
+External DNS is disabled by default. A local installation needs a Compose
+override with an upstream DNS resolver for these two services to reach
+OpenRouter. A hardened public host also needs an explicit outbound firewall
+exception; adding an API key alone does not enable network access.
+
 Recreate the affected containers without rerunning the seed jobs:
 
 ```sh
 docker compose --env-file ops/demo/.runtime/compose.env -f ops/demo/compose.yml \
-  up -d --no-deps --force-recreate admin admin-worker storefront
+  -f /path/to/your/override.yml up -d --no-deps --force-recreate admin admin-worker storefront
 ```
 
 Enable the shopping assistant and select a valid model in Admin's Storefront
@@ -81,6 +97,7 @@ docker compose stop storefront admin admin-worker storefront-api storefront-mark
 docker compose run --rm --no-deps dataset reset
 docker compose run --rm --no-deps media reset
 docker compose run --rm --no-deps cache-reset
+docker compose run --rm --no-deps storefront-runtime reset
 docker compose restart mock-services
 docker compose up -d --wait --no-deps mock-services
 docker compose run --rm --no-deps mock-state

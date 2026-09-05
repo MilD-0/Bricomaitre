@@ -1,4 +1,6 @@
-import { readFileSync, statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -202,7 +204,43 @@ describe('self-contained demo runtime', () => {
     expect(resources).toContain('arn:aws:s3:::bricomaitre-demo/exports/products/*');
     expect(resources.some((resource) => resource.includes('exports/orders'))).toBe(false);
     expect(resources.some((resource) => resource.includes('bulletin'))).toBe(false);
-    expect(initializer).toContain('--prefix exports/orders/');
+    const directory = mkdtempSync(resolve(tmpdir(), 'bric-storage-test-'));
+    const calls = resolve(directory, 'calls');
+    try {
+      execFileSync(
+        'bash',
+        [
+          '-c',
+          'mc() { printf "%s\\n" "$*" >> "$MC_CALLS"; }; source "$1" reset',
+          'test',
+          resolve(workspaceRoot, 'ops/demo/object-storage/init.sh'),
+        ],
+        {
+          env: {
+            ...process.env,
+            MC_CALLS: calls,
+            DEMO_S3_ACCESS_KEY: 'test-root',
+            DEMO_S3_SECRET_KEY: 'test-root-secret',
+            DEMO_S3_ADMIN_ACCESS_KEY: 'test-admin',
+            DEMO_S3_ADMIN_SECRET_KEY: 'test-admin-secret',
+            DEMO_S3_READER_ACCESS_KEY: 'test-reader',
+            DEMO_S3_READER_SECRET_KEY: 'test-reader-secret',
+          },
+        },
+      );
+      const operations = readFileSync(calls, 'utf8').trim().split('\n');
+      expect(operations.filter((operation) => operation.startsWith('rm '))).toEqual(
+        ['products', 'brands', 'categories', 'assets', 'banners', 'bulletin', 'exports'].map(
+          (prefix) => `rm --recursive --force demo/bricomaitre-demo/${prefix}/`,
+        ),
+      );
+      expect(operations).toContain(
+        'ilm rule add --expire-days 2 --prefix exports/ demo/bricomaitre-demo',
+      );
+      expect(operations).toContain('quota set demo/bricomaitre-demo --size 4GiB');
+    } finally {
+      rmSync(directory, { recursive: true });
+    }
     expect(initializer).toContain('mirror --overwrite --remove /catalog-images');
   });
 
