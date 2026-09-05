@@ -83,6 +83,22 @@ describe('production packaging and release runtime', () => {
       expect(source).not.toMatch(/^COPY [.] [.]$/m);
       expect(source).toContain(`COPY ${appDirectory} ./${appDirectory}`);
       expect(source).toContain('COPY packages/storefront-core ./packages/storefront-core');
+      const manifests = new Map(
+        licensedPackageManifests.map((manifestPath) => {
+          const manifest = JSON.parse(readFileSync(resolve(workspaceRoot, manifestPath), 'utf8'));
+          return [manifest.name, { path: manifestPath, ...manifest }];
+        }),
+      );
+      for (const manifest of manifests.values()) {
+        if (!source.includes(`COPY ${manifest.path} `)) continue;
+        for (const [name, version] of Object.entries({
+          ...manifest.dependencies,
+          ...manifest.devDependencies,
+        })) {
+          if (!String(version).startsWith('workspace:')) continue;
+          expect(source).toContain(`COPY ${manifests.get(name)?.path} `);
+        }
+      }
       expect(source).not.toContain('ops/ownership');
       expect(source).toContain('COPY --chown=bric:bric LICENSE NOTICE SECURITY.md ./');
       expect(source).toContain(

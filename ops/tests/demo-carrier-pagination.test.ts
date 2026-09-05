@@ -4,6 +4,8 @@ import { createServer } from 'node:net';
 import { resolve } from 'node:path';
 import { expect, it } from 'vitest';
 
+type OrderPage = { last_page: number; data: Array<{ status: string; tracking: string }> };
+
 it('preserves imported historical outcomes and bounds provider-filtered order pages', async () => {
   const socket = createServer();
   socket.listen(0, '127.0.0.1');
@@ -39,20 +41,24 @@ it('preserves imported historical outcomes and bounds provider-filtered order pa
         })
       ).status,
     ).toBe(200);
-    const page = await (await fetch(`${origin}/ecotrack/delivro/api/v1/get/orders?page=3`)).json();
+    const page = (await (
+      await fetch(`${origin}/ecotrack/delivro/api/v1/get/orders?page=3`)
+    ).json()) as OrderPage;
     expect(page.last_page).toBe(3);
     expect(page.data).toHaveLength(5);
     expect(page.data[0].status).toBe('livre_non_encaisse');
-    const tracked = await (
+    const tracked = (await (
       await fetch(`${origin}/ecotrack/delivro/api/v1/get/orders?tracking=HISTORICAL-7`)
-    ).json();
+    ).json()) as OrderPage;
     expect(tracked.data).toHaveLength(1);
     expect(tracked.data[0].tracking).toBe('HISTORICAL-7');
-    const emir = await (await fetch(`${origin}/ecotrack/emir/api/v1/get/orders`)).json();
+    const emir = (await (
+      await fetch(`${origin}/ecotrack/emir/api/v1/get/orders`)
+    ).json()) as OrderPage;
     expect(emir.data).toHaveLength(45);
-    const filtered = await (
+    const filtered = (await (
       await fetch(`${origin}/ecotrack/delivro/api/v1/get/orders?start_date=2025-01-01`)
-    ).json();
+    ).json()) as OrderPage;
     expect(filtered.data).toEqual([]);
   } finally {
     child.kill('SIGTERM');
