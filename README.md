@@ -12,6 +12,10 @@ catalog, while the other helps staff investigate and prepare operational work.
 [Demo admin](https://bricomaitre-admin.mildsauce.cloud) · [Source](https://github.com/MilD-0/Bricomaitre) ·
 [Email Mild](mailto:mayldsauce@gmail.com)
 
+The hosted demo runs on my own machine over an unreliable connection, so it may
+be slow or offline. If you need access at a particular time,
+[email me](mailto:mayldsauce@gmail.com) and I'll make sure it's running.
+
 ## Production figures
 
 |            16.4k |                         US$160k |            2.6k |                99.998% |
