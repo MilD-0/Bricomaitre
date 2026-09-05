@@ -28,8 +28,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  prepare-media:
+    name: Prepare shared catalog media
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: corepack enable && pnpm install --frozen-lockfile
+      - name: Prepare one media set for every architecture
+        run: |
+          pnpm demo:data:verify
+          pnpm demo:images
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: demo-catalog-media
+          path: ops/demo/.cache/images/catalog/
+          compression-level: 0
+          retention-days: 1
+
   native-install:
     name: Build and install / ${{ matrix.arch }}
+    needs: prepare-media
     strategy:
       fail-fast: false
       matrix:
@@ -68,11 +93,14 @@ jobs:
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
         with:
           driver-opts: default-load=true
-      - name: Verify packaging tools and prepare media
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: demo-catalog-media
+          path: ops/demo/.cache/images/catalog
+      - name: Verify packaging tools and assemble bundle
         run: |
           pnpm test:ops
           pnpm demo:data:verify
-          pnpm demo:images
           node ops/demo/release/assemble.mjs "$DEMO_VERSION" "$RUNNER_TEMP/demo-release"
       - name: Build release images
         run: docker compose -f "$RUNNER_TEMP/demo-release/compose.build.json" build
