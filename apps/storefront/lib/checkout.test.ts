@@ -54,6 +54,9 @@ describe('checkout domain', () => {
     expect(
       checkoutFormSchema.parse({ ...form, phoneNumber1: '+213 550 12 34 56' }).phoneNumber1,
     ).toBe('0550123456');
+    expect(
+      checkoutFormSchema.parse({ ...form, phoneNumber1: '\u200f٠٧٩٨٥٦٤٢٩١' }).phoneNumber1,
+    ).toBe('0798564291');
     expect(checkoutFormSchema.safeParse({ ...form, email: 'not-an-email' }).success).toBe(false);
     expect(
       checkoutFormSchema.parse({ ...form, homeAddress: '', delivery: 'home' }).homeAddress,

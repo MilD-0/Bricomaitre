@@ -7,6 +7,7 @@ import {
 import { z } from 'zod';
 import type { StorefrontOrderMarketing } from '@bric/storefront-core/marketing-contracts';
 import { META_SEMANTICS_VERSION } from '@bric/storefront-core/meta-contracts';
+import { normalizeAlgerianPhoneNumber } from '@bric/storefront-core/settings';
 
 import type { CartItem } from '@/lib/cart';
 
@@ -27,9 +28,8 @@ const algerianPhone = z
   .trim()
   .min(1, 'phone_required')
   .max(50, 'phone_invalid')
-  .transform((value) => value.replace(/[\s().-]/g, ''))
-  .refine((value) => /^(?:0|(?:\+?213))[5-7]\d{8}$/.test(value), 'phone_invalid')
-  .transform((value) => value.replace(/^\+?213/, '0'));
+  .transform(normalizeAlgerianPhoneNumber)
+  .refine((value) => /^0[5-7]\d{8}$/.test(value), 'phone_invalid');
 
 export const checkoutFormSchema = z.object({
   phoneNumber1: algerianPhone,

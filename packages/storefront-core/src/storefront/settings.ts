@@ -8,7 +8,10 @@ const providerCompatibleEmailSchema = z
   .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Enter a valid email address.');
 
 export function normalizeAlgerianPhoneNumber(value: string) {
-  const digits = value.replace(/\D/g, '');
+  const digits = value
+    .replace(/[٠-٩]/g, (digit) => String(digit.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (digit) => String(digit.charCodeAt(0) - 0x06f0))
+    .replace(/\D/g, '');
 
   if (digits.startsWith('00213')) return `0${digits.slice(5)}`;
   if (digits.startsWith('213')) return `0${digits.slice(3)}`;

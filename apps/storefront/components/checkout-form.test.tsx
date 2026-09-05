@@ -283,6 +283,10 @@ describe('CheckoutForm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'submit' }));
 
     expect(await screen.findByText('phoneError')).toBeVisible();
+    fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
+      target: { value: '0798564291' },
+    });
+    expect(screen.queryByText('phoneError')).not.toBeInTheDocument();
     expect(mocks.create).not.toHaveBeenCalled();
   });
 

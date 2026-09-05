@@ -467,13 +467,22 @@ export function CheckoutForm({
               <input
                 name="phoneNumber1"
                 type="tel"
+                dir="ltr"
                 inputMode="tel"
                 autoComplete="tel"
                 value={phoneNumber1}
                 placeholder={labels.phonePlaceholder}
                 aria-invalid={Boolean(errors.phoneNumber1)}
                 aria-describedby={errors.phoneNumber1 ? 'phone-error' : undefined}
-                onChange={(event) => setPhoneNumber1(event.target.value)}
+                onChange={(event) => {
+                  setPhoneNumber1(event.target.value);
+                  setErrors((current) => {
+                    if (!current.phoneNumber1) return current;
+                    const next = { ...current };
+                    delete next.phoneNumber1;
+                    return next;
+                  });
+                }}
               />
               {errors.phoneNumber1 ? <small id="phone-error">{errors.phoneNumber1}</small> : null}
             </label>
