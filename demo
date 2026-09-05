@@ -3,11 +3,20 @@ set -Eeuo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 demo_root="$repo_root/ops/demo"
-runtime_dir="$demo_root/.runtime"
+runtime_dir="${BRIC_DEMO_RUNTIME_DIR:-$demo_root/.runtime}"
 compose_file="$demo_root/compose.yml"
 
 mkdir -p "$runtime_dir"
 chmod 700 "$runtime_dir"
+runtime_dir="$(cd "$runtime_dir" && pwd)"
+export BRIC_DEMO_RUNTIME_DIR="$runtime_dir"
+
+# Host settings survive launcher calls and scheduled resets. Release builds use
+# a separate runtime directory and never load this machine's configuration.
+if [[ -f "$runtime_dir/host.env" ]]; then
+  # shellcheck disable=SC1090
+  source "$runtime_dir/host.env"
+fi
 
 random_hex() {
   openssl rand -hex "${1:-32}"
@@ -26,6 +35,7 @@ calculate_data_revision() {
         | sort -z \
         | xargs -0 sha256sum
       date -u +%F
+      printf '%s\n' "${BRIC_DEMO_OBJECT_ORIGIN:-http://127.0.0.1:${BRIC_DEMO_OBJECT_PORT:-3900}}"
     } | sha256sum | cut -d' ' -f1
   )
 }
@@ -212,7 +222,7 @@ smoke() {
   wait_for_url 'Admin' "$DEMO_ADMIN_ORIGIN/api/health"
   wait_for_url 'Storefront API' "http://127.0.0.1:$DEMO_API_PORT/api/health"
   wait_for_url 'Provider mocks' "http://127.0.0.1:$DEMO_MOCK_PORT/health"
-  wait_for_url 'Object storage' "$DEMO_OBJECT_PUBLIC_ORIGIN/minio/health/live"
+  wait_for_url 'Object storage' "http://127.0.0.1:$DEMO_OBJECT_PORT/minio/health/live"
 }
 
 build_images() {
@@ -319,6 +329,7 @@ reset_external_state() {
 prepare_dependencies() {
   prepare_catalog_images
   compose up -d --wait postgres redis object-storage mock-services
+  compose stop storefront admin admin-worker storefront-api storefront-marketing-worker
 
   if ! template_is_current; then
     printf 'Building immutable demo database template...\n'
@@ -327,6 +338,7 @@ prepare_dependencies() {
 
   restore_application_database
   reset_external_state
+  clear_application_caches
 }
 
 start_applications() {
@@ -444,9 +456,7 @@ case "$command" in
     compose down --remove-orphans
     ;;
   reset)
-    compose stop storefront admin admin-worker storefront-api storefront-marketing-worker
     prepare_dependencies
-    clear_application_caches
     compose up -d --no-deps storefront-api storefront-marketing-worker admin admin-worker storefront
     smoke
     ;;
