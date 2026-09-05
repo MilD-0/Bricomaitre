@@ -25,6 +25,8 @@ export const ANALYTICS_RESOLVED_SHIPMENT_STATUSES = [
   'manual_completed',
 ] as const;
 
+export const ANALYTICS_PAID_SHIPMENT_STATUSES = ['paye_et_archive', 'payed'] as const;
+
 export function effectiveEcotrackStatusSql(input: {
   localStatus: SQLWrapper;
   providerStatus: SQLWrapper;

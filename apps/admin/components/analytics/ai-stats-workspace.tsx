@@ -26,6 +26,7 @@ import {
 } from '../ui/workspace';
 import { AnalyticsRangeControls } from './analytics-range-controls';
 import {
+  ANALYTICS_TIME_ZONE,
   formatDate,
   formatDuration,
   formatDzd,
@@ -44,13 +45,18 @@ import {
   AnalyticsTableHead,
   humanizeAnalyticsKey,
 } from './analytics-presentation';
+import { completedTrendBuckets } from './analytics-workspace-primitives';
 
 function formatMetric(locale: string, metric: AiStatsMetric) {
   if (metric.unit === 'percent') return formatPercent(locale, metric.value);
   if (metric.unit === 'milliseconds') return formatDuration(locale, metric.value);
   if (metric.unit === 'usd') return formatUsd(locale, metric.value);
-  if (metric.unit === 'dzd') return formatDzd(locale, metric.value);
+  if (metric.unit === 'dzd') return formatDzd(locale, metric.value, true);
   return formatNumber(locale, metric.value, true);
+}
+
+function entityLabel(labels: Record<string, string>, key: string) {
+  return labels[key] ?? humanizeAnalyticsKey(key);
 }
 
 function MetricStrip({
@@ -105,13 +111,16 @@ function EmptyRows({ copy }: { copy: AiStatsCopy }) {
 
 function OperationsView({
   data,
+  filters,
   copy,
   locale,
 }: {
   data: AiOperationsStats;
+  filters: AiStatsPayload['filters'];
   copy: AiStatsCopy;
   locale: string;
 }) {
+  const trend = completedTrendBuckets(data.trend, filters.resolvedGrain, filters.endDate);
   return (
     <>
       <MetricStrip metrics={data.metrics} copy={copy} locale={locale} />
@@ -119,7 +128,7 @@ function OperationsView({
         {data.trend.length ? (
           <div className="h-[18rem] w-full">
             <ResponsiveChart width="100%" height="100%">
-              <ComposedChart data={data.trend} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+              <ComposedChart data={trend} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                 <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.55} />
                 <XAxis
                   dataKey="bucket"
@@ -186,7 +195,9 @@ function OperationsView({
             <tbody>
               {data.workflows.map((row) => (
                 <tr key={row.task} className="border-b border-border/45 last:border-0">
-                  <td className="px-2 py-3 font-medium">{humanizeAnalyticsKey(row.task)}</td>
+                  <td className="px-2 py-3 font-medium">
+                    {entityLabel(copy.entities.workflows, row.task)}
+                  </td>
                   <td className="px-2 py-3 text-muted-foreground">{copy.workload[row.mode]}</td>
                   <td className="px-2 py-3 text-end tabular-nums">
                     {formatNumber(locale, row.runs)}
@@ -223,7 +234,9 @@ function OperationsView({
                   key={tool.name}
                   className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 py-2.5 text-sm"
                 >
-                  <span className="truncate font-medium">{humanizeAnalyticsKey(tool.name)}</span>
+                  <span className="truncate font-medium">
+                    {entityLabel(copy.entities.tools, tool.name)}
+                  </span>
                   <span className="tabular-nums text-muted-foreground">
                     {formatNumber(locale, tool.calls)}
                   </span>
@@ -245,9 +258,11 @@ function OperationsView({
                   key={`${change.type}:${change.status}`}
                   className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 py-2.5 text-sm"
                 >
-                  <span className="truncate font-medium">{humanizeAnalyticsKey(change.type)}</span>
+                  <span className="truncate font-medium">
+                    {entityLabel(copy.entities.changes, change.type)}
+                  </span>
                   <span className="text-muted-foreground">
-                    {humanizeAnalyticsKey(change.status)}
+                    {entityLabel(copy.entities.statuses, change.status)}
                   </span>
                   <span className="w-12 text-end tabular-nums">
                     {formatNumber(locale, change.count)}
@@ -315,7 +330,9 @@ function OperationsView({
                   {formatDate(locale, item.startedAt, { includeTime: true })}
                 </span>
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{humanizeAnalyticsKey(item.task)}</p>
+                  <p className="truncate font-medium">
+                    {entityLabel(copy.entities.workflows, item.task)}
+                  </p>
                   <p className="truncate text-xs text-muted-foreground">
                     {item.promptVersion} · {item.model}
                   </p>
@@ -328,7 +345,7 @@ function OperationsView({
                       : 'text-amber-600 dark:text-amber-400',
                   )}
                 >
-                  {humanizeAnalyticsKey(item.errorCode ?? item.status)}
+                  {entityLabel(copy.entities.statuses, item.errorCode ?? item.status)}
                 </span>
               </div>
             ))}
@@ -341,13 +358,19 @@ function OperationsView({
 
 function ShoppingView({
   data,
+  filters,
   copy,
   locale,
 }: {
   data: AiShoppingStats;
+  filters: AiStatsPayload['filters'];
   copy: AiStatsCopy;
   locale: string;
 }) {
+  const trend = completedTrendBuckets(data.trend, filters.resolvedGrain, filters.endDate);
+  const headlineMetrics = data.metrics.filter(
+    (metric) => metric.key !== 'paidContributionCoverage',
+  );
   const reliability = [
     {
       label: copy.reliability.activeJourneys,
@@ -358,6 +381,10 @@ function ShoppingView({
     {
       label: copy.reliability.p95Latency,
       value: formatDuration(locale, data.summary.p95DurationMs),
+    },
+    {
+      label: copy.reliability.contributionCoverage,
+      value: formatPercent(locale, data.orders.contributionCoveragePct),
     },
     {
       label: copy.reliability.ratings,
@@ -374,7 +401,7 @@ function ShoppingView({
 
   return (
     <>
-      <MetricStrip metrics={data.metrics} copy={copy} locale={locale} />
+      <MetricStrip metrics={headlineMetrics} copy={copy} locale={locale} />
       <div className="grid min-w-0 border-b border-border/60 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.6fr)]">
         <Section title={copy.sections.journey} className="border-b-0 lg:border-e">
           <div className="divide-y divide-border/45">
@@ -417,7 +444,7 @@ function ShoppingView({
         {data.trend.length ? (
           <div className="h-[17rem] w-full">
             <ResponsiveChart width="100%" height="100%">
-              <ComposedChart data={data.trend} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+              <ComposedChart data={trend} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                 <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.55} />
                 <XAxis
                   dataKey="bucket"
@@ -478,7 +505,9 @@ function ShoppingView({
             <tbody>
               {data.intents.map((intent) => (
                 <tr key={intent.name} className="border-b border-border/45 last:border-0">
-                  <td className="px-2 py-3 font-medium">{humanizeAnalyticsKey(intent.name)}</td>
+                  <td className="px-2 py-3 font-medium">
+                    {entityLabel(copy.entities.intents, intent.name)}
+                  </td>
                   <td className="px-2 py-3 text-end tabular-nums">
                     {formatNumber(locale, intent.messages)}
                   </td>
@@ -571,6 +600,7 @@ export function AiStatsWorkspace({ initialData }: { initialData: AiStatsPayload 
   const updatedAt = `${copy.updated} ${new Intl.DateTimeFormat(locale, {
     dateStyle: 'medium',
     timeStyle: 'short',
+    timeZone: ANALYTICS_TIME_ZONE,
   }).format(new Date(payload.generatedAt))}`;
 
   function selectRange(range: AiStatsRange) {
@@ -645,9 +675,14 @@ export function AiStatsWorkspace({ initialData }: { initialData: AiStatsPayload 
         className={cn('min-w-0 transition-opacity', query.isPlaceholderData && 'opacity-65')}
       >
         {payload.data.kind === 'operations' ? (
-          <OperationsView data={payload.data} copy={copy} locale={locale} />
+          <OperationsView
+            data={payload.data}
+            filters={payload.filters}
+            copy={copy}
+            locale={locale}
+          />
         ) : (
-          <ShoppingView data={payload.data} copy={copy} locale={locale} />
+          <ShoppingView data={payload.data} filters={payload.filters} copy={copy} locale={locale} />
         )}
       </main>
     </WorkspaceFrame>

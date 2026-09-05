@@ -10,6 +10,8 @@
         "arn:aws:s3:::bricomaitre-demo/brands/*",
         "arn:aws:s3:::bricomaitre-demo/categories/*",
         "arn:aws:s3:::bricomaitre-demo/banners/*",
+        "arn:aws:s3:::bricomaitre-demo/catalog/*",
+        "arn:aws:s3:::bricomaitre-demo/merchandising/*",
         "arn:aws:s3:::bricomaitre-demo/exports/products/*"
       ]
     }

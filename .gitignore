@@ -58,6 +58,7 @@ skills-lock.json
 **/skills-lock.json
 ops/runtime/
 ops/demo/.runtime/
+ops/demo/.cache/
 
 *.swn
 *.swo

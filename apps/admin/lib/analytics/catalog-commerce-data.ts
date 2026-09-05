@@ -35,6 +35,8 @@ export async function loadBasketPairs(db: Database, filters: AnalyticsFilters) {
       on right_item.order_id = left_item.order_id
       and right_item.id > left_item.id
       and right_item.content_id <> left_item.content_id
+      and coalesce(right_item.product_id::text, right_item.raw_value) <>
+        coalesce(left_item.product_id::text, left_item.raw_value)
     inner join ${orders} on ${orders.id} = left_item.order_id
     where ${timestampPredicate(orders.createdAt, filters.startDate, filters.endDate)}
     group by least(left_item.title_snapshot, right_item.title_snapshot),

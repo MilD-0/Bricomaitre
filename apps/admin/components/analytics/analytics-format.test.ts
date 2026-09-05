@@ -23,6 +23,7 @@ describe('analytics formatting', () => {
     expect(formatDuration('en', 950)).toBe('950 ms');
     expect(formatDuration('en', 1_500)).toBe('1.5 s');
     expect(formatDate('en', '2026-08-24')).toMatch(/Aug 24/);
+    expect(formatDate('en', '2026-08-23T23:30:00.000Z', { includeTime: true })).toMatch(/Aug 24/);
   });
 
   it('retains the precision needed for small provider costs', () => {

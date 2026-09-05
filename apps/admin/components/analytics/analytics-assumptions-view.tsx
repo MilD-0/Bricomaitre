@@ -31,7 +31,7 @@ function nullableField(value: string) {
 }
 
 function assumptionSourceLabel(copy: AnalyticsCopy, value: string | null | undefined) {
-  if (value === 'automatic' || value === 'manual' || value === 'missing') {
+  if (value === 'automatic' || value === 'default' || value === 'manual' || value === 'missing') {
     return copy.assumptions[value];
   }
   return copy.assumptions.missing;

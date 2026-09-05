@@ -45,6 +45,40 @@ function noContent(response) {
   response.end();
 }
 
+function serviceForPath(pathname) {
+  if (pathname.startsWith('/ecotrack/')) return 'ecotrack';
+  if (pathname.startsWith('/meta/') || /^\/v\d+[.]\d+\//.test(pathname)) return 'meta';
+  if (pathname.startsWith('/google/')) return 'google';
+  if (pathname.startsWith('/tiktok/')) return 'tiktok';
+  return 'demo';
+}
+
+function requestedFailure(request, url) {
+  return request.headers['x-demo-failure'] ?? url.searchParams.get('__demo_failure');
+}
+
+function failDeterministically(response, scenario, service) {
+  if (scenario === 'rate-limit') {
+    return json(
+      response,
+      429,
+      { error: `${service} demo rate limit reached.` },
+      { 'retry-after': '2', 'x-ratelimit-remaining': '0' },
+    );
+  }
+  if (scenario === 'unavailable') {
+    return json(response, 503, { error: `${service} demo service unavailable.` });
+  }
+  if (scenario === 'malformed') {
+    response.writeHead(200, {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+    });
+    return response.end('{"demo":"malformed"');
+  }
+  return false;
+}
+
 async function readJson(request) {
   const chunks = [];
   for await (const chunk of request) chunks.push(chunk);
@@ -176,11 +210,11 @@ async function handleEcotrack(request, response, url) {
           {
             status: state.status,
             order_id: state.reference,
-            desk_phone: '0000000000',
+            desk_phone: '0550000000',
             desk_commune: 'Alger Centre',
             desk_map_link: 'https://example.invalid/demo-desk',
             desk_address: 'Adresse de démonstration',
-            driver_phone: '0000000000',
+            driver_phone: '0770000000',
             estimated_fee: '500',
             activity: [],
           },
@@ -437,12 +471,19 @@ async function handleGoogle(request, response, url) {
 
 const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
-  let service = 'demo';
+  const service = serviceForPath(url.pathname);
   try {
     if (url.pathname === '/health')
       return json(response, 200, {
         ok: true,
         services: ['ecotrack-delivro', 'ecotrack-emir', 'meta', 'google', 'tiktok'],
+        failureScenarios: ['rate-limit', 'unavailable', 'malformed'],
+      });
+    if (url.pathname === '/__demo/scenarios')
+      return json(response, 200, {
+        header: 'x-demo-failure',
+        queryParameter: '__demo_failure',
+        scenarios: ['rate-limit', 'unavailable', 'malformed'],
       });
     if (url.pathname === '/__demo/requests') return json(response, 200, { requests });
     if (url.pathname === '/__demo/state')
@@ -455,20 +496,38 @@ const server = createServer(async (request, response) => {
       requests.length = 0;
       return json(response, 200, { ok: true });
     }
+    if (url.pathname === '/__demo/shipments' && request.method === 'POST') {
+      const body = await readJson(request);
+      if (!Array.isArray(body.shipments) || body.shipments.length > 2000) {
+        return json(response, 400, { error: 'Expected at most 2,000 demo shipments.' });
+      }
+      for (const input of body.shipments) {
+        const tracking = typeof input?.tracking === 'string' ? input.tracking.trim() : '';
+        if (!tracking)
+          return json(response, 400, { error: 'Every shipment needs a tracking number.' });
+        shipments.set(tracking, {
+          tracking,
+          reference: String(input.reference ?? tracking.replace(/\D/g, '').slice(-5) ?? '1'),
+          status: String(input.status ?? 'en_preparation'),
+          amount: Number(input.amount ?? 0),
+          provider: input.provider === 'emir' ? 'emir' : 'delivro',
+          createdAt: String(input.createdAt ?? new Date().toISOString()),
+        });
+      }
+      return json(response, 200, { ok: true, imported: body.shipments.length });
+    }
+    const failure = requestedFailure(request, url);
+    if (failure && failDeterministically(response, failure, service) !== false) return;
     if (url.pathname.startsWith('/ecotrack/')) {
-      service = 'ecotrack';
       return await handleEcotrack(request, response, url);
     }
     if (url.pathname.startsWith('/meta/') || /^\/v\d+[.]\d+\//.test(url.pathname)) {
-      service = 'meta';
       return await handleMeta(request, response, url);
     }
     if (url.pathname.startsWith('/google/')) {
-      service = 'google';
       return await handleGoogle(request, response, url);
     }
     if (url.pathname.startsWith('/tiktok/')) {
-      service = 'tiktok';
       await readJson(request);
       return json(response, 200, { code: 0, message: 'OK', request_id: 'demo-tiktok-request' });
     }

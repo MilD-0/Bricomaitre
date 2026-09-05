@@ -2,7 +2,10 @@ import { sql, type SQLWrapper } from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
 import { getProfitTrackerReport, type ProfitTrackerRangeInput } from '../profit-tracker';
-import { ANALYTICS_RESOLVED_SHIPMENT_STATUSES } from '../ecotrack-status-policy';
+import {
+  ANALYTICS_PAID_SHIPMENT_STATUSES,
+  ANALYTICS_RESOLVED_SHIPMENT_STATUSES,
+} from '../ecotrack-status-policy';
 import type { StatsFilters } from '../stats';
 import type {
   AnalyticsEffectiveRange,
@@ -185,6 +188,11 @@ export function fulfillmentPhase(status: string) {
 
 export const resolvedShipmentStatusesSql = sql.join(
   ANALYTICS_RESOLVED_SHIPMENT_STATUSES.map((status) => sql`${status}`),
+  sql`, `,
+);
+
+export const paidShipmentStatusesSql = sql.join(
+  ANALYTICS_PAID_SHIPMENT_STATUSES.map((status) => sql`${status}`),
   sql`, `,
 );
 
