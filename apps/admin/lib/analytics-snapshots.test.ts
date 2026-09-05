@@ -105,6 +105,28 @@ describe('analytics snapshots', () => {
     expect(store.compute).toHaveBeenCalledTimes(1);
   });
 
+  it('serializes distinct cold reports within one process', async () => {
+    const store = setup();
+    let active = 0;
+    let maximumActive = 0;
+    store.compute.mockImplementation(async () => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      active -= 1;
+      return structuredClone(payload);
+    });
+
+    await Promise.all([
+      store.load(query),
+      store.load({ ...query, view: 'money' }),
+      store.load({ ...query, view: 'catalog' }),
+    ]);
+
+    expect(store.compute).toHaveBeenCalledTimes(3);
+    expect(maximumActive).toBe(1);
+  });
+
   it('releases the lock after computation fails so retry can succeed', async () => {
     const store = setup();
     store.compute.mockRejectedValueOnce(new Error('database unavailable'));

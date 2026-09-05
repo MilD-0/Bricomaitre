@@ -6,7 +6,8 @@ const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
   archive: vi.fn(),
   restore: vi.fn(),
-  loadArchived: vi.fn(),
+  loadArchivedByIds: vi.fn(),
+  loadArchivedPage: vi.fn(),
   revalidateTags: vi.fn(),
   revalidateProducts: vi.fn(),
   revalidateLandingPages: vi.fn(),
@@ -23,7 +24,10 @@ vi.mock('./product-update-workflow', async (importOriginal) => ({
   archiveProductThroughCanonicalWorkflow: mocks.archive,
   restoreProductThroughCanonicalWorkflow: mocks.restore,
 }));
-vi.mock('./product-archive', () => ({ loadArchivedProducts: mocks.loadArchived }));
+vi.mock('./product-archive', () => ({
+  loadArchivedProductsByIds: mocks.loadArchivedByIds,
+  loadArchivedProductsPage: mocks.loadArchivedPage,
+}));
 vi.mock('./server-cache', () => ({
   CACHE_TAGS: { products: 'products', productsMeta: 'products-meta' },
   revalidateServerTags: mocks.revalidateTags,
@@ -116,7 +120,18 @@ describe('admin AI direct product updates', () => {
       availabilityStatus: 'out_of_stock',
       archived: false,
     }));
-    mocks.loadArchived.mockResolvedValue([]);
+    mocks.loadArchivedByIds.mockResolvedValue([]);
+    mocks.loadArchivedPage.mockResolvedValue({
+      items: [],
+      pagination: {
+        page: 1,
+        limit: 50,
+        totalItems: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    });
   });
 
   it('creates one complete canonical product and refreshes the catalog once', async () => {
@@ -271,7 +286,7 @@ describe('admin AI direct product updates', () => {
   });
 
   it('inspects exact archived IDs with explicit missing records', async () => {
-    mocks.loadArchived.mockResolvedValue([
+    mocks.loadArchivedByIds.mockResolvedValue([
       {
         id: 12,
         title: 'Perceuse archivée',
@@ -291,15 +306,23 @@ describe('admin AI direct product updates', () => {
   });
 
   it('searches and paginates the complete archive instead of truncating it to a tiny sample', async () => {
-    mocks.loadArchived.mockResolvedValue(
-      Array.from({ length: 125 }, (_, index) => ({
-        id: index + 1,
-        title: `Perceuse ${index + 1}`,
-        sku: `PB-${index + 1}`,
+    mocks.loadArchivedPage.mockResolvedValue({
+      items: Array.from({ length: 50 }, (_, index) => ({
+        id: index + 51,
+        title: `Perceuse ${index + 51}`,
+        sku: `PB-${index + 51}`,
         barcode: null,
         archivedAt: '2026-08-20T10:00:00.000Z',
       })),
-    );
+      pagination: {
+        page: 2,
+        limit: 50,
+        totalItems: 125,
+        totalPages: 3,
+        hasNextPage: true,
+        hasPreviousPage: true,
+      },
+    });
 
     await expect(
       inspectAdminAiArchivedProducts({

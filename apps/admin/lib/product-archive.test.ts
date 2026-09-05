@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { loadArchivedProducts } from './product-archive';
+import { loadArchivedProductsPage } from './product-archive';
 
-describe('loadArchivedProducts', () => {
-  it('serializes archived products for the hidden archive page', async () => {
-    const orderBy = vi.fn().mockResolvedValue([
+describe('loadArchivedProductsPage', () => {
+  it('counts and limits archived products before serializing the visible page', async () => {
+    const offset = vi.fn().mockResolvedValue([
       {
         id: 7,
         title: 'Archived drill',
@@ -13,14 +13,30 @@ describe('loadArchivedProducts', () => {
         archivedAt: new Date('2026-08-01T00:00:00.000Z'),
       },
     ]);
+    const limit = vi.fn(() => ({ offset }));
+    const orderBy = vi.fn(() => ({ limit }));
+    const countWhere = vi.fn().mockResolvedValue([{ value: 113 }]);
     const db = {
-      select: vi.fn(() => ({
-        from: vi.fn(() => ({ where: vi.fn(() => ({ orderBy })) })),
-      })),
+      select: vi
+        .fn()
+        .mockReturnValueOnce({ from: vi.fn(() => ({ where: countWhere })) })
+        .mockReturnValueOnce({
+          from: vi.fn(() => ({ where: vi.fn(() => ({ orderBy })) })),
+        }),
     };
 
-    await expect(loadArchivedProducts(db as never)).resolves.toEqual([
-      expect.objectContaining({ id: 7, archivedAt: '2026-08-01T00:00:00.000Z' }),
-    ]);
+    await expect(loadArchivedProductsPage(db as never, { page: 2, limit: 50 })).resolves.toEqual({
+      items: [expect.objectContaining({ id: 7, archivedAt: '2026-08-01T00:00:00.000Z' })],
+      pagination: {
+        page: 2,
+        limit: 50,
+        totalItems: 113,
+        totalPages: 3,
+        hasNextPage: true,
+        hasPreviousPage: true,
+      },
+    });
+    expect(limit).toHaveBeenCalledWith(50);
+    expect(offset).toHaveBeenCalledWith(50);
   });
 });

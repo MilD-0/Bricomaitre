@@ -11,7 +11,7 @@ import {
   restoreProductThroughCanonicalWorkflow,
   type ProductMutationActor,
 } from './product-update-workflow';
-import { loadArchivedProducts } from './product-archive';
+import { loadArchivedProductsByIds, loadArchivedProductsPage } from './product-archive';
 import { productPayloadSchema, productPromoCodePayloadSchema } from './products';
 import { captureAdminException, getRequestId } from './sentry';
 import { CACHE_TAGS, revalidateServerTags } from './server-cache';
@@ -201,10 +201,10 @@ export async function inspectAdminAiArchivedProducts(
   rawInput: z.input<typeof adminAiArchivedProductInspectionSchema>,
 ) {
   const input = adminAiArchivedProductInspectionSchema.parse(rawInput);
-  const allItems = await loadArchivedProducts(getDb());
   if (input.scope === 'exact') {
     const requestedIds = [...new Set(input.productIds)];
-    const byId = new Map(allItems.map((item) => [item.id, item]));
+    const items = await loadArchivedProductsByIds(getDb(), requestedIds);
+    const byId = new Map(items.map((item) => [item.id, item]));
     return {
       kind: 'archived_products' as const,
       scope: input.scope,
@@ -217,29 +217,16 @@ export async function inspectAdminAiArchivedProducts(
     };
   }
 
-  const query = input.query.toLocaleLowerCase();
-  const matched = query
-    ? allItems.filter((item) =>
-        [item.title, item.sku, item.barcode].some((value) =>
-          value?.toLocaleLowerCase().includes(query),
-        ),
-      )
-    : allItems;
-  const offset = (input.page - 1) * input.limit;
-  const totalPages = Math.max(1, Math.ceil(matched.length / input.limit));
+  const result = await loadArchivedProductsPage(getDb(), {
+    page: input.page,
+    limit: input.limit,
+    search: input.query,
+  });
   return {
     kind: 'archived_products' as const,
     scope: input.scope,
     query: input.query,
-    items: matched.slice(offset, offset + input.limit),
-    pagination: {
-      page: input.page,
-      limit: input.limit,
-      totalItems: matched.length,
-      totalPages,
-      hasNextPage: input.page < totalPages,
-      hasPreviousPage: input.page > 1,
-    },
+    ...result,
   };
 }
 

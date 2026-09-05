@@ -29,7 +29,7 @@ vi.mock('next/link', () => ({
   default: (
     linkProps: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
       href: string;
-      prefetch?: boolean;
+      prefetch?: boolean | null;
     },
   ) => {
     const { children, href, className, prefetch, ...props } = linkProps;
@@ -37,7 +37,7 @@ vi.mock('next/link', () => ({
       <a
         href={href}
         className={className}
-        data-prefetch={prefetch === false ? 'false' : 'true'}
+        data-prefetch={prefetch === false ? 'false' : prefetch === true ? 'true' : 'auto'}
         {...props}
       >
         {children}
@@ -147,7 +147,7 @@ describe('AppShell', () => {
       '/en/stats/meta-ads?range=custom&startDate=2026-08-01&endDate=2026-08-15&grain=week',
     );
     expect(acquisitionLink).toHaveAttribute('data-prefetch', 'false');
-    expect(screen.getByRole('link', { name: 'nav.stats', exact: true })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'nav.stats' })).toHaveAttribute(
       'data-prefetch',
       'false',
     );
@@ -300,8 +300,22 @@ describe('AppShell', () => {
       '/en/categories',
     );
     await userEvent.click(screen.getByRole('button', { name: 'Show nav.stats submenu' }));
+    expect(screen.getByRole('link', { name: 'nav.stats' })).toHaveAttribute(
+      'data-prefetch',
+      'true',
+    );
     expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute('href', '/en/stats');
+    expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute(
+      'data-prefetch',
+      'false',
+    );
     expect(screen.getByRole('link', { name: 'Money' })).toHaveAttribute('href', '/en/stats/time');
+    expect(screen.getByRole('link', { name: 'Money' })).toHaveAttribute('data-prefetch', 'false');
+    await userEvent.click(screen.getByRole('button', { name: 'Show nav.orders submenu' }));
+    expect(screen.getByRole('link', { name: 'nav.ecotrackShipments' })).toHaveAttribute(
+      'data-prefetch',
+      'auto',
+    );
     expect(screen.getByRole('link', { name: 'Fulfillment' })).toHaveAttribute(
       'href',
       '/en/stats/fulfillment',

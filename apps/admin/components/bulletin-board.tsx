@@ -23,6 +23,7 @@ import {
   type BulletinAttachment,
   type BulletinComposerFormValues,
   type BulletinPostRecord,
+  type BulletinPagination,
   type BulletinReactionRecord,
   type BulletinReplyRecord,
   bulletinComposerFormSchema,
@@ -69,6 +70,7 @@ type BulletinResponse = {
     canModerate: boolean;
     canPost: boolean;
   };
+  pagination: BulletinPagination;
 };
 
 type MutationMessages = {
@@ -191,9 +193,10 @@ function formatAttachmentSize(size: number) {
 
 function updateBulletinBoard(
   queryClient: ReturnType<typeof useQueryClient>,
+  queryKey: readonly ['bulletin-board', number, string, string],
   updater: (current: BulletinResponse) => BulletinResponse,
 ) {
-  queryClient.setQueryData<BulletinResponse>(['bulletin-board'], (current) => {
+  queryClient.setQueryData<BulletinResponse>(queryKey, (current) => {
     if (!current) {
       return current;
     }
@@ -213,15 +216,32 @@ export function BulletinBoard() {
   const [sort, setSort] = useState<'updated-desc' | 'updated-asc' | 'created-desc'>('updated-desc');
   const [page, setPage] = useState(1);
   const [deletePost, setDeletePost] = useState<BulletinPostRecord | null>(null);
+  const boardQueryKey = ['bulletin-board', page, activeTag, sort] as const;
 
   const boardQuery = useQuery({
-    queryKey: ['bulletin-board'],
-    queryFn: () => request<BulletinResponse>('/api/bulletin'),
+    queryKey: boardQueryKey,
+    queryFn: () => {
+      const query = new URLSearchParams({
+        page: String(page),
+        limit: String(pageSize),
+        tag: activeTag,
+        sort,
+      });
+      return request<BulletinResponse>(`/api/bulletin?${query}`);
+    },
     initialData: {
       posts: [],
       availableTags: [],
       currentUserId: null,
       permissions: { canModerate: false, canPost: true },
+      pagination: {
+        page: 1,
+        limit: pageSize,
+        totalItems: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
     },
   });
 
@@ -303,11 +323,11 @@ export function BulletinBoard() {
       }),
     onMutate: async (values) => {
       await queryClient.cancelQueries({ queryKey: ['bulletin-board'] });
-      const snapshot = queryClient.getQueryData<BulletinResponse>(['bulletin-board']);
+      const snapshot = queryClient.getQueryData<BulletinResponse>(boardQueryKey);
       const now = new Date().toISOString();
       const tempId = takeOptimisticId();
 
-      updateBulletinBoard(queryClient, (current) => ({
+      updateBulletinBoard(queryClient, boardQueryKey, (current) => ({
         ...current,
         posts: [
           {
@@ -347,7 +367,7 @@ export function BulletinBoard() {
     },
     onError: (_error, _values, context) => {
       if (context?.snapshot) {
-        queryClient.setQueryData(['bulletin-board'], context.snapshot);
+        queryClient.setQueryData(boardQueryKey, context.snapshot);
       }
       if (context?.values) {
         form.reset(context.values);
@@ -434,9 +454,9 @@ export function BulletinBoard() {
       }),
     onMutate: async ({ postId, emoji, messages }) => {
       await queryClient.cancelQueries({ queryKey: ['bulletin-board'] });
-      const snapshot = queryClient.getQueryData<BulletinResponse>(['bulletin-board']);
+      const snapshot = queryClient.getQueryData<BulletinResponse>(boardQueryKey);
 
-      updateBulletinBoard(queryClient, (current) => ({
+      updateBulletinBoard(queryClient, boardQueryKey, (current) => ({
         ...current,
         posts: current.posts.map((post) => {
           if (post.id !== postId) {
@@ -483,7 +503,7 @@ export function BulletinBoard() {
     },
     onError: (_error, variables, context) => {
       if (context?.snapshot) {
-        queryClient.setQueryData(['bulletin-board'], context.snapshot);
+        queryClient.setQueryData(boardQueryKey, context.snapshot);
       }
       toast.error(variables.messages.error, { id: context?.toastId });
     },
@@ -501,10 +521,10 @@ export function BulletinBoard() {
       }),
     onMutate: async ({ postId, body, messages }) => {
       await queryClient.cancelQueries({ queryKey: ['bulletin-board'] });
-      const snapshot = queryClient.getQueryData<BulletinResponse>(['bulletin-board']);
+      const snapshot = queryClient.getQueryData<BulletinResponse>(boardQueryKey);
       const now = new Date().toISOString();
 
-      updateBulletinBoard(queryClient, (current) => ({
+      updateBulletinBoard(queryClient, boardQueryKey, (current) => ({
         ...current,
         posts: current.posts.map((post) =>
           post.id === postId
@@ -538,7 +558,7 @@ export function BulletinBoard() {
     },
     onError: (_error, variables, context) => {
       if (context?.snapshot) {
-        queryClient.setQueryData(['bulletin-board'], context.snapshot);
+        queryClient.setQueryData(boardQueryKey, context.snapshot);
       }
       toast.error(variables.messages.error, { id: context?.toastId });
     },
@@ -553,12 +573,12 @@ export function BulletinBoard() {
       request(`/api/bulletin/replies/${replyId}`, { method: 'DELETE' }),
     onMutate: async ({ messages }) => {
       await queryClient.cancelQueries({ queryKey: ['bulletin-board'] });
-      const snapshot = queryClient.getQueryData<BulletinResponse>(['bulletin-board']);
+      const snapshot = queryClient.getQueryData<BulletinResponse>(boardQueryKey);
       return { snapshot, toastId: toast.loading(messages.loading) };
     },
     onError: (_error, variables, context) => {
       if (context?.snapshot) {
-        queryClient.setQueryData(['bulletin-board'], context.snapshot);
+        queryClient.setQueryData(boardQueryKey, context.snapshot);
       }
       toast.error(variables.messages.error, { id: context?.toastId });
     },
@@ -576,9 +596,9 @@ export function BulletinBoard() {
       }),
     onMutate: async ({ replyId, emoji, messages }) => {
       await queryClient.cancelQueries({ queryKey: ['bulletin-board'] });
-      const snapshot = queryClient.getQueryData<BulletinResponse>(['bulletin-board']);
+      const snapshot = queryClient.getQueryData<BulletinResponse>(boardQueryKey);
 
-      updateBulletinBoard(queryClient, (current) => ({
+      updateBulletinBoard(queryClient, boardQueryKey, (current) => ({
         ...current,
         posts: current.posts.map((post) => ({
           ...post,
@@ -631,7 +651,7 @@ export function BulletinBoard() {
     },
     onError: (_error, variables, context) => {
       if (context?.snapshot) {
-        queryClient.setQueryData(['bulletin-board'], context.snapshot);
+        queryClient.setQueryData(boardQueryKey, context.snapshot);
       }
       toast.error(variables.messages.error, { id: context?.toastId });
     },
@@ -653,41 +673,20 @@ export function BulletinBoard() {
     form.reset(readDraft() ?? defaultValues);
   }
 
-  const sortedPosts = useMemo(() => {
-    const filtered = boardQuery.data.posts
-      .map((post) => ({
+  const pagePosts = useMemo(
+    () =>
+      boardQuery.data.posts.map((post) => ({
         ...post,
         reactions: post.reactions ?? [],
         replies: (post.replies ?? []).map((reply) => ({
           ...reply,
           reactions: reply.reactions ?? [],
         })),
-      }))
-      .filter((post) => activeTag === 'all' || post.tags.includes(activeTag));
-    const next = [...filtered];
-
-    next.sort((left, right) => {
-      if (left.pinned !== right.pinned) {
-        return left.pinned ? -1 : 1;
-      }
-
-      if (sort === 'updated-asc') {
-        return new Date(left.updatedAt).getTime() - new Date(right.updatedAt).getTime();
-      }
-
-      if (sort === 'created-desc') {
-        return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-      }
-
-      return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
-    });
-
-    return next;
-  }, [activeTag, boardQuery.data.posts, sort]);
-
-  const totalPages = Math.max(1, Math.ceil(sortedPosts.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const pagePosts = sortedPosts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+      })),
+    [boardQuery.data.posts],
+  );
+  const totalPages = boardQuery.data.pagination.totalPages;
+  const currentPage = boardQuery.data.pagination.page;
   const pinnedPosts = pagePosts.filter((post) => post.pinned);
   const recentPosts = pagePosts.filter((post) => !post.pinned);
   useAdminAiSurfaceDetails(
@@ -696,7 +695,7 @@ export function BulletinBoard() {
       sort,
       page: currentPage,
       visibleCount: pagePosts.length,
-      totalPosts: boardQuery.data.posts.length,
+      totalPosts: boardQuery.data.pagination.totalItems,
       composerOpen,
       focusedPostId: editingPost?.id ?? deletePost?.id ?? null,
       fetching: boardQuery.isFetching,
@@ -754,7 +753,7 @@ export function BulletinBoard() {
       <WorkspaceHeader>
         <WorkspaceHeading
           title={t('title')}
-          meta={t('sections.visibleCount', { count: boardQuery.data.posts.length })}
+          meta={t('sections.visibleCount', { count: boardQuery.data.pagination.totalItems })}
           description={
             boardQuery.isFetching ? (
               <span className="inline-flex items-center gap-1">
@@ -1066,7 +1065,7 @@ export function BulletinBoard() {
               {t('sections.recent')}
             </p>
             <p className="text-xs text-muted-foreground">
-              {t('sections.visibleCount', { count: sortedPosts.length })}
+              {t('sections.visibleCount', { count: boardQuery.data.pagination.totalItems })}
             </p>
           </div>
 

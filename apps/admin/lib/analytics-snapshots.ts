@@ -62,6 +62,19 @@ export function createAnalyticsSnapshotStore(dependencies: {
 }) {
   const now = dependencies.now ?? Date.now;
   const inFlight = new Map<string, Promise<AnalyticsPayload>>();
+  let computeTail: Promise<void> = Promise.resolve();
+
+  function computeInSequence(query: AnalyticsQuery) {
+    const computation = computeTail.then(
+      () => dependencies.compute(query),
+      () => dependencies.compute(query),
+    );
+    computeTail = computation.then(
+      () => undefined,
+      () => undefined,
+    );
+    return computation;
+  }
 
   function present(snapshot: Snapshot, state: 'fresh' | 'stale' | 'miss'): AnalyticsPayload {
     return {
@@ -95,7 +108,7 @@ export function createAnalyticsSnapshotStore(dependencies: {
       }
     } catch {
       // Redis is an optimization. A cache outage must not make reporting unavailable.
-      return dependencies.compute(normalized);
+      return computeInSequence(normalized);
     }
 
     if (saved && !options.refresh) {
@@ -149,7 +162,10 @@ export function createAnalyticsSnapshotStore(dependencies: {
       // Another process may have completed between our read and lock acquisition.
       const completed = readSnapshot(await redis.get(key));
       if (completed && completed.computedAt !== previous) return present(completed, 'fresh');
-      const payload = await dependencies.compute(query);
+      // A report fans out into several database queries. Keep distinct cold
+      // reports sequential inside each process so simultaneous navigations or
+      // prefetches cannot multiply that fan-out and exhaust the web heap.
+      const payload = await computeInSequence(query);
       const snapshot = { computedAt: new Date(now()).toISOString(), payload };
       await redis
         .eval(

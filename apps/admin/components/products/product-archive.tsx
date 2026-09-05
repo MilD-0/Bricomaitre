@@ -2,13 +2,15 @@
 
 import { ArchiveRestore, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useState, useTransition } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 
-import type { ArchivedProduct } from '../../lib/product-archive';
+import type { ArchivedProductsPage } from '../../lib/product-archive';
 import { toast } from '../../lib/toast';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import { Button } from '../ui/button';
+import { WorkspacePagination } from '../ui/workspace-pagination';
 import {
   WorkspaceActions,
   WorkspaceFrame,
@@ -16,14 +18,21 @@ import {
   WorkspaceHeading,
 } from '../ui/workspace';
 
-export function ProductArchive({ initialProducts }: { initialProducts: ArchivedProduct[] }) {
+export function ProductArchive({ initialData }: { initialData: ArchivedProductsPage }) {
   const t = useTranslations('productArchive');
   const nav = useTranslations('nav');
   const locale = useLocale();
-  const [products, setProducts] = useState(initialProducts);
+  const router = useRouter();
+  const [products, setProducts] = useState(initialData.items);
   const [restoringId, setRestoringId] = useState<number | null>(null);
+  const [isNavigating, startNavigation] = useTransition();
   useAdminAiSurfaceDetails({
-    filters: { state: 'archived', visibleCount: products.length },
+    filters: {
+      state: 'archived',
+      page: initialData.pagination.page,
+      visibleCount: products.length,
+      totalItems: initialData.pagination.totalItems,
+    },
     selection: null,
   });
 
@@ -35,6 +44,7 @@ export function ProductArchive({ initialProducts }: { initialProducts: ArchivedP
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error || t('restoreError'));
       setProducts((current) => current.filter((product) => product.id !== productId));
+      router.refresh();
       toast.success(t('restored'), { id: toastId });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('restoreError'), { id: toastId });
@@ -48,7 +58,7 @@ export function ProductArchive({ initialProducts }: { initialProducts: ArchivedP
       <WorkspaceHeader>
         <WorkspaceHeading
           title={t('title')}
-          meta={products.length}
+          meta={initialData.pagination.totalItems}
           description={t('description')}
           showTitleOnMobile
         />
@@ -99,6 +109,14 @@ export function ProductArchive({ initialProducts }: { initialProducts: ArchivedP
           </div>
         )}
       </div>
+      <WorkspacePagination
+        currentPage={initialData.pagination.page}
+        totalPages={initialData.pagination.totalPages}
+        pending={isNavigating}
+        onPageChange={(page) =>
+          startNavigation(() => router.push(`/${locale}/archive${page > 1 ? `?page=${page}` : ''}`))
+        }
+      />
     </WorkspaceFrame>
   );
 }

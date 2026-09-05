@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { bulletinPostSchema, canModerateBulletin } from '../../../lib/bulletin';
+import {
+  bulletinListQuerySchema,
+  bulletinPostSchema,
+  canModerateBulletin,
+} from '../../../lib/bulletin';
 import {
   getBulletinViewer,
   loadBulletinData,
@@ -9,7 +13,7 @@ import {
 } from '../../../lib/bulletin-server';
 import { createBulletinPost } from '../../../lib/bulletin-mutations';
 
-export async function GET() {
+export async function GET(request?: NextRequest) {
   const { session, response } = await requireBulletinSession();
   if (response || !session) {
     return response;
@@ -21,11 +25,27 @@ export async function GET() {
       availableTags: [],
       currentUserId: session.user.id ?? null,
       permissions: { canModerate: false, canPost: true },
+      pagination: {
+        page: 1,
+        limit: 20,
+        totalItems: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
     });
   }
 
   const viewer = getBulletinViewer(session);
-  const data = await loadBulletinData(viewer);
+  const data = await loadBulletinData(
+    viewer,
+    bulletinListQuerySchema.parse({
+      page: request?.nextUrl.searchParams.get('page') ?? undefined,
+      limit: request?.nextUrl.searchParams.get('limit') ?? undefined,
+      tag: request?.nextUrl.searchParams.get('tag') ?? undefined,
+      sort: request?.nextUrl.searchParams.get('sort') ?? undefined,
+    }),
+  );
 
   return NextResponse.json({
     ...data,

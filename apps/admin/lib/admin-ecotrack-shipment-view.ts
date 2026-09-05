@@ -1,9 +1,10 @@
-import { and, asc, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 
 import {
   ecotrackOrderMajEntries,
   ecotrackOrderStates,
   ecotrackOrderTrackingEvents,
+  ecotrackWilayas,
   orders,
   products,
 } from '@bric/db/schema';
@@ -20,7 +21,9 @@ import {
 } from './ecotrack-shipment-policy';
 import { getOrderProductLookup, toOrderRecord } from './order-records';
 import { readEcotrackCatalog } from './ecotrack';
+import type { EcotrackShipmentListQuery } from './ecotrack-shipment-list';
 import { sanitizeNullableText } from './ecotrack-shipment-status';
+import { orderProductSearchCondition } from './order-product-search';
 import type {
   EcotrackDatabase as Database,
   EcotrackShipmentRow as ShipmentRow,
@@ -167,6 +170,93 @@ export async function loadActiveShipmentRows(
     : query.orderBy(desc(ecotrackOrderStates.updatedAt), desc(ecotrackOrderStates.id)));
 
   return rows.map((entry) => ({ ...entry.state, order: entry.order })) as ShipmentRow[];
+}
+
+function shipmentListOrderBy(query: EcotrackShipmentListQuery) {
+  const values = query.sortRules.flatMap((rule) => {
+    const direction = rule.direction === 'asc' ? asc : desc;
+    if (rule.key === 'trackingNumber') return [direction(ecotrackOrderStates.trackingNumber)];
+    if (rule.key === 'clientName')
+      return [direction(sql`concat_ws(' ', ${orders.firstName}, ${orders.lastName})`)];
+    if (rule.key === 'currentStatus') return [direction(ecotrackOrderStates.currentStatus)];
+    if (rule.key === 'lastStatusSyncedAt')
+      return [
+        direction(sql`coalesce(${ecotrackOrderStates.lastStatusSyncedAt}, 'epoch'::timestamptz)`),
+      ];
+    return [direction(orders.createdAt)];
+  });
+  return [...values, desc(orders.id)];
+}
+
+export async function loadActiveShipmentPageRows(
+  db: Database,
+  query: EcotrackShipmentListQuery,
+  now = new Date(),
+) {
+  const search = query.search ? `%${query.search}%` : null;
+  const where = and(
+    isNull(ecotrackOrderStates.deletedAt),
+    query.status === 'all' ? undefined : eq(ecotrackOrderStates.currentStatus, query.status),
+    query.staleOnly
+      ? or(
+          isNull(ecotrackOrderStates.lastStatusSyncedAt),
+          lte(ecotrackOrderStates.lastStatusSyncedAt, new Date(now.getTime() - STATUS_STALE_MS)),
+          isNull(ecotrackOrderStates.lastTrackingSyncedAt),
+          lte(
+            ecotrackOrderStates.lastTrackingSyncedAt,
+            new Date(now.getTime() - TRACKING_STALE_MS),
+          ),
+          isNull(ecotrackOrderStates.lastMajSyncedAt),
+          lte(ecotrackOrderStates.lastMajSyncedAt, new Date(now.getTime() - MAJ_STALE_MS)),
+        )
+      : undefined,
+    search
+      ? or(
+          ilike(ecotrackOrderStates.trackingNumber, search),
+          sql`concat_ws(' ', ${orders.firstName}, ${orders.lastName}) ILIKE ${search}`,
+          ilike(orders.phoneNumber1, search),
+          ilike(orders.phoneNumber2, search),
+          ilike(orders.homeAddress, search),
+          ilike(orders.city, search),
+          ilike(ecotrackWilayas.name, search),
+          sql`cast(${orders.state} as text) ILIKE ${search}`,
+          ilike(ecotrackOrderStates.currentStatus, search),
+          orderProductSearchCondition(query.search),
+        )
+      : undefined,
+  );
+  const [{ value: totalItems = 0 }] = await db
+    .select({ value: count() })
+    .from(ecotrackOrderStates)
+    .innerJoin(orders, eq(ecotrackOrderStates.orderId, orders.id))
+    .leftJoin(ecotrackWilayas, eq(ecotrackWilayas.wilayaId, orders.state))
+    .where(where);
+  const totalPages = Math.max(1, Math.ceil(totalItems / query.limit));
+  const page = Math.min(query.page, totalPages);
+  const rows = await db
+    .select({
+      state: ecotrackOrderStates,
+      order: orders,
+    })
+    .from(ecotrackOrderStates)
+    .innerJoin(orders, eq(ecotrackOrderStates.orderId, orders.id))
+    .leftJoin(ecotrackWilayas, eq(ecotrackWilayas.wilayaId, orders.state))
+    .where(where)
+    .orderBy(...shipmentListOrderBy(query))
+    .limit(query.limit)
+    .offset((page - 1) * query.limit);
+
+  return {
+    rows: rows.map((entry) => ({ ...entry.state, order: entry.order })) as ShipmentRow[],
+    pagination: {
+      page,
+      limit: query.limit,
+      totalItems,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1,
+    },
+  };
 }
 
 export function buildListItems(

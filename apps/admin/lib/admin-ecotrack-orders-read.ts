@@ -5,7 +5,6 @@ import type { ActionActor } from './action-history';
 import { getOrderProductLookup } from './order-records';
 import { readEcotrackCatalog } from './ecotrack';
 import {
-  applyEcotrackShipmentListQuery,
   parseEcotrackShipmentListQuery,
   type EcotrackShipmentListQueryInput,
 } from './ecotrack-shipment-list';
@@ -22,7 +21,7 @@ import {
   confirmShipmentStatusFromCurrentOrders,
   ensureFreshShipmentRow,
   getEcotrackTrackingsInfoAllowingMissing,
-  loadActiveShipmentRows,
+  loadActiveShipmentPageRows,
   loadShipmentRowByOrderId,
   refreshShipmentRow,
   shouldRetireShipmentMissingFromStatusFeed,
@@ -63,17 +62,22 @@ export async function loadEcotrackOrdersPageData(
 
   const db = getDb();
   const query = parseEcotrackShipmentListQuery(input);
-  const [rows, catalog] = await Promise.all([loadActiveShipmentRows(db), readEcotrackCatalog(db)]);
+  const [pageData, catalog] = await Promise.all([
+    loadActiveShipmentPageRows(db, query),
+    readEcotrackCatalog(db),
+  ]);
   const stateNameById = new Map(catalog.wilayas.map((entry) => [entry.wilayaId, entry.name]));
-  const productLookup = await getOrderProductLookup(
-    db,
-    rows.map((row) => row.order),
-  );
-  const entries = buildListItems(rows, productLookup, stateNameById);
+  const buildPageItems = async (rows: typeof pageData.rows) => {
+    const productLookup = await getOrderProductLookup(
+      db,
+      rows.map((row) => row.order),
+    );
+    return buildListItems(rows, productLookup, stateNameById);
+  };
+  const entries = await buildPageItems(pageData.rows);
 
   if (options.ensureFreshVisiblePage) {
-    const initialPage = applyEcotrackShipmentListQuery(entries, query);
-    const staleVisibleIds = initialPage.pageItems
+    const staleVisibleIds = entries
       .filter(
         (item) =>
           item.status.isStatusStale || item.status.isTrackingStale || item.status.isMajStale,
@@ -82,26 +86,19 @@ export async function loadEcotrackOrdersPageData(
 
     if (staleVisibleIds.length > 0) {
       await refreshEcotrackOrdersBatch(staleVisibleIds, options.actor);
-      const refreshedRows = await loadActiveShipmentRows(db);
-      const refreshedProductLookup = await getOrderProductLookup(
-        db,
-        refreshedRows.map((row) => row.order),
-      );
-      const refreshedEntries = buildListItems(refreshedRows, refreshedProductLookup, stateNameById);
-      const { pageItems, pagination } = applyEcotrackShipmentListQuery(refreshedEntries, query);
+      const refreshedPage = await loadActiveShipmentPageRows(db, query);
       return {
         writable,
-        items: pageItems,
-        pagination,
+        items: await buildPageItems(refreshedPage.rows),
+        pagination: refreshedPage.pagination,
       };
     }
   }
 
-  const { pageItems, pagination } = applyEcotrackShipmentListQuery(entries, query);
   return {
     writable,
-    items: pageItems,
-    pagination,
+    items: entries,
+    pagination: pageData.pagination,
   };
 }
 

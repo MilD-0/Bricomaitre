@@ -76,94 +76,89 @@ describe('BulletinBoard', () => {
     window.localStorage.clear();
 
     server.use(
-      http.get('/api/bulletin', () =>
-        HttpResponse.json({
+      http.get('/api/bulletin', ({ request }) => {
+        const url = new URL(request.url);
+        const requestedPage = Number(url.searchParams.get('page') ?? 1);
+        const requestedLimit = Number(url.searchParams.get('limit') ?? 20);
+        const tag = url.searchParams.get('tag') ?? 'all';
+        const allPosts = [
+          {
+            id: 1,
+            title: 'Pinned issue',
+            body: 'The **front counter** printer needs toner before noon.\nSecond line stays visible.\n\n- Replace cartridge\n- Run a test page',
+            tags: ['ops', 'urgent'],
+            attachments: [],
+            reactions: [
+              {
+                emoji: '👍',
+                count: 1,
+                reacted: false,
+                users: [{ id: 'user-2', name: 'Nadia', email: 'nadia@example.com' }],
+              },
+            ],
+            replies: [
+              {
+                id: 91,
+                body: 'I can cover this.',
+                createdAt: '2026-01-02T01:00:00.000Z',
+                updatedAt: '2026-01-02T01:00:00.000Z',
+                author: { id: 'user-1', name: 'You', email: 'you@example.com' },
+                reactions: [],
+                permissions: { canDelete: true },
+              },
+            ],
+            pinned: true,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-02T00:00:00.000Z',
+            author: { id: 'user-2', name: 'Nadia', email: 'nadia@example.com' },
+            permissions: { canEdit: true, canDelete: true, canPin: true },
+          },
+          ...Array.from({ length: additionalPostCount }, (_, index) => ({
+            id: index + 2,
+            title: index === 20 ? 'Page two update' : `Packing reminder ${index + 1}`,
+            body: 'Use the blue labels for campaign bundles only.',
+            tags: ['ops'],
+            attachments: [],
+            reactions: [],
+            replies: [],
+            pinned: false,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt:
+              index === 20
+                ? '2025-12-01T00:00:00.000Z'
+                : `2026-01-${String((index % 9) + 1).padStart(2, '0')}T00:00:00.000Z`,
+            author: { id: 'user-1', name: 'You', email: 'you@example.com' },
+            permissions: { canEdit: true, canDelete: true, canPin: true },
+          })),
+        ];
+        const filtered = allPosts
+          .filter((post) => tag === 'all' || post.tags.includes(tag))
+          .sort(
+            (left, right) =>
+              Number(right.pinned) - Number(left.pinned) ||
+              Date.parse(right.updatedAt) - Date.parse(left.updatedAt) ||
+              right.id - left.id,
+          );
+        const totalPages = Math.max(1, Math.ceil(filtered.length / requestedLimit));
+        const page = Math.min(requestedPage, totalPages);
+        return HttpResponse.json({
           currentUserId: 'user-1',
           availableTags: ['ops', 'urgent'],
           permissions: {
             canModerate: true,
             canPost: true,
           },
-          posts: [
-            {
-              id: 1,
-              title: 'Pinned issue',
-              body: 'The **front counter** printer needs toner before noon.\nSecond line stays visible.\n\n- Replace cartridge\n- Run a test page',
-              tags: ['ops', 'urgent'],
-              attachments: [],
-              reactions: [
-                {
-                  emoji: '👍',
-                  count: 1,
-                  reacted: false,
-                  users: [
-                    {
-                      id: 'user-2',
-                      name: 'Nadia',
-                      email: 'nadia@example.com',
-                    },
-                  ],
-                },
-              ],
-              replies: [
-                {
-                  id: 91,
-                  body: 'I can cover this.',
-                  createdAt: '2026-01-02T01:00:00.000Z',
-                  updatedAt: '2026-01-02T01:00:00.000Z',
-                  author: {
-                    id: 'user-1',
-                    name: 'You',
-                    email: 'you@example.com',
-                  },
-                  reactions: [],
-                  permissions: {
-                    canDelete: true,
-                  },
-                },
-              ],
-              pinned: true,
-              createdAt: '2026-01-01T00:00:00.000Z',
-              updatedAt: '2026-01-02T00:00:00.000Z',
-              author: {
-                id: 'user-2',
-                name: 'Nadia',
-                email: 'nadia@example.com',
-              },
-              permissions: {
-                canEdit: true,
-                canDelete: true,
-                canPin: true,
-              },
-            },
-            ...Array.from({ length: additionalPostCount }, (_, index) => ({
-              id: index + 2,
-              title: index === 20 ? 'Page two update' : `Packing reminder ${index + 1}`,
-              body: 'Use the blue labels for campaign bundles only.',
-              tags: ['ops'],
-              attachments: [],
-              reactions: [],
-              replies: [],
-              pinned: false,
-              createdAt: '2026-01-01T00:00:00.000Z',
-              updatedAt:
-                index === 20
-                  ? '2025-12-01T00:00:00.000Z'
-                  : `2026-01-${String((index % 9) + 1).padStart(2, '0')}T00:00:00.000Z`,
-              author: {
-                id: 'user-1',
-                name: 'You',
-                email: 'you@example.com',
-              },
-              permissions: {
-                canEdit: true,
-                canDelete: true,
-                canPin: true,
-              },
-            })),
-          ],
-        }),
-      ),
+          posts: filtered.slice((page - 1) * requestedLimit, page * requestedLimit),
+          pagination: {
+            page,
+            limit: requestedLimit,
+            totalItems: filtered.length,
+            totalPages,
+            hasNextPage: page < totalPages,
+            hasPreviousPage: page > 1,
+          },
+        });
+      }),
       http.post('/api/bulletin', async ({ request }) => {
         await new Promise((resolve) => setTimeout(resolve, 50));
         createCalls.push(await request.json());

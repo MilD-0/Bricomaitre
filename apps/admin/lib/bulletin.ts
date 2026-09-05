@@ -61,6 +61,24 @@ export const bulletinReplySchema = z.object({
   body: z.string().trim().min(1).max(2000),
 });
 
+export const bulletinListQuerySchema = z.object({
+  page: z.coerce.number().int().positive().catch(1),
+  limit: z.coerce.number().int().positive().max(50).catch(20),
+  tag: z.string().trim().max(24).catch('all'),
+  sort: z.enum(['updated-desc', 'updated-asc', 'created-desc']).catch('updated-desc'),
+});
+
+export type BulletinListQuery = z.infer<typeof bulletinListQuerySchema>;
+
+export type BulletinPagination = {
+  page: number;
+  limit: number;
+  totalItems: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+};
+
 export const bulletinComposerFormSchema = z.object({
   title: z.string().trim().min(3).max(120),
   body: z.string().trim().min(10).max(5000),

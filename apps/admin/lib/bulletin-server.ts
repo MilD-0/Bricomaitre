@@ -1,4 +1,4 @@
-import { asc, desc, eq, inArray } from 'drizzle-orm';
+import { asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
 import { getDb } from '@bric/db/client';
@@ -16,11 +16,13 @@ import {
   canDeleteBulletinPost,
   canEditBulletinPost,
   canPinBulletinPost,
+  bulletinListQuerySchema,
   slugifyBulletinTag,
   type BulletinAttachment,
   type BulletinReactionRecord,
   type BulletinReplyRecord,
   type BulletinPostRecord,
+  type BulletinListQuery,
 } from './bulletin';
 import { auth } from './auth';
 import { normalizePermissions, type PermissionKey } from './permissions';
@@ -337,67 +339,114 @@ async function loadBulletinTagNames() {
   return tags.map((tag) => tag.name);
 }
 
-export async function loadBulletinData(viewer: {
-  userId: string | null;
-  permissions: PermissionKey[];
-}) {
+export async function loadBulletinData(
+  viewer: {
+    userId: string | null;
+    permissions: PermissionKey[];
+  },
+  queryInput: Partial<BulletinListQuery> = {},
+) {
   const db = getDb();
-  const [posts, tagRows, attachmentRows, replyRows, postReactionRows, replyReactionRows, tags] =
-    await Promise.all([
-      db
-        .select()
-        .from(bulletinPosts)
-        .orderBy(desc(bulletinPosts.pinned), desc(bulletinPosts.updatedAt)),
-      db
-        .select({
-          postId: bulletinPostTags.postId,
-          tagName: bulletinTags.name,
-        })
-        .from(bulletinPostTags)
-        .innerJoin(bulletinTags, eq(bulletinTags.id, bulletinPostTags.tagId)),
-      db
-        .select({
-          postId: bulletinPostAttachments.postId,
-          fileName: bulletinPostAttachments.fileName,
-          fileUrl: bulletinPostAttachments.fileUrl,
-          fileKey: bulletinPostAttachments.fileKey,
-          contentType: bulletinPostAttachments.contentType,
-          size: bulletinPostAttachments.size,
-        })
-        .from(bulletinPostAttachments),
-      db
-        .select({
-          id: bulletinReplies.id,
-          postId: bulletinReplies.postId,
-          body: bulletinReplies.body,
-          createdAt: bulletinReplies.createdAt,
-          updatedAt: bulletinReplies.updatedAt,
-          authorId: bulletinReplies.authorId,
-          authorName: bulletinReplies.authorName,
-          authorEmail: bulletinReplies.authorEmail,
-        })
-        .from(bulletinReplies)
-        .orderBy(bulletinReplies.createdAt),
-      db
-        .select({
-          postId: bulletinPostReactions.postId,
-          emoji: bulletinPostReactions.emoji,
-          userId: bulletinPostReactions.userId,
-          userName: bulletinPostReactions.userName,
-          userEmail: bulletinPostReactions.userEmail,
-        })
-        .from(bulletinPostReactions),
-      db
-        .select({
-          replyId: bulletinReplyReactions.replyId,
-          emoji: bulletinReplyReactions.emoji,
-          userId: bulletinReplyReactions.userId,
-          userName: bulletinReplyReactions.userName,
-          userEmail: bulletinReplyReactions.userEmail,
-        })
-        .from(bulletinReplyReactions),
-      loadBulletinTagNames(),
-    ]);
+  const query = bulletinListQuerySchema.parse(queryInput);
+  const where =
+    query.tag === 'all'
+      ? undefined
+      : sql<boolean>`exists (
+          select 1
+          from ${bulletinPostTags}
+          inner join ${bulletinTags} on ${bulletinTags.id} = ${bulletinPostTags.tagId}
+          where ${bulletinPostTags.postId} = ${bulletinPosts.id}
+            and ${bulletinTags.name} = ${query.tag}
+        )`;
+  const [{ value: totalItems = 0 }] = await db
+    .select({ value: count() })
+    .from(bulletinPosts)
+    .where(where);
+  const totalPages = Math.max(1, Math.ceil(totalItems / query.limit));
+  const page = Math.min(query.page, totalPages);
+  const sortOrder =
+    query.sort === 'updated-asc'
+      ? [asc(bulletinPosts.updatedAt), asc(bulletinPosts.id)]
+      : query.sort === 'created-desc'
+        ? [desc(bulletinPosts.createdAt), desc(bulletinPosts.id)]
+        : [desc(bulletinPosts.updatedAt), desc(bulletinPosts.id)];
+  const posts = await db
+    .select()
+    .from(bulletinPosts)
+    .where(where)
+    .orderBy(desc(bulletinPosts.pinned), ...sortOrder)
+    .limit(query.limit)
+    .offset((page - 1) * query.limit);
+  const postIds = posts.map((post) => post.id);
+  const noRows = Promise.resolve([]);
+  const [tagRows, attachmentRows, replyRows, postReactionRows, tags] = await Promise.all([
+    postIds.length === 0
+      ? noRows
+      : db
+          .select({
+            postId: bulletinPostTags.postId,
+            tagName: bulletinTags.name,
+          })
+          .from(bulletinPostTags)
+          .innerJoin(bulletinTags, eq(bulletinTags.id, bulletinPostTags.tagId))
+          .where(inArray(bulletinPostTags.postId, postIds)),
+    postIds.length === 0
+      ? noRows
+      : db
+          .select({
+            postId: bulletinPostAttachments.postId,
+            fileName: bulletinPostAttachments.fileName,
+            fileUrl: bulletinPostAttachments.fileUrl,
+            fileKey: bulletinPostAttachments.fileKey,
+            contentType: bulletinPostAttachments.contentType,
+            size: bulletinPostAttachments.size,
+          })
+          .from(bulletinPostAttachments)
+          .where(inArray(bulletinPostAttachments.postId, postIds)),
+    postIds.length === 0
+      ? noRows
+      : db
+          .select({
+            id: bulletinReplies.id,
+            postId: bulletinReplies.postId,
+            body: bulletinReplies.body,
+            createdAt: bulletinReplies.createdAt,
+            updatedAt: bulletinReplies.updatedAt,
+            authorId: bulletinReplies.authorId,
+            authorName: bulletinReplies.authorName,
+            authorEmail: bulletinReplies.authorEmail,
+          })
+          .from(bulletinReplies)
+          .where(inArray(bulletinReplies.postId, postIds))
+          .orderBy(bulletinReplies.createdAt),
+    postIds.length === 0
+      ? noRows
+      : db
+          .select({
+            postId: bulletinPostReactions.postId,
+            emoji: bulletinPostReactions.emoji,
+            userId: bulletinPostReactions.userId,
+            userName: bulletinPostReactions.userName,
+            userEmail: bulletinPostReactions.userEmail,
+          })
+          .from(bulletinPostReactions)
+          .where(inArray(bulletinPostReactions.postId, postIds)),
+    loadBulletinTagNames(),
+  ]);
+  const replyIds = replyRows.map((reply) => reply.id);
+  const replyReactionRows =
+    replyIds.length === 0
+      ? []
+      : await db
+          .select({
+            replyId: bulletinReplyReactions.replyId,
+            emoji: bulletinReplyReactions.emoji,
+            userId: bulletinReplyReactions.userId,
+            userName: bulletinReplyReactions.userName,
+            userEmail: bulletinReplyReactions.userEmail,
+          })
+          .from(bulletinReplyReactions)
+          .where(inArray(bulletinReplyReactions.replyId, replyIds));
 
   return {
     posts: mapBulletinPosts(
@@ -410,5 +459,13 @@ export async function loadBulletinData(viewer: {
       viewer,
     ),
     availableTags: tags,
+    pagination: {
+      page,
+      limit: query.limit,
+      totalItems,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1,
+    },
   };
 }
