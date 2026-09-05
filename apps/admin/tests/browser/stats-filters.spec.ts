@@ -12,7 +12,11 @@ test('stats filters fetch once without rerendering the server page and survive r
   const serverNavigations: string[] = [];
   page.on('request', (request) => {
     const url = new URL(request.url());
-    if (url.pathname === '/api/stats/workspace') apiRequests.push(url.search);
+    // The initial 30-day snapshot may be stale and refresh in the background.
+    // Count only requests for the range selected by this interaction.
+    if (url.pathname === '/api/stats/workspace' && url.searchParams.get('range') === '7d') {
+      apiRequests.push(url.search);
+    }
     if (
       url.pathname === '/en/stats/search' &&
       (request.isNavigationRequest() || request.headers().rsc === '1')
@@ -32,7 +36,7 @@ test('stats filters fetch once without rerendering the server page and survive r
   expect((await response).ok()).toBe(true);
   await expect(page).toHaveURL(/range=7d/);
   await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
-  expect(apiRequests).toHaveLength(1);
+  expect(apiRequests).toEqual(['?range=7d&grain=auto&view=search']);
   expect(serverNavigations).toEqual([]);
 
   await page.reload();
