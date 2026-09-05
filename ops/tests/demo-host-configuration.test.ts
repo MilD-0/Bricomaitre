@@ -43,6 +43,14 @@ it('keeps host origins and secrets across preparation without affecting another 
       local.match(/^DEMO_DATA_REVISION=.*$/m)?.[0],
     );
     expect(prepare(runtime)).toEqual(hosted);
+    expect(
+      execFileSync('bash', ['demo', 'prepare'], {
+        cwd: root,
+        env: { ...environment, BRIC_DEMO_RUNTIME_DIR: runtime, LC_ALL: 'en_US.UTF-8' },
+        stdio: 'pipe',
+      }),
+    ).toBeDefined();
+    expect(readFileSync(join(runtime, 'compose.env'), 'utf8')).toEqual(hosted);
     expect(readFileSync(join(runtime, 'secrets.env'), 'utf8')).toEqual(secrets);
     expect(prepare(isolated)).toContain('DEMO_STOREFRONT_ORIGIN=http://127.0.0.1:3402');
     expect(readFileSync(join(runtime, 'compose.env'), 'utf8')).toEqual(hosted);

@@ -363,6 +363,16 @@ services:
     env_file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/admin.env
     environment:
       DATABASE_URL: postgresql://bricomaitre_demo_admin:${DEMO_POSTGRES_ADMIN_PASSWORD}@postgres:5432/bricomaitre_demo
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "const fs=require('node:fs'); const age=Date.now()-Number(fs.readFileSync('/tmp/bric-admin-worker-heartbeat','utf8').trim()); process.exit(age>=0&&age<=45000?0:1)"
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
     depends_on:
       admin:
         condition: service_healthy
