@@ -255,7 +255,8 @@ describe('self-contained demo runtime', () => {
     expect(launcher).toContain('pause_reset_timer_if_installed');
     expect(launcher).toContain('resume_reset_timer_if_installed');
     expect(launcher).toContain('/__demo/reset');
-    expect(launcher).toContain('/__demo/shipments');
+    expect(launcher).toContain('ops/demo/release/mock-state.mjs');
+    expect(read('ops/demo/release/mock-state.mjs')).toContain('/__demo/shipments');
     expect(launcher).toContain('compose up -d --wait postgres redis object-storage mock-services');
     expect(launcher).not.toContain('compose up --build -d');
   });
