@@ -145,6 +145,7 @@ jobs:
       BETTER_AUTH_SECRET: ci-browser-verification-secret-1234567890
       BETTER_AUTH_URL: http://127.0.0.1:3020
       BRIC_PLAYWRIGHT_ADMIN_ORIGIN: http://127.0.0.1:3020
+      BRIC_PLAYWRIGHT_SERVER: prebuilt
       GOOGLE_CLIENT_ID: ci-browser-client
       GOOGLE_CLIENT_SECRET: ci-browser-secret
       ADMIN_EMAILS: playwright@bricomaitre.invalid
@@ -159,6 +160,13 @@ jobs:
         run: printf 'ADMIN_PLAYWRIGHT_STORAGE_STATE=%s/admin-playwright-auth.json\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Install Chromium
         run: bash ops/scripts/install-playwright-chromium.sh @bric/admin
+      - name: Build Admin for browser acceptance
+        env:
+          DATABASE_URL: ''
+          REDIS_URL: ''
+          CIRCLE_NODE_TOTAL: '2'
+          NODE_OPTIONS: --max-old-space-size=2048
+        run: pnpm --filter @bric/admin build
       - name: Run Admin browser acceptance tests
         run: |
           ops/scripts/run-with-ci-services.sh 55433 56380 bricomaitre_browser \

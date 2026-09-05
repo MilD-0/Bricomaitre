@@ -5,6 +5,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const defaultStorageState = resolve(process.cwd(), '../../ops/runtime/admin-playwright-state.json');
 const storageState = process.env.ADMIN_PLAYWRIGHT_STORAGE_STATE?.trim() || defaultStorageState;
+const useProductionServer = process.env.BRIC_PLAYWRIGHT_SERVER === 'prebuilt';
 
 function readLoopbackOrigin(name: string, fallback: string) {
   const origin = new URL(process.env[name] ?? fallback);
@@ -62,11 +63,12 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm dev --hostname 127.0.0.1',
+    command: useProductionServer ? 'pnpm start' : 'pnpm dev --hostname 127.0.0.1',
     url: `${adminReadinessOrigin}/android-chrome-192x192.png`,
     reuseExistingServer: false,
     timeout: 60_000,
     env: {
+      HOSTNAME: '127.0.0.1',
       BETTER_AUTH_URL: adminOrigin,
       BRIC_PLAYWRIGHT_DISABLE_DEV_INDICATORS: '1',
       PORT: adminPort,

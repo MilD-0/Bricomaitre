@@ -64,6 +64,20 @@ describe('Playwright server isolation', () => {
     );
   });
 
+  it('runs the built application on the same isolated origin for CI acceptance', async () => {
+    vi.stubEnv('BRIC_PLAYWRIGHT_SERVER', 'prebuilt');
+    vi.stubEnv('BRIC_PLAYWRIGHT_ADMIN_ORIGIN', 'http://127.0.0.1:3020');
+
+    const config = await loadConfig();
+
+    expect(config.webServer).toMatchObject({
+      command: 'pnpm start',
+      url: 'http://127.0.0.1:3020/android-chrome-192x192.png',
+      reuseExistingServer: false,
+      env: { HOSTNAME: '127.0.0.1', PORT: '3020', BETTER_AUTH_URL: 'http://127.0.0.1:3020' },
+    });
+  });
+
   it('rejects non-loopback test origins', async () => {
     vi.stubEnv('BRIC_PLAYWRIGHT_ADMIN_ORIGIN', 'https://example.com:3020');
 

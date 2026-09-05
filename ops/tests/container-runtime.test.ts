@@ -458,6 +458,11 @@ describe('production packaging and release runtime', () => {
     expect(adminBrowser).toContain('127.0.0.1:55433/bricomaitre_browser');
     expect(adminBrowser).toContain('127.0.0.1:56380/0');
     expect(adminBrowser).toContain('Configure ephemeral Admin browser state');
+    expect(adminBrowser).toContain('BRIC_PLAYWRIGHT_SERVER: prebuilt');
+    expect(adminBrowser.indexOf('name: Build Admin for browser acceptance')).toBeGreaterThan(0);
+    expect(adminBrowser.indexOf('name: Build Admin for browser acceptance')).toBeLessThan(
+      adminBrowser.indexOf('name: Run Admin browser acceptance tests'),
+    );
     expect(adminBrowser).toContain(
       "printf 'ADMIN_PLAYWRIGHT_STORAGE_STATE=%s/admin-playwright-auth.json\\n'",
     );

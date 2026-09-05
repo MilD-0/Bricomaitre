@@ -596,7 +596,7 @@ function SidebarNavItem({
       <div className="flex items-center gap-1">
         <Link
           href={href}
-          prefetch
+          prefetch={item.key !== 'stats'}
           onClick={(event) => {
             if (
               event.defaultPrevented ||
@@ -665,6 +665,7 @@ function SidebarNavItem({
                   <Link
                     key={subItem.key}
                     href={subHref}
+                    prefetch={item.key !== 'stats'}
                     onClick={(event) => {
                       if (
                         event.defaultPrevented ||
