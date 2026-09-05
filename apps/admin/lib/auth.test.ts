@@ -111,7 +111,6 @@ describe('Better Auth configuration', () => {
     expect(betterAuthMock).toHaveBeenCalledWith(
       expect.objectContaining({
         account: {
-          identityStrategy: 'provider-id',
           modelName: 'account',
         },
         baseURL: 'https://admin.example.com',

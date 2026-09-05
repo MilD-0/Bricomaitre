@@ -45,7 +45,6 @@ export const authServer = betterAuth({
   database,
   secret,
   account: {
-    identityStrategy: 'provider-id',
     modelName: 'account',
   },
   databaseHooks: {
