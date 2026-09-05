@@ -134,6 +134,7 @@ jobs:
           ops/scripts/run-loopback-isolated.sh pnpm test:storefront:browser
       - name: Upload browser diagnostics
         if: ${{ !cancelled() }}
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: storefront-browser-diagnostics
@@ -181,6 +182,7 @@ jobs:
             bash -lc 'pnpm --filter @bric/admin db:migrate && pnpm --filter @bric/admin exec tsx scripts/create-playwright-session.ts && ops/scripts/run-ci-check.sh "Admin browser acceptance tests" pnpm test:admin:browser'
       - name: Upload Admin browser diagnostics
         if: ${{ !cancelled() }}
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: admin-browser-diagnostics
@@ -212,6 +214,7 @@ jobs:
           ops/scripts/run-loopback-isolated.sh pnpm test:storefront:performance
       - name: Upload performance diagnostics
         if: ${{ !cancelled() }}
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: storefront-performance-diagnostics

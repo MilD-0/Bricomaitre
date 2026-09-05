@@ -181,6 +181,9 @@ describe('production packaging and release runtime', () => {
     expect(buildScript).toContain("fixture_origin='http://127.0.0.1:4311'");
     expect(buildScript).toContain('node apps/storefront/test/fixture-storefront-api.mjs');
     expect(buildScript).toContain('export STOREFRONT_API_BASE_URL="$fixture_origin"');
+    expect(buildScript).toContain(
+      'export NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS="http://127.0.0.1:3003,$fixture_origin"',
+    );
     expect(buildScript).toContain("STOREFRONT_API_TIMEOUT_MS='1000'");
     expect(buildScript).toContain("SENTRY_AUTH_TOKEN=''");
     expect(buildScript).toContain('pnpm build:apps');
@@ -455,6 +458,7 @@ describe('production packaging and release runtime', () => {
     );
     expect(storefrontBrowser).toContain('BRIC_PLAYWRIGHT_SERVER: prebuilt');
     expect(storefrontBrowser).toContain('bash ops/scripts/build-public-apps.sh storefront');
+    expect(storefrontBrowser).toContain('continue-on-error: true');
     expect(
       storefrontBrowser.indexOf('name: Build Storefront for browser acceptance'),
     ).toBeGreaterThan(0);
@@ -473,6 +477,7 @@ describe('production packaging and release runtime', () => {
     expect(adminBrowser).toContain('127.0.0.1:56380/0');
     expect(adminBrowser).toContain('Configure ephemeral Admin browser state');
     expect(adminBrowser).toContain('BRIC_PLAYWRIGHT_SERVER: prebuilt');
+    expect(adminBrowser).toContain('continue-on-error: true');
     expect(adminBrowser.indexOf('name: Build Admin for browser acceptance')).toBeGreaterThan(0);
     expect(adminBrowser.indexOf('name: Build Admin for browser acceptance')).toBeLessThan(
       adminBrowser.indexOf('name: Run Admin browser acceptance tests'),
