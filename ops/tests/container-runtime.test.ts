@@ -629,8 +629,11 @@ describe('production packaging and release runtime', () => {
     );
     expect(imageSigner).toContain('BRIC_SIGN_MAX_ATTEMPTS:-3');
     expect(imageSigner).toContain('BRIC_SIGN_RETRY_DELAY_SECONDS:-5');
+    expect(imageSigner).toContain('BRIC_SIGN_TIMEOUT_SECONDS:-90');
     expect(imageSigner).toContain('--retry-all-errors');
     expect(imageSigner).toContain('tuf refresh failed');
+    expect(imageSigner).toContain('equivalent entry already exists');
+    expect(imageSigner).toContain('cosign verify');
     expect(imageSigner).toContain('failed with a non-network error; not retrying');
     expect(imageSigner).toContain('exhausted $max_attempts transient-network attempts');
     expect(ci.indexOf('uses: docker/setup-buildx-action@')).toBeLessThan(

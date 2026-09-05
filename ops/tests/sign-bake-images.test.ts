@@ -8,7 +8,16 @@ const workspaceRoot = resolve(import.meta.dirname, '../..');
 const signer = resolve(workspaceRoot, 'ops/scripts/sign-bake-images.sh');
 const temporaryDirectories: string[] = [];
 
-function runSigner(mode: 'transient-once' | 'always-transient' | 'signing-error') {
+function runSigner(
+  mode:
+    | 'transient-once'
+    | 'always-transient'
+    | 'signing-error'
+    | 'already-signed'
+    | 'equivalent-entry'
+    | 'hang',
+  options: { maxAttempts?: string; timeoutSeconds?: string } = {},
+) {
   const directory = mkdtempSync(join(tmpdir(), 'bric-release-sign-'));
   temporaryDirectories.push(directory);
   const cosignCountFile = join(directory, 'cosign-calls');
@@ -34,6 +43,20 @@ printf '{"value":"synthetic-oidc-token"}\n'
     join(directory, 'cosign'),
     `#!/usr/bin/env bash
 set -euo pipefail
+if [[ "\${1:-}" == verify ]]; then
+  case "$FAKE_COSIGN_MODE" in
+    already-signed)
+      exit 0
+      ;;
+    equivalent-entry)
+      [[ -f "$FAKE_COSIGN_COUNT_FILE" ]]
+      exit
+      ;;
+    *)
+      exit 1
+      ;;
+  esac
+fi
 count=0
 if [[ -f "$FAKE_COSIGN_COUNT_FILE" ]]; then
   count="$(cat "$FAKE_COSIGN_COUNT_FILE")"
@@ -54,6 +77,13 @@ case "$FAKE_COSIGN_MODE" in
   signing-error)
     echo 'signature policy rejected the identity' >&2
     exit 17
+    ;;
+  equivalent-entry)
+    echo 'createLogEntryConflict: an equivalent entry already exists in the transparency log' >&2
+    exit 1
+    ;;
+  hang)
+    sleep 10
     ;;
 esac
 echo 'synthetic signing succeeded'
@@ -77,16 +107,19 @@ echo 'synthetic signing succeeded'
         FAKE_COSIGN_MODE: mode,
         FAKE_COSIGN_COUNT_FILE: cosignCountFile,
         FAKE_OIDC_COUNT_FILE: oidcCountFile,
-        BRIC_SIGN_MAX_ATTEMPTS: '3',
+        BRIC_SIGN_MAX_ATTEMPTS: options.maxAttempts ?? '3',
         BRIC_SIGN_RETRY_DELAY_SECONDS: '0',
+        BRIC_SIGN_TIMEOUT_SECONDS: options.timeoutSeconds ?? '5',
       },
     },
   );
 
   return {
     ...result,
-    cosignCalls: Number(readFileSync(cosignCountFile, 'utf8').trim()),
-    oidcCalls: Number(readFileSync(oidcCountFile, 'utf8').trim()),
+    cosignCalls: Number(
+      readFileSync(cosignCountFile, { encoding: 'utf8', flag: 'a+' }).trim() || '0',
+    ),
+    oidcCalls: Number(readFileSync(oidcCountFile, { encoding: 'utf8', flag: 'a+' }).trim() || '0'),
     output: readFileSync(outputFile, 'utf8'),
     digest,
   };
@@ -127,5 +160,32 @@ describe('release image signing retries', () => {
     expect(result.cosignCalls).toBe(3);
     expect(result.oidcCalls).toBe(3);
     expect(result.stderr).toContain('exhausted 3 transient-network attempts');
+  });
+
+  it('reuses a valid existing signature without requesting another identity', () => {
+    const result = runSigner('already-signed');
+
+    expect(result.status).toBe(0);
+    expect(result.cosignCalls).toBe(0);
+    expect(result.oidcCalls).toBe(0);
+    expect(result.stdout).toContain('already has a valid release signature; reusing it');
+  });
+
+  it('accepts a duplicate Rekor entry only after verifying the published signature', () => {
+    const result = runSigner('equivalent-entry');
+
+    expect(result.status).toBe(0);
+    expect(result.cosignCalls).toBe(1);
+    expect(result.oidcCalls).toBe(1);
+    expect(result.stdout).toContain('before Rekor returned its duplicate-entry response');
+  });
+
+  it('terminates a stalled signing request', () => {
+    const result = runSigner('hang', { maxAttempts: '1', timeoutSeconds: '1' });
+
+    expect(result.status).toBe(124);
+    expect(result.cosignCalls).toBe(1);
+    expect(result.oidcCalls).toBe(1);
+    expect(result.stderr).toContain('timed out after 1s');
   });
 });

@@ -16,7 +16,11 @@ fi
 
 max_attempts="${BRIC_SIGN_MAX_ATTEMPTS:-3}"
 retry_delay_seconds="${BRIC_SIGN_RETRY_DELAY_SECONDS:-5}"
+timeout_seconds="${BRIC_SIGN_TIMEOUT_SECONDS:-90}"
+certificate_identity="${BRIC_COSIGN_CERTIFICATE_IDENTITY:-https://github.com/MilD-0/Bricomaitre/.github/workflows/deploy.yml@refs/heads/main}"
+certificate_oidc_issuer="${BRIC_COSIGN_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
 transient_pattern='i/o timeout|TLS handshake timeout|connection reset by peer|unexpected EOF|unexpected eof|temporary failure in name resolution|dial tcp|network is unreachable|context deadline exceeded|DeadlineExceeded|net/http: request canceled|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|tuf refresh failed'
+equivalent_entry_pattern='equivalent entry already exists'
 
 if [[ ! "$max_attempts" =~ ^[1-9][0-9]*$ ]]; then
   echo 'BRIC_SIGN_MAX_ATTEMPTS must be a positive integer' >&2
@@ -26,6 +30,18 @@ if [[ ! "$retry_delay_seconds" =~ ^[0-9]+$ ]]; then
   echo 'BRIC_SIGN_RETRY_DELAY_SECONDS must be a non-negative integer' >&2
   exit 64
 fi
+if [[ ! "$timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
+  echo 'BRIC_SIGN_TIMEOUT_SECONDS must be a positive integer' >&2
+  exit 64
+fi
+
+verify_signature() {
+  timeout --kill-after=5s "${timeout_seconds}s" \
+    cosign verify \
+    --certificate-identity "$certificate_identity" \
+    --certificate-oidc-issuer "$certificate_oidc_issuer" \
+    "$1" >/dev/null 2>&1
+}
 
 mkdir -p "$(dirname "$output_file")"
 : >"$output_file"
@@ -46,7 +62,12 @@ for image_spec in "$@"; do
 
   echo "::group::Sign ${image_name}"
   signed=false
+  if verify_signature "$digest_ref"; then
+    echo "${image_name} already has a valid release signature; reusing it."
+    signed=true
+  fi
   for attempt in $(seq 1 "$max_attempts"); do
+    [[ "$signed" == false ]] || break
     oidc_token="$(
       curl --fail-with-body --silent --show-error \
         --retry 3 \
@@ -58,16 +79,25 @@ for image_spec in "$@"; do
         | node -e 'let data = ""; process.stdin.on("data", chunk => data += chunk); process.stdin.on("end", () => { const parsed = JSON.parse(data); if (!parsed.value) throw new Error("GitHub OIDC response did not include a token"); process.stdout.write(parsed.value); });'
     )"
 
-    if sign_output="$(cosign sign --yes --identity-token "$oidc_token" "$digest_ref" 2>&1)"; then
+    if sign_output="$(timeout --kill-after=5s "${timeout_seconds}s" cosign sign --yes --identity-token "$oidc_token" "$digest_ref" 2>&1)"; then
       printf '%s\n' "$sign_output"
       signed=true
       break
     else
       sign_status=$?
     fi
+    if ((sign_status == 124)); then
+      sign_output="${sign_output}${sign_output:+$'\n'}Signing ${image_name} timed out after ${timeout_seconds}s."
+    fi
     printf '%s\n' "$sign_output" >&2
 
-    if ! grep -Eiq "$transient_pattern" <<<"$sign_output"; then
+    if grep -Eiq "$equivalent_entry_pattern" <<<"$sign_output" && verify_signature "$digest_ref"; then
+      echo "${image_name} was signed before Rekor returned its duplicate-entry response; reusing the verified signature."
+      signed=true
+      break
+    fi
+
+    if ((sign_status != 124)) && ! grep -Eiq "$transient_pattern|$equivalent_entry_pattern" <<<"$sign_output"; then
       echo "Signing ${image_name} failed with a non-network error; not retrying." >&2
       exit "$sign_status"
     fi
