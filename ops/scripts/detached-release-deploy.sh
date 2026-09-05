@@ -16,24 +16,33 @@ status_file="$release_dir/.bric-deploy.status"
 pid_file="$release_dir/.bric-deploy.pid"
 log_file="$release_dir/.bric-deploy.log"
 
-read_status() {
+print_recorded_status() {
   local status
 
-  if [[ -f "$status_file" ]]; then
-    status="$(cat "$status_file")"
-    if [[ ! "$status" =~ ^[0-9]+$ ]]; then
-      echo "invalid recorded deploy status: $status" >&2
-      exit 1
-    fi
-    if [[ "$status" == 0 ]]; then
-      printf 'success\n'
-    else
-      printf 'failure:%s\n' "$status"
-    fi
+  if [[ ! -f "$status_file" ]]; then
+    return 1
+  fi
+  status="$(cat "$status_file")"
+  if [[ ! "$status" =~ ^[0-9]+$ ]]; then
+    echo "invalid recorded deploy status: $status" >&2
+    exit 1
+  fi
+  if [[ "$status" == 0 ]]; then
+    printf 'success\n'
+  else
+    printf 'failure:%s\n' "$status"
+  fi
+}
+
+read_status() {
+  if print_recorded_status; then
     return
   fi
 
   if [[ ! -f "$pid_file" ]]; then
+    if print_recorded_status; then
+      return
+    fi
     printf 'missing\n'
     return
   fi
@@ -46,6 +55,8 @@ read_status() {
   fi
   if kill -0 "$pid" 2>/dev/null; then
     printf 'running\n'
+  elif print_recorded_status; then
+    return
   else
     printf 'orphaned\n'
   fi
