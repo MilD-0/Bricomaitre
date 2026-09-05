@@ -128,4 +128,35 @@ describe('marketing attribution boundary', () => {
     expect(JSON.stringify(context.acquisition)).not.toContain('meta-click');
     expect(JSON.stringify(context)).not.toMatch(/phone|email|address/i);
   });
+
+  it.each(['_ga', '_fbc', '_ttp'])(
+    'ignores malformed %s cookies when building an order',
+    (name) => {
+      window.history.replaceState({}, '', '/ar/landing/motor-holder');
+      document.cookie = `${name}=%ZZ; Path=/`;
+      expect(getMarketingOrderContext('purchase-cookie')).toMatchObject({
+        eventId: 'purchase-cookie',
+        eventSourceUrl: window.location.href,
+      });
+      document.cookie = `${name}=; Max-Age=0; Path=/`;
+    },
+  );
+
+  it('bounds encoded Arabic campaign URLs while retaining the landing path and click identity', () => {
+    const query = new URLSearchParams({
+      fbclid: 'x'.repeat(250),
+      utm_source: 'fb',
+      utm_campaign: 'حملة'.repeat(40),
+      utm_content: 'عرض'.repeat(50),
+    });
+    window.history.replaceState({}, '', `/ar/landing/motor-holder?${query}`);
+    expect(window.location.href.length).toBeGreaterThan(2048);
+    const context = getMarketingOrderContext('purchase-long-url');
+    expect(context.eventSourceUrl.length).toBeLessThanOrEqual(2048);
+    expect(new URL(context.eventSourceUrl).pathname).toBe('/ar/landing/motor-holder');
+    expect(new URL(context.eventSourceUrl).searchParams.get('fbclid')).toBe('x'.repeat(250));
+    expect(context.acquisition?.utmContent).toBe('عرض'.repeat(50));
+    expect(captureStorefrontAttribution().landingUrl.length).toBeLessThanOrEqual(2048);
+    expect(getStorefrontAnalyticsContext().sessionId).toBeTruthy();
+  });
 });

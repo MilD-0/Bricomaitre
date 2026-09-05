@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { CHECKOUT_REQUEST_TIMEOUT_MS } from './checkout-request';
 
 import {
   addCartItem,
@@ -23,6 +24,31 @@ const item = {
 };
 
 describe('storefront cart boundary', () => {
+  it.each(['headers', 'body'])(
+    'times out a stalled cart validation response at %s',
+    async (phase) => {
+      vi.useFakeTimers();
+      try {
+        const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
+          const stalled = () =>
+            new Promise<never>((_resolve, reject) => {
+              init!.signal!.addEventListener('abort', () =>
+                reject(new DOMException('Timed out', 'AbortError')),
+              );
+            });
+          if (phase === 'headers') return stalled();
+          return { ok: true, json: stalled } as unknown as Response;
+        });
+        const assertion = expect(reconcileCartWithCatalog([item], fetcher)).rejects.toMatchObject({
+          name: 'AbortError',
+        });
+        await vi.advanceTimersByTimeAsync(CHECKOUT_REQUEST_TIMEOUT_MS);
+        await assertion;
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
   it('adds and merges validated product snapshots with a quantity ceiling', () => {
     expect(addCartItem([], item)).toEqual([item]);
     expect(addCartItem([{ ...item, quantity: 19 }], { ...item, quantity: 3 })[0]).toMatchObject({

@@ -242,7 +242,12 @@ function sanitizedLandingUrl(url: URL) {
   ] as const;
   for (const [name, max] of fields) {
     const value = trimmedQueryValue(url.searchParams, name, max);
-    if (value) landing.searchParams.set(name, value);
+    if (value) {
+      landing.searchParams.set(name, value);
+      // Encoded Arabic campaign names can exceed the URL budget even when
+      // each individual field is within its own character limit.
+      if (landing.href.length > 2048) landing.searchParams.delete(name);
+    }
   }
   return landing.toString();
 }
@@ -308,12 +313,17 @@ export function captureStorefrontAttribution(now = Date.now()): StorefrontAttrib
 }
 
 function cookie(name: string) {
-  const prefix = `${name}=`;
-  const match = document.cookie
-    .split(';')
-    .map((value) => value.trim())
-    .find((value) => value.startsWith(prefix));
-  return match ? decodeURIComponent(match.slice(prefix.length)) : null;
+  try {
+    const prefix = `${name}=`;
+    const match = document.cookie
+      .split(';')
+      .map((value) => value.trim())
+      .find((value) => value.startsWith(prefix));
+    return match ? decodeURIComponent(match.slice(prefix.length)) : null;
+  } catch {
+    // Third-party cookies may be malformed or inaccessible.
+    return null;
+  }
 }
 
 export function parseGoogleClientId(value: string | null) {
@@ -373,7 +383,10 @@ export function getMarketingOrderContext(eventId: string): StorefrontOrderMarket
   return storefrontOrderMarketingSchema.parse({
     semanticsVersion: MARKETING_SEMANTICS_VERSION,
     eventId,
-    eventSourceUrl: window.location.href,
+    eventSourceUrl:
+      window.location.href.length <= 2048
+        ? window.location.href
+        : sanitizedLandingUrl(new URL(window.location.href)),
     sessionEntry: analytics.entry,
     ...(analytics.lastNonDirectTouch ? { lastNonDirectTouch: analytics.lastNonDirectTouch } : {}),
     assistant:

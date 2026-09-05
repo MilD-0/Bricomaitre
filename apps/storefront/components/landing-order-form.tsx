@@ -17,13 +17,7 @@ export async function LandingOrderForm({
 }) {
   const [translate, catalog, contact] = await Promise.all([
     getTranslations({ locale, namespace: 'Checkout' }),
-    getStorefrontEcotrackCatalog().catch(() => ({
-      wilayas: [],
-      communes: [],
-      serviceFees: [],
-      weightFees: [],
-      lastSync: null,
-    })),
+    getStorefrontEcotrackCatalog().catch(() => null),
     getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse),
   ]);
   const { product } = page;
@@ -47,6 +41,27 @@ export async function LandingOrderForm({
             ? 'هذا المنتج غير متوفر حالياً.'
             : 'Ce produit est actuellement indisponible.'}
         </p>
+      </section>
+    );
+  }
+
+  if (!catalog?.wilayas.length || !catalog.communes.length) {
+    return (
+      <section id="landing-order" className="landing-order-unavailable" role="alert">
+        <h2>{translate('title')}</h2>
+        <p>
+          {locale === 'ar'
+            ? 'تعذر تحميل مناطق التوصيل. أعد المحاولة لإتمام طلبك.'
+            : 'Les destinations de livraison n’ont pas pu être chargées. Réessayez pour commander.'}
+        </p>
+        <form
+          method="get"
+          action={`/${locale}/landing/${encodeURIComponent(page.slug)}#landing-order`}
+        >
+          <button className="button button-primary" type="submit">
+            {translate('retry')}
+          </button>
+        </form>
       </section>
     );
   }

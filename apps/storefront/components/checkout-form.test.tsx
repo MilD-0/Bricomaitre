@@ -468,4 +468,58 @@ describe('CheckoutForm', () => {
     await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
     expect(mocks.create.mock.calls[1][1]).toBe(firstKey);
   });
+  it('submits without attribution if tracking preparation fails', async () => {
+    mocks.identity.mockImplementationOnce(() => {
+      throw new Error('Tracking unavailable');
+    });
+    render(
+      <CheckoutForm
+        locale="fr"
+        catalog={catalog}
+        directItem={directItem}
+        labels={labels}
+        embedded
+      />,
+    );
+    fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
+      target: { value: '0550000000' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), { target: { value: '16' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), {
+      target: { value: 'Alger Centre' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
+    expect(mocks.create.mock.calls[0][0]).toMatchObject({
+      phoneNumber1: '0550000000',
+      journeyId: null,
+    });
+    expect(mocks.create.mock.calls[0][0].marketing).toBeUndefined();
+    expect(mocks.push).toHaveBeenCalledWith('/fr/thank-you?token=public-order-token-1234567890');
+  });
+
+  it('shows progress during catalog validation and exposes a recoverable failure', async () => {
+    let fail!: (error: Error) => void;
+    mocks.reconcile.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    render(
+      <CheckoutForm
+        locale="fr"
+        catalog={catalog}
+        directItem={directItem}
+        labels={labels}
+        embedded
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    expect(screen.getByRole('button', { name: 'submitting' })).toBeDisabled();
+    fail(new Error('Request timed out'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('submitError');
+    expect(screen.getByRole('button', { name: 'submit' })).toBeEnabled();
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
 });

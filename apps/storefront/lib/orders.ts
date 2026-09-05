@@ -6,6 +6,8 @@ import {
   type StorefrontOrderCreateRequest,
 } from '@bric/storefront-core/contracts';
 
+import { withCheckoutRequestTimeout } from './checkout-request';
+
 export class CheckoutOrderError extends Error {
   status: number | null;
   code:
@@ -62,25 +64,28 @@ export async function createCheckoutOrder(
   payload: StorefrontOrderCreateRequest,
   idempotencyKey: string,
 ) {
-  let response: Response;
-  try {
-    response = await fetch('/api/orders', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey },
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    throw new CheckoutOrderError('order_network_error', { code: 'network' });
-  }
-  if (!response.ok) throw await responseError(response);
-  const parsed = storefrontCreateOrderResponseSchema.safeParse(await readJson(response));
-  if (!parsed.success || !parsed.data.item.publicToken) {
-    throw new CheckoutOrderError('order_invalid_response', {
-      code: 'invalid_response',
-      status: response.status,
-    });
-  }
-  return parsed.data.item;
+  return withCheckoutRequestTimeout(async (signal) => {
+    let response: Response;
+    try {
+      response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey },
+        body: JSON.stringify(payload),
+        signal,
+      });
+    } catch {
+      throw new CheckoutOrderError('order_network_error', { code: 'network' });
+    }
+    if (!response.ok) throw await responseError(response);
+    const parsed = storefrontCreateOrderResponseSchema.safeParse(await readJson(response));
+    if (!parsed.success || !parsed.data.item.publicToken) {
+      throw new CheckoutOrderError('order_invalid_response', {
+        code: 'invalid_response',
+        status: response.status,
+      });
+    }
+    return parsed.data.item;
+  });
 }
 
 export async function verifyCheckoutOrder(orderId: number, token: string) {
