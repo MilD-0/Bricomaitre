@@ -10,6 +10,8 @@ LICENSE
 third_party/licenses
 apps/admin/drizzle/bootstrap
 apps/admin/drizzle/migrations
+ops/demo/data/algeria-communes.json
+ops/demo/data/algeria-wilayas.json
 **/*.png
 **/*.woff2
 **/next-env.d.ts

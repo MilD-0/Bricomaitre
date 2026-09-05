@@ -40,6 +40,16 @@
     "dead-code:check": "knip",
     "dependencies:check": "bash ops/scripts/check-production-dependencies.sh",
     "analyze:storefront": "pnpm --filter @bric/storefront build",
+    "demo:up": "./demo up",
+    "demo:down": "./demo down",
+    "demo:reset": "./demo reset",
+    "demo:status": "./demo status",
+    "demo:logs": "./demo logs",
+    "demo:smoke": "./demo smoke",
+    "demo:data:refresh": "node ops/demo/scripts/refresh-data-sources.mjs",
+    "demo:data:verify": "node ops/demo/scripts/verify-generated-data.mjs",
+    "demo:images": "node ops/demo/scripts/prepare-catalog-images.mjs",
+    "demo:schedule": "./demo schedule",
     "ops:up": "docker compose -f ops/docker/compose.prod.yml up -d",
     "ops:down": "docker compose -f ops/docker/compose.prod.yml down",
     "ops:restart": "docker compose -f ops/docker/compose.prod.yml restart",
@@ -57,6 +67,7 @@
     "eslint-config-next": "16.3.4",
     "knip": "6.34.0",
     "prettier": "3.9.6",
+    "sharp": "0.35.4",
     "typescript": "6.0.3"
   }
 }

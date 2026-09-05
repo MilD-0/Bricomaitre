@@ -9,6 +9,7 @@ import type {
   AnalyticsCashStage,
   AnalyticsMetric,
   AnalyticsPayload,
+  AnalyticsResolvedGrain,
   AnalyticsView,
 } from '../../lib/analytics';
 import { analyticsFocusAiSurfaceDetails } from '../../lib/admin-ai-live-surface-details';
@@ -104,7 +105,7 @@ function funnelLabel(copy: AnalyticsCopy, key: string) {
     landingViews: copy.labels.landingViews,
     bricOrders: copy.labels.bricOrders,
   };
-  return labels[key] ?? key.replaceAll('_', ' ');
+  return labels[key] ?? fulfillmentPhaseLabel(copy, key);
 }
 
 export function fulfillmentPhaseLabel(copy: AnalyticsCopy, phase: string) {
@@ -237,17 +238,16 @@ export function splitPartialSeries(
   return rows.map((row, index) => {
     const partial = row.isPartial === true;
     const forecast = row.isForecast === true;
-    const nextIsForecast = rows[index + 1]?.isForecast === true;
     const nextIsOpen = rows[index + 1]?.isPartial === true || rows[index + 1]?.isForecast === true;
     const result = { ...row };
     for (const key of keys) {
       const projected = row[`${key}Projected`];
       const projectedValue = typeof projected === 'number' ? projected : null;
-      result[`${key}Actual`] = forecast ? null : row[key];
+      result[`${key}Actual`] = forecast || partial ? null : row[key];
       result[`${key}Open`] = forecast
         ? projectedValue
         : partial
-          ? (projectedValue ?? (nextIsForecast ? row[key] : null))
+          ? projectedValue
           : nextIsOpen
             ? row[key]
             : null;
@@ -255,6 +255,30 @@ export function splitPartialSeries(
     }
     return result;
   });
+}
+
+export function completedTrendBuckets<T extends { bucket: string }>(
+  rows: T[],
+  grain: AnalyticsResolvedGrain,
+  endDate: string,
+) {
+  if (rows.length < 2 || grain === 'day') return rows;
+  const lastBucket = rows.at(-1)?.bucket.slice(0, 10);
+  if (!lastBucket) return rows;
+
+  if (grain === 'month') {
+    const [year, month, day] = endDate.split('-').map(Number);
+    const finalDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    if (lastBucket.slice(0, 7) === endDate.slice(0, 7) && day < finalDay) {
+      return rows.slice(0, -1);
+    }
+    return rows;
+  }
+
+  const bucketEnd = new Date(`${lastBucket}T00:00:00.000Z`);
+  bucketEnd.setUTCDate(bucketEnd.getUTCDate() + 6);
+  if (bucketEnd.toISOString().slice(0, 10) > endDate) return rows.slice(0, -1);
+  return rows;
 }
 
 export function ActualOpenLine({
@@ -271,7 +295,7 @@ export function ActualOpenLine({
   return (
     <>
       <Line
-        type="monotone"
+        type="linear"
         dataKey={`${dataKey}Actual`}
         name={name}
         stroke={stroke}
@@ -280,7 +304,7 @@ export function ActualOpenLine({
         connectNulls={false}
       />
       <Line
-        type="monotone"
+        type="linear"
         dataKey={`${dataKey}Open`}
         name={`${name} · Forecast`}
         stroke={stroke}

@@ -1,0 +1,1542 @@
+commune_id,wilaya_code,name,name_ar
+1,1,Adrar,أدرار
+2,1,Akabli,اقبلي
+3,1,Aoulef,أولف
+4,1,Bouda,بودة
+5,1,Fenoughil,فنوغيل
+6,1,In Zghmir,إن زغمير
+7,1,Ouled Ahmed Timmi,أولاد أحمد تيمي
+8,1,Reggane,رقان
+9,1,Sali,سالي
+10,1,Sebaa,السبع
+11,1,Tamantit,تامنطيط
+12,1,Tamest,تامست
+13,1,Timekten,تيمقتن
+14,1,Tit,تيت
+15,1,Tsabit,تسابيت
+16,1,Zaouiet Kounta,زاوية كنتة
+17,2,Abou El Hassane,أبو الحسن
+18,2,Ain Merane,عين مران
+19,2,Benairia,بنايرية
+20,2,Beni Bouattab,بني بوعتاب
+21,2,Beni Haoua,بني حواء
+22,2,Beni Rached,بني راشد
+23,2,Boukadir,بوقادير
+24,2,Bouzeghaia,بوزغاية
+25,2,Breira,بريرة
+26,2,Chettia,الشطية
+27,2,Chlef,الشلف
+28,2,Dahra,الظهرة
+29,2,El Hadjadj,الحجاج
+30,2,El Karimia,الكريمية
+31,2,El Marsa,المرسى
+32,2,Harchoun,حرشون
+33,2,Herenfa,الهرانفة
+34,2,Labiod Medjadja,الأبيض مجاجة
+35,2,Moussadek,مصدق
+36,2,Oued Fodda,وادي الفضة
+37,2,Oued Goussine,وادي قوسين
+38,2,Oued Sly,وادي سلي
+39,2,Ouled Abbes,أولاد عباس
+40,2,Ouled Ben Abdelkader,أولاد بن عبد القادر
+41,2,Ouled Fares,أولاد فارس
+42,2,Oum Drou,أم الدروع
+43,2,Sendjas,سنجاس
+44,2,Sidi Abderrahmane,سيدي عبد الرحمن
+45,2,Sidi Akkacha,سيدي عكاشة
+46,2,Sobha,الصبحة
+47,2,Tadjena,تاجنة
+48,2,Talassa,تلعصة
+49,2,Taougrit,تاوقريت
+50,2,Tenes,تنس
+51,2,Zeboudja,الزبوجة
+52,3,Aflou,أفلو
+53,3,Ain Madhi,عين ماضي
+54,3,Ain Sidi Ali,عين سيدي علي
+55,3,Benacer Benchohra,بن ناصر بن شهرة
+56,3,Brida,بريدة
+57,3,El Assafia,العسافية
+58,3,El Beidha,البيضاء
+59,3,El Ghicha,الغيشة
+60,3,El Haouaita,الحويطة
+61,3,Gueltat Sidi Saad,قلتة سيدي سعد
+62,3,Hadj Mechri,الحاج مشري
+63,3,Hassi Delaa,حاسي الدلاعة
+64,3,Hassi R'Mel,حاسي الرمل
+65,3,Kheneg,الخنق
+66,3,Ksar El Hirane,قصر الحيران
+67,3,Laghouat,الأغواط
+68,3,Oued M'Zi,وادي مزي
+69,3,Oued Morra,وادي مرة
+70,3,Sebgag,سبقاق
+71,3,Sidi Bouzid,سيدي بوزيد
+72,3,Sidi Makhlouf,سيدي مخلوف
+73,3,Tadjemout,تاجموت
+74,3,Tadjrouna,تاجرونة
+75,3,Taouiala,تاويالة
+76,4,Ain Babouche,عين ببوش
+77,4,Ain Beida,عين البيضاء
+78,4,Ain Diss,عين الديس
+79,4,Ain Fekroun,عين فكرون
+80,4,Ain Kercha,عين كرشة
+81,4,Ain Zitoun,عين الزيتون
+82,4,Aïn M'lila,عين مليلة
+83,4,Behir Chergui,بحير الشرقي
+84,4,Berriche,بريش
+85,4,Bir Chouhada,بئر الشهداء
+86,4,Dhalaa,الضلعة
+87,4,El Amiria,العامرية
+88,4,El Belala,البلالة
+89,4,El Djazia,الجازية
+90,4,El Fedjoudj Boughrara Sa,الفجوج بوغرارة سعودي
+91,4,El Harmilia,الحرملية
+92,4,Fkirina,فكيرينة
+93,4,Hanchir Toumghani,هنشير تومغني
+94,4,Ksar Sbahi,قصر الصباحي
+95,4,Meskiana,مسكيانة
+96,4,Oued Nini,وادي نيني
+97,4,Ouled Gacem,أولاد قاسم
+98,4,Ouled Hamla,أولاد حملة
+99,4,Ouled Zouai,أولاد زواي
+100,4,Oum El Bouaghi,أم البواقي
+101,4,Rahia,الرحية
+102,4,Sigus,سيقوس
+103,4,Souk Naamane,سوق نعمان
+104,4,Zorg,الزرق
+105,5,Ain Djasser,عين جاسر
+106,5,Ain Touta,عين التوتة
+107,5,Ain Yagout,عين ياقوت
+108,5,Arris,أريس
+109,5,Azil Abedelkader,عزيل عبد القادر
+110,5,Barika,بريكة
+111,5,Batna,باتنة
+112,5,Beni Foudhala El Hakania,بني فضالة الحقانية
+113,5,Bitam,بيطام
+114,5,Boulhilat,بولهيلات
+115,5,Boumagueur,بومقر
+116,5,Boumia,بومية
+117,5,Bouzina,بوزينة
+118,5,Chemora,الشمرة
+119,5,Chir,شير
+120,5,Djerma,جرمة
+121,5,Djezzar,الجزار
+122,5,El Hassi,الحاسي
+123,5,El Madher,المعذر
+124,5,Fesdis,فسديس
+125,5,Foum Toub,فم الطوب
+126,5,Ghassira,غسيرة
+127,5,Gosbat,القصبات
+128,5,Guigba,القيقبة
+129,5,Hidoussa,حيدوسة
+130,5,Ichemoul,إشمول
+131,5,Inoughissen,إينوغيسن
+132,5,Kimmel,كيمل
+133,5,Ksar Bellezma,قصر بلزمة
+134,5,Larbaa,لارباع
+135,5,Lazrou,لازرو
+136,5,Lemcene,لمسان
+137,5,M Doukal,إمدوكل
+138,5,Maafa,معافة
+139,5,Menaa,منعة
+140,5,Merouana,مروانة
+141,5,N Gaous,نقاوس
+142,5,Oued Chaaba,وادي الشعبة
+143,5,Oued El Ma,وادي الماء
+144,5,Oued Taga,وادي الطاقة
+145,5,Ouled Ammar,أولاد عمار
+146,5,Ouled Aouf,أولاد عوف
+147,5,Ouled Fadel,أولاد فاضل
+148,5,Ouled Sellem,أولاد سلام
+149,5,Ouled Si Slimane,أولاد سي سليمان
+150,5,Ouyoun El Assafir,عيون العصافير
+151,5,Rahbat,الرحبات
+152,5,Ras El Aioun,رأس العيون
+153,5,Sefiane,سفيان
+154,5,Seggana,سقانة
+155,5,Seriana,سريانة
+156,5,T Kout,تكوت
+157,5,Talkhamt,تالخمت
+158,5,Taxlent,تاكسلانت
+159,5,Tazoult,تازولت
+160,5,Teniet El Abed,ثنية العابد
+161,5,Tighanimine,تيغانمين
+162,5,Tigharghar,تغرغار
+163,5,Tilatou,تيلاطو
+164,5,Timgad,تيمقاد
+165,5,Zanet El Beida,زانة البيضاء
+166,6,Adekar,أدكار
+167,6,Ait-Smail,أيت إسماعيل
+168,6,Akbou,أقبو
+169,6,Akfadou,أكفادو
+170,6,Amalou,أمالو
+171,6,Amizour,أميزور
+172,6,Aokas,أوقاس
+173,6,Aït R'zine,أيت رزين
+174,6,Barbacha,برباشة
+175,6,Bejaia,بجاية
+176,6,Beni Djellil,بني جليل
+177,6,Beni K'sila,بني كسيلة
+178,6,Beni-Mallikeche,بني مليكش
+179,6,Benimaouche,بني معوش
+180,6,Boudjellil,بو جليل
+181,6,Bouhamza,بوحمزة
+182,6,Boukhelifa,بوخليفة
+183,6,Chellata,شلاطة
+184,6,Chemini,شميني
+185,6,Darguina,درقينة
+186,6,Dra El Caid,ذراع القايد
+187,6,El Kseur,القصر
+188,6,Fenaia Il Maten,فناية الماثن
+189,6,Feraoun,فرعون
+190,6,Ighil-Ali,إغيل علي
+191,6,Ighram,اغرم
+192,6,Kendira,كنديرة
+193,6,Kherrata,خراطة
+194,6,Leflaye,الفلاي
+195,6,M'cisna,مسيسنة
+196,6,Melbou,مالبو
+197,6,Oued Ghir,وادي غير
+198,6,Ouzellaguen,أوزلاقن
+199,6,Seddouk,صدوق
+200,6,Sidi Ayad,سيدي عياد
+201,6,Sidi-Aich,سيدي عيش
+202,6,Smaoun,سمعون
+203,6,Souk El Tenine,سوق لإثنين
+204,6,Souk Oufella,سوق اوفلا
+205,6,Tala Hamza,تالة حمزة
+206,6,Tamokra,تامقرة
+207,6,Tamridjet,تامريجت
+208,6,Taourit Ighil,تاوريرت إغيل
+209,6,Taskriout,تاسكريوت
+210,6,Tazmalt,تازمالت
+211,6,Tibane,طيبان
+212,6,Tichy,تيشي
+213,6,Tifra,تيفرة
+214,6,Timezrit,تيمزريت
+215,6,Tinebdar,تينبدار
+216,6,Tizi N'Berber,تيزي نبربر
+217,6,Toudja,توجة
+218,7,Ain Naga,عين الناقة
+219,7,Ain Zaatout,عين زعطوط
+220,7,Biskra,بسكرة
+221,7,Bordj Ben Azzouz,برج بن عزوز
+222,7,Bouchakroun,بوشقرون
+223,7,Branis,برانيس
+224,7,Chetma,شتمة
+225,7,Djemorah,جمورة
+226,7,El Feidh,الفيض
+227,7,El Ghrous,الغروس
+228,7,El Hadjab,الحاجب
+229,7,El Haouch,الحوش
+230,7,El Kantara,القنطرة
+231,7,El Outaya,الوطاية
+232,7,Foughala,فوغالة
+233,7,Khenguet Sidi Nadji,خنقة سيدي ناجي
+234,7,Lichana,ليشانة
+235,7,Lioua,ليوة
+236,7,M'Chouneche,مشونش
+237,7,M'Lili,مليلي
+238,7,Mekhadma,مخادمة
+239,7,Meziraa,المزيرعة
+240,7,Oumache,أوماش
+241,7,Ourlal,أورلال
+242,7,Sidi Okba,سيدي عقبة
+243,7,Tolga,طولقة
+244,7,Zeribet El Oued,زريبة الوادي
+245,8,Abadla,العبادلة
+246,8,Bechar,بشار
+247,8,Beni-Ounif,بني ونيف
+248,8,Boukais,بوكايس
+249,8,Erg-Ferradj,عرق فراج
+250,8,Kenadsa,القنادسة
+251,8,Lahmar,لحمر
+252,8,Machraa-Houari-Boumediene,مشرع هواري بومدين
+253,8,Meridja,المريجة
+254,8,Mogheul,موغل
+255,8,Taghit,تاغيت
+256,9,Ain Romana,عين الرمانة
+257,9,Beni Mered,بني مراد
+258,9,Beni-Tamou,بني تامو
+259,9,Benkhelil,بن خليل
+260,9,Blida,البليدة
+261,9,Bouarfa,بوعرفة
+262,9,Boufarik,بوفاريك
+263,9,Bougara,بوقرة
+264,9,Bouinan,بوعينان
+265,9,Chebli,الشبلي
+266,9,Chiffa,الشفة
+267,9,Chrea,الشريعة
+268,9,Djebabra,جبابرة
+269,9,El-Affroun,العفرون
+270,9,Guerrouaou,قرواو
+271,9,Hammam Elouane,حمام ملوان
+272,9,Larbâa,الأربعاء
+273,9,Meftah,مفتاح
+274,9,Mouzaia,موزاية
+275,9,Oued Djer,وادي جر
+276,9,Oued El Alleug,وادي العلايق
+277,9,Ouled Slama,اولاد سلامة
+278,9,Ouled Yaïch,أولاد يعيش
+279,9,Souhane,صوحان
+280,9,Soumaa,الصومعة
+281,10,Aghbalou,أغبالو
+282,10,Ahl El Ksar,أهل القصر
+283,10,Ain El Hadjar,عين الحجر
+284,10,Ain Laloui,عين العلوي
+285,10,Ain Turk,عين الترك
+286,10,Ain-Bessem,عين بسام
+287,10,Ait Laaziz,أيت لعزيز
+288,10,Aomar,أعمر
+289,10,Ath Mansour,آث  منصور
+290,10,Bechloul,بشلول
+291,10,Bir Ghbalou,بئر غبالو
+292,10,Bordj Okhriss,برج أوخريص
+293,10,Bouderbala,بودربالة
+294,10,Bouira,البويرة
+295,10,Boukram,بوكرم
+296,10,Chorfa,شرفة
+297,10,Dechmia,الدشمية
+298,10,Dirah,ديرة
+299,10,Djebahia,جباحية
+300,10,El Adjiba,العجيبة
+301,10,El Asnam,الأسنام
+302,10,El Hachimia,الهاشمية
+303,10,El Khabouzia,الخبوزية
+304,10,El-Hakimia,الحاكمية
+305,10,El-Mokrani,المقراني
+306,10,Guerrouma,قرومة
+307,10,Hadjera Zerga,الحجرة الزرقاء
+308,10,Haizer,حيزر
+309,10,Hanif,حنيف
+310,10,Kadiria,قادرية
+311,10,Lakhdaria,الأخضرية
+312,10,M Chedallah,أمشدالة
+313,10,Maala,معلة
+314,10,Maamora,المعمورة
+315,10,Mezdour,مزدور
+316,10,Oued El Berdi,وادي البردي
+317,10,Ouled Rached,أولاد راشد
+318,10,Raouraoua,روراوة
+319,10,Ridane,ريدان
+320,10,Saharidj,سحاريج
+321,10,Souk El Khemis,سوق الخميس
+322,10,Sour El Ghozlane,سور الغزلان
+323,10,Taghzout,تاغزوت
+324,10,Taguedite,تاقديت
+325,10,Z'barbar (El Isseri ),زبربر
+326,11,Abelsa,ابلسة
+327,11,Ain Amguel,عين امقل
+328,11,Idles,أدلس
+329,11,Tamanrasset,تمنراست
+330,11,Tazrouk,تاظروك
+331,12,Ain Zerga,عين الزرقاء
+332,12,Bedjene,بجن
+333,12,Bekkaria,بكارية
+334,12,Bir Dheheb,بئر الذهب
+335,12,Bir Mokkadem,بئر مقدم
+336,12,Bir-El-Ater,بئر العاتر
+337,12,Boukhadra,بوخضرة
+338,12,Boulhaf Dyr,بولحاف الدير
+339,12,Cheria,الشريعة
+340,12,El Kouif,الكويف
+341,12,El Malabiod,الماء الابيض
+342,12,El Meridj,المريج
+343,12,El Mezeraa,المزرعة
+344,12,El Ogla,العقلة
+345,12,El Ogla El Malha,العقلة المالحة
+346,12,El-Aouinet,العوينات
+347,12,El-Houidjbet,الحويجبات
+348,12,Ferkane,فركان
+349,12,Guorriguer,قريقر
+350,12,Hammamet,الحمامات
+351,12,Morsott,مرسط
+352,12,Negrine,نقرين
+353,12,Ouenza,الونزة
+354,12,Oum Ali,أم علي
+355,12,Saf Saf El Ouesra,صفصاف الوسرى
+356,12,Stah Guentis,سطح قنطيس
+357,12,Tebessa,تبسة
+358,12,Telidjen,ثليجان
+359,13,Ain Fetah,عين فتاح
+360,13,Ain Fezza,عين فزة
+361,13,Ain Ghoraba,عين غرابة
+362,13,Ain Kebira,عين الكبيرة
+363,13,Ain Nehala,عين النحالة
+364,13,Ain Tellout,عين تالوت
+365,13,Ain Youcef,عين يوسف
+366,13,Amieur,عمير
+367,13,Azail,العزايل
+368,13,Bab El Assa,باب العسة
+369,13,Beni Bahdel,بني بهدل
+370,13,Beni Boussaid,بني بوسعيد
+371,13,Beni Khellad,بني خلاد
+372,13,Beni Mester,بني مستر
+373,13,Beni Ouarsous,بني وارسوس
+374,13,Beni Smiel,بني صميل
+375,13,Beni Snous,بني سنوس
+376,13,Bensekrane,بن سكران
+377,13,Bouhlou,بوحلو
+378,13,Bouihi,البويهي
+379,13,Chetouane,شتوان
+380,13,Dar Yaghmoracen,دار يغمراسن
+381,13,Djebala,جبالة
+382,13,El Aricha,العريشة
+383,13,El Fehoul,الفحول
+384,13,El Gor,القور
+385,13,Fellaoucene,فلاوسن
+386,13,Ghazaouet,الغزوات
+387,13,Hammam Boughrara,حمام بوغرارة
+388,13,Hennaya,الحناية
+389,13,Honnaine,هنين
+390,13,MSirda Fouaga,مسيردة الفواقة
+391,13,Maghnia,مغنية
+392,13,Mansourah,منصورة
+393,13,Marsa Ben M'Hidi,مرسى بن مهيدي
+394,13,Nedroma,ندرومة
+395,13,Oued Lakhdar,وادي الخضر
+396,13,Ouled Mimoun,أولاد ميمون
+397,13,Ouled Riyah,أولاد رياح
+398,13,Remchi,الرمشي
+399,13,Sabra,صبرة
+400,13,Sebbaa Chioukh,سبعة شيوخ
+401,13,Sebdou,سبدو
+402,13,Sidi Abdelli,سيدي العبدلي
+403,13,Sidi Djillali,سيدي الجيلالي
+404,13,Sidi Medjahed,سيدي مجاهد
+405,13,Souahlia,السواحلية
+406,13,Souani,السواني
+407,13,Souk Tleta,سوق الثلاثاء
+408,13,Terny Beni Hediel,تيرني بني هديل
+409,13,Tianet,تيانت
+410,13,Tlemcen,تلمسان
+411,13,Zenata,زناتة
+412,14,Ain Bouchekif,عين بوشقيف
+413,14,Ain Deheb,عين الذهب
+414,14,Ain Dzarit,عين دزاريت
+415,14,Ain El Hadid,عين الحديد
+416,14,Ain Kermes,عين كرمس
+417,14,Bougara,بوقرة
+418,14,Chehaima,شحيمة
+419,14,Dahmouni,دحموني
+420,14,Djebilet Rosfa,جبيلات الرصفاء
+421,14,Djillali Ben Amar,جيلالي بن عمار
+422,14,Faidja,الفايجة
+423,14,Frenda,فرندة
+424,14,Guertoufa,قرطوفة
+425,14,Hamadia,حمادية
+426,14,Ksar Chellala,قصر الشلالة
+427,14,Madna,مادنة
+428,14,Mahdia,مهدية
+429,14,Mechraa Safa,مشرع الصفا
+430,14,Medrissa,مدريسة
+431,14,Medroussa,مدروسة
+432,14,Meghila,مغيلة
+433,14,Mellakou,ملاكو
+434,14,Nadorah,الناظورة
+435,14,Naima,النعيمة
+436,14,Oued Lilli,وادي ليلي
+437,14,Rahouia,الرحوية
+438,14,Rechaiga,الرشايقة
+439,14,Sebaine,السبعين
+440,14,Sebt,السبت
+441,14,Serghine,سرغين
+442,14,Si Abdelghani,سي عبد الغني
+443,14,Sidi Abderrahmane,سيدي عبد الرحمن
+444,14,Sidi Ali Mellal,سيدي علي ملال
+445,14,Sidi Bakhti,سيدي بختي
+446,14,Sidi Hosni,سيدي حسني
+447,14,Sougueur,السوقر
+448,14,Tagdempt,تاقدمت
+449,14,Takhemaret,تخمرت
+450,14,Tiaret,تيارت
+451,14,Tidda,تيدة
+452,14,Tousnina,توسنينة
+453,14,Zmalet El Emir Abdelkade,زمالة  الأمير عبد القادر
+454,15,Abi-Youcef,أبي يوسف
+455,15,Aghribs,أغريب
+456,15,Agouni-Gueghrane,أقني قغران
+457,15,Ain-El-Hammam,عين الحمام
+458,15,Ain-Zaouia,عين الزاوية
+459,15,Ait Aggouacha,أيت عقـواشة
+460,15,Ait Bouaddou,أيت بــوادو
+461,15,Ait Boumahdi,أيت بومهدي
+462,15,Ait Khellili,أيت خليلي
+463,15,Ait Yahia Moussa,أيت يحي موسى
+464,15,Ait-Aissa-Mimoun,أيت عيسى ميمون
+465,15,Ait-Chafaa,أيت شافع
+466,15,Ait-Mahmoud,أيت محمود
+467,15,Ait-Oumalou,أيت  أومالو
+468,15,Ait-Toudert,أيت تودرت
+469,15,Ait-Yahia,أيت يحيى
+470,15,Akbil,اقبيل
+471,15,Akerrou,أقرو
+472,15,Assi-Youcef,أسي يوسف
+473,15,Azazga,عزازقة
+474,15,Azeffoun,أزفون
+475,15,Beni Zmenzer,بنــــي زمنزار
+476,15,Beni-Aissi,بني عيسي
+477,15,Beni-Douala,بني دوالة
+478,15,Beni-Yenni,بني يني
+479,15,Beni-Zikki,بني زيكــي
+480,15,Boghni,بوغني
+481,15,Boudjima,بوجيمة
+482,15,Bounouh,بونوح
+483,15,Bouzeguene,بوزقــن
+484,15,Draa-Ben-Khedda,ذراع بن خدة
+485,15,Draa-El-Mizan,ذراع الميزان
+486,15,Freha,فريحة
+487,15,Frikat,فريقات
+488,15,Iboudrarene,إبودرارن
+489,15,Idjeur,إيجــار
+490,15,Iferhounene,إفــرحــونان
+491,15,Ifigha,إيفيغاء
+492,15,Iflissen,إفليـــسن
+493,15,Illilten,إيلـيــلتـن
+494,15,Illoula Oumalou,إيلولة أومـــالو
+495,15,Imsouhal,إمســوحال
+496,15,Irdjen,إيرجـــن
+497,15,Larbaa Nath Irathen,الأربعــاء ناث إيراثن
+498,15,M'Kira,مكيرة
+499,15,Maatkas,معـــاتقة
+500,15,Makouda,ماكودة
+501,15,Mechtras,مشطراس
+502,15,Mekla,مقــلع
+503,15,Mizrana,ميزرانـــة
+504,15,Ouacif,واسيف
+505,15,Ouadhias,واضية
+506,15,Ouaguenoun,واقنون
+507,15,Sidi Namane,سيدي نعمان
+508,15,Souama,صوامـــع
+509,15,Souk-El-Tenine,سوق الإثنين
+510,15,Tadmait,تادمايت
+511,15,Tigzirt,تيقـزيرت
+512,15,Timizart,تيمـيزار
+513,15,Tirmitine,تيرمتين
+514,15,Tizi N'Tleta,تيزي نثلاثة
+515,15,Tizi-Gheniff,تيزي غنيف
+516,15,Tizi-Ouzou,تيزي وزو
+517,15,Tizi-Rached,تيزي راشد
+518,15,Yakourene,إعــكورن
+519,15,Yatafene,يطــافن
+520,15,Zekri,زكري
+521,16,Ain Benian,عين بنيان
+522,16,Ain Taya,عين طاية
+523,16,Alger Centre,الجزائر الوسطى
+524,16,Bab El Oued,باب الوادي
+525,16,Bab Ezzouar,باب الزوار
+526,16,Baba Hassen,بابا حسن
+527,16,Bachedjerah,باش جراح
+528,16,Baraki,براقي
+529,16,Ben Aknoun,ابن عكنون
+530,16,Beni Messous,بني مسوس
+531,16,Bir Mourad Rais,بئر مراد رايس
+532,16,Bir Touta,بئر توتة
+533,16,Birkhadem,بئر خادم
+534,16,Bologhine Ibnou Ziri,بولوغين بن زيري
+535,16,Bordj El Bahri,برج البحري
+536,16,Bordj El Kiffan,برج الكيفان
+537,16,Bourouba,بوروبة
+538,16,Bouzareah,بوزريعة
+539,16,Casbah,القصبة
+540,16,Cheraga,الشراقة
+541,16,Dar El Beida,الدار البيضاء
+542,16,Dely Ibrahim,دالي ابراهيم
+543,16,Djasr Kasentina,جسر قسنطينة
+544,16,Douira,الدويرة
+545,16,Draria,الدرارية
+546,16,El Achour,العاشور
+547,16,El Biar,الابيار
+548,16,El Harrach,الحراش
+549,16,El Madania,المدنية
+550,16,El Magharia,المغارية
+551,16,El Marsa,المرسى
+552,16,El Mouradia,المرادية
+553,16,Hammamet,الحمامات
+554,16,Herraoua,هراوة
+555,16,Hussein Dey,حسين داي
+556,16,Hydra,حيدرة
+557,16,Khraissia,الخرايسية
+558,16,Kouba,القبة
+559,16,Les Eucalyptus,الكاليتوس
+560,16,Maalma,المعالمة
+561,16,Mohamed Belouzdad,محمد بلوزداد
+562,16,Mohammadia,المحمدية
+563,16,Oued Koriche,وادي قريش
+564,16,Oued Smar,وادي السمار
+565,16,Ouled Chebel,اولاد شبل
+566,16,Ouled Fayet,اولاد فايت
+567,16,Rahmania,الرحمانية
+568,16,Rais Hamidou,الرايس حميدو
+569,16,Reghaia,رغاية
+570,16,Rouiba,الرويبة
+571,16,Sehaoula,السحاولة
+572,16,Sidi M'Hamed,سيدي امحمد
+573,16,Sidi Moussa,سيدي موسى
+574,16,Souidania,سويدانية
+575,16,Staoueli,سطاوالي
+576,16,Tessala El Merdja,تسالة المرجة
+577,16,Zeralda,زرالدة
+578,17,Ain Chouhada,عين الشهداء
+579,17,Ain El Ibel,عين الإبل
+580,17,Ain Fekka,عين فقه
+581,17,Ain Maabed,عين معبد
+582,17,Ain Oussera,عين وسارة
+583,17,Amourah,عمورة
+584,17,Benhar,بنهار
+585,17,Benyagoub,بن يعقوب
+586,17,Birine,بيرين
+587,17,Bouira Lahdab,بويرة الأحداب
+588,17,Charef,الشارف
+589,17,Dar Chioukh,دار الشيوخ
+590,17,Deldoul,دلدول
+591,17,Djelfa,الجلفة
+592,17,Douis,دويس
+593,17,El Guedid,القديد
+594,17,El Idrissia,الادريسية
+595,17,El Khemis,الخميس
+596,17,Faidh El Botma,فيض البطمة
+597,17,Guernini,قرنيني
+598,17,Guettara,قطارة
+599,17,Had Sahary,حد الصحاري
+600,17,Hassi Bahbah,حاسي بحبح
+601,17,Hassi El Euch,حاسي العش
+602,17,Hassi Fedoul,حاسي فدول
+603,17,M'Liliha,مليليحة
+604,17,Messaad,مسعد
+605,17,Moudjebara,مجبارة
+606,17,Oum Laadham,أم العظام
+607,17,Sed Rahal,سد الرحال
+608,17,Selmana,سلمانة
+609,17,Sidi Baizid,سيدي بايزيد
+610,17,Sidi Laadjel,سيدي لعجال
+611,17,Taadmit,تعظميت
+612,17,Zaafrane,زعفران
+613,17,Zaccar,زكار
+614,18,Bordj T'har,برج الطهر
+615,18,Boudria Beniyadjis,بودريعة بني  ياجيس
+616,18,Bouraoui Belhadef,بوراوي بلهادف
+617,18,Boussif Ouled Askeur,بوسيف أولاد عسكر
+618,18,Chahna,الشحنة
+619,18,Chekfa,الشقفة
+620,18,Djemaa Beni Habibi,الجمعة بني حبيبي
+621,18,Djimla,جيملة
+622,18,El Ancer,العنصر
+623,18,El Aouana,العوانة
+624,18,El Kennar Nouchfi,القنار نشفي
+625,18,El Milia,الميلية
+626,18,Emir Abdelkader,الامير عبد القادر
+627,18,Erraguene Souissi,أراقن سويسي
+628,18,Ghebala,غبالة
+629,18,Jijel,جيجل
+630,18,Kaous,قاوس
+631,18,Khiri Oued Adjoul,خيري واد عجول
+632,18,Oudjana,وجانة
+633,18,Ouled Rabah,أولاد رابح
+634,18,Ouled Yahia Khadrouch,أولاد يحيى خدروش
+635,18,Selma Benziada,سلمى بن زيادة
+636,18,Settara,السطارة
+637,18,Sidi Abdelaziz,سيدي عبد العزيز
+638,18,Sidi Marouf,سيدي معروف
+639,18,Taher,الطاهير
+640,18,Texenna,تاكسنة
+641,18,Ziama Mansouriah,زيامة منصورية
+642,19,Ain Abessa,عين عباسة
+643,19,Ain Arnat,عين أرنات
+644,19,Ain Azel,عين أزال
+645,19,Ain El Kebira,عين الكبيرة
+646,19,Ain Lahdjar,عين الحجر
+647,19,Ain Oulmene,عين ولمان
+648,19,Ain-Legradj,عين لقراج
+649,19,Ain-Roua,عين الروى
+650,19,Ain-Sebt,عين السبت
+651,19,Ait Naoual Mezada,أيت نوال مزادة
+652,19,Ait-Tizi,ايت تيزي
+653,19,Amoucha,عموشة
+654,19,Babor,بابور
+655,19,Bazer-Sakra,بازر سكرة
+656,19,Beidha Bordj,بيضاء برج
+657,19,Bellaa,بلاعة
+658,19,Beni Chebana,بني شبانة
+659,19,Beni Fouda,بني فودة
+660,19,Beni Ourtilane,بني ورتيلان
+661,19,Beni Oussine,بني وسين
+662,19,Beni-Aziz,بني عزيز
+663,19,Beni-Mouhli,بني موحلي
+664,19,Bir Haddada,بئر حدادة
+665,19,Bir-El-Arch,بئر العرش
+666,19,Bouandas,بوعنداس
+667,19,Bougaa,بوقاعة
+668,19,Bousselam,بوسلام
+669,19,Boutaleb,بوطالب
+670,19,Dehamcha,الدهامشة
+671,19,Djemila,جميلة
+672,19,Draa-Kebila,ذراع قبيلة
+673,19,El Eulma,العلمة
+674,19,El Ouricia,أوريسيا
+675,19,El-Ouldja,الولجة
+676,19,Guellal,قلال
+677,19,Guelta Zerka,قلتة زرقاء
+678,19,Guenzet,قنزات
+679,19,Guidjel,قجال
+680,19,Hamam Soukhna,حمام السخنة
+681,19,Hamma,الحامة
+682,19,Hammam Guergour,حمام قرقور
+683,19,Harbil,حربيل
+684,19,Kasr El Abtal,قصر الابطال
+685,19,Maaouia,معاوية
+686,19,Maouaklane,ماوكلان
+687,19,Mezloug,مزلوق
+688,19,Oued El Bared,واد البارد
+689,19,Ouled Addouane,أولاد عدوان
+690,19,Ouled Sabor,أولاد صابر
+691,19,Ouled Si Ahmed,أولاد سي أحمد
+692,19,Ouled Tebben,أولاد تبان
+693,19,Rosfa,الرصفة
+694,19,Salah Bey,صالح باي
+695,19,Serdj-El-Ghoul,سرج الغول
+696,19,Setif,سطيف
+697,19,Tachouda,تاشودة
+698,19,Tala-Ifacene,تالة إيفاسن
+699,19,Taya,الطاية
+700,19,Tella,التلة
+701,19,Tizi N'Bechar,تيزي نبشار
+702,20,Ain Sekhouna,عين السخونة
+703,20,Aïn El Hadjar,عين الحجر
+704,20,Aïn Soltane,عين السلطان
+705,20,Doui Thabet,دوي ثابت
+706,20,El Hassasna,الحساسنة
+707,20,Hounet,هونت
+708,20,Maamora,المعمورة
+709,20,Moulay Larbi,مولاي العربي
+710,20,Ouled Brahim,أولاد إبراهيم
+711,20,Ouled Khaled,أولاد خالد
+712,20,Saida,سعيدة
+713,20,Sidi Ahmed,سيدي احمد
+714,20,Sidi Amar,سيدي عمر
+715,20,Sidi Boubekeur,سيدي بوبكر
+716,20,Tircine,تيرسين
+717,20,Youb,يوب
+718,21,Ain Bouziane,عين بوزيان
+719,21,Ain Charchar,عين شرشار
+720,21,Ain Kechra,عين قشرة
+721,21,Ain Zouit,عين زويت
+722,21,Azzaba,عزابة
+723,21,Bekkouche Lakhdar,بكوش لخضر
+724,21,Ben Azzouz,بن عزوز
+725,21,Beni Bechir,بني بشير
+726,21,Beni Oulbane,بني ولبان
+727,21,Beni Zid,بني زيد
+728,21,Bin El Ouiden,بين الويدان
+729,21,Bouchetata,بوشطاطة
+730,21,Cheraia,الشرايع
+731,21,Collo,القل
+732,21,Djendel Saadi Mohamed,جندل سعدي محمد
+733,21,El Arrouch,الحروش
+734,21,El Ghedir,الغدير
+735,21,El Hadaiek,الحدائق
+736,21,El Marsa,المرسى
+737,21,Emjez Edchich,مجاز الدشيش
+738,21,Es Sebt,السبت
+739,21,Filfila,فلفلة
+740,21,Hammadi Krouma,حمادي كرومة
+741,21,Kanoua,قنواع
+742,21,Kerkara,الكركرة
+743,21,Khenag Maoune,خناق مايو
+744,21,Oued Zhour,وادي الزهور
+745,21,Ouldja Boulbalout,الولجة بولبلوط
+746,21,Ouled Attia,أولاد عطية
+747,21,Ouled Habbaba,أولاد حبابة
+748,21,Oum Toub,أم الطوب
+749,21,Ramdane Djamel,رمضان جمال
+750,21,Salah Bouchaour,صالح بو الشعور
+751,21,Sidi Mezghiche,سيدي مزغيش
+752,21,Skikda,سكيكدة
+753,21,Tamalous,تمالوس
+754,21,Zerdezas,زردازة
+755,21,Zitouna,الزيتونة
+756,22,Ain El Berd,عين البرد
+757,22,Ain Kada,عين قادة
+758,22,Ain Thrid,عين الثريد
+759,22,Ain Tindamine,عين تندمين
+760,22,Ain- Adden,عين أدن
+761,22,Amarnas,العمارنة
+762,22,Bedrabine El Mokrani,بضرابين المقراني
+763,22,Belarbi,بلعربي
+764,22,Ben Badis,بن باديس
+765,22,Benachiba Chelia,بن عشيبة شلية
+766,22,Bir El Hammam,بئر الحمام
+767,22,Boudjebaa El Bordj,بوجبهة البرج
+768,22,Boukhanefis,بوخنفيس
+769,22,Chetouane Belaila,شيطوان البلايلة
+770,22,Dhaya,الضاية
+771,22,El Hacaiba,الحصيبة
+772,22,Hassi Dahou,حاسي دحو
+773,22,Hassi Zahana,حاسي زهانة
+774,22,Lamtar,لمطار
+775,22,M'Cid,مسيد
+776,22,Makedra,مكدرة
+777,22,Marhoum,مرحوم
+778,22,Merine,مرين
+779,22,Mezaourou,مزاورو
+780,22,Mostefa Ben Brahim,مصطفى بن ابراهيم
+781,22,Moulay Slissen,مولاي سليسن
+782,22,Oued Sebaa,وادي السبع
+783,22,Oued Sefioun,وادي سفيون
+784,22,Oued Taourira,وادي تاوريرة
+785,22,Ras El Ma,راس الماء
+786,22,Redjem Demouche,رجم دموش
+787,22,Sehala Thaoura,السهالة الثورة
+788,22,Sfisef,سفيزف
+789,22,Sidi Ali Benyoub,سيدي علي بن يوب
+790,22,Sidi Ali Boussidi,سيدي علي بوسيدي
+791,22,Sidi Bel-Abbes,سيدي بلعباس
+792,22,Sidi Brahim,سيدي ابراهيم
+793,22,Sidi Chaib,سيدي شعيب
+794,22,Sidi Dahou Zairs,سيدي دحو الزاير
+795,22,Sidi Hamadouche,سيدي حمادوش
+796,22,Sidi Khaled,سيدي خالد
+797,22,Sidi Lahcene,سيدي لحسن
+798,22,Sidi Yacoub,سيدي يعقوب
+799,22,Tabia,طابية
+800,22,Taoudmout,تاودموت
+801,22,Tefessour,تفسور
+802,22,Teghalimet,تغاليمت
+803,22,Telagh,تلاغ
+804,22,Tenira,تنيرة
+805,22,Tessala,تسالة
+806,22,Tilmouni,تلموني
+807,22,Zerouala,زروالة
+808,23,Ain El Berda,عين الباردة
+809,23,Annaba,عنابة
+810,23,Berrahal,برحال
+811,23,Chetaibi,شطايبي
+812,23,Cheurfa,الشرفة
+813,23,El Bouni,البوني
+814,23,El Eulma,العلمة
+815,23,El Hadjar,الحجار
+816,23,Oued El Aneb,واد العنب
+817,23,Seraidi,سرايدي
+818,23,Sidi Amar,سيدي عمار
+819,23,Treat,التريعات
+820,24,Ain Ben Beida,عين بن بيضاء
+821,24,Ain Larbi,عين العربي
+822,24,Ain Makhlouf,عين مخلوف
+823,24,Ain Regada,عين رقادة
+824,24,Ain Sandel,عين صندل
+825,24,Belkheir,بلخير
+826,24,Bendjarah,بن جراح
+827,24,Beni Mezline,بني مزلين
+828,24,Bordj Sabath,برج صباط
+829,24,Bou Hachana,بوحشانة
+830,24,Bou Hamdane,بوحمدان
+831,24,Bouati Mahmoud,بوعاتي محمود
+832,24,Bouchegouf,بوشقوف
+833,24,Boumahra Ahmed,بومهرة أحمد
+834,24,Dahouara,الدهوارة
+835,24,Djeballah Khemissi,جبالة الخميسي
+836,24,El Fedjoudj,الفجوج
+837,24,Guelaat Bou Sbaa,قلعة بوصبع
+838,24,Guelma,قالمة
+839,24,Hammam Debagh,حمام دباغ
+840,24,Hammam N'Bail,حمام النبايل
+841,24,Heliopolis,هيليوبوليس
+842,24,Houari Boumedienne,هواري بومدين
+843,24,Khezaras,لخزارة
+844,24,Medjez Amar,مجاز عمار
+845,24,Medjez Sfa,مجاز الصفاء
+846,24,Nechmaya,نشماية
+847,24,Oued Cheham,وادي الشحم
+848,24,Oued Ferragha,وادي فراغة
+849,24,Oued Zenati,وادي الزناتي
+850,24,Ras El Agba,رأس العقبة
+851,24,Roknia,الركنية
+852,24,Sellaoua Announa,سلاوة عنونة
+853,24,Tamlouka,تاملوكة
+854,25,Ain Abid,عين عبيد
+855,25,Ain Smara,عين السمارة
+856,25,Ben Badis,أبن باديس الهرية
+857,25,Beni Hamidane,بني حميدان
+858,25,Constantine,قسنطينة
+859,25,Didouche Mourad,ديدوش مراد
+860,25,El Khroub,الخروب
+861,25,Hamma Bouziane,حامة بوزيان
+862,25,Ibn Ziad,ابن زياد
+863,25,Messaoud Boudjeriou,بوجريو مسعود
+864,25,Ouled Rahmoun,أولاد رحمون
+865,25,Zighoud Youcef,زيغود يوسف
+866,26,Ain Boucif,عين بوسيف
+867,26,Ain Ouksir,عين اقصير
+868,26,Aissaouia,العيساوية
+869,26,Aziz,عزيز
+870,26,Baata,بعطة
+871,26,Ben Chicao,بن شكاو
+872,26,Beni Slimane,بني سليمان
+873,26,Berrouaghia,البرواقية
+874,26,Bir Ben Laabed,بئر بن عابد
+875,26,Boghar,بوغار
+876,26,Bouaiche,بوعيش
+877,26,Bouaichoune,بوعيشون
+878,26,Bouchrahil,بوشراحيل
+879,26,Boughzoul,بوغزول
+880,26,Bouskene,بوسكن
+881,26,Chabounia,الشهبونية
+882,26,Chelalet El Adhaoura,شلالة العذاورة
+883,26,Cheniguel,شنيقل
+884,26,Derrag,دراق
+885,26,Djouab,جواب
+886,26,Draa Esmar,ذراع السمار
+887,26,El Azizia,العزيزية
+888,26,El Guelbelkebir,القلب الكبير
+889,26,El Hamdania,الحمدانية
+890,26,El Haoudane,الحوضان
+891,26,El Omaria,العمارية
+892,26,El Ouinet,العوينات
+893,26,Hannacha,حناشة
+894,26,Kef Lakhdar,الكاف الاخضر
+895,26,Khams Djouamaa,خمس جوامع
+896,26,Ksar El Boukhari,قصر البخاري
+897,26,M'fatha,مفاتحة
+898,26,Maghraoua,مغراوة
+899,26,Medea,المدية
+900,26,Medjebar,مجبر
+901,26,Mezerana,مزغنة
+902,26,Mihoub,ميهوب
+903,26,Ouamri,عوامري
+904,26,Oued Harbil,وادي حربيل
+905,26,Ouled Antar,أولاد عنتر
+906,26,Ouled Bouachra,أولاد بوعشرة
+907,26,Ouled Brahim,أولاد إبراهيم
+908,26,Ouled Deid,أولاد دايد
+909,26,Ouled Emaaraf,أولاد امعرف
+910,26,Ouled Hellal,أولاد هلال
+911,26,Oum El Djellil,أم الجليل
+912,26,Ouzera,وزرة
+913,26,Rebaia,الربعية
+914,26,Saneg,السانق
+915,26,Sedraya,سدراية
+916,26,Seghouane,سغوان
+917,26,Si Mahdjoub,سي المحجوب
+918,26,Sidi Demed,سيدي دامد
+919,26,Sidi Naamane,سيدي نعمان
+920,26,Sidi Rabie,سيدي الربيع
+921,26,Sidi Zahar,سيدي زهار
+922,26,Sidi Ziane,سيدي زيان
+923,26,Souagui,السواقي
+924,26,Tablat,تابلاط
+925,26,Tafraout,تفراوت
+926,26,Tamesguida,تمسقيدة
+927,26,Tizi Mahdi,تيزي مهدي
+928,26,Tletat Ed Douair,ثلاث دوائر
+929,26,Zoubiria,الزبيرية
+930,27,Achaacha,عشعاشة
+931,27,Ain-Boudinar,عين بودينار
+932,27,Ain-Nouissy,عين نويسي
+933,27,Ain-Sidi Cherif,عين سيدي الشريف
+934,27,Ain-Tedles,عين تادلس
+935,27,Benabdelmalek Ramdane,بن عبد المالك رمضان
+936,27,Bouguirat,بوقيراط
+937,27,Fornaka,فرناقة
+938,27,Hadjadj,حجاج
+939,27,Hassi Mameche,حاسي ماماش
+940,27,Hassiane,الحسيان (بني ياحي
+941,27,Khadra,خضرة
+942,27,Kheir-Eddine,خير الدين
+943,27,Mansourah,منصورة
+944,27,Mazagran,مزغران
+945,27,Mesra,ماسرة
+946,27,Mostaganem,مستغانم
+947,27,Nekmaria,نكمارية
+948,27,Oued El Kheir,وادي الخير
+949,27,Ouled Boughalem,أولاد بوغالم
+950,27,Ouled-Maalah,أولاد مع الله
+951,27,Safsaf,صفصاف
+952,27,Sayada,صيادة
+953,27,Sidi Ali,سيدي علي
+954,27,Sidi Belaattar,سيدي بلعطار
+955,27,Sidi-Lakhdar,سيدي لخضر
+956,27,Sirat,سيرات
+957,27,Souaflia,السوافلية
+958,27,Sour,سور
+959,27,Stidia,ستيدية
+960,27,Tazgait,تزقايت
+961,27,Touahria,الطواهرية
+962,28,Ain El Hadjel,عين الحجل
+963,28,Ain El Melh,عين الملح
+964,28,Ain Fares,عين فارس
+965,28,Ain Khadra,عين الخضراء
+966,28,Ain Rich,عين الريش
+967,28,Belaiba,بلعايبة
+968,28,Ben Srour,بن سرور
+969,28,Beni Ilmane,بني يلمان
+970,28,Benzouh,بن زوه
+971,28,Berhoum,برهوم
+972,28,Bir Foda,بئر فضة
+973,28,Bou Saada,بوسعادة
+974,28,Bouti Sayeh,بوطي السايح
+975,28,Chellal,شلال
+976,28,Dehahna,دهاهنة
+977,28,Djebel Messaad,جبل مساعد
+978,28,El Hamel,الهامل
+979,28,El Houamed,الحوامد
+980,28,Hammam Dalaa,حمام الضلعة
+981,28,Khettouti Sed-El-Jir,خطوطي سد الجير
+982,28,Khoubana,خبانة
+983,28,M'Cif,مسيف
+984,28,M'Sila,المسيلة
+985,28,M'Tarfa,المطارفة
+986,28,Maadid,المعاضيد
+987,28,Maarif,معاريف
+988,28,Magra,مقرة
+989,28,Medjedel,امجدل
+990,28,Menaa,مناعة
+991,28,Mohamed Boudiaf,محمد بوضياف
+992,28,Ouanougha,ونوغة
+993,28,Ouled Addi Guebala,أولاد عدي لقبالة
+994,28,Ouled Derradj,أولاد دراج
+995,28,Ouled Madhi,أولاد ماضي
+996,28,Ouled Mansour,أولاد منصور
+997,28,Ouled Sidi Brahim,أولاد سيدي ابراهيم
+998,28,Ouled Slimane,أولاد سليمان
+999,28,Oulteme,ولتام
+1000,28,Sidi Aissa,سيدي عيسى
+1001,28,Sidi Ameur,سيدي عامر
+1002,28,Sidi Hadjeres,سيدي هجرس
+1003,28,Sidi M'Hamed,سيدي امحمد
+1004,28,Slim,سليم
+1005,28,Souamaa,السوامع
+1006,28,Tamsa,تامسة
+1007,28,Tarmount,تارمونت
+1008,28,Zarzour,زرزور
+1009,29,Ain Fares,عين فارس
+1010,29,Ain Fekan,عين فكان
+1011,29,Ain Ferah,عين فراح
+1012,29,Ain Frass,عين أفرص
+1013,29,Alaimia,العلايمية
+1014,29,Aouf,عوف
+1015,29,Benian,بنيان
+1016,29,Bou Henni,بوهني
+1017,29,Bouhanifia,بوحنيفية
+1018,29,Chorfa,الشرفاء
+1019,29,El Bordj,البرج
+1020,29,El Gaada,القعدة
+1021,29,El Ghomri,الغمري
+1022,29,El Gueitena,القطنة
+1023,29,El Hachem,الحشم
+1024,29,El Keurt,القرط
+1025,29,El Mamounia,المأمونية
+1026,29,El Menaouer,المنور
+1027,29,Ferraguig,فراقيق
+1028,29,Froha,فروحة
+1029,29,Gharrous,غروس
+1030,29,Ghriss,غريس
+1031,29,Guerdjoum,قرجوم
+1032,29,Hacine,حسين
+1033,29,Khalouia,خلوية
+1034,29,Makhda,ماقضة
+1035,29,Maoussa,ماوسة
+1036,29,Mascara,معسكر
+1037,29,Matemore,المطمور
+1038,29,Mocta-Douz,مقطع الدوز
+1039,29,Mohammadia,المحمدية
+1040,29,Nesmot,نسمط
+1041,29,Oggaz,عقاز
+1042,29,Oued El Abtal,وادي الأبطال
+1043,29,Oued Taria,وادي التاغية
+1044,29,Ras El Ain Amirouche,رأس عين عميروش
+1045,29,Sedjerara,سجرارة
+1046,29,Sehailia,السهايلية
+1047,29,Sidi Abdeldjebar,سيدي عبد الجبار
+1048,29,Sidi Abdelmoumene,سيدي عبد المومن
+1049,29,Sidi Boussaid,سيدي بوسعيد
+1050,29,Sidi Kada,سيدي قادة
+1051,29,Sig,سيق
+1052,29,Tighennif,تيغنيف
+1053,29,Tizi,تيزي
+1054,29,Zahana,زهانة
+1055,29,Zelamta,زلامطة
+1056,30,Ain Beida,عين البيضاء
+1057,30,El Borma,البرمة
+1058,30,Hassi Ben Abdellah,حاسي بن عبد الله
+1059,30,Hassi Messaoud,حاسي مسعود
+1060,30,N'Goussa,انقوسة
+1061,30,Ouargla,ورقلة
+1062,30,Rouissat,الرويسات
+1063,30,Sidi Khouiled,سيدي خويلد
+1064,31,Ain Biya,عين البية
+1065,31,Ain Kerma,عين الكرمة
+1066,31,Ain Turk,عين الترك
+1067,31,Arzew,أرزيو
+1068,31,Ben Freha,بن فريحة
+1069,31,Bethioua,بطيوة
+1070,31,Bir El Djir,بئر الجير
+1071,31,Boufatis,بوفاتيس
+1072,31,Bousfer,بوسفر
+1073,31,Boutlelis,بوتليليس
+1074,31,El Ancor,العنصر
+1075,31,El Braya,البراية
+1076,31,El Kerma,الكرمة
+1077,31,Es Senia,السانية
+1078,31,Gdyel,قديل
+1079,31,Hassi Ben Okba,حاسي بن عقبة
+1080,31,Hassi Bounif,حاسي بونيف
+1081,31,Hassi Mefsoukh,حاسي مفسوخ
+1082,31,Marsat El Hadjadj,مرسى الحجاج
+1083,31,Mers El Kebir,المرسى الكبير
+1084,31,Messerghin,مسرغين
+1085,31,Oran,وهران
+1086,31,Oued Tlelat,وادي تليلات
+1087,31,Sidi Ben Yebka,سيدي بن يبقى
+1088,31,Sidi Chami,سيدي الشحمي
+1089,31,Tafraoui,طفراوي
+1090,32,Arbaouat,اربوات
+1091,32,Aïn El Orak,عين العراك
+1092,32,Boualem,بوعلام
+1093,32,Bougtoub,بوقطب
+1094,32,Boussemghoun,بوسمغون
+1095,32,Brezina,بريزينة
+1096,32,Cheguig,الشقيق
+1097,32,Chellala,شلالة
+1098,32,El Bayadh,البيض
+1099,32,El Bnoud,البنود
+1100,32,El Kheiter,الخيثر
+1101,32,El Mehara,المحرة
+1102,32,Ghassoul,الغاسول
+1103,32,Kef El Ahmar,الكاف الأحمر
+1104,32,Krakda,كراكدة
+1105,32,Labiodh Sidi Cheikh,الأبيض سيدي الشيخ
+1106,32,Rogassa,رقاصة
+1107,32,Sidi Ameur,سيدي عامر
+1108,32,Sidi Slimane,سيدي سليمان
+1109,32,Sidi Tiffour,سيدي طيفور
+1110,32,Stitten,ستيتن
+1111,32,Tousmouline,توسمولين
+1112,33,Bordj Omar Driss,برج عمر إدريس
+1113,33,Debdeb,دبداب
+1114,33,Illizi,إيليزي
+1115,33,In Amenas,إن أمناس
+1116,34,Ain Taghrout,عين تاغروت
+1117,34,Ain Tesra,عين تسرة
+1118,34,B. B. Arreridj,برج بوعريرج
+1119,34,Belimour,بليمور
+1120,34,Ben Daoud,بن داود
+1121,34,Bir Kasdali,بئر قاصد علي
+1122,34,Bordj Ghedir,برج الغدير
+1123,34,Bordj Zemmoura,برج زمورة
+1124,34,Colla,القلة
+1125,34,Djaafra,جعافرة
+1126,34,El Achir,الياشير
+1127,34,El Annasseur,العناصر
+1128,34,El Euch,العش
+1129,34,El M'hir,المهير
+1130,34,El Main,الماين
+1131,34,Elhammadia,الحمادية
+1132,34,Ghailasa,غيلاسة
+1133,34,Haraza,حرازة
+1134,34,Hasnaoua,حسناوة
+1135,34,Khelil,خليل
+1136,34,Ksour,القصور
+1137,34,Mansoura,المنصورة
+1138,34,Medjana,مجانة
+1139,34,Ouled Brahem,أولاد أبراهم
+1140,34,Ouled Dahmane,أولاد دحمان
+1141,34,Ouled Sidi-Brahim,أولاد سيدي ابراهيم
+1142,34,Rabta,الرابطة
+1143,34,Ras El Oued,رأس الوادي
+1144,34,Sidi-Embarek,سيدي أمبارك
+1145,34,Taglait,تقلعيت
+1146,34,Tassamert,تسامرت
+1147,34,Tefreg,تفرق
+1148,34,Teniet En Nasr,ثنية النصر
+1149,34,Tixter,تيكستار
+1150,35,Afir,أعفير
+1151,35,Ammal,عمال
+1152,35,Baghlia,بغلية
+1153,35,Ben Choud,بن شود
+1154,35,Beni Amrane,بني عمران
+1155,35,Bordj Menaiel,برج منايل
+1156,35,Boudouaou,بودواو
+1157,35,Boudouaou El Bahri,بودواو البحري
+1158,35,Boumerdes,بومرداس
+1159,35,Bouzegza Keddara,بوزقزة قدارة
+1160,35,Chabet El Ameur,شعبة العامر
+1161,35,Corso,قورصو
+1162,35,Dellys,دلس
+1163,35,Djinet,جنات
+1164,35,El Kharrouba,الخروبة
+1165,35,Hammedi,حمادي
+1166,35,Isser,يسر
+1167,35,Khemis El Khechna,خميس الخشنة
+1168,35,Larbatache,الاربعطاش
+1169,35,Leghata,لقاطة
+1170,35,Naciria,الناصرية
+1171,35,Ouled Aissa,أولاد عيسى
+1172,35,Ouled Hedadj,أولاد هداج
+1173,35,Ouled Moussa,أولاد موسى
+1174,35,Si Mustapha,سي مصطفى
+1175,35,Sidi Daoud,سيدي داود
+1176,35,Souk El Had,سوق الحد
+1177,35,Taourga,تاورقة
+1178,35,Thenia,الثنية
+1179,35,Tidjelabine,تيجلابين
+1180,35,Timezrit,تيمزريت
+1181,35,Zemmouri,زموري
+1182,36,Ain El Assel,عين العسل
+1183,36,Ain Kerma,عين الكرمة
+1184,36,Asfour,عصفور
+1185,36,Ben M Hidi,بن مهيدي
+1186,36,Berrihane,بريحان
+1187,36,Besbes,البسباس
+1188,36,Bougous,بوقوس
+1189,36,Bouhadjar,بوحجار
+1190,36,Bouteldja,بوثلجة
+1191,36,Chebaita Mokhtar,شبيطة مختار
+1192,36,Chefia,الشافية
+1193,36,Chihani,شحاني
+1194,36,Drean,الذرعـان
+1195,36,Echatt,الشط
+1196,36,El Aioun,العيون
+1197,36,El Kala,القالة
+1198,36,El Tarf,الطارف
+1199,36,Hammam Beni Salah,حمام بني صالح
+1200,36,Lac Des Oiseaux,بحيرة الطيور
+1201,36,Oued Zitoun,وادي الزيتون
+1202,36,Raml Souk,رمل السوق
+1203,36,Souarekh,السوارخ
+1204,36,Zerizer,زريزر
+1205,36,Zitouna,الزيتونة
+1206,37,Oum El Assel,أم العسل
+1207,37,Tindouf,تندوف
+1208,38,Ammari,عماري
+1209,38,Beni Chaib,بني شعيب
+1210,38,Beni Lahcene,بني لحسن
+1211,38,Bordj Bounaama,برج بونعامة
+1212,38,Bordj El Emir Abdelkader,برج الأمير عبد القادر
+1213,38,Boucaid,بوقائد
+1214,38,Khemisti,خميستي
+1215,38,Larbaa,الأربعاء
+1216,38,Lardjem,لرجام
+1217,38,Layoune,العيون
+1218,38,Lazharia,الأزهرية
+1219,38,Maacem,المعاصم
+1220,38,Melaab,الملعب
+1221,38,Ouled Bessam,أولاد بسام
+1222,38,Sidi Abed,سيدي عابد
+1223,38,Sidi Boutouchent,سيدي بوتوشنت
+1224,38,Sidi Lantri,سيدي العنتري
+1225,38,Sidi Slimane,سيدي سليمان
+1226,38,Tamellahet,تملاحت
+1227,38,Theniet El Had,ثنية الاحد
+1228,38,Tissemsilt,تيسمسيلت
+1229,38,Youssoufia,اليوسفية
+1230,39,Bayadha,البياضة
+1231,39,Ben Guecha,بن  قشة
+1232,39,Debila,الدبيلة
+1233,39,Douar El Maa,دوار الماء
+1234,39,El Ogla,العقلة
+1235,39,El-Oued,الوادي
+1236,39,Guemar,قمار
+1237,39,Hamraia,الحمراية
+1238,39,Hassani Abdelkrim,حساني عبد الكريم
+1239,39,Hassi Khalifa,حاسي خليفة
+1240,39,Kouinine,كوينين
+1241,39,Magrane,المقرن
+1242,39,Mih Ouansa,اميه وانسة
+1243,39,Nakhla,النخلة
+1244,39,Oued El Alenda,وادي العلندة
+1245,39,Ourmes,ورماس
+1246,39,Reguiba,الرقيبة
+1247,39,Robbah,الرباح
+1248,39,Sidi Aoun,سيدي عون
+1249,39,Taghzout,تغزوت
+1250,39,Taleb Larbi,الطالب العربي
+1251,39,Trifaoui,الطريفاوي
+1252,40,Ain Touila,عين الطويلة
+1253,40,Babar,بابار
+1254,40,Baghai,بغاي
+1255,40,Bouhmama,بوحمامة
+1256,40,Chechar,ششار
+1257,40,Chelia,شلية
+1258,40,Djellal,جلال
+1259,40,El Hamma,الحامة
+1260,40,El Mahmal,المحمل
+1261,40,El Oueldja,الولجة
+1262,40,Ensigha,انسيغة
+1263,40,Kais,قايس
+1264,40,Khenchela,خنشلة
+1265,40,Khirane,خيران
+1266,40,M'Sara,مصارة
+1267,40,M'Toussa,متوسة
+1268,40,Ouled Rechache,أولاد رشاش
+1269,40,Remila,الرميلة
+1270,40,Tamza,طامزة
+1271,40,Taouzianat,تاوزيانت
+1272,40,Yabous,يابوس
+1273,41,Ain Soltane,عين سلطان
+1274,41,Ain Zana,عين الزانة
+1275,41,Bir Bouhouche,بئر بوحوش
+1276,41,Drea,الدريعة
+1277,41,Haddada,الحدادة
+1278,41,Hanencha,الحنانشة
+1279,41,Khedara,الخضارة
+1280,41,Khemissa,خميسة
+1281,41,M'daourouche,مداوروش
+1282,41,Machroha,المشروحة
+1283,41,Merahna,المراهنة
+1284,41,Oued Kebrit,وادي الكبريت
+1285,41,Ouillen,ويلان
+1286,41,Ouled Driss,أولاد إدريس
+1287,41,Ouled Moumen,أولاد مومن
+1288,41,Oum El Adhaim,أم العظايم
+1289,41,Ragouba,الراقوبة
+1290,41,Safel El Ouiden,سافل الويدان
+1291,41,Sedrata,سدراتة
+1292,41,Sidi Fredj,سيدي فرج
+1293,41,Souk Ahras,سوق أهراس
+1294,41,Taoura,تاورة
+1295,41,Terraguelt,ترقالت
+1296,41,Tiffech,تيفاش
+1297,41,Zaarouria,الزعرورية
+1298,41,Zouabi,الزوابي
+1299,42,Aghbal,أغبال
+1300,42,Ahmer El Ain,أحمر العين
+1301,42,Ain Tagourait,عين تاقورايت
+1302,42,Attatba,الحطاطبة
+1303,42,Beni Mileuk,بني ميلك
+1304,42,Bou Haroun,بوهارون
+1305,42,Bou Ismail,بواسماعيل
+1306,42,Bourkika,بورقيقة
+1307,42,Chaiba,الشعيبة
+1308,42,Cherchell,شرشال
+1309,42,Damous,الداموس
+1310,42,Douaouda,دواودة
+1311,42,Fouka,فوكة
+1312,42,Gouraya,قوراية
+1313,42,Hadjout,حجوط
+1314,42,Hadjret Ennous,حجرة النص
+1315,42,Khemisti,خميستي
+1316,42,Kolea,القليعة
+1317,42,Larhat,الأرهاط
+1318,42,Menaceur,مناصر
+1319,42,Merad,مراد
+1320,42,Messelmoun,مسلمون
+1321,42,Nador,الناظور
+1322,42,Sidi Ghiles,سيدي غيلاس
+1323,42,Sidi Rached,سيدي راشد
+1324,42,Sidi Semiane,سيدي سميان
+1325,42,Sidi-Amar,سيدي عامر
+1326,42,Tipaza,تيبازة
+1327,43,Ahmed Rachedi,أحمد راشدي
+1328,43,Ain Beida Harriche,عين البيضاء أحريش
+1329,43,Ain Mellouk,عين الملوك
+1330,43,Ain Tine,عين التين
+1331,43,Amira Arres,اعميرة اراس
+1332,43,Benyahia Abderrahmane,بن يحي عبد الرحمن
+1333,43,Bouhatem,بوحاتم
+1334,43,Chelghoum Laid,شلغوم العيد
+1335,43,Chigara,الشيقارة
+1336,43,Derrahi Bousselah,دراحي بوصلاح
+1337,43,El Ayadi Barbes,العياضي برباس
+1338,43,El Mechira,مشيرة
+1339,43,Ferdjioua,فرجيوة
+1340,43,Grarem Gouga,القرارم قوقة
+1341,43,Hamala,حمالة
+1342,43,Mila,ميلة
+1343,43,Minar Zarza,مينار زارزة
+1344,43,Oued Athmenia,وادي العثمانية
+1345,43,Oued Endja,وادي النجاء
+1346,43,Oued Seguen,وادي سقان
+1347,43,Ouled Khalouf,أولاد اخلوف
+1348,43,Rouached,الرواشد
+1349,43,Sidi Khelifa,سيدي خليفة
+1350,43,Sidi Merouane,سيدي مروان
+1351,43,Tadjenanet,تاجنانت
+1352,43,Tassadane Haddada,تسدان حدادة
+1353,43,Tassala Lematai,تسالة لمطاعي
+1354,43,Teleghma,التلاغمة
+1355,43,Terrai Bainen,ترعي باينان
+1356,43,Tiberguent,تيبرقنت
+1357,43,Yahia Beniguecha,يحي بني قشة
+1358,43,Zeghaia,زغاية
+1359,44,Ain-Benian,عين البنيان
+1360,44,Ain-Bouyahia,عين بويحيى
+1361,44,Ain-Defla,عين الدفلى
+1362,44,Ain-Lechiakh,عين الاشياخ
+1363,44,Ain-Soltane,عين السلطان
+1364,44,Ain-Torki,عين التركي
+1365,44,Arib,عريب
+1366,44,Bathia,بطحية
+1367,44,Belaas,بلعاص
+1368,44,Ben Allal,بن علال
+1369,44,Bir-Ould-Khelifa,بئر ولد خليفة
+1370,44,Birbouche,بربوش
+1371,44,Bordj-Emir-Khaled,برج الأمير خالد
+1372,44,Boumedfaa,بومدفع
+1373,44,Bourached,بوراشد
+1374,44,Djelida,جليدة
+1375,44,Djemaa Ouled Cheikh,جمعة أولاد الشيخ
+1376,44,Djendel,جندل
+1377,44,El-Abadia,العبادية
+1378,44,El-Amra,العامرة
+1379,44,El-Attaf,العطاف
+1380,44,El-Maine,الماين
+1381,44,Hammam-Righa,حمام ريغة
+1382,44,Hassania,الحسانية
+1383,44,Hoceinia,الحسينية
+1384,44,Khemis-Miliana,خميس مليانة
+1385,44,Mekhatria,المخاطرية
+1386,44,Miliana,مليانة
+1387,44,Oued Chorfa,وادي الشرفاء
+1388,44,Oued Djemaa,واد الجمعة
+1389,44,Rouina,الروينة
+1390,44,Sidi-Lakhdar,سيدي الأخضر
+1391,44,Tacheta Zegagha,تاشتة زقاغة
+1392,44,Tarik-Ibn-Ziad,طارق بن زياد
+1393,44,Tiberkanine,تبركانين
+1394,44,Zeddine,زدين
+1395,45,Ain Ben Khelil,عين بن خليل
+1396,45,Ain Sefra,عين الصفراء
+1397,45,Asla,عسلة
+1398,45,Djenienne Bourezg,جنين بورزق
+1399,45,El Biodh,البيوض
+1400,45,Kasdir,القصدير
+1401,45,Makmen Ben Amar,مكمن بن عمار
+1402,45,Mecheria,المشرية
+1403,45,Moghrar,مغرار
+1404,45,Naama,النعامة
+1405,45,Sfissifa,سفيسيفة
+1406,45,Tiout,تيوت
+1407,46,Aghlal,أغلال
+1408,46,Ain El Arbaa,عين الأربعاء
+1409,46,Ain Kihal,عين الكيحل
+1410,46,Ain Temouchent,عين تموشنت
+1411,46,Ain Tolba,عين الطلبة
+1412,46,Aoubellil,عقب الليل
+1413,46,Beni Saf,بني صاف
+1414,46,Bouzedjar,بوزجار
+1415,46,Chaabat El Ham,شعبة اللحم
+1416,46,Chentouf,شنتوف
+1417,46,El Amria,العامرية
+1418,46,El Maleh,المالح
+1419,46,El Messaid,المساعيد
+1420,46,Emir Abdelkader,الأمير عبد القادر
+1421,46,Hammam Bou Hadjar,حمام بوحجر
+1422,46,Hassasna,الحساسنة
+1423,46,Hassi El Ghella,حاسي الغلة
+1424,46,Oued Berkeche,وادي برقش
+1425,46,Oued Sebbah,وادي الصباح
+1426,46,Ouled Boudjemaa,أولاد بوجمعة
+1427,46,Ouled Kihal,أولاد الكيحل
+1428,46,Oulhaca El Gheraba,ولهاصة الغرابة
+1429,46,Sidi Ben Adda,سيدي بن عدة
+1430,46,Sidi Boumediene,سيدي بومدين
+1431,46,Sidi Ouriache,سيدي ورياش
+1432,46,Sidi Safi,سيدي صافي
+1433,46,Tamzoura,تامزورة
+1434,46,Terga,تارقة
+1435,47,Berriane,بريان
+1436,47,Bounoura,بونورة
+1437,47,Dhayet Bendhahoua,ضاية بن ضحوة
+1438,47,El Atteuf,العطف
+1439,47,El Guerrara,القرارة
+1440,47,Ghardaia,غرداية
+1441,47,Mansoura,المنصورة
+1442,47,Metlili,متليلي
+1443,47,Sebseb,سبسب
+1444,47,Zelfana,زلفانة
+1445,48,Ain Rahma,عين الرحمة
+1446,48,Ain-Tarek,عين طارق
+1447,48,Ammi Moussa,عمي موسى
+1448,48,Belaassel Bouzagza,بلعسل بوزقزة
+1449,48,Bendaoud,بن داود
+1450,48,Beni Dergoun,بني درقن
+1451,48,Beni Zentis,بني زنطيس
+1452,48,Dar Ben Abdelah,دار بن عبد الله
+1453,48,Djidiouia,جديوية
+1454,48,El H'madna,الحمادنة
+1455,48,El Hassi,الحاسي
+1456,48,El Ouldja,الولجة
+1457,48,El-Guettar,القطار
+1458,48,El-Matmar,المطمر
+1459,48,Had Echkalla,حد الشكالة
+1460,48,Hamri,حمري
+1461,48,Kalaa,القلعة
+1462,48,Lahlef,لحلاف
+1463,48,Mazouna,مازونة
+1464,48,Mediouna,مديونة
+1465,48,Mendes,منداس
+1466,48,Merdja Sidi Abed,مرجة سيدي عابد
+1467,48,Ouarizane,واريزان
+1468,48,Oued El Djemaa,وادي الجمعة
+1469,48,Oued Essalem,وادي السلام
+1470,48,Oued-Rhiou,وادي رهيو
+1471,48,Ouled Aiche,أولاد يعيش
+1472,48,Ouled Sidi Mihoub,أولاد سيدي الميهوب
+1473,48,Ramka,الرمكة
+1474,48,Relizane,غليزان
+1475,48,Sidi Khettab,سيدي  خطاب
+1476,48,Sidi Lazreg,سيدي لزرق
+1477,48,Sidi M'Hamed Benaouda,سيدي امحمد بن عودة
+1478,48,Sidi M'hamed Benali,سيدي أمحمد بن علي
+1479,48,Sidi Saada,سيدي سعادة
+1480,48,Souk El Had,سوق الحد
+1481,48,Yellel,يلل
+1482,48,Zemmoura,زمورة
+1483,49,Aougrout,أوقروت
+1484,49,Charouine,شروين
+1485,49,Deldoul,دلدول
+1486,49,Ksar Kaddour,قصر قدور
+1487,49,Metarfa,المطارفة
+1488,49,Ouled Aissa,أولاد عيسى
+1489,49,Ouled Said,أولاد السعيد
+1490,49,Talmine,طالمين
+1491,49,Timimoun,تيميمون
+1492,49,Tinerkouk,تنركوك
+1493,50,Bordj Badji Mokhtar,برج باجي مختار
+1494,50,Timiaouine,تيمياوين
+1495,51,Besbes,بسباس
+1496,51,Chaiba,الشعيبة
+1497,51,Doucen,الدوسن
+1498,51,Ouled Djellal,أولاد جلال
+1499,51,Ras El Miad,رأس الميعاد
+1500,51,Sidi Khaled,سيدي  خالد
+1501,52,Beni Ikhlef,بن يخلف
+1502,52,Béni Abbès,بني عباس
+1503,52,El Ouata,الواتة
+1504,52,Igli,إقلي
+1505,52,Kerzaz,كرزاز
+1506,52,Ksabi,القصابي
+1507,52,Ouled-Khodeir,أولاد خضير
+1508,52,Tabelbala,تبلبالة
+1509,52,Tamtert,تامترت
+1510,52,Timoudi,تيمودي
+1511,53,Ain Salah,عين صالح
+1512,53,Foggaret Ezzoua,فقارة الزوى
+1513,53,Inghar,إينغر
+1514,54,Ain Guezzam,عين قزام
+1515,54,Tin Zouatine,تين زواتين
+1516,55,Benaceur,بن ناصر
+1517,55,Blidet Amor,بلدة اعمر
+1518,55,El Alia,العالية
+1519,55,El Hadjira,الحجيرة
+1520,55,M'Naguer,المنقر
+1521,55,Megarine,المقارين
+1522,55,Nezla,النزلة
+1523,55,Sidi Slimane,سيدي سليمان
+1524,55,Taibet,الطيبات
+1525,55,Tebesbest,تبسبست
+1526,55,Temacine,تماسين
+1527,55,Touggourt,تقرت
+1528,55,Zaouia El Abidia,الزاوية العابدية
+1529,56,Bordj El Haouass,برج الحواس
+1530,56,Djanet,جانت
+1531,57,Djamaa,جامعة
+1532,57,El-M'ghaier,المغير
+1533,57,M'Rara,المرارة
+1534,57,Oum Touyour,أم الطيور
+1535,57,Sidi Amrane,سيدي عمران
+1536,57,Sidi Khelil,سيدي خليل
+1537,57,Still,سطيل
+1538,57,Tenedla,تندلة
+1539,58,El Meniaa,المنيعة
+1540,58,Hassi Fehal,حاسي الفحل
+1541,58,Hassi Gara,حاسي القارة

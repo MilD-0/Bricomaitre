@@ -1,0 +1,468 @@
+name: bricomaitre-demo
+
+x-budget: &budget
+  dns: [127.0.0.1]
+  cpus: 0.5
+  mem_limit: 512m
+  memswap_limit: 512m
+  pids_limit: 128
+  logging:
+    driver: local
+    options:
+      max-size: '10m'
+      max-file: '3'
+
+x-app-security: &app-security
+  <<: *budget
+  init: true
+  restart: unless-stopped
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+
+x-admin-build: &admin-build
+  context: ../..
+  dockerfile: ops/docker/Dockerfile.admin
+  args:
+    GOOGLE_CLIENT_ID: demo-client.apps.invalid
+    APPLICATION_ORIGIN: ${DEMO_ADMIN_ORIGIN}
+    STOREFRONT_API_BASE_URL: http://storefront-api:3001
+    NEXT_PUBLIC_SENTRY_DSN_ADMIN: ''
+    SENTRY_ORG: ''
+    SENTRY_PROJECT_ADMIN: ''
+    SENTRY_RELEASE: demo
+    BRIC_IMAGE_REVISION: demo
+    BRIC_IMAGE_CREATED: ${DEMO_IMAGE_CREATED}
+  secrets:
+    - google_client_secret
+    - better_auth_secret
+    - sentry_auth_token
+
+x-storefront-api-build: &storefront-api-build
+  context: ../..
+  dockerfile: ops/docker/Dockerfile.storefront-api
+  args:
+    SENTRY_ORG: ''
+    SENTRY_PROJECT_STOREFRONT_API: ''
+    SENTRY_RELEASE: demo
+    BRIC_IMAGE_REVISION: demo
+    BRIC_IMAGE_CREATED: ${DEMO_IMAGE_CREATED}
+  secrets:
+    - sentry_auth_token
+
+services:
+  gateway:
+    <<: *app-security
+    image: nginx:stable-trixie@sha256:09cc2702709e6388d979d8030e3ab4eb1ceb699b2dced26d7543e872a822e823
+    user: '101:101'
+    read_only: true
+    cpus: 0.5
+    mem_limit: 128m
+    memswap_limit: 128m
+    entrypoint: [nginx, '-g', 'daemon off;']
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - 127.0.0.1:${DEMO_ADMIN_PORT}:3400
+      - 127.0.0.1:${DEMO_API_PORT}:3401
+      - 127.0.0.1:${DEMO_STOREFRONT_PORT}:3402
+      - 127.0.0.1:${DEMO_OBJECT_PORT}:3900
+      - 127.0.0.1:${DEMO_OBJECT_CONSOLE_PORT}:3901
+      - 127.0.0.1:${DEMO_MOCK_PORT}:3808
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, http://127.0.0.1:8080/health]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  postgres:
+    read_only: true
+    tmpfs: [/tmp:size=32m, /var/run/postgresql:size=16m]
+    cpus: 2.0
+    mem_limit: 2g
+    memswap_limit: 2g
+    pids_limit: 256
+    <<: *budget
+    image: postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+    init: true
+    shm_size: 512mb
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bricomaitre_demo
+      POSTGRES_USER: bricomaitre_demo_owner
+      POSTGRES_PASSWORD: ${DEMO_POSTGRES_OWNER_PASSWORD}
+      POSTGRES_ADMIN_USER: bricomaitre_demo_admin
+      POSTGRES_ADMIN_PASSWORD: ${DEMO_POSTGRES_ADMIN_PASSWORD}
+      POSTGRES_STOREFRONT_USER: bricomaitre_demo_storefront
+      POSTGRES_STOREFRONT_PASSWORD: ${DEMO_POSTGRES_STOREFRONT_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../docker/postgres/init-roles.sh:/docker-entrypoint-initdb.d/10-bric-roles.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U bricomaitre_demo_owner -d bricomaitre_demo]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    read_only: true
+    tmpfs: [/tmp:size=16m]
+    <<: *budget
+    image: redis:7-bookworm@sha256:71da9275c5f3fcb97d0fa0c8c5b36cc995327265420f17a04bfd544f458059f7
+    init: true
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - noeviction
+      - --requirepass
+      - ${DEMO_REDIS_PASSWORD}
+    environment:
+      REDISCLI_AUTH: ${DEMO_REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  object-storage:
+    read_only: true
+    tmpfs: [/tmp:size=32m, /root/.minio:size=8m]
+    <<: *budget
+    image: quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    init: true
+    restart: unless-stopped
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${DEMO_S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${DEMO_S3_SECRET_KEY}
+      MINIO_BROWSER_REDIRECT_URL: ${DEMO_OBJECT_CONSOLE_ORIGIN}
+    volumes:
+      - object-storage-data:/data
+    healthcheck:
+      test: [CMD, mc, ready, local]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  object-storage-init:
+    <<: *budget
+    image: quay.io/minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+    restart: 'no'
+    environment:
+      DEMO_S3_ACCESS_KEY: ${DEMO_S3_ACCESS_KEY}
+      DEMO_S3_SECRET_KEY: ${DEMO_S3_SECRET_KEY}
+      DEMO_S3_ADMIN_ACCESS_KEY: ${DEMO_S3_ADMIN_ACCESS_KEY}
+      DEMO_S3_ADMIN_SECRET_KEY: ${DEMO_S3_ADMIN_SECRET_KEY}
+      DEMO_S3_READER_ACCESS_KEY: ${DEMO_S3_READER_ACCESS_KEY}
+      DEMO_S3_READER_SECRET_KEY: ${DEMO_S3_READER_SECRET_KEY}
+    volumes:
+      - ./object-storage/init.sh:/init.sh:ro
+      - ./object-storage/public-read-policy.json:/public-read-policy.json:ro
+      - ./object-storage/admin-policy.json:/admin-policy.json:ro
+      - ./object-storage/reader-policy.json:/reader-policy.json:ro
+      - ./.cache/images/catalog:/catalog-images:ro
+      - ./object-storage/assets:/merchandising-assets:ro
+    entrypoint: [/bin/sh, /init.sh]
+    depends_on:
+      object-storage:
+        condition: service_healthy
+
+  mock-services:
+    build:
+      context: .
+      dockerfile: Dockerfile.mocks
+    <<: *app-security
+    read_only: true
+    environment:
+      PORT: 8080
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  migrations:
+    <<: *budget
+    build:
+      <<: *admin-build
+      target: migrations
+    restart: 'no'
+    env_file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/admin.env
+    environment:
+      DATABASE_URL: postgresql://bricomaitre_demo_owner:${DEMO_POSTGRES_OWNER_PASSWORD}@postgres:5432/bricomaitre_demo
+      ADMIN_DB_TASK: migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  database-permissions:
+    <<: *budget
+    image: postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+    restart: 'no'
+    environment:
+      PGPASSWORD: ${DEMO_POSTGRES_OWNER_PASSWORD}
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: bricomaitre_demo
+      POSTGRES_USER: bricomaitre_demo_owner
+      POSTGRES_ADMIN_USER: bricomaitre_demo_admin
+      POSTGRES_ADMIN_PASSWORD: ${DEMO_POSTGRES_ADMIN_PASSWORD}
+      POSTGRES_STOREFRONT_USER: bricomaitre_demo_storefront
+      POSTGRES_STOREFRONT_PASSWORD: ${DEMO_POSTGRES_STOREFRONT_PASSWORD}
+    volumes:
+      - ../docker/postgres/init-roles.sh:/init-roles.sh:ro
+    entrypoint: [/bin/bash, /init-roles.sh]
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+
+  seed:
+    cpus: 2.0
+    mem_limit: 2g
+    memswap_limit: 2g
+    pids_limit: 256
+    <<: *budget
+    image: postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+    restart: 'no'
+    environment:
+      PGPASSWORD: ${DEMO_POSTGRES_OWNER_PASSWORD}
+      DEMO_OBJECT_PUBLIC_ORIGIN: ${DEMO_OBJECT_PUBLIC_ORIGIN}
+      DEMO_DATA_REVISION: ${DEMO_DATA_REVISION:-development}
+    volumes:
+      - ./postgres:/seed:ro
+      - ./data:/data:ro
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - psql -v ON_ERROR_STOP=1 -v asset_origin="$${DEMO_OBJECT_PUBLIC_ORIGIN}" -v build_key="$${DEMO_DATA_REVISION}" -h postgres -U bricomaitre_demo_owner -d bricomaitre_demo -f /seed/seed.sql
+    depends_on:
+      database-permissions:
+        condition: service_completed_successfully
+
+  live-seed:
+    cpus: 2.0
+    mem_limit: 2g
+    memswap_limit: 2g
+    pids_limit: 256
+    <<: *budget
+    image: postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+    restart: 'no'
+    environment:
+      PGPASSWORD: ${DEMO_POSTGRES_OWNER_PASSWORD}
+      DEMO_OBJECT_PUBLIC_ORIGIN: ${DEMO_OBJECT_PUBLIC_ORIGIN}
+    volumes:
+      - ./postgres:/seed:ro
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - psql -v ON_ERROR_STOP=1 -v asset_origin="$${DEMO_OBJECT_PUBLIC_ORIGIN}" -h postgres -U bricomaitre_demo_owner -d bricomaitre_demo -f /seed/live.sql
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+
+  storefront-api:
+    build:
+      <<: *storefront-api-build
+      target: web
+    <<: *app-security
+    read_only: true
+    env_file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/storefront-api.env
+    environment:
+      DATABASE_URL: postgresql://bricomaitre_demo_storefront:${DEMO_POSTGRES_STOREFRONT_PASSWORD}@postgres:5432/bricomaitre_demo
+      PORT: 3001
+    volumes:
+      - storefront-api-cache:/app/apps/storefront-api/.next/cache
+    depends_on:
+      live-seed:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      mock-services:
+        condition: service_healthy
+      object-storage-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 4s
+      retries: 30
+
+  storefront-marketing-worker:
+    build:
+      <<: *storefront-api-build
+      target: meta-worker
+    <<: *app-security
+    read_only: true
+    env_file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/storefront-api.env
+    environment:
+      DATABASE_URL: postgresql://bricomaitre_demo_storefront:${DEMO_POSTGRES_STOREFRONT_PASSWORD}@postgres:5432/bricomaitre_demo
+    depends_on:
+      storefront-api:
+        condition: service_healthy
+
+  admin:
+    cpus: 1.0
+    mem_limit: 1g
+    memswap_limit: 1g
+    build:
+      <<: *admin-build
+      target: web
+    <<: *app-security
+    read_only: true
+    env_file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/admin.env
+    environment:
+      DATABASE_URL: postgresql://bricomaitre_demo_admin:${DEMO_POSTGRES_ADMIN_PASSWORD}@postgres:5432/bricomaitre_demo
+      AI_ADMIN_INPUT_COST_PER_1M_USD: '1'
+      AI_ADMIN_OUTPUT_COST_PER_1M_USD: '6'
+      AI_STOREFRONT_INPUT_COST_PER_1M_USD: '1'
+      AI_STOREFRONT_OUTPUT_COST_PER_1M_USD: '6'
+      PORT: 3000
+    volumes:
+      - admin-cache:/app/apps/admin/.next/cache
+    depends_on:
+      storefront-api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 4s
+      retries: 30
+
+  admin-worker:
+    build:
+      <<: *admin-build
+      target: worker
+    <<: *app-security
+    read_only: true
+    env_file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/admin.env
+    environment:
+      DATABASE_URL: postgresql://bricomaitre_demo_admin:${DEMO_POSTGRES_ADMIN_PASSWORD}@postgres:5432/bricomaitre_demo
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "const fs=require('node:fs'); const age=Date.now()-Number(fs.readFileSync('/tmp/bric-admin-worker-heartbeat','utf8').trim()); process.exit(age>=0&&age<=45000?0:1)"
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      admin:
+        condition: service_healthy
+      mock-services:
+        condition: service_healthy
+
+  storefront-runtime:
+    <<: *budget
+    image: bricomaitre-demo-storefront
+    user: '0:0'
+    restart: 'no'
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - ./storefront-runtime/init.sh:/init-next-server.sh:ro
+      - storefront-server:/next-server
+    entrypoint: [/bin/sh, /init-next-server.sh]
+
+  storefront:
+    cpus: 1.0
+    mem_limit: 1g
+    memswap_limit: 1g
+    build:
+      context: ../..
+      dockerfile: ops/docker/Dockerfile.storefront
+      target: runner
+      args:
+        STOREFRONT_API_BASE_URL: http://storefront-api:3001
+        NEXT_PUBLIC_SITE_URL: ${DEMO_STOREFRONT_ORIGIN}
+        NEXT_PUBLIC_CLOUDFRONT_URL: ${DEMO_OBJECT_PUBLIC_ORIGIN}/bricomaitre-demo
+        NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS: ${DEMO_OBJECT_PUBLIC_ORIGIN}
+        NEXT_PUBLIC_FACEBOOK_PIXEL_ID: ''
+        NEXT_PUBLIC_GA_MEASUREMENT_ID: ''
+        NEXT_PUBLIC_TIKTOK_PIXEL_ID: ''
+        NEXT_PUBLIC_RELEASE: demo
+        NEXT_PUBLIC_SENTRY_DSN_STOREFRONT: ''
+        NEXT_PUBLIC_SENTRY_ENVIRONMENT: demo
+        BRIC_DEMO_MODE: 'true'
+        SENTRY_ORG: ''
+        SENTRY_PROJECT_STOREFRONT: ''
+        SENTRY_RELEASE: demo
+        BRIC_IMAGE_REVISION: demo
+        BRIC_IMAGE_CREATED: ${DEMO_IMAGE_CREATED}
+      secrets:
+        - sentry_auth_token
+    <<: *app-security
+    read_only: true
+    env_file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/storefront.env
+    environment:
+      PORT: 3002
+    volumes:
+      - storefront-cache:/app/apps/storefront/.next/cache
+      - storefront-server:/app/apps/storefront/.next/server
+    depends_on:
+      storefront-runtime:
+        condition: service_completed_successfully
+      storefront-api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3002/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 4s
+      retries: 30
+
+secrets:
+  google_client_secret:
+    file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/google-client-secret
+  better_auth_secret:
+    file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/better-auth-secret
+  sentry_auth_token:
+    file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/sentry-auth-token
+
+volumes:
+  admin-cache:
+  object-storage-data:
+  postgres-data:
+  redis-data:
+  storefront-api-cache:
+  storefront-cache:
+  storefront-server:
+
+networks:
+  default:
+    driver_opts:
+      com.docker.network.bridge.name: br-bric-demo

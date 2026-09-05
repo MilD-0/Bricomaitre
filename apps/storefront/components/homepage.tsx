@@ -49,6 +49,10 @@ export function selectHomepageCategories(categories: Category[]) {
   return (roots.length > 0 ? roots : categories).slice(0, HOMEPAGE_CATEGORY_LIMIT);
 }
 
+export function selectHomepageBrands(brands: Brand[]) {
+  return brands.filter((brand) => brand.featured && brand.image);
+}
+
 export function selectCarouselTaxonomy(
   products: Product[],
   brands: Brand[],
@@ -230,6 +234,7 @@ export function Homepage({
 }) {
   const text = copy[locale];
   const hasMerchandising = Object.values(data).some((items) => items.length > 0);
+  const homepageBrands = selectHomepageBrands(data.brands);
   return (
     <div className="home-page home-production">
       <h1 className="sr-only">
@@ -266,11 +271,11 @@ export function Homepage({
         </section>
       ) : null}
       <EditorialCards cards={data.productCards} locale={locale} />
-      {data.brands.length ? (
+      {homepageBrands.length ? (
         <section className="home-section home-brand-section">
           <SectionHeading title={text.brands} />
           <div className="home-brand-band">
-            <HomepageBrandCarousel brands={data.brands} locale={locale} />
+            <HomepageBrandCarousel brands={homepageBrands} locale={locale} />
           </div>
         </section>
       ) : null}

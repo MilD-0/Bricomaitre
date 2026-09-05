@@ -36,10 +36,11 @@ legacy_image_ref_regex="${BRIC_LEGACY_IMAGE_REF_REGEX:-}"
 if [[ -z "$legacy_image_ref_regex" ]]; then
   legacy_image_ref_regex='^ghcr[.]io/mild-0/bricomaitre2/[a-z0-9-]+@sha256:[a-f0-9]{64}$'
 fi
-cosign_certificate_identity="${BRIC_COSIGN_CERTIFICATE_IDENTITY:-https://github.com/MilD-0/Bricomaitre2/.github/workflows/deploy.yml@refs/heads/main}"
+cosign_certificate_identity="${BRIC_COSIGN_CERTIFICATE_IDENTITY:-https://github.com/MilD-0/Bricomaitre/.github/workflows/deploy.yml@refs/heads/main}"
 legacy_cosign_certificate_identity="${BRIC_LEGACY_COSIGN_CERTIFICATE_IDENTITY:-https://github.com/MilD-0/Bricomaitre2/.github/workflows/deploy.yml@refs/heads/main}"
 cosign_oidc_issuer="${BRIC_COSIGN_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
 verified_release_layout=""
+verified_release_image_profile=""
 
 slot_is_valid() {
   [[ "$1" == "blue" || "$1" == "green" ]]
@@ -452,6 +453,7 @@ verify_release_dir() {
   local file
 
   verified_release_layout=""
+  verified_release_image_profile=""
 
   for file in "${common_required_files[@]}"; do
     if [[ ! -f "$file" ]]; then
@@ -482,6 +484,7 @@ verify_release_dir() {
   fi
 
   set -a
+  BRIC_RELEASE_SIGNER_IDENTITY=""
   # shellcheck disable=SC1090
   source "$marker_file"
   set +a
@@ -493,6 +496,30 @@ verify_release_dir() {
 
   if [[ -n "$expected_commit" && "${BRIC_RELEASE_COMMIT}" != "$expected_commit" ]]; then
     echo "release commit mismatch: expected $expected_commit but found ${BRIC_RELEASE_COMMIT}" >&2
+    exit 1
+  fi
+
+  if [[ -n "$expected_commit" ]]; then
+    if [[ "$BRIC_RELEASE_SIGNER_IDENTITY" != "$cosign_certificate_identity" ]]; then
+      echo "release signer mismatch: expected ${cosign_certificate_identity}" >&2
+      exit 1
+    fi
+    verified_release_image_profile="public"
+  elif [[ "$verified_release_layout" == "legacy" ]]; then
+    if [[ -n "$BRIC_RELEASE_SIGNER_IDENTITY" && "$BRIC_RELEASE_SIGNER_IDENTITY" != "$legacy_cosign_certificate_identity" ]]; then
+      echo "legacy release signer is not trusted: ${BRIC_RELEASE_SIGNER_IDENTITY}" >&2
+      exit 1
+    fi
+    verified_release_image_profile="legacy"
+  elif [[ "$BRIC_RELEASE_SIGNER_IDENTITY" == "$cosign_certificate_identity" ]]; then
+    verified_release_image_profile="public"
+  elif [[ -z "$BRIC_RELEASE_SIGNER_IDENTITY" || "$BRIC_RELEASE_SIGNER_IDENTITY" == "$legacy_cosign_certificate_identity" ]]; then
+    # rollback.sh consumes this global after sourcing this library.
+    # shellcheck disable=SC2034
+    verified_release_image_profile="legacy-public"
+    echo 'warning: accepting a canonical release signed by the former repository for rollback compatibility' >&2
+  else
+    echo "release signer is not trusted: ${BRIC_RELEASE_SIGNER_IDENTITY}" >&2
     exit 1
   fi
 }
@@ -515,7 +542,7 @@ verify_image_ref_format() {
 
   if [[ "$verification_profile" == "legacy" ]]; then
     expected_regex="$legacy_image_ref_regex"
-  elif [[ "$verification_profile" != "public" ]]; then
+  elif [[ "$verification_profile" != "public" && "$verification_profile" != "legacy-public" ]]; then
     echo "invalid image verification profile: $verification_profile" >&2
     return 1
   fi
@@ -531,7 +558,7 @@ verify_signed_image() {
   local verification_profile="${2:-public}"
   local expected_identity="$cosign_certificate_identity"
 
-  if [[ "$verification_profile" == "legacy" ]]; then
+  if [[ "$verification_profile" == "legacy" || "$verification_profile" == "legacy-public" ]]; then
     expected_identity="$legacy_cosign_certificate_identity"
   elif [[ "$verification_profile" != "public" ]]; then
     echo "invalid image verification profile: $verification_profile" >&2
@@ -596,7 +623,7 @@ apply_release_images() {
   require_slot "$target_slot"
   require_release_image_manifest "$images_file"
 
-  if [[ "$verification_profile" != "public" && "$verification_profile" != "legacy" ]]; then
+  if [[ "$verification_profile" != "public" && "$verification_profile" != "legacy-public" && "$verification_profile" != "legacy" ]]; then
     echo "invalid image verification profile: $verification_profile" >&2
     return 1
   fi

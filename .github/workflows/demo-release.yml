@@ -1,0 +1,133 @@
+name: Demo release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Immutable demo version, for example 2026.09.05
+        required: true
+        type: string
+      publish:
+        description: Publish tested images and create a draft GitHub release
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: demo-release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  native-install:
+    name: Build and install / ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    env:
+      DEMO_VERSION: ${{ inputs.version }}
+      DEMO_PLATFORMS: linux/${{ matrix.arch }}
+      DEMO_TAG_SUFFIX: -${{ matrix.arch }}
+      DEMO_IMAGE_NAMESPACE: ghcr.io/mild-0/bricomaitre-demo
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: corepack enable && pnpm install --frozen-lockfile
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        with:
+          driver-opts: default-load=true
+      - name: Verify packaging tools and prepare media
+        run: |
+          pnpm test:ops
+          pnpm demo:data:verify
+          pnpm demo:images
+          node ops/demo/release/assemble.mjs "$DEMO_VERSION" "$RUNNER_TEMP/demo-release"
+      - name: Build release images
+        run: docker compose -f "$RUNNER_TEMP/demo-release/compose.build.json" build
+      - name: Test installation from the extracted bundle
+        run: node ops/demo/release/verify.mjs "$RUNNER_TEMP/demo-release/bricomaitre-demo"
+      - name: Upload tested bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: demo-bundle-${{ matrix.arch }}
+          path: ${{ runner.temp }}/demo-release/bricomaitre-demo/
+          retention-days: 14
+      - name: Authenticate image publication
+        if: inputs.publish
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish tested architecture images
+        if: inputs.publish
+        run: docker compose -f "$RUNNER_TEMP/demo-release/compose.build.json" push
+      - name: Report installation state
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/demo-release/bricomaitre-demo/compose.yaml" ]; then
+            docker compose -p bricomaitre-demo-release-test -f "$RUNNER_TEMP/demo-release/bricomaitre-demo/compose.yaml" ps -a
+          fi
+
+  release:
+    needs: native-install
+    if: inputs.publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      packages: write
+    env:
+      DEMO_VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: demo-bundle-*
+          path: ${{ runner.temp }}/bundles
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Combine architectures into a private draft
+        env:
+          DEMO_PRIVATE_DRAFT: '1'
+        run: |
+          node ops/demo/release/publish.mjs \
+            "$RUNNER_TEMP/bundles/demo-bundle-amd64" \
+            "$RUNNER_TEMP/bundles/demo-bundle-arm64" \
+            "$RUNNER_TEMP/release/bricomaitre-demo"
+          node ops/demo/release/archive.mjs "$RUNNER_TEMP/release/bricomaitre-demo"
+      - name: Create the reviewable release
+        run: |
+          gh release create "demo-$DEMO_VERSION" \
+            "$RUNNER_TEMP/release/bricomaitre-demo-$DEMO_VERSION.tar.gz" \
+            "$RUNNER_TEMP/release/bricomaitre-demo-$DEMO_VERSION.tar.gz.sha256" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
+            --title "Bricomaitre demo $DEMO_VERSION" \
+            --notes-file ops/demo/release/README.md

@@ -32,6 +32,20 @@ export function dayInTimezone(now: Date, timezone = 'Africa/Algiers') {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
+export function remainingDayFraction(now: Date, timezone = 'Africa/Algiers') {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const elapsedSeconds =
+    Number(values.hour) * 3_600 + Number(values.minute) * 60 + Number(values.second);
+  return Math.max(0, Math.min(1, 1 - elapsedSeconds / 86_400));
+}
+
 export function resolveAnalyticsReferenceNow(
   setting: string | undefined,
   cutoffDate: string | null,

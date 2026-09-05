@@ -356,6 +356,7 @@ jobs:
           {
             echo "BRIC_RELEASE_ID=${RELEASE_SHA::12}-${GITHUB_RUN_ID}"
             echo "BRIC_RELEASE_COMMIT=${RELEASE_SHA}"
+            echo "BRIC_RELEASE_SIGNER_IDENTITY=https://github.com/${GITHUB_REPOSITORY}/.github/workflows/deploy.yml@refs/heads/main"
             echo "BRIC_RELEASE_CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "BRIC_WORKFLOW_RUN_ID=${GITHUB_RUN_ID}"
             echo "BRIC_VERIFICATION_RUN_ID=${VERIFICATION_RUN_ID}"

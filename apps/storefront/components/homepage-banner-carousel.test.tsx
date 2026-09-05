@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HomepageBannerCarousel } from './homepage-banner-carousel';
 
-const mocks = vi.hoisted(() => ({ scrollNext: vi.fn() }));
+const mocks = vi.hoisted(() => ({ scrollNext: vi.fn(), unoptimized: false }));
 vi.mock('embla-carousel-react', () => ({
   default: () => [vi.fn(), { scrollNext: mocks.scrollNext }],
 }));
@@ -14,7 +14,7 @@ vi.mock('next/image', () => ({
       src,
       alt,
       sizes,
-      srcSet: String(src).endsWith('.svg') ? undefined : String(src),
+      srcSet: String(src).endsWith('.svg') || mocks.unoptimized ? undefined : String(src),
     },
   }),
 }));
@@ -38,6 +38,7 @@ describe('HomepageBannerCarousel', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     mocks.scrollNext.mockReset();
+    mocks.unoptimized = false;
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       value: vi.fn(() => ({ matches: false })),
@@ -48,6 +49,8 @@ describe('HomepageBannerCarousel', () => {
   it('does not autoplay until the second full-resolution image has loaded', () => {
     const { container } = render(<HomepageBannerCarousel banners={banners} locale="fr" />);
     const fullImages = container.querySelectorAll('.home-banner-picture > picture:last-child img');
+    expect(container.querySelectorAll('.home-banner-copy')).toHaveLength(2);
+    expect(container.querySelector('.home-banner-copy')).toHaveTextContent('Voir la sélection');
     fireEvent.load(fullImages[0]!);
     vi.advanceTimersByTime(10_000);
     expect(mocks.scrollNext).not.toHaveBeenCalled();
@@ -94,6 +97,20 @@ describe('HomepageBannerCarousel', () => {
     expect(
       container.querySelector('.home-banner-picture > picture:last-child source'),
     ).toHaveAttribute('srcset', '/banner-1-portrait.svg');
+  });
+
+  it('uses the original banner as the blur layer when image optimization is disabled', () => {
+    mocks.unoptimized = true;
+    const { container } = render(<HomepageBannerCarousel banners={banners} locale="fr" />);
+
+    expect(container.querySelector('.home-banner-blur img')).toHaveAttribute(
+      'src',
+      '/banner-1-wide.jpg',
+    );
+    expect(container.querySelector('.home-banner-blur source')).toHaveAttribute(
+      'srcset',
+      '/banner-1-portrait.jpg',
+    );
   });
 
   it('keeps the carousel DOM direction aligned with the Arabic Embla direction', () => {

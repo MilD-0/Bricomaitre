@@ -3,7 +3,8 @@
   "ignoreUnresolved": ["next"],
   "workspaces": {
     "ops": {
-      "entry": ["scripts/*.mjs"]
+      "ignoreBinaries": ["psql"],
+      "entry": ["scripts/*.mjs", "demo/mock-services.mjs", "demo/release/*.mjs"]
     },
     "apps/admin": {
       "entry": [

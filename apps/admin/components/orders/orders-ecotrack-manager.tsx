@@ -65,6 +65,7 @@ const ECOTRACK_STATUSES = [
   'livre_non_encaisse',
   'encaisse_non_paye',
   'paiements_prets',
+  'payed',
   'paye_et_archive',
   'retour_chez_livreur',
   'retour_transit_entrepot',

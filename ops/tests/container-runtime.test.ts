@@ -335,6 +335,9 @@ describe('production packaging and release runtime', () => {
     expect(release).not.toContain('extract-static-page-count.py');
     expect(release).toContain('bash ops/scripts/build-release-images.sh');
     expect(release).toContain('bash ops/scripts/sign-bake-images.sh');
+    expect(release).toContain(
+      'BRIC_RELEASE_SIGNER_IDENTITY=https://github.com/${GITHUB_REPOSITORY}/.github/workflows/deploy.yml@refs/heads/main',
+    );
     expect(deploy).toContain('bash "$script_dir/smoke-check.sh"');
   });
 
@@ -519,7 +522,10 @@ describe('production packaging and release runtime', () => {
     const actionReferences = [
       ...`${ci}\n${release}\n${workspaceSetup}`.matchAll(/^\s*-?\s*uses:\s+([^\s#]+)/gm),
     ].map(([, reference]) => reference);
-    expect(ci).not.toMatch(/^\s*pull_request:/m);
+    expect(ci).toMatch(/^\s*pull_request:\n\s+branches:\n\s+- main/m);
+    expect(ci).not.toMatch(/^\s*pull_request_target:/m);
+    expect(ci).not.toMatch(/secrets\./);
+    expect(release).toContain("github.event.workflow_run.event == 'push'");
     expect(ci).not.toContain('github.event.pull_request');
     expect(ci).toContain("if: github.event_name == 'workflow_dispatch'");
     expect(actionReferences.length).toBeGreaterThan(0);
@@ -1104,7 +1110,7 @@ describe('production packaging and release runtime', () => {
     expect(rollback).toContain('render_release_nginx_config "$current_release" "$current_slot"');
     expect(deploy).toContain('apply_release_images "$target_slot" "$release_images_file"');
     expect(rollback).toContain(
-      'apply_release_images "$target_slot" "$release_images_file" "$verified_release_layout"',
+      'apply_release_images "$target_slot" "$release_images_file" "$verified_release_image_profile"',
     );
     expect(deploy).toContain('preserving the candidate services');
     expect(rollback).toContain('preserving the rollback candidate');

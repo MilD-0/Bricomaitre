@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -150,5 +150,47 @@ describe('HomepageBrandCarousel', () => {
     );
     expect(container.querySelectorAll('img[loading="eager"]')).toHaveLength(0);
     expect(container.querySelectorAll('img[loading="lazy"]')).toHaveLength(5);
+  });
+
+  it('shows product controls only when the carousel actually overflows', async () => {
+    const product = homepageFixtureResponse.topProducts[0]!;
+    const api = {
+      rootNode: vi.fn(() => ({ clientWidth: 1200, scrollWidth: 1200 })),
+      canScrollPrev: vi.fn(() => false),
+      canScrollNext: vi.fn(() => true),
+      scrollPrev: vi.fn(),
+      scrollNext: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+    };
+    mocks.embla.mockReturnValueOnce([vi.fn(), api] as never);
+
+    const { container, unmount } = render(
+      <HomepageProductCarousel
+        products={[product]}
+        locale="fr"
+        brands={homepageFixtureResponse.brands}
+        categories={homepageFixtureResponse.categories}
+      />,
+    );
+
+    await waitFor(() => expect(api.rootNode).toHaveBeenCalled());
+    expect(container.querySelector('.home-carousel-controls')).not.toBeInTheDocument();
+    unmount();
+
+    api.rootNode.mockReturnValue({ clientWidth: 1200, scrollWidth: 1600 });
+    mocks.embla.mockReturnValueOnce([vi.fn(), api] as never);
+    const overflow = render(
+      <HomepageProductCarousel
+        products={[product]}
+        locale="fr"
+        brands={homepageFixtureResponse.brands}
+        categories={homepageFixtureResponse.categories}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(overflow.container.querySelector('.home-carousel-controls')).toBeInTheDocument(),
+    );
   });
 });

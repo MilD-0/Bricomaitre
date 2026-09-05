@@ -106,10 +106,10 @@ export async function getAnalyticsData(
 
   switch (filters.view) {
     case 'money':
-      loaded = await loadMoneyView(db, filters, cutoffs!);
+      loaded = await loadMoneyView(db, filters, cutoffs!, now);
       break;
     case 'acquisition':
-      loaded = await loadAcquisitionView(db, filters, cutoffs!);
+      loaded = await loadAcquisitionView(db, filters, cutoffs!, now);
       break;
     case 'fulfillment':
       loaded = await loadFulfillmentView(db, filters, cutoffs!);
@@ -133,7 +133,7 @@ export async function getAnalyticsData(
       loaded = await loadAssumptionsView(db, filters, cutoffs!);
       break;
     case 'command':
-      loaded = await loadCommandView(db, filters, cutoffs!);
+      loaded = await loadCommandView(db, filters, cutoffs!, now);
       break;
   }
 

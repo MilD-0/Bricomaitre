@@ -33,6 +33,7 @@ export const analyticsCopyEn = {
   metrics: {
     trueProfit: 'True profit',
     profitX: 'Profit ×',
+    grossProfit: 'Gross profit',
     adjustedProfit: 'Adjusted profit',
     automaticPaidProfit: 'Paid-order profit',
     paidProfitCoverage: 'Exact paid-cost coverage',
@@ -449,6 +450,7 @@ export const analyticsCopyEn = {
     returnRate: 'Return rate %',
     notes: 'Operator note',
     automatic: 'Automatic',
+    default: 'Default',
     manual: 'Manual',
     missing: 'Missing',
   },

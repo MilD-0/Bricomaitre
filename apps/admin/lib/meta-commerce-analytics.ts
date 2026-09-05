@@ -14,6 +14,7 @@ import {
   CONFIRMED_LIFECYCLE_ORDER_STATUSES,
   ORDER_STATUS,
 } from '@bric/storefront-core/order-domain';
+import { ANALYTICS_PAID_SHIPMENT_STATUSES } from './ecotrack-status-policy';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -194,7 +195,9 @@ export function buildMetaCommercePerformanceQuery(
         count(*) filter (where ${inArray(orders.inHouseStatus, [...META_COMMERCE_COMPLETED_STATUSES])})::int as completed_orders,
         count(*) filter (where ${orders.inHouseStatus} = ${ORDER_STATUS.CANCELLED})::int as cancelled_orders,
         count(*) filter (where ${inArray(orders.inHouseStatus, [...META_COMMERCE_NEGATIVE_OUTCOME_STATUSES])})::int as negative_outcome_orders,
-        count(*) filter (where ${ecotrackOrderStates.currentStatus} = 'paye_et_archive')::int as paid_orders,
+        count(*) filter (
+          where ${inArray(ecotrackOrderStates.currentStatus, [...ANALYTICS_PAID_SHIPMENT_STATUSES])}
+        )::int as paid_orders,
         count(*) filter (where ${ecotrackOrderStates.currentStatus} = 'retour_archive')::int as returned_orders,
         coalesce(sum(coalesce(line_economics.submitted_product_value, ${orders.price}::double precision, 0)), 0)::double precision as submitted_value_dzd,
         count(*) filter (where line_economics.cost_complete)::int as cost_complete_orders,
@@ -300,7 +303,9 @@ export function buildMetaCommerceSummaryQuery(filters: MetaCommerceFilters) {
         count(*) filter (where ${inArray(orders.inHouseStatus, [...META_COMMERCE_COMPLETED_STATUSES])})::int as completed_orders,
         count(*) filter (where ${orders.inHouseStatus} = ${ORDER_STATUS.CANCELLED})::int as cancelled_orders,
         count(*) filter (where ${inArray(orders.inHouseStatus, [...META_COMMERCE_NEGATIVE_OUTCOME_STATUSES])})::int as negative_outcome_orders,
-        count(*) filter (where ${ecotrackOrderStates.currentStatus} = 'paye_et_archive')::int as paid_orders,
+        count(*) filter (
+          where ${inArray(ecotrackOrderStates.currentStatus, [...ANALYTICS_PAID_SHIPMENT_STATUSES])}
+        )::int as paid_orders,
         count(*) filter (where ${ecotrackOrderStates.currentStatus} = 'retour_archive')::int as returned_orders,
         coalesce(sum(coalesce(line_economics.submitted_product_value, ${orders.price}::double precision, 0)), 0)::double precision as submitted_value_dzd,
         count(*) filter (where line_economics.cost_complete)::int as cost_complete_orders,

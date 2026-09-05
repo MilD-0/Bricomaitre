@@ -3,6 +3,7 @@ import type { SVGProps } from 'react';
 import { Button } from '../ui/button';
 
 type GoogleLoginPanelProps = {
+  demo?: boolean;
   signInLabel: string;
   onSignIn: () => Promise<void>;
 };
@@ -30,7 +31,7 @@ function GoogleMark(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-export function GoogleLoginPanel({ signInLabel, onSignIn }: GoogleLoginPanelProps) {
+export function GoogleLoginPanel({ demo = false, signInLabel, onSignIn }: GoogleLoginPanelProps) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-4">
       <form action={onSignIn}>
@@ -39,7 +40,7 @@ export function GoogleLoginPanel({ signInLabel, onSignIn }: GoogleLoginPanelProp
           variant="outline"
           className="h-12 whitespace-nowrap px-5 [&_svg]:size-5"
         >
-          <GoogleMark />
+          {!demo && <GoogleMark />}
           {signInLabel}
         </Button>
       </form>

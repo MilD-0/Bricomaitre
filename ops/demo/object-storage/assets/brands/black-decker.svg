@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 96" role="img" aria-labelledby="title">
+  <title id="title">BLACK+DECKER</title>
+  <rect width="240" height="96" fill="#fff"/>
+  <rect x="20" y="18" width="200" height="60" rx="4" fill="none" stroke="#f36f21" stroke-width="6"/>
+  <text x="120" y="55" fill="#252b2d" font-family="Arial,sans-serif" font-size="22" font-weight="800" letter-spacing=".4" text-anchor="middle">BLACK+DECKER</text>
+</svg>

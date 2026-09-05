@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AnalyticsPayload } from '../../lib/analytics';
 import { AdminAiSurfaceProvider, useAdminAiSurfaceContext } from '../admin-ai-surface-context';
-import { splitPartialSeries, StatsWorkspace } from './analytics-workspace';
+import { completedTrendBuckets, splitPartialSeries, StatsWorkspace } from './analytics-workspace';
 
 const { localeState, pushMock, replaceMock, searchParamsState } = vi.hoisted(() => ({
   localeState: { current: 'en' },
@@ -34,7 +34,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 describe('open-period chart series', () => {
-  it('keeps the observed endpoint while drawing projected completion separately', () => {
+  it('stops actuals at the last complete bucket and draws projected completion separately', () => {
     const rows = splitPartialSeries(
       [
         { label: 'Aug 7', profit: 100, profitProjected: null, isPartial: false },
@@ -43,11 +43,11 @@ describe('open-period chart series', () => {
       ['profit'],
     );
 
-    expect(rows[1]).toMatchObject({ profitActual: 40, profitOpen: 90, profitDisplay: 90 });
+    expect(rows[1]).toMatchObject({ profitActual: null, profitOpen: 90, profitDisplay: 90 });
     expect(rows[0]).toMatchObject({ profitActual: 100, profitOpen: 100 });
   });
 
-  it('continues the dotted series through future-only points', () => {
+  it('does not invent an open-period forecast when the metric has no projection', () => {
     const rows = splitPartialSeries(
       [
         { label: 'Aug 19', profit: 100, profitProjected: null, isPartial: true },
@@ -62,8 +62,38 @@ describe('open-period chart series', () => {
       ['profit'],
     );
 
-    expect(rows[0]).toMatchObject({ profitActual: 100, profitOpen: 100 });
+    expect(rows[0]).toMatchObject({ profitActual: null, profitOpen: null });
     expect(rows[1]).toMatchObject({ profitActual: null, profitOpen: 110, profitDisplay: 110 });
+  });
+});
+
+describe('completed trend buckets', () => {
+  const rows = [
+    { bucket: '2026-08-01', value: 100 },
+    { bucket: '2026-09-01', value: 14 },
+  ];
+
+  it('removes a partial final month from charts without projection semantics', () => {
+    expect(completedTrendBuckets(rows, 'month', '2026-09-04')).toEqual([rows[0]]);
+  });
+
+  it('retains complete months and daily buckets', () => {
+    expect(completedTrendBuckets(rows, 'month', '2026-09-30')).toEqual(rows);
+    expect(completedTrendBuckets(rows, 'day', '2026-09-04')).toEqual(rows);
+    expect(completedTrendBuckets([rows[1]], 'month', '2026-09-04')).toEqual([rows[1]]);
+  });
+
+  it('removes a partial final week', () => {
+    expect(
+      completedTrendBuckets(
+        [
+          { bucket: '2026-08-24', value: 100 },
+          { bucket: '2026-08-31', value: 30 },
+        ],
+        'week',
+        '2026-09-04',
+      ),
+    ).toEqual([{ bucket: '2026-08-24', value: 100 }]);
   });
 });
 
@@ -745,6 +775,7 @@ describe('StatsWorkspace', () => {
   it('edits an existing operating cost through the compatible update endpoint', async () => {
     renderWorkspace(assumptionsPayload());
 
+    expect(screen.getByText('Default')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Workspace rent'));
     const nameInput = screen.getByDisplayValue('Workspace rent');
     const costForm = nameInput.closest('.mb-5');

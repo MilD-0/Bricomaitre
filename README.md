@@ -8,10 +8,13 @@ product, built and maintained by [Mild](https://github.com/MilD-0). The system
 also includes two grounded assistants: one helps customers navigate the live
 catalog, while the other helps staff investigate and prepare operational work.
 
-[Live storefront](https://bricomaitre.com) · [Source](https://github.com/MilD-0/Bricomaitre) ·
+[Live storefront](https://bricomaitre.com) · [Demo](https://bricomaitre.mildsauce.cloud) ·
+[Demo admin](https://bricomaitre-admin.mildsauce.cloud) · [Source](https://github.com/MilD-0/Bricomaitre) ·
 [Email Mild](mailto:mayldsauce@gmail.com)
 
-<!-- Add the Demo link above once its public URL exists. -->
+The hosted demo runs on my own machine over an unreliable connection, so it may
+be slow or offline. You can [run it locally](./docs/demo.md#run-it-locally), or
+[email me](mailto:mayldsauce@gmail.com) if you need it running at a particular time.
 
 ## Production figures
 
@@ -197,10 +200,10 @@ BullMQ, Vitest, Playwright, Docker, Nginx, S3, CloudFront, and Sentry. See the
 [architecture](./docs/architecture.md) for boundaries, data flows, and failure
 behavior.
 
-## Run it locally
+## Development
 
-Use Node.js 24, Corepack, PostgreSQL 16, and Redis 7. The pinned package manager
-is pnpm 11.
+For source-native development, use Node.js 24, Corepack, PostgreSQL 16, and
+Redis 7. The pinned package manager is pnpm 11.
 
 ```bash
 corepack enable
@@ -211,7 +214,7 @@ pnpm build:verify
 `build:verify` compiles all three applications with inert build values and a
 local storefront fixture. It does not require production credentials or data.
 
-For interactive development, copy each application’s `.env.example` to `.env`,
+For interactive development, copy each application's `.env.example` to `.env`,
 start PostgreSQL and Redis, then run the applications from separate terminals:
 
 ```bash
@@ -224,6 +227,7 @@ pnpm dev:admin
 
 - [Project story and lineage](./docs/project-story.md)
 - [Architecture](./docs/architecture.md)
+- [Demo](./docs/demo.md)
 - [Operations](./docs/operations.md)
 - [Domain language](./CONTEXT.md)
 - [Analytics semantics](./docs/analytics.md)

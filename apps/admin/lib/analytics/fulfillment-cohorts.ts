@@ -22,6 +22,7 @@ import {
   type Database,
   type EconomicsReport,
   fulfillmentPhase,
+  paidShipmentStatusesSql,
   resolvedShipmentStatusesSql,
   stateAwareContributionSql,
 } from './loaders-shared';
@@ -136,7 +137,7 @@ export async function loadAttemptDistribution(
         avg(${analyticsOrderCohortFacts.attemptCount})::double precision as average_attempts
       from ${analyticsOrderCohortFacts}
       where ${datePredicate(analyticsOrderCohortFacts.postedDay, startDate, endDate)}
-        and ${analyticsOrderCohortFacts.outcome} in ('paye_et_archive', 'retour_archive')
+        and ${analyticsOrderCohortFacts.outcome} in (${paidShipmentStatusesSql}, 'retour_archive')
         and ${analyticsOrderCohortFacts.semanticsVersion}
           = ${ANALYTICS_FACT_SEMANTICS_VERSION}
       group by ${analyticsOrderCohortFacts.outcome},
@@ -165,7 +166,7 @@ export async function loadAttemptDistribution(
       left join ${ecotrackOrderTrackingEvents}
         on ${ecotrackOrderTrackingEvents.orderId} = first_posted.order_id
       where ${datePredicate(sql`first_posted.posted_day`, startDate, endDate)}
-        and ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'retour_archive')
+        and ${ecotrackOrderStates.currentStatus} in (${paidShipmentStatusesSql}, 'retour_archive')
       group by first_posted.order_id, ${ecotrackOrderStates.currentStatus}
     )
     select outcome,
@@ -273,7 +274,7 @@ export async function loadFulfillmentCohorts(
     )
     select week_start::text,
       count(*)::int as posted,
-      count(*) filter (where current_status in ('paye_et_archive', 'payed'))::int as paid,
+      count(*) filter (where current_status in (${paidShipmentStatusesSql}))::int as paid,
       count(*) filter (where current_status = 'retour_archive')::int as returned,
       count(*) filter (where delivered_at is not null)::int as delivered,
       count(*) filter (
@@ -287,7 +288,7 @@ export async function loadFulfillmentCohorts(
         ), 0)::double precision end as delivered_contribution,
       case when ${planningReturnRatePct}::double precision = 100 then 0 else
         coalesce(sum(comparable_gross_profit) filter (
-          where current_status in ('paye_et_archive', 'payed')
+          where current_status in (${paidShipmentStatusesSql})
         ), 0)::double precision end as paid_contribution,
       count(*) filter (where cost_complete)::int as cost_complete_orders,
       bool_and(posted_day <= ${matureCutoffDate}::date)
@@ -366,7 +367,7 @@ export async function loadFulfillmentCohorts(
     )
     select week_start::text,
       count(*)::int as posted,
-      count(*) filter (where current_status in ('paye_et_archive', 'payed'))::int as paid,
+      count(*) filter (where current_status in (${paidShipmentStatusesSql}))::int as paid,
       count(*) filter (where current_status = 'retour_archive')::int as returned,
       count(*) filter (where delivered_at is not null)::int as delivered,
       count(*) filter (
@@ -380,7 +381,7 @@ export async function loadFulfillmentCohorts(
         ), 0)::double precision end as delivered_contribution,
       case when ${planningReturnRatePct}::double precision = 100 then 0 else
         coalesce(sum(comparable_gross_profit) filter (
-          where current_status in ('paye_et_archive', 'payed')
+          where current_status in (${paidShipmentStatusesSql})
         ), 0)::double precision end as paid_contribution,
       count(*) filter (where cost_complete)::int as cost_complete_orders,
       bool_and(posted_day <= ${matureCutoffDate}::date)

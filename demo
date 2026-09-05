@@ -1,0 +1,537 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+demo_root="$repo_root/ops/demo"
+runtime_dir="${BRIC_DEMO_RUNTIME_DIR:-$demo_root/.runtime}"
+compose_file="$demo_root/compose.yml"
+
+mkdir -p "$runtime_dir"
+chmod 700 "$runtime_dir"
+runtime_dir="$(cd "$runtime_dir" && pwd)"
+export BRIC_DEMO_RUNTIME_DIR="$runtime_dir"
+
+# Host settings survive launcher calls and scheduled resets. Release builds use
+# a separate runtime directory and never load this machine's configuration.
+if [[ -f "$runtime_dir/host.env" ]]; then
+  # shellcheck disable=SC1090
+  source "$runtime_dir/host.env"
+fi
+
+random_hex() {
+  openssl rand -hex "${1:-32}"
+}
+
+calculate_data_revision() {
+  (
+    cd "$repo_root"
+    {
+      find apps/admin/drizzle ops/demo/postgres ops/demo/data \
+        -type f ! -name '*.partial' \
+        ! -path 'ops/demo/postgres/live.sql' \
+        ! -path 'ops/demo/postgres/seed/90-live.sql' \
+        ! -path 'ops/demo/postgres/seed/99-live-verify.sql' \
+        -print0 \
+        | LC_ALL=C sort -z \
+        | xargs -0 sha256sum
+      date -u +%F
+      printf '%s\n' "${BRIC_DEMO_OBJECT_ORIGIN:-http://127.0.0.1:${BRIC_DEMO_OBJECT_PORT:-3900}}"
+    } | sha256sum | cut -d' ' -f1
+  )
+}
+
+ensure_secret_file() {
+  local path="$1"
+  local value="${2:-}"
+  if [[ ! -f "$path" ]]; then
+    printf '%s' "$value" >"$path"
+    chmod 600 "$path"
+  fi
+}
+
+write_runtime_configuration() {
+  local secrets_file="$runtime_dir/secrets.env"
+  if [[ ! -f "$secrets_file" ]]; then
+    umask 077
+    {
+      printf 'DEMO_POSTGRES_OWNER_PASSWORD=%s\n' "$(random_hex)"
+      printf 'DEMO_POSTGRES_ADMIN_PASSWORD=%s\n' "$(random_hex)"
+      printf 'DEMO_POSTGRES_STOREFRONT_PASSWORD=%s\n' "$(random_hex)"
+      printf 'DEMO_REDIS_PASSWORD=%s\n' "$(random_hex)"
+      printf 'DEMO_S3_ACCESS_KEY=demo%s\n' "$(random_hex 8)"
+      printf 'DEMO_S3_SECRET_KEY=%s\n' "$(random_hex)"
+      printf 'DEMO_BETTER_AUTH_SECRET=%s\n' "$(random_hex 32)"
+      printf 'DEMO_AUTH_SESSION_SEED=%s\n' "$(random_hex 32)"
+      printf 'DEMO_REVALIDATE_SECRET=%s\n' "$(random_hex 32)"
+      printf 'DEMO_META_PROXY_SECRET=%s\n' "$(random_hex 32)"
+      printf 'DEMO_DEPLOY_TOKEN=%s\n' "$(random_hex 32)"
+      printf 'DEMO_IMAGE_CREATED=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    } >"$secrets_file"
+  fi
+
+  if ! grep -q '^DEMO_IMAGE_CREATED=' "$secrets_file"; then
+    printf 'DEMO_IMAGE_CREATED=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$secrets_file"
+  fi
+
+  # Preserve storage root credentials, but never pass them to application processes.
+  for identity in ADMIN READER; do
+    if ! grep -q "^DEMO_S3_${identity}_ACCESS_KEY=" "$secrets_file"; then
+      printf 'DEMO_S3_%s_ACCESS_KEY=demo%s\n' "$identity" "$(random_hex 8)" >>"$secrets_file"
+      printf 'DEMO_S3_%s_SECRET_KEY=%s\n' "$identity" "$(random_hex)" >>"$secrets_file"
+    fi
+  done
+
+  # This file only contains generated demo values and is deliberately ignored.
+  # shellcheck disable=SC1090
+  source "$secrets_file"
+
+  local admin_port="${BRIC_DEMO_ADMIN_PORT:-3400}"
+  local api_port="${BRIC_DEMO_API_PORT:-3401}"
+  local storefront_port="${BRIC_DEMO_STOREFRONT_PORT:-3402}"
+  local object_port="${BRIC_DEMO_OBJECT_PORT:-3900}"
+  local object_console_port="${BRIC_DEMO_OBJECT_CONSOLE_PORT:-3901}"
+  local mock_port="${BRIC_DEMO_MOCK_PORT:-3808}"
+  local data_revision
+  data_revision="$(calculate_data_revision)"
+  local admin_origin="${BRIC_DEMO_ADMIN_ORIGIN:-http://127.0.0.1:$admin_port}"
+  local storefront_origin="${BRIC_DEMO_STOREFRONT_ORIGIN:-http://127.0.0.1:$storefront_port}"
+  local object_origin="${BRIC_DEMO_OBJECT_ORIGIN:-http://127.0.0.1:$object_port}"
+  local object_console_origin="${BRIC_DEMO_OBJECT_CONSOLE_ORIGIN:-http://127.0.0.1:$object_console_port}"
+
+  umask 077
+  {
+    printf 'DEMO_POSTGRES_OWNER_PASSWORD=%s\n' "$DEMO_POSTGRES_OWNER_PASSWORD"
+    printf 'DEMO_POSTGRES_ADMIN_PASSWORD=%s\n' "$DEMO_POSTGRES_ADMIN_PASSWORD"
+    printf 'DEMO_POSTGRES_STOREFRONT_PASSWORD=%s\n' "$DEMO_POSTGRES_STOREFRONT_PASSWORD"
+    printf 'DEMO_REDIS_PASSWORD=%s\n' "$DEMO_REDIS_PASSWORD"
+    printf 'DEMO_S3_ACCESS_KEY=%s\n' "$DEMO_S3_ACCESS_KEY"
+    printf 'DEMO_S3_SECRET_KEY=%s\n' "$DEMO_S3_SECRET_KEY"
+    printf 'DEMO_S3_ADMIN_ACCESS_KEY=%s\nDEMO_S3_ADMIN_SECRET_KEY=%s\n' "$DEMO_S3_ADMIN_ACCESS_KEY" "$DEMO_S3_ADMIN_SECRET_KEY"
+    printf 'DEMO_S3_READER_ACCESS_KEY=%s\nDEMO_S3_READER_SECRET_KEY=%s\n' "$DEMO_S3_READER_ACCESS_KEY" "$DEMO_S3_READER_SECRET_KEY"
+    printf 'DEMO_ADMIN_PORT=%s\n' "$admin_port"
+    printf 'DEMO_API_PORT=%s\n' "$api_port"
+    printf 'DEMO_STOREFRONT_PORT=%s\n' "$storefront_port"
+    printf 'DEMO_OBJECT_PORT=%s\n' "$object_port"
+    printf 'DEMO_OBJECT_CONSOLE_PORT=%s\n' "$object_console_port"
+    printf 'DEMO_MOCK_PORT=%s\n' "$mock_port"
+    printf 'DEMO_ADMIN_ORIGIN=%s\n' "$admin_origin"
+    printf 'DEMO_STOREFRONT_ORIGIN=%s\n' "$storefront_origin"
+    printf 'DEMO_OBJECT_PUBLIC_ORIGIN=%s\n' "$object_origin"
+    printf 'DEMO_OBJECT_CONSOLE_ORIGIN=%s\n' "$object_console_origin"
+    printf 'DEMO_IMAGE_CREATED=%s\n' "$DEMO_IMAGE_CREATED"
+    printf 'DEMO_DATA_REVISION=%s\n' "$data_revision"
+  } >"$runtime_dir/compose.env"
+
+  ensure_secret_file "$runtime_dir/google-client-secret" "demo-client-secret"
+  ensure_secret_file "$runtime_dir/better-auth-secret" "$DEMO_BETTER_AUTH_SECRET"
+  ensure_secret_file "$runtime_dir/sentry-auth-token" ''
+
+  if [[ ! -f "$runtime_dir/search-console-private-key.pem" ]]; then
+    openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+      -out "$runtime_dir/search-console-private-key.pem" >/dev/null 2>&1
+    chmod 600 "$runtime_dir/search-console-private-key.pem"
+  fi
+
+  local credentials_json credentials_base64
+  credentials_json="$(node -e 'const fs=require("node:fs"); process.stdout.write(JSON.stringify({client_email:"search-console@demo.bricomaitre.invalid",private_key:fs.readFileSync(process.argv[1],"utf8"),token_uri:"http://mock-services:8080/google/oauth2/token"}))' "$runtime_dir/search-console-private-key.pem")"
+  credentials_base64="$(printf '%s' "$credentials_json" | base64 -w 0)"
+
+  {
+    printf '%s\n' 'NODE_ENV=production' 'PORT=3000'
+    printf 'REDIS_URL=redis://default:%s@redis:6379/0\n' "$DEMO_REDIS_PASSWORD"
+    printf '%s\n' 'GOOGLE_CLIENT_ID=demo-client.apps.invalid' 'GOOGLE_CLIENT_SECRET=demo-client-secret'
+    printf 'BETTER_AUTH_URL=%s\nBETTER_AUTH_SECRET=%s\n' "$admin_origin" "$DEMO_BETTER_AUTH_SECRET"
+    printf '%s\n' 'BRIC_DEMO_MODE=true' "BRIC_DEMO_SESSION_SEED=$DEMO_AUTH_SESSION_SEED"
+    printf 'BRIC_DEMO_OBJECT_ORIGIN=%s\n' "$object_origin"
+    printf '%s\n' 'ADMIN_EMAILS=operator@demo.bricomaitre.invalid' 'DEVELOPER_EMAILS=operator@demo.bricomaitre.invalid'
+    printf '%s\n' 'AWS_REGION=eu-west-3' 'AWS_S3_BUCKET=bricomaitre-demo'
+    printf 'AWS_CLOUDFRONT_DOMAIN=%s/bricomaitre-demo\n' "$object_origin"
+    printf 'AWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\n' "$DEMO_S3_ADMIN_ACCESS_KEY" "$DEMO_S3_ADMIN_SECRET_KEY"
+    printf '%s\n' 'AWS_ENDPOINT_URL_S3=http://object-storage:9000' 'AWS_S3_FORCE_PATH_STYLE=true'
+    printf '%s\n' 'ECOTRACK_BASE_URL=http://mock-services:8080/ecotrack/delivro/api/v1' 'ECOTRACK_TOKEN=demo-delivro-token'
+    printf '%s\n' 'ECOTRACK_EMIR_BASE_URL=http://mock-services:8080/ecotrack/emir/api/v1' 'ECOTRACK_EMIR_TOKEN=demo-emir-token' 'ECOTRACK_MIN_REQUEST_INTERVAL_MS=0'
+    printf '%s\n' 'STOREFRONT_API_BASE_URL=http://storefront-api:3001'
+    printf 'STOREFRONT_BASE_URL=http://storefront:3002\nNEXT_PUBLIC_STOREFRONT_BASE_URL=%s\n' "$storefront_origin"
+    printf 'STOREFRONT_REVALIDATE_SECRET=%s\n' "$DEMO_REVALIDATE_SECRET"
+    printf '%s\n' 'ADMIN_DATABASE_MAINTENANCE_CRON=43 * * * *' 'ADMIN_DATABASE_MAINTENANCE_TIMEZONE=Africa/Algiers'
+    printf '%s\n' 'ADMIN_REPORTING_REFRESH_CRON=17 3 * * *' 'ADMIN_REPORTING_REFRESH_TIMEZONE=Africa/Algiers'
+    printf '%s\n' 'ADMIN_META_ADS_SYNC_ENABLED=false' 'ADMIN_META_ADS_SYNC_CRON=17 */6 * * *' 'ADMIN_META_ADS_SYNC_TIMEZONE=Africa/Algiers'
+    printf '%s\n' 'ADMIN_SEARCH_CONSOLE_SYNC_ENABLED=false' 'ADMIN_SEARCH_CONSOLE_SYNC_CRON=37 4 * * *' 'ADMIN_SEARCH_CONSOLE_SYNC_TIMEZONE=Africa/Algiers'
+    printf 'GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64=%s\n' "$credentials_base64"
+    printf '%s\n' 'SEARCH_CONSOLE_ANALYTICS_ENDPOINT=http://mock-services:8080/google/webmasters/v3/sites' 'SEARCH_CONSOLE_INSPECTION_ENDPOINT=http://mock-services:8080/google/urlInspection/index:inspect' 'SEARCH_CONSOLE_SITE_URL=sc-domain:demo.bricomaitre.invalid' 'SEARCH_CONSOLE_SITE_ORIGIN=https://demo.bricomaitre.invalid'
+    printf '%s\n' 'META_AD_ACCOUNT_ID=100000000001' 'META_ADS_ACCESS_TOKEN=demo-meta-ads-token' 'META_ADS_GRAPH_API_VERSION=v25.0' 'META_ADS_GRAPH_API_ORIGIN=http://mock-services:8080'
+    printf '%s\n' 'ECOTRACK_SYNC_CRON=0 3 * * *' 'ECOTRACK_SYNC_TIMEZONE=Africa/Algiers' 'ECOTRACK_ORDER_SYNC_CRON=*/15 * * * *' 'ECOTRACK_ORDER_SYNC_TIMEZONE=Africa/Algiers'
+    printf '%s\n' 'PRODUCT_CATALOG_FEED_DEBOUNCE_MS=1000' 'PRODUCT_CATALOG_FEED_TOKEN=demo-catalog-token' 'PRODUCT_EXPORT_BATCH_SIZE=250' 'PRODUCT_EXPORT_BATCH_DELAY_MS=0'
+    printf '%s\n' 'MARKETING_GOOGLE_DESTINATION_ENABLED=true' 'MARKETING_TIKTOK_DESTINATION_ENABLED=true'
+    printf '%s\n' 'GOOGLE_ANALYTICS_MEASUREMENT_ID=G-DEMO000001' 'GOOGLE_ANALYTICS_API_SECRET=demo-ga-secret' 'GOOGLE_ANALYTICS_API_ENDPOINT=http://mock-services:8080/google/mp/collect'
+    printf '%s\n' 'TIKTOK_PIXEL_ID=demo-tiktok-pixel' 'TIKTOK_EVENTS_API_ACCESS_TOKEN=demo-tiktok-token' 'TIKTOK_EVENTS_API_ENDPOINT=http://mock-services:8080/tiktok/open_api/v1.3/event/track/'
+    printf '%s\n' 'AI_ENABLED=false' 'SENTRY_ENVIRONMENT=demo' 'SENTRY_RELEASE=demo'
+  } >"$runtime_dir/admin.env"
+
+  {
+    printf '%s\n' 'NODE_ENV=production' 'PORT=3001'
+    printf 'REDIS_URL=redis://default:%s@redis:6379/0\n' "$DEMO_REDIS_PASSWORD"
+    printf '%s\n' 'ECOTRACK_BASE_URL=http://mock-services:8080/ecotrack/delivro/api/v1' 'ECOTRACK_TOKEN=demo-delivro-token' 'ECOTRACK_MIN_REQUEST_INTERVAL_MS=0'
+    printf 'SITE_URL=%s\n' "$storefront_origin"
+    printf 'STOREFRONT_API_DEPLOY_TOKEN=%s\nSTOREFRONT_REVALIDATE_SECRET=%s\nSTOREFRONT_META_PROXY_SECRET=%s\n' "$DEMO_DEPLOY_TOKEN" "$DEMO_REVALIDATE_SECRET" "$DEMO_META_PROXY_SECRET"
+    printf '%s\n' 'META_PIXEL_ID=demo-pixel' 'META_CONVERSIONS_API_TOKEN=demo-meta-capi-token' 'META_GRAPH_API_VERSION=v25.0' 'META_GRAPH_API_ORIGIN=http://mock-services:8080/meta'
+    printf '%s\n' 'GOOGLE_ANALYTICS_MEASUREMENT_ID=G-DEMO000001' 'GOOGLE_ANALYTICS_API_SECRET=demo-ga-secret' 'GOOGLE_ANALYTICS_API_ENDPOINT=http://mock-services:8080/google/mp/collect' 'MARKETING_GOOGLE_DESTINATION_ENABLED=true'
+    printf '%s\n' 'TIKTOK_PIXEL_ID=demo-tiktok-pixel' 'TIKTOK_EVENTS_API_ACCESS_TOKEN=demo-tiktok-token' 'TIKTOK_EVENTS_API_ENDPOINT=http://mock-services:8080/tiktok/open_api/v1.3/event/track/' 'MARKETING_TIKTOK_DESTINATION_ENABLED=true'
+    printf '%s\n' 'AWS_REGION=eu-west-3' 'AWS_S3_BUCKET=bricomaitre-demo'
+    printf 'AWS_CLOUDFRONT_DOMAIN=%s/bricomaitre-demo\n' "$object_origin"
+    printf 'AWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\n' "$DEMO_S3_READER_ACCESS_KEY" "$DEMO_S3_READER_SECRET_KEY"
+    printf '%s\n' 'AWS_ENDPOINT_URL_S3=http://object-storage:9000' 'AWS_S3_FORCE_PATH_STYLE=true'
+    printf '%s\n' 'SENTRY_ENVIRONMENT=demo' 'SENTRY_RELEASE=demo' 'SENTRY_DSN_STOREFRONT_API='
+  } >"$runtime_dir/storefront-api.env"
+
+  {
+    printf '%s\n' 'NODE_ENV=production' 'PORT=3002'
+    printf 'SITE_URL=%s\nNEXT_PUBLIC_SITE_URL=%s\n' "$storefront_origin" "$storefront_origin"
+    printf '%s\n' 'STOREFRONT_API_BASE_URL=http://storefront-api:3001' 'AI_ENABLED=false'
+    printf 'REDIS_URL=redis://default:%s@redis:6379/0\n' "$DEMO_REDIS_PASSWORD"
+    printf 'NEXT_PUBLIC_CLOUDFRONT_URL=%s/bricomaitre-demo\nNEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS=%s\n' "$object_origin" "$object_origin"
+    printf 'STOREFRONT_META_PROXY_SECRET=%s\n' "$DEMO_META_PROXY_SECRET"
+    printf '%s\n' 'NEXT_PUBLIC_FACEBOOK_PIXEL_ID=' 'NEXT_PUBLIC_GA_MEASUREMENT_ID=' 'NEXT_PUBLIC_TIKTOK_PIXEL_ID=' 'SENTRY_DSN_STOREFRONT=' 'NEXT_PUBLIC_SENTRY_DSN_STOREFRONT=' 'SENTRY_ENVIRONMENT=demo' 'SENTRY_RELEASE=demo'
+  } >"$runtime_dir/storefront.env"
+
+  chmod 600 "$runtime_dir"/*
+}
+
+compose() {
+  local files=(-f "$compose_file")
+  if [[ "${BRIC_DEMO_REQUIRE_HOST_CONTAINMENT:-false}" = true ]]; then
+    if ! mountpoint -q /var/lib/bricomaitre-demo/data \
+      || [[ "$(findmnt -n -o LABEL --target /var/lib/bricomaitre-demo/data)" != bric-demo-state ]] \
+      || ! systemctl is-active --quiet archer-demo-firewall.service; then
+      printf 'Demo host containment is unavailable; refusing Compose operation.\n' >&2
+      return 1
+    fi
+  fi
+  if [[ -n "${BRIC_DEMO_COMPOSE_OVERRIDE:-}" ]]; then
+    files+=(-f "$BRIC_DEMO_COMPOSE_OVERRIDE")
+  fi
+  docker compose --env-file "$runtime_dir/compose.env" "${files[@]}" "$@"
+}
+
+wait_for_url() {
+  local label="$1"
+  local url="$2"
+  local deadline=$((SECONDS + 180))
+  until curl --fail --silent --show-error "$url" >/dev/null 2>&1; do
+    if ((SECONDS >= deadline)); then
+      printf '%s did not become healthy: %s\n' "$label" "$url" >&2
+      return 1
+    fi
+    sleep 2
+  done
+  printf '%-18s %s\n' "$label" "$url"
+}
+
+show_urls() {
+  # shellcheck disable=SC1090
+  source "$runtime_dir/compose.env"
+  printf '%-18s %s\n' 'Storefront' "$DEMO_STOREFRONT_ORIGIN"
+  printf '%-18s %s\n' 'Admin' "$DEMO_ADMIN_ORIGIN"
+  printf '%-18s %s\n' 'Storefront API' "http://127.0.0.1:$DEMO_API_PORT/api/health"
+  printf '%-18s %s\n' 'Object storage' "$DEMO_OBJECT_CONSOLE_ORIGIN"
+  printf '%-18s %s\n' 'Provider log' "http://127.0.0.1:$DEMO_MOCK_PORT/__demo/requests"
+}
+
+smoke() {
+  # shellcheck disable=SC1090
+  source "$runtime_dir/compose.env"
+  wait_for_url 'Storefront' "$DEMO_STOREFRONT_ORIGIN/api/health"
+  wait_for_url 'Admin' "$DEMO_ADMIN_ORIGIN/api/health"
+  wait_for_url 'Storefront API' "http://127.0.0.1:$DEMO_API_PORT/api/health"
+  wait_for_url 'Provider mocks' "http://127.0.0.1:$DEMO_MOCK_PORT/health"
+  wait_for_url 'Object storage' "http://127.0.0.1:$DEMO_OBJECT_PORT/minio/health/live"
+}
+
+build_images() {
+  compose build "$@" \
+    migrations storefront-api storefront-marketing-worker admin admin-worker storefront mock-services
+}
+
+prepare_catalog_images() {
+  node "$demo_root/scripts/verify-generated-data.mjs"
+  node "$demo_root/scripts/prepare-catalog-images.mjs"
+}
+
+run_migrations_and_permissions() {
+  compose run --rm --no-deps migrations
+  compose run --rm --no-deps database-permissions
+}
+
+template_is_current() {
+  # shellcheck disable=SC1090
+  source "$runtime_dir/compose.env"
+  local comment
+  comment="$(
+    compose exec -T postgres psql -U bricomaitre_demo_owner -d postgres -Atc \
+      "SELECT coalesce(shobj_description(oid, 'pg_database'), '') FROM pg_database WHERE datname = 'bricomaitre_demo_template'"
+  )"
+  [[ "$comment" == "bricomaitre-demo-template:$DEMO_DATA_REVISION" ]]
+}
+
+drop_database_if_present() {
+  local database="$1"
+  compose exec -T postgres psql -U bricomaitre_demo_owner -d postgres \
+    -v ON_ERROR_STOP=1 -v target_database="$database" <<'SQL'
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE datname = :'target_database' AND pid <> pg_backend_pid();
+SELECT format('ALTER DATABASE %I ALLOW_CONNECTIONS true', :'target_database')
+WHERE EXISTS (SELECT 1 FROM pg_database WHERE datname = :'target_database') \gexec
+UPDATE pg_database SET datistemplate = false WHERE datname = :'target_database';
+SELECT format('DROP DATABASE %I', :'target_database')
+WHERE EXISTS (SELECT 1 FROM pg_database WHERE datname = :'target_database') \gexec
+SQL
+}
+
+build_database_template() {
+  # A current migrations image matters when the schema itself changed.
+  compose build migrations
+  run_migrations_and_permissions
+  compose run --rm --no-deps seed
+
+  # shellcheck disable=SC1090
+  source "$runtime_dir/compose.env"
+  drop_database_if_present bricomaitre_demo_template
+  compose exec -T postgres psql -U bricomaitre_demo_owner -d postgres \
+    -v ON_ERROR_STOP=1 \
+    -v template_comment="bricomaitre-demo-template:$DEMO_DATA_REVISION" <<'SQL'
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE datname = 'bricomaitre_demo' AND pid <> pg_backend_pid();
+CREATE DATABASE bricomaitre_demo_template
+  WITH TEMPLATE bricomaitre_demo OWNER bricomaitre_demo_owner;
+COMMENT ON DATABASE bricomaitre_demo_template
+  IS :'template_comment';
+UPDATE pg_database
+SET datistemplate = true, datallowconn = false
+WHERE datname = 'bricomaitre_demo_template';
+SQL
+}
+
+restore_application_database() {
+  drop_database_if_present bricomaitre_demo
+  compose exec -T postgres psql -U bricomaitre_demo_owner -d postgres \
+    -v ON_ERROR_STOP=1 <<'SQL'
+CREATE DATABASE bricomaitre_demo
+  WITH TEMPLATE bricomaitre_demo_template OWNER bricomaitre_demo_owner;
+SQL
+  compose run --rm --no-deps database-permissions
+  compose run --rm --no-deps live-seed
+}
+
+reset_external_state() {
+  # shellcheck disable=SC1090
+  source "$runtime_dir/compose.env"
+  curl --fail --silent --show-error -X POST \
+    "http://127.0.0.1:$DEMO_MOCK_PORT/__demo/reset" >/dev/null
+  DEMO_POSTGRES_CONTAINER="$(compose ps -q postgres)" \
+    DEMO_MOCK_ORIGIN="http://127.0.0.1:$DEMO_MOCK_PORT" \
+    node "$repo_root/ops/demo/release/mock-state.mjs"
+  compose exec -T redis redis-cli FLUSHDB >/dev/null
+  compose run --rm --no-deps --entrypoint /bin/sh object-storage-init /init.sh reset
+}
+
+prepare_dependencies() {
+  prepare_catalog_images
+  compose up -d --wait postgres redis object-storage mock-services gateway
+  compose stop storefront admin admin-worker storefront-api storefront-marketing-worker
+
+  if ! template_is_current; then
+    printf 'Building immutable demo database template...\n'
+    build_database_template
+  fi
+
+  restore_application_database
+  reset_external_state
+  clear_application_caches
+  compose run --rm --no-deps storefront-runtime reset
+}
+
+start_applications() {
+  compose up -d --no-deps "$@" \
+    storefront-api storefront-marketing-worker admin admin-worker storefront gateway
+}
+
+clear_application_caches() {
+  compose run --rm --no-deps --entrypoint /bin/sh storefront-api \
+    -c 'find /app/apps/storefront-api/.next/cache -mindepth 1 -delete'
+  compose run --rm --no-deps --entrypoint /bin/sh admin \
+    -c 'find /app/apps/admin/.next/cache -mindepth 1 -delete'
+  compose run --rm --no-deps --entrypoint /bin/sh storefront \
+    -c 'find /app/apps/storefront/.next/cache -mindepth 1 -delete'
+}
+
+install_reset_timer() {
+  if ! command -v systemctl >/dev/null 2>&1; then
+    printf 'systemd is required to install the six-hour demo reset timer.\n' >&2
+    return 1
+  fi
+
+  local account_root user_unit_dir
+  account_root="$(getent passwd "$(id -u)" | cut -d: -f6)"
+  user_unit_dir="${XDG_CONFIG_HOME:-$account_root/.config}/systemd/user"
+  mkdir -p "$user_unit_dir"
+
+  {
+    printf '%s\n' \
+      '[Unit]' \
+      'Description=Restore the Bricomaitre public demo dataset' \
+      '' \
+      '[Service]' \
+      'Type=oneshot' \
+      "WorkingDirectory=$repo_root" \
+      "ExecStart=\"$repo_root/demo\" reset"
+  } >"$user_unit_dir/bricomaitre-demo-reset.service"
+
+  {
+    printf '%s\n' \
+      '[Unit]' \
+      'Description=Reset the Bricomaitre public demo every six hours' \
+      '' \
+      '[Timer]' \
+      'OnBootSec=6h' \
+      'OnUnitActiveSec=6h' \
+      'Persistent=true' \
+      'Unit=bricomaitre-demo-reset.service' \
+      '' \
+      '[Install]' \
+      'WantedBy=timers.target'
+  } >"$user_unit_dir/bricomaitre-demo-reset.timer"
+
+  systemctl --user daemon-reload
+  systemctl --user enable --now bricomaitre-demo-reset.timer
+  systemctl --user list-timers bricomaitre-demo-reset.timer --no-pager
+}
+
+reset_timer_unit_path() {
+  local account_root
+  account_root="$(getent passwd "$(id -u)" | cut -d: -f6)"
+  printf '%s/systemd/user/bricomaitre-demo-reset.timer' \
+    "${XDG_CONFIG_HOME:-$account_root/.config}"
+}
+
+pause_reset_timer_if_installed() {
+  if command -v systemctl >/dev/null 2>&1 && [[ -f "$(reset_timer_unit_path)" ]]; then
+    systemctl --user stop bricomaitre-demo-reset.timer
+  fi
+}
+
+resume_reset_timer_if_installed() {
+  if command -v systemctl >/dev/null 2>&1 && [[ -f "$(reset_timer_unit_path)" ]]; then
+    systemctl --user start bricomaitre-demo-reset.timer
+  fi
+}
+
+remove_reset_timer() {
+  local account_root user_unit_dir
+  account_root="$(getent passwd "$(id -u)" | cut -d: -f6)"
+  user_unit_dir="${XDG_CONFIG_HOME:-$account_root/.config}/systemd/user"
+  systemctl --user disable --now bricomaitre-demo-reset.timer >/dev/null 2>&1 || true
+  rm -f "$user_unit_dir/bricomaitre-demo-reset.service" \
+    "$user_unit_dir/bricomaitre-demo-reset.timer"
+  systemctl --user daemon-reload
+  printf 'Six-hour demo reset timer removed.\n'
+}
+
+write_runtime_configuration
+
+command="${1:-help}"
+if [[ "$command" = prepare ]]; then
+  printf 'Demo runtime configuration prepared.\n'
+  exit 0
+fi
+case "$command" in
+  up|reset|rebuild|destroy)
+    exec 9>"$runtime_dir/operation.lock"
+    flock 9
+    ;;
+esac
+
+case "$command" in
+  compose)
+    shift
+    compose "$@"
+    ;;
+  up)
+    build_images
+    prepare_dependencies
+    start_applications
+    smoke
+    resume_reset_timer_if_installed
+    printf '\n'
+    show_urls
+    ;;
+  down)
+    pause_reset_timer_if_installed
+    compose down --remove-orphans
+    ;;
+  reset)
+    prepare_dependencies
+    compose up -d --no-deps storefront-api storefront-marketing-worker admin admin-worker storefront gateway
+    smoke
+    ;;
+  rebuild)
+    build_images --pull
+    prepare_dependencies
+    start_applications --force-recreate
+    smoke
+    resume_reset_timer_if_installed
+    ;;
+  smoke)
+    smoke
+    ;;
+  status)
+    compose ps --all
+    ;;
+  logs)
+    shift || true
+    compose logs --follow --tail=200 "$@"
+    ;;
+  urls)
+    show_urls
+    ;;
+  config)
+    compose config --quiet
+    printf 'Demo Compose configuration is valid.\n'
+    ;;
+  schedule)
+    install_reset_timer
+    ;;
+  unschedule)
+    remove_reset_timer
+    ;;
+  destroy)
+    if [[ "${2:-}" != '--yes' ]]; then
+      printf 'This removes only the bricomaitre-demo containers and volumes. Re-run: ./demo destroy --yes\n' >&2
+      exit 2
+    fi
+    pause_reset_timer_if_installed
+    compose down --volumes --remove-orphans
+    ;;
+  help|-h|--help)
+    printf '%s\n' \
+      'Usage: ./demo <command>' \
+      '' \
+      '  up       Build and start the complete demo' \
+      '  down     Stop the demo and preserve its data' \
+      '  reset    Restore deterministic synthetic data' \
+      '  rebuild  Rebuild images and restart the demo' \
+      '  smoke    Verify every public surface' \
+      '  status   Show all demo services' \
+      '  logs     Follow logs; optionally name services' \
+      '  urls     Print local entry points' \
+      '  config   Validate the resolved Compose model' \
+      '  schedule Install the six-hour reset timer for this user' \
+      '  unschedule Remove the six-hour reset timer' \
+      '  destroy  Remove demo data; requires --yes'
+    ;;
+  *)
+    printf 'Unknown demo command: %s\n' "$command" >&2
+    exit 2
+    ;;
+esac

@@ -11,7 +11,11 @@ import {
 } from './admin-ecotrack-orders-data';
 import type { EcotrackCatalogRecord } from './ecotrack';
 import { getUpstreamTrackingValues } from './ecotrack-shipment-status';
-import { localOrderCanRemainInCashPipeline } from './ecotrack-status-policy';
+import {
+  ANALYTICS_PAID_SHIPMENT_STATUSES,
+  ANALYTICS_RESOLVED_SHIPMENT_STATUSES,
+  localOrderCanRemainInCashPipeline,
+} from './ecotrack-status-policy';
 
 describe('admin ECOTRACK shipment mapping', () => {
   afterEach(() => {
@@ -52,6 +56,13 @@ describe('admin ECOTRACK shipment mapping', () => {
     expect(localOrderCanRemainInCashPipeline(8)).toBe(false);
     expect(localOrderCanRemainInCashPipeline(9)).toBe(false);
     expect(localOrderCanRemainInCashPipeline(10)).toBe(false);
+  });
+
+  it('keeps both EcoTrack paid aliases in analytics semantics', () => {
+    expect(ANALYTICS_PAID_SHIPMENT_STATUSES).toEqual(['paye_et_archive', 'payed']);
+    expect(ANALYTICS_RESOLVED_SHIPMENT_STATUSES).toEqual(
+      expect.arrayContaining([...ANALYTICS_PAID_SHIPMENT_STATUSES]),
+    );
   });
 
   it('uses the latest upstream activity timestamp and falls back to stored timestamps', () => {

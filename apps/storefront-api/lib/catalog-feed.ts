@@ -1,4 +1,5 @@
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getS3EndpointConfig } from '@bric/runtime/aws';
 
 const DEFAULT_CATALOG_FEED_S3_KEY = 'exports/products/catalog-feed/latest.csv';
 
@@ -19,6 +20,7 @@ function getCatalogFeedKey() {
 function getCatalogFeedClient() {
   return new S3Client({
     region: readRequiredEnv('AWS_REGION'),
+    ...getS3EndpointConfig(),
   });
 }
 

@@ -110,3 +110,34 @@ Build-time tools and data:
 
 Dependency packages may carry additional notices. Preserve those notices when
 redistributing the corresponding package or object code.
+
+PUBLIC DEMONSTRATION DATA
+
+The local demonstration is built from pinned public datasets and deterministic
+synthetic commerce records. Source revisions and checksums are recorded in
+ops/demo/data/sources.lock.json.
+
+| Dataset | Material used | Terms |
+| --- | --- | --- |
+| Amazon Shopping Queries Dataset (ESCI) | Product metadata and query-product judgments | Apache-2.0 |
+| Shopping Queries Image Dataset (SQID) | Product-to-image URL index | MIT metadata |
+| Amazon Berkeley Objects (ABO) | Listing metadata and product images | CC BY 4.0 |
+| DZShip | Algerian wilaya and commune reference data | MIT |
+
+ESCI is available from https://github.com/amazon-science/esci-data. SQID is
+available from https://huggingface.co/datasets/crossingminds/shopping-queries-image-dataset.
+ABO and its license are available from
+https://amazon-berkeley-objects.s3.amazonaws.com/index.html. DZShip is
+available from https://github.com/DZBuild-com/dzship.
+
+The normalized CSV manifests are repository data, not production exports.
+Downloaded source images and optimized copies remain outside Git. ABO images
+retain their CC BY 4.0 terms. Product imagery reached through the SQID URL index
+is not relicensed under the AGPL or MIT metadata license; anyone hosting or
+redistributing those images remains responsible for the applicable image
+rights. Synthetic names, contacts, orders, shipments, events, costs, messages,
+and operational records do not represent real people or transactions.
+
+Demo release media images include optimized copies of these catalog images.
+They have been resized and converted to WebP. The bundled image manifest maps
+each copy to its source; MEDIA-SHA256SUMS identifies the packaged files.

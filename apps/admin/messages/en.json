@@ -2286,6 +2286,7 @@
       "livre_non_encaisse": "Livre non encaisse",
       "encaisse_non_paye": "Encaisse non paye",
       "paiements_prets": "Paiements prets",
+      "payed": "Payment completed",
       "paye_et_archive": "Paye et archive",
       "retour_chez_livreur": "Retour chez livreur",
       "retour_transit_entrepot": "Retour transit entrepot",
@@ -2551,7 +2552,8 @@
     "unknownUser": "Unknown user",
     "accessPending": "Your email has not been granted access yet. An admin or developer must allowlist your address and assign a role before you can enter the app.",
     "signOut": "Sign out",
-    "signInWithGoogle": "Sign in with Google"
+    "signInWithGoogle": "Sign in with Google",
+    "enterDemo": "Enter the demo"
   },
   "history": {
     "title": "Action history",
