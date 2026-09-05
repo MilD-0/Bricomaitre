@@ -501,18 +501,41 @@ jobs:
           test "$BRIC_RELEASE_COMMIT" = "$RELEASE_SHA"
 
           release_path="/srv/bric/releases/${BRIC_RELEASE_ID}"
+          detached_deploy_script="$release_path/ops/scripts/detached-release-deploy.sh"
           bundle_dir="$(mktemp -d)"
           env_transaction_started=false
+          remote_deploy_started=false
+          reset_ssh_control() {
+            ssh -F "$BRIC_DEPLOY_SSH_CONFIG" -O exit bric-production >/dev/null 2>&1 || true
+            rm -f "$BRIC_DEPLOY_SSH_CONTROL_PATH"
+          }
+          read_remote_deploy_state() {
+            local attempt
+            local state
+            for attempt in 1 2 3 4 5 6; do
+              if state="$(ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
+                "bash '$detached_deploy_script' status '$release_path'")"; then
+                printf '%s\n' "$state"
+                return 0
+              fi
+              reset_ssh_control
+              sleep 2
+            done
+            return 1
+          }
+          show_remote_deploy_logs() {
+            ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
+              "bash '$detached_deploy_script' logs '$release_path' 200" || true
+          }
           cleanup_deploy_step() {
             status=$?
             trap - EXIT
             rm -rf "$bundle_dir"
-            if [[ "$env_transaction_started" == true ]]; then
+            if [[ "$env_transaction_started" == true && "$remote_deploy_started" == false ]]; then
               ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
                 "source '$release_path/ops/scripts/blue-green.sh'; rollback_runtime_env_transaction" || true
             fi
-            ssh -F "$BRIC_DEPLOY_SSH_CONFIG" -O exit bric-production >/dev/null 2>&1 || true
-            rm -f "$BRIC_DEPLOY_SSH_CONTROL_PATH"
+            reset_ssh_control
             exit "$status"
           }
           trap cleanup_deploy_step EXIT
@@ -543,17 +566,42 @@ jobs:
           ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
             "mkdir -p '$release_path'"
           rsync -az --delete \
+            --exclude='.bric-deploy.*' \
             -e "ssh -F $BRIC_DEPLOY_SSH_CONFIG" \
             "$bundle_dir/" "bric-production:$release_path/"
           printf '%s\n' "$GHCR_READ_TOKEN" | ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
             "docker login ghcr.io -u '$GHCR_USERNAME' --password-stdin >/dev/null"
 
-          ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
-            "source '$release_path/ops/scripts/blue-green.sh'; begin_runtime_env_transaction"
-          env_transaction_started=true
+          deploy_state="$(read_remote_deploy_state)"
+          case "$deploy_state" in
+            missing) ;;
+            running)
+              remote_deploy_started=true
+              ;;
+            success)
+              show_remote_deploy_logs
+              echo "## Deploy phase" >> "$GITHUB_STEP_SUMMARY"
+              echo "- ✅ Deployed verified release ${BRIC_RELEASE_ID}" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+              ;;
+            failure:*|orphaned)
+              show_remote_deploy_logs >&2
+              echo "recorded remote deploy state: $deploy_state" >&2
+              exit 1
+              ;;
+            *)
+              echo "unsupported remote deploy state: $deploy_state" >&2
+              exit 1
+              ;;
+          esac
 
-          printf '%s\n%s\n' "$ECOTRACK_EMIR_BASE_URL" "$ECOTRACK_EMIR_TOKEN" | \
-            ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production '
+          if [[ "$deploy_state" == missing ]]; then
+            ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
+              "source '$release_path/ops/scripts/blue-green.sh'; begin_runtime_env_transaction"
+            env_transaction_started=true
+
+            printf '%s\n%s\n' "$ECOTRACK_EMIR_BASE_URL" "$ECOTRACK_EMIR_TOKEN" | \
+              ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production '
               set -euo pipefail
               IFS= read -r emir_base_url
               IFS= read -r emir_token
@@ -566,7 +614,7 @@ jobs:
               printf "ECOTRACK_EMIR_BASE_URL=%s\nECOTRACK_EMIR_TOKEN=%s\n" "$emir_base_url" "$emir_token" >> "$tmp_file"
               mv "$tmp_file" "$env_file"
             '
-          printf '%s\n%s\n%s\n%s\n%s\n%s\n' \
+            printf '%s\n%s\n%s\n%s\n%s\n%s\n' \
             "$OPENROUTER_API_KEY" \
             "$AI_ADMIN_MODEL" \
             "$AI_CONTENT_MODEL" \
@@ -601,7 +649,7 @@ jobs:
                 "$openrouter_api_key" "$storefront_model" "$storefront_fallback_model" >> "$storefront_tmp_file"
               mv "$storefront_tmp_file" "$storefront_env_file"
             '
-          printf '%s\n%s\n%s\n%s\n' \
+            printf '%s\n%s\n%s\n%s\n' \
             "$ADMIN_META_ADS_SYNC_ENABLED" \
             "$META_AD_ACCOUNT_ID" \
             "$META_ADS_ACCESS_TOKEN" \
@@ -628,7 +676,7 @@ jobs:
                 "$sync_enabled" "$account_id" "$access_token" "$graph_version" >> "$tmp_file"
               mv "$tmp_file" "$env_file"
             '
-          printf '%s\n%s\n%s\n%s\n' \
+            printf '%s\n%s\n%s\n%s\n' \
             "$ADMIN_SEARCH_CONSOLE_SYNC_ENABLED" \
             "$GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64" \
             "$SEARCH_CONSOLE_SITE_URL" \
@@ -652,7 +700,7 @@ jobs:
                 "$sync_enabled" "$credentials_base64" "$site_url" "$site_origin" >> "$tmp_file"
               mv "$tmp_file" "$env_file"
             '
-          printf '%s\n%s\n%s\n%s\n' \
+            printf '%s\n%s\n%s\n%s\n' \
             "$GOOGLE_ANALYTICS_MEASUREMENT_ID" \
             "$GOOGLE_ANALYTICS_API_SECRET" \
             "$TIKTOK_PIXEL_ID" \
@@ -687,7 +735,7 @@ jobs:
                 "$tiktok_enabled" >> "$admin_tmp_file"
               mv "$admin_tmp_file" "$admin_env_file"
             '
-          printf '%s\n%s\n%s\n%s\n%s\n%s\n' \
+            printf '%s\n%s\n%s\n%s\n%s\n%s\n' \
             "$SENTRY_DSN_ADMIN" \
             "$NEXT_PUBLIC_SENTRY_DSN_ADMIN" \
             "$SENTRY_DSN_WORKER" \
@@ -728,8 +776,50 @@ jobs:
               mv "$storefront_tmp_file" "$storefront_env_file"
             '
 
-          ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
-            "bash '$release_path/ops/scripts/deploy.sh' '$release_path' '$RELEASE_SHA'"
-          env_transaction_started=false
+            remote_deploy_started=true
+            start_state="$(ssh -F "$BRIC_DEPLOY_SSH_CONFIG" bric-production \
+              "bash '$detached_deploy_script' start '$release_path' '$RELEASE_SHA'")"
+            case "$start_state" in
+              started|running) ;;
+              success) ;;
+              failure:*|orphaned)
+                show_remote_deploy_logs >&2
+                echo "recorded remote deploy state: $start_state" >&2
+                exit 1
+                ;;
+              *)
+                echo "unsupported remote deploy start state: $start_state" >&2
+                exit 1
+                ;;
+            esac
+            env_transaction_started=false
+          fi
+
+          for _ in {1..150}; do
+            deploy_state="$(read_remote_deploy_state)"
+            case "$deploy_state" in
+              running)
+                sleep 5
+                ;;
+              success)
+                show_remote_deploy_logs
+                break
+                ;;
+              failure:*|orphaned|missing)
+                show_remote_deploy_logs >&2
+                echo "recorded remote deploy state: $deploy_state" >&2
+                exit 1
+                ;;
+              *)
+                echo "unsupported remote deploy state: $deploy_state" >&2
+                exit 1
+                ;;
+            esac
+          done
+          if [[ "$deploy_state" != success ]]; then
+            show_remote_deploy_logs >&2
+            echo 'timed out waiting for the remote deploy result' >&2
+            exit 1
+          fi
           echo "## Deploy phase" >> "$GITHUB_STEP_SUMMARY"
           echo "- ✅ Deployed verified release ${BRIC_RELEASE_ID}" >> "$GITHUB_STEP_SUMMARY"

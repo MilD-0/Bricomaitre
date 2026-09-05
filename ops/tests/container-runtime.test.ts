@@ -530,7 +530,11 @@ describe('production packaging and release runtime', () => {
     expect(release).toContain(
       'ssh -F "$BRIC_DEPLOY_SSH_CONFIG" -O exit bric-production >/dev/null 2>&1 || true',
     );
-    expect(release.match(/ssh -F "\$BRIC_DEPLOY_SSH_CONFIG" bric-production/g)).toHaveLength(11);
+    expect(release.match(/ssh -F "\$BRIC_DEPLOY_SSH_CONFIG" bric-production/g)).toHaveLength(13);
+    expect(release).toContain("--exclude='.bric-deploy.*'");
+    expect(release).toContain('read_remote_deploy_state');
+    expect(release).toContain('remote_deploy_started=true');
+    expect(release).toContain("logs '$release_path' 200");
     expect(release).not.toContain('~/.ssh/bric_deploy_key');
     expect(release).not.toContain('> ~/.ssh/known_hosts');
     expect(release).toContain('Reject a superseded release');
