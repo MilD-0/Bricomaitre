@@ -48,8 +48,7 @@ describe('checkout domain', () => {
       false,
     );
     expect(
-      checkoutFormSchema.safeParse({ ...form, phoneNumber1: '1234' }).error?.issues[0]
-        ?.message,
+      checkoutFormSchema.safeParse({ ...form, phoneNumber1: '1234' }).error?.issues[0]?.message,
     ).toBe('phone_invalid');
     expect(
       checkoutFormSchema.parse({ ...form, phoneNumber1: '+213 550 12 34 56' }).phoneNumber1,
