@@ -61,7 +61,8 @@ const DEFAULT_REPORTING_REFRESH_CRON = '11 3 * * *';
 const DEFAULT_REPORTING_REFRESH_TIMEZONE = 'Africa/Algiers';
 const DEFAULT_DATABASE_MAINTENANCE_CRON = '43 * * * *';
 const DEFAULT_DATABASE_MAINTENANCE_TIMEZONE = 'Africa/Algiers';
-const WORKER_HEARTBEAT_PATH = '/tmp/bric-admin-worker-heartbeat';
+const WORKER_HEARTBEAT_PATH =
+  process.env.BRIC_WORKER_HEARTBEAT_PATH?.trim() || '/tmp/bric-admin-worker-heartbeat';
 const WORKER_HEARTBEAT_INTERVAL_MS = 15_000;
 
 if (process.env.ADMIN_WORKER_BOOTSTRAP_CHECK === '1') {

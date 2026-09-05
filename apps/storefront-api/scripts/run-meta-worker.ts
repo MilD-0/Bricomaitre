@@ -23,7 +23,8 @@ import {
 const POLL_INTERVAL_MS = 1_000;
 const HEARTBEAT_INTERVAL_MS = 15_000;
 const RECONCILIATION_INTERVAL_MS = 60_000;
-const WORKER_HEARTBEAT_PATH = '/tmp/bric-storefront-meta-worker-heartbeat';
+const WORKER_HEARTBEAT_PATH =
+  process.env.BRIC_WORKER_HEARTBEAT_PATH?.trim() || '/tmp/bric-storefront-meta-worker-heartbeat';
 
 Sentry.init({
   dsn: process.env.SENTRY_DSN_STOREFRONT_API?.trim() || undefined,

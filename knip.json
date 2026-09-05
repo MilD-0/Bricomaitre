@@ -4,7 +4,14 @@
   "workspaces": {
     "ops": {
       "ignoreBinaries": ["psql"],
-      "entry": ["scripts/*.mjs", "demo/mock-services.mjs", "demo/release/*.mjs"]
+      "entry": [
+        "scripts/*.mjs",
+        "demo/mock-services.mjs",
+        "demo/release/*.mjs",
+        "dev/cli.mjs",
+        "dev/qa.mjs",
+        "dev/supervisor.mjs"
+      ]
     },
     "apps/admin": {
       "entry": [
