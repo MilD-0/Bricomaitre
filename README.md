@@ -215,8 +215,15 @@ with Compose and run:
 This starts dedicated PostgreSQL, Redis, and object-storage instances alongside
 the real Storefront, Storefront API, Commerce Operating System, and workers. The
 admin entry button creates a real local session with developer RBAC; it bypasses
-only external identity proof. No production credentials or data are used. AI is
-disabled until its local demo runtime is added.
+only external identity proof. No production credentials or data are used.
+
+AI assistants are not yet available in the hosted demo. To try them, run the
+demo locally from source with your own `OPENROUTER_API_KEY`, set
+`AI_PROVIDER=openrouter` and `AI_ENABLED=true`, and configure the models in the
+Admin and Storefront environments. The shopping assistant also needs enabling
+in Storefront settings. See the [demo AI setup notes](./ops/demo/release/README.md#ai-assistants).
+
+TODO: add local AI model support to the demo.
 
 The catalog contains 3,884 hardware products and 9,065 exact-product images
 derived from pinned public datasets. Deterministic generators add 250,000

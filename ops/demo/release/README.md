@@ -32,6 +32,28 @@ configuration because browser configuration is compiled into the web images.
 The release uses its own Compose project and volumes, separate from `./demo`.
 Stop the source demo first if it occupies these ports.
 
+## AI assistants
+
+AI assistants are not yet available in the hosted demo, and this bundle keeps
+them disabled. To try them with your own OpenRouter account, use the source
+checkout and run `./demo up`. In `ops/demo/.runtime/admin.env` and
+`ops/demo/.runtime/storefront.env`, set `OPENROUTER_API_KEY`,
+`AI_PROVIDER=openrouter`, and `AI_ENABLED=true`. Configure `AI_ADMIN_MODEL` and
+`AI_CONTENT_MODEL` for Admin, and `AI_STOREFRONT_MODEL` for Storefront.
+
+Recreate the affected containers without rerunning the seed jobs:
+
+```sh
+docker compose --env-file ops/demo/.runtime/compose.env -f ops/demo/compose.yml \
+  up -d --no-deps --force-recreate admin admin-worker storefront
+```
+
+Enable the shopping assistant and select a valid model in Admin's Storefront
+settings too. The `./demo` launcher regenerates these environment files, so
+later launcher commands overwrite manual changes. Keep your API key out of Git.
+
+TODO: add local AI model support to the demo.
+
 ## Stop and resume
 
 ```sh
