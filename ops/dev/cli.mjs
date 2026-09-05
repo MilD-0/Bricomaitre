@@ -21,6 +21,7 @@ import {
   composeOutput,
   query,
   supervisorAlive,
+  clearTaskDataCaches,
 } from './environment.mjs';
 
 const usage = `Usage:
@@ -38,6 +39,7 @@ const usage = `Usage:
   ./bric inspect providers               Recorded mock-provider requests
   ./bric verify [--plan] [--base <ref>]   Run focused checks and save evidence
   ./bric verify -- <command> [args...]    Record a specific check (15 minute limit)
+  ./bric gauntlet [lane] [--list] [--match id]  Run the broad E2E audit
   ./bric qa                             Real checkout → retry → confirmation → worker → carrier
 
 Linux, Node, pnpm and Docker Compose are required. Runtime and evidence: ops/runtime/dev.
@@ -45,6 +47,7 @@ Linux, Node, pnpm and Docker Compose are required. Runtime and evidence: ops/run
 async function destroy() {
   const m = loadManifest();
   await stop(m);
+  clearTaskDataCaches();
   if (existsSync(join(runtime, 'dependencies.json')))
     await compose(m, ['down', '--volumes', '--remove-orphans', '--timeout', '10']);
   const reservation = join(registryPath(), `${m.ports.admin}.json`);
@@ -220,6 +223,10 @@ async function main() {
   if (command === 'verify') {
     const { verify } = await import('./verify.mjs');
     return withLock(() => verify(process.argv.slice(3)));
+  }
+  if (command === 'gauntlet') {
+    const { gauntlet } = await import('./gauntlet.mjs');
+    return withLock(() => gauntlet(process.argv.slice(3)));
   }
   if (command === 'qa') {
     const { verify } = await import('./verify.mjs');

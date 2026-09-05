@@ -8,6 +8,7 @@ import {
   copyFileSync,
   readdirSync,
   readFileSync,
+  existsSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -18,6 +19,8 @@ const root = resolve(import.meta.dirname, '../..');
 const state = await import('../dev/state.mjs');
 // @ts-expect-error CLI modules run as plain Node JavaScript.
 const verification = await import('../dev/verify.mjs');
+// @ts-expect-error CLI modules run as plain Node JavaScript.
+const environment = await import('../dev/environment.mjs');
 const temporary: string[] = [];
 function directory() {
   const path = mkdtempSync(join(tmpdir(), 'bric-dev-test-'));
@@ -41,6 +44,22 @@ afterEach(() => {
 });
 
 describe('task environment and verification contracts', () => {
+  it('clears persisted task data caches while preserving compiler output and other worktrees', () => {
+    const cwd = directory();
+    const cache = join(cwd, 'apps/storefront/.next/dev/cache');
+    mkdirSync(join(cache, 'fetch-cache'), { recursive: true });
+    writeFileSync(join(cache, 'fetch-cache/settings'), 'old database settings');
+    mkdirSync(join(cache, 'turbopack'));
+    writeFileSync(join(cache, 'turbopack/compiler'), 'reusable compiler state');
+    environment.clearTaskDataCaches(cwd);
+    expect(existsSync(join(cache, 'fetch-cache'))).toBe(false);
+    expect(readFileSync(join(cache, 'turbopack/compiler'), 'utf8')).toBe('reusable compiler state');
+    const external = directory();
+    writeFileSync(join(external, 'settings'), 'another environment');
+    symlinkSync(external, join(cache, 'fetch-cache'));
+    expect(() => environment.clearTaskDataCaches(cwd)).toThrow('outside this worktree');
+    expect(readFileSync(join(external, 'settings'), 'utf8')).toBe('another environment');
+  });
   it('detects edits, new files and deletions without invalidating evidence for ignored runtime output', () => {
     const { cwd, git } = repository();
     const before = state.identity(cwd);

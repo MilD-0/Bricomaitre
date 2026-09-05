@@ -1,7 +1,16 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, readFileSync, mkdirSync, openSync, closeSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  openSync,
+  closeSync,
+  rmSync,
+  realpathSync,
+} from 'node:fs';
+import { join, sep } from 'node:path';
 import {
   root,
   runtime,
@@ -27,6 +36,22 @@ function dataFingerprint() {
   ])
     hash.update(readFileSync(join(root, path)));
   return hash.digest('hex');
+}
+
+export function clearTaskDataCaches(cwd = root) {
+  const ownedRoot = realpathSync(cwd);
+  const paths = ['admin', 'storefront-api', 'storefront']
+    .flatMap((app) =>
+      ['.next/cache/fetch-cache', '.next/dev/cache/fetch-cache'].map((cache) =>
+        join(ownedRoot, 'apps', app, cache),
+      ),
+    )
+    .filter(existsSync);
+  for (const path of paths) {
+    if (!realpathSync(path).startsWith(`${ownedRoot}${sep}`))
+      throw new Error(`Task data cache points outside this worktree: ${path}`);
+  }
+  for (const path of paths) rmSync(path, { recursive: true });
 }
 export const services = ['api', 'admin', 'storefront', 'admin-worker', 'meta-worker'];
 function readEnv(path) {
@@ -122,6 +147,13 @@ async function configure(m) {
     'seed',
   ];
   const subset = Object.fromEntries(names.map((name) => [name, compiled.services[name]]));
+  // Private exports request SSE-S3. Keep the task's local key across restarts.
+  // https://github.com/minio/minio/blob/master/docs/kms/IAM.md
+  const keyFile = join(runtime, 'object-storage-key');
+  if (!existsSync(keyFile))
+    writeFileSync(keyFile, randomBytes(32).toString('base64'), { mode: 0o600, flag: 'wx' });
+  subset['object-storage'].environment.MINIO_KMS_SECRET_KEY =
+    `task-key:${readFileSync(keyFile, 'utf8').trim()}`;
   const ports = { postgres: 5432, redis: 6379, 'object-storage': 9000, 'mock-services': 8080 };
   for (const [name, service] of Object.entries(subset)) {
     service.restart = 'no';
