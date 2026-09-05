@@ -262,6 +262,9 @@ const config = {
     },
     'admin-worker': {
       ...service('admin-worker', ['node', 'apps/admin/dist/run-background-workers.cjs']),
+      environment: {
+        NODE_OPTIONS: source.services['admin-worker'].environment.NODE_OPTIONS,
+      },
       depends_on: { admin: healthy },
     },
     'storefront-marketing-worker': {

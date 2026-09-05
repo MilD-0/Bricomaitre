@@ -7,6 +7,7 @@ import { expect, it } from 'vitest';
 
 type DemoService = {
   cpus: string;
+  environment?: Record<string, string>;
   mem_limit: string;
   memswap_limit: string;
   pids_limit: number;
@@ -93,6 +94,10 @@ it('keeps host origins and secrets across preparation without affecting another 
       if (name !== 'gateway') expect(service.ports, name).toBeUndefined();
     }
     expect(config.services.gateway.ports).toHaveLength(6);
+    expect(Number(config.services['admin-worker'].mem_limit)).toBe(1024 * 1024 * 1024);
+    expect(config.services['admin-worker'].environment?.NODE_OPTIONS).toBe(
+      '--max-old-space-size=512',
+    );
   } finally {
     rmSync(runtime, { recursive: true });
     rmSync(isolated, { recursive: true });

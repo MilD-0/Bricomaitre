@@ -355,6 +355,9 @@ services:
       retries: 30
 
   admin-worker:
+    cpus: 0.5
+    mem_limit: 1g
+    memswap_limit: 1g
     build:
       <<: *admin-build
       target: worker
@@ -363,6 +366,7 @@ services:
     env_file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/admin.env
     environment:
       DATABASE_URL: postgresql://bricomaitre_demo_admin:${DEMO_POSTGRES_ADMIN_PASSWORD}@postgres:5432/bricomaitre_demo
+      NODE_OPTIONS: --max-old-space-size=512
     healthcheck:
       test:
         - CMD

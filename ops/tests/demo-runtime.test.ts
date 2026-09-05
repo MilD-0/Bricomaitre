@@ -57,6 +57,13 @@ describe('self-contained demo runtime', () => {
       'storefront-api-cache:/app/apps/storefront-api/.next/cache',
     );
     expect(serviceBlock(compose, 'admin')).toContain('admin-cache:/app/apps/admin/.next/cache');
+    expect(serviceBlock(compose, 'admin-worker')).toContain('mem_limit: 1g');
+    expect(serviceBlock(compose, 'admin-worker')).toContain(
+      'NODE_OPTIONS: --max-old-space-size=512',
+    );
+    expect(read('ops/demo/release/assemble.mjs')).toContain(
+      "NODE_OPTIONS: source.services['admin-worker'].environment.NODE_OPTIONS",
+    );
   });
 
   it('publishes only the six explicit loopback entry points', () => {
