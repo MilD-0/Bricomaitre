@@ -59,8 +59,6 @@ resume without resetting, use `./demo compose stop` and `./demo compose start`.
 Bundle installations have their own Compose project and volumes; do not run
 both on the same ports.
 
-## Real application behavior, local dependencies
-
 The [Compose stack](../ops/demo/compose.yml) runs the Storefront, canonical
 Storefront API, Commerce Operating System, Admin worker, and analytics and
 marketing worker. It gives them dedicated PostgreSQL, Redis, and S3-compatible
@@ -85,20 +83,6 @@ demo exercise failure handling without contacting a carrier or sending a real
 marketing conversion. It does not prove compatibility with every live provider
 response.
 
-## A dataset built in dependency order
-
-A populated product grid was insufficient. Orders need line items, shipment
-outcomes need status histories, and financial reporting needs costs and dates
-that agree with those records. The [seed pipeline](../ops/demo/postgres/seed.sql)
-builds those dependencies in order:
-
-1. Algerian reference data, including 58 wilayas and 1,541 communes.
-2. Catalog records, taxonomy, media, prices, and inventory.
-3. Customers, orders, line items, status histories, and carrier outcomes.
-4. Traffic, attribution, reporting facts, acquisition costs, and financial history.
-5. Operational records, integration state, and assistant histories, followed by
-   cross-record verification.
-
 The baseline after a reset contains:
 
 | Data                     |     Count |
@@ -115,95 +99,6 @@ Historical reporting spans more than four years. Its rollups represent
 sessions and 410,400 raw journey events, linked to recent orders. All these
 figures describe generated demonstration data, not production traffic or a
 throughput benchmark.
-
-### Public catalog, generated business history
-
-The catalog combines Amazon's Shopping Queries dataset, Shopping Queries Image
-Dataset, and Amazon Berkeley Objects. The
-[source lock](../ops/demo/data/sources.lock.json) records revisions and checksums;
-the [generated manifest](../ops/demo/data/generated-manifest.json) covers the
-normalized inputs. Asset and dataset terms remain in [NOTICE](../NOTICE).
-
-Gallery depth follows the available photos of each exact product. The catalog
-was reduced rather than padded with unrelated pictures to meet a gallery quota.
-The [image pipeline](../ops/demo/scripts/prepare-catalog-images.mjs) bounds
-download sizes, retries failed transfers, retains originals for rebuilds, and
-produces optimized WebP files. Browsers fetch those files from the demo's object
-storage, never from the dataset's source hosts.
-
-Merchandising received a separate editorial pass: four homepage cards, two hero
-compositions, brand logos, and deliberate selections for top products and
-featured groups. The seed checks that these placements use the curated assets
-and do not repeat the same products across adjacent sections.
-
-Deterministic SQL generators build customer and business histories around the
-catalog and Algerian geography. They populate fulfillment, finance, acquisition,
-catalog intelligence, customer reporting, action history, and assistant analytics
-together. Importing an unrelated order dataset would not establish those
-relationships.
-
-### What building the demo exposed
-
-Early data produced contradictions visible in the charts: substantial order
-volume with almost no paid outcomes, implausible repeat-customer rates, and
-reporting periods that did not line up. Fixing individual headline values would
-have left drill-downs inconsistent. The generators and reporting inputs had to
-agree on customer identity, posted transitions, carrier status, attribution,
-and paid outcomes.
-
-The review also reached shared analytics behavior. Partial weeks and months
-must not look like completed periods collapsing at the end of a chart.
-Projections need a distinction between observed results, estimated completion,
-and future values. Current
-[chart tests](../apps/admin/components/analytics/analytics-workspace.test.tsx)
-cover those boundaries; [forecast tests](../apps/admin/lib/analytics.test.ts)
-cover completed-day history, weekday variation, backtested baselines, and
-resistance to an exceptional day's influence. The formulas and interpretation
-belong in [analytics](analytics.md).
-
-## Repeatable state without redoing every step
-
-The source launcher builds and verifies a versioned PostgreSQL template.
-Subsequent resets clone a matching template, then add a fresh seven-day activity
-window relative to the reset date. A changed dataset, schema, media origin, or
-date can require rebuilding the historical template.
-
-Reset also restores mock carrier state, clears Redis and application caches,
-removes uploaded demo files, and restores Storefront's writable runtime files.
-Generated credentials survive. Downloaded originals stay on the machine for
-rebuilds, and curated media is restored from the local cache. Resets stop the
-applications while replacing their state, so the hosted demo is briefly
-unavailable during that work; a historical rebuild takes longer.
-
-The [release assembler](../ops/demo/release/assemble.mjs) packages application,
-initialization, gateway, and media images with the source and asset manifests.
-Installation generates fresh credentials and gives applications only their own
-runtime configuration. It does not ship the build machine's environment files.
-
-## Hosting a writable public demo
-
-Public developer access is intentional. Visitors can change or delete demo
-records, so the installation must be disposable and separated from real data.
-
-Containers have CPU, RAM, process, and log limits. Their long-running processes
-use read-only root filesystems with bounded temporary storage. The
-[gateway](../ops/demo/gateway/nginx.conf) limits requests and concurrent
-connections, applies tighter limits to imports, exports, and uploads, and
-rejects oversized bodies. MinIO has a 4 GiB bucket quota. Admin has bucket-scoped
-object permissions; the API has read-only access. Neither receives storage root
-credentials.
-
-The hosted instance adds controls outside Compose: a firewall blocks new
-connections from demo containers to the workstation, LAN, other container
-networks, and internet, while a separate 16 GiB filesystem bounds persistent
-demo data. Public HTTPS traffic reaches the workstation through a VPS reverse
-connection. Only the Storefront, Admin, and intended public media paths are
-exposed. Databases, provider mocks, the canonical API, and the storage console
-remain private.
-
-Those host controls are not installed by the portable bundle. Loopback port
-bindings alone do not isolate containers from a host or LAN. The demo also does
-not reproduce production's blue/green deployment or availability guarantees.
 
 ## AI assistants
 
