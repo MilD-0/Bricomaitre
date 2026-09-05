@@ -522,7 +522,10 @@ describe('production packaging and release runtime', () => {
     const actionReferences = [
       ...`${ci}\n${release}\n${workspaceSetup}`.matchAll(/^\s*-?\s*uses:\s+([^\s#]+)/gm),
     ].map(([, reference]) => reference);
-    expect(ci).not.toMatch(/^\s*pull_request:/m);
+    expect(ci).toMatch(/^\s*pull_request:\n\s+branches:\n\s+- main/m);
+    expect(ci).not.toMatch(/^\s*pull_request_target:/m);
+    expect(ci).not.toMatch(/secrets\./);
+    expect(release).toContain("github.event.workflow_run.event == 'push'");
     expect(ci).not.toContain('github.event.pull_request');
     expect(ci).toContain("if: github.event_name == 'workflow_dispatch'");
     expect(actionReferences.length).toBeGreaterThan(0);

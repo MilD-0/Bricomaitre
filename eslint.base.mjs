@@ -15,6 +15,6 @@ export function createTypeScriptEslintConfig(overrides = []) {
   return defineConfig([
     ...nextTs,
     ...overrides,
-    globalIgnores(['build/**', 'dist/**', 'coverage/**']),
+    globalIgnores(['build/**', 'dist/**', 'coverage/**', '**/.runtime/**', '**/.cache/**']),
   ]);
 }

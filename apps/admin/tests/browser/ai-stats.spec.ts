@@ -57,7 +57,7 @@ test('AI operations stats use focused pages and preserve the active range', asyn
   await expect(page.getByRole('heading', { name: 'Shopping assistant' })).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByRole('heading', { name: 'Assistant journey' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Activity and assisted orders' })).toBeVisible();
   await expect(page.getByText('Opened')).toBeVisible();
   await expect(page.getByText(/influenced/i)).toHaveCount(0);
 
