@@ -18,6 +18,7 @@ import {
   type OrderStatusHistoryRecord,
 } from './orders';
 import { getOrderProductLookup, toOrderRecord } from './order-records';
+import { orderProductSearchCondition } from './order-product-search';
 import { getCanonicalOrderProjectionDays } from './profit-tracker';
 import type {
   DailyOrderStatusOverview,
@@ -363,6 +364,7 @@ export async function loadOrdersPageData(
         ilike(orders.homeAddress, `%${query.search}%`),
         sql`cast(${orders.state} as text) ILIKE ${`%${query.search}%`}`,
         ilike(orders.city, `%${query.search}%`),
+        orderProductSearchCondition(query.search),
       )
     : undefined;
   const whereClause = and(

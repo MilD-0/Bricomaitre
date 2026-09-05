@@ -285,6 +285,37 @@ describe('POST /api/ai/chat model-led runtime', () => {
     );
   });
 
+  it('passes complete analytics evidence to recovery without imposing output-token caps', async () => {
+    mocks.permissions = ['analytics_manage'];
+    const toolResults = [
+      {
+        type: 'tool-result',
+        toolCallId: 'analytics-1',
+        toolName: 'query_analytics',
+        input: { view: 'acquisition' },
+        output: { rows: 'x'.repeat(40_000), finalOrderId: 17493 },
+      },
+      {
+        type: 'tool-result',
+        toolCallId: 'orders-1',
+        toolName: 'query_orders',
+        input: { search: 'equilibre' },
+        output: { items: [{ id: 17504 }] },
+      },
+    ];
+    mocks.streamParts = toolResults;
+    const response = await POST(
+      request({ message: 'Reconcile these purchases.', conversationKey }),
+    );
+    await response.text();
+
+    expect(mocks.streamOptions).not.toHaveProperty('maxOutputTokens');
+    const recovery = mocks.generateText.mock.calls[0]![0];
+    expect(recovery).not.toHaveProperty('maxOutputTokens');
+    const evidence = recovery.messages.at(-1).content.split('this turn:\n')[1];
+    expect(JSON.parse(evidence)).toEqual(toolResults);
+  });
+
   it('never hides a completed mutation when both model narration passes are empty', async () => {
     mocks.permissions = ['products_write'];
     mocks.streamParts = [

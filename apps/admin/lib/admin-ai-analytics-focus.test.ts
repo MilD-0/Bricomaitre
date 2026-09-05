@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 
 import type { AnalyticsPayload } from './analytics';
-import { compactAnalyticsForAssistant, adminAiAnalyticsQuerySchema } from './ai-analytics';
+import { analyticsForAssistant, adminAiAnalyticsQuerySchema } from './ai-analytics';
 import {
   adminAiAnalyticsFocusSchemaForView,
   focusAnalyticsForAssistant,
@@ -223,8 +223,8 @@ describe('admin assistant analytics focus', () => {
     expect(JSON.stringify(branch('acquisition')?.properties.focus)).toContain('paid_funnel');
   });
 
-  it('finds exact rows beyond the generic twenty-row compaction boundary', () => {
-    const result = compactAnalyticsForAssistant(catalogPayload(), {
+  it('adds focused matches while retaining the full canonical dataset', () => {
+    const result = analyticsForAssistant(catalogPayload(), {
       dimension: 'products',
       search: 'Product 50',
       identifiers: [],
@@ -276,8 +276,7 @@ describe('admin assistant analytics focus', () => {
       ]),
       rows: [{ id: '50', title: 'Product 50' }],
     });
-    expect(result.data).toEqual({ kind: 'catalog', summary: null });
-    expect((result.data as Record<string, unknown>).products).toBeUndefined();
+    expect(result.data).toEqual(catalogPayload().data);
     expect(result.truncations).toEqual([]);
   });
 
@@ -294,7 +293,7 @@ describe('admin assistant analytics focus', () => {
   });
 
   it('can return up to one hundred focused canonical rows without widening other datasets', () => {
-    const result = compactAnalyticsForAssistant(catalogPayload(), {
+    const result = analyticsForAssistant(catalogPayload(), {
       dimension: 'products',
       identifiers: [],
       limit: 75,
@@ -344,7 +343,7 @@ describe('admin assistant analytics focus', () => {
       ],
     } as unknown as AnalyticsPayload;
 
-    const result = compactAnalyticsForAssistant(payload, {
+    const result = analyticsForAssistant(payload, {
       dimension: 'campaigns',
       identifiers: ['cmp-1'],
       limit: 20,

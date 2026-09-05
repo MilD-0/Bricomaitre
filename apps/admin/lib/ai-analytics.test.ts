@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AnalyticsPayload } from './analytics';
-import { compactAnalyticsForAssistant } from './ai-analytics';
+import { analyticsForAssistant } from './ai-analytics';
 
 describe('admin assistant Analytics adapter', () => {
   it('preserves canonical metrics, comparisons, sources, and warnings', () => {
@@ -34,7 +34,7 @@ describe('admin assistant Analytics adapter', () => {
         ],
         products: Array.from({ length: 35 }, (_, index) => ({
           id: String(index + 1),
-          title: `Product ${index + 1}`,
+          title: `Product ${index + 1} ${'x'.repeat(3_000)}`,
           sku: null,
           categoryName: null,
           brandName: null,
@@ -104,7 +104,7 @@ describe('admin assistant Analytics adapter', () => {
       diagnostics: { queryDurationMs: 42, responseSizeBytes: 10_000 },
     } satisfies AnalyticsPayload;
 
-    const result = compactAnalyticsForAssistant(payload);
+    const result = analyticsForAssistant(payload);
 
     expect(result).toMatchObject({
       kind: 'analytics',
@@ -132,12 +132,7 @@ describe('admin assistant Analytics adapter', () => {
       warnings: [{ key: 'projectedCostCoverage', value: 92 }],
     });
     expect(result).not.toHaveProperty('semanticContract');
-    expect(result.data).not.toHaveProperty('metrics');
-    expect((result.data as { products: unknown[] }).products).toHaveLength(20);
-    expect(result.truncations).toContainEqual({
-      path: 'data.products',
-      available: 35,
-      included: 20,
-    });
+    expect(result.data).toEqual(payload.data);
+    expect(result.truncations).toEqual([]);
   });
 });

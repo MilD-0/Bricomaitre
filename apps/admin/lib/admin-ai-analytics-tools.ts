@@ -23,7 +23,7 @@ import { adminAiAnalyticsQuerySchema, queryAdminAnalytics } from './ai-analytics
 
 const ADMIN_AI_ANALYTICS_TOOL_DESCRIPTION = [
   'Read canonical live Analytics evidence.',
-  'Results include metric meanings, dates, coverage, estimation, sources, and warnings. Use focus for useful underlying rows and sourceCoverage for the exact EcoTrack denominator and missing eligible orders.',
+  'Results include the full canonical workspace data, metric meanings, dates, coverage, estimation, sources, and warnings. Focus adds selected rows with field definitions without removing the full workspace data. Use sourceCoverage for the exact EcoTrack denominator and missing eligible orders.',
 ].join(' ');
 
 export function buildAdminAiAnalyticsTools({

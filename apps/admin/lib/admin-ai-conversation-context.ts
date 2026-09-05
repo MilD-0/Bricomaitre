@@ -1,6 +1,4 @@
 export const ADMIN_AI_CONTEXT_QUERY_LIMIT = 200;
-const ADMIN_AI_CONTEXT_CHARACTER_BUDGET = 80_000;
-const ADMIN_AI_TOOL_EVIDENCE_CHARACTER_BUDGET = 12_000;
 
 type AdminAiConversationContextMessage = {
   role: 'user' | 'assistant';
@@ -90,7 +88,7 @@ export function latestAdminAiAnalyticsContinuation(newestFirstRows: readonly Sto
   return null;
 }
 
-function boundedToolEvidence(value: unknown, characterBudget: number) {
+function toolEvidence(value: unknown) {
   if (value === undefined) return null;
   let serialized: string;
   try {
@@ -99,17 +97,14 @@ function boundedToolEvidence(value: unknown, characterBudget: number) {
     return null;
   }
   if (!serialized || serialized === '[]' || serialized === '{}') return null;
-  if (serialized.length <= characterBudget) return serialized;
-  const suffix = '\n[…saved tool evidence truncated to the conversation context budget]';
-  return `${serialized.slice(0, Math.max(0, characterBudget - suffix.length))}${suffix}`;
+  return serialized;
 }
 
-function contextMessage(row: StoredMessageRow, toolEvidenceBudget: number) {
+function contextMessage(row: StoredMessageRow) {
   if (row.role !== 'user' && row.role !== 'assistant') return null;
   const saved = storedMessage(row.content);
   if (!saved?.text.trim()) return null;
-  const evidence =
-    row.role === 'assistant' ? boundedToolEvidence(saved.toolResults, toolEvidenceBudget) : null;
+  const evidence = row.role === 'assistant' ? toolEvidence(saved.toolResults) : null;
   return {
     role: row.role,
     content: evidence
@@ -118,32 +113,11 @@ function contextMessage(row: StoredMessageRow, toolEvidenceBudget: number) {
   } satisfies AdminAiConversationContextMessage;
 }
 
-export function buildAdminAiConversationContext(
-  newestFirstRows: readonly StoredMessageRow[],
-  options: {
-    characterBudget?: number;
-    toolEvidenceBudget?: number;
-  } = {},
-) {
-  const characterBudget = Math.max(
-    2_000,
-    options.characterBudget ?? ADMIN_AI_CONTEXT_CHARACTER_BUDGET,
-  );
-  const toolEvidenceBudget = Math.max(
-    500,
-    options.toolEvidenceBudget ?? ADMIN_AI_TOOL_EVIDENCE_CHARACTER_BUDGET,
-  );
-  const selected: AdminAiConversationContextMessage[] = [];
-  let usedCharacters = 0;
-
-  for (const row of newestFirstRows) {
-    const message = contextMessage(row, toolEvidenceBudget);
-    if (!message) continue;
-    const nextCharacters = message.content.length;
-    if (usedCharacters + nextCharacters > characterBudget) break;
-    selected.push(message);
-    usedCharacters += nextCharacters;
-  }
-
-  return selected.reverse();
+export function buildAdminAiConversationContext(newestFirstRows: readonly StoredMessageRow[]) {
+  return newestFirstRows
+    .flatMap((row) => {
+      const message = contextMessage(row);
+      return message ? [message] : [];
+    })
+    .reverse();
 }

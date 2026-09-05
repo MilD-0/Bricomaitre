@@ -33,7 +33,7 @@ describe('admin AI conversation context', () => {
     expect(context.at(-1)?.content).toContain('"toolName":"find_products"');
   });
 
-  it('keeps the newest complete messages within the bounded model context', () => {
+  it('restores complete messages in chronological order', () => {
     const newestFirst = [
       { role: 'assistant', content: { text: 'Newest assistant answer' } },
       { role: 'user', content: { text: 'Newest user question' } },
@@ -41,31 +41,28 @@ describe('admin AI conversation context', () => {
       { role: 'user', content: { text: 'Older question' } },
     ];
 
-    const context = buildAdminAiConversationContext(newestFirst, { characterBudget: 2_000 });
+    const context = buildAdminAiConversationContext(newestFirst);
 
     expect(context).toEqual([
+      { role: 'user', content: 'Older question' },
+      { role: 'assistant', content: 'x'.repeat(2_000) },
       { role: 'user', content: 'Newest user question' },
       { role: 'assistant', content: 'Newest assistant answer' },
     ]);
   });
 
-  it('bounds oversized saved tool evidence without dropping the assistant answer', () => {
-    const context = buildAdminAiConversationContext(
-      [
-        {
-          role: 'assistant',
-          content: {
-            text: 'Use product 481 for the next step.',
-            toolResults: [{ output: 'x'.repeat(4_000) }],
-          },
-        },
-      ],
-      { toolEvidenceBudget: 500 },
-    );
-
-    expect(context[0]?.content).toContain('Use product 481 for the next step.');
-    expect(context[0]?.content).toContain('tool evidence truncated');
-    expect(context[0]!.content.length).toBeLessThan(700);
+  it('restores full analytics evidence beyond the former evidence and context budgets', () => {
+    const evidence = [
+      { toolName: 'query_analytics', output: { rows: 'x'.repeat(100_000), lastOrderId: 481 } },
+    ];
+    const context = buildAdminAiConversationContext([
+      {
+        role: 'assistant',
+        content: { text: 'Inspect these orders.', toolResults: evidence },
+      },
+    ]);
+    const serialized = context[0]!.content.split('instructions):\n')[1]!;
+    expect(JSON.parse(serialized)).toEqual(evidence);
   });
 
   it('restores the latest canonical analytics query for conversational follow-ups', () => {

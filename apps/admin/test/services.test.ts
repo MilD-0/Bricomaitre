@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import * as XLSX from 'xlsx';
 
 import { getDb, getPool } from '@bric/db/client';
@@ -11,6 +11,7 @@ import {
   importBatches,
   orderAcquisitionAttribution,
   orderAiInfluence,
+  orderLineItems,
   orders,
   processedOrders,
   products,
@@ -45,12 +46,112 @@ import {
   getLiveStorefrontAiStats,
 } from '../lib/stats-experience';
 import { deleteImportBatch, importStatsSpreadsheet } from '../lib/stats-order-import';
+import { queryAdminOrders } from '../lib/admin-ai-order-query';
+import { loadOrdersPageData } from '../lib/admin-orders-data';
 
 const runId = randomUUID();
 
 describe('real PostgreSQL and Redis contracts', () => {
   afterAll(async () => {
     await Promise.allSettled([getRedis().quit(), getPool().end()]);
+  });
+
+  it('searches saved and current product identities without duplicating orders or grouped units', async () => {
+    const db = getDb();
+    const marker = `search-${runId}`;
+    const [product] = await db
+      .insert(products)
+      .values({
+        title: `Équilibreur ${marker}`,
+        titleAr: `حامل محرك ${marker}`,
+        sku: `TC0725-${runId}`,
+        slug: `renamed-${marker}`,
+        price: '100.00',
+      })
+      .returning();
+    const fixtures = await db
+      .insert(orders)
+      .values([
+        { phoneNumber1: '0550000001' },
+        { phoneNumber1: '0550000002' },
+        { phoneNumber1: '0550000003', note: marker },
+      ])
+      .returning();
+    const [first, second, unrelated] = fixtures;
+    try {
+      await db.insert(orderLineItems).values(
+        [
+          {
+            orderId: first!.id,
+            productId: product!.id,
+            contentId: 'current',
+            titleSnapshot: `Old title ${marker}`,
+            quantity: 2,
+          },
+          {
+            orderId: first!.id,
+            productId: null,
+            contentId: 'deleted',
+            titleSnapshot: `Équilibreur ${marker}`,
+            quantity: 3,
+          },
+          {
+            orderId: second!.id,
+            productId: product!.id,
+            contentId: 'current',
+            titleSnapshot: `Old title ${marker}`,
+            quantity: 1,
+          },
+        ].map((line) => ({
+          ...line,
+          rawValue: line.contentId,
+          originalUnitPrice: '100.00',
+          effectiveUnitPrice: '100.00',
+          lineTotal: String(line.quantity * 100),
+        })),
+      );
+
+      for (const search of [`equilibreUR ${marker}`, `حامل محرك ${marker}`, product!.sku!]) {
+        const result = await queryAdminOrders({ search, limit: 1 });
+        expect(result.pagination.totalItems).toBe(2);
+        expect(result.items).toHaveLength(1);
+        const next = await queryAdminOrders({ search, limit: 1, page: 2 });
+        expect(
+          new Set([...result.items, ...next.items].map((row) => ('id' in row ? row.id : null))),
+        ).toEqual(new Set([first!.id, second!.id]));
+      }
+      const grouped = await queryAdminOrders({
+        search: `equilibreur ${marker}`,
+        groupBy: { dimension: 'product' },
+      });
+      expect(grouped).toMatchObject({
+        matchedOrders: 2,
+        items: expect.arrayContaining([
+          expect.objectContaining({ productId: product!.id, orderCount: 2, units: 3 }),
+          expect.objectContaining({ productId: null, orderCount: 1, units: 3 }),
+        ]),
+      });
+      const page = await loadOrdersPageData({ search: `equilibreur ${marker}` }, false);
+      expect(page.items.map((row) => row.id).sort()).toEqual([first!.id, second!.id].sort());
+      const note = await queryAdminOrders({ search: marker });
+      expect(note.pagination.totalItems).toBe(3);
+      expect(note.items).toContainEqual(expect.objectContaining({ id: unrelated!.id }));
+      const absent = await queryAdminOrders({ search: `absent-${marker}` });
+      expect(absent.pagination.totalItems).toBe(0);
+
+      await db.delete(products).where(eq(products.id, product!.id));
+      const deleted = await queryAdminOrders({ search: `equilibreur ${marker}` });
+      expect(deleted.pagination.totalItems).toBe(1);
+      expect(deleted.items).toContainEqual(expect.objectContaining({ id: first!.id }));
+    } finally {
+      await db.delete(orders).where(
+        inArray(
+          orders.id,
+          fixtures.map((row) => row.id),
+        ),
+      );
+      await db.delete(products).where(eq(products.id, product!.id));
+    }
   });
 
   it('applies migrations to a queryable PostgreSQL schema', async () => {

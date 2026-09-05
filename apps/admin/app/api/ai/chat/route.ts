@@ -26,7 +26,7 @@ import {
   buildAdminAiConversationContext,
 } from '../../../../lib/admin-ai-conversation-context';
 import { adminAiContextMessage } from '../../../../lib/admin-ai-context';
-import { ADMIN_AI_MAX_OUTPUT_TOKENS, resolveAdminAiModel } from '../../../../lib/admin-ai-models';
+import { resolveAdminAiModel } from '../../../../lib/admin-ai-models';
 import { normalizePermissions } from '../../../../lib/permissions';
 import { requireAppAccess } from '../../../../lib/rbac';
 import { adminAiToolConfirmsCompletedMutation } from '../../../../lib/admin-ai-execution-capabilities';
@@ -73,13 +73,6 @@ function repeatableStreamText<TOOLS extends ToolSet>(
   options: Parameters<typeof streamText<TOOLS>>[0],
 ) {
   return () => streamText(options);
-}
-
-function synthesisEvidence(value: unknown) {
-  const serialized = JSON.stringify(value);
-  const limit = 24_000;
-  if (serialized.length <= limit) return serialized;
-  return `${serialized.slice(0, limit)}\n[…tool evidence truncated for final synthesis]`;
 }
 
 function hasSuccessfulMutation(toolResults: unknown[]) {
@@ -223,7 +216,6 @@ export async function POST(request: NextRequest) {
       stopWhen: stepCountIs(8),
       abortSignal: AbortSignal.any([request.signal, AbortSignal.timeout(config.requestTimeoutMs)]),
       maxRetries: config.maxRetries,
-      maxOutputTokens: ADMIN_AI_MAX_OUTPUT_TOKENS,
     });
 
     const encoder = new TextEncoder();
@@ -338,12 +330,11 @@ export async function POST(request: NextRequest) {
                     ...messages,
                     {
                       role: 'user' as const,
-                      content: `Trusted tool evidence from this turn:\n${synthesisEvidence(toolResults)}`,
+                      content: `Trusted tool evidence from this turn:\n${JSON.stringify(toolResults)}`,
                     },
                   ],
                   abortSignal: request.signal,
                   maxRetries: config.maxRetries,
-                  maxOutputTokens: ADMIN_AI_MAX_OUTPUT_TOKENS,
                   timeout: config.requestTimeoutMs,
                 });
                 text = synthesis.text.trim();

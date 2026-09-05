@@ -7,7 +7,7 @@ import { createAiLanguageModel, getAiConfig } from '@bric/ai-core';
 import { generateText, stepCountIs } from 'ai';
 
 import { adminAiContextMessage } from '../lib/admin-ai-context';
-import { ADMIN_AI_MAX_OUTPUT_TOKENS, resolveAdminAiModel } from '../lib/admin-ai-models';
+import { resolveAdminAiModel } from '../lib/admin-ai-models';
 import { adminAiApplicationDate, adminAiRuntimeInstructions } from '../lib/admin-ai-runtime';
 import { buildAdminAiTools } from '../lib/admin-ai-tools';
 import type { PermissionKey } from '../lib/permissions';
@@ -633,7 +633,6 @@ async function runScenario(scenario: Scenario) {
         tools,
         toolChoice: 'auto',
         stopWhen: stepCountIs(8),
-        maxOutputTokens: ADMIN_AI_MAX_OUTPUT_TOKENS,
       });
       const calls = result.steps.flatMap((step) =>
         step.toolCalls.map((call) => ({ toolName: call.toolName, input: call.input })),

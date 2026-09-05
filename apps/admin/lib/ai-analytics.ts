@@ -20,75 +20,9 @@ import {
 } from './admin-ai-analytics-focus';
 import { adminAiDateScopeSchema, canonicalAdminAiDateQuery } from './admin-ai-date-scope';
 
-const ADMIN_AI_ANALYTICS_ARRAY_LIMIT = 20;
-const ADMIN_AI_ANALYTICS_STRING_LIMIT = 2_000;
-const ADMIN_AI_ANALYTICS_MAX_DEPTH = 10;
-
-type AnalyticsTruncation = {
-  path: string;
-  available: number;
-  included: number;
-};
-
-function compactValue(
-  value: unknown,
-  path: string,
-  depth: number,
-  truncations: AnalyticsTruncation[],
-  arrayLimit = ADMIN_AI_ANALYTICS_ARRAY_LIMIT,
-): unknown {
-  if (depth > ADMIN_AI_ANALYTICS_MAX_DEPTH) return '[nested data omitted]';
-  if (typeof value === 'string') {
-    return value.length <= ADMIN_AI_ANALYTICS_STRING_LIMIT
-      ? value
-      : `${value.slice(0, ADMIN_AI_ANALYTICS_STRING_LIMIT - 1)}…`;
-  }
-  if (Array.isArray(value)) {
-    if (value.length > arrayLimit) {
-      truncations.push({
-        path,
-        available: value.length,
-        included: arrayLimit,
-      });
-    }
-    return value
-      .slice(0, arrayLimit)
-      .map((item, index) =>
-        compactValue(item, `${path}[${index}]`, depth + 1, truncations, arrayLimit),
-      );
-  }
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, child]) => [
-        key,
-        compactValue(child, `${path}.${key}`, depth + 1, truncations, arrayLimit),
-      ]),
-    );
-  }
-  return value;
-}
-
-export function compactAnalyticsForAssistant(
-  payload: AnalyticsPayload,
-  focus?: AdminAiAnalyticsFocus,
-) {
-  const truncations: AnalyticsTruncation[] = [];
+export function analyticsForAssistant(payload: AnalyticsPayload, focus?: AdminAiAnalyticsFocus) {
   const metrics = analyticsMetricsForAssistant(payload);
   const focusedDataset = focus ? focusAnalyticsForAssistant(payload, focus) : null;
-  const summary =
-    payload.data && typeof payload.data === 'object' && 'summary' in payload.data
-      ? payload.data.summary
-      : null;
-  const assistantData = focusedDataset
-    ? { kind: payload.view, summary }
-    : Object.fromEntries(Object.entries(payload.data).filter(([key]) => key !== 'metrics'));
-  const compactedData = compactValue(
-    assistantData,
-    'data',
-    0,
-    truncations,
-    focus?.limit ?? ADMIN_AI_ANALYTICS_ARRAY_LIMIT,
-  );
   return {
     kind: 'analytics' as const,
     responseContractVersion: 6 as const,
@@ -102,10 +36,10 @@ export function compactAnalyticsForAssistant(
     generatedAt: payload.generatedAt,
     referenceDate: payload.referenceDate,
     reviewClock: payload.reviewClock,
-    data: compactedData,
+    data: payload.data,
     sources: payload.sources,
     warnings: payload.warnings,
-    truncations,
+    truncations: [],
     diagnostics: payload.diagnostics,
   };
 }
@@ -297,10 +231,10 @@ export async function queryAdminAnalytics(raw: unknown) {
   const payload = await getAnalyticsData(query, {
     includeStorefrontDetails: query.view === 'storefront',
   });
-  const compact = compactAnalyticsForAssistant(payload, normalizedFocus);
-  if (!sourceCoverage) return compact;
+  const result = analyticsForAssistant(payload, normalizedFocus);
+  if (!sourceCoverage) return result;
   return {
-    ...compact,
+    ...result,
     sourceCoverage: await loadEcotrackSourceCoverage({
       startDate: payload.filters.startDate,
       endDate: payload.filters.endDate,

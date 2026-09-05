@@ -24,6 +24,7 @@ import {
 } from '@bric/storefront-core/order-domain';
 
 import { loadOrderDetail } from './admin-orders-data';
+import { orderProductSearchCondition } from './order-product-search';
 import {
   ADMIN_AI_IN_HOUSE_ORDER_STATUS_VALUES,
   adminAiInHouseOrderStatus,
@@ -140,7 +141,7 @@ export const adminAiOrderInspectionSchema = z
   .strict();
 
 export const ADMIN_AI_QUERY_ORDERS_TOOL_DESCRIPTION =
-  'Query local orders. Add only useful filters; date scopes distinguish one day, a range, since, and through. Returns lightweight rows and an exact total. Optionally group the matched population by captured product for exact order and unit counts. Use inspect_orders for exact order detail.';
+  'Query local orders. Search matches order IDs, customer details, saved product titles, and current product names or SKUs, including Arabic names and unaccented French names. Ad-set names are not product identities; use product-ID filters after resolving the actual catalog product when needed. Add only useful filters; date scopes distinguish one day, a range, since, and through. Returns lightweight rows and an exact total. Optionally group the matched orders by all their captured products for exact order and unit counts. Use inspect_orders for exact order detail.';
 
 export const ADMIN_AI_INSPECT_ORDERS_TOOL_DESCRIPTION =
   'Read exact local orders with captured commercial facts, in-house status history, and the stored active or deleted EcoTrack shipment summary. This does not refresh the carrier.';
@@ -224,6 +225,7 @@ function queryConditions(input: ReturnType<typeof normalizeOrderQuery>) {
       ilike(orders.note, pattern),
       ilike(orders.homeAddress, pattern),
       ilike(orders.city, pattern),
+      orderProductSearchCondition(input.search),
     );
     if (search) conditions.push(search);
   }
