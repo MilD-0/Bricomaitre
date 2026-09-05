@@ -23,7 +23,7 @@ export function bucketFor(date: string, grain: AnalyticsResolvedGrain) {
   return `${date.slice(0, 7)}-01`;
 }
 
-function bucketEnd(bucket: string, grain: AnalyticsResolvedGrain) {
+export function economicsBucketEnd(bucket: string, grain: AnalyticsResolvedGrain) {
   if (grain === 'day') return bucket;
   if (grain === 'week') return addDays(bucket, 6);
   const monthAfter = new Date(`${bucket}T00:00:00.000Z`);
@@ -163,7 +163,7 @@ export function aggregateEconomicsSeries(
         isPartial:
           group.days.includes(today) ||
           (group.days.includes(latestTrackedDate ?? '') &&
-            (latestTrackedDate ?? group.bucket) < bucketEnd(group.bucket, grain)),
+            (latestTrackedDate ?? group.bucket) < economicsBucketEnd(group.bucket, grain)),
         grossProfitDzdProjected: null,
         adjustedProfitDzdProjected: null,
         adCostDzdProjected: null,
@@ -221,7 +221,7 @@ export function aggregateAutomaticPaidSeries(
     profitCoveragePct: ratio(row.completeOrders, row.paidOrders),
     providerAmountCoveragePct: ratio(row.providerAmountOrders, row.paidOrders),
     isPartial: Boolean(
-      cutoffDate && row.bucket === lastBucket && cutoffDate < bucketEnd(row.bucket, grain),
+      cutoffDate && row.bucket === lastBucket && cutoffDate < economicsBucketEnd(row.bucket, grain),
     ),
   }));
 }

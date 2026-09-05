@@ -5,8 +5,8 @@ import type {
   AnalyticsLeadingOrderForecast,
   AnalyticsResolvedGrain,
 } from './contract';
-import { addDays } from './date-range';
-import { bucketFor } from './economics-series';
+import { addDays, inclusiveDays } from './date-range';
+import { bucketFor, economicsBucketEnd } from './economics-series';
 
 type EconomicsReport = Awaited<ReturnType<typeof getProfitTrackerReport>>;
 
@@ -202,7 +202,7 @@ function robustWeightedAverage(values: number[]) {
   return weightedAverage(bounded);
 }
 
-type ForecastBaselineMethod = 'weekday' | 'recent' | 'seasonal-blend';
+type ForecastBaselineMethod = 'weekday' | 'seasonal-blend';
 
 type HistoricalEconomicsDay = {
   date: string;
@@ -231,7 +231,6 @@ function baselineValue(
     .slice(-8);
   const sameWeekday =
     sameWeekdayRows.length >= 2 ? robustWeightedAverage(values(sameWeekdayRows)) : null;
-  if (method === 'recent') return recent;
   if (method === 'weekday') return sameWeekday ?? recent;
   if (sameWeekday == null) return recent;
   if (recent == null) return sameWeekday;
@@ -240,7 +239,7 @@ function baselineValue(
 
 function chooseBaselineMethod(completed: HistoricalEconomicsDay[]): ForecastBaselineMethod {
   if (completed.length < 21) return 'seasonal-blend';
-  const candidates: ForecastBaselineMethod[] = ['weekday', 'recent', 'seasonal-blend'];
+  const candidates: ForecastBaselineMethod[] = ['weekday', 'seasonal-blend'];
   const validationStart = Math.max(14, completed.length - 21);
   const scores = candidates.map((method) => {
     let absoluteError = 0;
@@ -262,11 +261,10 @@ function chooseBaselineMethod(completed: HistoricalEconomicsDay[]): ForecastBase
   return scores.sort((left, right) => left.error - right.error)[0]!.method;
 }
 
-function standardDeviation(values: number[], mean: number) {
-  if (values.length < 2) return 0;
-  return Math.sqrt(
-    values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1),
-  );
+function robustDeviation(values: number[]) {
+  const center = median(values);
+  if (values.length < 2 || center == null) return 0;
+  return (median(values.map((value) => Math.abs(value - center))) ?? 0) * 1.4826;
 }
 
 export function buildEconomicsForecast(
@@ -274,6 +272,7 @@ export function buildEconomicsForecast(
   today: string,
   horizonDays = 14,
   leading?: AnalyticsLeadingOrderForecast,
+  currentDayRemainingFraction = 0,
 ) {
   const completed = [...report.days]
     .flatMap((day) => {
@@ -302,16 +301,40 @@ export function buildEconomicsForecast(
     .slice(-56);
   if (completed.length < 7) return [];
   const baselineMethod = chooseBaselineMethod(completed);
+  const residuals = completed.slice(Math.max(14, completed.length - 28)).flatMap((actual) => {
+    const history = completed.filter((day) => day.date < actual.date);
+    const predicted = baselineValue(
+      history,
+      actual.date,
+      (day) => day.trueProfitDzd,
+      baselineMethod,
+    );
+    return predicted == null ? [] : [actual.trueProfitDzd - predicted];
+  });
+  const baselineSpread = robustDeviation(residuals);
 
   const leadingByDate = new Map(leading?.days.map((day) => [day.date, day]) ?? []);
-  return Array.from({ length: horizonDays }, (_, index) => {
-    const date = addDays(today, index + 1);
+  const remainingFraction = Math.max(0, Math.min(1, currentDayRemainingFraction));
+  const schedule = [
+    ...(remainingFraction > 0
+      ? [{ date: today, horizonIndex: 0, share: remainingFraction, currentDayRemainder: true }]
+      : []),
+    ...Array.from({ length: horizonDays }, (_, horizonIndex) => ({
+      date: addDays(today, horizonIndex + 1),
+      horizonIndex,
+      share: 1,
+      currentDayRemainder: false,
+    })),
+  ];
+  return schedule.map(({ date, horizonIndex, share, currentDayRemainder }) => {
     const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
     const isConfiguredRestDay = Boolean(
       report.settings?.restFrom && date >= report.settings.restFrom && weekday === 5,
     );
     if (isConfiguredRestDay) {
-      const operatingCostDzd = operatingCostForDay(date, report.costs ?? []);
+      const operatingCostDzd = currentDayRemainder
+        ? 0
+        : operatingCostForDay(date, report.costs ?? []);
       const forecastTrueProfitDzd = operatingCostDzd === 0 ? 0 : -operatingCostDzd;
       return {
         date,
@@ -327,13 +350,13 @@ export function buildEconomicsForecast(
         forecastPaidOrders: leadingByDate.get(date)?.forecastPaidOrders ?? null,
         samples: 0,
         method: 'configured-rest-day',
+        currentDayRemainder,
       } as const;
     }
     const sameWeekday = completed
       .filter((day) => new Date(`${day.date}T00:00:00.000Z`).getUTCDay() === weekday)
       .slice(-8);
-    const sample =
-      baselineMethod === 'recent' || sameWeekday.length < 2 ? completed.slice(-14) : sameWeekday;
+    const sample = sameWeekday.length < 2 ? completed.slice(-14) : sameWeekday;
     const profits = sample.map((day) => day.trueProfitDzd as number);
     const baselineGrossProfitDzd = baselineValue(
       completed,
@@ -350,21 +373,23 @@ export function buildEconomicsForecast(
     const baselinePostedOrders =
       baselineValue(completed, date, (day) => day.postedOrders, baselineMethod) ?? 0;
     const leadingDay = leadingByDate.get(date);
-    const forecastGrossProfitDzd =
+    const fullDayGrossProfitDzd =
       baselineGrossProfitDzd == null
         ? (leadingDay?.expectedGrossProfitDzd ?? null)
         : Math.max(baselineGrossProfitDzd, leadingDay?.expectedGrossProfitDzd ?? 0);
-    const forecastAdjustedProfitDzd =
+    const fullDayAdjustedProfitDzd =
       baselineAdjustedProfitDzd == null
         ? (leadingDay?.expectedAdjustedProfitDzd ?? null)
         : Math.max(baselineAdjustedProfitDzd, leadingDay?.expectedAdjustedProfitDzd ?? 0);
-    const forecastAdCostDzd = baselineValue(
-      completed,
-      date,
-      (day) => day.adCostDzd,
-      baselineMethod,
-    );
-    const forecastOperatingCostDzd = operatingCostForDay(date, report.costs ?? []);
+    const fullDayAdCostDzd = baselineValue(completed, date, (day) => day.adCostDzd, baselineMethod);
+    const forecastGrossProfitDzd =
+      fullDayGrossProfitDzd == null ? null : fullDayGrossProfitDzd * share;
+    const forecastAdjustedProfitDzd =
+      fullDayAdjustedProfitDzd == null ? null : fullDayAdjustedProfitDzd * share;
+    const forecastAdCostDzd = fullDayAdCostDzd == null ? null : fullDayAdCostDzd * share;
+    const forecastOperatingCostDzd = currentDayRemainder
+      ? 0
+      : operatingCostForDay(date, report.costs ?? []);
     const forecastNetProfitDzd =
       forecastAdjustedProfitDzd != null && forecastAdCostDzd != null
         ? forecastAdjustedProfitDzd - forecastAdCostDzd
@@ -372,8 +397,9 @@ export function buildEconomicsForecast(
     const forecastTrueProfitDzd =
       forecastNetProfitDzd != null
         ? forecastNetProfitDzd - forecastOperatingCostDzd
-        : (weightedAverage(profits) ?? 0);
-    const spread = standardDeviation(profits, forecastTrueProfitDzd);
+        : (weightedAverage(profits) ?? 0) * share;
+    const horizonScale = Math.sqrt(1 + horizonIndex / 10);
+    const spread = baselineSpread * horizonScale * share;
     return {
       date,
       forecastGrossProfitDzd,
@@ -384,15 +410,17 @@ export function buildEconomicsForecast(
       forecastTrueProfitDzd,
       lowerTrueProfitDzd: forecastTrueProfitDzd - 1.28 * spread,
       upperTrueProfitDzd: forecastTrueProfitDzd + 1.28 * spread,
-      forecastPostedOrders: Math.max(baselinePostedOrders, leadingDay?.expectedPostedOrders ?? 0),
-      forecastPaidOrders: leadingDay?.forecastPaidOrders ?? null,
-      knownPipelinePostedOrders: leadingDay?.expectedPostedOrders ?? 0,
-      knownPipelineGrossProfitDzd: leadingDay?.expectedGrossProfitDzd ?? 0,
-      knownPipelineAdjustedProfitDzd: leadingDay?.expectedAdjustedProfitDzd ?? 0,
+      forecastPostedOrders:
+        Math.max(baselinePostedOrders, leadingDay?.expectedPostedOrders ?? 0) * share,
+      forecastPaidOrders: currentDayRemainder ? null : (leadingDay?.forecastPaidOrders ?? null),
+      knownPipelinePostedOrders: (leadingDay?.expectedPostedOrders ?? 0) * share,
+      knownPipelineGrossProfitDzd: (leadingDay?.expectedGrossProfitDzd ?? 0) * share,
+      knownPipelineAdjustedProfitDzd: (leadingDay?.expectedAdjustedProfitDzd ?? 0) * share,
       samples: sample.length,
       method: leadingDay
         ? 'historical-baseline-with-pipeline-floor'
         : `backtested-${baselineMethod}`,
+      currentDayRemainder,
     } as const;
   });
 }
@@ -417,7 +445,9 @@ export function projectOpenEconomicsSeries(
   return points.map((point) => {
     if (!point.isPartial) return point;
     const remaining = forecast.filter((row) => bucketFor(row.date, grain) === point.bucket);
-    if (!remaining.length) return point;
+    if (!remaining.length || remaining.at(-1)?.date !== economicsBucketEnd(point.bucket, grain)) {
+      return point;
+    }
 
     const grossRemainder = sumForecastMetric(remaining, (row) => row.forecastGrossProfitDzd);
     const adjustedRemainder = sumForecastMetric(remaining, (row) => row.forecastAdjustedProfitDzd);
@@ -478,6 +508,14 @@ export function appendEconomicsForecastSeries(
   for (const [bucket, rows] of [...future.entries()].sort(([left], [right]) =>
     left.localeCompare(right),
   )) {
+    const end = economicsBucketEnd(bucket, grain);
+    if (
+      rows[0]?.date !== bucket ||
+      rows.at(-1)?.date !== end ||
+      rows.length !== inclusiveDays(bucket, end)
+    ) {
+      continue;
+    }
     const grossProfitDzd = sumForecastMetric(rows, (row) => row.forecastGrossProfitDzd);
     const adjustedProfitDzd = sumForecastMetric(rows, (row) => row.forecastAdjustedProfitDzd);
     const adCostDzd = sumForecastMetric(rows, (row) => row.forecastAdCostDzd);

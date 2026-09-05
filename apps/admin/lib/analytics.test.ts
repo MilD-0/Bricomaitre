@@ -21,12 +21,14 @@ import {
   storefrontPathCoverage,
 } from './analytics';
 import { ANALYTICS_FACT_SEMANTICS_VERSION } from './analytics-fact-contract';
-import { dayInTimezone } from './analytics/date-range';
+import { dayInTimezone, remainingDayFraction } from './analytics/date-range';
 import { metricWithProjectedComparison } from './analytics/loaders-shared';
 
 describe('analytics filter model', () => {
   it('resolves the Algiers reporting day across the UTC midnight boundary', () => {
     expect(dayInTimezone(new Date('2026-08-30T23:11:00.000Z'))).toBe('2026-08-31');
+    expect(remainingDayFraction(new Date('2026-08-30T23:00:00.000Z'))).toBeCloseTo(1);
+    expect(remainingDayFraction(new Date('2026-08-31T11:00:00.000Z'))).toBeCloseTo(0.5);
   });
 
   it('normalizes presets, comparison windows and automatic grain', () => {
@@ -434,7 +436,77 @@ describe('analytics forecasting', () => {
 
     expect(forecast).toHaveLength(7);
     expect(Math.max(...forecast.map((day) => day.forecastTrueProfitDzd))).toBeLessThan(500);
+    expect(Math.max(...forecast.map((day) => day.upperTrueProfitDzd))).toBeLessThan(500);
     expect(forecast.every((day) => day.method.startsWith('backtested-'))).toBe(true);
+  });
+
+  it('retains weekly commerce shape and widens uncertainty across the horizon', () => {
+    const days = Array.from({ length: 56 }, (_, index) => {
+      const value = new Date(Date.UTC(2026, 5, 25 + index));
+      const date = value.toISOString().slice(0, 10);
+      const profitByWeekday = [120, 126, 112, 106, 116, 76, 136];
+      const trueProfitDzd = profitByWeekday[value.getUTCDay()]! + index * 0.2;
+      return {
+        date,
+        postedOrders: Math.round(trueProfitDzd / 2),
+        operatingCostDzd: 0,
+        trueProfitDzd,
+        isRestDay: false,
+        grossProfitDzd: trueProfitDzd + 25,
+        metrics: { adjustedProfitDzd: trueProfitDzd + 10, adCostDzd: 10 },
+      };
+    }).reverse();
+    const forecast = buildEconomicsForecast(
+      { settings: { restFrom: null }, costs: [], days } as unknown as Parameters<
+        typeof buildEconomicsForecast
+      >[0],
+      '2026-08-20',
+      14,
+    );
+
+    expect(
+      new Set(forecast.map((day) => Math.round(day.forecastTrueProfitDzd))).size,
+    ).toBeGreaterThan(4);
+    const intervalWidth = (index: number) =>
+      forecast[index]!.upperTrueProfitDzd - forecast[index]!.lowerTrueProfitDzd;
+    expect(intervalWidth(13)).toBeGreaterThan(intervalWidth(0) * 1.2);
+    expect(
+      Math.max(...forecast.map((_day, index) => intervalWidth(index))) /
+        Math.min(...forecast.map((_day, index) => intervalWidth(index))),
+    ).toBeLessThan(1.6);
+  });
+
+  it('adds only the unelapsed share of the current day to an open-period projection', () => {
+    const days = Array.from({ length: 14 }, (_, index) => ({
+      date: `2026-08-${String(5 + index).padStart(2, '0')}`,
+      postedOrders: 10,
+      operatingCostDzd: 5,
+      trueProfitDzd: 75,
+      isRestDay: false,
+      grossProfitDzd: 110,
+      metrics: { adjustedProfitDzd: 100, adCostDzd: 20 },
+    })).reverse();
+    const forecast = buildEconomicsForecast(
+      { settings: { restFrom: null }, costs: [], days } as unknown as Parameters<
+        typeof buildEconomicsForecast
+      >[0],
+      '2026-08-19',
+      1,
+      undefined,
+      0.75,
+    );
+
+    expect(forecast).toHaveLength(2);
+    expect(forecast[0]).toMatchObject({
+      date: '2026-08-19',
+      forecastAdjustedProfitDzd: 75,
+      forecastAdCostDzd: 15,
+      forecastOperatingCostDzd: 0,
+      forecastTrueProfitDzd: 60,
+      forecastPostedOrders: 7.5,
+      currentDayRemainder: true,
+    });
+    expect(forecast[1]).toMatchObject({ date: '2026-08-20', currentDayRemainder: false });
   });
 
   it('trains on the period identity and keeps configured Fridays as rest days', () => {
@@ -552,20 +624,28 @@ describe('analytics forecasting', () => {
           forecastNetProfitDzd: 60,
           forecastTrueProfitDzd: 50,
         },
+        {
+          date: '2026-08-20',
+          forecastGrossProfitDzd: 80,
+          forecastAdjustedProfitDzd: 70,
+          forecastAdCostDzd: 10,
+          forecastNetProfitDzd: 60,
+          forecastTrueProfitDzd: 45,
+        },
       ] as never,
       'week',
     )[0];
 
     expect(projected).toMatchObject({
       trueProfitDzd: 110,
-      trueProfitDzdProjected: 215,
-      adjustedProfitDzdProjected: 330,
-      adCostDzdProjected: 90,
-      netProfitDzdProjected: 240,
-      cumulativeTrueProfitDzdProjected: 1_205,
-      projectionDays: 2,
+      trueProfitDzdProjected: 260,
+      adjustedProfitDzdProjected: 400,
+      adCostDzdProjected: 100,
+      netProfitDzdProjected: 300,
+      cumulativeTrueProfitDzdProjected: 1_250,
+      projectionDays: 3,
     });
-    expect(projected?.profitXProjected).toBeCloseTo(330 / 90);
+    expect(projected?.profitXProjected).toBeCloseTo(400 / 100);
   });
 
   it('appends future buckets as forecast-only economics points', () => {
@@ -602,6 +682,45 @@ describe('analytics forecasting', () => {
       cumulativeTrueProfitDzdProjected: 605,
       isForecast: true,
     });
+  });
+
+  it('does not chart an incomplete future bucket as a full period', () => {
+    const series = appendEconomicsForecastSeries(
+      [
+        {
+          bucket: '2026-08-14',
+          label: '2026-08-14',
+          netProfitDzd: 60,
+          trueProfitDzd: 55,
+          cumulativeNetProfitDzd: 600,
+          cumulativeTrueProfitDzd: 550,
+          isPartial: false,
+        },
+      ] as never,
+      [
+        {
+          date: '2026-08-21',
+          forecastGrossProfitDzd: 100,
+          forecastAdjustedProfitDzd: 80,
+          forecastAdCostDzd: 20,
+          forecastNetProfitDzd: 60,
+          forecastTrueProfitDzd: 55,
+          forecastPostedOrders: 2,
+        },
+        {
+          date: '2026-08-22',
+          forecastGrossProfitDzd: 100,
+          forecastAdjustedProfitDzd: 80,
+          forecastAdCostDzd: 20,
+          forecastNetProfitDzd: 60,
+          forecastTrueProfitDzd: 55,
+          forecastPostedOrders: 2,
+        },
+      ] as never,
+      'week',
+    );
+
+    expect(series).toHaveLength(1);
   });
 });
 

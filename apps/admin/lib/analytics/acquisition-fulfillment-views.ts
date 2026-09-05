@@ -8,7 +8,12 @@ import {
   commonCutoff,
   type AnalyticsCanonicalCutoffs,
 } from './data-boundaries';
-import { clipAnalyticsFilters, inclusiveDays } from './date-range';
+import {
+  clipAnalyticsFilters,
+  dayInTimezone,
+  inclusiveDays,
+  remainingDayFraction,
+} from './date-range';
 import { aggregateEconomicsSeries } from './economics-series';
 import {
   economicsWarnings,
@@ -39,6 +44,7 @@ export async function loadAcquisitionView(
   db: Database,
   filters: AnalyticsFilters,
   cutoffs: AnalyticsCanonicalCutoffs,
+  now = new Date(),
 ) {
   const performanceFilters = clipAnalyticsFilters(
     filters,
@@ -71,7 +77,13 @@ export async function loadAcquisitionView(
     ]);
   const summary = performance.summary;
   const old = previousPerformance?.summary;
-  const forecast = buildEconomicsForecast(current, performanceFilters.endDate, 14, leadingForecast);
+  const forecast = buildEconomicsForecast(
+    current,
+    performanceFilters.endDate,
+    14,
+    leadingForecast,
+    performanceFilters.endDate === dayInTimezone(now) ? remainingDayFraction(now) : 0,
+  );
   const profitSeries = projectOpenEconomicsSeries(
     aggregateEconomicsSeries(current, filters.resolvedGrain, performanceFilters.endDate),
     forecast,
