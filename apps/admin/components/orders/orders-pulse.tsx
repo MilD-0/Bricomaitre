@@ -10,6 +10,7 @@ import type {
 } from '../../lib/order-admin-contracts';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
+import { Skeleton } from '../ui/skeleton';
 import { Switch } from '../ui/switch';
 import { formatOrderMoney } from './orders-workspace-presenters';
 
@@ -29,6 +30,23 @@ export function OrdersPulse({
   const overviewT = useTranslations('ordersManager.overview');
   const [activeReportIndex, setActiveReportIndex] = useState(0);
 
+  if (!overview && loading) {
+    return (
+      <section
+        data-orders-pulse-loading
+        aria-busy="true"
+        aria-label={overviewT('refreshing')}
+        className="grid grid-cols-2 gap-px border-b border-border/60 bg-border/45 p-px sm:grid-cols-4 lg:grid-cols-7"
+      >
+        {Array.from({ length: 7 }).map((_, index) => (
+          <div key={index} className="bg-background px-3 py-3">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="mt-2 h-6 w-24" />
+          </div>
+        ))}
+      </section>
+    );
+  }
   if (!overview?.available) return null;
   const activeReport = overview.reports[activeReportIndex] ?? overview.reports[0];
   if (!activeReport) return null;

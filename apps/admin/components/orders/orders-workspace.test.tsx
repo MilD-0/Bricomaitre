@@ -126,11 +126,15 @@ function makeOverview(reportCount = 7): Extract<DailyOrderStatusOverview, { avai
 function renderWorkspace(
   options: {
     initialOrders?: OrdersResponse;
-    initialOverview?: DailyOrderStatusOverview;
+    initialOverview?: DailyOrderStatusOverview | null;
     completedOrderCount?: number;
+    overviewResponse?: Promise<Response>;
   } = {},
 ) {
   server.use(
+    ...(options.overviewResponse
+      ? [http.get('/api/orders/overview', () => options.overviewResponse!)]
+      : []),
     http.get('/api/orders/:id', ({ params }) => {
       const order = orders.find((item) => String(item.id) === String(params.id));
       return order
@@ -149,7 +153,11 @@ function renderWorkspace(
       <NextIntlClientProvider locale="en" messages={messages}>
         <OrdersWorkspace
           initialOrders={options.initialOrders ?? initialOrders}
-          initialOverview={options.initialOverview ?? makeOverview()}
+          initialOverview={
+            options.initialOverview === null
+              ? undefined
+              : (options.initialOverview ?? makeOverview())
+          }
         />
       </NextIntlClientProvider>
     </QueryClientProvider>,
@@ -181,6 +189,28 @@ describe('OrdersWorkspace', () => {
       'data-orders-pulse',
     );
     expect(screen.queryByText('Seven-day outlook')).not.toBeInTheDocument();
+  });
+
+  it('renders the order queue while the overview loads separately', async () => {
+    let resolveOverview!: (response: Response) => void;
+    const overviewResponse = new Promise<Response>((resolve) => {
+      resolveOverview = resolve;
+    });
+
+    const { container } = renderWorkspace({ initialOverview: null, overviewResponse });
+
+    expect(screen.getByText('2 orders')).toBeInTheDocument();
+    expect(container.querySelector('[data-orders-pulse-loading]')).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+
+    resolveOverview(HttpResponse.json({ overview: makeOverview() }));
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-orders-pulse]')).toBeInTheDocument();
+    });
+    expect(container.querySelector('[data-orders-pulse-loading]')).not.toBeInTheDocument();
   });
 
   it('keeps the complete status filter behind one deliberate phone control', async () => {

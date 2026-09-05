@@ -11,7 +11,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
-import { useDeferredValue, useLayoutEffect, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { requestJson as request } from '../../lib/admin-api';
 import type { EcotrackCatalogResponse } from '../../lib/ecotrack-admin-contracts';
@@ -66,6 +66,7 @@ type DeleteTarget = { id: number; label: string };
 type NoAnswerAttemptFilter = 'all' | 1 | 2 | '3-plus';
 
 const noAnswerAttemptFilters: NoAnswerAttemptFilter[] = ['all', 1, 2, '3-plus'];
+const ordersOverviewQueryKey = ['orders-overview'] as const;
 
 export function OrdersWorkspace({
   initialOrders,
@@ -92,9 +93,6 @@ export function OrdersWorkspace({
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [bulkStatus, setBulkStatus] = useState<OrderStatus>(ORDER_STATUS.CONFIRMED);
   const [projectionBasis, setProjectionBasis] = useState<ProfitProjectionBasis>('confirmed');
-  const [overviewByBasis, setOverviewByBasis] = useState<
-    Partial<Record<ProfitProjectionBasis, DailyOrderStatusOverview>>
-  >(() => (initialOverview ? { confirmed: initialOverview } : {}));
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const effectiveNoAnswerAttemptFilter =
     statusFilter === ORDER_STATUS.NO_ANSWER ? noAnswerAttemptFilter : 'all';
@@ -172,19 +170,26 @@ export function OrdersWorkspace({
     placeholderData: keepPreviousData,
     staleTime: 60_000,
   });
-  const overviewMutation = useMutation({
-    mutationFn: (basis: ProfitProjectionBasis) =>
+  const overviewQuery = useQuery({
+    queryKey: [...ordersOverviewQueryKey, projectionBasis, 7],
+    queryFn: () =>
       request<{ overview: DailyOrderStatusOverview }>(
-        `/api/orders/overview?projectionBasis=${basis}&reportDays=7`,
+        `/api/orders/overview?projectionBasis=${projectionBasis}&reportDays=7`,
       ),
-    onSuccess: (response, basis) => {
-      setOverviewByBasis((current) => ({ ...current, [basis]: response.overview }));
-    },
-    onError: (error: Error) => toast.error(error.message),
+    initialData:
+      projectionBasis === 'confirmed' && initialOverview
+        ? { overview: initialOverview }
+        : undefined,
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: false,
   });
+  useEffect(() => {
+    if (overviewQuery.error) toast.error(overviewQuery.error.message);
+  }, [overviewQuery.error]);
   const changeProjectionBasis = (basis: ProfitProjectionBasis) => {
     setProjectionBasis(basis);
-    if (!overviewByBasis[basis]) overviewMutation.mutate(basis);
   };
   const orders = ordersQuery.data?.items ?? [];
   const pagination = ordersQuery.data?.pagination;
@@ -215,6 +220,7 @@ export function OrdersWorkspace({
       );
       queryClient.setQueryData(['orders-workspace-detail', response.item.id], response);
       toast.success(t('notifications.orders.status.success', { name: response.item.fullName }));
+      void queryClient.invalidateQueries({ queryKey: ordersOverviewQueryKey });
       await queryClient.invalidateQueries({ queryKey: ['orders-workspace'] });
     },
     onError: (error: Error) => toast.error(error.message),
@@ -262,6 +268,7 @@ export function OrdersWorkspace({
         toast.error(t('notifications.orders.bulkStatus.error', { count: result.failedIds.length }));
       }
       setSelectedIds(result.failedIds);
+      void queryClient.invalidateQueries({ queryKey: ordersOverviewQueryKey });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['orders-workspace'] }),
         queryClient.invalidateQueries({ queryKey: ['orders-workspace-detail'] }),
@@ -269,6 +276,7 @@ export function OrdersWorkspace({
     },
     onError: async () => {
       toast.error(t('notifications.orders.bulkStatus.error', { count: selectedOrders.length }));
+      void queryClient.invalidateQueries({ queryKey: ordersOverviewQueryKey });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['orders-workspace'] }),
         queryClient.invalidateQueries({ queryKey: ['orders-workspace-detail'] }),
@@ -283,6 +291,7 @@ export function OrdersWorkspace({
       setDeleteTarget(null);
       setSelectedIds((current) => current.filter((id) => id !== target.id));
       if (activeOrderId === target.id) returnToQueue();
+      void queryClient.invalidateQueries({ queryKey: ordersOverviewQueryKey });
       await queryClient.invalidateQueries({ queryKey: ['orders-workspace'] });
     },
     onError: (_error, target) =>
@@ -361,15 +370,16 @@ export function OrdersWorkspace({
               onCreated={async (order) => {
                 setOpenedOrder(order);
                 focusOrder(order.id);
+                void queryClient.invalidateQueries({ queryKey: ordersOverviewQueryKey });
                 await queryClient.invalidateQueries({ queryKey: ['orders-workspace'] });
               }}
             />
           </WorkspaceActions>
         </WorkspaceHeader>
         <OrdersPulse
-          overview={overviewByBasis[projectionBasis] ?? overviewByBasis.confirmed}
+          overview={overviewQuery.data?.overview}
           projectionBasis={projectionBasis}
-          loading={overviewMutation.isPending && overviewMutation.variables === projectionBasis}
+          loading={overviewQuery.isPending || overviewQuery.isFetching}
           onProjectionBasisChange={changeProjectionBasis}
         />
         <WorkspaceToolbar className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
