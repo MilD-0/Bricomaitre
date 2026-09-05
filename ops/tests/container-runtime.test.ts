@@ -623,6 +623,7 @@ describe('production packaging and release runtime', () => {
     expect(imageBuilder).toContain('docker buildx bake');
     expect(imageBuilder).toContain('Release image build failed with a non-network error');
     expect(imageBuilder).toContain('i/o timeout|TLS handshake timeout|connection reset by peer');
+    expect(imageBuilder).toContain('blob upload unknown to registry');
     const imageSigner = readFileSync(
       resolve(workspaceRoot, 'ops/scripts/sign-bake-images.sh'),
       'utf8',

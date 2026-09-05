@@ -8,7 +8,9 @@ const workspaceRoot = resolve(import.meta.dirname, '../..');
 const builder = resolve(workspaceRoot, 'ops/scripts/build-release-images.sh');
 const temporaryDirectories: string[] = [];
 
-function runBuilder(mode: 'transient-once' | 'always-transient' | 'build-error') {
+function runBuilder(
+  mode: 'transient-once' | 'registry-upload-once' | 'always-transient' | 'build-error',
+) {
   const directory = mkdtempSync(join(tmpdir(), 'bric-release-build-'));
   temporaryDirectories.push(directory);
   const fakeBin = join(directory, 'bin');
@@ -30,6 +32,12 @@ case "$FAKE_DOCKER_MODE" in
   transient-once)
     if ((count == 1)); then
       echo 'failed to resolve source metadata: dial tcp: i/o timeout' >&2
+      exit 1
+    fi
+    ;;
+  registry-upload-once)
+    if ((count == 1)); then
+      echo 'unknown: blob upload unknown to registry' >&2
       exit 1
     fi
     ;;
@@ -91,6 +99,15 @@ describe('release image build retries', () => {
     expect(result.status).toBe(1);
     expect(result.calls).toBe(1);
     expect(result.stderr).toContain('non-network error; not retrying');
+  });
+
+  it('retries a lost registry upload session', () => {
+    const result = runBuilder('registry-upload-once');
+
+    expect(result.status).toBe(0);
+    expect(result.calls).toBe(2);
+    expect(result.stderr).toContain('transient network error; retrying');
+    expect(result.log).toContain('synthetic build succeeded');
   });
 
   it('bounds repeated transient failures', () => {

@@ -31,7 +31,7 @@ fi
 
 mkdir -p "$(dirname "$metadata_file")" "$(dirname "$log_file")"
 
-transient_pattern='i/o timeout|TLS handshake timeout|connection reset by peer|unexpected EOF|unexpected eof|temporary failure in name resolution|dial tcp|network is unreachable|context deadline exceeded|DeadlineExceeded|net/http: request canceled|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout'
+transient_pattern='i/o timeout|TLS handshake timeout|connection reset by peer|unexpected EOF|unexpected eof|temporary failure in name resolution|dial tcp|network is unreachable|context deadline exceeded|DeadlineExceeded|net/http: request canceled|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|blob upload unknown to registry'
 
 for attempt in $(seq 1 "$max_attempts"); do
   if [[ -e "$metadata_file" ]]; then
