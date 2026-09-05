@@ -666,6 +666,20 @@
       "when": 1788600750244,
       "tag": "0094_thin_agent_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1788637848823,
+      "tag": "0095_unique_fat_cobra",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1788637861660,
+      "tag": "0096_careful_oracle",
+      "breakpoints": true
     }
   ]
 }

@@ -50,6 +50,7 @@ export const accounts = adminSchema.table(
     userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    issuer: text('issuer').notNull(),
     accountId: text('provider_account_id').notNull(),
     providerId: text('provider').notNull(),
     accessToken: text('access_token'),
@@ -69,6 +70,7 @@ export const accounts = adminSchema.table(
   (t) => [
     primaryKey({ columns: [t.providerId, t.accountId] }),
     uniqueIndex('accounts_id_unique').on(t.id),
+    uniqueIndex('accounts_issuer_account_id_unique').on(t.issuer, t.accountId),
     index('accounts_user_id_idx').on(t.userId),
   ],
 );

@@ -1,0 +1,1 @@
+ALTER TABLE "admin"."accounts" ALTER COLUMN "issuer" DROP DEFAULT;

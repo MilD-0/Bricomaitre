@@ -110,6 +110,10 @@ describe('Better Auth configuration', () => {
     );
     expect(betterAuthMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        account: {
+          identityStrategy: 'provider-id',
+          modelName: 'account',
+        },
         baseURL: 'https://admin.example.com',
         database: expect.objectContaining({ name: 'drizzle-adapter' }),
         secret: 'test-better-auth-secret-at-least-thirty-two-characters',

@@ -1,0 +1,2 @@
+ALTER TABLE "admin"."accounts" ADD COLUMN "issuer" text DEFAULT 'local:oauth:google' NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "accounts_issuer_account_id_unique" ON "admin"."accounts" USING btree ("issuer","provider_account_id");
