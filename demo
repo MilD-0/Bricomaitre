@@ -418,6 +418,10 @@ remove_reset_timer() {
 write_runtime_configuration
 
 command="${1:-help}"
+if [[ "$command" = prepare ]]; then
+  printf 'Demo runtime configuration prepared.\n'
+  exit 0
+fi
 case "$command" in
   up|reset|rebuild|destroy)
     exec 9>"$runtime_dir/operation.lock"
