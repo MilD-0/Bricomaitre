@@ -23,6 +23,7 @@ import type { AnalyticsCopy } from './analytics-copy';
 import {
   AnalyticsAssistantFocusContext,
   chartTooltip,
+  completedTrendBuckets,
   type DataOf,
   DenseTable,
   MetricStrip,
@@ -81,6 +82,7 @@ export function SearchVisibilityView({
       toast.error(error instanceof Error ? error.message : copy.labels.syncFailed),
   });
   const inspectionIssues = data.indexHealth.issues;
+  const trend = completedTrendBuckets(data.trend, filters.resolvedGrain, filters.endDate);
   return (
     <>
       <MetricStrip metrics={data.metrics} copy={copy} locale={locale} />
@@ -106,7 +108,7 @@ export function SearchVisibilityView({
         <div>
           <ChartFrame className="h-[22rem]">
             <ResponsiveChart width="100%" height="100%">
-              <ComposedChart data={data.trend}>
+              <ComposedChart data={trend}>
                 <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.5} />
                 <XAxis
                   dataKey="bucket"
@@ -179,7 +181,9 @@ export function SearchVisibilityView({
                       {copy.labels.position} {formatNumber(locale, row.position)}
                     </span>
                     <span className="font-medium text-foreground">
-                      +{formatNumber(locale, row.potentialClicks)} {copy.labels.clicks}
+                      {row.potentialClicks > 0
+                        ? `+${formatNumber(locale, row.potentialClicks)} ${copy.labels.clicks}`
+                        : '—'}
                     </span>
                   </span>
                 </button>
@@ -231,7 +235,9 @@ export function SearchVisibilityView({
                       {formatNumber(locale, row.position)}
                     </td>
                     <td className="px-3 py-2.5 text-end font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
-                      +{formatNumber(locale, row.potentialClicks)}
+                      {row.potentialClicks > 0
+                        ? `+${formatNumber(locale, row.potentialClicks)}`
+                        : '—'}
                     </td>
                   </tr>
                 ))}

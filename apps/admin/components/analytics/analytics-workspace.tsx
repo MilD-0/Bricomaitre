@@ -27,6 +27,7 @@ import { CatalogView } from './analytics-catalog-view';
 import { CommandView, MoneyView } from './analytics-command-money-views';
 import { getAnalyticsCopy } from './analytics-copy';
 import { FulfillmentView } from './analytics-fulfillment-view';
+import { ANALYTICS_TIME_ZONE } from './analytics-format';
 import { SearchVisibilityView } from './analytics-search-view';
 import { StorefrontView } from './analytics-storefront-view';
 import {
@@ -35,7 +36,7 @@ import {
   WarningRail,
 } from './analytics-workspace-primitives';
 
-export { splitPartialSeries } from './analytics-workspace-primitives';
+export { completedTrendBuckets, splitPartialSeries } from './analytics-workspace-primitives';
 
 export function StatsWorkspace({ initialData }: { initialData: AnalyticsPayload }) {
   const locale = useLocale();
@@ -124,6 +125,7 @@ export function StatsWorkspace({ initialData }: { initialData: AnalyticsPayload 
   const updatedAt = `${copy.updated} ${new Intl.DateTimeFormat(locale, {
     dateStyle: 'medium',
     timeStyle: 'short',
+    timeZone: ANALYTICS_TIME_ZONE,
   }).format(new Date(payload.generatedAt))}`;
   useAdminAiSurfaceDetails(
     analyticsAiSurfaceDetails({

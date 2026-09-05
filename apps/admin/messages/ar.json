@@ -2286,6 +2286,7 @@
       "livre_non_encaisse": "تم التسليم غير محصل",
       "encaisse_non_paye": "محصل غير مدفوع",
       "paiements_prets": "الدفعات جاهزة",
+      "payed": "تم الدفع",
       "paye_et_archive": "مدفوع ومؤرشف",
       "retour_chez_livreur": "ارجاع عند السائق",
       "retour_transit_entrepot": "ارجاع في طريقه للمخزن",

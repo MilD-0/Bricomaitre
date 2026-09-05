@@ -49,12 +49,14 @@ function ProgressiveBannerImage({
     priority,
     unoptimized: portraitSvg,
   });
-  const lowLandscape = landscapeSvg
-    ? landscape
-    : `/_next/image?url=${encodeURIComponent(landscape)}&w=32&q=60`;
-  const lowPortrait = portraitSvg
-    ? portrait
-    : `/_next/image?url=${encodeURIComponent(portrait)}&w=32&q=60`;
+  const lowLandscape =
+    landscapeSvg || !landscapeProps.srcSet
+      ? landscape
+      : `/_next/image?url=${encodeURIComponent(landscape)}&w=32&q=60`;
+  const lowPortrait =
+    portraitSvg || !portraitProps.srcSet
+      ? portrait
+      : `/_next/image?url=${encodeURIComponent(portrait)}&w=32&q=60`;
   useEffect(() => {
     const image = imageRef.current;
     if (image?.complete && image.naturalWidth > 0) markReady();
@@ -110,6 +112,7 @@ export function HomepageBannerCarousel({
   }, [api, banners.length, canAutoplay]);
 
   if (banners.length === 0) return null;
+  const cta = locale === 'ar' ? 'اكتشف المنتجات' : 'Voir la sélection';
   return (
     <section
       className="home-banner"
@@ -135,6 +138,10 @@ export function HomepageBannerCarousel({
                     priority={index === 0}
                     onReady={() => markLoaded(index)}
                   />
+                  <span className="home-banner-copy">
+                    <strong>{label}</strong>
+                    <span>{cta}</span>
+                  </span>
                 </a>
               </div>
             );

@@ -213,8 +213,20 @@ admin entry button creates a real local session with developer RBAC; it bypasses
 only external identity proof. No production credentials or data are used. AI is
 disabled until its local demo runtime is added.
 
+The catalog contains 3,884 hardware products and 9,065 exact-product images
+derived from pinned public datasets. Deterministic generators add 250,000
+orders, one million line items, 200,000 carrier shipments, four years of
+analytics, and populated operational, financial, marketing, Search Console,
+fulfillment, and assistant histories. Images are downloaded and optimized once,
+then served from local object storage; browsers do not load them from the source
+hosts.
+
 Use `./demo urls` to print the entry points, `./demo reset` to restore the
-synthetic dataset, and `./demo down` to stop the stack without deleting it.
+synthetic dataset, and `./demo down` to stop the stack without deleting it. The
+first build creates a versioned PostgreSQL template; later resets restore that
+verified template and add a fresh seven-day activity window. On a persistent
+demo host, `./demo schedule` installs the six-hour reset timer for the current
+user.
 
 For source-native development, use Node.js 24, Corepack, PostgreSQL 16, and
 Redis 7. The pinned package manager is pnpm 11.

@@ -35,6 +35,7 @@ import {
   type AnalyticsFulfillmentSummary,
   type AnalyticsReturnObservation,
   type Database,
+  paidShipmentStatusesSql,
   resolvedShipmentStatusesSql,
 } from './loaders-shared';
 
@@ -108,14 +109,14 @@ export async function loadFulfillmentSummary(
           and current_status not in (${resolvedShipmentStatusesSql})
       )::int as active_shipments,
       count(delivered_at)::int as delivered_orders,
-      count(*) filter (where current_status in ('paye_et_archive', 'payed'))::int as paid_orders,
+      count(*) filter (where current_status in (${paidShipmentStatusesSql}))::int as paid_orders,
       count(*) filter (where current_status = 'retour_archive')::int as returned_orders,
       count(*) filter (where current_status = 'annule')::int as cancelled_orders,
-      count(*) filter (where current_status in ('paye_et_archive', 'retour_archive'))::int
+      count(*) filter (where current_status in (${paidShipmentStatusesSql}, 'retour_archive'))::int
         as terminal_orders,
       count(*) filter (
         where posted_day <= ${matureCutoffDate}::date
-          and current_status in ('paye_et_archive', 'payed')
+          and current_status in (${paidShipmentStatusesSql})
       )::int as mature_paid_orders,
       count(*) filter (
         where posted_day <= ${matureCutoffDate}::date and current_status = 'retour_archive'
@@ -189,11 +190,11 @@ export async function loadReturnObservation(
       where ${datePredicate(sql`first_posted.posted_day`, filters.startDate, filters.endDate)}
     )
     select
-      count(*) filter (where current_status in ('paye_et_archive', 'payed'))::int as paid,
+      count(*) filter (where current_status in (${paidShipmentStatusesSql}))::int as paid,
       count(*) filter (where current_status = 'retour_archive')::int as returned,
       count(*) filter (
         where posted_day <= ${matureCutoffDate}::date
-          and current_status in ('paye_et_archive', 'payed')
+          and current_status in (${paidShipmentStatusesSql})
       )::int as mature_paid,
       count(*) filter (
         where posted_day <= ${matureCutoffDate}::date and current_status = 'retour_archive'
@@ -329,7 +330,7 @@ export async function loadAutomaticPaidEconomics(
       left join ${processedOrders}
         on ${processedOrders.tracking} = ${ecotrackOrderStates.trackingNumber}
       where ${ecotrackOrderStates.deletedAt} is null
-        and ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
+        and ${ecotrackOrderStates.currentStatus} in (${paidShipmentStatusesSql})
     )
     select (paid_at at time zone 'Africa/Algiers')::date::text as day,
       count(*)::int as paid_orders,

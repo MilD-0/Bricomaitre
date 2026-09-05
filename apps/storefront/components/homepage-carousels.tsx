@@ -25,11 +25,34 @@ function Controls({
   locale: Locale;
   label: string;
 }) {
+  const [canScrollPrevious, setCanScrollPrevious] = useState(false);
+  const [canScrollNext, setCanScrollNext] = useState(false);
+
+  useEffect(() => {
+    if (!api) return;
+    const update = () => {
+      const viewport = api.rootNode();
+      const hasOverflow = viewport.scrollWidth > viewport.clientWidth + 1;
+      setCanScrollPrevious(hasOverflow && api.canScrollPrev());
+      setCanScrollNext(hasOverflow && api.canScrollNext());
+    };
+    update();
+    api.on('select', update);
+    api.on('reInit', update);
+    return () => {
+      api.off('select', update);
+      api.off('reInit', update);
+    };
+  }, [api]);
+
+  if (!canScrollPrevious && !canScrollNext) return null;
+
   return (
     <div className="home-carousel-controls" aria-label={label}>
       <button
         type="button"
         onClick={() => api?.scrollPrev()}
+        disabled={!canScrollPrevious}
         aria-label={locale === 'ar' ? 'السابق' : 'Précédent'}
       >
         {locale === 'ar' ? <ChevronRight /> : <ChevronLeft />}
@@ -37,6 +60,7 @@ function Controls({
       <button
         type="button"
         onClick={() => api?.scrollNext()}
+        disabled={!canScrollNext}
         aria-label={locale === 'ar' ? 'التالي' : 'Suivant'}
       >
         {locale === 'ar' ? <ChevronLeft /> : <ChevronRight />}

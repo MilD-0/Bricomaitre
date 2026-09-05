@@ -44,6 +44,7 @@ services:
   postgres:
     image: postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
     init: true
+    shm_size: 512mb
     restart: unless-stopped
     environment:
       POSTGRES_DB: bricomaitre_demo
@@ -111,7 +112,8 @@ services:
     volumes:
       - ./object-storage/init.sh:/init.sh:ro
       - ./object-storage/public-read-policy.json:/public-read-policy.json:ro
-      - ./object-storage/assets:/seed-assets:ro
+      - ./.cache/images/catalog:/catalog-images:ro
+      - ./object-storage/assets:/merchandising-assets:ro
     entrypoint: [/bin/sh, /init.sh]
     depends_on:
       object-storage:
@@ -177,14 +179,32 @@ services:
     environment:
       PGPASSWORD: ${DEMO_POSTGRES_OWNER_PASSWORD}
       DEMO_OBJECT_PUBLIC_ORIGIN: ${DEMO_OBJECT_PUBLIC_ORIGIN}
+      DEMO_DATA_REVISION: ${DEMO_DATA_REVISION:-development}
     volumes:
-      - ./postgres/seed.sql:/seed.sql:ro
+      - ./postgres:/seed:ro
+      - ./data:/data:ro
     entrypoint:
       - /bin/sh
       - -ec
-      - psql -v ON_ERROR_STOP=1 -v asset_origin="$${DEMO_OBJECT_PUBLIC_ORIGIN}" -h postgres -U bricomaitre_demo_owner -d bricomaitre_demo -f /seed.sql
+      - psql -v ON_ERROR_STOP=1 -v asset_origin="$${DEMO_OBJECT_PUBLIC_ORIGIN}" -v build_key="$${DEMO_DATA_REVISION}" -h postgres -U bricomaitre_demo_owner -d bricomaitre_demo -f /seed/seed.sql
     depends_on:
       database-permissions:
+        condition: service_completed_successfully
+
+  live-seed:
+    image: postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+    restart: 'no'
+    environment:
+      PGPASSWORD: ${DEMO_POSTGRES_OWNER_PASSWORD}
+      DEMO_OBJECT_PUBLIC_ORIGIN: ${DEMO_OBJECT_PUBLIC_ORIGIN}
+    volumes:
+      - ./postgres:/seed:ro
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - psql -v ON_ERROR_STOP=1 -v asset_origin="$${DEMO_OBJECT_PUBLIC_ORIGIN}" -h postgres -U bricomaitre_demo_owner -d bricomaitre_demo -f /seed/live.sql
+    depends_on:
+      seed:
         condition: service_completed_successfully
 
   storefront-api:
@@ -202,7 +222,7 @@ services:
     volumes:
       - storefront-api-cache:/app/apps/storefront-api/.next/cache
     depends_on:
-      seed:
+      live-seed:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
@@ -244,6 +264,10 @@ services:
     env_file: .runtime/admin.env
     environment:
       DATABASE_URL: postgresql://bricomaitre_demo_admin:${DEMO_POSTGRES_ADMIN_PASSWORD}@postgres:5432/bricomaitre_demo
+      AI_ADMIN_INPUT_COST_PER_1M_USD: '1'
+      AI_ADMIN_OUTPUT_COST_PER_1M_USD: '6'
+      AI_STOREFRONT_INPUT_COST_PER_1M_USD: '1'
+      AI_STOREFRONT_OUTPUT_COST_PER_1M_USD: '6'
       PORT: 3000
     ports:
       - 127.0.0.1:${DEMO_ADMIN_PORT}:3000
@@ -295,6 +319,7 @@ services:
         NEXT_PUBLIC_RELEASE: demo
         NEXT_PUBLIC_SENTRY_DSN_STOREFRONT: ''
         NEXT_PUBLIC_SENTRY_ENVIRONMENT: demo
+        BRIC_DEMO_MODE: 'true'
         SENTRY_ORG: ''
         SENTRY_PROJECT_STOREFRONT: ''
         SENTRY_RELEASE: demo

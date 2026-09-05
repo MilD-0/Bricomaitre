@@ -34,6 +34,23 @@ describe('Admin content security policy', () => {
     ).not.toContain('not a URL');
   });
 
+  it('allows only an explicit loopback image origin in demo mode', () => {
+    expect(
+      buildAdminPageContentSecurityPolicy('nonce-value', {
+        NODE_ENV: 'production',
+        BRIC_DEMO_MODE: 'true',
+        BRIC_DEMO_OBJECT_ORIGIN: 'http://127.0.0.1:3900',
+      }),
+    ).toContain("img-src 'self' data: blob: https: http://127.0.0.1:3900");
+    expect(
+      buildAdminPageContentSecurityPolicy('nonce-value', {
+        NODE_ENV: 'production',
+        BRIC_DEMO_MODE: 'true',
+        BRIC_DEMO_OBJECT_ORIGIN: 'http://objects.example.com',
+      }),
+    ).not.toContain('objects.example.com');
+  });
+
   it('gives JSON API responses no browser execution surface', () => {
     expect(ADMIN_API_CONTENT_SECURITY_POLICY).toContain("default-src 'none'");
     expect(ADMIN_API_CONTENT_SECURITY_POLICY).not.toContain('script-src');

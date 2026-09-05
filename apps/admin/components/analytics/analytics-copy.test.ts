@@ -15,6 +15,7 @@ describe('analytics workspace copy', () => {
       expect(objectKeys(copy)).toEqual(objectKeys(english));
       expect(objectKeys(copy.labels)).toEqual(objectKeys(english.labels));
       expect(objectKeys(copy.fulfillmentPhases)).toEqual(objectKeys(english.fulfillmentPhases));
+      expect(objectKeys(copy.assumptions)).toEqual(objectKeys(english.assumptions));
     }
   });
 
@@ -22,5 +23,6 @@ describe('analytics workspace copy', () => {
     expect(getAnalyticsCopy('fr-FR').labels.nextSevenDayModel).toBe('Modèle des 7 prochains jours');
     expect(getAnalyticsCopy('ar-DZ').labels.analyticsRange).toBe('نطاق التحليلات');
     expect(getAnalyticsCopy('ar-DZ').fulfillmentPhases.delivery).toBe('قيد التوصيل');
+    expect(getAnalyticsCopy('fr-FR').assumptions.default).toBe('Par défaut');
   });
 });

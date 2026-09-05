@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "sources": {
+    "esciProducts": {
+      "name": "Amazon Shopping Queries Dataset product catalog",
+      "revision": "7916cdf6ab75a462e77f20ab40428a10923998d5",
+      "license": "Apache-2.0",
+      "url": "https://media.githubusercontent.com/media/amazon-science/esci-data/7916cdf6ab75a462e77f20ab40428a10923998d5/shopping_queries_dataset/shopping_queries_dataset_products.parquet",
+      "sha256": "25124442d064d64b26f74082d6fa09438d679efc0c183cf28d19064a2b65a265",
+      "bytes": 1108857465
+    },
+    "esciExamples": {
+      "name": "Amazon Shopping Queries Dataset query-product judgments",
+      "revision": "7916cdf6ab75a462e77f20ab40428a10923998d5",
+      "license": "Apache-2.0",
+      "url": "https://media.githubusercontent.com/media/amazon-science/esci-data/7916cdf6ab75a462e77f20ab40428a10923998d5/shopping_queries_dataset/shopping_queries_dataset_examples.parquet",
+      "sha256": "4a735b693b4a424a6fc67f5be6e4c811495c488bbf66d02a602d308b2744263a",
+      "bytes": 51286808
+    },
+    "sqidImages": {
+      "name": "Shopping Queries Image Dataset product image URLs",
+      "revision": "2514ba83e413ee8979798c1ef82d13f737535b04",
+      "license": "MIT",
+      "url": "https://huggingface.co/datasets/crossingminds/shopping-queries-image-dataset/resolve/2514ba83e413ee8979798c1ef82d13f737535b04/data/product_image_urls.parquet",
+      "sha256": "e6fc69c6870d37448b96fa3f6b0986c53c992a8632199361c773d88cfa92ef47",
+      "bytes": 4181471
+    },
+    "sqidSupplementalImages": {
+      "name": "Shopping Queries Image Dataset supplemental product image URLs",
+      "revision": "2514ba83e413ee8979798c1ef82d13f737535b04",
+      "license": "MIT",
+      "url": "https://huggingface.co/datasets/crossingminds/shopping-queries-image-dataset/resolve/2514ba83e413ee8979798c1ef82d13f737535b04/data/supp_product_image_urls.parquet",
+      "sha256": "07c2e237e418b1f5b27f9f9c144bb88051deba9f18dd81364dd180ce8a967c7f",
+      "bytes": 736785
+    },
+    "aboListings": {
+      "name": "Amazon Berkeley Objects listing metadata mirror",
+      "revision": "ae2befec6225c0e9151112863f48918aa8a50505",
+      "license": "CC-BY-4.0",
+      "upstream": "https://amazon-berkeley-objects.s3.amazonaws.com/index.html",
+      "files": [
+        {
+          "local": "abo-listings-00000.parquet",
+          "path": "data/listings/listings-00000-of-00016.parquet",
+          "sha256": "d509a674d8c7c05b34f18bda56ca2d42117081b4066e85936d9b96a4435b8397",
+          "bytes": 6112723
+        },
+        {
+          "local": "abo-listings-00001.parquet",
+          "path": "data/listings/listings-00001-of-00016.parquet",
+          "sha256": "5958064da48e4130d9503fd7a265c886d31d60bc6870438a6982cd357d61f861",
+          "bytes": 6013485
+        },
+        {
+          "local": "abo-listings-00002.parquet",
+          "path": "data/listings/listings-00002-of-00016.parquet",
+          "sha256": "fadae01bfab9e072abf9b9f68f16c6da5f809acd2cf1dce52ed46e8e962d10e2",
+          "bytes": 6092878
+        },
+        {
+          "local": "abo-listings-00003.parquet",
+          "path": "data/listings/listings-00003-of-00016.parquet",
+          "sha256": "c56757d7208e45bd31805f90151b61f2742868190c965eacf641dd36e499104f",
+          "bytes": 6056840
+        },
+        {
+          "local": "abo-listings-00004.parquet",
+          "path": "data/listings/listings-00004-of-00016.parquet",
+          "sha256": "fe53f6ff56df903e3e5b843fab00f3b045c9c97a12b308c8f35ff4fa826a71e1",
+          "bytes": 6194213
+        },
+        {
+          "local": "abo-listings-00005.parquet",
+          "path": "data/listings/listings-00005-of-00016.parquet",
+          "sha256": "ca8a1bac0af7bbb790937dac59af6001c176a9074a7343fa73f81f8b51fe01f3",
+          "bytes": 6251770
+        },
+        {
+          "local": "abo-listings-00006.parquet",
+          "path": "data/listings/listings-00006-of-00016.parquet",
+          "sha256": "50ba313f2438e297ad1e01f391a2e93708369fdbc955f99fe97e6b68bcadfe38",
+          "bytes": 6158901
+        },
+        {
+          "local": "abo-listings-00007.parquet",
+          "path": "data/listings/listings-00007-of-00016.parquet",
+          "sha256": "2a30d57d0a303f6ec511e4ba0c6c339a23026f5d2b7fc7c1ed3416c671ef24bf",
+          "bytes": 6084853
+        },
+        {
+          "local": "abo-listings-00008.parquet",
+          "path": "data/listings/listings-00008-of-00016.parquet",
+          "sha256": "dc8f2344d0863849782e494a11e7debb7108803d82fef2bcde1ab3d556721f4a",
+          "bytes": 6233994
+        },
+        {
+          "local": "abo-listings-00009.parquet",
+          "path": "data/listings/listings-00009-of-00016.parquet",
+          "sha256": "fa84ac81b97d211e79c9c30ea3b640d7a4eaf1867c2b38f7c7a7e96734b986a0",
+          "bytes": 6185662
+        },
+        {
+          "local": "abo-listings-00010.parquet",
+          "path": "data/listings/listings-00010-of-00016.parquet",
+          "sha256": "7482d36681a7584bc19797510f6f3746a8cea5a67795b597e1e1340b47a0d1b4",
+          "bytes": 6140565
+        },
+        {
+          "local": "abo-listings-00011.parquet",
+          "path": "data/listings/listings-00011-of-00016.parquet",
+          "sha256": "3196983ff4cfe11f01fb5011b7f890cacbd03d94584fade630985b2c6e55d210",
+          "bytes": 6070867
+        },
+        {
+          "local": "abo-listings-00012.parquet",
+          "path": "data/listings/listings-00012-of-00016.parquet",
+          "sha256": "c0d88a6f38eff7523ed8d31f740a1e8ee12d7b277b5ea404e044fd169131a69b",
+          "bytes": 6112073
+        },
+        {
+          "local": "abo-listings-00013.parquet",
+          "path": "data/listings/listings-00013-of-00016.parquet",
+          "sha256": "0a5f0fe9470b187f6ff0f29508fb4a4a48e883a6ff9401b43b78d2e8597f7ec8",
+          "bytes": 6101507
+        },
+        {
+          "local": "abo-listings-00014.parquet",
+          "path": "data/listings/listings-00014-of-00016.parquet",
+          "sha256": "cbe720dcfd4c156823691122abd74522a80458e8284f2fbdd641753e880d4114",
+          "bytes": 6161431
+        },
+        {
+          "local": "abo-listings-00015.parquet",
+          "path": "data/listings/listings-00015-of-00016.parquet",
+          "sha256": "0ea9c686938d5349d9fcfa3933634448bfd84faf3d6694a38aac942ce2dda3a6",
+          "bytes": 6091755
+        }
+      ]
+    },
+    "aboImages": {
+      "name": "Amazon Berkeley Objects image metadata mirror",
+      "revision": "ae2befec6225c0e9151112863f48918aa8a50505",
+      "license": "CC-BY-4.0",
+      "upstream": "https://amazon-berkeley-objects.s3.amazonaws.com/index.html",
+      "url": "https://huggingface.co/datasets/hyper3labs/amazon-berkeley-objects/resolve/ae2befec6225c0e9151112863f48918aa8a50505/data/images/images.parquet",
+      "sha256": "bd527acbd39493efc425308d912713f876e2544e2dd611cefac6055ab3c2687f",
+      "bytes": 12033373
+    },
+    "algeriaWilayas": {
+      "name": "DZShip carrier-compatible Algerian wilayas",
+      "revision": "42fd2cb18b2d1808ff4935f97de3940a0c09329e",
+      "license": "MIT",
+      "url": "https://raw.githubusercontent.com/DZBuild-com/dzship/42fd2cb18b2d1808ff4935f97de3940a0c09329e/data/wilayas.json",
+      "sha256": "6ed18614ec249a4ffa18d8cd7a26839cb95fae7e4af93e99cd651adf3e682431",
+      "bytes": 9036
+    },
+    "algeriaCommunes": {
+      "name": "DZShip carrier-compatible Algerian communes",
+      "revision": "42fd2cb18b2d1808ff4935f97de3940a0c09329e",
+      "license": "MIT",
+      "url": "https://raw.githubusercontent.com/DZBuild-com/dzship/42fd2cb18b2d1808ff4935f97de3940a0c09329e/data/communes.json",
+      "sha256": "85598564e86d096d57ebcb1defb3e61e22e420c538310f5f474107be43f2c172",
+      "bytes": 161495
+    }
+  },
+  "tools": {
+    "duckdbImage": "docker.io/duckdb/duckdb@sha256:69b2f746c2d179c0e8d47914f2cff6a9af863372732822fb84e88047f4f2ebf1"
+  }
+}

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 96" role="img" aria-labelledby="title">
+  <title id="title">DEWALT</title>
+  <rect width="240" height="96" fill="#fff"/>
+  <path fill="#f8cf16" d="M18 24h204v48H18z"/>
+  <text x="120" y="59" fill="#1d2224" font-family="Arial Black,Arial,sans-serif" font-size="34" font-style="italic" font-weight="900" letter-spacing="-1.5" text-anchor="middle">DEWALT</text>
+</svg>

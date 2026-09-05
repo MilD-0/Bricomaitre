@@ -12,6 +12,7 @@ vi.mock('@sentry/nextjs', () => ({
 
 describe('storefront Next configuration', () => {
   it('enables modern routing, strict image, and security foundations without partial prerendering', async () => {
+    delete process.env.BRIC_DEMO_MODE;
     process.env.NEXT_PUBLIC_STOREFRONT_IMAGE_ORIGINS = 'http://cdn.example.com:4311';
     process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID = 'meta-id';
     process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID = 'google-id';
@@ -37,6 +38,7 @@ describe('storefront Next configuration', () => {
         imgOptSequentialRead: true,
       },
       images: {
+        unoptimized: false,
         formats: ['image/webp'],
         qualities: [60, 75],
         maximumDiskCacheSize: 512_000_000,
@@ -69,5 +71,16 @@ describe('storefront Next configuration', () => {
         widenClientFileUpload: true,
       }),
     );
+  });
+
+  it("serves the demo's preoptimized loopback images without proxying them", async () => {
+    vi.stubEnv('BRIC_DEMO_MODE', 'true');
+    vi.resetModules();
+
+    const { default: config } = await import('./next.config');
+
+    expect(config.images?.unoptimized).toBe(true);
+    expect(config.images?.dangerouslyAllowLocalIP).not.toBe(true);
+    vi.unstubAllEnvs();
   });
 });

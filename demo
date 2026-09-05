@@ -13,6 +13,23 @@ random_hex() {
   openssl rand -hex "${1:-32}"
 }
 
+calculate_data_revision() {
+  (
+    cd "$repo_root"
+    {
+      find apps/admin/drizzle ops/demo/postgres ops/demo/data \
+        -type f ! -name '*.partial' \
+        ! -path 'ops/demo/postgres/live.sql' \
+        ! -path 'ops/demo/postgres/seed/90-live.sql' \
+        ! -path 'ops/demo/postgres/seed/99-live-verify.sql' \
+        -print0 \
+        | sort -z \
+        | xargs -0 sha256sum
+      date -u +%F
+    } | sha256sum | cut -d' ' -f1
+  )
+}
+
 ensure_secret_file() {
   local path="$1"
   local value="${2:-}"
@@ -56,6 +73,8 @@ write_runtime_configuration() {
   local object_port="${BRIC_DEMO_OBJECT_PORT:-3900}"
   local object_console_port="${BRIC_DEMO_OBJECT_CONSOLE_PORT:-3901}"
   local mock_port="${BRIC_DEMO_MOCK_PORT:-3808}"
+  local data_revision
+  data_revision="$(calculate_data_revision)"
   local admin_origin="${BRIC_DEMO_ADMIN_ORIGIN:-http://127.0.0.1:$admin_port}"
   local storefront_origin="${BRIC_DEMO_STOREFRONT_ORIGIN:-http://127.0.0.1:$storefront_port}"
   local object_origin="${BRIC_DEMO_OBJECT_ORIGIN:-http://127.0.0.1:$object_port}"
@@ -80,6 +99,7 @@ write_runtime_configuration() {
     printf 'DEMO_OBJECT_PUBLIC_ORIGIN=%s\n' "$object_origin"
     printf 'DEMO_OBJECT_CONSOLE_ORIGIN=%s\n' "$object_console_origin"
     printf 'DEMO_IMAGE_CREATED=%s\n' "$DEMO_IMAGE_CREATED"
+    printf 'DEMO_DATA_REVISION=%s\n' "$data_revision"
   } >"$runtime_dir/compose.env"
 
   ensure_secret_file "$runtime_dir/google-client-secret" "demo-client-secret"
@@ -102,6 +122,7 @@ write_runtime_configuration() {
     printf '%s\n' 'GOOGLE_CLIENT_ID=demo-client.apps.invalid' 'GOOGLE_CLIENT_SECRET=demo-client-secret'
     printf 'BETTER_AUTH_URL=%s\nBETTER_AUTH_SECRET=%s\n' "$admin_origin" "$DEMO_BETTER_AUTH_SECRET"
     printf '%s\n' 'BRIC_DEMO_MODE=true' "BRIC_DEMO_SESSION_SEED=$DEMO_AUTH_SESSION_SEED"
+    printf 'BRIC_DEMO_OBJECT_ORIGIN=%s\n' "$object_origin"
     printf '%s\n' 'ADMIN_EMAILS=operator@demo.bricomaitre.invalid' 'DEVELOPER_EMAILS=operator@demo.bricomaitre.invalid'
     printf '%s\n' 'AWS_REGION=eu-west-3' 'AWS_S3_BUCKET=bricomaitre-demo'
     printf 'AWS_CLOUDFRONT_DOMAIN=%s/bricomaitre-demo\n' "$object_origin"
@@ -199,22 +220,113 @@ build_images() {
     migrations storefront-api storefront-marketing-worker admin admin-worker storefront mock-services
 }
 
-prepare_dependencies() {
-  compose up -d --wait postgres redis object-storage mock-services
+prepare_catalog_images() {
+  node "$demo_root/scripts/verify-generated-data.mjs"
+  node "$demo_root/scripts/prepare-catalog-images.mjs"
+}
+
+run_migrations_and_permissions() {
   compose run --rm --no-deps migrations
   compose run --rm --no-deps database-permissions
+}
 
-  local initialized
-  initialized="$(
-    compose exec -T postgres \
-      psql -U bricomaitre_demo_owner -d bricomaitre_demo -Atc \
-      "SELECT to_regclass('demo_runtime.initialization') IS NOT NULL"
+template_is_current() {
+  # shellcheck disable=SC1090
+  source "$runtime_dir/compose.env"
+  local comment
+  comment="$(
+    compose exec -T postgres psql -U bricomaitre_demo_owner -d postgres -Atc \
+      "SELECT coalesce(shobj_description(oid, 'pg_database'), '') FROM pg_database WHERE datname = 'bricomaitre_demo_template'"
   )"
-  if [[ "$initialized" != 't' ]]; then
-    compose run --rm --no-deps seed
+  [[ "$comment" == "bricomaitre-demo-template:$DEMO_DATA_REVISION" ]]
+}
+
+drop_database_if_present() {
+  local database="$1"
+  compose exec -T postgres psql -U bricomaitre_demo_owner -d postgres \
+    -v ON_ERROR_STOP=1 -v target_database="$database" <<'SQL'
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE datname = :'target_database' AND pid <> pg_backend_pid();
+SELECT format('ALTER DATABASE %I ALLOW_CONNECTIONS true', :'target_database')
+WHERE EXISTS (SELECT 1 FROM pg_database WHERE datname = :'target_database') \gexec
+UPDATE pg_database SET datistemplate = false WHERE datname = :'target_database';
+SELECT format('DROP DATABASE %I', :'target_database')
+WHERE EXISTS (SELECT 1 FROM pg_database WHERE datname = :'target_database') \gexec
+SQL
+}
+
+build_database_template() {
+  # A current migrations image matters when the schema itself changed.
+  compose build migrations
+  run_migrations_and_permissions
+  compose run --rm --no-deps seed
+
+  # shellcheck disable=SC1090
+  source "$runtime_dir/compose.env"
+  drop_database_if_present bricomaitre_demo_template
+  compose exec -T postgres psql -U bricomaitre_demo_owner -d postgres \
+    -v ON_ERROR_STOP=1 \
+    -v template_comment="bricomaitre-demo-template:$DEMO_DATA_REVISION" <<'SQL'
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE datname = 'bricomaitre_demo' AND pid <> pg_backend_pid();
+CREATE DATABASE bricomaitre_demo_template
+  WITH TEMPLATE bricomaitre_demo OWNER bricomaitre_demo_owner;
+COMMENT ON DATABASE bricomaitre_demo_template
+  IS :'template_comment';
+UPDATE pg_database
+SET datistemplate = true, datallowconn = false
+WHERE datname = 'bricomaitre_demo_template';
+SQL
+}
+
+restore_application_database() {
+  drop_database_if_present bricomaitre_demo
+  compose exec -T postgres psql -U bricomaitre_demo_owner -d postgres \
+    -v ON_ERROR_STOP=1 <<'SQL'
+CREATE DATABASE bricomaitre_demo
+  WITH TEMPLATE bricomaitre_demo_template OWNER bricomaitre_demo_owner;
+SQL
+  compose run --rm --no-deps database-permissions
+  compose run --rm --no-deps live-seed
+}
+
+reset_external_state() {
+  # shellcheck disable=SC1090
+  source "$runtime_dir/compose.env"
+  curl --fail --silent --show-error -X POST \
+    "http://127.0.0.1:$DEMO_MOCK_PORT/__demo/reset" >/dev/null
+  compose exec -T postgres psql -U bricomaitre_demo_owner -d bricomaitre_demo -Atc \
+    "SELECT jsonb_build_object('shipments', coalesce(jsonb_agg(jsonb_build_object(
+      'tracking', shipment.tracking_number,
+      'reference', shipment.reference,
+      'status', shipment.current_status,
+      'amount', shipment.current_amount,
+      'provider', shipment.provider,
+      'createdAt', shipment.provider_created_at
+    )), '[]'::jsonb))
+    FROM admin.ecotrack_order_states shipment
+    JOIN orders ON orders.id = shipment.order_id
+    WHERE orders.mongo_id LIKE 'demo-live-order:%' AND shipment.deleted_at IS NULL" \
+    | curl --fail --silent --show-error \
+      -H 'content-type: application/json' --data-binary @- \
+      "http://127.0.0.1:$DEMO_MOCK_PORT/__demo/shipments" >/dev/null
+  compose exec -T redis redis-cli FLUSHDB >/dev/null
+  compose run --rm --no-deps --entrypoint /bin/sh object-storage-init /init.sh reset
+}
+
+prepare_dependencies() {
+  prepare_catalog_images
+  compose up -d --wait postgres redis object-storage mock-services
+
+  if ! template_is_current; then
+    printf 'Building immutable demo database template...\n'
+    build_database_template
   fi
 
-  compose run --rm --no-deps --entrypoint /bin/sh object-storage-init /init.sh
+  restore_application_database
+  reset_external_state
 }
 
 start_applications() {
@@ -231,33 +343,105 @@ clear_application_caches() {
     -c 'find /app/apps/storefront/.next/cache -mindepth 1 -delete'
 }
 
+install_reset_timer() {
+  if ! command -v systemctl >/dev/null 2>&1; then
+    printf 'systemd is required to install the six-hour demo reset timer.\n' >&2
+    return 1
+  fi
+
+  local account_root user_unit_dir
+  account_root="$(getent passwd "$(id -u)" | cut -d: -f6)"
+  user_unit_dir="${XDG_CONFIG_HOME:-$account_root/.config}/systemd/user"
+  mkdir -p "$user_unit_dir"
+
+  {
+    printf '%s\n' \
+      '[Unit]' \
+      'Description=Restore the Bricomaitre public demo dataset' \
+      '' \
+      '[Service]' \
+      'Type=oneshot' \
+      "WorkingDirectory=$repo_root" \
+      "ExecStart=\"$repo_root/demo\" reset"
+  } >"$user_unit_dir/bricomaitre-demo-reset.service"
+
+  {
+    printf '%s\n' \
+      '[Unit]' \
+      'Description=Reset the Bricomaitre public demo every six hours' \
+      '' \
+      '[Timer]' \
+      'OnBootSec=6h' \
+      'OnUnitActiveSec=6h' \
+      'Persistent=true' \
+      'Unit=bricomaitre-demo-reset.service' \
+      '' \
+      '[Install]' \
+      'WantedBy=timers.target'
+  } >"$user_unit_dir/bricomaitre-demo-reset.timer"
+
+  systemctl --user daemon-reload
+  systemctl --user enable --now bricomaitre-demo-reset.timer
+  systemctl --user list-timers bricomaitre-demo-reset.timer --no-pager
+}
+
+reset_timer_unit_path() {
+  local account_root
+  account_root="$(getent passwd "$(id -u)" | cut -d: -f6)"
+  printf '%s/systemd/user/bricomaitre-demo-reset.timer' \
+    "${XDG_CONFIG_HOME:-$account_root/.config}"
+}
+
+pause_reset_timer_if_installed() {
+  if command -v systemctl >/dev/null 2>&1 && [[ -f "$(reset_timer_unit_path)" ]]; then
+    systemctl --user stop bricomaitre-demo-reset.timer
+  fi
+}
+
+resume_reset_timer_if_installed() {
+  if command -v systemctl >/dev/null 2>&1 && [[ -f "$(reset_timer_unit_path)" ]]; then
+    systemctl --user start bricomaitre-demo-reset.timer
+  fi
+}
+
+remove_reset_timer() {
+  local account_root user_unit_dir
+  account_root="$(getent passwd "$(id -u)" | cut -d: -f6)"
+  user_unit_dir="${XDG_CONFIG_HOME:-$account_root/.config}/systemd/user"
+  systemctl --user disable --now bricomaitre-demo-reset.timer >/dev/null 2>&1 || true
+  rm -f "$user_unit_dir/bricomaitre-demo-reset.service" \
+    "$user_unit_dir/bricomaitre-demo-reset.timer"
+  systemctl --user daemon-reload
+  printf 'Six-hour demo reset timer removed.\n'
+}
+
 write_runtime_configuration
 
 command="${1:-help}"
+case "$command" in
+  up|reset|rebuild|destroy)
+    exec 9>"$runtime_dir/operation.lock"
+    flock 9
+    ;;
+esac
+
 case "$command" in
   up)
     build_images
     prepare_dependencies
     start_applications
     smoke
+    resume_reset_timer_if_installed
     printf '\n'
     show_urls
     ;;
   down)
+    pause_reset_timer_if_installed
     compose down --remove-orphans
     ;;
   reset)
     compose stop storefront admin admin-worker storefront-api storefront-marketing-worker
-    compose up -d --wait postgres redis object-storage mock-services
-    # shellcheck disable=SC1090
-    source "$runtime_dir/compose.env"
-    curl --fail --silent --show-error -X POST \
-      "http://127.0.0.1:$DEMO_MOCK_PORT/__demo/reset" >/dev/null
-    compose run --rm --no-deps migrations
-    compose run --rm --no-deps database-permissions
-    compose run --rm --no-deps seed
-    compose exec -T redis redis-cli FLUSHDB >/dev/null
-    compose run --rm --no-deps --entrypoint /bin/sh object-storage-init /init.sh reset
+    prepare_dependencies
     clear_application_caches
     compose up -d --no-deps storefront-api storefront-marketing-worker admin admin-worker storefront
     smoke
@@ -267,6 +451,7 @@ case "$command" in
     prepare_dependencies
     start_applications --force-recreate
     smoke
+    resume_reset_timer_if_installed
     ;;
   smoke)
     smoke
@@ -285,11 +470,18 @@ case "$command" in
     compose config --quiet
     printf 'Demo Compose configuration is valid.\n'
     ;;
+  schedule)
+    install_reset_timer
+    ;;
+  unschedule)
+    remove_reset_timer
+    ;;
   destroy)
     if [[ "${2:-}" != '--yes' ]]; then
       printf 'This removes only the bricomaitre-demo containers and volumes. Re-run: ./demo destroy --yes\n' >&2
       exit 2
     fi
+    pause_reset_timer_if_installed
     compose down --volumes --remove-orphans
     ;;
   help|-h|--help)
@@ -305,6 +497,8 @@ case "$command" in
       '  logs     Follow logs; optionally name services' \
       '  urls     Print local entry points' \
       '  config   Validate the resolved Compose model' \
+      '  schedule Install the six-hour reset timer for this user' \
+      '  unschedule Remove the six-hour reset timer' \
       '  destroy  Remove demo data; requires --yes'
     ;;
   *)

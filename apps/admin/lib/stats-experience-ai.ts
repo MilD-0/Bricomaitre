@@ -19,6 +19,7 @@ import {
 import { STOREFRONT_ANALYTICS_PROJECT } from '@bric/storefront-core/contracts';
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 import { getAdminAiModelPricing } from './admin-ai-models';
+import { ANALYTICS_PAID_SHIPMENT_STATUSES } from './ecotrack-status-policy';
 import {
   ADMIN_REPORTING_TIMEZONE,
   CUSTOMER_SUCCESSFUL_ORDER_STATUSES,
@@ -485,7 +486,10 @@ export async function getLiveStorefrontAiStats(
       select count(*) filter (where ${orderAiInfluence.level} <> 'none')::int as influenced_orders,
         count(*) filter (where ${orderAiInfluence.level} <> 'none' and ${inArray(orders.inHouseStatus, [...CUSTOMER_SUCCESSFUL_ORDER_STATUSES])})::int as confirmed_orders,
         count(*) filter (where ${orderAiInfluence.level} <> 'none' and ${inArray(orders.inHouseStatus, [ORDER_STATUS.COMPLETED, ORDER_STATUS.MANUAL_COMPLETED])})::int as completed_orders,
-        count(*) filter (where ${orderAiInfluence.level} <> 'none' and ${ecotrackOrderStates.currentStatus} = 'paye_et_archive')::int as paid_orders,
+        count(*) filter (
+          where ${orderAiInfluence.level} <> 'none'
+            and ${inArray(ecotrackOrderStates.currentStatus, [...ANALYTICS_PAID_SHIPMENT_STATUSES])}
+        )::int as paid_orders,
         count(*) filter (where ${orderAiInfluence.recommendedProductOrdered})::int as recommended_product_orders,
         coalesce(sum(coalesce(line_values.submitted_value, ${orders.price}::double precision, 0))
           filter (where ${orderAiInfluence.level} <> 'none'), 0)::double precision as submitted_value_dzd

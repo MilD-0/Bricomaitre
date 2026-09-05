@@ -80,7 +80,22 @@ export async function loadSourceHealth(
         as meta_through_date,
       (select max(${metaAdsDailyInsights.syncedAt}) from ${metaAdsDailyInsights})
         as meta_updated_at,
-      0::int as storefront_records,
+      (select count(*)::int from ${analyticsDailyRollups}
+        where ${analyticsDailyRollups.dimension} = 'overall'
+          and ${datePredicate(analyticsDailyRollups.day, filters.startDate, filters.endDate)})
+        +
+      (select count(*)::int from ${analyticsEvents}
+        where ${timestampPredicate(analyticsEvents.occurredAt, filters.startDate, filters.endDate)})
+        as storefront_records,
+      (select count(distinct day)::int from (
+        select ${analyticsDailyRollups.day} as day from ${analyticsDailyRollups}
+          where ${analyticsDailyRollups.dimension} = 'overall'
+            and ${datePredicate(analyticsDailyRollups.day, filters.startDate, filters.endDate)}
+        union
+        select (${analyticsEvents.occurredAt} at time zone 'Africa/Algiers')::date as day
+          from ${analyticsEvents}
+          where ${timestampPredicate(analyticsEvents.occurredAt, filters.startDate, filters.endDate)}
+      ) storefront_days) as storefront_days,
       greatest(
         (select max(${analyticsDailyRollups.day}) from ${analyticsDailyRollups}
           where ${datePredicate(analyticsDailyRollups.day, filters.startDate, filters.endDate)}),
@@ -96,6 +111,7 @@ export async function loadSourceHealth(
   const row = (result.rows[0] ?? {}) as Record<string, unknown>;
   const postedRecords = numeric(row.posted_records);
   const metaDays = numeric(row.meta_days);
+  const storefrontDays = numeric(row.storefront_days);
   const expectedDays = filters.startDate ? inclusiveDays(filters.startDate, filters.endDate) : null;
   const metaThrough = row.meta_through_date ? String(row.meta_through_date) : null;
   const storefrontThrough = row.storefront_through_date
@@ -134,7 +150,7 @@ export async function loadSourceHealth(
       updatedAt: isoValue(row.storefront_updated_at),
       throughDate: storefrontThrough,
       records: numeric(row.storefront_records),
-      coveragePct: null,
+      coveragePct: expectedDays && expectedDays > 0 ? (storefrontDays / expectedDays) * 100 : null,
     },
     {
       key: 'assumptions',
