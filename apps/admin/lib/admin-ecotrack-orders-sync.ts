@@ -12,7 +12,6 @@ import {
   rawOrderInfoFromTrackingPayload,
   resolveEcotrackStatusEvidence,
 } from './ecotrack-shipment-status';
-import type { EcotrackShipmentRow as ShipmentRow } from './ecotrack-shipment-types';
 import {
   MISSING_STATUS_CONFIRMATION_LIMIT,
   TERMINAL_STATUSES,
@@ -24,6 +23,33 @@ import {
   upsertShipmentState,
 } from './admin-ecotrack-shipment-state';
 
+async function* shipmentBatches(db: ReturnType<typeof getDb>) {
+  let afterId = 0;
+  const pageSize = 500;
+  while (true) {
+    // Stable IDs keep writes to updatedAt from moving shipments between pages.
+    const rows = await loadActiveShipmentRows(db, { afterId, limit: pageSize });
+    if (rows.length === 0) return;
+    afterId = rows[rows.length - 1].id;
+    const candidates = rows.filter(
+      (row) =>
+        !TERMINAL_STATUSES.has(row.currentStatus) ||
+        isStaleAt(row.lastStatusSyncedAt, 7 * 24 * 60 * 60 * 1000) ||
+        row.currentAmountSource !== 'ecotrack_orders' ||
+        row.deliveryTariff === null,
+    );
+    for (const provider of ['delivro', 'emir'] as const) {
+      const providerRows = candidates.filter(
+        (row) => (row.provider === 'emir' ? 'emir' : 'delivro') === provider,
+      );
+      for (let index = 0; index < providerRows.length; index += 100) {
+        yield providerRows.slice(index, index + 100);
+      }
+    }
+    if (rows.length < pageSize) return;
+  }
+}
+
 export async function syncEcotrackShipmentStates(
   options: {
     includeMaj?: boolean;
@@ -31,25 +57,7 @@ export async function syncEcotrackShipmentStates(
   } = {},
 ) {
   const db = getDb();
-  const rows = await loadActiveShipmentRows(db);
-  const candidates = rows.filter(
-    (row) =>
-      !TERMINAL_STATUSES.has(row.currentStatus) ||
-      isStaleAt(row.lastStatusSyncedAt, 7 * 24 * 60 * 60 * 1000) ||
-      row.currentAmountSource !== 'ecotrack_orders' ||
-      row.deliveryTariff === null,
-  );
-
-  const batches: ShipmentRow[][] = [];
-  for (const provider of ['delivro', 'emir'] as const) {
-    const providerRows = candidates.filter(
-      (row) => (row.provider === 'emir' ? 'emir' : 'delivro') === provider,
-    );
-    for (let index = 0; index < providerRows.length; index += 100) {
-      batches.push(providerRows.slice(index, index + 100));
-    }
-  }
-
+  let total = 0;
   let synced = 0;
   let missing = 0;
   let retired = 0;
@@ -60,7 +68,8 @@ export async function syncEcotrackShipmentStates(
   let failed = 0;
   let batchFailed = 0;
   let majFailed = 0;
-  for (const batch of batches) {
+  for await (const batch of shipmentBatches(db)) {
+    total += batch.length;
     const trackingNumbers = batch.map((row) => row.trackingNumber);
     let statusResponse: Awaited<ReturnType<typeof getEcotrackOrdersStatus>>;
     let trackingResponse: Awaited<ReturnType<typeof getEcotrackTrackingsInfo>>;
@@ -162,12 +171,12 @@ export async function syncEcotrackShipmentStates(
     }
   }
 
-  if (candidates.length > 0 && synced + missing + retired === 0 && failed > 0) {
+  if (total > 0 && synced + missing + retired === 0 && failed > 0) {
     throw new Error(`ECOTRACK shipment sync failed for all ${failed} candidates.`);
   }
 
   return {
-    total: candidates.length,
+    total,
     synced,
     missing,
     retired,

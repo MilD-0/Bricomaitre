@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 const {
   getDbMock,
@@ -119,10 +120,24 @@ function createDbMock(
   }));
   const rowByOrderId = new Map(rows.map((row) => [row.order.id, row]));
   const limitSequence = [...(options?.limitSequence ?? rows.map((row) => row.order.id))];
+  const pageCursors: number[] = [];
+  const pageLimit = vi.fn(async (size: number, afterId: number) => {
+    pageCursors.push(afterId);
+    const page = rows.filter((row) => row.id > afterId).slice(0, size);
+    return page.map((row) => ({ state: row, order: row.order }));
+  });
   const makeFromChain = (table: unknown) => ({
     innerJoin: vi.fn(() => ({
-      where: vi.fn(() => ({
-        orderBy: vi.fn(async () => rows.map((row) => ({ state: row, order: row.order }))),
+      where: vi.fn((condition: Parameters<PgDialect['sqlToQuery']>[0]) => ({
+        orderBy: vi.fn(() =>
+          Object.assign(Promise.resolve(rows.map((row) => ({ state: row, order: row.order }))), {
+            limit: (size: number) => {
+              const query = new PgDialect().sqlToQuery(condition);
+              expect(query.sql).toContain('"id" > $1');
+              return pageLimit(size, query.params[0] as number);
+            },
+          }),
+        ),
         limit: vi.fn(async () => {
           const nextOrderId = limitSequence.shift();
           if (nextOrderId == null) {
@@ -193,7 +208,7 @@ function createDbMock(
     transaction: vi.fn(async (callback: (trx: typeof tx) => Promise<void>) => callback(tx)),
   };
 
-  return { db, updates };
+  return { db, updates, pageLimit, pageCursors };
 }
 
 describe('admin ecotrack shipment reconciliation', () => {
@@ -413,6 +428,40 @@ describe('admin ecotrack shipment reconciliation', () => {
       majFailed: 1,
     });
     expect(getEcotrackMajMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('streams multiple database pages in provider-specific batches, including past skipped pages', async () => {
+    const rows = Array.from({ length: 1101 }, (_, index) => ({
+      ...createShipmentRow(index + 1),
+      provider: index % 2 ? 'emir' : 'delivro',
+      currentStatus: index < 500 ? 'payed' : 'en_livraison',
+      currentAmountSource: 'ecotrack_orders',
+      deliveryTariff: '400',
+    }));
+    const { db, pageLimit, pageCursors } = createDbMock(rows);
+    getDbMock.mockReturnValue(db);
+    getEcotrackOrdersStatusMock.mockImplementation(async (trackings: string[]) => {
+      expect(pageLimit.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(trackings.length).toBeLessThanOrEqual(100);
+      const parity = trackings.map((tracking) => Number(tracking.slice(4)) % 2);
+      expect(new Set(parity).size).toBe(1);
+      return {
+        data: new Map(
+          trackings.map((tracking) => [tracking, { status: 'en_livraison', activity: [] }]),
+        ),
+      };
+    });
+    getEcotrackTrackingsInfoMock.mockResolvedValue({ data: new Map() });
+
+    const result = await syncEcotrackShipmentStates();
+
+    expect(result).toMatchObject({ total: 601, synced: 601, failed: 0 });
+    expect(pageLimit.mock.calls.map(([size]) => size)).toEqual([500, 500, 500]);
+    expect(pageCursors).toEqual([0, 580, 1080]);
+    const processed = getEcotrackOrdersStatusMock.mock.calls.flatMap(([trackings]) => trackings);
+    expect(new Set(processed).size).toBe(601);
+    expect(processed).toContain('TRK-1101');
+    expect(processed).not.toContain('TRK-500');
   });
 
   it('keeps periodic reconciliation bounded by skipping per-shipment MAJ requests', async () => {
