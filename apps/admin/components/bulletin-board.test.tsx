@@ -57,6 +57,7 @@ import messages from '../messages/en.json';
 import { server } from '../test/mocks/server';
 
 describe('BulletinBoard', () => {
+  let additionalPostCount = 0;
   const createCalls: unknown[] = [];
   const patchCalls: Array<{ url: string; body: unknown }> = [];
   const deleteCalls: string[] = [];
@@ -65,6 +66,7 @@ describe('BulletinBoard', () => {
   const reactionCalls: Array<{ url: string; body: unknown }> = [];
 
   beforeEach(() => {
+    additionalPostCount = 0;
     createCalls.length = 0;
     patchCalls.length = 0;
     deleteCalls.length = 0;
@@ -134,7 +136,7 @@ describe('BulletinBoard', () => {
                 canPin: true,
               },
             },
-            ...Array.from({ length: 21 }, (_, index) => ({
+            ...Array.from({ length: additionalPostCount }, (_, index) => ({
               id: index + 2,
               title: index === 20 ? 'Page two update' : `Packing reminder ${index + 1}`,
               body: 'Use the blue labels for campaign bundles only.',
@@ -229,7 +231,7 @@ describe('BulletinBoard', () => {
       'lg:not-sr-only',
     );
     expect(view.container.querySelector('[data-workspace-heading] span')).toHaveTextContent(
-      '22 visible',
+      '1 visible',
     );
     expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
     expect(view.container.querySelector('[data-bulletin-post="1"]')).toHaveClass('max-w-5xl');
@@ -271,9 +273,13 @@ describe('BulletinBoard', () => {
   }, 30_000);
 
   it('filters by plain tag labels, confirms delete, and paginates posts', async () => {
-    renderBoard();
+    additionalPostCount = 21;
+    const view = renderBoard();
 
     await screen.findByText('Pinned issue');
+    expect(view.container.querySelector('[data-workspace-heading] span')).toHaveTextContent(
+      '22 visible',
+    );
 
     await userEvent.click(screen.getByRole('button', { name: 'urgent' }));
     expect(screen.getByText('Pinned issue')).toBeInTheDocument();

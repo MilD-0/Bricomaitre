@@ -31,7 +31,7 @@ const workspaceRoutes = [
   '/en/stats/shopping-assistant',
 ] as const;
 
-const accessibilityRoutes = [
+const accessibilityRoutes = new Set<string>([
   '/en/administration',
   '/en/products',
   '/en/ai-proposals',
@@ -43,7 +43,7 @@ const accessibilityRoutes = [
   '/en/bulletin',
   '/en/stats',
   '/en/stats/shopping-assistant',
-] as const;
+]);
 
 const screenshotRoutes = new Set([
   '/en/products',
@@ -76,67 +76,53 @@ test.beforeEach(async ({ isMobile, page }) => {
   if (isMobile) await page.setViewportSize({ width: 360, height: 800 });
 });
 
-test('keeps every workspace structurally clean and within the viewport', async ({
-  page,
-}, testInfo) => {
-  test.setTimeout(6 * 60_000);
+test.describe('workspace checks', () => {
+  test.describe.configure({ mode: 'parallel' });
 
   for (const path of workspaceRoutes) {
-    const browserErrors: string[] = [];
-    const failedResponses: string[] = [];
-    const onConsole = (message: { type(): string; text(): string }) => {
-      if (message.type() === 'error') browserErrors.push(message.text());
-    };
-    const onPageError = (error: Error) => browserErrors.push(error.message);
-    const onResponse = (response: { status(): number; url(): string }) => {
-      if (response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`);
-    };
-    page.on('console', onConsole);
-    page.on('pageerror', onPageError);
-    page.on('response', onResponse);
+    test(`${path} stays within the viewport and meets its accessibility checks`, async ({
+      page,
+    }, testInfo) => {
+      test.setTimeout(120_000);
+      const browserErrors: string[] = [];
+      const failedResponses: string[] = [];
+      page.on('console', (message) => {
+        if (message.type() === 'error') browserErrors.push(message.text());
+      });
+      page.on('pageerror', (error) => browserErrors.push(error.message));
+      page.on('response', (response) => {
+        if (response.status() >= 400)
+          failedResponses.push(`${response.status()} ${response.url()}`);
+      });
 
-    await test.step(path, async () => {
       await openWorkspace(page, path);
       await page.waitForTimeout(350);
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
       expect(overflow, `${path} overflowed by ${overflow}px`).toBeLessThanOrEqual(1);
-      expect(browserErrors, `${path} emitted browser errors`).toEqual([]);
-      expect(failedResponses, `${path} returned failed responses`).toEqual([]);
+      if (accessibilityRoutes.has(path)) {
+        const results = await new AxeBuilder({ page })
+          .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+          .analyze();
+        expect(
+          results.violations.map((violation) => ({
+            id: violation.id,
+            impact: violation.impact,
+            help: violation.help,
+            targets: violation.nodes.map((node) => node.target),
+          })),
+          `${path} has accessibility violations`,
+        ).toEqual([]);
+      }
       if (screenshotRoutes.has(path)) {
         await testInfo.attach(`${testInfo.project.name}-${path.slice(4).replaceAll('/', '-')}`, {
           body: await page.screenshot(),
           contentType: 'image/png',
         });
       }
-    });
-
-    page.off('console', onConsole);
-    page.off('pageerror', onPageError);
-    page.off('response', onResponse);
-  }
-});
-
-test('keeps representative workspaces at WCAG A and AA', async ({ page }) => {
-  test.setTimeout(4 * 60_000);
-
-  for (const path of accessibilityRoutes) {
-    await test.step(path, async () => {
-      await openWorkspace(page, path);
-      await page.waitForTimeout(350);
-      const results = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .analyze();
-      expect(
-        results.violations.map((violation) => ({
-          id: violation.id,
-          impact: violation.impact,
-          help: violation.help,
-          targets: violation.nodes.map((node) => node.target),
-        })),
-        `${path} has accessibility violations`,
-      ).toEqual([]);
+      expect(browserErrors, `${path} emitted browser errors`).toEqual([]);
+      expect(failedResponses, `${path} returned failed responses`).toEqual([]);
     });
   }
 });
