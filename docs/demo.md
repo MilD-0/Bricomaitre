@@ -14,6 +14,10 @@ may be slow or offline. You can run it locally, or
 Its data is shared between visitors and resets every six hours. No production
 credentials or business data are used.
 
+The hosted demo uses a fixed release checkout and release-specific images,
+including its reset scripts and seed data. Development changes do not alter it;
+upgrades are deliberate. Downloadable releases pin their images by digest.
+
 ## Run it locally
 
 The Docker-only [installation bundle](../ops/demo/release/README.md) pulls
