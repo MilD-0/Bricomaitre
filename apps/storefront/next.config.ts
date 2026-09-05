@@ -6,6 +6,7 @@ import { getStorefrontRemoteImagePatterns } from './lib/product-images';
 import { getAllowedDevOrigins } from './lib/dev-origins';
 
 const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
+const demoMode = process.env.BRIC_DEMO_MODE?.trim().toLowerCase() === 'true';
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'X-Frame-Options', value: 'DENY' },
@@ -46,6 +47,10 @@ const nextConfig: NextConfig = {
     imgOptSequentialRead: true,
   },
   images: {
+    // Demo catalog images are already normalized to WebP and are served from
+    // host-local MinIO. Let the browser fetch them directly; an optimizer
+    // inside the container cannot address the host through browser loopback.
+    unoptimized: demoMode,
     // Next recommends WebP for most self-hosted deployments. AVIF encoding is
     // materially more CPU intensive and its codec can create threads outside
     // Sharp's concurrency control, which is a poor fit for this shared VPS.

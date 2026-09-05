@@ -16,6 +16,7 @@ import { formatDate, formatNumber, formatPercent } from './analytics-format';
 import type { AnalyticsCopy } from './analytics-copy';
 import {
   chartTooltip,
+  completedTrendBuckets,
   type DataOf,
   DenseTable,
   Funnel,
@@ -77,6 +78,7 @@ export function StorefrontView({
   const cartSessions = funnelValues.get('Cart sessions') ?? 0;
   const checkoutSessions = funnelValues.get('Checkout sessions') ?? 0;
   const submittedSessions = funnelValues.get('Submitted-order sessions') ?? 0;
+  const trend = completedTrendBuckets(viewData.trend, filters.resolvedGrain, filters.endDate);
   return (
     <>
       <MetricStrip metrics={metrics} copy={copy} locale={locale} />
@@ -84,7 +86,7 @@ export function StorefrontView({
         <Section title={copy.sections.siteTrend} analyticsFocus={{ dimension: 'storefront_trend' }}>
           <ChartFrame className="h-[23rem]">
             <ResponsiveChart width="100%" height="100%">
-              <ComposedChart data={viewData.trend}>
+              <ComposedChart data={trend}>
                 <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.5} />
                 <XAxis
                   dataKey="bucket"

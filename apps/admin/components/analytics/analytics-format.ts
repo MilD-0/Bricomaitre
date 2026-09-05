@@ -1,5 +1,7 @@
 type NumericValue = number | null | undefined;
 
+export const ANALYTICS_TIME_ZONE = 'Africa/Algiers';
+
 export function formatNumber(locale: string, value: NumericValue, compact = false) {
   if (value == null) return '—';
   return new Intl.NumberFormat(locale, {
@@ -66,9 +68,9 @@ export function formatDate(
   return new Intl.DateTimeFormat(
     locale,
     options.includeTime
-      ? { dateStyle: 'medium', timeStyle: 'short' }
+      ? { dateStyle: 'medium', timeStyle: 'short', timeZone: ANALYTICS_TIME_ZONE }
       : options.long
-        ? { dateStyle: 'medium' }
-        : { month: 'short', day: 'numeric' },
+        ? { dateStyle: 'medium', timeZone: ANALYTICS_TIME_ZONE }
+        : { month: 'short', day: 'numeric', timeZone: ANALYTICS_TIME_ZONE },
   ).format(date);
 }

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 96" role="img" aria-labelledby="title">
+  <title id="title">Milwaukee</title>
+  <rect width="240" height="96" fill="#fff"/>
+  <path d="M22 65h196" stroke="#d51f2b" stroke-width="5"/>
+  <path d="m54 64 13-17 2 11 15-20" fill="none" stroke="#d51f2b" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
+  <text x="129" y="55" fill="#252b2d" font-family="Arial,sans-serif" font-size="28" font-style="italic" font-weight="800" text-anchor="middle">Milwaukee</text>
+</svg>

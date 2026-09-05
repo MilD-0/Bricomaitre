@@ -38,7 +38,7 @@ const aiStatsCopy = {
       releases: 'Releases',
       changes: 'Change outcomes',
       exceptions: 'Recent exceptions',
-      journey: 'Assistant journey',
+      journey: 'Activity and assisted orders',
       demandTrend: 'Assistant demand',
       intents: 'Shopper intents',
       reliability: 'Reliability',
@@ -69,6 +69,46 @@ const aiStatsCopy = {
       deterministic: 'Deterministic',
       batch: 'Batch',
     },
+    entities: {
+      workflows: {
+        admin_chat: 'Admin Assistant',
+        product_categorization: 'Product Categorization',
+        shopping_assistant: 'Shopping Assistant',
+      },
+      tools: {
+        query_analytics: 'Query analytics',
+        inspect_orders: 'Inspect orders',
+        inspect_products: 'Inspect products',
+        inspect_inventory: 'Inspect inventory',
+        search_catalog: 'Search catalog',
+        inspect_landing_pages: 'Inspect landing pages',
+        save_order_shopping_list: 'Save order shopping list',
+        find_products: 'Find products',
+      },
+      changes: {
+        product_content: 'Product content',
+        product_relation: 'Product relation',
+        product_category: 'Product category',
+        entity_edit: 'Entity edit',
+      },
+      statuses: {
+        proposed: 'Proposed',
+        applied: 'Applied',
+        rejected: 'Rejected',
+        expired: 'Expired',
+        failed: 'Failed',
+        cancelled: 'Cancelled',
+        provider_timeout: 'Provider timeout',
+      },
+      intents: {
+        product_discovery: 'Product discovery',
+        comparison: 'Comparison',
+        project_planning: 'Project planning',
+        order_help: 'Order help',
+        availability: 'Availability',
+        other: 'Other',
+      },
+    },
     journey: {
       opened: 'Opened',
       messaged: 'Question sent',
@@ -80,6 +120,7 @@ const aiStatsCopy = {
     },
     reliability: {
       activeJourneys: 'Active journeys',
+      contributionCoverage: 'Contribution coverage',
       completedRuns: 'Completed runs',
       failedRuns: 'Failed runs',
       p95Latency: 'P95 latency',
@@ -134,7 +175,7 @@ const aiStatsCopy = {
       releases: 'Versions',
       changes: 'Résultats des changements',
       exceptions: 'Exceptions récentes',
-      journey: 'Parcours assistant',
+      journey: 'Activité et commandes assistées',
       demandTrend: 'Demande assistant',
       intents: 'Intentions clients',
       reliability: 'Fiabilité',
@@ -161,6 +202,46 @@ const aiStatsCopy = {
       clicks: 'Clics',
     },
     workload: { interactive: 'Interactif', deterministic: 'Déterministe', batch: 'Lot' },
+    entities: {
+      workflows: {
+        admin_chat: 'Assistant admin',
+        product_categorization: 'Catégorisation des produits',
+        shopping_assistant: 'Assistant d’achat',
+      },
+      tools: {
+        query_analytics: 'Interroger les statistiques',
+        inspect_orders: 'Examiner les commandes',
+        inspect_products: 'Examiner les produits',
+        inspect_inventory: 'Examiner le stock',
+        search_catalog: 'Rechercher dans le catalogue',
+        inspect_landing_pages: 'Examiner les pages de campagne',
+        save_order_shopping_list: 'Enregistrer la liste d’achat',
+        find_products: 'Rechercher des produits',
+      },
+      changes: {
+        product_content: 'Contenu produit',
+        product_relation: 'Relation produit',
+        product_category: 'Catégorie produit',
+        entity_edit: 'Modification d’entité',
+      },
+      statuses: {
+        proposed: 'Proposée',
+        applied: 'Appliquée',
+        rejected: 'Rejetée',
+        expired: 'Expirée',
+        failed: 'Échec',
+        cancelled: 'Annulée',
+        provider_timeout: 'Délai fournisseur dépassé',
+      },
+      intents: {
+        product_discovery: 'Découverte de produits',
+        comparison: 'Comparaison',
+        project_planning: 'Préparation d’un projet',
+        order_help: 'Aide sur une commande',
+        availability: 'Disponibilité',
+        other: 'Autre',
+      },
+    },
     journey: {
       opened: 'Ouvert',
       messaged: 'Question envoyée',
@@ -172,6 +253,7 @@ const aiStatsCopy = {
     },
     reliability: {
       activeJourneys: 'Parcours actifs',
+      contributionCoverage: 'Couverture de la contribution',
       completedRuns: 'Exécutions terminées',
       failedRuns: 'Échecs',
       p95Latency: 'Latence P95',
@@ -226,7 +308,7 @@ const aiStatsCopy = {
       releases: 'الإصدارات',
       changes: 'نتائج التغييرات',
       exceptions: 'الاستثناءات الأخيرة',
-      journey: 'مسار المساعد',
+      journey: 'النشاط والطلبات بمساعدة المساعد',
       demandTrend: 'طلب المساعد',
       intents: 'نوايا المتسوقين',
       reliability: 'الموثوقية',
@@ -253,6 +335,46 @@ const aiStatsCopy = {
       clicks: 'النقرات',
     },
     workload: { interactive: 'تفاعلي', deterministic: 'حتمي', batch: 'دفعي' },
+    entities: {
+      workflows: {
+        admin_chat: 'مساعد الإدارة',
+        product_categorization: 'تصنيف المنتجات',
+        shopping_assistant: 'مساعد التسوق',
+      },
+      tools: {
+        query_analytics: 'الاستعلام عن الإحصاءات',
+        inspect_orders: 'فحص الطلبات',
+        inspect_products: 'فحص المنتجات',
+        inspect_inventory: 'فحص المخزون',
+        search_catalog: 'البحث في الكتالوج',
+        inspect_landing_pages: 'فحص صفحات الحملات',
+        save_order_shopping_list: 'حفظ قائمة مشتريات الطلبات',
+        find_products: 'البحث عن المنتجات',
+      },
+      changes: {
+        product_content: 'محتوى المنتج',
+        product_relation: 'علاقة المنتج',
+        product_category: 'فئة المنتج',
+        entity_edit: 'تعديل كيان',
+      },
+      statuses: {
+        proposed: 'مقترح',
+        applied: 'مطبق',
+        rejected: 'مرفوض',
+        expired: 'منتهي',
+        failed: 'فشل',
+        cancelled: 'ملغى',
+        provider_timeout: 'انتهت مهلة المزود',
+      },
+      intents: {
+        product_discovery: 'اكتشاف المنتجات',
+        comparison: 'المقارنة',
+        project_planning: 'تخطيط المشروع',
+        order_help: 'المساعدة في الطلب',
+        availability: 'التوفر',
+        other: 'أخرى',
+      },
+    },
     journey: {
       opened: 'فتح المساعد',
       messaged: 'إرسال سؤال',
@@ -264,6 +386,7 @@ const aiStatsCopy = {
     },
     reliability: {
       activeJourneys: 'المسارات النشطة',
+      contributionCoverage: 'تغطية المساهمة',
       completedRuns: 'التشغيلات المكتملة',
       failedRuns: 'التشغيلات الفاشلة',
       p95Latency: 'زمن P95',
@@ -284,5 +407,6 @@ const aiStatsCopy = {
 export type AiStatsCopy = (typeof aiStatsCopy)['en'];
 
 export function getAiStatsCopy(locale: string): AiStatsCopy {
-  return (aiStatsCopy[locale as keyof typeof aiStatsCopy] ?? aiStatsCopy.en) as AiStatsCopy;
+  const language = locale.toLowerCase().split('-')[0] as keyof typeof aiStatsCopy;
+  return (aiStatsCopy[language] ?? aiStatsCopy.en) as AiStatsCopy;
 }

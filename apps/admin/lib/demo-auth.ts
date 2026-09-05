@@ -7,7 +7,7 @@ import { redirect } from 'next/navigation';
 import { getDb, hasDb } from '@bric/db/client';
 import { sessions, userAccessGrants, users } from '@bric/db/schema';
 
-const DEMO_USER_ID = 'bricomaitre-demo-operator';
+const DEMO_USER_ID = 'demo-operator';
 const DEMO_USER_EMAIL = 'operator@demo.bricomaitre.invalid';
 const DEMO_SESSION_SECONDS = 60 * 60;
 

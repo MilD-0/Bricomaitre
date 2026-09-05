@@ -88,7 +88,7 @@ export async function readStorefrontHomepage(db: Database) {
     readStorefrontAssets(db),
     readStorefrontProducts(db, {
       page: 1,
-      limit: 8,
+      limit: 4,
       search: '',
       brandId: null,
       categoryId: null,
@@ -113,7 +113,7 @@ export async function readStorefrontHomepage(db: Database) {
   const featuredGroups = await Promise.all(
     assets.featuredGroups.map(async (group) => ({
       ...group,
-      products: (await readStorefrontProductsForSelectionPage(db, group, { page: 1, limit: 12 }))
+      products: (await readStorefrontProductsForSelectionPage(db, group, { page: 1, limit: 4 }))
         .items,
     })),
   );

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 96" role="img" aria-labelledby="title">
+  <title id="title">VESSEL</title>
+  <rect width="240" height="96" fill="#fff"/>
+  <circle cx="47" cy="48" r="25" fill="#d6282f"/>
+  <path d="m32 34 15 30 15-30" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="7"/>
+  <text x="83" y="61" fill="#252b2d" font-family="Arial Black,Arial,sans-serif" font-size="35" font-weight="900">VESSEL</text>
+</svg>

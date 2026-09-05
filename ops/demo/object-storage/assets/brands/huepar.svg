@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 96" role="img" aria-labelledby="title">
+  <title id="title">Huepar</title>
+  <rect width="240" height="96" fill="#fff"/>
+  <circle cx="45" cy="48" r="23" fill="none" stroke="#138a5b" stroke-width="6"/>
+  <path stroke="#138a5b" stroke-width="5" d="M45 14v68M11 48h68"/>
+  <text x="87" y="60" fill="#253236" font-family="Arial,sans-serif" font-size="35" font-weight="800">Huepar</text>
+</svg>

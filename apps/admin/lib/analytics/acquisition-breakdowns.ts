@@ -18,7 +18,7 @@ import {
   numeric,
   timestampPredicate,
 } from './query-values';
-import { type Database, type EconomicsReport } from './loaders-shared';
+import { type Database, type EconomicsReport, paidShipmentStatusesSql } from './loaders-shared';
 
 export async function loadMetaBreakdowns(
   db: Database,
@@ -154,7 +154,7 @@ export async function loadMetaBreakdowns(
         )::int as paid_d21,
         count(*) filter (
           where ordered_day <= ${filters.endDate}::date - interval '21 days'
-            and outcome in ('paye_et_archive', 'retour_archive')
+            and outcome in (${paidShipmentStatusesSql}, 'retour_archive')
         )::int as terminal
       from attributed
       group by campaign_id

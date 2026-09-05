@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "files": {
+    "catalog-source.csv": {
+      "bytes": 4751566,
+      "sha256": "75434b4e74a2c5a598facdf27aa4265012bb4b86b8d069909dbe286e76d9dd8d"
+    },
+    "catalog-stats.csv": {
+      "bytes": 288,
+      "sha256": "4b77a5c14a614eb8828773d96e4041a2c9753a4aa3b1c6baf629f5eb91c6ba48"
+    },
+    "image-manifest.tsv": {
+      "bytes": 852809,
+      "sha256": "529ae7266c06cee0c0d922cde2264fea6e008f25fcf463615365659252f4de5d"
+    },
+    "algeria-wilayas.csv": {
+      "bytes": 2232,
+      "sha256": "841ec5630b72dcc9baa2fbaebe389145ccac167d8733145d39d8122d6eae8dd6"
+    },
+    "algeria-communes.csv": {
+      "bytes": 52551,
+      "sha256": "2cac9448d5e5ba523c2369918dc034b96572a47da2ee0a7290d7cbc6da630378"
+    },
+    "algeria-wilayas.json": {
+      "bytes": 9036,
+      "sha256": "6ed18614ec249a4ffa18d8cd7a26839cb95fae7e4af93e99cd651adf3e682431"
+    },
+    "algeria-communes.json": {
+      "bytes": 161495,
+      "sha256": "85598564e86d096d57ebcb1defb3e61e22e420c538310f5f474107be43f2c172"
+    }
+  }
+}

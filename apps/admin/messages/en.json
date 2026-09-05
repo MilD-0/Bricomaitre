@@ -2286,6 +2286,7 @@
       "livre_non_encaisse": "Livre non encaisse",
       "encaisse_non_paye": "Encaisse non paye",
       "paiements_prets": "Paiements prets",
+      "payed": "Payment completed",
       "paye_et_archive": "Paye et archive",
       "retour_chez_livreur": "Retour chez livreur",
       "retour_transit_entrepot": "Retour transit entrepot",

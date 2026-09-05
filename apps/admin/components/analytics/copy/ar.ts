@@ -33,6 +33,7 @@ export const analyticsCopyAr = {
   metrics: {
     trueProfit: 'الربح الحقيقي',
     profitX: 'مضاعف الربح',
+    grossProfit: 'الربح الخام',
     adjustedProfit: 'الربح المعدل',
     automaticPaidProfit: 'ربح الطلبات المدفوعة',
     paidProfitCoverage: 'تغطية تكلفة الطلبات المدفوعة',
@@ -448,6 +449,7 @@ export const analyticsCopyAr = {
     returnRate: 'نسبة الإرجاع %',
     notes: 'ملاحظة المشغل',
     automatic: 'تلقائي',
+    default: 'افتراضي',
     manual: 'يدوي',
     missing: 'مفقود',
   },
