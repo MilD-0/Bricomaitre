@@ -41,6 +41,8 @@ archive
 **/.env
 **/.env.*
 ENV_VALUES
+ops/demo/.runtime
+ops/demo/.cache
 *.pem
 *.key
 

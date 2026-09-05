@@ -146,7 +146,7 @@ services:
       <<: *admin-build
       target: migrations
     restart: 'no'
-    env_file: .runtime/admin.env
+    env_file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/admin.env
     environment:
       DATABASE_URL: postgresql://bricomaitre_demo_owner:${DEMO_POSTGRES_OWNER_PASSWORD}@postgres:5432/bricomaitre_demo
       ADMIN_DB_TASK: migrate
@@ -213,7 +213,7 @@ services:
       target: web
     <<: *app-security
     read_only: true
-    env_file: .runtime/storefront-api.env
+    env_file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/storefront-api.env
     environment:
       DATABASE_URL: postgresql://bricomaitre_demo_storefront:${DEMO_POSTGRES_STOREFRONT_PASSWORD}@postgres:5432/bricomaitre_demo
       PORT: 3001
@@ -248,7 +248,7 @@ services:
       target: meta-worker
     <<: *app-security
     read_only: true
-    env_file: .runtime/storefront-api.env
+    env_file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/storefront-api.env
     environment:
       DATABASE_URL: postgresql://bricomaitre_demo_storefront:${DEMO_POSTGRES_STOREFRONT_PASSWORD}@postgres:5432/bricomaitre_demo
     depends_on:
@@ -261,7 +261,7 @@ services:
       target: web
     <<: *app-security
     read_only: true
-    env_file: .runtime/admin.env
+    env_file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/admin.env
     environment:
       DATABASE_URL: postgresql://bricomaitre_demo_admin:${DEMO_POSTGRES_ADMIN_PASSWORD}@postgres:5432/bricomaitre_demo
       AI_ADMIN_INPUT_COST_PER_1M_USD: '1'
@@ -294,7 +294,7 @@ services:
       target: worker
     <<: *app-security
     read_only: true
-    env_file: .runtime/admin.env
+    env_file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/admin.env
     environment:
       DATABASE_URL: postgresql://bricomaitre_demo_admin:${DEMO_POSTGRES_ADMIN_PASSWORD}@postgres:5432/bricomaitre_demo
     depends_on:
@@ -329,7 +329,7 @@ services:
         - sentry_auth_token
     <<: *app-security
     read_only: false
-    env_file: .runtime/storefront.env
+    env_file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/storefront.env
     environment:
       PORT: 3002
     ports:
@@ -353,11 +353,11 @@ services:
 
 secrets:
   google_client_secret:
-    file: .runtime/google-client-secret
+    file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/google-client-secret
   better_auth_secret:
-    file: .runtime/better-auth-secret
+    file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/better-auth-secret
   sentry_auth_token:
-    file: .runtime/sentry-auth-token
+    file: ${BRIC_DEMO_RUNTIME_DIR:-./.runtime}/sentry-auth-token
 
 volumes:
   admin-cache:
