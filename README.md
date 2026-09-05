@@ -199,6 +199,11 @@ behavior.
 
 ## Run it locally
 
+Demo releases use a Docker-only [installation bundle](./ops/demo/release/README.md).
+The bundle pulls prebuilt application and media images. It does not need Node.js,
+a source checkout, or external accounts on the machine running it.
+The commands below build the demo from this checkout instead.
+
 To explore the application stack with synthetic data and local substitutes for
 auth, carrier, marketing, reporting, and object-storage services, use Docker
 with Compose and run:
