@@ -60,6 +60,22 @@ for (const definition of Object.values(config.services)) {
     definition.volumes?.every((volume) => volume.type === 'volume') ?? true,
     'No host bind mounts',
   );
+  assert.ok(Number(definition.cpus) > 0 && Number(definition.mem_limit) > 0);
+  assert.equal(definition.memswap_limit, definition.mem_limit);
+  assert.ok(definition.pids_limit > 0);
+  assert.equal(definition.logging.options['max-file'], '3');
+  assert.deepEqual(definition.dns, ['127.0.0.1']);
+  assert.ok(definition.ports?.every((port) => port.host_ip === '127.0.0.1') ?? true);
+}
+for (const name of [
+  'admin',
+  'admin-worker',
+  'storefront-api',
+  'storefront-marketing-worker',
+  'storefront',
+]) {
+  assert.equal(config.services[name].read_only, true);
+  assert.ok(config.services[name].volumes.every((volume) => volume.source !== 'runtime'));
 }
 const release = JSON.parse(await readFile(resolve(bundle, 'release.json'), 'utf8'));
 // Custom images were built locally; infrastructure images still need to be
@@ -69,6 +85,16 @@ await run('up', '-d', '--wait', '--wait-timeout', '1200', '--pull', 'never');
 for (const port of [3400, 3401, 3402]) {
   const response = await fetch(`http://127.0.0.1:${port}/api/health`);
   assert.equal(response.status, 200);
+}
+for (const name of ['admin', 'storefront-api', 'storefront']) {
+  compose(
+    'exec',
+    '-T',
+    name,
+    '/bin/sh',
+    '-ec',
+    'test -r /runtime/app.env && test ! -e /runtime/secrets.env && test ! -e /runtime/compose.env',
+  );
 }
 assert.equal(sql('SELECT count(*) FROM products'), '3884');
 assert.equal(sql('SELECT count(*) FROM orders'), '250800');
@@ -108,6 +134,7 @@ await run('run', '--rm', '--no-deps', 'dataset', 'reset');
 assert.equal(sql('SELECT built_at::date = CURRENT_DATE FROM demo_runtime.template_metadata'), 't');
 await run('run', '--rm', '--no-deps', 'media', 'reset');
 await run('run', '--rm', '--no-deps', 'cache-reset');
+await run('run', '--rm', '--no-deps', 'storefront-runtime', 'reset');
 await run('restart', 'mock-services');
 await run('up', '-d', '--wait', '--wait-timeout', '60', '--no-deps', 'mock-services');
 await run('run', '--rm', '--no-deps', 'mock-state');

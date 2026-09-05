@@ -73,6 +73,14 @@ write_runtime_configuration() {
     printf 'DEMO_IMAGE_CREATED=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$secrets_file"
   fi
 
+  # Preserve storage root credentials, but never pass them to application processes.
+  for identity in ADMIN READER; do
+    if ! grep -q "^DEMO_S3_${identity}_ACCESS_KEY=" "$secrets_file"; then
+      printf 'DEMO_S3_%s_ACCESS_KEY=demo%s\n' "$identity" "$(random_hex 8)" >>"$secrets_file"
+      printf 'DEMO_S3_%s_SECRET_KEY=%s\n' "$identity" "$(random_hex)" >>"$secrets_file"
+    fi
+  done
+
   # This file only contains generated demo values and is deliberately ignored.
   # shellcheck disable=SC1090
   source "$secrets_file"
@@ -98,6 +106,8 @@ write_runtime_configuration() {
     printf 'DEMO_REDIS_PASSWORD=%s\n' "$DEMO_REDIS_PASSWORD"
     printf 'DEMO_S3_ACCESS_KEY=%s\n' "$DEMO_S3_ACCESS_KEY"
     printf 'DEMO_S3_SECRET_KEY=%s\n' "$DEMO_S3_SECRET_KEY"
+    printf 'DEMO_S3_ADMIN_ACCESS_KEY=%s\nDEMO_S3_ADMIN_SECRET_KEY=%s\n' "$DEMO_S3_ADMIN_ACCESS_KEY" "$DEMO_S3_ADMIN_SECRET_KEY"
+    printf 'DEMO_S3_READER_ACCESS_KEY=%s\nDEMO_S3_READER_SECRET_KEY=%s\n' "$DEMO_S3_READER_ACCESS_KEY" "$DEMO_S3_READER_SECRET_KEY"
     printf 'DEMO_ADMIN_PORT=%s\n' "$admin_port"
     printf 'DEMO_API_PORT=%s\n' "$api_port"
     printf 'DEMO_STOREFRONT_PORT=%s\n' "$storefront_port"
@@ -136,12 +146,12 @@ write_runtime_configuration() {
     printf '%s\n' 'ADMIN_EMAILS=operator@demo.bricomaitre.invalid' 'DEVELOPER_EMAILS=operator@demo.bricomaitre.invalid'
     printf '%s\n' 'AWS_REGION=eu-west-3' 'AWS_S3_BUCKET=bricomaitre-demo'
     printf 'AWS_CLOUDFRONT_DOMAIN=%s/bricomaitre-demo\n' "$object_origin"
-    printf 'AWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\n' "$DEMO_S3_ACCESS_KEY" "$DEMO_S3_SECRET_KEY"
+    printf 'AWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\n' "$DEMO_S3_ADMIN_ACCESS_KEY" "$DEMO_S3_ADMIN_SECRET_KEY"
     printf '%s\n' 'AWS_ENDPOINT_URL_S3=http://object-storage:9000' 'AWS_S3_FORCE_PATH_STYLE=true'
     printf '%s\n' 'ECOTRACK_BASE_URL=http://mock-services:8080/ecotrack/delivro/api/v1' 'ECOTRACK_TOKEN=demo-delivro-token'
     printf '%s\n' 'ECOTRACK_EMIR_BASE_URL=http://mock-services:8080/ecotrack/emir/api/v1' 'ECOTRACK_EMIR_TOKEN=demo-emir-token' 'ECOTRACK_MIN_REQUEST_INTERVAL_MS=0'
     printf '%s\n' 'STOREFRONT_API_BASE_URL=http://storefront-api:3001'
-    printf 'STOREFRONT_BASE_URL=%s\nNEXT_PUBLIC_STOREFRONT_BASE_URL=%s\n' "$storefront_origin" "$storefront_origin"
+    printf 'STOREFRONT_BASE_URL=http://storefront:3002\nNEXT_PUBLIC_STOREFRONT_BASE_URL=%s\n' "$storefront_origin"
     printf 'STOREFRONT_REVALIDATE_SECRET=%s\n' "$DEMO_REVALIDATE_SECRET"
     printf '%s\n' 'ADMIN_DATABASE_MAINTENANCE_CRON=43 * * * *' 'ADMIN_DATABASE_MAINTENANCE_TIMEZONE=Africa/Algiers'
     printf '%s\n' 'ADMIN_REPORTING_REFRESH_CRON=17 3 * * *' 'ADMIN_REPORTING_REFRESH_TIMEZONE=Africa/Algiers'
@@ -169,7 +179,7 @@ write_runtime_configuration() {
     printf '%s\n' 'TIKTOK_PIXEL_ID=demo-tiktok-pixel' 'TIKTOK_EVENTS_API_ACCESS_TOKEN=demo-tiktok-token' 'TIKTOK_EVENTS_API_ENDPOINT=http://mock-services:8080/tiktok/open_api/v1.3/event/track/' 'MARKETING_TIKTOK_DESTINATION_ENABLED=true'
     printf '%s\n' 'AWS_REGION=eu-west-3' 'AWS_S3_BUCKET=bricomaitre-demo'
     printf 'AWS_CLOUDFRONT_DOMAIN=%s/bricomaitre-demo\n' "$object_origin"
-    printf 'AWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\n' "$DEMO_S3_ACCESS_KEY" "$DEMO_S3_SECRET_KEY"
+    printf 'AWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\n' "$DEMO_S3_READER_ACCESS_KEY" "$DEMO_S3_READER_SECRET_KEY"
     printf '%s\n' 'AWS_ENDPOINT_URL_S3=http://object-storage:9000' 'AWS_S3_FORCE_PATH_STYLE=true'
     printf '%s\n' 'SENTRY_ENVIRONMENT=demo' 'SENTRY_RELEASE=demo' 'SENTRY_DSN_STOREFRONT_API='
   } >"$runtime_dir/storefront-api.env"
@@ -188,7 +198,19 @@ write_runtime_configuration() {
 }
 
 compose() {
-  docker compose --env-file "$runtime_dir/compose.env" -f "$compose_file" "$@"
+  local files=(-f "$compose_file")
+  if [[ "${BRIC_DEMO_REQUIRE_HOST_CONTAINMENT:-false}" = true ]]; then
+    if ! mountpoint -q /var/lib/bricomaitre-demo/data \
+      || [[ "$(findmnt -n -o LABEL --target /var/lib/bricomaitre-demo/data)" != bric-demo-state ]] \
+      || ! systemctl is-active --quiet archer-demo-firewall.service; then
+      printf 'Demo host containment is unavailable; refusing Compose operation.\n' >&2
+      return 1
+    fi
+  fi
+  if [[ -n "${BRIC_DEMO_COMPOSE_OVERRIDE:-}" ]]; then
+    files+=(-f "$BRIC_DEMO_COMPOSE_OVERRIDE")
+  fi
+  docker compose --env-file "$runtime_dir/compose.env" "${files[@]}" "$@"
 }
 
 wait_for_url() {
@@ -328,7 +350,7 @@ reset_external_state() {
 
 prepare_dependencies() {
   prepare_catalog_images
-  compose up -d --wait postgres redis object-storage mock-services
+  compose up -d --wait postgres redis object-storage mock-services gateway
   compose stop storefront admin admin-worker storefront-api storefront-marketing-worker
 
   if ! template_is_current; then
@@ -339,11 +361,12 @@ prepare_dependencies() {
   restore_application_database
   reset_external_state
   clear_application_caches
+  compose run --rm --no-deps storefront-runtime reset
 }
 
 start_applications() {
   compose up -d --no-deps "$@" \
-    storefront-api storefront-marketing-worker admin admin-worker storefront
+    storefront-api storefront-marketing-worker admin admin-worker storefront gateway
 }
 
 clear_application_caches() {
@@ -442,6 +465,10 @@ case "$command" in
 esac
 
 case "$command" in
+  compose)
+    shift
+    compose "$@"
+    ;;
   up)
     build_images
     prepare_dependencies
@@ -457,7 +484,7 @@ case "$command" in
     ;;
   reset)
     prepare_dependencies
-    compose up -d --no-deps storefront-api storefront-marketing-worker admin admin-worker storefront
+    compose up -d --no-deps storefront-api storefront-marketing-worker admin admin-worker storefront gateway
     smoke
     ;;
   rebuild)
