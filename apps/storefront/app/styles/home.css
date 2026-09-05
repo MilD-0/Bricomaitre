@@ -187,58 +187,7 @@
   flex: 0 0 100%;
 }
 .home-banner-slide > a {
-  position: relative;
   display: block;
-  color: var(--sf-text-inverse, #fff);
-}
-.home-banner-slide > a::after {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    var(--sf-surface-overlay, rgba(16, 24, 26, 0.72)),
-    transparent 58%
-  );
-  content: '';
-  pointer-events: none;
-}
-.home-banner-slide:nth-child(even) > a::after {
-  background: linear-gradient(
-    270deg,
-    var(--sf-surface-overlay, rgba(16, 24, 26, 0.7)),
-    transparent 58%
-  );
-}
-.home-banner-copy {
-  position: absolute;
-  z-index: 2;
-  inset-block-start: 50%;
-  left: clamp(1.6rem, 5vw, 5rem);
-  width: min(38rem, 44%);
-  display: grid;
-  justify-items: start;
-  gap: 1.1rem;
-  text-align: start;
-  transform: translateY(-50%);
-}
-.home-banner-slide:nth-child(even) .home-banner-copy {
-  right: clamp(1.6rem, 5vw, 5rem);
-  left: auto;
-}
-.home-banner-copy strong {
-  font-size: var(--sf-type-display, clamp(2rem, 4.2vw, 4.4rem));
-  font-weight: var(--sf-weight-semibold, 650);
-  letter-spacing: var(--sf-tracking-tight, -0.045em);
-  line-height: var(--sf-leading-tight, 0.98);
-  text-wrap: balance;
-  text-shadow: var(--sf-shadow-raised, 0 2px 18px rgba(0, 0, 0, 0.28));
-}
-.home-banner-copy > span {
-  padding-block-end: 0.22rem;
-  border-block-end: 2px solid currentColor;
-  font-size: var(--sf-type-body, 1rem);
-  font-weight: var(--sf-weight-bold, 740);
 }
 .home-banner-picture {
   position: relative;
@@ -620,29 +569,6 @@
   }
   .home-banner-picture {
     aspect-ratio: 19 / 23;
-  }
-  .home-banner-slide > a::after,
-  .home-banner-slide:nth-child(even) > a::after {
-    background: linear-gradient(
-      180deg,
-      var(--sf-surface-overlay, rgba(16, 24, 26, 0.74)),
-      transparent 58%
-    );
-  }
-  .home-banner-copy,
-  .home-banner-slide:nth-child(even) .home-banner-copy {
-    inset: 1.45rem 1.2rem auto;
-    width: auto;
-    gap: 0.75rem;
-    transform: none;
-  }
-  .home-banner-copy strong {
-    max-width: 19rem;
-    font-size: var(--sf-type-display, clamp(1.75rem, 9vw, 2.5rem));
-    line-height: var(--sf-leading-tight, 1.03);
-  }
-  .home-banner-copy > span {
-    font-size: var(--sf-type-small, 0.84rem);
   }
   .home-product-carousel > div > div {
     flex-basis: calc(82% - 0.75rem);

@@ -73,21 +73,25 @@ describe('landing page metadata', () => {
   });
 
   it('publishes localized alternates only when the sibling locale exists', () => {
-    expect(buildLandingPageMetadata(page, 'fr', true)).toMatchObject({
+    expect(
+      buildLandingPageMetadata(page, 'fr', { ...page, locale: 'ar', slug: 'lampe-ar' }),
+    ).toMatchObject({
       alternates: {
         languages: {
           fr: 'https://bricomaitre.com/fr/landing/lampe-atelier',
-          ar: 'https://bricomaitre.com/ar/landing/lampe-atelier',
+          ar: 'https://bricomaitre.com/ar/landing/lampe-ar',
           'x-default': 'https://bricomaitre.com/fr/landing/lampe-atelier',
         },
       },
       openGraph: { siteName: 'Bricomaitre', locale: 'fr_DZ', alternateLocale: ['ar_DZ'] },
     });
-    expect(buildLandingPageMetadata(page, 'fr', false).alternates).not.toHaveProperty('languages');
+    expect(buildLandingPageMetadata(page, 'fr', null).alternates).not.toHaveProperty('languages');
   });
 
   it('uses the campaign image and alternative text for rich social cards', () => {
-    expect(buildLandingPageMetadata(page, 'fr', true)).toMatchObject({
+    expect(
+      buildLandingPageMetadata(page, 'fr', { ...page, locale: 'ar', slug: 'lampe-ar' }),
+    ).toMatchObject({
       openGraph: {
         images: [
           { url: 'https://cdn.example.com/landing.jpg', alt: 'Lampe allumée dans un atelier' },
@@ -104,7 +108,9 @@ describe('landing page metadata', () => {
   });
 
   it('keeps direct-link campaign pages out of indexing regardless of legacy document flags', () => {
-    expect(buildLandingPageMetadata(page, 'fr', true).robots).toEqual({
+    expect(
+      buildLandingPageMetadata(page, 'fr', { ...page, locale: 'ar', slug: 'lampe-ar' }).robots,
+    ).toEqual({
       index: false,
       follow: false,
     });

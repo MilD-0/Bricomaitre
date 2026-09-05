@@ -33,26 +33,38 @@ export async function readPublishedStorefrontLandingPage(
 ): Promise<StorefrontLandingPageResponse | null> {
   const slug = landingPageSlugSchema.parse(input.slug);
   const locale = landingPageLocaleSchema.parse(input.locale);
-  const [page] = await db
-    .select({
-      id: landingPages.id,
-      productId: landingPages.productId,
-      slug: landingPages.slug,
-      locale: landingPages.locale,
-      revision: landingPages.publishedRevision,
-      publishedAt: landingPages.publishedAt,
-    })
+  const selection = {
+    id: landingPages.id,
+    productId: landingPages.productId,
+    slug: landingPages.slug,
+    locale: landingPages.locale,
+    revision: landingPages.publishedRevision,
+    publishedAt: landingPages.publishedAt,
+  };
+  const pages = await db
+    .select(selection)
     .from(landingPages)
-    .where(
-      and(
-        eq(landingPages.slug, slug),
-        eq(landingPages.locale, locale),
-        eq(landingPages.status, 'published'),
-      ),
-    )
-    .limit(1);
-
+    .where(and(eq(landingPages.slug, slug), eq(landingPages.status, 'published')))
+    .limit(2);
+  let page = pages.find((candidate) => candidate.locale === locale) ?? pages[0];
   if (!page?.revision) return null;
+
+  // A language switch preserves the source slug. Resolve its product's active
+  // translation, falling back to the source when only one language is published.
+  if (page.locale !== locale) {
+    const [translation] = await db
+      .select(selection)
+      .from(landingPages)
+      .where(
+        and(
+          eq(landingPages.productId, page.productId),
+          eq(landingPages.locale, locale),
+          eq(landingPages.status, 'published'),
+        ),
+      )
+      .limit(1);
+    if (translation) page = translation;
+  }
 
   return readStorefrontLandingPageRevisionPointer(db, page);
 }

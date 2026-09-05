@@ -681,6 +681,18 @@ const server = createServer((request, response) => {
         : json({ error: 'Not found' }, 404);
   } else if (url.pathname === '/storefront/homepage') {
     result = json(homepage());
+  } else if (
+    ['lampe-fr', 'lampe-ar', 'lampe-fr-only', 'lampe-ar-only'].some(
+      (slug) => url.pathname === `/storefront/landing-pages/${slug}`,
+    )
+  ) {
+    const locale = url.searchParams.get('locale');
+    const only = url.pathname.endsWith('-only');
+    const contentLocale = only ? (url.pathname.endsWith('ar-only') ? 'ar' : 'fr') : locale;
+    result = json({
+      ...landingPage(contentLocale),
+      slug: only ? url.pathname.split('/').at(-1) : `lampe-${locale}`,
+    });
   } else if (url.pathname === '/storefront/landing-pages/lampe-atelier') {
     const locale = url.searchParams.get('locale');
     result =

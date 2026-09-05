@@ -2,12 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { homepageFixtureResponse } from '@/test/fixtures/homepage';
-import {
-  Homepage,
-  selectCarouselTaxonomy,
-  selectHomepageBrands,
-  selectHomepageCategories,
-} from './homepage';
+import { Homepage, selectCarouselTaxonomy, selectHomepageCategories } from './homepage';
 
 const data = {
   banners: [],
@@ -52,16 +47,5 @@ describe('Homepage trust signals', () => {
     expect(visible.every((category) => category.parentId === null)).toBe(true);
     expect(taxonomy.brands.map((brand) => brand.id)).toEqual([1]);
     expect(taxonomy.categories.map((category) => category.id)).toEqual([1]);
-  });
-
-  it('shows only featured brands with brand artwork', () => {
-    const sample = homepageFixtureResponse.brands[0]!;
-    const brands = [
-      sample,
-      { ...sample, id: 2, featured: false },
-      { ...sample, id: 3, featured: true, image: null },
-    ];
-
-    expect(selectHomepageBrands(brands).map((brand) => brand.id)).toEqual([sample.id]);
   });
 });

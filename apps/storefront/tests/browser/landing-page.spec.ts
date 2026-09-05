@@ -107,3 +107,27 @@ test('labels a signed saved-revision preview before rendering the campaign', asy
   ).toBeVisible();
   await expect(page.getByRole('textbox', { name: /Numéro de téléphone/ })).toBeVisible();
 });
+
+for (const slug of ['lampe-fr', 'lampe-fr-only', 'lampe-ar-only']) {
+  test(`switches landing page languages for ${slug}`, async ({ page }) => {
+    await page.goto(`/fr/landing/${slug}?utm_source=language-test`);
+    const arabicSlug = slug === 'lampe-fr' ? 'lampe-ar' : slug;
+    const arabicLink = page
+      .locator('.site-header')
+      .getByRole('link', { name: 'العربية', exact: true });
+    await expect(arabicLink).toHaveAttribute(
+      'href',
+      `/ar/landing/${arabicSlug}?utm_source=language-test`,
+    );
+    await arabicLink.click();
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+      slug === 'lampe-fr-only' ? 'Éclairez chaque chantier' : 'أنِر كل مشروع',
+    );
+    await page.locator('.site-header').getByRole('link', { name: 'Français', exact: true }).click();
+    await expect(page).toHaveURL(`/fr/landing/${slug}?utm_source=language-test`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+      slug === 'lampe-ar-only' ? 'أنِر كل مشروع' : 'Éclairez chaque chantier',
+    );
+  });
+}

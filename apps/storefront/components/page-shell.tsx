@@ -20,6 +20,7 @@ import {
 type PageShellProps = {
   children: React.ReactNode;
   locale?: Locale;
+  alternatePath?: string;
   contactSettings?: Pick<
     StorefrontSettingsResponse,
     'phoneDisplay' | 'phoneHref' | 'phoneEnabled' | 'aiAssistantEnabled'
@@ -30,6 +31,7 @@ type PageShellProps = {
 export async function PageShell({
   children,
   locale: localeProp,
+  alternatePath,
   contactSettings: contactSettingsProp,
 }: PageShellProps) {
   const localeValue = localeProp ?? (await getLocale());
@@ -97,6 +99,7 @@ export async function PageShell({
             <NavigationActions
               locale={locale}
               alternateLocale={alternateLocale}
+              alternatePath={alternatePath}
               alternateLabel={alternateLabel}
               categories={[]}
               labels={{

@@ -15,7 +15,7 @@ function getLandingPageUrl(locale: Locale, slug: string) {
 export function buildLandingPageMetadata(
   page: StorefrontLandingPageResponse,
   locale: Locale,
-  hasAlternateLocale: boolean,
+  alternatePage: StorefrontLandingPageResponse | null,
 ): Metadata {
   const alternateLocale: Locale = locale === 'fr' ? 'ar' : 'fr';
   const canonical = getLandingPageUrl(locale, page.slug);
@@ -29,11 +29,12 @@ export function buildLandingPageMetadata(
   const images = imageUrl ? [{ url: imageUrl, alt: imageAlt }] : undefined;
   const alternates: Metadata['alternates'] = { canonical };
 
+  const hasAlternateLocale = alternatePage !== null && alternatePage.locale !== page.locale;
   if (hasAlternateLocale) {
     alternates.languages = {
-      fr: getLandingPageUrl('fr', page.slug),
-      ar: getLandingPageUrl('ar', page.slug),
-      'x-default': getLandingPageUrl('fr', page.slug),
+      fr: getLandingPageUrl('fr', locale === 'fr' ? page.slug : alternatePage.slug),
+      ar: getLandingPageUrl('ar', locale === 'ar' ? page.slug : alternatePage.slug),
+      'x-default': getLandingPageUrl('fr', locale === 'fr' ? page.slug : alternatePage.slug),
     };
   }
 

@@ -112,7 +112,6 @@ export function HomepageBannerCarousel({
   }, [api, banners.length, canAutoplay]);
 
   if (banners.length === 0) return null;
-  const cta = locale === 'ar' ? 'اكتشف المنتجات' : 'Voir la sélection';
   return (
     <section
       className="home-banner"
@@ -138,10 +137,6 @@ export function HomepageBannerCarousel({
                     priority={index === 0}
                     onReady={() => markLoaded(index)}
                   />
-                  <span className="home-banner-copy">
-                    <strong>{label}</strong>
-                    <span>{cta}</span>
-                  </span>
                 </a>
               </div>
             );
