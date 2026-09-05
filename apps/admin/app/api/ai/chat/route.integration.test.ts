@@ -23,7 +23,7 @@ vi.mock('@bric/ai-core', async (importOriginal) => ({
     enabled: true,
     provider: mocks.provider,
     requestTimeoutMs: 30_000,
-    maxRetries: 2,
+    maxRetries: 5,
   }),
 }));
 
@@ -38,7 +38,6 @@ vi.mock('ai', async (importOriginal) => ({
       })(),
     };
   },
-  stepCountIs: () => 'eight-step-stop',
   tool: (definition: unknown) => definition,
 }));
 
@@ -202,6 +201,7 @@ describe('POST /api/ai/chat model-led runtime', () => {
       toolChoice: string;
       stopWhen: unknown;
       abortSignal?: AbortSignal;
+      maxRetries?: number;
     };
 
     expect(response.status).toBe(200);
@@ -210,8 +210,10 @@ describe('POST /api/ai/chat model-led runtime', () => {
     expect(options.tools).toHaveProperty('query_analytics');
     expect(options.prepareStep).toBeUndefined();
     expect(options.toolChoice).toBe('auto');
-    expect(options.stopWhen).toBe('eight-step-stop');
+    expect(options.stopWhen).toEqual(expect.any(Function));
+    expect(await (options.stopWhen as () => boolean)()).toBe(false);
     expect(options.abortSignal).toBe(chatRequest.signal);
+    expect(options.maxRetries).toBe(5);
     expect(options).not.toHaveProperty('timeout');
     expect(options.instructions).toContain('Use available tools when');
     expect(options.instructions).not.toContain('Connected capability map');

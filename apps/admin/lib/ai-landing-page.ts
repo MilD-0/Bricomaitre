@@ -28,7 +28,6 @@ import {
 import { generateText, Output } from 'ai';
 import { z } from 'zod';
 
-const LANDING_PAGE_MODEL_TIMEOUT_MS = 120_000;
 const LANDING_PAGE_STAGE_ATTEMPTS = 2;
 
 export const LANDING_PAGE_GENERATION_INSTRUCTIONS = [
@@ -327,7 +326,6 @@ function createModelStageRunner(config: AiConfig): LandingPageStageRunner {
           name: 'storefront_landing_page_plan',
         }),
         maxRetries: config.maxRetries,
-        timeout: Math.max(config.requestTimeoutMs, LANDING_PAGE_MODEL_TIMEOUT_MS),
       });
       return { plan: landingPagePlanSchema.parse(await result.output), usage: result.usage };
     },
@@ -347,7 +345,6 @@ function createModelStageRunner(config: AiConfig): LandingPageStageRunner {
           name: `storefront_landing_page_${section.type.replaceAll('-', '_')}`,
         }),
         maxRetries: config.maxRetries,
-        timeout: Math.max(config.requestTimeoutMs, LANDING_PAGE_MODEL_TIMEOUT_MS),
       });
       const rawBlock = schema.parse(await result.output) as Record<string, unknown>;
       const block = landingPageBlockSchema.parse({
@@ -701,7 +698,6 @@ function createModelEditStageRunner(config: AiConfig): LandingPageEditStageRunne
           name: 'storefront_landing_page_edit_plan',
         }),
         maxRetries: config.maxRetries,
-        timeout: Math.max(config.requestTimeoutMs, LANDING_PAGE_MODEL_TIMEOUT_MS),
       });
       return { plan: landingPageEditPlanSchema.parse(await result.output), usage: result.usage };
     },
@@ -722,7 +718,6 @@ function createModelEditStageRunner(config: AiConfig): LandingPageEditStageRunne
           name: `storefront_landing_page_edit_${slot.type.replaceAll('-', '_')}`,
         }),
         maxRetries: config.maxRetries,
-        timeout: Math.max(config.requestTimeoutMs, LANDING_PAGE_MODEL_TIMEOUT_MS),
       });
       const rawBlock = schema.parse(await result.output) as Record<string, unknown>;
       return {

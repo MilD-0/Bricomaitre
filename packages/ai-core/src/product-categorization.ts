@@ -88,7 +88,6 @@ export function createProductCategorizationClassifier(
           name: 'product_category_decision',
         }),
         maxRetries: config.maxRetries,
-        timeout: config.requestTimeoutMs,
       });
       const decision = productCategorizationDecisionSchema.parse(await result.output);
       if (decision.categoryId !== null && !allowedCategoryIds.has(decision.categoryId)) {

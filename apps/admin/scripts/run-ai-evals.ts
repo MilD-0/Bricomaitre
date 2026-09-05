@@ -4,7 +4,7 @@ import 'dotenv/config';
 // Mutations are intentionally replaced with non-writing evaluation receipts.
 
 import { createAiLanguageModel, getAiConfig } from '@bric/ai-core';
-import { generateText, stepCountIs } from 'ai';
+import { generateText } from 'ai';
 
 import { adminAiContextMessage } from '../lib/admin-ai-context';
 import { resolveAdminAiModel } from '../lib/admin-ai-models';
@@ -633,7 +633,7 @@ async function runScenario(scenario: Scenario) {
         ],
         tools,
         toolChoice: 'auto',
-        stopWhen: stepCountIs(8),
+        stopWhen: () => false,
       });
       const calls = result.steps.flatMap((step) =>
         step.toolCalls.map((call) => ({ toolName: call.toolName, input: call.input })),

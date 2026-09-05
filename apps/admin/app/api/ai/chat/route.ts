@@ -1,5 +1,5 @@
 import { createAiLanguageModel, getAiConfig } from '@bric/ai-core';
-import { generateText, stepCountIs, streamText, type ToolSet } from 'ai';
+import { generateText, streamText, type ToolSet } from 'ai';
 import { and, desc, eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -228,7 +228,7 @@ export async function POST(request: NextRequest) {
       messages,
       tools,
       toolChoice: 'auto',
-      stopWhen: stepCountIs(8),
+      stopWhen: () => false,
       // An operating investigation may span several live queries and a long
       // reasoning pass. Keep it alive until the client disconnects.
       abortSignal: request.signal,

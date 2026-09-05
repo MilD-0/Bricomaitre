@@ -183,7 +183,7 @@ describe('AI configuration', () => {
       openRouterReferer: undefined,
       openRouterTitle: undefined,
       requestTimeoutMs: 30_000,
-      maxRetries: 2,
+      maxRetries: 5,
     });
   });
 

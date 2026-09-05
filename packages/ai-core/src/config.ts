@@ -54,7 +54,7 @@ export function getAiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig {
     openRouterReferer: env.OPENROUTER_HTTP_REFERER || undefined,
     openRouterTitle: env.OPENROUTER_APP_TITLE || undefined,
     requestTimeoutMs: Number(env.AI_REQUEST_TIMEOUT_MS ?? 30_000),
-    maxRetries: Number(env.AI_MAX_RETRIES ?? 2),
+    maxRetries: Number(env.AI_MAX_RETRIES ?? 5),
   });
 }
 
