@@ -4,11 +4,30 @@ import {
   ADMIN_AI_DEFAULT_MODEL,
   ADMIN_AI_DEFAULT_REASONING_EFFORT,
   getDefaultAdminAiReasoningEffort,
+  getAdminAiModelOptions,
   resolveAdminAiModel,
   supportsAdminAiReasoningEffort,
 } from './admin-ai-models';
 
 describe('admin AI model selection', () => {
+  it('resolves ExperientialLabs slugs and reasoning without OpenRouter route controls', () => {
+    expect(resolveAdminAiModel('gpt-5.6-luna', 'medium', 'experientiallabs')).toEqual({
+      model: 'gpt-5.6-luna',
+      telemetryModel: 'experientiallabs/gpt-5.6-luna',
+      chatRequestBody: { reasoning_effort: 'medium' },
+    });
+    expect(resolveAdminAiModel('deepseek-v4-flash', 'high', 'experientiallabs')).toMatchObject({
+      model: 'deepseek-v4-flash',
+      chatRequestBody: { reasoning_effort: 'high' },
+    });
+    expect(getAdminAiModelOptions('experientiallabs').map((option) => option.id)).toEqual([
+      'deepseek-v4-flash',
+      'gpt-5.6-luna',
+    ]);
+    expect(() => resolveAdminAiModel('deepseek-v4-flash-fast', 'high', 'experientiallabs')).toThrow(
+      'requires OpenRouter',
+    );
+  });
   it('defaults the operating assistant to GPT-5.6 Luna at balanced reasoning', () => {
     expect(ADMIN_AI_DEFAULT_MODEL).toBe('gpt-5.6-luna');
     expect(ADMIN_AI_DEFAULT_REASONING_EFFORT).toBe('medium');
@@ -18,12 +37,12 @@ describe('admin AI model selection', () => {
     expect(resolveAdminAiModel('deepseek-v4-flash', 'high')).toEqual({
       model: 'deepseek/deepseek-v4-flash',
       telemetryModel: 'deepseek/deepseek-v4-flash',
-      openRouterRequestBody: { reasoning: { effort: 'high' } },
+      chatRequestBody: { reasoning: { effort: 'high' } },
     });
     expect(resolveAdminAiModel('gpt-5.6-luna', 'medium')).toEqual({
       model: 'openai/gpt-5.6-luna',
       telemetryModel: 'openai/gpt-5.6-luna',
-      openRouterRequestBody: { reasoning: { effort: 'medium' } },
+      chatRequestBody: { reasoning: { effort: 'medium' } },
     });
   });
 
@@ -31,7 +50,7 @@ describe('admin AI model selection', () => {
     expect(resolveAdminAiModel('deepseek-v4-flash-fast', 'xhigh')).toMatchObject({
       model: 'deepseek/deepseek-v4-flash',
       telemetryModel: 'deepseek/deepseek-v4-flash@baidu/fp8',
-      openRouterRequestBody: {
+      chatRequestBody: {
         reasoning: { effort: 'xhigh' },
         provider: {
           order: ['baidu/fp8'],

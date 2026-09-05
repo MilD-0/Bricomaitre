@@ -4,7 +4,7 @@ import { z } from 'zod';
 const optionalModel = z.string().trim().min(1).optional();
 const optionalUrl = z.string().trim().url().optional();
 
-export const aiProviderSchema = z.enum(['openai', 'openrouter', 'deepseek']);
+export const aiProviderSchema = z.enum(['openai', 'openrouter', 'deepseek', 'experientiallabs']);
 export type AiProvider = z.infer<typeof aiProviderSchema>;
 
 export const aiConfigSchema = z.object({
@@ -14,6 +14,7 @@ export const aiConfigSchema = z.object({
   adminModel: optionalModel,
   storefrontModel: optionalModel,
   contentModel: optionalModel,
+  experientialLabsBaseUrl: optionalUrl,
   openRouterBaseUrl: optionalUrl,
   openRouterReferer: optionalUrl,
   openRouterTitle: z.string().trim().min(1).max(200).optional(),
@@ -25,7 +26,7 @@ export type AiConfig = z.infer<typeof aiConfigSchema>;
 export type AiTask = 'admin' | 'storefront' | 'content';
 export type AiLanguageModelOptions = {
   model?: string;
-  openRouterRequestBody?: Record<string, unknown>;
+  chatRequestBody?: Record<string, unknown>;
 };
 
 function isTruthy(value: string | undefined) {
@@ -40,12 +41,15 @@ export function getAiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig {
     apiKey:
       provider === 'openrouter'
         ? env.OPENROUTER_API_KEY || undefined
-        : provider === 'deepseek'
-          ? env.DEEPSEEK_API_KEY || undefined
-          : env.OPENAI_API_KEY || undefined,
+        : provider === 'experientiallabs'
+          ? env.EXPLABS_API_KEY || undefined
+          : provider === 'deepseek'
+            ? env.DEEPSEEK_API_KEY || undefined
+            : env.OPENAI_API_KEY || undefined,
     adminModel: env.AI_ADMIN_MODEL || undefined,
     storefrontModel: env.AI_STOREFRONT_MODEL || undefined,
     contentModel: env.AI_CONTENT_MODEL || undefined,
+    experientialLabsBaseUrl: env.EXPLABS_BASE_URL || undefined,
     openRouterBaseUrl: env.OPENROUTER_BASE_URL || undefined,
     openRouterReferer: env.OPENROUTER_HTTP_REFERER || undefined,
     openRouterTitle: env.OPENROUTER_APP_TITLE || undefined,
@@ -63,9 +67,11 @@ export function assertAiConfigured(config: AiConfig) {
       `${
         config.provider === 'openrouter'
           ? 'OPENROUTER_API_KEY'
-          : config.provider === 'deepseek'
-            ? 'DEEPSEEK_API_KEY'
-            : 'OPENAI_API_KEY'
+          : config.provider === 'experientiallabs'
+            ? 'EXPLABS_API_KEY'
+            : config.provider === 'deepseek'
+              ? 'DEEPSEEK_API_KEY'
+              : 'OPENAI_API_KEY'
       } is not configured`,
     );
   }
@@ -86,7 +92,7 @@ export function resolveAiModel(config: AiConfig, task: AiTask) {
   return model;
 }
 
-export function mergeOpenRouterRequestBody(body: string, additions: Record<string, unknown>) {
+export function mergeAiChatRequestBody(body: string, additions: Record<string, unknown>) {
   const parsed = JSON.parse(body) as Record<string, unknown>;
   return JSON.stringify({ ...parsed, ...additions });
 }
@@ -99,27 +105,32 @@ export function createAiLanguageModel(
   assertAiConfigured(config);
   const model = options.model ?? resolveAiModel(config, task);
 
-  if (config.provider === 'openrouter') {
+  if (config.provider === 'openrouter' || config.provider === 'experientiallabs') {
     const headers: Record<string, string> = {};
-    if (config.openRouterReferer) headers['HTTP-Referer'] = config.openRouterReferer;
-    if (config.openRouterTitle) headers['X-OpenRouter-Title'] = config.openRouterTitle;
+    if (config.provider === 'openrouter' && config.openRouterReferer)
+      headers['HTTP-Referer'] = config.openRouterReferer;
+    if (config.provider === 'openrouter' && config.openRouterTitle)
+      headers['X-OpenRouter-Title'] = config.openRouterTitle;
     const provider = createOpenAI({
-      name: 'openrouter',
+      name: config.provider,
       apiKey: config.apiKey,
-      baseURL: config.openRouterBaseUrl ?? 'https://openrouter.ai/api/v1',
+      baseURL:
+        config.provider === 'experientiallabs'
+          ? (config.experientialLabsBaseUrl ?? 'https://api.experientiallabs.ai/v1')
+          : (config.openRouterBaseUrl ?? 'https://openrouter.ai/api/v1'),
       headers,
-      fetch: options.openRouterRequestBody
+      fetch: options.chatRequestBody
         ? (input, init) =>
             globalThis.fetch(input, {
               ...init,
               body:
                 typeof init?.body === 'string'
-                  ? mergeOpenRouterRequestBody(init.body, options.openRouterRequestBody!)
+                  ? mergeAiChatRequestBody(init.body, options.chatRequestBody!)
                   : init?.body,
             })
         : undefined,
     });
-    return provider.chat(model);
+    return provider.chat(config.provider === 'experientiallabs' ? model.split('/').at(-1)! : model);
   }
 
   if (config.provider === 'deepseek') {

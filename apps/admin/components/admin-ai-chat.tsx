@@ -42,7 +42,16 @@ export const ADMIN_AI_MODEL_STORAGE_KEY = 'bricomaitre:admin-ai:model';
 export const ADMIN_AI_REASONING_EFFORT_STORAGE_KEY = 'bricomaitre:admin-ai:reasoning-effort';
 export const ADMIN_AI_AUTO_ACCEPT_STORAGE_KEY = 'bricomaitre:admin-ai:auto-accept';
 
-export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[] }) {
+export function AdminAiChat({
+  permissions = [],
+  modelIds,
+}: {
+  permissions?: PermissionKey[];
+  modelIds?: readonly AdminAiModelId[];
+}) {
+  const modelOptions = ADMIN_AI_MODEL_OPTIONS.filter(
+    (option) => !modelIds || modelIds.includes(option.id),
+  );
   const t = useTranslations();
   const surfaceContext = useAdminAiSurfaceContext();
   const suggestionKeys = useMemo(
@@ -203,7 +212,10 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
     const storedModel = adminAiModelIdSchema.safeParse(
       window.localStorage.getItem(ADMIN_AI_MODEL_STORAGE_KEY),
     );
-    const nextModel = storedModel.success ? storedModel.data : ADMIN_AI_DEFAULT_MODEL;
+    const nextModel =
+      storedModel.success && (!modelIds || modelIds.includes(storedModel.data))
+        ? storedModel.data
+        : ADMIN_AI_DEFAULT_MODEL;
     const storedEffort = adminAiReasoningEffortSchema.safeParse(
       window.localStorage.getItem(ADMIN_AI_REASONING_EFFORT_STORAGE_KEY),
     );
@@ -216,7 +228,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
       setModel(nextModel);
       setReasoningEffort(nextEffort);
     });
-  }, []);
+  }, [modelIds]);
 
   useEffect(() => {
     if (!open) return;
@@ -612,7 +624,7 @@ export function AdminAiChat({ permissions = [] }: { permissions?: PermissionKey[
                       aria-label={t('aiChat.model')}
                       className="h-9 w-full rounded-lg border border-border/70 bg-background px-2.5 text-xs text-foreground shadow-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                     >
-                      {ADMIN_AI_MODEL_OPTIONS.map((option) => (
+                      {modelOptions.map((option) => (
                         <option key={option.id} value={option.id}>
                           {option.label} · {option.cost}
                         </option>

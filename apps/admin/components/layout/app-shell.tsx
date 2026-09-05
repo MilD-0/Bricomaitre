@@ -1,5 +1,6 @@
 'use client';
 
+import type { AdminAiModelId } from '../../lib/admin-ai-models';
 import {
   BarChart3,
   Bot,
@@ -92,6 +93,7 @@ export function AppShell({
   initialUserEmail = null,
   initialUserImage = null,
   initialUserName = null,
+  adminAiModelIds,
 }: {
   children: React.ReactNode;
   initialPermissions: PermissionKey[];
@@ -101,6 +103,7 @@ export function AppShell({
   initialUserEmail?: string | null;
   initialUserImage?: string | null;
   initialUserName?: string | null;
+  adminAiModelIds?: readonly AdminAiModelId[];
 }) {
   const t = useTranslations();
   const permissions = useAppStore((s) => s.permissions);
@@ -540,7 +543,9 @@ export function AppShell({
           </div>
         </DialogContent>
       </Dialog>
-      {initialIsAllowed ? <AdminAiChat permissions={permissions} /> : null}
+      {initialIsAllowed ? (
+        <AdminAiChat permissions={permissions} modelIds={adminAiModelIds} />
+      ) : null}
     </AdminAiSurfaceProvider>
   );
 }

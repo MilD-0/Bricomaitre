@@ -26,7 +26,7 @@ import {
   buildAdminAiConversationContext,
 } from '../../../../lib/admin-ai-conversation-context';
 import { adminAiContextMessage } from '../../../../lib/admin-ai-context';
-import { resolveAdminAiModel } from '../../../../lib/admin-ai-models';
+import { getAdminAiModelOptions, resolveAdminAiModel } from '../../../../lib/admin-ai-models';
 import { normalizePermissions } from '../../../../lib/permissions';
 import { requireAppAccess } from '../../../../lib/rbac';
 import { adminAiToolConfirmsCompletedMutation } from '../../../../lib/admin-ai-execution-capabilities';
@@ -107,14 +107,29 @@ export async function POST(request: NextRequest) {
     const actor = { email: actorId, name: session.user.name };
     const db = getDb();
     const config = getAiConfig();
-    if (config.provider !== 'openrouter') {
+    if (config.provider !== 'openrouter' && config.provider !== 'experientiallabs') {
       return NextResponse.json(
-        { error: 'The admin AI model selector requires OpenRouter.' },
+        { error: 'The admin assistant requires OpenRouter or ExperientialLabs.' },
         { status: 503 },
       );
     }
 
-    const selectedModel = resolveAdminAiModel(parsed.data.model, parsed.data.reasoningEffort);
+    if (
+      !getAdminAiModelOptions(config.provider).some((option) => option.id === parsed.data.model)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'The selected model route is unavailable with the configured provider. Select another model.',
+        },
+        { status: 400 },
+      );
+    }
+    const selectedModel = resolveAdminAiModel(
+      parsed.data.model,
+      parsed.data.reasoningEffort,
+      config.provider,
+    );
     const model = selectedModel.telemetryModel;
     const now = new Date();
     const title = adminAiConversationTitle(parsed.data.message);
@@ -193,7 +208,7 @@ export async function POST(request: NextRequest) {
     ];
     const languageModel = createAiLanguageModel(config, 'admin', {
       model: selectedModel.model,
-      openRouterRequestBody: selectedModel.openRouterRequestBody,
+      chatRequestBody: selectedModel.chatRequestBody,
     });
     const tools = buildAdminAiTools({
       permissions,

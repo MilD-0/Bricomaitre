@@ -219,8 +219,8 @@ async function runScenario(
 async function main() {
   const config = getAiConfig();
   assertAiConfigured(config);
-  if (config.provider !== 'openrouter')
-    throw new Error('Storefront evaluation requires OpenRouter.');
+  if (config.provider !== 'openrouter' && config.provider !== 'experientiallabs')
+    throw new Error('Storefront evaluation requires OpenRouter or ExperientialLabs.');
 
   const suite = process.argv[2];
   if (suite && !(suite in suites)) {

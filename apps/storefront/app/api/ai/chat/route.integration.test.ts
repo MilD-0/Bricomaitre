@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  provider: 'openrouter' as 'openrouter' | 'experientiallabs',
   rateLimit: {
     ok: true,
     limit: 12,
@@ -35,7 +36,7 @@ vi.mock('@bric/ai-core', async (importOriginal) => ({
   createAiLanguageModel: mocks.createLanguageModel,
   getAiConfig: () => ({
     enabled: true,
-    provider: 'openrouter',
+    provider: mocks.provider,
     apiKey: 'test-key',
     requestTimeoutMs: 30_000,
     maxRetries: 2,
@@ -105,6 +106,7 @@ function validBody() {
 
 describe('POST /api/ai/chat', () => {
   beforeEach(() => {
+    mocks.provider = 'openrouter';
     mocks.rateLimit = {
       ok: true,
       limit: 12,
@@ -128,6 +130,18 @@ describe('POST /api/ai/chat', () => {
     mocks.result = { products: [], cartMutations: [] };
     mocks.recordRun.mockReset().mockResolvedValue(undefined);
     mocks.createLanguageModel.mockClear();
+  });
+
+  it('accepts the env-selected ExperientialLabs provider with existing model settings', async () => {
+    mocks.provider = 'experientiallabs';
+    const response = await POST(request(validBody()));
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(mocks.createLanguageModel).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'experientiallabs' }),
+      'storefront',
+      { model: 'openai/gpt-5.6-luna' },
+    );
   });
 
   it('streams a model-led turn with the real tool surface and a redacted page context', async () => {

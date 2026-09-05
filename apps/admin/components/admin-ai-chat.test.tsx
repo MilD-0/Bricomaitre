@@ -218,6 +218,17 @@ describe('AdminAiChat', () => {
     });
   });
 
+  it('resets an unavailable saved provider route to a supported model', async () => {
+    window.localStorage.setItem(ADMIN_AI_MODEL_STORAGE_KEY, 'deepseek-v4-flash-fast');
+    const user = userEvent.setup();
+    render(<AdminAiChat modelIds={['deepseek-v4-flash', 'gpt-5.6-luna']} />);
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    const model = screen.getByRole('combobox', { name: 'aiChat.model' });
+    expect(model).toHaveValue('gpt-5.6-luna');
+    expect(within(model).getAllByRole('option')).toHaveLength(2);
+    expect(within(model).queryByRole('option', { name: /Fast/ })).not.toBeInTheDocument();
+  });
+
   it('persists model and reasoning choices and sends them with the next request', async () => {
     const user = userEvent.setup();
     render(<AdminAiChat />);

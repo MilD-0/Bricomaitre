@@ -72,9 +72,9 @@ export async function POST(request: NextRequest) {
   try {
     const config = getAiConfig();
     assertAiConfigured(config);
-    if (config.provider !== 'openrouter') {
+    if (config.provider !== 'openrouter' && config.provider !== 'experientiallabs') {
       return NextResponse.json(
-        { error: 'storefront_assistant_requires_openrouter' },
+        { error: 'storefront_assistant_requires_supported_provider' },
         { status: 503 },
       );
     }

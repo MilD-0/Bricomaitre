@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { AiProvider } from '@bric/ai-core/config';
 
 export const ADMIN_AI_MODEL_OPTIONS = [
   {
@@ -67,16 +68,36 @@ export function getDefaultAdminAiReasoningEffort(modelId: AdminAiModelId): Admin
     : option.reasoningEfforts[0];
 }
 
-export function resolveAdminAiModel(modelId: AdminAiModelId, effort: AdminAiReasoningEffort) {
+export function getAdminAiModelOptions(provider: string | undefined) {
+  return ADMIN_AI_MODEL_OPTIONS.filter(
+    (option) => provider !== 'experientiallabs' || !('provider' in option),
+  );
+}
+
+export function resolveAdminAiModel(
+  modelId: AdminAiModelId,
+  effort: AdminAiReasoningEffort,
+  activeProvider: AiProvider = 'openrouter',
+) {
   if (!supportsAdminAiReasoningEffort(modelId, effort)) {
     throw new Error(`Reasoning effort ${effort} is not supported by ${modelId}.`);
   }
   const option = getAdminAiModelOption(modelId);
+  if (activeProvider === 'experientiallabs') {
+    if ('provider' in option)
+      throw new Error('This model route requires OpenRouter. Select DeepSeek V4 Flash instead.');
+    const model = option.model.split('/').at(-1)!;
+    return {
+      model,
+      telemetryModel: `experientiallabs/${model}`,
+      chatRequestBody: { reasoning_effort: effort },
+    };
+  }
   const provider = 'provider' in option ? option.provider : undefined;
   return {
     model: option.model,
     telemetryModel: provider ? `${option.model}@baidu/fp8` : option.model,
-    openRouterRequestBody: {
+    chatRequestBody: {
       reasoning: { effort },
       ...(provider ? { provider } : {}),
     },

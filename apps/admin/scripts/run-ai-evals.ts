@@ -435,10 +435,11 @@ const suites: Record<string, Scenario[]> = {
   ],
 };
 
-const selectedModel = resolveAdminAiModel('gpt-5.6-luna', 'medium');
-const model = createAiLanguageModel(getAiConfig(), 'admin', {
+const config = getAiConfig();
+const selectedModel = resolveAdminAiModel('gpt-5.6-luna', 'medium', config.provider);
+const model = createAiLanguageModel(config, 'admin', {
   model: selectedModel.model,
-  openRouterRequestBody: selectedModel.openRouterRequestBody,
+  chatRequestBody: selectedModel.chatRequestBody,
 });
 
 const evaluationPermissions = [

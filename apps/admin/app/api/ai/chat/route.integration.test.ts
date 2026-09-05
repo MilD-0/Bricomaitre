@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  provider: 'openrouter' as 'openrouter' | 'experientiallabs',
   authEmail: 'operator@bricomaitre.com' as string | null,
   denied: null as NextResponse | null,
   hasDb: true,
@@ -20,7 +21,7 @@ vi.mock('@bric/ai-core', async (importOriginal) => ({
   createAiLanguageModel: mocks.createLanguageModel,
   getAiConfig: () => ({
     enabled: true,
-    provider: 'openrouter',
+    provider: mocks.provider,
     requestTimeoutMs: 30_000,
     maxRetries: 2,
   }),
@@ -109,6 +110,7 @@ function events(value: string) {
 describe('POST /api/ai/chat model-led runtime', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.provider = 'openrouter';
     mocks.authEmail = 'operator@bricomaitre.com';
     mocks.denied = null;
     mocks.hasDb = true;
@@ -143,6 +145,36 @@ describe('POST /api/ai/chat model-led runtime', () => {
 
     mocks.authEmail = null;
     expect((await POST(request({ message: 'Hello', conversationKey }))).status).toBe(401);
+  });
+
+  it('uses the env-selected ExperientialLabs provider for the admin turn', async () => {
+    mocks.provider = 'experientiallabs';
+    const response = await POST(request({ message: 'Check orders.', conversationKey }));
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(mocks.createLanguageModel).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'experientiallabs' }),
+      'admin',
+      { model: 'gpt-5.6-luna', chatRequestBody: { reasoning_effort: 'medium' } },
+    );
+    expect(mocks.insertedValues).toContainEqual(
+      expect.objectContaining({ model: 'experientiallabs/gpt-5.6-luna' }),
+    );
+  });
+
+  it('rejects an unavailable OpenRouter route before starting an ExperientialLabs run', async () => {
+    mocks.provider = 'experientiallabs';
+    const response = await POST(
+      request({
+        message: 'Hello',
+        conversationKey,
+        model: 'deepseek-v4-flash-fast',
+        reasoningEffort: 'high',
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.createLanguageModel).not.toHaveBeenCalled();
+    expect(mocks.insertedValues).toEqual([]);
   });
 
   it('lets the model combine conceptual and live evidence without a preflight plan', async () => {

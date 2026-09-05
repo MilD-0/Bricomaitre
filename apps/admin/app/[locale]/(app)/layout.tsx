@@ -5,6 +5,7 @@ import { getDb, hasDb } from '@bric/db/client';
 import { users } from '@bric/db/schema';
 import { auth } from '../../../lib/auth';
 import { eq } from 'drizzle-orm';
+import { getAdminAiModelOptions } from '../../../lib/admin-ai-models';
 
 export default async function ProtectedLayout({
   children,
@@ -32,6 +33,9 @@ export default async function ProtectedLayout({
 
   return (
     <AppShell
+      adminAiModelIds={getAdminAiModelOptions(process.env.AI_PROVIDER?.trim().toLowerCase()).map(
+        (option) => option.id,
+      )}
       initialPermissions={session?.user?.permissions ?? []}
       initialRole={session?.user?.role ?? 'viewer'}
       initialIsAllowed={session?.user?.isAllowed ?? false}
