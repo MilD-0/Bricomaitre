@@ -1,0 +1,41 @@
+services:
+  ai-relay:
+    image: nginx:stable-trixie@sha256:09cc2702709e6388d979d8030e3ab4eb1ceb699b2dced26d7543e872a822e823
+    user: '101:101'
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 0.25
+    mem_limit: 64m
+    memswap_limit: 64m
+    pids_limit: 64
+    tmpfs: [/tmp:size=16m, mode=1777]
+    logging:
+      driver: local
+      options: { max-size: '10m', max-file: '3' }
+    entrypoint: [nginx, '-g', 'daemon off;']
+    volumes:
+      - ./ai-relay.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      default: {}
+      ai-egress:
+        gw_priority: 1
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, http://127.0.0.1:8080/health]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  admin:
+    environment:
+      EXPLABS_BASE_URL: http://ai-relay:8080/v1
+  admin-worker:
+    environment:
+      EXPLABS_BASE_URL: http://ai-relay:8080/v1
+  storefront:
+    environment:
+      EXPLABS_BASE_URL: http://ai-relay:8080/v1
+
+networks:
+  ai-egress: {}

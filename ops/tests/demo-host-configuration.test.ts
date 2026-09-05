@@ -53,7 +53,17 @@ it('keeps host origins and secrets across preparation without affecting another 
     ).toBeDefined();
     expect(readFileSync(join(runtime, 'compose.env'), 'utf8')).toEqual(hosted);
     expect(readFileSync(join(runtime, 'secrets.env'), 'utf8')).toEqual(secrets);
+    const aiSettings =
+      'AI_ENABLED=true\nAI_PROVIDER=experientiallabs\nEXPLABS_API_KEY=fixture-only\nAI_STOREFRONT_MODEL=gpt-5.6-luna\n';
+    writeFileSync(join(runtime, 'ai.env'), aiSettings);
+    prepare(runtime);
+    prepare(runtime);
+    for (const name of ['admin.env', 'storefront.env']) {
+      expect(readFileSync(join(runtime, name), 'utf8')).toContain(aiSettings);
+    }
+    expect(readFileSync(join(runtime, 'storefront-api.env'), 'utf8')).not.toContain('fixture-only');
     expect(prepare(isolated)).toContain('DEMO_STOREFRONT_ORIGIN=http://127.0.0.1:3402');
+    expect(readFileSync(join(isolated, 'admin.env'), 'utf8')).not.toContain('fixture-only');
     expect(readFileSync(join(runtime, 'compose.env'), 'utf8')).toEqual(hosted);
     const values = Object.fromEntries(
       secrets

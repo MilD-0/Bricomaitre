@@ -195,6 +195,12 @@ write_runtime_configuration() {
     printf '%s\n' 'NEXT_PUBLIC_FACEBOOK_PIXEL_ID=' 'NEXT_PUBLIC_GA_MEASUREMENT_ID=' 'NEXT_PUBLIC_TIKTOK_PIXEL_ID=' 'SENTRY_DSN_STOREFRONT=' 'NEXT_PUBLIC_SENTRY_DSN_STOREFRONT=' 'SENTRY_ENVIRONMENT=demo' 'SENTRY_RELEASE=demo'
   } >"$runtime_dir/storefront.env"
 
+  # Optional local provider settings survive every launcher call and reset.
+  if [[ -f "$runtime_dir/ai.env" ]]; then
+    cat "$runtime_dir/ai.env" >>"$runtime_dir/admin.env"
+    cat "$runtime_dir/ai.env" >>"$runtime_dir/storefront.env"
+  fi
+
   chmod 600 "$runtime_dir"/*
 }
 
@@ -210,6 +216,9 @@ compose() {
   fi
   if [[ -n "${BRIC_DEMO_COMPOSE_OVERRIDE:-}" ]]; then
     files+=(-f "$BRIC_DEMO_COMPOSE_OVERRIDE")
+  fi
+  if [[ "${BRIC_DEMO_AI_RELAY:-false}" = true ]]; then
+    files+=(-f "$demo_root/ai.compose.yml")
   fi
   docker compose --env-file "$runtime_dir/compose.env" "${files[@]}" "$@"
 }
@@ -354,8 +363,30 @@ prepare_dependencies() {
 }
 
 start_applications() {
+  if [[ "${BRIC_DEMO_AI_RELAY:-false}" = true ]]; then
+    compose up -d --wait --no-deps ai-relay
+  fi
   compose up -d --no-deps "$@" \
     storefront-api storefront-marketing-worker admin admin-worker storefront gateway
+  configure_ai_assistant
+}
+
+configure_ai_assistant() {
+  [[ -f "$runtime_dir/ai.env" ]] || return 0
+  local AI_ENABLED=false AI_STOREFRONT_MODEL=openai/gpt-5.6-luna AI_STOREFRONT_FALLBACK_MODEL=
+  # Operator-owned shell-compatible environment file, like host.env.
+  # shellcheck disable=SC1090
+  source "$runtime_dir/ai.env"
+  local enabled=false
+  if [[ "$AI_ENABLED" = true || "$AI_ENABLED" = 1 ]]; then enabled=true; fi
+  compose exec -T postgres psql -U bricomaitre_demo_owner -d bricomaitre_demo \
+    -v ON_ERROR_STOP=1 -v enabled="$enabled" -v model="$AI_STOREFRONT_MODEL" \
+    -v fallback="$AI_STOREFRONT_FALLBACK_MODEL" <<'SQL'
+UPDATE storefront_settings
+SET ai_assistant_enabled = :'enabled'::boolean,
+    ai_model = :'model', ai_fallback_model = nullif(:'fallback', ''), updated_at = now()
+WHERE id = 1;
+SQL
 }
 
 clear_application_caches() {
@@ -473,7 +504,7 @@ case "$command" in
     ;;
   reset)
     prepare_dependencies
-    compose up -d --no-deps storefront-api storefront-marketing-worker admin admin-worker storefront gateway
+    start_applications
     smoke
     ;;
   rebuild)
