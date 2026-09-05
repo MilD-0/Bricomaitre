@@ -53,12 +53,15 @@ COPY third_party/licenses ./third_party/licenses
 
 FROM base AS build
 
+# Next.js otherwise sizes page workers from the host CPU count.
+ARG BRIC_BUILD_CPUS=""
 RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-11.24.0,target=/corepack,sharing=shared \
   --mount=type=cache,id=bricomaitre-admin-next-build,target=/workspace/apps/admin/.next/cache,sharing=locked \
   --mount=type=secret,id=google_client_secret \
   --mount=type=secret,id=better_auth_secret \
   --mount=type=secret,id=sentry_auth_token \
-  export GOOGLE_CLIENT_SECRET="$(cat /run/secrets/google_client_secret)" \
+  export CIRCLE_NODE_TOTAL="${BRIC_BUILD_CPUS}" \
+  GOOGLE_CLIENT_SECRET="$(cat /run/secrets/google_client_secret)" \
   BETTER_AUTH_SECRET="$(cat /run/secrets/better_auth_secret)" \
   BETTER_AUTH_URL="${APPLICATION_ORIGIN}" \
   SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)" \

@@ -52,9 +52,12 @@ ENV NODE_ENV=production
 
 FROM base AS build
 
+# Next.js otherwise sizes page workers from the host CPU count.
+ARG BRIC_BUILD_CPUS=""
 RUN --mount=type=cache,id=bricomaitre-corepack-pnpm-11.24.0,target=/corepack,sharing=shared \
   --mount=type=cache,id=bricomaitre-storefront-api-next-build,target=/workspace/apps/storefront-api/.next/cache,sharing=locked \
   --mount=type=secret,id=sentry_auth_token \
+  CIRCLE_NODE_TOTAL="${BRIC_BUILD_CPUS}" \
   SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)" \
   pnpm --filter @bric/storefront-api build \
   && bash ops/scripts/hydrate-next-standalone.sh apps/storefront-api \
