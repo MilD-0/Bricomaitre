@@ -132,7 +132,7 @@ jobs:
             echo "DOCKER_CONFIG=$docker_config"
             echo "BUILDX_CONFIG=$HOME/.docker/buildx"
           } >> "$GITHUB_ENV"
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
         with:
           name: bricomaitre-ci
           driver-opts: network=host
@@ -205,7 +205,7 @@ jobs:
             echo "DOCKER_CONFIG=$docker_config"
             echo "BUILDX_CONFIG=$HOME/.docker/buildx"
           } >> "$GITHUB_ENV"
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
         with:
           name: bricomaitre-ci
           driver-opts: network=host
@@ -281,7 +281,7 @@ jobs:
             echo "DOCKER_CONFIG=$docker_config"
             echo "BUILDX_CONFIG=$HOME/.docker/buildx"
           } >> "$GITHUB_ENV"
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
         with:
           name: bricomaitre-ci
           driver-opts: network=host
