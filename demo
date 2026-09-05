@@ -32,7 +32,7 @@ calculate_data_revision() {
         ! -path 'ops/demo/postgres/seed/90-live.sql' \
         ! -path 'ops/demo/postgres/seed/99-live-verify.sql' \
         -print0 \
-        | sort -z \
+        | LC_ALL=C sort -z \
         | xargs -0 sha256sum
       date -u +%F
       printf '%s\n' "${BRIC_DEMO_OBJECT_ORIGIN:-http://127.0.0.1:${BRIC_DEMO_OBJECT_PORT:-3900}}"

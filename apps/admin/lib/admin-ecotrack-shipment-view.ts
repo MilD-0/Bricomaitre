@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
 
 import {
   ecotrackOrderMajEntries,
@@ -145,16 +145,26 @@ function toListItem(
   };
 }
 
-export async function loadActiveShipmentRows(db: Database) {
-  const rows = await db
+export async function loadActiveShipmentRows(
+  db: Database,
+  page?: { afterId: number; limit: number },
+) {
+  const query = db
     .select({
       state: ecotrackOrderStates,
       order: orders,
     })
     .from(ecotrackOrderStates)
     .innerJoin(orders, eq(ecotrackOrderStates.orderId, orders.id))
-    .where(isNull(ecotrackOrderStates.deletedAt))
-    .orderBy(desc(ecotrackOrderStates.updatedAt), desc(ecotrackOrderStates.id));
+    .where(
+      and(
+        isNull(ecotrackOrderStates.deletedAt),
+        page ? gt(ecotrackOrderStates.id, page.afterId) : undefined,
+      ),
+    );
+  const rows = await (page
+    ? query.orderBy(asc(ecotrackOrderStates.id)).limit(page.limit)
+    : query.orderBy(desc(ecotrackOrderStates.updatedAt), desc(ecotrackOrderStates.id)));
 
   return rows.map((entry) => ({ ...entry.state, order: entry.order })) as ShipmentRow[];
 }

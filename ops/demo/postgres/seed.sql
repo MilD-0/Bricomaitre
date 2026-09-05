@@ -11,6 +11,7 @@
 \ir /seed/seed/40-analytics.sql
 \echo 'Populating operations and integrations'
 \ir /seed/seed/50-operations.sql
+\ir /seed/seed/60-carrier-completion.sql
 \echo 'Verifying the immutable dataset'
 \ir /seed/seed/99-verify.sql
 
