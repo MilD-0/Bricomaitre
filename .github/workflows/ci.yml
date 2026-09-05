@@ -19,7 +19,7 @@ concurrency:
 jobs:
   static-quality:
     name: Static quality
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,7 +51,7 @@ jobs:
 
   service-contracts:
     name: PostgreSQL and Redis contracts
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,7 +64,7 @@ jobs:
 
   tests:
     name: Tests / ${{ matrix.suite }}
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -110,7 +110,7 @@ jobs:
 
   browser-acceptance:
     name: Browser acceptance
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -137,7 +137,7 @@ jobs:
 
   admin-browser-acceptance:
     name: Admin browser acceptance
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 20
     env:
       DATABASE_URL: postgres://bricomaitre:bricomaitre@127.0.0.1:55433/bricomaitre_browser
@@ -184,7 +184,7 @@ jobs:
 
   browser-performance:
     name: Browser performance budgets
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 15
     env:
       BRIC_PLAYWRIGHT_FIXTURE_API_ORIGIN: http://127.0.0.1:4321
@@ -216,7 +216,7 @@ jobs:
   production-builds:
     name: Production builds
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -238,7 +238,7 @@ jobs:
       - admin-browser-acceptance
       - browser-performance
       - production-builds
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 5
     steps:
       - name: Fail when an upstream gate failed or was cancelled

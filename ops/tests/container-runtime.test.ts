@@ -405,10 +405,10 @@ describe('production packaging and release runtime', () => {
 
     const selfHostedRunnerSelector = 'runs-on: [self-hosted, Linux, X64, bricomaitre-ci]';
     const hostedRunnerSelector = 'runs-on: ubuntu-24.04';
-    expect(ci).not.toContain(selfHostedRunnerSelector);
-    expect(release).not.toContain(selfHostedRunnerSelector);
-    expect(ci.split(hostedRunnerSelector)).toHaveLength(9);
-    expect(release.split(hostedRunnerSelector)).toHaveLength(7);
+    expect(ci.split(selfHostedRunnerSelector)).toHaveLength(9);
+    expect(release.split(selfHostedRunnerSelector)).toHaveLength(7);
+    expect(ci).not.toContain(hostedRunnerSelector);
+    expect(release).not.toContain(hostedRunnerSelector);
     expect(ci).not.toContain('services:');
     expect(ci).not.toContain('55432:5432');
     expect(ci).not.toContain('56379:6379');
