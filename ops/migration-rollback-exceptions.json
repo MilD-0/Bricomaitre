@@ -1,4 +1,10 @@
 {
   "version": 1,
-  "exceptions": []
+  "exceptions": [
+    {
+      "migration": "0095_unique_fat_cobra.sql",
+      "sha256": "83ef7627724be8af731da1a4d3920f072fa89bc528f27570d46da977b8df0372",
+      "reason": "The admin config exposes only Google OAuth, existing provider/account identities are collision-free, and the migration default preserves writes from the previous runtime during rollout."
+    }
+  ]
 }

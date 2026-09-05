@@ -205,6 +205,12 @@ describe('migration rollback-safety verification', () => {
             sha256: '9de21c5d770f7545b17bc78525544ceb521e8209481cf0496b1d837c6acbe283',
             reason: 'The required column has a default that preserves previous-runtime inserts.',
           },
+          {
+            migration: '0095_unique_fat_cobra.sql',
+            sha256: '83ef7627724be8af731da1a4d3920f072fa89bc528f27570d46da977b8df0372',
+            reason:
+              'The admin config exposes only Google OAuth, existing provider/account identities are collision-free, and the migration default preserves writes from the previous runtime during rollout.',
+          },
         ],
       }),
     );
@@ -231,6 +237,6 @@ describe('migration rollback-safety verification', () => {
     expect(build.status).toBe(0);
     const result = run(previous, candidate);
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('88 historical and 7 new migration');
+    expect(result.stdout).toContain('88 historical and 9 new migration');
   });
 });
