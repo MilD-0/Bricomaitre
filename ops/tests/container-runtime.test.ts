@@ -627,7 +627,10 @@ describe('production packaging and release runtime', () => {
     );
     expect(playwrightInstaller).toContain('exec 9>"$playwright_cache_dir/.install.lock"');
     expect(playwrightInstaller).toContain('flock 9');
-    expect(playwrightInstaller).toContain('playwright install --with-deps chromium');
+    expect(playwrightInstaller).toContain("RUNNER_ENVIRONMENT:-}\" == 'github-hosted'");
+    expect(playwrightInstaller).toContain('install_arguments=(install chromium)');
+    expect(playwrightInstaller).toContain('install_arguments=(install --with-deps chromium)');
+    expect(playwrightInstaller).toContain('exec playwright "${install_arguments[@]}"');
     const loopbackRunner = readFileSync(
       resolve(workspaceRoot, 'ops/scripts/run-loopback-isolated.sh'),
       'utf8',

@@ -12,5 +12,11 @@ mkdir -p "$playwright_cache_dir"
 
 exec 9>"$playwright_cache_dir/.install.lock"
 flock 9
+
+install_arguments=(install chromium)
+if [[ "${RUNNER_ENVIRONMENT:-}" == 'github-hosted' ]]; then
+  install_arguments=(install --with-deps chromium)
+fi
+
 PLAYWRIGHT_BROWSERS_PATH="$playwright_cache_dir" \
-  pnpm --filter "$workspace_filter" exec playwright install --with-deps chromium
+  pnpm --filter "$workspace_filter" exec playwright "${install_arguments[@]}"
