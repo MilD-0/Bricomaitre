@@ -587,6 +587,7 @@ export function MoneyView({
                   tickFormatter={(value) => formatNumber(locale, Number(value), true)}
                   tickLine={false}
                   axisLine={false}
+                  domain={['auto', 'auto']}
                   width={52}
                   fontSize="var(--type-size-label-px)"
                 />
@@ -605,7 +606,7 @@ export function MoneyView({
                   stroke="none"
                 />
                 <Line
-                  type="monotone"
+                  type="linear"
                   dataKey="forecastTrueProfitDzd"
                   name={copy.metrics.trueProfit}
                   stroke="var(--chart-violet)"

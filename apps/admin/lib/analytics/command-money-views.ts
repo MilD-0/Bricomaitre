@@ -7,7 +7,7 @@ import {
   commonCutoff,
   type AnalyticsCanonicalCutoffs,
 } from './data-boundaries';
-import { addDays, clipAnalyticsFilters } from './date-range';
+import { addDays, clipAnalyticsFilters, dayInTimezone, remainingDayFraction } from './date-range';
 import { aggregateAutomaticPaidSeries, aggregateEconomicsSeries } from './economics-series';
 import {
   buildSignals,
@@ -39,6 +39,7 @@ export async function loadCommandView(
   db: Database,
   filters: AnalyticsFilters,
   cutoffs: AnalyticsCanonicalCutoffs,
+  now = new Date(),
 ) {
   const economicsFilters = clipAnalyticsFilters(
     filters,
@@ -105,8 +106,15 @@ export async function loadCommandView(
     loadReturnObservation(db, fulfillmentFilters, current.settings.defaultReturnRate),
     loadSourceHealth(db, filters, current),
   ]);
-  const forecast = buildEconomicsForecast(current, economicsFilters.endDate, 14, leadingForecast);
-  const forecastTrueProfitDzd = forecast
+  const forecast = buildEconomicsForecast(
+    current,
+    economicsFilters.endDate,
+    14,
+    leadingForecast,
+    economicsFilters.endDate === dayInTimezone(now) ? remainingDayFraction(now) : 0,
+  );
+  const futureForecast = forecast.filter((point) => !point.currentDayRemainder);
+  const forecastTrueProfitDzd = futureForecast
     .slice(0, 7)
     .reduce((sum, point) => sum + point.forecastTrueProfitDzd, 0);
   const paidByBucket = new Map(
@@ -189,7 +197,7 @@ export async function loadCommandView(
       },
       returns,
       forecast: {
-        days: forecast.slice(0, 7),
+        days: futureForecast.slice(0, 7),
         nextSevenDayTrueProfitDzd: forecastTrueProfitDzd,
         leading: leadingForecast,
       },
@@ -209,6 +217,7 @@ export async function loadMoneyView(
   db: Database,
   filters: AnalyticsFilters,
   cutoffs: AnalyticsCanonicalCutoffs,
+  now = new Date(),
 ) {
   const economicsFilters = clipAnalyticsFilters(
     filters,
@@ -250,7 +259,14 @@ export async function loadMoneyView(
       loadFulfillmentCohorts(db, fulfillmentFilters.startDate, fulfillmentFilters.endDate, current),
       loadLeadingOrderForecast(db, economicsFilters, current.settings),
     ]);
-  const forecast = buildEconomicsForecast(current, economicsFilters.endDate, 14, leadingForecast);
+  const forecast = buildEconomicsForecast(
+    current,
+    economicsFilters.endDate,
+    14,
+    leadingForecast,
+    economicsFilters.endDate === dayInTimezone(now) ? remainingDayFraction(now) : 0,
+  );
+  const futureForecast = forecast.filter((point) => !point.currentDayRemainder);
   const headlineMetrics = economicsMetrics(current, previous);
   const performanceSeries = appendEconomicsForecastSeries(
     aggregateEconomicsSeries(current, filters.resolvedGrain, economicsFilters.endDate),
@@ -281,7 +297,7 @@ export async function loadMoneyView(
         fulfillmentFilters.endDate,
       ),
       cohorts,
-      forecast,
+      forecast: futureForecast,
       weeks: current.weeks.map((week) => ({
         ...week,
         isPartial: economicsFilters.endDate < addDays(week.weekStart, 6),

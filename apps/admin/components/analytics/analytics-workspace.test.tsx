@@ -47,7 +47,7 @@ describe('open-period chart series', () => {
     expect(rows[0]).toMatchObject({ profitActual: 100, profitOpen: 100 });
   });
 
-  it('continues the dotted series through future-only points', () => {
+  it('does not invent an open-period forecast when the metric has no projection', () => {
     const rows = splitPartialSeries(
       [
         { label: 'Aug 19', profit: 100, profitProjected: null, isPartial: true },
@@ -62,7 +62,7 @@ describe('open-period chart series', () => {
       ['profit'],
     );
 
-    expect(rows[0]).toMatchObject({ profitActual: null, profitOpen: 100 });
+    expect(rows[0]).toMatchObject({ profitActual: null, profitOpen: null });
     expect(rows[1]).toMatchObject({ profitActual: null, profitOpen: 110, profitDisplay: 110 });
   });
 });
