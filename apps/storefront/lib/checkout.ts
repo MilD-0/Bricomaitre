@@ -29,7 +29,7 @@ const algerianPhone = z
   .min(1, 'phone_required')
   .max(50, 'phone_invalid')
   .transform(normalizeAlgerianPhoneNumber)
-  .refine((value) => /^0[5-7]\d{8}$/.test(value), 'phone_invalid');
+  .refine((value) => /^\d{8,15}$/.test(value), 'phone_invalid');
 
 export const checkoutFormSchema = z.object({
   phoneNumber1: algerianPhone,

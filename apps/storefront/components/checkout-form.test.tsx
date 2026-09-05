@@ -271,7 +271,7 @@ describe('CheckoutForm', () => {
   it('uses a specific error for an invalid Algerian phone number', async () => {
     render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels} />);
     fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
-      target: { value: '1234567890' },
+      target: { value: '1234' },
     });
     fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), { target: { value: '16' } });
     fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), {

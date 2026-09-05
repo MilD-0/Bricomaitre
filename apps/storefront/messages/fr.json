@@ -198,7 +198,7 @@
     "optional": "facultatif",
     "orderSummary": "Votre commande",
     "phone": "Numéro de téléphone",
-    "phoneError": "Saisissez un numéro de téléphone algérien valide à 10 chiffres.",
+    "phoneError": "Saisissez un numéro de téléphone contenant entre 8 et 15 chiffres.",
     "phonePlaceholder": "Ex. 0550 00 00 00",
     "quantity": "Quantité",
     "requiredError": "Ce champ est obligatoire.",
