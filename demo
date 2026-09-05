@@ -363,12 +363,12 @@ prepare_dependencies() {
 }
 
 start_applications() {
+  configure_ai_assistant
   if [[ "${BRIC_DEMO_AI_RELAY:-false}" = true ]]; then
     compose up -d --wait --no-deps ai-relay
   fi
   compose up -d --no-deps "$@" \
     storefront-api storefront-marketing-worker admin admin-worker storefront gateway
-  configure_ai_assistant
 }
 
 configure_ai_assistant() {
