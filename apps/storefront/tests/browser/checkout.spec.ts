@@ -119,13 +119,13 @@ test('persists checkout details across visits without hydration or field-layout 
   const wilaya = page.getByRole('combobox', { name: /Wilaya/ });
   const commune = page.getByRole('combobox', { name: /Commune/ });
   const address = page.getByRole('textbox', { name: /Adresse complète/ });
-  await phone.fill('1234567890');
+  await phone.fill('1234');
   await wilaya.selectOption('16');
   await address.fill('12 rue des Outils');
   await page.getByRole('button', { name: 'Confirmer ma commande' }).click();
 
   await expect(
-    page.getByText('Saisissez un numéro de téléphone algérien valide à 10 chiffres.'),
+    page.getByText('Saisissez un numéro de téléphone contenant entre 8 et 15 chiffres.'),
   ).toBeVisible();
   await expect(page.getByText('Ce champ est obligatoire.')).toBeVisible();
   const [wilayaBox, communeBox] = await Promise.all([wilaya.boundingBox(), commune.boundingBox()]);
