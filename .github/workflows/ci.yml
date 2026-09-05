@@ -194,6 +194,12 @@ jobs:
 
   browser-performance:
     name: Browser performance budgets
+    needs:
+      - static-quality
+      - service-contracts
+      - tests
+      - browser-acceptance
+      - admin-browser-acceptance
     runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 15
     env:

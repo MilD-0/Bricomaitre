@@ -691,6 +691,16 @@ describe('production packaging and release runtime', () => {
     expect(ci).toContain('BRIC_PLAYWRIGHT_STOREFRONT_ORIGIN: http://127.0.0.1:3013');
     expect(ci).toContain('BRIC_PLAYWRIGHT_UPSTREAM_ORIGIN: http://127.0.0.1:3014');
     expect(ci).toContain('BRIC_PLAYWRIGHT_FIXTURE_API_ORIGIN: http://127.0.0.1:4321');
+    const performanceJob = ci.slice(
+      ci.indexOf('  browser-performance:'),
+      ci.indexOf('  production-builds:'),
+    );
+    expect(performanceJob).toContain(`    needs:
+      - static-quality
+      - service-contracts
+      - tests
+      - browser-acceptance
+      - admin-browser-acceptance`);
     expect(release).toContain(
       'GOOGLE_ANALYTICS_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}',
     );
