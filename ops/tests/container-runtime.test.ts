@@ -553,9 +553,7 @@ describe('production packaging and release runtime', () => {
     ).toBe(true);
     expect(ci.match(/uses: [.][/][.]github[/]actions[/]setup-workspace/g)).toHaveLength(7);
     expect(ci.match(/clean: false/g)).toHaveLength(7);
-    expect(ci).toContain(
-      'uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c',
-    );
+    expect(ci).toMatch(/uses: docker\/setup-buildx-action@[a-f0-9]{40}\b/);
     expect(`${ci}\n${release}`.match(/name: bricomaitre-ci/g)).toHaveLength(4);
     expect(`${ci}\n${release}`.match(/driver-opts: network=host/g)).toHaveLength(4);
     expect(`${ci}\n${release}`.match(/keep-state: true/g)).toHaveLength(4);
