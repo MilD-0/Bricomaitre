@@ -61,6 +61,22 @@ describe('Playwright server isolation', () => {
     });
   });
 
+  it('starts an existing Storefront build for browser acceptance', async () => {
+    vi.stubEnv('BRIC_PLAYWRIGHT_SERVER', 'prebuilt');
+
+    const config = await loadConfig();
+    const webServers = Array.isArray(config.webServer) ? config.webServer : [config.webServer];
+
+    expect(webServers).toHaveLength(3);
+    expect(webServers[1]).toMatchObject({
+      command: 'pnpm start',
+      url: 'http://127.0.0.1:3004/api/health',
+    });
+    expect(webServers[2]).toMatchObject({
+      url: 'http://127.0.0.1:3003/api/health',
+    });
+  });
+
   it('keeps design-baseline captures out of browser acceptance', async () => {
     const config = await loadConfig();
     const projects = config.projects ?? [];

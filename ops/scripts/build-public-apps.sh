@@ -67,4 +67,15 @@ export SENTRY_PROJECT_STOREFRONT=''
 export SENTRY_RELEASE='source-verification'
 export NEXT_TELEMETRY_DISABLED='1'
 
-pnpm build:apps
+case "${1:-all}" in
+  all)
+    pnpm build:apps
+    ;;
+  storefront)
+    pnpm --filter @bric/storefront build
+    ;;
+  *)
+    echo 'usage: build-public-apps.sh [all|storefront]' >&2
+    exit 64
+    ;;
+esac

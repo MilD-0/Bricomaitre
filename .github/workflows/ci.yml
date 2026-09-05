@@ -112,6 +112,8 @@ jobs:
     name: Browser acceptance
     runs-on: [self-hosted, Linux, X64, bricomaitre-ci]
     timeout-minutes: 20
+    env:
+      BRIC_PLAYWRIGHT_SERVER: prebuilt
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -120,6 +122,12 @@ jobs:
       - uses: ./.github/actions/setup-workspace
       - name: Install Chromium
         run: bash ops/scripts/install-playwright-chromium.sh @bric/storefront
+      - name: Build Storefront for browser acceptance
+        env:
+          NODE_OPTIONS: --max-old-space-size=2048
+        run: >-
+          ops/scripts/run-loopback-isolated.sh
+          bash ops/scripts/build-public-apps.sh storefront
       - name: Run browser acceptance tests
         run: >-
           ops/scripts/run-ci-check.sh "Storefront browser acceptance tests"

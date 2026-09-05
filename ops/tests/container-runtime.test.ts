@@ -184,6 +184,7 @@ describe('production packaging and release runtime', () => {
     expect(buildScript).toContain("STOREFRONT_API_TIMEOUT_MS='1000'");
     expect(buildScript).toContain("SENTRY_AUTH_TOKEN=''");
     expect(buildScript).toContain('pnpm build:apps');
+    expect(buildScript).toContain('pnpm --filter @bric/storefront build');
     expect(buildScript).not.toContain('api.bricomaitre.com');
   });
 
@@ -448,6 +449,19 @@ describe('production packaging and release runtime', () => {
       '--project service-integration-node --project redis-integration-node --maxWorkers=1',
     );
 
+    const storefrontBrowser = ci.slice(
+      ci.indexOf('  browser-acceptance:'),
+      ci.indexOf('\n  admin-browser-acceptance:'),
+    );
+    expect(storefrontBrowser).toContain('BRIC_PLAYWRIGHT_SERVER: prebuilt');
+    expect(storefrontBrowser).toContain('bash ops/scripts/build-public-apps.sh storefront');
+    expect(
+      storefrontBrowser.indexOf('name: Build Storefront for browser acceptance'),
+    ).toBeGreaterThan(0);
+    expect(storefrontBrowser.indexOf('name: Build Storefront for browser acceptance')).toBeLessThan(
+      storefrontBrowser.indexOf('name: Run browser acceptance tests'),
+    );
+
     const adminBrowser = ci.slice(
       ci.indexOf('  admin-browser-acceptance:'),
       ci.indexOf('\n  browser-performance:'),
@@ -488,7 +502,7 @@ describe('production packaging and release runtime', () => {
     );
     expect(ci).not.toContain('pnpm test:admin:browser --workers=2');
     expect(ci).toContain('ops/scripts/run-loopback-isolated.sh pnpm test:storefront:performance');
-    expect(ci.match(/ops[/]scripts[/]run-loopback-isolated[.]sh/g)).toHaveLength(3);
+    expect(ci.match(/ops[/]scripts[/]run-loopback-isolated[.]sh/g)).toHaveLength(4);
     expect(ci.match(/ops[/]scripts[/]run-with-ci-services[.]sh/g)).toHaveLength(1);
     expect(release).toContain('workflow_run:');
     expect(release).toMatch(/workflow_run:[\s\S]*branches:\s+- main/);

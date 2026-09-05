@@ -90,6 +90,13 @@ test('AI stats keep prior data visible when a filtered request fails', async ({ 
       body: JSON.stringify({ error: 'Simulated analytics failure' }),
     });
   });
+  const serverNavigations: string[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.endsWith('/stats/ai-assistants') && url.searchParams.has('_rsc')) {
+      serverNavigations.push(url.search);
+    }
+  });
   const mobile = (page.viewportSize()?.width ?? 1_280) < 1_024;
   if (mobile) {
     await page.getByLabel('AI analytics range').selectOption('14d');
@@ -102,4 +109,5 @@ test('AI stats keep prior data visible when a filtered request fails', async ({ 
   await expect(
     page.getByText(/Simulated analytics failure|request failed with status 500/i),
   ).toBeVisible();
+  expect(serverNavigations).toEqual([]);
 });

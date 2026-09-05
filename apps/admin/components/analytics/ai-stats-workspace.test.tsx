@@ -5,8 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AiStatsPayload } from '../../lib/ai-stats';
 import { AiStatsWorkspace } from './ai-stats-workspace';
 
-const { replaceMock, requestMock, searchParamsState } = vi.hoisted(() => ({
-  replaceMock: vi.fn(),
+const { requestMock, searchParamsState } = vi.hoisted(() => ({
   requestMock: vi.fn(),
   searchParamsState: { current: 'range=30d&grain=auto' },
 }));
@@ -14,7 +13,6 @@ const { replaceMock, requestMock, searchParamsState } = vi.hoisted(() => ({
 vi.mock('next-intl', () => ({ useLocale: () => 'en' }));
 vi.mock('next/navigation', () => ({
   usePathname: () => '/en/stats/ai-assistants',
-  useRouter: () => ({ replace: replaceMock }),
   useSearchParams: () => new URLSearchParams(searchParamsState.current),
 }));
 vi.mock('../../lib/admin-api', () => ({ requestJson: requestMock }));
@@ -208,7 +206,10 @@ function renderWorkspace(payload: AiStatsPayload) {
 }
 
 describe('AiStatsWorkspace', () => {
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
 
   beforeEach(() => {
     searchParamsState.current = 'range=30d&grain=auto';
@@ -216,11 +217,29 @@ describe('AiStatsWorkspace', () => {
   });
 
   it('keeps the clean default route without starting a duplicate server render', () => {
+    const replaceState = vi.spyOn(window.history, 'replaceState');
     searchParamsState.current = '';
     renderWorkspace(operationsPayload());
 
     expect(requestMock).not.toHaveBeenCalled();
-    expect(replaceMock).not.toHaveBeenCalled();
+    expect(replaceState).not.toHaveBeenCalled();
+  });
+
+  it('updates the filter URL without starting a server navigation', async () => {
+    const replaceState = vi.spyOn(window.history, 'replaceState');
+    requestMock.mockReturnValue(new Promise(() => {}));
+    renderWorkspace(operationsPayload());
+
+    fireEvent.click(screen.getByRole('button', { name: '14 days' }));
+
+    await waitFor(() =>
+      expect(replaceState).toHaveBeenCalledWith(
+        null,
+        '',
+        '/en/stats/ai-assistants?range=14d&grain=auto',
+      ),
+    );
+    expect(requestMock).toHaveBeenCalledTimes(1);
   });
 
   it('separates interactive assistant work from batch work and leaves unrated quality unavailable', () => {

@@ -3,7 +3,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { useLocale } from 'next-intl';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { Bar, CartesianGrid, ComposedChart, Line, Tooltip, XAxis, YAxis } from 'recharts';
 
@@ -536,7 +536,6 @@ export function AiStatsWorkspace({ initialData }: { initialData: AiStatsPayload 
   const locale = useLocale();
   const copy = getAiStatsCopy(locale);
   const pathname = usePathname();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [initialDataReceivedAt] = useState(() => Date.now());
   const [filters, setFilters] = useState(initialData.filters);
@@ -573,8 +572,10 @@ export function AiStatsWorkspace({ initialData }: { initialData: AiStatsPayload 
     if (!currentQuery && usesDefaultFilters) return;
     const normalized = routeSearchParams.toString();
     if (currentQuery === normalized) return;
-    router.replace(`${pathname}?${normalized}`, { scroll: false });
-  }, [filters.grain, filters.range, pathname, routeSearchParams, router, searchParams]);
+    // React Query owns filter loading. A router navigation would also rerun
+    // the server page, masking request failures and recalculating the report.
+    window.history.replaceState(null, '', `${pathname}?${normalized}`);
+  }, [filters.grain, filters.range, pathname, routeSearchParams, searchParams]);
 
   const query = useQuery({
     queryKey: [
