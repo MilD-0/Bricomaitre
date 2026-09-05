@@ -1,0 +1,3 @@
+CREATE INDEX "idx_analytics_events_created_at" ON "analytics_events" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX "idx_ecotrack_order_states_active_freshness" ON "admin"."ecotrack_order_states" USING btree (coalesce("last_order_synced_at", "last_status_synced_at", "updated_at"),"updated_at") WHERE "admin"."ecotrack_order_states"."deleted_at" is null;--> statement-breakpoint
+CREATE INDEX "idx_ecotrack_order_tracking_events_date_status" ON "admin"."ecotrack_order_tracking_events" USING btree ("event_date","status");

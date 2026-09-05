@@ -70,6 +70,7 @@ export const orders = pgTable(
     index('idx_orders_mongo_id').on(t.mongoId),
     index('idx_orders_confirmed').on(t.inHouseStatus),
     index('idx_orders_created').on(t.createdAt),
+    index('idx_orders_updated').on(t.updatedAt),
     index('idx_orders_visit').on(t.visitId),
     index('idx_orders_journey').on(t.journeyId),
     index('idx_orders_session').on(t.sessionId),

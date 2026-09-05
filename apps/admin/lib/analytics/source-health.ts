@@ -57,7 +57,7 @@ export async function loadSourceHealth(
       (select count(*)::int from ${orders}
         where ${timestampPredicate(orders.createdAt, filters.startDate, filters.endDate)})
         as order_records,
-      (select max((${orders.createdAt} at time zone 'Africa/Algiers')::date) from ${orders}
+      (select (max(${orders.createdAt}) at time zone 'Africa/Algiers')::date from ${orders}
         where ${timestampPredicate(orders.createdAt, filters.startDate, filters.endDate)})
         as orders_through_date,
       (select max(${orders.updatedAt}) from ${orders}) as orders_updated_at,
@@ -65,11 +65,11 @@ export async function loadSourceHealth(
       (select count(tracked_order_id)::int from posted) as ecotrack_records,
       (select max(${ecotrackOrderStates.updatedAt}) from ${ecotrackOrderStates}
         where ${ecotrackOrderStates.deletedAt} is null) as ecotrack_updated_at,
-      (select max((coalesce(
+      (select (max(coalesce(
           ${ecotrackOrderStates.lastOrderSyncedAt},
           ${ecotrackOrderStates.lastStatusSyncedAt},
           ${ecotrackOrderStates.updatedAt}
-        ) at time zone 'Africa/Algiers')::date)
+        )) at time zone 'Africa/Algiers')::date
         from ${ecotrackOrderStates}
         where ${ecotrackOrderStates.deletedAt} is null) as ecotrack_through_date,
       (select count(distinct ${metaAdsDailyInsights.day})::int from ${metaAdsDailyInsights}
@@ -99,7 +99,7 @@ export async function loadSourceHealth(
       greatest(
         (select max(${analyticsDailyRollups.day}) from ${analyticsDailyRollups}
           where ${datePredicate(analyticsDailyRollups.day, filters.startDate, filters.endDate)}),
-        (select max((${analyticsEvents.occurredAt} at time zone 'Africa/Algiers')::date)
+        (select (max(${analyticsEvents.occurredAt}) at time zone 'Africa/Algiers')::date
           from ${analyticsEvents}
           where ${timestampPredicate(analyticsEvents.occurredAt, filters.startDate, filters.endDate)})
       ) as storefront_through_date,

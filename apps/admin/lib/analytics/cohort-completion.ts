@@ -41,8 +41,31 @@ function isTerminalLoss(outcome: string) {
   return outcome === 'retour_archive' || outcome === 'annule' || outcome === 'failed';
 }
 
+type CohortCompletionGroup = Omit<CohortCompletionOrder, 'deliveredDay'> & {
+  delivered: boolean;
+  observedOrders: number;
+  profitSamples: number;
+};
+
 export function projectCohortCompletion(
   orders: CohortCompletionOrder[],
+  range: Pick<AnalyticsFilters, 'startDate' | 'endDate'>,
+  fallbackPaidRate: number,
+): CohortCompletionProjection {
+  return projectCohortCompletionGroups(
+    orders.map((order) => ({
+      ...order,
+      delivered: order.deliveredDay != null,
+      observedOrders: 1,
+      profitSamples: order.grossProfitDzd == null ? 0 : 1,
+    })),
+    range,
+    fallbackPaidRate,
+  );
+}
+
+function projectCohortCompletionGroups(
+  orders: CohortCompletionGroup[],
   range: Pick<AnalyticsFilters, 'startDate' | 'endDate'>,
   fallbackPaidRate: number,
 ): CohortCompletionProjection {
@@ -68,7 +91,7 @@ export function projectCohortCompletion(
 
   for (const order of selected) {
     const terminalPaid = isPaid(order.outcome);
-    const delivered = order.deliveredDay != null;
+    const delivered = order.delivered;
     const manuallyCompleted = order.outcome === 'manual_completed';
     const terminalLoss = isTerminalLoss(order.outcome);
     const unresolved = !terminalPaid && !delivered && !manuallyCompleted && !terminalLoss;
@@ -81,12 +104,12 @@ export function projectCohortCompletion(
           : unresolvedPaidRate;
     const contributionProbability =
       terminalPaid || delivered || manuallyCompleted ? 1 : terminalLoss ? 0 : paidProbability;
-    if (unresolved) unresolvedOrders += 1;
-    projectedPaidOrders += paidProbability;
+    if (unresolved) unresolvedOrders += order.observedOrders;
+    projectedPaidOrders += paidProbability * order.observedOrders;
     projectedPaidUnits += order.units * paidProbability;
     if (order.grossProfitDzd != null) {
       projectedAdjustedProfitDzd += order.grossProfitDzd * contributionProbability;
-      profitSamples += 1;
+      profitSamples += order.profitSamples;
     }
 
     const day = byDay.get(order.postedDay) ?? {
@@ -95,17 +118,17 @@ export function projectCohortCompletion(
       projectedAdjustedProfitDzd: 0,
       profitSamples: 0,
     };
-    day.observedOrders += 1;
-    day.projectedPaidOrders += paidProbability;
+    day.observedOrders += order.observedOrders;
+    day.projectedPaidOrders += paidProbability * order.observedOrders;
     if (order.grossProfitDzd != null) {
       day.projectedAdjustedProfitDzd += order.grossProfitDzd * contributionProbability;
-      day.profitSamples += 1;
+      day.profitSamples += order.profitSamples;
     }
     byDay.set(order.postedDay, day);
   }
 
   return {
-    observedOrders: selected.length,
+    observedOrders: selected.reduce((sum, group) => sum + group.observedOrders, 0),
     unresolvedOrders,
     projectedPaidOrders,
     projectedPaidUnits,
@@ -128,40 +151,44 @@ export async function loadCohortCompletionPair(
 ): Promise<CohortCompletionPair | null> {
   const firstDate = filters.comparisonStartDate ?? filters.startDate;
   const result = await db.execute(sql`
-    with item_units as (
-      select ${orderLineItems.orderId} as order_id,
-        coalesce(sum(${orderLineItems.quantity}), 0)::int as units
-      from ${orderLineItems}
-      group by ${orderLineItems.orderId}
-    )
     select ${analyticsOrderCohortFacts.postedDay}::text as posted_day,
-      (${analyticsOrderCohortFacts.deliveredAt} at time zone 'Africa/Algiers')::date::text
-        as delivered_day,
+      (${analyticsOrderCohortFacts.deliveredAt} is not null) as delivered,
       ${analyticsOrderCohortFacts.outcome} as outcome,
-      ${analyticsOrderCohortFacts.grossProfitDzd}::double precision as gross_profit_dzd,
-      coalesce(item_units.units, 0)::int as units
+      sum(${analyticsOrderCohortFacts.grossProfitDzd})::double precision as gross_profit_dzd,
+      count(*)::int as observed_orders,
+      count(${analyticsOrderCohortFacts.grossProfitDzd})::int as profit_samples,
+      coalesce(sum(item_units.units), 0)::int as units
     from ${analyticsOrderCohortFacts}
-    left join item_units on item_units.order_id = ${analyticsOrderCohortFacts.orderId}
+    left join lateral (
+      select coalesce(sum(${orderLineItems.quantity}), 0)::int as units
+      from ${orderLineItems}
+      where ${orderLineItems.orderId} = ${analyticsOrderCohortFacts.orderId}
+    ) item_units on true
     where ${analyticsOrderCohortFacts.semanticsVersion} = ${ANALYTICS_FACT_SEMANTICS_VERSION}
       and ${firstDate ? sql`${analyticsOrderCohortFacts.postedDay} >= ${firstDate}::date` : sql`true`}
       and ${analyticsOrderCohortFacts.postedDay} <= ${filters.endDate}::date
-    order by ${analyticsOrderCohortFacts.postedDay}, ${analyticsOrderCohortFacts.orderId}
+    group by ${analyticsOrderCohortFacts.postedDay}, ${analyticsOrderCohortFacts.outcome},
+      (${analyticsOrderCohortFacts.deliveredAt} is not null)
+    order by ${analyticsOrderCohortFacts.postedDay}, ${analyticsOrderCohortFacts.outcome},
+      (${analyticsOrderCohortFacts.deliveredAt} is not null)
   `);
-  const orders = Array.from(result.rows as Iterable<unknown>, (raw): CohortCompletionOrder => {
+  const orders = Array.from(result.rows as Iterable<unknown>, (raw): CohortCompletionGroup => {
     const row = raw as Record<string, unknown>;
     return {
       postedDay: String(row.posted_day),
-      deliveredDay: row.delivered_day ? String(row.delivered_day) : null,
+      delivered: row.delivered === true,
+      observedOrders: numeric(row.observed_orders),
+      profitSamples: numeric(row.profit_samples),
       outcome: String(row.outcome),
       grossProfitDzd: nullableNumeric(row.gross_profit_dzd),
       units: numeric(row.units),
     };
   });
   if (!orders.length) return null;
-  const current = projectCohortCompletion(orders, filters, fallbackPaidRate);
+  const current = projectCohortCompletionGroups(orders, filters, fallbackPaidRate);
   const previous =
     filters.comparisonStartDate && filters.comparisonEndDate
-      ? projectCohortCompletion(
+      ? projectCohortCompletionGroups(
           orders,
           { startDate: filters.comparisonStartDate, endDate: filters.comparisonEndDate },
           fallbackPaidRate,

@@ -763,10 +763,10 @@ describe('StatsWorkspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
-    expect(replaceMock).toHaveBeenCalledWith(
+    expect(window.location.pathname + window.location.search).toBe(
       '/en/stats?range=custom&grain=auto&startDate=2026-08-01&endDate=2026-08-10',
-      { scroll: false },
     );
+    expect(replaceMock).not.toHaveBeenCalled();
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('range=custom');
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('startDate=2026-08-01');
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('endDate=2026-08-10');

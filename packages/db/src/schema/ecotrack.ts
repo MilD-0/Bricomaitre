@@ -152,6 +152,12 @@ export const ecotrackOrderStates = adminSchema.table(
       t.updatedAt.desc(),
     ),
     index('idx_ecotrack_order_states_order_synced').on(t.lastOrderSyncedAt.desc()),
+    index('idx_ecotrack_order_states_active_freshness')
+      .on(
+        sql`coalesce(${t.lastOrderSyncedAt}, ${t.lastStatusSyncedAt}, ${t.updatedAt})`,
+        t.updatedAt,
+      )
+      .where(sql`${t.deletedAt} is null`),
     check(
       'ecotrack_order_states_current_amount_nonnegative_check',
       sql`${t.currentAmount} is null or ${t.currentAmount} >= 0`,
@@ -285,5 +291,6 @@ export const ecotrackOrderTrackingEvents = adminSchema.table(
       t.eventTime.desc(),
     ),
     index('idx_ecotrack_order_tracking_events_status').on(t.status),
+    index('idx_ecotrack_order_tracking_events_date_status').on(t.eventDate, t.status),
   ],
 );

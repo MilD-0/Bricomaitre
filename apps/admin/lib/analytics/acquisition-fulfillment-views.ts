@@ -204,7 +204,7 @@ export async function loadFulfillmentView(
       economicsInput(operationalFilters.startDate, operationalFilters.endDate),
       { db },
     ));
-  const [fulfillment, previousSummary, completion] = await Promise.all([
+  const [fulfillment, previousSummary, completion, sources] = await Promise.all([
     loadFulfillmentData(db, operationalFilters, economics),
     prior ? loadFulfillmentSummary(db, prior.startDate, prior.endDate) : Promise.resolve(null),
     loadCohortCompletionPair(
@@ -212,11 +212,14 @@ export async function loadFulfillmentView(
       operationalFilters,
       1 - economics.settings.defaultReturnRate / 100,
     ),
-  ]);
-  const [returns, sources] = await Promise.all([
-    loadReturnObservation(db, operationalFilters, economics.settings.defaultReturnRate),
     loadSourceHealth(db, filters, economics),
   ]);
+  const returns = await loadReturnObservation(
+    db,
+    operationalFilters,
+    economics.settings.defaultReturnRate,
+    fulfillment.summary,
+  );
   const completionComparisonAvailable = Boolean(
     completion?.previous &&
     previousSummary &&

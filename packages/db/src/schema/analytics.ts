@@ -96,6 +96,7 @@ export const analyticsEvents = pgTable(
   (t) => [
     uniqueIndex('analytics_events_event_id_unique').on(t.eventId),
     index('idx_analytics_events_occurred_at').on(t.occurredAt.desc()),
+    index('idx_analytics_events_created_at').on(t.createdAt),
     index('idx_analytics_events_event_name').on(t.eventName, t.occurredAt.desc()),
     index('idx_analytics_events_visit').on(t.visitId, t.occurredAt.desc()),
     index('idx_analytics_events_journey').on(t.journeyId, t.occurredAt.desc()),

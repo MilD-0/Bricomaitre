@@ -224,38 +224,39 @@ export async function loadProductMetaAssociations(
   filters: AnalyticsFilters,
 ): Promise<ProductMetaAssociation[]> {
   const result = await db.execute(sql`
-    select coalesce(${orderLineItems.productId}::text, ${orderLineItems.contentId}) as product_id,
-      max(${orderAcquisitionAttribution.metaCampaignId}) as campaign_id,
-      max(insight.campaign_name) as campaign_name,
-      max(${orderAcquisitionAttribution.metaAdsetId}) as adset_id,
-      max(insight.adset_name) as adset_name,
-      ${orderAcquisitionAttribution.metaAdId} as ad_id,
-      max(insight.ad_name) as ad_name,
-      count(distinct ${orders.id})::int as attributed_orders,
-      count(distinct ${orders.id}) filter (
-        where ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
-      )::int as paid_orders
-    from ${orderAcquisitionAttribution}
-    inner join ${orders} on ${orders.id} = ${orderAcquisitionAttribution.orderId}
-    inner join ${orderLineItems} on ${orderLineItems.orderId} = ${orders.id}
-    left join ${ecotrackOrderStates}
-      on ${ecotrackOrderStates.orderId} = ${orders.id}
-      and ${ecotrackOrderStates.deletedAt} is null
-    left join lateral (
-      select ${metaAdsDailyInsights.campaignName} as campaign_name,
+    with associations as (
+      select coalesce(${orderLineItems.productId}::text, ${orderLineItems.contentId}) as product_id,
+        max(${orderAcquisitionAttribution.metaCampaignId}) as campaign_id,
+        max(${orderAcquisitionAttribution.metaAdsetId}) as adset_id,
+        ${orderAcquisitionAttribution.metaAdId} as ad_id,
+        count(distinct ${orders.id})::int as attributed_orders,
+        count(distinct ${orders.id}) filter (
+          where ${ecotrackOrderStates.currentStatus} in ('paye_et_archive', 'payed')
+        )::int as paid_orders
+      from ${orderAcquisitionAttribution}
+      inner join ${orders} on ${orders.id} = ${orderAcquisitionAttribution.orderId}
+      inner join ${orderLineItems} on ${orderLineItems.orderId} = ${orders.id}
+      left join ${ecotrackOrderStates}
+        on ${ecotrackOrderStates.orderId} = ${orders.id}
+        and ${ecotrackOrderStates.deletedAt} is null
+      where ${orderAcquisitionAttribution.channel} = 'meta_paid'
+        and ${orderAcquisitionAttribution.metaAdId} is not null
+        and ${timestampPredicate(orders.createdAt, filters.startDate, filters.endDate)}
+      group by coalesce(${orderLineItems.productId}::text, ${orderLineItems.contentId}),
+        ${orderAcquisitionAttribution.metaAdId}
+    ), latest_insights as (
+      select distinct on (${metaAdsDailyInsights.adId})
+        ${metaAdsDailyInsights.adId} as ad_id,
+        ${metaAdsDailyInsights.campaignName} as campaign_name,
         ${metaAdsDailyInsights.adsetName} as adset_name,
         ${metaAdsDailyInsights.adName} as ad_name
       from ${metaAdsDailyInsights}
-      where ${metaAdsDailyInsights.adId} = ${orderAcquisitionAttribution.metaAdId}
-      order by ${metaAdsDailyInsights.day} desc
-      limit 1
-    ) insight on true
-    where ${orderAcquisitionAttribution.channel} = 'meta_paid'
-      and ${orderAcquisitionAttribution.metaAdId} is not null
-      and ${timestampPredicate(orders.createdAt, filters.startDate, filters.endDate)}
-    group by coalesce(${orderLineItems.productId}::text, ${orderLineItems.contentId}),
-      ${orderAcquisitionAttribution.metaAdId}
-    order by count(distinct ${orders.id}) desc
+      order by ${metaAdsDailyInsights.adId}, ${metaAdsDailyInsights.day} desc
+    )
+    select associations.*, insight.campaign_name, insight.adset_name, insight.ad_name
+    from associations
+    left join latest_insights insight on insight.ad_id = associations.ad_id
+    order by associations.attributed_orders desc
   `);
   return Array.from(result.rows as Iterable<unknown>, (raw): ProductMetaAssociation => {
     const row = raw as Record<string, unknown>;

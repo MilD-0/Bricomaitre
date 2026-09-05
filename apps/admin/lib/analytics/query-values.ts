@@ -23,6 +23,7 @@ export function datePredicate(column: SQLWrapper, startDate: string | null, endD
 }
 
 export function timestampPredicate(column: SQLWrapper, startDate: string | null, endDate: string) {
-  return sql`${startDate ? sql`(${column} at time zone 'Africa/Algiers')::date >= ${startDate}::date` : sql`true`}
-    and (${column} at time zone 'Africa/Algiers')::date <= ${endDate}::date`;
+  // Convert the range boundaries, so indexes on the timestamp remain usable.
+  return sql`${startDate ? sql`${column} >= (${startDate}::date::timestamp at time zone 'Africa/Algiers')` : sql`true`}
+    and ${column} < ((${endDate}::date + interval '1 day') at time zone 'Africa/Algiers')`;
 }

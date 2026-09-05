@@ -90,8 +90,10 @@ export function StatsWorkspace({ initialData }: { initialData: AnalyticsPayload 
     if (!currentQuery && usesDefaultFilters) return;
     const normalizedQuery = routeSearchParams.toString();
     if (currentQuery === normalizedQuery) return;
-    router.replace(`${pathname}?${normalizedQuery}`, { scroll: false });
-  }, [filters.grain, filters.range, pathname, routeSearchParams, router, searchParams]);
+    // React Query owns filter loading. A router navigation would also rerun
+    // the server page and calculate the same report a second time.
+    window.history.replaceState(null, '', `${pathname}?${normalizedQuery}`);
+  }, [filters.grain, filters.range, pathname, routeSearchParams, searchParams]);
 
   const analyticsQuery = useQuery({
     queryKey: [
