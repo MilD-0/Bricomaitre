@@ -35,7 +35,6 @@ for (const [locale, messages] of [
 ] as const) {
   test(`${locale} preserves product edits and offers upload recovery`, async ({
     page,
-    context,
   }, testInfo) => {
     let latest = product;
     let uploadAttempts = 0;
