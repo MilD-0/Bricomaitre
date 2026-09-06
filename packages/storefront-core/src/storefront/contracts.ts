@@ -92,6 +92,7 @@ export const storefrontProductListQuerySchema = z.object({
 
 export const storefrontOrderCreateRequestSchema = storefrontOrderCreateSchema
   .extend({
+    expectedProductSubtotal: z.number().finite().nonnegative().optional(),
     meta: storefrontOrderMetaSchema.optional(),
     marketing: storefrontOrderMarketingSchema.optional(),
   })
@@ -139,10 +140,19 @@ export const storefrontProductsResponseSchema = z.object({
 
 export const storefrontCartValidationRequestSchema = z.object({
   productIds: z.array(z.number().int().positive()).min(1).max(50),
+  promoCode: z.string().trim().min(1).max(120).nullable().optional(),
 });
 
 export const storefrontCartValidationResponseSchema = z.object({
   items: z.array(storefrontProductResponseItemSchema),
+  promo: z
+    .object({
+      code: z.string(),
+      productId: z.number().int().positive(),
+      promoPrice: z.number().nonnegative(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const storefrontProductTokenSchema = z.string().trim().min(1).max(200);
@@ -416,6 +426,7 @@ export const storefrontOrderResponseItemSchema = z.object({
       brandId: z.number().int().nullable().optional(),
       rawValue: z.string(),
       title: z.string(),
+      titleAr: z.string().nullable().optional(),
       unitPrice: z.number(),
       quantity: z.number().int().positive(),
       lineTotal: z.number(),

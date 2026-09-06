@@ -113,12 +113,15 @@ export function NavigationActions({
 
   useEffect(() => {
     const updateCart = () => setCartItems(readCart(window.localStorage));
+    const openCart = () => cartButtonRef.current?.click();
     updateCart();
     window.addEventListener('bric:cart-updated', updateCart);
     window.addEventListener('storage', updateCart);
+    window.addEventListener('bric:cart-open', openCart);
     return () => {
       window.removeEventListener('bric:cart-updated', updateCart);
       window.removeEventListener('storage', updateCart);
+      window.removeEventListener('bric:cart-open', openCart);
     };
   }, []);
 

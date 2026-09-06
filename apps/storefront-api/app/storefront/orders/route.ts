@@ -476,7 +476,8 @@ export async function POST(req: NextRequest) {
     if (error instanceof UnorderableCartError) {
       return NextResponse.json(
         {
-          error: 'Your cart changed. Review current product availability before ordering.',
+          error:
+            'Your cart changed. Review current prices, promotions and availability before ordering.',
           code: 'cart_changed',
         },
         { status: 409, headers: withRequestIdHeaders(requestId) },

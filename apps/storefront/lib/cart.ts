@@ -2,10 +2,11 @@ import { z } from 'zod';
 
 import { withCheckoutRequestTimeout } from './checkout-request';
 
-const cartItemSchema = z.object({
+export const cartItemSchema = z.object({
   productId: z.number().int().positive(),
   token: z.string().trim().min(1).max(200),
   title: z.string().trim().min(1).max(300),
+  promoCode: z.string().trim().min(1).max(120).nullable().optional(),
   imageUrl: z.string().nullable(),
   unitPrice: z.number().min(0),
   quantity: z.number().int().min(1).max(20),
@@ -67,6 +68,22 @@ export function removeCartItem(current: unknown, productId: number) {
   return parsed.success ? parsed.data.filter((item) => item.productId !== productId) : [];
 }
 
+export function consumeOrderedCartItems(
+  current: CartItem[],
+  ordered: Array<{ productId: number | null; quantity: number }>,
+) {
+  const quantities = new Map<number, number>();
+  for (const item of ordered) {
+    if (item.productId !== null)
+      quantities.set(item.productId, (quantities.get(item.productId) ?? 0) + item.quantity);
+  }
+  return current.flatMap((item) => {
+    const consumed = Math.min(item.quantity, quantities.get(item.productId) ?? 0);
+    quantities.set(item.productId, (quantities.get(item.productId) ?? 0) - consumed);
+    return consumed === item.quantity ? [] : [{ ...item, quantity: item.quantity - consumed }];
+  });
+}
+
 export function getCartItemCount(current: unknown) {
   const parsed = cartSchema.safeParse(current);
   return parsed.success ? parsed.data.reduce((total, item) => total + item.quantity, 0) : 0;
@@ -79,7 +96,11 @@ export function getCartSubtotal(current: unknown) {
     : 0;
 }
 
-export async function reconcileCartWithCatalog(current: CartItem[], fetcher: typeof fetch = fetch) {
+export async function reconcileCartWithCatalog(
+  current: CartItem[],
+  fetcher: typeof fetch = fetch,
+  locale: 'fr' | 'ar' = 'fr',
+) {
   if (current.length === 0) {
     return {
       items: [],
@@ -93,15 +114,20 @@ export async function reconcileCartWithCatalog(current: CartItem[], fetcher: typ
     const response = await fetcher('/api/cart/validate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ productIds: current.map((item) => item.productId) }),
+      body: JSON.stringify({
+        productIds: current.map((item) => item.productId),
+        promoCode: current.find((item) => item.promoCode)?.promoCode ?? null,
+      }),
       signal,
     });
     if (!response.ok) throw new Error('Cart validation is unavailable.');
     return (await response.json()) as {
+      promo?: { code: string; productId: number; promoPrice: number } | null;
       items?: Array<{
         id: number;
         slug: string | null;
         title: string;
+        titleAr?: string | null;
         price: string | null;
         inStock: boolean;
         availabilityStatus: string;
@@ -114,7 +140,8 @@ export async function reconcileCartWithCatalog(current: CartItem[], fetcher: typ
   const priceChangedProductIds: number[] = [];
   const items = current.flatMap((item) => {
     const product = products.get(item.productId);
-    const unitPrice = Number(product?.price);
+    const promo = payload.promo?.productId === item.productId ? payload.promo : null;
+    const unitPrice = promo?.promoPrice ?? Number(product?.price);
     if (
       !product?.inStock ||
       product.price === null ||
@@ -129,7 +156,8 @@ export async function reconcileCartWithCatalog(current: CartItem[], fetcher: typ
       {
         ...item,
         token: product.slug ?? String(product.id),
-        title: product.title,
+        title: locale === 'ar' && product.titleAr?.trim() ? product.titleAr : product.title,
+        ...(item.promoCode || promo ? { promoCode: promo?.code ?? null } : {}),
         unitPrice,
         imageUrl: product.images[0] ?? null,
         availabilityStatus: product.availabilityStatus,

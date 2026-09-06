@@ -8,7 +8,11 @@ import {
   orders,
   storefrontOrderIdempotency,
 } from '@bric/db/schema';
-import { readOrderProductSubtotal, resolveOrderCommercialState } from '../order-commercial';
+import {
+  readOrderProductSubtotal,
+  resolveOrderCommercialState,
+  assertReviewedOrderPrices,
+} from '../order-commercial';
 import { insertCanonicalOrder, updateCanonicalOrder } from '../order-write';
 import { attachJourneyToOrder } from './analytics';
 import { readEcotrackDeliveryFee } from '../ecotrack-support';
@@ -140,6 +144,7 @@ export async function createStorefrontOrder(
     requireOrderable: true,
   });
   const orderLines = commercial.lines;
+  assertReviewedOrderPrices(commercial, payload);
   let deliveryFee = 0;
   if (payload.state != null) {
     try {

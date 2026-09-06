@@ -30,11 +30,11 @@ describe('server-cache', () => {
     });
   });
 
-  it('revalidates unique tags using the max profile', () => {
+  it('expires unique tags before the next read', () => {
     revalidateServerTags('products', 'stats', 'products');
 
     expect(revalidateTagMock).toHaveBeenCalledTimes(2);
-    expect(revalidateTagMock).toHaveBeenNthCalledWith(1, 'products', 'max');
-    expect(revalidateTagMock).toHaveBeenNthCalledWith(2, 'stats', 'max');
+    expect(revalidateTagMock).toHaveBeenNthCalledWith(1, 'products', { expire: 0 });
+    expect(revalidateTagMock).toHaveBeenNthCalledWith(2, 'stats', { expire: 0 });
   });
 });

@@ -118,6 +118,7 @@ export function ProductActions({
       return;
     }
     const params = new URLSearchParams({ product: item.token, quantity: String(quantity) });
+    if (item.promoCode) params.set('promo', item.promoCode);
     if (analytics.metadata?.landingPageId)
       params.set('landing', String(analytics.metadata.landingPageId));
     if (analytics.metadata?.landingRevision)

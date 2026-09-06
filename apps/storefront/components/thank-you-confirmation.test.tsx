@@ -5,9 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CHECKOUT_CONFIRMATION_KEY } from '@/lib/checkout';
 import type { StorefrontOrderResponseItem } from '@bric/storefront-core/contracts';
 import { ThankYouConfirmation } from './thank-you-confirmation';
+import { CheckoutOrderError } from '@/lib/orders';
 
 const mocks = vi.hoisted(() => ({ verify: vi.fn(), track: vi.fn() }));
-vi.mock('@/lib/orders', () => ({ verifyCheckoutOrderByToken: mocks.verify }));
+vi.mock('@/lib/orders', async (original) => ({
+  ...(await original<typeof import('@/lib/orders')>()),
+  verifyCheckoutOrderByToken: mocks.verify,
+}));
 vi.mock('@/lib/analytics', () => ({ trackCheckoutEvent: mocks.track }));
 vi.mock('@/components/storefront-image', () => ({
   StorefrontImage: ({ src }: { src: string }) => <span data-image-src={src} />,
@@ -110,6 +114,46 @@ const support = {
 };
 
 describe('ThankYouConfirmation', () => {
+  it.each(['another-token', null])(
+    'never displays a saved order under an unrelated token %s',
+    async (token) => {
+      window.localStorage.setItem(
+        CHECKOUT_CONFIRMATION_KEY,
+        JSON.stringify({ order, cartMode: 'cart', stateName: 'Alger', createdAt: order.createdAt }),
+      );
+      mocks.verify.mockRejectedValue(new TypeError('offline'));
+      render(<ThankYouConfirmation locale="fr" orderId={null} token={token} labels={labels} />);
+      expect(await screen.findByText('unavailableTitle')).toBeInTheDocument();
+      expect(screen.queryByText(order.phoneNumber1)).not.toBeInTheDocument();
+    },
+  );
+
+  it('hides a previously saved order when its token has been rejected', async () => {
+    window.localStorage.setItem(
+      CHECKOUT_CONFIRMATION_KEY,
+      JSON.stringify({ order, cartMode: 'cart', stateName: 'Alger', createdAt: order.createdAt }),
+    );
+    mocks.verify.mockRejectedValue(
+      new CheckoutOrderError('expired', { code: 'request_failed', status: 403 }),
+    );
+    render(
+      <ThankYouConfirmation locale="fr" orderId={null} token={order.publicToken} labels={labels} />,
+    );
+    expect(await screen.findByText('unavailableTitle')).toBeInTheDocument();
+    expect(screen.queryByText(order.phoneNumber1)).not.toBeInTheDocument();
+  });
+
+  it('uses the Arabic product title on Arabic confirmations', async () => {
+    mocks.verify.mockResolvedValue({
+      ...order,
+      orderProducts: [{ ...order.orderProducts[0], titleAr: 'مصباح مكتب' }],
+    });
+    render(
+      <ThankYouConfirmation locale="ar" orderId={null} token={order.publicToken} labels={labels} />,
+    );
+    expect(await screen.findByText('مصباح مكتب')).toBeInTheDocument();
+    expect(screen.queryByText('Desk Lamp')).not.toBeInTheDocument();
+  });
   afterEach(cleanup);
   beforeEach(() => {
     window.localStorage.clear();
@@ -238,6 +282,8 @@ describe('ThankYouConfirmation', () => {
       />,
     );
     expect(await screen.findByText('fallback')).toBeInTheDocument();
+    expect(screen.queryByText('trackingLive')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'retry' })).toBeInTheDocument();
     expect(screen.getByText('Desk Lamp')).toBeInTheDocument();
     expect(mocks.track).toHaveBeenCalledWith(
       expect.objectContaining({

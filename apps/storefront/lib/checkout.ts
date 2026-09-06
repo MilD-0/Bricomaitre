@@ -9,7 +9,7 @@ import type { StorefrontOrderMarketing } from '@bric/storefront-core/marketing-c
 import { META_SEMANTICS_VERSION } from '@bric/storefront-core/meta-contracts';
 import { normalizeAlgerianPhoneNumber } from '@bric/storefront-core/settings';
 
-import type { CartItem } from '@/lib/cart';
+import { cartItemSchema, type CartItem } from '@/lib/cart';
 
 const optionalText = (max: number) =>
   z
@@ -74,14 +74,11 @@ export function getCheckoutDeliveryFee(
 }
 
 export function expandCheckoutCart(items: CartItem[]) {
-  return items
-    .flatMap((item) =>
-      Array.from(
-        { length: Math.min(20, item.quantity) },
-        () => item.token || String(item.productId),
-      ),
-    )
-    .slice(0, 50);
+  const products = items.flatMap((item) =>
+    Array.from({ length: item.quantity }, () => item.token || String(item.productId)),
+  );
+  if (products.length > 50) throw new Error('checkout_quantity_limit');
+  return products;
 }
 
 export function buildCheckoutOrderPayload(options: {
@@ -91,6 +88,8 @@ export function buildCheckoutOrderPayload(options: {
   journeyId: string | null;
   sessionId: string | null;
   marketing?: StorefrontOrderMarketing;
+  promoCode?: string | null;
+  expectedProductSubtotal?: number;
 }): StorefrontOrderCreateRequest {
   return storefrontOrderCreateRequestSchema.parse({
     firstName: options.form.firstName,
@@ -104,7 +103,10 @@ export function buildCheckoutOrderPayload(options: {
     city: options.form.city,
     homeAddress: options.form.homeAddress,
     note: null,
-    promoCode: null,
+    promoCode: options.promoCode ?? null,
+    ...(options.expectedProductSubtotal !== undefined
+      ? { expectedProductSubtotal: options.expectedProductSubtotal }
+      : {}),
     visitId: options.visitId,
     journeyId: options.journeyId,
     sessionId: options.sessionId,
@@ -125,6 +127,10 @@ const pendingCheckoutSchema = z.object({
   idempotencyKey: z.string().min(1),
   payload: storefrontOrderCreateRequestSchema,
   createdAt: z.string().datetime({ offset: true }),
+  retryAt: z.number().nonnegative().optional(),
+  items: z.array(cartItemSchema).max(50).optional(),
+  cartMode: z.enum(['cart', 'direct']).optional(),
+  deliveryFee: z.number().nonnegative().optional(),
 });
 
 const checkoutConfirmationSchema = z.object({

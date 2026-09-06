@@ -38,8 +38,8 @@ describe('server cache', () => {
     revalidateServerTags('products', 'assets', 'products');
 
     expect(mocks.revalidateTag.mock.calls).toEqual([
-      ['products', 'max'],
-      ['assets', 'max'],
+      ['products', { expire: 0 }],
+      ['assets', { expire: 0 }],
     ]);
   });
 });

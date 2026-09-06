@@ -9,7 +9,11 @@ import { PageShell } from '@/components/page-shell';
 import { ThankYouConfirmation } from '@/components/thank-you-confirmation';
 import { ThankYouPageSkeleton } from '@/components/storefront-skeletons';
 import { isLocale } from '@/i18n/config';
-import { fetchStorefrontOrderByToken, getStorefrontSettings } from '@/lib/storefront-api';
+import {
+  fetchStorefrontOrderByToken,
+  getStorefrontSettings,
+  getStorefrontEcotrackCatalog,
+} from '@/lib/storefront-api';
 import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 type ThankYouPageProps = {
@@ -49,10 +53,11 @@ async function ThankYouPageContent({ params, searchParams }: ThankYouPageProps) 
   const orderId = Number.parseInt(rawOrderId ?? '', 10);
   const validOrderId = Number.isInteger(orderId) && orderId > 0 ? orderId : null;
   const validToken = rawToken?.trim() || null;
-  const [t, contact, initialOrder] = await Promise.all([
+  const [t, contact, initialOrder, deliveryCatalog] = await Promise.all([
     getTranslations({ locale, namespace: 'ThankYou' }),
     getStorefrontSettings().catch(() => defaultStorefrontSettingsResponse),
     validToken ? fetchStorefrontOrderByToken(validToken).catch(() => null) : Promise.resolve(null),
+    validToken ? getStorefrontEcotrackCatalog().catch(() => null) : Promise.resolve(null),
   ]);
 
   return (
@@ -66,7 +71,9 @@ async function ThankYouPageContent({ params, searchParams }: ThankYouPageProps) 
             ? {
                 order: initialOrder,
                 cartMode: 'cart',
-                stateName: null,
+                stateName:
+                  deliveryCatalog?.wilayas.find((wilaya) => wilaya.wilayaId === initialOrder.state)
+                    ?.name ?? null,
                 createdAt: initialOrder.updatedAt,
                 purchaseEventId: initialOrder.purchaseEventId,
               }

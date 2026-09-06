@@ -42,6 +42,20 @@ const props = {
 };
 
 describe('ProductActions', () => {
+  it('carries the accepted promotion through both cart and direct checkout', () => {
+    render(
+      <ProductActions {...props} item={{ ...props.item, promoCode: 'AUDIT10', unitPrice: 1200 }} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: labels.addToCart }));
+    expect(JSON.parse(window.localStorage.getItem(STOREFRONT_CART_KEY)!)[0]).toMatchObject({
+      promoCode: 'AUDIT10',
+      unitPrice: 1200,
+    });
+    fireEvent.click(screen.getByRole('button', { name: labels.buyNow }));
+    expect(routerPushMock).toHaveBeenCalledWith(
+      '/fr/checkout?product=desk-lamp&quantity=1&promo=AUDIT10',
+    );
+  });
   beforeEach(() => {
     window.localStorage.clear();
     trackProductEventMock.mockReset();

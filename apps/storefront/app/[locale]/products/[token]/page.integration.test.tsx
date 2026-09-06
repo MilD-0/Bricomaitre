@@ -9,6 +9,7 @@ const {
   getProductMock,
   getCatalogMetaMock,
   getSettingsMock,
+  getPromoMock,
   notFoundMock,
   permanentRedirectMock,
   captureProductPageExceptionMock,
@@ -16,6 +17,7 @@ const {
   getProductMock: vi.fn(),
   getCatalogMetaMock: vi.fn(),
   getSettingsMock: vi.fn(),
+  getPromoMock: vi.fn(),
   notFoundMock: vi.fn(() => {
     throw new Error('NEXT_NOT_FOUND');
   }),
@@ -29,6 +31,7 @@ vi.mock('@/lib/storefront-api', () => ({
   getStorefrontProductDetail: getProductMock,
   getStorefrontCatalogMeta: getCatalogMetaMock,
   getStorefrontSettings: getSettingsMock,
+  fetchStorefrontProductPromo: getPromoMock,
 }));
 vi.mock('next/headers', () => ({
   headers: async () => new Headers({ 'x-nonce': 'test-nonce' }),
@@ -87,12 +90,16 @@ vi.mock('@/components/product-actions', () => ({
   ProductActions: ({
     available,
     support,
+    item,
   }: {
     available: boolean;
+    item: { promoCode?: string; unitPrice: number };
     support?: { contact: { phoneDisplay: string } };
   }) =>
     React.createElement('div', {
       'data-actions': available,
+      'data-promo': item.promoCode,
+      'data-unit-price': item.unitPrice,
       'data-support-phone': support?.contact.phoneDisplay,
     }),
 }));
@@ -137,6 +144,41 @@ const productResponse = {
 };
 
 describe('localized Product Detail Page', () => {
+  it('renders the validated promotional price and passes the code into customer actions', async () => {
+    getPromoMock.mockResolvedValue({
+      ok: true,
+      promo: {
+        code: 'AUDIT10',
+        productId: 12,
+        originalPrice: 1500,
+        promoPrice: 1200,
+        discountAmount: 300,
+      },
+    });
+    const html = renderToStaticMarkup(
+      await ProductPageContent({
+        params: Promise.resolve({ locale: 'fr', token: 'desk-lamp' }),
+        searchParams: Promise.resolve({ promo: 'AUDIT10' }),
+      }),
+    );
+    expect(getPromoMock).toHaveBeenCalledWith(12, 'AUDIT10');
+    expect(html).toContain('data-promo="AUDIT10"');
+    expect(html).toContain('data-unit-price="1200"');
+    expect(html).toMatch(/product-current-price[^>]*>1[^\d]200/);
+  });
+
+  it('retains a promotion while redirecting a legacy product identifier', async () => {
+    getProductMock.mockResolvedValue({
+      ...productResponse,
+      resolution: { ...productResponse.resolution, requestedToken: '12' },
+    });
+    await expect(
+      ProductPageContent({
+        params: Promise.resolve({ locale: 'fr', token: '12' }),
+        searchParams: Promise.resolve({ promo: 'AUDIT10' }),
+      }),
+    ).rejects.toThrow('NEXT_REDIRECT:/fr/products/desk-lamp?promo=AUDIT10');
+  });
   beforeEach(() => {
     getProductMock.mockReset();
     getProductMock.mockResolvedValue(productResponse);

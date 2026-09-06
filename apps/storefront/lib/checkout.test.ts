@@ -112,6 +112,20 @@ describe('checkout domain', () => {
     ];
     expect(expandCheckoutCart(items)).toEqual(['desk-lamp', 'desk-lamp']);
     expect(
+      expandCheckoutCart([
+        { ...items[0], quantity: 20 },
+        { ...items[0], quantity: 20 },
+        { ...items[0], quantity: 10 },
+      ]),
+    ).toHaveLength(50);
+    expect(() =>
+      expandCheckoutCart([
+        { ...items[0], quantity: 20 },
+        { ...items[0], quantity: 20 },
+        { ...items[0], quantity: 20 },
+      ]),
+    ).toThrow('checkout_quantity_limit');
+    expect(
       buildCheckoutOrderPayload({
         form: checkoutFormSchema.parse({
           phoneNumber1: '0550123456',
@@ -124,6 +138,8 @@ describe('checkout domain', () => {
           delivery: 'office',
         }),
         cartProducts: expandCheckoutCart(items),
+        promoCode: 'AUDIT10',
+        expectedProductSubtotal: 9000,
         visitId: 'visit-1',
         journeyId: 'journey-1',
         sessionId: 'session-1',
@@ -137,6 +153,8 @@ describe('checkout domain', () => {
       delivery: 1,
       state: 16,
       cartProducts: ['desk-lamp', 'desk-lamp'],
+      promoCode: 'AUDIT10',
+      expectedProductSubtotal: 9000,
       visitId: 'visit-1',
       note: null,
       marketing: { eventId: 'purchase-1' },

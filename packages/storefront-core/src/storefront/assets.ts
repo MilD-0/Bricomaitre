@@ -24,6 +24,18 @@ import {
 
 type Database = ReturnType<typeof getDb>;
 
+export function selectHomepageBrands<T extends { id: number; featured: boolean }>(
+  brands: T[],
+  products: Array<{ brandId: number | null }>,
+) {
+  const selected = [...brands].sort((a, b) => Number(b.featured) - Number(a.featured)).slice(0, 24);
+  const ids = new Set([
+    ...selected.map((brand) => brand.id),
+    ...products.map((product) => product.brandId),
+  ]);
+  return brands.filter((brand) => ids.has(brand.id));
+}
+
 function withSelections<T extends { id: number }>(
   items: T[],
   selectedProducts: Array<{ groupId: number; productId: number }>,
@@ -126,7 +138,11 @@ export async function readStorefrontHomepage(db: Database) {
       const product = cardProductById.get(card.productId);
       return product ? [{ ...card, product }] : [];
     }),
-    brands,
+    brands: selectHomepageBrands(brands, [
+      ...topProducts,
+      ...cardProducts,
+      ...featuredGroups.flatMap((group) => group.products),
+    ]),
     featuredGroups: featuredGroups.filter((group) => group.products.length > 0),
   };
 }

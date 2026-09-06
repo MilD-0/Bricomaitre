@@ -27,6 +27,19 @@ export class UnorderableCartError extends Error {
   }
 }
 
+export function assertReviewedOrderPrices(
+  commercial: Pick<ResolvedOrderCommercialState, 'promo' | 'productSubtotal'>,
+  review: { promoCode?: string | null; expectedProductSubtotal?: number },
+) {
+  if (
+    (review.promoCode && !commercial.promo) ||
+    (review.expectedProductSubtotal !== undefined &&
+      Math.abs(review.expectedProductSubtotal - commercial.productSubtotal) > 0.005)
+  ) {
+    throw new UnorderableCartError(0);
+  }
+}
+
 function roundCurrency(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }

@@ -3,6 +3,7 @@ import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CheckoutForm } from './checkout-form';
+import { CheckoutOrderError } from '@/lib/orders';
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -79,6 +80,9 @@ const labelKeys = [
   'emailError',
   'submitError',
   'cartUpdated',
+  'quantityLimit',
+  'editCart',
+  'rateLimit',
   'retry',
   'savedAttempt',
   'trustPhone',
@@ -162,6 +166,195 @@ const order = {
 };
 
 describe('CheckoutForm', () => {
+  it('replays a legacy pending request without displaying an unrelated direct-product quote', async () => {
+    const basket = [{ ...directItem, productId: 99, token: 'different-product' }];
+    window.localStorage.setItem('bric:cart:v1', JSON.stringify(basket));
+    window.localStorage.setItem(
+      'bric:checkout:pending:v1',
+      JSON.stringify({
+        idempotencyKey: 'legacy-attempt',
+        payload: order,
+        createdAt: order.createdAt,
+      }),
+    );
+    render(
+      <CheckoutForm
+        locale="ar"
+        catalog={catalog}
+        directItem={{ ...basket[0], title: 'Different product' }}
+        labels={labels}
+      />,
+    );
+    expect(screen.queryByText('Different product')).not.toBeInTheDocument();
+    expect(document.querySelector('.checkout-summary dl')).toBeNull();
+    expect(screen.getByRole('textbox', { name: /phone/ })).toHaveValue(order.phoneNumber1);
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
+    expect(mocks.create.mock.calls[0]).toEqual([
+      expect.objectContaining({ cartProducts: order.cartProducts }),
+      'legacy-attempt',
+    ]);
+    expect(JSON.parse(window.localStorage.getItem('bric:cart:v1')!)).toEqual(basket);
+  });
+
+  it('keeps a pending direct purchase independent of the current cart route and delivery catalog', async () => {
+    const basket = [{ ...directItem, productId: 99, token: 'different-product' }];
+    window.localStorage.setItem('bric:cart:v1', JSON.stringify(basket));
+    window.localStorage.setItem(
+      'bric:checkout:pending:v1',
+      JSON.stringify({
+        idempotencyKey: 'direct-attempt',
+        payload: { ...order, delivery: 1 },
+        items: [directItem],
+        cartMode: 'direct',
+        deliveryFee: 300,
+        createdAt: order.createdAt,
+      }),
+    );
+    const updatedCatalog = {
+      ...catalog,
+      communes: [{ ...catalog.communes[0], hasStopDesk: false }],
+      serviceFees: [{ ...catalog.serviceFees[0], stopDeskFee: '900' }],
+    };
+    render(<CheckoutForm locale="ar" catalog={updatedCatalog} directItem={null} labels={labels} />);
+    expect(screen.getByRole('button', { name: /^officeDelivery/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(document.querySelector('.checkout-summary dl')).toHaveTextContent(/300|٣٠٠/);
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
+    expect(mocks.create.mock.calls[0]).toEqual([
+      expect.objectContaining({ delivery: 1 }),
+      'direct-attempt',
+    ]);
+    expect(JSON.parse(window.localStorage.getItem('bric:cart:v1')!)).toEqual(basket);
+    expect(JSON.parse(window.localStorage.getItem('bric:checkout:confirmation:v1')!).cartMode).toBe(
+      'direct',
+    );
+  });
+
+  it('retains cart mode after an expired promotion is rejected on a resumed direct-product route', async () => {
+    const discounted = { ...directItem, promoCode: 'EXPIRED', unitPrice: 4000 };
+    window.localStorage.setItem('bric:cart:v1', JSON.stringify([discounted]));
+    window.localStorage.setItem(
+      'bric:checkout:pending:v1',
+      JSON.stringify({
+        idempotencyKey: 'cart-attempt',
+        payload: { ...order, promoCode: 'EXPIRED', expectedProductSubtotal: 8000 },
+        items: [discounted],
+        cartMode: 'cart',
+        createdAt: order.createdAt,
+      }),
+    );
+    mocks.create
+      .mockRejectedValueOnce(
+        new CheckoutOrderError('expired', { code: 'cart_changed', status: 409 }),
+      )
+      .mockResolvedValueOnce(order);
+    mocks.reconcile.mockResolvedValue({
+      items: [directItem],
+      changed: true,
+      requiresReview: true,
+      removedProductIds: [],
+      priceChangedProductIds: [12],
+    });
+    render(
+      <CheckoutForm
+        locale="ar"
+        catalog={catalog}
+        directItem={{ ...directItem, productId: 99, token: 'different-product' }}
+        labels={labels}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    expect(await screen.findByText('cartUpdated')).toBeInTheDocument();
+    expect(JSON.parse(window.localStorage.getItem('bric:cart:v1')!)[0].unitPrice).toBe(4500);
+    mocks.reconcile.mockResolvedValue({
+      items: [directItem],
+      changed: false,
+      requiresReview: false,
+      removedProductIds: [],
+      priceChangedProductIds: [],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
+    expect(mocks.create.mock.calls[1][0]).toMatchObject({
+      promoCode: null,
+      expectedProductSubtotal: 9000,
+    });
+    expect(JSON.parse(window.localStorage.getItem('bric:checkout:confirmation:v1')!).cartMode).toBe(
+      'cart',
+    );
+  });
+  it('unlocks customer details after a definite server validation rejection', async () => {
+    mocks.create
+      .mockRejectedValueOnce(new CheckoutOrderError('invalid', { code: 'validation', status: 400 }))
+      .mockResolvedValueOnce(order);
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels} />);
+    fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
+      target: { value: '0550000000' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), { target: { value: '16' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), {
+      target: { value: 'Alger Centre' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    expect(await screen.findByText('submitError')).toBeInTheDocument();
+    expect(window.localStorage.getItem('bric:checkout:pending:v1')).toBeNull();
+    expect(screen.getByRole('textbox', { name: /phone/ })).toBeEnabled();
+    const firstKey = mocks.create.mock.calls[0][1];
+    fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
+      target: { value: '0550000001' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
+    expect(mocks.create.mock.calls[1][1]).not.toBe(firstKey);
+    expect(mocks.create.mock.calls[1][0].phoneNumber1).toBe('0550000001');
+  });
+  it('stops an oversized basket before validation or order submission without changing its quantities', async () => {
+    const items = [12, 13, 14].map((productId) => ({ ...directItem, productId, quantity: 20 }));
+    window.localStorage.setItem('bric:cart:v1', JSON.stringify(items));
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={null} labels={labels} />);
+    expect(await screen.findByText('quantityLimit')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'submit' })).toBeDisabled();
+    const opened = vi.fn();
+    window.addEventListener('bric:cart-open', opened);
+    fireEvent.click(screen.getByRole('button', { name: 'editCart' }));
+    expect(opened).toHaveBeenCalledOnce();
+    window.removeEventListener('bric:cart-open', opened);
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(
+      JSON.parse(window.localStorage.getItem('bric:cart:v1')!).map(
+        (item: { quantity: number }) => item.quantity,
+      ),
+    ).toEqual([20, 20, 20]);
+  });
+
+  it('preserves the rate-limit deadline and disables both retry controls', async () => {
+    mocks.create.mockRejectedValue(
+      new CheckoutOrderError('limited', {
+        code: 'rate_limit',
+        status: 429,
+        retryAfterSeconds: 310,
+      }),
+    );
+    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels} />);
+    fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
+      target: { value: '0550000000' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), { target: { value: '16' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), {
+      target: { value: 'Alger Centre' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+    expect(await screen.findByText('rateLimit')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'retry' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'submit' })).toBeDisabled();
+    expect(
+      JSON.parse(window.localStorage.getItem('bric:checkout:pending:v1')!).retryAt,
+    ).toBeGreaterThan(Date.now() + 300_000);
+  });
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
@@ -357,6 +550,8 @@ describe('CheckoutForm', () => {
   });
 
   it('creates an idempotent direct-product order and stores its verified handoff snapshot', async () => {
+    const basket = [{ ...directItem, productId: 99, token: 'unrelated-product' }];
+    window.localStorage.setItem('bric:cart:v1', JSON.stringify(basket));
     render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels} />);
     fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
       target: { value: '0550000000' },
@@ -383,6 +578,7 @@ describe('CheckoutForm', () => {
       journeyId: 'journey-1',
     });
     expect(window.localStorage.getItem('bric:checkout:pending:v1')).toBeNull();
+    expect(JSON.parse(window.localStorage.getItem('bric:cart:v1')!)).toEqual(basket);
     expect(JSON.parse(window.localStorage.getItem('bric:checkout:confirmation:v1')!)).toMatchObject(
       { cartMode: 'direct', order: { id: 42 } },
     );
@@ -443,35 +639,44 @@ describe('CheckoutForm', () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
-  it('keeps the attempt and exposes a retry action after a recoverable failure', async () => {
-    mocks.create.mockRejectedValueOnce(new TypeError('offline')).mockResolvedValueOnce(order);
-    render(
-      <CheckoutForm
-        locale="fr"
-        catalog={catalog}
-        directItem={directItem}
-        labels={labels}
-        support={support}
-      />,
-    );
-    fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
-      target: { value: '0550000000' },
-    });
-    fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), { target: { value: '16' } });
-    fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), {
-      target: { value: 'Alger Centre' },
-    });
-    fireEvent.change(screen.getByRole('textbox', { name: /address/ }), {
-      target: { value: '12 rue des Outils' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
-    expect(await screen.findByRole('button', { name: 'retry' })).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: /Call.*0795 34 28 26/ }).length).toBeGreaterThan(0);
-    const firstKey = mocks.create.mock.calls[0][1];
-    fireEvent.click(screen.getByRole('button', { name: 'retry' }));
-    await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
-    expect(mocks.create.mock.calls[1][1]).toBe(firstKey);
-  });
+  it.each(['retry', 'submit'])(
+    'reuses the committed attempt through %s after a lost response',
+    async (control) => {
+      mocks.create.mockRejectedValueOnce(new TypeError('offline')).mockResolvedValueOnce(order);
+      render(
+        <CheckoutForm
+          locale="fr"
+          catalog={catalog}
+          directItem={directItem}
+          labels={labels}
+          support={support}
+        />,
+      );
+      fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
+        target: { value: '0550000000' },
+      });
+      fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), {
+        target: { value: '16' },
+      });
+      fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), {
+        target: { value: 'Alger Centre' },
+      });
+      fireEvent.change(screen.getByRole('textbox', { name: /address/ }), {
+        target: { value: '12 rue des Outils' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+      expect(await screen.findByRole('button', { name: 'retry' })).toBeInTheDocument();
+      expect(screen.getAllByRole('link', { name: /Call.*0795 34 28 26/ }).length).toBeGreaterThan(
+        0,
+      );
+      const firstKey = mocks.create.mock.calls[0][1];
+      expect(screen.getByRole('textbox', { name: /phone/ })).toBeDisabled();
+      fireEvent.click(screen.getByRole('button', { name: control }));
+      await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
+      expect(mocks.create.mock.calls[1][1]).toBe(firstKey);
+      expect(mocks.create.mock.calls[1][0]).toEqual(mocks.create.mock.calls[0][0]);
+    },
+  );
   it('submits without attribution if tracking preparation fails', async () => {
     mocks.identity.mockImplementationOnce(() => {
       throw new Error('Tracking unavailable');

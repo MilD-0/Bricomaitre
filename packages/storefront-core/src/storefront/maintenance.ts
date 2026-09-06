@@ -48,11 +48,13 @@ export async function deleteExpiredOrderIdempotencyBatch(
   db: Database,
   { now = new Date(), limit = STOREFRONT_MAINTENANCE_BATCH_SIZE } = {},
 ) {
+  // A browser can retry a saved request days later. Completed keys live with their orders.
   const result = await db.execute(sql`
     with expired as (
       select ${storefrontOrderIdempotency.keyHash}
       from ${storefrontOrderIdempotency}
       where ${storefrontOrderIdempotency.expiresAt} < ${now}
+        and ${storefrontOrderIdempotency.orderId} is null
       order by ${storefrontOrderIdempotency.expiresAt} asc
       limit ${Math.max(1, limit)}
       for update skip locked

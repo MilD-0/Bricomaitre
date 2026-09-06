@@ -31,9 +31,11 @@ function exceptionLabel(variant: CustomerOrderTrackingVariant, labels: TrackingL
 export function OrderTracking({
   order,
   labels,
+  live = true,
 }: {
   order: StorefrontOrderResponseItem;
   labels: TrackingLabels;
+  live?: boolean;
 }) {
   const state = getCustomerOrderTrackingState(order.inHouseStatus);
   const exception = exceptionLabel(state.variant, labels);
@@ -42,10 +44,12 @@ export function OrderTracking({
     <section className="order-tracking" aria-labelledby="order-tracking-title">
       <header>
         <div>
-          <span className="order-tracking-live">
-            <CircleDot aria-hidden="true" />
-            {labels.live}
-          </span>
+          {live ? (
+            <span className="order-tracking-live">
+              <CircleDot aria-hidden="true" />
+              {labels.live}
+            </span>
+          ) : null}
           <h2 id="order-tracking-title">{labels.title}</h2>
         </div>
         <span className="order-tracking-current">{labels[state.current]}</span>

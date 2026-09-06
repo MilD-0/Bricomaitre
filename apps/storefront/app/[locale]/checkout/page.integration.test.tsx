@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   catalog: vi.fn(),
   product: vi.fn(),
   settings: vi.fn(),
+  promo: vi.fn(),
   notFound: vi.fn(() => {
     throw new Error('NEXT_NOT_FOUND');
   }),
@@ -18,6 +19,7 @@ vi.mock('@/lib/storefront-api', () => ({
   getStorefrontEcotrackCatalog: mocks.catalog,
   getStorefrontProductDetail: mocks.product,
   getStorefrontSettings: mocks.settings,
+  fetchStorefrontProductPromo: mocks.promo,
 }));
 vi.mock('next/navigation', () => ({ notFound: mocks.notFound }));
 vi.mock('next-intl/server', () => ({
@@ -41,10 +43,14 @@ vi.mock('@/components/checkout-form', () => ({
     catalog,
     labels,
     support,
+    directItem,
+    initialNotice,
   }: {
     catalog: { wilayas: unknown[]; communes: unknown[] };
     labels: { title: string; officeDelivery: string; eyebrow?: string };
     support?: { contact: { phoneDisplay: string } };
+    directItem: { promoCode?: string; unitPrice: number } | null;
+    initialNotice?: string;
   }) =>
     React.createElement(
       'section',
@@ -52,6 +58,9 @@ vi.mock('@/components/checkout-form', () => ({
         'data-wilayas': catalog.wilayas.length,
         'data-communes': catalog.communes.length,
         'data-eyebrow': labels.eyebrow,
+        'data-promo': directItem?.promoCode,
+        'data-unit-price': directItem?.unitPrice,
+        'data-notice': initialNotice,
       },
       `${labels.title}|${labels.officeDelivery}|${support?.contact.phoneDisplay ?? ''}`,
     ),
@@ -68,6 +77,51 @@ const catalog = {
 };
 
 describe('localized Checkout Page', () => {
+  it('explains an expired promotion before the customer confirms a direct purchase', async () => {
+    mocks.product.mockResolvedValue({
+      item: {
+        id: 12,
+        canonicalToken: 'desk-lamp',
+        title: 'Lampe',
+        price: '1500',
+        media: [],
+        availability: { status: 'in_stock' },
+      },
+    });
+    mocks.promo.mockResolvedValue({ ok: false, promo: null });
+    const html = renderToStaticMarkup(
+      await CheckoutPageContent({
+        params: Promise.resolve({ locale: 'fr' }),
+        searchParams: Promise.resolve({ product: 'desk-lamp', promo: 'EXPIRED' }),
+      }),
+    );
+    expect(html).toContain('data-notice="promoUnavailable"');
+    expect(html).toContain('data-unit-price="1500"');
+    expect(html).not.toContain('data-promo=');
+  });
+  it.each(['fr', 'ar'])('loads the promotion from a direct-checkout URL in %s', async (locale) => {
+    mocks.product.mockResolvedValue({
+      item: {
+        id: 12,
+        canonicalToken: 'desk-lamp',
+        title: 'Lampe',
+        titleAr: 'مصباح',
+        price: '1500',
+        media: [],
+        availability: { status: 'in_stock' },
+      },
+    });
+    mocks.promo.mockResolvedValue({ ok: true, promo: { code: 'AUDIT10', promoPrice: 1200 } });
+    const html = renderToStaticMarkup(
+      await CheckoutPageContent({
+        params: Promise.resolve({ locale }),
+        searchParams: Promise.resolve({ product: 'desk-lamp', promo: 'AUDIT10', quantity: '2' }),
+      }),
+    );
+    expect(mocks.promo).toHaveBeenCalledWith(12, 'AUDIT10');
+    expect(html).toContain('data-promo="AUDIT10"');
+    expect(html).toContain('data-unit-price="1200"');
+  });
   beforeEach(() => {
     mocks.catalog.mockReset().mockResolvedValue(catalog);
     mocks.product.mockReset();

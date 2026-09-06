@@ -10,7 +10,16 @@ export async function resolveLegacyTaxonomyRedirect(
 ) {
   const query = parseCatalogPageQuery(values);
   const isSingleTaxonomyFilter = (query.category === null) !== (query.brand === null);
-  if (query.q || query.sort !== 'recommended' || query.page !== 1 || !isSingleTaxonomyFilter)
+  if (
+    query.q ||
+    query.sort !== 'recommended' ||
+    query.page !== 1 ||
+    query.discounted ||
+    query.stock !== 'all' ||
+    query.minPrice !== null ||
+    query.maxPrice !== null ||
+    !isSingleTaxonomyFilter
+  )
     return null;
 
   try {

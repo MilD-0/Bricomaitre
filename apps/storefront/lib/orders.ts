@@ -10,6 +10,7 @@ import { withCheckoutRequestTimeout } from './checkout-request';
 
 export class CheckoutOrderError extends Error {
   status: number | null;
+  retryAfterSeconds: number | null;
   code:
     | 'network'
     | 'validation'
@@ -22,12 +23,17 @@ export class CheckoutOrderError extends Error {
 
   constructor(
     message: string,
-    options: { status?: number | null; code: CheckoutOrderError['code'] },
+    options: {
+      status?: number | null;
+      code: CheckoutOrderError['code'];
+      retryAfterSeconds?: number | null;
+    },
   ) {
     super(message);
     this.name = 'CheckoutOrderError';
     this.status = options.status ?? null;
     this.code = options.code;
+    this.retryAfterSeconds = options.retryAfterSeconds ?? null;
   }
 }
 
@@ -57,7 +63,18 @@ async function responseError(response: Response) {
             : response.status >= 500
               ? 'unavailable'
               : 'request_failed';
-  return new CheckoutOrderError('order_request_failed', { status: response.status, code });
+  const retryHeader = response.headers.get('retry-after');
+  const delay =
+    retryHeader === null
+      ? NaN
+      : /^\d+$/.test(retryHeader)
+        ? Number(retryHeader)
+        : Math.ceil((Date.parse(retryHeader) - Date.now()) / 1000);
+  return new CheckoutOrderError('order_request_failed', {
+    status: response.status,
+    code,
+    retryAfterSeconds: Number.isFinite(delay) ? Math.max(0, delay) : null,
+  });
 }
 
 export async function createCheckoutOrder(

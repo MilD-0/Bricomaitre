@@ -31,6 +31,9 @@ export type CheckoutLabels = {
   retry: string;
   savedAttempt: string;
   cartUpdated: string;
+  quantityLimit: string;
+  editCart: string;
+  rateLimit: string;
   trustPhone: string;
   trustPayment: string;
   trustDelivery: string;
@@ -72,6 +75,9 @@ export function buildCheckoutLabels(
     retry: translate('retry'),
     savedAttempt: translate('savedAttempt'),
     cartUpdated: translate('cartUpdated'),
+    quantityLimit: translate('quantityLimit'),
+    editCart: translate('editCart'),
+    rateLimit: translate('rateLimit'),
     trustPhone: translate('trustPhone'),
     trustPayment: translate('trustPayment'),
     trustDelivery: translate('trustDelivery'),

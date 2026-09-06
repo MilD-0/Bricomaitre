@@ -177,7 +177,8 @@
     "zoomImage": "Agrandir l’image",
     "supportTitle": "Une question avant de commander ?",
     "supportDescription": "Notre équipe peut vous aider rapidement.",
-    "supportCall": "Appeler"
+    "supportCall": "Appeler",
+    "promoUnavailable": "Cette promotion n’est plus disponible. Le prix actuel est affiché."
   },
   "Checkout": {
     "address": "Adresse complète",
@@ -203,7 +204,7 @@
     "quantity": "Quantité",
     "requiredError": "Ce champ est obligatoire.",
     "retry": "Réessayer",
-    "savedAttempt": "Votre tentative est enregistrée",
+    "savedAttempt": "Vérifiez votre demande enregistrée avant de la modifier",
     "cartUpdated": "Votre panier a été actualisé selon les prix et disponibilités actuels. Vérifiez-le avant de continuer.",
     "submit": "Confirmer ma commande",
     "submitError": "La commande n'a pas pu être envoyée. Vos informations sont conservées, vous pouvez réessayer.",
@@ -217,7 +218,11 @@
     "wilaya": "Wilaya",
     "supportTitle": "Besoin d’aide pour commander ?",
     "supportDescription": "Appelez-nous, notre équipe est là pour vous aider.",
-    "supportCall": "Appeler"
+    "supportCall": "Appeler",
+    "quantityLimit": "Une commande peut contenir au maximum 50 articles. Réduisez les quantités de votre panier avant de commander.",
+    "editCart": "Modifier le panier",
+    "rateLimit": "Trop de tentatives rapprochées. Votre demande est enregistrée. Patientez : les boutons seront réactivés à la fin du délai.",
+    "promoUnavailable": "Cette promotion n’est plus disponible. Le prix actuel est affiché."
   },
   "ThankYou": {
     "address": "Adresse",
@@ -227,7 +232,7 @@
     "delivery": "Livraison",
     "deliveryMode": "Mode de livraison",
     "description": "Votre commande a bien été enregistrée.",
-    "fallback": "Nous affichons la copie enregistrée sur cet appareil. La vérification en ligne reprendra automatiquement.",
+    "fallback": "Ces détails ont été enregistrés sur cet appareil. Le statut actuel n’a pas pu être vérifié. Réessayez pour l’actualiser.",
     "homeDelivery": "À domicile",
     "nextOne": "Notre équipe vous appelle pour confirmer les détails.",
     "nextThree": "Votre colis est livré à l'adresse ou au bureau choisi.",

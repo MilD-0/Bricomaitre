@@ -48,7 +48,7 @@ describe('durable storefront order idempotency', () => {
     ).resolves.toEqual({ kind: 'started' });
   });
 
-  it('returns the committed order for a matching completed claim', async () => {
+  it('returns the committed order even after the processing retention deadline', async () => {
     const { db } = createDb({
       insertResults: [[]],
       selected: [
@@ -57,7 +57,7 @@ describe('durable storefront order idempotency', () => {
           fingerprint: 'fingerprint',
           orderId: 42,
           metaResponse: { eventId: 'purchase-42' },
-          expiresAt: new Date('2026-08-16T12:00:00.000Z'),
+          expiresAt: new Date('2026-08-14T12:00:00.000Z'),
         },
       ],
     });

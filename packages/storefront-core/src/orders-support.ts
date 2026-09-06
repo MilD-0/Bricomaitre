@@ -196,6 +196,7 @@ export type OrderProductSummary = {
   slug?: string | null;
   rawValue: string;
   title: string;
+  titleAr?: string | null;
   unitPrice: number;
   quantity: number;
   lineTotal: number;
@@ -522,6 +523,7 @@ export function buildOrderProductSummaries(
         ...(resolved?.slug !== undefined ? { slug: resolved.slug } : {}),
         rawValue,
         title: resolved?.title ?? rawValue,
+        ...(resolved?.titleAr !== undefined ? { titleAr: resolved.titleAr } : {}),
         unitPrice: resolved?.unitPrice ?? 0,
         quantity: 0,
         lineTotal: 0,

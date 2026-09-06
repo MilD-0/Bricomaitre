@@ -24,6 +24,7 @@ export type ProductLookupEntry = {
   brandId: number | null;
   slug: string | null;
   title: string;
+  titleAr?: string | null;
   price: number;
   thumbnailUrl: string | null;
 };
@@ -96,6 +97,7 @@ export async function getOrderProductLookup(
             brandId: products.brandId,
             slug: products.slug,
             title: products.title,
+            titleAr: products.titleAr,
             price: sql<number>`coalesce(${products.price}, 0)::double precision`,
             images: products.images,
           })
@@ -115,6 +117,7 @@ export async function getOrderProductLookup(
       brandId: product.brandId,
       slug: product.slug,
       title: product.title,
+      titleAr: product.titleAr,
       price: parseNumericAmount(product.price),
       thumbnailUrl: product.images[0] ?? null,
     };
@@ -197,6 +200,7 @@ export function toOrderRecord(
         brandId: product.brandId,
         ...(product.slug !== null ? { slug: product.slug } : {}),
         title: product.title,
+        titleAr: product.titleAr,
         unitPrice: product.price,
         thumbnailUrl: product.thumbnailUrl,
         missing: false,
@@ -215,6 +219,7 @@ export function toOrderRecord(
             ...(catalog?.slug != null ? { slug: catalog.slug } : {}),
             rawValue: line.rawValue,
             title: line.title,
+            titleAr: catalog?.titleAr ?? null,
             unitPrice: line.effectiveUnitPrice,
             quantity: line.quantity,
             lineTotal: line.lineTotal,

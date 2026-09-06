@@ -10,6 +10,7 @@ import {
   getStorefrontEcotrackCatalog,
   getStorefrontProductDetail,
   getStorefrontSettings,
+  fetchStorefrontProductPromo,
 } from '@/lib/storefront-api';
 import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
@@ -37,13 +38,19 @@ export async function CheckoutPageContent({ params, searchParams }: CheckoutPage
   const landingRevision = Number.parseInt(rawLandingRevision ?? '', 10);
   const detail = rawProduct ? await getStorefrontProductDetail(rawProduct).catch(() => null) : null;
   const product = detail?.item;
+  const rawPromo = Array.isArray(query.promo) ? query.promo[0] : query.promo;
+  const promo =
+    product && rawPromo
+      ? ((await fetchStorefrontProductPromo(product.id, rawPromo).catch(() => null))?.promo ?? null)
+      : null;
   const directItem = product
     ? {
         productId: product.id,
         token: product.canonicalToken,
         title: locale === 'ar' && product.titleAr?.trim() ? product.titleAr : product.title,
         imageUrl: product.media[0]?.url ?? null,
-        unitPrice: parseProductPrice(product.price),
+        unitPrice: promo?.promoPrice ?? parseProductPrice(product.price),
+        ...(promo ? { promoCode: promo.code } : {}),
         quantity,
         availabilityStatus: product.availability.status,
       }
@@ -55,6 +62,7 @@ export async function CheckoutPageContent({ params, searchParams }: CheckoutPage
         locale={locale}
         catalog={catalog}
         directItem={directItem}
+        initialNotice={rawPromo && !promo ? t('promoUnavailable') : undefined}
         landingAttribution={
           Number.isInteger(landingPageId) &&
           landingPageId > 0 &&

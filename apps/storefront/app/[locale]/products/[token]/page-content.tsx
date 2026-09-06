@@ -28,6 +28,7 @@ import {
   getStorefrontCatalogMeta,
   getStorefrontProductDetail,
   getStorefrontSettings,
+  fetchStorefrontProductPromo,
 } from '@/lib/storefront-api';
 import { isStorefrontUpstreamError } from '@/lib/storefront-upstream';
 import { captureProductPageException } from '@/lib/sentry';
@@ -35,6 +36,7 @@ import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contrac
 
 export type ProductPageProps = {
   params: Promise<{ locale: string; token: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
 export async function resolveProductPageParams(params: ProductPageProps['params']) {
@@ -62,7 +64,9 @@ async function ProductUnavailable({ locale }: { locale: Locale }) {
   );
 }
 
-export async function ProductPageContent({ params }: ProductPageProps) {
+export async function ProductPageContent({ params, searchParams }: ProductPageProps) {
+  const query = (await searchParams) ?? {};
+  const rawPromo = Array.isArray(query.promo) ? query.promo[0] : query.promo;
   const [{ locale, token }, requestHeaders] = await Promise.all([
     resolveProductPageParams(params),
     headers(),
@@ -91,7 +95,10 @@ export async function ProductPageContent({ params }: ProductPageProps) {
 
   if (!response) notFound();
   if (response.resolution.requestedToken !== response.resolution.canonicalToken) {
-    permanentRedirect(getProductPath(locale, response.resolution.canonicalToken) as Route);
+    const promoQuery = rawPromo ? `?${new URLSearchParams({ promo: rawPromo })}` : '';
+    permanentRedirect(
+      `${getProductPath(locale, response.resolution.canonicalToken)}${promoQuery}` as Route,
+    );
   }
 
   const product = response.item;
@@ -107,7 +114,10 @@ export async function ProductPageContent({ params }: ProductPageProps) {
     product.brand?.image && isDisplayableProductImageUrl(product.brand.image)
       ? product.brand.image
       : null;
-  const price = parseProductPrice(product.price);
+  const promo = rawPromo
+    ? ((await fetchStorefrontProductPromo(product.id, rawPromo).catch(() => null))?.promo ?? null)
+    : null;
+  const price = promo?.promoPrice ?? parseProductPrice(product.price);
   const categoryBreadcrumbs = buildProductCategoryBreadcrumbs(
     product.category,
     categoryMeta,
@@ -201,11 +211,14 @@ export async function ProductPageContent({ params }: ProductPageProps) {
           <div className="product-purchase-summary">
             <div className="product-price-block" aria-label={t('price')}>
               <strong className="product-current-price">
-                {formatProductPrice(product.price, locale)}
+                {formatProductPrice(String(price), locale)}
               </strong>
-              {hasProductDiscount(product) && product.oldPrice ? (
+              {promo || (hasProductDiscount(product) && product.oldPrice) ? (
                 <del className="product-compare-price">
-                  {formatProductPrice(product.oldPrice, locale)}
+                  {formatProductPrice(
+                    promo ? String(promo.originalPrice) : product.oldPrice!,
+                    locale,
+                  )}
                 </del>
               ) : null}
             </div>
@@ -222,6 +235,7 @@ export async function ProductPageContent({ params }: ProductPageProps) {
             </p>
           </div>
 
+          {rawPromo && !promo ? <p role="status">{t('promoUnavailable')}</p> : null}
           <ProductActions
             locale={locale}
             available={product.availability.inStock}
@@ -231,6 +245,7 @@ export async function ProductPageContent({ params }: ProductPageProps) {
               title: copy.title,
               imageUrl,
               unitPrice: price,
+              ...(promo ? { promoCode: promo.code } : {}),
               availabilityStatus: product.availability.status,
             }}
             analytics={analytics}

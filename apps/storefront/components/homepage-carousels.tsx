@@ -254,6 +254,10 @@ export function HomepageProductCarousel({
 }
 
 export function HomepageBrandCarousel({ brands, locale }: { brands: Brand[]; locale: Locale }) {
+  const displayedBrands = useMemo(
+    () => [...brands].sort((a, b) => Number(b.featured) - Number(a.featured)).slice(0, 24),
+    [brands],
+  );
   const [ref, api] = useEmblaCarousel(
     { loop: true, dragFree: true, watchDrag: false, direction: locale === 'ar' ? 'rtl' : 'ltr' },
     [
@@ -287,13 +291,13 @@ export function HomepageBrandCarousel({ brands, locale }: { brands: Brand[]; loc
   // Embla can only honor `loop` when the slides are wide enough to cover its
   // loop points. Keep a generous minimum for wide desktop displays instead of
   // allowing the plugin to silently fall back to a finite, one-step track.
-  const repeats = Math.max(2, Math.ceil(24 / brands.length));
-  const loopBrands = Array.from({ length: repeats }, () => brands).flat();
+  const repeats = Math.max(1, Math.ceil(24 / displayedBrands.length));
+  const loopBrands = Array.from({ length: repeats }, () => displayedBrands).flat();
   return (
     <div className="home-brand-carousel" ref={ref}>
       <div>
         {loopBrands.map((brand, index) => {
-          const repeatedCopy = index >= brands.length;
+          const repeatedCopy = index >= displayedBrands.length;
           return (
             <a
               key={`${brand.id}-${index}`}

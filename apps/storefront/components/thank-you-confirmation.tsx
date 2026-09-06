@@ -18,7 +18,7 @@ import {
   writeCheckoutConfirmation,
   type CheckoutConfirmation,
 } from '@/lib/checkout';
-import { verifyCheckoutOrderByToken } from '@/lib/orders';
+import { CheckoutOrderError, verifyCheckoutOrderByToken } from '@/lib/orders';
 import { formatProductPrice } from '@/lib/product-presentation';
 
 type Labels = {
@@ -85,11 +85,17 @@ export function ThankYouConfirmation({
 
   const verify = useCallback(async () => {
     const stored = readCheckoutConfirmation(window.localStorage);
-    const matching = stored && (orderId == null || stored.order.id === orderId) ? stored : null;
-    const baseline = matching ?? initialConfirmation;
+    const matches = (candidate: CheckoutConfirmation | null | undefined) =>
+      candidate &&
+      token &&
+      candidate.order.publicToken === token &&
+      (orderId == null || candidate.order.id === orderId);
+    const matching = matches(stored) ? stored : null;
+    const baseline = matching ?? (matches(initialConfirmation) ? initialConfirmation : null);
     if (baseline) {
       setConfirmation(baseline);
     } else {
+      setConfirmation(null);
       setStatus('loading');
     }
     if (!token) {
@@ -108,8 +114,12 @@ export function ThankYouConfirmation({
       writeCheckoutConfirmation(window.localStorage, next);
       setConfirmation(next);
       setStatus('success');
-    } catch {
-      setStatus(baseline ? 'fallback' : 'failure');
+    } catch (error) {
+      const rejected =
+        error instanceof CheckoutOrderError &&
+        [400, 401, 403, 404, 410].includes(error.status ?? 0);
+      if (rejected) setConfirmation(null);
+      setStatus(baseline && !rejected ? 'fallback' : 'failure');
       void trackCheckoutEvent(
         {
           eventName: 'order_verification_failed_after_create',
@@ -173,7 +183,12 @@ export function ThankYouConfirmation({
     return <ThankYouContentSkeleton />;
   }
 
-  if (!confirmation) {
+  if (
+    !confirmation ||
+    !token ||
+    confirmation.order.publicToken !== token ||
+    (orderId != null && confirmation.order.id !== orderId)
+  ) {
     return (
       <main className="thank-you-page thank-you-state">
         <RotateCcw aria-hidden="true" />
@@ -207,13 +222,17 @@ export function ThankYouConfirmation({
         </div>
       </header>
       {status === 'fallback' ? (
-        <p className="thank-you-fallback" role="status">
+        <div className="thank-you-fallback" role="status">
           {labels.fallback}
-        </p>
+          <button type="button" onClick={() => void verify()}>
+            {labels.retry}
+          </button>
+        </div>
       ) : null}
 
       <OrderTracking
         order={order}
+        live={status === 'success' || status === 'prerendered'}
         labels={{
           title: labels.trackingTitle,
           live: labels.trackingLive,
@@ -258,7 +277,9 @@ export function ThankYouConfirmation({
                   )}
                 </span>
                 <div>
-                  <strong>{item.title}</strong>
+                  <strong>
+                    {locale === 'ar' && item.titleAr?.trim() ? item.titleAr : item.title}
+                  </strong>
                   <small>
                     {labels.quantity}: {item.quantity}
                   </small>

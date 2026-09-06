@@ -12,6 +12,87 @@ const cart = [
   },
 ];
 
+test('opens the real cart drawer to reduce an oversized basket and resumes checkout', async ({
+  page,
+}) => {
+  const items = [12, 42, 13].map((productId) => ({
+    ...cart[0],
+    productId,
+    token: String(productId),
+    title: `Article ${productId}`,
+    quantity: 20,
+  }));
+  await page.addInitScript(
+    (value) => localStorage.setItem('bric:cart:v1', JSON.stringify(value)),
+    items,
+  );
+  await page.route('**/api/cart/validate', (route) =>
+    route.fulfill({
+      json: {
+        items: items.map((item) => ({
+          id: item.productId,
+          slug: item.token,
+          title: item.title,
+          price: String(item.unitPrice),
+          inStock: true,
+          availabilityStatus: 'in_stock',
+          images: [],
+        })),
+      },
+    }),
+  );
+  await page.goto('/fr/checkout');
+  await expect(page.locator('.checkout-submit')).toBeDisabled();
+  await page.getByRole('button', { name: 'Modifier le panier', exact: true }).click();
+  const drawer = page.getByRole('dialog');
+  await expect(drawer).toBeVisible();
+  for (let index = 0; index < 10; index += 1)
+    await drawer.getByRole('button', { name: /Diminuer.*Article 13/ }).click();
+  await drawer.getByRole('button', { name: /Fermer/ }).click();
+  await expect(page.locator('.checkout-submit')).toBeEnabled();
+  await expect(
+    page.getByText('Une commande peut contenir au maximum 50 articles.', { exact: false }),
+  ).toHaveCount(0);
+  expect(
+    await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('bric:cart:v1')!).map(
+        (item: { quantity: number }) => item.quantity,
+      ),
+    ),
+  ).toEqual([20, 20, 10]);
+});
+
+test('ordinary confirmation retries the same request after the creation response is lost', async ({
+  page,
+}) => {
+  let committed: { status: number; body: string } | null = null;
+  const attempts: Array<{ key: string | undefined; body: string | null }> = [];
+  await page.route('**/api/orders', async (route) => {
+    attempts.push({
+      key: route.request().headers()['idempotency-key'],
+      body: route.request().postData(),
+    });
+    if (!committed) {
+      const response = await route.fetch();
+      committed = { status: response.status(), body: await response.text() };
+      await route.abort();
+    } else {
+      await route.fulfill({ ...committed, contentType: 'application/json' });
+    }
+  });
+  await page.goto('/fr/checkout?product=desk-lamp&quantity=2');
+  await page.locator('[name="phoneNumber1"]').fill('0550000000');
+  await page.locator('[name="state"]').selectOption('16');
+  await page.locator('[name="city"]').selectOption('Alger Centre');
+  await page.locator('.checkout-submit').click();
+  await expect(page.locator('.checkout-recovery')).toBeVisible();
+  await expect(page.locator('[name="phoneNumber1"]')).toBeDisabled();
+  await page.locator('.checkout-submit').click();
+  await expect(page).toHaveURL(/\/fr\/thank-you\?token=/);
+  expect(attempts).toHaveLength(2);
+  expect(attempts[1]).toEqual(attempts[0]);
+});
+
 test('completes a cart checkout, verifies its public token, and keeps analytics free of customer data', async ({
   page,
 }) => {
@@ -81,6 +162,11 @@ test('completes a cart checkout, verifies its public token, and keeps analytics 
   expect(analyticsBodies).not.toContain('ada@example.com');
   expect(analyticsBodies).not.toContain('12 rue des Outils');
   await expect.poll(() => page.evaluate(() => localStorage.getItem('bric:cart:v1'))).toBeNull();
+  await page.evaluate(() => localStorage.removeItem('bric:checkout:confirmation:v1'));
+  await page.reload();
+  await expect(
+    page.locator('.thank-you-customer').getByText('Alger', { exact: true }),
+  ).toBeVisible();
 });
 
 test('supports the direct-product checkout in Arabic at a small-phone viewport', async ({

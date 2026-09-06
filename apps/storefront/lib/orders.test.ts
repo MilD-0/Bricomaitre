@@ -71,6 +71,15 @@ const payload = {
 };
 
 describe('checkout order client', () => {
+  it('retains the server retry delay on rate limiting', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response('{}', { status: 429, headers: { 'Retry-After': '310' } }),
+    );
+    await expect(createCheckoutOrder(payload, 'same-attempt')).rejects.toMatchObject({
+      code: 'rate_limit',
+      retryAfterSeconds: 310,
+    });
+  });
   beforeEach(() => vi.stubGlobal('fetch', vi.fn()));
   afterEach(() => vi.unstubAllGlobals());
 

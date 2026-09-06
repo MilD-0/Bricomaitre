@@ -239,13 +239,16 @@ export async function fetchStorefrontCatalog(
   );
 }
 
-export async function fetchStorefrontCartValidation(productIds: number[]) {
+export async function fetchStorefrontCartValidation(
+  productIds: number[],
+  promoCode?: string | null,
+) {
   const pathname = '/storefront/products/validate';
   return parseUpstreamJson(
     await fetchStorefrontUpstream(pathname, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ productIds }),
+      body: JSON.stringify({ productIds, ...(promoCode ? { promoCode } : {}) }),
       cache: 'no-store',
     }),
     pathname,

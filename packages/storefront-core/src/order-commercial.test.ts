@@ -1,8 +1,35 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildOrderCommercialValues } from './order-commercial';
+import {
+  assertReviewedOrderPrices,
+  buildOrderCommercialValues,
+  UnorderableCartError,
+} from './order-commercial';
 
 describe('order commercial values', () => {
+  it('rejects a price change or expired promotion before accepting an order', () => {
+    expect(() =>
+      assertReviewedOrderPrices(
+        { promo: null, productSubtotal: 1500 },
+        { expectedProductSubtotal: 1200 },
+      ),
+    ).toThrow(UnorderableCartError);
+    expect(() =>
+      assertReviewedOrderPrices(
+        { promo: null, productSubtotal: 1500 },
+        { promoCode: 'EXPIRED', expectedProductSubtotal: 1500 },
+      ),
+    ).toThrow(UnorderableCartError);
+    expect(() =>
+      assertReviewedOrderPrices(
+        { promo: null, productSubtotal: 1500 },
+        { expectedProductSubtotal: 1500 },
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertReviewedOrderPrices({ promo: null, productSubtotal: 1500 }, {}),
+    ).not.toThrow();
+  });
   it('persists product subtotal and grand total for non-promotional orders', () => {
     expect(
       buildOrderCommercialValues(

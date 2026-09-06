@@ -25,6 +25,7 @@ export function createServerCache<TArgs extends unknown[], TResult>(options: {
 
 export function revalidateServerTags(...tags: string[]) {
   for (const tag of new Set(tags)) {
-    revalidateTag(tag, 'max');
+    // A downstream cache must not refill from an upstream stale response after publication.
+    revalidateTag(tag, { expire: 0 });
   }
 }

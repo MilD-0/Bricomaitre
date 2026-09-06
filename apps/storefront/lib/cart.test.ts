@@ -3,6 +3,7 @@ import { CHECKOUT_REQUEST_TIMEOUT_MS } from './checkout-request';
 
 import {
   addCartItem,
+  consumeOrderedCartItems,
   getCartItemCount,
   getCartSubtotal,
   readCart,
@@ -24,6 +25,50 @@ const item = {
 };
 
 describe('storefront cart boundary', () => {
+  it('consumes only the accepted order quantities, preserving later additions and unrelated products', () => {
+    const later = { ...item, productId: 99, quantity: 4 };
+    expect(
+      consumeOrderedCartItems([{ ...item, quantity: 5 }, later], [{ productId: 12, quantity: 2 }]),
+    ).toEqual([{ ...item, quantity: 3 }, later]);
+    expect(consumeOrderedCartItems([item, later], [{ productId: 12, quantity: 2 }])).toEqual([
+      later,
+    ]);
+  });
+  it('keeps a live promotional price and requires review when it expires', async () => {
+    const product = {
+      id: 12,
+      slug: item.token,
+      title: item.title,
+      titleAr: 'مصباح',
+      price: '1500',
+      inStock: true,
+      availabilityStatus: 'in_stock',
+      images: [],
+    };
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            items: [product],
+            promo: { code: 'AUDIT10', productId: 12, promoPrice: 1200 },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [product], promo: null })));
+    const discounted = { ...item, promoCode: 'AUDIT10', unitPrice: 1200 };
+    const active = await reconcileCartWithCatalog([discounted], fetcher, 'ar');
+    expect(active.items[0]).toMatchObject({
+      title: 'مصباح',
+      unitPrice: 1200,
+      promoCode: 'AUDIT10',
+    });
+    expect(active.requiresReview).toBe(false);
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({ promoCode: 'AUDIT10' });
+    const expired = await reconcileCartWithCatalog(active.items, fetcher, 'ar');
+    expect(expired.items[0]).toMatchObject({ unitPrice: 1500, promoCode: null });
+    expect(expired.requiresReview).toBe(true);
+  });
   it.each(['headers', 'body'])(
     'times out a stalled cart validation response at %s',
     async (phase) => {

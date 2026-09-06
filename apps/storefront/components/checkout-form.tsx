@@ -25,6 +25,7 @@ import type { Locale } from '@/i18n/config';
 import { getAnalyticsIdentity, trackCheckoutEvent } from '@/lib/analytics';
 import {
   readCart,
+  consumeOrderedCartItems,
   reconcileCartWithCatalog,
   STOREFRONT_CART_KEY,
   writeCart,
@@ -69,6 +70,7 @@ export function CheckoutForm({
   directItem,
   landingAttribution,
   embedded = false,
+  initialNotice,
   labels,
   support,
 }: {
@@ -77,6 +79,7 @@ export function CheckoutForm({
   directItem: CartItem | null;
   landingAttribution?: { landingPageId: number; landingRevision: number };
   embedded?: boolean;
+  initialNotice?: string;
   labels: CheckoutLabels;
   support?: { contact: StorefrontSupportContact; labels: SupportContactLabels };
 }) {
@@ -92,21 +95,28 @@ export function CheckoutForm({
   const [email, setEmail] = useState('');
   const [delivery, setDelivery] = useState<'home' | 'office'>('home');
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [requestError, setRequestError] = useState('');
+  const [requestError, setRequestError] = useState(initialNotice ?? '');
   const [pending, setPending] = useState<PendingCheckout | null>(null);
+  const [cartMode, setCartMode] = useState<'cart' | 'direct'>(directItem ? 'direct' : 'cart');
   const [submitting, setSubmitting] = useState(false);
   const [validating, setValidating] = useState(false);
+  const [retryAt, setRetryAt] = useState(0);
   const busy = validating || submitting;
+  const retryBlocked = retryAt > 0;
   const submissionLock = useRef(false);
+  const validationLock = useRef(false);
   const submitIconRef = useRef<ShieldCheckIconHandle>(null);
   const viewed = useRef(false);
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- Checkout persistence must hydrate before the customer can submit the form. */
-    if (!directItem) {
+    const savedAttempt = readPendingCheckout(window.localStorage);
+    setCartMode(savedAttempt?.cartMode ?? (directItem ? 'direct' : 'cart'));
+    if (savedAttempt) setItems(savedAttempt.items ?? []);
+    if (!directItem && !savedAttempt) {
       const storedItems = readCart(window.localStorage);
       setItems(storedItems);
-      void reconcileCartWithCatalog(storedItems)
+      void reconcileCartWithCatalog(storedItems, fetch, locale)
         .then((reconciled) => {
           if (!reconciled.changed) return;
           setItems(reconciled.items);
@@ -116,22 +126,19 @@ export function CheckoutForm({
         })
         .catch(() => undefined);
     }
-    const savedAttempt = readPendingCheckout(window.localStorage);
     const savedDraft = readCheckoutDraft(window.localStorage);
-    const restored =
-      savedDraft ??
-      (savedAttempt
-        ? {
-            phoneNumber1: savedAttempt.payload.phoneNumber1,
-            lastName: savedAttempt.payload.lastName ?? '',
-            firstName: savedAttempt.payload.firstName ?? '',
-            state: savedAttempt.payload.state,
-            city: savedAttempt.payload.city ?? '',
-            homeAddress: savedAttempt.payload.homeAddress ?? '',
-            email: savedAttempt.payload.email ?? '',
-            delivery: savedAttempt.payload.delivery === 1 ? ('office' as const) : ('home' as const),
-          }
-        : null);
+    const restored = savedAttempt
+      ? {
+          phoneNumber1: savedAttempt.payload.phoneNumber1,
+          lastName: savedAttempt.payload.lastName ?? '',
+          firstName: savedAttempt.payload.firstName ?? '',
+          state: savedAttempt.payload.state,
+          city: savedAttempt.payload.city ?? '',
+          homeAddress: savedAttempt.payload.homeAddress ?? '',
+          email: savedAttempt.payload.email ?? '',
+          delivery: savedAttempt.payload.delivery === 1 ? ('office' as const) : ('home' as const),
+        }
+      : savedDraft;
     if (restored) {
       const validCity =
         restored.state != null &&
@@ -147,10 +154,16 @@ export function CheckoutForm({
       setLastName(restored.lastName);
       setFirstName(restored.firstName);
       setState(restored.state);
-      setCity(validCity ? restored.city : '');
+      setCity(savedAttempt || validCity ? restored.city : '');
       setHomeAddress(restored.homeAddress);
       setEmail(restored.email);
-      setDelivery(restored.delivery === 'office' && officeAvailableForDraft ? 'office' : 'home');
+      setDelivery(
+        savedAttempt
+          ? restored.delivery
+          : restored.delivery === 'office' && officeAvailableForDraft
+            ? 'office'
+            : 'home',
+      );
     } else {
       try {
         const estimate = JSON.parse(
@@ -174,17 +187,42 @@ export function CheckoutForm({
       }
     }
     setPending(savedAttempt);
-    if (savedAttempt) setRequestError(labels.submitError);
+    if (savedAttempt) {
+      setRetryAt((savedAttempt.retryAt ?? 0) > Date.now() ? savedAttempt.retryAt! : 0);
+      setRequestError(
+        (savedAttempt.retryAt ?? 0) > Date.now() ? labels.rateLimit : labels.submitError,
+      );
+    }
     setHydrated(true);
     /* eslint-enable react-hooks/set-state-in-effect */
     void prepareHaptics();
-  }, [catalog, directItem, labels.cartUpdated, labels.submitError]);
+  }, [catalog, directItem, labels.cartUpdated, labels.submitError, labels.rateLimit, locale]);
+
+  useEffect(() => {
+    if (!retryAt) return;
+    const timer = window.setTimeout(() => setRetryAt(0), Math.max(0, retryAt - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [retryAt]);
+
+  useEffect(() => {
+    if (cartMode === 'direct' || pending || busy) return;
+    const updateCart = () => {
+      setItems(readCart(window.localStorage));
+      setRequestError('');
+    };
+    window.addEventListener('bric:cart-updated', updateCart);
+    window.addEventListener('storage', updateCart);
+    return () => {
+      window.removeEventListener('bric:cart-updated', updateCart);
+      window.removeEventListener('storage', updateCart);
+    };
+  }, [cartMode, pending, busy]);
 
   useEffect(() => {
     if (!embedded || !directItem) return;
     const updateQuantity = (event: Event) => {
       const detail = (event as CustomEvent<LandingOrderQuantityDetail>).detail;
-      if (!detail || detail.productId !== directItem.productId) return;
+      if (!detail || detail.productId !== directItem.productId || pending || busy) return;
       const quantity = Math.max(1, Math.min(20, detail.quantity));
       setItems((current) =>
         current.map((item) => (item.productId === detail.productId ? { ...item, quantity } : item)),
@@ -192,7 +230,7 @@ export function CheckoutForm({
     };
     window.addEventListener(LANDING_ORDER_QUANTITY_EVENT, updateQuantity);
     return () => window.removeEventListener(LANDING_ORDER_QUANTITY_EVENT, updateQuantity);
-  }, [directItem, embedded]);
+  }, [directItem, embedded, pending, busy]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -211,10 +249,9 @@ export function CheckoutForm({
   const communes = useMemo(() => getCheckoutCommunes(catalog, state), [catalog, state]);
   const officeAvailable = hasCheckoutStopDesk(catalog, state);
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const deliveryFee = getCheckoutDeliveryFee(catalog, state, delivery);
+  const deliveryFee = pending?.deliveryFee ?? getCheckoutDeliveryFee(catalog, state, delivery);
   const total = subtotal + deliveryFee;
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
-  const cartMode = directItem ? ('direct' as const) : ('cart' as const);
 
   useEffect(() => {
     if (viewed.current || !hydrated || itemCount === 0) return;
@@ -258,7 +295,7 @@ export function CheckoutForm({
   }
 
   async function completeSubmission(attempt: PendingCheckout) {
-    if (submissionLock.current) return;
+    if (submissionLock.current || (attempt.retryAt ?? 0) > Date.now()) return;
     submissionLock.current = true;
     setSubmitting(true);
     setRequestError('');
@@ -275,7 +312,14 @@ export function CheckoutForm({
       });
       clearPendingCheckout(window.localStorage);
       try {
-        window.localStorage.removeItem(STOREFRONT_CART_KEY);
+        if (attempt.cartMode === 'cart') {
+          const remaining = consumeOrderedCartItems(
+            readCart(window.localStorage),
+            order.orderProducts,
+          );
+          if (remaining.length) writeCart(window.localStorage, remaining);
+          else window.localStorage.removeItem(STOREFRONT_CART_KEY);
+        }
       } catch {
         // The committed order must still succeed when browser storage is unavailable.
       }
@@ -293,21 +337,43 @@ export function CheckoutForm({
       router.push(`/${locale}/thank-you?token=${encodeURIComponent(order.publicToken!)}`);
     } catch (error) {
       const code = error instanceof CheckoutOrderError ? error.code : 'request_failed';
-      if (code === 'cart_changed') {
+      if (code === 'cart_changed' || code === 'validation') {
         clearPendingCheckout(window.localStorage);
         setPending(null);
+        if (delivery === 'office' && !officeAvailable) setDelivery('home');
+        if (city && !communes.some((commune) => commune.name === city)) setCity('');
         try {
-          const reconciled = await reconcileCartWithCatalog(items);
+          const reconciled = await reconcileCartWithCatalog(
+            cartMode === 'cart' ? readCart(window.localStorage) : items,
+            fetch,
+            locale,
+          );
           setItems(reconciled.items);
-          if (!directItem) writeCart(window.localStorage, reconciled.items);
+          if (cartMode === 'cart') writeCart(window.localStorage, reconciled.items);
           window.dispatchEvent(new CustomEvent('bric:cart-updated'));
         } catch {
           // A fresh submit will validate again before creating another attempt.
         }
-        setRequestError(labels.cartUpdated);
+        setRequestError(code === 'cart_changed' ? labels.cartUpdated : labels.submitError);
       } else {
-        setPending(readPendingCheckout(window.localStorage) ?? attempt);
-        setRequestError(labels.submitError);
+        const nextAttempt = {
+          ...attempt,
+          ...(code === 'rate_limit'
+            ? {
+                retryAt:
+                  Date.now() +
+                  Math.max(
+                    1,
+                    error instanceof CheckoutOrderError ? (error.retryAfterSeconds ?? 60) : 60,
+                  ) *
+                    1000,
+              }
+            : {}),
+        };
+        writePendingCheckout(window.localStorage, nextAttempt);
+        setPending(nextAttempt);
+        setRetryAt(nextAttempt.retryAt ?? 0);
+        setRequestError(code === 'rate_limit' ? labels.rateLimit : labels.submitError);
       }
       void triggerHaptic('error');
       void trackCheckoutEvent({
@@ -325,15 +391,25 @@ export function CheckoutForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!hydrated || items.length === 0) return;
+    if (!hydrated || busy || validationLock.current || retryBlocked) return;
+    if (pending) {
+      await completeSubmission(pending);
+      return;
+    }
+    if (items.length === 0) return;
+    if (items.reduce((sum, item) => sum + item.quantity, 0) > 50) {
+      setRequestError(labels.quantityLimit);
+      return;
+    }
+    validationLock.current = true;
     setValidating(true);
     setRequestError('');
     try {
-      const reconciled = await reconcileCartWithCatalog(items);
+      const reconciled = await reconcileCartWithCatalog(items, fetch, locale);
       const validatedItems = reconciled.items;
       if (reconciled.changed) {
         setItems(reconciled.items);
-        if (!directItem) writeCart(window.localStorage, reconciled.items);
+        if (cartMode === 'cart') writeCart(window.localStorage, reconciled.items);
         window.dispatchEvent(new CustomEvent('bric:cart-updated'));
         if (reconciled.requiresReview) {
           setRequestError(labels.cartUpdated);
@@ -386,9 +462,21 @@ export function CheckoutForm({
       const payload = buildCheckoutOrderPayload({
         form: parsed.data,
         cartProducts: expandCheckoutCart(validatedItems),
+        promoCode: validatedItems.find((item) => item.promoCode)?.promoCode ?? null,
+        expectedProductSubtotal: validatedItems.reduce(
+          (sum, item) => sum + item.unitPrice * item.quantity,
+          0,
+        ),
         ...attribution,
       });
-      const attempt = { idempotencyKey: createId(), payload, createdAt: new Date().toISOString() };
+      const attempt = {
+        idempotencyKey: createId(),
+        payload,
+        items: validatedItems,
+        cartMode,
+        deliveryFee,
+        createdAt: new Date().toISOString(),
+      };
       writePendingCheckout(window.localStorage, attempt);
       setPending(attempt);
       void triggerHaptic('primary');
@@ -403,13 +491,14 @@ export function CheckoutForm({
     } catch {
       setRequestError(labels.submitError);
     } finally {
+      validationLock.current = false;
       setValidating(false);
     }
   }
 
   if (!hydrated && !directItem) return <CheckoutContentSkeleton />;
 
-  if (hydrated && items.length === 0) {
+  if (hydrated && items.length === 0 && !pending) {
     return (
       <main className="checkout-page checkout-empty">
         <PackageCheck aria-hidden="true" />
@@ -442,7 +531,11 @@ export function CheckoutForm({
             <strong>{labels.savedAttempt}</strong>
             <p>{requestError}</p>
           </div>
-          <button type="button" onClick={() => void completeSubmission(pending)} disabled={busy}>
+          <button
+            type="button"
+            onClick={() => void completeSubmission(pending)}
+            disabled={busy || retryBlocked}
+          >
             {labels.retry}
           </button>
           {support ? (
@@ -458,7 +551,12 @@ export function CheckoutForm({
       ) : null}
 
       <form className="checkout-layout" onSubmit={submit} aria-busy={busy} noValidate>
-        <section className="checkout-form-panel" aria-label={labels.title}>
+        <fieldset
+          className="checkout-form-panel"
+          aria-label={labels.title}
+          disabled={Boolean(pending) || busy}
+          style={{ border: 0, margin: 0, minWidth: 0 }}
+        >
           <div className="checkout-fields">
             <label className="checkout-field checkout-field-phone">
               <span>
@@ -543,6 +641,9 @@ export function CheckoutForm({
                 onChange={(event) => setCity(event.target.value)}
               >
                 <option value="">{labels.commune}</option>
+                {pending && city && !communes.some((commune) => commune.name === city) ? (
+                  <option value={city}>{city}</option>
+                ) : null}
                 {communes.map((commune) => (
                   <option key={commune.communeId} value={commune.name}>
                     {commune.name}
@@ -610,60 +711,84 @@ export function CheckoutForm({
               <Check aria-hidden="true" />
             </button>
           </fieldset>
-        </section>
+        </fieldset>
 
         <aside className="checkout-summary">
           <h2>{labels.orderSummary}</h2>
-          <ul>
-            {items.map((item) => (
-              <li key={item.productId}>
-                <span className="checkout-summary-image">
-                  {item.imageUrl ? (
-                    <StorefrontImage
-                      src={item.imageUrl}
-                      alt=""
-                      width={72}
-                      height={72}
-                      sizes="64px"
-                      quality={60}
-                    />
-                  ) : (
-                    'BRICO'
-                  )}
-                </span>
+          {pending && !pending.items ? (
+            <p>
+              {labels.savedAttempt} · {labels.quantity}: {pending.payload.cartProducts.length}
+            </p>
+          ) : (
+            <>
+              <ul>
+                {items.map((item) => (
+                  <li key={item.productId}>
+                    <span className="checkout-summary-image">
+                      {item.imageUrl ? (
+                        <StorefrontImage
+                          src={item.imageUrl}
+                          alt=""
+                          width={72}
+                          height={72}
+                          sizes="64px"
+                          quality={60}
+                        />
+                      ) : (
+                        'BRICO'
+                      )}
+                    </span>
+                    <div>
+                      <strong>{item.title}</strong>
+                      <small>
+                        {labels.quantity}: {item.quantity}
+                      </small>
+                    </div>
+                    <b>{formatProductPrice(String(item.unitPrice * item.quantity), locale)}</b>
+                  </li>
+                ))}
+              </ul>
+              <dl>
                 <div>
-                  <strong>{item.title}</strong>
-                  <small>
-                    {labels.quantity}: {item.quantity}
-                  </small>
+                  <dt>{labels.subtotal}</dt>
+                  <dd>{formatProductPrice(String(subtotal), locale)}</dd>
                 </div>
-                <b>{formatProductPrice(String(item.unitPrice * item.quantity), locale)}</b>
-              </li>
-            ))}
-          </ul>
-          <dl>
-            <div>
-              <dt>{labels.subtotal}</dt>
-              <dd>{formatProductPrice(String(subtotal), locale)}</dd>
-            </div>
-            <div>
-              <dt>{labels.delivery}</dt>
-              <dd>{formatProductPrice(String(deliveryFee), locale)}</dd>
-            </div>
-            <div>
-              <dt>{labels.total}</dt>
-              <dd>{formatProductPrice(String(total), locale)}</dd>
-            </div>
-          </dl>
+                <div>
+                  <dt>{labels.delivery}</dt>
+                  <dd>{formatProductPrice(String(deliveryFee), locale)}</dd>
+                </div>
+                <div>
+                  <dt>{labels.total}</dt>
+                  <dd>{formatProductPrice(String(total), locale)}</dd>
+                </div>
+              </dl>
+            </>
+          )}
           {requestError && !pending ? (
             <p className="checkout-submit-error" role="alert">
               {requestError}
             </p>
           ) : null}
+          {itemCount > 50 && !pending ? (
+            <p role="alert">
+              {labels.quantityLimit}{' '}
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new Event('bric:cart-open'))}
+              >
+                {labels.editCart}
+              </button>
+            </p>
+          ) : null}
           <button
             className="checkout-submit"
             type="submit"
-            disabled={!hydrated || busy || items.length === 0}
+            disabled={
+              !hydrated ||
+              busy ||
+              retryBlocked ||
+              (!pending && (items.length === 0 || itemCount > 50))
+            }
             onPointerDown={prepareHaptics}
             onMouseEnter={startSubmitIconAnimation}
             onMouseLeave={() => submitIconRef.current?.stopAnimation()}

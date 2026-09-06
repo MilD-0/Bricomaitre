@@ -74,6 +74,18 @@ const category = {
 };
 
 describe('HomepageBrandCarousel', () => {
+  it('bounds a large taxonomy while retaining featured brands and keyboard access', () => {
+    const many = Array.from({ length: 1600 }, (_, index) => ({
+      ...brands[0],
+      id: index + 1,
+      name: `Brand ${index}`,
+      featured: index === 1599,
+    }));
+    const { container } = render(<HomepageBrandCarousel brands={many} locale="ar" />);
+    expect(container.querySelectorAll('.home-brand-carousel a')).toHaveLength(24);
+    expect(container.querySelector('a')).toHaveAttribute('aria-label', 'Brand 1599');
+    expect(container.querySelectorAll('a:not([tabindex="-1"])')).toHaveLength(24);
+  });
   it('uses Embla loop mode with uninterrupted auto-scroll', () => {
     const { container } = render(<HomepageBrandCarousel brands={brands} locale="fr" />);
     expect(mocks.embla).toHaveBeenCalledWith(
