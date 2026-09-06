@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DELETE, GET, PATCH, PUT } from '../route';
-import { productPatchSchema, productPayloadSchema } from '../../../../../lib/products';
 import { ProductMutationNotFoundError } from '../../../../../lib/product-update-workflow';
 
 const {
@@ -233,10 +232,6 @@ describe('app/api/products/[id]/route', () => {
 
   it('returns 400 when PUT payload is invalid', async () => {
     hasDbMock.mockReturnValue(true);
-    vi.spyOn(productPayloadSchema, 'safeParse').mockReturnValue({
-      success: false,
-      error: { flatten: () => ({ fieldErrors: { title: ['required'] } }) },
-    } as never);
 
     const res = await PUT(
       new NextRequest('http://localhost/api/products/4', {
@@ -248,34 +243,34 @@ describe('app/api/products/[id]/route', () => {
     );
 
     expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({ error: { fieldErrors: { title: ['required'] } } });
+    await expect(res.json()).resolves.toMatchObject({
+      error: { fieldErrors: { title: expect.any(Array), price: expect.any(Array) } },
+    });
+    expect(mutateEntityWithHistoryMock).not.toHaveBeenCalled();
   });
 
   it('updates product and applies numeric formatting rules in PUT', async () => {
     hasDbMock.mockReturnValue(true);
-    vi.spyOn(productPayloadSchema, 'safeParse').mockReturnValue({
-      success: true,
-      data: {
-        title: 'Updated Product',
-        slug: 'updated-product',
-        titleAr: null,
-        description: null,
-        descriptionAr: null,
-        sku: null,
-        barcode: null,
-        price: 7,
-        oldPrice: 8.2,
-        purchasePrice: null,
-        active: false,
-        inStock: false,
-        availabilityStatus: 'out_of_stock',
-        inventoryQuantity: 3,
-        brandId: null,
-        categoryId: null,
-        images: [],
-        promoCodes: [],
-      },
-    } as never);
+    const payload = {
+      title: 'Updated Product',
+      slug: 'updated-product',
+      titleAr: null,
+      description: null,
+      descriptionAr: null,
+      sku: null,
+      barcode: null,
+      price: 7,
+      oldPrice: 8.2,
+      purchasePrice: null,
+      active: false,
+      inStock: false,
+      availabilityStatus: 'out_of_stock',
+      inventoryQuantity: 3,
+      brandId: null,
+      categoryId: null,
+      images: [],
+      promoCodes: [],
+    };
 
     const db = {
       marker: 'db',
@@ -289,7 +284,7 @@ describe('app/api/products/[id]/route', () => {
     const res = await PUT(
       new NextRequest('http://localhost/api/products/4', {
         method: 'PUT',
-        body: JSON.stringify({}),
+        body: JSON.stringify(payload),
         headers: { 'content-type': 'application/json' },
       }),
       { params: Promise.resolve({ id: '4' }) },
@@ -353,14 +348,11 @@ describe('app/api/products/[id]/route', () => {
 
   it('patches product toggles in PATCH', async () => {
     hasDbMock.mockReturnValue(true);
-    vi.spyOn(productPatchSchema, 'safeParse').mockReturnValue({
-      success: true,
-      data: {
-        active: true,
-        inStock: false,
-        availabilityStatus: 'out_of_stock',
-      },
-    } as never);
+    const payload = {
+      active: true,
+      inStock: false,
+      availabilityStatus: 'out_of_stock',
+    };
 
     const db = {
       marker: 'db',
@@ -374,7 +366,7 @@ describe('app/api/products/[id]/route', () => {
     const res = await PATCH(
       new NextRequest('http://localhost/api/products/4', {
         method: 'PATCH',
-        body: JSON.stringify({ active: true, inStock: false }),
+        body: JSON.stringify(payload),
         headers: { 'content-type': 'application/json' },
       }),
       { params: Promise.resolve({ id: '4' }) },

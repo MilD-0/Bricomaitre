@@ -36,22 +36,6 @@ export type MetaCatalogExportPreviewState = {
   rows: MetaCatalogExportRow[];
 } | null;
 
-type ProductExportAllJob = {
-  id: string;
-  status: 'running' | 'completed' | 'cancelled' | 'failed';
-  fileName: string | null;
-  progress: {
-    phase: 'counting' | 'loading' | 'processing-images' | 'packaging';
-    current: number;
-    total: number;
-    percentage: number;
-  };
-  errorMessage: string | null;
-  downloadPath: string | null;
-};
-
-export type ProductExportJobResponse = { job: ProductExportAllJob | null };
-
 export function MetaCatalogExportDialog({
   state,
   onOpenChange,

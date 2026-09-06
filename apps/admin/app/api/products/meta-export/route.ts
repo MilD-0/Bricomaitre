@@ -47,20 +47,7 @@ export async function GET(request: NextRequest) {
   }
 
   const brandNameById = new Map(brandRows.map((brand) => [brand.id, brand.name]));
-  const imageLinkByProductId = new Map<number, string>();
-
-  for (const product of productsByRequestedOrder) {
-    const primaryImage = product.images[0];
-    if (primaryImage) {
-      imageLinkByProductId.set(product.id, primaryImage);
-    }
-  }
-
-  const rows = buildMetaCatalogExportRows(
-    productsByRequestedOrder,
-    brandNameById,
-    imageLinkByProductId,
-  );
+  const rows = buildMetaCatalogExportRows(productsByRequestedOrder, brandNameById);
   const workbook = buildMetaCatalogWorkbook(rows);
   const buffer = toXlsxBuffer(workbook);
   const fileName = buildMetaCatalogExportFileName();

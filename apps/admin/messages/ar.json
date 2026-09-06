@@ -1775,13 +1775,15 @@
         "running": "جارٍ التنفيذ",
         "completed": "مكتمل",
         "cancelled": "أُلغي",
-        "failed": "فشل"
+        "failed": "فشل",
+        "queued": "قيد الانتظار"
       },
       "progress": {
         "counting": "جارٍ عدّ المنتجات",
         "loading": "جارٍ قراءة المنتجات",
         "processing-images": "جارٍ تجهيز صور مربعة للكتالوج",
-        "packaging": "جارٍ إنشاء الملف"
+        "packaging": "جارٍ إنشاء الملف",
+        "queued": "في انتظار بدء التصدير"
       },
       "notifications": {
         "start": {

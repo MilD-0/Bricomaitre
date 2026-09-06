@@ -1775,13 +1775,15 @@
         "running": "Running",
         "completed": "Completed",
         "cancelled": "Cancelled",
-        "failed": "Failed"
+        "failed": "Failed",
+        "queued": "Queued"
       },
       "progress": {
         "counting": "Counting products",
         "loading": "Reading products",
         "processing-images": "Preparing square catalog images",
-        "packaging": "Building spreadsheet"
+        "packaging": "Building spreadsheet",
+        "queued": "Waiting for export worker"
       },
       "notifications": {
         "start": {

@@ -74,7 +74,6 @@ export function buildMetaCatalogExportFileName(now = new Date()) {
 export function buildMetaCatalogExportRows(
   products: MetaCatalogProduct[],
   brandNameById: Map<number, string>,
-  imageLinkByProductId: Map<number, string>,
   storefrontBaseUrl = getStorefrontPublicBaseUrl(),
 ) {
   return products.map((product) => {
@@ -92,7 +91,7 @@ export function buildMetaCatalogExportRows(
       price: `${hasCompareAtPrice ? compareAtPrice : price} DZD`,
       salePrice: hasCompareAtPrice ? `${price} DZD` : '',
       link: `${storefrontBaseUrl.replace(/\/+$/, '')}/products/${product.slug ?? product.id}`,
-      imageLink: imageLinkByProductId.get(product.id) ?? '',
+      imageLink: product.images[0] ?? '',
       brand: product.brandId
         ? (brandNameById.get(product.brandId) ?? 'Sans marque')
         : 'Sans marque',

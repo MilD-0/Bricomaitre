@@ -150,7 +150,6 @@ describe('app/api/products/meta-export/route', () => {
     expect(buildMetaCatalogExportRowsMock).toHaveBeenCalledWith(
       productsFromDb,
       new Map([[9, 'Acme']]),
-      new Map([[1, 'https://raw.example.com/roller.jpg']]),
     );
     expect(buildMetaCatalogWorkbookMock).toHaveBeenCalledWith([{ id: '1', contentId: '1' }]);
     expect(toXlsxBufferMock).toHaveBeenCalledWith({ workbook: true });

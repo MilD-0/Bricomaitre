@@ -1,8 +1,9 @@
+vi.mock('next/cache', () => ({ unstable_cache: (load: (...args: unknown[]) => unknown) => load }));
+
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET, POST } from '../route';
-import { productPayloadSchema } from '../../../../lib/products';
 
 const {
   hasDbMock,
@@ -63,7 +64,6 @@ vi.mock('../../../../lib/server-cache', () => ({
     products: 'products',
     productsMeta: 'products-meta',
   },
-  createServerCache: ({ load }: { load: (...args: unknown[]) => unknown }) => load,
   revalidateServerTags: revalidateServerTagsMock,
 }));
 
@@ -318,12 +318,8 @@ describe('app/api/products/route', () => {
     await expect(res.json()).resolves.toEqual({ error: 'DATABASE_URL is not configured' });
   });
 
-  it('returns 400 for invalid payload from schema safeParse', async () => {
+  it('rejects invalid product data before canonical mutation', async () => {
     hasDbMock.mockReturnValue(true);
-    vi.spyOn(productPayloadSchema, 'safeParse').mockReturnValue({
-      success: false,
-      error: { flatten: () => ({ formErrors: ['invalid'] }) },
-    } as never);
 
     const req = new NextRequest('http://localhost/api/products', {
       method: 'POST',
@@ -333,7 +329,10 @@ describe('app/api/products/route', () => {
 
     const res = await POST(req);
     expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({ error: { formErrors: ['invalid'] } });
+    await expect(res.json()).resolves.toMatchObject({
+      error: { fieldErrors: { title: expect.any(Array), price: expect.any(Array) } },
+    });
+    expect(createProductMock).not.toHaveBeenCalled();
   });
 
   it('creates a product through the canonical lifecycle workflow', async () => {
@@ -341,32 +340,29 @@ describe('app/api/products/route', () => {
     const db = { marker: 'db' };
     getDbMock.mockReturnValue(db);
 
-    vi.spyOn(productPayloadSchema, 'safeParse').mockReturnValue({
-      success: true,
-      data: {
-        title: 'Test Product',
-        slug: 'test-product',
-        titleAr: null,
-        description: null,
-        descriptionAr: null,
-        sku: 'SKU-1',
-        barcode: null,
-        price: 12.3,
-        oldPrice: 14,
-        purchasePrice: 9.5,
-        active: true,
-        inStock: true,
-        availabilityStatus: 'in_stock',
-        inventoryQuantity: 8,
-        brandId: null,
-        categoryId: null,
-        images: [],
-      },
-    } as never);
+    const payload = {
+      title: 'Test Product',
+      slug: 'test-product',
+      titleAr: null,
+      description: null,
+      descriptionAr: null,
+      sku: 'SKU-1',
+      barcode: null,
+      price: 12.3,
+      oldPrice: 14,
+      purchasePrice: 9.5,
+      active: true,
+      inStock: true,
+      availabilityStatus: 'in_stock',
+      inventoryQuantity: 8,
+      brandId: null,
+      categoryId: null,
+      images: [],
+    };
 
     const req = new NextRequest('http://localhost/api/products', {
       method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify(payload),
       headers: { 'content-type': 'application/json' },
     });
 
@@ -399,33 +395,30 @@ describe('app/api/products/route', () => {
     getDbMock.mockReturnValue(db);
     startProductCatalogFeedRefreshJobMock.mockRejectedValue(new Error('queue unavailable'));
 
-    vi.spyOn(productPayloadSchema, 'safeParse').mockReturnValue({
-      success: true,
-      data: {
-        title: 'Test Product',
-        slug: 'test-product',
-        titleAr: null,
-        description: null,
-        descriptionAr: null,
-        sku: null,
-        barcode: null,
-        price: 1,
-        oldPrice: null,
-        purchasePrice: null,
-        active: true,
-        inStock: true,
-        availabilityStatus: 'in_stock',
-        inventoryQuantity: 0,
-        brandId: null,
-        categoryId: null,
-        images: [],
-      },
-    } as never);
+    const payload = {
+      title: 'Test Product',
+      slug: 'test-product',
+      titleAr: null,
+      description: null,
+      descriptionAr: null,
+      sku: null,
+      barcode: null,
+      price: 1,
+      oldPrice: null,
+      purchasePrice: null,
+      active: true,
+      inStock: true,
+      availabilityStatus: 'in_stock',
+      inventoryQuantity: 0,
+      brandId: null,
+      categoryId: null,
+      images: [],
+    };
 
     const res = await POST(
       new NextRequest('http://localhost/api/products', {
         method: 'POST',
-        body: JSON.stringify({}),
+        body: JSON.stringify(payload),
         headers: { 'content-type': 'application/json' },
       }),
     );

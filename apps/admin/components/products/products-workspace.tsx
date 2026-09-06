@@ -9,13 +9,13 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useDeferredValue, useMemo, useState } from 'react';
 
 import { requestJson as request } from '../../lib/admin-api';
+import type { ExportJobResponse } from '../../lib/background-job-contract';
 import {
   buildMetaCatalogExportFileName,
   buildMetaCatalogExportRows,
 } from '../../lib/meta-catalog-shared';
 import { appendSortParams, getSortRuleState, toggleSortRule } from '../../lib/multi-sort';
 import type { PaginationMeta } from '../../lib/pagination';
-import { canExportAllProducts } from '../../lib/permissions';
 import {
   productListQuerySchema,
   type ProductPatch,
@@ -26,14 +26,12 @@ import {
 } from '../../lib/products';
 import { toast } from '../../lib/toast';
 import { cn } from '../../lib/utils';
-import { useAppStore } from '../../store/app-store';
 import { MultiSortHeader } from '../multi-sort-header';
 import { SearchField } from '../search-field';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
 import {
   MetaCatalogExportDialog,
   type MetaCatalogExportPreviewState,
-  type ProductExportJobResponse,
 } from './product-export-presenters';
 import {
   ProductEditorPanel,
@@ -147,7 +145,7 @@ function CompactExportStatus({
   onCancel,
   onDownload,
 }: {
-  job: NonNullable<ProductExportJobResponse['job']>;
+  job: NonNullable<ExportJobResponse['job']>;
   pendingCancel: boolean;
   onCancel: () => void;
   onDownload: () => void;
@@ -174,7 +172,7 @@ function CompactExportStatus({
           <p className="mt-1.5 text-xs text-destructive">{job.errorMessage}</p>
         ) : null}
       </div>
-      {job.status === 'running' ? (
+      {job.status === 'queued' || job.status === 'running' ? (
         <Button
           type="button"
           size="sm"
@@ -197,16 +195,16 @@ function CompactExportStatus({
 export function ProductsWorkspace({
   initialData,
   initialMeta,
+  canExportAll = false,
 }: {
   initialData?: ProductsResponse;
   initialMeta?: ProductsMetaResponse;
+  canExportAll?: boolean;
 }) {
   const t = useTranslations();
   const storefrontBaseUrl = useStorefrontBaseUrl();
   const locale = useLocale();
   const queryClient = useQueryClient();
-  const role = useAppStore((state) => state.role);
-  const canExportEntireCatalog = canExportAllProducts(role);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search.trim());
@@ -369,15 +367,19 @@ export function ProductsWorkspace({
   });
   const exportJobQuery = useQuery({
     queryKey: ['products-export-all-job'],
-    queryFn: () => request<ProductExportJobResponse>('/api/products/export-all'),
-    enabled: canExportEntireCatalog,
+    queryFn: () => request<ExportJobResponse>('/api/products/export-all'),
+    enabled: canExportAll,
     initialData: { job: null },
     staleTime: 0,
-    refetchInterval: (query) => (query.state.data?.job?.status === 'running' ? 1_000 : false),
+    refetchInterval: (query) =>
+      query.state.data?.job?.status === 'queued' || query.state.data?.job?.status === 'running'
+        ? 1_000
+        : false,
   });
+  const exportInProgress =
+    exportJobQuery.data.job?.status === 'queued' || exportJobQuery.data.job?.status === 'running';
   const startExportAllMutation = useMutation({
-    mutationFn: () =>
-      request<ProductExportJobResponse>('/api/products/export-all', { method: 'POST' }),
+    mutationFn: () => request<ExportJobResponse>('/api/products/export-all', { method: 'POST' }),
     onSuccess: async () => {
       toast.success(t('products.exportAll.notifications.start.success'));
       await queryClient.invalidateQueries({ queryKey: ['products-export-all-job'] });
@@ -385,8 +387,7 @@ export function ProductsWorkspace({
     onError: (error: Error) => toast.error(error.message),
   });
   const cancelExportAllMutation = useMutation({
-    mutationFn: () =>
-      request<ProductExportJobResponse>('/api/products/export-all', { method: 'DELETE' }),
+    mutationFn: () => request<ExportJobResponse>('/api/products/export-all', { method: 'DELETE' }),
     onSuccess: async () => {
       toast.success(t('products.exportAll.notifications.cancel.success'));
       await queryClient.invalidateQueries({ queryKey: ['products-export-all-job'] });
@@ -428,12 +429,7 @@ export function ProductsWorkspace({
     setMetaCatalogExportState({
       title: t('products.export.title', { count: selectedProducts.length }),
       fileName: buildMetaCatalogExportFileName(),
-      rows: buildMetaCatalogExportRows(
-        selectedProducts,
-        brandNameById,
-        new Map(selectedProducts.map((product) => [product.id, product.images[0] ?? ''])),
-        storefrontBaseUrl,
-      ),
+      rows: buildMetaCatalogExportRows(selectedProducts, brandNameById, storefrontBaseUrl),
     });
   }
 
@@ -471,17 +467,14 @@ export function ProductsWorkspace({
             >
               {t('productArchive.title')}
             </Link>
-            {canExportEntireCatalog ? (
+            {canExportAll ? (
               <CompactMenu label={t('labels.actions')}>
                 <CompactMenuItem
-                  disabled={
-                    startExportAllMutation.isPending ||
-                    exportJobQuery.data.job?.status === 'running'
-                  }
+                  disabled={startExportAllMutation.isPending || exportInProgress}
                   onClick={() => startExportAllMutation.mutate()}
                 >
                   {t(
-                    exportJobQuery.data.job?.status === 'running'
+                    exportInProgress
                       ? 'products.exportAll.runningAction'
                       : 'products.exportAll.action',
                   )}
@@ -647,7 +640,7 @@ export function ProductsWorkspace({
           </div>
         ) : null}
 
-        {canExportEntireCatalog && exportJobQuery.data.job ? (
+        {canExportAll && exportJobQuery.data.job ? (
           <CompactExportStatus
             job={exportJobQuery.data.job}
             pendingCancel={cancelExportAllMutation.isPending}

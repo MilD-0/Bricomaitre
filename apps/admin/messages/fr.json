@@ -1775,13 +1775,15 @@
         "running": "En cours",
         "completed": "Terminé",
         "cancelled": "Annulé",
-        "failed": "Échoué"
+        "failed": "Échoué",
+        "queued": "En attente"
       },
       "progress": {
         "counting": "Comptage des produits",
         "loading": "Lecture des produits",
         "processing-images": "Préparation des images carrées du catalogue",
-        "packaging": "Création du fichier"
+        "packaging": "Création du fichier",
+        "queued": "En attente du traitement"
       },
       "notifications": {
         "start": {

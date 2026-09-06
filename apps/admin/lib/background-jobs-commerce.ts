@@ -379,23 +379,6 @@ export async function runProductExportJob(
     }
   }
 
-  await helpers.updateProgress({ phase: 'processing-images', current: 0, total: totalProducts });
-  const imageLinkByProductId = new Map<number, string>();
-
-  for (let index = 0; index < productRows.length; index += 1) {
-    await helpers.throwIfCancelled();
-    const product = productRows[index];
-    const primaryImage = product.images[0];
-    if (primaryImage) {
-      imageLinkByProductId.set(product.id, primaryImage);
-    }
-    await helpers.updateProgress({
-      phase: 'processing-images',
-      current: index + 1,
-      total: totalProducts,
-    });
-  }
-
   await helpers.throwIfCancelled();
   await helpers.updateProgress({
     phase: 'packaging',
@@ -403,9 +386,7 @@ export async function runProductExportJob(
     total: totalProducts,
   });
 
-  const workbook = buildMetaCatalogWorkbook(
-    buildMetaCatalogExportRows(productRows, brandNameById, imageLinkByProductId),
-  );
+  const workbook = buildMetaCatalogWorkbook(buildMetaCatalogExportRows(productRows, brandNameById));
   const fileName = buildMetaCatalogExportFileName();
   const downloadUrl = await uploadExportArtifact({
     prefix: 'exports/products',
@@ -461,28 +442,8 @@ export async function runProductCatalogFeedRefreshJob(
     });
   }
 
-  await helpers.updateProgress({ phase: 'processing-images', current: 0, total: totalProducts });
-  const imageLinkByProductId = new Map<number, string>();
-
-  for (let index = 0; index < productRows.length; index += 1) {
-    await helpers.throwIfCancelled();
-    const product = productRows[index];
-    if (product.images[0]) {
-      imageLinkByProductId.set(product.id, product.images[0]);
-    }
-    await helpers.updateProgress({
-      phase: 'processing-images',
-      current: index + 1,
-      total: totalProducts,
-    });
-  }
-
   await helpers.throwIfCancelled();
-  const rows = buildMetaCatalogExportRows(
-    filterCatalogFeedProducts(productRows),
-    brandNameById,
-    imageLinkByProductId,
-  );
+  const rows = buildMetaCatalogExportRows(filterCatalogFeedProducts(productRows), brandNameById);
   const downloadUrl = await uploadStableArtifact({
     key: PRODUCT_CATALOG_FEED_OBJECT_KEY,
     contentType: 'text/csv; charset=utf-8',

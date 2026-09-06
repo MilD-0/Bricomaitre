@@ -33,7 +33,6 @@ describe('buildMetaCatalogExportRows', () => {
         },
       ],
       new Map([[9, 'Acme']]),
-      new Map([[1, 'https://cdn.example.com/square.jpg']]),
     );
 
     expect(rows).toEqual([
@@ -47,7 +46,7 @@ describe('buildMetaCatalogExportRows', () => {
         price: '19.5 DZD',
         salePrice: '',
         link: 'https://bricomaitre.com/products/disabled-stock-toggle',
-        imageLink: 'https://cdn.example.com/square.jpg',
+        imageLink: 'https://cdn.example.com/product.jpg',
         brand: 'Acme',
       },
     ]);
@@ -71,7 +70,6 @@ describe('buildMetaCatalogExportRows', () => {
         },
       ],
       new Map([[9, 'Acme']]),
-      new Map([[2, 'https://cdn.example.com/square-sale.jpg']]),
     );
 
     expect(rows).toEqual([
@@ -85,7 +83,7 @@ describe('buildMetaCatalogExportRows', () => {
         price: '100 DZD',
         salePrice: '80 DZD',
         link: 'https://bricomaitre.com/products/discounted-roller',
-        imageLink: 'https://cdn.example.com/square-sale.jpg',
+        imageLink: 'https://cdn.example.com/product-sale.jpg',
         brand: 'Acme',
       },
     ]);
@@ -111,7 +109,6 @@ describe('buildMetaCatalogExportRows', () => {
         },
       ],
       new Map(),
-      new Map(),
     );
 
     expect(rows[0]?.link).toBe('https://storefront.example.com/products/configured-domain');
@@ -135,7 +132,6 @@ describe('buildMetaCatalogExportRows', () => {
           updatedAt: '2026-04-12T00:00:00.000Z',
         },
       ],
-      new Map(),
       new Map(),
     );
 
@@ -161,7 +157,6 @@ describe('buildMetaCatalogExportRows', () => {
         },
       ],
       new Map([[9, 'Acme']]),
-      new Map(),
     );
 
     const csv = toCsvBuffer(rows).toString('utf8');

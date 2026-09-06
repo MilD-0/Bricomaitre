@@ -83,11 +83,13 @@ vi.mock('../image-upload-field', () => ({
 function renderWorkspace(
   paginationOverrides: Partial<PaginationMeta> = {},
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  canExportAll = false,
 ) {
   return render(
     <QueryClientProvider client={queryClient}>
       <NextIntlClientProvider locale="en" messages={messages}>
         <ProductsWorkspace
+          canExportAll={canExportAll}
           initialData={{
             items: products,
             pagination: {
@@ -112,6 +114,72 @@ function renderWorkspace(
 
 describe('ProductsWorkspace', () => {
   afterEach(() => cleanup());
+
+  it('polls a queued export through completion and prevents another start while waiting', async () => {
+    const user = userEvent.setup();
+    let complete = false;
+    const reads: string[] = [];
+    server.use(
+      http.get('/api/products/export-all', () => {
+        reads.push(complete ? 'completed' : 'queued');
+        return HttpResponse.json({
+          job: {
+            id: 'export-1',
+            status: complete ? 'completed' : 'queued',
+            fileName: null,
+            progress: {
+              phase: complete ? 'packaging' : 'queued',
+              current: 0,
+              total: 0,
+              percentage: complete ? 100 : 0,
+            },
+            errorMessage: null,
+            downloadPath: complete ? '/exports/catalog.xlsx' : null,
+          },
+        });
+      }),
+    );
+    renderWorkspace({}, undefined, true);
+    expect(await screen.findByRole('button', { name: 'Cancel export' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+    expect(screen.getByRole('menuitem', { name: 'Export running' })).toBeDisabled();
+    await user.keyboard('{Escape}');
+    complete = true;
+    expect(await screen.findByRole('button', { name: 'Download export' })).toBeEnabled();
+    expect(reads).toContain('completed');
+    expect(screen.queryByRole('button', { name: 'Cancel export' })).not.toBeInTheDocument();
+  });
+
+  it('cancels an export before a worker starts it', async () => {
+    const user = userEvent.setup();
+    let cancelled = false;
+    server.use(
+      http.get('/api/products/export-all', () =>
+        HttpResponse.json({
+          job: {
+            id: 'export-2',
+            status: cancelled ? 'cancelled' : 'queued',
+            fileName: null,
+            progress: { phase: 'queued', current: 0, total: 0, percentage: 0 },
+            errorMessage: null,
+            downloadPath: null,
+          },
+        }),
+      ),
+      http.delete('/api/products/export-all', () => {
+        cancelled = true;
+        return HttpResponse.json({ job: null });
+      }),
+    );
+    renderWorkspace({}, undefined, true);
+    await user.click(await screen.findByRole('button', { name: 'Cancel export' }));
+    await waitFor(() => expect(cancelled).toBe(true));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Cancel export' })).not.toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+    expect(screen.getByRole('menuitem', { name: 'Export all products' })).toBeEnabled();
+  });
 
   it('renders as the flat integrated products workspace', () => {
     const { container } = renderWorkspace();
