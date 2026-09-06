@@ -440,6 +440,8 @@ export const analyticsCopyFr = {
     defaultReturn: 'Taux de retour par défaut',
     restFrom: 'Repos vendredi actif depuis',
     newCost: 'Ajouter un coût',
+    costRetryRequired:
+      'La réponse a été interrompue. Enregistrez à nouveau pour confirmer cette même dépense avant toute autre modification.',
     monthly: 'Mensuel',
     once: 'Ponctuel',
     amount: 'Montant DZD',
@@ -447,7 +449,7 @@ export const analyticsCopyFr = {
     end: 'Date de fin (optionnel)',
     newOverride: 'Modifier la journée',
     gross: 'Profit brut DZD',
-    confirmed: 'Commandes confirmées',
+    confirmed: 'Commandes postées ou saisies',
     returnRate: 'Taux de retour %',
     notes: 'Note opérateur',
     automatic: 'Automatique',

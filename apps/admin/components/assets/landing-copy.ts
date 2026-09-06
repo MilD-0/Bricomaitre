@@ -25,6 +25,12 @@ export type LandingWorkspaceCopy = {
   stale: string;
   reload: string;
   unsavedConfirm: string;
+  draftFound: string;
+  draftRecover: string;
+  draftChanged: string;
+  restoreDraft: string;
+  discardDraft: string;
+  draftStorageFailed: string;
   pageDetails: string;
   seoTitle: string;
   seoDescription: string;
@@ -78,6 +84,15 @@ const copy: Record<'en' | 'fr' | 'ar', LandingWorkspaceCopy> = {
     stale: 'A newer revision exists. Your edits are still here.',
     reload: 'Reload latest revision',
     unsavedConfirm: 'Leave without saving your changes?',
+    draftFound: 'Unsaved changes from this tab',
+    draftRecover:
+      'Restore your changes to continue editing, or discard them to use the saved page. Nothing is published until you save.',
+    draftChanged:
+      'These changes began at revision {draftRevision}. The saved page is now revision {currentRevision}. Restoring replaces its content in the editor. Review it before saving.',
+    restoreDraft: 'Restore changes',
+    discardDraft: 'Discard changes',
+    draftStorageFailed:
+      'This browser could not keep a recovery copy. Save your changes before leaving this page.',
     pageDetails: 'Page details',
     seoTitle: 'Browser and social title',
     seoDescription: 'Browser and social description',
@@ -129,6 +144,15 @@ const copy: Record<'en' | 'fr' | 'ar', LandingWorkspaceCopy> = {
     stale: 'Une révision plus récente existe. Vos modifications sont conservées.',
     reload: 'Charger la dernière révision',
     unsavedConfirm: 'Quitter sans enregistrer les modifications ?',
+    draftFound: 'Modifications non enregistrées dans cet onglet',
+    draftRecover:
+      'Restaurez vos modifications pour continuer, ou abandonnez-les pour utiliser la page enregistrée. Rien ne sera publié avant votre enregistrement.',
+    draftChanged:
+      'Ces modifications datent de la révision {draftRevision}. La page enregistrée est maintenant à la révision {currentRevision}. Restaurer remplace son contenu dans cet éditeur. Vérifiez-le avant de sauvegarder.',
+    restoreDraft: 'Restaurer les modifications',
+    discardDraft: 'Abandonner les modifications',
+    draftStorageFailed:
+      'Ce navigateur ne peut pas conserver de copie de récupération. Enregistrez vos modifications avant de quitter cette page.',
     pageDetails: 'Détails de la page',
     seoTitle: 'Titre navigateur et réseaux sociaux',
     seoDescription: 'Description navigateur et réseaux sociaux',
@@ -180,6 +204,15 @@ const copy: Record<'en' | 'fr' | 'ar', LandingWorkspaceCopy> = {
     stale: 'توجد مراجعة أحدث، وما زالت تعديلاتك محفوظة هنا.',
     reload: 'تحميل أحدث مراجعة',
     unsavedConfirm: 'المغادرة دون حفظ التغييرات؟',
+    draftFound: 'تغييرات غير محفوظة من علامة التبويب هذه',
+    draftRecover:
+      'استعد تغييراتك لمواصلة التحرير، أو تجاهلها لاستخدام الصفحة المحفوظة. لن يُنشر شيء حتى تحفظ.',
+    draftChanged:
+      'بدأت هذه التغييرات من المراجعة {draftRevision}. الصفحة المحفوظة الآن في المراجعة {currentRevision}. الاستعادة تستبدل محتواها في المحرر. راجعها قبل الحفظ.',
+    restoreDraft: 'استعادة التغييرات',
+    discardDraft: 'تجاهل التغييرات',
+    draftStorageFailed:
+      'تعذّر على هذا المتصفح الاحتفاظ بنسخة للاستعادة. احفظ تغييراتك قبل مغادرة هذه الصفحة.',
     pageDetails: 'تفاصيل الصفحة',
     seoTitle: 'عنوان المتصفح والمشاركة',
     seoDescription: 'وصف المتصفح والمشاركة',

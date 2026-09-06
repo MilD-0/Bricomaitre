@@ -26,6 +26,7 @@ import { SidePanel } from '../ui/side-panel';
 import { Spinner } from '../ui/spinner';
 import { Switch } from '../ui/switch';
 import { Textarea } from '../ui/textarea';
+import { useStorefrontBaseUrl } from '../storefront-origin';
 import { buildDraftPromoHref } from './storefront-links';
 
 export type ProductEditorState =
@@ -55,6 +56,10 @@ const emptyProduct: ProductPayloadInput = {
   images: [],
   promoCodes: [],
 };
+
+function optionalNumericInput(value: unknown) {
+  return value == null || value === '' ? null : Number(value);
+}
 
 function toDateTimeInput(value: string | null | undefined) {
   if (!value) return null;
@@ -103,6 +108,7 @@ export function ProductEditorPanel({
   onChanged: () => Promise<void>;
 }) {
   const t = useTranslations();
+  const storefrontBaseUrl = useStorefrontBaseUrl();
   const form = useForm<ProductPayloadInput>({
     resolver: zodResolver(productPayloadSchema),
     defaultValues: emptyProduct,
@@ -125,6 +131,7 @@ export function ProductEditorPanel({
     staleTime: 0,
   });
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (!state) return;
@@ -171,7 +178,7 @@ export function ProductEditorPanel({
   });
 
   const submit = form.handleSubmit((rawValues) => {
-    saveMutation.mutate(productPayloadSchema.parse(rawValues));
+    if (!uploading) saveMutation.mutate(productPayloadSchema.parse(rawValues));
   });
   const isEdit = state?.mode === 'edit';
   const title = isEdit ? t('labels.editProductTitle') : t('labels.createProductTitle');
@@ -227,7 +234,7 @@ export function ProductEditorPanel({
           </Button>
           <Button
             type="button"
-            disabled={saveMutation.isPending || (isEdit && detailQuery.isFetching)}
+            disabled={uploading || saveMutation.isPending || (isEdit && detailQuery.isFetching)}
             onClick={() => void submit()}
           >
             {saveMutation.isPending ? <Spinner className="size-4" /> : null}
@@ -309,9 +316,14 @@ export function ProductEditorPanel({
                   min="0"
                   step="0.01"
                   {...form.register('purchasePrice', {
-                    setValueAs: (value) => (value === '' ? null : Number(value)),
+                    setValueAs: optionalNumericInput,
                   })}
                 />
+                {form.formState.errors.purchasePrice ? (
+                  <FieldError role="alert">
+                    {form.formState.errors.purchasePrice.message}
+                  </FieldError>
+                ) : null}
               </Field>
               <Field>
                 <FieldLabel htmlFor="selected-product-old-price">
@@ -323,9 +335,12 @@ export function ProductEditorPanel({
                   min="0"
                   step="0.01"
                   {...form.register('oldPrice', {
-                    setValueAs: (value) => (value === '' ? null : Number(value)),
+                    setValueAs: optionalNumericInput,
                   })}
                 />
+                {form.formState.errors.oldPrice ? (
+                  <FieldError role="alert">{form.formState.errors.oldPrice.message}</FieldError>
+                ) : null}
               </Field>
               <Field>
                 <FieldLabel htmlFor="selected-product-quantity">
@@ -338,13 +353,18 @@ export function ProductEditorPanel({
                   step="1"
                   {...form.register('inventoryQuantity', { valueAsNumber: true })}
                 />
+                {form.formState.errors.inventoryQuantity ? (
+                  <FieldError role="alert">
+                    {form.formState.errors.inventoryQuantity.message}
+                  </FieldError>
+                ) : null}
               </Field>
               <Field>
                 <FieldLabel htmlFor="selected-product-brand">{t('nav.brands')}</FieldLabel>
                 <NativeSelect
                   id="selected-product-brand"
                   {...form.register('brandId', {
-                    setValueAs: (value) => (value === '' ? null : Number(value)),
+                    setValueAs: optionalNumericInput,
                   })}
                 >
                   <NativeSelectOption value="">{t('labels.noBrand')}</NativeSelectOption>
@@ -354,13 +374,16 @@ export function ProductEditorPanel({
                     </NativeSelectOption>
                   ))}
                 </NativeSelect>
+                {form.formState.errors.brandId ? (
+                  <FieldError role="alert">{form.formState.errors.brandId.message}</FieldError>
+                ) : null}
               </Field>
               <Field>
                 <FieldLabel htmlFor="selected-product-category">{t('nav.categories')}</FieldLabel>
                 <NativeSelect
                   id="selected-product-category"
                   {...form.register('categoryId', {
-                    setValueAs: (value) => (value === '' ? null : Number(value)),
+                    setValueAs: optionalNumericInput,
                   })}
                 >
                   <NativeSelectOption value="">{t('labels.noCategory')}</NativeSelectOption>
@@ -370,6 +393,9 @@ export function ProductEditorPanel({
                     </NativeSelectOption>
                   ))}
                 </NativeSelect>
+                {form.formState.errors.categoryId ? (
+                  <FieldError role="alert">{form.formState.errors.categoryId.message}</FieldError>
+                ) : null}
               </Field>
             </div>
             <div className="mt-5 grid gap-px overflow-hidden rounded-[var(--shape-radius-card)] border border-border/60 bg-border/60 sm:grid-cols-2">
@@ -450,8 +476,15 @@ export function ProductEditorPanel({
                         </FieldLabel>
                         <Input
                           id={`selected-promo-code-${field.id}`}
+                          aria-invalid={Boolean(form.formState.errors.promoCodes?.[index]?.code)}
+                          aria-describedby={`promo-code-error-${field.id}`}
                           {...form.register(`promoCodes.${index}.code`)}
                         />
+                        {form.formState.errors.promoCodes?.[index]?.code ? (
+                          <FieldError id={`promo-code-error-${field.id}`} role="alert">
+                            {form.formState.errors.promoCodes[index].code?.message}
+                          </FieldError>
+                        ) : null}
                       </Field>
                       <Field>
                         <FieldLabel htmlFor={`selected-promo-price-${field.id}`}>
@@ -462,10 +495,19 @@ export function ProductEditorPanel({
                           type="number"
                           min="0"
                           step="0.01"
+                          aria-invalid={Boolean(
+                            form.formState.errors.promoCodes?.[index]?.promoPrice,
+                          )}
+                          aria-describedby={`promo-promoPrice-error-${field.id}`}
                           {...form.register(`promoCodes.${index}.promoPrice`, {
                             valueAsNumber: true,
                           })}
                         />
+                        {form.formState.errors.promoCodes?.[index]?.promoPrice ? (
+                          <FieldError id={`promo-promoPrice-error-${field.id}`} role="alert">
+                            {form.formState.errors.promoCodes[index].promoPrice?.message}
+                          </FieldError>
+                        ) : null}
                       </Field>
                       <Field>
                         <FieldLabel htmlFor={`selected-promo-start-${field.id}`}>
@@ -474,8 +516,17 @@ export function ProductEditorPanel({
                         <Input
                           id={`selected-promo-start-${field.id}`}
                           type="datetime-local"
+                          aria-invalid={Boolean(
+                            form.formState.errors.promoCodes?.[index]?.startsAt,
+                          )}
+                          aria-describedby={`promo-startsAt-error-${field.id}`}
                           {...form.register(`promoCodes.${index}.startsAt`)}
                         />
+                        {form.formState.errors.promoCodes?.[index]?.startsAt ? (
+                          <FieldError id={`promo-startsAt-error-${field.id}`} role="alert">
+                            {form.formState.errors.promoCodes[index].startsAt?.message}
+                          </FieldError>
+                        ) : null}
                       </Field>
                       <Field>
                         <FieldLabel htmlFor={`selected-promo-end-${field.id}`}>
@@ -484,8 +535,15 @@ export function ProductEditorPanel({
                         <Input
                           id={`selected-promo-end-${field.id}`}
                           type="datetime-local"
+                          aria-invalid={Boolean(form.formState.errors.promoCodes?.[index]?.endsAt)}
+                          aria-describedby={`promo-endsAt-error-${field.id}`}
                           {...form.register(`promoCodes.${index}.endsAt`)}
                         />
+                        {form.formState.errors.promoCodes?.[index]?.endsAt ? (
+                          <FieldError id={`promo-endsAt-error-${field.id}`} role="alert">
+                            {form.formState.errors.promoCodes[index].endsAt?.message}
+                          </FieldError>
+                        ) : null}
                       </Field>
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
@@ -508,7 +566,7 @@ export function ProductEditorPanel({
                           onClick={async () => {
                             try {
                               await navigator.clipboard.writeText(
-                                buildDraftPromoHref(draftValues, code),
+                                buildDraftPromoHref(draftValues, code, storefrontBaseUrl),
                               );
                               toast.success(t('products.promos.copySuccess'));
                             } catch {
@@ -558,6 +616,7 @@ export function ProductEditorPanel({
 
           <FormSection title={t('labels.images')}>
             <ImageUploadField
+              onUploadingChange={setUploading}
               uploadUrl="/api/uploads/products"
               label={t('labels.images')}
               multiple

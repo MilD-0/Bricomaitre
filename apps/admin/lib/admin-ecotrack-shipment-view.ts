@@ -24,6 +24,7 @@ import { readEcotrackCatalog } from './ecotrack';
 import type { EcotrackShipmentListQuery } from './ecotrack-shipment-list';
 import { sanitizeNullableText } from './ecotrack-shipment-status';
 import { orderProductSearchCondition } from './order-product-search';
+import { orderIdentifierSearchCondition } from './order-search';
 import type {
   EcotrackDatabase as Database,
   EcotrackShipmentRow as ShipmentRow,
@@ -194,6 +195,20 @@ export async function loadActiveShipmentPageRows(
   now = new Date(),
 ) {
   const search = query.search ? `%${query.search}%` : null;
+  const identifierSearch = await orderIdentifierSearchCondition(db, query.search);
+  const exactTracking =
+    query.search && !identifierSearch
+      ? await db
+          .select({ id: ecotrackOrderStates.id })
+          .from(ecotrackOrderStates)
+          .where(
+            and(
+              isNull(ecotrackOrderStates.deletedAt),
+              eq(ecotrackOrderStates.trackingNumber, query.search.toUpperCase()),
+            ),
+          )
+          .limit(1)
+      : [];
   const where = and(
     isNull(ecotrackOrderStates.deletedAt),
     query.status === 'all' ? undefined : eq(ecotrackOrderStates.currentStatus, query.status),
@@ -211,18 +226,21 @@ export async function loadActiveShipmentPageRows(
         )
       : undefined,
     search
-      ? or(
-          ilike(ecotrackOrderStates.trackingNumber, search),
-          sql`concat_ws(' ', ${orders.firstName}, ${orders.lastName}) ILIKE ${search}`,
-          ilike(orders.phoneNumber1, search),
-          ilike(orders.phoneNumber2, search),
-          ilike(orders.homeAddress, search),
-          ilike(orders.city, search),
-          ilike(ecotrackWilayas.name, search),
-          sql`cast(${orders.state} as text) ILIKE ${search}`,
-          ilike(ecotrackOrderStates.currentStatus, search),
-          orderProductSearchCondition(query.search),
-        )
+      ? (identifierSearch ??
+          (exactTracking.length
+            ? eq(ecotrackOrderStates.id, exactTracking[0]!.id)
+            : or(
+                ilike(ecotrackOrderStates.trackingNumber, search),
+                sql`concat_ws(' ', ${orders.firstName}, ${orders.lastName}) ILIKE ${search}`,
+                ilike(orders.phoneNumber1, search),
+                ilike(orders.phoneNumber2, search),
+                ilike(orders.homeAddress, search),
+                ilike(orders.city, search),
+                ilike(ecotrackWilayas.name, search),
+                sql`cast(${orders.state} as text) ILIKE ${search}`,
+                ilike(ecotrackOrderStates.currentStatus, search),
+                orderProductSearchCondition(query.search),
+              )))
       : undefined,
   );
   const [{ value: totalItems = 0 }] = await db

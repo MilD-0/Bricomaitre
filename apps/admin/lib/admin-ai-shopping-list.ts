@@ -7,12 +7,11 @@ import { getDb } from '@bric/db/client';
 import { brands, products } from '@bric/db/schema';
 
 import type { ActionActor } from './action-history';
-import { applyAdminInventoryBatch } from './admin-inventory-workflow';
+import { applyShoppingListInventory } from './shopping-list-inventory.server';
 import { loadOrderDetail, loadOrdersPageData } from './admin-orders-data';
 import { ORDER_STATUS, parseNumericAmount, type OrderStatus } from './orders';
 import {
   buildGeneratedShoppingListDraft,
-  buildShoppingListInventoryPreview,
   buildShoppingListScopeKey,
   mergeShoppingListDraft,
   type ShoppingListDraftPayload,
@@ -357,7 +356,7 @@ export async function applyAdminAiShoppingListInventory(
       selectionSkipped.push({ draftId, productId: null, reason: 'missing_draft_line' });
     } else if (item.productId == null) {
       selectionSkipped.push({ draftId, productId: null, reason: 'unmatched_product' });
-    } else if (item.checked) {
+    } else if (item.inventoryAppliedQuantity >= item.quantity) {
       selectionSkipped.push({ draftId, productId: item.productId, reason: 'already_applied' });
     } else if (!item.inventoryActionEligible || item.inventoryDecreaseQuantity <= 0) {
       selectionSkipped.push({
@@ -370,7 +369,7 @@ export async function applyAdminAiShoppingListInventory(
   const candidates = draft.draftItems.filter(
     (item) =>
       item.productId != null &&
-      !item.checked &&
+      item.inventoryAppliedQuantity < item.quantity &&
       item.inventoryActionEligible &&
       item.inventoryDecreaseQuantity > 0 &&
       (values.selection === 'all' || requestedIds.has(item.draftId)),
@@ -386,7 +385,7 @@ export async function applyAdminAiShoppingListInventory(
     };
   }
 
-  const result = await applyAdminInventoryBatch(
+  const result = await applyShoppingListInventory(
     db,
     {
       requestId: createHash('sha256')
@@ -399,40 +398,14 @@ export async function applyAdminAiShoppingListInventory(
           }),
         )
         .digest('hex'),
-      mode: 'decrease',
-      items: candidates.map((item) => ({
-        productId: item.productId!,
-        quantity: item.inventoryDecreaseQuantity,
-        source: {
-          type: 'shopping-list' as const,
-          orderIds: draft.orders.map((order) => order.orderId),
-        },
-      })),
+      sourceMode: draft.sourceMode,
+      orderIds: draft.orderIds,
+      revision: draft.revision,
+      draftIds: candidates.map((item) => item.draftId),
     },
     actor,
   );
-  const appliedByProduct = new Map(result.items.map((item) => [item.productId, item]));
-  const nextPayload: ShoppingListDraftPayload = {
-    ...draft,
-    draftItems: draft.draftItems.map((item) => {
-      if (item.productId == null) return item;
-      const applied = appliedByProduct.get(item.productId);
-      if (!applied) return item;
-      return {
-        ...item,
-        inventoryQuantity: applied.nextQuantity,
-        ...buildShoppingListInventoryPreview(item.quantity, applied.nextQuantity),
-        inventoryAppliedQuantity:
-          item.inventoryAppliedQuantity + (applied.previousQuantity - applied.nextQuantity),
-        checked: true,
-      };
-    }),
-  };
-  const saved = await saveAdminShoppingListDraft(
-    db,
-    { ...nextPayload, revision: draft.revision },
-    actor,
-  );
+  const saved = result.draft;
   const appliedUnits = result.items.reduce(
     (total, item) => total + item.previousQuantity - item.nextQuantity,
     0,

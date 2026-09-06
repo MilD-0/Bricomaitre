@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -177,6 +177,9 @@ describe('migration rollback-safety verification', () => {
       JSON.stringify({
         version: 1,
         exceptions: [
+          ...JSON.parse(
+            readFileSync(join(workspaceRoot, 'ops/migration-rollback-exceptions.json'), 'utf8'),
+          ).exceptions,
           {
             migration: '0088_petite_enchantress.sql',
             sha256: '26f02b2b0c6a8e6e763499ec85526ab72209da603dd26d58b7f0bcc62bc9f815',
@@ -236,7 +239,7 @@ describe('migration rollback-safety verification', () => {
 
     expect(build.status).toBe(0);
     const result = run(previous, candidate);
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain('88 historical and 10 new migration');
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('88 historical and 12 new migration');
   });
 });

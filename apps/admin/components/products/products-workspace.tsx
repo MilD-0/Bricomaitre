@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- Operational catalog images include legacy external origins. */
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { PackageOpen, Plus, SlidersHorizontal, X } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useDeferredValue, useMemo, useState } from 'react';
@@ -39,6 +40,7 @@ import {
   type ProductEditorState,
   type ProductsCatalogOptions,
 } from './product-editor-panel';
+import { useStorefrontBaseUrl } from '../storefront-origin';
 import { buildStorefrontProductHref } from './storefront-links';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
@@ -200,6 +202,7 @@ export function ProductsWorkspace({
   initialMeta?: ProductsMetaResponse;
 }) {
   const t = useTranslations();
+  const storefrontBaseUrl = useStorefrontBaseUrl();
   const locale = useLocale();
   const queryClient = useQueryClient();
   const role = useAppStore((state) => state.role);
@@ -404,6 +407,7 @@ export function ProductsWorkspace({
         selectedProducts,
         brandNameById,
         new Map(selectedProducts.map((product) => [product.id, product.images[0] ?? ''])),
+        storefrontBaseUrl,
       ),
     });
   }
@@ -436,6 +440,12 @@ export function ProductsWorkspace({
             }
           />
           <WorkspaceActions>
+            <Link
+              href={`/${locale}/archive`}
+              className="px-2 py-2 text-sm text-muted-foreground hover:text-foreground hover:underline"
+            >
+              {t('productArchive.title')}
+            </Link>
             {canExportEntireCatalog ? (
               <CompactMenu label={t('labels.actions')}>
                 <CompactMenuItem
@@ -651,7 +661,7 @@ export function ProductsWorkspace({
                 <ProductThumbnail product={product} />
                 <span className="min-w-0">
                   <a
-                    href={buildStorefrontProductHref(product)}
+                    href={buildStorefrontProductHref(product, storefrontBaseUrl)}
                     target="_blank"
                     rel="noreferrer"
                     className="block truncate text-sm font-semibold underline-offset-4 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"
@@ -786,7 +796,7 @@ export function ProductsWorkspace({
                       <ProductThumbnail product={product} />
                       <span className="min-w-0">
                         <a
-                          href={buildStorefrontProductHref(product)}
+                          href={buildStorefrontProductHref(product, storefrontBaseUrl)}
                           target="_blank"
                           rel="noreferrer"
                           className="block truncate font-medium underline-offset-4 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"
@@ -876,6 +886,7 @@ export function ProductsWorkspace({
       </WorkspaceFrame>
 
       <ProductEditorPanel
+        key={editorState ? (editorState.product?.id ?? 'create') : 'closed'}
         state={editorState}
         meta={metaQuery.data ?? { brands: [], categories: [] }}
         onClose={() => setEditorState(null)}

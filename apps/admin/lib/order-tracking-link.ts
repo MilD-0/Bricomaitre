@@ -1,3 +1,4 @@
+import { getStorefrontPublicBaseUrl } from './storefront-public-url';
 const DEFAULT_STOREFRONT_BASE_URL = 'https://bricomaitre.com';
 
 function normalizeBaseUrl(value: string) {
@@ -7,7 +8,7 @@ function normalizeBaseUrl(value: string) {
 export function buildOrderTrackingUrl(
   publicToken: string | null | undefined,
   locale: string,
-  baseUrl = process.env.NEXT_PUBLIC_STOREFRONT_BASE_URL,
+  baseUrl = getStorefrontPublicBaseUrl(),
 ) {
   const token = publicToken?.trim();
   if (!token) return null;

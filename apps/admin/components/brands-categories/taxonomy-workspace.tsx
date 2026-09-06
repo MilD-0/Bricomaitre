@@ -5,6 +5,7 @@
 import { ImageIcon, Plus, Search } from 'lucide-react';
 import { useLocale } from 'next-intl';
 import * as React from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { requestJson } from '../../lib/admin-api';
 import { taxonomyAiSurfaceDetails } from '../../lib/admin-ai-live-surface-details';
@@ -86,6 +87,7 @@ function TaxonomyThumbnail({ item }: { item: TaxonomyRow }) {
 }
 
 export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
+  const queryClient = useQueryClient();
   const localeValue = useLocale();
   const locale = localeValue === 'ar' || localeValue === 'fr' ? localeValue : 'en';
   const t = getTaxonomyCopy(locale);
@@ -176,6 +178,7 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
     setPending(true);
     try {
       await operation();
+      await queryClient.invalidateQueries({ queryKey: ['products-meta-workspace'] });
       await load();
       if (closeEditor) setEditor(null);
       toast.success(success);

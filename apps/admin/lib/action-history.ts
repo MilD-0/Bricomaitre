@@ -1,14 +1,36 @@
-import { and, asc, count, desc, eq, getTableColumns, ilike, isNull, ne, or } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  ilike,
+  inArray,
+  isNull,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { getDb } from '@bric/db/client';
 import { parseSortRuleStrings } from './multi-sort';
 import { normalizePermissions } from './permissions';
 import {
+  assertProductAllocationsCanBeDeleted,
+  lockStockAllocationHistory,
+  parseStockAllocationChange,
+  restoreStockAllocationHistory,
+  StockAllocationHistoryConflictError,
+} from './stock-allocation-history';
+import {
   actionLogs,
   adCosts,
   assetBanners,
   brands,
+  bulletinPostAttachments,
+  bulletinPostTags,
   bulletinPostReactions,
   bulletinPosts,
   bulletinReplies,
@@ -187,13 +209,87 @@ export type ActionHistoryListResult = {
   pagination: ActionHistoryPagination;
 };
 
+const bulletinRelatedTables = {
+  tags: bulletinPostTags,
+  attachments: bulletinPostAttachments,
+  replies: bulletinReplies,
+  reactions: bulletinPostReactions,
+  replyReactions: bulletinReplyReactions,
+};
+
+async function restoreBulletinRows(
+  tx: Transaction,
+  snapshot: SnapshotRecord,
+  keys: Array<keyof typeof bulletinRelatedTables>,
+) {
+  for (const key of keys) {
+    const rows = snapshot[key];
+    if (!Array.isArray(rows) || !rows.length) continue;
+    const table = bulletinRelatedTables[key];
+    const allowedKeys = new Set(Object.keys(getTableColumns(table)));
+    await tx
+      .insert(table)
+      .values(
+        rows.map(
+          (row) =>
+            cleanSnapshot(
+              reviveSnapshot(row as SnapshotRecord, ['createdAt', 'updatedAt']),
+              allowedKeys,
+            ) as never,
+        ),
+      );
+  }
+}
+
+async function fetchBulletinPostState(tx: Database | Transaction, entityId: number) {
+  const [post] = await tx
+    .select()
+    .from(bulletinPosts)
+    .where(eq(bulletinPosts.id, entityId))
+    .limit(1);
+  if (!post) return null;
+  const tags = await tx
+    .select()
+    .from(bulletinPostTags)
+    .where(eq(bulletinPostTags.postId, entityId))
+    .orderBy(asc(bulletinPostTags.tagId));
+  const attachments = await tx
+    .select()
+    .from(bulletinPostAttachments)
+    .where(eq(bulletinPostAttachments.postId, entityId))
+    .orderBy(asc(bulletinPostAttachments.id));
+  const replies = await tx
+    .select()
+    .from(bulletinReplies)
+    .where(eq(bulletinReplies.postId, entityId))
+    .orderBy(asc(bulletinReplies.id));
+  const reactions = await tx
+    .select()
+    .from(bulletinPostReactions)
+    .where(eq(bulletinPostReactions.postId, entityId))
+    .orderBy(asc(bulletinPostReactions.id));
+  const replyReactions = replies.length
+    ? await tx
+        .select()
+        .from(bulletinReplyReactions)
+        .where(
+          inArray(
+            bulletinReplyReactions.replyId,
+            replies.map((reply) => reply.id),
+          ),
+        )
+        .orderBy(asc(bulletinReplyReactions.id))
+    : [];
+  return { ...post, tags, attachments, replies, reactions, replyReactions };
+}
+
 const entityConfigs: Record<string, MutableEntityConfig> = {
   products: {
     entityType: 'products',
     resource: 'products',
     table: products,
     label: (row) => String(row.title ?? row.slug ?? `#${row.id ?? 'unknown'}`),
-    timestampKeys: ['createdAt', 'updatedAt', 'publishedAt'],
+    timestampKeys: ['createdAt', 'updatedAt', 'publishedAt', 'archivedAt'],
   },
   orders: {
     entityType: 'orders',
@@ -240,6 +336,38 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
     table: bulletinPosts,
     label: (row) => String(row.title ?? `#${row.id ?? 'unknown'}`),
     timestampKeys: ['createdAt', 'updatedAt'],
+    fetchState: fetchBulletinPostState,
+    insertState: async (tx, snapshot) => {
+      await tx
+        .insert(bulletinPosts)
+        .values(
+          cleanSnapshot(snapshot, new Set(Object.keys(getTableColumns(bulletinPosts)))) as never,
+        );
+      await restoreBulletinRows(tx, snapshot, [
+        'tags',
+        'attachments',
+        'replies',
+        'reactions',
+        'replyReactions',
+      ]);
+    },
+    updateState: async (tx, entityId, snapshot) => {
+      await tx
+        .update(bulletinPosts)
+        .set(cleanSnapshot(snapshot, new Set(Object.keys(getTableColumns(bulletinPosts)))) as never)
+        .where(eq(bulletinPosts.id, entityId));
+      // Post edits own tags and attachments. Replies and reactions may have been
+      // added independently since that edit and must not be replaced by undo.
+      if (Array.isArray(snapshot.tags)) {
+        await tx.delete(bulletinPostTags).where(eq(bulletinPostTags.postId, entityId));
+      }
+      if (Array.isArray(snapshot.attachments)) {
+        await tx
+          .delete(bulletinPostAttachments)
+          .where(eq(bulletinPostAttachments.postId, entityId));
+      }
+      await restoreBulletinRows(tx, snapshot, ['tags', 'attachments']);
+    },
   },
   bulletinReplies: {
     entityType: 'bulletinReplies',
@@ -247,6 +375,28 @@ const entityConfigs: Record<string, MutableEntityConfig> = {
     table: bulletinReplies,
     label: (row) => String(row.body ?? `#${row.id ?? 'unknown'}`),
     timestampKeys: ['createdAt', 'updatedAt'],
+    fetchState: async (tx, entityId) => {
+      const [reply] = await tx
+        .select()
+        .from(bulletinReplies)
+        .where(eq(bulletinReplies.id, entityId))
+        .limit(1);
+      if (!reply) return null;
+      const replyReactions = await tx
+        .select()
+        .from(bulletinReplyReactions)
+        .where(eq(bulletinReplyReactions.replyId, entityId))
+        .orderBy(asc(bulletinReplyReactions.id));
+      return { ...reply, replyReactions };
+    },
+    insertState: async (tx, snapshot) => {
+      await tx
+        .insert(bulletinReplies)
+        .values(
+          cleanSnapshot(snapshot, new Set(Object.keys(getTableColumns(bulletinReplies)))) as never,
+        );
+      await restoreBulletinRows(tx, snapshot, ['replyReactions']);
+    },
   },
   bulletinPostReactions: {
     entityType: 'bulletinPostReactions',
@@ -584,7 +734,13 @@ export function getActionHistoryChanges(
 ): ActionHistoryChange[] {
   const beforeState = isRecord(entry.beforeState) ? entry.beforeState : {};
   const afterState = isRecord(entry.afterState) ? entry.afterState : {};
-  const ignoredKeys = new Set(['id', 'createdAt', 'updatedAt']);
+  const ignoredKeys = new Set([
+    'id',
+    'createdAt',
+    'updatedAt',
+    'stockAllocations',
+    'stockHistoryVersion',
+  ]);
 
   return [...new Set([...Object.keys(beforeState), ...Object.keys(afterState)])]
     .filter((key) => !ignoredKeys.has(key))
@@ -760,6 +916,9 @@ async function updateEntity(
 }
 
 async function deleteEntity(tx: Transaction, entityType: string, entityId: number) {
+  if (entityType === 'products') {
+    await assertProductAllocationsCanBeDeleted(tx, entityId);
+  }
   const config = getActionEntityConfig(entityType);
 
   if (!config) {
@@ -857,6 +1016,7 @@ export async function mutateEntityWithHistory<T>(
     execute: (tx: Transaction) => Promise<T>;
     resolveEntityId?: (result: T) => number;
     isReversible?: boolean;
+    snapshotFields?: { before?: SnapshotRecord; after?: SnapshotRecord };
   },
 ) {
   return db.transaction((tx) => mutateEntityWithHistoryTransaction(tx, params));
@@ -872,8 +1032,14 @@ export async function mutateEntityWithHistoryTransaction<T>(
     execute: (tx: Transaction) => Promise<T>;
     resolveEntityId?: (result: T) => number;
     isReversible?: boolean;
+    snapshotFields?: { before?: SnapshotRecord; after?: SnapshotRecord };
   },
 ) {
+  if (params.entityType === 'products' && params.entityId) {
+    // A product snapshot must include stock changes committed before this mutation.
+    await tx.execute(sql`select ${products.id} from ${products}
+      where ${products.id} = ${params.entityId} for update`);
+  }
   const beforeState = params.entityId
     ? await fetchEntity(tx, params.entityType, params.entityId)
     : null;
@@ -887,12 +1053,17 @@ export async function mutateEntityWithHistoryTransaction<T>(
   const afterState =
     params.operation === 'delete' ? null : await fetchEntity(tx, params.entityType, entityId);
 
+  const historyVersion = params.entityType === 'products' ? { stockHistoryVersion: 1 } : {};
   await recordActionLog(tx, {
     entityType: params.entityType,
     entityId,
     operation: params.operation,
-    beforeState,
-    afterState,
+    beforeState: beforeState
+      ? { ...beforeState, ...historyVersion, ...params.snapshotFields?.before }
+      : null,
+    afterState: afterState
+      ? { ...afterState, ...historyVersion, ...params.snapshotFields?.after }
+      : null,
     actor: params.actor,
     isReversible: params.isReversible,
   });
@@ -977,120 +1148,170 @@ export async function applyHistoryAction(
     actor?: ActionActor;
   },
 ) {
-  return db.transaction(async (tx) => {
-    const [entry] = await tx
-      .select()
-      .from(actionLogs)
-      .where(eq(actionLogs.id, params.actionLogId))
-      .limit(1);
+  return db
+    .transaction(async (tx) => {
+      const [entry] = await tx
+        .select()
+        .from(actionLogs)
+        .where(eq(actionLogs.id, params.actionLogId))
+        .for('update')
+        .limit(1);
 
-    if (!entry) {
-      throw new ActionHistoryConflictError('Action log not found');
-    }
+      if (!entry) {
+        throw new ActionHistoryConflictError('Action log not found');
+      }
 
-    if (params.direction === 'undo' && entry.isUndone) {
-      throw new ActionHistoryConflictError('Action already undone');
-    }
+      if (params.direction === 'undo' && entry.isUndone) {
+        throw new ActionHistoryConflictError('Action already undone');
+      }
 
-    if (params.direction === 'redo' && !entry.isUndone) {
-      throw new ActionHistoryConflictError('Action has not been undone');
-    }
+      if (params.direction === 'redo' && !entry.isUndone) {
+        throw new ActionHistoryConflictError('Action has not been undone');
+      }
 
-    if (!entry.isReversible) {
-      throw new ActionHistoryConflictError(
-        params.direction === 'undo'
-          ? 'This action cannot be undone.'
-          : 'This action cannot be redone.',
+      if (!entry.isReversible) {
+        throw new ActionHistoryConflictError(
+          params.direction === 'undo'
+            ? 'This action cannot be undone.'
+            : 'This action cannot be redone.',
+        );
+      }
+
+      const config = getActionEntityConfig(entry.entityType);
+
+      if (!config) {
+        throw new ActionHistoryConflictError(`Unsupported entity type: ${entry.entityType}`);
+      }
+
+      const stockAllocations =
+        entry.entityType === 'products'
+          ? parseStockAllocationChange(
+              isRecord(entry.beforeState) ? entry.beforeState.stockAllocations : undefined,
+              isRecord(entry.afterState) ? entry.afterState.stockAllocations : undefined,
+              entry.entityId,
+            )
+          : null;
+      if (
+        entry.entityType === 'products' &&
+        entry.operation === 'update' &&
+        !stockAllocations &&
+        isRecord(entry.beforeState) &&
+        isRecord(entry.afterState) &&
+        entry.beforeState.inventoryQuantity !== entry.afterState.inventoryQuantity &&
+        (entry.beforeState.stockHistoryVersion !== 1 || entry.afterState.stockHistoryVersion !== 1)
+      ) {
+        throw new ActionHistoryConflictError(
+          'This older stock action has no order-allocation history and cannot be safely recovered.',
+        );
+      }
+      if (stockAllocations) {
+        if (entry.operation !== 'update') {
+          throw new StockAllocationHistoryConflictError(
+            'Stock allocation history must update a product.',
+          );
+        }
+        await lockStockAllocationHistory(tx, entry.entityId, stockAllocations.before);
+      } else if (entry.entityType === 'products') {
+        // Read the recovery sequence only after concurrent stock mutations finish.
+        await tx.execute(sql`select ${products.id} from ${products}
+        where ${products.id} = ${entry.entityId} for update`);
+      }
+
+      const entityHistory = await tx
+        .select({
+          id: actionLogs.id,
+          isUndone: actionLogs.isUndone,
+        })
+        .from(actionLogs)
+        .where(
+          and(eq(actionLogs.entityType, entry.entityType), eq(actionLogs.entityId, entry.entityId)),
+        )
+        .orderBy(asc(actionLogs.createdAt), asc(actionLogs.id));
+
+      if (!entityHistory.some((historyEntry) => historyEntry.id === entry.id)) {
+        throw new ActionHistoryConflictError('Action log history is unavailable');
+      }
+
+      const recovery = resolveActionHistoryRecovery(entry, entityHistory);
+      if (recovery.nextAction !== params.direction) {
+        const message =
+          recovery.blockedReason === 'history_out_of_sync'
+            ? 'Action history is out of sync'
+            : params.direction === 'undo'
+              ? 'Only the latest applied action can be undone'
+              : 'Only the next undone action can be redone';
+        throw new ActionHistoryConflictError(message);
+      }
+
+      const beforeState = reviveSnapshot(
+        entry.beforeState as SnapshotRecord | null,
+        config.timestampKeys,
       );
-    }
+      const afterState = reviveSnapshot(
+        entry.afterState as SnapshotRecord | null,
+        config.timestampKeys,
+      );
 
-    const config = getActionEntityConfig(entry.entityType);
+      if (params.direction === 'undo') {
+        if (entry.operation === 'create') {
+          await deleteEntity(tx, entry.entityType, entry.entityId);
+        }
+        if (entry.operation === 'update' && beforeState) {
+          await updateEntity(tx, entry.entityType, entry.entityId, beforeState);
+        }
+        if (entry.operation === 'delete' && beforeState) {
+          await insertEntity(tx, entry.entityType, beforeState);
+        }
 
-    if (!config) {
-      throw new ActionHistoryConflictError(`Unsupported entity type: ${entry.entityType}`);
-    }
+        if (stockAllocations) {
+          await restoreStockAllocationHistory(tx, stockAllocations.after, stockAllocations.before);
+        }
 
-    const entityHistory = await tx
-      .select({
-        id: actionLogs.id,
-        isUndone: actionLogs.isUndone,
-      })
-      .from(actionLogs)
-      .where(
-        and(eq(actionLogs.entityType, entry.entityType), eq(actionLogs.entityId, entry.entityId)),
-      )
-      .orderBy(asc(actionLogs.createdAt), asc(actionLogs.id));
+        await tx
+          .update(actionLogs)
+          .set({
+            isUndone: true,
+            undoneAt: new Date(),
+            undoneBy: params.actor?.email ?? null,
+            updatedAt: new Date(),
+          })
+          .where(eq(actionLogs.id, params.actionLogId));
 
-    if (!entityHistory.some((historyEntry) => historyEntry.id === entry.id)) {
-      throw new ActionHistoryConflictError('Action log history is unavailable');
-    }
+        return { ...entry, isUndone: true };
+      }
 
-    const recovery = resolveActionHistoryRecovery(entry, entityHistory);
-    if (recovery.nextAction !== params.direction) {
-      const message =
-        recovery.blockedReason === 'history_out_of_sync'
-          ? 'Action history is out of sync'
-          : params.direction === 'undo'
-            ? 'Only the latest applied action can be undone'
-            : 'Only the next undone action can be redone';
-      throw new ActionHistoryConflictError(message);
-    }
-
-    const beforeState = reviveSnapshot(
-      entry.beforeState as SnapshotRecord | null,
-      config.timestampKeys,
-    );
-    const afterState = reviveSnapshot(
-      entry.afterState as SnapshotRecord | null,
-      config.timestampKeys,
-    );
-
-    if (params.direction === 'undo') {
-      if (entry.operation === 'create') {
+      if (entry.operation === 'create' && afterState) {
+        await insertEntity(tx, entry.entityType, afterState);
+      }
+      if (entry.operation === 'update' && afterState) {
+        await updateEntity(tx, entry.entityType, entry.entityId, afterState);
+      }
+      if (entry.operation === 'delete') {
         await deleteEntity(tx, entry.entityType, entry.entityId);
       }
-      if (entry.operation === 'update' && beforeState) {
-        await updateEntity(tx, entry.entityType, entry.entityId, beforeState);
-      }
-      if (entry.operation === 'delete' && beforeState) {
-        await insertEntity(tx, entry.entityType, beforeState);
+
+      if (stockAllocations) {
+        await restoreStockAllocationHistory(tx, stockAllocations.before, stockAllocations.after);
       }
 
       await tx
         .update(actionLogs)
         .set({
-          isUndone: true,
-          undoneAt: new Date(),
-          undoneBy: params.actor?.email ?? null,
+          isUndone: false,
+          redoneAt: new Date(),
+          redoneBy: params.actor?.email ?? null,
           updatedAt: new Date(),
         })
         .where(eq(actionLogs.id, params.actionLogId));
 
-      return { ...entry, isUndone: true };
-    }
-
-    if (entry.operation === 'create' && afterState) {
-      await insertEntity(tx, entry.entityType, afterState);
-    }
-    if (entry.operation === 'update' && afterState) {
-      await updateEntity(tx, entry.entityType, entry.entityId, afterState);
-    }
-    if (entry.operation === 'delete') {
-      await deleteEntity(tx, entry.entityType, entry.entityId);
-    }
-
-    await tx
-      .update(actionLogs)
-      .set({
-        isUndone: false,
-        redoneAt: new Date(),
-        redoneBy: params.actor?.email ?? null,
-        updatedAt: new Date(),
-      })
-      .where(eq(actionLogs.id, params.actionLogId));
-
-    return { ...entry, isUndone: false };
-  });
+      return { ...entry, isUndone: false };
+    })
+    .catch((error: unknown) => {
+      if (error instanceof StockAllocationHistoryConflictError) {
+        throw new ActionHistoryConflictError(error.message);
+      }
+      throw error;
+    });
 }
 
 export function toActionHistoryItem(entry: ActionLogEntry) {

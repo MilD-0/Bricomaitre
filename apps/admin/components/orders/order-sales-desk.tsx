@@ -84,6 +84,16 @@ export function OrderSalesDesk({
     setCreated(null);
   }
 
+  function closeCreate() {
+    setCreateOpen(false);
+    reset();
+  }
+
+  function openOrder(id: number) {
+    closeCreate();
+    onOpenOrder(id);
+  }
+
   async function createOrder() {
     const name = splitOrderFullNameDraft(fullName);
     setSaving(true);
@@ -267,7 +277,7 @@ export function OrderSalesDesk({
                     <button
                       type="button"
                       className="underline"
-                      onClick={() => onOpenOrder(candidate.id)}
+                      onClick={() => openOrder(candidate.id)}
                     >
                       #{candidate.id} · {new Date(candidate.createdAt).toLocaleString()}
                     </button>
@@ -278,15 +288,14 @@ export function OrderSalesDesk({
           ) : null}
 
           <DialogFooter className="sticky -bottom-4 -mx-4 border-t border-border/60 bg-[var(--glass-surface)] px-4 py-3 backdrop-blur-xl sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
-            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
+            <Button type="button" variant="outline" onClick={closeCreate}>
               {t('close')}
             </Button>
             {created ? (
               <Button
                 type="button"
                 onClick={() => {
-                  onOpenOrder(created.item.id);
-                  setCreateOpen(false);
+                  openOrder(created.item.id);
                 }}
               >
                 {t('openCreated')}

@@ -1,11 +1,6 @@
 import type { ProductPayloadInput, ProductRecord } from '../../lib/products';
 
-const DEFAULT_STOREFRONT_BASE_URL = 'https://bricomaitre.com';
-
-function getStorefrontBaseUrl() {
-  const value = process.env.NEXT_PUBLIC_STOREFRONT_BASE_URL ?? DEFAULT_STOREFRONT_BASE_URL;
-  return value.endsWith('/') ? value.slice(0, -1) : value;
-}
+import { getStorefrontPublicBaseUrl } from '../../lib/storefront-public-url';
 
 function slugifyDraftProduct(value: string) {
   const slug = value
@@ -17,17 +12,21 @@ function slugifyDraftProduct(value: string) {
   return slug || 'product';
 }
 
-export function buildStorefrontProductHref(product: Pick<ProductRecord, 'id' | 'slug'>) {
+export function buildStorefrontProductHref(
+  product: Pick<ProductRecord, 'id' | 'slug'>,
+  baseUrl = getStorefrontPublicBaseUrl(),
+) {
   const token = product.slug ?? product.id;
-  return `${getStorefrontBaseUrl()}/products/${encodeURIComponent(String(token))}`;
+  return `${baseUrl.replace(/\/+$/, '')}/products/${encodeURIComponent(String(token))}`;
 }
 
 export function buildDraftPromoHref(
   values: Pick<Partial<ProductPayloadInput>, 'slug' | 'title'>,
   code: string,
+  baseUrl = getStorefrontPublicBaseUrl(),
 ) {
   const token = values.slug?.trim() || slugifyDraftProduct(values.title ?? '');
-  const url = new URL(`/products/${encodeURIComponent(token)}`, getStorefrontBaseUrl());
+  const url = new URL(`/products/${encodeURIComponent(token)}`, baseUrl);
   url.searchParams.set('promo', code);
   return url.toString();
 }

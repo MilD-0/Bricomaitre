@@ -2,10 +2,10 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Download, Loader2, Plus, Settings2, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import type { AnalyticsPayload } from '../../lib/analytics';
-import { requestJson as request } from '../../lib/admin-api';
+import { AdminApiError, requestJson as request } from '../../lib/admin-api';
 import { analyticsFocusAiSurfaceDetails } from '../../lib/admin-ai-live-surface-details';
 import { toast } from '../../lib/toast';
 import { useAdminAiSurfaceDetails } from '../admin-ai-surface-context';
@@ -57,6 +57,8 @@ export function AssumptionsView({
   const { fxRate, returnRate, restFrom } = settingsDraft;
   const [showCostForm, setShowCostForm] = useState(false);
   const [editingCostId, setEditingCostId] = useState<number | null>(null);
+  const costSubmission = useRef<{ body: string; uncertain: boolean } | null>(null);
+  const [costRetryRequired, setCostRetryRequired] = useState(false);
   const [costDraft, setCostDraft] = useState({
     name: '',
     amountDzd: '',
@@ -106,6 +108,7 @@ export function AssumptionsView({
   }
 
   function openNewCost() {
+    if (costSubmission.current || costMutation.isPending) return;
     setEditingCostId(null);
     setCostDraft({
       name: '',
@@ -118,7 +121,7 @@ export function AssumptionsView({
   }
 
   function openCost(cost: DataOf<'assumptions'>['costs'][number]) {
-    if (!cost.id) return;
+    if (!cost.id || costSubmission.current || costMutation.isPending) return;
     setEditingCostId(cost.id);
     setCostDraft({
       name: cost.name,
@@ -151,27 +154,38 @@ export function AssumptionsView({
     onError: (error: Error) => toast.error(error.message),
   });
   const costMutation = useMutation({
-    mutationFn: () =>
-      request(
-        editingCostId
-          ? `/api/stats/profit-tracker/costs/${editingCostId}`
-          : '/api/stats/profit-tracker/costs',
-        {
-          method: editingCostId ? 'PUT' : 'POST',
-          body: JSON.stringify({
-            name: costDraft.name,
-            amountDzd: Number(costDraft.amountDzd),
-            period: costDraft.period,
-            startDate: costDraft.startDate,
-            endDate: costDraft.endDate || null,
-          }),
-        },
-      ),
+    mutationFn: () => {
+      const input = {
+        name: costDraft.name,
+        amountDzd: Number(costDraft.amountDzd),
+        period: costDraft.period,
+        startDate: costDraft.startDate,
+        endDate: costDraft.endDate || null,
+      };
+      if (editingCostId) {
+        return request(`/api/stats/profit-tracker/costs/${editingCostId}`, {
+          method: 'PUT',
+          body: JSON.stringify(input),
+        });
+      }
+      // Retry the same operation after an uncertain response, even if a stale
+      // event attempts to change the draft before the disabled controls render.
+      costSubmission.current ??= {
+        body: JSON.stringify({ ...input, requestId: crypto.randomUUID() }),
+        uncertain: false,
+      };
+      return request('/api/stats/profit-tracker/costs', {
+        method: 'POST',
+        body: costSubmission.current.body,
+      });
+    },
     onSuccess: async () => {
       toast.success(
         editingCostId ? copy.labels.operatingCostUpdated : copy.labels.operatingCostAdded,
       );
       setShowCostForm(false);
+      costSubmission.current = null;
+      setCostRetryRequired(false);
       setEditingCostId(null);
       setCostDraft({
         name: '',
@@ -182,8 +196,21 @@ export function AssumptionsView({
       });
       await invalidate();
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => {
+      if (costSubmission.current) {
+        const rejectedBeforeMutation =
+          error instanceof AdminApiError && [400, 401, 403, 404, 422, 429].includes(error.status);
+        if (!costSubmission.current.uncertain && rejectedBeforeMutation) {
+          costSubmission.current = null;
+        } else {
+          costSubmission.current.uncertain = true;
+          setCostRetryRequired(true);
+        }
+      }
+      toast.error(error.message);
+    },
   });
+  const costFormLocked = costMutation.isPending || costRetryRequired;
   const deleteCostMutation = useMutation({
     mutationFn: (id: number) =>
       request(`/api/stats/profit-tracker/costs/${id}`, { method: 'DELETE' }),
@@ -324,7 +351,7 @@ export function AssumptionsView({
             identifiers: editingCostId ? [String(editingCostId)] : [],
           }}
           action={
-            <Button size="sm" variant="outline" onClick={openNewCost}>
+            <Button size="sm" variant="outline" disabled={costFormLocked} onClick={openNewCost}>
               <Plus className="size-3.5" />
               {copy.assumptions.newCost}
             </Button>
@@ -332,11 +359,20 @@ export function AssumptionsView({
         >
           {showCostForm ? (
             <div className="mb-5 grid gap-3 border-y border-border/60 bg-muted/10 py-4 sm:grid-cols-2 lg:grid-cols-3">
+              {costRetryRequired ? (
+                <p
+                  role="status"
+                  className="text-sm text-muted-foreground sm:col-span-2 lg:col-span-3"
+                >
+                  {copy.assumptions.costRetryRequired}
+                </p>
+              ) : null}
               <label>
                 <span className="mb-1 block text-xs text-muted-foreground">
                   {copy.columns.name}
                 </span>
                 <Input
+                  disabled={costFormLocked}
                   value={costDraft.name}
                   onChange={(event) =>
                     setCostDraft((current) => ({ ...current, name: event.target.value }))
@@ -348,6 +384,7 @@ export function AssumptionsView({
                   {copy.assumptions.amount}
                 </span>
                 <Input
+                  disabled={costFormLocked}
                   type="number"
                   min="0"
                   value={costDraft.amountDzd}
@@ -361,6 +398,7 @@ export function AssumptionsView({
                   {copy.labels.period}
                 </span>
                 <NativeSelect
+                  disabled={costFormLocked}
                   value={costDraft.period}
                   onChange={(event) =>
                     setCostDraft((current) => ({
@@ -380,6 +418,7 @@ export function AssumptionsView({
                   {copy.assumptions.start}
                 </span>
                 <Input
+                  disabled={costFormLocked}
                   type="date"
                   value={costDraft.startDate}
                   onChange={(event) =>
@@ -392,6 +431,7 @@ export function AssumptionsView({
                   {copy.assumptions.end}
                 </span>
                 <Input
+                  disabled={costFormLocked}
                   type="date"
                   value={costDraft.endDate}
                   onChange={(event) =>
@@ -410,7 +450,9 @@ export function AssumptionsView({
                 </Button>
                 <Button
                   variant="outline"
+                  disabled={costFormLocked}
                   onClick={() => {
+                    if (costSubmission.current || costMutation.isPending) return;
                     setShowCostForm(false);
                     setEditingCostId(null);
                   }}
@@ -500,7 +542,7 @@ export function AssumptionsView({
               <th className="px-3 py-2 text-start">{copy.columns.source}</th>
               <th className="px-3 py-2 text-end">{copy.labels.returnPercent}</th>
               <th className="px-3 py-2 text-start">{copy.columns.source}</th>
-              <th className="px-3 py-2 text-end">{copy.columns.confirmed}</th>
+              <th className="px-3 py-2 text-end">{copy.assumptions.confirmed}</th>
               <th className="px-3 py-2 text-start">{copy.columns.source}</th>
               <th className="px-3 py-2 text-start">{copy.columns.note}</th>
             </tr>

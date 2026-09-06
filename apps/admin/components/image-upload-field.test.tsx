@@ -69,6 +69,7 @@ describe('ImageUploadField', () => {
 
   it('shows a thumbnail and upload progress before applying the returned URL', async () => {
     const onChange = vi.fn();
+    const onUploadingChange = vi.fn();
     deferUploadCompletion = true;
 
     render(
@@ -77,6 +78,7 @@ describe('ImageUploadField', () => {
         label="Images"
         value={[]}
         onChange={onChange}
+        onUploadingChange={onUploadingChange}
       />,
     );
 
@@ -85,6 +87,8 @@ describe('ImageUploadField', () => {
 
     expect(await screen.findByText('preview.png')).toBeInTheDocument();
     expect(screen.getByText('50%')).toBeInTheDocument();
+    expect(onUploadingChange).toHaveBeenLastCalledWith(true);
+    expect(onChange).not.toHaveBeenCalled();
 
     await act(async () => {
       pendingUploadCompletions.splice(0).forEach((complete) => complete());
@@ -92,7 +96,39 @@ describe('ImageUploadField', () => {
 
     await waitFor(() => {
       expect(onChange).toHaveBeenCalledWith(['https://cdn.example.com/uploaded.jpg']);
+      expect(onUploadingChange).toHaveBeenLastCalledWith(false);
+      expect(onChange.mock.invocationCallOrder[0]).toBeLessThan(
+        onUploadingChange.mock.invocationCallOrder[1]!,
+      );
     });
+  });
+
+  it('preserves a pending replacement when another file is dropped or image edits are attempted', async () => {
+    const onChange = vi.fn();
+    deferUploadCompletion = true;
+    render(
+      <ImageUploadField
+        uploadUrl="/api/uploads/test"
+        label="Images"
+        multiple
+        value={['https://cdn.example.com/existing.jpg']}
+        onChange={onChange}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Change image 1' }));
+    await userEvent.upload(
+      document.querySelector('input[type="file"]') as HTMLInputElement,
+      new File(['img'], 'replacement.png', { type: 'image/png' }),
+    );
+    expect(screen.getByRole('button', { name: 'Change image 1' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Delete image 1' })).toBeDisabled();
+    const add = screen.getByRole('button', { name: /add images/i });
+    expect(add).toBeDisabled();
+    fireEvent.drop(add, {
+      dataTransfer: { files: [new File(['img'], 'second.png', { type: 'image/png' })] },
+    });
+    await act(async () => pendingUploadCompletions.splice(0).forEach((complete) => complete()));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(['https://cdn.example.com/uploaded.jpg']);
   });
 
   it('uploads an image dropped on the upload field', async () => {

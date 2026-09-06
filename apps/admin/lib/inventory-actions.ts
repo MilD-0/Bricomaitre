@@ -2,6 +2,7 @@ import { and, eq, gte, sql } from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
 import { products } from '@bric/db/schema';
+import type { StockAllocationChange } from './stock-allocation-history';
 import {
   mutateEntityWithHistoryTransaction,
   type ActionActor,
@@ -61,6 +62,7 @@ export async function applyInventoryQuantityChangeInTransaction(
     mode: 'increase' | 'decrease';
     quantity: number;
     actor?: ActionActor;
+    stockAllocations?: StockAllocationChange;
   },
 ) {
   const delta = input.mode === 'increase' ? input.quantity : -input.quantity;
@@ -73,6 +75,12 @@ export async function applyInventoryQuantityChangeInTransaction(
       entityId: input.productId,
       operation: 'update',
       actor: input.actor,
+      snapshotFields: input.stockAllocations
+        ? {
+            before: { stockAllocations: input.stockAllocations.before },
+            after: { stockAllocations: input.stockAllocations.after },
+          }
+        : undefined,
       execute: async (tx) => {
         const rows = await tx
           .update(products)

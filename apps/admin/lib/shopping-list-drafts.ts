@@ -27,6 +27,11 @@ export type ShoppingListDraftItem = {
   inventoryDecreaseQuantity: number;
   inventoryShortageQuantity: number;
   inventoryAppliedQuantity: number;
+  inventoryLedgerOnly?: boolean;
+  inventoryManualAppliedQuantity?: number;
+  inventoryOrderAppliedQuantity?: number;
+  inventoryLegacyAppliedQuantity?: number;
+  inventoryAllocationReview?: boolean;
   inventoryActionEligible: boolean;
   notes: string[];
   checked: boolean;
@@ -102,6 +107,11 @@ const shoppingListDraftItemSchema = z.object({
   inventoryDecreaseQuantity: z.number().int().min(0).max(999999),
   inventoryShortageQuantity: z.number().int().min(0).max(999999),
   inventoryAppliedQuantity: z.number().int().min(0).max(999999),
+  inventoryLedgerOnly: z.boolean().optional(),
+  inventoryManualAppliedQuantity: z.number().int().nonnegative().optional(),
+  inventoryOrderAppliedQuantity: z.number().int().nonnegative().optional(),
+  inventoryLegacyAppliedQuantity: z.number().int().nonnegative().optional(),
+  inventoryAllocationReview: z.boolean().optional(),
   inventoryActionEligible: z.boolean(),
   notes: z.array(z.string().trim().max(500)).max(100),
   checked: z.boolean(),
@@ -180,15 +190,107 @@ export function buildShoppingListScopeKey(
 export function buildShoppingListInventoryPreview(
   quantity: number,
   inventoryQuantity: number | null,
+  inventoryAppliedQuantity = 0,
 ) {
+  const remaining = Math.max(quantity - inventoryAppliedQuantity, 0);
   const available = Math.max(inventoryQuantity ?? 0, 0);
-  const decreaseQuantity = Math.min(quantity, available);
+  const decreaseQuantity = Math.min(remaining, available);
   return {
     inventoryDecreaseQuantity: decreaseQuantity,
-    inventoryShortageQuantity: Math.max(quantity - decreaseQuantity, 0),
-    inventoryAppliedQuantity: 0,
+    inventoryShortageQuantity: Math.max(remaining - decreaseQuantity, 0),
+    inventoryAppliedQuantity,
     inventoryActionEligible: inventoryQuantity != null && decreaseQuantity > 0,
   };
+}
+
+export function reconcileShoppingListInventory(item: ShoppingListDraftItem): ShoppingListDraftItem {
+  const preview = buildShoppingListInventoryPreview(
+    item.quantity,
+    item.inventoryQuantity,
+    item.inventoryAppliedQuantity,
+  );
+  const decrease = Math.min(item.inventoryDecreaseQuantity, preview.inventoryDecreaseQuantity);
+  return {
+    ...item,
+    inventoryDecreaseQuantity: decrease,
+    inventoryShortageQuantity: Math.max(
+      item.quantity - item.inventoryAppliedQuantity - decrease,
+      0,
+    ),
+    inventoryActionEligible: item.productId != null && preview.inventoryActionEligible,
+  };
+}
+
+// generatedItems keeps the stock allocation ledger even when editable lines are
+// removed. Credits belong to the product within this persisted shopping scope.
+export function reconcileShoppingListAllocations<T extends ShoppingListDraftPayload>(
+  input: T,
+  previous: Pick<ShoppingListDraftPayload, 'generatedItems' | 'draftItems'> = input,
+): T {
+  const applied = new Map<number, number>();
+  const templates = new Map<number, ShoppingListDraftItem>();
+  for (const item of previous.generatedItems) {
+    if (item.productId == null) continue;
+    applied.set(
+      item.productId,
+      Math.max(applied.get(item.productId) ?? 0, item.inventoryAppliedQuantity),
+    );
+    templates.set(item.productId, item);
+  }
+  const legacyApplied = new Map<number, number>();
+  for (const item of previous.draftItems) {
+    if (item.productId == null) continue;
+    legacyApplied.set(
+      item.productId,
+      (legacyApplied.get(item.productId) ?? 0) + item.inventoryAppliedQuantity,
+    );
+    if (!templates.has(item.productId)) templates.set(item.productId, item);
+  }
+  for (const [id, quantity] of legacyApplied)
+    applied.set(id, Math.max(applied.get(id) ?? 0, quantity));
+  const generatedItems: ShoppingListDraftItem[] = input.generatedItems.map((item) => ({
+    ...item,
+    inventoryManualAppliedQuantity:
+      item.productId == null
+        ? 0
+        : (templates.get(item.productId)?.inventoryManualAppliedQuantity ?? 0),
+    inventoryOrderAppliedQuantity:
+      item.productId == null
+        ? 0
+        : (templates.get(item.productId)?.inventoryOrderAppliedQuantity ?? 0),
+    inventoryLegacyAppliedQuantity:
+      item.productId == null
+        ? 0
+        : (templates.get(item.productId)?.inventoryLegacyAppliedQuantity ?? 0),
+    inventoryAppliedQuantity: item.productId == null ? 0 : (applied.get(item.productId) ?? 0),
+  }));
+  const present = new Set(generatedItems.map((item) => item.productId));
+  for (const [id, quantity] of applied) {
+    if (quantity <= 0 || present.has(id)) continue;
+    generatedItems.push({
+      ...templates.get(id)!,
+      inventoryAppliedQuantity: quantity,
+      inventoryLedgerOnly: true,
+    });
+  }
+  const remainingCredit = new Map(applied);
+  const draftItems = input.draftItems.map((item) => {
+    const credit = item.productId == null ? 0 : (remainingCredit.get(item.productId) ?? 0);
+    const allocated = Math.min(item.quantity, credit);
+    if (item.productId != null) remainingCredit.set(item.productId, credit - allocated);
+    return reconcileShoppingListInventory({
+      ...item,
+      inventoryAppliedQuantity: allocated,
+      // Only generatedItems carry server-managed counters. Editable lines cannot
+      // introduce credit by supplying these fields in a save request.
+      inventoryManualAppliedQuantity: undefined,
+      inventoryOrderAppliedQuantity: undefined,
+      inventoryLegacyAppliedQuantity: undefined,
+      inventoryAllocationReview:
+        item.productId != null && Boolean(templates.get(item.productId)?.inventoryAllocationReview),
+    });
+  });
+  return { ...input, generatedItems, draftItems };
 }
 
 export async function buildGeneratedShoppingListDraft(input: {
@@ -295,53 +397,92 @@ export async function buildGeneratedShoppingListDraft(input: {
   });
 }
 
-function mergeUniqueById<T>(saved: T[], generated: T[], getId: (item: T) => string | number) {
-  const seen = new Set(saved.map((item) => getId(item)));
-  const merged = [...saved];
-
-  for (const item of generated) {
-    const id = getId(item);
-    if (!seen.has(id)) {
-      merged.push(item);
-      seen.add(id);
-    }
-  }
-
-  return merged;
-}
-
-function normalizeDraftItemGeneration(item: ShoppingListDraftItem) {
-  return {
-    ...item,
-    generatedAt: item.generatedAt || legacyShoppingListGeneratedAt,
-  };
-}
-
-function normalizeOrderGroupGeneration(order: ShoppingListOrderGroup) {
-  return {
-    ...order,
-    generatedAt: order.generatedAt || legacyShoppingListGeneratedAt,
-  };
+function shoppingListProductKey(item: ShoppingListDraftItem) {
+  return item.productId == null ? `draft:${item.draftId}` : `product:${item.productId}`;
 }
 
 export function mergeShoppingListDraft(
   generated: ShoppingListDraftPayload,
   saved: ShoppingListDraftPayload,
 ): ShoppingListDraftPayload {
-  const savedDraftItems = saved.draftItems.map(normalizeDraftItemGeneration);
-  const generatedDraftItems = generated.draftItems.map(normalizeDraftItemGeneration);
-
-  return {
-    ...saved,
-    sourceMode: generated.sourceMode,
-    orderIds: normalizeShoppingListOrderIds(generated.orderIds),
-    title: generated.title,
-    draftItems: mergeUniqueById(savedDraftItems, generatedDraftItems, (item) => item.draftId),
-    generatedItems: generated.generatedItems.map(normalizeDraftItemGeneration),
-    orders: mergeUniqueById(
-      saved.orders.map(normalizeOrderGroupGeneration),
-      generated.orders.map(normalizeOrderGroupGeneration),
-      (order) => order.orderId,
-    ),
+  const group = (items: ShoppingListDraftItem[]) => {
+    const groups = new Map<string, ShoppingListDraftItem[]>();
+    for (const item of items) {
+      const key = shoppingListProductKey(item);
+      groups.set(key, [...(groups.get(key) ?? []), item]);
+    }
+    return groups;
   };
+  const prior = group(saved.generatedItems.filter((item) => !item.inventoryLedgerOnly));
+  const fresh = group(generated.generatedItems);
+  const editable = group(saved.draftItems);
+  const total = (items: ShoppingListDraftItem[]) =>
+    items.reduce((sum, item) => sum + item.quantity, 0);
+  const draftItems: ShoppingListDraftItem[] = [];
+  for (const key of new Set([...editable.keys(), ...fresh.keys()])) {
+    const oldGenerated = prior.get(key) ?? [];
+    const oldItems = editable.get(key) ?? [];
+    const newGenerated = fresh.get(key) ?? [];
+    // An explicitly removed product stays removed on Refresh. Reset is the
+    // separate action that restores generated lines.
+    if (oldGenerated.length && !oldItems.length) continue;
+    const quantity = Math.max(total(newGenerated) + total(oldItems) - total(oldGenerated), 0);
+    if (!quantity) continue;
+    const items = (oldItems.length ? oldItems : newGenerated).map((item) => ({ ...item }));
+    let change = quantity - total(items);
+    if (change > 0) {
+      items[0]!.quantity += change;
+      items[0]!.checked = false;
+    } else {
+      for (const item of [...items].reverse()) {
+        const removed = Math.min(item.quantity, -change);
+        item.quantity -= removed;
+        change += removed;
+      }
+    }
+    for (const item of items) {
+      if (!item.quantity) continue;
+      const inventoryQuantity = newGenerated.length
+        ? newGenerated[0]!.inventoryQuantity
+        : item.inventoryQuantity;
+      draftItems.push({
+        ...item,
+        isCustom: newGenerated.length ? item.isCustom : true,
+        inventoryQuantity,
+        // Refresh recomputes the proposal using current demand and availability.
+        // The authoritative save will subtract this cohort's existing credits.
+        ...buildShoppingListInventoryPreview(item.quantity, inventoryQuantity),
+        generatedAt: item.generatedAt || legacyShoppingListGeneratedAt,
+      });
+    }
+  }
+  const currentIds = new Set(generated.orderIds);
+  const removedOrders = shoppingListOrderIds(saved).some((id) => !currentIds.has(id));
+  const previous = removedOrders
+    ? {
+        generatedItems: saved.generatedItems.map((item) => ({
+          ...item,
+          inventoryOrderAppliedQuantity: 0,
+          inventoryAppliedQuantity:
+            (item.inventoryManualAppliedQuantity ?? 0) + (item.inventoryLegacyAppliedQuantity ?? 0),
+        })),
+        draftItems: [],
+      }
+    : saved;
+  return reconcileShoppingListAllocations(
+    {
+      ...saved,
+      sourceMode: generated.sourceMode,
+      orderIds: normalizeShoppingListOrderIds(generated.orderIds),
+      title: generated.title,
+      draftItems,
+      generatedItems: generated.generatedItems,
+      orders: generated.orders,
+    },
+    previous,
+  );
+}
+
+function shoppingListOrderIds(draft: ShoppingListDraftPayload) {
+  return [...draft.orderIds, ...draft.orders.map((order) => order.orderId)];
 }

@@ -26,6 +26,7 @@ type ImageUploadFieldProps = {
   multiple?: boolean;
   value: string[];
   onChange: (urls: string[]) => void;
+  onUploadingChange?: (uploading: boolean) => void;
 };
 
 type UploadItem = {
@@ -91,6 +92,7 @@ export function ImageUploadField({
   multiple = false,
   value,
   onChange,
+  onUploadingChange,
 }: ImageUploadFieldProps) {
   const t = useTranslations('uploadFields');
   const [uploads, setUploads] = useState<UploadItem[]>([]);
@@ -101,12 +103,15 @@ export function ImageUploadField({
   const pickerStateRef = useRef<PickerState>({ multiple, replaceIndex: null });
   const cleanupTimeoutRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
+  const uploadingRef = useRef(false);
+  const uploading = uploads.some((upload) => upload.status === 'uploading');
   const existingImages = useMemo(
     () => value.map((url, index) => ({ id: `${url}-${index}`, url, index })),
     [value],
   );
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
 
@@ -117,6 +122,7 @@ export function ImageUploadField({
   }, []);
 
   const openPicker = ({ multiple: allowMultiple, replaceIndex }: PickerState) => {
+    if (uploadingRef.current) return;
     pickerStateRef.current = { multiple: allowMultiple, replaceIndex };
     if (inputRef.current) {
       inputRef.current.value = '';
@@ -145,7 +151,9 @@ export function ImageUploadField({
   };
 
   const uploadImages = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0 || uploadingRef.current) return;
+    uploadingRef.current = true;
+    onUploadingChange?.(true);
 
     const selectedFiles = Array.from(files);
     const effectiveFiles = pickerStateRef.current.multiple
@@ -172,7 +180,7 @@ export function ImageUploadField({
     ]);
 
     try {
-      const uploadedUrls = await Promise.all(
+      const uploadedUrls = await Promise.allSettled(
         nextUploads.map(async ({ id, file }) => {
           try {
             const urls = await uploadSingleImage({
@@ -199,10 +207,16 @@ export function ImageUploadField({
         }),
       );
 
-      applyUploadedUrls(uploadedUrls.flat());
+      if (mountedRef.current) {
+        applyUploadedUrls(
+          uploadedUrls.flatMap((result) => (result.status === 'fulfilled' ? result.value : [])),
+        );
+      }
     } catch {
       // Preserve current value on failed uploads.
     } finally {
+      uploadingRef.current = false;
+      if (mountedRef.current) onUploadingChange?.(false);
       if (cleanupTimeoutRef.current !== null) {
         window.clearTimeout(cleanupTimeoutRef.current);
       }
@@ -224,12 +238,14 @@ export function ImageUploadField({
   };
 
   const removeImage = (index: number) => {
+    if (uploadingRef.current) return;
     onChange(value.filter((_, currentIndex) => currentIndex !== index));
   };
 
   const handleDrop = (event: React.DragEvent<HTMLButtonElement>) => {
     event.preventDefault();
     setIsDragActive(false);
+    if (uploadingRef.current) return;
     pickerStateRef.current = { multiple, replaceIndex: null };
     void uploadImages(event.dataTransfer.files);
   };
@@ -243,6 +259,7 @@ export function ImageUploadField({
           type="file"
           multiple={multiple}
           accept="image/*"
+          disabled={uploading}
           className="sr-only"
           onChange={(event) => void uploadImages(event.target.files)}
         />
@@ -279,6 +296,7 @@ export function ImageUploadField({
                     <button
                       type="button"
                       aria-label={t('changeImage', { number: image.index + 1 })}
+                      disabled={uploading}
                       className="inline-flex size-7 cursor-pointer items-center justify-center rounded-full border border-border/70 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                       onClick={(event) => {
                         event.stopPropagation();
@@ -290,6 +308,7 @@ export function ImageUploadField({
                     <button
                       type="button"
                       aria-label={t('deleteImage', { number: image.index + 1 })}
+                      disabled={uploading}
                       className="inline-flex size-7 cursor-pointer items-center justify-center rounded-full border border-border/70 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                       onClick={(event) => {
                         event.stopPropagation();
@@ -368,6 +387,7 @@ export function ImageUploadField({
 
         <button
           type="button"
+          disabled={uploading}
           className={cn(
             'flex cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border border-dashed px-4 py-4 text-center text-sm font-medium text-foreground transition-colors',
             isDragActive
@@ -441,6 +461,7 @@ export function ImageUploadField({
             <Button
               type="button"
               variant="destructive"
+              disabled={uploading}
               onClick={() => {
                 if (deleteIndex !== null) {
                   removeImage(deleteIndex);

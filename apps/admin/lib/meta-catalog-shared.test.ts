@@ -4,15 +4,15 @@ import { toCsvBuffer } from './meta-catalog';
 import { buildMetaCatalogExportRows } from './meta-catalog-shared';
 
 describe('buildMetaCatalogExportRows', () => {
-  const originalStorefrontBaseUrl = process.env.STOREFRONT_BASE_URL;
+  const originalStorefrontBaseUrl = process.env.NEXT_PUBLIC_STOREFRONT_BASE_URL;
 
   afterEach(() => {
     if (originalStorefrontBaseUrl === undefined) {
-      delete process.env.STOREFRONT_BASE_URL;
+      delete process.env.NEXT_PUBLIC_STOREFRONT_BASE_URL;
       return;
     }
 
-    process.env.STOREFRONT_BASE_URL = originalStorefrontBaseUrl;
+    process.env.NEXT_PUBLIC_STOREFRONT_BASE_URL = originalStorefrontBaseUrl;
   });
 
   it('uses the product inStock flag for Meta availability', () => {
@@ -92,7 +92,7 @@ describe('buildMetaCatalogExportRows', () => {
   });
 
   it('uses the configured storefront base url when building product links', () => {
-    process.env.STOREFRONT_BASE_URL = 'https://storefront.example.com/';
+    process.env.NEXT_PUBLIC_STOREFRONT_BASE_URL = 'https://storefront.example.com/';
 
     const rows = buildMetaCatalogExportRows(
       [

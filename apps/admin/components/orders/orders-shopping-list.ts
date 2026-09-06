@@ -5,6 +5,7 @@ import {
   buildGeneratedShoppingListDraft,
   buildShoppingListInventoryPreview,
   mergeShoppingListDraft,
+  reconcileShoppingListInventory,
   normalizeShoppingListOrderIds,
   type ShoppingListDraftItem,
   type ShoppingListDraftRecord,
@@ -83,45 +84,12 @@ export function buildShoppingListStateFromDraft(
     revision: draft.revision,
     title: title ?? draft.title,
     generatedItems: draft.generatedItems,
-    draftItems: draft.draftItems,
+    draftItems: draft.draftItems.map(reconcileShoppingListInventory),
     orders: draft.orders,
     search: '',
     updatedAt: draft.updatedAt,
     updatedByName: draft.updatedByName,
   };
-}
-
-async function fetchBrandName(brandId: number | null, cache: Map<number, string>) {
-  if (brandId === null) {
-    return 'Unbranded';
-  }
-
-  const cached = cache.get(brandId);
-  if (cached) {
-    return cached;
-  }
-
-  const brand = await request<BrandLookupResponse>(`/api/brands/${brandId}`);
-  cache.set(brandId, brand.name);
-  return brand.name;
-}
-
-async function fetchShoppingListProductDetails(
-  productId: number | null,
-  cache: Map<number, ProductLookupResponse['item']>,
-) {
-  if (productId === null) {
-    return null;
-  }
-
-  const cached = cache.get(productId);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  const product = await request<ProductLookupResponse>(`/api/products/${productId}`);
-  cache.set(productId, product.item);
-  return product.item;
 }
 
 export function buildInventoryPreview(quantity: number, inventoryQuantity: number | null) {
@@ -136,7 +104,13 @@ export function recalculateShoppingListInventory(
 ) {
   const quantity = overrides?.quantity ?? item.quantity;
   const inventoryQuantity = overrides?.inventoryQuantity ?? item.inventoryQuantity;
-  const nextPreview = buildInventoryPreview(quantity, inventoryQuantity);
+  const inventoryAppliedQuantity =
+    overrides?.inventoryAppliedQuantity ?? item.inventoryAppliedQuantity;
+  const nextPreview = buildShoppingListInventoryPreview(
+    quantity,
+    inventoryQuantity,
+    inventoryAppliedQuantity,
+  );
 
   return {
     ...item,
@@ -145,7 +119,7 @@ export function recalculateShoppingListInventory(
     inventoryDecreaseQuantity: nextPreview.inventoryDecreaseQuantity,
     inventoryShortageQuantity: nextPreview.inventoryShortageQuantity,
     inventoryActionEligible: item.productId != null && nextPreview.inventoryActionEligible,
-    inventoryAppliedQuantity: overrides?.inventoryAppliedQuantity ?? item.inventoryAppliedQuantity,
+    inventoryAppliedQuantity,
   };
 }
 
@@ -154,14 +128,35 @@ async function buildShoppingListState(
   sourceMode: ShoppingListSourceMode,
   title: string,
 ) {
-  const brandCache = new Map<number, string>();
-  const productDetailsCache = new Map<number, ProductLookupResponse['item']>();
+  const productIds = [
+    ...new Set(
+      orders.flatMap((order) =>
+        order.orderProducts.flatMap((item) => (item.productId == null ? [] : [item.productId])),
+      ),
+    ),
+  ];
+  const brandIds = [
+    ...new Set(
+      orders.flatMap((order) =>
+        order.orderProducts.flatMap((item) => (item.brandId == null ? [] : [item.brandId])),
+      ),
+    ),
+  ];
+  const details = await request<{
+    products: Array<{ id: number; inventoryQuantity: number; purchasePrice: string | null }>;
+    brands: Array<{ id: number; name: string }>;
+  }>('/api/orders/shopping-list-details', {
+    method: 'POST',
+    body: JSON.stringify({ productIds, brandIds }),
+  });
+  const productById = new Map(details.products.map((item) => [item.id, item]));
+  const brandById = new Map(details.brands.map((item) => [item.id, item.name]));
   const generated = await buildGeneratedShoppingListDraft({
     orders,
     sourceMode,
     title,
     resolveProductDetails: async (productId) => {
-      const product = await fetchShoppingListProductDetails(productId, productDetailsCache);
+      const product = productById.get(productId);
       return product
         ? {
             inventoryQuantity: product.inventoryQuantity,
@@ -170,7 +165,8 @@ async function buildShoppingListState(
           }
         : null;
     },
-    resolveBrandName: (brandId) => fetchBrandName(brandId, brandCache),
+    resolveBrandName: async (brandId) =>
+      brandId == null ? 'Unbranded' : (brandById.get(brandId) ?? 'Unbranded'),
   });
 
   return {

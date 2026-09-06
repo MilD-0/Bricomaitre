@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render } from '@testing-library/react';
 
 const { authMock, hasDbMock, getDbMock, appShellMock, redirectMock, connectionMock } = vi.hoisted(
   () => ({
@@ -71,9 +72,15 @@ describe('app/[locale]/(app)/layout', () => {
       params: Promise.resolve({ locale: 'en' }),
     });
 
-    expect(ui.props.initialUserEmail).toBe('ada@example.com');
-    expect(ui.props.initialUserName).toBe('Ada Lovelace');
-    expect(ui.props.initialUserImage).toBe('https://db.example.com/avatar.png');
+    render(ui);
+    expect(appShellMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialUserEmail: 'ada@example.com',
+        initialUserName: 'Ada Lovelace',
+        initialUserImage: 'https://db.example.com/avatar.png',
+      }),
+      undefined,
+    );
   });
 
   it('falls back to the session image when the user row is unavailable', async () => {
@@ -90,7 +97,11 @@ describe('app/[locale]/(app)/layout', () => {
       params: Promise.resolve({ locale: 'en' }),
     });
 
-    expect(ui.props.initialUserImage).toBe('https://session.example.com/avatar.png');
+    render(ui);
+    expect(appShellMock).toHaveBeenCalledWith(
+      expect.objectContaining({ initialUserImage: 'https://session.example.com/avatar.png' }),
+      undefined,
+    );
   });
 
   it('redirects disallowed users back to the locale root', async () => {

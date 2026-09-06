@@ -17,6 +17,7 @@ import {
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 
 import { ANALYTICS_FALLBACK_PRODUCT_MARGIN_RATE } from './analytics-fact-contract';
+import { runIdempotentAdminMutation } from './admin-mutation-idempotency';
 import { effectiveEcotrackStatusSql } from './ecotrack-status-policy';
 import {
   applyProfitTrackerRollforward,
@@ -108,6 +109,10 @@ export const profitTrackerCostSchema = z
       });
     }
   });
+
+export const profitTrackerCostCreateSchema = profitTrackerCostSchema.and(
+  z.object({ requestId: z.uuid() }),
+);
 
 export type ProfitTrackerRangeInput = z.input<typeof profitTrackerRangeSchema>;
 export type ProfitTrackerDayUpdate = z.infer<typeof profitTrackerDaySchema>;
@@ -653,11 +658,30 @@ export async function deleteProfitTrackerDay(
   db: Database = getDb(),
 ): Promise<string | null> {
   const parsedDate = dateOnlySchema.parse(date);
-  const rows = await db
-    .delete(profitTrackerDays)
-    .where(eq(profitTrackerDays.day, parsedDate))
-    .returning({ day: profitTrackerDays.day });
-  return rows[0]?.day ?? null;
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .delete(profitTrackerDays)
+      .where(eq(profitTrackerDays.day, parsedDate))
+      .returning({ day: profitTrackerDays.day });
+    if (rows.length) await invalidateDeletedEconomics(tx);
+    return rows[0]?.day ?? null;
+  });
+}
+
+// Deleted rows cannot contribute their updatedAt to the materialized-fact
+// freshness check. Advance the existing global economics dependency atomically.
+async function invalidateDeletedEconomics(db: Pick<Database, 'insert'>) {
+  const now = new Date();
+  await db
+    .insert(profitTrackerSettings)
+    .values({
+      id: 1,
+      fxRate: decimal(DEFAULT_SETTINGS.fxRate),
+      defaultReturnRate: decimal(DEFAULT_SETTINGS.defaultReturnRate),
+      restFrom: DEFAULT_SETTINGS.restFrom,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({ target: profitTrackerSettings.id, set: { updatedAt: now } });
 }
 
 export async function listProfitTrackerCosts(db: Database = getDb()) {
@@ -671,19 +695,31 @@ export async function listProfitTrackerCosts(db: Database = getDb()) {
 export async function createProfitTrackerCost(
   input: z.input<typeof profitTrackerCostSchema>,
   db: Database = getDb(),
+  requestId?: string,
 ) {
   const value = profitTrackerCostSchema.parse(input);
-  const [row] = await db
-    .insert(profitTrackerOperatingCosts)
-    .values({
-      name: value.name,
-      amountDzd: decimal(value.amountDzd),
-      period: value.period,
-      startDate: value.startDate,
-      endDate: value.endDate,
+  const create = async (writer: Pick<Database, 'insert'>) => {
+    const [row] = await writer
+      .insert(profitTrackerOperatingCosts)
+      .values({
+        name: value.name,
+        amountDzd: decimal(value.amountDzd),
+        period: value.period,
+        startDate: value.startDate,
+        endDate: value.endDate,
+      })
+      .returning();
+    return mapCost(row);
+  };
+  if (!requestId) return create(db);
+  return (
+    await runIdempotentAdminMutation(db, {
+      scope: 'profit-tracker-cost:create',
+      requestId,
+      payload: value,
+      execute: create,
     })
-    .returning();
-  return mapCost(row);
+  ).value;
 }
 
 export async function updateProfitTrackerCost(
@@ -708,11 +744,14 @@ export async function updateProfitTrackerCost(
 }
 
 export async function deleteProfitTrackerCost(id: number, db: Database = getDb()) {
-  const rows = await db
-    .delete(profitTrackerOperatingCosts)
-    .where(eq(profitTrackerOperatingCosts.id, id))
-    .returning({ id: profitTrackerOperatingCosts.id });
-  return rows[0]?.id ?? null;
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .delete(profitTrackerOperatingCosts)
+      .where(eq(profitTrackerOperatingCosts.id, id))
+      .returning({ id: profitTrackerOperatingCosts.id });
+    if (rows.length) await invalidateDeletedEconomics(tx);
+    return rows[0]?.id ?? null;
+  });
 }
 
 export async function syncProfitTrackerMetaRows(
@@ -1281,8 +1320,8 @@ export async function exportProfitTrackerCsv(
     'gross_profit_source',
     'return_rate_pct',
     'return_rate_source',
-    'confirmed_orders',
-    'confirmed_orders_source',
+    'posted_or_manual_orders',
+    'posted_or_manual_orders_source',
     'posted_orders',
     'cost_complete_orders',
     'projected_coverage_pct',
@@ -1293,8 +1332,8 @@ export async function exportProfitTrackerCsv(
     'profit_x',
     'net_profit_before_returns_dzd',
     'profit_x_before_returns',
-    'cost_per_confirmed_dzd',
-    'confirmation_rate_pct',
+    'cost_per_posted_or_manual_order_dzd',
+    'posted_or_manual_orders_to_meta_purchases_pct',
     'click_to_page_rate_pct',
     'operating_cost_dzd',
     'true_profit_dzd',

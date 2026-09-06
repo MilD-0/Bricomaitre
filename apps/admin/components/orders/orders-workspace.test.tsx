@@ -11,6 +11,7 @@ import type { OrderRecord } from '../../lib/orders';
 import { ORDER_STATUS } from '../../lib/orders';
 import { server } from '../../test/mocks/server';
 import { OrdersWorkspace } from './orders-workspace';
+import { OrderSalesDesk } from './order-sales-desk';
 import { formatOrderListTimestamp } from './orders-workspace-presenters';
 
 function makeOrder(id: number, name: string, status: OrderRecord['inHouseStatus']): OrderRecord {
@@ -387,22 +388,67 @@ describe('OrdersWorkspace', () => {
     );
   });
 
+  it.each(['Open created order', 'duplicate'])(
+    'closes completed phone capture via %s and resets the next capture',
+    async (action) => {
+      const user = userEvent.setup();
+      const onOpenOrder = vi.fn();
+      server.use(
+        http.get('/api/products', () =>
+          HttpResponse.json({ items: [{ id: 1, title: 'Audit drill', price: 4000, images: [] }] }),
+        ),
+        http.post('/api/orders', () =>
+          HttpResponse.json({
+            ok: true,
+            item: orders[0],
+            duplicateCandidates: [{ id: 2, createdAt: '2026-08-18T10:00:00Z' }],
+          }),
+        ),
+      );
+      render(
+        <QueryClientProvider
+          client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+        >
+          <NextIntlClientProvider locale="en" messages={messages}>
+            <OrderSalesDesk writable onOpenOrder={onOpenOrder} onCreated={async () => undefined} />
+          </NextIntlClientProvider>
+        </QueryClientProvider>,
+      );
+      await user.click(screen.getByRole('button', { name: 'Phone order' }));
+      await user.type(screen.getByLabelText('Customer name'), 'Operator test');
+      await user.type(screen.getByLabelText('Telephone'), '0661920626');
+      await user.type(screen.getByPlaceholderText('Search title, SKU, or barcode'), 'Audit');
+      await user.click(await screen.findByRole('button', { name: /Audit drill/ }));
+      await user.click(screen.getByRole('button', { name: 'Create order' }));
+      await screen.findByRole('button', { name: 'Open created order' });
+      await user.click(
+        action === 'duplicate'
+          ? screen.getByRole('button', { name: /^#2/ })
+          : screen.getByRole('button', { name: action }),
+      );
+      expect(onOpenOrder).toHaveBeenCalledWith(action === 'duplicate' ? 2 : 1);
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: 'Phone order' }));
+      expect(screen.getByLabelText('Customer name')).toHaveValue('');
+      expect(screen.getByLabelText('Telephone')).toHaveValue('');
+      expect(screen.getByRole('button', { name: 'Create order' })).toBeDisabled();
+    },
+  );
+
   it('generates the established shopping-list workflow from selected orders', async () => {
     const user = userEvent.setup();
     renderWorkspace();
     server.use(
       http.get('/api/orders/shopping-list-draft', () => HttpResponse.json({ draft: null })),
-      http.get('/api/products/1', () =>
+      http.put('/api/orders/shopping-list-draft', async ({ request }) => {
+        const payload = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ draft: { ...payload, scopeKey: 'selected:1', revision: 1 } });
+      }),
+      http.get('/api/orders/shopping-list-draft/review', () => HttpResponse.json({ reviews: [] })),
+      http.post('/api/orders/shopping-list-details', () =>
         HttpResponse.json({
-          item: {
-            id: 1,
-            inventoryQuantity: 4,
-            brandId: null,
-            title: 'Cordless drill',
-            price: 4000,
-            purchasePrice: 2800,
-            images: [],
-          },
+          products: [{ id: 1, inventoryQuantity: 4, purchasePrice: '2800' }],
+          brands: [],
         }),
       ),
     );
@@ -424,6 +470,12 @@ describe('OrdersWorkspace', () => {
     expect(
       screen.getByRole('menuitem', { name: 'Accept all inventory changes' }),
     ).toBeInTheDocument();
+    await user.click(screen.getByRole('menuitem', { name: 'Review previous stock deductions' }));
+    await screen.findByRole('dialog', { name: 'Review previous stock deductions' });
+    await waitFor(() => expect(screen.getAllByRole('dialog')).toHaveLength(1));
+    await user.keyboard('{Escape}');
+    await screen.findByRole('dialog', { name: 'Shopping list for 1 selected orders' });
+    await waitFor(() => expect(screen.getAllByRole('dialog')).toHaveLength(1));
   });
 
   it('previews and starts selected-order Ecotrack posting through production contracts', async () => {

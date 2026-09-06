@@ -7,6 +7,8 @@ import {
   stateAwareProjectedContribution,
   toCanonicalOrderProjectionDay,
   upsertProfitTrackerDay,
+  deleteProfitTrackerCost,
+  deleteProfitTrackerDay,
 } from './profit-tracker';
 import { applyProfitTrackerRollforward } from './profit-tracker-metrics';
 
@@ -21,6 +23,33 @@ const automatic = {
 };
 
 describe('profit tracker source precedence', () => {
+  it.each(['cost', 'day'] as const)(
+    'invalidates deleted %s economics atomically without overwriting settings',
+    async (kind) => {
+      const onConflictDoUpdate = vi.fn(async () => undefined);
+      const tx = {
+        delete: vi.fn(() => ({
+          where: vi.fn(() => ({
+            returning: vi.fn(async () => [{ id: 5, day: '2026-09-05' }]),
+          })),
+        })),
+        insert: vi.fn(() => ({ values: vi.fn(() => ({ onConflictDoUpdate })) })),
+      };
+      const db = { transaction: vi.fn(async (work) => work(tx)) };
+      const result =
+        kind === 'cost'
+          ? await deleteProfitTrackerCost(5, db as never)
+          : await deleteProfitTrackerDay('2026-09-05', db as never);
+      expect(result).toBe(kind === 'cost' ? 5 : '2026-09-05');
+      expect(onConflictDoUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          set: { updatedAt: expect.any(Date) },
+        }),
+      );
+      expect(db.transaction).toHaveBeenCalledOnce();
+    },
+  );
+
   it('updates only the manual fields supplied by the operator', async () => {
     const now = new Date('2026-08-15T12:00:00.000Z');
     const conflictInputs: Array<{ set: Record<string, unknown> }> = [];

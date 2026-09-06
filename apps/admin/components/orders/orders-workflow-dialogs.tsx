@@ -61,6 +61,8 @@ export function ShoppingListWorkspaceDialog({
   onIncreaseInventoryDecrease,
   onDecreaseInventoryDecrease,
   onRemoveItem,
+  onReviewInventory,
+  reviewInventoryLabel,
   onApplyAllInventoryChanges,
   onApplySelectedInventoryChanges,
 }: {
@@ -81,6 +83,8 @@ export function ShoppingListWorkspaceDialog({
   onIncreaseInventoryDecrease: (draftId: string) => void;
   onDecreaseInventoryDecrease: (draftId: string) => void;
   onRemoveItem: (draftId: string) => void;
+  onReviewInventory?: () => void;
+  reviewInventoryLabel?: string;
   onApplyAllInventoryChanges: () => void;
   onApplySelectedInventoryChanges: () => void;
 }) {
@@ -147,6 +151,15 @@ export function ShoppingListWorkspaceDialog({
                   icon={<Printer className="size-4" aria-hidden="true" />}
                   onPrimaryClick={onPrint}
                   options={[
+                    ...(onReviewInventory
+                      ? [
+                          {
+                            key: 'review-stock',
+                            label: reviewInventoryLabel ?? '',
+                            onSelect: onReviewInventory,
+                          },
+                        ]
+                      : []),
                     {
                       key: 'refresh',
                       label: t('ordersManager.shoppingList.refresh'),

@@ -304,7 +304,7 @@ export function AppShell({
             'fixed inset-0 z-40 flex w-full flex-col bg-background p-0 text-card-foreground shadow-[var(--shadow-vapor-strong)] transition-transform duration-[var(--duration-navigation)] lg:sticky lg:inset-auto lg:top-3 lg:h-[calc(100vh-1.5rem)] lg:w-[17rem] lg:rounded-xl lg:border lg:border-border/60 lg:bg-background/92 lg:shadow-sm lg:backdrop-blur-xl',
             sidebarOpen
               ? 'translate-x-0'
-              : '-translate-x-[110%] rtl:translate-x-[110%] lg:translate-x-0',
+              : '-translate-x-[110%] rtl:translate-x-[110%] lg:translate-x-0 rtl:lg:translate-x-0',
             sidebarCollapsed ? 'lg:w-[4.75rem]' : 'lg:w-[17rem]',
           )}
           animate={{ opacity: sidebarOpen ? 1 : 0.98 }}
@@ -463,7 +463,7 @@ export function AppShell({
           </div>
         </motion.aside>
 
-        <main className="min-w-0 flex-1 space-y-3 sm:space-y-4">
+        <main className="min-w-0 flex-1 space-y-3 pb-24 sm:space-y-4">
           <div
             data-mobile-workflow-header
             className="sticky top-2 z-20 flex items-center justify-between gap-3 rounded-[var(--shape-radius-card)] border border-border/50 bg-[var(--glass-surface)] px-2.5 py-2 shadow-[var(--shadow-vapor)] backdrop-blur-xl sm:px-4 sm:py-3 lg:hidden"

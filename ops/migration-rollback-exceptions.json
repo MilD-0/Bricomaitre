@@ -1,4 +1,10 @@
 {
   "version": 1,
-  "exceptions": []
+  "exceptions": [
+    {
+      "migration": "0098_careless_wolfpack.sql",
+      "sha256": "dfc6a1b9c1df5e032d576142b86a85b4cd219c4064f8b09239854056774e8909",
+      "reason": "The foreign keys constrain only the new stock allocation table, which the previous runtime does not use. The new shopping-list allocation version defaults to zero, preserving inserts from the previous runtime."
+    }
+  ]
 }

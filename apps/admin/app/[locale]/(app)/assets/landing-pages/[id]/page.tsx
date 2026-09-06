@@ -6,7 +6,7 @@ import {
   LandingPageNotFoundError,
 } from '../../../../../../lib/landing-pages';
 import { requireAssetsPageAccess } from '../../../../../../lib/page-access';
-import { getStorefrontBaseUrl } from '../../../../../../lib/storefront-revalidate';
+import { getStorefrontPublicBaseUrl } from '../../../../../../lib/storefront-public-url';
 
 export default async function LandingPageBuilderPage({
   params,
@@ -25,6 +25,10 @@ export default async function LandingPageBuilderPage({
     throw error;
   }
   return (
-    <LandingPageBuilder initialPage={initialPage} storefrontBaseUrl={getStorefrontBaseUrl()} />
+    <LandingPageBuilder
+      key={initialPage.id}
+      initialPage={initialPage}
+      storefrontBaseUrl={getStorefrontPublicBaseUrl()}
+    />
   );
 }

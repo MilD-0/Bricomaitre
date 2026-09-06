@@ -9,9 +9,15 @@ import { requestJson as request } from '../../lib/admin-api';
 import type { OrdersResponse } from '../../lib/order-admin-contracts';
 import { ORDER_STATUS, parseNumericAmount, type OrderRecord } from '../../lib/orders';
 import {
+  reconcileShoppingListAllocations,
   type ShoppingListDraftItem,
+  type ShoppingListDraftRecord,
   type ShoppingListSourceMode,
 } from '../../lib/shopping-list-drafts';
+import {
+  ShoppingInventoryReviewDialog,
+  shoppingInventoryReviewLabel,
+} from './shopping-inventory-review';
 import { toast } from '../../lib/toast';
 import { SplitActionButton } from '../split-action-button';
 import type { ProductSearchItem } from './order-products-editor';
@@ -95,6 +101,7 @@ export function OrdersWorkflows({
   const queryClient = useQueryClient();
   const [shoppingListState, setShoppingListState] = useState<ShoppingListState>(null);
   const [shoppingListOpen, setShoppingListOpen] = useState(false);
+  const [stockReviewOpen, setStockReviewOpen] = useState(false);
   const [shoppingListSaveStatus, setShoppingListSaveStatus] =
     useState<ShoppingListSaveStatus>('idle');
   const [ecotrackPreviewState, setEcotrackPreviewState] =
@@ -170,22 +177,23 @@ export function OrdersWorkflows({
   });
   const inventoryRequestRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const applyInventoryMutation = useMutation({
-    mutationFn: (
-      items: Array<{
-        productId: number;
-        quantity: number;
-        source: { type: 'shopping-list'; orderIds: number[] };
-      }>,
-    ) => {
-      const payload = { mode: 'decrease' as const, items };
+    mutationFn: (payload: {
+      sourceMode: ShoppingListSourceMode;
+      orderIds: number[];
+      revision: number;
+      draftIds: string[];
+    }) => {
       const fingerprint = JSON.stringify(payload);
       if (inventoryRequestRef.current?.fingerprint !== fingerprint) {
         inventoryRequestRef.current = { fingerprint, requestId: crypto.randomUUID() };
       }
-      return request<InventoryApplyResponse>('/api/inventory/apply', {
-        method: 'POST',
-        body: JSON.stringify({ ...payload, requestId: inventoryRequestRef.current.requestId }),
-      });
+      return request<InventoryApplyResponse & { draft: ShoppingListDraftRecord }>(
+        '/api/orders/shopping-list-draft/apply',
+        {
+          method: 'POST',
+          body: JSON.stringify({ ...payload, requestId: inventoryRequestRef.current.requestId }),
+        },
+      );
     },
     onSuccess: async () => {
       inventoryRequestRef.current = null;
@@ -271,7 +279,7 @@ export function OrdersWorkflows({
       setShoppingListState((current) =>
         current?.scopeKey === response.draft.scopeKey
           ? {
-              ...current,
+              ...reconcileShoppingListAllocations(current, response.draft),
               revision: response.draft.revision,
               updatedAt: response.draft.updatedAt,
               updatedByName: response.draft.updatedByName,
@@ -399,27 +407,23 @@ export function OrdersWorkflows({
     if (!shoppingListState) return;
     if (shoppingListSaveTimeoutRef.current) clearTimeout(shoppingListSaveTimeoutRef.current);
     try {
-      await request<{ ok: true }>(
-        buildShoppingListDraftUrl(shoppingListState.sourceMode, shoppingListState.orderIds),
+      if (shoppingListState.revision === null) {
+        setShoppingListState({
+          ...shoppingListState,
+          draftItems: shoppingListState.generatedItems
+            .filter((item) => !item.inventoryLedgerOnly)
+            .map((item) => ({ ...item, checked: false })),
+          search: '',
+        });
+        setShoppingListSaveStatus('idle');
+        return;
+      }
+      const response = await request<{ ok: true; draft: ShoppingListDraftRecord }>(
+        `${buildShoppingListDraftUrl(shoppingListState.sourceMode, shoppingListState.orderIds)}&revision=${shoppingListState.revision}`,
         { method: 'DELETE' },
       );
-      setShoppingListState((current) =>
-        current
-          ? {
-              ...current,
-              draftItems: current.generatedItems.map((item) => ({
-                ...item,
-                notes: [...item.notes],
-                checked: false,
-              })),
-              search: '',
-              revision: null,
-              updatedAt: null,
-              updatedByName: null,
-            }
-          : current,
-      );
-      setShoppingListSaveStatus('idle');
+      setShoppingListState(buildShoppingListStateFromDraft(response.draft));
+      setShoppingListSaveStatus('saved');
     } catch {
       setShoppingListSaveStatus('error');
       toast.error(t('ordersManager.shoppingList.saveError'));
@@ -428,6 +432,10 @@ export function OrdersWorkflows({
 
   async function refreshShoppingList() {
     if (!shoppingListState) return;
+    if (shoppingListState.draftItems.some((item) => item.inventoryAllocationReview)) {
+      await openStockReview();
+      return;
+    }
     const toastId = toast.loading(t('ordersManager.shoppingList.refreshing'));
     try {
       const orders =
@@ -436,7 +444,7 @@ export function OrdersWorkflows({
               shoppingListState.orderIds.includes(order.id),
             )
           : await fetchOrdersForShoppingListSource(shoppingListState.sourceMode);
-      if (orders.length === 0) {
+      if (orders.length === 0 && shoppingListState.sourceMode === 'selected') {
         toast.error(t('ordersManager.shoppingList.emptySelection'), { id: toastId });
         return;
       }
@@ -498,12 +506,27 @@ export function OrdersWorkflows({
     }
   }
 
+  async function openStockReview() {
+    if (!shoppingListState) return;
+    try {
+      await saveShoppingListNow(shoppingListState);
+      setStockReviewOpen(true);
+    } catch {
+      toast.error(t('ordersManager.shoppingList.saveError'));
+    }
+  }
+
   async function applyInventoryChanges(checkedOnly: boolean) {
     if (!shoppingListState) return;
+    if (shoppingListState.draftItems.some((item) => item.inventoryAllocationReview)) {
+      await openStockReview();
+      return;
+    }
     const candidates = shoppingListState.draftItems.filter(
       (item) =>
         item.productId != null &&
         item.inventoryDecreaseQuantity > 0 &&
+        item.quantity > item.inventoryAppliedQuantity &&
         item.inventoryActionEligible &&
         (!checkedOnly || item.checked),
     );
@@ -515,36 +538,21 @@ export function OrdersWorkflows({
       t('ordersManager.shoppingList.inventoryApplyLoading', { count: candidates.length }),
     );
     try {
-      const response = await applyInventoryMutation.mutateAsync(
-        candidates.map((item) => ({
-          productId: item.productId!,
-          quantity: item.inventoryDecreaseQuantity,
-          source: {
-            type: 'shopping-list' as const,
-            orderIds: shoppingListState.orders.map((order) => order.orderId),
-          },
-        })),
-      );
-      updateShoppingListItems((items) =>
-        items.map((item) => {
-          const applied = response.items.find((entry) => entry.productId === item.productId);
-          return applied
-            ? {
-                ...recalculateShoppingListInventory(item, {
-                  inventoryQuantity: applied.nextQuantity,
-                  inventoryAppliedQuantity:
-                    item.inventoryAppliedQuantity +
-                    (applied.previousQuantity - applied.nextQuantity),
-                }),
-                checked: true,
-              }
-            : item;
-        }),
-      );
+      const saved = await saveShoppingListNow(shoppingListState);
+      const response = await applyInventoryMutation.mutateAsync({
+        sourceMode: saved.draft.sourceMode,
+        orderIds: saved.draft.orderIds,
+        revision: saved.draft.revision,
+        draftIds: candidates.map((item) => item.draftId),
+      });
+      setShoppingListState(buildShoppingListStateFromDraft(response.draft));
+      setShoppingListSaveStatus('saved');
       toast.success(
         t('ordersManager.shoppingList.inventoryApplySuccess', { count: response.items.length }),
         { id: toastId },
       );
+      if (response.draft.draftItems.some((item) => item.inventoryAllocationReview))
+        setStockReviewOpen(true);
       if (response.skipped.length > 0) {
         toast.error(
           response.skipped.map((item) => `${item.productId}: ${item.reason}`).join(' | '),
@@ -728,7 +736,7 @@ export function OrdersWorkflows({
         />
       </div>
 
-      {shoppingListOpen ? (
+      {shoppingListOpen && !stockReviewOpen ? (
         <ShoppingListWorkspaceDialog
           open
           state={shoppingListState}
@@ -748,6 +756,8 @@ export function OrdersWorkflows({
             updateShoppingListState((current) => ({ ...current, search }))
           }
           onAddProduct={(product) => void addShoppingListProduct(product)}
+          onReviewInventory={() => void openStockReview()}
+          reviewInventoryLabel={shoppingInventoryReviewLabel(locale)}
           onReset={resetShoppingList}
           onRefresh={refreshShoppingList}
           onToggleItem={(draftId) =>
@@ -779,12 +789,18 @@ export function OrdersWorkflows({
             updateShoppingListItems((items) =>
               items.map((item) => {
                 if (item.draftId !== draftId) return item;
-                const maximum = Math.min(item.quantity, item.inventoryQuantity ?? 0);
+                const maximum = Math.min(
+                  Math.max(item.quantity - item.inventoryAppliedQuantity, 0),
+                  item.inventoryQuantity ?? 0,
+                );
                 const next = Math.min(item.inventoryDecreaseQuantity + 1, maximum);
                 return {
                   ...item,
                   inventoryDecreaseQuantity: next,
-                  inventoryShortageQuantity: Math.max(item.quantity - next, 0),
+                  inventoryShortageQuantity: Math.max(
+                    item.quantity - item.inventoryAppliedQuantity - next,
+                    0,
+                  ),
                 };
               }),
             )
@@ -797,7 +813,10 @@ export function OrdersWorkflows({
                 return {
                   ...item,
                   inventoryDecreaseQuantity: next,
-                  inventoryShortageQuantity: Math.max(item.quantity - next, 0),
+                  inventoryShortageQuantity: Math.max(
+                    item.quantity - item.inventoryAppliedQuantity - next,
+                    0,
+                  ),
                 };
               }),
             )
@@ -807,6 +826,25 @@ export function OrdersWorkflows({
           }
           onApplyAllInventoryChanges={() => void applyInventoryChanges(false)}
           onApplySelectedInventoryChanges={() => void applyInventoryChanges(true)}
+        />
+      ) : null}
+
+      {shoppingListState ? (
+        <ShoppingInventoryReviewDialog
+          open={stockReviewOpen}
+          onOpenChange={setStockReviewOpen}
+          sourceMode={shoppingListState.sourceMode}
+          orderIds={shoppingListState.orderIds}
+          onReviewed={async () => {
+            const response = await fetchShoppingListDraft(
+              shoppingListState.sourceMode,
+              shoppingListState.orderIds,
+            );
+            if (response.draft) {
+              setShoppingListState(buildShoppingListStateFromDraft(response.draft));
+              setShoppingListSaveStatus('saved');
+            }
+          }}
         />
       ) : null}
 

@@ -1,3 +1,5 @@
+import { CACHE_TAGS, revalidateServerTags } from './server-cache';
+import { getStorefrontPublicBaseUrl } from './storefront-public-url';
 import { signInternalRequest } from '@bric/runtime/internal-signing';
 import { buildLandingPagePreviewPayload } from '@bric/storefront-core/landing-pages';
 
@@ -30,7 +32,7 @@ export function buildStorefrontLandingPagePreviewUrl(
   const payload = buildLandingPagePreviewPayload(input);
   const signature = signInternalRequest(payload, secret, timestamp);
   const url = new URL(
-    `${getStorefrontBaseUrl()}/${input.locale}/landing-preview/${encodeURIComponent(input.slug)}`,
+    `${getStorefrontPublicBaseUrl()}/${input.locale}/landing-preview/${encodeURIComponent(input.slug)}`,
   );
   url.searchParams.set('previewRevision', String(input.revision));
   url.searchParams.set('previewTimestamp', timestamp);
@@ -58,6 +60,20 @@ async function postSignedRevalidationRequest(baseUrl: string, bodyText: string, 
   }
 }
 
+async function invalidateInOrder(targets: string[], bodyText: string, secret: string) {
+  const results: PromiseSettledResult<void>[] = [];
+  // Expire canonical data before any consumer can refill its own cache.
+  for (const target of targets) {
+    try {
+      await postSignedRevalidationRequest(target, bodyText, secret);
+      results.push({ status: 'fulfilled', value: undefined });
+    } catch (reason) {
+      results.push({ status: 'rejected', reason });
+    }
+  }
+  return results;
+}
+
 export async function revalidateStorefrontAssets() {
   const secret = getStorefrontRevalidateSecret();
   if (!secret) {
@@ -75,9 +91,7 @@ export async function revalidateStorefrontAssets() {
       ),
     ),
   ];
-  const results = await Promise.allSettled(
-    targets.map((baseUrl) => postSignedRevalidationRequest(baseUrl, bodyText, secret)),
-  );
+  const results = await invalidateInOrder(targets, bodyText, secret);
 
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
@@ -107,6 +121,7 @@ export async function revalidateStorefrontProducts() {
 }
 
 export async function revalidateStorefrontProductMeta() {
+  revalidateServerTags(CACHE_TAGS.productsMeta);
   const secret = getStorefrontRevalidateSecret();
   if (!secret) {
     console.warn(
@@ -133,9 +148,7 @@ async function revalidateTargets(
     ...new Set(candidateTargets.filter((baseUrl): baseUrl is string => Boolean(baseUrl))),
   ];
   const bodyText = JSON.stringify(payload);
-  const results = await Promise.allSettled(
-    targets.map((baseUrl) => postSignedRevalidationRequest(baseUrl, bodyText, secret)),
-  );
+  const results = await invalidateInOrder(targets, bodyText, secret);
 
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
@@ -160,9 +173,7 @@ export async function revalidateStorefrontSettings() {
     (baseUrl): baseUrl is string => Boolean(baseUrl),
   );
   const bodyText = JSON.stringify({ scope: 'settings' });
-  const results = await Promise.allSettled(
-    targets.map((baseUrl) => postSignedRevalidationRequest(baseUrl, bodyText, secret)),
-  );
+  const results = await invalidateInOrder(targets, bodyText, secret);
 
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
@@ -186,9 +197,7 @@ export async function revalidateStorefrontLandingPages() {
     (baseUrl): baseUrl is string => Boolean(baseUrl),
   );
   const bodyText = JSON.stringify({ scope: 'landing-pages' });
-  const results = await Promise.allSettled(
-    targets.map((baseUrl) => postSignedRevalidationRequest(baseUrl, bodyText, secret)),
-  );
+  const results = await invalidateInOrder(targets, bodyText, secret);
   results.forEach((result, index) => {
     if (result.status === 'rejected')
       console.warn('[admin] storefront landing-page revalidation request failed', {

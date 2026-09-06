@@ -439,6 +439,8 @@ export const analyticsCopyEn = {
     defaultReturn: 'Default return rate',
     restFrom: 'Friday-rest active from',
     newCost: 'Add operating cost',
+    costRetryRequired:
+      'The response was interrupted. Save again to confirm this same cost before making other changes.',
     monthly: 'Monthly',
     once: 'One time',
     amount: 'Amount DZD',
@@ -446,7 +448,7 @@ export const analyticsCopyEn = {
     end: 'End date (optional)',
     newOverride: 'Edit daily override',
     gross: 'Gross profit DZD',
-    confirmed: 'Confirmed orders',
+    confirmed: 'Posted or manual orders',
     returnRate: 'Return rate %',
     notes: 'Operator note',
     automatic: 'Automatic',

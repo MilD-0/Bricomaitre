@@ -5,6 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Check, Minus, Package, Phone, Plus, Search, X } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
+import { useStorefrontBaseUrl } from '../storefront-origin';
 import { useDeferredValue, useMemo, useState } from 'react';
 
 import { requestJson as request } from '../../lib/admin-api';
@@ -159,6 +160,7 @@ function OrderEditorBody({
   onSave: (order: OrderRecord, patch: OrderPatch) => Promise<void>;
 }) {
   const locale = useLocale();
+  const storefrontBaseUrl = useStorefrontBaseUrl();
   const t = useTranslations();
   const [draft, setDraft] = useState(() => buildDraft(order, catalog));
   const [productSearch, setProductSearch] = useState('');
@@ -508,10 +510,13 @@ function OrderEditorBody({
               <div className="min-w-0 flex-1">
                 {product.productId !== null && !product.missing ? (
                   <a
-                    href={buildStorefrontProductHref({
-                      id: product.productId,
-                      slug: product.slug ?? null,
-                    })}
+                    href={buildStorefrontProductHref(
+                      {
+                        id: product.productId,
+                        slug: product.slug ?? null,
+                      },
+                      storefrontBaseUrl,
+                    )}
                     target="_blank"
                     rel="noreferrer"
                     className="block truncate text-sm font-medium underline-offset-4 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring/30"

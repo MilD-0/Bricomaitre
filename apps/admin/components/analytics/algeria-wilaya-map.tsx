@@ -277,6 +277,12 @@ export function AlgeriaWilayaMap({ rows, locale }: { rows: WilayaValue[]; locale
                   setTooltip(null);
                 }}
                 onClick={() => setSelectedName(row?.name ?? featureName)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setSelectedName(row?.name ?? featureName);
+                  }
+                }}
               >
                 <title>{label}</title>
               </path>

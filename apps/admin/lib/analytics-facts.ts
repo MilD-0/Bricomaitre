@@ -288,17 +288,17 @@ export async function refreshAnalyticsFacts(
 }
 
 export async function refreshAnalyticsFactsAfterMutation() {
+  // Economics writes carry dependency timestamps, so readers can fall back to
+  // canonical calculations while the existing worker rebuilds materialized facts.
+  // A committed edit must not wait for an all-history rebuild before acknowledging it.
+  await import('./analytics-snapshots')
+    .then(({ invalidateAnalyticsSnapshots }) => invalidateAnalyticsSnapshots())
+    .catch((error) => console.error('Stats snapshot invalidation failed.', error));
   try {
-    await refreshAnalyticsFacts();
-    return true;
+    const { triggerAdminReportingRefresh } = await import('./reporting-refresh-trigger');
+    return Boolean(await triggerAdminReportingRefresh('economics-mutation'));
   } catch (error) {
-    console.error('Stats fact refresh failed after an economics mutation.', error);
+    console.error('Stats refresh scheduling failed after an economics mutation.', error);
     return false;
-  } finally {
-    // Rotate after rebuilding so an overlapping reader cannot cache old facts
-    // under the new generation. Failed rebuilds also discard old snapshots.
-    await import('./analytics-snapshots')
-      .then(({ invalidateAnalyticsSnapshots }) => invalidateAnalyticsSnapshots())
-      .catch((error) => console.error('Stats snapshot invalidation failed.', error));
   }
 }

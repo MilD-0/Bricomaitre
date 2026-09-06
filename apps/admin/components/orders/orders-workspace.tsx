@@ -11,6 +11,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
+import { useStorefrontBaseUrl } from '../storefront-origin';
 import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { requestJson as request } from '../../lib/admin-api';
@@ -78,6 +79,7 @@ export function OrdersWorkspace({
   initialOverview?: DailyOrderStatusOverview;
 }) {
   const locale = useLocale();
+  const storefrontBaseUrl = useStorefrontBaseUrl();
   const t = useTranslations();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
@@ -307,7 +309,7 @@ export function OrdersWorkspace({
             method: 'POST',
           })
         ).publicToken;
-      const trackingUrl = buildOrderTrackingUrl(publicToken, locale);
+      const trackingUrl = buildOrderTrackingUrl(publicToken, locale, storefrontBaseUrl);
       if (!trackingUrl) throw new Error(t('ordersManager.tracking.unavailable'));
       await navigator.clipboard.writeText(trackingUrl);
       toast.success(t('ordersManager.tracking.success'));
@@ -567,7 +569,11 @@ export function OrdersWorkspace({
             ) : null}
             <div className="divide-y divide-border/55">
               {orders.map((order) => {
-                const trackingUrl = buildOrderTrackingUrl(order.publicToken, locale);
+                const trackingUrl = buildOrderTrackingUrl(
+                  order.publicToken,
+                  locale,
+                  storefrontBaseUrl,
+                );
                 const note = order.note?.trim();
                 const statusLabel =
                   order.inHouseStatus === ORDER_STATUS.NO_ANSWER

@@ -1,3 +1,4 @@
+import { getStorefrontPublicBaseUrl } from './storefront-public-url';
 export type MetaCatalogProduct = {
   id: number;
   slug: string | null;
@@ -40,8 +41,6 @@ export const META_CATALOG_EXPORT_HEADERS = [
   'brand',
 ] as const;
 
-const DEFAULT_STOREFRONT_BASE_URL = 'https://bricomaitre.com';
-
 function parseProductPrice(value: number | string | null | undefined) {
   if (typeof value === 'number') {
     return value;
@@ -56,14 +55,6 @@ function parseProductPrice(value: number | string | null | undefined) {
 
 function formatExportTimestampPart(value: number) {
   return String(value).padStart(2, '0');
-}
-
-function normalizeBaseUrl(value: string) {
-  return value.endsWith('/') ? value.slice(0, -1) : value;
-}
-
-function getStorefrontBaseUrl() {
-  return normalizeBaseUrl(process.env.STOREFRONT_BASE_URL ?? DEFAULT_STOREFRONT_BASE_URL);
 }
 
 export function buildMetaCatalogExportFileName(now = new Date()) {
@@ -84,6 +75,7 @@ export function buildMetaCatalogExportRows(
   products: MetaCatalogProduct[],
   brandNameById: Map<number, string>,
   imageLinkByProductId: Map<number, string>,
+  storefrontBaseUrl = getStorefrontPublicBaseUrl(),
 ) {
   return products.map((product) => {
     const price = parseProductPrice(product.price) ?? 0;
@@ -99,7 +91,7 @@ export function buildMetaCatalogExportRows(
       condition: 'new',
       price: `${hasCompareAtPrice ? compareAtPrice : price} DZD`,
       salePrice: hasCompareAtPrice ? `${price} DZD` : '',
-      link: `${getStorefrontBaseUrl()}/products/${product.slug ?? product.id}`,
+      link: `${storefrontBaseUrl.replace(/\/+$/, '')}/products/${product.slug ?? product.id}`,
       imageLink: imageLinkByProductId.get(product.id) ?? '',
       brand: product.brandId
         ? (brandNameById.get(product.brandId) ?? 'Sans marque')

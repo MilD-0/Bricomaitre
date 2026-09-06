@@ -19,6 +19,7 @@ import {
 } from './orders';
 import { getOrderProductLookup, toOrderRecord } from './order-records';
 import { orderProductSearchCondition } from './order-product-search';
+import { orderIdentifierSearchCondition } from './order-search';
 import { getCanonicalOrderProjectionDays } from './profit-tracker';
 import type {
   DailyOrderStatusOverview,
@@ -356,7 +357,8 @@ export async function loadOrdersPageData(
   const db = getDb();
   const query = orderListQuerySchema.parse(input);
   const searchFilter = query.search
-    ? or(
+    ? ((await orderIdentifierSearchCondition(db, query.search)) ??
+      or(
         sql`concat_ws(' ', ${orders.firstName}, ${orders.lastName}) ILIKE ${`%${query.search}%`}`,
         ilike(orders.phoneNumber1, `%${query.search}%`),
         ilike(orders.phoneNumber2, `%${query.search}%`),
@@ -365,7 +367,7 @@ export async function loadOrdersPageData(
         sql`cast(${orders.state} as text) ILIKE ${`%${query.search}%`}`,
         ilike(orders.city, `%${query.search}%`),
         orderProductSearchCondition(query.search),
-      )
+      ))
     : undefined;
   const whereClause = and(
     query.inHouseStatus !== undefined

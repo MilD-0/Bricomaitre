@@ -46,7 +46,7 @@ function database() {
       },
     })),
     delete: vi.fn(() => deleteChain),
-    insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue(undefined) })),
+    insert: vi.fn(() => ({ values: vi.fn(() => ({ returning: async () => [{ id: 9001 }] })) })),
   };
   const db = {
     select: vi.fn(() => ({

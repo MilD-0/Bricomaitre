@@ -46,10 +46,10 @@ const page: LandingPageDetail = {
   }),
 };
 
-function renderBuilder() {
+function renderBuilder(initialPage = page) {
   return render(
     <NextIntlClientProvider locale="en" messages={{}}>
-      <LandingPageBuilder initialPage={page} storefrontBaseUrl="https://bricomaitre.com" />
+      <LandingPageBuilder initialPage={initialPage} storefrontBaseUrl="https://bricomaitre.com" />
     </NextIntlClientProvider>,
   );
 }
@@ -58,6 +58,7 @@ describe('LandingPageBuilder', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    window.sessionStorage.clear();
   });
 
   it('uses sticky document chrome and keeps product identity visible on mobile', () => {
@@ -154,9 +155,124 @@ describe('LandingPageBuilder', () => {
     const back = screen.getByRole('link', { name: 'Back to outline' });
     expect(fireEvent.click(back)).toBe(false);
     expect(confirm).toHaveBeenCalled();
+    const sidebarLink = document.createElement('a');
+    sidebarLink.href = '/en/products';
+    document.body.append(sidebarLink);
+    expect(fireEvent.click(sidebarLink)).toBe(false);
+    sidebarLink.remove();
 
     await user.click(screen.getByRole('button', { name: /Product hero · More/ }));
     expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
     fireEvent(window, new Event('beforeunload', { cancelable: true }));
+  });
+  it('recovers incomplete edits after leaving and returning to the editor', async () => {
+    const user = userEvent.setup();
+    const first = renderBuilder();
+    await user.clear(screen.getByRole('textbox', { name: 'Browser and social title' }));
+    await user.click(screen.getByRole('switch', { name: 'Status · Inactive' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Add block' }), 'media-feature');
+    await user.click(within(screen.getByRole('main')).getByRole('button', { name: 'Add item' }));
+    first.unmount();
+
+    renderBuilder();
+    expect(screen.getByRole('region', { name: 'Unsaved changes from this tab' })).toBeVisible();
+    expect(screen.getByRole('textbox', { name: 'Browser and social title' })).toHaveValue(
+      'Cordless drill',
+    );
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Restore changes' }));
+    expect(screen.getByRole('textbox', { name: 'Browser and social title' })).toHaveValue('');
+    expect(screen.getByRole('switch', { name: 'Status · Active' })).toBeChecked();
+    await user.click(screen.getByRole('button', { name: /4 · Media feature/ }));
+    expect(
+      within(screen.getByRole('main')).getByRole('textbox', { name: 'Bullet points 1' }),
+    ).toHaveValue('');
+    expect(window.sessionStorage.getItem('bric:landing-draft:7')).not.toBeNull();
+  });
+
+  it('explains a newer saved revision before restoring and saves against that revision', async () => {
+    const user = userEvent.setup();
+    const first = renderBuilder();
+    await user.type(screen.getByRole('textbox', { name: 'Browser and social title' }), ' draft');
+    first.unmount();
+    const newer = structuredClone(page);
+    newer.currentRevision = 4;
+    newer.document.seo.title = 'A newer saved title';
+    let body: Record<string, unknown> | null = null;
+    server.use(
+      http.patch('/api/landing-pages/7', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ id: 7, active: false, currentRevision: 5 });
+      }),
+    );
+
+    renderBuilder(newer);
+    expect(
+      screen.getByText(/changes began at revision 3.*saved page is now revision 4/),
+    ).toBeVisible();
+    expect(screen.getByRole('textbox', { name: 'Browser and social title' })).toHaveValue(
+      'A newer saved title',
+    );
+    await user.click(screen.getByRole('button', { name: 'Restore changes' }));
+    expect(screen.getByRole('textbox', { name: 'Browser and social title' })).toHaveValue(
+      'Cordless drill draft',
+    );
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(body).toMatchObject({
+        expectedRevision: 4,
+        document: { seo: { title: 'Cordless drill draft' } },
+      }),
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
+    expect(window.sessionStorage.getItem('bric:landing-draft:7')).toBeNull();
+  });
+
+  it('discards a recovered draft explicitly without modifying the saved page', async () => {
+    const user = userEvent.setup();
+    const first = renderBuilder();
+    await user.type(screen.getByRole('textbox', { name: 'Browser and social title' }), ' draft');
+    first.unmount();
+    const second = renderBuilder();
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+    expect(screen.getByRole('textbox', { name: 'Browser and social title' })).toHaveValue(
+      'Cordless drill',
+    );
+    expect(window.sessionStorage.getItem('bric:landing-draft:7')).toBeNull();
+    second.unmount();
+    renderBuilder();
+    expect(screen.queryByRole('button', { name: 'Restore changes' })).not.toBeInTheDocument();
+  });
+
+  it('keeps unrelated page drafts separate and ignores malformed recovery data', () => {
+    window.sessionStorage.setItem(
+      'bric:landing-draft:8',
+      JSON.stringify({ version: 1, baseRevision: 3, active: true, document: page.document }),
+    );
+    window.sessionStorage.setItem(
+      'bric:landing-draft:7',
+      JSON.stringify({ version: 1, baseRevision: 3, active: true, document: { blocks: null } }),
+    );
+    renderBuilder();
+    expect(screen.queryByRole('button', { name: 'Restore changes' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Browser and social title' })).toHaveValue(
+      'Cordless drill',
+    );
+    expect(window.sessionStorage.getItem('bric:landing-draft:8')).not.toBeNull();
+  });
+
+  it('shows when browser storage cannot keep a recovery copy', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Full', 'QuotaExceededError');
+    });
+    renderBuilder();
+    await user.type(screen.getByRole('textbox', { name: 'Browser and social title' }), ' draft');
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Save your changes before leaving this page.',
+    );
+    expect(screen.getByRole('textbox', { name: 'Browser and social title' })).toHaveValue(
+      'Cordless drill draft',
+    );
   });
 });

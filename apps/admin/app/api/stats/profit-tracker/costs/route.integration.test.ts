@@ -13,7 +13,7 @@ vi.mock('../../../../../lib/analytics-facts', () => ({
   refreshAnalyticsFactsAfterMutation: refreshFactsMock,
 }));
 
-vi.mock('@bric/db/client', () => ({ hasDb: () => true }));
+vi.mock('@bric/db/client', () => ({ hasDb: () => true, getDb: () => ({}) }));
 vi.mock('../../../../../lib/rbac', () => ({
   requireAnalyticsAccess: requireOpsMock,
   requireMutationAccess: requireMutationMock,
@@ -30,6 +30,7 @@ vi.mock('../../../../../lib/profit-tracker', async () => {
 });
 
 import { GET, POST } from './route';
+import { AdminMutationIdempotencyConflictError } from '../../../../../lib/admin-mutation-idempotency';
 
 describe('profit tracker costs route', () => {
   beforeEach(() => {
@@ -56,11 +57,11 @@ describe('profit tracker costs route', () => {
     const response = await POST(
       new Request('http://localhost/api/stats/profit-tracker/costs', {
         method: 'POST',
-        body: JSON.stringify(input),
+        body: JSON.stringify({ ...input, requestId: '8f3ca9ac-8441-4f5a-a8cd-22d1569644a8' }),
       }),
     );
     expect(response.status).toBe(200);
-    expect(createCostMock).toHaveBeenCalledWith(input);
+    expect(createCostMock).toHaveBeenCalledWith(input, {}, '8f3ca9ac-8441-4f5a-a8cd-22d1569644a8');
     expect(refreshFactsMock).toHaveBeenCalledOnce();
   });
 
@@ -79,5 +80,22 @@ describe('profit tracker costs route', () => {
     );
     expect(response.status).toBe(400);
     expect(createCostMock).not.toHaveBeenCalled();
+  });
+
+  it('requires a retry identity and returns a conflict for changed retry payloads', async () => {
+    const input = { name: 'Rent', amountDzd: 60000, period: 'monthly', startDate: '2026-08-01' };
+    const post = (body: unknown) =>
+      POST(
+        new Request('http://localhost/api/stats/profit-tracker/costs', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        }),
+      );
+    expect((await post(input)).status).toBe(400);
+    createCostMock.mockRejectedValueOnce(new AdminMutationIdempotencyConflictError());
+    expect(
+      (await post({ ...input, requestId: '8f3ca9ac-8441-4f5a-a8cd-22d1569644a8' })).status,
+    ).toBe(409);
+    expect(refreshFactsMock).not.toHaveBeenCalled();
   });
 });

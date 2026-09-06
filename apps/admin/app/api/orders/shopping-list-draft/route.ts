@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { auth } from '../../../../lib/auth';
@@ -8,7 +9,7 @@ import {
   shoppingListDraftQuerySchema,
 } from '../../../../lib/shopping-list-drafts';
 import {
-  deleteAdminShoppingListDraft,
+  resetAdminShoppingListDraft,
   loadAdminShoppingListDraft,
   saveAdminShoppingListDraft,
   ShoppingListDraftConflictError,
@@ -87,6 +88,29 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
 
-  await deleteAdminShoppingListDraft(getDb(), parsed.data);
-  return NextResponse.json({ ok: true });
+  const revision = z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .safeParse(req.nextUrl.searchParams.get('revision') ?? undefined);
+  if (!revision.success)
+    return NextResponse.json({ error: 'A current draft revision is required.' }, { status: 400 });
+  const session = await auth();
+  try {
+    return NextResponse.json({
+      ok: true,
+      draft: await resetAdminShoppingListDraft(
+        getDb(),
+        { ...parsed.data, revision: revision.data },
+        {
+          email: session?.user?.email,
+          name: session?.user?.name,
+        },
+      ),
+    });
+  } catch (error) {
+    if (error instanceof ShoppingListDraftConflictError)
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    throw error;
+  }
 }

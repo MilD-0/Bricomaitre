@@ -67,6 +67,7 @@ export type AssetsWorkspaceCopy = {
   cardDescriptionAr: string;
   characteristicsFr: string;
   characteristicsAr: string;
+  characteristicsRequirement: string;
   productSearch: string;
   productEmpty: string;
   selected: string;
@@ -181,8 +182,12 @@ function BannerEditor({
   const [portrait, setPortrait] = React.useState(item?.imageUrlPortrait ?? '');
   const [active, setActive] = React.useState(item?.active ?? true);
   const [error, setError] = React.useState('');
+  const [uploadingLandscape, setUploadingLandscape] = React.useState(false);
+  const [uploadingPortrait, setUploadingPortrait] = React.useState(false);
+  const uploading = uploadingLandscape || uploadingPortrait;
 
   const submit = async () => {
+    if (pending || uploading) return;
     const parsed = assetBannerSchema.safeParse({
       title,
       titleAr,
@@ -210,7 +215,7 @@ function BannerEditor({
           <Button variant="outline" onClick={onClose}>
             {copy.cancel}
           </Button>
-          <Button disabled={pending} onClick={() => void submit()}>
+          <Button disabled={pending || uploading} onClick={() => void submit()}>
             {copy.save}
           </Button>
         </div>
@@ -240,12 +245,14 @@ function BannerEditor({
         <ProductPicker copy={copy} selectedIds={productIds} onChange={setProductIds} />
         <ImageUploadField
           uploadUrl="/api/uploads/assets"
+          onUploadingChange={setUploadingLandscape}
           label={copy.landscape}
           value={landscape ? [landscape] : []}
           onChange={(urls) => setLandscape(urls[0] ?? '')}
         />
         <ImageUploadField
           uploadUrl="/api/uploads/assets"
+          onUploadingChange={setUploadingPortrait}
           label={copy.portrait}
           value={portrait ? [portrait] : []}
           onChange={(urls) => setPortrait(urls[0] ?? '')}
@@ -440,6 +447,10 @@ function CardEditor({
       .filter(Boolean);
 
   const submit = async () => {
+    if (lines(characteristicsFr).length < 3 || lines(characteristicsAr).length < 3) {
+      setError(copy.characteristicsRequirement);
+      return;
+    }
     const parsed = productCardSchema.safeParse({
       productId: productIds[0] ?? 0,
       titleFr,

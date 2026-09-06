@@ -49,6 +49,33 @@ describe('Search Console ingestion', () => {
     ).toThrowError(SearchConsoleSyncError);
   });
 
+  it('permits configured loopback pages only in explicit demo mode', () => {
+    const env = { GOOGLE_SEARCH_CONSOLE_CREDENTIALS_JSON: JSON.stringify(credentials) };
+    expect(
+      readSearchConsoleConfig({
+        ...env,
+        BRIC_DEMO_MODE: 'true',
+        SEARCH_CONSOLE_SITE_ORIGIN: 'http://127.0.0.1:4402',
+      }).siteOrigin,
+    ).toBe('http://127.0.0.1:4402');
+    for (const origin of [
+      'http://127.0.0.1:4402',
+      'https://shop.example/path',
+      'https://user:password@shop.example',
+    ]) {
+      expect(() =>
+        readSearchConsoleConfig({ ...env, SEARCH_CONSOLE_SITE_ORIGIN: origin }),
+      ).toThrowError(SearchConsoleSyncError);
+    }
+    expect(() =>
+      readSearchConsoleConfig({
+        ...env,
+        BRIC_DEMO_MODE: 'true',
+        SEARCH_CONSOLE_SITE_ORIGIN: 'http://shop.example',
+      }),
+    ).toThrowError(SearchConsoleSyncError);
+  });
+
   it('loads exact totals separately from privacy-limited detail and tolerates inspection failure', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
       const url = String(input);

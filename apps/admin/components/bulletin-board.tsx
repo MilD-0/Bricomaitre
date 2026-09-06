@@ -317,7 +317,10 @@ export function BulletinBoard() {
       request('/api/bulletin', {
         method: 'POST',
         body: JSON.stringify({
-          ...values,
+          title: values.title,
+          body: values.body,
+          pinned: values.pinned,
+          attachments: values.attachments,
           tags: parseBulletinTags(values.tagsInput),
         }),
       }),
@@ -389,7 +392,10 @@ export function BulletinBoard() {
       request(`/api/bulletin/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({
-          ...values,
+          title: values.title,
+          body: values.body,
+          pinned: values.pinned,
+          attachments: values.attachments,
           tags: parseBulletinTags(values.tagsInput),
         }),
       }),

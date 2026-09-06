@@ -854,6 +854,88 @@ describe('StatsWorkspace', () => {
     });
   });
 
+  it('keeps the expense creation request ID when a response is lost and Save is retried', async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      if (String(url) === '/api/stats/profit-tracker/costs' && init?.method === 'POST') {
+        calls.push(JSON.parse(String(init.body)));
+        if (calls.length === 1) throw new TypeError('Connection lost after committing');
+        return new Response(JSON.stringify({ data: { id: 8 } }));
+      }
+      return new Response(JSON.stringify({ data: assumptionsPayload() }));
+    });
+    renderWorkspace(assumptionsPayload());
+    fireEvent.click(screen.getByRole('button', { name: 'Add operating cost' }));
+    const name = screen.getByRole('textbox', { name: 'Name' });
+    fireEvent.change(name, { target: { value: 'Retry-safe expense' } });
+    const form = name.closest('.mb-5')!;
+    fireEvent.change(within(form as HTMLElement).getByRole('spinbutton'), {
+      target: { value: '3100' },
+    });
+    const save = within(form as HTMLElement).getByRole('button', { name: 'Save' });
+    fireEvent.click(save);
+    await waitFor(() => {
+      expect(calls).toHaveLength(1);
+      expect(save).toBeEnabled();
+    });
+    expect(name).toBeDisabled();
+    expect(within(form as HTMLElement).getByRole('spinbutton')).toBeDisabled();
+    expect(within(form as HTMLElement).getByRole('combobox')).toBeDisabled();
+    expect(within(form as HTMLElement).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add operating cost' })).toBeDisabled();
+    expect(screen.getByText(/Save again to confirm this same cost/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Workspace rent'));
+    expect(name).toHaveValue('Retry-safe expense');
+    // Even a stale change event cannot alter the operation that may have committed.
+    fireEvent.change(within(form as HTMLElement).getByRole('spinbutton'), {
+      target: { value: '9000' },
+    });
+    fireEvent.click(save);
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(calls[0]?.requestId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(calls[1]).toEqual(calls[0]);
+    await waitFor(() => expect(name).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Add operating cost' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Add operating cost' }));
+    expect(screen.getByRole('textbox', { name: 'Name' })).toBeEnabled();
+    expect(screen.queryByText(/Save again to confirm this same cost/)).not.toBeInTheDocument();
+  });
+
+  it('allows correcting an expense rejected before creation', async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      if (String(url) === '/api/stats/profit-tracker/costs' && init?.method === 'POST') {
+        calls.push(JSON.parse(String(init.body)));
+        return calls.length === 1
+          ? new Response(JSON.stringify({ error: 'Invalid amount' }), { status: 400 })
+          : new Response(JSON.stringify({ data: { id: 8 } }));
+      }
+      return new Response(JSON.stringify({ data: assumptionsPayload() }));
+    });
+    renderWorkspace(assumptionsPayload());
+    fireEvent.click(screen.getByRole('button', { name: 'Add operating cost' }));
+    const name = screen.getByRole('textbox', { name: 'Name' });
+    fireEvent.change(name, { target: { value: 'Corrected expense' } });
+    const form = name.closest('.mb-5')!;
+    const amount = within(form as HTMLElement).getByRole('spinbutton');
+    fireEvent.change(amount, { target: { value: '3100' } });
+    const save = within(form as HTMLElement).getByRole('button', { name: 'Save' });
+    fireEvent.click(save);
+    await waitFor(() => {
+      expect(calls).toHaveLength(1);
+      expect(save).toBeEnabled();
+    });
+    expect(amount).toBeEnabled();
+    expect(within(form as HTMLElement).getByRole('button', { name: 'Cancel' })).toBeEnabled();
+    expect(screen.queryByText(/Save again to confirm this same cost/)).not.toBeInTheDocument();
+    fireEvent.change(amount, { target: { value: '3200' } });
+    fireEvent.click(save);
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(calls[1]?.amountDzd).toBe(3200);
+    expect(calls[1]?.requestId).not.toBe(calls[0]?.requestId);
+    await waitFor(() => expect(name).not.toBeInTheDocument());
+  });
+
   it('only enables reset when the selected day contains a manual override', () => {
     renderWorkspace(assumptionsPayload());
 

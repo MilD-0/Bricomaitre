@@ -169,9 +169,20 @@ export function readSearchConsoleConfig(env: SearchConsoleEnvironment = process.
   if (!siteUrl.startsWith('sc-domain:') && !/^https?:\/\//.test(siteUrl)) {
     throw new SearchConsoleSyncError('SEARCH_CONSOLE_SITE_URL is invalid.', 'invalid_site_url');
   }
-  if (!/^https:\/\//.test(siteOrigin)) {
+  let validOrigin = false;
+  try {
+    const url = new URL(siteOrigin);
+    const localDemo =
+      env.BRIC_DEMO_MODE?.trim().toLowerCase() === 'true' &&
+      url.protocol === 'http:' &&
+      ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+    validOrigin = url.origin === siteOrigin && (url.protocol === 'https:' || localDemo);
+  } catch {
+    // Report malformed URLs through the same configuration error below.
+  }
+  if (!validOrigin) {
     throw new SearchConsoleSyncError(
-      'SEARCH_CONSOLE_SITE_ORIGIN must be an HTTPS origin.',
+      'SEARCH_CONSOLE_SITE_ORIGIN must be an HTTPS origin (HTTP loopback is allowed in demo mode).',
       'invalid_site_origin',
     );
   }

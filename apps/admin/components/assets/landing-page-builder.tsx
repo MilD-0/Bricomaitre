@@ -252,6 +252,40 @@ function blockSummary(block: LandingPageBlock) {
   return block.type;
 }
 
+type LocalLandingDraft = {
+  version: 1;
+  baseRevision: number;
+  active: boolean;
+  document: LandingPageDocument;
+};
+
+function readLocalDraft(value: string | null): LocalLandingDraft | null {
+  if (!value) return null;
+  try {
+    const draft = JSON.parse(value) as LocalLandingDraft;
+    if (
+      draft.version !== 1 ||
+      !Number.isSafeInteger(draft.baseRevision) ||
+      draft.baseRevision < 1 ||
+      typeof draft.active !== 'boolean'
+    )
+      return null;
+    const parsed = landingPageDocumentSchema.safeParse(draft.document);
+    // Drafts can contain empty required text, unfinished URLs and incomplete
+    // lists. Reject broken structure, while retaining those editable values.
+    if (
+      !parsed.success &&
+      parsed.error.issues.some(
+        (issue) => !['too_small', 'too_big', 'invalid_format', 'custom'].includes(issue.code),
+      )
+    )
+      return null;
+    return draft;
+  } catch {
+    return null;
+  }
+}
+
 export function LandingPageBuilder({
   initialPage,
   storefrontBaseUrl,
@@ -276,10 +310,68 @@ export function LandingPageBuilder({
   const [pending, setPending] = React.useState(false);
   const [message, setMessage] = React.useState('');
   const [stale, setStale] = React.useState(false);
+  const draftKey = `bric:landing-draft:${initialPage.id}`;
+  const draftReady = React.useSyncExternalStore(
+    React.useCallback(() => () => {}, []),
+    () => true,
+    () => false,
+  );
+  const [initialRecovery] = React.useState(() => {
+    try {
+      const draft =
+        typeof window === 'undefined'
+          ? null
+          : readLocalDraft(window.sessionStorage.getItem(draftKey));
+      return {
+        draft:
+          draft &&
+          (JSON.stringify(draft.document) !== JSON.stringify(initialPage.document) ||
+            draft.active !== initialPage.active)
+            ? draft
+            : null,
+        failed: false,
+      };
+    } catch {
+      return { draft: null, failed: true };
+    }
+  });
+  const [recovery, setRecovery] = React.useState<LocalLandingDraft | null>(initialRecovery.draft);
+  const [draftStorageFailed, setDraftStorageFailed] = React.useState(initialRecovery.failed);
   const dirty = React.useMemo(
     () => JSON.stringify(document) !== JSON.stringify(savedDocument) || active !== savedActive,
     [active, document, savedActive, savedDocument],
   );
+  const localDraft = JSON.stringify({
+    version: 1,
+    baseRevision: page.currentRevision,
+    active,
+    document,
+  } satisfies LocalLandingDraft);
+  React.useLayoutEffect(() => {
+    if (!draftReady || recovery) return;
+    try {
+      if (dirty) window.sessionStorage.setItem(draftKey, localDraft);
+      else window.sessionStorage.removeItem(draftKey);
+    } catch {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- A failed external storage write must be visible to the operator.
+      setDraftStorageFailed(true);
+    }
+  }, [dirty, draftKey, draftReady, localDraft, recovery]);
+  const restoreDraft = () => {
+    if (!recovery) return;
+    setDocument(structuredClone(recovery.document));
+    setActive(recovery.active);
+    setSelectedId(recovery.document.blocks[0]?.id ?? '');
+    setRecovery(null);
+  };
+  const discardDraft = () => {
+    try {
+      window.sessionStorage.removeItem(draftKey);
+      setRecovery(null);
+    } catch {
+      setDraftStorageFailed(true);
+    }
+  };
   const selectedIndex = document.blocks.findIndex((block) => block.id === selectedId);
   const selected = document.blocks[selectedIndex] ?? document.blocks[0];
 
@@ -289,13 +381,38 @@ export function LandingPageBuilder({
       event.preventDefault();
       event.returnValue = '';
     };
+    const navigate = (event: MouseEvent) => {
+      if (
+        !dirty ||
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      )
+        return;
+      const link = (event.target as Element).closest<HTMLAnchorElement>('a[href]');
+      if (!link || link.target === '_blank' || link.hasAttribute('download')) return;
+      const destination = new URL(link.href, window.location.href);
+      if (
+        destination.href === window.location.href ||
+        (destination.pathname === window.location.pathname &&
+          destination.search === window.location.search)
+      )
+        return;
+      if (!window.confirm(t.unsavedConfirm)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
     window.addEventListener('beforeunload', beforeUnload);
-    return () => window.removeEventListener('beforeunload', beforeUnload);
-  }, [dirty]);
-
-  const confirmNavigation = (event: React.MouseEvent) => {
-    if (dirty && !window.confirm(t.unsavedConfirm)) event.preventDefault();
-  };
+    window.document.addEventListener('click', navigate, true);
+    return () => {
+      window.removeEventListener('beforeunload', beforeUnload);
+      window.document.removeEventListener('click', navigate, true);
+    };
+  }, [dirty, t.unsavedConfirm]);
   const patchBlock = (index: number, block: LandingPageBlock) =>
     setDocument((current) => ({
       ...current,
@@ -337,6 +454,7 @@ export function LandingPageBuilder({
   };
 
   const save = async () => {
+    if (pending || recovery || !draftReady) return;
     const parsed = landingPageDocumentSchema.safeParse({
       ...document,
       seo: { ...document.seo, indexable: false },
@@ -361,6 +479,12 @@ export function LandingPageBuilder({
           }),
         },
       );
+      try {
+        if (window.sessionStorage.getItem(draftKey) === localDraft)
+          window.sessionStorage.removeItem(draftKey);
+      } catch {
+        setDraftStorageFailed(true);
+      }
       setPage((current) => ({
         ...current,
         active: result.active,
@@ -400,7 +524,6 @@ export function LandingPageBuilder({
           <div className="flex min-w-0 items-center gap-3">
             <Link
               href={`/${adminLocale}/assets/landing-pages`}
-              onClick={confirmNavigation}
               className="grid size-9 shrink-0 place-items-center rounded-md hover:bg-muted"
               aria-label={t.back}
             >
@@ -439,10 +562,14 @@ export function LandingPageBuilder({
               <Switch
                 aria-label={`${t.status} · ${active ? t.active : t.inactive}`}
                 checked={active}
+                disabled={pending || Boolean(recovery) || !draftReady}
                 onCheckedChange={setActive}
               />
             </label>
-            <Button disabled={pending || !dirty} onClick={() => void save()}>
+            <Button
+              disabled={pending || !dirty || Boolean(recovery) || !draftReady}
+              onClick={() => void save()}
+            >
               {pending ? t.saving : t.save}
             </Button>
           </WorkspaceActions>
@@ -451,10 +578,10 @@ export function LandingPageBuilder({
           <span
             className={cn(
               message ? 'text-destructive' : 'text-muted-foreground',
-              message === t.saved && 'text-primary',
+              message === t.saved && !dirty && 'text-primary',
             )}
           >
-            {message || (dirty ? t.unsaved : t.saved)}
+            {dirty && message === t.saved ? t.unsaved : message || (dirty ? t.unsaved : t.saved)}
           </span>
           {stale ? (
             <Button size="sm" variant="outline" onClick={() => void reload()}>
@@ -464,7 +591,36 @@ export function LandingPageBuilder({
         </div>
       </div>
 
-      <div className="grid min-h-[calc(100dvh-11rem)] md:grid-cols-[20rem_minmax(0,1fr)] xl:grid-cols-[24rem_minmax(0,1fr)]">
+      {draftReady && recovery ? (
+        <section aria-label={t.draftFound} className="border-b border-border/60 px-4 py-4 sm:px-6">
+          <p className="text-sm font-medium">{t.draftFound}</p>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+            {recovery.baseRevision !== page.currentRevision
+              ? t.draftChanged
+                  .replace('{draftRevision}', String(recovery.baseRevision))
+                  .replace('{currentRevision}', String(page.currentRevision))
+              : t.draftRecover}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button onClick={restoreDraft}>{t.restoreDraft}</Button>
+            <Button variant="outline" onClick={discardDraft}>
+              {t.discardDraft}
+            </Button>
+          </div>
+        </section>
+      ) : null}
+      {draftReady && draftStorageFailed ? (
+        <p
+          role="alert"
+          className="border-b border-border/60 px-4 py-3 text-sm text-destructive sm:px-6"
+        >
+          {t.draftStorageFailed}
+        </p>
+      ) : null}
+      <div
+        inert={pending || Boolean(recovery) || !draftReady}
+        className="grid min-h-[calc(100dvh-11rem)] md:grid-cols-[20rem_minmax(0,1fr)] xl:grid-cols-[24rem_minmax(0,1fr)]"
+      >
         <aside className={cn('border-e border-border/60', showEditor && 'hidden md:block')}>
           <div className="border-b border-border/60 px-3 py-3 text-sm font-semibold">
             {t.outline}

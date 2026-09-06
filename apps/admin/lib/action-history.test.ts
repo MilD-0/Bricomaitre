@@ -28,7 +28,7 @@ function createActionLogSelectBuilder(row: unknown) {
   return {
     from: vi.fn(() => ({
       where: vi.fn(() => ({
-        limit: vi.fn().mockResolvedValue(row ? [row] : []),
+        for: vi.fn(() => ({ limit: vi.fn().mockResolvedValue(row ? [row] : []) })),
       })),
     })),
   };
@@ -230,7 +230,7 @@ describe('action-history helpers', () => {
       entityLabel: 'Widget',
       operation: 'update',
       beforeState: { id: 9, title: 'Widget', color: '#ffffff', inventoryQuantity: 2 },
-      afterState: { id: 9, title: 'Widget', color: '#000000', inventoryQuantity: 4 },
+      afterState: { id: 9, title: 'Updated widget', color: '#000000', inventoryQuantity: 2 },
       createdBy: 'admin@example.com',
       createdByName: 'Admin',
       isReversible: true,
@@ -246,6 +246,7 @@ describe('action-history helpers', () => {
     const entityUpdateSet = vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) }));
     const logUpdateSet = vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) }));
     const tx = {
+      execute: vi.fn().mockResolvedValue({ rows: [] }),
       select: vi
         .fn()
         .mockReturnValueOnce(createActionLogSelectBuilder(historyEntry))

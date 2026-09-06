@@ -1,10 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CompactMenu, CompactMenuItem } from './compact-menu';
 
 describe('CompactMenu', () => {
+  afterEach(() => vi.restoreAllMocks());
   it('opens, selects an action, and closes', async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
@@ -53,6 +54,7 @@ describe('CompactMenu', () => {
 
     await user.click(screen.getByRole('button', { name: 'Bottom row actions' }));
 
-    expect(screen.getByRole('menu')).toHaveClass('bottom-full');
+    expect(screen.getByRole('menu').parentElement).toBe(document.body);
+    expect(screen.getByRole('menu')).toHaveClass('fixed');
   });
 });

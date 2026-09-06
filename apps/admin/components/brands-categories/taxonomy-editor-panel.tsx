@@ -47,8 +47,10 @@ export function TaxonomyEditorPanel({
   const [parentId, setParentId] = React.useState(category?.parentId ?? '');
   const [imageUrl, setImageUrl] = React.useState(item?.image ?? '');
   const [error, setError] = React.useState('');
+  const [uploading, setUploading] = React.useState(false);
 
   const submit = async () => {
+    if (pending || uploading) return;
     const parsed =
       view === 'brands'
         ? brandFormSchema.safeParse({ name, imageUrl })
@@ -78,7 +80,7 @@ export function TaxonomyEditorPanel({
           <Button type="button" variant="outline" onClick={onClose}>
             {copy.cancel}
           </Button>
-          <Button type="button" disabled={pending} onClick={() => void submit()}>
+          <Button type="button" disabled={pending || uploading} onClick={() => void submit()}>
             {pending ? copy.saving : copy.save}
           </Button>
         </div>
@@ -136,6 +138,7 @@ export function TaxonomyEditorPanel({
         ) : null}
 
         <ImageUploadField
+          onUploadingChange={setUploading}
           uploadUrl={view === 'brands' ? '/api/uploads/brands' : '/api/uploads/categories'}
           label={copy.image}
           value={imageUrl ? [imageUrl] : []}

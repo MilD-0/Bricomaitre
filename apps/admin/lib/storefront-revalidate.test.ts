@@ -1,3 +1,8 @@
+const { revalidateLocalMeta } = vi.hoisted(() => ({ revalidateLocalMeta: vi.fn() }));
+vi.mock('./server-cache', () => ({
+  CACHE_TAGS: { productsMeta: 'products-meta' },
+  revalidateServerTags: revalidateLocalMeta,
+}));
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { verifyInternalRequestSignature } from '@bric/runtime/internal-signing';
@@ -16,6 +21,7 @@ const originalSecret = process.env.STOREFRONT_REVALIDATE_SECRET;
 
 describe('storefront product revalidation', () => {
   beforeEach(() => {
+    revalidateLocalMeta.mockClear();
     delete process.env.STOREFRONT_BASE_URL;
     delete process.env.STOREFRONT_REVALIDATE_SECRET;
   });
@@ -23,6 +29,7 @@ describe('storefront product revalidation', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     if (originalBaseUrl === undefined) {
       delete process.env.STOREFRONT_BASE_URL;
     } else {
@@ -40,7 +47,8 @@ describe('storefront product revalidation', () => {
   });
 
   it('builds a short-lived signed URL for the saved landing-page revision', () => {
-    process.env.STOREFRONT_BASE_URL = 'https://bricomaitre.com/';
+    process.env.STOREFRONT_BASE_URL = 'http://storefront:3002';
+    vi.stubEnv('NEXT_PUBLIC_STOREFRONT_BASE_URL', 'https://public.example.com/');
     process.env.STOREFRONT_REVALIDATE_SECRET = 'test-secret';
 
     const previewUrl = new URL(
@@ -51,7 +59,7 @@ describe('storefront product revalidation', () => {
     );
 
     expect(`${previewUrl.origin}${previewUrl.pathname}`).toBe(
-      'https://bricomaitre.com/fr/landing-preview/perceuse-20v',
+      'https://public.example.com/fr/landing-preview/perceuse-20v',
     );
     expect(previewUrl.searchParams.get('previewRevision')).toBe('4');
     expect(
@@ -99,6 +107,30 @@ describe('storefront product revalidation', () => {
     ).toEqual({ ok: true });
   });
 
+  it('does not expire the storefront consumer before canonical invalidation finishes', async () => {
+    process.env.STOREFRONT_BASE_URL = 'http://storefront:3002';
+    process.env.STOREFRONT_REVALIDATE_SECRET = 'test-secret';
+    let finishCanonical!: () => void;
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            finishCanonical = () => resolve(new Response(null, { status: 200 }));
+          }),
+      )
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const invalidation = revalidateStorefrontProducts();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    finishCanonical();
+    await invalidation;
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'http://localhost:3001/api/internal/revalidate',
+      'http://storefront:3002/api/internal/revalidate',
+    ]);
+  });
+
   it('posts a signed product metadata invalidation for category and brand changes', async () => {
     process.env.STOREFRONT_BASE_URL = 'https://storefront.example.com';
     process.env.STOREFRONT_REVALIDATE_SECRET = 'test-secret';
@@ -106,6 +138,7 @@ describe('storefront product revalidation', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await revalidateStorefrontProductMeta();
+    expect(revalidateLocalMeta).toHaveBeenCalledWith('products-meta');
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([

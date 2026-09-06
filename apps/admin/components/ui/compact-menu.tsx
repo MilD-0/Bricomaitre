@@ -2,6 +2,7 @@
 
 import { MoreHorizontal } from 'lucide-react';
 import * as React from 'react';
+import { createPortal } from 'react-dom';
 
 import { cn } from '../../lib/utils';
 
@@ -18,11 +19,53 @@ export function CompactMenu({
   const rootRef = React.useRef<HTMLDivElement>(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const menuId = React.useId();
+  const menuRef = React.useRef<HTMLDivElement>(null);
+  const [position, setPosition] = React.useState({ top: 0, left: 0 });
+
+  React.useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const trigger = triggerRef.current?.getBoundingClientRect();
+      const menu = menuRef.current?.getBoundingClientRect();
+      if (!trigger || !menu) return;
+      const gap = 6;
+      const above = trigger.top - menu.height - gap;
+      const below = trigger.bottom + gap;
+      const top =
+        side === 'top' && above >= gap
+          ? above
+          : below + menu.height <= window.innerHeight - gap
+            ? below
+            : Math.max(gap, above);
+      const rtl = document.documentElement.dir === 'rtl';
+      setPosition({
+        top,
+        left: Math.max(
+          gap,
+          Math.min(
+            rtl ? trigger.left : trigger.right - menu.width,
+            window.innerWidth - menu.width - gap,
+          ),
+        ),
+      });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open, side]);
 
   React.useEffect(() => {
     if (!open) return;
     const outside = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (
+        !rootRef.current?.contains(event.target as Node) &&
+        !menuRef.current?.contains(event.target as Node)
+      )
+        setOpen(false);
     };
     const keyboard = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
@@ -51,21 +94,23 @@ export function CompactMenu({
       >
         <MoreHorizontal className="size-4" aria-hidden="true" />
       </button>
-      {open ? (
-        <div
-          id={menuId}
-          role="menu"
-          className={cn(
-            'absolute end-0 z-40 min-w-48 overflow-hidden rounded-md border border-border/70 bg-popover py-1 text-popover-foreground shadow-lg',
-            side === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5',
-          )}
-          onClick={(event) => {
-            if ((event.target as HTMLElement).closest('[role="menuitem"]')) setOpen(false);
-          }}
-        >
-          {children}
-        </div>
-      ) : null}
+      {open
+        ? createPortal(
+            <div
+              ref={menuRef}
+              style={position}
+              id={menuId}
+              role="menu"
+              className="fixed z-[100] min-w-48 max-h-[calc(100dvh-12px)] overflow-auto rounded-md border border-border/70 bg-popover py-1 text-popover-foreground shadow-lg"
+              onClick={(event) => {
+                if ((event.target as HTMLElement).closest('[role="menuitem"]')) setOpen(false);
+              }}
+            >
+              {children}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

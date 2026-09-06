@@ -24,7 +24,6 @@ import {
 } from './bulletin';
 import { syncBulletinPostAttachments, syncBulletinPostTags } from './bulletin-server';
 import type { PermissionKey } from './permissions';
-import { deletePrivateS3Object } from './s3-upload';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -85,20 +84,27 @@ export async function setBulletinPostReaction(
 
   await mutateEntityWithHistory(db, {
     entityType: 'bulletinPostReactions',
-    entityId: existing?.id ?? postId,
+    ...(existing ? { entityId: existing.id } : {}),
     operation: existing ? 'delete' : 'create',
     actor,
+    resolveEntityId: (id: number) => id,
     execute: async (tx) => {
       if (existing) {
         await tx.delete(bulletinPostReactions).where(eq(bulletinPostReactions.id, existing.id));
+        return existing.id;
       } else {
-        await tx.insert(bulletinPostReactions).values({
-          postId,
-          userId: actor.id ?? null,
-          userName: actor.name,
-          userEmail: actor.email,
-          emoji,
-        });
+        const [inserted] = await tx
+          .insert(bulletinPostReactions)
+          .values({
+            postId,
+            userId: actor.id ?? null,
+            userName: actor.name,
+            userEmail: actor.email,
+            emoji,
+          })
+          .returning({ id: bulletinPostReactions.id });
+        if (!inserted) throw new Error('Unable to create bulletin reaction');
+        return inserted.id;
       }
     },
   });
@@ -131,20 +137,27 @@ export async function setBulletinReplyReaction(
 
   await mutateEntityWithHistory(db, {
     entityType: 'bulletinReplyReactions',
-    entityId: existing?.id ?? replyId,
+    ...(existing ? { entityId: existing.id } : {}),
     operation: existing ? 'delete' : 'create',
     actor,
+    resolveEntityId: (id: number) => id,
     execute: async (tx) => {
       if (existing) {
         await tx.delete(bulletinReplyReactions).where(eq(bulletinReplyReactions.id, existing.id));
+        return existing.id;
       } else {
-        await tx.insert(bulletinReplyReactions).values({
-          replyId,
-          userId: actor.id ?? null,
-          userName: actor.name,
-          userEmail: actor.email,
-          emoji,
-        });
+        const [inserted] = await tx
+          .insert(bulletinReplyReactions)
+          .values({
+            replyId,
+            userId: actor.id ?? null,
+            userName: actor.name,
+            userEmail: actor.email,
+            emoji,
+          })
+          .returning({ id: bulletinReplyReactions.id });
+        if (!inserted) throw new Error('Unable to create bulletin reaction');
+        return inserted.id;
       }
     },
   });
@@ -207,22 +220,27 @@ export async function createBulletinReply(
 
   await mutateEntityWithHistory(db, {
     entityType: 'bulletinReplies',
-    entityId: postId,
     operation: 'create',
     actor,
     execute: async (tx) => {
-      await tx.insert(bulletinReplies).values({
-        postId,
-        authorId: actor.id ?? null,
-        authorName: actor.name,
-        authorEmail: actor.email,
-        body: data.body,
-      });
+      const [inserted] = await tx
+        .insert(bulletinReplies)
+        .values({
+          postId,
+          authorId: actor.id ?? null,
+          authorName: actor.name,
+          authorEmail: actor.email,
+          body: data.body,
+        })
+        .returning({ id: bulletinReplies.id });
+      if (!inserted) throw new Error('Unable to create bulletin reply');
       await tx
         .update(bulletinPosts)
         .set({ updatedAt: new Date() })
         .where(eq(bulletinPosts.id, postId));
+      return inserted.id;
     },
+    resolveEntityId: (id: number) => id,
   });
 
   return { postId };
@@ -249,7 +267,6 @@ export async function updateBulletinPost(
     throw new BulletinMutationForbiddenError('post', postId);
   }
 
-  let removedAttachmentKeys: string[] = [];
   await mutateEntityWithHistory(db, {
     entityType: 'bulletinPosts',
     entityId: postId,
@@ -273,15 +290,11 @@ export async function updateBulletinPost(
       await tx.update(bulletinPosts).set(update).where(eq(bulletinPosts.id, postId));
       if (values.tags !== undefined) await syncBulletinPostTags(tx, postId, values.tags);
       if (values.attachments !== undefined)
-        removedAttachmentKeys = await syncBulletinPostAttachments(tx, postId, values.attachments);
+        await syncBulletinPostAttachments(tx, postId, values.attachments);
     },
   });
 
-  await Promise.all(
-    removedAttachmentKeys
-      .filter((key) => key.startsWith('bulletin/'))
-      .map((key) => deletePrivateS3Object(key).catch(() => undefined)),
-  );
+  // Private objects stay available while action history can restore their metadata.
 
   return {
     id: postId,
@@ -309,11 +322,6 @@ export async function deleteBulletinPost(
     throw new BulletinMutationForbiddenError('post', postId);
   }
 
-  const attachments = await db
-    .select({ fileKey: bulletinPostAttachments.fileKey })
-    .from(bulletinPostAttachments)
-    .where(eq(bulletinPostAttachments.postId, postId));
-
   await mutateEntityWithHistory(db, {
     entityType: 'bulletinPosts',
     entityId: postId,
@@ -325,12 +333,6 @@ export async function deleteBulletinPost(
       await tx.delete(bulletinPosts).where(eq(bulletinPosts.id, postId));
     },
   });
-  await Promise.all(
-    attachments
-      .map((attachment) => attachment.fileKey)
-      .filter((key) => key.startsWith('bulletin/'))
-      .map((key) => deletePrivateS3Object(key).catch(() => undefined)),
-  );
   return { id: postId, deleted: true as const };
 }
 

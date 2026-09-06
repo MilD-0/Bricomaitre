@@ -53,6 +53,7 @@ vi.mock('./file-upload-field', () => ({
 }));
 
 import { BulletinBoard } from './bulletin-board';
+import { bulletinPostPatchSchema } from '../lib/bulletin';
 import messages from '../messages/en.json';
 import { server } from '../test/mocks/server';
 
@@ -165,7 +166,11 @@ describe('BulletinBoard', () => {
         return HttpResponse.json({ ok: true });
       }),
       http.patch('/api/bulletin/:id', async ({ request }) => {
-        patchCalls.push({ url: request.url, body: await request.json() });
+        const body = await request.json();
+        const parsed = bulletinPostPatchSchema.safeParse(body);
+        if (!parsed.success)
+          return HttpResponse.json({ error: parsed.error.message }, { status: 400 });
+        patchCalls.push({ url: request.url, body });
         return HttpResponse.json({ ok: true });
       }),
       http.delete('/api/bulletin/:id', ({ request }) => {
@@ -213,6 +218,28 @@ describe('BulletinBoard', () => {
     );
   }
 
+  it('edits a post through the strict API contract', async () => {
+    const view = renderBoard();
+    await screen.findByText('Pinned issue');
+    const post = view.container.querySelector('[data-bulletin-post="1"]') as HTMLElement;
+    await userEvent.click(within(post).getByRole('button', { name: 'Actions · Pinned issue' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
+    const body = await screen.findByPlaceholderText('Post content');
+    await userEvent.clear(body);
+    await userEvent.type(body, 'Updated shift instructions');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() =>
+      expect(patchCalls).toContainEqual({
+        url: expect.stringContaining('/api/bulletin/1'),
+        body: expect.objectContaining({
+          body: 'Updated shift instructions',
+          tags: ['ops', 'urgent'],
+        }),
+      }),
+    );
+    expect((patchCalls[0]!.body as Record<string, unknown>).tagsInput).toBeUndefined();
+  });
+
   it('creates a post with normalized tags and attachments from the closed composer flow', async () => {
     const view = renderBoard();
 
@@ -252,7 +279,6 @@ describe('BulletinBoard', () => {
         title: 'Shift handoff',
         body: 'Lock the paint cage after receiving the final truck.',
         tags: ['ops', 'closing'],
-        tagsInput: '#Ops, Closing, ops',
         pinned: true,
         attachments: [
           {

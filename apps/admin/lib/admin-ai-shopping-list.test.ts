@@ -23,8 +23,8 @@ vi.mock('./shopping-list-drafts.server', () => ({
   loadAdminShoppingListDraft: mocks.loadDraft,
   saveAdminShoppingListDraft: mocks.saveDraft,
 }));
-vi.mock('./admin-inventory-workflow', () => ({
-  applyAdminInventoryBatch: mocks.applyInventory,
+vi.mock('./shopping-list-inventory.server', () => ({
+  applyShoppingListInventory: mocks.applyInventory,
 }));
 
 import {
@@ -107,6 +107,7 @@ describe('admin AI order shopping lists', () => {
     mocks.loadDraft.mockResolvedValue(null);
     mocks.saveDraft.mockImplementation(async (_db, draft) => ({
       scopeKey: 'status:confirmed',
+      revision: 0,
       ...draft,
       updatedAt: generatedAt,
       updatedByName: 'Admin',
@@ -200,6 +201,7 @@ describe('admin AI order shopping lists', () => {
     const draft = payload();
     mocks.loadDraft.mockResolvedValue({
       scopeKey: 'status:confirmed',
+      revision: 0,
       ...draft,
       updatedAt: generatedAt,
       updatedByName: 'Admin',
@@ -207,6 +209,7 @@ describe('admin AI order shopping lists', () => {
     mocks.applyInventory.mockResolvedValue({
       ok: true,
       complete: false,
+      draft: { ...draft, scopeKey: 'status:confirmed', revision: 1 },
       items: [{ productId: 12, previousQuantity: 10, nextQuantity: 6 }],
       skipped: [{ productId: 18, reason: 'insufficient', available: 1 }],
     });
@@ -222,19 +225,10 @@ describe('admin AI order shopping lists', () => {
       mocks.db,
       {
         requestId: expect.any(String),
-        mode: 'decrease',
-        items: [
-          {
-            productId: 12,
-            quantity: 4,
-            source: { type: 'shopping-list', orderIds: [31, 32] },
-          },
-          {
-            productId: 18,
-            quantity: 2,
-            source: { type: 'shopping-list', orderIds: [31, 32] },
-          },
-        ],
+        sourceMode: 'confirmed',
+        orderIds: [31, 32],
+        revision: 0,
+        draftIds: ['2:12', '2:18'],
       },
       undefined,
     );
@@ -254,16 +248,6 @@ describe('admin AI order shopping lists', () => {
       ],
     });
     expect(result).not.toHaveProperty('draft');
-    const savedPayload = mocks.saveDraft.mock.calls[0]?.[1] as ShoppingListDraftPayload;
-    expect(savedPayload.draftItems.find((item) => item.productId === 12)).toMatchObject({
-      inventoryQuantity: 6,
-      inventoryAppliedQuantity: 4,
-      checked: true,
-    });
-    expect(savedPayload.draftItems.find((item) => item.productId === 18)).toMatchObject({
-      inventoryQuantity: 2,
-      inventoryAppliedQuantity: 0,
-      checked: false,
-    });
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
   });
 });

@@ -67,7 +67,17 @@ const products: ProductRecord[] = [
 ];
 
 vi.mock('../image-upload-field', () => ({
-  ImageUploadField: ({ label }: { label: string }) => <div>{label}</div>,
+  ImageUploadField: ({
+    label,
+    onUploadingChange,
+  }: {
+    label: string;
+    onUploadingChange?: (uploading: boolean) => void;
+  }) => (
+    <button type="button" onClick={() => onUploadingChange?.(true)}>
+      {label}
+    </button>
+  ),
 }));
 
 function renderWorkspace(paginationOverrides: Partial<PaginationMeta> = {}) {
@@ -185,6 +195,87 @@ describe('ProductsWorkspace', () => {
         inStock: true,
       }),
     );
+  });
+
+  it('does not carry a cancelled upload lock into the next product editor', async () => {
+    const user = userEvent.setup();
+    server.use(http.get('/api/products/1', () => HttpResponse.json({ item: products[0] })));
+    renderWorkspace();
+    const openEditor = async () => {
+      await user.click(screen.getAllByRole('button', { name: 'Actions · First product' })[0]!);
+      await user.click(screen.getByRole('menuitem', { name: 'Edit' }));
+      await screen.findByRole('dialog', { name: 'Edit product' });
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Save product' })).toBeEnabled(),
+      );
+    };
+    await openEditor();
+    await user.click(screen.getByRole('button', { name: 'Images' }));
+    expect(screen.getByRole('button', { name: 'Save product' })).toBeDisabled();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await openEditor();
+  });
+
+  it('creates a product with optional prices and taxonomy left empty', async () => {
+    const user = userEvent.setup();
+    let saved: unknown;
+    server.use(
+      http.post('/api/products', async ({ request }) => {
+        saved = await request.json();
+        return HttpResponse.json({ item: { ...products[0], id: 3 } });
+      }),
+    );
+    renderWorkspace();
+    await user.click(screen.getByRole('button', { name: 'New product' }));
+    await user.type(screen.getByLabelText('Product name'), 'Optional fields verification');
+    await user.clear(screen.getByLabelText('Price'));
+    await user.type(screen.getByLabelText('Price'), '1500');
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Create product' })).getByRole('button', {
+        name: 'New product',
+      }),
+    );
+    await waitFor(() =>
+      expect(saved).toMatchObject({
+        title: 'Optional fields verification',
+        price: 1500,
+        oldPrice: null,
+        purchasePrice: null,
+        brandId: null,
+        categoryId: null,
+      }),
+    );
+  });
+
+  it('explains invalid promo prices before sending a product mutation', async () => {
+    const user = userEvent.setup();
+    const save = vi.fn();
+    server.use(
+      http.get('/api/products/1', () =>
+        HttpResponse.json({
+          item: {
+            ...products[0],
+            promoCodes: [
+              { code: 'OFFER', promoPrice: 1200, active: true, startsAt: null, endsAt: null },
+            ],
+          },
+        }),
+      ),
+      http.put('/api/products/1', () => {
+        save();
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    renderWorkspace();
+    await user.click(screen.getAllByRole('button', { name: 'Actions · First product' })[0]!);
+    await user.click(screen.getByRole('menuitem', { name: 'Edit' }));
+    await screen.findByDisplayValue('OFFER');
+    await user.click(screen.getByRole('button', { name: 'Save product' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Active promo price must be lower than the product price.',
+    );
+    expect(save).not.toHaveBeenCalled();
   });
 
   it('links product titles to the storefront and applies full-catalog filters and multi-sort', async () => {

@@ -23,6 +23,11 @@ vi.mock('../../../../lib/rbac', () => ({
   requireMutationAccess: requireMutationAccessMock,
 }));
 
+vi.mock('../../../../lib/shopping-list-stock-allocations', () => ({
+  initializeLegacyShoppingListAllocations: vi.fn(),
+  hydrateShoppingListStockCredits: vi.fn(async (_db, draft) => draft),
+}));
+
 const draftItem = {
   draftId: '9:1',
   productId: 1,
@@ -116,7 +121,8 @@ describe('app/api/orders/shopping-list-draft/route', () => {
   });
 
   it('returns a saved draft by scope', async () => {
-    getDbMock.mockReturnValue({
+    const db = {
+      transaction: vi.fn(),
       select: () => ({
         from: () => ({
           where: () => ({
@@ -124,14 +130,16 @@ describe('app/api/orders/shopping-list-draft/route', () => {
           }),
         }),
       }),
-    });
+    };
+    db.transaction.mockImplementation(async (fn) => fn(db));
+    getDbMock.mockReturnValue(db);
 
     const response = await GET(
       new NextRequest('http://localhost/api/orders/shopping-list-draft?sourceMode=confirmed'),
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       draft: {
         scopeKey: 'status:confirmed',
         revision: 0,
@@ -179,9 +187,13 @@ describe('app/api/orders/shopping-list-draft/route', () => {
     ]);
     valuesMock.mockReturnValue({ onConflictDoNothing: onConflictDoNothingMock });
     onConflictDoNothingMock.mockReturnValue({ returning: returningMock });
-    getDbMock.mockReturnValue({
+    const db = {
+      transaction: vi.fn(),
+      select: () => ({ from: () => ({ where: () => ({ limit: async () => [] }) }) }),
       insert: () => ({ values: valuesMock }),
-    });
+    };
+    db.transaction.mockImplementation(async (fn) => fn(db));
+    getDbMock.mockReturnValue(db);
 
     const response = await PUT(
       new NextRequest('http://localhost/api/orders/shopping-list-draft', {
@@ -218,20 +230,24 @@ describe('app/api/orders/shopping-list-draft/route', () => {
     );
   });
 
-  it('deletes a draft by scope', async () => {
-    const whereMock = vi.fn().mockResolvedValue(undefined);
+  it('resets edits by scope without deleting allocation history', async () => {
+    const setMock = vi.fn(() => ({
+      where: () => ({ returning: async () => [draftRow({ revision: 1 })] }),
+    }));
+    const tx = {
+      select: () => ({ from: () => ({ where: () => ({ for: async () => [draftRow()] }) }) }),
+      update: () => ({ set: setMock }),
+    };
     getDbMock.mockReturnValue({
-      delete: () => ({ where: whereMock }),
+      transaction: async (callback: (value: typeof tx) => unknown) => callback(tx),
     });
-
     const response = await DELETE(
       new NextRequest(
-        'http://localhost/api/orders/shopping-list-draft?sourceMode=selected&orderIds=32&orderIds=31',
+        'http://localhost/api/orders/shopping-list-draft?sourceMode=selected&orderIds=32&orderIds=31&revision=0',
       ),
     );
-
-    expect(whereMock).toHaveBeenCalledTimes(1);
+    expect(setMock).toHaveBeenCalledWith(expect.objectContaining({ revision: 1 }));
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ ok: true });
+    expect(await response.json()).toMatchObject({ ok: true, draft: { revision: 1 } });
   });
 });

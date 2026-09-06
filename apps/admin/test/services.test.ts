@@ -1,10 +1,21 @@
 import { randomUUID } from 'node:crypto';
-import { afterAll, describe, expect, it } from 'vitest';
-import { eq, inArray } from 'drizzle-orm';
+import { afterAll, describe, expect, it, vi } from 'vitest';
+import { and, eq, inArray } from 'drizzle-orm';
 import * as XLSX from 'xlsx';
 
 import { getDb, getPool } from '@bric/db/client';
 import {
+  adminMutationIdempotency,
+  shoppingListDrafts,
+  actionLogs,
+  bulletinPostAttachments,
+  bulletinPostTags,
+  bulletinTags,
+  bulletinPosts,
+  bulletinReplies,
+  bulletinPostReactions,
+  bulletinReplyReactions,
+  ecotrackOrderStates,
   analyticsJourneys,
   analyticsDailyRollups,
   analyticsSessions,
@@ -15,6 +26,7 @@ import {
   orders,
   processedOrders,
   products,
+  storefrontOrderIdempotency,
 } from '@bric/db/schema';
 import {
   beginIdempotentRequest,
@@ -34,6 +46,7 @@ import {
 import {
   deleteExpiredAnalyticsEventsBatch,
   deleteExpiredAnalyticsSessionsBatch,
+  deleteExpiredOrderIdempotencyBatch,
   rollUpNextExpiredAnalyticsDay,
 } from '@bric/storefront-core/maintenance';
 import { createStorefrontOrder, readStorefrontOrderByToken } from '@bric/storefront-core/orders';
@@ -48,12 +61,922 @@ import {
 import { deleteImportBatch, importStatsSpreadsheet } from '../lib/stats-order-import';
 import { queryAdminOrders } from '../lib/admin-ai-order-query';
 import { loadOrdersPageData } from '../lib/admin-orders-data';
+import { loadActiveShipmentPageRows } from '../lib/admin-ecotrack-shipment-view';
+import { parseEcotrackShipmentListQuery } from '../lib/ecotrack-shipment-list';
+import {
+  createBulletinReply,
+  deleteBulletinPost,
+  setBulletinPostReaction,
+  setBulletinReplyReaction,
+} from '../lib/bulletin-mutations';
+import { applyHistoryAction, getActionEntityConfig } from '../lib/action-history';
+
+import { applyShoppingListInventory } from '../lib/shopping-list-inventory.server';
+import {
+  saveAdminShoppingListDraft,
+  resetAdminShoppingListDraft,
+  ShoppingListDraftConflictError,
+} from '../lib/shopping-list-drafts.server';
+import {
+  buildGeneratedShoppingListDraft,
+  mergeShoppingListDraft,
+} from '../lib/shopping-list-drafts';
+vi.mock('../lib/server-cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/server-cache')>()),
+  revalidateServerTags: vi.fn(),
+}));
+vi.mock('../lib/storefront-revalidate', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/storefront-revalidate')>()),
+  revalidateStorefrontProducts: vi.fn(),
+}));
 
 const runId = randomUUID();
 
 describe('real PostgreSQL and Redis contracts', () => {
   afterAll(async () => {
     await Promise.allSettled([getRedis().quit(), getPool().end()]);
+  });
+
+  it('atomically bounds shopping deductions across concurrent requests, retries, reopen and quantity increases', async () => {
+    const db = getDb();
+    const [product] = await db
+      .insert(products)
+      .values({ title: runId, slug: `inventory-${runId}`, price: '10', inventoryQuantity: 10 })
+      .returning();
+    const [order] = await db
+      .insert(orders)
+      .values({ firstName: runId, phoneNumber1: '0661920628' })
+      .returning();
+    await db.insert(orderLineItems).values({
+      orderId: order!.id,
+      productId: product!.id,
+      contentId: String(product!.id),
+      rawValue: String(product!.id),
+      titleSnapshot: runId,
+      originalUnitPrice: '10',
+      effectiveUnitPrice: '10',
+      quantity: 2,
+      lineTotal: '20',
+    });
+    let scopeKey = '';
+    const requestPrefix = `inventory-${runId}`;
+    try {
+      const generated = await buildGeneratedShoppingListDraft({
+        sourceMode: 'selected',
+        title: 'Audit inventory',
+        orders: [
+          {
+            id: order!.id,
+            fullName: 'Audit',
+            note: null,
+            orderProducts: [
+              {
+                productId: product!.id,
+                rawValue: String(product!.id),
+                title: runId,
+                unitPrice: 10,
+                quantity: 2,
+                lineTotal: 20,
+                thumbnailUrl: null,
+                missing: false,
+              },
+            ],
+          },
+        ],
+        resolveProductDetails: async () => ({ inventoryQuantity: 10, purchasePrice: null }),
+        resolveBrandName: async () => 'Unbranded',
+      });
+      const draft = await saveAdminShoppingListDraft(db, {
+        ...generated,
+        revision: null,
+        draftItems: generated.draftItems.map((item) => ({
+          ...item,
+          inventoryManualAppliedQuantity: 999,
+          inventoryLegacyAppliedQuantity: 999,
+          inventoryOrderAppliedQuantity: 999,
+          inventoryAppliedQuantity: 999,
+        })),
+      });
+      expect(draft.draftItems[0]!.inventoryAppliedQuantity).toBe(0);
+      scopeKey = draft.scopeKey;
+      const input = {
+        sourceMode: draft.sourceMode,
+        orderIds: draft.orderIds,
+        revision: draft.revision,
+        draftIds: draft.draftItems.map((item) => item.draftId),
+        requestId: `${requestPrefix}-one`,
+      };
+      const concurrent = await Promise.allSettled([
+        applyShoppingListInventory(db, input),
+        applyShoppingListInventory(db, { ...input, requestId: `${requestPrefix}-two` }),
+      ]);
+      expect(concurrent.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      const rejected = concurrent.find(
+        (result) => result.status === 'rejected',
+      ) as PromiseRejectedResult;
+      expect(rejected.reason).toBeInstanceOf(ShoppingListDraftConflictError);
+      const first = concurrent.find(
+        (result) => result.status === 'fulfilled',
+      ) as PromiseFulfilledResult<Awaited<ReturnType<typeof applyShoppingListInventory>>>;
+      const successfulId =
+        concurrent[0]!.status === 'fulfilled' ? input.requestId : `${requestPrefix}-two`;
+      const retry = await applyShoppingListInventory(db, { ...input, requestId: successfulId });
+      expect(retry).toEqual(first.value);
+      const repeat = await applyShoppingListInventory(db, {
+        ...input,
+        revision: retry.draft.revision,
+        requestId: `${requestPrefix}-repeat`,
+      });
+      expect(repeat.items).toEqual([]);
+      expect(
+        (await db.select().from(products).where(eq(products.id, product!.id)))[0]!
+          .inventoryQuantity,
+      ).toBe(8);
+      const increased = await saveAdminShoppingListDraft(db, {
+        ...repeat.draft,
+        draftItems: repeat.draft.draftItems.map((item) => ({
+          ...item,
+          quantity: 5,
+          inventoryDecreaseQuantity: 3,
+        })),
+      });
+      const extra = await applyShoppingListInventory(db, {
+        ...input,
+        revision: increased.revision,
+        requestId: `${requestPrefix}-extra`,
+      });
+      expect(extra.items[0]).toMatchObject({ previousQuantity: 8, nextQuantity: 5 });
+      expect(extra.draft.draftItems[0]).toMatchObject({
+        inventoryAppliedQuantity: 5,
+        inventoryDecreaseQuantity: 0,
+      });
+      const reset = await resetAdminShoppingListDraft(db, {
+        ...input,
+        revision: extra.draft.revision,
+      });
+      const resetApply = await applyShoppingListInventory(db, {
+        ...input,
+        revision: reset.revision,
+        requestId: `${requestPrefix}-reset`,
+      });
+      expect(resetApply.items).toEqual([]);
+      const removed = await saveAdminShoppingListDraft(db, { ...resetApply.draft, draftItems: [] });
+      expect(removed.generatedItems[0]!.inventoryAppliedQuantity).toBe(5);
+      const readded = await saveAdminShoppingListDraft(db, {
+        ...removed,
+        draftItems: [
+          {
+            ...generated.draftItems[0]!,
+            draftId: `custom:${product!.id}`,
+            quantity: 5,
+            inventoryAppliedQuantity: 0,
+            inventoryDecreaseQuantity: 5,
+            isCustom: true,
+          },
+        ],
+      });
+      expect(readded.draftItems[0]).toMatchObject({
+        inventoryAppliedQuantity: 5,
+        inventoryDecreaseQuantity: 0,
+      });
+      const reapply = await applyShoppingListInventory(db, {
+        ...input,
+        draftIds: readded.draftItems.map((item) => item.draftId),
+        revision: readded.revision,
+        requestId: `${requestPrefix}-readd`,
+      });
+      expect(reapply.items).toEqual([]);
+      const duplicated = await saveAdminShoppingListDraft(db, {
+        ...reapply.draft,
+        draftItems: [
+          {
+            ...readded.draftItems[0]!,
+            draftId: 'duplicate:first',
+            quantity: 3,
+            inventoryAppliedQuantity: 5,
+            inventoryDecreaseQuantity: 3,
+          },
+          {
+            ...readded.draftItems[0]!,
+            draftId: 'duplicate:second',
+            quantity: 2,
+            inventoryAppliedQuantity: 5,
+            inventoryDecreaseQuantity: 2,
+          },
+        ],
+      });
+      expect(duplicated.draftItems.map((item) => item.inventoryAppliedQuantity)).toEqual([3, 2]);
+      const reordered = await saveAdminShoppingListDraft(db, {
+        ...duplicated,
+        draftItems: [...duplicated.draftItems].reverse(),
+      });
+      expect(reordered.draftItems.map((item) => item.inventoryAppliedQuantity)).toEqual([2, 3]);
+      const ledgerOnly = await saveAdminShoppingListDraft(db, {
+        ...reordered,
+        generatedItems: [],
+        draftItems: [],
+      });
+      expect(ledgerOnly.generatedItems[0]).toMatchObject({
+        inventoryAppliedQuantity: 5,
+        inventoryLedgerOnly: true,
+      });
+      const resetLedger = await resetAdminShoppingListDraft(db, {
+        ...input,
+        revision: ledgerOnly.revision,
+      });
+      expect(resetLedger.draftItems).toEqual([]);
+      expect(resetLedger.generatedItems[0]!.inventoryAppliedQuantity).toBe(5);
+      expect(
+        (await db.select().from(products).where(eq(products.id, product!.id)))[0]!
+          .inventoryQuantity,
+      ).toBe(5);
+    } finally {
+      if (scopeKey)
+        await db.delete(shoppingListDrafts).where(eq(shoppingListDrafts.scopeKey, scopeKey));
+      await db.delete(adminMutationIdempotency).where(
+        inArray(
+          adminMutationIdempotency.requestId,
+          ['one', 'two', 'repeat', 'extra', 'reset', 'readd'].map(
+            (suffix) => `${requestPrefix}-${suffix}`,
+          ),
+        ),
+      );
+      await db
+        .delete(actionLogs)
+        .where(and(eq(actionLogs.entityType, 'products'), eq(actionLogs.entityId, product!.id)));
+      await db.delete(orders).where(eq(orders.id, order!.id));
+      await db.delete(products).where(eq(products.id, product!.id));
+    }
+  });
+
+  it('deducts overlapping order requirements once while keeping manual extras scoped', async () => {
+    const { orderInventoryAllocations } = await import('@bric/db/schema');
+    const { loadAdminShoppingListDraft } = await import('../lib/shopping-list-drafts.server');
+    const db = getDb();
+    const [product] = await db
+      .insert(products)
+      .values({
+        title: `overlap-${runId}`,
+        slug: `overlap-${runId}`,
+        price: '10',
+        inventoryQuantity: 50,
+      })
+      .returning();
+    const created = await db
+      .insert(orders)
+      .values([1, 2, 3].map((i) => ({ firstName: `${runId}-${i}`, phoneNumber1: '0661920628' })))
+      .returning();
+    const ids = created.map((order) => order.id);
+    const scopes: string[] = [];
+    const requests: string[] = [];
+    const build = async (
+      orderIds: number[],
+      sourceMode: 'selected' | 'posted' | 'dispatched' = 'selected',
+    ) =>
+      buildGeneratedShoppingListDraft({
+        sourceMode,
+        title: `overlap-${runId}`,
+        orders: orderIds.map((id) => ({
+          id,
+          fullName: 'Overlap',
+          note: null,
+          orderProducts: [
+            {
+              productId: product!.id,
+              rawValue: String(product!.id),
+              title: product!.title,
+              quantity: 2,
+              unitPrice: 10,
+              lineTotal: 20,
+              thumbnailUrl: null,
+              missing: false,
+            },
+          ],
+        })),
+        resolveProductDetails: async () => ({ inventoryQuantity: 50, purchasePrice: null }),
+        resolveBrandName: async () => 'Unbranded',
+      });
+    const save = async (
+      orderIds: number[],
+      sourceMode: 'selected' | 'posted' | 'dispatched' = 'selected',
+    ) => {
+      const d = await saveAdminShoppingListDraft(db, {
+        ...(await build(orderIds, sourceMode)),
+        revision: null,
+      });
+      scopes.push(d.scopeKey);
+      return d;
+    };
+    const apply = async (d: Awaited<ReturnType<typeof save>>) => {
+      const requestId = randomUUID();
+      requests.push(requestId);
+      return applyShoppingListInventory(db, {
+        sourceMode: d.sourceMode,
+        orderIds: d.orderIds,
+        revision: d.revision,
+        draftIds: d.draftItems.map((item) => item.draftId),
+        requestId,
+      });
+    };
+    try {
+      await db.insert(orderLineItems).values(
+        ids.map((orderId) => ({
+          orderId,
+          productId: product!.id,
+          contentId: String(product!.id),
+          rawValue: String(product!.id),
+          titleSnapshot: product!.title,
+          originalUnitPrice: '10',
+          effectiveUnitPrice: '10',
+          quantity: 2,
+          lineTotal: '20',
+        })),
+      );
+      let a = await save([ids[0]!]);
+      a = await saveAdminShoppingListDraft(db, {
+        ...a,
+        draftItems: a.draftItems.map((item) => ({ ...item, inventoryDecreaseQuantity: 1 })),
+      });
+      await apply(a);
+      const ab = await save([ids[0]!, ids[1]!]);
+      const bc = await save([ids[1]!, ids[2]!]);
+      const concurrent = await Promise.all([apply(ab), apply(bc)]);
+      expect(
+        concurrent.reduce(
+          (sum, result) =>
+            sum +
+            result.items.reduce((n, item) => n + item.previousQuantity - item.nextQuantity, 0),
+          0,
+        ),
+      ).toBe(5);
+      expect(
+        (await db.select().from(products).where(eq(products.id, product!.id)))[0]!
+          .inventoryQuantity,
+      ).toBe(44);
+      expect(
+        (
+          await db
+            .select()
+            .from(orderInventoryAllocations)
+            .where(inArray(orderInventoryAllocations.orderId, ids))
+        ).map((row) => row.quantity),
+      ).toEqual([2, 2, 2]);
+      for (const sourceMode of ['posted', 'dispatched'] as const) {
+        const [existing] = await db
+          .select()
+          .from(shoppingListDrafts)
+          .where(eq(shoppingListDrafts.scopeKey, `status:${sourceMode}`));
+        if (existing) continue;
+        const status = await save(ids, sourceMode);
+        expect((await apply(status)).items).toEqual([]);
+      }
+      let reloaded = (await loadAdminShoppingListDraft(db, {
+        sourceMode: 'selected',
+        orderIds: [ids[0]!],
+      }))!;
+      expect(reloaded.draftItems[0]!.inventoryQuantity).toBe(44);
+      reloaded = await saveAdminShoppingListDraft(db, {
+        ...reloaded,
+        draftItems: reloaded.draftItems.map((item) => ({
+          ...item,
+          quantity: 3,
+          inventoryDecreaseQuantity: 1,
+        })),
+      });
+      const extra = await apply(reloaded);
+      expect(extra.items[0]).toMatchObject({ previousQuantity: 44, nextQuantity: 43 });
+      expect(extra.draft.generatedItems[0]).toMatchObject({
+        inventoryOrderAppliedQuantity: 2,
+        inventoryManualAppliedQuantity: 1,
+      });
+      const reset = await resetAdminShoppingListDraft(db, {
+        sourceMode: 'selected',
+        orderIds: [ids[0]!],
+        revision: extra.draft.revision,
+      });
+      expect((await apply(reset)).items).toEqual([]);
+      await db
+        .update(orderLineItems)
+        .set({ quantity: 3, lineTotal: '30' })
+        .where(and(eq(orderLineItems.orderId, ids[1]!), eq(orderLineItems.productId, product!.id)));
+      const edited = await save([ids[1]!]);
+      const increased = await saveAdminShoppingListDraft(db, {
+        ...edited,
+        draftItems: edited.draftItems.map((item) => ({
+          ...item,
+          quantity: 3,
+          inventoryDecreaseQuantity: 1,
+        })),
+      });
+      expect((await apply(increased)).items[0]).toMatchObject({
+        previousQuantity: 43,
+        nextQuantity: 42,
+      });
+      await db.delete(orders).where(eq(orders.id, ids[0]!));
+      const deletedOrderDraft = (await loadAdminShoppingListDraft(db, {
+        sourceMode: 'selected',
+        orderIds: [ids[0]!],
+      }))!;
+      expect((await apply(deletedOrderDraft)).items).toEqual([]);
+      expect(
+        (
+          await db
+            .select()
+            .from(orderInventoryAllocations)
+            .where(eq(orderInventoryAllocations.orderId, ids[0]!))
+        )[0]!.quantity,
+      ).toBe(2);
+    } finally {
+      if (scopes.length)
+        await db.delete(shoppingListDrafts).where(inArray(shoppingListDrafts.scopeKey, scopes));
+      if (requests.length)
+        await db
+          .delete(adminMutationIdempotency)
+          .where(inArray(adminMutationIdempotency.requestId, requests));
+      await db
+        .delete(actionLogs)
+        .where(and(eq(actionLogs.entityType, 'products'), eq(actionLogs.entityId, product!.id)));
+      await db.delete(orders).where(inArray(orders.id, ids));
+      await db.delete(products).where(eq(products.id, product!.id));
+    }
+  });
+
+  it('refreshes changing status cohorts and applies each order product only once', async () => {
+    const { orderInventoryAllocations } = await import('@bric/db/schema');
+    const rollback = new Error('shopping refresh fixture rollback');
+    await expect(
+      getDb().transaction(async (tx) => {
+        const db = tx as unknown as ReturnType<typeof getDb>;
+        // Isolate this status scope inside a transaction that always rolls back.
+        await tx
+          .delete(shoppingListDrafts)
+          .where(eq(shoppingListDrafts.scopeKey, 'status:confirmed'));
+        const [product] = await tx
+          .insert(products)
+          .values({
+            title: `Refresh ${runId}`,
+            slug: `refresh-${runId}`,
+            price: '10',
+            inventoryQuantity: 20,
+          })
+          .returning();
+        const cohort = await tx
+          .insert(orders)
+          .values(
+            [1, 2, 3].map((i) => ({
+              firstName: `refresh-${runId}-${i}`,
+              phoneNumber1: '0661920628',
+            })),
+          )
+          .returning();
+        await tx.insert(orderLineItems).values(
+          cohort.map((order) => ({
+            orderId: order.id,
+            productId: product!.id,
+            contentId: String(product!.id),
+            rawValue: String(product!.id),
+            titleSnapshot: product!.title,
+            originalUnitPrice: '10',
+            effectiveUnitPrice: '10',
+            quantity: 2,
+            lineTotal: '20',
+          })),
+        );
+        const generate = (ids: number[]) =>
+          buildGeneratedShoppingListDraft({
+            sourceMode: 'confirmed',
+            title: 'Refresh verification',
+            orders: ids.map((id) => ({
+              id,
+              fullName: 'Refresh',
+              note: null,
+              orderProducts: [
+                {
+                  productId: product!.id,
+                  rawValue: String(product!.id),
+                  title: product!.title,
+                  quantity: 2,
+                  unitPrice: 10,
+                  lineTotal: 20,
+                  thumbnailUrl: null,
+                  missing: false,
+                },
+              ],
+            })),
+            resolveProductDetails: async () => ({ inventoryQuantity: 20, purchasePrice: null }),
+            resolveBrandName: async () => 'Unbranded',
+          });
+        let draft = await saveAdminShoppingListDraft(db, {
+          ...(await generate([cohort[0]!.id])),
+          revision: null,
+        });
+        const apply = () =>
+          applyShoppingListInventory(db, {
+            sourceMode: draft.sourceMode,
+            orderIds: draft.orderIds,
+            revision: draft.revision,
+            draftIds: draft.draftItems.map((item) => item.draftId),
+            requestId: randomUUID(),
+          });
+        draft = (await apply()).draft;
+        expect(draft.draftItems[0]!.inventoryAppliedQuantity).toBe(2);
+        const refresh = async (ids: number[]) => {
+          draft = await saveAdminShoppingListDraft(db, {
+            ...mergeShoppingListDraft(await generate(ids), draft),
+            revision: draft.revision,
+          });
+        };
+        await refresh([cohort[0]!.id, cohort[1]!.id]);
+        expect(draft.draftItems[0]).toMatchObject({
+          quantity: 4,
+          inventoryAppliedQuantity: 2,
+          inventoryDecreaseQuantity: 2,
+        });
+        const growth = await apply();
+        expect(growth.items[0]).toMatchObject({ previousQuantity: 18, nextQuantity: 16 });
+        draft = growth.draft;
+        // Replace a consumed order with a new order, leaving total demand unchanged.
+        await refresh([cohort[1]!.id, cohort[2]!.id]);
+        expect(draft.orders.map((order) => order.orderId)).toEqual([cohort[1]!.id, cohort[2]!.id]);
+        expect(draft.draftItems[0]).toMatchObject({
+          quantity: 4,
+          inventoryAppliedQuantity: 2,
+          inventoryDecreaseQuantity: 2,
+        });
+        const replacement = await apply();
+        expect(replacement.items[0]).toMatchObject({ previousQuantity: 16, nextQuantity: 14 });
+        draft = replacement.draft;
+        await refresh([cohort[1]!.id, cohort[2]!.id]);
+        const repeat = await apply();
+        expect(repeat.items).toEqual([]);
+        draft = repeat.draft;
+        await refresh([]);
+        expect(draft.draftItems).toEqual([]);
+        const [remaining] = await tx.select().from(products).where(eq(products.id, product!.id));
+        expect(remaining!.inventoryQuantity).toBe(14);
+        const allocations = await tx
+          .select()
+          .from(orderInventoryAllocations)
+          .where(eq(orderInventoryAllocations.productId, product!.id));
+        expect(allocations).toHaveLength(3);
+        expect(allocations.every((allocation) => allocation.quantity === 2)).toBe(true);
+        throw rollback;
+      }),
+    ).rejects.toBe(rollback);
+  });
+
+  it('preserves legacy deductions and lets an operator attribute ambiguous partials without changing stock', async () => {
+    const { orderInventoryAllocations } = await import('@bric/db/schema');
+    const { loadAdminShoppingListDraft } = await import('../lib/shopping-list-drafts.server');
+    const {
+      loadShoppingListAllocationReview,
+      reconcileShoppingListAllocationReview,
+      ShoppingListAllocationReviewError,
+    } = await import('../lib/shopping-list-stock-allocations');
+    const db = getDb();
+    const [product] = await db
+      .insert(products)
+      .values({
+        title: `legacy-${runId}`,
+        slug: `legacy-${runId}`,
+        price: '10',
+        inventoryQuantity: 50,
+      })
+      .returning();
+    const created = await db
+      .insert(orders)
+      .values(
+        [1, 2, 3].map((i) => ({ firstName: `legacy-${runId}-${i}`, phoneNumber1: '0661920628' })),
+      )
+      .returning();
+    const ids = created.map((order) => order.id);
+    const scopes: string[] = [];
+    const requests: string[] = [];
+    const build = async (orderIds: number[]) =>
+      buildGeneratedShoppingListDraft({
+        sourceMode: 'selected',
+        title: `legacy-${runId}`,
+        orders: orderIds.map((id) => ({
+          id,
+          fullName: 'Legacy',
+          note: null,
+          orderProducts: [
+            {
+              productId: product!.id,
+              rawValue: String(product!.id),
+              title: product!.title,
+              quantity: 2,
+              unitPrice: 10,
+              lineTotal: 20,
+              thumbnailUrl: null,
+              missing: false,
+            },
+          ],
+        })),
+        resolveProductDetails: async () => ({ inventoryQuantity: 50, purchasePrice: null }),
+        resolveBrandName: async () => 'Unbranded',
+      });
+    try {
+      await db.insert(orderLineItems).values(
+        ids.map((orderId) => ({
+          orderId,
+          productId: product!.id,
+          contentId: String(product!.id),
+          rawValue: String(product!.id),
+          titleSnapshot: product!.title,
+          originalUnitPrice: '10',
+          effectiveUnitPrice: '10',
+          quantity: 2,
+          lineTotal: '20',
+        })),
+      );
+      for (const orderIds of [[ids[0]!, ids[1]!], [ids[2]!]]) {
+        const draft = await build(orderIds);
+        const scopeKey = `selected:${orderIds.join(',')}`;
+        scopes.push(scopeKey);
+        const applied = draft.draftItems.map((item) => ({ ...item, inventoryAppliedQuantity: 1 }));
+        await db.insert(shoppingListDrafts).values({
+          scopeKey,
+          sourceMode: 'selected',
+          orderIds,
+          title: draft.title,
+          generatedItems: draft.generatedItems,
+          draftItems: applied,
+          ordersSnapshot: draft.orders,
+        });
+      }
+      const legacy = (await loadAdminShoppingListDraft(db, {
+        sourceMode: 'selected',
+        orderIds: [ids[0]!, ids[1]!],
+      }))!;
+      const single = (await loadAdminShoppingListDraft(db, {
+        sourceMode: 'selected',
+        orderIds: [ids[2]!],
+      }))!;
+      expect(single.draftItems[0]!.inventoryAppliedQuantity).toBe(1);
+      expect(legacy.draftItems[0]).toMatchObject({
+        inventoryAllocationReview: true,
+        inventoryAppliedQuantity: 1,
+      });
+      let sibling = await saveAdminShoppingListDraft(db, {
+        ...(await build([ids[0]!])),
+        revision: null,
+      });
+      scopes.push(sibling.scopeKey);
+      const blockedId = randomUUID();
+      requests.push(blockedId);
+      const blocked = await applyShoppingListInventory(db, {
+        sourceMode: sibling.sourceMode,
+        orderIds: sibling.orderIds,
+        revision: sibling.revision,
+        draftIds: sibling.draftItems.map((item) => item.draftId),
+        requestId: blockedId,
+      });
+      expect(blocked.items).toEqual([]);
+      expect(blocked.skipped).toHaveLength(1);
+      sibling = blocked.draft;
+      const review = await loadShoppingListAllocationReview(db, {
+        sourceMode: 'selected',
+        orderIds: [ids[0]!],
+      });
+      expect(review.reviews[0]!.products[0]!.recordedQuantity).toBe(1);
+      const reviewInput = {
+        scopeKey: legacy.scopeKey,
+        revision: legacy.revision,
+        productId: product!.id,
+        requestId: randomUUID(),
+        orders: [{ orderId: ids[0]!, quantity: 1 }],
+        manualQuantity: 0,
+      };
+      requests.push(reviewInput.requestId);
+      await expect(
+        reconcileShoppingListAllocationReview(db, { ...reviewInput, manualQuantity: 1 }),
+      ).rejects.toBeInstanceOf(ShoppingListAllocationReviewError);
+      await reconcileShoppingListAllocationReview(db, reviewInput);
+      expect(await reconcileShoppingListAllocationReview(db, reviewInput)).toEqual({ ok: true });
+      expect(
+        (await db.select().from(products).where(eq(products.id, product!.id)))[0]!
+          .inventoryQuantity,
+      ).toBe(50);
+      expect(
+        (
+          await loadShoppingListAllocationReview(db, {
+            sourceMode: 'selected',
+            orderIds: [ids[0]!],
+          })
+        ).reviews,
+      ).toEqual([]);
+      expect(
+        (
+          await db
+            .select()
+            .from(orderInventoryAllocations)
+            .where(inArray(orderInventoryAllocations.orderId, ids))
+        ).map((row) => row.needsReview),
+      ).toEqual([false, false, false]);
+      sibling = (await loadAdminShoppingListDraft(db, sibling))!;
+      sibling = await saveAdminShoppingListDraft(db, {
+        ...sibling,
+        draftItems: sibling.draftItems.map((item) => ({ ...item, inventoryDecreaseQuantity: 1 })),
+      });
+      const requestId = randomUUID();
+      requests.push(requestId);
+      const remaining = await applyShoppingListInventory(db, {
+        sourceMode: sibling.sourceMode,
+        orderIds: sibling.orderIds,
+        revision: sibling.revision,
+        draftIds: sibling.draftItems.map((item) => item.draftId),
+        requestId,
+      });
+      expect(remaining.items[0]).toMatchObject({ previousQuantity: 50, nextQuantity: 49 });
+    } finally {
+      if (scopes.length)
+        await db.delete(shoppingListDrafts).where(inArray(shoppingListDrafts.scopeKey, scopes));
+      if (requests.length)
+        await db
+          .delete(adminMutationIdempotency)
+          .where(inArray(adminMutationIdempotency.requestId, requests));
+      await db
+        .delete(actionLogs)
+        .where(and(eq(actionLogs.entityType, 'products'), eq(actionLogs.entityId, product!.id)));
+      await db.delete(orders).where(inArray(orders.id, ids));
+      await db.delete(products).where(eq(products.id, product!.id));
+    }
+  });
+
+  it('finds normalized phones, legacy secondary phones, order IDs and exact shipment scans', async () => {
+    const db = getDb();
+    const [primary, secondary] = await db
+      .insert(orders)
+      .values([
+        { phoneNumber1: '661920629', normalizedPhone: '213661920629', firstName: runId },
+        { phoneNumber1: '000000001', phoneNumber2: '0661 92 06 29', firstName: runId },
+      ])
+      .returning();
+    const tracking = `AUDIT${primary!.id}`;
+    try {
+      await db.insert(ecotrackOrderStates).values({
+        orderId: primary!.id,
+        reference: tracking,
+        trackingNumber: tracking,
+        currentStatus: 'prete_a_expedier',
+      });
+      for (const search of ['0661920629', '661920629', '+213 661 92 06 29']) {
+        const result = await loadOrdersPageData({ search }, false);
+        expect(result.items.map((row) => row.id)).toEqual(
+          expect.arrayContaining([primary!.id, secondary!.id]),
+        );
+      }
+      expect(
+        (await loadOrdersPageData({ search: String(primary!.id) }, false)).items.map(
+          (row) => row.id,
+        ),
+      ).toEqual([primary!.id]);
+      const scanned = await loadActiveShipmentPageRows(
+        db,
+        parseEcotrackShipmentListQuery({ search: tracking.toLowerCase() }),
+      );
+      expect(scanned.rows.map((row) => row.order.id)).toEqual([primary!.id]);
+    } finally {
+      await db.delete(orders).where(inArray(orders.id, [primary!.id, secondary!.id]));
+    }
+  });
+
+  it('records and undoes created bulletin child IDs instead of their different parent IDs', async () => {
+    const db = getDb();
+    const actor = { email: `identity-${runId}@example.com`, name: 'Audit' };
+    const parentId = 1_500_000_000 + Math.floor(Math.random() * 100_000);
+    const [post] = await db
+      .insert(bulletinPosts)
+      .values({
+        id: parentId,
+        title: runId,
+        body: 'identity',
+        authorName: actor.name,
+        authorEmail: actor.email,
+      })
+      .returning();
+    try {
+      await createBulletinReply(db, post!.id, { body: 'Created reply' }, actor);
+      const [createdReply] = await db
+        .select()
+        .from(bulletinReplies)
+        .where(eq(bulletinReplies.postId, post!.id));
+      expect(createdReply!.id).not.toBe(post!.id);
+      const [parentReply] = await db
+        .insert(bulletinReplies)
+        .values({
+          id: parentId + 1,
+          postId: post!.id,
+          body: 'Parent reply',
+          authorName: actor.name,
+          authorEmail: actor.email,
+        })
+        .returning();
+      await setBulletinPostReaction(db, post!.id, '👍', 'add', actor);
+      await setBulletinReplyReaction(db, parentReply!.id, '👍', 'add', actor);
+      const [postReaction] = await db
+        .select()
+        .from(bulletinPostReactions)
+        .where(eq(bulletinPostReactions.postId, post!.id));
+      const [replyReaction] = await db
+        .select()
+        .from(bulletinReplyReactions)
+        .where(eq(bulletinReplyReactions.replyId, parentReply!.id));
+      for (const [entityType, entityId, parent] of [
+        ['bulletinReplies', createdReply!.id, post!.id],
+        ['bulletinPostReactions', postReaction!.id, post!.id],
+        ['bulletinReplyReactions', replyReaction!.id, parentReply!.id],
+      ] as const) {
+        expect(entityId).not.toBe(parent);
+        const [entry] = await db
+          .select()
+          .from(actionLogs)
+          .where(and(eq(actionLogs.entityType, entityType), eq(actionLogs.createdBy, actor.email)));
+        expect(entry!.entityId).toBe(entityId);
+        await applyHistoryAction(db, { actionLogId: entry!.id, direction: 'undo', actor });
+        expect(
+          (await getActionEntityConfig(entityType)!.fetchState?.(db, entityId)) ?? null,
+        ).toBeNull();
+      }
+      expect(
+        await db
+          .select()
+          .from(bulletinPostReactions)
+          .where(eq(bulletinPostReactions.postId, post!.id)),
+      ).toEqual([]);
+      expect(
+        await db
+          .select()
+          .from(bulletinReplyReactions)
+          .where(eq(bulletinReplyReactions.replyId, parentReply!.id)),
+      ).toEqual([]);
+      expect(
+        (await db.select().from(bulletinReplies).where(eq(bulletinReplies.id, parentReply!.id)))[0]
+          ?.id,
+      ).toBe(parentReply!.id);
+    } finally {
+      await db.delete(actionLogs).where(eq(actionLogs.createdBy, actor.email));
+      await db.delete(bulletinPosts).where(eq(bulletinPosts.id, post!.id));
+    }
+  });
+
+  it('restores a deleted bulletin post with tags, attachments, replies and reactions, then redoes deletion', async () => {
+    const db = getDb();
+    const actor = {
+      email: `audit-${runId}@example.com`,
+      name: 'Audit',
+      permissions: ['bulletin_moderate'] as const,
+    };
+    const [post] = await db
+      .insert(bulletinPosts)
+      .values({ title: runId, body: 'handoff', authorName: actor.name, authorEmail: actor.email })
+      .returning();
+    const [tag] = await db.insert(bulletinTags).values({ name: runId, slug: runId }).returning();
+    try {
+      await db.insert(bulletinPostTags).values({ postId: post!.id, tagId: tag!.id });
+      await db.insert(bulletinPostAttachments).values({
+        postId: post!.id,
+        fileName: 'handoff.txt',
+        fileKey: `bulletin/${runId}`,
+        fileUrl: '/api/bulletin/attachments/test',
+        contentType: 'text/plain',
+        size: 7,
+      });
+      const [reply] = await db
+        .insert(bulletinReplies)
+        .values({
+          postId: post!.id,
+          body: 'received',
+          authorName: actor.name,
+          authorEmail: actor.email,
+        })
+        .returning();
+      await db
+        .insert(bulletinPostReactions)
+        .values({ postId: post!.id, userName: actor.name, userEmail: actor.email, emoji: '👍' });
+      await db
+        .insert(bulletinReplyReactions)
+        .values({ replyId: reply!.id, userName: actor.name, userEmail: actor.email, emoji: '👍' });
+      const config = getActionEntityConfig('bulletinPosts')!;
+      const before = await config.fetchState!(db, post!.id);
+      await deleteBulletinPost(db, post!.id, actor);
+      const [action] = await db
+        .select()
+        .from(actionLogs)
+        .where(and(eq(actionLogs.entityType, 'bulletinPosts'), eq(actionLogs.entityId, post!.id)));
+      expect(await config.fetchState!(db, post!.id)).toBeNull();
+      await applyHistoryAction(db, { actionLogId: action!.id, direction: 'undo', actor });
+      expect(await config.fetchState!(db, post!.id)).toEqual(before);
+      await applyHistoryAction(db, { actionLogId: action!.id, direction: 'redo', actor });
+      expect(await config.fetchState!(db, post!.id)).toBeNull();
+    } finally {
+      await db
+        .delete(actionLogs)
+        .where(and(eq(actionLogs.entityType, 'bulletinPosts'), eq(actionLogs.entityId, post!.id)));
+      await db.delete(bulletinPosts).where(eq(bulletinPosts.id, post!.id));
+      await db.delete(bulletinTags).where(eq(bulletinTags.id, tag!.id));
+    }
   });
 
   it('searches saved and current product identities without duplicating orders or grouped units', async () => {
@@ -257,7 +1180,7 @@ describe('real PostgreSQL and Redis contracts', () => {
     await expect(applyRateLimit(options)).resolves.toMatchObject({ ok: false, remaining: 0 });
   });
 
-  it('commits an order and its durable idempotency result atomically', async () => {
+  it('commits an order atomically and preserves its replay after idempotency maintenance', async () => {
     const db = getDb();
     const keyHash = `service-order:${runId}`;
     const fingerprint = buildIdempotencyFingerprint({ phoneNumber1: '0550000001' });
@@ -288,6 +1211,51 @@ describe('real PostgreSQL and Redis contracts', () => {
           processingTtlSeconds: 60,
         }),
       ).resolves.toMatchObject({ kind: 'completed', orderId: created.item.id });
+
+      const afterRetention = new Date(Date.now() + 2 * 24 * 60 * 60 * 1_000);
+      const abandonedKeyHash = `${keyHash}:abandoned`;
+      const activeKeyHash = `${keyHash}:active`;
+      await claimStorefrontOrderIdempotency(db, {
+        keyHash: abandonedKeyHash,
+        fingerprint,
+        processingTtlSeconds: 60,
+      });
+      await claimStorefrontOrderIdempotency(db, {
+        keyHash: activeKeyHash,
+        fingerprint,
+        processingTtlSeconds: 60,
+        now: afterRetention,
+      });
+      try {
+        await deleteExpiredOrderIdempotencyBatch(db, { now: afterRetention });
+        const retained = await db
+          .select({ keyHash: storefrontOrderIdempotency.keyHash })
+          .from(storefrontOrderIdempotency)
+          .where(
+            inArray(storefrontOrderIdempotency.keyHash, [keyHash, abandonedKeyHash, activeKeyHash]),
+          );
+        expect(retained.map((row) => row.keyHash).sort()).toEqual([keyHash, activeKeyHash].sort());
+        await expect(
+          claimStorefrontOrderIdempotency(db, {
+            keyHash,
+            fingerprint,
+            processingTtlSeconds: 60,
+            now: afterRetention,
+          }),
+        ).resolves.toMatchObject({ kind: 'completed', orderId: created.item.id });
+        await expect(
+          claimStorefrontOrderIdempotency(db, {
+            keyHash,
+            fingerprint: `${fingerprint}:changed`,
+            processingTtlSeconds: 60,
+            now: afterRetention,
+          }),
+        ).resolves.toEqual({ kind: 'conflict' });
+      } finally {
+        await db
+          .delete(storefrontOrderIdempotency)
+          .where(inArray(storefrontOrderIdempotency.keyHash, [abandonedKeyHash, activeKeyHash]));
+      }
     } finally {
       await db.delete(orders).where(eq(orders.id, created.item.id));
     }
@@ -660,5 +1628,430 @@ describe('real PostgreSQL and Redis contracts', () => {
       }
       await db.delete(orders).where(eq(orders.id, order.id));
     }
+  });
+
+  it('replays a lost expense response once, rejects changed retries, and invalidates deleted economics', async () => {
+    const {
+      createProfitTrackerCost,
+      deleteProfitTrackerCost,
+      deleteProfitTrackerDay,
+      exportProfitTrackerCsv,
+      updateProfitTrackerSettings,
+      upsertProfitTrackerDay,
+    } = await import('../lib/profit-tracker');
+    const { profitTrackerOperatingCosts, profitTrackerSettings, metaAdsDailyInsights } =
+      await import('@bric/db/schema');
+    const { AdminMutationIdempotencyConflictError } =
+      await import('../lib/admin-mutation-idempotency');
+    const rollback = new Error('financial fixture rollback');
+    const date = '2098-06-17';
+    await expect(
+      getDb().transaction(async (tx) => {
+        const db = tx as unknown as ReturnType<typeof getDb>;
+        await updateProfitTrackerSettings(
+          { fxRate: 321, defaultReturnRate: 7, restFrom: null },
+          db,
+        );
+        const input = {
+          name: `expense-${runId}`,
+          amountDzd: 3100,
+          period: 'once' as const,
+          startDate: date,
+        };
+        const requestId = randomUUID();
+        const first = await createProfitTrackerCost(input, db, requestId);
+        const replay = await createProfitTrackerCost(input, db, requestId);
+        expect(replay).toEqual(first);
+        const rows = await tx
+          .select()
+          .from(profitTrackerOperatingCosts)
+          .where(eq(profitTrackerOperatingCosts.name, input.name));
+        expect(rows).toHaveLength(1);
+        await expect(
+          createProfitTrackerCost({ ...input, amountDzd: 999 }, db, requestId),
+        ).rejects.toBeInstanceOf(AdminMutationIdempotencyConflictError);
+        await tx
+          .update(profitTrackerSettings)
+          .set({ updatedAt: new Date('2000-01-01') })
+          .where(eq(profitTrackerSettings.id, 1));
+        expect(await deleteProfitTrackerCost(first.id!, db)).toBe(first.id);
+        const [settings] = await tx
+          .select()
+          .from(profitTrackerSettings)
+          .where(eq(profitTrackerSettings.id, 1));
+        expect(settings!.updatedAt.getTime()).toBeGreaterThan(new Date('2000-01-01').getTime());
+        expect(Number(settings!.fxRate)).toBe(321);
+        expect(Number(settings!.defaultReturnRate)).toBe(7);
+        await upsertProfitTrackerDay({ date, confirmedOrders: 3, note: runId }, db);
+        await tx.insert(metaAdsDailyInsights).values({
+          day: date,
+          accountId: runId,
+          accountCurrency: 'EUR',
+          accountTimezone: 'Africa/Algiers',
+          campaignId: runId,
+          adsetId: runId,
+          adId: runId,
+          attributionSetting: 'test',
+          actionReportTime: 'conversion',
+          purchases: '2',
+          syncedAt: new Date(),
+        });
+        const csv = await exportProfitTrackerCsv(
+          { range: 'custom', startDate: date, endDate: date },
+          { db },
+        );
+        const [header, row] = csv
+          .trim()
+          .split('\n')
+          .map((line) => line.split(','));
+        expect(row![header!.indexOf('posted_or_manual_orders')]).toBe('3');
+        expect(row![header!.indexOf('posted_or_manual_orders_source')]).toBe('manual');
+        expect(row![header!.indexOf('posted_or_manual_orders_to_meta_purchases_pct')]).toBe('150');
+        expect(header).not.toContain('confirmation_rate_pct');
+        await tx
+          .update(profitTrackerSettings)
+          .set({ updatedAt: new Date('2000-01-01') })
+          .where(eq(profitTrackerSettings.id, 1));
+        expect(await deleteProfitTrackerDay(date, db)).toBe(date);
+        const [afterDay] = await tx
+          .select()
+          .from(profitTrackerSettings)
+          .where(eq(profitTrackerSettings.id, 1));
+        expect(afterDay!.updatedAt.getTime()).toBeGreaterThan(new Date('2000-01-01').getTime());
+        throw rollback;
+      }),
+    ).rejects.toBe(rollback);
+  });
+
+  it('recovers shopping stock and order allocations atomically with history conflicts', async () => {
+    const { orderInventoryAllocations } = await import('@bric/db/schema');
+    const { applyInventoryQuantityChange } = await import('../lib/inventory-actions');
+    const { ActionHistoryConflictError } = await import('../lib/action-history');
+    const rollback = new Error('stock recovery fixture rollback');
+    await expect(
+      getDb().transaction(async (tx) => {
+        const db = tx as unknown as ReturnType<typeof getDb>;
+        const [product] = await tx
+          .insert(products)
+          .values({
+            title: `Recovery ${runId}`,
+            slug: `recovery-${runId}`,
+            price: '10',
+            inventoryQuantity: 20,
+          })
+          .returning();
+        const [order] = await tx
+          .insert(orders)
+          .values({ firstName: runId, phoneNumber1: '0661920629' })
+          .returning();
+        await tx.insert(orderLineItems).values({
+          orderId: order!.id,
+          productId: product!.id,
+          contentId: String(product!.id),
+          rawValue: String(product!.id),
+          titleSnapshot: product!.title!,
+          originalUnitPrice: '10',
+          effectiveUnitPrice: '10',
+          quantity: 2,
+          lineTotal: '20',
+        });
+        const generated = await buildGeneratedShoppingListDraft({
+          sourceMode: 'selected',
+          title: 'Recovery fixture',
+          orders: [
+            {
+              id: order!.id,
+              fullName: runId,
+              note: null,
+              orderProducts: [
+                {
+                  productId: product!.id,
+                  rawValue: String(product!.id),
+                  title: product!.title!,
+                  unitPrice: 10,
+                  quantity: 2,
+                  lineTotal: 20,
+                  thumbnailUrl: null,
+                  missing: false,
+                },
+              ],
+            },
+          ],
+          resolveProductDetails: async () => ({ inventoryQuantity: 20, purchasePrice: null }),
+          resolveBrandName: async () => 'Unbranded',
+        });
+        const draft = await saveAdminShoppingListDraft(db, {
+          ...generated,
+          revision: null,
+          draftItems: generated.draftItems.map((item) => ({
+            ...item,
+            quantity: 3,
+            inventoryDecreaseQuantity: 3,
+          })),
+        });
+        const applied = await applyShoppingListInventory(db, {
+          sourceMode: draft.sourceMode,
+          orderIds: draft.orderIds,
+          revision: draft.revision,
+          draftIds: draft.draftItems.map((item) => item.draftId),
+          requestId: `recovery-${runId}`,
+        });
+        expect(applied.items).toEqual([
+          { productId: product!.id, previousQuantity: 20, nextQuantity: 17 },
+        ]);
+        const [entry] = await tx
+          .select()
+          .from(actionLogs)
+          .where(and(eq(actionLogs.entityType, 'products'), eq(actionLogs.entityId, product!.id)));
+        expect(entry!.afterState).toMatchObject({
+          stockAllocations: {
+            orders: [{ orderId: order!.id, productId: product!.id, quantity: 2 }],
+            manual: { scopeKey: draft.scopeKey, productId: product!.id, quantity: 1 },
+          },
+        });
+        const readState = async () => {
+          const [currentProduct] = await tx
+            .select()
+            .from(products)
+            .where(eq(products.id, product!.id));
+          const [allocation] = await tx
+            .select()
+            .from(orderInventoryAllocations)
+            .where(eq(orderInventoryAllocations.orderId, order!.id));
+          const [currentDraft] = await tx
+            .select()
+            .from(shoppingListDrafts)
+            .where(eq(shoppingListDrafts.scopeKey, draft.scopeKey));
+          const generatedItems = currentDraft!.generatedItems as Array<{
+            productId: number;
+            inventoryManualAppliedQuantity: number;
+            inventoryAppliedQuantity: number;
+          }>;
+          const item = generatedItems.find((item) => item.productId === product!.id)!;
+          return {
+            stock: currentProduct!.inventoryQuantity,
+            allocation,
+            item,
+            revision: currentDraft!.revision,
+          };
+        };
+        await applyHistoryAction(db, { actionLogId: entry!.id, direction: 'undo' });
+        expect(await readState()).toMatchObject({
+          stock: 20,
+          allocation: { quantity: 0 },
+          item: {
+            inventoryManualAppliedQuantity: 0,
+            inventoryAppliedQuantity: 0,
+            inventoryQuantity: 20,
+          },
+          revision: applied.draft.revision + 1,
+        });
+        await expect(
+          applyHistoryAction(db, { actionLogId: entry!.id, direction: 'undo' }),
+        ).rejects.toBeInstanceOf(ActionHistoryConflictError);
+        await applyHistoryAction(db, { actionLogId: entry!.id, direction: 'redo' });
+        expect(await readState()).toMatchObject({
+          stock: 17,
+          allocation: { quantity: 2 },
+          item: { inventoryManualAppliedQuantity: 1, inventoryAppliedQuantity: 3 },
+        });
+        const { archiveProductThroughCanonicalWorkflow, restoreProductThroughCanonicalWorkflow } =
+          await import('../lib/product-update-workflow');
+        const archiveRollback = new Error('archive fixture savepoint rollback');
+        await expect(
+          tx.transaction(async (archiveTx) => {
+            const archiveDb = archiveTx as unknown as ReturnType<typeof getDb>;
+            await archiveProductThroughCanonicalWorkflow(archiveDb, product!.id, {});
+            expect(await readState()).toMatchObject({
+              stock: 17,
+              allocation: { quantity: 2 },
+              item: { inventoryManualAppliedQuantity: 1 },
+            });
+            const [archivedProduct] = await archiveTx
+              .select()
+              .from(products)
+              .where(eq(products.id, product!.id));
+            expect(archivedProduct!.archivedAt).not.toBeNull();
+            await restoreProductThroughCanonicalWorkflow(archiveDb, product!.id, {});
+            expect(await readState()).toMatchObject({ stock: 17, allocation: { quantity: 2 } });
+            const archiveHistory = await archiveTx
+              .select()
+              .from(actionLogs)
+              .where(
+                and(eq(actionLogs.entityType, 'products'), eq(actionLogs.entityId, product!.id)),
+              );
+            const lifecycle = archiveHistory
+              .filter((row) => row.id !== entry!.id)
+              .sort((a, b) => b.id - a.id);
+            for (const action of lifecycle)
+              await applyHistoryAction(archiveDb, { actionLogId: action.id, direction: 'undo' });
+            expect(await readState()).toMatchObject({
+              stock: 17,
+              allocation: { quantity: 2 },
+              item: { inventoryManualAppliedQuantity: 1 },
+            });
+            expect(
+              (await archiveTx.select().from(products).where(eq(products.id, product!.id)))[0]!
+                .archivedAt,
+            ).toBeNull();
+            throw archiveRollback;
+          }),
+        ).rejects.toBe(archiveRollback);
+        // Pre-metadata stock changes cannot reveal whether they consumed these orders.
+        const legacyBefore = { ...(entry!.beforeState as Record<string, unknown>) };
+        const legacyAfter = { ...(entry!.afterState as Record<string, unknown>) };
+        delete legacyBefore.stockAllocations;
+        delete legacyAfter.stockAllocations;
+        delete legacyBefore.stockHistoryVersion;
+        delete legacyAfter.stockHistoryVersion;
+        await tx
+          .update(actionLogs)
+          .set({ beforeState: legacyBefore, afterState: legacyAfter })
+          .where(eq(actionLogs.id, entry!.id));
+        await expect(
+          applyHistoryAction(db, { actionLogId: entry!.id, direction: 'undo' }),
+        ).rejects.toThrow('older stock action');
+        expect(await readState()).toMatchObject({
+          stock: 17,
+          allocation: { quantity: 2 },
+          item: { inventoryManualAppliedQuantity: 1 },
+        });
+        await tx
+          .update(actionLogs)
+          .set({ beforeState: entry!.beforeState, afterState: entry!.afterState })
+          .where(eq(actionLogs.id, entry!.id));
+        // A changed manual balance must roll both stock and order counters back.
+        const [savedDraft] = await tx
+          .select()
+          .from(shoppingListDrafts)
+          .where(eq(shoppingListDrafts.scopeKey, draft.scopeKey));
+        const savedGenerated = savedDraft!.generatedItems as Array<Record<string, unknown>>;
+        await tx
+          .update(shoppingListDrafts)
+          .set({
+            generatedItems: savedGenerated.map((item) => ({
+              ...item,
+              inventoryManualAppliedQuantity: 2,
+            })),
+          })
+          .where(eq(shoppingListDrafts.id, savedDraft!.id));
+        await expect(
+          applyHistoryAction(db, { actionLogId: entry!.id, direction: 'undo' }),
+        ).rejects.toBeInstanceOf(ActionHistoryConflictError);
+        expect(await readState()).toMatchObject({
+          stock: 17,
+          allocation: { quantity: 2 },
+          item: { inventoryManualAppliedQuantity: 2 },
+        });
+        await tx
+          .update(shoppingListDrafts)
+          .set({ generatedItems: savedGenerated })
+          .where(eq(shoppingListDrafts.id, savedDraft!.id));
+        // An allocation changed outside this action must roll the stock write back too.
+        await tx
+          .update(orderInventoryAllocations)
+          .set({ quantity: 1 })
+          .where(eq(orderInventoryAllocations.orderId, order!.id));
+        await expect(
+          applyHistoryAction(db, { actionLogId: entry!.id, direction: 'undo' }),
+        ).rejects.toBeInstanceOf(ActionHistoryConflictError);
+        expect(await readState()).toMatchObject({
+          stock: 17,
+          allocation: { quantity: 1 },
+          item: { inventoryManualAppliedQuantity: 1 },
+        });
+        expect(
+          (await tx.select().from(actionLogs).where(eq(actionLogs.id, entry!.id)))[0]!.isUndone,
+        ).toBe(false);
+        await tx
+          .update(orderInventoryAllocations)
+          .set({ quantity: 2, needsReview: true, legacyScopeKeys: ['retained-provenance'] })
+          .where(eq(orderInventoryAllocations.orderId, order!.id));
+        // Regular product history still gates older shopping deductions.
+        await applyInventoryQuantityChange(db, {
+          productId: product!.id,
+          mode: 'increase',
+          quantity: 1,
+        });
+        await expect(
+          applyHistoryAction(db, { actionLogId: entry!.id, direction: 'undo' }),
+        ).rejects.toThrow('Only the latest applied action can be undone');
+        const history = await tx
+          .select()
+          .from(actionLogs)
+          .where(and(eq(actionLogs.entityType, 'products'), eq(actionLogs.entityId, product!.id)));
+        const correction = history.find((row) => row.id !== entry!.id)!;
+        await applyHistoryAction(db, { actionLogId: correction.id, direction: 'undo' });
+        await applyHistoryAction(db, { actionLogId: entry!.id, direction: 'undo' });
+        expect(await readState()).toMatchObject({
+          stock: 20,
+          allocation: { quantity: 0, needsReview: true, legacyScopeKeys: ['retained-provenance'] },
+          item: {
+            inventoryManualAppliedQuantity: 0,
+            inventoryAppliedQuantity: 0,
+            inventoryQuantity: 20,
+          },
+        });
+        const { mutateEntityWithHistory } = await import('../lib/action-history');
+        const [legacyProduct] = await mutateEntityWithHistory(db, {
+          entityType: 'products',
+          operation: 'create',
+          execute: (inner) =>
+            inner
+              .insert(products)
+              .values({
+                title: 'Imported stock history',
+                slug: `recovery-legacy-${runId}`,
+                price: '10',
+                inventoryQuantity: 5,
+              })
+              .returning(),
+          resolveEntityId: (rows) => rows[0]!.id,
+        });
+        const [creation] = await tx
+          .select()
+          .from(actionLogs)
+          .where(
+            and(eq(actionLogs.entityType, 'products'), eq(actionLogs.entityId, legacyProduct!.id)),
+          );
+        await tx
+          .insert(orderInventoryAllocations)
+          .values({ orderId: order!.id, productId: legacyProduct!.id, quantity: 1 });
+        await expect(
+          applyHistoryAction(db, { actionLogId: creation!.id, direction: 'undo' }),
+        ).rejects.toThrow('allocations must be recovered');
+        expect(
+          await tx.select().from(products).where(eq(products.id, legacyProduct!.id)),
+        ).toHaveLength(1);
+        await tx
+          .update(orderInventoryAllocations)
+          .set({ quantity: 0, needsReview: true })
+          .where(eq(orderInventoryAllocations.productId, legacyProduct!.id));
+        await expect(
+          applyHistoryAction(db, { actionLogId: creation!.id, direction: 'undo' }),
+        ).rejects.toThrow('allocations must be recovered');
+        expect(
+          (
+            await tx
+              .select()
+              .from(orderInventoryAllocations)
+              .where(eq(orderInventoryAllocations.productId, legacyProduct!.id))
+          )[0]!.needsReview,
+        ).toBe(true);
+        await tx
+          .update(orderInventoryAllocations)
+          .set({ needsReview: false })
+          .where(eq(orderInventoryAllocations.productId, legacyProduct!.id));
+        await applyHistoryAction(db, { actionLogId: creation!.id, direction: 'undo' });
+        expect(
+          await tx.select().from(products).where(eq(products.id, legacyProduct!.id)),
+        ).toHaveLength(0);
+        await applyHistoryAction(db, { actionLogId: creation!.id, direction: 'redo' });
+        expect(
+          await tx.select().from(products).where(eq(products.id, legacyProduct!.id)),
+        ).toHaveLength(1);
+        throw rollback;
+      }),
+    ).rejects.toBe(rollback);
   });
 });
