@@ -27,6 +27,7 @@ export type EcotrackRequestOptions = {
   json?: unknown;
   fetchImpl?: typeof fetch;
   env?: NodeJS.ProcessEnv;
+  deadlineAt?: number;
   accept?: string;
   respectGlobalLimiter?: boolean;
 };
@@ -246,6 +247,12 @@ function parseRateLimit(headers: Headers, path: string): EcotrackExtendedRateLim
   };
 }
 
+export function readEcotrackRejected(payload: unknown) {
+  if (typeof payload !== 'object' || payload === null) return false;
+  const value = (payload as Record<string, unknown>).success;
+  return value === false || value === 0 || value === '0';
+}
+
 export function readEcotrackSuccess(payload: unknown) {
   if (typeof payload !== 'object' || payload === null) {
     return false;
@@ -318,8 +325,10 @@ function assertEcotrackMutationSuccess(
     readEcotrackMessage(result.payload) ??
     (success ? null : buildEcotrackResultMessage(result.payload, fallbackMessage));
 
+  if (!success && !readEcotrackRejected(result.payload))
+    throw new Error('ECOTRACK returned an unknown mutation outcome.');
   if (!success) {
-    throw new Error(message ?? fallbackMessage);
+    throw new EcotrackMutationRejectedError(message ?? fallbackMessage);
   }
 
   return {
@@ -327,6 +336,13 @@ function assertEcotrackMutationSuccess(
     success,
     message,
   };
+}
+
+export class EcotrackMutationRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EcotrackMutationRejectedError';
+  }
 }
 
 export class EcotrackRateLimitError extends Error {
@@ -367,11 +383,18 @@ export async function requestEcotrack(
     body = JSON.stringify(options.json);
   }
 
+  const signal = AbortSignal.timeout(
+    Math.max(1, (options.deadlineAt ?? Date.now() + 30_000) - Date.now()),
+  );
   const runRequest = async () => {
+    if (options.deadlineAt !== undefined && Date.now() >= options.deadlineAt)
+      throw new EcotrackMutationRejectedError('ECOTRACK request deadline expired before sending.');
+    signal.throwIfAborted();
     const response = await fetchImpl(url, {
       method: options.method ?? 'GET',
       headers,
       body,
+      signal,
     });
     const text = await response.text();
     const rateLimit = parseRateLimit(response.headers, options.path);
@@ -392,16 +415,10 @@ export async function requestEcotrack(
     }
 
     if (!response.ok) {
-      throw new Error(
-        `ECOTRACK request failed for ${options.path}: ${response.status} ${text.slice(0, 200)}`,
-      );
-    }
-
-    if (rateLimit.dayRemaining !== null && rateLimit.dayRemaining <= 0) {
-      throw new EcotrackRateLimitError('ECOTRACK daily rate limit exhausted.', rateLimit);
-    }
-    if (rateLimit.hourRemaining !== null && rateLimit.hourRemaining <= 0) {
-      throw new EcotrackRateLimitError('ECOTRACK hourly rate limit exhausted.', rateLimit);
+      const message = `ECOTRACK request failed for ${options.path}: ${response.status} ${text.slice(0, 200)}`;
+      if (response.status >= 400 && response.status < 500)
+        throw new EcotrackMutationRejectedError(message);
+      throw new Error(message);
     }
 
     return { payload, text, rateLimit, response };
@@ -430,13 +447,20 @@ export async function requestEcotrackBinary(
     }
   }
 
+  const signal = AbortSignal.timeout(
+    Math.max(1, (options.deadlineAt ?? Date.now() + 30_000) - Date.now()),
+  );
   const runRequest = async () => {
+    if (options.deadlineAt !== undefined && Date.now() >= options.deadlineAt)
+      throw new EcotrackMutationRejectedError('ECOTRACK request deadline expired before sending.');
+    signal.throwIfAborted();
     const response = await fetchImpl(url, {
       method: options.method ?? 'GET',
       headers: {
         Accept: options.accept ?? 'application/pdf, application/octet-stream;q=0.9, */*;q=0.8',
         Authorization: `Bearer ${token}`,
       },
+      signal,
     });
     const rateLimit = parseRateLimit(response.headers, options.path);
 
@@ -450,9 +474,10 @@ export async function requestEcotrackBinary(
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(
-        `ECOTRACK request failed for ${options.path}: ${response.status} ${text.slice(0, 200)}`,
-      );
+      const message = `ECOTRACK request failed for ${options.path}: ${response.status} ${text.slice(0, 200)}`;
+      if (response.status >= 400 && response.status < 500)
+        throw new EcotrackMutationRejectedError(message);
+      throw new Error(message);
     }
 
     return {
@@ -476,6 +501,7 @@ export async function validateEcotrackToken(
   options: {
     fetchImpl?: typeof fetch;
     env?: NodeJS.ProcessEnv;
+    deadlineAt?: number;
   } = {},
 ): Promise<EcotrackTokenValidationResult> {
   const result = await requestEcotrack({
@@ -483,6 +509,7 @@ export async function validateEcotrackToken(
     method: 'GET',
     fetchImpl: options.fetchImpl,
     env: options.env,
+    deadlineAt: options.deadlineAt,
   });
 
   return {
@@ -498,6 +525,7 @@ export async function fetchEcotrackOrderLabel(
   options: {
     fetchImpl?: typeof fetch;
     env?: NodeJS.ProcessEnv;
+    deadlineAt?: number;
   } = {},
 ) {
   return requestEcotrackBinary({
@@ -506,6 +534,7 @@ export async function fetchEcotrackOrderLabel(
     query: { tracking },
     fetchImpl: options.fetchImpl,
     env: options.env,
+    deadlineAt: options.deadlineAt,
   });
 }
 
@@ -514,6 +543,7 @@ export async function updateEcotrackOrder(
   options: {
     fetchImpl?: typeof fetch;
     env?: NodeJS.ProcessEnv;
+    deadlineAt?: number;
   } = {},
 ) {
   const result = await requestEcotrack({
@@ -522,6 +552,7 @@ export async function updateEcotrackOrder(
     query: payload,
     fetchImpl: options.fetchImpl,
     env: options.env,
+    deadlineAt: options.deadlineAt,
   });
 
   return assertEcotrackMutationSuccess(result, 'ECOTRACK rejected the order update.');
@@ -532,6 +563,7 @@ export async function deleteEcotrackOrder(
   options: {
     fetchImpl?: typeof fetch;
     env?: NodeJS.ProcessEnv;
+    deadlineAt?: number;
   } = {},
 ) {
   const result = await requestEcotrack({
@@ -540,6 +572,7 @@ export async function deleteEcotrackOrder(
     query: { tracking },
     fetchImpl: options.fetchImpl,
     env: options.env,
+    deadlineAt: options.deadlineAt,
   });
 
   return assertEcotrackMutationSuccess(result, 'ECOTRACK rejected the order deletion.');
@@ -551,6 +584,7 @@ export async function dispatchEcotrackOrder(
   options: {
     fetchImpl?: typeof fetch;
     env?: NodeJS.ProcessEnv;
+    deadlineAt?: number;
   } = {},
 ) {
   const result = await requestEcotrack({
@@ -559,6 +593,7 @@ export async function dispatchEcotrackOrder(
     query: { tracking, ask_collection: askCollection ? 1 : 0 },
     fetchImpl: options.fetchImpl,
     env: options.env,
+    deadlineAt: options.deadlineAt,
   });
 
   return assertEcotrackMutationSuccess(result, 'ECOTRACK rejected the dispatch request.');
@@ -570,6 +605,7 @@ export async function addEcotrackMaj(
   options: {
     fetchImpl?: typeof fetch;
     env?: NodeJS.ProcessEnv;
+    deadlineAt?: number;
   } = {},
 ) {
   const result = await requestEcotrack({
@@ -578,6 +614,7 @@ export async function addEcotrackMaj(
     query: { tracking, content },
     fetchImpl: options.fetchImpl,
     env: options.env,
+    deadlineAt: options.deadlineAt,
   });
 
   return assertEcotrackMutationSuccess(result, 'ECOTRACK rejected the follow-up update.');
@@ -588,6 +625,7 @@ export async function getEcotrackMaj(
   options: {
     fetchImpl?: typeof fetch;
     env?: NodeJS.ProcessEnv;
+    deadlineAt?: number;
   } = {},
 ) {
   const result = await requestEcotrack({
@@ -596,6 +634,7 @@ export async function getEcotrackMaj(
     query: { tracking },
     fetchImpl: options.fetchImpl,
     env: options.env,
+    deadlineAt: options.deadlineAt,
   });
 
   return {
@@ -609,6 +648,7 @@ export async function getEcotrackTrackingInfo(
   options: {
     fetchImpl?: typeof fetch;
     env?: NodeJS.ProcessEnv;
+    deadlineAt?: number;
   } = {},
 ) {
   const result = await requestEcotrack({
@@ -617,6 +657,7 @@ export async function getEcotrackTrackingInfo(
     query: { tracking },
     fetchImpl: options.fetchImpl,
     env: options.env,
+    deadlineAt: options.deadlineAt,
   });
 
   return {
@@ -630,6 +671,7 @@ export async function getEcotrackTrackingsInfo(
   options: {
     fetchImpl?: typeof fetch;
     env?: NodeJS.ProcessEnv;
+    deadlineAt?: number;
   } = {},
 ) {
   const queryString = trackings
@@ -640,6 +682,7 @@ export async function getEcotrackTrackingsInfo(
     method: 'GET',
     fetchImpl: options.fetchImpl,
     env: options.env,
+    deadlineAt: options.deadlineAt,
   });
 
   const payload =
@@ -668,6 +711,7 @@ export async function getEcotrackOrdersStatus(
   options: {
     fetchImpl?: typeof fetch;
     env?: NodeJS.ProcessEnv;
+    deadlineAt?: number;
   } = {},
 ) {
   const result = await requestEcotrack({
@@ -679,6 +723,7 @@ export async function getEcotrackOrdersStatus(
     },
     fetchImpl: options.fetchImpl,
     env: options.env,
+    deadlineAt: options.deadlineAt,
   });
 
   const payload =
@@ -713,6 +758,7 @@ export async function getEcotrackOrdersPage(
     tracking?: string;
     fetchImpl?: typeof fetch;
     env?: NodeJS.ProcessEnv;
+    deadlineAt?: number;
   } = {},
 ) {
   const result = await requestEcotrack({
@@ -726,6 +772,7 @@ export async function getEcotrackOrdersPage(
     },
     fetchImpl: options.fetchImpl,
     env: options.env,
+    deadlineAt: options.deadlineAt,
   });
   const rawPage =
     typeof result.payload === 'object' && result.payload !== null
@@ -749,6 +796,7 @@ export async function listEcotrackOrders(
     maxPages?: number;
     fetchImpl?: typeof fetch;
     env?: NodeJS.ProcessEnv;
+    deadlineAt?: number;
   } = {},
 ) {
   const maxPages = Math.min(100, Math.max(1, Math.trunc(options.maxPages ?? 100)));
@@ -783,6 +831,7 @@ export async function getEcotrackOrder(
     startDate?: string;
     fetchImpl?: typeof fetch;
     env?: NodeJS.ProcessEnv;
+    deadlineAt?: number;
   } = {},
 ) {
   const result = await getEcotrackOrdersPage({
@@ -790,6 +839,7 @@ export async function getEcotrackOrder(
     startDate: options.startDate,
     fetchImpl: options.fetchImpl,
     env: options.env,
+    deadlineAt: options.deadlineAt,
   });
 
   return {
@@ -804,6 +854,7 @@ export async function requestEcotrackReturn(
   options: {
     fetchImpl?: typeof fetch;
     env?: NodeJS.ProcessEnv;
+    deadlineAt?: number;
   } = {},
 ) {
   const result = await requestEcotrack({
@@ -812,6 +863,7 @@ export async function requestEcotrackReturn(
     query: { tracking },
     fetchImpl: options.fetchImpl,
     env: options.env,
+    deadlineAt: options.deadlineAt,
   });
 
   return assertEcotrackMutationSuccess(result, 'ECOTRACK rejected the return request.');

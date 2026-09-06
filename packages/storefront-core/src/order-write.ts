@@ -265,7 +265,6 @@ export async function ensureCanonicalOrderPublicToken(
     .set({
       publicToken,
       publicTokenExpiresAt: createPublicOrderTokenExpiry(now),
-      updatedAt: now,
     })
     .where(eq(orders.id, orderId))
     .returning({ publicToken: orders.publicToken });

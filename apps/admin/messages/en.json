@@ -2314,6 +2314,33 @@
       "livred": "Order delivered",
       "encaissed": "Order collected",
       "payed": "Payment completed"
+    },
+    "recovery": {
+      "title": "Carrier operations to resolve",
+      "description": "These orders are locked until the carrier outcome is recorded. Verify the carrier record before allowing another request.",
+      "operation": "Order #{id} · {kind} · {provider}",
+      "review": "Review",
+      "close": "Close",
+      "amount": "Amount to collect: {amount} DZD",
+      "saved": "The carrier accepted this operation. Apply the saved response to finish updating the order.",
+      "applySaved": "Finish local update",
+      "verify": "Check this request in the carrier dashboard. Record what you verified, then confirm whether the carrier applied it. Do not repeat the request while its outcome is unknown.",
+      "waiting": "The carrier request is still in progress. Recovery becomes available after its response window closes.",
+      "evidence": "What did you verify at the carrier?",
+      "tracking": "Tracking number created by this request",
+      "confirmApplied": "Carrier applied the request",
+      "confirmNotApplied": "Carrier did not apply the request",
+      "loadError": "Carrier recovery could not be loaded.",
+      "retry": "Retry",
+      "kinds": {
+        "post": "Create shipment",
+        "update": "Edit shipment",
+        "recreate": "Recreate shipment",
+        "delete": "Delete shipment",
+        "dispatch": "Dispatch",
+        "maj": "Add follow-up",
+        "return": "Request return"
+      }
     }
   },
   "inventory": {
@@ -2359,7 +2386,8 @@
       "orderApplyError": "Failed to add {count} scanned order products to inventory.",
       "notFound": "No matching barcode or order was found.",
       "error": "Failed to scan the inventory input.",
-      "noSelection": "Select at least one product from the scanned order."
+      "noSelection": "Select at least one product from the scanned order.",
+      "orderApplyPartial": "Received {count} products. {failed} could not be received and remain selected for review."
     },
     "notifications": {
       "barcode": {

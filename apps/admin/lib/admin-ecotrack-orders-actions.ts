@@ -1,562 +1,305 @@
-import { eq } from 'drizzle-orm';
-import { PDFDocument } from 'pdf-lib';
+import { getDb } from '@bric/db/client';
 import {
   addEcotrackMaj as addEcotrackMajUpstream,
   deleteEcotrackOrder,
   dispatchEcotrackOrder,
+  EcotrackMutationRejectedError,
+  EcotrackRateLimitError,
   fetchEcotrackOrderLabel,
   getEcotrackOrdersStatus,
+  readEcotrackRejected,
   requestEcotrackReturn as requestEcotrackReturnUpstream,
   updateEcotrackOrder,
 } from '@bric/storefront-core/ecotrack-client';
+import { normalizeAlgeriaPhone } from '@bric/storefront-core/meta';
 import {
-  restoreCanonicalOrderSnapshot,
-  updateCanonicalOrder,
-} from '@bric/storefront-core/order-write';
-import { getDb } from '@bric/db/client';
-import { ecotrackOrderStates, orderLineItems } from '@bric/db/schema';
-import {
+  buildOrderCommercialValues,
   readOrderProductSubtotal,
   resolveOrderCommercialState,
 } from '@bric/storefront-core/order-commercial';
-import { normalizeAlgeriaPhone } from '@bric/storefront-core/meta';
-
+import { PDFDocument } from 'pdf-lib';
+import type { ActionActor } from './action-history';
+import {
+  ensureFreshShipmentRow,
+  getEcotrackTrackingsInfoAllowingMissing,
+  type EcotrackBulkLabelResult,
+  type EcotrackDispatchBatchResult,
+  type EcotrackOrderDetail,
+} from './admin-ecotrack-shipment-state';
+import {
+  buildEcotrackOrderDetailFromRow,
+  getActionFlags,
+  loadShipmentRowByOrderId,
+} from './admin-ecotrack-shipment-view';
 import type { EcotrackBulkActionFailure, EcotrackLabelItem } from './ecotrack-admin-contracts';
+import { readEcotrackCatalog } from './ecotrack-catalog';
+import { applySavedEcotrackMutation, type CarrierOrderChange } from './ecotrack-mutation-apply';
 import {
-  buildEcotrackOrderActionSnapshot,
-  buildEcotrackShipmentActionSnapshot,
-} from './ecotrack-action-snapshots';
-import { getOrderProductLookup, toOrderRecord } from './order-records';
-import {
-  buildEcotrackOrderPayload,
-  createEcotrackOrdersBatch,
-  persistEcotrackPostedOrder,
-  readEcotrackCatalog,
-} from './ecotrack';
+  claimEcotrackMutation,
+  ECOTRACK_MUTATION_TIMEOUT_MS,
+  markEcotrackMutationUncertain,
+  recordEcotrackMutationResult,
+  type CarrierMutationKind,
+} from './ecotrack-mutations';
+import { buildEcotrackOrderPayload, createEcotrackOrdersBatch } from './ecotrack-posting';
 import { formatEcotrackActionError, toEcotrackFailureRecord } from './ecotrack-shipment-errors';
+import { providerRequestOptions } from './ecotrack-shipment-evidence';
 import {
   buildUpdatePayload,
   type EcotrackDispatchRequest,
   type EcotrackOrderUpdateDraft,
 } from './ecotrack-shipment-input';
-import { providerRequestOptions } from './ecotrack-shipment-evidence';
 import { sanitizeNullableText } from './ecotrack-shipment-status';
 import type { EcotrackShipmentRow as ShipmentRow } from './ecotrack-shipment-types';
-import { ORDER_STATUS } from './orders';
-import { refreshEcotrackOrder } from './admin-ecotrack-orders-read';
-import {
-  STATUS_STALE_MS,
-  canonicalizeOrderCartProducts,
-  ensureFreshShipmentRow,
-  getActionFlags,
-  getEcotrackTrackingsInfoAllowingMissing,
-  isStaleAt,
-  loadMajSyncSummary,
-  loadShipmentRowByOrderId,
-  recordEcotrackOrderAction,
-  recordEcotrackMajAction,
-  recordEcotrackShipmentAction,
-  softDeleteShipmentRow,
-  type EcotrackBulkLabelResult,
-  type EcotrackDispatchBatchResult,
-  type EcotrackOrderDetail,
-} from './admin-ecotrack-shipment-state';
+import { getOrderProductLookup, toOrderRecord } from './order-records';
+
+type ActionFlag =
+  'canEdit' | 'canEditAndRecreate' | 'canDelete' | 'canDispatch' | 'canAddMaj' | 'canAskReturn';
+async function loadActionableShipment(orderId: number, flag: ActionFlag, actor: ActionActor) {
+  const db = getDb();
+  const row = await loadShipmentRowByOrderId(db, orderId);
+  if (!row) return null;
+  await ensureFreshShipmentRow(db, row, { includeMaj: false, includeTracking: false, actor });
+  const fresh = await loadShipmentRowByOrderId(db, orderId);
+  if (!fresh) return null;
+  if (!getActionFlags(fresh.currentStatus, fresh.deletedAt)[flag])
+    throw new Error('This carrier action is no longer available. Refresh the shipment.');
+  return fresh;
+}
+
+async function executeCarrierCommand(
+  row: ShipmentRow,
+  kind: CarrierMutationKind,
+  actor: ActionActor,
+  request: Record<string, unknown>,
+  send: (deadlineAt: number) => Promise<Record<string, unknown>>,
+) {
+  const db = getDb();
+  const operation = await claimEcotrackMutation(db, {
+    orderId: row.order.id,
+    orderUpdatedAt: row.order.updatedAt,
+    kind,
+    provider: row.provider === 'emir' ? 'emir' : 'delivro',
+    trackingNumber: row.trackingNumber,
+    request,
+    actor,
+  });
+  let saved;
+  try {
+    const result = await send(operation.createdAt.getTime() + ECOTRACK_MUTATION_TIMEOUT_MS);
+    saved = await recordEcotrackMutationResult(db, operation, result, true);
+  } catch (error) {
+    if (error instanceof EcotrackMutationRejectedError || error instanceof EcotrackRateLimitError) {
+      await recordEcotrackMutationResult(db, operation, { message: error.message }, false);
+    } else {
+      await markEcotrackMutationUncertain(db, operation, error);
+    }
+    throw error;
+  }
+  await applySavedEcotrackMutation(db, saved);
+  if (kind === 'delete') return null;
+  const current = await loadShipmentRowByOrderId(db, row.order.id);
+  return current ? buildEcotrackOrderDetailFromRow(db, current) : null;
+}
+
+async function prepareCarrierOrderChange(row: ShipmentRow, draft: EcotrackOrderUpdateDraft) {
+  const db = getDb();
+  const now = new Date();
+  const deliveryFee = draft.deliveryFee ?? Number(row.order.deliveryFee ?? 0);
+  const commercial =
+    draft.cartProducts === undefined
+      ? undefined
+      : await resolveOrderCommercialState(db, {
+          cartProducts: draft.cartProducts,
+          promoCode: row.order.promoCode,
+          productPromos: row.order.productPromos,
+          now,
+        });
+  const productSubtotal =
+    commercial?.productSubtotal ?? (await readOrderProductSubtotal(db, row.order));
+  const desired: CarrierOrderChange = {
+    values: {
+      firstName: draft.firstName,
+      lastName: sanitizeNullableText(draft.lastName),
+      phoneNumber1: draft.phoneNumber1,
+      normalizedPhone: normalizeAlgeriaPhone(draft.phoneNumber1),
+      phoneNumber2: sanitizeNullableText(draft.phoneNumber2),
+      delivery: draft.delivery,
+      state: draft.state,
+      city: draft.city,
+      homeAddress: sanitizeNullableText(draft.homeAddress),
+      note: sanitizeNullableText(draft.note),
+      deliveryFee: deliveryFee.toFixed(2),
+    },
+    commercial,
+    deliveryFee: commercial ? deliveryFee : undefined,
+    totals: { productSubtotal, deliveryFee, subtotalOverride: draft.subtotalOverride },
+  };
+  const projected = {
+    ...row.order,
+    ...(commercial ? buildOrderCommercialValues(commercial, deliveryFee) : {}),
+    ...desired.values,
+    productSubtotal: productSubtotal.toFixed(2),
+    price: draft.subtotalOverride?.toFixed(2) ?? null,
+    totalAmount: ((draft.subtotalOverride ?? productSubtotal) + deliveryFee).toFixed(2),
+  };
+  const lookup = await getOrderProductLookup(db, [projected]);
+  if (commercial)
+    lookup.orderLinesByOrderId.set(
+      row.order.id,
+      commercial.lines.map((line) => ({
+        productId: line.productId,
+        contentId: line.contentId,
+        rawValue: line.rawValue,
+        title: line.title,
+        effectiveUnitPrice: line.effectiveUnitPrice,
+        quantity: line.quantity,
+        lineTotal: line.lineTotal,
+        thumbnailUrl: line.thumbnailUrl,
+      })),
+    );
+  return {
+    desired,
+    record: toOrderRecord(projected, [], lookup),
+    catalog: await readEcotrackCatalog(db),
+  };
+}
 
 export async function updatePostedEcotrackOrder(
   orderId: number,
   draft: EcotrackOrderUpdateDraft,
-  actor: { email?: string | null; name?: string | null },
+  actor: ActionActor,
 ) {
-  const db = getDb();
-  const row = await loadShipmentRowByOrderId(db, orderId);
-  if (!row) {
-    return null;
-  }
-
-  let fresh: EcotrackOrderDetail | null;
-  try {
-    fresh = await ensureFreshShipmentRow(db, row, {
-      includeMaj: false,
-      includeTracking: false,
-      actor,
-    });
-  } catch (error) {
-    throw new Error(formatEcotrackActionError('update', row, error).summary);
-  }
-  if (!fresh?.canEdit) {
-    throw new Error(
-      formatEcotrackActionError(
-        'update',
-        row,
-        new Error('This ECOTRACK order can no longer be modified.'),
-      ).summary,
-    );
-  }
-
-  const previous = {
-    firstName: row.order.firstName,
-    lastName: row.order.lastName,
-    phoneNumber1: row.order.phoneNumber1,
-    phoneNumber2: row.order.phoneNumber2,
-    delivery: row.order.delivery,
-    state: row.order.state,
-    city: row.order.city,
-    homeAddress: row.order.homeAddress,
-    note: row.order.note,
-    cartProducts: row.order.cartProducts,
-    deliveryFee: row.order.deliveryFee,
-    price: row.order.price,
-    normalizedPhone: row.order.normalizedPhone,
-    productSubtotal: row.order.productSubtotal,
-    totalAmount: row.order.totalAmount,
-    promoCode: row.order.promoCode,
-    promoProductId: row.order.promoProductId,
-    promoOriginalSubtotal: row.order.promoOriginalSubtotal,
-    promoDiscountAmount: row.order.promoDiscountAmount,
-    promoFinalSubtotal: row.order.promoFinalSubtotal,
-  };
-
-  const catalog = await readEcotrackCatalog(db);
-  const now = new Date();
-  const nextDeliveryFeeValue =
-    draft.deliveryFee === null
-      ? (row.order.deliveryFee ?? '0.00')
-      : String(Number(draft.deliveryFee).toFixed(2));
-  const nextCartProducts =
-    draft.cartProducts === undefined
-      ? row.order.cartProducts
-      : await canonicalizeOrderCartProducts(db, draft.cartProducts);
-  const commercial =
-    draft.cartProducts === undefined
-      ? null
-      : await resolveOrderCommercialState(db, {
-          cartProducts: nextCartProducts,
-          promoCode: row.order.promoCode,
-          now,
-        });
-  const canonicalSubtotal =
-    commercial?.productSubtotal ?? (await readOrderProductSubtotal(db, row.order));
-  const previousLines =
-    commercial === null
-      ? []
-      : await db.select().from(orderLineItems).where(eq(orderLineItems.orderId, orderId));
-
-  const updatedOrder = await db.transaction(async (tx) => {
-    const result = await updateCanonicalOrder(tx, {
-      orderId,
-      values: {
-        firstName: draft.firstName,
-        lastName: sanitizeNullableText(draft.lastName),
-        phoneNumber1: draft.phoneNumber1,
-        normalizedPhone: normalizeAlgeriaPhone(draft.phoneNumber1),
-        phoneNumber2: sanitizeNullableText(draft.phoneNumber2),
-        delivery: draft.delivery,
-        state: draft.state,
-        city: draft.city,
-        homeAddress: sanitizeNullableText(draft.homeAddress),
-        note: sanitizeNullableText(draft.note),
-        deliveryFee: nextDeliveryFeeValue,
-      },
-      commercial: commercial ?? undefined,
-      deliveryFee: commercial ? Number(nextDeliveryFeeValue) : undefined,
-      totals: {
-        productSubtotal: canonicalSubtotal,
-        deliveryFee: Number(nextDeliveryFeeValue),
-        subtotalOverride: draft.subtotalOverride,
-      },
-      now,
-    });
-    return result.order;
-  });
-
-  try {
-    const productLookup = await getOrderProductLookup(db, [updatedOrder]);
-    const updatedRecord = toOrderRecord(updatedOrder, [], productLookup);
-    await updateEcotrackOrder(
-      buildUpdatePayload(updatedRecord, row.trackingNumber, catalog),
-      providerRequestOptions(row),
-    );
-  } catch (error) {
-    await db.transaction(async (tx) => {
-      await restoreCanonicalOrderSnapshot(tx, {
-        orderId,
-        values: { ...previous, updatedAt: row.order.updatedAt },
-        lineItems: commercial ? previousLines : undefined,
+  const row = await loadActionableShipment(orderId, 'canEdit', actor);
+  if (!row) return null;
+  const { desired, record, catalog } = await prepareCarrierOrderChange(row, draft);
+  const payload = buildUpdatePayload(record, row.trackingNumber, catalog, row.rawOrderPayload);
+  return executeCarrierCommand(
+    row,
+    'update',
+    actor,
+    { desired, record, payload },
+    async (deadlineAt) => {
+      const result = await updateEcotrackOrder(payload, {
+        ...providerRequestOptions(row),
+        deadlineAt,
       });
-    });
-    throw new Error(formatEcotrackActionError('update', row, error).summary);
-  }
-
-  await db.transaction(async (tx) => {
-    const beforeOrderState = buildEcotrackOrderActionSnapshot(updatedOrder);
-    const beforeShipmentState = buildEcotrackShipmentActionSnapshot(row);
-
-    await tx
-      .update(ecotrackOrderStates)
-      .set({
-        lastActionAt: now,
-        updatedAt: now,
-      })
-      .where(eq(ecotrackOrderStates.id, row.id));
-
-    const afterShipmentState = {
-      ...beforeShipmentState,
-      lastActionAt: now,
-      updatedAt: now,
-    };
-
-    await recordEcotrackOrderAction(
-      tx,
-      buildEcotrackOrderActionSnapshot(row.order),
-      beforeOrderState,
-      actor,
-    );
-    await recordEcotrackShipmentAction(
-      tx,
-      row.order.id,
-      beforeShipmentState,
-      afterShipmentState,
-      actor,
-      'update',
-    );
-  });
-
-  return refreshEcotrackOrder(orderId, actor);
+      return { success: result.success, raw: result.payload };
+    },
+  );
 }
 
 export async function recreatePostedEcotrackOrder(
   orderId: number,
   draft: EcotrackOrderUpdateDraft,
-  actor: { email?: string | null; name?: string | null },
+  actor: ActionActor,
 ) {
-  const db = getDb();
-  const row = await loadShipmentRowByOrderId(db, orderId);
-  if (!row) {
-    return null;
-  }
-
-  let fresh: EcotrackOrderDetail | null;
-  try {
-    fresh = await ensureFreshShipmentRow(db, row, {
-      includeMaj: false,
-      includeTracking: false,
-      actor,
-    });
-  } catch (error) {
-    throw new Error(formatEcotrackActionError('recreate', row, error).summary);
-  }
-
-  if (!fresh) {
-    return null;
-  }
-
-  if (fresh.canEdit) {
-    throw new Error(
-      formatEcotrackActionError(
-        'recreate',
-        row,
-        new Error('This ECOTRACK order should be edited directly instead of recreated.'),
-      ).summary,
-    );
-  }
-
-  const previousOrderValues = {
-    firstName: row.order.firstName,
-    lastName: row.order.lastName,
-    phoneNumber1: row.order.phoneNumber1,
-    phoneNumber2: row.order.phoneNumber2,
-    delivery: row.order.delivery,
-    state: row.order.state,
-    city: row.order.city,
-    homeAddress: row.order.homeAddress,
-    note: row.order.note,
-    cartProducts: row.order.cartProducts,
-    deliveryFee: row.order.deliveryFee,
-    price: row.order.price,
-    normalizedPhone: row.order.normalizedPhone,
-    productSubtotal: row.order.productSubtotal,
-    totalAmount: row.order.totalAmount,
-    promoCode: row.order.promoCode,
-    promoProductId: row.order.promoProductId,
-    promoOriginalSubtotal: row.order.promoOriginalSubtotal,
-    promoDiscountAmount: row.order.promoDiscountAmount,
-    promoFinalSubtotal: row.order.promoFinalSubtotal,
-    ecotrackStatus: row.order.ecotrackStatus,
-    ecotrackStatusLastUpdate: row.order.ecotrackStatusLastUpdate,
-    ecotrackStatusData: row.order.ecotrackStatusData,
-    ecotrackReference: row.order.ecotrackReference,
-    ecotrackTrackingNumber: row.order.ecotrackTrackingNumber,
-    updatedAt: row.order.updatedAt,
-  };
-  const previousShipmentValues = {
-    deletedAt: row.deletedAt,
-    lastActionAt: row.lastActionAt,
-    updatedAt: row.updatedAt,
-  };
-
-  const now = new Date();
-  const nextCartProducts =
-    draft.cartProducts === undefined
-      ? row.order.cartProducts
-      : await canonicalizeOrderCartProducts(db, draft.cartProducts);
-  const nextDeliveryFeeValue =
-    draft.deliveryFee === null
-      ? (row.order.deliveryFee ?? '0.00')
-      : String(Number(draft.deliveryFee).toFixed(2));
-  const commercial =
-    draft.cartProducts === undefined
-      ? null
-      : await resolveOrderCommercialState(db, {
-          cartProducts: nextCartProducts,
-          promoCode: row.order.promoCode,
-          now,
-        });
-  const canonicalSubtotal =
-    commercial?.productSubtotal ?? (await readOrderProductSubtotal(db, row.order));
-  const previousLines =
-    commercial === null
-      ? []
-      : await db.select().from(orderLineItems).where(eq(orderLineItems.orderId, orderId));
-  const updatedOrder = await db.transaction(async (tx) => {
-    const result = await updateCanonicalOrder(tx, {
-      orderId,
-      values: {
-        firstName: draft.firstName,
-        lastName: sanitizeNullableText(draft.lastName),
-        phoneNumber1: draft.phoneNumber1,
-        normalizedPhone: normalizeAlgeriaPhone(draft.phoneNumber1),
-        phoneNumber2: sanitizeNullableText(draft.phoneNumber2),
-        delivery: draft.delivery,
-        state: draft.state,
-        city: draft.city,
-        homeAddress: sanitizeNullableText(draft.homeAddress),
-        note: sanitizeNullableText(draft.note),
-        deliveryFee: nextDeliveryFeeValue,
-      },
-      commercial: commercial ?? undefined,
-      deliveryFee: commercial ? Number(nextDeliveryFeeValue) : undefined,
-      totals: {
-        productSubtotal: canonicalSubtotal,
-        deliveryFee: Number(nextDeliveryFeeValue),
-        subtotalOverride: draft.subtotalOverride,
-      },
-      now,
-    });
-    return result.order;
-  });
-
-  let recreated = false;
-
-  try {
-    await softDeleteShipmentRow(db, row, { actor, operation: 'update' });
-
-    const catalog = await readEcotrackCatalog(db);
-    const productLookup = await getOrderProductLookup(db, [updatedOrder]);
-    const updatedRecord = toOrderRecord(updatedOrder, [], productLookup);
-    const payload = buildEcotrackOrderPayload(updatedRecord, catalog);
-    const createResponse = await createEcotrackOrdersBatch([payload], providerRequestOptions(row));
-    const createResult = createResponse.results.get(payload.reference);
-
-    if (!createResult?.success || !createResult.tracking) {
-      throw new Error(createResult?.message ?? 'Ecotrack rejected the recreated order.');
-    }
-
-    await persistEcotrackPostedOrder(
-      db,
-      {
-        row: updatedOrder,
-        record: updatedRecord,
-      },
-      actor,
-      createResult,
-      row.provider === 'emir' ? 'emir' : 'delivro',
-    );
-    recreated = true;
-  } catch (error) {
-    await db.transaction(async (tx) => {
-      await restoreCanonicalOrderSnapshot(tx, {
-        orderId,
-        values: previousOrderValues,
-        lineItems: commercial ? previousLines : undefined,
+  const row = await loadActionableShipment(orderId, 'canEditAndRecreate', actor);
+  if (!row) return null;
+  const { desired, record, catalog } = await prepareCarrierOrderChange(row, draft);
+  const payload = buildEcotrackOrderPayload(record, catalog);
+  return executeCarrierCommand(
+    row,
+    'recreate',
+    actor,
+    { desired, record, payload },
+    async (deadlineAt) => {
+      const response = await createEcotrackOrdersBatch([payload], {
+        ...providerRequestOptions(row),
+        deadlineAt,
       });
-
-      await tx
-        .update(ecotrackOrderStates)
-        .set(previousShipmentValues)
-        .where(eq(ecotrackOrderStates.id, row.id));
-    });
-
-    throw new Error(formatEcotrackActionError('recreate', row, error).summary);
-  }
-
-  if (!recreated) {
-    throw new Error(
-      formatEcotrackActionError('recreate', row, new Error('Failed to recreate ECOTRACK shipment.'))
-        .summary,
-    );
-  }
-
-  return refreshEcotrackOrder(orderId, actor);
+      const result = response.results.get(payload.reference);
+      if (
+        !result?.raw ||
+        (!result.success && !readEcotrackRejected(result.raw)) ||
+        (result.success && !result.tracking)
+      )
+        throw new Error('Carrier creation outcome is unknown. Open carrier recovery.');
+      if (!result.success)
+        throw new EcotrackMutationRejectedError(
+          result.message ?? 'Carrier rejected shipment recreation.',
+        );
+      return result;
+    },
+  );
 }
 
-export async function deletePostedEcotrackOrder(
-  orderId: number,
-  actor: { email?: string | null; name?: string | null },
-) {
-  const db = getDb();
-  let row = await loadShipmentRowByOrderId(db, orderId);
-  if (!row) {
-    return null;
-  }
-
-  if (isStaleAt(row.lastStatusSyncedAt, STATUS_STALE_MS)) {
-    let fresh: EcotrackOrderDetail | null;
+export async function deletePostedEcotrackOrder(orderId: number, actor: ActionActor) {
+  const row = await loadActionableShipment(orderId, 'canDelete', actor);
+  if (!row) return null;
+  await executeCarrierCommand(row, 'delete', actor, {}, async (deadlineAt) => {
     try {
-      fresh = await ensureFreshShipmentRow(db, row, {
-        includeMaj: false,
-        includeTracking: false,
-        actor,
+      const result = await deleteEcotrackOrder(row.trackingNumber, {
+        ...providerRequestOptions(row),
+        deadlineAt,
       });
+      return { success: result.success, raw: result.payload };
     } catch (error) {
-      throw new Error(formatEcotrackActionError('delete', row, error).summary);
+      // Some carrier instances return an error after deleting. Require both
+      // status absence and an explicit missing-tracking response before applying locally.
+      try {
+        const [status, tracking] = await Promise.all([
+          getEcotrackOrdersStatus([row.trackingNumber], 'all', providerRequestOptions(row)),
+          getEcotrackTrackingsInfoAllowingMissing(
+            [row.trackingNumber],
+            providerRequestOptions(row),
+          ),
+        ]);
+        if (!status.data.has(row.trackingNumber) && tracking.missing.has(row.trackingNumber))
+          return {
+            success: true,
+            raw: {
+              recoveredBy: 'status-and-tracking-absence',
+              originalError: error instanceof Error ? error.message : String(error),
+            },
+          };
+      } catch {
+        /* Preserve the mutation error when its outcome cannot be verified. */
+      }
+      throw error;
     }
-    if (!fresh) {
-      return null;
-    }
-    if (!fresh.canDelete) {
-      throw new Error(
-        formatEcotrackActionError(
-          'delete',
-          row,
-          new Error('This ECOTRACK order can no longer be deleted.'),
-        ).summary,
-      );
-    }
-    // Freshness reconciliation may update the local order. Use that revision
-    // for the optimistic check after the provider deletion finishes.
-    const refreshedRow = await loadShipmentRowByOrderId(db, orderId);
-    if (!refreshedRow) return null;
-    if (
-      refreshedRow.id !== row.id ||
-      refreshedRow.trackingNumber !== row.trackingNumber ||
-      !getActionFlags(refreshedRow.currentStatus, refreshedRow.deletedAt).canDelete
-    ) {
-      throw new Error(
-        'The ECOTRACK shipment changed while deletion was in progress. Refresh and retry.',
-      );
-    }
-    row = refreshedRow;
-  } else if (!getActionFlags(row.currentStatus, row.deletedAt).canDelete) {
-    throw new Error(
-      formatEcotrackActionError(
-        'delete',
-        row,
-        new Error('This ECOTRACK order can no longer be deleted.'),
-      ).summary,
-    );
-  }
-
-  try {
-    if (row.provider === 'emir') {
-      await deleteEcotrackOrder(row.trackingNumber, providerRequestOptions(row));
-    } else {
-      await deleteEcotrackOrder(row.trackingNumber);
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '';
-    if (!message.includes(' 400 ') && !message.includes(' 404 ')) {
-      throw new Error(formatEcotrackActionError('delete', row, error).summary);
-    }
-
-    const [statusResponse, trackingResponse] = await Promise.all([
-      row.provider === 'emir'
-        ? getEcotrackOrdersStatus([row.trackingNumber], 'all', providerRequestOptions(row))
-        : getEcotrackOrdersStatus([row.trackingNumber], 'all'),
-      row.provider === 'emir'
-        ? getEcotrackTrackingsInfoAllowingMissing([row.trackingNumber], providerRequestOptions(row))
-        : getEcotrackTrackingsInfoAllowingMissing([row.trackingNumber]),
-    ]);
-
-    if (
-      statusResponse.data.has(row.trackingNumber) ||
-      trackingResponse.data.has(row.trackingNumber)
-    ) {
-      throw new Error(formatEcotrackActionError('delete', row, error).summary);
-    }
-  }
-
-  const deleted = await softDeleteShipmentRow(db, row, {
-    actor,
-    operation: 'delete',
-    restorePostedOrderToConfirmed: true,
   });
-  if (!deleted) {
-    throw new Error(
-      'The ECOTRACK shipment changed while deletion was in progress. Refresh and retry.',
-    );
-  }
-
   return { ok: true, inHouseOrderStatus: 'confirmed' as const };
 }
 
 export async function dispatchPostedEcotrackOrder(
   orderId: number,
   request: EcotrackDispatchRequest,
-  actor: { email?: string | null; name?: string | null },
+  actor: ActionActor,
 ) {
-  const db = getDb();
-  const row = await loadShipmentRowByOrderId(db, orderId);
-  if (!row) {
-    return null;
-  }
-
-  let fresh: EcotrackOrderDetail | null;
-  try {
-    fresh = await ensureFreshShipmentRow(db, row, {
-      includeMaj: false,
-      includeTracking: false,
-      actor,
+  const row = await loadActionableShipment(orderId, 'canDispatch', actor);
+  if (!row) return null;
+  return executeCarrierCommand(row, 'dispatch', actor, request, async (deadlineAt) => {
+    const result = await dispatchEcotrackOrder(row.trackingNumber, request.askCollection, {
+      ...providerRequestOptions(row),
+      deadlineAt,
     });
-  } catch (error) {
-    throw new Error(formatEcotrackActionError('dispatch', row, error).summary);
-  }
-  if (!fresh?.canDispatch) {
-    throw new Error(
-      formatEcotrackActionError(
-        'dispatch',
-        row,
-        new Error('This ECOTRACK order can no longer be dispatched.'),
-      ).summary,
-    );
-  }
-
-  try {
-    await dispatchEcotrackOrder(
-      row.trackingNumber,
-      request.askCollection,
-      providerRequestOptions(row),
-    );
-  } catch (error) {
-    throw new Error(formatEcotrackActionError('dispatch', row, error).summary);
-  }
-  const now = new Date();
-  await db.transaction(async (tx) => {
-    await tx
-      .update(ecotrackOrderStates)
-      .set({
-        lastActionAt: now,
-        updatedAt: now,
-      })
-      .where(eq(ecotrackOrderStates.id, row.id));
-    await updateCanonicalOrder(tx, {
-      orderId,
-      status: { value: ORDER_STATUS.DISPATCHED, noAnswerCount: 0 },
-      actor,
-      now,
-    });
+    return { success: result.success, raw: result.payload };
   });
+}
 
-  return refreshEcotrackOrder(orderId, actor);
+export async function addEcotrackMaj(orderId: number, content: string, actor: ActionActor) {
+  const row = await loadActionableShipment(orderId, 'canAddMaj', actor);
+  if (!row) return null;
+  return executeCarrierCommand(row, 'maj', actor, { content }, async (deadlineAt) => {
+    const result = await addEcotrackMajUpstream(row.trackingNumber, content, {
+      ...providerRequestOptions(row),
+      deadlineAt,
+    });
+    return { success: result.success, raw: result.payload };
+  });
+}
+
+export async function requestEcotrackReturn(orderId: number, actor: ActionActor) {
+  const row = await loadActionableShipment(orderId, 'canAskReturn', actor);
+  if (!row) return null;
+  return executeCarrierCommand(row, 'return', actor, {}, async (deadlineAt) => {
+    const result = await requestEcotrackReturnUpstream(row.trackingNumber, {
+      ...providerRequestOptions(row),
+      deadlineAt,
+    });
+    return { success: result.success, raw: result.payload };
+  });
 }
 
 export async function dispatchEcotrackOrdersBatch(
@@ -605,134 +348,6 @@ export async function dispatchEcotrackOrdersBatch(
     failureCount: failures.length,
     totalRequested: orderIds.length,
   };
-}
-
-export async function addEcotrackMaj(
-  orderId: number,
-  content: string,
-  actor: { email?: string | null; name?: string | null },
-) {
-  const db = getDb();
-  const row = await loadShipmentRowByOrderId(db, orderId);
-  if (!row) {
-    return null;
-  }
-
-  let fresh: EcotrackOrderDetail | null;
-  try {
-    fresh = await ensureFreshShipmentRow(db, row, { includeTracking: false, actor });
-  } catch (error) {
-    throw new Error(formatEcotrackActionError('maj', row, error).summary);
-  }
-  if (!fresh?.canAddMaj) {
-    throw new Error(
-      formatEcotrackActionError(
-        'maj',
-        row,
-        new Error('This ECOTRACK order cannot receive a follow-up update right now.'),
-      ).summary,
-    );
-  }
-
-  try {
-    await addEcotrackMajUpstream(row.trackingNumber, content, providerRequestOptions(row));
-  } catch (error) {
-    throw new Error(formatEcotrackActionError('maj', row, error).summary);
-  }
-  const now = new Date();
-  await db.transaction(async (tx) => {
-    const beforeShipmentState = buildEcotrackShipmentActionSnapshot(row);
-    const beforeMajState = await loadMajSyncSummary(tx, row.order.id, row.trackingNumber);
-
-    await tx
-      .update(ecotrackOrderStates)
-      .set({
-        lastActionAt: now,
-        updatedAt: now,
-      })
-      .where(eq(ecotrackOrderStates.id, row.id));
-
-    const afterShipmentState = {
-      ...beforeShipmentState,
-      lastActionAt: now,
-      updatedAt: now,
-    };
-    const afterMajState = await loadMajSyncSummary(tx, row.order.id, row.trackingNumber);
-
-    await recordEcotrackShipmentAction(
-      tx,
-      row.order.id,
-      beforeShipmentState,
-      afterShipmentState,
-      actor,
-      'update',
-    );
-    await recordEcotrackMajAction(tx, row.order.id, beforeMajState, afterMajState, actor);
-  });
-
-  return refreshEcotrackOrder(orderId, actor);
-}
-
-export async function requestEcotrackReturn(
-  orderId: number,
-  actor: { email?: string | null; name?: string | null },
-) {
-  const db = getDb();
-  const row = await loadShipmentRowByOrderId(db, orderId);
-  if (!row) {
-    return null;
-  }
-
-  let fresh: EcotrackOrderDetail | null;
-  try {
-    fresh = await ensureFreshShipmentRow(db, row, { actor });
-  } catch (error) {
-    throw new Error(formatEcotrackActionError('return', row, error).summary);
-  }
-  if (!fresh?.canAskReturn) {
-    throw new Error(
-      formatEcotrackActionError(
-        'return',
-        row,
-        new Error('Return can only be requested while the shipment is en_livraison.'),
-      ).summary,
-    );
-  }
-
-  try {
-    await requestEcotrackReturnUpstream(row.trackingNumber, providerRequestOptions(row));
-  } catch (error) {
-    throw new Error(formatEcotrackActionError('return', row, error).summary);
-  }
-  const now = new Date();
-  await db.transaction(async (tx) => {
-    const beforeShipmentState = buildEcotrackShipmentActionSnapshot(row);
-
-    await tx
-      .update(ecotrackOrderStates)
-      .set({
-        lastActionAt: now,
-        updatedAt: now,
-      })
-      .where(eq(ecotrackOrderStates.id, row.id));
-
-    const afterShipmentState = {
-      ...beforeShipmentState,
-      lastActionAt: now,
-      updatedAt: now,
-    };
-
-    await recordEcotrackShipmentAction(
-      tx,
-      row.order.id,
-      beforeShipmentState,
-      afterShipmentState,
-      actor,
-      'update',
-    );
-  });
-
-  return refreshEcotrackOrder(orderId, actor);
 }
 
 export async function fetchSingleEcotrackLabel(orderId: number) {

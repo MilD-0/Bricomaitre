@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DELETE, GET, PATCH, POST } from '../route';
 import { AdminOrderHasActiveEcotrackShipmentError } from '../../../../../lib/admin-order-lifecycle';
 import { orderPatchSchema } from '../../../../../lib/orders';
+import { DELETE, GET, PATCH, POST } from '../route';
 
 const {
   ensureOrderConfirmedEventForOrderMock,
@@ -33,6 +33,11 @@ const {
   readEcotrackCatalogMock: vi.fn(),
   triggerAdminReportingRefreshMock: vi.fn(),
   deleteAdminOrderMock: vi.fn(),
+}));
+
+vi.mock('../../../../../lib/ecotrack-mutations', async (original) => ({
+  ...(await original<typeof import('../../../../../lib/ecotrack-mutations')>()),
+  assertNoUnresolvedEcotrackMutation: vi.fn(),
 }));
 
 vi.mock('@bric/storefront-core/meta', () => ({

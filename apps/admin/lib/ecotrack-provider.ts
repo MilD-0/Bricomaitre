@@ -1,12 +1,6 @@
 import { z } from 'zod';
 
-import {
-  EcotrackRateLimitError,
-  requestEcotrack as requestSharedEcotrack,
-  type EcotrackExtendedRateLimitSnapshot,
-  type EcotrackRequestOptions,
-  type EcotrackRequestResult,
-} from '@bric/storefront-core/ecotrack-client';
+import { requestEcotrack as requestSharedEcotrack } from '@bric/storefront-core/ecotrack-client';
 
 export type EcotrackProvider = 'delivro' | 'emir';
 
@@ -64,39 +58,7 @@ export function readEcotrackTracking(payload: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
-async function applyEcotrackRateLimitBackoff(rateLimit: EcotrackExtendedRateLimitSnapshot) {
-  if (rateLimit.dayRemaining !== null && rateLimit.dayRemaining <= 0) {
-    throw new EcotrackRateLimitError('ECOTRACK daily rate limit exhausted.', rateLimit);
-  }
-
-  if (rateLimit.hourRemaining !== null && rateLimit.hourRemaining <= 0) {
-    throw new EcotrackRateLimitError('ECOTRACK hourly rate limit exhausted.', rateLimit);
-  }
-
-  if (rateLimit.retryAfterSeconds !== null && rateLimit.retryAfterSeconds > 0) {
-    await sleep(rateLimit.retryAfterSeconds * 1000);
-    return;
-  }
-
-  if (
-    rateLimit.minuteRemaining !== null &&
-    rateLimit.minuteRemaining <= 1 &&
-    rateLimit.minuteReset !== null
-  ) {
-    const waitMs = Math.max(rateLimit.minuteReset * 1000 - Date.now(), 0);
-    if (waitMs > 0) {
-      await sleep(waitMs);
-    }
-  }
-}
-
-export async function requestEcotrack(
-  options: EcotrackRequestOptions,
-): Promise<EcotrackRequestResult> {
-  const result = await requestSharedEcotrack({ ...options, respectGlobalLimiter: false });
-  await applyEcotrackRateLimitBackoff(result.rateLimit);
-  return result;
-}
+export { requestSharedEcotrack as requestEcotrack };
 
 export async function requestEcotrackJson<T>(
   path: string,

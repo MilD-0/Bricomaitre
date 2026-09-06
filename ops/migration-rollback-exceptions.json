@@ -10,6 +10,11 @@
       "migration": "0100_parallel_selene.sql",
       "sha256": "6cf42d5a6a3aa438d34b1b37c4c817daa55a297edc1d8375787317519fa530f9",
       "reason": "The additive product_promos column defaults to an empty array, so the previous runtime can still insert and update orders without supplying it. Existing prices remain in the established immutable order-line snapshots and commercial totals; the legacy single-promotion fields remain available."
+    },
+    {
+      "migration": "0101_cold_blindfold.sql",
+      "sha256": "bc19c5dbdae39cab15eeeec00b0ebc8aa6318d489c0b63d2bb269d67030d37d5",
+      "reason": "The operation constraints apply only to the new ecotrack_mutations table, which the previous runtime does not use. The two existing unique indexes are widened by tracking_number without removing columns. At source31f91789 admin-ecotrack-shipment-state.ts357/369, the only MAJ and tracking-event writers use untargeted ON CONFLICT DO NOTHING, which remains valid. Observation/activity (order_id, source_key) indexes and their explicit conflict targets are unchanged. carrier-mutations.services.test.ts executes these previous-runtime insert forms against the migrated schema and verifies separate shipment attempts."
     }
   ]
 }

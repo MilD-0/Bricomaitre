@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { getEcotrackOrder, getEcotrackTrackingsInfo, listEcotrackOrders } from './ecotrack-client';
+import {
+  EcotrackMutationRejectedError,
+  getEcotrackOrder,
+  getEcotrackTrackingsInfo,
+  listEcotrackOrders,
+  requestEcotrack,
+  updateEcotrackOrder,
+} from './ecotrack-client';
 
 const env = {
   ECOTRACK_BASE_URL: 'https://ecotrack.example/api/v1',
@@ -153,5 +160,54 @@ describe('getEcotrackOrder', () => {
     expect(result.rawData.get('TRK-11')).toMatchObject({
       OrderInfo: { provider_new_field: 'retained' },
     });
+  });
+});
+
+describe('carrier request outcomes', () => {
+  const env = {
+    NODE_ENV: 'test' as const,
+    ECOTRACK_BASE_URL: 'https://carrier.example.invalid/api/v1',
+    ECOTRACK_TOKEN: 'test',
+    ECOTRACK_MIN_REQUEST_INTERVAL_MS: '0',
+  };
+  it('returns an accepted mutation even when that response exhausts the quota', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        Response.json(
+          { success: true },
+          { headers: { 'x-ratelimit-remaining-day': '0', 'x-ratelimit-remaining-hour': '0' } },
+        ),
+      );
+    await expect(updateEcotrackOrder({ tracking: 'T' }, { fetchImpl, env })).resolves.toMatchObject(
+      { success: true, rateLimit: { dayRemaining: 0, hourRemaining: 0 } },
+    );
+  });
+  it('distinguishes explicit rejections from ambiguous successful HTTP responses', async () => {
+    const rejected = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json({ success: false, message: 'Rejected' }));
+    await expect(
+      updateEcotrackOrder({ tracking: 'T' }, { fetchImpl: rejected, env }),
+    ).rejects.toBeInstanceOf(EcotrackMutationRejectedError);
+    const unknown = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json({ message: 'Unexpected response' }));
+    await expect(
+      updateEcotrackOrder({ tracking: 'T' }, { fetchImpl: unknown, env }),
+    ).rejects.toThrow('unknown mutation outcome');
+  });
+  it('does not send an expired queued request', async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    await expect(
+      requestEcotrack({
+        path: '/create/orders',
+        method: 'POST',
+        fetchImpl,
+        env,
+        deadlineAt: Date.now() - 1,
+      }),
+    ).rejects.toThrow('deadline expired before sending');
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

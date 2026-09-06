@@ -23,7 +23,7 @@ import { searchAssetProductOptions } from '../lib/admin-assets-data';
 import { loadActiveShipmentPageRows } from '../lib/admin-ecotrack-shipment-view';
 import { loadConfirmedOrderIds, loadOrderRecordsByIds } from '../lib/admin-orders-data';
 import { reviewProductContentProposal } from '../lib/ai-product-content';
-import { persistEcotrackPostedOrder } from '../lib/ecotrack-posting-persistence';
+import { persistEcotrackPostedOrderInTransaction } from '../lib/ecotrack-posting-persistence';
 import { parseEcotrackShipmentListQuery } from '../lib/ecotrack-shipment-list';
 
 vi.mock('../lib/server-cache', async (importOriginal) => ({
@@ -55,20 +55,22 @@ describe('persisted commerce workflows', () => {
     try {
       for (const provider of ['delivro', 'emir'] as const) {
         const [current] = await db.select().from(orders).where(eq(orders.id, row!.id));
-        await persistEcotrackPostedOrder(
-          db,
-          {
-            row: current!,
-            record: toOrderRecord(current!, [], new OrderProductLookup()),
-          },
-          actor,
-          {
-            success: true,
-            tracking: `${provider}-${runId}`,
-            message: null,
-            raw: { success: true },
-          },
-          provider,
+        await db.transaction((tx) =>
+          persistEcotrackPostedOrderInTransaction(
+            tx,
+            {
+              row: current!,
+              record: toOrderRecord(current!, [], new OrderProductLookup()),
+            },
+            actor,
+            {
+              success: true,
+              tracking: `${provider}-${runId}`,
+              message: null,
+              raw: { success: true },
+            },
+            provider,
+          ),
         );
         const [shipment] = await db
           .select()

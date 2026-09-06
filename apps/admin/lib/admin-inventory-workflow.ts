@@ -8,15 +8,15 @@ import { mutateEntityWithHistory, type ActionActor } from './action-history';
 import { runIdempotentAdminMutation } from './admin-mutation-idempotency';
 import { loadOrderDetail } from './admin-orders-data';
 import {
-  applyInventoryQuantityChangeInTransaction,
-  buildInventoryRowSelection,
-  readInventoryProductById,
-} from './inventory-actions';
-import {
   inventoryApplyRequestSchema,
   inventoryBarcodeSchema,
   inventoryScanQuerySchema,
 } from './inventory';
+import {
+  applyInventoryQuantityChangeInTransaction,
+  buildInventoryRowSelection,
+  readInventoryProductById,
+} from './inventory-actions';
 import { productAvailabilityStatus } from './products';
 import { CACHE_TAGS, revalidateServerTags } from './server-cache';
 import { revalidateStorefrontProducts } from './storefront-revalidate';
@@ -95,11 +95,12 @@ export async function applyAdminInventoryBatch(
         available?: number;
       }> = [];
 
-      for (const item of values.items) {
+      for (const item of [...values.items].sort((a, b) => a.productId - b.productId)) {
         const change = await applyInventoryQuantityChangeInTransaction(tx, {
           productId: item.productId,
           mode: values.mode,
           quantity: item.quantity,
+          source: item.source,
           actor,
         });
         if (change.kind === 'updated') {
@@ -138,7 +139,7 @@ export async function inspectAdminInventoryScan(
   const { query } = inventoryScanQuerySchema.parse(input);
 
   if (isExactNumeric(query)) {
-    const order = await loadOrderDetail(Number(query));
+    const order = await loadOrderDetail(Number(query), db);
     if (order) {
       const productIds = [
         ...new Set(

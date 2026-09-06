@@ -128,7 +128,13 @@ export function deriveLatestUpstreamActivityAt(
     ...(payload.majEntries ?? []).map((entry) => readEcotrackActivityTimestamp(entry)),
   ]);
 
-  return latestActivity ?? row.order.ecotrackStatusLastUpdate ?? row.createdAt;
+  return (
+    latestActivity ??
+    parseEcotrackProviderTimestamp(payload.orderInfo?.last_updated_at) ??
+    row.providerUpdatedAt ??
+    row.providerCreatedAt ??
+    row.createdAt
+  );
 }
 
 export function mapEcotrackStatusToOrderStatus(

@@ -1,18 +1,19 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { CanonicalOrderNotFoundError } from '@bric/storefront-core/order-write';
+import { NextRequest, NextResponse } from 'next/server';
 
 import { getDb, hasDb } from '@bric/db/client';
-import { loadOrderDetail } from '../../../../lib/admin-orders-data';
+import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import {
   AdminOrderHasActiveEcotrackShipmentError,
   AdminOrderLifecycleNotFoundError,
   deleteAdminOrder,
 } from '../../../../lib/admin-order-lifecycle';
-import { auth } from '../../../../lib/auth';
-import { parsePositiveIntegerId } from '@bric/runtime/http-input';
-import { orderPatchSchema } from '../../../../lib/orders';
-import { AdminOrderNotFoundError, updateAdminOrder } from '../../../../lib/admin-order-update';
 import { ensureAdminOrderPublicToken } from '../../../../lib/admin-order-tracking';
+import { AdminOrderNotFoundError, updateAdminOrder } from '../../../../lib/admin-order-update';
+import { loadOrderDetail } from '../../../../lib/admin-orders-data';
+import { auth } from '../../../../lib/auth';
+import { EcotrackMutationConflictError } from '../../../../lib/ecotrack-mutations';
+import { orderPatchSchema } from '../../../../lib/orders';
 import { requireMutationAccess } from '../../../../lib/rbac';
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -56,6 +57,8 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
     const publicToken = await ensureAdminOrderPublicToken(db, numericId);
     return NextResponse.json({ ok: true, publicToken });
   } catch (error) {
+    if (error instanceof EcotrackMutationConflictError)
+      return NextResponse.json({ error: error.message }, { status: 409 });
     if (error instanceof CanonicalOrderNotFoundError) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
@@ -94,6 +97,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }),
     });
   } catch (error) {
+    if (error instanceof EcotrackMutationConflictError)
+      return NextResponse.json({ error: error.message }, { status: 409 });
     if (error instanceof AdminOrderNotFoundError) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
@@ -123,6 +128,8 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   try {
     await deleteAdminOrder(db, numericId, actor);
   } catch (error) {
+    if (error instanceof EcotrackMutationConflictError)
+      return NextResponse.json({ error: error.message }, { status: 409 });
     if (error instanceof AdminOrderLifecycleNotFoundError) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }

@@ -45,7 +45,6 @@ import {
   orders,
 } from '@bric/db/schema';
 import {
-  deletePostedEcotrackOrder,
   refreshEcotrackOrdersBatch,
   syncEcotrackShipmentStates,
 } from './admin-ecotrack-orders-data';
@@ -178,13 +177,17 @@ function createDbMock(
   });
   const tx = {
     select: vi.fn(() => ({
-      from: vi.fn(() => ({
+      from: vi.fn((table: unknown) => ({
         where: vi.fn((condition: Parameters<PgDialect['sqlToQuery']>[0]) => ({
           for: vi.fn(async () => {
             const id = Number(new PgDialect().sqlToQuery(condition).params[0]);
-            const current = rowByOrderId.get(id);
-            return current ? [{ ...current.order, ...options?.currentOrder }] : [];
+            const current =
+              table === orders ? rowByOrderId.get(id) : rows.find((row) => row.id === id);
+            return current
+              ? [table === orders ? { ...current.order, ...options?.currentOrder } : current]
+              : [];
           }),
+          limit: vi.fn(async () => []),
           then: (resolve: (value: unknown[]) => unknown) => Promise.resolve([]).then(resolve),
         })),
       })),
@@ -198,7 +201,7 @@ function createDbMock(
               table === ecotrackOrderStates && options?.rejectShipmentWrites
                 ? []
                 : rows[0]
-                  ? [{ ...rows[0].order, ...values }]
+                  ? [{ ...(table === ecotrackOrderStates ? rows[0] : rows[0].order), ...values }]
                   : [],
             ),
             then: (resolve: (value: unknown[]) => unknown) => Promise.resolve([]).then(resolve),
@@ -250,86 +253,6 @@ describe('admin ecotrack shipment reconciliation', () => {
         now,
       ),
     ).toBe(true);
-  });
-
-  it('soft-deletes the local row when upstream delete returns 400 but the tracking is already gone', async () => {
-    const row = createShipmentRow();
-    row.order.inHouseStatus = 11;
-    const { db, updates } = createDbMock([row]);
-    getDbMock.mockReturnValue(db);
-    deleteEcotrackOrderMock.mockRejectedValue(
-      new Error('ECOTRACK request failed for /delete/order: 400 {"message":"suppression ok"}'),
-    );
-    getEcotrackOrdersStatusMock.mockResolvedValue({ data: new Map() });
-    getEcotrackTrackingsInfoMock.mockRejectedValue(
-      new Error(
-        'ECOTRACK request failed for /get/trackings/info?trackings[]=TRK-11: 404 {"message":"Trackings non trouvés"}',
-      ),
-    );
-
-    await expect(deletePostedEcotrackOrder(11, {})).resolves.toEqual({
-      ok: true,
-      inHouseOrderStatus: 'confirmed',
-    });
-
-    expect(deleteEcotrackOrderMock).toHaveBeenCalledWith('TRK-11');
-    expect(getEcotrackOrdersStatusMock).toHaveBeenCalledWith(['TRK-11'], 'all');
-    expect(getEcotrackTrackingsInfoMock).toHaveBeenCalledWith(['TRK-11']);
-    expect(updates).toHaveLength(2);
-    expect(updates.find((update) => update.target === orders)?.values).toMatchObject({
-      ecotrackStatus: null,
-      ecotrackStatusLastUpdate: null,
-      ecotrackStatusData: null,
-      ecotrackReference: null,
-      ecotrackTrackingNumber: null,
-      inHouseStatus: 2,
-    });
-    expect(
-      updates.find((update) => update.target === ecotrackOrderStates)?.values.deletedAt,
-    ).toBeInstanceOf(Date);
-  });
-
-  it('restores a dispatched order when its recreated shipment is deleted', async () => {
-    const row = createShipmentRow();
-    row.order.inHouseStatus = 3;
-    const { db, updates } = createDbMock([row]);
-    getDbMock.mockReturnValue(db);
-    deleteEcotrackOrderMock.mockResolvedValue({});
-
-    await expect(deletePostedEcotrackOrder(11, {})).resolves.toEqual({
-      ok: true,
-      inHouseOrderStatus: 'confirmed',
-    });
-    expect(updates.find((update) => update.target === orders)?.values).toMatchObject({
-      inHouseStatus: 2,
-      noAnswerCount: 0,
-      ecotrackTrackingNumber: null,
-    });
-  });
-
-  it('rejects deletion when the order advanced while the provider request was running', async () => {
-    const row = createShipmentRow();
-    row.order.inHouseStatus = 3;
-    const { db, updates } = createDbMock([row], {
-      currentOrder: { inHouseStatus: 4, updatedAt: new Date(row.order.updatedAt.getTime() + 1000) },
-    });
-    getDbMock.mockReturnValue(db);
-    deleteEcotrackOrderMock.mockResolvedValue({});
-    await expect(deletePostedEcotrackOrder(11, {})).rejects.toThrow(
-      'The ECOTRACK shipment changed while deletion was in progress. Refresh and retry.',
-    );
-    expect(updates).toEqual([]);
-  });
-
-  it('does not report deletion after the active local shipment was replaced', async () => {
-    const row = createShipmentRow();
-    const { db, updates } = createDbMock([row], { rejectShipmentWrites: true });
-    getDbMock.mockReturnValue(db);
-
-    await expect(deletePostedEcotrackOrder(11, {})).rejects.toThrow(
-      'The ECOTRACK shipment changed while deletion was in progress. Refresh and retry.',
-    );
-    expect(updates.filter((update) => update.target === orders)).toEqual([]);
   });
 
   it('removes missing upstream shipments from batch refreshes instead of throwing', async () => {

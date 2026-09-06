@@ -276,17 +276,19 @@ describe('OrdersEcotrackManager', () => {
   });
 
   it('opens the flat shipment inspector from the refined ledger', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          item: {
-            ...buildShipment(11, 'Ada Lovelace', 'TRK-11', '0550123456', 'Chair'),
-            majEntries: [],
-            trackingEvents: [],
-          },
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
+      String(input).includes('/api/orders/ecotrack/recovery')
+        ? Response.json({ items: [] })
+        : new Response(
+            JSON.stringify({
+              item: {
+                ...buildShipment(11, 'Ada Lovelace', 'TRK-11', '0550123456', 'Chair'),
+                majEntries: [],
+                trackingEvents: [],
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
     );
 
     renderOrdersEcotrackManager({
@@ -356,6 +358,7 @@ describe('OrdersEcotrackManager', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/orders/ecotrack/recovery')) return Response.json({ items: [] });
 
       if (url.includes('/api/orders/ecotrack/shipments/refresh')) {
         return new Response(
@@ -404,7 +407,11 @@ describe('OrdersEcotrackManager', () => {
         { id: 'toast-id' },
       );
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input]) => !String(input).includes('/api/orders/ecotrack/recovery'),
+      ),
+    ).toHaveLength(2);
   });
 
   it('shows an error toast and skips invalidation when all refreshes fail', async () => {
@@ -412,6 +419,7 @@ describe('OrdersEcotrackManager', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/orders/ecotrack/recovery')) return Response.json({ items: [] });
 
       if (url.includes('/api/orders/ecotrack/shipments/refresh')) {
         return new Response(
@@ -442,7 +450,11 @@ describe('OrdersEcotrackManager', () => {
         { id: 'toast-id' },
       );
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input]) => !String(input).includes('/api/orders/ecotrack/recovery'),
+      ),
+    ).toHaveLength(1);
   });
 
   it('shows a critical partial-success toast for bulk dispatch failures and still invalidates queries', async () => {
@@ -450,6 +462,7 @@ describe('OrdersEcotrackManager', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/orders/ecotrack/recovery')) return Response.json({ items: [] });
 
       if (url.includes('/api/orders/ecotrack/shipments/dispatch')) {
         return new Response(
@@ -499,7 +512,11 @@ describe('OrdersEcotrackManager', () => {
         { id: 'toast-id' },
       );
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input]) => !String(input).includes('/api/orders/ecotrack/recovery'),
+      ),
+    ).toHaveLength(2);
   });
 
   it('downloads successful labels and shows a critical partial toast for failed labels', async () => {
@@ -510,6 +527,7 @@ describe('OrdersEcotrackManager', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/orders/ecotrack/recovery')) return Response.json({ items: [] });
 
       if (url.includes('/api/orders/ecotrack/shipments/labels')) {
         return new Response(
@@ -559,7 +577,11 @@ describe('OrdersEcotrackManager', () => {
         { id: 'toast-id' },
       );
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input]) => !String(input).includes('/api/orders/ecotrack/recovery'),
+      ),
+    ).toHaveLength(1);
   });
 
   it('shows status-allowed row actions inside the row dropdown menu', async () => {
@@ -593,6 +615,7 @@ describe('OrdersEcotrackManager', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/orders/ecotrack/recovery')) return Response.json({ items: [] });
 
       if (url.includes('/api/orders/ecotrack/shipments?')) {
         return new Response(JSON.stringify(buildDispatchableOrders(2)), {
@@ -630,7 +653,11 @@ describe('OrdersEcotrackManager', () => {
       'ordersEcotrackManager.notifications.scan.success:TRK-11',
       { id: 'toast-id' },
     );
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input]) => !String(input).includes('/api/orders/ecotrack/recovery'),
+      ),
+    ).toHaveLength(1);
   });
 
   it('shows an error toast when a scanned tracking number is not found', async () => {
@@ -638,6 +665,7 @@ describe('OrdersEcotrackManager', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/orders/ecotrack/recovery')) return Response.json({ items: [] });
 
       if (url.includes('/api/orders/ecotrack/shipments?')) {
         return new Response(JSON.stringify(buildDispatchableOrders(2)), {
@@ -675,6 +703,7 @@ describe('OrdersEcotrackManager', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/orders/ecotrack/recovery')) return Response.json({ items: [] });
 
       if (url.includes('/api/orders/ecotrack/shipments?')) {
         return new Response(JSON.stringify(buildInitialOrders(2)), {
@@ -712,6 +741,7 @@ describe('OrdersEcotrackManager', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/orders/ecotrack/recovery')) return Response.json({ items: [] });
 
       if (url.includes('/api/orders/ecotrack/shipments?')) {
         return new Response(JSON.stringify(buildDispatchableOrders(2)), {
@@ -773,6 +803,7 @@ describe('OrdersEcotrackManager', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/orders/ecotrack/recovery')) return Response.json({ items: [] });
 
       if (url.includes('/api/orders/ecotrack/shipments?')) {
         return new Response(JSON.stringify(buildDispatchableOrders(2)), {
@@ -848,6 +879,7 @@ describe('OrdersEcotrackManager', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/orders/ecotrack/recovery')) return Response.json({ items: [] });
 
       if (url.includes('/api/orders/ecotrack/shipments?')) {
         return new Response(JSON.stringify(buildDispatchableOrders(2)), {
@@ -920,9 +952,10 @@ describe('OrdersEcotrackManager', () => {
   it('does not submit duplicate scan lookups while a scan request is pending', async () => {
     const user = userEvent.setup();
     let resolveLookup: ((value: Response) => void) | null = null;
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/orders/ecotrack/recovery')) return Response.json({ items: [] });
 
       if (url.includes('/api/orders/ecotrack/shipments?')) {
         return new Promise((resolve) => {
@@ -944,7 +977,11 @@ describe('OrdersEcotrackManager', () => {
     );
     await user.keyboard('{Enter}');
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input]) => !String(input).includes('/api/orders/ecotrack/recovery'),
+      ),
+    ).toHaveLength(1);
 
     (resolveLookup as unknown as (value: Response) => void)(
       new Response(JSON.stringify(buildDispatchableOrders(2)), {

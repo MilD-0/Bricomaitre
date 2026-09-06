@@ -2,12 +2,12 @@ import { and, eq, gte, sql } from 'drizzle-orm';
 
 import { getDb } from '@bric/db/client';
 import { products } from '@bric/db/schema';
-import type { StockAllocationChange } from './stock-allocation-history';
 import {
   mutateEntityWithHistoryTransaction,
   type ActionActor,
   type Transaction,
 } from './action-history';
+import type { StockAllocationChange } from './stock-allocation-history';
 
 type Database = ReturnType<typeof getDb>;
 type InventoryRow = Pick<
@@ -63,6 +63,7 @@ export async function applyInventoryQuantityChangeInTransaction(
     quantity: number;
     actor?: ActionActor;
     stockAllocations?: StockAllocationChange;
+    source?: { type: 'shopping-list' | 'order-scan' | 'barcode-scan'; orderIds?: number[] };
   },
 ) {
   const delta = input.mode === 'increase' ? input.quantity : -input.quantity;
@@ -75,12 +76,13 @@ export async function applyInventoryQuantityChangeInTransaction(
       entityId: input.productId,
       operation: 'update',
       actor: input.actor,
-      snapshotFields: input.stockAllocations
-        ? {
-            before: { stockAllocations: input.stockAllocations.before },
-            after: { stockAllocations: input.stockAllocations.after },
-          }
-        : undefined,
+      snapshotFields: {
+        before: input.stockAllocations ? { stockAllocations: input.stockAllocations.before } : {},
+        after: {
+          ...(input.stockAllocations ? { stockAllocations: input.stockAllocations.after } : {}),
+          ...(input.source ? { inventoryReceiptSource: input.source } : {}),
+        },
+      },
       execute: async (tx) => {
         const rows = await tx
           .update(products)

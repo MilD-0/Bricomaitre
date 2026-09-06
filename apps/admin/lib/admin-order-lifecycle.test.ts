@@ -21,7 +21,11 @@ vi.mock('@bric/storefront-core/order-commercial', () => ({
 }));
 vi.mock('@bric/storefront-core/order-write', () => ({ insertCanonicalOrder: mocks.insert }));
 vi.mock('@bric/storefront-core/meta', () => ({ normalizeAlgeriaPhone: mocks.normalizePhone }));
-vi.mock('./action-history', () => ({ mutateEntityWithHistory: mocks.mutate }));
+vi.mock('./action-history', () => ({
+  mutateEntityWithHistory: mocks.mutate,
+  mutateEntityWithHistoryTransaction: mocks.mutate,
+}));
+vi.mock('./ecotrack-mutations', () => ({ assertNoUnresolvedEcotrackMutation: vi.fn() }));
 vi.mock('./admin-orders-data', () => ({ loadOrderDetail: mocks.loadDetail }));
 vi.mock('./ecotrack', () => ({
   readEcotrackCatalog: mocks.readCatalog,
@@ -121,6 +125,8 @@ describe('canonical admin order lifecycle', () => {
   it('deletes only an existing exact local order and refreshes reporting', async () => {
     const db = {
       query: { ecotrackOrderStates: { findFirst: mocks.activeShipment } },
+      select: () => ({ from: () => ({ where: () => ({ for: async () => [{ id: 91 }] }) }) }),
+      transaction: async (callback: (tx: unknown) => unknown) => callback(db),
     };
     await expect(deleteAdminOrder(db as never, 91, actor)).resolves.toMatchObject({
       id: 91,
@@ -147,6 +153,8 @@ describe('canonical admin order lifecycle', () => {
   it('refuses permanent local deletion while an EcoTrack shipment is active', async () => {
     const db = {
       query: { ecotrackOrderStates: { findFirst: mocks.activeShipment } },
+      select: () => ({ from: () => ({ where: () => ({ for: async () => [{ id: 91 }] }) }) }),
+      transaction: async (callback: (tx: unknown) => unknown) => callback(db),
     };
     mocks.activeShipment.mockResolvedValueOnce({ trackingNumber: 'TRK-91' });
 

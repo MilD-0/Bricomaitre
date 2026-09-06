@@ -432,12 +432,15 @@ async function loadOrderPageRows(
   return { rows, page, totalPages, totalItems };
 }
 
-export async function loadOrderDetail(id: number): Promise<OrderRecord | null> {
-  if (!hasDb()) {
+export async function loadOrderDetail(
+  id: number,
+  db?: ReturnType<typeof getDb>,
+): Promise<OrderRecord | null> {
+  if (!db && !hasDb()) {
     return null;
   }
 
-  const db = getDb();
+  db ??= getDb();
   const row = await db.query.orders.findFirst({ where: eq(orders.id, id) });
 
   if (!row) {

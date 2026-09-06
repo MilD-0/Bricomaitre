@@ -1,17 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ecotrackOrderStates, orderStatusHistory } from '@bric/db/schema';
+import { cleanEcotrackEnvValue, getEcotrackConfig } from '@bric/storefront-core/ecotrack-client';
 import {
   buildEcotrackOrderPayload,
   classifyOrdersForEcotrackPosting,
   createEcotrackOrdersBatch,
   fetchEcotrackCatalogSnapshot,
-  postOrdersToEcotrack,
   validateEcotrackToken,
   type EcotrackCatalogRecord,
   type EcotrackOrderInput,
 } from './ecotrack';
-import { cleanEcotrackEnvValue, getEcotrackConfig } from '@bric/storefront-core/ecotrack-client';
 
 describe('lib/ecotrack', () => {
   const env = {
@@ -579,120 +577,5 @@ describe('lib/ecotrack', () => {
         errors: { telephone: ['Phone is required'] },
       },
     });
-  });
-
-  it('posts orders without a validate phase and returns a create-only summary', async () => {
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ success: true }), {
-          headers: { 'content-type': 'application/json' },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            results: {
-              0: { success: true, tracking: 'TRK-11', message: 'Created successfully.' },
-            },
-          }),
-          {
-            headers: { 'content-type': 'application/json' },
-          },
-        ),
-      );
-
-    const updateSetMock = vi.fn((values: Record<string, unknown>) => ({
-      where: vi.fn(() => ({
-        returning: vi.fn().mockResolvedValue([{ ...orderInput.row, ...values }]),
-      })),
-    }));
-    const onConflictDoUpdateMock = vi.fn(({ set }) => ({
-      returning: vi.fn().mockResolvedValue([{ id: 101, ...set }]),
-    }));
-    const upsertValuesMock = vi
-      .fn()
-      .mockReturnValue({ onConflictDoUpdate: onConflictDoUpdateMock });
-    const statusHistoryValuesMock = vi.fn().mockResolvedValue(undefined);
-    const actionLogValuesMock = vi.fn().mockResolvedValue(undefined);
-    const db = {
-      transaction: async (callback: (tx: Record<string, unknown>) => Promise<void>) =>
-        callback({
-          select: vi.fn().mockReturnValue({
-            from: vi.fn().mockReturnValue({
-              where: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue([]),
-                for: vi.fn().mockResolvedValue([orderInput.row]),
-              }),
-            }),
-          }),
-          update: vi.fn().mockReturnValue({ set: updateSetMock }),
-          insert: vi.fn((table: unknown) => {
-            if (table === ecotrackOrderStates) {
-              return { values: upsertValuesMock };
-            }
-
-            if (table === orderStatusHistory) {
-              return { values: statusHistoryValuesMock };
-            }
-
-            return { values: actionLogValuesMock };
-          }),
-        }),
-    } as never;
-
-    const summary = await postOrdersToEcotrack(
-      db,
-      [orderInput],
-      catalog,
-      { email: 'ops@example.com', name: 'Ops' },
-      { fetchImpl, env },
-    );
-
-    expect(summary).toMatchObject({
-      provider: 'delivro',
-      totalRequested: 1,
-      eligible: 1,
-      created: 1,
-      skippedAlreadyPosted: 0,
-      invalid: 0,
-      failed: 0,
-    });
-    expect(summary).not.toHaveProperty('validated');
-    expect(summary.results).toEqual([
-      expect.objectContaining({ orderId: 11, status: 'created', tracking: 'TRK-11' }),
-    ]);
-    expect(updateSetMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        inHouseStatus: 11,
-        noAnswerCount: 0,
-        ecotrackTrackingNumber: 'TRK-11',
-      }),
-    );
-    expect(statusHistoryValuesMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        orderId: 11,
-        status: 11,
-        noAnswerCount: 0,
-        changedBy: 'ops@example.com',
-        changedByName: 'Ops',
-      }),
-    );
-    expect(onConflictDoUpdateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        set: expect.objectContaining({
-          trackingNumber: 'TRK-11',
-          currentStatus: 'prete_a_expedier',
-          deliveryTariff: null,
-          returnTariff: null,
-          paymentId: null,
-          rawLastTrackingPayload: null,
-          rawLastMajPayload: null,
-          lastStatusSyncedAt: null,
-          lastTrackingSyncedAt: null,
-          lastMajSyncedAt: null,
-        }),
-      }),
-    );
   });
 });

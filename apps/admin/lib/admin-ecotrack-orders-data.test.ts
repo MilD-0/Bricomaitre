@@ -83,7 +83,7 @@ describe('admin ECOTRACK shipment mapping', () => {
     expect(latestActivity?.toISOString()).toBe('2026-03-12T10:00:00.000Z');
 
     const fallbackActivity = deriveLatestUpstreamActivityAt(row, {});
-    expect(fallbackActivity?.toISOString()).toBe('2026-03-05T00:00:00.000Z');
+    expect(fallbackActivity?.toISOString()).toBe('2026-03-01T00:00:00.000Z');
 
     const rowWithoutStatusUpdate = {
       createdAt: new Date('2026-03-02T00:00:00.000Z'),
@@ -164,7 +164,7 @@ describe('admin ECOTRACK shipment mapping', () => {
     ).toEqual({ status: 'encaisse_non_paye', activity: [] });
   });
 
-  it('builds update payloads with the fixed ECOTRACK-required fields', () => {
+  it('builds carrier update fields without inventing package or GPS data', () => {
     const catalog: EcotrackCatalogRecord = {
       wilayas: [
         { wilayaId: 16, name: 'Alger', createdAt: new Date(), updatedAt: new Date() },
@@ -203,6 +203,8 @@ describe('admin ECOTRACK shipment mapping', () => {
       catalog,
     );
 
+    expect(payload).not.toHaveProperty('fragile');
+    expect(payload).not.toHaveProperty('gps_link');
     expect(payload).toMatchObject({
       tracking: 'TRK-11',
       reference: '11',
@@ -218,9 +220,33 @@ describe('admin ECOTRACK shipment mapping', () => {
       boutique: 'Bricomaitre',
       type: 1,
       stop_desk: 1,
-      fragile: 0,
-      gps_link: 'https://www.google.com/maps',
     });
+  });
+
+  it('preserves known provider GPS and package values when editing a shipment', () => {
+    const record = {
+      id: 11,
+      fullName: 'Ada',
+      phoneNumber1: '0550000011',
+      homeAddress: 'Street',
+      city: 'Alger',
+      state: 16,
+      totalAmount: 1000,
+      orderProducts: [],
+      delivery: 0,
+    } as never;
+    const catalog = { wilayas: [], communes: [], serviceFees: [], weightFees: [], lastSync: null };
+    const snapshot = { fragile: '1', gps_link: 'https://maps.google.com/?q=36.75,3.05' };
+    expect(buildUpdatePayload(record, 'TRACK', catalog, snapshot)).toMatchObject({
+      fragile: 1,
+      gps_link: snapshot.gps_link,
+    });
+    expect(buildUpdatePayload(record, 'TRACK', catalog, { fragile: false })).toMatchObject({
+      fragile: 0,
+    });
+    expect(
+      buildUpdatePayload(record, 'TRACK', catalog, { fragile: 'unknown', gps_link: 'not a URL' }),
+    ).not.toHaveProperty('gps_link');
   });
 
   it('allows office shipment edits without a home address', () => {
@@ -240,5 +266,24 @@ describe('admin ECOTRACK shipment mapping', () => {
       delivery: 1,
       homeAddress: '',
     });
+  });
+  it('rejects amount prefixes, malformed decimals and non-finite carrier totals', () => {
+    const draft = {
+      firstName: 'Ada',
+      phoneNumber1: '0550000011',
+      delivery: 0,
+      state: 16,
+      city: 'Alger',
+      homeAddress: 'Street',
+    };
+    for (const amount of ['12abc', '12.3.4', '1e3', '', '-1', Number.POSITIVE_INFINITY]) {
+      expect(() =>
+        parseEcotrackShipmentUpdateDraft({ ...draft, subtotalOverride: amount }),
+      ).toThrow();
+      expect(() => parseEcotrackShipmentUpdateDraft({ ...draft, deliveryFee: amount })).toThrow();
+    }
+    expect(
+      parseEcotrackShipmentUpdateDraft({ ...draft, subtotalOverride: '1250.50', deliveryFee: '0' }),
+    ).toMatchObject({ subtotalOverride: 1250.5, deliveryFee: 0 });
   });
 });

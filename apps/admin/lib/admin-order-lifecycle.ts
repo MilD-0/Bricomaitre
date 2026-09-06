@@ -2,6 +2,7 @@ import { and, desc, eq, gte } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
 import { orders } from '@bric/db/schema';
+import { normalizeAlgeriaPhone } from '@bric/storefront-core/meta';
 import {
   createPublicOrderToken,
   createPublicOrderTokenExpiry,
@@ -9,11 +10,15 @@ import {
 import { resolveOrderCommercialState } from '@bric/storefront-core/order-commercial';
 import { storefrontOrderCreateSchema } from '@bric/storefront-core/order-domain';
 import { insertCanonicalOrder } from '@bric/storefront-core/order-write';
-import { normalizeAlgeriaPhone } from '@bric/storefront-core/meta';
 
-import { mutateEntityWithHistory, type ActionActor } from './action-history';
+import {
+  mutateEntityWithHistory,
+  mutateEntityWithHistoryTransaction,
+  type ActionActor,
+} from './action-history';
 import { loadOrderDetail } from './admin-orders-data';
 import { readEcotrackCatalog, resolveEcotrackDeliveryFee } from './ecotrack';
+import { assertNoUnresolvedEcotrackMutation } from './ecotrack-mutations';
 import { triggerAdminReportingRefresh } from './reporting-refresh-trigger';
 
 type Database = ReturnType<typeof getDb>;
@@ -103,7 +108,7 @@ export async function createAdminOrder(
       }),
     resolveEntityId: (result) => result.order.id,
   });
-  const item = await loadOrderDetail(created.order.id);
+  const item = await loadOrderDetail(created.order.id, db);
   if (!item) throw new AdminOrderLifecycleNotFoundError(created.order.id);
   await triggerAdminReportingRefresh('order-create');
   return {
@@ -116,22 +121,27 @@ export async function createAdminOrder(
 }
 
 export async function deleteAdminOrder(db: Database, orderId: number, actor?: ActionActor) {
-  const existing = await loadOrderDetail(orderId);
+  const existing = await loadOrderDetail(orderId, db);
   if (!existing) throw new AdminOrderLifecycleNotFoundError(orderId);
-  const activeShipment = await db.query.ecotrackOrderStates.findFirst({
-    columns: { trackingNumber: true },
-    where: (state, { and, eq, isNull }) => and(eq(state.orderId, orderId), isNull(state.deletedAt)),
-  });
-  if (activeShipment) {
-    throw new AdminOrderHasActiveEcotrackShipmentError(orderId, activeShipment.trackingNumber);
-  }
-  await mutateEntityWithHistory(db, {
-    entityType: 'orders',
-    entityId: orderId,
-    operation: 'delete',
-    actor,
-    isReversible: false,
-    execute: (tx) => tx.delete(orders).where(eq(orders.id, orderId)),
+  await db.transaction(async (tx) => {
+    const [order] = await tx.select().from(orders).where(eq(orders.id, orderId)).for('update');
+    if (!order) throw new AdminOrderLifecycleNotFoundError(orderId);
+    await assertNoUnresolvedEcotrackMutation(tx, orderId);
+    const activeShipment = await tx.query.ecotrackOrderStates.findFirst({
+      columns: { trackingNumber: true },
+      where: (state, { and, eq, isNull }) =>
+        and(eq(state.orderId, orderId), isNull(state.deletedAt)),
+    });
+    if (activeShipment)
+      throw new AdminOrderHasActiveEcotrackShipmentError(orderId, activeShipment.trackingNumber);
+    await mutateEntityWithHistoryTransaction(tx, {
+      entityType: 'orders',
+      entityId: orderId,
+      operation: 'delete',
+      actor,
+      isReversible: false,
+      execute: (tx) => tx.delete(orders).where(eq(orders.id, orderId)),
+    });
   });
   await triggerAdminReportingRefresh('order-delete');
   return {

@@ -1,16 +1,17 @@
-import { and, eq, isNull } from 'drizzle-orm';
 import {
   getEcotrackMaj,
   getEcotrackOrder,
   getEcotrackOrdersStatus,
   getEcotrackTrackingsInfo,
-  type EcotrackMajEntry as UpstreamEcotrackMajEntry,
   type EcotrackOrderInfo,
   type EcotrackOrderSummary,
   type EcotrackStatusItem,
   type EcotrackTrackingInfo,
+  type EcotrackMajEntry as UpstreamEcotrackMajEntry,
 } from '@bric/storefront-core/ecotrack-client';
 import { updateCanonicalOrder } from '@bric/storefront-core/order-write';
+import { and, eq, isNull } from 'drizzle-orm';
+import { loadUnresolvedEcotrackMutation } from './ecotrack-mutations';
 
 import {
   ecotrackOrderMajEntries,
@@ -19,39 +20,6 @@ import {
   orders,
 } from '@bric/db/schema';
 import type { ActionActor } from './action-history';
-import type {
-  EcotrackBulkActionFailure,
-  EcotrackBulkActionResponse,
-  EcotrackDispatchBatchResponse,
-  EcotrackLabelsResponse,
-  EcotrackShipmentDetail,
-  EcotrackShipmentsResponse,
-} from './ecotrack-admin-contracts';
-import {
-  buildEcotrackOrderActionSnapshot,
-  buildEcotrackShipmentActionSnapshot,
-} from './ecotrack-action-snapshots';
-import { normalizeEcotrackMonetarySnapshotValue } from './ecotrack-monetary';
-import { isEcotrackMissingTrackingInfoError } from './ecotrack-shipment-errors';
-import {
-  mapMajEntry,
-  mapTrackingInfoEvents,
-  persistStatusEvidence,
-  providerRequestOptions,
-} from './ecotrack-shipment-evidence';
-import {
-  deriveLatestUpstreamActivityAt,
-  getUpstreamTrackingValues,
-  mapEcotrackOrderSnapshot,
-  mapEcotrackStatusToOrderStatus,
-  rawOrderInfoFromTrackingPayload,
-  resolveEcotrackStatusEvidence,
-} from './ecotrack-shipment-status';
-import type {
-  EcotrackDatabase as Database,
-  EcotrackShipmentRow as ShipmentRow,
-} from './ecotrack-shipment-types';
-import { coerceOrderStatus, isConfirmedLifecycleStatus, ORDER_STATUS } from './orders';
 import {
   ECOTRACK_SYNC_ACTOR_NAME,
   loadMajSyncSummary,
@@ -67,11 +35,43 @@ import {
   loadShipmentRowByOrderId,
 } from './admin-ecotrack-shipment-view';
 import {
+  buildEcotrackOrderActionSnapshot,
+  buildEcotrackShipmentActionSnapshot,
+} from './ecotrack-action-snapshots';
+import type {
+  EcotrackBulkActionFailure,
+  EcotrackBulkActionResponse,
+  EcotrackDispatchBatchResponse,
+  EcotrackLabelsResponse,
+  EcotrackShipmentDetail,
+  EcotrackShipmentsResponse,
+} from './ecotrack-admin-contracts';
+import { isEcotrackMissingTrackingInfoError } from './ecotrack-shipment-errors';
+import {
+  mapMajEntry,
+  mapTrackingInfoEvents,
+  persistStatusEvidence,
+  providerRequestOptions,
+} from './ecotrack-shipment-evidence';
+import {
   MAJ_STALE_MS,
   MISSING_STATUS_RETIRE_MS,
   STATUS_STALE_MS,
   TRACKING_STALE_MS,
 } from './ecotrack-shipment-policy';
+import {
+  deriveLatestUpstreamActivityAt,
+  getUpstreamTrackingValues,
+  mapEcotrackOrderSnapshot,
+  mapEcotrackStatusToOrderStatus,
+  rawOrderInfoFromTrackingPayload,
+  resolveEcotrackStatusEvidence,
+} from './ecotrack-shipment-status';
+import type {
+  EcotrackDatabase as Database,
+  EcotrackShipmentRow as ShipmentRow,
+} from './ecotrack-shipment-types';
+import { coerceOrderStatus, ORDER_STATUS } from './orders';
 
 export * from './admin-ecotrack-shipment-audit';
 export * from './admin-ecotrack-shipment-view';
@@ -119,7 +119,6 @@ export async function softDeleteShipmentRow(
   } = {},
 ) {
   const now = new Date();
-  const beforeShipmentState = buildEcotrackShipmentActionSnapshot(row);
 
   return db.transaction(async (tx) => {
     const [currentOrder] = await tx
@@ -127,6 +126,7 @@ export async function softDeleteShipmentRow(
       .from(orders)
       .where(eq(orders.id, row.order.id))
       .for('update');
+    if (await loadUnresolvedEcotrackMutation(tx, row.order.id)) return false;
     // The provider call happened before this transaction. Do not overwrite an
     // operator or carrier update that arrived while that request was in flight.
     if (
@@ -139,6 +139,18 @@ export async function softDeleteShipmentRow(
     )
       return false;
     const beforeOrderState = buildEcotrackOrderActionSnapshot(currentOrder);
+    const [currentShipment] = await tx
+      .select()
+      .from(ecotrackOrderStates)
+      .where(eq(ecotrackOrderStates.id, row.id))
+      .for('update');
+    if (
+      !currentShipment ||
+      currentShipment.trackingNumber !== row.trackingNumber ||
+      currentShipment.deletedAt
+    )
+      return false;
+    const beforeShipmentState = buildEcotrackShipmentActionSnapshot(currentShipment);
     const [deletedShipment] = await tx
       .update(ecotrackOrderStates)
       .set({
@@ -153,7 +165,7 @@ export async function softDeleteShipmentRow(
           isNull(ecotrackOrderStates.deletedAt),
         ),
       )
-      .returning({ id: ecotrackOrderStates.id });
+      .returning();
 
     if (!deletedShipment) {
       return false;
@@ -179,12 +191,7 @@ export async function softDeleteShipmentRow(
     });
 
     const afterOrderState = buildEcotrackOrderActionSnapshot(updated.order);
-    const afterShipmentState = {
-      ...beforeShipmentState,
-      deletedAt: now,
-      lastActionAt: now,
-      updatedAt: now,
-    };
+    const afterShipmentState = buildEcotrackShipmentActionSnapshot(deletedShipment);
 
     await recordEcotrackOrderAction(tx, beforeOrderState, afterOrderState, options.actor);
     await recordEcotrackShipmentAction(
@@ -288,8 +295,25 @@ export async function upsertShipmentState(
   }
 
   return db.transaction(async (tx) => {
-    const beforeOrderState = buildEcotrackOrderActionSnapshot(row.order);
-    const beforeShipmentState = buildEcotrackShipmentActionSnapshot(row);
+    const [currentOrder] = await tx
+      .select()
+      .from(orders)
+      .where(eq(orders.id, row.order.id))
+      .for('update');
+    if (!currentOrder || (await loadUnresolvedEcotrackMutation(tx, row.order.id))) return false;
+    const beforeOrderState = buildEcotrackOrderActionSnapshot(currentOrder);
+    const [currentShipment] = await tx
+      .select()
+      .from(ecotrackOrderStates)
+      .where(eq(ecotrackOrderStates.id, row.id))
+      .for('update');
+    if (
+      !currentShipment ||
+      currentShipment.trackingNumber !== row.trackingNumber ||
+      currentShipment.deletedAt
+    )
+      return false;
+    const beforeShipmentState = buildEcotrackShipmentActionSnapshot(currentShipment);
     const beforeMajState = await loadMajSyncSummary(tx, row.order.id, row.trackingNumber);
     const beforeTrackingState = await loadTrackingSyncSummary(tx, row.order.id, row.trackingNumber);
 
@@ -303,7 +327,7 @@ export async function upsertShipmentState(
           isNull(ecotrackOrderStates.deletedAt),
         ),
       )
-      .returning({ id: ecotrackOrderStates.id });
+      .returning();
 
     if (!updatedShipment) {
       return false;
@@ -323,7 +347,8 @@ export async function upsertShipmentState(
           deriveLatestUpstreamActivityAt(row, payload),
         )
       : null;
-    const currentLocalStatus = coerceOrderStatus(row.order.inHouseStatus);
+    const currentLocalStatus = coerceOrderStatus(currentOrder.inHouseStatus);
+    let savedOrder = currentOrder;
 
     if (statusItem) {
       const nextOrderValues: Partial<typeof orders.$inferInsert> = {
@@ -333,7 +358,7 @@ export async function upsertShipmentState(
         updatedAt: now,
       };
 
-      await updateCanonicalOrder(tx, {
+      const orderResult = await updateCanonicalOrder(tx, {
         orderId: row.order.id,
         values: nextOrderValues,
         status:
@@ -343,6 +368,7 @@ export async function upsertShipmentState(
         actor: { name: ECOTRACK_SYNC_ACTOR_NAME },
         now,
       });
+      savedOrder = orderResult.order;
     }
 
     if (payload.majEntries) {
@@ -370,40 +396,8 @@ export async function upsertShipmentState(
       }
     }
 
-    const afterOrderState = {
-      ...beforeOrderState,
-      ...(statusItem
-        ? {
-            ecotrackStatus: statusItem.status,
-            ecotrackStatusLastUpdate: now,
-            ecotrackStatusData: payload.rawStatusItem ?? payload.rawOrderInfo ?? statusItem,
-            updatedAt: now,
-          }
-        : {}),
-      ...(nextLocalStatus !== null && nextLocalStatus !== currentLocalStatus
-        ? {
-            inHouseStatus: nextLocalStatus,
-            noAnswerCount: 0,
-            confirmedBy: isConfirmedLifecycleStatus(nextLocalStatus)
-              ? (row.order.confirmedBy ?? null)
-              : null,
-            confirmedByName: isConfirmedLifecycleStatus(nextLocalStatus)
-              ? (row.order.confirmedByName ?? null)
-              : null,
-            confirmedAt: isConfirmedLifecycleStatus(nextLocalStatus)
-              ? (row.order.confirmedAt ?? now)
-              : null,
-          }
-        : {}),
-    };
-    const afterShipmentState = {
-      ...beforeShipmentState,
-      ...updates,
-      estimatedFee:
-        updates.estimatedFee === undefined
-          ? beforeShipmentState.estimatedFee
-          : normalizeEcotrackMonetarySnapshotValue(updates.estimatedFee),
-    };
+    const afterOrderState = buildEcotrackOrderActionSnapshot(savedOrder);
+    const afterShipmentState = buildEcotrackShipmentActionSnapshot(updatedShipment);
     const afterMajState = await loadMajSyncSummary(tx, row.order.id, row.trackingNumber);
     const afterTrackingState = await loadTrackingSyncSummary(tx, row.order.id, row.trackingNumber);
 

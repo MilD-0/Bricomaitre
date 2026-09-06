@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { buildEcotrackOrderPayload } from './ecotrack';
+import { buildEcotrackOrderPayload } from './ecotrack-posting';
 import type { OrderRecord } from './orders';
 
 const nullableNonNegativeAmountSchema = z
@@ -10,7 +10,12 @@ const nullableNonNegativeAmountSchema = z
       return null;
     }
 
-    const parsed = typeof value === 'number' ? value : Number.parseFloat(value.trim());
+    const parsed =
+      typeof value === 'number'
+        ? value
+        : /^\d+(?:\.\d+)?$/.test(value.trim())
+          ? Number(value.trim())
+          : Number.NaN;
     if (!Number.isFinite(parsed) || parsed < 0) {
       return Number.NaN;
     }
@@ -82,8 +87,25 @@ export function buildUpdatePayload(
   record: OrderRecord,
   trackingNumber: string,
   catalog: Parameters<typeof buildEcotrackOrderPayload>[1],
+  providerSnapshot?: unknown,
 ) {
   const payload = buildEcotrackOrderPayload(record, catalog);
+  const saved =
+    providerSnapshot && typeof providerSnapshot === 'object'
+      ? (providerSnapshot as Record<string, unknown>)
+      : {};
+  const fragile =
+    saved.fragile === true || saved.fragile === 1 || saved.fragile === '1'
+      ? 1
+      : saved.fragile === false || saved.fragile === 0 || saved.fragile === '0'
+        ? 0
+        : undefined;
+  const gpsLink =
+    typeof saved.gps_link === 'string' &&
+    /^https?:\/\//i.test(saved.gps_link) &&
+    z.url().safeParse(saved.gps_link).success
+      ? saved.gps_link
+      : undefined;
 
   return {
     tracking: trackingNumber,
@@ -101,8 +123,8 @@ export function buildUpdatePayload(
     boutique: 'Bricomaitre',
     type: 1,
     stop_desk: payload.stop_desk,
-    fragile: 0,
-    gps_link: 'https://www.google.com/maps',
+    ...(fragile !== undefined ? { fragile } : {}),
+    ...(gpsLink ? { gps_link: gpsLink } : {}),
   };
 }
 

@@ -149,9 +149,6 @@ export async function readOrderProductSubtotal(
   db: Executor,
   order: Pick<typeof orders.$inferSelect, 'id' | 'price' | 'productSubtotal'>,
 ) {
-  if (order.price !== null) {
-    return parseNumericAmount(order.price);
-  }
   if (order.productSubtotal !== null) {
     return parseNumericAmount(order.productSubtotal);
   }

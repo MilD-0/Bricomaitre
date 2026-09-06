@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { hasDb } from '@bric/db/client';
-import { auth } from './auth';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
+import { auth } from './auth';
+import { EcotrackMutationConflictError } from './ecotrack-mutations';
 import { requireMutationAccess } from './rbac';
 import { captureAdminException, getRequestId, withRequestIdHeaders } from './sentry';
 
@@ -80,7 +81,10 @@ export async function handleEcotrackShipmentMutation<TPayload = undefined, TItem
     captureAdminException(error, { requestId, operation, route, session });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : fallbackError },
-      { status: 502, headers: withRequestIdHeaders(requestId) },
+      {
+        status: error instanceof EcotrackMutationConflictError ? 409 : 502,
+        headers: withRequestIdHeaders(requestId),
+      },
     );
   }
 }

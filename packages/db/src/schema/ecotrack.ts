@@ -1,6 +1,9 @@
+import { sql } from 'drizzle-orm';
 import {
+  bigint,
   bigserial,
   boolean,
+  check,
   date,
   index,
   integer,
@@ -10,10 +13,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  bigint,
-  check,
 } from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
 import { adminSchema } from './namespaces';
 import { orders } from './orders';
 
@@ -247,7 +247,12 @@ export const ecotrackOrderMajEntries = adminSchema.table(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex('ecotrack_order_maj_entries_unique').on(t.orderId, t.remarque, t.remoteCreatedAt),
+    uniqueIndex('ecotrack_order_maj_entries_unique').on(
+      t.orderId,
+      t.trackingNumber,
+      t.remarque,
+      t.remoteCreatedAt,
+    ),
     index('idx_ecotrack_order_maj_entries_order_created').on(t.orderId, t.remoteCreatedAt.desc()),
     index('idx_ecotrack_order_maj_entries_tracking_created').on(
       t.trackingNumber,
@@ -275,6 +280,7 @@ export const ecotrackOrderTrackingEvents = adminSchema.table(
   (t) => [
     uniqueIndex('ecotrack_order_tracking_events_unique').on(
       t.orderId,
+      t.trackingNumber,
       t.eventDate,
       t.eventTime,
       t.status,
@@ -292,5 +298,41 @@ export const ecotrackOrderTrackingEvents = adminSchema.table(
     ),
     index('idx_ecotrack_order_tracking_events_status').on(t.status),
     index('idx_ecotrack_order_tracking_events_date_status').on(t.eventDate, t.status),
+  ],
+);
+
+// A carrier request can succeed while its response is lost. Keep its ownership
+// until the response is reconciled; never retry an unknown creation blindly.
+export const ecotrackMutations = adminSchema.table(
+  'ecotrack_mutations',
+  {
+    id: text('id').primaryKey(),
+    orderId: bigint('order_id', { mode: 'number' }).notNull(),
+    kind: text('kind').notNull(),
+    provider: text('provider').notNull(),
+    trackingNumber: text('tracking_number'),
+    orderUpdatedAt: timestamp('order_updated_at', { withTimezone: true }).notNull(),
+    state: text('state').notNull().default('pending'),
+    request: jsonb('request').$type<Record<string, unknown>>().notNull(),
+    response: jsonb('response').$type<Record<string, unknown>>(),
+    error: text('error'),
+    actor: jsonb('actor').$type<{ email?: string | null; name?: string | null }>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('ecotrack_mutations_unresolved_order')
+      .on(t.orderId)
+      .where(sql`${t.state} in ('pending', 'succeeded', 'uncertain')`),
+    index('idx_ecotrack_mutations_order_created').on(t.orderId, t.createdAt),
+    check(
+      'ecotrack_mutations_state_check',
+      sql`${t.state} in ('pending', 'succeeded', 'uncertain', 'applied', 'rejected')`,
+    ),
+    check(
+      'ecotrack_mutations_kind_check',
+      sql`${t.kind} in ('post', 'update', 'recreate', 'delete', 'dispatch', 'maj', 'return')`,
+    ),
+    check('ecotrack_mutations_provider_check', sql`${t.provider} in ('delivro', 'emir')`),
   ],
 );

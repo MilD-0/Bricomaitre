@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl';
 import { useDeferredValue, useRef, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 
+import { requestJson as request } from '../lib/admin-api';
 import {
   inventoryApplyResponseSchema,
   inventoryBarcodeSchema,
@@ -26,11 +27,11 @@ import {
   toggleSortRule,
   type SortRule,
 } from '../lib/multi-sort';
-import { requestJson as request } from '../lib/admin-api';
 import { captureQueries, restoreQueries, type QuerySnapshot } from '../lib/query-cache';
 import { toast } from '../lib/toast';
-import { MultiSortHeader } from './multi-sort-header';
 import { useAdminAiSurfaceDetails } from './admin-ai-surface-context';
+import { MultiSortHeader } from './multi-sort-header';
+import { SearchField } from './search-field';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import {
@@ -45,18 +46,17 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './
 import { Field, FieldError, FieldGroup, FieldLabel } from './ui/field';
 import { Input } from './ui/input';
 import { PendingInline, sectionTransitionProps, SurfacePendingOverlay } from './ui/motion';
-import { Skeleton } from './ui/skeleton';
 import { ScrollableRegion } from './ui/scrollable-region';
+import { Skeleton } from './ui/skeleton';
 import { Switch } from './ui/switch';
-import { SearchField } from './search-field';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { WorkspacePagination } from './ui/workspace-pagination';
 import {
   WorkspaceFrame,
   WorkspaceHeader,
   WorkspaceHeading,
   WorkspaceToolbar,
 } from './ui/workspace';
+import { WorkspacePagination } from './ui/workspace-pagination';
 
 type MutationMessages = {
   loading: string;
@@ -499,7 +499,7 @@ export function InventoryManager({ title }: { title: string }) {
       items: Array<{
         productId: number;
         quantity: number;
-        source: { type: 'order-scan' | 'shopping-list'; orderIds?: number[] };
+        source: { type: 'order-scan' | 'shopping-list' | 'barcode-scan'; orderIds?: number[] };
       }>;
     }
   >({
@@ -620,16 +620,17 @@ export function InventoryManager({ title }: { title: string }) {
     );
 
     try {
-      await batchApplyMutation.mutateAsync({
+      const result = await batchApplyMutation.mutateAsync({
         mode: 'increase',
         items: [
           {
             productId: scanBarcodeState.item.id,
             quantity: 1,
-            source: { type: 'order-scan' },
+            source: { type: 'barcode-scan' },
           },
         ],
       });
+      if (!result.complete) throw new Error('The scanned product could not be received.');
       toast.success(
         t('inventory.notifications.quantity.scan.success', { name: scanBarcodeState.item.title }),
         { id: toastId },
@@ -687,7 +688,7 @@ export function InventoryManager({ title }: { title: string }) {
     );
 
     try {
-      await batchApplyMutation.mutateAsync({
+      const result = await batchApplyMutation.mutateAsync({
         mode: 'increase',
         items: selectedItems.map((item) => ({
           productId: item.productId!,
@@ -698,7 +699,22 @@ export function InventoryManager({ title }: { title: string }) {
           },
         })),
       });
-      toast.success(t('inventory.scan.orderApplySuccess', { count: selectedItems.length }), {
+      if (!result.complete) {
+        const appliedIds = new Set(result.items.map((item) => item.productId));
+        setScanOrderState((current) => ({
+          ...current,
+          items: current.items.filter((item) => !appliedIds.has(item.productId!)),
+        }));
+        toast.error(
+          t('inventory.scan.orderApplyPartial', {
+            count: result.items.length,
+            failed: result.skipped.length,
+          }),
+          { id: toastId },
+        );
+        return;
+      }
+      toast.success(t('inventory.scan.orderApplySuccess', { count: result.items.length }), {
         id: toastId,
       });
       closeScanOrderDialog();

@@ -1,11 +1,22 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
-import type { EcotrackExtendedRateLimitSnapshot } from '@bric/storefront-core/ecotrack-client';
-import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 import { orders, orderStatusHistory } from '@bric/db/schema';
-import { getOrderProductLookup, toOrderRecord } from './order-records';
+import {
+  EcotrackMutationRejectedError,
+  EcotrackRateLimitError,
+  readEcotrackRejected,
+  type EcotrackExtendedRateLimitSnapshot,
+} from '@bric/storefront-core/ecotrack-client';
+import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 import { readEcotrackCatalog, type EcotrackCatalogRecord } from './ecotrack-catalog';
+import { applySavedEcotrackMutation } from './ecotrack-mutation-apply';
+import {
+  claimEcotrackMutation,
+  markEcotrackMutationUncertain,
+  recordEcotrackMutationResult,
+  type CarrierMutation,
+} from './ecotrack-mutations';
 import {
   buildEcotrackResultMessage,
   chunkArray,
@@ -19,7 +30,7 @@ import {
   sleep,
   type EcotrackProvider,
 } from './ecotrack-provider';
-import { persistEcotrackPostedOrder } from './ecotrack-posting-persistence';
+import { getOrderProductLookup, toOrderRecord } from './order-records';
 import { coerceOrderStatus, type OrderRecord, type OrderStatusHistoryRecord } from './orders';
 
 type Database = ReturnType<typeof getDb>;
@@ -103,8 +114,6 @@ export type EcotrackOrderInput = {
   row: typeof orders.$inferSelect;
   record: OrderRecord;
 };
-
-export { persistEcotrackPostedOrder };
 
 type EcotrackPreviewResult = {
   totalRequested: number;
@@ -355,6 +364,7 @@ export async function createEcotrackOrdersBatch(
   options: {
     fetchImpl?: typeof fetch;
     env?: NodeJS.ProcessEnv;
+    deadlineAt?: number;
   } = {},
 ) {
   const keyedOrders = Object.fromEntries(ordersBatch.map((order, index) => [String(index), order]));
@@ -362,6 +372,7 @@ export async function createEcotrackOrdersBatch(
     path: '/create/orders',
     method: 'POST',
     json: { orders: keyedOrders },
+    deadlineAt: options.deadlineAt,
     fetchImpl: options.fetchImpl ?? fetch,
     env: options.env ?? process.env,
   });
@@ -514,83 +525,118 @@ export async function postOrdersToEcotrack(
   let createdCount = 0;
   let processedCount = 0;
 
+  const publish = async () => {
+    // Reporting outages must not strand a successful carrier response.
+    try {
+      await options.updateSummary?.(summary);
+    } catch (error) {
+      console.error('Unable to publish carrier progress', error);
+    }
+  };
   for (const [batchIndex, batch] of batches.entries()) {
     await options.throwIfCancelled?.();
-    await options.updateProgress?.({
-      phase: 'creating',
-      current: processedCount,
-      total: preview.eligible.length,
-    });
-
-    const createResponse = await createEcotrackOrdersBatch(
-      batch.map((item) => item.payload),
-      { fetchImpl, env },
-    );
+    const claimed: Array<{ item: EcotrackOrderPreviewItem; operation: CarrierMutation }> = [];
+    for (const item of batch) {
+      const input = inputById.get(item.orderId)!;
+      try {
+        const operation = await claimEcotrackMutation(db, {
+          orderId: item.orderId,
+          orderUpdatedAt: input.row.updatedAt,
+          kind: 'post',
+          provider,
+          request: { payload: item.payload, record: input.record },
+          actor,
+        });
+        claimed.push({ item, operation });
+      } catch (error) {
+        summary.failed += 1;
+        summary.results.push({
+          orderId: item.orderId,
+          reference: item.payload.reference,
+          tracking: null,
+          status: 'failed',
+          message: error instanceof Error ? error.message : 'Unable to claim order.',
+        });
+      }
+    }
+    if (!claimed.length) continue;
+    let createResponse: Awaited<ReturnType<typeof createEcotrackOrdersBatch>>;
+    try {
+      createResponse = await createEcotrackOrdersBatch(
+        claimed.map(({ item }) => item.payload),
+        {
+          fetchImpl,
+          env,
+          deadlineAt:
+            Math.min(...claimed.map(({ operation }) => operation.createdAt.getTime())) + 120_000,
+        },
+      );
+    } catch (error) {
+      await Promise.allSettled(
+        claimed.map(({ operation }) =>
+          error instanceof EcotrackMutationRejectedError || error instanceof EcotrackRateLimitError
+            ? recordEcotrackMutationResult(db, operation, { message: error.message }, false)
+            : markEcotrackMutationUncertain(db, operation, error),
+        ),
+      );
+      throw error;
+    }
     withLatestRateLimit(summary, createResponse.rateLimit);
-    await options.updateSummary?.(summary);
-
-    for (const batchItem of batch) {
-      await options.throwIfCancelled?.();
-      const createResult = createResponse.results.get(batchItem.payload.reference) ?? {
-        success: false,
-        tracking: null,
-        message: 'Ecotrack did not return a result for this order.',
-        raw: null,
-      };
-
-      if (createResult.success && createResult.tracking) {
+    // Finish every response in this issued batch before honoring cancellation.
+    for (const { item, operation } of claimed) {
+      const result = createResponse.results.get(item.payload.reference);
+      try {
+        if (
+          !result?.raw ||
+          (!result.success && !readEcotrackRejected(result.raw)) ||
+          (result.success && !result.tracking)
+        ) {
+          await markEcotrackMutationUncertain(
+            db,
+            operation,
+            new Error('Carrier outcome needs reconciliation.'),
+          );
+          throw new Error(
+            'Carrier outcome needs reconciliation. Open carrier recovery before retrying.',
+          );
+        }
+        const saved = await recordEcotrackMutationResult(db, operation, result, result.success);
+        if (!result.success) throw new Error(result.message ?? 'Carrier rejected the order.');
+        await applySavedEcotrackMutation(db, saved);
         createdCount += 1;
         summary.created = createdCount;
         summary.results.push({
-          orderId: batchItem.orderId,
-          reference: batchItem.payload.reference,
-          tracking: createResult.tracking,
+          orderId: item.orderId,
+          reference: item.payload.reference,
+          tracking: result.tracking,
           status: 'created',
-          message: createResult.message ?? 'Created successfully.',
+          message: result.message ?? 'Created successfully.',
         });
-
-        await options.updateProgress?.({
-          phase: 'persisting',
-          current: createdCount - 1,
-          total: preview.eligible.length,
-        });
-        const input = inputById.get(batchItem.orderId);
-        if (!input) {
-          throw new Error(`Missing order input for Ecotrack order ${batchItem.orderId}.`);
-        }
-
-        await persistEcotrackPostedOrder(db, input, actor, createResult, provider);
-      } else {
+      } catch (error) {
         summary.failed += 1;
         summary.results.push({
-          orderId: batchItem.orderId,
-          reference: batchItem.payload.reference,
-          tracking: createResult.tracking,
+          orderId: item.orderId,
+          reference: item.payload.reference,
+          tracking: result?.tracking ?? null,
           status: 'failed',
-          message: createResult.message ?? 'Ecotrack rejected the order.',
+          message: error instanceof Error ? error.message : 'Local carrier recovery is required.',
         });
       }
-
       processedCount += 1;
-      await options.updateSummary?.(summary);
     }
-
-    await options.updateProgress?.({
-      phase: 'creating',
-      current: processedCount,
-      total: preview.eligible.length,
-    });
-    if (mutatingDelayMs > 0 && batchIndex < batches.length - 1) {
-      await sleep(mutatingDelayMs);
+    await publish();
+    try {
+      await options.updateProgress?.({
+        phase: 'creating',
+        current: processedCount,
+        total: preview.eligible.length,
+      });
+    } catch (error) {
+      console.error('Unable to publish carrier progress', error);
     }
+    if (mutatingDelayMs > 0 && batchIndex < batches.length - 1) await sleep(mutatingDelayMs);
   }
 
-  await flushPostingState(
-    options,
-    'completed',
-    preview.eligible.length,
-    preview.eligible.length,
-    summary,
-  );
+  await publish();
   return summary;
 }

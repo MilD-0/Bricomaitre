@@ -708,6 +708,13 @@
       "when": 1788676220222,
       "tag": "0100_parallel_selene",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1788691186867,
+      "tag": "0101_cold_blindfold",
+      "breakpoints": true
     }
   ]
 }

@@ -90,7 +90,7 @@ describe('admin AI native inventory operations', () => {
           {
             productId: 12,
             quantity: 1,
-            source: { type: 'order-scan' },
+            source: { type: 'barcode-scan' },
           },
         ],
       },

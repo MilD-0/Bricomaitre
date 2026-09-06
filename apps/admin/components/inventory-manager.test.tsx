@@ -124,6 +124,7 @@ describe('InventoryManager', () => {
         applyCalls.push(body);
         return HttpResponse.json({
           ok: true,
+          complete: true,
           items: [{ productId: 1, previousQuantity: 2, nextQuantity: 3 }],
           skipped: [],
         });
@@ -347,12 +348,64 @@ describe('InventoryManager', () => {
     expect(applyCalls).toContainEqual({
       requestId: expect.any(String),
       mode: 'increase',
-      items: [{ productId: 1, quantity: 1, source: { type: 'order-scan' } }],
+      items: [{ productId: 1, quantity: 1, source: { type: 'barcode-scan' } }],
     });
     expect(applyCalls).toContainEqual({
       requestId: expect.any(String),
       mode: 'increase',
       items: [{ productId: 1, quantity: 2, source: { type: 'order-scan', orderIds: [50] } }],
     });
+  });
+  it('keeps failed receipt rows selected and retries only those rows after a partial batch', async () => {
+    let attempts = 0;
+    server.use(
+      http.post('/api/inventory/scan', () =>
+        HttpResponse.json({
+          kind: 'order',
+          order: { id: 50, fullName: 'Ada Lovelace', phoneNumber1: '0550000050', inHouseStatus: 2 },
+          items: [
+            { productId: 1, title: 'Hammer', quantity: 2, inventoryQuantity: 2, selectable: true },
+            { productId: 2, title: 'Wrench', quantity: 1, inventoryQuantity: 0, selectable: true },
+          ],
+        }),
+      ),
+      http.post('/api/inventory/apply', async ({ request }) => {
+        applyCalls.push((await request.json()) as Record<string, unknown>);
+        attempts++;
+        return HttpResponse.json(
+          attempts === 1
+            ? {
+                ok: true,
+                complete: false,
+                items: [{ productId: 1, previousQuantity: 2, nextQuantity: 4 }],
+                skipped: [{ productId: 2, reason: 'missing' }],
+              }
+            : {
+                ok: true,
+                complete: true,
+                items: [{ productId: 2, previousQuantity: 0, nextQuantity: 1 }],
+                skipped: [],
+              },
+        );
+      }),
+    );
+    renderInventoryManager();
+    await screen.findAllByText('Hammer');
+    await userEvent.type(screen.getByPlaceholderText('Barcode or order ID'), '50');
+    await userEvent.click(screen.getByRole('button', { name: 'Scan' }));
+    await screen.findByText('Ada Lovelace');
+    await userEvent.click(screen.getByRole('button', { name: 'Add selected products' }));
+    await screen.findByText(
+      'Received 1 products. 1 could not be received and remain selected for review.',
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByText('Hammer')).not.toBeInTheDocument();
+    expect(within(dialog).getByText('Wrench')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add selected products' }));
+    await screen.findByText('Added 1 scanned order products to inventory.');
+    expect(applyCalls.at(-1)).toMatchObject({
+      items: [{ productId: 2, quantity: 1, source: { type: 'order-scan', orderIds: [50] } }],
+    });
+    expect(applyCalls[0]!.requestId).not.toBe(applyCalls[1]!.requestId);
   });
 });

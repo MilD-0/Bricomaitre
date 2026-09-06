@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, ilike, isNull, lte, or, sql } from 'drizzle-orm';
 
 import {
   ecotrackOrderMajEntries,
@@ -6,33 +6,32 @@ import {
   ecotrackOrderTrackingEvents,
   ecotrackWilayas,
   orders,
-  products,
 } from '@bric/db/schema';
 import type {
   EcotrackShipmentDetail,
   EcotrackShipmentListItem,
   EcotrackStatusSummary,
 } from './ecotrack-admin-contracts';
+import { readEcotrackCatalog } from './ecotrack-catalog';
+import type { EcotrackShipmentListQuery } from './ecotrack-shipment-list';
 import {
   MAJ_STALE_MS,
   STATUS_STALE_MS,
   TERMINAL_STATUSES,
   TRACKING_STALE_MS,
 } from './ecotrack-shipment-policy';
-import { getOrderProductLookup, toOrderRecord } from './order-records';
-import { readEcotrackCatalog } from './ecotrack';
-import type { EcotrackShipmentListQuery } from './ecotrack-shipment-list';
 import { sanitizeNullableText } from './ecotrack-shipment-status';
+import type {
+  EcotrackDatabase as Database,
+  EcotrackShipmentRow as ShipmentRow,
+} from './ecotrack-shipment-types';
 import { orderProductSearchCondition } from './order-product-search';
+import { getOrderProductLookup, toOrderRecord } from './order-records';
 import {
   orderIdentifierSearchCondition,
   withOrderSearchTimeout,
   type OrderSearchDatabase,
 } from './order-search';
-import type {
-  EcotrackDatabase as Database,
-  EcotrackShipmentRow as ShipmentRow,
-} from './ecotrack-shipment-types';
 import { parseNumericAmount, type DeliveryType, type OrderRecord } from './orders';
 
 type EcotrackOrderListItem = EcotrackShipmentListItem;
@@ -52,38 +51,6 @@ export function isStaleAt(value: Date | null | undefined, maxAgeMs: number) {
 
 function mapDeliveryLabel(delivery: DeliveryType) {
   return delivery === 1 ? 'office' : 'home';
-}
-
-function isMongoObjectId(value: string) {
-  return /^[a-f\d]{24}$/i.test(value.trim());
-}
-
-export async function canonicalizeOrderCartProducts(db: Database, cartProducts: string[]) {
-  const normalized = cartProducts
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .map((value) =>
-      /^\d+$/.test(value) && !isMongoObjectId(value) ? String(Number.parseInt(value, 10)) : value,
-    );
-  const mongoIds = [...new Set(normalized.filter(isMongoObjectId))];
-
-  if (mongoIds.length === 0) {
-    return normalized;
-  }
-
-  const productRows = await db
-    .select({ id: products.id, mongoId: products.mongoId })
-    .from(products)
-    .where(inArray(products.mongoId, mongoIds));
-  const lookup = new Map<string, string>();
-
-  for (const product of productRows) {
-    if (product.mongoId) {
-      lookup.set(product.mongoId, String(product.id));
-    }
-  }
-
-  return normalized.map((value) => lookup.get(value) ?? value);
 }
 
 export function getActionFlags(currentStatus: string, deletedAt: Date | null) {
@@ -330,12 +297,22 @@ export async function buildEcotrackOrderDetailFromRow(
     db
       .select()
       .from(ecotrackOrderMajEntries)
-      .where(eq(ecotrackOrderMajEntries.orderId, row.order.id))
+      .where(
+        and(
+          eq(ecotrackOrderMajEntries.orderId, row.order.id),
+          eq(ecotrackOrderMajEntries.trackingNumber, row.trackingNumber),
+        ),
+      )
       .orderBy(desc(ecotrackOrderMajEntries.remoteCreatedAt), desc(ecotrackOrderMajEntries.id)),
     db
       .select()
       .from(ecotrackOrderTrackingEvents)
-      .where(eq(ecotrackOrderTrackingEvents.orderId, row.order.id))
+      .where(
+        and(
+          eq(ecotrackOrderTrackingEvents.orderId, row.order.id),
+          eq(ecotrackOrderTrackingEvents.trackingNumber, row.trackingNumber),
+        ),
+      )
       .orderBy(
         desc(ecotrackOrderTrackingEvents.eventDate),
         desc(ecotrackOrderTrackingEvents.eventTime),

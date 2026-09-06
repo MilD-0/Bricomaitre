@@ -27,7 +27,6 @@ import { ScrollableRegion } from '../ui/scrollable-region';
 import { Skeleton } from '../ui/skeleton';
 import { Switch } from '../ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { WorkspacePagination } from '../ui/workspace-pagination';
 import {
   WorkspaceActions,
   WorkspaceFrame,
@@ -35,12 +34,14 @@ import {
   WorkspaceHeading,
   WorkspaceToolbar,
 } from '../ui/workspace';
+import { WorkspacePagination } from '../ui/workspace-pagination';
+import { EcotrackRecovery } from './ecotrack-recovery';
+import { EcotrackStatusBadge } from './ecotrack-status-badge';
 import {
   formatEcotrackDateTime,
   formatEcotrackMoney,
   getTrackingHistoryStatusKey,
 } from './orders-ecotrack-presentation';
-import { EcotrackStatusBadge } from './ecotrack-status-badge';
 
 type RowActionModel = {
   primary: {
@@ -665,6 +666,7 @@ export function OrdersEcotrackWorkspace(props: OrdersEcotrackWorkspaceProps) {
   return (
     <WorkspaceFrame>
       <EcotrackWorkspaceChrome {...props} />
+      {props.writable ? <EcotrackRecovery /> : null}
       {props.isInitialLoading ? (
         <div className="grid gap-3 py-6">
           <Skeleton className="h-16 w-full" />

@@ -1,16 +1,16 @@
 import { createHash } from 'node:crypto';
 
 import type {
-  EcotrackMajEntry as UpstreamEcotrackMajEntry,
   EcotrackOrderInfo,
   EcotrackOrderSummary,
   EcotrackStatusItem,
   EcotrackTrackingInfo,
+  EcotrackMajEntry as UpstreamEcotrackMajEntry,
 } from '@bric/storefront-core/ecotrack-client';
 import { readEcotrackActivityTimestamp } from '@bric/storefront-core/ecotrack-tracking';
 
 import { ecotrackOrderActivities, ecotrackOrderStatusObservations } from '@bric/db/schema';
-import { getEcotrackProviderEnv } from './ecotrack';
+import { getEcotrackProviderEnv } from './ecotrack-provider';
 import { parseEcotrackProviderTimestamp, sanitizeNullableText } from './ecotrack-shipment-status';
 import type { EcotrackShipmentRow, EcotrackTransaction } from './ecotrack-shipment-types';
 
@@ -44,6 +44,7 @@ export async function persistStatusEvidence(
     parseEcotrackProviderTimestamp(input.orderInfo?.last_updated_at) ?? latestActivityAt;
   const statusSourceKey = sourceKey([
     'status',
+    row.trackingNumber,
     input.statusItem.status,
     effectiveAt?.toISOString() ?? 'baseline',
   ]);
@@ -83,6 +84,7 @@ export async function persistStatusEvidence(
       firstObservedAt: input.observedAt,
       lastObservedAt: input.observedAt,
       sourceKey: sourceKey([
+        row.trackingNumber,
         activityAt?.toISOString() ?? null,
         activity.reason ?? null,
         activity.details ?? null,

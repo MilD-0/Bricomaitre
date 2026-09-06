@@ -2,6 +2,7 @@ import { asc, eq, type InferInsertModel } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
 import { orderStatusHistory, orders } from '@bric/db/schema';
+import { ensureMarketingOrderStatusEvents } from '@bric/storefront-core/marketing';
 import {
   ensureOrderCompletedEventForOrder,
   ensureOrderConfirmedEventForOrder,
@@ -9,7 +10,6 @@ import {
   isMetaOrderConfirmedStatus,
   normalizeAlgeriaPhone,
 } from '@bric/storefront-core/meta';
-import { ensureMarketingOrderStatusEvents } from '@bric/storefront-core/marketing';
 import {
   readOrderProductSubtotal,
   resolveOrderCommercialState,
@@ -18,6 +18,10 @@ import { updateCanonicalOrder } from '@bric/storefront-core/order-write';
 
 import { mutateEntityWithHistoryTransaction, type ActionActor } from './action-history';
 import { readEcotrackCatalog, resolveEcotrackDeliveryFee } from './ecotrack';
+import {
+  EcotrackMutationConflictError,
+  assertNoUnresolvedEcotrackMutation,
+} from './ecotrack-mutations';
 import { getOrderProductLookup, toOrderRecord } from './order-records';
 import {
   DEGRADED_CAPTURE_VARIANT,
@@ -161,6 +165,31 @@ export async function updateAdminOrder(
   const updated = await db.transaction(async (tx) => {
     const [existing] = await tx.select().from(orders).where(eq(orders.id, orderId)).for('update');
     if (!existing) throw new AdminOrderNotFoundError(orderId);
+    await assertNoUnresolvedEcotrackMutation(tx, orderId);
+    const carrierFields = [
+      'firstName',
+      'lastName',
+      'phoneNumber1',
+      'delivery',
+      'state',
+      'city',
+      'homeAddress',
+      'cartProducts',
+      'note',
+    ] as const;
+    if (
+      existing.ecotrackTrackingNumber &&
+      carrierFields.some(
+        (field) =>
+          changes[field] !== undefined &&
+          JSON.stringify(changes[field]) !== JSON.stringify(existing[field]),
+      )
+    ) {
+      throw new EcotrackMutationConflictError(
+        orderId,
+        'This order has a carrier shipment. Change delivery, customer or product details in the carrier workspace so the carrier receives the changes.',
+      );
+    }
 
     const currentStatus = coerceOrderStatus(existing.inHouseStatus);
     if (
@@ -243,7 +272,10 @@ export async function updateAdminOrder(
         ) {
           update.deliveryFee = nextDeliveryFee.toFixed(2);
           update.productSubtotal = persistedSubtotal.toFixed(2);
-          update.totalAmount = (persistedSubtotal + nextDeliveryFee).toFixed(2);
+          update.totalAmount = (
+            (existing.price == null || commercial ? persistedSubtotal : Number(existing.price)) +
+            nextDeliveryFee
+          ).toFixed(2);
         }
 
         update.variant = shouldUseDegradedCaptureVariant({

@@ -1,13 +1,13 @@
 import { getDb } from '@bric/db/client';
 import { z } from 'zod';
 
+import type { ActionActor } from './action-history';
 import {
   AdminInventoryNotFoundError,
   applyAdminInventoryBatch,
   inspectAdminInventoryScan,
   updateAdminInventoryProduct,
 } from './admin-inventory-workflow';
-import type { ActionActor } from './action-history';
 
 export const adminAiInventoryAdjustmentSchema = z.object({
   mode: z
@@ -119,7 +119,8 @@ export async function receiveAdminInventory(
       items: values.items.map((item) => ({
         ...item,
         source: {
-          type: 'order-scan' as const,
+          type:
+            values.source === 'barcode_scan' ? ('barcode-scan' as const) : ('order-scan' as const),
           ...(values.orderId == null ? {} : { orderIds: [values.orderId] }),
         },
       })),

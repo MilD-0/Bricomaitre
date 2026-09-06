@@ -1,4 +1,4 @@
-import { eq, max, sql } from 'drizzle-orm';
+import { and, eq, max, sql } from 'drizzle-orm';
 
 import { ecotrackOrderMajEntries, ecotrackOrderTrackingEvents } from '@bric/db/schema';
 import { recordExplicitActionLog, type ActionActor } from './action-history';
@@ -30,7 +30,12 @@ export async function loadMajSyncSummary(
       latestRemoteCreatedAt: max(ecotrackOrderMajEntries.remoteCreatedAt),
     })
     .from(ecotrackOrderMajEntries)
-    .where(eq(ecotrackOrderMajEntries.orderId, orderId));
+    .where(
+      and(
+        eq(ecotrackOrderMajEntries.orderId, orderId),
+        eq(ecotrackOrderMajEntries.trackingNumber, trackingNumber),
+      ),
+    );
 
   return {
     orderId,
@@ -51,7 +56,12 @@ export async function loadTrackingSyncSummary(
       latestEventDate: max(ecotrackOrderTrackingEvents.eventDate),
     })
     .from(ecotrackOrderTrackingEvents)
-    .where(eq(ecotrackOrderTrackingEvents.orderId, orderId));
+    .where(
+      and(
+        eq(ecotrackOrderTrackingEvents.orderId, orderId),
+        eq(ecotrackOrderTrackingEvents.trackingNumber, trackingNumber),
+      ),
+    );
 
   return {
     orderId,

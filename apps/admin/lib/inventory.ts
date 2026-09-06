@@ -53,7 +53,7 @@ const inventoryApplyItemSchema = z.object({
   quantity: z.coerce.number().int().positive(),
   source: z
     .object({
-      type: z.enum(['shopping-list', 'order-scan']),
+      type: z.enum(['shopping-list', 'order-scan', 'barcode-scan']),
       orderIds: z.array(z.number().int().positive()).optional(),
     })
     .optional(),
@@ -88,6 +88,7 @@ const inventoryApplySkippedItemSchema = z.object({
 
 export const inventoryApplyResponseSchema = z.object({
   ok: z.literal(true),
+  complete: z.boolean(),
   items: z.array(inventoryApplyResultItemSchema),
   skipped: z.array(inventoryApplySkippedItemSchema),
 });

@@ -2314,6 +2314,33 @@
       "livred": "Commande livrée",
       "encaissed": "Commande encaissée",
       "payed": "Paiement effectué"
+    },
+    "recovery": {
+      "title": "Opérations transporteur à résoudre",
+      "description": "Ces commandes restent verrouillées tant que le résultat transporteur est inconnu. Vérifiez son dossier avant toute nouvelle demande.",
+      "operation": "Commande n° {id} · {kind} · {provider}",
+      "review": "Examiner",
+      "close": "Fermer",
+      "amount": "Montant à encaisser : {amount} DZD",
+      "saved": "Le transporteur a accepté cette opération. Appliquez la réponse enregistrée pour terminer la mise à jour.",
+      "applySaved": "Terminer la mise à jour",
+      "verify": "Vérifiez cette demande dans le tableau de bord du transporteur. Notez votre vérification, puis confirmez si elle a été appliquée. Ne répétez pas une demande dont le résultat est inconnu.",
+      "waiting": "La demande transporteur est encore en cours. La résolution sera disponible après son délai de réponse.",
+      "evidence": "Qu’avez-vous vérifié auprès du transporteur ?",
+      "tracking": "Numéro de suivi créé par cette demande",
+      "confirmApplied": "Le transporteur a appliqué la demande",
+      "confirmNotApplied": "Le transporteur n’a pas appliqué la demande",
+      "loadError": "Impossible de charger les opérations à résoudre.",
+      "retry": "Réessayer",
+      "kinds": {
+        "post": "Créer un envoi",
+        "update": "Modifier l’envoi",
+        "recreate": "Recréer l’envoi",
+        "delete": "Supprimer l’envoi",
+        "dispatch": "Expédier",
+        "maj": "Ajouter une remarque",
+        "return": "Demander un retour"
+      }
     }
   },
   "inventory": {
@@ -2359,7 +2386,8 @@
       "orderApplyError": "Impossible d’ajouter {count} produits de commande au stock.",
       "notFound": "Aucun code-barres ou ID de commande correspondant n’a été trouvé.",
       "error": "Échec du scan d’inventaire.",
-      "noSelection": "Sélectionnez au moins un produit de la commande scannée."
+      "noSelection": "Sélectionnez au moins un produit de la commande scannée.",
+      "orderApplyPartial": "{count} produits réceptionnés. {failed} n’ont pas pu être réceptionnés et restent sélectionnés pour vérification."
     },
     "notifications": {
       "barcode": {
