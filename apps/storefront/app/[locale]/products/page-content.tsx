@@ -5,11 +5,7 @@ import { getTranslations } from 'next-intl/server';
 import type { StorefrontProductsResponse } from '@bric/storefront-core/contracts';
 
 import { CatalogTelemetry } from '@/components/catalog-telemetry';
-import {
-  CatalogCard,
-  getCatalogProductTitle,
-  getCatalogProductToken,
-} from '@/components/catalog-card';
+import { CatalogCard } from '@/components/catalog-card';
 import { CatalogInfiniteLoader } from '@/components/catalog-infinite-loader';
 import { CatalogFilters } from '@/components/catalog-filters';
 import { CatalogLiveSearch } from '@/components/catalog-live-search';
@@ -26,7 +22,6 @@ import {
   type CatalogSearchParams,
 } from '@/lib/catalog-query';
 import { buildCatalogStructuredData } from '@/lib/catalog-seo';
-import { formatProductPrice } from '@/lib/product-presentation';
 import { captureCatalogPageException } from '@/lib/sentry';
 import { getStorefrontCatalog, getStorefrontCatalogMeta } from '@/lib/storefront-api';
 
@@ -297,53 +292,5 @@ export async function CatalogPageContent({
         </section>
       </div>
     </PageShell>
-  );
-}
-
-export async function CatalogNoScriptCatalog() {
-  let products: StorefrontProductsResponse['items'] = [];
-  let hasNextPage = false;
-  try {
-    const response = await getStorefrontCatalog(toStorefrontCatalogQuery(parseCatalogPageQuery()));
-    hasNextPage = response.total > CATALOG_PAGE_SIZE;
-    products = response.items.slice(0, CATALOG_PAGE_SIZE);
-  } catch {
-    return null;
-  }
-
-  return (
-    <noscript>
-      <main className="catalog-noscript">
-        {(['fr', 'ar'] as const).map((locale) => (
-          <section
-            key={locale}
-            className={`catalog-noscript-${locale}`}
-            lang={locale}
-            dir={locale === 'ar' ? 'rtl' : 'ltr'}
-          >
-            <h1>{locale === 'ar' ? 'منتجات بريكوماتر' : 'Produits Bricomaitre'}</h1>
-            <ul>
-              {products.map((product) => (
-                <li key={product.id}>
-                  <a
-                    href={`/${locale}/products/${encodeURIComponent(getCatalogProductToken(product))}`}
-                  >
-                    <h2>{getCatalogProductTitle(product, locale)}</h2>
-                    {product.price ? (
-                      <span>{formatProductPrice(product.price, locale)}</span>
-                    ) : null}
-                  </a>
-                </li>
-              ))}
-            </ul>
-            {hasNextPage ? (
-              <a className="button button-secondary" href={`/${locale}/products?page=2`} rel="next">
-                {locale === 'ar' ? 'المنتجات التالية' : 'Produits suivants'}
-              </a>
-            ) : null}
-          </section>
-        ))}
-      </main>
-    </noscript>
   );
 }

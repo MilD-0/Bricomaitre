@@ -1,15 +1,8 @@
 import type { Metadata } from 'next';
-import { Suspense } from 'react';
 
 import '../../styles/catalog.css';
 
-import {
-  CatalogNoScriptCatalog,
-  CatalogPageContent,
-  resolveCatalogLocale,
-  type CatalogPageProps,
-} from './page-content';
-import { CatalogPageSkeleton } from '@/components/storefront-skeletons';
+import { CatalogPageContent, resolveCatalogLocale, type CatalogPageProps } from './page-content';
 import { isFilteredCatalog, parseCatalogPageQuery } from '@/lib/catalog-query';
 import { buildCatalogMetadata } from '@/lib/catalog-seo';
 
@@ -21,13 +14,6 @@ export async function generateMetadata({
   return buildCatalogMetadata(locale, isFilteredCatalog(parseCatalogPageQuery(values)));
 }
 
-export default function CatalogPage(props: CatalogPageProps) {
-  return (
-    <>
-      <CatalogNoScriptCatalog />
-      <Suspense fallback={<CatalogPageSkeleton />}>
-        <CatalogPageContent {...props} />
-      </Suspense>
-    </>
-  );
+export default async function CatalogPage(props: CatalogPageProps) {
+  return CatalogPageContent(props);
 }

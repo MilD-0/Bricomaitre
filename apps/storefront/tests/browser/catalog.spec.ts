@@ -378,7 +378,7 @@ test('renders and filters the server-first French catalog with governed analytic
 test('preserves Arabic RTL, small-phone cards, and no-JavaScript discovery', async ({
   page,
   browser,
-}) => {
+}, testInfo) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await page.goto('/ar/products');
 
@@ -404,17 +404,36 @@ test('preserves Arabic RTL, small-phone cards, and no-JavaScript discovery', asy
   }));
   expect(widths.body).toBeLessThanOrEqual(widths.viewport);
 
-  const context = await browser.newContext({
-    javaScriptEnabled: false,
-    viewport: { width: 360, height: 740 },
-  });
-  const noScriptPage = await context.newPage();
-  await noScriptPage.goto('/fr/products');
-  await expect(
-    noScriptPage.getByRole('heading', { level: 2, name: 'Lampe de travail' }),
-  ).toBeVisible();
-  await expect(noScriptPage.getByRole('link', { name: 'Produits suivants' })).toBeVisible();
-  await context.close();
+  for (const locale of ['fr', 'ar']) {
+    const context = await browser.newContext({
+      javaScriptEnabled: false,
+      viewport: { width: 360, height: 740 },
+    });
+    const noScriptPage = await context.newPage();
+    await noScriptPage.goto(`/${locale}/products`);
+    await expect(noScriptPage.locator('.catalog-card')).toHaveCount(24);
+    await noScriptPage.screenshot({
+      path: testInfo.outputPath(`catalog-noscript-${locale}.png`),
+      fullPage: true,
+    });
+    const firstHref = await noScriptPage.locator('.catalog-card a').first().getAttribute('href');
+    await noScriptPage.locator('a[rel="next"]').click();
+    await expect(noScriptPage).toHaveURL(new RegExp(`/${locale}/products\\?page=2$`));
+    await expect(noScriptPage.locator('.catalog-card')).toHaveCount(15);
+    expect(await noScriptPage.locator('.catalog-card a').first().getAttribute('href')).not.toBe(
+      firstHref,
+    );
+    await expect(noScriptPage.locator('a[rel="prev"]')).toHaveAttribute(
+      'href',
+      `/${locale}/products`,
+    );
+    await noScriptPage.goto(`/${locale}/products?q=lampe`);
+    await expect(noScriptPage.locator('.catalog-card')).toHaveCount(1);
+    await expect(noScriptPage.locator('.catalog-card h2')).toHaveText(
+      locale === 'fr' ? 'Lampe de travail' : 'مصباح العمل',
+    );
+    await context.close();
+  }
 });
 
 test('searches live and forgives French typos and Arabic letter variants', async ({ page }) => {
