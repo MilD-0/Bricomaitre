@@ -211,12 +211,12 @@ for (const [locale, messages] of [
     });
     await page.goto(`/${locale}/products`);
     const cancel = page.getByRole('button', {
-      name: messages.productsManager.exportAll.cancel,
+      name: messages.products.exportAll.cancel,
       exact: true,
     });
     await expect(cancel).toBeEnabled();
     await expect(
-      page.getByText(messages.productsManager.exportAll.progress.queued, { exact: true }),
+      page.getByText(messages.products.exportAll.progress.queued, { exact: true }),
     ).toBeVisible();
     await capture(page, testInfo, locale, 'queued-export');
     await cancel.click();
