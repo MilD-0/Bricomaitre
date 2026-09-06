@@ -161,6 +161,8 @@ type EcotrackTerminalPresentation = {
   successes: EcotrackTerminalRow[];
   validationFailures: EcotrackTerminalRow[];
   providerRejections: EcotrackTerminalRow[];
+  recoveryRequired: EcotrackTerminalRow[];
+  notSent: EcotrackTerminalRow[];
   alreadyPosted: EcotrackTerminalRow[];
   repairableOrderIds: number[];
   retryableOrderIds: number[];
@@ -193,16 +195,25 @@ function ecotrackTerminalPresentation(
       ? value.filter((item): item is number => Number.isSafeInteger(item) && Number(item) > 0)
       : [];
 
+  const classified = record.outcomeClassificationVersion === 1;
+  const validationFailures = rows(record.validationFailures);
   return {
     provider: typeof record.provider === 'string' ? record.provider : null,
     attemptNumber: typeof record.attemptNumber === 'number' ? record.attemptNumber : 1,
     retryCount: typeof record.retryCount === 'number' ? record.retryCount : 0,
     successes: rows(record.successes),
-    validationFailures: rows(record.validationFailures),
-    providerRejections: rows(record.providerRejections),
+    validationFailures,
+    providerRejections: classified ? rows(record.providerRejections) : [],
+    recoveryRequired: [
+      ...rows(record.recoveryRequired),
+      ...(classified ? [] : rows(record.providerRejections)),
+    ],
+    notSent: rows(record.notSent),
     alreadyPosted: rows(record.alreadyPosted),
-    repairableOrderIds: orderIds(record.repairableOrderIds),
-    retryableOrderIds: orderIds(record.retryableOrderIds),
+    repairableOrderIds: classified
+      ? orderIds(record.repairableOrderIds)
+      : validationFailures.flatMap((row) => (row.orderId === null ? [] : [row.orderId])),
+    retryableOrderIds: classified ? orderIds(record.retryableOrderIds) : [],
   };
 }
 
@@ -298,6 +309,12 @@ export function StructuredToolResultCard({
                 'text-amber-700 dark:text-amber-300',
               ],
               ['providerRejections', ecotrackTerminal.providerRejections, 'text-destructive'],
+              [
+                'recoveryRequired',
+                ecotrackTerminal.recoveryRequired,
+                'text-amber-700 dark:text-amber-300',
+              ],
+              ['notSent', ecotrackTerminal.notSent, 'text-muted-foreground'],
               ['alreadyPosted', ecotrackTerminal.alreadyPosted, 'text-muted-foreground'],
             ] as const
           ).map(([key, rows, tone]) =>
@@ -319,6 +336,16 @@ export function StructuredToolResultCard({
               </section>
             ) : null,
           )}
+          {ecotrackTerminal.recoveryRequired.length > 0 ? (
+            <Link
+              href={`/${locale}/orders/ecotrack`}
+              onClick={onNavigate}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary underline"
+            >
+              {t('aiChat.ecotrackTerminal.openRecovery')}
+              <ArrowUpRight className="size-3.5 rtl:-scale-x-100" />
+            </Link>
+          ) : null}
           {ecotrackTerminal.repairableOrderIds.length ||
           ecotrackTerminal.retryableOrderIds.length ? (
             <div className="flex flex-wrap gap-2 border-t border-border/50 pt-3">

@@ -136,6 +136,7 @@ describe('AI task terminal follow-ups', () => {
             orderId: 13,
             reference: '13',
             status: 'failed',
+            failureKind: 'provider_rejected',
             message: 'telephone is invalid',
           },
           {
@@ -183,7 +184,12 @@ describe('AI task terminal follow-ups', () => {
           results: [
             { orderId: 11, status: 'created', tracking: 'EM-11', message: 'Created.' },
             { orderId: 12, status: 'invalid', message: 'Missing commune.' },
-            { orderId: 13, status: 'failed', message: 'Phone rejected.' },
+            {
+              orderId: 13,
+              status: 'failed',
+              failureKind: 'provider_rejected',
+              message: 'Phone rejected.',
+            },
             { orderId: 14, status: 'skipped', message: 'already_posted' },
           ],
         },
@@ -207,4 +213,44 @@ describe('AI task terminal follow-ups', () => {
       retryableOrderIds: [13],
     });
   });
+});
+
+it('keeps uncertain, locally unapplied and legacy failed outcomes out of retry drafts', () => {
+  const summary = {
+    failed: 4,
+    results: [
+      {
+        orderId: 1,
+        status: 'failed',
+        failureKind: 'recovery_required',
+        tracking: 'ACCEPTED-1',
+        message: 'Local apply failed.',
+      },
+      {
+        orderId: 2,
+        status: 'failed',
+        failureKind: 'recovery_required',
+        message: 'Response unknown.',
+      },
+      { orderId: 3, status: 'failed', message: 'Legacy failure without outcome evidence.' },
+      {
+        orderId: 4,
+        status: 'failed',
+        failureKind: 'not_sent',
+        message: 'Order changed before claim.',
+      },
+    ],
+  };
+  const input = { jobId: 'posting', status: 'completed' as const, summary };
+  expect(buildEcotrackTerminalOutput(input)).toMatchObject({
+    outcomeClassificationVersion: 1,
+    counts: { providerRejected: 0, recoveryRequired: 3, notSent: 1 },
+    recoveryRequired: [{ orderId: 1, tracking: 'ACCEPTED-1' }, { orderId: 2 }, { orderId: 3 }],
+    notSent: [{ orderId: 4 }],
+    repairableOrderIds: [4],
+    retryableOrderIds: [],
+  });
+  const message = formatAiTaskTerminalMessage({ ...input, kind: 'order-ecotrack:selected' });
+  expect(message).toContain('Carrier recovery required (do not repost):');
+  expect(message).not.toContain('Provider rejections:');
 });

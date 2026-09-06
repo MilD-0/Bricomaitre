@@ -857,6 +857,7 @@ describe('AdminAiChat', () => {
                   toolName: 'ecotrack_posting_terminal',
                   output: {
                     kind: 'ecotrack_posting_terminal',
+                    outcomeClassificationVersion: 1,
                     provider: 'emir',
                     attemptNumber: 2,
                     retryCount: 1,

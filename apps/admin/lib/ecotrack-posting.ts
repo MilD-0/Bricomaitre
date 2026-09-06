@@ -95,6 +95,7 @@ type EcotrackPostingResultItem = {
   reference: string;
   tracking: string | null;
   status: 'skipped' | 'invalid' | 'created' | 'failed';
+  failureKind?: 'provider_rejected' | 'recovery_required' | 'not_sent';
   message: string;
 };
 
@@ -555,6 +556,7 @@ export async function postOrdersToEcotrack(
           reference: item.payload.reference,
           tracking: null,
           status: 'failed',
+          failureKind: 'not_sent',
           message: error instanceof Error ? error.message : 'Unable to claim order.',
         });
       }
@@ -572,19 +574,36 @@ export async function postOrdersToEcotrack(
         },
       );
     } catch (error) {
-      await Promise.allSettled(
+      const savedOutcomes = await Promise.allSettled(
         claimed.map(({ operation }) =>
           error instanceof EcotrackMutationRejectedError || error instanceof EcotrackRateLimitError
             ? recordEcotrackMutationResult(db, operation, { message: error.message }, false)
             : markEcotrackMutationUncertain(db, operation, error),
         ),
       );
+      for (const [index, { item }] of claimed.entries()) {
+        const rejectionRecorded =
+          (error instanceof EcotrackMutationRejectedError ||
+            error instanceof EcotrackRateLimitError) &&
+          savedOutcomes[index]?.status === 'fulfilled';
+        summary.failed += 1;
+        summary.results.push({
+          orderId: item.orderId,
+          reference: item.payload.reference,
+          tracking: null,
+          status: 'failed',
+          failureKind: rejectionRecorded ? 'provider_rejected' : 'recovery_required',
+          message: error instanceof Error ? error.message : 'Carrier outcome needs reconciliation.',
+        });
+      }
+      await publish();
       throw error;
     }
     withLatestRateLimit(summary, createResponse.rateLimit);
     // Finish every response in this issued batch before honoring cancellation.
     for (const { item, operation } of claimed) {
       const result = createResponse.results.get(item.payload.reference);
+      let failureKind: EcotrackPostingResultItem['failureKind'] = 'recovery_required';
       try {
         if (
           !result?.raw ||
@@ -601,7 +620,10 @@ export async function postOrdersToEcotrack(
           );
         }
         const saved = await recordEcotrackMutationResult(db, operation, result, result.success);
-        if (!result.success) throw new Error(result.message ?? 'Carrier rejected the order.');
+        if (!result.success) {
+          failureKind = 'provider_rejected';
+          throw new Error(result.message ?? 'Carrier rejected the order.');
+        }
         await applySavedEcotrackMutation(db, saved);
         createdCount += 1;
         summary.created = createdCount;
@@ -619,6 +641,7 @@ export async function postOrdersToEcotrack(
           reference: item.payload.reference,
           tracking: result?.tracking ?? null,
           status: 'failed',
+          failureKind,
           message: error instanceof Error ? error.message : 'Local carrier recovery is required.',
         });
       }

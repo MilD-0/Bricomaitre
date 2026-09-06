@@ -3,6 +3,10 @@ import { resolve } from 'node:path';
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import en from '../../messages/en.json';
+import fr from '../../messages/fr.json';
+import ar from '../../messages/ar.json';
+import { getProposalReviewCopy } from '../../components/products/ai-proposal-workspace-copy';
 
 const defaultStorageState = resolve(process.cwd(), '../../ops/runtime/admin-playwright-state.json');
 const storageState = process.env.ADMIN_PLAYWRIGHT_STORAGE_STATE?.trim() || defaultStorageState;
@@ -59,6 +63,7 @@ const ecotrackTerminalMessage = {
       toolName: 'ecotrack_posting_terminal',
       output: {
         kind: 'ecotrack_posting_terminal',
+        outcomeClassificationVersion: 1,
         provider: 'emir',
         attemptNumber: 2,
         retryCount: 1,
@@ -101,9 +106,9 @@ const ecotrackTerminalMessage = {
   ],
 };
 
-async function openHydratedAssistant(page: Page) {
-  const launcher = page.getByRole('button', { name: 'AI assistant', exact: true });
-  const close = page.getByRole('button', { name: 'Close AI assistant' });
+async function openHydratedAssistant(page: Page, copy = en.aiChat) {
+  const launcher = page.getByRole('button', { name: copy.open, exact: true });
+  const close = page.getByRole('button', { name: copy.close });
   await launcher.waitFor({ state: 'visible', timeout: 30_000 });
 
   for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -332,3 +337,101 @@ test('keeps a terminal EcoTrack workflow actionable across close and reload', as
     'Retry EcoTrack posting for the exact order IDs 13 via emir. Preview those exact IDs first and only post the eligible rows.',
   );
 });
+
+for (const [locale, messages] of [
+  ['fr', fr],
+  ['ar', ar],
+] as const) {
+  test(`${locale} proposal filters survive collapse and native form submission`, async ({
+    page,
+  }, testInfo) => {
+    await page.goto(`/${locale}/ai-proposals?expiry=active&evidence=present&pageSize=10`);
+    const copy = getProposalReviewCopy(locale);
+    const expiry = page.locator('select[name="expiry"]');
+    await expect(expiry).toHaveValue('active');
+    await expiry.selectOption('expired');
+    await page.getByRole('button', { name: copy.filters, exact: true }).click();
+    await expect(expiry).toBeHidden();
+    await page.locator('input[name="q"]').fill('browser-proposal');
+    await page
+      .getByRole('button', { name: messages.aiProposalInbox.applyFilters, exact: true })
+      .click();
+    await expect(page).toHaveURL(/q=browser-proposal/);
+    const query = new URL(page.url()).searchParams;
+    expect(query.get('expiry')).toBe('expired');
+    expect(query.get('evidence')).toBe('present');
+    expect(query.get('pageSize')).toBe('10');
+    await expect(expiry).toHaveValue('expired');
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      ),
+    ).toBeLessThanOrEqual(1);
+    await page.screenshot({
+      path: testInfo.outputPath(`proposal-filters-${locale}.png`),
+      fullPage: true,
+    });
+  });
+
+  test(`${locale} carrier uncertainty opens recovery without a retry suggestion`, async ({
+    page,
+  }, testInfo) => {
+    const copy = messages.aiChat;
+    await page.route('**/api/ai/conversations**', (route) =>
+      route.fulfill({ json: { conversations: [] } }),
+    );
+    await page.route('**/api/ai/history', (route) => route.fulfill({ json: { jobs: [] } }));
+    await page.route('**/api/ai/chat', (route) =>
+      route.fulfill({
+        contentType: 'application/x-ndjson',
+        body: chatStream({
+          message:
+            locale === 'fr'
+              ? 'La réponse du transporteur doit être vérifiée.'
+              : 'يجب التحقق من نتيجة عملية الناقل.',
+          conversation: {
+            id: 812,
+            sessionKey: '26c2b4c2-625b-44e4-a1c2-a255d07cbf80',
+            title: 'Carrier recovery',
+          },
+          toolResults: [
+            {
+              type: 'tool-result',
+              toolName: 'ecotrack_posting_terminal',
+              output: {
+                kind: 'ecotrack_posting_terminal',
+                outcomeClassificationVersion: 1,
+                provider: 'emir',
+                recoveryRequired: [
+                  { orderId: 21, tracking: 'ACCEPTED-21', message: 'Local apply failed.' },
+                ],
+                providerRejections: [],
+                retryableOrderIds: [],
+                repairableOrderIds: [],
+              },
+            },
+          ],
+        }),
+      }),
+    );
+    await page.goto(`/${locale}/orders`);
+    await openHydratedAssistant(page, copy);
+    await page.getByRole('textbox', { name: copy.placeholder }).fill('Inspect carrier result 21');
+    await page.getByRole('button', { name: copy.send, exact: true }).click();
+    await expect(
+      page.getByRole('link', { name: copy.ecotrackTerminal.openRecovery }),
+    ).toHaveAttribute('href', `/${locale}/orders/ecotrack`);
+    await expect(
+      page.getByRole('button', { name: copy.ecotrackTerminal.retry, exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByText(/ACCEPTED-21/)).toBeVisible();
+    const dialog = page.getByRole('dialog');
+    expect(
+      await dialog.evaluate((element) => element.scrollWidth - element.clientWidth),
+    ).toBeLessThanOrEqual(1);
+    await page.screenshot({
+      path: testInfo.outputPath(`carrier-uncertainty-${locale}.png`),
+      fullPage: true,
+    });
+  });
+}

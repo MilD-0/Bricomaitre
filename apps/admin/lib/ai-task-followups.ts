@@ -34,6 +34,7 @@ type EcotrackTerminalRow = {
 
 type EcotrackTerminalOutput = {
   kind: 'ecotrack_posting_terminal';
+  outcomeClassificationVersion: 1;
   jobId: string;
   status: AiTaskTerminalStatus;
   provider: string | null;
@@ -45,11 +46,15 @@ type EcotrackTerminalOutput = {
     succeeded: number;
     validationFailed: number;
     providerRejected: number;
+    recoveryRequired: number;
+    notSent: number;
     alreadyPosted: number;
   };
   successes: EcotrackTerminalRow[];
   validationFailures: EcotrackTerminalRow[];
   providerRejections: EcotrackTerminalRow[];
+  recoveryRequired: EcotrackTerminalRow[];
+  notSent: EcotrackTerminalRow[];
   alreadyPosted: EcotrackTerminalRow[];
   repairableOrderIds: number[];
   retryableOrderIds: number[];
@@ -59,7 +64,7 @@ function numberValue(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
-function ecotrackTerminalRow(value: unknown): (EcotrackTerminalRow & { status: string }) | null {
+function ecotrackTerminalRow(value: unknown) {
   if (!value || typeof value !== 'object') return null;
   const row = value as Record<string, unknown>;
   if (!['created', 'invalid', 'failed', 'skipped'].includes(String(row.status))) return null;
@@ -68,6 +73,11 @@ function ecotrackTerminalRow(value: unknown): (EcotrackTerminalRow & { status: s
     reference: typeof row.reference === 'string' ? row.reference : null,
     tracking: typeof row.tracking === 'string' ? row.tracking : null,
     status: String(row.status),
+    failureKind:
+      row.failureKind === 'provider_rejected' || row.failureKind === 'not_sent'
+        ? row.failureKind
+        : 'recovery_required',
+
     message:
       typeof row.message === 'string' && row.message.trim()
         ? row.message.trim()
@@ -87,9 +97,9 @@ export function buildEcotrackTerminalOutput(input: {
         return row ? [row] : [];
       })
     : [];
-  const rowsWithStatus = (status: string) =>
+  const rowsWithStatus = (status: string, failureKind?: string) =>
     rows
-      .filter((row) => row.status === status)
+      .filter((row) => row.status === status && (!failureKind || row.failureKind === failureKind))
       .map((row) => ({
         orderId: row.orderId,
         reference: row.reference,
@@ -98,7 +108,9 @@ export function buildEcotrackTerminalOutput(input: {
       }));
   const successes = rowsWithStatus('created');
   const validationFailures = rowsWithStatus('invalid');
-  const providerRejections = rowsWithStatus('failed');
+  const providerRejections = rowsWithStatus('failed', 'provider_rejected');
+  const recoveryRequired = rowsWithStatus('failed', 'recovery_required');
+  const notSent = rowsWithStatus('failed', 'not_sent');
   const alreadyPosted = rowsWithStatus('skipped');
   const orderIds = (selected: EcotrackTerminalRow[]) =>
     selected.flatMap((row) => (row.orderId === null ? [] : [row.orderId]));
@@ -107,6 +119,7 @@ export function buildEcotrackTerminalOutput(input: {
 
   return {
     kind: 'ecotrack_posting_terminal',
+    outcomeClassificationVersion: 1,
     jobId: input.jobId,
     status: input.status,
     provider:
@@ -120,14 +133,20 @@ export function buildEcotrackTerminalOutput(input: {
       eligible: numberValue(input.summary.eligible),
       succeeded: numberValue(input.summary.created),
       validationFailed: numberValue(input.summary.invalid),
-      providerRejected: numberValue(input.summary.failed),
+      providerRejected: providerRejections.length,
+      recoveryRequired: recoveryRequired.length,
+      notSent: notSent.length,
       alreadyPosted: numberValue(input.summary.skippedAlreadyPosted),
     },
     successes,
     validationFailures,
     providerRejections,
+    recoveryRequired,
+    notSent,
     alreadyPosted,
-    repairableOrderIds: [...new Set(orderIds([...validationFailures, ...providerRejections]))],
+    repairableOrderIds: [
+      ...new Set(orderIds([...validationFailures, ...providerRejections, ...notSent])),
+    ],
     retryableOrderIds: [...new Set(orderIds(providerRejections))],
   };
 }
@@ -161,6 +180,12 @@ function ecotrackResultLines(output: EcotrackTerminalOutput) {
       (row) => row.message,
     ),
     ...section('Provider rejections:', output.providerRejections, (row) => row.message),
+    ...section(
+      'Carrier recovery required (do not repost):',
+      output.recoveryRequired,
+      (row) => row.message,
+    ),
+    ...section('Not sent to the provider:', output.notSent, (row) => row.message),
     ...section('Already posted:', output.alreadyPosted, (row) => row.message),
   ];
 }

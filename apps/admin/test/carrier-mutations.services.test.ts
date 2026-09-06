@@ -230,6 +230,99 @@ describe('carrier mutation ownership and recovery', () => {
     ).toBe(true);
   });
 
+  it('distinguishes rejected, uncertain, unapplied and unsent posting outcomes', async () => {
+    const db = getDb();
+    const rows = [
+      await createOrder(),
+      await createOrder(),
+      await createOrder(),
+      await createOrder(),
+    ];
+    await operation(rows[3]!);
+    const fetchImpl = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).includes('/validate/token')) return Response.json({ success: true });
+      await db
+        .update(orders)
+        .set({ updatedAt: new Date(rows[0]!.updatedAt.getTime() + 1000) })
+        .where(eq(orders.id, rows[0]!.id));
+      return Response.json({
+        results: {
+          0: { success: true, tracking: `ACCEPTED-${rows[0]!.id}` },
+          1: { message: 'Carrier did not establish an outcome.' },
+          2: { success: false, message: 'Telephone rejected.' },
+        },
+      });
+    });
+    const summary = await postOrdersToEcotrack(db, rows.map(input), catalog, actor, {
+      fetchImpl,
+      env,
+    });
+    expect(summary).toMatchObject({ created: 0, failed: 4 });
+    expect(summary.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          orderId: rows[0]!.id,
+          failureKind: 'recovery_required',
+          tracking: `ACCEPTED-${rows[0]!.id}`,
+        }),
+        expect.objectContaining({ orderId: rows[1]!.id, failureKind: 'recovery_required' }),
+        expect.objectContaining({ orderId: rows[2]!.id, failureKind: 'provider_rejected' }),
+        expect.objectContaining({ orderId: rows[3]!.id, failureKind: 'not_sent' }),
+      ]),
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const saved = await db
+      .select()
+      .from(ecotrackMutations)
+      .where(
+        inArray(
+          ecotrackMutations.orderId,
+          rows.map((row) => row.id),
+        ),
+      );
+    expect(Object.fromEntries(saved.map((row) => [row.orderId, row.state]))).toEqual({
+      [rows[0]!.id]: 'succeeded',
+      [rows[1]!.id]: 'uncertain',
+      [rows[2]!.id]: 'rejected',
+      [rows[3]!.id]: 'pending',
+    });
+  });
+
+  it('publishes each uncertain issued order when the whole carrier batch loses its response', async () => {
+    const db = getDb();
+    const rows = [await createOrder(), await createOrder()];
+    const updateSummary = vi.fn();
+    const fetchImpl = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).includes('/validate/token')) return Response.json({ success: true });
+      throw new Error('Connection lost after send');
+    });
+    await expect(
+      postOrdersToEcotrack(db, rows.map(input), catalog, actor, { fetchImpl, env, updateSummary }),
+    ).rejects.toThrow();
+    expect(updateSummary).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        failed: 2,
+        results: rows.map((row) =>
+          expect.objectContaining({ orderId: row.id, failureKind: 'recovery_required' }),
+        ),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(
+      (
+        await db
+          .select()
+          .from(ecotrackMutations)
+          .where(
+            inArray(
+              ecotrackMutations.orderId,
+              rows.map((row) => row.id),
+            ),
+          )
+      ).every((row) => row.state === 'uncertain'),
+    ).toBe(true);
+  });
+
   it('allows only one concurrent claim and blocks ordinary edits and deletion until recovery', async () => {
     const row = await createOrder();
     const claims = await Promise.allSettled([operation(row), operation(row)]);
