@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DELETE, PATCH, PUT } from '../route';
-import { assetBannerSchema } from '../../../../../../lib/assets';
 
 const {
   hasDbMock,
@@ -208,22 +207,19 @@ describe('app/api/assets/[kind]/[id]/route', () => {
     };
     getDbMock.mockReturnValue(db);
 
-    vi.spyOn(assetBannerSchema, 'safeParse').mockReturnValue({
-      success: true,
-      data: {
-        title: 'Updated banner',
-        titleAr: 'بنر محدث',
-        imageUrl: 'https://cdn.example.com/updated.jpg',
-        imageUrlPortrait: 'https://cdn.example.com/updated-portrait.jpg',
-        imageUrlLandscape: 'https://cdn.example.com/updated.jpg',
-        productId: 4,
-        active: false,
-      },
-    } as never);
+    const payload = {
+      title: 'Updated banner',
+      titleAr: 'بنر محدث',
+      imageUrl: 'https://cdn.example.com/updated.jpg',
+      imageUrlPortrait: 'https://cdn.example.com/updated-portrait.jpg',
+      imageUrlLandscape: 'https://cdn.example.com/updated.jpg',
+      productId: 4,
+      active: false,
+    };
 
     const req = new NextRequest('http://localhost/api/assets/banner/8', {
       method: 'PUT',
-      body: JSON.stringify({ data: {} }),
+      body: JSON.stringify({ data: payload }),
       headers: { 'content-type': 'application/json' },
     });
 

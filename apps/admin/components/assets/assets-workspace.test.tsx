@@ -221,35 +221,52 @@ describe('AssetsWorkspace', () => {
     await waitFor(() => expect(toggle).toBeChecked());
   });
 
-  it('creates through the same protected mutation boundary and refreshes the list', async () => {
+  it('keeps an accepted creation when refresh fails, then retries only the list read', async () => {
     const user = userEvent.setup();
-    let requestBody: unknown = null;
+    const posts: unknown[] = [];
+    let failRefresh = true;
     server.use(
       http.post('/api/assets', async ({ request }) => {
-        requestBody = await request.json();
+        posts.push(await request.json());
         return HttpResponse.json({ ok: true });
       }),
+      http.get('/api/assets', () =>
+        failRefresh
+          ? HttpResponse.json({ error: 'Read unavailable' }, { status: 503 })
+          : HttpResponse.json({
+              ...assets,
+              banners: [...assets.banners, { ...assets.banners[0], id: 99, title: 'New campaign' }],
+            }),
+      ),
     );
     renderWorkspace();
     await user.click(screen.getByRole('button', { name: 'Create' }));
     const panel = await screen.findByRole('dialog', { name: 'Create · Banners' });
-    await user.type(within(panel).getByRole('textbox', { name: 'Title' }), 'New campaign');
-    await user.type(within(panel).getByRole('textbox', { name: 'Arabic title' }), 'حملة جديدة');
-    await user.type(
-      within(panel).getByRole('textbox', { name: 'Landscape image' }),
-      'https://cdn.example.com/new.jpg',
-    );
-    await user.type(
-      within(panel).getByRole('textbox', { name: 'Portrait image' }),
-      'https://cdn.example.com/new-mobile.jpg',
-    );
+    for (const [name, value] of [
+      ['Title', 'New campaign'],
+      ['Arabic title', 'حملة جديدة'],
+      ['Landscape image', 'https://cdn.example.com/new.jpg'],
+      ['Portrait image', 'https://cdn.example.com/mobile.jpg'],
+    ]) {
+      await user.type(within(panel).getByRole('textbox', { name }), value!);
+    }
     await user.click(within(panel).getByRole('button', { name: 'Save' }));
-    await waitFor(() =>
-      expect(requestBody).toMatchObject({
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(posts).toEqual([
+      expect.objectContaining({
         kind: 'banner',
-        data: { title: 'New campaign', titleAr: 'حملة جديدة', active: true },
+        data: expect.objectContaining({ title: 'New campaign' }),
       }),
-    );
+    ]);
+    expect(screen.getByText('New campaign')).toBeVisible();
+    expect(screen.getByRole('alert')).toHaveTextContent('Saved. The list could not be refreshed.');
+    expect(screen.getByRole('switch', { name: 'Active · New campaign' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Create' })).toBeDisabled();
+    failRefresh = false;
+    await user.click(screen.getByRole('button', { name: 'Refresh list' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(screen.getByRole('switch', { name: 'Active · New campaign' })).toBeEnabled();
+    expect(posts).toHaveLength(1);
   });
 
   it('reorders and deletes from the compact overflow menu', async () => {

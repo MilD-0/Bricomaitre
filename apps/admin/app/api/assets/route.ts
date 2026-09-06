@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ZodError } from 'zod';
 
 import { getDb, hasDb } from '@bric/db/client';
 import { loadAssetsData } from '../../../lib/admin-assets-data';
-import {
-  assetMutationRequestSchema,
-  assetBannerSchema,
-  featuredProductGroupSchema,
-  productCardSchema,
-} from '../../../lib/assets';
+import { assetMutationRequestSchema } from '../../../lib/assets';
 import { createAdminAsset } from '../../../lib/asset-mutations';
 import { auth } from '../../../lib/auth';
 import { requireMutationAccess } from '../../../lib/rbac';
@@ -39,35 +35,21 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   const actor = { email: session?.user?.email, name: session?.user?.name };
 
-  if (body.data.kind === 'banner') {
-    const parsed = assetBannerSchema.safeParse(body.data.data);
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-    }
-
-    await createAdminAsset(db, 'banner', parsed.data, actor);
+  const kind =
+    body.data.kind === 'banner'
+      ? 'banner'
+      : body.data.kind === 'featuredGroup'
+        ? 'featured-group'
+        : body.data.kind === 'productCard'
+          ? 'product-card'
+          : null;
+  if (!kind) return NextResponse.json({ error: 'Unsupported asset kind' }, { status: 400 });
+  try {
+    await createAdminAsset(db, kind, body.data.data, actor);
     return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof ZodError)
+      return NextResponse.json({ error: error.flatten() }, { status: 400 });
+    throw error;
   }
-
-  if (body.data.kind === 'featuredGroup') {
-    const parsed = featuredProductGroupSchema.safeParse(body.data.data);
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-    }
-
-    await createAdminAsset(db, 'featured-group', parsed.data, actor);
-    return NextResponse.json({ ok: true });
-  }
-
-  if (body.data.kind === 'productCard') {
-    const parsed = productCardSchema.safeParse(body.data.data);
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-    }
-
-    await createAdminAsset(db, 'product-card', parsed.data, actor);
-    return NextResponse.json({ ok: true });
-  }
-
-  return NextResponse.json({ error: 'Unsupported asset kind' }, { status: 400 });
 }

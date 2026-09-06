@@ -41,7 +41,10 @@ import {
 
 export type AssetsWorkspaceView = 'banners' | 'groups' | 'cards';
 
-const copy: Record<'en' | 'fr' | 'ar', AssetsWorkspaceCopy> = {
+const copy: Record<
+  'en' | 'fr' | 'ar',
+  AssetsWorkspaceCopy & { refreshFailed: string; retry: string }
+> = {
   en: {
     title: 'Assets',
     banners: 'Banners',
@@ -91,6 +94,8 @@ const copy: Record<'en' | 'fr' | 'ar', AssetsWorkspaceCopy> = {
     remove: 'Remove',
     validation: 'Review the entered information.',
     mutationFailed: 'The change could not be saved.',
+    refreshFailed: 'Saved. The list could not be refreshed.',
+    retry: 'Refresh list',
   },
   fr: {
     title: 'Ressources',
@@ -142,6 +147,8 @@ const copy: Record<'en' | 'fr' | 'ar', AssetsWorkspaceCopy> = {
     remove: 'Retirer',
     validation: 'Vérifiez les informations saisies.',
     mutationFailed: 'La modification n’a pas pu être enregistrée.',
+    refreshFailed: 'Enregistré. La liste n’a pas pu être actualisée.',
+    retry: 'Actualiser la liste',
   },
   ar: {
     title: 'المحتوى المرئي',
@@ -192,6 +199,8 @@ const copy: Record<'en' | 'fr' | 'ar', AssetsWorkspaceCopy> = {
     remove: 'إزالة',
     validation: 'راجع المعلومات المدخلة.',
     mutationFailed: 'تعذّر حفظ التغيير.',
+    refreshFailed: 'تم الحفظ. تعذّر تحديث القائمة.',
+    retry: 'تحديث القائمة',
   },
 };
 
@@ -240,6 +249,7 @@ export function AssetsWorkspace({
   const [editor, setEditor] = React.useState<AssetsEditorState | null>(null);
   const [pending, setPending] = React.useState(false);
   const optimisticId = React.useRef(-1);
+  const [refreshError, setRefreshError] = React.useState('');
 
   const items =
     view === 'banners'
@@ -270,20 +280,27 @@ export function AssetsWorkspace({
   );
 
   const reload = async () => {
-    const next = await requestJson<AssetsResponse>('/api/assets');
-    setAssets(next);
-    const ids = [
-      ...new Set([
-        ...next.banners.flatMap((item) => item.productId ?? []),
-        ...next.productCards.map((item) => item.productId),
-        ...next.featuredGroups.flatMap((item) => item.productIds),
-      ]),
-    ];
-    if (ids.length) {
-      const response = await requestJson<{ items: AssetProductOption[] }>(
-        `/api/assets/product-options?ids=${ids.join(',')}`,
-      );
-      setProducts(response.items);
+    try {
+      const next = await requestJson<AssetsResponse>('/api/assets');
+      const ids = [
+        ...new Set([
+          ...next.banners.flatMap((item) => item.productId ?? []),
+          ...next.productCards.map((item) => item.productId),
+          ...next.featuredGroups.flatMap((item) => item.productIds),
+        ]),
+      ];
+      const nextProducts: AssetProductOption[] = [];
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        const response = await requestJson<{ items: AssetProductOption[] }>(
+          `/api/assets/product-options?ids=${ids.slice(offset, offset + 100).join(',')}`,
+        );
+        nextProducts.push(...response.items);
+      }
+      setAssets(next);
+      setProducts(nextProducts);
+      setRefreshError('');
+    } catch (error) {
+      setRefreshError(error instanceof Error ? error.message : t.refreshFailed);
     }
   };
 
@@ -292,14 +309,16 @@ export function AssetsWorkspace({
     setAssets(optimistic);
     setPending(true);
     try {
-      await operation();
-      await reload();
+      try {
+        await operation();
+      } catch (error) {
+        setAssets(snapshot);
+        toast.error(error instanceof Error ? error.message : t.mutationFailed);
+        return false;
+      }
       toast.success(t.save);
+      await reload();
       return true;
-    } catch (error) {
-      setAssets(snapshot);
-      toast.error(error instanceof Error ? error.message : t.mutationFailed);
-      return false;
     } finally {
       setPending(false);
     }
@@ -483,7 +502,7 @@ export function AssetsWorkspace({
       <WorkspaceHeader>
         <WorkspaceHeading title={t.title} meta={`${viewTitle} · ${items.length}`} />
         <WorkspaceActions>
-          <Button onClick={createEditor}>
+          <Button disabled={Boolean(refreshError)} onClick={createEditor}>
             <Plus className="size-4" aria-hidden="true" />
             {t.create}
           </Button>
@@ -501,6 +520,27 @@ export function AssetsWorkspace({
         ))}
       </WorkspaceNavigation>
 
+      {refreshError ? (
+        <div role="alert" className="border-b border-border/60 px-4 py-3 text-sm">
+          <p>{t.refreshFailed}</p>
+          <p className="mt-1 text-muted-foreground">{refreshError}</p>
+          <Button
+            className="mt-3"
+            variant="outline"
+            disabled={pending}
+            onClick={async () => {
+              setPending(true);
+              try {
+                await reload();
+              } finally {
+                setPending(false);
+              }
+            }}
+          >
+            {t.retry}
+          </Button>
+        </div>
+      ) : null}
       <div className="divide-y divide-border/60 border-b border-border/60">
         {items.map((item, index) => {
           const banner = view === 'banners' ? (item as AssetBannerRecord) : null;
@@ -540,24 +580,33 @@ export function AssetsWorkspace({
                 <Switch
                   aria-label={`${t.active} · ${primary}`}
                   checked={item.active}
-                  disabled={pending || item.id < 0}
+                  disabled={pending || Boolean(refreshError) || item.id < 0}
                   onCheckedChange={(active) => void setActive(item, active)}
                 />
                 <CompactMenu label={`${t.actions} · ${primary}`}>
-                  <CompactMenuItem onClick={() => edit(item)}>{t.edit}</CompactMenuItem>
                   <CompactMenuItem
-                    disabled={index === 0 || pending}
+                    disabled={pending || Boolean(refreshError) || item.id < 0}
+                    onClick={() => edit(item)}
+                  >
+                    {t.edit}
+                  </CompactMenuItem>
+                  <CompactMenuItem
+                    disabled={index === 0 || pending || Boolean(refreshError)}
                     onClick={() => void move(item, -1)}
                   >
                     {t.moveUp}
                   </CompactMenuItem>
                   <CompactMenuItem
-                    disabled={index === items.length - 1 || pending}
+                    disabled={index === items.length - 1 || pending || Boolean(refreshError)}
                     onClick={() => void move(item, 1)}
                   >
                     {t.moveDown}
                   </CompactMenuItem>
-                  <CompactMenuItem destructive onClick={() => void remove(item)}>
+                  <CompactMenuItem
+                    destructive
+                    disabled={pending || Boolean(refreshError) || item.id < 0}
+                    onClick={() => void remove(item)}
+                  >
                     {t.delete}
                   </CompactMenuItem>
                 </CompactMenu>

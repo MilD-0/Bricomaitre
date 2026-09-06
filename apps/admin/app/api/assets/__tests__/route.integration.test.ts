@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { POST } from '../route';
-import { assetBannerSchema, featuredProductGroupSchema } from '../../../../lib/assets';
 
 const {
   hasDbMock,
@@ -73,10 +72,6 @@ describe('app/api/assets/route', () => {
 
   it('returns 400 for invalid featured group payloads', async () => {
     hasDbMock.mockReturnValue(true);
-    vi.spyOn(featuredProductGroupSchema, 'safeParse').mockReturnValue({
-      success: false,
-      error: { flatten: () => ({ fieldErrors: { productIds: ['invalid'] } }) },
-    } as never);
 
     const req = new NextRequest('http://localhost/api/assets', {
       method: 'POST',
@@ -87,7 +82,9 @@ describe('app/api/assets/route', () => {
     const res = await POST(req);
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toEqual({
-      error: { fieldErrors: { productIds: ['invalid'] } },
+      error: expect.objectContaining({
+        fieldErrors: expect.objectContaining({ name: expect.any(Array) }),
+      }),
     });
   });
 
@@ -130,22 +127,19 @@ describe('app/api/assets/route', () => {
     const selectMock = vi.fn().mockReturnValue({ from: selectFromMock });
     getDbMock.mockReturnValue({ ...db, select: selectMock });
 
-    vi.spyOn(assetBannerSchema, 'safeParse').mockReturnValue({
-      success: true,
-      data: {
-        title: 'Homepage hero',
-        titleAr: 'بانر الواجهة',
-        imageUrl: 'https://cdn.example.com/banner.jpg',
-        imageUrlPortrait: 'https://cdn.example.com/banner-portrait.jpg',
-        imageUrlLandscape: 'https://cdn.example.com/banner.jpg',
-        productId: 15,
-        active: true,
-      },
-    } as never);
+    const payload = {
+      title: 'Homepage hero',
+      titleAr: 'بانر الواجهة',
+      imageUrl: 'https://cdn.example.com/banner.jpg',
+      imageUrlPortrait: 'https://cdn.example.com/banner-portrait.jpg',
+      imageUrlLandscape: 'https://cdn.example.com/banner.jpg',
+      productId: 15,
+      active: true,
+    };
 
     const req = new NextRequest('http://localhost/api/assets', {
       method: 'POST',
-      body: JSON.stringify({ kind: 'banner', data: {} }),
+      body: JSON.stringify({ kind: 'banner', data: payload }),
       headers: { 'content-type': 'application/json' },
     });
 
@@ -196,25 +190,22 @@ describe('app/api/assets/route', () => {
     const db = { marker: 'db', select: selectMock };
     getDbMock.mockReturnValue(db);
 
-    vi.spyOn(featuredProductGroupSchema, 'safeParse').mockReturnValue({
-      success: true,
-      data: {
-        name: 'Top carousel',
-        nameAr: 'دوار علوي',
-        cta: 'Voir Plus',
-        ctaAr: 'اكتشف المزيد',
-        link: '/products?featured=1',
-        productIds: [9],
-        brandIds: [],
-        categoryIds: [],
-        prioritizeRecommendations: true,
-        active: true,
-      },
-    } as never);
+    const payload = {
+      name: 'Top carousel',
+      nameAr: 'دوار علوي',
+      cta: 'Voir Plus',
+      ctaAr: 'اكتشف المزيد',
+      link: '/products?featured=1',
+      productIds: [9],
+      brandIds: [],
+      categoryIds: [],
+      prioritizeRecommendations: true,
+      active: true,
+    };
 
     const req = new NextRequest('http://localhost/api/assets', {
       method: 'POST',
-      body: JSON.stringify({ kind: 'featuredGroup', data: {} }),
+      body: JSON.stringify({ kind: 'featuredGroup', data: payload }),
       headers: { 'content-type': 'application/json' },
     });
 
