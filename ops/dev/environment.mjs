@@ -243,6 +243,8 @@ async function configure(m) {
       NODE_OPTIONS: '--max-old-space-size=2048',
       BRIC_DEMO_MODE: 'true',
       AI_ENABLED: 'false',
+      AI_STOREFRONT_MODEL: 'local-demo-disabled',
+      AI_STOREFRONT_MODEL_OPTIONS: 'local-demo-disabled',
       SENTRY_AUTH_TOKEN: '',
       SENTRY_DSN_ADMIN: '',
       SENTRY_DSN_WORKER: '',

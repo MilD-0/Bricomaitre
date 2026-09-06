@@ -406,7 +406,7 @@ WITH allocated AS (
   FROM allocated
 )
 SELECT day, 'web', query,
-  'https://demo.bricomaitre.invalid/fr/products/' || slug, 'dza', device,
+  :'storefront_origin' || '/fr/products/' || slug, 'dza', device,
   row_clicks, row_impressions, row_clicks::numeric / nullif(row_impressions, 0),
   greatest(1, base_position
     + 1.2 * ((SELECT history_end FROM demo_runtime.timeline) - day)::numeric /
@@ -428,8 +428,8 @@ INSERT INTO search_console_sitemaps (
   submitted_urls, contents, last_submitted_at, last_downloaded_at, synced_at
 )
 SELECT
-  'https://demo.bricomaitre.invalid/sitemap.xml',
-  'sc-domain:demo.bricomaitre.invalid', 'sitemap', false, true, 0, 0,
+  :'storefront_origin' || '/sitemap.xml',
+  :'storefront_origin' || '/', 'sitemap', false, true, 0, 0,
   (SELECT count(*) FROM products WHERE active),
   jsonb_build_array(jsonb_build_object('type','web','submitted',(SELECT count(*) FROM products WHERE active))),
   timeline.history_end - 1, timeline.history_end,
@@ -616,16 +616,16 @@ INSERT INTO search_console_url_inspections (
   page_fetch_state, google_canonical, user_canonical, last_crawl_at, crawled_as,
   referring_urls, sitemap_urls, rich_results, inspected_at
 )
-SELECT 'https://demo.bricomaitre.invalid/fr/products/' || product.slug,
-  'sc-domain:demo.bricomaitre.invalid',
+SELECT :'storefront_origin' || '/fr/products/' || product.slug,
+  :'storefront_origin' || '/',
   CASE WHEN mod(product.id, 13) = 0 THEN 'NEUTRAL' ELSE 'PASS' END,
   CASE WHEN mod(product.id, 13) = 0 THEN 'Discovered - currently not indexed'
     ELSE 'Submitted and indexed' END,
   'ALLOWED', 'INDEXING_ALLOWED', 'SUCCESSFUL',
-  'https://demo.bricomaitre.invalid/fr/products/' || product.slug,
-  'https://demo.bricomaitre.invalid/fr/products/' || product.slug,
+  :'storefront_origin' || '/fr/products/' || product.slug,
+  :'storefront_origin' || '/fr/products/' || product.slug,
   timeline.history_end::timestamptz - interval '2 days' + interval '8 hours', 'MOBILE', '[]',
-  '["https://demo.bricomaitre.invalid/sitemap.xml"]',
+  jsonb_build_array(:'storefront_origin' || '/sitemap.xml'),
   jsonb_build_object('productSnippets', jsonb_build_object('verdict', 'PASS')),
   timeline.history_end::timestamptz - interval '1 day' + interval '8 hours'
 FROM products product

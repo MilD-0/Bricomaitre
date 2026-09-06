@@ -92,6 +92,8 @@ services:
     environment:
       POSTGRES_DB: bricomaitre_demo
       POSTGRES_USER: bricomaitre_demo_owner
+      # The temporary initdb server accepts Unix sockets before TCP is enabled.
+      POSTGRES_HOST: /var/run/postgresql
       POSTGRES_PASSWORD: ${DEMO_POSTGRES_OWNER_PASSWORD}
       POSTGRES_ADMIN_USER: bricomaitre_demo_admin
       POSTGRES_ADMIN_PASSWORD: ${DEMO_POSTGRES_ADMIN_PASSWORD}
@@ -144,6 +146,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${DEMO_S3_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${DEMO_S3_SECRET_KEY}
+      MINIO_KMS_SECRET_KEY: demo-key:${DEMO_S3_KMS_KEY}
       MINIO_BROWSER_REDIRECT_URL: ${DEMO_OBJECT_CONSOLE_ORIGIN}
     volumes:
       - object-storage-data:/data
@@ -184,6 +187,7 @@ services:
     read_only: true
     environment:
       PORT: 8080
+      DEMO_STOREFRONT_ORIGIN: ${DEMO_STOREFRONT_ORIGIN}
     healthcheck:
       test:
         [
@@ -241,6 +245,7 @@ services:
     environment:
       PGPASSWORD: ${DEMO_POSTGRES_OWNER_PASSWORD}
       DEMO_OBJECT_PUBLIC_ORIGIN: ${DEMO_OBJECT_PUBLIC_ORIGIN}
+      DEMO_STOREFRONT_ORIGIN: ${DEMO_STOREFRONT_ORIGIN}
       DEMO_DATA_REVISION: ${DEMO_DATA_REVISION:-development}
     volumes:
       - ./postgres:/seed:ro
@@ -248,7 +253,7 @@ services:
     entrypoint:
       - /bin/sh
       - -ec
-      - psql -v ON_ERROR_STOP=1 -v asset_origin="$${DEMO_OBJECT_PUBLIC_ORIGIN}" -v build_key="$${DEMO_DATA_REVISION}" -h postgres -U bricomaitre_demo_owner -d bricomaitre_demo -f /seed/seed.sql
+      - psql -v ON_ERROR_STOP=1 -v asset_origin="$${DEMO_OBJECT_PUBLIC_ORIGIN}" -v storefront_origin="$${DEMO_STOREFRONT_ORIGIN}" -v build_key="$${DEMO_DATA_REVISION}" -h postgres -U bricomaitre_demo_owner -d bricomaitre_demo -f /seed/seed.sql
     depends_on:
       database-permissions:
         condition: service_completed_successfully
@@ -264,12 +269,13 @@ services:
     environment:
       PGPASSWORD: ${DEMO_POSTGRES_OWNER_PASSWORD}
       DEMO_OBJECT_PUBLIC_ORIGIN: ${DEMO_OBJECT_PUBLIC_ORIGIN}
+      DEMO_STOREFRONT_ORIGIN: ${DEMO_STOREFRONT_ORIGIN}
     volumes:
       - ./postgres:/seed:ro
     entrypoint:
       - /bin/sh
       - -ec
-      - psql -v ON_ERROR_STOP=1 -v asset_origin="$${DEMO_OBJECT_PUBLIC_ORIGIN}" -h postgres -U bricomaitre_demo_owner -d bricomaitre_demo -f /seed/live.sql
+      - psql -v ON_ERROR_STOP=1 -v asset_origin="$${DEMO_OBJECT_PUBLIC_ORIGIN}" -v storefront_origin="$${DEMO_STOREFRONT_ORIGIN}" -h postgres -U bricomaitre_demo_owner -d bricomaitre_demo -f /seed/live.sql
     depends_on:
       seed:
         condition: service_completed_successfully

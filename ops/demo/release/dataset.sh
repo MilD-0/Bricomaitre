@@ -33,7 +33,7 @@ fi
 if [[ -z "$stored_revision" || "$rebuild" = true ]]; then
   printf 'Building the dated dataset. This can take several minutes.\n'
   "${psql_base[@]}" -d bricomaitre_demo -v asset_origin="$DEMO_OBJECT_PUBLIC_ORIGIN" \
-    -v build_key="$expected_revision" -f /seed/seed.sql
+    -v storefront_origin="$DEMO_STOREFRONT_ORIGIN" -v build_key="$expected_revision" -f /seed/seed.sql
   if [[ -n "$stored_revision" ]]; then
     sql <<'SQL'
 ALTER DATABASE bricomaitre_demo_template IS_TEMPLATE false;
@@ -55,5 +55,6 @@ DROP DATABASE bricomaitre_demo;
 CREATE DATABASE bricomaitre_demo WITH TEMPLATE bricomaitre_demo_template OWNER bricomaitre_demo_owner;
 SQL
 /bin/bash /bundle/ops/docker/postgres/init-roles.sh
-"${psql_base[@]}" -d bricomaitre_demo -v asset_origin="$DEMO_OBJECT_PUBLIC_ORIGIN" -f /seed/live.sql
+"${psql_base[@]}" -d bricomaitre_demo -v asset_origin="$DEMO_OBJECT_PUBLIC_ORIGIN" \
+  -v storefront_origin="$DEMO_STOREFRONT_ORIGIN" -f /seed/live.sql
 printf 'Demo dataset ready.\n'

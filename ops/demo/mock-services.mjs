@@ -3,6 +3,10 @@ import { createServer } from 'node:http';
 const port = Number.parseInt(process.env.PORT ?? '8080', 10);
 const requests = [];
 const shipments = new Map();
+const storefrontOrigin = (process.env.DEMO_STOREFRONT_ORIGIN ?? 'http://127.0.0.1:3402').replace(
+  /\/$/,
+  '',
+);
 
 const locations = [
   { wilaya_id: 16, wilaya_name: 'Alger' },
@@ -96,27 +100,18 @@ function record(method, pathname, status, service) {
 }
 
 function trackingState(tracking) {
-  if (shipments.has(tracking)) return shipments.get(tracking);
-  const suffix = Number.parseInt(tracking.replace(/\D/g, '').slice(-2) || '0', 10);
-  const status = ['en_livraison', 'livre_non_encaisse', 'payed', 'retour_archive'][suffix % 4];
-  return {
-    tracking,
-    reference: tracking.replace(/\D/g, '').slice(-5) || '1',
-    status,
-    amount: 12_500 + (suffix % 6) * 1_500,
-    provider: tracking.startsWith('EM') ? 'emir' : 'delivro',
-    createdAt: new Date(Date.now() - 5 * 86_400_000).toISOString(),
-  };
+  return shipments.get(tracking);
 }
 
 function orderInfo(state) {
   return {
+    ...state.input,
     tracking: state.tracking,
     reference: state.reference,
     montant: String(state.amount),
     tarif_prestation: '500',
     tarif_retour: state.status === 'retour_archive' ? '250' : '0',
-    stop_desk: 0,
+    stop_desk: Number(state.input?.stop_desk ?? 0),
     payment_id: ['payed', 'paye_et_archive'].includes(state.status)
       ? `PAY-${state.tracking}`
       : null,
@@ -131,7 +126,7 @@ function orderInfo(state) {
 
 function trackingInfo(state) {
   return {
-    recipientName: 'Client démo',
+    recipientName: state.input?.nom_client ?? 'Client démo',
     shippedBy: state.provider === 'emir' ? 'Emir Demo' : 'Delivro Demo',
     originCity: 16,
     destLocationCity: 16,
@@ -147,6 +142,32 @@ function trackingInfo(state) {
       },
     ],
   };
+}
+
+function shipmentLabel(tracking) {
+  const text = `Demo shipment ${tracking}`.replace(/[^\x20-\x7e]/g, '?').replace(/[\\()]/g, '\\$&');
+  const content = `BT /F1 18 Tf 40 760 Td (${text}) Tj ET\n`;
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}endstream`,
+  ];
+  let document = '%PDF-1.4\n';
+  const offsets = [0];
+  for (const [index, object] of objects.entries()) {
+    offsets.push(Buffer.byteLength(document));
+    document += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  }
+  const xref = Buffer.byteLength(document);
+  document += `xref\n0 ${offsets.length}\n0000000000 65535 f \n`;
+  document += offsets
+    .slice(1)
+    .map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`)
+    .join('');
+  document += `trailer\n<< /Size ${offsets.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(document);
 }
 
 function ecotrackFees() {
@@ -190,7 +211,9 @@ async function handleEcotrack(request, response, url) {
       shipments.set(tracking, {
         tracking,
         reference,
-        status: 'en_preparation',
+        status: 'prete_a_expedier',
+        input,
+        updates: [],
         amount: Number(input.montant ?? 0),
         provider,
         createdAt: new Date().toISOString(),
@@ -203,23 +226,25 @@ async function handleEcotrack(request, response, url) {
   if (route === '/get/orders/status') {
     const trackings = (url.searchParams.get('trackings') ?? '').split(',').filter(Boolean);
     const data = Object.fromEntries(
-      trackings.map((tracking) => {
-        const state = trackingState(tracking);
-        return [
-          tracking,
-          {
-            status: state.status,
-            order_id: state.reference,
-            desk_phone: '0550000000',
-            desk_commune: 'Alger Centre',
-            desk_map_link: 'https://example.invalid/demo-desk',
-            desk_address: 'Adresse de démonstration',
-            driver_phone: '0770000000',
-            estimated_fee: '500',
-            activity: [],
-          },
-        ];
-      }),
+      trackings
+        .filter((tracking) => shipments.has(tracking))
+        .map((tracking) => {
+          const state = trackingState(tracking);
+          return [
+            tracking,
+            {
+              status: state.status,
+              order_id: state.reference,
+              desk_phone: '0550000000',
+              desk_commune: 'Alger Centre',
+              desk_map_link: 'https://example.invalid/demo-desk',
+              desk_address: 'Adresse de démonstration',
+              driver_phone: '0770000000',
+              estimated_fee: '500',
+              activity: [],
+            },
+          ];
+        }),
     );
     return json(response, 200, { success: true, data });
   }
@@ -230,27 +255,24 @@ async function handleEcotrack(request, response, url) {
       response,
       200,
       Object.fromEntries(
-        trackings.map((tracking) => [tracking, trackingInfo(trackingState(tracking))]),
+        trackings
+          .filter((tracking) => shipments.has(tracking))
+          .map((tracking) => [tracking, trackingInfo(trackingState(tracking))]),
       ),
     );
   }
 
   if (route === '/get/tracking/info') {
     const state = trackingState(url.searchParams.get('tracking') ?? 'DLD00000001');
+    if (!state) return json(response, 404, { success: false, message: 'Shipment not found.' });
     return json(response, 200, trackingInfo(state));
   }
 
   if (route === '/get/maj') {
     const tracking = url.searchParams.get('tracking') ?? 'DLD00000001';
-    return json(response, 200, [
-      {
-        remarque: 'Suivi de démonstration',
-        station: 'Alger',
-        livreur: 'Équipe démo',
-        created_at: new Date().toISOString(),
-        tracking,
-      },
-    ]);
+    const state = trackingState(tracking);
+    if (!state) return json(response, 404, { success: false, message: 'Shipment not found.' });
+    return json(response, 200, state.updates ?? []);
   }
 
   if (route === '/get/orders') {
@@ -279,9 +301,10 @@ async function handleEcotrack(request, response, url) {
   }
 
   if (route === '/get/order/label') {
-    const pdf = Buffer.from(
-      '%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n',
-    );
+    const tracking = url.searchParams.get('tracking') ?? '';
+    if (!shipments.has(tracking))
+      return json(response, 404, { success: false, message: 'Shipment not found.' });
+    const pdf = shipmentLabel(tracking);
     response.writeHead(200, {
       'content-type': 'application/pdf',
       'content-disposition': 'inline; filename="demo-label.pdf"',
@@ -299,14 +322,28 @@ async function handleEcotrack(request, response, url) {
     ].includes(route)
   ) {
     const tracking = url.searchParams.get('tracking');
+    if (!tracking || !shipments.has(tracking))
+      return json(response, 404, { success: false, message: 'Shipment not found.' });
     if (tracking) {
       const state = trackingState(tracking);
       if (route === '/delete/order') shipments.delete(tracking);
       else if (route === '/valid/order')
-        shipments.set(tracking, { ...state, status: 'en_livraison' });
+        shipments.set(tracking, { ...state, status: 'en_ramassage' });
       else if (route === '/ask/for/order/return')
-        shipments.set(tracking, { ...state, status: 'retour_demande' });
-      else shipments.set(tracking, state);
+        shipments.set(tracking, { ...state, status: 'retour_en_traitement' });
+      else if (route === '/add/maj') {
+        const update = {
+          remarque: url.searchParams.get('content') ?? '',
+          station: 'Alger',
+          livreur: 'Équipe démo',
+          created_at: new Date().toISOString(),
+          tracking,
+        };
+        shipments.set(tracking, { ...state, updates: [...(state.updates ?? []), update] });
+      } else {
+        const input = { ...state.input, ...Object.fromEntries(url.searchParams) };
+        shipments.set(tracking, { ...state, input, amount: Number(input.montant ?? state.amount) });
+      }
     }
     return json(response, 200, { success: true, message: 'Demo carrier mutation accepted.' });
   }
@@ -432,7 +469,7 @@ async function handleGoogle(request, response, url) {
     const values = {
       date: day,
       query: 'perceuse sans fil',
-      page: 'https://demo.bricomaitre.invalid/fr/products/perceuse-sans-fil',
+      page: `${storefrontOrigin}/fr/products`,
       country: 'dza',
       device: 'MOBILE',
       searchAppearance: 'MERCHANT_LISTINGS',
@@ -453,7 +490,7 @@ async function handleGoogle(request, response, url) {
     return json(response, 200, {
       sitemap: [
         {
-          path: 'https://demo.bricomaitre.invalid/sitemap.xml',
+          path: `${storefrontOrigin}/sitemap.xml`,
           type: 'sitemap',
           isPending: false,
           warnings: 0,

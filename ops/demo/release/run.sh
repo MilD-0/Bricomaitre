@@ -11,7 +11,7 @@ load_env() {
 task="$1"
 shift
 case "$task" in
-  admin|admin-worker|storefront-api|storefront-marketing-worker|storefront)
+  admin|admin-worker|storefront-api|storefront-marketing-worker|storefront|mock-services)
     load_env /runtime/app.env
     exec "$@"
     ;;
@@ -31,6 +31,7 @@ case "$task" in
   object-storage)
     export MINIO_ROOT_USER="$DEMO_S3_ACCESS_KEY" MINIO_ROOT_PASSWORD="$DEMO_S3_SECRET_KEY"
     export MINIO_BROWSER_REDIRECT_URL="$DEMO_OBJECT_CONSOLE_ORIGIN"
+    export MINIO_KMS_SECRET_KEY="demo-key:$DEMO_S3_KMS_KEY"
     exec minio server /data --console-address :9001
     ;;
   media)

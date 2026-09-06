@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
+import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { expect, it } from 'vitest';
 
@@ -60,6 +61,55 @@ it('preserves imported historical outcomes and bounds provider-filtered order pa
       await fetch(`${origin}/ecotrack/delivro/api/v1/get/orders?start_date=2025-01-01`)
     ).json()) as OrderPage;
     expect(filtered.data).toEqual([]);
+
+    const carrier = `${origin}/ecotrack/delivro/api/v1`;
+    const created = await fetch(`${carrier}/create/orders`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        orders: { 73: { reference: '73', montant: 5000, nom_client: 'Demo customer' } },
+      }),
+    });
+    expect(created.status).toBe(200);
+    const tracking = 'DLD00000073';
+    const info = async () =>
+      (await fetch(`${carrier}/get/tracking/info?tracking=${tracking}`)).json();
+    expect(await info()).toMatchObject({
+      status: 'prete_a_expedier',
+      recipientName: 'Demo customer',
+    });
+    await fetch(`${carrier}/update/order?tracking=${tracking}&montant=6200&nom_client=Updated`, {
+      method: 'POST',
+    });
+    expect(await info()).toMatchObject({
+      recipientName: 'Updated',
+      OrderInfo: { montant: '6200' },
+    });
+
+    // Parse and merge through the same PDF library as the real label API.
+    const { PDFDocument } = createRequire(
+      resolve(import.meta.dirname, '../../apps/admin/package.json'),
+    )('pdf-lib');
+    const label = await fetch(`${carrier}/get/order/label?tracking=${tracking}`);
+    const document = await PDFDocument.load(await label.arrayBuffer());
+    expect(document.getPageCount()).toBe(1);
+    const merged = await PDFDocument.create();
+    const [pageToCopy] = await merged.copyPages(document, [0]);
+    merged.addPage(pageToCopy);
+    expect((await merged.save()).length).toBeGreaterThan(100);
+
+    await fetch(`${carrier}/valid/order?tracking=${tracking}`, { method: 'POST' });
+    expect(await info()).toMatchObject({ status: 'en_ramassage' });
+    await fetch(`${carrier}/add/maj?tracking=${tracking}&content=Call%20after%2017h`, {
+      method: 'POST',
+    });
+    expect(await (await fetch(`${carrier}/get/maj?tracking=${tracking}`)).json()).toEqual([
+      expect.objectContaining({ remarque: 'Call after 17h', tracking }),
+    ]);
+    await fetch(`${carrier}/ask/for/order/return?tracking=${tracking}`, { method: 'POST' });
+    expect(await info()).toMatchObject({ status: 'retour_en_traitement' });
+    await fetch(`${carrier}/delete/order?tracking=${tracking}`, { method: 'DELETE' });
+    expect((await fetch(`${carrier}/get/tracking/info?tracking=${tracking}`)).status).toBe(404);
   } finally {
     child.kill('SIGTERM');
     await once(child, 'exit');

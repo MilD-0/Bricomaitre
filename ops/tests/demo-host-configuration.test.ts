@@ -73,6 +73,10 @@ it('keeps host origins and secrets across preparation without affecting another 
     );
     const admin = readFileSync(join(runtime, 'admin.env'), 'utf8');
     const reader = readFileSync(join(runtime, 'storefront-api.env'), 'utf8');
+    expect(admin).toContain('NEXT_PUBLIC_STOREFRONT_BASE_URL=https://shop.example.invalid');
+    expect(admin).toContain('STOREFRONT_BASE_URL=http://storefront:3002');
+    expect(admin).toContain('SEARCH_CONSOLE_SITE_ORIGIN=https://shop.example.invalid');
+    expect(admin).toContain('BRIC_DEMO_OBJECT_ORIGIN=https://media.example.invalid');
     expect(admin).toContain(`AWS_ACCESS_KEY_ID=${values.DEMO_S3_ADMIN_ACCESS_KEY}`);
     expect(reader).toContain(`AWS_ACCESS_KEY_ID=${values.DEMO_S3_READER_ACCESS_KEY}`);
     for (const env of [admin, reader]) {
@@ -93,6 +97,13 @@ it('keeps host origins and secrets across preparation without affecting another 
         ],
         { cwd: root, env: { ...environment, BRIC_DEMO_RUNTIME_DIR: runtime }, encoding: 'utf8' },
       ),
+    );
+    const encryptionKey = String(
+      config.services['object-storage'].environment.MINIO_KMS_SECRET_KEY,
+    ).split(':')[1];
+    expect(Buffer.from(encryptionKey!, 'base64')).toHaveLength(32);
+    expect(config.services['mock-services'].environment.DEMO_STOREFRONT_ORIGIN).toBe(
+      'https://shop.example.invalid',
     );
     for (const [name, service] of Object.entries(config.services) as [string, DemoService][]) {
       expect(Number(service.cpus), name).toBeGreaterThan(0);

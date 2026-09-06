@@ -1,4 +1,8 @@
 \set ON_ERROR_STOP on
+\if :{?storefront_origin}
+\else
+  \set storefront_origin 'http://127.0.0.1:3402'
+\endif
 \echo 'Resetting the demo database'
 \ir /seed/seed/00-reset.sql
 \echo 'Loading reference data'

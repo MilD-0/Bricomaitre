@@ -138,8 +138,10 @@ UPDATE orders SET cart_products = totals.cart_products,
   total_amount = totals.subtotal + coalesce(orders.del_pr, 0),
   price = totals.subtotal + coalesce(orders.del_pr, 0)
 FROM (
-  SELECT order_id, array_agg(raw_value ORDER BY id) cart_products, sum(line_total) subtotal
-  FROM order_line_items
+  SELECT order_id,
+    array_agg(raw_value ORDER BY id, unit) cart_products,
+    sum(CASE WHEN unit = 1 THEN line_total ELSE 0 END) subtotal
+  FROM order_line_items CROSS JOIN LATERAL generate_series(1, quantity) unit
   WHERE content_id LIKE 'live-line-%'
   GROUP BY order_id
 ) totals WHERE orders.id = totals.order_id;
@@ -888,16 +890,16 @@ INSERT INTO marketing_event_outbox (
   last_http_status, provider_request_id, response_summary, created_at, updated_at
 )
 SELECT destination, 'purchase', 'demo-live-' || destination || '-' || orders.id,
-  'order', orders.id, orders.created_at + interval '4 days',
+  'order', orders.id, least(now(), orders.created_at + interval '4 days'),
   jsonb_build_object('currency','DZD','value',orders.total_amount),
-  CASE WHEN mod(orders.id, 43) = 0 THEN 'retryable' ELSE 'delivered' END,
+  CASE WHEN mod(orders.id, 43) = 0 THEN 'retrying' ELSE 'accepted' END,
   CASE WHEN mod(orders.id, 43) = 0 THEN 2 ELSE 1 END, now(),
-  orders.created_at + interval '4 days 2 seconds',
-  CASE WHEN mod(orders.id, 43) <> 0 THEN orders.created_at + interval '4 days 2 seconds' END,
+  least(now(), orders.created_at + interval '4 days 2 seconds'),
+  CASE WHEN mod(orders.id, 43) <> 0 THEN least(now(), orders.created_at + interval '4 days 2 seconds') END,
   CASE WHEN mod(orders.id, 43) = 0 THEN 503 ELSE 204 END,
   CASE WHEN mod(orders.id, 43) <> 0 THEN 'demo-' || destination || '-' || orders.id END,
   jsonb_build_object('synthetic', true),
-  orders.created_at + interval '4 days', orders.created_at + interval '4 days 2 seconds'
+  least(now(), orders.created_at + interval '4 days'), least(now(), orders.created_at + interval '4 days 2 seconds')
 FROM orders CROSS JOIN unnest(ARRAY['google','tiktok']) destination
 WHERE orders.mongo_id LIKE 'demo-live-order:%' AND orders.confirmed IN (4, 10);
 
@@ -991,7 +993,7 @@ WITH allocated AS (
   FROM allocated
 )
 SELECT day, 'web', query,
-  'https://demo.bricomaitre.invalid/fr/products/' || slug, 'dza', device,
+  :'storefront_origin' || '/fr/products/' || slug, 'dza', device,
   row_clicks, row_impressions, row_clicks::numeric / nullif(row_impressions, 0),
   greatest(1, base_position - 0.15
     + 0.12 * sin(extract(doy FROM day) * pi() / 29)), now()
@@ -1165,7 +1167,7 @@ INSERT INTO search_console_sync_runs (
   trigger, status, site_url, since_day, until_day, totals_fetched,
   detail_rows_fetched, appearances_fetched, urls_inspected, started_at, completed_at
 )
-VALUES ('demo-reset', 'succeeded', 'sc-domain:demo.bricomaitre.invalid',
+VALUES ('demo-reset', 'succeeded', :'storefront_origin' || '/',
   current_date - 9, current_date, 10, 80, 20, 12,
   now() - interval '8 seconds', now());
 

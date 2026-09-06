@@ -379,7 +379,7 @@ INSERT INTO search_console_sync_runs (
   error_code, error_message, started_at, completed_at
 )
 SELECT 'scheduled', CASE WHEN mod(run_number, 19) = 0 THEN 'failed' ELSE 'succeeded' END,
-  'sc-domain:demo.bricomaitre.invalid', month_start::date,
+  :'storefront_origin' || '/', month_start::date,
   (month_start + interval '1 month - 1 day')::date,
   30, 120, 60, 4,
   CASE WHEN mod(run_number, 19) = 0 THEN 'provider_timeout' END,

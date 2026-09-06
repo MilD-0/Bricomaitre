@@ -36,6 +36,7 @@ calculate_data_revision() {
         | xargs -0 sha256sum
       date -u +%F
       printf '%s\n' "${BRIC_DEMO_OBJECT_ORIGIN:-http://127.0.0.1:${BRIC_DEMO_OBJECT_PORT:-3900}}"
+      printf '%s\n' "${BRIC_DEMO_STOREFRONT_ORIGIN:-http://127.0.0.1:${BRIC_DEMO_STOREFRONT_PORT:-3402}}"
     } | sha256sum | cut -d' ' -f1
   )
 }
@@ -72,6 +73,9 @@ write_runtime_configuration() {
   if ! grep -q '^DEMO_IMAGE_CREATED=' "$secrets_file"; then
     printf 'DEMO_IMAGE_CREATED=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$secrets_file"
   fi
+  if ! grep -q '^DEMO_S3_KMS_KEY=' "$secrets_file"; then
+    printf 'DEMO_S3_KMS_KEY=%s\n' "$(openssl rand -base64 32)" >>"$secrets_file"
+  fi
 
   # Preserve storage root credentials, but never pass them to application processes.
   for identity in ADMIN READER; do
@@ -106,6 +110,7 @@ write_runtime_configuration() {
     printf 'DEMO_REDIS_PASSWORD=%s\n' "$DEMO_REDIS_PASSWORD"
     printf 'DEMO_S3_ACCESS_KEY=%s\n' "$DEMO_S3_ACCESS_KEY"
     printf 'DEMO_S3_SECRET_KEY=%s\n' "$DEMO_S3_SECRET_KEY"
+    printf 'DEMO_S3_KMS_KEY=%s\n' "$DEMO_S3_KMS_KEY"
     printf 'DEMO_S3_ADMIN_ACCESS_KEY=%s\nDEMO_S3_ADMIN_SECRET_KEY=%s\n' "$DEMO_S3_ADMIN_ACCESS_KEY" "$DEMO_S3_ADMIN_SECRET_KEY"
     printf 'DEMO_S3_READER_ACCESS_KEY=%s\nDEMO_S3_READER_SECRET_KEY=%s\n' "$DEMO_S3_READER_ACCESS_KEY" "$DEMO_S3_READER_SECRET_KEY"
     printf 'DEMO_ADMIN_PORT=%s\n' "$admin_port"
@@ -158,7 +163,8 @@ write_runtime_configuration() {
     printf '%s\n' 'ADMIN_META_ADS_SYNC_ENABLED=false' 'ADMIN_META_ADS_SYNC_CRON=17 */6 * * *' 'ADMIN_META_ADS_SYNC_TIMEZONE=Africa/Algiers'
     printf '%s\n' 'ADMIN_SEARCH_CONSOLE_SYNC_ENABLED=false' 'ADMIN_SEARCH_CONSOLE_SYNC_CRON=37 4 * * *' 'ADMIN_SEARCH_CONSOLE_SYNC_TIMEZONE=Africa/Algiers'
     printf 'GOOGLE_SEARCH_CONSOLE_CREDENTIALS_BASE64=%s\n' "$credentials_base64"
-    printf '%s\n' 'SEARCH_CONSOLE_ANALYTICS_ENDPOINT=http://mock-services:8080/google/webmasters/v3/sites' 'SEARCH_CONSOLE_INSPECTION_ENDPOINT=http://mock-services:8080/google/urlInspection/index:inspect' 'SEARCH_CONSOLE_SITE_URL=sc-domain:demo.bricomaitre.invalid' 'SEARCH_CONSOLE_SITE_ORIGIN=https://demo.bricomaitre.invalid'
+    printf '%s\n' 'SEARCH_CONSOLE_ANALYTICS_ENDPOINT=http://mock-services:8080/google/webmasters/v3/sites' 'SEARCH_CONSOLE_INSPECTION_ENDPOINT=http://mock-services:8080/google/urlInspection/index:inspect'
+    printf 'SEARCH_CONSOLE_SITE_URL=%s/\nSEARCH_CONSOLE_SITE_ORIGIN=%s\n' "$storefront_origin" "$storefront_origin"
     printf '%s\n' 'META_AD_ACCOUNT_ID=100000000001' 'META_ADS_ACCESS_TOKEN=demo-meta-ads-token' 'META_ADS_GRAPH_API_VERSION=v25.0' 'META_ADS_GRAPH_API_ORIGIN=http://mock-services:8080'
     printf '%s\n' 'ECOTRACK_SYNC_CRON=0 3 * * *' 'ECOTRACK_SYNC_TIMEZONE=Africa/Algiers' 'ECOTRACK_ORDER_SYNC_CRON=*/15 * * * *' 'ECOTRACK_ORDER_SYNC_TIMEZONE=Africa/Algiers'
     printf '%s\n' 'PRODUCT_CATALOG_FEED_DEBOUNCE_MS=1000' 'PRODUCT_CATALOG_FEED_TOKEN=demo-catalog-token' 'PRODUCT_EXPORT_BATCH_SIZE=250' 'PRODUCT_EXPORT_BATCH_DELAY_MS=0'

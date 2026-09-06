@@ -13,10 +13,14 @@ node --input-type=module -e '
 cp /bundle/ops/demo/release/run.sh /runtime/run.sh
 # Apps receive only their own credentials, never the initialization volume.
 source /runtime/compose.env
-for app in admin storefront-api storefront; do
+for app in admin storefront-api storefront mock-services; do
   target="/runtime-$app"
   install -d -m 0755 "$target"
-  cp "/runtime/$app.env" "$target/app.env"
+  if [[ "$app" = mock-services ]]; then
+    printf 'DEMO_STOREFRONT_ORIGIN=%s\n' "$DEMO_STOREFRONT_ORIGIN" >"$target/app.env"
+  else
+    cp "/runtime/$app.env" "$target/app.env"
+  fi
   cp /bundle/ops/demo/release/run.sh "$target/run.sh"
   case "$app" in
     admin)

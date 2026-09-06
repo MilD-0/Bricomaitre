@@ -133,8 +133,10 @@ UPDATE orders SET
   total_amount = totals.subtotal + coalesce(orders.del_pr, 0),
   price = totals.subtotal + coalesce(orders.del_pr, 0)
 FROM (
-  SELECT order_id, array_agg(raw_value ORDER BY id) cart_products, sum(line_total) subtotal
-  FROM order_line_items GROUP BY order_id
+  SELECT order_id,
+    array_agg(raw_value ORDER BY id, unit) cart_products,
+    sum(CASE WHEN unit = 1 THEN line_total ELSE 0 END) subtotal
+  FROM order_line_items CROSS JOIN LATERAL generate_series(1, quantity) unit GROUP BY order_id
 ) totals
 WHERE orders.id = totals.order_id;
 
