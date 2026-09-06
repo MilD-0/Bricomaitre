@@ -1183,7 +1183,7 @@ INSERT INTO admin.action_logs (
 SELECT 'orders', 'order', orders.id, 'Commande ' || orders.ecotrack_reference,
   'status_change', jsonb_build_object('status', 2),
   jsonb_build_object('status', orders.confirmed),
-  orders.confirmed_by, orders.confirmed_by_name, true,
+  orders.confirmed_by, orders.confirmed_by_name, false,
   orders.updated_at, orders.updated_at
 FROM orders
 WHERE mongo_id LIKE 'demo-live-order:%' AND confirmed NOT IN (0, 1, 2, 6)
@@ -1211,3 +1211,55 @@ FROM recent_run run CROSS JOIN (VALUES
   (2, 'inspect_inventory', '{"productsChecked":412,"shortages":3}'::jsonb),
   (3, 'save_order_shopping_list', '{"items":18,"scope":"confirmed"}'::jsonb)
 ) tools(sequence, tool_name, output);
+
+-- Reviewable proposals use the final catalog, after curated campaign revisions.
+WITH eligible_products AS (
+  SELECT *, row_number() OVER (ORDER BY id) AS position, count(*) OVER () AS population
+  FROM products WHERE active
+)
+INSERT INTO ai_proposals (
+  run_id, proposal_type, status, entity_type, entity_id, source_updated_at,
+  payload, reasoning, evidence, confidence, requested_by, reviewed_by,
+  reviewed_at, applied_at, expires_at, created_at, updated_at
+)
+SELECT run.id,
+  (ARRAY['product_content','product_relation','product_category'])[1 + mod(run.id, 3)],
+  CASE WHEN mod(run.id, 7) = 0 THEN 'applied' ELSE 'proposed' END::ai_proposal_status,
+  'products', product.id, product.updated_at,
+  CASE mod(run.id, 3)
+    WHEN 0 THEN jsonb_build_object(
+      'before', jsonb_build_object('title', product.title, 'titleAr', product.title_ar,
+        'description', product.description, 'descriptionAr', product.description_ar),
+      'changes', jsonb_build_object('description', product.description || ' Référence disponible dans notre sélection atelier.'))
+    WHEN 1 THEN jsonb_build_object(
+      'sourceProductId', product.id, 'targetProductId', alternative.id,
+      'relationType', 'alternative_to', 'source', 'ai', 'confidence', 0.85,
+      'reviewStatus', 'proposed',
+      'evidenceSummary', 'These active products share the same catalog subtype; compare their specifications before choosing.',
+      'dependencyVersions', jsonb_build_object(
+        'sourceUpdatedAt', to_char(product.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'targetUpdatedAt', to_char(alternative.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')))
+    ELSE jsonb_build_object(
+      'before', jsonb_build_object('categoryId', product.category_id),
+      'changes', jsonb_build_object('categoryId', parent.id),
+      'dependencies', jsonb_build_object('category', jsonb_build_object(
+        'id', parent.id,
+        'updatedAt', to_char(parent.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))))
+  END,
+  'Synthetic review exercise based on the pinned catalog classification.',
+  jsonb_build_array(jsonb_build_object('label','Verified catalog classification',
+    'excerpt', 'The selected products belong to ' || category.name || ', within ' || parent.name || '.')),
+  0.85, 'operator@demo.bricomaitre.invalid',
+  CASE WHEN mod(run.id, 7) = 0 THEN 'operator@demo.bricomaitre.invalid' END,
+  CASE WHEN mod(run.id, 7) = 0 THEN now() END,
+  CASE WHEN mod(run.id, 7) = 0 THEN now() END,
+  now() + interval '7 days', now(), now()
+FROM (SELECT * FROM ai_runs WHERE surface = 'admin' AND status = 'completed' ORDER BY id LIMIT 360) run
+JOIN eligible_products product ON product.position = 1 + mod(run.id * 97, product.population)
+JOIN categories category ON category.id = product.category_id
+JOIN categories parent ON parent.id = category.parent_id AND parent.is_active
+JOIN LATERAL (
+  SELECT id, updated_at FROM products candidate
+  WHERE candidate.active AND candidate.category_id = product.category_id AND candidate.id <> product.id
+  ORDER BY candidate.id DESC LIMIT 1
+) alternative ON true;

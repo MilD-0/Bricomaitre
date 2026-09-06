@@ -72,7 +72,7 @@ SELECT CASE event_number % 5
   (ARRAY['operator@demo.bricomaitre.invalid','amine@demo.bricomaitre.invalid',
     'sarah@demo.bricomaitre.invalid','yacine@demo.bricomaitre.invalid'])[1 + mod(event_number, 4)],
   (ARRAY['Nadia Benali','Amine Kaci','Sarah Meziane','Yacine Saadi'])[1 + mod(event_number, 4)],
-  event_number % 7 <> 0,
+  false, -- Synthetic display history has no restorable entity snapshot.
   timeline.history_start::timestamptz
     + (mod(event_number * 104729, 145152000)::text || ' seconds')::interval,
   timeline.history_start::timestamptz
@@ -333,28 +333,6 @@ SELECT run.id,
   CASE WHEN run.status = 'completed' THEN jsonb_build_object('matched', 12, 'synthetic', true) END,
   run.error_code, run.started_at + interval '200 milliseconds', run.completed_at
 FROM ai_runs run WHERE mod(run.id, 5) <> 0;
-
-INSERT INTO ai_proposals (
-  run_id, proposal_type, status, entity_type, entity_id, source_updated_at,
-  payload, reasoning, evidence, confidence, requested_by, reviewed_by,
-  reviewed_at, applied_at, expires_at, created_at, updated_at
-)
-SELECT run.id,
-  (ARRAY['product_content','product_relation','product_category'])[1 + mod(run.id, 3)],
-  CASE WHEN mod(run.id, 7) = 0 THEN 'applied' ELSE 'proposed' END::ai_proposal_status,
-  'products', product.id, product.updated_at,
-  jsonb_build_object('before', jsonb_build_object('title', product.title),
-    'changes', jsonb_build_object('description', 'Proposition concise fondée sur les attributs vérifiés du catalogue.')),
-  'The catalog evidence supports this bounded, reviewable change.',
-  jsonb_build_array(jsonb_build_object('label','Verified catalog attributes','excerpt','Source, subtype, price, and stock were inspected.')),
-  0.72 + mod(run.id, 25) / 100.0,
-  'operator@demo.bricomaitre.invalid',
-  CASE WHEN mod(run.id, 7) = 0 THEN 'operator@demo.bricomaitre.invalid' END,
-  CASE WHEN mod(run.id, 7) = 0 THEN run.completed_at + interval '2 minutes' END,
-  CASE WHEN mod(run.id, 7) = 0 THEN run.completed_at + interval '3 minutes' END,
-  '2030-01-01', run.completed_at, run.completed_at
-FROM (SELECT * FROM ai_runs WHERE surface = 'admin' AND status = 'completed' ORDER BY id LIMIT 360) run
-JOIN products product ON product.id = 1 + mod(run.id * 97, 3884);
 
 INSERT INTO meta_ads_sync_runs (
   trigger, status, api_version, account_id, account_currency, account_timezone,

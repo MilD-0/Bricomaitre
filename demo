@@ -1,6 +1,30 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+command="${1:-help}"
+case "$command" in
+  help|-h|--help)
+    printf '%s\n' \
+      'Usage: ./demo <command>' \
+      '' \
+      '  up       Build and start the complete demo' \
+      '  down     Stop the demo and preserve its data' \
+      '  reset    Restore deterministic synthetic data' \
+      '  rebuild  Rebuild images and restart the demo' \
+      '  smoke    Verify every public surface' \
+      '  status   Show all demo services' \
+      '  logs     Follow logs; optionally name services' \
+      '  urls     Print local entry points' \
+      '  config   Validate the resolved Compose model' \
+      '  schedule Install the six-hour reset timer for this user' \
+      '  unschedule Remove the six-hour reset timer' \
+      '  destroy  Remove demo data; requires --yes'
+    exit 0
+    ;;
+  prepare|compose|up|down|reset|rebuild|smoke|status|logs|urls|config|schedule|unschedule|destroy) ;;
+  *) printf 'Unknown demo command: %s\n' "$command" >&2; exit 2 ;;
+esac
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 demo_root="$repo_root/ops/demo"
 runtime_dir="${BRIC_DEMO_RUNTIME_DIR:-$demo_root/.runtime}"
@@ -476,18 +500,18 @@ remove_reset_timer() {
   printf 'Six-hour demo reset timer removed.\n'
 }
 
+# Configuration generation shares the operation lock: simultaneous preparation
+# must never replace credentials while another command is starting services.
+exec 9>"$runtime_dir/operation.lock"
+flock 9
 write_runtime_configuration
-
-command="${1:-help}"
 if [[ "$command" = prepare ]]; then
   printf 'Demo runtime configuration prepared.\n'
   exit 0
 fi
 case "$command" in
-  up|reset|rebuild|destroy)
-    exec 9>"$runtime_dir/operation.lock"
-    flock 9
-    ;;
+  up|down|reset|rebuild|destroy|compose) ;;
+  *) flock -u 9 ;;
 esac
 
 case "$command" in
@@ -550,26 +574,5 @@ case "$command" in
     fi
     pause_reset_timer_if_installed
     compose down --volumes --remove-orphans
-    ;;
-  help|-h|--help)
-    printf '%s\n' \
-      'Usage: ./demo <command>' \
-      '' \
-      '  up       Build and start the complete demo' \
-      '  down     Stop the demo and preserve its data' \
-      '  reset    Restore deterministic synthetic data' \
-      '  rebuild  Rebuild images and restart the demo' \
-      '  smoke    Verify every public surface' \
-      '  status   Show all demo services' \
-      '  logs     Follow logs; optionally name services' \
-      '  urls     Print local entry points' \
-      '  config   Validate the resolved Compose model' \
-      '  schedule Install the six-hour reset timer for this user' \
-      '  unschedule Remove the six-hour reset timer' \
-      '  destroy  Remove demo data; requires --yes'
-    ;;
-  *)
-    printf 'Unknown demo command: %s\n' "$command" >&2
-    exit 2
     ;;
 esac

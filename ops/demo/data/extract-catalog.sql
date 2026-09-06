@@ -161,12 +161,7 @@ SELECT * EXCLUDE (title_search), classify_family(subtype_key) family_key
 FROM typed WHERE subtype_key IS NOT NULL;
 
 CREATE OR REPLACE TEMP TABLE selected_abo AS
-SELECT * EXCLUDE (source_rank) FROM (
-  SELECT *, row_number() OVER (PARTITION BY family_key ORDER BY
-    len(source_image_urls) DESC, (source_brand <> '')::int DESC,
-    (source_description <> '')::int DESC, hash(source_product_id)) source_rank
-  FROM source_products WHERE source_dataset = 'abo' AND family_key IS NOT NULL
-);
+SELECT * FROM source_products WHERE source_dataset = 'abo' AND family_key IS NOT NULL;
 
 CREATE OR REPLACE TEMP TABLE selected_esci AS
 WITH target AS (SELECT ceil(count(*) * 1.5)::bigint product_count FROM selected_abo),

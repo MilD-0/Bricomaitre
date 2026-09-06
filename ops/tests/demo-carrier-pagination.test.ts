@@ -110,6 +110,27 @@ it('preserves imported historical outcomes and bounds provider-filtered order pa
     expect(await info()).toMatchObject({ status: 'retour_en_traitement' });
     await fetch(`${carrier}/delete/order?tracking=${tracking}`, { method: 'DELETE' });
     expect((await fetch(`${carrier}/get/tracking/info?tracking=${tracking}`)).status).toBe(404);
+    for (const path of [
+      '/ecotrack/delivro/api/v1/get/orders',
+      '/meta/v25.0/demo-pixel/events',
+      '/google/mp/collect',
+      '/tiktok/events',
+    ]) {
+      const rateLimited = await fetch(`${origin}${path}`, {
+        headers: { 'x-demo-failure': 'rate-limit' },
+      });
+      expect(rateLimited.status).toBe(429);
+      expect(rateLimited.headers.get('retry-after')).toBe('2');
+      expect((await fetch(`${origin}${path}?__demo_failure=unavailable`)).status).toBe(503);
+      const malformed = await fetch(`${origin}${path}?__demo_failure=malformed`);
+      expect(malformed.status).toBe(200);
+      await expect(malformed.json()).rejects.toThrow();
+    }
+    expect((await fetch(`${origin}/__demo/reset`, { method: 'POST' })).status).toBe(200);
+    expect(await (await fetch(`${origin}/__demo/state`)).json()).toMatchObject({
+      shipmentCount: 0,
+      requestCount: 0,
+    });
   } finally {
     child.kill('SIGTERM');
     await once(child, 'exit');

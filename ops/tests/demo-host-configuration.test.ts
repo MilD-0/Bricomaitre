@@ -1,5 +1,6 @@
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { once } from 'node:events';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -124,3 +125,54 @@ it('keeps host origins and secrets across preparation without affecting another 
     rmSync(isolated, { recursive: true });
   }
 }, 30_000);
+
+it('shows help without creating credentials and serializes preparation before writing them', async () => {
+  const root = resolve(import.meta.dirname, '../..');
+  const directory = mkdtempSync(join(tmpdir(), 'bric-demo-lock-test-'));
+  const runtime = join(directory, 'runtime');
+  const environment = { ...process.env, BRIC_DEMO_RUNTIME_DIR: runtime };
+  try {
+    const help = execFileSync('bash', ['demo', '--help'], {
+      cwd: root,
+      env: environment,
+      encoding: 'utf8',
+    });
+    expect(help).toContain('Usage: ./demo');
+    expect(existsSync(runtime)).toBe(false);
+    mkdirSync(runtime);
+    const lock = spawn(
+      'flock',
+      [join(runtime, 'operation.lock'), 'bash', '-c', 'printf ready; read -r'],
+      { stdio: ['pipe', 'pipe', 'pipe'] },
+    );
+    const lockExited = once(lock, 'exit');
+    await once(lock.stdout, 'data');
+    const prepare = spawn('bash', ['demo', 'prepare'], {
+      cwd: root,
+      env: environment,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const prepared = once(prepare, 'exit');
+    try {
+      await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+      expect(existsSync(join(runtime, 'secrets.env'))).toBe(false);
+      lock.stdin.end('release\n');
+      await lockExited;
+      expect((await prepared)[0]).toBe(0);
+      expect(readFileSync(join(runtime, 'compose.env'), 'utf8')).toContain(
+        'DEMO_POSTGRES_OWNER_PASSWORD=',
+      );
+    } finally {
+      if (prepare.exitCode === null) {
+        prepare.kill('SIGTERM');
+        await prepared;
+      }
+      if (lock.exitCode === null) {
+        lock.kill('SIGTERM');
+        await lockExited;
+      }
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
