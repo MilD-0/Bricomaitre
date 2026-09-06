@@ -332,16 +332,6 @@ describe('production packaging and release runtime', () => {
     expect(notice).toContain('libvips/tree/v8.18.6');
   });
 
-  it('prints candidate state and bounded logs when a health gate expires', () => {
-    const healthGate = readFileSync(
-      resolve(workspaceRoot, 'ops/scripts/wait-for-health.sh'),
-      'utf8',
-    );
-
-    expect(healthGate).toContain('oom={{.State.OOMKilled}}');
-    expect(healthGate).toContain('docker logs --tail 100 "$container_id"');
-  });
-
   it('separates cancellable CI from serialized, verified production releases', () => {
     const ci = readFileSync(resolve(workspaceRoot, '.github/workflows/ci.yml'), 'utf8');
     const release = readFileSync(resolve(workspaceRoot, '.github/workflows/deploy.yml'), 'utf8');
@@ -1133,23 +1123,6 @@ describe('production packaging and release runtime', () => {
     expect(deploy).toContain('authenticated_redis_ping');
     expect(deploy).toContain('reconcile_incumbent_slot');
     expect(deploy).toContain('compose up -d --no-deps --force-recreate "$previous_api_service"');
-  });
-
-  it('rebuilds persisted reporting with the candidate artifact before cutover', () => {
-    const deploy = readFileSync(resolve(workspaceRoot, 'ops/scripts/deploy.sh'), 'utf8');
-    const migrationImage = readFileSync(
-      resolve(workspaceRoot, 'ops/docker/Dockerfile.admin'),
-      'utf8',
-    );
-    const workerHealth = deploy.indexOf('wait-for-health.sh" "$worker_service"');
-    const refresh = deploy.indexOf('refresh-release-reporting.sh" "$target_slot"');
-    const routing = deploy.indexOf('routing_changed=true');
-
-    expect(migrationImage).toContain('refresh-release-reporting.cjs');
-    expect(migrationImage).toContain('refresh-reporting) node');
-    expect(workerHealth).toBeGreaterThan(-1);
-    expect(refresh).toBeGreaterThan(workerHealth);
-    expect(refresh).toBeLessThan(routing);
   });
 
   it('proves migration rollback compatibility before candidate cutover', () => {

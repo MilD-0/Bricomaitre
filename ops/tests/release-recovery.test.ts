@@ -115,3 +115,42 @@ describe('release finalization and recovery', () => {
     expect(result.stderr).toContain('preserving candidate services');
   });
 });
+
+it.each(['worker', 'reporting', 'none'])(
+  'gates routing on candidate health and reporting (%s failure)',
+  (failure) => {
+    const source = readFileSync(resolve(root, 'ops/scripts/deploy.sh'), 'utf8');
+    const start = source.indexOf('compose pull "$worker_service"');
+    const end = source.indexOf('\nif compose ps -q nginx', start);
+    if (start < 0 || end < 0) throw new Error('Candidate readiness phase is missing');
+    const script = source.slice(start, end);
+    const result = spawnSync(
+      'bash',
+      [
+        '-c',
+        `
+set -euo pipefail
+worker_service=admin-worker-green
+target_slot=green
+script_dir=/fake
+compose() { :; }
+assert_service_image() { :; }
+bash() { echo health; [[ "$FAIL_STAGE" != worker ]]; }
+/fake/refresh-release-reporting.sh() { echo reporting; [[ "$FAIL_STAGE" != reporting ]]; }
+render_nginx_config() { echo routing; }
+stage_nginx_main_config() { :; }
+${script}
+`,
+      ],
+      { encoding: 'utf8', env: { ...process.env, FAIL_STAGE: failure }, timeout: 5000 },
+    );
+    expect(result.stdout.trim().split('\n')).toEqual(
+      failure === 'worker'
+        ? ['health']
+        : failure === 'reporting'
+          ? ['health', 'reporting']
+          : ['health', 'reporting', 'routing'],
+    );
+    expect(result.status).toBe(failure === 'none' ? 0 : 1);
+  },
+);
