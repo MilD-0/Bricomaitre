@@ -50,6 +50,11 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams('range=90d&grain=week'),
 }));
 
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
 describe('AdminAiChat', () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn();
@@ -82,11 +87,6 @@ describe('AdminAiChat', () => {
         return new Response('{}', { status: 200 });
       }),
     );
-  });
-
-  afterEach(() => {
-    cleanup();
-    vi.unstubAllGlobals();
   });
 
   it('uses an icon-only mobile launcher and an integrated responsive workspace', async () => {
@@ -1668,84 +1668,88 @@ it('preserves an unsent draft when searching saved conversations', async () => {
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('?q='), expect.anything()),
   );
   expect(composer).toHaveValue('Unsent draft');
-  cleanup();
-  vi.unstubAllGlobals();
 });
 
-it('adds a terminal task message without replacing the active streamed turn', async () => {
-  let terminal = false;
-  let controller: ReadableStreamDefaultController<Uint8Array>;
-  const conversation = {
-    id: 12,
-    sessionKey: 'e7249553-56ac-49f5-9e9c-dd8d724a6fac',
-    title: 'Saved',
-  };
-  const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value) + '\n');
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (input: string | URL | Request) => {
-      const url = String(input);
-      if (url === '/api/ai/conversations') return Response.json({ conversations: [conversation] });
-      if (url === '/api/ai/conversations/12')
-        return Response.json({
-          messages: [
-            { role: 'assistant', content: 'Saved answer', messageRecordId: 1 },
-            ...(terminal
-              ? [
-                  {
-                    role: 'assistant',
-                    content: 'Task completed',
-                    terminal: true,
-                    jobId: 'background',
-                    messageRecordId: 2,
-                  },
-                ]
-              : []),
-          ],
-        });
-      if (url === '/api/ai/history')
-        return Response.json({
-          jobs: [
-            {
-              id: 'background',
-              conversationId: 12,
-              kind: 'ai-product-content',
-              status: terminal ? 'completed' : 'running',
-              progress: { phase: 'generating', current: 0, total: 1, percentage: 0 },
-            },
-          ],
-        });
-      if (url === '/api/ai/chat')
-        return new Response(
-          new ReadableStream({
-            start(value) {
-              controller = value;
-              value.enqueue(encode({ type: 'text-delta', delta: 'First part' }));
-            },
-          }),
-          { headers: { 'content-type': 'application/x-ndjson' } },
-        );
-      return Response.json({});
-    }),
-  );
-  const user = userEvent.setup();
-  render(<AdminAiChat />);
-  await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
-  await screen.findByText('Saved answer');
-  await user.type(screen.getByRole('textbox', { name: 'aiChat.placeholder' }), 'A new turn');
-  await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
-  await screen.findByText('First part');
-  terminal = true;
-  await screen.findByText('Task completed', {}, { timeout: 4000 });
-  expect(screen.getByText('First part')).toBeInTheDocument();
-  expect(screen.getByText('A new turn')).toBeInTheDocument();
-  await act(async () => {
-    controller!.enqueue(encode({ type: 'text-delta', delta: ' and last part.' }));
-    controller!.enqueue(encode({ type: 'result', toolResults: [], conversation, messageId: 3 }));
-    controller!.close();
-  });
-  expect(await screen.findByText('First part and last part.')).toBeInTheDocument();
-  expect(screen.getAllByText('Task completed')).toHaveLength(1);
-  cleanup();
-  vi.unstubAllGlobals();
-}, 10000);
+it.each([0, 5])(
+  'reconciles terminal messages after %s HTTP failures without replacing the active turn',
+  async (failedReads) => {
+    let terminal = false;
+    let remainingFailures = failedReads;
+    let controller: ReadableStreamDefaultController<Uint8Array>;
+    const conversation = {
+      id: 12,
+      sessionKey: 'e7249553-56ac-49f5-9e9c-dd8d724a6fac',
+      title: 'Saved',
+    };
+    const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value) + '\n');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === '/api/ai/conversations')
+          return Response.json({ conversations: [conversation] });
+        if (url === '/api/ai/conversations/12' && terminal && remainingFailures-- > 0)
+          return new Response(null, { status: 503 });
+        if (url === '/api/ai/conversations/12')
+          return Response.json({
+            messages: [
+              { role: 'assistant', content: 'Saved answer', messageRecordId: 1 },
+              ...(terminal
+                ? [
+                    {
+                      role: 'assistant',
+                      content: 'Task completed',
+                      terminal: true,
+                      jobId: 'background',
+                      messageRecordId: 2,
+                    },
+                  ]
+                : []),
+            ],
+          });
+        if (url === '/api/ai/history')
+          return Response.json({
+            jobs: [
+              {
+                id: 'background',
+                conversationId: 12,
+                kind: 'ai-product-content',
+                status: terminal ? 'completed' : 'running',
+                progress: { phase: 'generating', current: 0, total: 1, percentage: 0 },
+              },
+            ],
+          });
+        if (url === '/api/ai/chat')
+          return new Response(
+            new ReadableStream({
+              start(value) {
+                controller = value;
+                value.enqueue(encode({ type: 'text-delta', delta: 'First part' }));
+              },
+            }),
+            { headers: { 'content-type': 'application/x-ndjson' } },
+          );
+        return Response.json({});
+      }),
+    );
+    const user = userEvent.setup();
+    render(<AdminAiChat />);
+    await user.click(screen.getByRole('button', { name: 'aiChat.open' }));
+    await screen.findByText('Saved answer');
+    await user.type(screen.getByRole('textbox', { name: 'aiChat.placeholder' }), 'A new turn');
+    await user.click(screen.getByRole('button', { name: 'aiChat.send' }));
+    await screen.findByText('First part');
+    terminal = true;
+    await screen.findByText('Task completed', {}, { timeout: 9000 });
+    expect(screen.getByText('First part')).toBeInTheDocument();
+    expect(screen.getByText('A new turn')).toBeInTheDocument();
+    await act(async () => {
+      controller!.enqueue(encode({ type: 'text-delta', delta: ' and last part.' }));
+      controller!.enqueue(encode({ type: 'result', toolResults: [], conversation, messageId: 3 }));
+      controller!.close();
+    });
+    expect(await screen.findByText('First part and last part.')).toBeInTheDocument();
+    expect(screen.getAllByText('Task completed')).toHaveLength(1);
+  },
+  15000,
+);

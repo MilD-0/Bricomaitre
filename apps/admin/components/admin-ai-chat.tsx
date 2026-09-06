@@ -196,6 +196,7 @@ export function AdminAiChat({
         }
         if (terminalJobIds.every((jobId) => terminalMessages.has(jobId))) return;
       }
+      throw new Error('Terminal task messages are not available yet');
     },
     [],
   );
