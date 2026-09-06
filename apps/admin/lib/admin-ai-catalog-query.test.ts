@@ -40,6 +40,9 @@ describe('Admin assistant broad catalog evidence', () => {
     expect(adminAiCatalogQuerySchema.safeParse({ inventoryMin: 10, inventoryMax: 2 }).success).toBe(
       false,
     );
+    expect(adminAiCatalogQuerySchema.safeParse({ promoEndsThrough: '2026-02-30' }).success).toBe(
+      false,
+    );
     expect(
       adminAiCatalogQuerySchema.safeParse({
         promoEndsFrom: '2026-09-01',

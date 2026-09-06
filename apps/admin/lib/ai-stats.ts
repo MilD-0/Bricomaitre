@@ -10,6 +10,7 @@ import {
 import { STOREFRONT_ANALYTICS_PROJECT } from '@bric/storefront-core/contracts';
 import {
   ISO_DATE_PATTERN,
+  dateCondition,
   aiStatsQuerySchema,
   isoValue,
   numberValue,
@@ -23,6 +24,7 @@ import {
 } from './ai-stats-contract';
 import { loadOperations } from './ai-stats-operations';
 import { loadShopping } from './ai-stats-shopping';
+import { dayInTimezone } from './analytics/date-range';
 import { resolveAnalyticsFilters, resolveAnalyticsReferenceNow } from './analytics';
 
 export { aiStatsQuerySchema } from './ai-stats-contract';
@@ -46,7 +48,7 @@ async function loadAiDatasetCutoff(db: Database, surface: AiStatsSurface) {
       : await db.execute(sql`
           select to_char(greatest(
             (select max(${analyticsAiDailyRollups.day}) from ${analyticsAiDailyRollups}),
-            (select max(${analyticsEvents.occurredAt} at time zone 'Africa/Algiers')
+            (select max(${analyticsEvents.occurredAt} at time zone 'UTC')
               from ${analyticsEvents}
               where ${analyticsEvents.metadata}->>'storefrontProject' = ${STOREFRONT_ANALYTICS_PROJECT}),
             (select max(${orderAiInfluence.capturedAt} at time zone 'Africa/Algiers')
@@ -92,7 +94,12 @@ export async function getAiStatsData(
   const clock = resolveAnalyticsReferenceNow(reviewSetting, cutoff, wallNow);
   const filters = resolveAiFilters(
     clock.reviewClock && parsed.range === 'custom' && parsed.endDate! > clock.referenceDate
-      ? { ...parsed, endDate: clock.referenceDate }
+      ? {
+          ...parsed,
+          startDate:
+            parsed.startDate! > clock.referenceDate ? clock.referenceDate : parsed.startDate,
+          endDate: clock.referenceDate,
+        }
       : parsed,
     clock.now,
   );
@@ -105,15 +112,37 @@ export async function getAiStatsData(
           from ${aiRuns} where ${aiRuns.surface} = 'admin' and ${timestampCondition(aiRuns.startedAt, filters)}
         `)
       : db.execute(sql`
-          select min(${analyticsEvents.occurredAt}) as from_at,
-            max(${analyticsEvents.occurredAt}) as through_at, count(*)::int as records
-          from ${analyticsEvents}
-          where ${timestampCondition(analyticsEvents.occurredAt, filters)}
-            and ${analyticsEvents.metadata}->>'storefrontProject' = ${STOREFRONT_ANALYTICS_PROJECT}
-            and ${analyticsEvents.eventName} like 'ai_assistant_%'
+          select min(from_at) as from_at, max(through_at) as through_at, sum(records)::bigint as records
+          from (
+            select min(${analyticsEvents.occurredAt}) as from_at,
+              max(${analyticsEvents.occurredAt}) as through_at, count(*)::bigint as records
+            from ${analyticsEvents}
+            where ${timestampCondition(analyticsEvents.occurredAt, filters, 'UTC')}
+              and ${analyticsEvents.metadata}->>'storefrontProject' = ${STOREFRONT_ANALYTICS_PROJECT}
+              and ${analyticsEvents.eventName} like 'ai_assistant_%'
+              and not exists (
+                select 1 from ${analyticsAiDailyRollups} rollup
+                where rollup.day = (${analyticsEvents.occurredAt} at time zone 'UTC')::date
+                  and rollup.dimension = 'overall' and rollup.dimension_key = ''
+              )
+            union all
+            select min(${analyticsAiDailyRollups.day})::timestamp at time zone 'UTC',
+              max(${analyticsAiDailyRollups.day})::timestamp at time zone 'UTC',
+              sum(${analyticsAiDailyRollups.opens} + ${analyticsAiDailyRollups.messages} +
+                ${analyticsAiDailyRollups.resultClicks} + ${analyticsAiDailyRollups.runs} +
+                ${analyticsAiDailyRollups.helpful} + ${analyticsAiDailyRollups.notHelpful} +
+                ${analyticsAiDailyRollups.errors})::bigint
+            from ${analyticsAiDailyRollups}
+            where ${dateCondition(analyticsAiDailyRollups.day, filters)}
+              and ${analyticsAiDailyRollups.dimension} = 'overall'
+              and ${analyticsAiDailyRollups.dimensionKey} = ''
+          ) retained_coverage
         `),
   ]);
   const coverage = rows(coverageResult)[0] ?? {};
+  const coverageFrom = isoValue(coverage.from_at),
+    coverageThrough = isoValue(coverage.through_at);
+  const coverageTimezone = filters.surface === 'operations' ? 'Africa/Algiers' : 'UTC';
   const base = {
     surface: filters.surface,
     filters,
@@ -121,8 +150,10 @@ export async function getAiStatsData(
     referenceDate: clock.referenceDate,
     reviewClock: clock.reviewClock,
     coverage: {
-      fromDate: isoValue(coverage.from_at)?.slice(0, 10) ?? null,
-      throughDate: isoValue(coverage.through_at)?.slice(0, 10) ?? null,
+      fromDate: coverageFrom ? dayInTimezone(new Date(coverageFrom), coverageTimezone) : null,
+      throughDate: coverageThrough
+        ? dayInTimezone(new Date(coverageThrough), coverageTimezone)
+        : null,
       records: numberValue(coverage.records),
     },
     data,

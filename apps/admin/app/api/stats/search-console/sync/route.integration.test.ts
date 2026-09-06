@@ -53,4 +53,14 @@ describe('POST /api/stats/search-console/sync', () => {
     expect(reversed.status).toBe(400);
     expect(syncMock).not.toHaveBeenCalled();
   });
+  it('rejects impossible dates before provider access', async () => {
+    const response = await POST(
+      new Request('http://localhost/api/stats/search-console/sync', {
+        method: 'POST',
+        body: JSON.stringify({ since: '2026-02-30', until: '2026-03-01' }),
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(syncMock).not.toHaveBeenCalled();
+  });
 });

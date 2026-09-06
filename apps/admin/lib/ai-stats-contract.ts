@@ -222,10 +222,13 @@ export function rows(result: Awaited<ReturnType<Database['execute']>>) {
   return result.rows as Array<Record<string, unknown>>;
 }
 
-export function timestampCondition(column: SQLWrapper, filters: AiStatsFilters) {
-  return filters.startDate
-    ? sql`${column} >= ${filters.startDate}::date and ${column} < (${filters.endDate}::date + interval '1 day')`
-    : sql`${column} < (${filters.endDate}::date + interval '1 day')`;
+export function timestampCondition(
+  column: SQLWrapper,
+  filters: AiStatsFilters,
+  timezone: 'Africa/Algiers' | 'UTC' = 'Africa/Algiers',
+) {
+  return sql`${filters.startDate ? sql`${column} >= (${filters.startDate}::date::timestamp at time zone ${timezone}) and` : sql``}
+    ${column} < ((${filters.endDate}::date + interval '1 day') at time zone ${timezone})`;
 }
 
 export function dateCondition(column: SQLWrapper, filters: AiStatsFilters) {

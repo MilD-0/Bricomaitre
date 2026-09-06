@@ -89,7 +89,7 @@ export async function getLiveStorefrontAiStats(
   filters: ExperienceStatsFilters,
 ): Promise<StorefrontAiStats> {
   const eventWhere = and(
-    reportingTimestampCondition(analyticsEvents.occurredAt, filters),
+    dateCondition(analyticsEvents.occurredAt, filters),
     sql`${analyticsEvents.metadata}->>'storefrontProject' = ${STOREFRONT_ANALYTICS_PROJECT}`,
   );
   const rollupWhere = dateCondition(analyticsAiDailyRollups.day, filters);

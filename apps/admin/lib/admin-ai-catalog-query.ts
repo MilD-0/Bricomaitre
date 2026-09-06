@@ -20,7 +20,7 @@ import { z } from 'zod';
 import { getDb } from '@bric/db/client';
 import { brands, categories, productPromoCodes, products } from '@bric/db/schema';
 
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.');
+import { reportingDateSchema as dateSchema } from './analytics/contract';
 const directionSchema = z.enum(['asc', 'desc']);
 
 export const adminAiCatalogQuerySchema = z

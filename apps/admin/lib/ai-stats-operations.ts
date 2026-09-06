@@ -42,14 +42,9 @@ export async function loadOperations(
         count(*) filter (where ${aiRuns.status} = 'running')::int as running,
         count(distinct ${aiRuns.actorId}) filter (where ${aiRuns.actorId} is not null)::int
           as active_operators,
-        coalesce(sum(${aiRuns.inputTokens}), 0)::bigint as input_tokens,
-        coalesce(sum(${aiRuns.outputTokens}), 0)::bigint as output_tokens,
         coalesce(sum(${aiRuns.totalTokens}), 0)::bigint as total_tokens,
         count(*) filter (where ${aiRuns.completedAt} >= ${aiRuns.startedAt})::int
           as valid_duration_samples,
-        percentile_cont(0.5) within group (
-          order by extract(epoch from (${aiRuns.completedAt} - ${aiRuns.startedAt})) * 1000
-        ) filter (where ${aiRuns.completedAt} >= ${aiRuns.startedAt}) as p50_duration_ms,
         percentile_cont(0.95) within group (
           order by extract(epoch from (${aiRuns.completedAt} - ${aiRuns.startedAt})) * 1000
         ) filter (where ${aiRuns.completedAt} >= ${aiRuns.startedAt}) as p95_duration_ms
@@ -120,7 +115,6 @@ export async function loadOperations(
         and ${timestampCondition(aiToolCalls.startedAt, filters)}
       group by ${aiToolCalls.toolName}
       order by count(*) desc, ${aiToolCalls.toolName} asc
-      limit 16
     `),
     db.execute(sql`
       select ${aiRuns.promptVersion} as prompt_version, ${aiRuns.model} as model,
@@ -290,7 +284,7 @@ export async function loadOperations(
         estimatedCostUsd: cost && cost.coveredRuns === cost.runs ? cost.cost : null,
       };
     }),
-    tools: toolRows.map((row) => {
+    tools: toolRows.slice(0, 16).map((row) => {
       const calls = numberValue(row.calls);
       const completed = numberValue(row.completed);
       return {

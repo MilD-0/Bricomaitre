@@ -47,16 +47,19 @@ describe('POST /api/stats/profit-tracker/fetch-meta', () => {
     });
   });
 
-  it('rejects malformed dates before calling Meta', async () => {
-    const response = await POST(
-      new Request('http://localhost/api/stats/profit-tracker/fetch-meta', {
-        method: 'POST',
-        body: JSON.stringify({ date: 'yesterday' }),
-      }),
-    );
-    expect(response.status).toBe(400);
-    expect(syncMock).not.toHaveBeenCalled();
-  });
+  it.each(['yesterday', '2026-02-30', '2026-13-01'])(
+    'rejects invalid calendar date %s before calling Meta',
+    async (date) => {
+      const response = await POST(
+        new Request('http://localhost/api/stats/profit-tracker/fetch-meta', {
+          method: 'POST',
+          body: JSON.stringify({ date }),
+        }),
+      );
+      expect(response.status).toBe(400);
+      expect(syncMock).not.toHaveBeenCalled();
+    },
+  );
 
   it('synchronizes an inclusive active range and caps it at 90 days', async () => {
     const response = await POST(

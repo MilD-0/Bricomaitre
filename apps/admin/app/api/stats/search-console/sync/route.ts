@@ -6,7 +6,7 @@ import { hasDb } from '@bric/db/client';
 import { requireMutationAccess } from '../../../../../lib/rbac';
 import { SearchConsoleSyncError, syncSearchConsole } from '../../../../../lib/search-console';
 
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+import { reportingDateSchema as dateSchema } from '../../../../../lib/analytics/contract';
 const inputSchema = z
   .object({ since: dateSchema.optional(), until: dateSchema.optional() })
   .strict()
@@ -29,11 +29,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
   const raw = await request.text();
-  const body = raw
-    ? await Promise.resolve()
-        .then(() => JSON.parse(raw))
-        .catch(() => null)
-    : {};
+  let body: unknown = {};
+  try {
+    if (raw) body = JSON.parse(raw);
+  } catch {
+    body = null;
+  }
   const parsed = inputSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { dayInTimezone } from './analytics/date-range';
+import { addDays, resolveAnalyticsFilters } from './analytics/date-range';
+import { numeric, nullableNumeric, isoValue as isoTimestamp } from './analytics/query-values';
 import { reportingDateSchema as dateOnlySchema } from './analytics/contract';
 
 import { getDb } from '@bric/db/client';
@@ -133,29 +134,6 @@ export type ProfitTrackerMetaSyncRange = {
   accountCurrency: string;
   syncedAt: Date;
 };
-
-function numeric(value: unknown) {
-  const parsed = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function nullableNumeric(value: unknown) {
-  if (value == null) return null;
-  const parsed = numeric(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function isoTimestamp(value: unknown) {
-  if (!value) return null;
-  const parsed = value instanceof Date ? value : new Date(String(value));
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
-}
-
-function addDays(date: string, amount: number) {
-  const value = new Date(`${date}T00:00:00.000Z`);
-  value.setUTCDate(value.getUTCDate() + amount);
-  return value.toISOString().slice(0, 10);
-}
 
 type AutomaticDayEconomics = {
   date: string;
@@ -483,38 +461,6 @@ async function loadRealizedDayEconomics(db: Database, startDate: string | null, 
     feesDzd: numeric(row.fees_dzd),
     realizedProfitDzd: numeric(row.realized_profit_dzd),
   }));
-}
-
-function resolveProfitTrackerRange(raw: ProfitTrackerRangeInput, now = new Date()) {
-  const parsed = profitTrackerRangeSchema.parse(raw);
-  const endDate = parsed.range === 'custom' ? parsed.endDate! : dayInTimezone(now);
-  let startDate: string | null;
-
-  switch (parsed.range) {
-    case '7d':
-      startDate = addDays(endDate, -6);
-      break;
-    case '14d':
-      startDate = addDays(endDate, -13);
-      break;
-    case '30d':
-      startDate = addDays(endDate, -29);
-      break;
-    case '90d':
-      startDate = addDays(endDate, -89);
-      break;
-    case 'year':
-      startDate = `${endDate.slice(0, 4)}-01-01`;
-      break;
-    case 'custom':
-      startDate = parsed.startDate!;
-      break;
-    case 'all':
-      startDate = null;
-      break;
-  }
-
-  return { range: parsed.range, startDate, endDate };
 }
 
 function mapSettings(row: typeof profitTrackerSettings.$inferSelect | undefined) {
@@ -1002,7 +948,11 @@ export async function getProfitTrackerReport(
   options: { db?: Database; now?: Date } = {},
 ) {
   const db = options.db ?? getDb();
-  const filters = resolveProfitTrackerRange(input, options.now);
+  const { range, startDate, endDate } = resolveAnalyticsFilters(
+    { ...profitTrackerRangeSchema.parse(input), view: 'money', grain: 'auto' },
+    options.now,
+  );
+  const filters = { range, startDate, endDate };
   const settings = await getProfitTrackerSettings(db);
   const queryStartDate = filters.startDate ? addDays(filters.startDate, -7) : null;
   const dayConditions = [lte(profitTrackerDays.day, filters.endDate)];

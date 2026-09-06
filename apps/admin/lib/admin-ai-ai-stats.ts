@@ -58,12 +58,12 @@ const ADMIN_AI_STATS_METRIC_DEFINITIONS: Record<
     engagedJourneys: {
       definition:
         'Storefront assistant questions/messages in the period. Despite the historical metric key, this is not a distinct-journey count.',
-      dateBasis: 'Storefront assistant event time in Africa/Algiers.',
+      dateBasis: 'Storefront assistant event time in UTC, matching retained daily analytics.',
     },
     resultClickRate: {
       definition: 'Storefront assistant result-click events divided by assistant message events.',
       denominator: 'Assistant messages/questions in the selected period.',
-      dateBasis: 'Storefront assistant event time in Africa/Algiers.',
+      dateBasis: 'Storefront assistant event time in UTC, matching retained daily analytics.',
     },
     recommendedOrders: {
       definition:

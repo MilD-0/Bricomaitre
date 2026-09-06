@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { reportingDateSchema } from '../../../../../../lib/analytics/contract';
 import { hasDb } from '@bric/db/client';
 import { refreshAnalyticsFactsAfterMutation } from '../../../../../../lib/analytics-facts';
 import { deleteProfitTrackerDay } from '../../../../../../lib/profit-tracker';
@@ -12,13 +13,12 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 503 });
   }
   const { date } = await params;
-  try {
-    const deleted = await deleteProfitTrackerDay(date);
-    if (deleted) await refreshAnalyticsFactsAfterMutation();
-    return deleted
-      ? NextResponse.json({ data: { date: deleted } })
-      : NextResponse.json({ error: 'Profit-tracker day not found' }, { status: 404 });
-  } catch {
+  const parsed = reportingDateSchema.safeParse(date);
+  if (!parsed.success)
     return NextResponse.json({ error: 'Invalid profit-tracker date' }, { status: 400 });
-  }
+  const deleted = await deleteProfitTrackerDay(parsed.data);
+  if (deleted) await refreshAnalyticsFactsAfterMutation();
+  return deleted
+    ? NextResponse.json({ data: { date: deleted } })
+    : NextResponse.json({ error: 'Profit-tracker day not found' }, { status: 404 });
 }

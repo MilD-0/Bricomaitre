@@ -6,7 +6,7 @@ import { MetaAdsSyncError, syncMetaAdsInsights } from '../../../../../lib/meta-a
 import { getProfitTrackerReport } from '../../../../../lib/profit-tracker';
 import { requireMutationAccess } from '../../../../../lib/rbac';
 
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+import { reportingDateSchema as dateSchema } from '../../../../../lib/analytics/contract';
 const inputSchema = z
   .union([
     z.object({ date: dateSchema }).strict(),

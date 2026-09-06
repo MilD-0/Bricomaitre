@@ -30,7 +30,7 @@ export async function loadShopping(
   db: Database,
   filters: AiStatsFilters,
 ): Promise<AiShoppingStats> {
-  const eventWhere = sql`${timestampCondition(analyticsEvents.occurredAt, filters)}
+  const eventWhere = sql`${timestampCondition(analyticsEvents.occurredAt, filters, 'UTC')}
     and ${analyticsEvents.metadata}->>'storefrontProject' = ${STOREFRONT_ANALYTICS_PROJECT}`;
   const rollupWhere = dateCondition(analyticsAiDailyRollups.day, filters);
   const unrolledEventWhere = sql`${eventWhere} and not exists (
@@ -91,7 +91,7 @@ export async function loadShopping(
     `),
       db.execute(sql`
       with trend as (
-        select (${analyticsEvents.occurredAt} at time zone 'Africa/Algiers')::date as day,
+        select (${analyticsEvents.occurredAt} at time zone 'UTC')::date as day,
           count(*) filter (where ${analyticsEvents.eventName} = 'ai_assistant_open')::bigint as opens,
           count(*) filter (where ${analyticsEvents.eventName} = 'ai_assistant_message')::bigint as messages,
           count(*) filter (where ${analyticsEvents.eventName} = 'ai_assistant_result_click')::bigint as result_clicks,

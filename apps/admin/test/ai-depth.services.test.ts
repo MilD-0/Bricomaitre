@@ -7,6 +7,8 @@ import {
   aiMessages,
   aiProposals,
   aiRuns,
+  aiToolCalls,
+  analyticsAiDailyRollups,
   categories,
   products,
   landingPages,
@@ -17,6 +19,7 @@ import {
   analyticsEvents,
   analyticsDailyRollups,
   profitTrackerSettings,
+  profitTrackerDays,
   storefrontSettings,
   productPromoCodes,
   actionLogs,
@@ -24,6 +27,9 @@ import {
   featuredProductGroups,
   featuredProductGroupProducts,
 } from '@bric/db/schema';
+import { STOREFRONT_ANALYTICS_PROJECT } from '@bric/storefront-core/contracts';
+import { getAiStatsData } from '../lib/ai-stats';
+import { getLiveStorefrontAiStats } from '../lib/stats-experience-ai';
 import { DEFAULT_STOREFRONT_SETTINGS } from '@bric/storefront-core/settings';
 import { patchAdminAsset, deleteAdminAsset, reorderAdminAssets } from '../lib/asset-mutations';
 import { applyHistoryAction } from '../lib/action-history';
@@ -32,6 +38,7 @@ import { saveStorefrontSettings } from '../lib/storefront-settings';
 import { ORDER_STATUS } from '@bric/storefront-core/order-domain';
 import {
   createProfitTrackerCost,
+  getProfitTrackerReport,
   deleteProfitTrackerCost,
   listProfitTrackerCosts,
   getProfitTrackerSettings,
@@ -69,6 +76,150 @@ afterAll(async () => {
 });
 
 describe('durable AI evidence', () => {
+  it('counts every tool type while limiting the display and respecting the operations business day', async () => {
+    const db = getDb();
+    const runs = await db
+      .insert(aiRuns)
+      .values(
+        [new Date('2093-01-01T23:30:00Z'), new Date('2093-01-02T23:30:00Z')].map((startedAt) => ({
+          surface: 'admin' as const,
+          task: 'admin_chat',
+          status: 'completed' as const,
+          model: 'test-model',
+          promptVersion: 'test-version',
+          actorId: randomUUID(),
+          startedAt,
+          completedAt: new Date(startedAt.getTime() + 1000),
+        })),
+      )
+      .returning();
+    try {
+      await db.insert(aiToolCalls).values(
+        Array.from({ length: 33 }, (_, index) => ({
+          runId: runs[0]!.id,
+          toolName: `tool-${Math.floor(index / 2)}`,
+          status: index === 32 ? 'failed' : 'completed',
+          startedAt: runs[0]!.startedAt,
+          completedAt: runs[0]!.completedAt,
+        })),
+      );
+      const report = await getAiStatsData(
+        {
+          surface: 'operations',
+          range: 'custom',
+          startDate: '2093-01-02',
+          endDate: '2093-01-02',
+          grain: 'day',
+        },
+        { db, now: new Date('2093-01-02T12:00:00Z') },
+      );
+      expect(report.data.kind).toBe('operations');
+      if (report.data.kind !== 'operations') throw new Error('Expected operations stats');
+      expect(report.data.summary).toMatchObject({
+        interactiveRuns: 1,
+        toolCalls: 33,
+        completedToolCalls: 32,
+      });
+      expect(report.data.metrics.find((metric) => metric.key === 'toolCompletion')).toMatchObject({
+        sample: 33,
+        value: 96.97,
+      });
+      expect(report.data.tools).toHaveLength(16);
+      expect(report.data.trend.map((row) => row.bucket)).toEqual(['2093-01-02']);
+      expect(report.coverage).toEqual({
+        fromDate: '2093-01-02',
+        throughDate: '2093-01-02',
+        records: 1,
+      });
+    } finally {
+      await db.delete(aiRuns).where(
+        inArray(
+          aiRuns.id,
+          runs.map((run) => run.id),
+        ),
+      );
+    }
+  });
+
+  it('combines retained shopping days and the raw UTC tail without losing coverage or double counting', async () => {
+    const db = getDb(),
+      journeyId = randomUUID();
+    await db.insert(analyticsJourneys).values({ id: journeyId });
+    const [rollup] = await db
+      .insert(analyticsAiDailyRollups)
+      .values({
+        day: '2093-02-01',
+        dimension: 'overall',
+        dimensionKey: '',
+        opens: 5,
+        messages: 7,
+        runs: 1,
+        completed: 1,
+        errors: 2,
+      })
+      .returning();
+    try {
+      await db.insert(analyticsEvents).values(
+        ['2093-01-31T23:30:00Z', '2093-02-01T23:30:00Z', '2093-02-02T23:30:00Z'].map(
+          (occurredAt) => ({
+            eventId: randomUUID(),
+            journeyId,
+            sessionId: journeyId,
+            eventName: 'ai_assistant_message',
+            occurredAt: new Date(occurredAt),
+            metadata: { storefrontProject: STOREFRONT_ANALYTICS_PROJECT },
+          }),
+        ),
+      );
+      const query = {
+        surface: 'shopping' as const,
+        range: 'custom' as const,
+        startDate: '2093-02-01',
+        endDate: '2093-02-02',
+        grain: 'day' as const,
+      };
+      const report = await getAiStatsData(query, { db, now: new Date('2093-02-02T12:00:00Z') });
+      expect(report.data.kind).toBe('shopping');
+      if (report.data.kind !== 'shopping') throw new Error('Expected shopping stats');
+      expect(report.data.summary).toMatchObject({ opens: 5, messages: 8 });
+      expect(report.data.trend.map(({ bucket, messages }) => ({ bucket, messages }))).toEqual([
+        { bucket: '2093-02-01', messages: 7 },
+        { bucket: '2093-02-02', messages: 1 },
+      ]);
+      expect(report.coverage).toEqual({
+        fromDate: '2093-02-01',
+        throughDate: '2093-02-02',
+        records: 16,
+      });
+      const compact = await getLiveStorefrontAiStats(db, query);
+      expect(compact).toMatchObject({ opens: 5, messages: 8 });
+    } finally {
+      await db.delete(analyticsAiDailyRollups).where(eq(analyticsAiDailyRollups.id, rollup!.id));
+      await db.delete(analyticsJourneys).where(eq(analyticsJourneys.id, journeyId));
+    }
+  });
+
+  it('respects an explicit all-history cutoff rather than broadening the report to today', async () => {
+    const db = getDb();
+    const dates = ['2094-01-01', '2094-01-03'];
+    await db
+      .insert(profitTrackerDays)
+      .values(dates.map((day) => ({ day, grossProfitDzd: '100', fxRateUsed: '280' })));
+    try {
+      const report = await getProfitTrackerReport(
+        { range: 'all', endDate: '2094-01-02' },
+        { db, now: new Date('2094-01-04T12:00:00Z') },
+      );
+      expect(report.filters.range).toBe('all');
+      expect(report.filters.endDate <= '2094-01-02').toBe(true);
+      expect(report.days.some((day) => day.date === dates[0])).toBe(true);
+      expect(report.days.some((day) => day.date === dates[1])).toBe(false);
+      expect(report.days.every((day) => day.date <= report.filters.endDate)).toBe(true);
+    } finally {
+      await db.delete(profitTrackerDays).where(inArray(profitTrackerDays.day, dates));
+    }
+  });
+
   it('audits atomic asset reorders, rejects stale AI lists, and supports undo and redo', async () => {
     const db = getDb(),
       actor = { email: `${randomUUID()}@example.invalid` };
