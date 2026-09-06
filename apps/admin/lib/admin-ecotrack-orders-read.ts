@@ -3,7 +3,6 @@ import { getEcotrackMaj, getEcotrackOrdersStatus } from '@bric/storefront-core/e
 
 import type { ActionActor } from './action-history';
 import {
-  buildEcotrackOrderDetailFromRow,
   buildListItems,
   confirmShipmentStatusFromCurrentOrders,
   ensureFreshShipmentRow,
@@ -116,18 +115,11 @@ export async function loadEcotrackOrderDetail(
     return null;
   }
 
-  let freshDetail: EcotrackOrderDetail | null;
   try {
-    freshDetail = await ensureFreshShipmentRow(db, initialRow, { actor });
+    return await ensureFreshShipmentRow(db, initialRow, { actor });
   } catch (error) {
     throw new Error(formatEcotrackActionError('detail', initialRow, error).summary);
   }
-  if (!freshDetail) {
-    return null;
-  }
-
-  const row = await loadShipmentRowByOrderId(db, orderId);
-  return row ? buildEcotrackOrderDetailFromRow(db, row) : null;
 }
 
 export async function refreshEcotrackOrder(orderId: number, actor?: ActionActor | null) {

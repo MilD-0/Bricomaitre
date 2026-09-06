@@ -5,75 +5,11 @@ import {
   type ShoppingListOrderGroup,
 } from '../../lib/shopping-list-drafts';
 
-type EcotrackOrderPayload = {
-  reference: string;
-  nom_client: string;
-  telephone: string;
-  telephone_2?: string;
-  adresse: string;
-  code_postal?: string;
-  commune: string;
-  code_wilaya: string;
-  montant: string;
-  remarque?: string;
-  produit?: string;
-  type: '1';
-  stop_desk: 0 | 1;
-};
-
-type EcotrackPreviewItem = {
-  orderId: number;
-  customerName: string;
-  destination: string;
-  amount: string;
-  payload: EcotrackOrderPayload;
-};
-
-type EcotrackPreviewSkipItem = {
-  orderId: number;
-  customerName: string;
-  reason: 'already_posted';
-};
-
-type EcotrackPreviewInvalidItem = {
-  orderId: number;
-  customerName: string;
-  reason:
-    | 'status_not_confirmed'
-    | 'missing_phone'
-    | 'missing_wilaya'
-    | 'missing_commune'
-    | 'invalid_commune'
-    | 'missing_address'
-    | 'missing_name';
-  message: string;
-};
-
-export type EcotrackPreviewResponse = {
-  totalRequested: number;
-  eligible: EcotrackPreviewItem[];
-  skipped: EcotrackPreviewSkipItem[];
-  invalid: EcotrackPreviewInvalidItem[];
-};
-
-type EcotrackPostingResultItem = {
-  orderId: number;
-  reference: string;
-  tracking: string | null;
-  status: 'skipped' | 'invalid' | 'created' | 'failed';
-  message: string;
-};
-
-export type EcotrackPostingSummary = {
-  totalRequested: number;
-  eligible: number;
-  created: number;
-  skippedAlreadyPosted: number;
-  invalid: number;
-  failed: number;
-  rateLimits: Array<Record<string, unknown>>;
-  results: EcotrackPostingResultItem[];
-};
+import type { EcotrackPreviewResult as EcotrackPreviewResponse } from '../../lib/ecotrack-posting';
+export type {
+  EcotrackPreviewResult as EcotrackPreviewResponse,
+  EcotrackPostingSummary,
+} from '../../lib/ecotrack-posting';
 
 export type EcotrackPostingPreviewState = {
   mode: 'selected' | 'confirmed';

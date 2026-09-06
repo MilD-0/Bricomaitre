@@ -116,7 +116,7 @@ export type EcotrackOrderInput = {
   record: OrderRecord;
 };
 
-type EcotrackPreviewResult = {
+export type EcotrackPreviewResult = {
   totalRequested: number;
   eligible: EcotrackOrderPreviewItem[];
   skipped: EcotrackOrderSkipItem[];

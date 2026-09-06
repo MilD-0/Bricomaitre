@@ -314,8 +314,12 @@ export async function upsertShipmentState(
     )
       return false;
     const beforeShipmentState = buildEcotrackShipmentActionSnapshot(currentShipment);
-    const beforeMajState = await loadMajSyncSummary(tx, row.order.id, row.trackingNumber);
-    const beforeTrackingState = await loadTrackingSyncSummary(tx, row.order.id, row.trackingNumber);
+    const beforeMajState = payload.majEntries
+      ? await loadMajSyncSummary(tx, row.order.id, row.trackingNumber)
+      : null;
+    const beforeTrackingState = payload.trackingInfo
+      ? await loadTrackingSyncSummary(tx, row.order.id, row.trackingNumber)
+      : null;
 
     const [updatedShipment] = await tx
       .update(ecotrackOrderStates)
@@ -398,8 +402,6 @@ export async function upsertShipmentState(
 
     const afterOrderState = buildEcotrackOrderActionSnapshot(savedOrder);
     const afterShipmentState = buildEcotrackShipmentActionSnapshot(updatedShipment);
-    const afterMajState = await loadMajSyncSummary(tx, row.order.id, row.trackingNumber);
-    const afterTrackingState = await loadTrackingSyncSummary(tx, row.order.id, row.trackingNumber);
 
     await recordEcotrackOrderAction(tx, beforeOrderState, afterOrderState, actor);
     await recordEcotrackShipmentAction(
@@ -410,14 +412,24 @@ export async function upsertShipmentState(
       actor,
       'update',
     );
-    await recordEcotrackMajAction(tx, row.order.id, beforeMajState, afterMajState, actor);
-    await recordEcotrackTrackingAction(
-      tx,
-      row.order.id,
-      beforeTrackingState,
-      afterTrackingState,
-      actor,
-    );
+    if (beforeMajState) {
+      const afterMajState = await loadMajSyncSummary(tx, row.order.id, row.trackingNumber);
+      await recordEcotrackMajAction(tx, row.order.id, beforeMajState, afterMajState, actor);
+    }
+    if (beforeTrackingState) {
+      const afterTrackingState = await loadTrackingSyncSummary(
+        tx,
+        row.order.id,
+        row.trackingNumber,
+      );
+      await recordEcotrackTrackingAction(
+        tx,
+        row.order.id,
+        beforeTrackingState,
+        afterTrackingState,
+        actor,
+      );
+    }
 
     return true;
   });
