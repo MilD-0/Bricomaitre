@@ -5,13 +5,13 @@ import useEmblaCarousel from 'embla-carousel-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { StorefrontHomepageResponse } from '@bric/storefront-core/contracts';
-import { CatalogCard } from '@/components/catalog-card';
+import { CatalogCard, type CatalogProduct } from '@/components/catalog-card';
 import { StorefrontImage } from '@/components/storefront-image';
 import type { Locale } from '@/i18n/config';
 import { getBrandPath, getCategoryPath } from '@/lib/taxonomy-routes';
+import type { StorefrontHomepageResponse } from '@bric/storefront-core/contracts';
 
-type Product = StorefrontHomepageResponse['topProducts'][number];
+type Product = CatalogProduct;
 type Category = StorefrontHomepageResponse['categories'][number];
 type Brand = StorefrontHomepageResponse['brands'][number];
 const touchCarouselOptions = { align: 'start' as const, dragFree: true };

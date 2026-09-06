@@ -240,7 +240,6 @@ const catalogProducts = [
     updatedAt: '2026-07-01T10:00:00.000Z',
   },
 ];
-
 for (let id = 14; id <= 41; id += 1) {
   catalogProducts.push({
     id,
@@ -285,6 +284,16 @@ for (let id = 43; id <= 50; id += 1) {
     createdAt: '2026-06-21T10:00:00.000Z',
     updatedAt: `2026-06-${String(id - 20).padStart(2, '0')}T10:00:00.000Z`,
   });
+}
+
+// Exercise list payloads with bilingual catalog copy, not empty descriptions.
+for (const item of catalogProducts) {
+  item.description = (item.description ?? 'Outil robuste pour les travaux de chantier. ').repeat(
+    80,
+  );
+  item.descriptionAr = (
+    item.descriptionAr ?? 'أداة متينة للاستخدام في الورشة ومواقع العمل. '
+  ).repeat(80);
 }
 
 function homepage() {
@@ -504,6 +513,7 @@ function createOrder(payload) {
     return {
       productId: item?.id ?? null,
       brandId: item?.brandId ?? null,
+      slug: item?.slug ?? null,
       rawValue,
       title: item?.title ?? rawValue,
       unitPrice,
@@ -693,6 +703,8 @@ const server = createServer((request, response) => {
       ...landingPage(contentLocale),
       slug: only ? url.pathname.split('/').at(-1) : `lampe-${locale}`,
     });
+  } else if (url.pathname === '/storefront/landing-pages/unavailable') {
+    result = json({ error: 'Unavailable' }, 503);
   } else if (url.pathname === '/storefront/landing-pages/lampe-atelier') {
     const locale = url.searchParams.get('locale');
     result =

@@ -1,5 +1,7 @@
 'use client';
 
+import { storefrontCatalogCardSchema } from '@bric/storefront-core/contracts';
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
@@ -29,20 +31,18 @@ const MAX_PERSISTED_ITEMS = 240;
 function uniqueCatalogProducts(items: unknown[], excludedIds: Iterable<number> = []) {
   const seenIds = new Set(excludedIds);
 
-  return items.filter((item): item is CatalogProduct => {
-    if (!item || typeof item !== 'object' || !Number.isInteger((item as CatalogProduct).id))
-      return false;
-    const id = (item as CatalogProduct).id;
-    if (seenIds.has(id)) return false;
-    seenIds.add(id);
-    return true;
+  return items.flatMap((item) => {
+    const parsed = storefrontCatalogCardSchema.safeParse(item);
+    if (!parsed.success || seenIds.has(parsed.data.id)) return [];
+    seenIds.add(parsed.data.id);
+    return [parsed.data];
   });
 }
 
 function getStorageKey() {
   const url = new URL(window.location.href);
   url.searchParams.delete('page');
-  return `bric:catalog-position:v2:${url.pathname}${url.search}`;
+  return `bric:catalog-position:v3:${url.pathname}${url.search}`;
 }
 
 function readStoredState(): StoredCatalogState | null {
@@ -63,10 +63,10 @@ function readStoredState(): StoredCatalogState | null {
       page: value.page as number,
       hasNextPage: value.hasNextPage,
       totalCount: value.totalCount as number,
-      scrollY:
-        Number.isFinite(value.scrollY) && (value.scrollY as number) >= 0
-          ? (value.scrollY as number)
-          : 0,
+      scrollY: Math.max(
+        0,
+        Number(window.sessionStorage.getItem(`${getStorageKey()}:scroll`) ?? value.scrollY) || 0,
+      ),
     };
   } catch {
     return null;
@@ -76,12 +76,13 @@ function readStoredState(): StoredCatalogState | null {
 function writeStoredState(state: StoredCatalogState) {
   try {
     window.sessionStorage.setItem(getStorageKey(), JSON.stringify(state));
+    window.sessionStorage.setItem(`${getStorageKey()}:scroll`, String(state.scrollY));
   } catch {
     // Position restoration is a non-blocking enhancement.
   }
 }
 
-export function CatalogInfiniteLoader({
+function CatalogInfiniteLoaderState({
   locale,
   query,
   initialCount,
@@ -111,6 +112,8 @@ export function CatalogInfiniteLoader({
     end: string;
   };
 }) {
+  const requestRef = useRef<AbortController | null>(null);
+  useEffect(() => () => requestRef.current?.abort(), []);
   const normalizedQuery = useMemo(() => parseCatalogPageQuery(query), [query]);
   const restoresCatalogPosition = listContext === 'catalog';
   const [items, setItems] = useState<CatalogProduct[]>([]);
@@ -141,6 +144,13 @@ export function CatalogInfiniteLoader({
       pageRef.current = normalizedQuery.page;
       hasNextPageRef.current = initialHasNextPage;
       restoringRef.current = false;
+      writeStoredState({
+        items: [],
+        page: normalizedQuery.page,
+        hasNextPage: initialHasNextPage,
+        totalCount,
+        scrollY: 0,
+      });
       return () => {
         history.scrollRestoration = previousRestoration;
       };
@@ -175,13 +185,12 @@ export function CatalogInfiniteLoader({
     let frame = 0;
     function persist() {
       if (restoringRef.current) return;
-      writeStoredState({
-        items: itemsRef.current.slice(0, MAX_PERSISTED_ITEMS),
-        page: pageRef.current,
-        hasNextPage: hasNextPageRef.current,
-        totalCount,
-        scrollY: window.scrollY,
-      });
+      if (itemsRef.current.length > MAX_PERSISTED_ITEMS) return;
+      try {
+        window.sessionStorage.setItem(`${getStorageKey()}:scroll`, String(window.scrollY));
+      } catch {
+        // Position restoration is optional.
+      }
     }
     function handleScroll() {
       cancelAnimationFrame(frame);
@@ -203,9 +212,12 @@ export function CatalogInfiniteLoader({
     setLoading(true);
     setError(false);
     const nextPage = pageRef.current + 1;
+    const controller = new AbortController();
+    requestRef.current = controller;
     try {
       const response = await fetch(buildCatalogApiPath(normalizedQuery, nextPage, pageSize), {
         headers: { accept: 'application/json' },
+        signal: controller.signal,
       });
       if (!response.ok) throw new Error('catalog page unavailable');
       const payload = (await response.json()) as {
@@ -220,6 +232,7 @@ export function CatalogInfiniteLoader({
       ) {
         throw new Error('invalid catalog page');
       }
+      if (controller.signal.aborted) return;
       const nextItems = uniqueCatalogProducts(payload.items, [
         ...initialProductIds,
         ...items.map((item) => item.id),
@@ -230,9 +243,9 @@ export function CatalogInfiniteLoader({
       hasNextPageRef.current = payload.hasNextPage;
       setItems(appendedItems);
       setHasNextPage(payload.hasNextPage);
-      if (restoresCatalogPosition) {
+      if (restoresCatalogPosition && appendedItems.length <= MAX_PERSISTED_ITEMS) {
         writeStoredState({
-          items: appendedItems.slice(0, MAX_PERSISTED_ITEMS),
+          items: appendedItems,
           page: nextPage,
           hasNextPage: payload.hasNextPage,
           totalCount,
@@ -251,7 +264,7 @@ export function CatalogInfiniteLoader({
         },
       });
     } catch {
-      setError(true);
+      if (!controller.signal.aborted) setError(true);
     } finally {
       loadingRef.current = false;
       setLoading(false);
@@ -316,4 +329,14 @@ export function CatalogInfiniteLoader({
       </div>
     </>
   );
+}
+
+export function CatalogInfiniteLoader(props: Parameters<typeof CatalogInfiniteLoaderState>[0]) {
+  const key = JSON.stringify([
+    props.locale,
+    parseCatalogPageQuery(props.query),
+    props.pageSize,
+    props.listContext,
+  ]);
+  return <CatalogInfiniteLoaderState key={key} {...props} />;
 }

@@ -1,4 +1,4 @@
-import { expect, type BrowserContext, type Page, test } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 async function expectPhoneEnvironment(page: Page) {
   const environment = await page.evaluate(() => ({
@@ -303,3 +303,52 @@ test('keeps the Arabic phone journey RTL and usable', async ({ page }) => {
   await expect(page.getByRole('textbox', { name: /رقم الهاتف/ })).toBeVisible();
   await expectPhoneEnvironment(page);
 });
+
+for (const locale of ['fr', 'ar'] as const) {
+  test(`keeps ${locale} catalog pagination and locale links current after sorting`, async ({
+    page,
+  }, testInfo) => {
+    await page.goto(`/${locale}/products`);
+    await page.locator('.catalog-infinite-sentinel').scrollIntoViewIfNeeded();
+    await expect(page.locator('[data-catalog-product]')).toHaveCount(39);
+    await page.locator('.catalog-toolbar select').selectOption('price-asc');
+    await expect.poll(() => new URL(page.url()).searchParams.get('sort')).toBe('price-asc');
+    await page.locator('.catalog-infinite-sentinel').scrollIntoViewIfNeeded();
+    await expect(page.locator('[data-catalog-product]')).toHaveCount(39);
+    const ids = await page
+      .locator('[data-catalog-product]')
+      .evaluateAll((items) => items.map((item) => item.getAttribute('data-product-id')));
+    expect(new Set(ids).size).toBe(39);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const alternate = locale === 'fr' ? 'ar' : 'fr';
+    await expectPhoneEnvironment(page);
+    await page.screenshot({ path: testInfo.outputPath(`catalog-${locale}.png`), fullPage: false });
+    await page
+      .getByRole('button', { name: locale === 'fr' ? 'Ouvrir le menu' : 'فتح القائمة' })
+      .tap();
+    const localeLink = page
+      .getByRole('dialog')
+      .locator(`a[href="/${alternate}/products?sort=price-asc"]`);
+    await expect(localeLink).toBeVisible();
+    await localeLink.click();
+    await expect(page).toHaveURL(new RegExp(`/${alternate}/products\\?sort=price-asc$`));
+    await expect(page.locator('html')).toHaveAttribute('dir', alternate === 'ar' ? 'rtl' : 'ltr');
+  });
+
+  test(`offers recovery for a ${locale} campaign outage`, async ({ page }, testInfo) => {
+    await page.goto(`/${locale}/landing/unavailable`);
+    await expect(
+      page.getByRole('alert', {
+        name: locale === 'fr' ? 'Cette page a rencontré un problème' : 'تعذر عرض هذه الصفحة',
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: locale === 'fr' ? 'Réessayer' : 'حاول مرة أخرى' }),
+    ).toBeVisible();
+    await expectPhoneEnvironment(page);
+    await page.screenshot({
+      path: testInfo.outputPath(`landing-outage-${locale}.png`),
+      fullPage: false,
+    });
+  });
+}

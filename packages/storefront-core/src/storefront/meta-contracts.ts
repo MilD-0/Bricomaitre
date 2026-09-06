@@ -69,3 +69,7 @@ export const storefrontOrderMetaResponseSchema = z.object({
 export type MetaBrowserEvent = z.infer<typeof metaBrowserEventSchema>;
 export type StorefrontOrderMeta = z.infer<typeof storefrontOrderMetaSchema>;
 export type StorefrontOrderMetaResponse = z.infer<typeof storefrontOrderMetaResponseSchema>;
+
+export function buildMetaClickCookie(fbclid: string, capturedAt: number) {
+  return `fb.1.${Math.trunc(capturedAt)}.${fbclid}`;
+}

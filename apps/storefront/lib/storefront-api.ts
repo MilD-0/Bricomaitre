@@ -35,7 +35,6 @@ import {
   landingPagePreviewSchema,
   landingPageSlugSchema,
   storefrontLandingPageResponseSchema,
-  storefrontLandingPageSitemapResponseSchema,
   type LandingPagePreview,
   type StorefrontLandingPageResponse,
 } from '@bric/storefront-core/landing-pages';
@@ -153,24 +152,6 @@ export async function getStorefrontLandingPage(
         STOREFRONT_CACHE_TAGS.landingPages,
         getStorefrontLandingPageCacheTag(parsedLocale, parsedSlug),
       ],
-    },
-  )();
-}
-
-export async function getStorefrontSitemapLandingPages() {
-  return unstable_cache(
-    async () => {
-      const pathname = '/storefront/landing-pages';
-      return parseUpstreamJson(
-        await fetchStorefrontUpstream(pathname),
-        pathname,
-        storefrontLandingPageSitemapResponseSchema,
-      );
-    },
-    ['storefront-sitemap-landing-pages', getStorefrontApiBaseUrl()],
-    {
-      revalidate: 3600,
-      tags: [STOREFRONT_CACHE_TAGS.landingPages],
     },
   )();
 }

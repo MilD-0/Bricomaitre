@@ -167,7 +167,7 @@ describe('localized Product Detail Page', () => {
     expect(html).toMatch(/product-current-price[^>]*>1[^\d]200/);
   });
 
-  it('retains a promotion while redirecting a legacy product identifier', async () => {
+  it('retains promotion and campaign parameters while redirecting a legacy product identifier', async () => {
     getProductMock.mockResolvedValue({
       ...productResponse,
       resolution: { ...productResponse.resolution, requestedToken: '12' },
@@ -175,9 +175,16 @@ describe('localized Product Detail Page', () => {
     await expect(
       ProductPageContent({
         params: Promise.resolve({ locale: 'fr', token: '12' }),
-        searchParams: Promise.resolve({ promo: 'AUDIT10' }),
+        searchParams: Promise.resolve({
+          promo: 'AUDIT10',
+          fbclid: 'click-1',
+          utm_source: 'facebook',
+          utm_content: ['a', 'b'],
+        }),
       }),
-    ).rejects.toThrow('NEXT_REDIRECT:/fr/products/desk-lamp?promo=AUDIT10');
+    ).rejects.toThrow(
+      'NEXT_REDIRECT:/fr/products/desk-lamp?promo=AUDIT10&fbclid=click-1&utm_source=facebook&utm_content=a&utm_content=b',
+    );
   });
   beforeEach(() => {
     getProductMock.mockReset();

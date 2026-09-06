@@ -2,10 +2,9 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ readProduct: vi.fn() }));
-vi.mock('./catalog', () => ({ readStorefrontProductByToken: mocks.readProduct }));
+vi.mock('./catalog', () => ({ readStorefrontProductById: mocks.readProduct }));
 
 import {
-  readIndexableStorefrontLandingPages,
   readPublishedStorefrontLandingPage,
   readStorefrontLandingPageRevision,
 } from './landing-page-records';
@@ -43,11 +42,7 @@ const document = {
   ],
 };
 
-describe('indexable storefront landing pages', () => {
-  it('keeps direct-link campaign pages out of storefront discovery', async () => {
-    await expect(readIndexableStorefrontLandingPages({} as never)).resolves.toEqual([]);
-  });
-
+describe('storefront landing page revisions', () => {
   it('loads the exact current draft revision for a signed preview', async () => {
     const limit = vi
       .fn()
@@ -103,7 +98,7 @@ describe('indexable storefront landing pages', () => {
       publishedAt: null,
       document,
     });
-    expect(mocks.readProduct).toHaveBeenCalledWith(db, '8');
+    expect(mocks.readProduct).toHaveBeenCalledWith(db, 8);
   });
 });
 

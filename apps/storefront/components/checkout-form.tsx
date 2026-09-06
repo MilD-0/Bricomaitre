@@ -15,19 +15,20 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
 import { StorefrontImage } from '@/components/storefront-image';
+import { CheckoutContentSkeleton } from '@/components/storefront-skeletons';
 import {
   SupportContactActions,
-  type SupportContactLabels,
   type StorefrontSupportContact,
+  type SupportContactLabels,
 } from '@/components/support-contact-actions';
 import { ShieldCheckIcon, type ShieldCheckIconHandle } from '@/components/ui/shield-check';
 import type { Locale } from '@/i18n/config';
 import { getAnalyticsIdentity, trackCheckoutEvent } from '@/lib/analytics';
 import {
-  readCart,
+  consumeOrderedCartItems,
   getCartProductPromos,
   mergeCartValidation,
-  consumeOrderedCartItems,
+  readCart,
   reconcileCartWithCatalog,
   STOREFRONT_CART_KEY,
   writeCart,
@@ -43,22 +44,21 @@ import {
   hasCheckoutStopDesk,
   readCheckoutDraft,
   readPendingCheckout,
-  writeCheckoutDraft,
   writeCheckoutConfirmation,
+  writeCheckoutDraft,
   writePendingCheckout,
   type PendingCheckout,
 } from '@/lib/checkout';
-import { prepareHaptics, triggerHaptic } from '@/lib/haptics';
-import { CheckoutContentSkeleton } from '@/components/storefront-skeletons';
-import { CheckoutOrderError, createCheckoutOrder } from '@/lib/orders';
-import { formatProductPrice } from '@/lib/product-presentation';
-import { getMarketingOrderContext } from '@/lib/marketing-attribution';
 import type { CheckoutLabels } from '@/lib/checkout-labels';
+import { prepareHaptics, triggerHaptic } from '@/lib/haptics';
 import {
   LANDING_ORDER_QUANTITY_EVENT,
   LANDING_ORDER_SECTION_ID,
   type LandingOrderQuantityDetail,
 } from '@/lib/landing-order';
+import { getMarketingOrderContext } from '@/lib/marketing-attribution';
+import { CheckoutOrderError, createCheckoutOrder } from '@/lib/orders';
+import { formatProductPrice } from '@/lib/product-presentation';
 
 function createId() {
   return (
@@ -207,7 +207,9 @@ export function CheckoutForm({
     if (savedAttempt) {
       setRetryAt((savedAttempt.retryAt ?? 0) > Date.now() ? savedAttempt.retryAt! : 0);
       setRequestError(
-        (savedAttempt.retryAt ?? 0) > Date.now() ? labels.rateLimit : labels.submitError,
+        (savedAttempt.retryAt ?? 0) > Date.now() && savedAttempt.retryReason === 'rate_limit'
+          ? labels.rateLimit
+          : labels.submitError,
       );
     }
     setHydrated(true);
@@ -376,15 +378,11 @@ export function CheckoutForm({
       } else {
         const nextAttempt = {
           ...attempt,
-          ...(code === 'rate_limit'
+          ...(error instanceof CheckoutOrderError && error.retryAfterSeconds !== null
             ? {
-                retryAt:
-                  Date.now() +
-                  Math.max(
-                    1,
-                    error instanceof CheckoutOrderError ? (error.retryAfterSeconds ?? 60) : 60,
-                  ) *
-                    1000,
+                retryAt: Date.now() + Math.max(1, error.retryAfterSeconds) * 1000,
+                retryReason:
+                  code === 'rate_limit' ? ('rate_limit' as const) : ('processing' as const),
               }
             : {}),
         };

@@ -1,14 +1,13 @@
-import { productPromosSchema } from '../orders-support';
 import { z } from 'zod';
+import { productPromosSchema } from '../orders-support';
 
 import {
   deliveryTypeSchema,
   orderStatusSchema,
   storefrontOrderCreateSchema,
-  storefrontOrderPatchSchema,
 } from '../orders-support';
-import { storefrontOrderMetaResponseSchema, storefrontOrderMetaSchema } from './meta-contracts';
 import { storefrontOrderMarketingSchema } from './marketing-contracts';
+import { storefrontOrderMetaResponseSchema, storefrontOrderMetaSchema } from './meta-contracts';
 import { toStorefrontContactSettings } from './settings';
 
 export const STOREFRONT_ANALYTICS_PROJECT = 'storefront' as const;
@@ -111,7 +110,6 @@ export const storefrontOrderCreateRequestSchema = storefrontOrderCreateSchema
       });
     }
   });
-export const storefrontOrderPatchRequestSchema = storefrontOrderPatchSchema;
 
 export const storefrontProductResponseItemSchema = z.object({
   id: z.number().int().positive(),
@@ -132,6 +130,15 @@ export const storefrontProductResponseItemSchema = z.object({
   images: z.array(z.string()),
   createdAt: isoTimestampSchema,
   updatedAt: isoTimestampSchema,
+});
+
+export const storefrontCatalogCardSchema = storefrontProductResponseItemSchema.omit({
+  description: true,
+  descriptionAr: true,
+  sku: true,
+  barcode: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 export const storefrontProductsResponseSchema = z.object({
@@ -436,6 +443,7 @@ export const storefrontOrderResponseItemSchema = z.object({
       productId: z.number().int().positive().nullable(),
       brandId: z.number().int().nullable().optional(),
       rawValue: z.string(),
+      slug: z.string().nullable().optional(),
       title: z.string(),
       titleAr: z.string().nullable().optional(),
       unitPrice: z.number(),
@@ -518,4 +526,3 @@ export type StorefrontEcotrackCatalogResponse = z.infer<
 export type StorefrontProductDetailResponse = z.infer<typeof storefrontProductDetailResponseSchema>;
 export type StorefrontOrderCreateRequest = z.infer<typeof storefrontOrderCreateRequestSchema>;
 export type StorefrontOrderResponseItem = z.infer<typeof storefrontOrderResponseItemSchema>;
-export type StorefrontOrderPatchRequest = z.infer<typeof storefrontOrderPatchRequestSchema>;

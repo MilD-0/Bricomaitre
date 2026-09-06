@@ -1,4 +1,5 @@
-import { type InferInsertModel, and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
+import { StorefrontOrderClaimLostError } from './order-idempotency';
 
 import type { getDb } from '@bric/db/client';
 import {
@@ -8,14 +9,10 @@ import {
   orders,
   storefrontOrderIdempotency,
 } from '@bric/db/schema';
-import {
-  readOrderProductSubtotal,
-  resolveOrderCommercialState,
-  assertReviewedOrderPrices,
-} from '../order-commercial';
-import { insertCanonicalOrder, updateCanonicalOrder } from '../order-write';
-import { attachJourneyToOrder } from './analytics';
 import { readEcotrackDeliveryFee } from '../ecotrack-support';
+import { assertReviewedOrderPrices, resolveOrderCommercialState } from '../order-commercial';
+import { OrderProductLookup, getOrderProductLookup } from '../order-records';
+import { insertCanonicalOrder } from '../order-write';
 import {
   DEGRADED_CAPTURE_VARIANT,
   coerceDeliveryType,
@@ -23,26 +20,20 @@ import {
   coerceOrderStatus,
   type OrderStatusHistoryRecord,
 } from '../orders-support';
-import { getOrderProductLookup, OrderProductLookup } from '../order-records';
-import type { StorefrontOrderCreateRequest, StorefrontOrderPatchRequest } from './contracts';
+import { attachJourneyToOrder } from './analytics';
+import type { StorefrontOrderCreateRequest } from './contracts';
 import { toStorefrontOrderDto } from './dto';
+import { createOrderMarketingArtifacts } from './marketing';
+import { createOrderMetaArtifacts, readMetaOrderLocation, type MetaRequestContext } from './meta';
 import {
   createPublicOrderToken,
   createPublicOrderTokenExpiry,
   requireStorefrontOrderAccess,
   requireStorefrontOrderAccessByToken,
 } from './order-access';
-import { createOrderMetaArtifacts, readMetaOrderLocation, type MetaRequestContext } from './meta';
-import { createOrderMarketingArtifacts } from './marketing';
 
 type Database = ReturnType<typeof getDb>;
-type TimingStep =
-  | 'readEcotrackDeliveryFee'
-  | 'insertOrder'
-  | 'attachJourneyToOrder'
-  | 'insertStatusHistory'
-  | 'loadProductLookup'
-  | 'buildOrderDto';
+type TimingStep = 'readEcotrackDeliveryFee' | 'insertOrder' | 'loadProductLookup' | 'buildOrderDto';
 
 type TimingEntry = {
   step: TimingStep;
@@ -125,17 +116,27 @@ export async function createStorefrontOrder(
   payload: StorefrontOrderCreateRequest,
   options?: {
     reportTiming?: TimingReporter;
+    reportEnrichmentError?: (error: unknown) => void;
+    scheduleAfterCommit?: (work: () => Promise<void>) => void;
     metaRequestContext?: MetaRequestContext;
     idempotency?: {
       keyHash: string;
       fingerprint: string;
+      createdAt: Date;
     };
   },
 ) {
   const now = new Date();
   const reportTiming = options?.reportTiming;
+  function reportEnrichmentError(error: unknown) {
+    try {
+      options?.reportEnrichmentError?.(error);
+    } catch {
+      // Diagnostics must not undo a committed order or its optional savepoint.
+    }
+  }
   const publicToken = createPublicOrderToken();
-  let currentOrder: typeof orders.$inferSelect;
+
   let degradedCapture = shouldStartAsDegradedCapture(payload);
   const commercial = await resolveOrderCommercialState(db, {
     cartProducts: payload.cartProducts,
@@ -162,6 +163,21 @@ export async function createStorefrontOrder(
   let historyRows: (typeof orderStatusHistory.$inferSelect)[] = [];
   let metaResponse: Awaited<ReturnType<typeof createOrderMetaArtifacts>> | undefined;
   const created = await db.transaction(async (tx) => {
+    if (options?.idempotency) {
+      const [claim] = await tx
+        .select({ keyHash: storefrontOrderIdempotency.keyHash })
+        .from(storefrontOrderIdempotency)
+        .where(
+          and(
+            eq(storefrontOrderIdempotency.keyHash, options.idempotency.keyHash),
+            eq(storefrontOrderIdempotency.fingerprint, options.idempotency.fingerprint),
+            eq(storefrontOrderIdempotency.createdAt, options.idempotency.createdAt),
+            isNull(storefrontOrderIdempotency.orderId),
+          ),
+        )
+        .for('update');
+      if (!claim) throw new StorefrontOrderClaimLostError();
+    }
     const canonical = await measureStep('insertOrder', reportTiming, () =>
       insertCanonicalOrder(tx, {
         commercial,
@@ -192,26 +208,35 @@ export async function createStorefrontOrder(
     );
     const createdOrder = canonical.order;
     historyRows = [canonical.history];
-    if (payload.meta) {
-      metaResponse = await createOrderMetaArtifacts(tx, {
-        order: createdOrder,
-        lines: orderLines,
-        eventId: payload.meta.leadEventId,
-        eventSourceUrl: payload.meta.eventSourceUrl,
-        requestContext: options?.metaRequestContext ?? {},
-        location: metaLocation,
-        now,
-        linesAlreadyPersisted: true,
-      });
-    }
-    if (payload.marketing) {
-      await createOrderMarketingArtifacts(tx, {
-        order: createdOrder,
-        lines: orderLines,
-        marketing: payload.marketing,
-        requestContext: options?.metaRequestContext ?? {},
-        now,
-      });
+    if (payload.meta || payload.marketing) {
+      try {
+        await tx.transaction(async (enrichment) => {
+          if (payload.meta) {
+            metaResponse = await createOrderMetaArtifacts(enrichment, {
+              order: createdOrder,
+              lines: orderLines,
+              eventId: payload.meta.leadEventId,
+              eventSourceUrl: payload.meta.eventSourceUrl,
+              requestContext: options?.metaRequestContext ?? {},
+              location: metaLocation,
+              now,
+              linesAlreadyPersisted: true,
+            });
+          }
+          if (payload.marketing) {
+            await createOrderMarketingArtifacts(enrichment, {
+              order: createdOrder,
+              lines: orderLines,
+              marketing: payload.marketing,
+              requestContext: options?.metaRequestContext ?? {},
+              now,
+            });
+          }
+        });
+      } catch (error) {
+        metaResponse = undefined;
+        reportEnrichmentError(error);
+      }
     }
     if (options?.idempotency) {
       const completedAt = new Date();
@@ -228,6 +253,8 @@ export async function createStorefrontOrder(
           and(
             eq(storefrontOrderIdempotency.keyHash, options.idempotency.keyHash),
             eq(storefrontOrderIdempotency.fingerprint, options.idempotency.fingerprint),
+            eq(storefrontOrderIdempotency.createdAt, options.idempotency.createdAt),
+            isNull(storefrontOrderIdempotency.orderId),
           ),
         )
         .returning({ keyHash: storefrontOrderIdempotency.keyHash });
@@ -237,51 +264,27 @@ export async function createStorefrontOrder(
     }
     return createdOrder;
   });
-  currentOrder = created;
-  const pendingTimings: Promise<unknown>[] = [];
-
-  async function markDegradedCapture() {
-    if (degradedCapture) {
-      return;
-    }
-
-    degradedCapture = true;
-    try {
-      const result = await db.transaction((tx) =>
-        updateCanonicalOrder(tx, {
-          orderId: currentOrder.id,
-          values: { variant: DEGRADED_CAPTURE_VARIANT },
-        }),
-      );
-      currentOrder = result.order;
-    } catch {
-      currentOrder = { ...currentOrder, variant: DEGRADED_CAPTURE_VARIANT };
-    }
-  }
-
-  if (payload.journeyId || payload.sessionId) {
-    void measureStep('attachJourneyToOrder', reportTiming, () =>
-      attachJourneyToOrder(db, currentOrder.id, payload.journeyId ?? null),
-    ).catch(() => {
-      void markDegradedCapture();
-    });
+  const currentOrder = created;
+  if (payload.journeyId) {
+    const attach = async () => {
+      try {
+        await attachJourneyToOrder(db, currentOrder.id, payload.journeyId ?? null);
+      } catch (error) {
+        reportEnrichmentError(error);
+      }
+    };
+    if (options?.scheduleAfterCommit) options.scheduleAfterCommit(attach);
+    else await attach();
   }
 
   let productLookup = new OrderProductLookup();
-
-  pendingTimings.push(
-    (async () => {
-      try {
-        productLookup = await measureStep('loadProductLookup', reportTiming, () =>
-          getOrderProductLookup(db, [currentOrder]),
-        );
-      } catch {
-        await markDegradedCapture();
-      }
-    })(),
-  );
-
-  await Promise.all(pendingTimings);
+  try {
+    productLookup = await measureStep('loadProductLookup', reportTiming, () =>
+      getOrderProductLookup(db, [currentOrder]),
+    );
+  } catch (error) {
+    reportEnrichmentError(error);
+  }
 
   const item = await measureStep('buildOrderDto', reportTiming, async () =>
     toStorefrontOrderDto(
@@ -300,14 +303,18 @@ export async function readCommittedStorefrontOrder(db: Database, id: number) {
   const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
   if (!order) return null;
 
+  return hydrateStorefrontOrder(db, order);
+}
+
+async function hydrateStorefrontOrder(db: Database, order: typeof orders.$inferSelect) {
   const [historyRows, productLookup, purchaseEventId] = await Promise.all([
     db
       .select()
       .from(orderStatusHistory)
-      .where(eq(orderStatusHistory.orderId, id))
+      .where(eq(orderStatusHistory.orderId, order.id))
       .orderBy(asc(orderStatusHistory.changedAt)),
     getOrderProductLookup(db, [order]),
-    readPurchaseEventId(db, id),
+    readPurchaseEventId(db, order.id),
   ]);
 
   return toStorefrontOrderDto(
@@ -325,24 +332,9 @@ export async function readStorefrontOrder(db: Database, id: number, token: strin
     return access;
   }
 
-  const [historyRows, productLookup, purchaseEventId] = await Promise.all([
-    db
-      .select()
-      .from(orderStatusHistory)
-      .where(eq(orderStatusHistory.orderId, id))
-      .orderBy(asc(orderStatusHistory.changedAt)),
-    getOrderProductLookup(db, [access.order]),
-    readPurchaseEventId(db, id),
-  ]);
-
   return {
     kind: 'ok' as const,
-    item: toStorefrontOrderDto(
-      access.order,
-      toStorefrontHistoryEntries(historyRows),
-      productLookup,
-      purchaseEventId,
-    ),
+    item: await hydrateStorefrontOrder(db, access.order),
     token: access.token,
   };
 }
@@ -354,121 +346,9 @@ export async function readStorefrontOrderByToken(db: Database, token: string | n
     return access;
   }
 
-  const [historyRows, productLookup, purchaseEventId] = await Promise.all([
-    db
-      .select()
-      .from(orderStatusHistory)
-      .where(eq(orderStatusHistory.orderId, access.order.id))
-      .orderBy(asc(orderStatusHistory.changedAt)),
-    getOrderProductLookup(db, [access.order]),
-    readPurchaseEventId(db, access.order.id),
-  ]);
-
   return {
     kind: 'ok' as const,
-    item: toStorefrontOrderDto(
-      access.order,
-      toStorefrontHistoryEntries(historyRows),
-      productLookup,
-      purchaseEventId,
-    ),
-    token: access.token,
-  };
-}
-
-export async function updateStorefrontOrder(
-  db: Database,
-  id: number,
-  token: string | null,
-  changes: StorefrontOrderPatchRequest,
-) {
-  const access = await requireStorefrontOrderAccess(db, id, token);
-
-  if (access.kind !== 'ok') {
-    return access;
-  }
-
-  const shouldResolveDeliveryFee =
-    changes.delivery !== undefined || changes.state !== undefined || changes.city !== undefined;
-  const update: Partial<InferInsertModel<typeof orders>> & { updatedAt: Date } = {
-    updatedAt: new Date(),
-  };
-
-  if (changes.firstName !== undefined) update.firstName = changes.firstName;
-  if (changes.lastName !== undefined) update.lastName = changes.lastName;
-  if (changes.email !== undefined) update.email = changes.email;
-  if (changes.phoneNumber1 !== undefined) update.phoneNumber1 = changes.phoneNumber1;
-  if (changes.phoneNumber2 !== undefined) update.phoneNumber2 = changes.phoneNumber2;
-  if (changes.note !== undefined) update.note = changes.note;
-  if (changes.delivery !== undefined) update.delivery = changes.delivery;
-  if (changes.state !== undefined) update.state = changes.state;
-  if (changes.city !== undefined) update.city = changes.city;
-  if (changes.homeAddress !== undefined) update.homeAddress = changes.homeAddress;
-  let nextCommercial: Awaited<ReturnType<typeof resolveOrderCommercialState>> | null = null;
-
-  if (
-    changes.cartProducts !== undefined ||
-    changes.promoCode !== undefined ||
-    changes.productPromos !== undefined
-  ) {
-    const nextCartProducts = changes.cartProducts ?? access.order.cartProducts ?? [];
-    const nextPromoCode =
-      changes.promoCode !== undefined
-        ? changes.promoCode
-        : changes.productPromos !== undefined
-          ? null
-          : access.order.promoCode;
-    nextCommercial = await resolveOrderCommercialState(db, {
-      cartProducts: nextCartProducts,
-      promoCode: nextPromoCode,
-      productPromos:
-        changes.productPromos ??
-        (changes.promoCode !== undefined ? [] : access.order.productPromos),
-    });
-  }
-
-  let nextDeliveryFee = Number(access.order.deliveryFee ?? 0);
-  if (shouldResolveDeliveryFee) {
-    const nextDelivery = coerceDeliveryType(changes.delivery ?? access.order.delivery);
-    const nextState = changes.state !== undefined ? changes.state : access.order.state;
-    nextDeliveryFee = await readEcotrackDeliveryFee(db, nextState, nextDelivery);
-    update.deliveryFee = nextDeliveryFee.toFixed(2);
-  }
-
-  if (!nextCommercial && shouldResolveDeliveryFee) {
-    const productSubtotal = await readOrderProductSubtotal(db, access.order);
-    update.productSubtotal = productSubtotal.toFixed(2);
-    update.totalAmount = (productSubtotal + nextDeliveryFee).toFixed(2);
-  }
-
-  let updatedOrder!: typeof orders.$inferSelect;
-  await db.transaction(async (tx) => {
-    const result = await updateCanonicalOrder(tx, {
-      orderId: id,
-      values: update,
-      commercial: nextCommercial ?? undefined,
-      deliveryFee: nextCommercial ? nextDeliveryFee : undefined,
-    });
-    updatedOrder = result.order;
-  });
-  const [historyRows, productLookup, purchaseEventId] = await Promise.all([
-    db
-      .select()
-      .from(orderStatusHistory)
-      .where(eq(orderStatusHistory.orderId, id))
-      .orderBy(asc(orderStatusHistory.changedAt)),
-    getOrderProductLookup(db, [updatedOrder]),
-    readPurchaseEventId(db, id),
-  ]);
-
-  return {
-    kind: 'ok' as const,
-    item: toStorefrontOrderDto(
-      updatedOrder,
-      toStorefrontHistoryEntries(historyRows),
-      productLookup,
-      purchaseEventId,
-    ),
+    item: await hydrateStorefrontOrder(db, access.order),
     token: access.token,
   };
 }

@@ -1,12 +1,13 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { homepageFixtureResponse } from '@/test/fixtures/homepage';
 import { GET } from './route';
 
 const fetchCatalog = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/storefront-api', () => ({ fetchStorefrontCatalog: fetchCatalog }));
 
-const product = (id: number) => ({ id });
+const product = (id: number) => ({ ...homepageFixtureResponse.topProducts[0], id });
 
 describe('GET /api/catalog', () => {
   beforeEach(() => fetchCatalog.mockReset());
@@ -39,9 +40,11 @@ describe('GET /api/catalog', () => {
       page: 2,
       total: 48,
       hasNextPage: true,
-      items: expect.arrayContaining([product(1)]),
+      items: expect.arrayContaining([expect.objectContaining({ id: 1 })]),
     });
     expect(payload.items).toHaveLength(6);
+    expect(payload.items[0]).not.toHaveProperty('description');
+    expect(payload.items[0]).not.toHaveProperty('sku');
   });
 
   it('returns a recoverable response when an upstream result cannot be served', async () => {

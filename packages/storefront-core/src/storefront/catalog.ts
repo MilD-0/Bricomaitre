@@ -38,6 +38,27 @@ import {
 
 type Database = ReturnType<typeof getDb>;
 
+const productSelection = {
+  id: products.id,
+  slug: products.slug,
+  mongoId: products.mongoId,
+  title: products.title,
+  titleAr: products.titleAr,
+  description: products.description,
+  descriptionAr: products.descriptionAr,
+  sku: products.sku,
+  barcode: products.barcode,
+  price: products.price,
+  oldPrice: products.oldPrice,
+  inStock: products.inStock,
+  availabilityStatus: products.availabilityStatus,
+  brandId: products.brandId,
+  categoryId: products.categoryId,
+  images: products.images,
+  createdAt: products.createdAt,
+  updatedAt: products.updatedAt,
+};
+
 export type StorefrontProductBuildFeedItem = {
   id: number;
   slug: string | null;
@@ -173,6 +194,14 @@ export function selectStorefrontProductTokenMatch<
 }
 
 export async function readStorefrontProductByToken(db: Database, value: string) {
+  return readStorefrontProductDetail(db, value);
+}
+
+export async function readStorefrontProductById(db: Database, id: number) {
+  return readStorefrontProductDetail(db, String(id), true);
+}
+
+async function readStorefrontProductDetail(db: Database, value: string, exactId = false) {
   const { token, numericId } = normalizeStorefrontProductToken(value);
   if (!token) {
     return null;
@@ -194,24 +223,7 @@ export async function readStorefrontProductByToken(db: Database, value: string) 
 
   const rows = await db
     .select({
-      id: products.id,
-      slug: products.slug,
-      mongoId: products.mongoId,
-      title: products.title,
-      titleAr: products.titleAr,
-      description: products.description,
-      descriptionAr: products.descriptionAr,
-      sku: products.sku,
-      barcode: products.barcode,
-      price: products.price,
-      oldPrice: products.oldPrice,
-      inStock: products.inStock,
-      availabilityStatus: products.availabilityStatus,
-      brandId: products.brandId,
-      categoryId: products.categoryId,
-      images: products.images,
-      createdAt: products.createdAt,
-      updatedAt: products.updatedAt,
+      ...productSelection,
       brand: {
         id: brands.id,
         name: brands.name,
@@ -234,7 +246,13 @@ export async function readStorefrontProductByToken(db: Database, value: string) 
       categories,
       and(eq(products.categoryId, categories.id), eq(categories.isActive, true)),
     )
-    .where(and(eq(products.active, true), isNull(products.archivedAt), or(...tokenConditions)))
+    .where(
+      and(
+        eq(products.active, true),
+        isNull(products.archivedAt),
+        exactId ? eq(products.id, numericId!) : or(...tokenConditions),
+      ),
+    )
     .orderBy(
       asc(sql<number>`case
         when ${products.slug} = ${token} then 0
@@ -280,32 +298,8 @@ export async function readStorefrontProducts(db: Database, query: StorefrontProd
   const whereClause = buildStorefrontProductWhereClause(query);
 
   const rows = await db
-    .select({
-      id: products.id,
-      slug: products.slug,
-      mongoId: products.mongoId,
-      title: products.title,
-      titleAr: products.titleAr,
-      description: products.description,
-      descriptionAr: products.descriptionAr,
-      sku: products.sku,
-      barcode: products.barcode,
-      price: products.price,
-      oldPrice: products.oldPrice,
-      inStock: products.inStock,
-      availabilityStatus: products.availabilityStatus,
-      brandId: products.brandId,
-      categoryId: products.categoryId,
-      images: products.images,
-      createdAt: products.createdAt,
-      updatedAt: products.updatedAt,
-    })
+    .select(productSelection)
     .from(products)
-    .leftJoin(brands, and(eq(products.brandId, brands.id), eq(brands.isActive, true)))
-    .leftJoin(
-      categories,
-      and(eq(products.categoryId, categories.id), eq(categories.isActive, true)),
-    )
     .where(whereClause)
     .orderBy(...orderBy)
     .limit(query.limit)
@@ -319,26 +313,7 @@ export async function readStorefrontProductsByIds(db: Database, ids: number[]) {
   if (uniqueIds.length === 0) return [];
 
   const rows = await db
-    .select({
-      id: products.id,
-      slug: products.slug,
-      mongoId: products.mongoId,
-      title: products.title,
-      titleAr: products.titleAr,
-      description: products.description,
-      descriptionAr: products.descriptionAr,
-      sku: products.sku,
-      barcode: products.barcode,
-      price: products.price,
-      oldPrice: products.oldPrice,
-      inStock: products.inStock,
-      availabilityStatus: products.availabilityStatus,
-      brandId: products.brandId,
-      categoryId: products.categoryId,
-      images: products.images,
-      createdAt: products.createdAt,
-      updatedAt: products.updatedAt,
-    })
+    .select(productSelection)
     .from(products)
     .where(
       and(eq(products.active, true), isNull(products.archivedAt), inArray(products.id, uniqueIds)),
@@ -349,19 +324,10 @@ export async function readStorefrontProductsByIds(db: Database, ids: number[]) {
   return uniqueIds.flatMap((id) => byId.get(id) ?? []);
 }
 
-export async function readStorefrontProductsForSelections(
-  db: Database,
-  selection: { productIds: number[]; brandIds: number[]; categoryIds: number[] },
-  limit = 12,
-) {
-  const page = await readStorefrontProductsForSelectionPage(db, selection, { page: 1, limit });
-  return page.items;
-}
-
 export async function readStorefrontProductsForSelectionPage(
   db: Database,
   selection: { productIds: number[]; brandIds: number[]; categoryIds: number[] },
-  { page, limit }: { page: number; limit: number },
+  { page, limit, includeTotal = true }: { page: number; limit: number; includeTotal?: boolean },
 ) {
   const direct = await readStorefrontProductsByIds(db, selection.productIds);
   const uniqueDirect = [...new Map(direct.map((product) => [product.id, product])).values()];
@@ -391,29 +357,12 @@ export async function readStorefrontProductsForSelectionPage(
   const dynamicLimit = Math.max(0, limit - Math.max(0, uniqueDirect.length - start));
 
   const [countRows, rows] = await Promise.all([
-    db.select({ count: count() }).from(products).where(dynamicWhere),
+    includeTotal
+      ? db.select({ count: count() }).from(products).where(dynamicWhere)
+      : Promise.resolve(null),
     dynamicLimit > 0
       ? db
-          .select({
-            id: products.id,
-            slug: products.slug,
-            mongoId: products.mongoId,
-            title: products.title,
-            titleAr: products.titleAr,
-            description: products.description,
-            descriptionAr: products.descriptionAr,
-            sku: products.sku,
-            barcode: products.barcode,
-            price: products.price,
-            oldPrice: products.oldPrice,
-            inStock: products.inStock,
-            availabilityStatus: products.availabilityStatus,
-            brandId: products.brandId,
-            categoryId: products.categoryId,
-            images: products.images,
-            createdAt: products.createdAt,
-            updatedAt: products.updatedAt,
-          })
+          .select(productSelection)
           .from(products)
           .where(dynamicWhere)
           .orderBy(...buildRecommendedProductOrderBy())
@@ -427,7 +376,7 @@ export async function readStorefrontProductsForSelectionPage(
       ...uniqueDirect.slice(start, start + limit),
       ...rows.map((row) => toStorefrontProductDto(row satisfies StorefrontProductDtoRow)),
     ].slice(0, limit),
-    total: uniqueDirect.length + Number(countRows[0]?.count ?? 0),
+    total: countRows === null ? null : uniqueDirect.length + Number(countRows[0]?.count ?? 0),
   };
 }
 
@@ -509,11 +458,6 @@ export async function countStorefrontProducts(db: Database, query: StorefrontPro
   const rows = await db
     .select({ count: count() })
     .from(products)
-    .leftJoin(brands, and(eq(products.brandId, brands.id), eq(brands.isActive, true)))
-    .leftJoin(
-      categories,
-      and(eq(products.categoryId, categories.id), eq(categories.isActive, true)),
-    )
     .where(buildStorefrontProductWhereClause(query));
 
   return Number(rows[0]?.count ?? 0);

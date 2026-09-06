@@ -20,7 +20,6 @@
     "./jobs": "./src/jobs.ts",
     "./next-action": "./src/next-action.ts",
     "./rate-limit": "./src/rate-limit.ts",
-    "./idempotency": "./src/idempotency.ts",
     "./worker-heartbeat": "./src/worker-heartbeat.ts"
   },
   "dependencies": {

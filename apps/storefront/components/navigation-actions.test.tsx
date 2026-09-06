@@ -9,8 +9,8 @@ const haptics = vi.hoisted(() => ({ prepare: vi.fn(), trigger: vi.fn() }));
 const navigationMeta = vi.hoisted(() => vi.fn());
 
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/fr/products',
-  useSearchParams: () => new URLSearchParams('brand=2'),
+  usePathname: () => window.location.pathname,
+  useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 vi.mock('@/lib/analytics', () => ({ trackNavigationEvent: analytics }));
 vi.mock('@/lib/haptics', () => ({
@@ -89,6 +89,28 @@ describe('NavigationActions', () => {
   });
 
   afterEach(cleanup);
+
+  it('switches locale with the current filters after navigation in the same shell', async () => {
+    const props = {
+      locale: 'fr' as const,
+      alternateLocale: 'ar' as const,
+      alternateLabel: 'العربية',
+      categories: [],
+      labels,
+      contact,
+    };
+    const mounted = render(<NavigationActions {...props} />);
+    expect(await screen.findByRole('link', { name: /العربية/ })).toHaveAttribute(
+      'href',
+      '/ar/products?brand=2',
+    );
+    window.history.replaceState({}, '', '/fr/products?brand=8&q=drill');
+    mounted.rerender(<NavigationActions {...props} />);
+    expect(screen.getByRole('link', { name: /العربية/ })).toHaveAttribute(
+      'href',
+      '/ar/products?brand=8&q=drill',
+    );
+  });
 
   it('shows the total item quantity and preserves route state when switching locale', async () => {
     render(

@@ -250,8 +250,8 @@ export async function resolveOrderLineSnapshots(
   const rowByReference = new Map<string, (typeof rows)[number]>();
   for (const row of rows) {
     rowByReference.set(String(row.id), row);
-    if (row.mongoId) rowByReference.set(row.mongoId, row);
-    if (row.slug) rowByReference.set(row.slug, row);
+    if (row.mongoId && mongoIds.includes(row.mongoId)) rowByReference.set(row.mongoId, row);
+    if (row.slug && slugs.includes(row.slug)) rowByReference.set(row.slug, row);
   }
   const quantities = new Map<
     number,

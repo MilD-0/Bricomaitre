@@ -3,14 +3,14 @@
 import { Check, PackageCheck, RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { StorefrontImage } from '@/components/storefront-image';
 import { OrderTracking } from '@/components/order-tracking';
+import { StorefrontImage } from '@/components/storefront-image';
+import { ThankYouContentSkeleton } from '@/components/storefront-skeletons';
 import {
   SupportContactActions,
-  type SupportContactLabels,
   type StorefrontSupportContact,
+  type SupportContactLabels,
 } from '@/components/support-contact-actions';
-import { ThankYouContentSkeleton } from '@/components/storefront-skeletons';
 import type { Locale } from '@/i18n/config';
 import { trackCheckoutEvent } from '@/lib/analytics';
 import {
@@ -166,7 +166,7 @@ export function ThankYouConfirmation({
               ? [
                   {
                     productId: item.productId,
-                    productSlug: item.rawValue,
+                    productSlug: item.slug ?? null,
                     quantity: item.quantity,
                     price: item.unitPrice,
                   },

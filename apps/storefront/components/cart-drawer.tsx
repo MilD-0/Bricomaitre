@@ -60,17 +60,19 @@ export function CartDrawer({
 
   function commit(next: CartItem[]) {
     try {
-      writeCart(window.localStorage, next);
+      if (!writeCart(window.localStorage, next)) return false;
       onItemsChange(next);
       window.dispatchEvent(new CustomEvent('bric:cart-updated'));
+      return true;
     } catch {
       // Keep the current cart visible if browser storage becomes unavailable.
+      return false;
     }
   }
 
   function changeQuantity(item: CartItem, nextQuantity: number) {
     if (nextQuantity === item.quantity || nextQuantity < 1 || nextQuantity > 20) return;
-    commit(updateCartItemQuantity(items, item.productId, nextQuantity));
+    if (!commit(updateCartItemQuantity(items, item.productId, nextQuantity))) return;
     void triggerHaptic('control');
     void trackNavigationEvent({
       eventName: nextQuantity > item.quantity ? 'add_to_cart' : 'remove_from_cart',
@@ -84,7 +86,7 @@ export function CartDrawer({
   }
 
   function remove(item: CartItem) {
-    commit(removeCartItem(items, item.productId));
+    if (!commit(removeCartItem(items, item.productId))) return;
     void triggerHaptic('destructive');
     void trackNavigationEvent({
       eventName: 'remove_from_cart',

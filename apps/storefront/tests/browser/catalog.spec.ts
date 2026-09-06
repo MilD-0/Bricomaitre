@@ -450,7 +450,7 @@ test('automatically appends products and preserves position across refresh', asy
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const raw = sessionStorage.getItem('bric:catalog-position:v2:/fr/products');
+        const raw = sessionStorage.getItem('bric:catalog-position:v3:/fr/products');
         return raw ? JSON.parse(raw).page : null;
       }),
     )

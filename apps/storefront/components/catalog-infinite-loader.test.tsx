@@ -1,5 +1,5 @@
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CatalogInfiniteLoader } from './catalog-infinite-loader';
@@ -150,14 +150,14 @@ describe('CatalogInfiniteLoader', () => {
         }),
       ),
     );
-    expect(window.sessionStorage.getItem('bric:catalog-position:v2:/fr/products')).toBeNull();
+    expect(window.sessionStorage.getItem('bric:catalog-position:v3:/fr/products')).toBeNull();
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
   it('never restores global page position from an embedded similar-products list', async () => {
     window.history.replaceState({}, '', '/fr/products/current-drill');
     window.sessionStorage.setItem(
-      'bric:catalog-position:v2:/fr/products/current-drill',
+      'bric:catalog-position:v3:/fr/products/current-drill',
       JSON.stringify({
         items: [product(25, 'Previously loaded drill')],
         page: 2,
@@ -231,7 +231,7 @@ describe('CatalogInfiniteLoader', () => {
     queuedScrollFrame!(0);
 
     expect(
-      JSON.parse(window.sessionStorage.getItem('bric:catalog-position:v2:/fr/products') ?? 'null'),
+      JSON.parse(window.sessionStorage.getItem('bric:catalog-position:v3:/fr/products') ?? 'null'),
     ).toMatchObject({ page: 2, hasNextPage: false });
   });
 
@@ -335,47 +335,97 @@ describe('CatalogInfiniteLoader', () => {
     expect(screen.queryByRole('heading', { name: 'Repeated drill' })).not.toBeInTheDocument();
   });
 
-  it('caps persisted restoration data without truncating the live catalog', async () => {
-    intersectOnObserve = true;
-    const appendedProducts = Array.from({ length: 241 }, (_, index) => product(index + 25));
-    vi.mocked(fetch).mockResolvedValue(
-      new Response(
+  it('restores a complete prefix and resumes its next page after the persistence cap', async () => {
+    const props = {
+      locale: 'fr' as const,
+      query,
+      initialCount: 24,
+      initialProductIds: Array.from({ length: 24 }, (_, i) => i + 1),
+      initialHasNextPage: true,
+      totalCount: 288,
+      brandNames: {},
+      categoryNames: {},
+      labels,
+    };
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const page = Number(new URL(String(input), 'https://store.test').searchParams.get('page'));
+      return new Response(
         JSON.stringify({
-          items: appendedProducts,
-          page: 2,
-          hasNextPage: false,
+          items: Array.from({ length: 24 }, (_, i) => product((page - 1) * 24 + i + 1)),
+          page,
+          hasNextPage: page < 12,
         }),
-        { status: 200 },
+      );
+    });
+    const mounted = render(<CatalogInfiniteLoader {...props} />);
+    for (let page = 2; page <= 12; page++) {
+      fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+      await waitFor(() =>
+        expect(document.querySelector(`[data-product-id="${page * 24}"]`)).toBeInTheDocument(),
+      );
+    }
+    expect(document.querySelectorAll('[data-product-id]')).toHaveLength(264);
+    const stored = JSON.parse(
+      window.sessionStorage.getItem('bric:catalog-position:v3:/fr/products')!,
+    );
+    expect(stored.items).toHaveLength(240);
+    expect(stored.page).toBe(11);
+    expect(stored.hasNextPage).toBe(true);
+    mounted.unmount();
+    render(<CatalogInfiniteLoader {...props} />);
+    await waitFor(() =>
+      expect(document.querySelector('[data-product-id="264"]')).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+    await waitFor(() =>
+      expect(document.querySelector('[data-product-id="288"]')).toBeInTheDocument(),
+    );
+    expect(document.querySelectorAll('[data-product-id]')).toHaveLength(264);
+  });
+
+  it('resets pagination on query changes and ignores the previous query response', async () => {
+    let resolveOld!: (response: Response) => void;
+    vi.mocked(fetch)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ items: [product(90, 'Filtered drill')], page: 2, hasNextPage: false }),
+        ),
+      );
+    const props = {
+      locale: 'fr' as const,
+      query,
+      initialCount: 24,
+      initialProductIds: [],
+      initialHasNextPage: true,
+      totalCount: 50,
+      brandNames: {},
+      categoryNames: {},
+      labels,
+    };
+    const mounted = render(<CatalogInfiniteLoader {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+    window.history.replaceState({}, '', '/fr/products?q=drill');
+    mounted.rerender(<CatalogInfiniteLoader {...props} query={{ ...query, q: 'drill' }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+    await screen.findByRole('heading', { name: 'Filtered drill' });
+    resolveOld(
+      new Response(
+        JSON.stringify({ items: [product(25, 'Stale result')], page: 2, hasNextPage: false }),
       ),
     );
-
-    render(
-      <CatalogInfiniteLoader
-        locale="fr"
-        query={query}
-        initialCount={24}
-        initialProductIds={Array.from({ length: 24 }, (_, index) => index + 1)}
-        initialHasNextPage
-        totalCount={265}
-        brandNames={{}}
-        categoryNames={{}}
-        labels={labels}
-      />,
-    );
-
-    await waitFor(() =>
-      expect(document.querySelector('[data-product-id="265"]')).toBeInTheDocument(),
-    );
-    expect(document.querySelectorAll('[data-product-id]')).toHaveLength(241);
-    expect(
-      JSON.parse(window.sessionStorage.getItem('bric:catalog-position:v2:/fr/products') ?? 'null')
-        .items,
-    ).toHaveLength(240);
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls[0]?.[1]?.signal?.aborted).toBe(true));
+    expect(screen.queryByRole('heading', { name: 'Stale result' })).not.toBeInTheDocument();
+    expect(String(vi.mocked(fetch).mock.calls[1]?.[0])).toContain('q=drill');
   });
 
   it('rebuilds appended pages before restoring the saved scroll offset', async () => {
     window.sessionStorage.setItem(
-      'bric:catalog-position:v2:/fr/products',
+      'bric:catalog-position:v3:/fr/products',
       JSON.stringify({
         items: [product(25, 'Restored drill')],
         page: 2,
@@ -408,7 +458,7 @@ describe('CatalogInfiniteLoader', () => {
 
   it('deduplicates persisted products before restoring the catalog', async () => {
     window.sessionStorage.setItem(
-      'bric:catalog-position:v2:/fr/products',
+      'bric:catalog-position:v3:/fr/products',
       JSON.stringify({
         items: [product(25, 'Restored drill'), product(25, 'Repeated restored drill')],
         page: 2,
@@ -443,7 +493,7 @@ describe('CatalogInfiniteLoader', () => {
   it('continues after the restored page instead of requesting it again', async () => {
     intersectOnObserve = true;
     window.sessionStorage.setItem(
-      'bric:catalog-position:v2:/fr/products',
+      'bric:catalog-position:v3:/fr/products',
       JSON.stringify({
         items: [product(25, 'Restored drill')],
         page: 2,
@@ -486,7 +536,7 @@ describe('CatalogInfiniteLoader', () => {
 
   it('ignores restoration state from a different catalog total', async () => {
     window.sessionStorage.setItem(
-      'bric:catalog-position:v2:/fr/products',
+      'bric:catalog-position:v3:/fr/products',
       JSON.stringify({
         items: [],
         page: 1,

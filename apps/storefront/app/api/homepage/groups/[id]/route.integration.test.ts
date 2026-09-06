@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { homepageFixtureResponse } from '@/test/fixtures/homepage';
 import { GET } from './route';
 
 const fetchGroup = vi.hoisted(() => vi.fn());
@@ -14,7 +15,10 @@ describe('GET /api/homepage/groups/[id]', () => {
   beforeEach(() => fetchGroup.mockReset());
 
   it('proxies a cacheable featured group page', async () => {
-    fetchGroup.mockResolvedValue({ items: [{ id: 3 }], total: 18 });
+    fetchGroup.mockResolvedValue({
+      items: [{ ...homepageFixtureResponse.topProducts[0], id: 3 }],
+      total: 18,
+    });
     const response = await GET(
       new NextRequest('http://localhost/api/homepage/groups/4?page=2&limit=12'),
       context('4'),

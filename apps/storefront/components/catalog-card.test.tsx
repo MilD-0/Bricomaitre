@@ -18,10 +18,6 @@ const product: CatalogProduct = {
   mongoId: null,
   title: 'Desk Lamp',
   titleAr: 'مصباح المكتب',
-  description: null,
-  descriptionAr: null,
-  sku: 'DL-1',
-  barcode: null,
   price: '4500.00',
   oldPrice: '5200.00',
   inStock: true,
@@ -29,8 +25,6 @@ const product: CatalogProduct = {
   brandId: 2,
   categoryId: 3,
   images: ['/product-placeholder.svg'],
-  createdAt: '2026-07-01T10:00:00.000Z',
-  updatedAt: '2026-07-02T10:00:00.000Z',
 };
 
 const labels = {

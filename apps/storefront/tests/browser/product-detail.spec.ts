@@ -270,7 +270,7 @@ test('keeps embedded similar products from restoring the mobile page scroll', as
   await page.setViewportSize({ width: 360, height: 740 });
   await page.addInitScript(() => {
     window.sessionStorage.setItem(
-      'bric:catalog-position:v2:/fr/products/desk-lamp',
+      'bric:catalog-position:v3:/fr/products/desk-lamp',
       JSON.stringify({
         items: [],
         page: 2,

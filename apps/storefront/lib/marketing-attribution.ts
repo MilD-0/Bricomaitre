@@ -1,5 +1,6 @@
 'use client';
 
+import { classifyAcquisition, isNonDirectAcquisition } from '@bric/storefront-core/acquisition';
 import {
   MARKETING_SEMANTICS_VERSION,
   storefrontAcquisitionTouchSchema,
@@ -7,7 +8,7 @@ import {
   type StorefrontAcquisitionTouch,
   type StorefrontOrderMarketing,
 } from '@bric/storefront-core/marketing-contracts';
-import { classifyAcquisition, isNonDirectAcquisition } from '@bric/storefront-core/acquisition';
+import { buildMetaClickCookie } from '@bric/storefront-core/meta-contracts';
 import { z } from 'zod';
 
 import { getAssistantOrderInfluence } from '@/lib/assistant-attribution';
@@ -21,6 +22,13 @@ const ATTRIBUTION_MAX_AGE_SECONDS = 90 * 24 * 60 * 60;
 const SESSION_INACTIVITY_MS = 30 * 60 * 1000;
 const LAST_NON_DIRECT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 let documentEntryCaptured = false;
+let journeyPersistenceFailed = false;
+let sessionPersistenceFailed = false;
+let attributionPersistenceFailed = false;
+let memoryJourneyId: string | null = null;
+let memoryLastNonDirectTouch: StorefrontAcquisitionTouch | null = null;
+let memorySession: z.infer<typeof analyticsSessionSchema> | null = null;
+let memoryStorefrontAttribution: StorefrontAttribution | null = null;
 const attributionSchema = z
   .object({
     gclid: z.string().max(250).nullable(),
@@ -116,12 +124,15 @@ function currentAcquisitionTouch(input: {
 function getOrCreateJourneyId() {
   try {
     const current = window.localStorage.getItem(JOURNEY_KEY)?.trim();
-    if (current) return current.slice(0, 120);
-    const next = createId();
+    if (current) return (memoryJourneyId = current.slice(0, 120));
+    const next = journeyPersistenceFailed && memoryJourneyId ? memoryJourneyId : createId();
+    memoryJourneyId = next;
     window.localStorage.setItem(JOURNEY_KEY, next);
+    journeyPersistenceFailed = false;
     return next;
   } catch {
-    return createId();
+    journeyPersistenceFailed = true;
+    return (memoryJourneyId ??= createId());
   }
 }
 
@@ -130,13 +141,14 @@ function readSession() {
     const parsed = analyticsSessionSchema.safeParse(
       JSON.parse(window.localStorage.getItem(SESSION_KEY) ?? 'null'),
     );
-    return parsed.success ? parsed.data : null;
+    return parsed.success ? parsed.data : sessionPersistenceFailed ? memorySession : null;
   } catch {
-    return null;
+    return memorySession;
   }
 }
 
 function readLastNonDirectTouch(now: number) {
+  let persistenceFailed = sessionPersistenceFailed;
   try {
     const parsed = storefrontAcquisitionTouchSchema.safeParse(
       JSON.parse(window.localStorage.getItem(LAST_NON_DIRECT_TOUCH_KEY) ?? 'null'),
@@ -145,9 +157,13 @@ function readLastNonDirectTouch(now: number) {
       return parsed.data;
     }
   } catch {
-    // Invalid attribution state is discarded below.
+    persistenceFailed = true;
   }
-  return null;
+  return persistenceFailed &&
+    memoryLastNonDirectTouch &&
+    now - Date.parse(memoryLastNonDirectTouch.capturedAt) <= LAST_NON_DIRECT_MAX_AGE_MS
+    ? memoryLastNonDirectTouch
+    : null;
 }
 
 function hasCampaignQuery(url: URL) {
@@ -185,21 +201,24 @@ export function getStorefrontAnalyticsContext(now = Date.now()) {
     entry,
   });
 
+  memorySession = next;
   const classification = classifyAcquisition(entry);
   let lastNonDirectTouch = readLastNonDirectTouch(now);
   if (startsNewSession && isNonDirectAcquisition(classification.channel)) {
     lastNonDirectTouch = entry;
   }
 
+  memoryLastNonDirectTouch = lastNonDirectTouch;
   try {
     window.localStorage.setItem(SESSION_KEY, JSON.stringify(next));
+    sessionPersistenceFailed = false;
     if (lastNonDirectTouch) {
       window.localStorage.setItem(LAST_NON_DIRECT_TOUCH_KEY, JSON.stringify(lastNonDirectTouch));
     } else {
       window.localStorage.removeItem(LAST_NON_DIRECT_TOUCH_KEY);
     }
   } catch {
-    // Analytics identity is best-effort and never blocks navigation.
+    sessionPersistenceFailed = true;
   }
 
   return {
@@ -220,10 +239,6 @@ function writeCookie(name: string, value: string) {
   } catch {
     // Cookie storage is best-effort and never blocks commerce interactions.
   }
-}
-
-export function buildMetaClickCookie(fbclid: string, capturedAt: number) {
-  return `fb.1.${Math.floor(capturedAt / 1000)}.${fbclid}`;
 }
 
 function sanitizedLandingUrl(url: URL) {
@@ -260,8 +275,14 @@ function readStorefrontAttribution(now: number) {
     if (parsed.success && now - parsed.data.capturedAt <= ATTRIBUTION_MAX_AGE_SECONDS * 1000)
       return parsed.data;
   } catch {
-    // Invalid attribution state is replaced below.
+    attributionPersistenceFailed = true;
   }
+  if (
+    attributionPersistenceFailed &&
+    memoryStorefrontAttribution &&
+    now - memoryStorefrontAttribution.capturedAt <= ATTRIBUTION_MAX_AGE_SECONDS * 1000
+  )
+    return memoryStorefrontAttribution;
   return null;
 }
 
@@ -302,10 +323,12 @@ export function captureStorefrontAttribution(now = Date.now()): StorefrontAttrib
       : { ...stored, fbc },
   );
 
+  memoryStorefrontAttribution = next;
   try {
     window.localStorage.setItem(STOREFRONT_ATTRIBUTION_KEY, JSON.stringify(next));
+    attributionPersistenceFailed = false;
   } catch {
-    // Attribution storage is best-effort and never blocks navigation.
+    attributionPersistenceFailed = true;
   }
   writeCookie('bric_visit_id', next.visitId);
   if (next.fbc && (currentFbclid || !cookie('_fbc'))) writeCookie('_fbc', next.fbc);
@@ -354,6 +377,10 @@ function readStoredAttribution() {
 export function captureMarketingAttribution() {
   captureStorefrontAttribution();
   getStorefrontAnalyticsContext();
+  return captureMarketingClickIdentifiers();
+}
+
+function captureMarketingClickIdentifiers() {
   const current = readStoredAttribution();
   const query = new URLSearchParams(window.location.search);
   const next = attributionSchema.parse({
@@ -365,7 +392,7 @@ export function captureMarketingAttribution() {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   } catch {
-    // Attribution storage is best-effort and never blocks navigation.
+    attributionPersistenceFailed = true;
   }
   return next;
 }
@@ -377,7 +404,7 @@ function googleSessionCookieName(measurementId: string | undefined) {
 
 export function getMarketingOrderContext(eventId: string): StorefrontOrderMarketing {
   const storefrontAttribution = captureStorefrontAttribution();
-  const attribution = captureMarketingAttribution();
+  const attribution = captureMarketingClickIdentifiers();
   const analytics = getStorefrontAnalyticsContext();
   const sessionCookieName = googleSessionCookieName(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID);
   return storefrontOrderMarketingSchema.parse({

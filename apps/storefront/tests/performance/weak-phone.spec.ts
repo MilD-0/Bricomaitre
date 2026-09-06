@@ -197,3 +197,56 @@ test('thank-you meets the weak-phone content, LCP, and layout-stability budgets'
     },
   );
 });
+
+for (const locale of ['fr', 'ar'] as const) {
+  test(`keeps ${locale} catalog copy out of browser pages and scroll persistence`, async ({
+    page,
+    context,
+  }, testInfo) => {
+    await emulateWeakPhone(page, context);
+    const canonicalResponse = await page.request.get(
+      `${process.env.BRIC_PLAYWRIGHT_FIXTURE_API_ORIGIN ?? 'http://127.0.0.1:4311'}/storefront/products?page=2&limit=24`,
+    );
+    const browserResponse = await page.request.get('/api/catalog?page=2&limit=24');
+    const canonicalBytes = (await canonicalResponse.body()).length;
+    const browserBytes = (await browserResponse.body()).length;
+    expect(browserResponse.ok()).toBe(true);
+    expect(browserBytes).toBeLessThan(canonicalBytes / 5);
+    await page.goto(`/${locale}/products`);
+    await page.locator('.catalog-infinite-sentinel').scrollIntoViewIfNeeded();
+    await expect(page.locator('[data-catalog-product]')).toHaveCount(39);
+    const measurements = await page.evaluate(async () => {
+      const original = Storage.prototype.setItem;
+      const writes: Array<{ key: string; bytes: number; durationMs: number }> = [];
+      Storage.prototype.setItem = function (key, value) {
+        const start = performance.now();
+        original.call(this, key, value);
+        if (key.startsWith('bric:catalog-position:'))
+          writes.push({
+            key,
+            bytes: new TextEncoder().encode(value).length,
+            durationMs: performance.now() - start,
+          });
+      };
+      try {
+        for (let index = 0; index < 12; index++) {
+          window.scrollBy(0, index % 2 ? 40 : -40);
+          await new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          );
+        }
+      } finally {
+        Storage.prototype.setItem = original;
+      }
+      return writes;
+    });
+    expect(measurements.length).toBeGreaterThan(0);
+    expect(measurements.every((write) => write.key.endsWith(':scroll') && write.bytes < 10)).toBe(
+      true,
+    );
+    await testInfo.attach('catalog-payload-and-scroll.json', {
+      body: JSON.stringify({ canonicalBytes, browserBytes, writes: measurements }),
+      contentType: 'application/json',
+    });
+  });
+}

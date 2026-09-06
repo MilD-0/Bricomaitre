@@ -3,12 +3,12 @@ import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 
-import '../../../styles/product.css';
 import '../../../styles/checkout.css';
 import '../../../styles/landing-page.css';
+import '../../../styles/product.css';
 
-import { LandingPageRenderer } from '@/components/landing-page-renderer';
 import { LandingOrderForm } from '@/components/landing-order-form';
+import { LandingPageRenderer } from '@/components/landing-page-renderer';
 import { PageShell } from '@/components/page-shell';
 import { LandingPageSkeleton } from '@/components/storefront-skeletons';
 import { isLocale } from '@/i18n/config';
@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: LandingPageProps): Promise<Me
 async function LandingPageContent({ params }: LandingPageProps) {
   const [{ locale, slug }, requestHeaders] = await Promise.all([params, headers()]);
   if (!isLocale(locale)) notFound();
-  const page = await getStorefrontLandingPage(locale, slug).catch(() => null);
+  const page = await getStorefrontLandingPage(locale, slug);
   if (!page) notFound();
   const alternateLocale = locale === 'fr' ? 'ar' : 'fr';
   const alternatePage = await getStorefrontLandingPage(alternateLocale, page.slug).catch(

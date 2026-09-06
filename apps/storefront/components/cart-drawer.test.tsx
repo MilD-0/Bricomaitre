@@ -79,6 +79,32 @@ describe('CartDrawer', () => {
     );
   });
 
+  it('keeps the visible cart and emits no commerce event when persistence fails', () => {
+    const onItemsChange = vi.fn();
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Quota exceeded', 'QuotaExceededError');
+    });
+    try {
+      render(
+        <CartDrawer
+          locale="fr"
+          items={[item]}
+          labels={labels}
+          onClose={vi.fn()}
+          onItemsChange={onItemsChange}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: `${labels.increase}: ${item.title}` }));
+      fireEvent.click(screen.getByRole('button', { name: `${labels.remove}: ${item.title}` }));
+      expect(onItemsChange).not.toHaveBeenCalled();
+      expect(analytics).not.toHaveBeenCalled();
+      expect(haptics.trigger).not.toHaveBeenCalled();
+      expect(screen.getByText(item.title)).toBeVisible();
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
   it('removes an item and closes with Escape', () => {
     const onClose = vi.fn();
     const onItemsChange = vi.fn();

@@ -56,13 +56,19 @@ export async function fetchStorefrontUpstream(
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    return await fetch(`${getStorefrontApiBaseUrl()}${pathname}`, {
+    const response = await fetch(`${getStorefrontApiBaseUrl()}${pathname}`, {
       ...init,
       headers: {
         accept: 'application/json',
         ...(init.headers ?? {}),
       },
-      signal: controller.signal,
+      signal: init.signal ? AbortSignal.any([controller.signal, init.signal]) : controller.signal,
+    });
+    const body = await response.arrayBuffer();
+    return new Response([204, 205, 304].includes(response.status) ? null : body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
     });
   } catch (error) {
     const timedOut = error instanceof Error && error.name === 'AbortError';

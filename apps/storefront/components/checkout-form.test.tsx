@@ -2,8 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CheckoutForm } from './checkout-form';
 import { CheckoutOrderError } from '@/lib/orders';
+import { CheckoutForm } from './checkout-form';
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -132,7 +132,7 @@ const order = {
   email: null,
   phoneNumber1: '0550000000',
   phoneNumber2: null,
-  cartProducts: ['desk-lamp', 'desk-lamp'],
+  cartProducts: ['12', '12'],
   orderProducts: [
     {
       productId: 12,
@@ -331,30 +331,46 @@ describe('CheckoutForm', () => {
     ).toEqual([20, 20, 20]);
   });
 
-  it('preserves the rate-limit deadline and disables both retry controls', async () => {
-    mocks.create.mockRejectedValue(
-      new CheckoutOrderError('limited', {
-        code: 'rate_limit',
-        status: 429,
-        retryAfterSeconds: 310,
-      }),
-    );
-    render(<CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels} />);
-    fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
-      target: { value: '0550000000' },
-    });
-    fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), { target: { value: '16' } });
-    fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), {
-      target: { value: 'Alger Centre' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'submit' }));
-    expect(await screen.findByText('rateLimit')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'retry' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'submit' })).toBeDisabled();
-    expect(
-      JSON.parse(window.localStorage.getItem('bric:checkout:pending:v1')!).retryAt,
-    ).toBeGreaterThan(Date.now() + 300_000);
-  });
+  it.each([
+    { code: 'rate_limit' as const, status: 429, label: 'rateLimit' },
+    { code: 'conflict' as const, status: 409, label: 'submitError' },
+  ])(
+    'preserves the $code deadline and disables both retry controls',
+    async ({ code, status, label }) => {
+      mocks.create.mockRejectedValue(
+        new CheckoutOrderError('limited', {
+          code,
+          status,
+          retryAfterSeconds: 310,
+        }),
+      );
+      const mounted = render(
+        <CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels} />,
+      );
+      fireEvent.change(screen.getByRole('textbox', { name: /phone/ }), {
+        target: { value: '0550000000' },
+      });
+      fireEvent.change(screen.getByRole('combobox', { name: /wilaya/ }), {
+        target: { value: '16' },
+      });
+      fireEvent.change(screen.getByRole('combobox', { name: /commune/ }), {
+        target: { value: 'Alger Centre' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'submit' }));
+      expect(await screen.findByText(label)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'retry' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'submit' })).toBeDisabled();
+      expect(
+        JSON.parse(window.localStorage.getItem('bric:checkout:pending:v1')!).retryAt,
+      ).toBeGreaterThan(Date.now() + 300_000);
+      mounted.unmount();
+      render(
+        <CheckoutForm locale="fr" catalog={catalog} directItem={directItem} labels={labels} />,
+      );
+      expect(await screen.findByText(label)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'retry' })).toBeDisabled();
+    },
+  );
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
@@ -574,7 +590,7 @@ describe('CheckoutForm', () => {
     expect(payload).toMatchObject({
       phoneNumber1: '0550000000',
       firstName: 'Ada',
-      cartProducts: ['desk-lamp', 'desk-lamp'],
+      cartProducts: ['12', '12'],
       journeyId: 'journey-1',
     });
     expect(window.localStorage.getItem('bric:checkout:pending:v1')).toBeNull();
@@ -609,10 +625,7 @@ describe('CheckoutForm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'submit' }));
 
     await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
-    expect(mocks.create.mock.calls[0][0].cartProducts).toEqual([
-      'canonical-desk-lamp',
-      'canonical-desk-lamp',
-    ]);
+    expect(mocks.create.mock.calls[0][0].cartProducts).toEqual(['12', '12']);
   });
 
   it('retains a cross-tab addition while reviewing a changed price', async () => {

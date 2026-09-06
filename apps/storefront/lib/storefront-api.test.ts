@@ -21,6 +21,7 @@ import {
   recordStorefrontAssistantRun,
 } from './storefront-api';
 import {
+  fetchStorefrontUpstream,
   getStorefrontApiBaseUrl,
   getStorefrontApiTimeoutMs,
   StorefrontUpstreamError,
@@ -155,6 +156,24 @@ describe('storefront API client', () => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
     vi.mocked(unstable_cache).mockImplementation((read) => read);
+  });
+
+  it('keeps the upstream deadline active when headers arrive but the body stalls', async () => {
+    vi.mocked(fetch).mockImplementation(
+      async (_url, init) =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              init?.signal?.addEventListener('abort', () =>
+                controller.error(new DOMException('Aborted', 'AbortError')),
+              );
+            },
+          }),
+        ),
+    );
+    await expect(
+      fetchStorefrontUpstream('/storefront/settings', { timeoutMs: 10 }),
+    ).rejects.toMatchObject({ code: 'unavailable', message: expect.stringContaining('timed out') });
   });
 
   it('normalizes configuration and applies safe timeout defaults', () => {

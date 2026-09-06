@@ -2,7 +2,7 @@ import type { getDb } from '@bric/db/client';
 import { landingPageRevisions, landingPages } from '@bric/db/schema';
 import { and, eq } from 'drizzle-orm';
 
-import { readStorefrontProductByToken } from './catalog';
+import { readStorefrontProductById } from './catalog';
 import {
   landingPageDocumentSchema,
   landingPageLocaleSchema,
@@ -114,7 +114,7 @@ async function readStorefrontLandingPageRevisionPointer(
       )
       .limit(1)
       .then((rows) => rows[0] ?? null),
-    readStorefrontProductByToken(db, String(page.productId)),
+    readStorefrontProductById(db, page.productId),
   ]);
 
   if (!revision || !product) return null;
@@ -128,9 +128,4 @@ async function readStorefrontLandingPageRevisionPointer(
     document: landingPageDocumentSchema.parse(revision.document),
     product: product.item,
   });
-}
-
-export async function readIndexableStorefrontLandingPages(db: Database) {
-  void db;
-  return [];
 }

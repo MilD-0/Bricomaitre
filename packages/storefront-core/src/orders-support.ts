@@ -172,26 +172,6 @@ export const storefrontOrderCreateSchema = z.object({
   sessionId: optionalNullableTrimmedString(120),
 });
 
-export const storefrontOrderPatchSchema = z
-  .object({
-    firstName: optionalNullableTrimmedString(80).optional(),
-    lastName: optionalNullableTrimmedString(80).optional(),
-    email: optionalNullableEmail.optional(),
-    phoneNumber1: z.string().trim().min(1).max(50).optional(),
-    phoneNumber2: optionalNullableTrimmedString(50).optional(),
-    note: nullableTrimmedString(500).optional(),
-    delivery: deliveryTypeSchema.optional(),
-    state: nullableWilayaCode.optional(),
-    city: nullableTrimmedString(120).optional(),
-    homeAddress: nullableTrimmedString(300).optional(),
-    cartProducts: z.array(z.string().trim().min(1).max(160)).min(1).max(50).optional(),
-    promoCode: optionalNullableTrimmedString(120).optional(),
-    productPromos: productPromosSchema.optional(),
-  })
-  .refine((value) => Object.keys(value).length > 0, {
-    message: 'At least one field must be provided.',
-  });
-
 export type OrderStatus = z.infer<typeof orderStatusSchema>;
 export type DeliveryType = z.infer<typeof deliveryTypeSchema>;
 

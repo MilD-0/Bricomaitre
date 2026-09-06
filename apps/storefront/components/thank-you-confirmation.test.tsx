@@ -3,9 +3,9 @@ import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CHECKOUT_CONFIRMATION_KEY } from '@/lib/checkout';
+import { CheckoutOrderError } from '@/lib/orders';
 import type { StorefrontOrderResponseItem } from '@bric/storefront-core/contracts';
 import { ThankYouConfirmation } from './thank-you-confirmation';
-import { CheckoutOrderError } from '@/lib/orders';
 
 const mocks = vi.hoisted(() => ({ verify: vi.fn(), track: vi.fn() }));
 vi.mock('@/lib/orders', async (original) => ({
@@ -74,7 +74,8 @@ const order: StorefrontOrderResponseItem = {
   orderProducts: [
     {
       productId: 12,
-      rawValue: 'desk-lamp',
+      rawValue: '12',
+      slug: 'desk-lamp',
       title: 'Desk Lamp',
       unitPrice: 4500,
       quantity: 1,

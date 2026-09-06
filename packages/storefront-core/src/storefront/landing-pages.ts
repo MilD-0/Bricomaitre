@@ -326,16 +326,6 @@ export const storefrontLandingPageResponseSchema = z.object({
   product: storefrontProductDetailResponseItemSchema,
 });
 
-export const storefrontLandingPageSitemapResponseSchema = z.object({
-  items: z.array(
-    z.object({
-      slug: landingPageSlugSchema,
-      locale: landingPageLocaleSchema,
-      updatedAt: z.string().datetime(),
-    }),
-  ),
-});
-
 export type LandingPageBlock = z.infer<typeof landingPageBlockSchema>;
 export type LandingPageDocument = z.infer<typeof landingPageDocumentSchema>;
 export type LandingPageCreateInput = z.infer<typeof landingPageCreateSchema>;

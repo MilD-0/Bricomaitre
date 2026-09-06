@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
 import { storefrontOrderCreateRequestSchema } from '@bric/storefront-core/contracts';
+import { describe, expect, it } from 'vitest';
 
 import type { CartItem } from './cart';
 import {
@@ -110,7 +110,7 @@ describe('checkout domain', () => {
         availabilityStatus: 'in_stock',
       },
     ];
-    expect(expandCheckoutCart(items)).toEqual(['desk-lamp', 'desk-lamp']);
+    expect(expandCheckoutCart(items)).toEqual(['12', '12']);
     expect(
       expandCheckoutCart([
         { ...items[0], quantity: 20 },
@@ -152,7 +152,7 @@ describe('checkout domain', () => {
     ).toMatchObject({
       delivery: 1,
       state: 16,
-      cartProducts: ['desk-lamp', 'desk-lamp'],
+      cartProducts: ['12', '12'],
       promoCode: 'AUDIT10',
       expectedProductSubtotal: 9000,
       visitId: 'visit-1',

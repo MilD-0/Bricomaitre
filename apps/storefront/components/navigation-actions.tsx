@@ -1,14 +1,15 @@
 'use client';
 
 import { ChevronDown, ChevronRight, Menu, ShoppingCart } from 'lucide-react';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { CartDrawer, type CartDrawerLabels } from '@/components/cart-drawer';
 import { MobileSheet } from '@/components/mobile-sheet';
 import {
   SupportContactActions,
-  type SupportContactLabels,
   type StorefrontSupportContact,
+  type SupportContactLabels,
 } from '@/components/support-contact-actions';
 import type { Locale } from '@/i18n/config';
 import { trackNavigationEvent } from '@/lib/analytics';
@@ -65,7 +66,9 @@ export function NavigationActions({
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [drawerCategories, setDrawerCategories] = useState(categories);
   const [drawerBrands, setDrawerBrands] = useState<NavigationBrand[]>([]);
-  const [alternateHref, setAlternateHref] = useState(alternatePath ?? `/${alternateLocale}`);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const alternateHref = `${alternatePath ?? pathname.replace(/^\/(fr|ar)(?=\/|$)/, `/${alternateLocale}`)}${searchParams.size ? `?${searchParams}` : ''}`;
   const [visualLocale, setVisualLocale] = useState<Locale>(locale);
   const cartButtonRef = useRef<HTMLButtonElement>(null);
   const cartCount = getCartItemCount(cartItems);
@@ -87,11 +90,6 @@ export function NavigationActions({
   }, [locale]);
 
   useEffect(() => {
-    queueMicrotask(() =>
-      setAlternateHref(
-        `${alternatePath ?? window.location.pathname.replace(/^\/(fr|ar)(?=\/|$)/, `/${alternateLocale}`)}${window.location.search}`,
-      ),
-    );
     const controller = new AbortController();
     void fetchNavigationMeta(controller.signal)
       .then((meta: NavigationMeta) => {

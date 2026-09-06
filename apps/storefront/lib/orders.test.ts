@@ -118,6 +118,7 @@ describe('checkout order client', () => {
       method: 'POST',
       headers: { accept: 'application/json', 'content-type': 'application/json' },
       body: JSON.stringify({ token: 'token with spaces' }),
+      signal: expect.any(AbortSignal),
     });
   });
 

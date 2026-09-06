@@ -1,3 +1,4 @@
+import { storefrontCatalogCardSchema } from '@bric/storefront-core/contracts';
 import { NextRequest, NextResponse } from 'next/server';
 
 import {
@@ -18,7 +19,9 @@ export async function GET(request: NextRequest) {
   return fetchStorefrontCatalog(upstreamQuery)
     .then((response) =>
       NextResponse.json({
-        items: response.items.slice(0, batchSize),
+        items: response.items
+          .slice(0, batchSize)
+          .map((item) => storefrontCatalogCardSchema.parse(item)),
         total: response.total,
         page: query.page,
         hasNextPage: query.page * batchSize < response.total,

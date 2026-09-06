@@ -4,10 +4,10 @@ import {
   type StorefrontEcotrackCatalogResponse,
   type StorefrontOrderCreateRequest,
 } from '@bric/storefront-core/contracts';
-import { z } from 'zod';
 import type { StorefrontOrderMarketing } from '@bric/storefront-core/marketing-contracts';
 import { META_SEMANTICS_VERSION } from '@bric/storefront-core/meta-contracts';
 import { normalizeAlgerianPhoneNumber } from '@bric/storefront-core/settings';
+import { z } from 'zod';
 
 import { cartItemSchema, type CartItem } from '@/lib/cart';
 
@@ -75,7 +75,7 @@ export function getCheckoutDeliveryFee(
 
 export function expandCheckoutCart(items: CartItem[]) {
   const products = items.flatMap((item) =>
-    Array.from({ length: item.quantity }, () => item.token || String(item.productId)),
+    Array.from({ length: item.quantity }, () => String(item.productId)),
   );
   if (products.length > 50) throw new Error('checkout_quantity_limit');
   return products;
@@ -130,6 +130,7 @@ const pendingCheckoutSchema = z.object({
   payload: storefrontOrderCreateRequestSchema,
   createdAt: z.string().datetime({ offset: true }),
   retryAt: z.number().nonnegative().optional(),
+  retryReason: z.enum(['rate_limit', 'processing']).optional(),
   items: z.array(cartItemSchema).max(50).optional(),
   cartMode: z.enum(['cart', 'direct']).optional(),
   deliveryFee: z.number().nonnegative().optional(),

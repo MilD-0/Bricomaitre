@@ -1,4 +1,4 @@
-import { asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 
 import type { getDb } from '@bric/db/client';
 import {
@@ -10,17 +10,17 @@ import {
   productCards,
 } from '@bric/db/schema';
 import {
-  toStorefrontBannerDto,
-  toStorefrontFeaturedGroupDto,
-  toStorefrontProductCardDto,
-} from './dto';
-import {
   readStorefrontBrands,
   readStorefrontCategories,
   readStorefrontProducts,
   readStorefrontProductsByIds,
   readStorefrontProductsForSelectionPage,
 } from './catalog';
+import {
+  toStorefrontBannerDto,
+  toStorefrontFeaturedGroupDto,
+  toStorefrontProductCardDto,
+} from './dto';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -125,8 +125,13 @@ export async function readStorefrontHomepage(db: Database) {
   const featuredGroups = await Promise.all(
     assets.featuredGroups.map(async (group) => ({
       ...group,
-      products: (await readStorefrontProductsForSelectionPage(db, group, { page: 1, limit: 12 }))
-        .items,
+      products: (
+        await readStorefrontProductsForSelectionPage(db, group, {
+          page: 1,
+          limit: 12,
+          includeTotal: false,
+        })
+      ).items,
     })),
   );
 
@@ -153,9 +158,26 @@ export async function readStorefrontHomepageFeaturedGroupProducts(
   page: number,
   limit: number,
 ) {
-  const assets = await readStorefrontAssets(db);
-  const group = assets.featuredGroups.find((item) => item.id === groupId);
+  const [groups, selectedProducts, selectedBrands, selectedCategories] = await Promise.all([
+    db
+      .select()
+      .from(featuredProductGroups)
+      .where(and(eq(featuredProductGroups.id, groupId), eq(featuredProductGroups.active, true)))
+      .limit(1),
+    db
+      .select()
+      .from(featuredProductGroupProducts)
+      .where(eq(featuredProductGroupProducts.groupId, groupId)),
+    db
+      .select()
+      .from(featuredProductGroupBrands)
+      .where(eq(featuredProductGroupBrands.groupId, groupId)),
+    db
+      .select()
+      .from(featuredProductGroupCategories)
+      .where(eq(featuredProductGroupCategories.groupId, groupId)),
+  ]);
+  const [group] = withSelections(groups, selectedProducts, selectedBrands, selectedCategories);
   if (!group) return null;
-
   return readStorefrontProductsForSelectionPage(db, group, { page, limit });
 }

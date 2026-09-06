@@ -1,11 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { buildMetaClickCookie } from '@bric/storefront-core/meta-contracts';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  buildMetaClickCookie,
   captureMarketingAttribution,
   captureStorefrontAttribution,
-  getStorefrontAnalyticsContext,
   getMarketingOrderContext,
+  getStorefrontAnalyticsContext,
   parseGoogleClientId,
   parseGoogleSessionId,
 } from './marketing-attribution';
@@ -28,7 +28,7 @@ describe('marketing attribution boundary', () => {
     const attribution = captureStorefrontAttribution(1_720_000_000_000);
     expect(attribution).toMatchObject({
       fbclid: 'meta-click',
-      fbc: 'fb.1.1720000000.meta-click',
+      fbc: 'fb.1.1720000000000.meta-click',
       utmSource: 'facebook',
       utmMedium: 'paid_social',
     });
@@ -40,7 +40,7 @@ describe('marketing attribution boundary', () => {
     window.history.replaceState({}, '', '/fr/products');
     expect(captureStorefrontAttribution(1_720_000_001_000).visitId).toBe(attribution.visitId);
     expect(buildMetaClickCookie('next-click', 1_720_000_002_000)).toBe(
-      'fb.1.1720000002.next-click',
+      'fb.1.1720000002000.next-click',
     );
   });
 
@@ -50,7 +50,9 @@ describe('marketing attribution boundary', () => {
     const second = captureStorefrontAttribution(1_720_000_010_000);
     expect(second.visitId).not.toBe(first.visitId);
     expect(second.fbclid).toBe('second-click');
-    expect(document.cookie).toContain(`_fbc=${encodeURIComponent('fb.1.1720000010.second-click')}`);
+    expect(document.cookie).toContain(
+      `_fbc=${encodeURIComponent('fb.1.1720000010000.second-click')}`,
+    );
   });
 
   it('starts a new source-less campaign visit for platform click identifiers', () => {
@@ -96,6 +98,34 @@ describe('marketing attribution boundary', () => {
       utmSource: 'google',
     });
   });
+
+  it.each([false, true])(
+    'retains one journey, session and visit when storage writes fail (reads denied: %s)',
+    (denyReads) => {
+      const getItem = denyReads
+        ? vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+            throw new DOMException('Denied', 'SecurityError');
+          })
+        : null;
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('Denied', 'SecurityError');
+      });
+      try {
+        const first = { ...captureStorefrontAttribution(), ...getStorefrontAnalyticsContext() };
+        getMarketingOrderContext('purchase-storage-denied');
+        const second = { ...captureStorefrontAttribution(), ...getStorefrontAnalyticsContext() };
+        expect(first.journeyId).toBe(second.journeyId);
+        expect(first.sessionId).toBe(second.sessionId);
+        expect(first.visitId).toBe(second.visitId);
+        expect(first.journeyId).toBeTruthy();
+        expect(first.sessionId).toBeTruthy();
+        expect(first.visitId).toBeTruthy();
+      } finally {
+        getItem?.mockRestore();
+        setItem.mockRestore();
+      }
+    },
+  );
 
   it('normalizes GA identifiers without exposing customer fields', () => {
     expect(parseGoogleClientId('GA1.1.12345.67890')).toBe('12345.67890');

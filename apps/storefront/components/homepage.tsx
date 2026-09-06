@@ -1,15 +1,16 @@
-import type { StorefrontHomepageResponse } from '@bric/storefront-core/contracts';
-import { HomepageBannerCarousel } from '@/components/homepage-banner-carousel';
 import { HomepageAddToCart } from '@/components/homepage-add-to-cart';
+import { HomepageBannerCarousel } from '@/components/homepage-banner-carousel';
 import {
   HomepageBrandCarousel,
   HomepageCategoryCarousel,
   HomepageProductCarousel,
 } from '@/components/homepage-carousels';
-import { StorefrontImage } from '@/components/storefront-image';
 import { ProductTrustSignal } from '@/components/product-trust-signal';
+import { StorefrontImage } from '@/components/storefront-image';
 import type { Locale } from '@/i18n/config';
 import { formatProductPrice, parseProductPrice } from '@/lib/product-presentation';
+import type { StorefrontHomepageResponse } from '@bric/storefront-core/contracts';
+import { storefrontCatalogCardSchema } from '@bric/storefront-core/contracts';
 
 const copy = {
   fr: {
@@ -211,7 +212,7 @@ function CuratedProductCarousel({
   const taxonomy = selectCarouselTaxonomy(products, brands, categories);
   return (
     <HomepageProductCarousel
-      products={products}
+      products={products.map((product) => storefrontCatalogCardSchema.parse(product))}
       locale={locale}
       featuredGroupId={featuredGroupId}
       eagerImages={eagerImages}

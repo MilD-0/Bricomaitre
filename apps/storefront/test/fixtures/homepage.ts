@@ -1,4 +1,3 @@
-import type { CatalogProduct } from '@/components/catalog-card';
 import type { StorefrontHomepageResponse } from '@bric/storefront-core/contracts';
 
 type Localized = { fr: string; ar: string };
@@ -11,7 +10,7 @@ type HomepageCategory = {
 };
 
 type HomepageProduct = {
-  product: CatalogProduct;
+  product: StorefrontHomepageResponse['topProducts'][number];
   brand: string;
   category: Localized;
 };
@@ -28,7 +27,7 @@ const product = (
   image: string,
   brandId: number,
   categoryId: number,
-): CatalogProduct => ({
+): StorefrontHomepageResponse['topProducts'][number] => ({
   id,
   slug,
   mongoId: null,

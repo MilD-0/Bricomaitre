@@ -2,7 +2,6 @@ export * from './aws';
 export * from './client-ip';
 export * from './diagnostics';
 export * from './health';
-export * from './idempotency';
 export * from './internal-signing';
 export * from './jobs';
 export * from './next-action';

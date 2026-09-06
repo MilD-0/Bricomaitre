@@ -1,7 +1,7 @@
 import type { Route } from 'next';
+import { getTranslations } from 'next-intl/server';
 import { headers } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
 import { Fragment, Suspense } from 'react';
 import { ZodError } from 'zod';
 
@@ -12,11 +12,11 @@ import { ProductTelemetry } from '@/components/product-telemetry';
 import { ProductTrustSignal } from '@/components/product-trust-signal';
 import { SimilarProducts } from '@/components/similar-products';
 import { StorefrontImage } from '@/components/storefront-image';
-import { StructuredData } from '@/components/structured-data';
 import { SimilarProductsSkeleton } from '@/components/storefront-skeletons';
+import { StructuredData } from '@/components/structured-data';
 import { isLocale, type Locale } from '@/i18n/config';
-import { isDisplayableProductImageUrl } from '@/lib/product-images';
 import { buildProductCategoryBreadcrumbs } from '@/lib/product-breadcrumbs';
+import { isDisplayableProductImageUrl } from '@/lib/product-images';
 import {
   formatProductPrice,
   getLocalizedProductCopy,
@@ -24,14 +24,14 @@ import {
   parseProductPrice,
 } from '@/lib/product-presentation';
 import { buildProductStructuredData, getProductPath } from '@/lib/product-seo';
+import { captureProductPageException } from '@/lib/sentry';
 import {
+  fetchStorefrontProductPromo,
   getStorefrontCatalogMeta,
   getStorefrontProductDetail,
   getStorefrontSettings,
-  fetchStorefrontProductPromo,
 } from '@/lib/storefront-api';
 import { isStorefrontUpstreamError } from '@/lib/storefront-upstream';
-import { captureProductPageException } from '@/lib/sentry';
 import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 export type ProductPageProps = {
@@ -95,9 +95,15 @@ export async function ProductPageContent({ params, searchParams }: ProductPagePr
 
   if (!response) notFound();
   if (response.resolution.requestedToken !== response.resolution.canonicalToken) {
-    const promoQuery = rawPromo ? `?${new URLSearchParams({ promo: rawPromo })}` : '';
+    const redirectParams = new URLSearchParams();
+    for (const [name, value] of Object.entries(query)) {
+      for (const item of Array.isArray(value) ? value : value === undefined ? [] : [value]) {
+        redirectParams.append(name, item);
+      }
+    }
+    const querySuffix = redirectParams.size ? `?${redirectParams}` : '';
     permanentRedirect(
-      `${getProductPath(locale, response.resolution.canonicalToken)}${promoQuery}` as Route,
+      `${getProductPath(locale, response.resolution.canonicalToken)}${querySuffix}` as Route,
     );
   }
 

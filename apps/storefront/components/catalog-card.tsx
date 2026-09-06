@@ -1,11 +1,12 @@
-import type { StorefrontProductsResponse } from '@bric/storefront-core/contracts';
+import type { storefrontCatalogCardSchema } from '@bric/storefront-core/contracts';
+import type { z } from 'zod';
 
 import { StorefrontImage } from '@/components/storefront-image';
 import type { Locale } from '@/i18n/config';
 import { isDisplayableProductImageUrl } from '@/lib/product-images';
 import { formatProductPrice, parseProductPrice } from '@/lib/product-presentation';
 
-export type CatalogProduct = StorefrontProductsResponse['items'][number];
+export type CatalogProduct = z.infer<typeof storefrontCatalogCardSchema>;
 
 export type CatalogCardLabels = {
   inStock: string;

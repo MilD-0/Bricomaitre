@@ -1,27 +1,23 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 
-import {
-  beginIdempotentRequest,
-  buildIdempotencyFingerprint,
-  buildIdempotencyKeyHash,
-  clearIdempotentRequest,
-  completeIdempotentRequest,
-} from '@bric/runtime/idempotency';
 import { getDb, hasDb } from '@bric/db/client';
 import { storefrontOrderCreateRequestSchema } from '@bric/storefront-core/contracts';
 import { UnorderableCartError } from '@bric/storefront-core/order-commercial';
 import {
+  buildIdempotencyFingerprint,
+  buildIdempotencyKeyHash,
   claimStorefrontOrderIdempotency,
   clearStorefrontOrderIdempotency,
+  StorefrontOrderClaimLostError,
 } from '@bric/storefront-core/order-idempotency';
 import { createStorefrontOrder, readCommittedStorefrontOrder } from '@bric/storefront-core/orders';
 
+import { authorizeMetaSourceRequest, getMetaRequestContext } from '../../../lib/meta-request';
 import {
   buildRateLimitHeaders,
   enforceOrderVelocityLimit,
   enforceRequestRateLimit,
 } from '../../../lib/request-security';
-import { authorizeMetaSourceRequest, getMetaRequestContext } from '../../../lib/meta-request';
 import {
   captureStorefrontApiException,
   getRequestId,
@@ -43,42 +39,6 @@ function orderServiceUnavailable(requestId: string) {
     { error: 'Order service is temporarily unavailable. Please try again.' },
     { status: 503, headers: withRequestIdHeaders(requestId) },
   );
-}
-
-async function clearOrderIdempotencyBestEffort(
-  idempotencyKey: string,
-  requestId: string,
-  operation: string,
-) {
-  try {
-    await clearIdempotentRequest('storefront-order-create', idempotencyKey);
-  } catch (error) {
-    captureStorefrontApiException(error, {
-      requestId,
-      operation,
-      route: '/storefront/orders',
-      context: { idempotencyKeyPresent: true },
-    });
-  }
-}
-
-async function clearDurableOrderIdempotencyBestEffort(
-  db: ReturnType<typeof getDb>,
-  keyHash: string,
-  fingerprint: string,
-  requestId: string,
-  operation: string,
-) {
-  try {
-    await clearStorefrontOrderIdempotency(db, { keyHash, fingerprint });
-  } catch (error) {
-    captureStorefrontApiException(error, {
-      requestId,
-      operation,
-      route: '/storefront/orders',
-      context: { durableIdempotency: true },
-    });
-  }
 }
 
 function logOrderTiming(options: {
@@ -190,224 +150,115 @@ export async function POST(req: NextRequest) {
   }
 
   const fingerprint = buildIdempotencyFingerprint(parsed.data);
-  const idempotencyKeyHash = buildIdempotencyKeyHash(idempotencyKey);
-  let durableIdempotencyStarted = false;
-  const timings: OrderTimingEntry[] = [];
-  const startedAt = performance.now();
-
-  if (idempotencyKey) {
-    let started;
-    try {
-      started = await beginIdempotentRequest({
-        scope: 'storefront-order-create',
-        key: idempotencyKey,
-        fingerprint,
-        ttlSeconds: ORDER_CREATE_PROCESSING_TTL_SECONDS,
-      });
-    } catch (error) {
-      captureStorefrontApiException(error, {
-        requestId,
-        operation: 'storefront-order-idempotency-start',
-        route: '/storefront/orders',
-        context: { idempotencyKeyPresent: true },
-      });
-      return orderServiceUnavailable(requestId);
+  const keyHash = buildIdempotencyKeyHash(idempotencyKey);
+  let claim;
+  try {
+    claim = await claimStorefrontOrderIdempotency(getDb(), {
+      keyHash,
+      fingerprint,
+      processingTtlSeconds: ORDER_CREATE_PROCESSING_TTL_SECONDS,
+    });
+    if (claim.kind === 'conflict') {
+      return NextResponse.json(
+        { error: 'Idempotency key already used with a different payload.' },
+        {
+          status: 409,
+          headers: withRequestIdHeaders(requestId),
+        },
+      );
     }
-
-    if (started.kind === 'existing' && started.record) {
-      if (started.record.fingerprint !== fingerprint) {
-        return NextResponse.json(
-          { error: 'Idempotency key already used with a different payload.' },
-          {
-            status: 409,
-            headers: withRequestIdHeaders(requestId),
-          },
-        );
-      }
-
-      if (started.record.status === 'completed') {
-        return NextResponse.json(started.record.response.body, {
-          status: started.record.response.statusCode,
-          headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)),
-        });
-      }
+    if (claim.kind === 'processing') {
+      return NextResponse.json(
+        { error: 'Order request is already being processed.', code: 'processing' },
+        {
+          status: 409,
+          headers: withRequestIdHeaders(requestId, {
+            'retry-after': String(claim.retryAfterSeconds),
+          }),
+        },
+      );
     }
-
-    try {
-      const durableClaim = await claimStorefrontOrderIdempotency(getDb(), {
-        keyHash: idempotencyKeyHash!,
-        fingerprint,
-        processingTtlSeconds: ORDER_CREATE_PROCESSING_TTL_SECONDS,
-      });
-
-      if (durableClaim.kind === 'conflict') {
-        return NextResponse.json(
-          { error: 'Idempotency key already used with a different payload.' },
-          {
-            status: 409,
-            headers: withRequestIdHeaders(requestId),
-          },
-        );
-      }
-
-      if (durableClaim.kind === 'completed') {
-        const item = await readCommittedStorefrontOrder(getDb(), durableClaim.orderId);
-        if (!item) {
-          throw new Error('Durable idempotency record references a missing order.');
-        }
-        const body = {
-          ok: true,
-          item,
-          ...(durableClaim.metaResponse ? { meta: durableClaim.metaResponse } : {}),
-        };
-        return NextResponse.json(body, {
+    if (claim.kind === 'completed') {
+      const item = await readCommittedStorefrontOrder(getDb(), claim.orderId);
+      if (!item) throw new Error('Durable idempotency record references a missing order.');
+      return NextResponse.json(
+        { ok: true, item, ...(claim.metaResponse ? { meta: claim.metaResponse } : {}) },
+        {
           status: 201,
           headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)),
-        });
-      }
-
-      const redisProcessing =
-        started.kind === 'existing' && started.record?.status === 'processing';
-      if (durableClaim.kind === 'processing' || redisProcessing) {
-        if (durableClaim.kind === 'started') {
-          await clearDurableOrderIdempotencyBestEffort(
-            getDb(),
-            idempotencyKeyHash!,
-            fingerprint,
-            requestId,
-            'storefront-order-durable-idempotency-clear-after-redis-processing',
-          );
-        }
-        const retryAfterSeconds =
-          durableClaim.kind === 'processing'
-            ? durableClaim.retryAfterSeconds
-            : (started.ttlSeconds ?? ORDER_CREATE_PROCESSING_TTL_SECONDS);
-        return NextResponse.json(
-          { error: 'Order request is already being processed.' },
-          {
-            status: 409,
-            headers: withRequestIdHeaders(requestId, {
-              ...buildRateLimitHeaders(rateLimit),
-              'retry-after': String(retryAfterSeconds),
-            }),
-          },
-        );
-      }
-
-      durableIdempotencyStarted = true;
-    } catch (error) {
-      captureStorefrontApiException(error, {
-        requestId,
-        operation: 'storefront-order-durable-idempotency-claim',
-        route: '/storefront/orders',
-        context: { idempotencyKeyPresent: true },
-      });
-      await clearOrderIdempotencyBestEffort(
-        idempotencyKey,
-        requestId,
-        'storefront-order-idempotency-clear-after-durable-error',
+        },
       );
-      return orderServiceUnavailable(requestId);
     }
-  }
-
-  let orderVelocityLimit;
-  try {
-    orderVelocityLimit = await enforceOrderVelocityLimit(req, {
-      journeyId: parsed.data.journeyId,
-      visitId: parsed.data.visitId,
-      sessionId: parsed.data.sessionId,
-    });
   } catch (error) {
     captureStorefrontApiException(error, {
       requestId,
-      operation: 'storefront-order-velocity-limit',
+      operation: 'storefront-order-idempotency',
       route: '/storefront/orders',
     });
-    if (idempotencyKey) {
-      await clearOrderIdempotencyBestEffort(
-        idempotencyKey,
-        requestId,
-        'storefront-order-idempotency-clear-after-velocity-error',
-      );
-      if (durableIdempotencyStarted) {
-        await clearDurableOrderIdempotencyBestEffort(
-          getDb(),
-          idempotencyKeyHash!,
-          fingerprint,
-          requestId,
-          'storefront-order-durable-idempotency-clear-after-velocity-error',
-        );
-      }
-    }
     return orderServiceUnavailable(requestId);
   }
-  if (!orderVelocityLimit.ok) {
-    if (idempotencyKey) {
-      await clearOrderIdempotencyBestEffort(
-        idempotencyKey,
-        requestId,
-        'storefront-order-idempotency-clear-after-rate-limit',
-      );
-      if (durableIdempotencyStarted) {
-        await clearDurableOrderIdempotencyBestEffort(
-          getDb(),
-          idempotencyKeyHash!,
-          fingerprint,
-          requestId,
-          'storefront-order-durable-idempotency-clear-after-rate-limit',
-        );
-      }
-    }
 
-    const retryAfterMinutes = Math.max(1, Math.ceil(orderVelocityLimit.retryAfterSeconds / 60));
-    return NextResponse.json(
-      {
-        error: `Too many order attempts. Try again in about ${retryAfterMinutes} minute${retryAfterMinutes === 1 ? '' : 's'}.`,
-      },
-      {
-        status: 429,
-        headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(orderVelocityLimit)),
-      },
-    );
+  const idempotency = { keyHash, fingerprint, createdAt: claim.createdAt };
+  const timings: OrderTimingEntry[] = [];
+  const startedAt = performance.now();
+  async function clearClaim() {
+    try {
+      await clearStorefrontOrderIdempotency(getDb(), idempotency);
+    } catch (error) {
+      captureStorefrontApiException(error, {
+        requestId,
+        operation: 'storefront-order-idempotency-clear',
+        route: '/storefront/orders',
+      });
+    }
   }
 
   try {
-    const created = await createStorefrontOrder(getDb(), parsed.data, {
-      reportTiming: (entry) => {
-        timings.push(entry);
-      },
+    let velocity;
+    try {
+      velocity = await enforceOrderVelocityLimit(req, {
+        journeyId: parsed.data.journeyId,
+        visitId: parsed.data.visitId,
+        sessionId: parsed.data.sessionId,
+      });
+    } catch (error) {
+      await clearClaim();
+      captureStorefrontApiException(error, {
+        requestId,
+        operation: 'storefront-order-velocity-limit',
+        route: '/storefront/orders',
+      });
+      return orderServiceUnavailable(requestId);
+    }
+    if (!velocity.ok) {
+      await clearClaim();
+      return NextResponse.json(
+        { error: 'Too many order attempts. Please try again later.' },
+        {
+          status: 429,
+          headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(velocity)),
+        },
+      );
+    }
+    const { item, meta } = await createStorefrontOrder(getDb(), parsed.data, {
+      reportTiming: (entry) => timings.push(entry),
       metaRequestContext: getMetaRequestContext(req, marketingSourceUrls[0]),
-      ...(durableIdempotencyStarted
-        ? {
-            idempotency: {
-              keyHash: idempotencyKeyHash!,
-              fingerprint,
-            },
-          }
-        : {}),
+      idempotency,
+      scheduleAfterCommit: after,
+      reportEnrichmentError: (error) =>
+        captureStorefrontApiException(error, {
+          requestId,
+          operation: 'storefront-order-enrichment',
+          route: '/storefront/orders',
+        }),
     });
-    const createdResult = created as typeof created | (typeof created)['item'];
-    const item =
-      createdResult && typeof createdResult === 'object' && 'item' in createdResult
-        ? createdResult.item
-        : createdResult;
-    const meta =
-      createdResult && typeof createdResult === 'object' && 'meta' in createdResult
-        ? createdResult.meta
-        : undefined;
-    const body = {
-      ok: true,
-      item,
-      ...(meta ? { meta } : {}),
-    };
     const totalDurationMs = Number((performance.now() - startedAt).toFixed(1));
-
     if (totalDurationMs >= SLOW_ORDER_CREATE_THRESHOLD_MS) {
       logOrderTiming({
         requestId,
         totalDurationMs,
         timings,
+        outcome: 'slow',
         payload: {
           cartSize: parsed.data.cartProducts.length,
           hasJourneyId: Boolean(parsed.data.journeyId),
@@ -415,64 +266,26 @@ export async function POST(req: NextRequest) {
           delivery: parsed.data.delivery,
           state: parsed.data.state,
         },
-        outcome: 'slow',
       });
     }
-
-    if (idempotencyKey) {
-      try {
-        await completeIdempotentRequest({
-          scope: 'storefront-order-create',
-          key: idempotencyKey,
-          fingerprint,
-          statusCode: 201,
-          body,
-        });
-      } catch (error) {
-        captureStorefrontApiException(error, {
-          requestId,
-          operation: 'storefront-order-idempotency-complete',
-          route: '/storefront/orders',
-          context: {
-            idempotencyKeyPresent: true,
-            orderCommitted: true,
-          },
-        });
-      }
-    }
-
-    return NextResponse.json(body, {
-      status: 201,
-      headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)),
-    });
-  } catch (error) {
-    captureStorefrontApiException(error, {
-      requestId,
-      operation: 'storefront-order-create',
-      route: '/storefront/orders',
-      context: {
-        hasIdempotencyKey: Boolean(idempotencyKey),
-        idempotencyKeyPresent: Boolean(idempotencyKey),
+    return NextResponse.json(
+      { ok: true, item, ...(meta ? { meta } : {}) },
+      {
+        status: 201,
+        headers: withRequestIdHeaders(requestId, buildRateLimitHeaders(rateLimit)),
       },
-    });
-
-    if (idempotencyKey) {
-      await clearOrderIdempotencyBestEffort(
-        idempotencyKey,
-        requestId,
-        'storefront-order-idempotency-clear-after-create-error',
+    );
+  } catch (error) {
+    await clearClaim();
+    if (error instanceof StorefrontOrderClaimLostError) {
+      return NextResponse.json(
+        { error: 'Order request is already being processed.', code: 'processing' },
+        {
+          status: 409,
+          headers: withRequestIdHeaders(requestId, { 'retry-after': '1' }),
+        },
       );
-      if (durableIdempotencyStarted) {
-        await clearDurableOrderIdempotencyBestEffort(
-          getDb(),
-          idempotencyKeyHash!,
-          fingerprint,
-          requestId,
-          'storefront-order-durable-idempotency-clear-after-create-error',
-        );
-      }
     }
-
     if (error instanceof UnorderableCartError) {
       return NextResponse.json(
         {
@@ -480,14 +293,23 @@ export async function POST(req: NextRequest) {
             'Your cart changed. Review current prices, promotions and availability before ordering.',
           code: 'cart_changed',
         },
-        { status: 409, headers: withRequestIdHeaders(requestId) },
+        {
+          status: 409,
+          headers: withRequestIdHeaders(requestId),
+        },
       );
     }
-
+    captureStorefrontApiException(error, {
+      requestId,
+      operation: 'storefront-order-create',
+      route: '/storefront/orders',
+    });
     logOrderTiming({
       requestId,
       totalDurationMs: Number((performance.now() - startedAt).toFixed(1)),
       timings,
+      outcome: 'failed',
+      errorMessage: error instanceof Error ? error.message : String(error),
       payload: {
         cartSize: parsed.data.cartProducts.length,
         hasJourneyId: Boolean(parsed.data.journeyId),
@@ -495,10 +317,7 @@ export async function POST(req: NextRequest) {
         delivery: parsed.data.delivery,
         state: parsed.data.state,
       },
-      outcome: 'failed',
-      errorMessage: error instanceof Error ? error.message : String(error),
     });
-
-    throw error;
+    return orderServiceUnavailable(requestId);
   }
 }

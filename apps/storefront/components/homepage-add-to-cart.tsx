@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 
 import type { Locale } from '@/i18n/config';
-import { addCartItem, readCart, writeCart, type CartItem } from '@/lib/cart';
 import { trackProductEvent } from '@/lib/analytics';
+import { addCartItem, readCart, writeCart, type CartItem } from '@/lib/cart';
 import { prepareHaptics, triggerHaptic } from '@/lib/haptics';
 
 export function HomepageAddToCart({
@@ -23,8 +23,13 @@ export function HomepageAddToCart({
     void prepareHaptics();
   }, []);
   function add() {
-    const next = addCartItem(readCart(window.localStorage), { ...item, quantity: 1 });
-    writeCart(window.localStorage, next);
+    let next: CartItem[];
+    try {
+      next = addCartItem(readCart(window.localStorage), { ...item, quantity: 1 });
+      if (!writeCart(window.localStorage, next)) return;
+    } catch {
+      return;
+    }
     window.dispatchEvent(new CustomEvent('bric:cart-updated', { detail: { count: next.length } }));
     setAdded(true);
     void triggerHaptic('success');

@@ -1,3 +1,4 @@
+import { buildMetaClickCookie } from '@bric/storefront-core/meta-contracts';
 import { timingSafeEqual } from 'node:crypto';
 
 import { getTrustedClientIp } from '@bric/runtime/client-ip';
@@ -67,7 +68,7 @@ function buildFbcFromSourceUrl(eventSourceUrl: string | null | undefined, now = 
   if (!eventSourceUrl) return null;
   try {
     const fbclid = new URL(eventSourceUrl).searchParams.get('fbclid')?.trim().slice(0, 500);
-    return fbclid ? `fb.1.${Math.floor(now.getTime() / 1000)}.${fbclid}` : null;
+    return fbclid ? buildMetaClickCookie(fbclid, now.getTime()) : null;
   } catch {
     return null;
   }
