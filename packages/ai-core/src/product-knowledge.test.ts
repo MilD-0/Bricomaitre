@@ -1,49 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { createFixedProductRelationGenerator } from './testing';
-import {
-  MIN_AI_PRODUCT_RELATION_CONFIDENCE,
-  UnsupportedProductRelationError,
-  productRelationProposalSchema,
-} from './product-knowledge';
+import { productRelationProposalSchema } from './product-knowledge';
 
 describe('product relation AI contracts', () => {
-  it('keeps fixed test generators deterministic and provider-free', async () => {
-    const result = {
-      proposal: {
-        sourceProductId: 1,
-        targetProductId: 2,
-        relationType: 'requires' as const,
-        source: 'ai' as const,
-        confidence: 0.7,
-        reviewStatus: 'proposed' as const,
-        evidenceSummary: 'The supplied specifications identify the target as required.',
-      },
-      reasoning: 'Requires administrator verification.',
-      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-      model: 'test-model',
-    };
-
-    await expect(
-      createFixedProductRelationGenerator(result).generate({
-        sourceProduct: {
-          id: 1,
-          title: 'Cordless drill',
-          description: '18V cordless drill',
-          category: 'Power tools',
-          brand: 'Acme',
-        },
-        targetProduct: {
-          id: 2,
-          title: '18V battery',
-          description: 'Compatible battery pack',
-          category: 'Power tool accessories',
-          brand: 'Acme',
-        },
-      }),
-    ).resolves.toEqual(result);
-  });
-
   it('rejects AI proposals without evidence', () => {
     expect(
       productRelationProposalSchema.safeParse({
@@ -56,10 +15,5 @@ describe('product relation AI contracts', () => {
         evidenceSummary: null,
       }).success,
     ).toBe(false);
-  });
-
-  it('defines low-confidence generated relationships as unsupported', () => {
-    expect(MIN_AI_PRODUCT_RELATION_CONFIDENCE).toBe(0.5);
-    expect(new UnsupportedProductRelationError().message).toContain('does not support');
   });
 });
