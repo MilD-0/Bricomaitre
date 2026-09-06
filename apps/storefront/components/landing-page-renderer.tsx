@@ -93,6 +93,14 @@ export function LandingPageRenderer({
   const token = product.canonicalToken;
   const title = locale === 'ar' && product.titleAr ? product.titleAr : product.title;
   const image = product.media[0]?.url ?? null;
+  const cartItem = {
+    productId: product.id,
+    token,
+    title,
+    imageUrl: image,
+    unitPrice: parseProductPrice(product.price),
+    availabilityStatus: product.availability.status,
+  };
   const actionLabels =
     locale === 'ar'
       ? {
@@ -168,14 +176,7 @@ export function LandingPageRenderer({
                 </span>
                 <ProductActions
                   locale={locale}
-                  item={{
-                    productId: product.id,
-                    token,
-                    title,
-                    imageUrl: image,
-                    unitPrice: parseProductPrice(product.price),
-                    availabilityStatus: product.availability.status,
-                  }}
+                  item={cartItem}
                   analytics={analyticsFor(block.id)}
                   available={product.availability.inStock}
                   showAddToCart={block.showAddToCart}
@@ -443,14 +444,7 @@ export function LandingPageRenderer({
                 </div>
                 <ProductActions
                   locale={locale}
-                  item={{
-                    productId: product.id,
-                    token,
-                    title,
-                    imageUrl: image,
-                    unitPrice: parseProductPrice(product.price),
-                    availabilityStatus: product.availability.status,
-                  }}
+                  item={cartItem}
                   analytics={analyticsFor(block.id)}
                   available={product.availability.inStock}
                   showAddToCart={block.showAddToCart}

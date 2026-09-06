@@ -22,14 +22,6 @@ import { getBrandPath, getCategoryPath } from '@/lib/taxonomy-routes';
 import type { z } from 'zod';
 
 type NavigationMeta = z.infer<typeof navigationMetaSchema>;
-type NavigationCategory = {
-  id: number;
-  label: string;
-  slug?: string | null;
-  parentId?: number | null;
-};
-type NavigationBrand = { id: number; label: string; slug?: string | null };
-
 type NavigationLabels = {
   menu: string;
   closeMenu: string;
@@ -49,7 +41,6 @@ export function NavigationActions({
   alternateLocale,
   alternateLabel,
   alternatePath,
-  categories,
   labels,
   contact,
 }: {
@@ -57,15 +48,13 @@ export function NavigationActions({
   alternateLocale: Locale;
   alternateLabel: string;
   alternatePath?: string;
-  categories: NavigationCategory[];
   labels: NavigationLabels;
   contact: StorefrontSupportContact;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [drawerCategories, setDrawerCategories] = useState(categories);
-  const [drawerBrands, setDrawerBrands] = useState<NavigationBrand[]>([]);
+  const [meta, setMeta] = useState<NavigationMeta>({ categories: [], brands: [] });
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const alternateHref = `${alternatePath ?? pathname.replace(/^\/(fr|ar)(?=\/|$)/, `/${alternateLocale}`)}${searchParams.size ? `?${searchParams}` : ''}`;
@@ -76,12 +65,12 @@ export function NavigationActions({
   const categoryTree = useMemo(
     () =>
       buildNavigationTaxonomy(
-        drawerCategories.map((category) => ({
+        meta.categories.map((category) => ({
           ...category,
-          parentId: category.parentId ?? null,
+          label: locale === 'ar' && category.nameAr ? category.nameAr : category.name,
         })),
       ),
-    [drawerCategories],
+    [meta.categories, locale],
   );
 
   useEffect(() => {
@@ -92,22 +81,10 @@ export function NavigationActions({
   useEffect(() => {
     const controller = new AbortController();
     void fetchNavigationMeta(controller.signal)
-      .then((meta: NavigationMeta) => {
-        setDrawerCategories(
-          meta.categories.map((category) => ({
-            id: category.id,
-            label: locale === 'ar' && category.nameAr ? category.nameAr : category.name,
-            slug: category.slug,
-            parentId: category.parentId,
-          })),
-        );
-        setDrawerBrands(
-          meta.brands.map((brand) => ({ id: brand.id, label: brand.name, slug: brand.slug })),
-        );
-      })
+      .then(setMeta)
       .catch(() => undefined);
     return () => controller.abort();
-  }, [alternateLocale, alternatePath, categories.length, locale]);
+  }, []);
 
   useEffect(() => {
     const updateCart = () => setCartItems(readCart(window.localStorage));
@@ -350,7 +327,7 @@ export function NavigationActions({
               {labels.offers}
               <ChevronRight aria-hidden="true" size={18} />
             </a>
-            {drawerCategories.length > 0 ? (
+            {meta.categories.length > 0 ? (
               <details open>
                 <summary>
                   <span>{labels.categories}</span>
@@ -371,7 +348,7 @@ export function NavigationActions({
                 </div>
               </details>
             ) : null}
-            {drawerBrands.length > 0 ? (
+            {meta.brands.length > 0 ? (
               <LazyNavigationSection
                 summary={
                   <summary>
@@ -381,7 +358,7 @@ export function NavigationActions({
                 }
                 content={() => (
                   <div>
-                    {drawerBrands.map((brand) => (
+                    {meta.brands.map((brand) => (
                       <a
                         key={brand.id}
                         href={getBrandPath(locale, brand)}
@@ -390,7 +367,7 @@ export function NavigationActions({
                           setMenuOpen(false);
                         }}
                       >
-                        {brand.label}
+                        {brand.name}
                         <ChevronRight aria-hidden="true" size={18} />
                       </a>
                     ))}

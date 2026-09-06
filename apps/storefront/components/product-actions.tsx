@@ -90,13 +90,13 @@ export function ProductActions({
         );
         setAnnouncement(labels.added);
         void triggerHaptic('success');
+        void trackProductEvent({ eventName: 'add_to_cart', ...analyticsBase });
       } else {
         setAnnouncement('');
       }
     } catch {
       setAnnouncement('');
     }
-    void trackProductEvent({ eventName: 'add_to_cart', ...analyticsBase });
   }
 
   function buyNow() {

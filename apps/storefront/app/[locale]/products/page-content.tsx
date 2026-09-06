@@ -125,7 +125,6 @@ export async function CatalogPageContent({
             allCategories: t('allCategories'),
             brand: t('brandLabel'),
             allBrands: t('allBrands'),
-            discounted: t('discounted'),
             stock: t('stockLabel'),
             inStock: t('inStock'),
             price: t('priceLabel'),

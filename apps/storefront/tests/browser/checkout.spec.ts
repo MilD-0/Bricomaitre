@@ -97,7 +97,9 @@ test('completes a cart checkout, verifies its public token, and keeps analytics 
   page,
 }) => {
   const analytics: Array<Record<string, unknown>> = [];
+  const browserLookups: string[] = [];
   page.on('request', (request) => {
+    if (request.url().endsWith('/api/orders/track')) browserLookups.push(request.url());
     if (request.method() === 'POST' && request.url().endsWith('/api/analytics'))
       analytics.push(request.postDataJSON());
   });
@@ -167,6 +169,7 @@ test('completes a cart checkout, verifies its public token, and keeps analytics 
   await expect(
     page.locator('.thank-you-customer').getByText('Alger', { exact: true }),
   ).toBeVisible();
+  expect(browserLookups).toEqual([]);
 });
 
 test('supports the direct-product checkout in Arabic at a small-phone viewport', async ({

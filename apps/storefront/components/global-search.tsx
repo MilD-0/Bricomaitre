@@ -3,6 +3,7 @@
 import { ArrowUpRight, Search } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
+import { storefrontCatalogCardSchema } from '@bric/storefront-core/contracts';
 
 import { StorefrontImage } from '@/components/storefront-image';
 import type { Locale } from '@/i18n/config';
@@ -13,22 +14,9 @@ import { isDisplayableProductImageUrl } from '@/lib/product-images';
 import { SearchResultsSkeleton } from '@/components/storefront-skeletons';
 import { formatProductPrice } from '@/lib/product-presentation';
 
-const searchProductSchema = z.object({
-  id: z.number().int().positive(),
-  slug: z.string().nullable(),
-  mongoId: z.string().nullable(),
-  title: z.string(),
-  titleAr: z.string().nullable(),
-  price: z.string().nullable(),
-  inStock: z.boolean(),
-  images: z.array(z.string()),
-});
-
-const searchResponseSchema = z.object({
-  items: z.array(searchProductSchema),
-});
-
-type SearchProduct = z.infer<typeof searchProductSchema>;
+const searchResponseSchema = z.object({ items: z.array(storefrontCatalogCardSchema) });
+type SearchProduct = z.infer<typeof storefrontCatalogCardSchema>;
+const SUGGESTION_LIMIT = 5;
 
 export type GlobalSearchLabels = {
   label: string;
@@ -95,13 +83,17 @@ export function GlobalSearch({
         const controller = new AbortController();
         abortRef.current = controller;
         try {
-          const response = await fetch(`/api/catalog?q=${encodeURIComponent(query)}`, {
-            headers: { accept: 'application/json' },
-            signal: controller.signal,
-          });
+          const response = await fetch(
+            `/api/catalog?q=${encodeURIComponent(query)}&limit=${SUGGESTION_LIMIT}`,
+            {
+              headers: { accept: 'application/json' },
+              signal: controller.signal,
+            },
+          );
           if (!response.ok) throw new Error('search unavailable');
           const parsed = searchResponseSchema.parse(await response.json());
-          const items = parsed.items.slice(0, 5);
+          if (controller.signal.aborted) return;
+          const items = parsed.items.slice(0, SUGGESTION_LIMIT);
           setResults(items);
           void trackNavigationEvent({
             eventName: 'search',

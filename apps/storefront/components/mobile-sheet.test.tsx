@@ -14,6 +14,7 @@ describe('MobileSheet', () => {
           title="Navigation"
           closeLabel="Close"
           onClose={onClose}
+          headerAction={<button type="button">Header action</button>}
           footer={<a href="/checkout">Checkout</a>}
         >
           <button type="button">First action</button>
@@ -27,8 +28,12 @@ describe('MobileSheet', () => {
 
     const close = screen.getByRole('button', { name: 'Close' });
     expect(close).toHaveFocus();
-    fireEvent.keyDown(close, { key: 'Tab', code: 'Tab', shiftKey: true });
+    const first = screen.getByRole('button', { name: 'Header action' });
+    first.focus();
+    fireEvent.keyDown(first, { key: 'Tab', code: 'Tab', shiftKey: true });
     expect(screen.getByRole('link', { name: 'Checkout' })).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: 'Tab', code: 'Tab' });
+    expect(first).toHaveFocus();
     fireEvent.keyDown(dialog, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
   });

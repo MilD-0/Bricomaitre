@@ -6,9 +6,6 @@ import { GlobalSearch } from './global-search';
 const analytics = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const haptic = vi.hoisted(() => vi.fn());
 
-vi.mock('next/navigation', () => ({
-  useSearchParams: () => new URLSearchParams(),
-}));
 vi.mock('@/lib/analytics', () => ({ trackNavigationEvent: analytics }));
 vi.mock('@/lib/haptics', () => ({ triggerHaptic: haptic }));
 vi.mock('@/components/catalog-live-search', () => ({ getAdaptiveSearchDelay: () => 0 }));
@@ -41,6 +38,10 @@ describe('GlobalSearch', () => {
                 title: 'Lampe de travail',
                 titleAr: 'مصباح العمل',
                 price: '4500.00',
+                oldPrice: null,
+                availabilityStatus: 'in_stock',
+                brandId: null,
+                categoryId: null,
                 inStock: true,
                 images: ['/product-placeholder.svg'],
               },
@@ -71,7 +72,7 @@ describe('GlobalSearch', () => {
     fireEvent.change(input, { target: { value: 'per' } });
     expect(fetch).not.toHaveBeenCalled();
     await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith('/api/catalog?q=per', expect.any(Object)),
+      expect(fetch).toHaveBeenCalledWith('/api/catalog?q=per&limit=5', expect.any(Object)),
     );
     expect(await screen.findByText('Lampe de travail')).toBeVisible();
     expect(screen.getByText(/4.*500.*DA/)).toBeVisible();

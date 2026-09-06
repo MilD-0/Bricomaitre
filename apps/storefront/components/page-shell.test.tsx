@@ -1,7 +1,8 @@
+import { defaultStorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ settings: vi.fn(), content: vi.fn(), catalog: vi.fn() }));
+const mocks = vi.hoisted(() => ({ settings: vi.fn(), content: vi.fn() }));
 
 vi.mock('next-intl/server', () => ({
   getLocale: vi.fn().mockResolvedValue('fr'),
@@ -41,7 +42,6 @@ vi.mock('@/components/shopping-assistant-launcher', () => ({
 vi.mock('@/lib/storefront-api', () => ({
   getStorefrontSettings: mocks.settings,
   getStorefrontContent: mocks.content,
-  getStorefrontEcotrackCatalog: mocks.catalog,
 }));
 
 import { PageShell } from './page-shell';
@@ -50,12 +50,12 @@ describe('PageShell storefront AI setting', () => {
   beforeEach(() => {
     mocks.settings.mockReset();
     mocks.content.mockReset().mockResolvedValue({ announcement: null });
-    mocks.catalog.mockReset().mockResolvedValue(null);
   });
   afterEach(cleanup);
 
   it('renders the shopping advisor when enabled', async () => {
     mocks.settings.mockResolvedValue({
+      ...defaultStorefrontSettingsResponse,
       phoneDisplay: '0795 34 28 26',
       phoneHref: 'tel:+213795342826',
       phoneEnabled: false,
@@ -80,6 +80,7 @@ describe('PageShell storefront AI setting', () => {
 
   it('removes the shopping advisor when disabled by admin', async () => {
     mocks.settings.mockResolvedValue({
+      ...defaultStorefrontSettingsResponse,
       phoneDisplay: '0795 34 28 26',
       phoneHref: 'tel:+213795342826',
       phoneEnabled: true,
@@ -95,6 +96,7 @@ describe('PageShell storefront AI setting', () => {
         locale: 'fr',
         children: <p>Catalog</p>,
         contactSettings: {
+          ...defaultStorefrontSettingsResponse,
           phoneDisplay: '0795 34 28 26',
           phoneHref: 'tel:+213795342826',
           phoneEnabled: true,

@@ -42,20 +42,20 @@ export function MobileSheet({
         return;
       }
       if (event.key !== 'Tab') return;
-      const focusable = [...(sheetRef.current?.querySelectorAll<HTMLElement>('*') ?? [])].filter(
-        (element) =>
-          element.matches(
-            'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled)',
-          ) && element.tabIndex >= 0,
-      );
+      const focusable = [
+        ...(sheetRef.current?.querySelectorAll<HTMLElement>(
+          ':is(a[href], button, input, select, textarea, [tabindex]):not(:disabled)',
+        ) ?? []),
+      ].filter((element) => element.tabIndex >= 0);
       if (!focusable.length) return;
+      const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === closeRef.current) {
+      if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
       } else if (!event.shiftKey && document.activeElement === last) {
         event.preventDefault();
-        closeRef.current?.focus();
+        first.focus();
       }
     };
     window.addEventListener('keydown', handleKeyboard);

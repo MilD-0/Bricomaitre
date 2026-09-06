@@ -56,6 +56,25 @@ const labels: ShoppingAssistantLabels = {
   quickPrompts: ['Une perceuse', 'Comparer', 'Disponible'],
 };
 
+const product = {
+  id: 12,
+  token: 'perceuse-beton',
+  title: 'Perceuse béton',
+  titleAr: 'مثقاب خرسانة',
+  description: null,
+  descriptionAr: null,
+  sku: 'PB-1',
+  characteristics: ['Mandrin 13 mm'],
+  characteristicsAr: ['ظرف 13 مم'],
+  price: '12500.00',
+  oldPrice: null,
+  inStock: true,
+  availabilityStatus: 'in_stock',
+  imageUrl: null,
+  brand: 'Bric Pro',
+  category: 'Perçage',
+};
+
 describe('ShoppingAssistantPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -74,26 +93,7 @@ describe('ShoppingAssistantPanel', () => {
         JSON.stringify({
           message:
             'Voici une **option** du catalogue.\n\n- Adaptée au béton\n- Disponible en stock',
-          products: [
-            {
-              id: 12,
-              token: 'perceuse-beton',
-              title: 'Perceuse béton',
-              titleAr: 'مثقاب خرسانة',
-              description: null,
-              descriptionAr: null,
-              sku: 'PB-1',
-              characteristics: ['Mandrin 13 mm'],
-              characteristicsAr: ['ظرف 13 مم'],
-              price: '12500.00',
-              oldPrice: null,
-              inStock: true,
-              availabilityStatus: 'in_stock',
-              imageUrl: null,
-              brand: 'Bric Pro',
-              category: 'Perçage',
-            },
-          ],
+          products: [product],
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       ),
@@ -157,6 +157,50 @@ describe('ShoppingAssistantPanel', () => {
         JSON.parse(localStorage.getItem('bricomaitre-shopping-assistant-chat-v1:fr') ?? '[]'),
       ).toHaveLength(2),
     );
+  });
+
+  it.each(['manual', 'assistant'])('does not confirm a failed %s cart write', async (source) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        Response.json({
+          message: 'Voici le produit.',
+          products: [product],
+          cartMutations: source === 'assistant' ? [{ action: 'add', quantity: 1, product }] : [],
+        }),
+      ),
+    );
+    const nativeSetItem = Storage.prototype.setItem;
+    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key,
+      value,
+    ) {
+      if (key === STOREFRONT_CART_KEY)
+        throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      nativeSetItem.call(this, key, value);
+    });
+    const cartUpdated = vi.fn();
+    window.addEventListener('bric:cart-updated', cartUpdated);
+    try {
+      render(<ShoppingAssistantPanel locale="fr" labels={labels} onClose={vi.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Une perceuse' }));
+      await screen.findByText('Voici le produit.');
+      await waitFor(() => expect(screen.getByLabelText(labels.inputLabel)).toBeEnabled());
+      if (source === 'manual')
+        fireEvent.click(screen.getByRole('button', { name: labels.addToCart }));
+      expect(localStorage.getItem(STOREFRONT_CART_KEY)).toBeNull();
+      expect(cartUpdated).not.toHaveBeenCalled();
+      expect(screen.queryByText(labels.cartUpdated)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: labels.addedToCart })).not.toBeInTheDocument();
+      expect(behavior.haptic).not.toHaveBeenCalledWith('success');
+      expect(behavior.analytics).not.toHaveBeenCalledWith(
+        expect.objectContaining({ eventName: 'add_to_cart' }),
+      );
+    } finally {
+      write.mockRestore();
+      window.removeEventListener('bric:cart-updated', cartUpdated);
+    }
   });
 
   it('renders the first assistant text chunk before the response finishes', async () => {
@@ -391,7 +435,25 @@ describe('ShoppingAssistantPanel', () => {
     localStorage.setItem(
       'bricomaitre-shopping-assistant-chat-v1:fr',
       JSON.stringify([
-        { id: 'saved-1', role: 'assistant', content: 'Votre **ancienne réponse**.' },
+        {
+          id: 'saved-1',
+          role: 'assistant',
+          content: 'Votre **ancienne réponse**.',
+          products: [
+            {
+              ...product,
+              sku: undefined,
+              characteristics: undefined,
+              characteristicsAr: undefined,
+            },
+          ],
+        },
+        {
+          id: 'corrupt',
+          role: 'assistant',
+          content: 'Invalid saved product',
+          products: [{ id: 'invalid' }],
+        },
       ]),
     );
     vi.stubGlobal('fetch', vi.fn());
@@ -399,6 +461,11 @@ describe('ShoppingAssistantPanel', () => {
     render(<ShoppingAssistantPanel locale="fr" labels={labels} onClose={vi.fn()} />);
 
     expect(await screen.findByText('ancienne réponse', { selector: 'strong' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Perceuse béton/ })).toHaveAttribute(
+      'href',
+      '/fr/products/perceuse-beton',
+    );
+    expect(screen.queryByText('Invalid saved product')).not.toBeInTheDocument();
     const newChat = screen.getByRole('button', { name: labels.newChat });
     expect(newChat.closest('.mobile-sheet-header')).not.toBeNull();
     expect(newChat.closest('.shopping-assistant-intro')).toBeNull();
@@ -469,7 +536,11 @@ describe('ShoppingAssistantPanel', () => {
     );
     const dialog = screen.getByRole('dialog', { name: 'مستشار المنتجات' });
     expect(within(dialog).getByRole('button', { name: labels.close })).toHaveFocus();
+    const first = within(dialog).getByRole('button', { name: labels.newChat });
+    first.focus();
     fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
     await waitFor(() => expect(screen.getByLabelText(labels.inputLabel)).toHaveFocus());
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(first).toHaveFocus();
   });
 });

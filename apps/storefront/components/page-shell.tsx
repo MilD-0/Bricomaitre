@@ -12,20 +12,13 @@ import { NavigationCategories } from '@/components/navigation-categories';
 import { ShoppingAssistantLauncher } from '@/components/shopping-assistant-launcher';
 import { isLocale, type Locale } from '@/i18n/config';
 import { getStorefrontContent, getStorefrontSettings } from '@/lib/storefront-api';
-import {
-  defaultStorefrontSettingsResponse,
-  type StorefrontSettingsResponse,
-} from '@bric/storefront-core/contracts';
+import type { StorefrontSettingsResponse } from '@bric/storefront-core/contracts';
 
 type PageShellProps = {
   children: React.ReactNode;
   locale?: Locale;
   alternatePath?: string;
-  contactSettings?: Pick<
-    StorefrontSettingsResponse,
-    'phoneDisplay' | 'phoneHref' | 'phoneEnabled' | 'aiAssistantEnabled'
-  > &
-    Partial<StorefrontSettingsResponse>;
+  contactSettings?: StorefrontSettingsResponse;
 };
 
 export async function PageShell({
@@ -37,16 +30,13 @@ export async function PageShell({
   const localeValue = localeProp ?? (await getLocale());
   const locale = isLocale(localeValue) ? localeValue : 'fr';
   const alternateLocale = locale === 'fr' ? 'ar' : 'fr';
-  const t = await getTranslations({ locale, namespace: 'Navigation' });
-  const assistant = await getTranslations({ locale, namespace: 'ShoppingAssistant' });
   const alternateLabel = alternateLocale === 'ar' ? 'العربية' : 'Français';
-  const loadedContactSettings = contactSettingsProp
-    ? contactSettingsProp
-    : await getStorefrontSettings();
-  const contactSettings = { ...defaultStorefrontSettingsResponse, ...loadedContactSettings };
-  const storefrontContent = await getStorefrontContent(locale).catch(() => ({
-    announcement: null,
-  }));
+  const [t, assistant, contactSettings, storefrontContent] = await Promise.all([
+    getTranslations({ locale, namespace: 'Navigation' }),
+    getTranslations({ locale, namespace: 'ShoppingAssistant' }),
+    contactSettingsProp ?? getStorefrontSettings(),
+    getStorefrontContent(locale).catch(() => ({ announcement: null })),
+  ]);
 
   return (
     <div className="site-shell">
@@ -101,7 +91,6 @@ export async function PageShell({
               alternateLocale={alternateLocale}
               alternatePath={alternatePath}
               alternateLabel={alternateLabel}
-              categories={[]}
               labels={{
                 menu: t('openMenu'),
                 closeMenu: t('closeMenu'),

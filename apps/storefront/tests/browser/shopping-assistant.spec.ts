@@ -60,6 +60,13 @@ test('offers a grounded, fully observable product-advisor conversation in French
   await expect(advisor).toBeVisible();
   const newChat = advisor.getByRole('button', { name: 'Nouvelle discussion' });
   const close = advisor.getByRole('button', { name: 'Fermer le conseiller' });
+  await expect(close).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(newChat).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(advisor.getByLabel('Votre question sur les produits')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(newChat).toBeFocused();
   const liveCatalog = advisor.getByText('Catalogue en direct');
   await expect(newChat.locator('xpath=ancestor::header')).toHaveCount(1);
   const [newChatBox, closeBox, liveBox] = await Promise.all([

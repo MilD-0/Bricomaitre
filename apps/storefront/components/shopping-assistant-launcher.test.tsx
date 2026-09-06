@@ -47,6 +47,8 @@ const labels = {
   outOfStock: 'Indisponible',
   priceOnRequest: 'Sur demande',
   viewProduct: 'Voir',
+  addToCart: 'Ajouter au panier',
+  addedToCart: 'Ajouté',
   cartUpdated: 'Panier mis à jour',
   helpful: 'Utile',
   notHelpful: 'À améliorer',

@@ -49,13 +49,29 @@ describe('GET /api/catalog/meta', () => {
     });
   });
 
-  it('degrades to an empty navigation when catalog metadata is unavailable', async () => {
-    getCatalogMeta.mockResolvedValue({
-      get categories() {
-        throw new Error('unavailable');
-      },
-    });
-    const response = await GET();
-    await expect(response.json()).resolves.toEqual({ categories: [], brands: [] });
+  it('lets a later navigation retry after an upstream outage', async () => {
+    const payload = {
+      categories: [{ id: 1, name: 'Outils', nameAr: null, slug: 'outils', parentId: null }],
+      brands: [],
+    };
+    getCatalogMeta.mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce(payload);
+    const responses: Response[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        const response = await GET();
+        responses.push(response);
+        return response;
+      }),
+    );
+    try {
+      const { fetchNavigationMeta } = await import('@/lib/navigation-categories');
+      await expect(fetchNavigationMeta()).resolves.toEqual({ categories: [], brands: [] });
+      expect(responses[0]?.status).toBe(503);
+      await expect(fetchNavigationMeta()).resolves.toEqual(payload);
+      expect(getCatalogMeta).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

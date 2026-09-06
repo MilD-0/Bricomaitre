@@ -161,14 +161,20 @@ function CatalogInfiniteLoaderState({
     hasNextPageRef.current = stored.hasNextPage;
     setItems(itemsRef.current);
     setHasNextPage(stored.hasNextPage);
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        window.scrollTo({ top: stored.scrollY, behavior: 'auto' });
-        restoringRef.current = false;
-      }),
-    );
+    let restoreFrame = 0;
+    if (stored.scrollY > 0) {
+      restoreFrame = requestAnimationFrame(() => {
+        restoreFrame = requestAnimationFrame(() => {
+          window.scrollTo({ top: stored.scrollY, behavior: 'auto' });
+          restoringRef.current = false;
+        });
+      });
+    } else {
+      restoringRef.current = false;
+    }
 
     return () => {
+      cancelAnimationFrame(restoreFrame);
       history.scrollRestoration = previousRestoration;
     };
   }, [

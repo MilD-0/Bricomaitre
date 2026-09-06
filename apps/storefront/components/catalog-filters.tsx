@@ -22,12 +22,11 @@ type CatalogFilterLabels = {
   allCategories: string;
   brand: string;
   allBrands: string;
-  discounted?: string;
-  stock?: string;
-  inStock?: string;
-  price?: string;
-  minPrice?: string;
-  maxPrice?: string;
+  stock: string;
+  inStock: string;
+  price: string;
+  minPrice: string;
+  maxPrice: string;
   apply: string;
   reset: string;
 };
@@ -59,25 +58,6 @@ export function CatalogFilters({
   sort: string;
   labels: CatalogFilterLabels;
 }) {
-  const fallbackLabels =
-    locale === 'ar'
-      ? {
-          discounted: 'العروض فقط',
-          stock: 'التوفر',
-          inStock: 'المنتجات المتوفرة فقط',
-          price: 'السعر',
-          minPrice: 'الأدنى',
-          maxPrice: 'الأقصى',
-        }
-      : {
-          discounted: 'Promotions uniquement',
-          stock: 'Disponibilité',
-          inStock: 'Produits en stock uniquement',
-          price: 'Prix',
-          minPrice: 'Minimum',
-          maxPrice: 'Maximum',
-        };
-  const filterLabels = { ...fallbackLabels, ...labels };
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const railRef = useRef<HTMLElement>(null);
@@ -158,20 +138,20 @@ export function CatalogFilters({
         surface={surface}
       />
       <fieldset>
-        <legend>{filterLabels.stock}</legend>
+        <legend>{labels.stock}</legend>
         <label className="catalog-filter-checkbox">
           <input type="checkbox" name="stock" value="in" defaultChecked={stock === 'in'} />
-          <span>{filterLabels.inStock}</span>
+          <span>{labels.inStock}</span>
         </label>
       </fieldset>
       <fieldset>
-        <legend>{filterLabels.price}</legend>
+        <legend>{labels.price}</legend>
         <PriceRangeFields
           locale={locale}
           minPrice={minPrice}
           maxPrice={maxPrice}
-          minLabel={filterLabels.minPrice}
-          maxLabel={filterLabels.maxPrice}
+          minLabel={labels.minPrice}
+          maxLabel={labels.maxPrice}
         />
       </fieldset>
     </>

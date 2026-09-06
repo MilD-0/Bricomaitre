@@ -95,7 +95,6 @@ describe('NavigationActions', () => {
       locale: 'fr' as const,
       alternateLocale: 'ar' as const,
       alternateLabel: 'العربية',
-      categories: [],
       labels,
       contact,
     };
@@ -118,7 +117,6 @@ describe('NavigationActions', () => {
         locale="fr"
         alternateLocale="ar"
         alternateLabel="العربية"
-        categories={[{ id: 3, label: 'Éclairage' }]}
         labels={labels}
         contact={contact}
       />,
@@ -143,7 +141,6 @@ describe('NavigationActions', () => {
         locale="fr"
         alternateLocale="ar"
         alternateLabel="العربية"
-        categories={[]}
         labels={labels}
         contact={contact}
       />,
@@ -168,7 +165,6 @@ describe('NavigationActions', () => {
         locale="fr"
         alternateLocale="ar"
         alternateLabel="العربية"
-        categories={[{ id: 3, label: 'Éclairage' }]}
         labels={labels}
         contact={contact}
       />,

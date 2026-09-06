@@ -16,6 +16,11 @@ const labels = {
   allCategories: 'Toutes les catégories',
   brand: 'Marque',
   allBrands: 'Toutes les marques',
+  stock: 'Disponibilité',
+  inStock: 'Produits en stock uniquement',
+  price: 'Prix',
+  minPrice: 'Minimum',
+  maxPrice: 'Maximum',
   apply: 'Appliquer les filtres',
   reset: 'Effacer les filtres',
 };

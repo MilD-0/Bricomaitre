@@ -57,7 +57,7 @@ export async function CheckoutPageContent({ params, searchParams }: CheckoutPage
     : null;
 
   return (
-    <PageShell locale={locale}>
+    <PageShell locale={locale} contactSettings={contact}>
       <CheckoutForm
         locale={locale}
         catalog={catalog}

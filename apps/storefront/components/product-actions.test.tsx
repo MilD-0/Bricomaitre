@@ -106,9 +106,7 @@ describe('ProductActions', () => {
 
     expect(screen.queryByText(labels.added)).not.toBeInTheDocument();
     expect(haptics.trigger).not.toHaveBeenCalledWith('success');
-    expect(trackProductEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({ eventName: 'add_to_cart' }),
-    );
+    expect(trackProductEventMock).not.toHaveBeenCalled();
     storageWrite.mockRestore();
   });
 

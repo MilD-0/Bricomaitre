@@ -2,6 +2,7 @@
 
 import {
   shoppingAssistantCartMutationSchema,
+  shoppingAssistantProductSchema,
   type ShoppingAssistantCartMutation,
   type ShoppingAssistantProduct,
   type ShoppingAssistantToolName,
@@ -20,6 +21,7 @@ import {
   ThumbsUp,
 } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { z } from 'zod';
 
 import { AssistantMarkdown } from '@/components/assistant-markdown';
 import { MobileSheet } from '@/components/mobile-sheet';
@@ -63,8 +65,8 @@ export type ShoppingAssistantLabels = {
   outOfStock: string;
   priceOnRequest: string;
   viewProduct: string;
-  addToCart?: string;
-  addedToCart?: string;
+  addToCart: string;
+  addedToCart: string;
   cartUpdated: string;
   helpful: string;
   notHelpful: string;
@@ -72,86 +74,23 @@ export type ShoppingAssistantLabels = {
   quickPrompts: string[];
 };
 
-type ChatEntry = {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  products?: ShoppingAssistantProduct[];
-  cartMutations?: ShoppingAssistantCartMutation[];
-  feedback?: 'helpful' | 'not_helpful';
-  interrupted?: boolean;
-};
-
+const chatEntrySchema = z.object({
+  id: z.string(),
+  role: z.enum(['user', 'assistant']),
+  content: z.string().min(1).max(4_000),
+  products: z.array(shoppingAssistantProductSchema).max(8).optional(),
+  cartMutations: z.array(shoppingAssistantCartMutationSchema).max(8).optional(),
+  feedback: z.enum(['helpful', 'not_helpful']).optional(),
+  interrupted: z.boolean().optional(),
+});
+type ChatEntry = z.infer<typeof chatEntrySchema>;
 const chatStoragePrefix = 'bricomaitre-shopping-assistant-chat-v1';
-
-function isStoredProduct(value: unknown): value is ShoppingAssistantProduct {
-  if (!value || typeof value !== 'object') return false;
-  const product = value as Partial<ShoppingAssistantProduct>;
-  const nullableString = (candidate: unknown) =>
-    candidate === null || typeof candidate === 'string';
-  return (
-    Number.isInteger(product.id) &&
-    Number(product.id) > 0 &&
-    typeof product.token === 'string' &&
-    typeof product.title === 'string' &&
-    nullableString(product.titleAr) &&
-    nullableString(product.description) &&
-    nullableString(product.descriptionAr) &&
-    (product.sku === undefined || nullableString(product.sku)) &&
-    (product.characteristics === undefined ||
-      (Array.isArray(product.characteristics) &&
-        product.characteristics.every((value) => typeof value === 'string'))) &&
-    (product.characteristicsAr === undefined ||
-      (Array.isArray(product.characteristicsAr) &&
-        product.characteristicsAr.every((value) => typeof value === 'string'))) &&
-    nullableString(product.price) &&
-    nullableString(product.oldPrice) &&
-    typeof product.inStock === 'boolean' &&
-    typeof product.availabilityStatus === 'string' &&
-    nullableString(product.imageUrl) &&
-    nullableString(product.brand) &&
-    nullableString(product.category)
-  );
-}
 
 function storedEntries(value: unknown): ChatEntry[] {
   if (!Array.isArray(value)) return [];
-  return value.slice(-40).flatMap((entry): ChatEntry[] => {
-    if (!entry || typeof entry !== 'object') return [];
-    const candidate = entry as Partial<ChatEntry>;
-    if (
-      typeof candidate.id !== 'string' ||
-      (candidate.role !== 'user' && candidate.role !== 'assistant') ||
-      typeof candidate.content !== 'string' ||
-      candidate.content.length === 0 ||
-      candidate.content.length > 4_000 ||
-      (candidate.feedback !== undefined &&
-        candidate.feedback !== 'helpful' &&
-        candidate.feedback !== 'not_helpful') ||
-      (candidate.interrupted !== undefined && typeof candidate.interrupted !== 'boolean') ||
-      (candidate.products !== undefined &&
-        (!Array.isArray(candidate.products) || !candidate.products.every(isStoredProduct))) ||
-      (candidate.cartMutations !== undefined &&
-        (!Array.isArray(candidate.cartMutations) ||
-          !candidate.cartMutations.every(
-            (mutation) => shoppingAssistantCartMutationSchema.safeParse(mutation).success,
-          )))
-    )
-      return [];
-    return [
-      {
-        ...candidate,
-        products: candidate.products?.map((product) => ({
-          ...product,
-          sku: product.sku ?? null,
-          characteristics: product.characteristics ?? [],
-          characteristicsAr: product.characteristicsAr ?? [],
-        })),
-        cartMutations: candidate.cartMutations?.map((mutation) =>
-          shoppingAssistantCartMutationSchema.parse(mutation),
-        ),
-      } as ChatEntry,
-    ];
+  return value.slice(-40).flatMap((entry) => {
+    const parsed = chatEntrySchema.safeParse(entry);
+    return parsed.success ? [parsed.data] : [];
   });
 }
 
@@ -175,16 +114,20 @@ function ProductResult({
 
   function addExactProduct() {
     if (!product.inStock || product.price === null) return;
-    const next = addCartItem(readCart(window.localStorage), {
-      productId: product.id,
-      token: product.token,
-      title,
-      imageUrl: product.imageUrl,
-      unitPrice: Number(product.price),
-      quantity: 1,
-      availabilityStatus: product.availabilityStatus,
-    });
-    writeCart(window.localStorage, next);
+    try {
+      const next = addCartItem(readCart(window.localStorage), {
+        productId: product.id,
+        token: product.token,
+        title,
+        imageUrl: product.imageUrl,
+        unitPrice: Number(product.price),
+        quantity: 1,
+        availabilityStatus: product.availabilityStatus,
+      });
+      if (!writeCart(window.localStorage, next)) return;
+    } catch {
+      return;
+    }
     window.dispatchEvent(new Event('bric:cart-updated'));
     setAdded(true);
     void triggerHaptic('success');
@@ -248,7 +191,7 @@ function ProductResult({
         ) : (
           <ShoppingCart aria-hidden="true" size={14} />
         )}
-        {added ? (labels.addedToCart ?? 'Added') : (labels.addToCart ?? 'Add to cart')}
+        {added ? labels.addedToCart : labels.addToCart}
       </button>
     </div>
   );
@@ -284,7 +227,6 @@ export function ShoppingAssistantPanel({
       setMessages(storedEntries(JSON.parse(localStorage.getItem(storageKey) ?? '[]')));
     } catch {
       setMessages([]);
-      localStorage.removeItem(storageKey);
     } finally {
       setStorageReady(true);
     }
@@ -412,31 +354,32 @@ export function ShoppingAssistantPanel({
             );
             if (applied.changed) {
               try {
-                writeCart(window.localStorage, applied.items);
-                window.dispatchEvent(new Event('bric:cart-updated'));
-                appliedMutations = applied.changes.map(({ mutation }) => mutation);
-                void triggerHaptic(
-                  applied.changes.every(({ resultingQuantity }) => resultingQuantity === 0)
-                    ? 'destructive'
-                    : 'success',
-                );
-                for (const change of applied.changes) {
-                  const delta = change.resultingQuantity - change.previousQuantity;
-                  const unitPrice = change.unitPrice;
-                  void trackNavigationEvent({
-                    eventName: delta > 0 ? 'add_to_cart' : 'remove_from_cart',
-                    locale,
-                    productId: change.productId,
-                    productSlug: change.productToken,
-                    quantity: Math.abs(delta),
-                    ...(Number.isFinite(unitPrice) && unitPrice >= 0
-                      ? { value: Math.abs(delta) * unitPrice }
-                      : {}),
-                    metadata: {
-                      surface: 'ai_assistant',
-                      target: `cart_${change.mutation.action}`,
-                    },
-                  });
+                if (writeCart(window.localStorage, applied.items)) {
+                  window.dispatchEvent(new Event('bric:cart-updated'));
+                  appliedMutations = applied.changes.map(({ mutation }) => mutation);
+                  void triggerHaptic(
+                    applied.changes.every(({ resultingQuantity }) => resultingQuantity === 0)
+                      ? 'destructive'
+                      : 'success',
+                  );
+                  for (const change of applied.changes) {
+                    const delta = change.resultingQuantity - change.previousQuantity;
+                    const unitPrice = change.unitPrice;
+                    void trackNavigationEvent({
+                      eventName: delta > 0 ? 'add_to_cart' : 'remove_from_cart',
+                      locale,
+                      productId: change.productId,
+                      productSlug: change.productToken,
+                      quantity: Math.abs(delta),
+                      ...(Number.isFinite(unitPrice) && unitPrice >= 0
+                        ? { value: Math.abs(delta) * unitPrice }
+                        : {}),
+                      metadata: {
+                        surface: 'ai_assistant',
+                        target: `cart_${change.mutation.action}`,
+                      },
+                    });
+                  }
                 }
               } catch {
                 appliedMutations = [];

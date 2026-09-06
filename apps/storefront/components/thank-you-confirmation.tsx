@@ -91,12 +91,25 @@ export function ThankYouConfirmation({
       candidate.order.publicToken === token &&
       (orderId == null || candidate.order.id === orderId);
     const matching = matches(stored) ? stored : null;
-    const baseline = matching ?? (matches(initialConfirmation) ? initialConfirmation : null);
+    const verified = matches(initialConfirmation) ? initialConfirmation : null;
+    const baseline = verified
+      ? {
+          ...verified,
+          cartMode: matching?.cartMode ?? verified.cartMode,
+          purchaseEventId:
+            verified.order.purchaseEventId ?? matching?.purchaseEventId ?? verified.purchaseEventId,
+        }
+      : matching;
     if (baseline) {
       setConfirmation(baseline);
     } else {
       setConfirmation(null);
       setStatus('loading');
+    }
+    if (verified && baseline) {
+      writeCheckoutConfirmation(window.localStorage, baseline);
+      setStatus('success');
+      return;
     }
     if (!token) {
       if (!baseline) setStatus('failure');

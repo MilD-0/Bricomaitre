@@ -599,9 +599,7 @@ describe('CheckoutForm', () => {
       { cartMode: 'direct', order: { id: 42 } },
     );
     expect(mocks.push).toHaveBeenCalledWith('/fr/thank-you?token=public-order-token-1234567890');
-    expect(mocks.track.mock.calls.flatMap((call) => JSON.stringify(call))).not.toContain(
-      '0550000000',
-    );
+    expect(JSON.stringify(mocks.track.mock.calls)).not.toContain('0550000000');
   });
 
   it('uses a canonicalized token without forcing another click when only product metadata changed', async () => {

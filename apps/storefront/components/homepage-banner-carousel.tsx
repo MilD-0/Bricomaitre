@@ -19,7 +19,6 @@ function BannerImage({
   onReady: () => void;
   alt: string;
 }) {
-  const [ready, setReady] = useState(false);
   const imageRef = useRef<HTMLImageElement>(null);
   const reportedReady = useRef(false);
   const landscape = banner.imageUrlLandscape || banner.imageUrl;
@@ -27,7 +26,6 @@ function BannerImage({
   const markReady = useCallback(() => {
     if (reportedReady.current) return;
     reportedReady.current = true;
-    setReady(true);
     onReady();
   }, [onReady]);
   const common = { alt, width: 1920, height: 720, quality: 75 };
@@ -79,7 +77,7 @@ function BannerImage({
           />
         </>
       ) : null}
-      <span className={ready ? 'home-banner-picture is-ready' : 'home-banner-picture'}>
+      <span className="home-banner-picture">
         <picture>
           <source
             media="(max-width: 620px)"
@@ -111,11 +109,9 @@ export function HomepageBannerCarousel({
     direction: locale === 'ar' ? 'rtl' : 'ltr',
     duration: 28,
   });
-  const loaded = useRef(new Set<number>());
   const [heroReady, setHeroReady] = useState(false);
   const [canAutoplay, setCanAutoplay] = useState(false);
   const markLoaded = useCallback((index: number) => {
-    loaded.current.add(index);
     if (index === 0) setHeroReady(true);
     if (index === 1) setCanAutoplay(true);
   }, []);

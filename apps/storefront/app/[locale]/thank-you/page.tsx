@@ -60,7 +60,7 @@ async function ThankYouPageContent({ params, searchParams }: ThankYouPageProps) 
   ]);
 
   return (
-    <PageShell locale={locale}>
+    <PageShell locale={locale} contactSettings={contact}>
       <ThankYouConfirmation
         locale={locale}
         orderId={initialOrder?.id ?? validOrderId}

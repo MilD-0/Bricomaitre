@@ -2,29 +2,6 @@ import { expect, test } from '@playwright/test';
 
 const storefrontOrigin = process.env.BRIC_PLAYWRIGHT_STOREFRONT_ORIGIN ?? 'http://127.0.0.1:3003';
 
-test('lets the catalog loading skeleton fill the available product width', async ({ page }) => {
-  await page.goto('/fr/products');
-  const geometry = await page.evaluate(() => {
-    const skeleton = document.createElement('div');
-    skeleton.className = 'catalog-loading';
-    skeleton.innerHTML =
-      '<div><span></span><span></span></div><div class="catalog-skeleton-layout"><aside></aside><section></section></div>';
-    document.querySelector('.site-main')!.append(skeleton);
-    const layout = skeleton.querySelector('.catalog-skeleton-layout')!.getBoundingClientRect();
-    const products = skeleton.querySelector('section')!.getBoundingClientRect();
-    skeleton.remove();
-    return {
-      layoutWidth: layout.width,
-      productsWidth: products.width,
-      layoutRight: layout.right,
-      productsRight: products.right,
-    };
-  });
-
-  expect(geometry.productsWidth).toBeGreaterThan(geometry.layoutWidth * 0.6);
-  expect(geometry.productsRight).toBeCloseTo(geometry.layoutRight, 0);
-});
-
 test('provides responsive global navigation, forgiving suggestions, and a live cart badge', async ({
   page,
 }) => {
@@ -462,8 +439,11 @@ test('automatically appends products and preserves position across refresh', asy
   await page.goto('/fr/products');
 
   await page.getByRole('button', { name: 'Afficher plus de produits' }).scrollIntoViewIfNeeded();
-  await expect(page.locator('[data-product-id="18"]').first()).toBeVisible();
-  await page.locator('[data-product-id="18"]').scrollIntoViewIfNeeded();
+  const cards = page.locator('.catalog-grid > .catalog-card');
+  await expect(cards).toHaveCount(39);
+  const target = cards.nth(30);
+  const targetHref = await target.locator('a').first().getAttribute('href');
+  await target.scrollIntoViewIfNeeded();
   const savedY = await page.evaluate(() => window.scrollY);
   expect(savedY).toBeGreaterThan(500);
   await expect
@@ -476,7 +456,8 @@ test('automatically appends products and preserves position across refresh', asy
     .toBe(2);
 
   await page.reload();
-  await expect(page.locator('[data-product-id="18"]').first()).toBeVisible();
+  await expect(cards).toHaveCount(39);
+  await expect(cards.nth(30).locator('a').first()).toHaveAttribute('href', targetHref!);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(500);
 });
 

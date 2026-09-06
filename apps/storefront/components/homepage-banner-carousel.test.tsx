@@ -127,7 +127,7 @@ describe('HomepageBannerCarousel', () => {
     expect(mocks.scrollNext).toHaveBeenCalledTimes(1);
   });
 
-  it('reveals an image that completed before the hydration effect attached', () => {
+  it('lets subsequent banners load when the hero completed before hydration', () => {
     const complete = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'complete');
     const naturalWidth = Object.getOwnPropertyDescriptor(
       HTMLImageElement.prototype,
@@ -142,7 +142,7 @@ describe('HomepageBannerCarousel', () => {
       get: () => 1200,
     });
     const { container } = render(<HomepageBannerCarousel banners={banners} locale="fr" />);
-    expect(container.querySelectorAll('.home-banner-picture.is-ready')).toHaveLength(2);
+    expect(container.querySelectorAll('img')).toHaveLength(2);
     if (complete) Object.defineProperty(HTMLImageElement.prototype, 'complete', complete);
     if (naturalWidth)
       Object.defineProperty(HTMLImageElement.prototype, 'naturalWidth', naturalWidth);

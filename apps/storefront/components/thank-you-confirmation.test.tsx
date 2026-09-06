@@ -191,9 +191,7 @@ describe('ThankYouConfirmation', () => {
         'thank_you',
       ),
     );
-    expect(mocks.track.mock.calls.flatMap((call) => JSON.stringify(call))).not.toContain(
-      '0550000000',
-    );
+    expect(JSON.stringify(mocks.track.mock.calls)).not.toContain('0550000000');
     expect(
       JSON.parse(window.localStorage.getItem(CHECKOUT_CONFIRMATION_KEY)!).purchaseEventId,
     ).toBe('purchase-42');
@@ -212,7 +210,16 @@ describe('ThankYouConfirmation', () => {
     expect(await screen.findByLabelText('Loading order confirmation')).toBeInTheDocument();
   });
 
-  it('renders a server-verified confirmation before client JavaScript re-verifies it', () => {
+  it('reuses server verification and keeps local cart context without replacing canonical order data', async () => {
+    window.localStorage.setItem(
+      CHECKOUT_CONFIRMATION_KEY,
+      JSON.stringify({
+        order: { ...order, totalAmount: 1, inHouseStatus: 2 },
+        cartMode: 'direct',
+        stateName: 'Old name',
+        createdAt: order.createdAt,
+      }),
+    );
     mocks.verify.mockImplementationOnce(() => new Promise(() => undefined));
     render(
       <ThankYouConfirmation
@@ -233,7 +240,20 @@ describe('ThankYouConfirmation', () => {
     expect(screen.getByRole('heading', { name: 'title' })).toBeInTheDocument();
     expect(screen.getByText('Desk Lamp')).toBeInTheDocument();
     expect(screen.queryByLabelText('Loading order confirmation')).not.toBeInTheDocument();
-    expect(mocks.track).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(mocks.track).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventName: 'purchase',
+          value: 5000,
+          metadata: expect.objectContaining({ cartMode: 'direct', verificationSource: 'server' }),
+        }),
+        'thank_you',
+      ),
+    );
+    expect(mocks.verify).not.toHaveBeenCalled();
+    expect(JSON.parse(window.localStorage.getItem(CHECKOUT_CONFIRMATION_KEY)!).order).toMatchObject(
+      { totalAmount: 5000, inHouseStatus: 0 },
+    );
   });
 
   it('renders a connected rail with completed connectors and one current node', () => {

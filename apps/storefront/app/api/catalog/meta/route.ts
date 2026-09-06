@@ -16,6 +16,6 @@ export async function GET() {
       brands: meta.brands.map(({ id, name, slug }) => ({ id, name, slug })),
     });
   } catch {
-    return NextResponse.json({ categories: [], brands: [] });
+    return NextResponse.json({ error: 'Catalog metadata unavailable' }, { status: 503 });
   }
 }
