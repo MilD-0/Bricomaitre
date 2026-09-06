@@ -18,6 +18,14 @@ import type { getDb } from '@bric/db/client';
 import { parseSortRuleStrings } from './multi-sort';
 import { normalizePermissions } from './permissions';
 import {
+  assertTaxonomyRelationsUnchanged,
+  isTaxonomyEntity,
+  lockTaxonomyHistory,
+  readTaxonomyRelations,
+  restoreTaxonomyRelations,
+  TaxonomyHistoryConflictError,
+} from './taxonomy-history';
+import {
   assertProductAllocationsCanBeDeleted,
   lockStockAllocationHistory,
   parseStockAllocationChange,
@@ -1040,6 +1048,12 @@ export async function mutateEntityWithHistoryTransaction<T>(
     await tx.execute(sql`select ${products.id} from ${products}
       where ${products.id} = ${params.entityId} for update`);
   }
+  const taxonomyDelete =
+    isTaxonomyEntity(params.entityType) && params.operation === 'delete' && params.entityId;
+  if (taxonomyDelete) await lockTaxonomyHistory(tx, params.entityType, taxonomyDelete);
+  const taxonomyRelations = taxonomyDelete
+    ? await readTaxonomyRelations(tx, params.entityType, taxonomyDelete)
+    : undefined;
   const beforeState = params.entityId
     ? await fetchEntity(tx, params.entityType, params.entityId)
     : null;
@@ -1059,7 +1073,12 @@ export async function mutateEntityWithHistoryTransaction<T>(
     entityId,
     operation: params.operation,
     beforeState: beforeState
-      ? { ...beforeState, ...historyVersion, ...params.snapshotFields?.before }
+      ? {
+          ...beforeState,
+          ...historyVersion,
+          ...(taxonomyRelations ? { taxonomyRelations } : {}),
+          ...params.snapshotFields?.before,
+        }
       : null,
     afterState: afterState
       ? { ...afterState, ...historyVersion, ...params.snapshotFields?.after }
@@ -1183,6 +1202,10 @@ export async function applyHistoryAction(
         throw new ActionHistoryConflictError(`Unsupported entity type: ${entry.entityType}`);
       }
 
+      if (isTaxonomyEntity(entry.entityType)) {
+        await lockTaxonomyHistory(tx, entry.entityType, entry.entityId);
+      }
+
       const stockAllocations =
         entry.entityType === 'products'
           ? parseStockAllocationChange(
@@ -1254,6 +1277,14 @@ export async function applyHistoryAction(
 
       if (params.direction === 'undo') {
         if (entry.operation === 'create') {
+          if (isTaxonomyEntity(entry.entityType)) {
+            const relations = await readTaxonomyRelations(tx, entry.entityType, entry.entityId);
+            if (relations.productIds.length || relations.childIds.length) {
+              throw new ActionHistoryConflictError(
+                'This taxonomy acquired relationships after creation. Undo would remove newer work.',
+              );
+            }
+          }
           await deleteEntity(tx, entry.entityType, entry.entityId);
         }
         if (entry.operation === 'update' && beforeState) {
@@ -1261,6 +1292,14 @@ export async function applyHistoryAction(
         }
         if (entry.operation === 'delete' && beforeState) {
           await insertEntity(tx, entry.entityType, beforeState);
+          if (isTaxonomyEntity(entry.entityType)) {
+            await restoreTaxonomyRelations(
+              tx,
+              entry.entityType,
+              entry.entityId,
+              beforeState.taxonomyRelations,
+            );
+          }
         }
 
         if (stockAllocations) {
@@ -1287,6 +1326,14 @@ export async function applyHistoryAction(
         await updateEntity(tx, entry.entityType, entry.entityId, afterState);
       }
       if (entry.operation === 'delete') {
+        if (isTaxonomyEntity(entry.entityType)) {
+          await assertTaxonomyRelationsUnchanged(
+            tx,
+            entry.entityType,
+            entry.entityId,
+            beforeState?.taxonomyRelations,
+          );
+        }
         await deleteEntity(tx, entry.entityType, entry.entityId);
       }
 
@@ -1307,7 +1354,10 @@ export async function applyHistoryAction(
       return { ...entry, isUndone: false };
     })
     .catch((error: unknown) => {
-      if (error instanceof StockAllocationHistoryConflictError) {
+      if (
+        error instanceof StockAllocationHistoryConflictError ||
+        error instanceof TaxonomyHistoryConflictError
+      ) {
         throw new ActionHistoryConflictError(error.message);
       }
       throw error;

@@ -270,6 +270,52 @@ describe('taxonomy workspace preview', () => {
     );
   });
 
+  it('reloads successful bulk changes and leaves failed brands selected', async () => {
+    const items = ['Acme', 'Beta'].map((name, index) => ({
+      id: String(index + 1),
+      name,
+      slug: name.toLowerCase(),
+      image: null,
+      isActive: true,
+      status: 'active',
+      productCount: 0,
+      ...audit,
+    }));
+    server.use(
+      http.get('/api/brands', () =>
+        HttpResponse.json({ writable: true, items, pagination: { ...pagination, totalItems: 2 } }),
+      ),
+      http.patch('/api/brands/1', async () => {
+        await delay(30);
+        items[0]!.isActive = false;
+        items[0]!.status = 'draft';
+        return HttpResponse.json({ ok: true });
+      }),
+      http.patch('/api/brands/2', () =>
+        HttpResponse.json({ error: 'Unavailable' }, { status: 503 }),
+      ),
+    );
+    renderWorkspace('brands');
+    await screen.findByText('Acme');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Acme' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Beta' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }));
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'Select Acme' })).not.toBeChecked(),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: 'Acme · Inactive' })).toHaveAttribute(
+        'data-state',
+        'unchecked',
+      ),
+    );
+    expect(screen.getByRole('checkbox', { name: 'Select Beta' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Beta · Active' })).toHaveAttribute(
+      'data-state',
+      'checked',
+    );
+  });
+
   it('rolls an optimistic status change back and surfaces the failure', async () => {
     server.use(
       http.patch('/api/brands/:id', async () => {

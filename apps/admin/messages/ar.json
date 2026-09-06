@@ -240,7 +240,10 @@
       "archiveDialogDescription": "سيتم إخفاء هذا المنتج من المتجر.",
       "openEditor": "تعديل {name}",
       "quickChangeSaved": "تم حفظ حالة المنتج.",
-      "bulkChangeSaved": "تم تحديث {count} منتجًا."
+      "bulkChangeSaved": "تم تحديث {count} منتجًا.",
+      "bulkChangePartial": "تم تحديث {saved} منتجًا. تعذّر تحديث {failed} وبقيت محددة لإعادة المحاولة.",
+      "bulkArchivePartial": "تمت أرشفة {saved} منتجًا. تعذّرت أرشفة {failed}.",
+      "archiveSuccess": "تمت أرشفة {target}."
     },
     "orders": {
       "resultCount": "{count} طلبًا",

@@ -165,6 +165,39 @@ describe('AssetsWorkspace', () => {
     expect(within(panel).getByRole('textbox', { name: 'Landscape image' })).toBeVisible();
   });
 
+  it('keeps a new editor open when an earlier save finishes', async () => {
+    const user = userEvent.setup();
+    let release!: () => void;
+    let requested = false;
+    const response = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.put('/api/assets/banner/1', async () => {
+        requested = true;
+        await response;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    renderWorkspace();
+    await user.click(screen.getByRole('button', { name: 'Actions · Workshop campaign' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Edit' }));
+    const oldPanel = await screen.findByRole('dialog', { name: 'Edit · Banners' });
+    await user.click(within(oldPanel).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(requested).toBe(true));
+    await user.click(within(oldPanel).getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+    const newPanel = await screen.findByRole('dialog', { name: 'Create · Banners' });
+    await user.type(within(newPanel).getByRole('textbox', { name: 'Title' }), 'Keep my draft');
+    release();
+    await waitFor(() =>
+      expect(within(newPanel).getByRole('button', { name: 'Save' })).toBeEnabled(),
+    );
+    expect(within(screen.getByRole('dialog')).getByRole('textbox', { name: 'Title' })).toHaveValue(
+      'Keep my draft',
+    );
+  });
+
   it('closes overflow actions when focus moves to an outside interaction', async () => {
     const user = userEvent.setup();
     renderWorkspace();

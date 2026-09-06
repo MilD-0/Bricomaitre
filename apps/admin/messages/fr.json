@@ -240,7 +240,10 @@
       "archiveDialogDescription": "Ce produit sera masqué dans la boutique.",
       "openEditor": "Modifier {name}",
       "quickChangeSaved": "État du produit enregistré.",
-      "bulkChangeSaved": "{count} produits mis à jour."
+      "bulkChangeSaved": "{count} produits mis à jour.",
+      "bulkChangePartial": "{saved} produits mis à jour. {failed} échecs restent sélectionnés pour réessayer.",
+      "bulkArchivePartial": "{saved} produits archivés. {failed} produits n’ont pas pu être archivés.",
+      "archiveSuccess": "{target} archivé."
     },
     "orders": {
       "resultCount": "{count} commandes",

@@ -9,6 +9,10 @@ import {
   getActionEntityConfig,
   toActionHistoryItem,
 } from '../../../../../lib/action-history';
+import {
+  revalidateStorefrontProductMeta,
+  revalidateStorefrontProducts,
+} from '../../../../../lib/storefront-revalidate';
 import { auth } from '../../../../../lib/auth';
 import { parsePositiveIntegerId } from '@bric/runtime/http-input';
 import { requireMutationAccess } from '../../../../../lib/rbac';
@@ -53,6 +57,10 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       actor: { email: session?.user?.email, name: session?.user?.name },
     });
 
+    if (config.resource === 'brandsCategories') {
+      await revalidateStorefrontProductMeta();
+      await revalidateStorefrontProducts();
+    }
     return NextResponse.json({ ok: true, item: toActionHistoryItem(updated) });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to undo action';

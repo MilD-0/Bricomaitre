@@ -64,6 +64,21 @@ export function LandingPageIndex({
   const [productIds, setProductIds] = React.useState<number[]>([]);
   const [contentLocale, setContentLocale] = React.useState<'fr' | 'ar'>('fr');
 
+  React.useEffect(() => {
+    const controller = new AbortController();
+    void requestJson<{ items: LandingPageSummary[] }>('/api/landing-pages?view=index', {
+      signal: controller.signal,
+    })
+      .then((result) => {
+        if (!controller.signal.aborted) setItems(result.items);
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted)
+          toast.error(error instanceof Error ? error.message : t.validation);
+      });
+    return () => controller.abort();
+  }, [t.validation]);
+
   const filtered = React.useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     if (!normalized) return items;

@@ -89,7 +89,7 @@ const copy: Record<'en' | 'fr' | 'ar', AssetsWorkspaceCopy> = {
     productEmpty: 'No products match.',
     selected: 'Selected products',
     remove: 'Remove',
-    validation: 'Review the highlighted information.',
+    validation: 'Review the entered information.',
     mutationFailed: 'The change could not be saved.',
   },
   fr: {
@@ -394,7 +394,7 @@ export function AssetsWorkspace({
           }),
       );
     }
-    if (saved) setEditor(null);
+    if (saved) setEditor((current) => (current === editor ? null : current));
   };
 
   const setActive = async (item: Row, active: boolean) => {

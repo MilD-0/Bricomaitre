@@ -313,32 +313,57 @@ export function ProductsWorkspace({
   });
   const patchSelectedMutation = useMutation({
     mutationFn: async (values: ProductPatch) => {
-      await Promise.all(
-        selectedIds.map((id) =>
+      const ids = [...selectedIds];
+      const results = await Promise.allSettled(
+        ids.map((id) =>
           request(`/api/products/${id}`, { method: 'PATCH', body: JSON.stringify(values) }),
         ),
       );
+      return {
+        succeeded: ids.filter((_, index) => results[index].status === 'fulfilled'),
+        failed: ids.filter((_, index) => results[index].status === 'rejected'),
+      };
     },
-    onSuccess: async () => {
-      toast.success(t('adminWorkspace.products.bulkChangeSaved', { count: selectedIds.length }));
-      setSelectedIds([]);
+    onSuccess: async ({ succeeded, failed }) => {
+      setSelectedIds((current) => current.filter((id) => !succeeded.includes(id)));
       await queryClient.invalidateQueries({ queryKey: ['products-workspace'] });
+      if (failed.length) {
+        toast.error(
+          t('adminWorkspace.products.bulkChangePartial', {
+            saved: succeeded.length,
+            failed: failed.length,
+          }),
+        );
+      } else {
+        toast.success(t('adminWorkspace.products.bulkChangeSaved', { count: succeeded.length }));
+      }
     },
     onError: (error: Error) => toast.error(error.message),
   });
   const deleteProductsMutation = useMutation({
     mutationFn: async ({ ids }: DeleteTarget) => {
-      await Promise.all(ids.map((id) => request(`/api/products/${id}`, { method: 'DELETE' })));
-    },
-    onSuccess: async (_data, target) => {
-      toast.success(
-        t('notifications.products.archive.success', {
-          target: target.label,
-        }),
+      const results = await Promise.allSettled(
+        ids.map((id) => request(`/api/products/${id}`, { method: 'DELETE' })),
       );
+      return {
+        succeeded: ids.filter((_, index) => results[index].status === 'fulfilled'),
+        failed: ids.filter((_, index) => results[index].status === 'rejected'),
+      };
+    },
+    onSuccess: async ({ succeeded, failed }, target) => {
       setDeleteTarget(null);
-      setSelectedIds((current) => current.filter((id) => !target.ids.includes(id)));
+      setSelectedIds((current) => current.filter((id) => !succeeded.includes(id)));
       await queryClient.invalidateQueries({ queryKey: ['products-workspace'] });
+      if (failed.length) {
+        toast.error(
+          t('adminWorkspace.products.bulkArchivePartial', {
+            saved: succeeded.length,
+            failed: failed.length,
+          }),
+        );
+      } else {
+        toast.success(t('adminWorkspace.products.archiveSuccess', { target: target.label }));
+      }
     },
     onError: (error: Error) => toast.error(error.message),
   });

@@ -76,6 +76,28 @@ export type AssetsWorkspaceCopy = {
   mutationFailed: string;
 };
 
+function validationMessage(copy: AssetsWorkspaceCopy, field: PropertyKey | undefined) {
+  if (field === 'characteristicsFr' || field === 'characteristicsAr')
+    return copy.characteristicsRequirement;
+  const labels: Record<string, string> = {
+    title: copy.bannerTitle,
+    titleAr: copy.bannerTitleAr,
+    imageUrlLandscape: copy.landscape,
+    imageUrlPortrait: copy.portrait,
+    name: copy.groupName,
+    nameAr: copy.groupNameAr,
+    cta: copy.cta,
+    ctaAr: copy.ctaAr,
+    link: copy.link,
+    productId: copy.product,
+    titleFr: copy.cardTitleFr,
+    descriptionFr: copy.cardDescriptionFr,
+    descriptionAr: copy.cardDescriptionAr,
+  };
+  const label = field === undefined ? undefined : labels[String(field)];
+  return label ? `${label}: ${copy.validation}` : copy.validation;
+}
+
 type EditorState =
   | { kind: 'banner'; item?: AssetBannerRecord }
   | { kind: 'group'; item?: FeaturedProductGroupRecord }
@@ -198,7 +220,7 @@ function BannerEditor({
       active,
     });
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? copy.validation);
+      setError(validationMessage(copy, parsed.error.issues[0]?.path[0]));
       return;
     }
     await onSubmit(parsed.data);
@@ -312,7 +334,7 @@ function GroupEditor({
       active,
     });
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? copy.validation);
+      setError(validationMessage(copy, parsed.error.issues[0]?.path[0]));
       return;
     }
     await onSubmit(parsed.data);
@@ -462,7 +484,7 @@ function CardEditor({
       active,
     });
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? copy.validation);
+      setError(validationMessage(copy, parsed.error.issues[0]?.path[0]));
       return;
     }
     await onSubmit(parsed.data);

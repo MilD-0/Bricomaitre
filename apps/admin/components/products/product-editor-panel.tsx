@@ -167,7 +167,7 @@ export function ProductEditorPanel({
     mutationFn: () => request<{ ok: true }>(`/api/products/${productId}`, { method: 'DELETE' }),
     onSuccess: async () => {
       toast.success(
-        t('notifications.products.archive.success', {
+        t('adminWorkspace.products.archiveSuccess', {
           target: state?.mode === 'edit' ? state.product.title : '',
         }),
       );

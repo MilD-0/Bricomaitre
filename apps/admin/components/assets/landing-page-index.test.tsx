@@ -51,6 +51,7 @@ describe('LandingPageIndex', () => {
   beforeEach(() => {
     navigation.push.mockReset();
     server.use(
+      http.get('/api/landing-pages', () => HttpResponse.json({ items })),
       http.get('/api/assets/product-options', () =>
         HttpResponse.json({
           items: [
@@ -102,6 +103,19 @@ describe('LandingPageIndex', () => {
     await user.type(screen.getByRole('searchbox', { name: 'Search landing pages' }), 'lamp');
     expect(screen.queryByText('Cordless drill')).not.toBeInTheDocument();
     expect(screen.getByText('Workshop lamp')).toBeVisible();
+  });
+
+  it('refreshes a cached index when returning from a newly created page', async () => {
+    server.use(
+      http.get('/api/landing-pages', () =>
+        HttpResponse.json({
+          items: [...items, { ...items[0], id: 99, productTitle: 'Newly published product' }],
+        }),
+      ),
+    );
+    renderIndex();
+    expect(await screen.findByText('Newly published product')).toBeVisible();
+    expect(screen.getByText('Landing pages · 3')).toBeInTheDocument();
   });
 
   it('creates from server-backed product search and navigates to the focused builder', async () => {

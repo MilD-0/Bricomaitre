@@ -317,6 +317,54 @@ describe('ProductsWorkspace', () => {
     });
   });
 
+  it('waits for all bulk results, refreshes committed rows and retains only failed selections', async () => {
+    const user = userEvent.setup();
+    const current = products.map((product) => ({ ...product }));
+    let release!: () => void;
+    const slowSuccess = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let failed = false;
+    server.use(
+      http.patch('/api/products/1', async () => {
+        await slowSuccess;
+        current[0]!.active = false;
+        return HttpResponse.json({ ok: true });
+      }),
+      http.patch('/api/products/2', () => {
+        failed = true;
+        return HttpResponse.json({ error: 'Temporary failure' }, { status: 503 });
+      }),
+      http.get('/api/products', () =>
+        HttpResponse.json({
+          items: current,
+          pagination: {
+            page: 1,
+            limit: 50,
+            totalItems: 2,
+            totalPages: 1,
+            hasNextPage: false,
+            hasPreviousPage: false,
+          },
+        }),
+      ),
+    );
+    renderWorkspace();
+    await user.click(screen.getAllByRole('checkbox', { name: 'Select First product' })[0]!);
+    await user.click(screen.getAllByRole('checkbox', { name: 'Select Second product' })[0]!);
+    await user.click(screen.getByLabelText('Actions'));
+    await user.click(screen.getByRole('menuitem', { name: 'Deactivate selected' }));
+    await waitFor(() => expect(failed).toBe(true));
+    release();
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('checkbox', { name: 'Select First product' })[0],
+      ).not.toBeChecked(),
+    );
+    expect(screen.getAllByRole('checkbox', { name: 'Select Second product' })[0]).toBeChecked();
+    expect(screen.getAllByRole('switch', { name: /Active.*First product/ })[0]).not.toBeChecked();
+  });
+
   it('keeps secondary bulk operations available in one compact actions menu', async () => {
     const user = userEvent.setup();
     renderWorkspace();

@@ -240,7 +240,10 @@
       "archiveDialogDescription": "This product will be hidden from the storefront.",
       "openEditor": "Edit {name}",
       "quickChangeSaved": "Product state saved.",
-      "bulkChangeSaved": "Updated {count} products."
+      "bulkChangeSaved": "Updated {count} products.",
+      "bulkChangePartial": "Updated {saved} products. {failed} failed and remain selected for retry.",
+      "bulkArchivePartial": "Archived {saved} products. {failed} could not be archived.",
+      "archiveSuccess": "Archived {target}."
     },
     "orders": {
       "resultCount": "{count} orders",

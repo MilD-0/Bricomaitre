@@ -180,11 +180,13 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
       await operation();
       await queryClient.invalidateQueries({ queryKey: ['products-meta-workspace'] });
       await load();
-      if (closeEditor) setEditor(null);
+      if (closeEditor) setEditor((current) => (current === editor ? null : current));
       toast.success(success);
       return true;
     } catch (error) {
       setData(snapshot);
+      await queryClient.invalidateQueries({ queryKey: ['products-meta-workspace'] });
+      await load();
       toast.error(error instanceof Error ? error.message : t.saveFailed);
       return false;
     } finally {
@@ -280,6 +282,17 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
     });
   };
 
+  const mutateSelected = async (ids: string[], method: 'PATCH' | 'DELETE', body?: string) => {
+    const results = await Promise.allSettled(
+      ids.map((id) => requestJson(`${endpoint}/${id}`, { method, body })),
+    );
+    const succeeded = new Set(ids.filter((_, index) => results[index].status === 'fulfilled'));
+    setSelected((current) => current.filter((id) => !succeeded.has(id)));
+    setDeleteIds((current) => current.filter((id) => !succeeded.has(id)));
+    const failure = results.find((result) => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
+  };
+
   const setActive = async (ids: string[], active: boolean) => {
     const targetIds = new Set(ids);
     const succeeded = await perform({
@@ -289,14 +302,7 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
           : item,
       ),
       operation: () =>
-        Promise.all(
-          ids.map((id) =>
-            requestJson(`${endpoint}/${id}`, {
-              method: 'PATCH',
-              body: JSON.stringify({ status: active ? 'active' : 'draft' }),
-            }),
-          ),
-        ),
+        mutateSelected(ids, 'PATCH', JSON.stringify({ status: active ? 'active' : 'draft' })),
       success: ids.length === 1 ? t.saved : t.bulkSaved,
     });
     if (succeeded && ids.length > 1) setSelected([]);
@@ -306,8 +312,7 @@ export function TaxonomyWorkspace({ view }: { view: TaxonomyView }) {
     const targetIds = new Set(ids);
     const succeeded = await perform({
       optimistic: patchItems((item) => (targetIds.has(item.id) ? null : item)),
-      operation: () =>
-        Promise.all(ids.map((id) => requestJson(`${endpoint}/${id}`, { method: 'DELETE' }))),
+      operation: () => mutateSelected(ids, 'DELETE'),
       success: t.deleted,
     });
     if (succeeded) {
